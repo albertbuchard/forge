@@ -5,7 +5,7 @@ import type { ForgePluginConfigSchema, ForgePluginRegistrationApi } from "./plug
 
 type RawPluginConfig = Partial<Record<"baseUrl" | "apiToken" | "actorLabel" | "timeoutMs", unknown>>;
 
-export const FORGE_PLUGIN_ID = "forge";
+export const FORGE_PLUGIN_ID = "forge-openclaw-plugin";
 export const FORGE_PLUGIN_NAME = "Forge";
 export const FORGE_PLUGIN_DESCRIPTION = "Thin OpenClaw adapter for the live Forge /api/v1 collaboration API.";
 

@@ -1,8 +1,8 @@
 {
-  "id": "forge",
+  "id": "forge-openclaw-plugin",
   "name": "Forge",
   "description": "Thin OpenClaw adapter for the live Forge /api/v1 collaboration API.",
-  "version": "0.2.3",
+  "version": "0.2.4",
   "skills": [
     "./skills"
   ],

@@ -34,7 +34,7 @@ openclaw plugins install forge-openclaw-plugin
 openclaw gateway restart
 ```
 
-This SDK declaration migration does not rename the plugin, routes, tools, or config keys.
+This SDK declaration migration keeps the Forge product name, CLI namespace, and `/forge/v1` routes intact. The only identity change is the plugin id used by OpenClaw config and discovery: `forge-openclaw-plugin`.
 
 ## Install locally for release-parity development
 
@@ -59,7 +59,7 @@ openclaw plugins install ./projects/forge
 openclaw gateway restart
 ```
 
-That repo-local path is only the fallback for older local installs. The publishable package remains `forge-openclaw-plugin`, and the public release stays on the SDK `definePluginEntry` path. The Forge plugin keeps the same plugin id, route paths, tool names, and config keys across this migration.
+That repo-local path is only the fallback for older local installs. The publishable package remains `forge-openclaw-plugin`, and the public release stays on the SDK `definePluginEntry` path.
 
 ## Enable it
 
@@ -71,9 +71,9 @@ Example:
 {
   plugins: {
     enabled: true,
-    allow: ["forge"],
+    allow: ["forge-openclaw-plugin"],
     entries: {
-      forge: {
+      "forge-openclaw-plugin": {
         enabled: true,
         config: {
           baseUrl: "http://127.0.0.1:3017",
@@ -125,7 +125,7 @@ Best path:
 2. go to `Settings` -> `Collaboration Settings`
 3. issue or rotate a token there
 4. copy the raw `fg_live_...` token when it is revealed once
-5. paste it into `plugins.entries.forge.config.apiToken`
+5. paste it into `plugins.entries["forge-openclaw-plugin"].config.apiToken`
 
 If you need a CLI path, bootstrap an operator session first and then use that session to create the token:
 
@@ -156,7 +156,7 @@ curl -X POST http://127.0.0.1:3017/api/v1/settings/tokens \
   }'
 ```
 
-Copy the returned `fg_live_...` token into `plugins.entries.forge.config.apiToken` when you want explicit tokened auth.
+Copy the returned `fg_live_...` token into `plugins.entries["forge-openclaw-plugin"].config.apiToken` when you want explicit tokened auth.
 
 Forge reveals raw token values once. If you lose one, rotate it or issue a new token from Settings and replace it in the plugin config. Forge should not be treated as a vault for recovering old raw tokens.
 
@@ -206,14 +206,14 @@ For each of those, the skill teaches:
 
 ```bash
 openclaw plugins list
-openclaw plugins info forge
+openclaw plugins info forge-openclaw-plugin
 openclaw plugins doctor
 ```
 
 The Forge plugin registers CLI helpers inside the OpenClaw runtime. On current OpenClaw builds, the most reliable checks are:
 
 ```bash
-openclaw plugins info forge
+openclaw plugins info forge-openclaw-plugin
 openclaw health
 forge doctor
 forge overview
@@ -226,6 +226,7 @@ Use `forge doctor` as the production readiness check. It validates the live Forg
 
 - Forge `/api/v1` stays the source of truth.
 - OpenClaw routes are explicitly registered under `/forge/v1/...`.
+- OpenClaw plugin id is `forge-openclaw-plugin`; the display name remains `Forge`.
 - Token bootstrap remains canonical through Forge `/api/v1/settings/tokens`; the plugin focuses on onboarding, diagnostics, and operator workflows.
 - Localhost and Tailscale plugin installs can bootstrap an operator session automatically.
 - Remote non-local installs should use `apiToken`.

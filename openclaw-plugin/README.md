@@ -18,7 +18,7 @@ openclaw plugins install ./projects/forge
 openclaw gateway restart
 ```
 
-That repo-local path is the fallback only. The published package stays on the SDK `definePluginEntry` entrypoint and does not rename the plugin, routes, tools, or config keys.
+That repo-local path is the fallback only. The published package stays on the SDK `definePluginEntry` entrypoint. The OpenClaw plugin id is `forge-openclaw-plugin`, while the product name stays `Forge` and the CLI namespace stays `forge`.
 
 ## Recommended usage
 

@@ -5,7 +5,7 @@ import packageManifest from "../../openclaw-plugin/openclaw.plugin.json";
 describe("forge plugin manifest", () => {
   it("is self-describing for OpenClaw discovery and config UI", () => {
     expect(manifest).toMatchObject({
-      id: "forge",
+      id: "forge-openclaw-plugin",
       name: "Forge",
       description: expect.any(String),
       version: expect.any(String),

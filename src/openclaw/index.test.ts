@@ -549,7 +549,7 @@ describe("forge openclaw plugin", () => {
 
   it("exports an SDK-native plugin entry with manifest-level metadata", () => {
     expect(pluginEntry).toMatchObject({
-      id: "forge",
+      id: "forge-openclaw-plugin",
       name: "Forge",
       description: expect.any(String),
       configSchema: forgePluginConfigSchema,
@@ -561,7 +561,7 @@ describe("forge openclaw plugin", () => {
 
   it("keeps a separate legacy entry for repo-local fallback installs", () => {
     expect(legacyPluginEntry).toMatchObject({
-      id: "forge",
+      id: "forge-openclaw-plugin",
       name: "Forge",
       description: expect.any(String),
       configSchema: forgePluginConfigSchema,
