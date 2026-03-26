@@ -1,0 +1,447 @@
+import { useEffect, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Link, useParams } from "react-router-dom";
+import {
+  BriefcaseBusiness,
+  CheckCheck,
+  CircleAlert,
+  Clock3,
+  Pencil,
+  Play,
+  Target
+} from "lucide-react";
+import { SurfaceSkeleton } from "@/components/experience/surface-skeleton";
+import { SheetScaffold } from "@/components/experience/sheet-scaffold";
+import { TaskDialog } from "@/components/task-dialog";
+import { PageHero } from "@/components/shell/page-hero";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Card } from "@/components/ui/card";
+import { EntityBadge } from "@/components/ui/entity-badge";
+import { EntityName } from "@/components/ui/entity-name";
+import { InfoTooltip } from "@/components/ui/info-tooltip";
+import { ErrorState } from "@/components/ui/page-state";
+import { completeTaskRun, getTaskContext, patchTask, releaseTaskRun, removeActivityLog, uncompleteTask } from "@/lib/api";
+import { getReadableActivityDescription, getReadableActivityTitle } from "@/lib/activity-copy";
+import { getActivityEventHref } from "@/lib/entity-links";
+import { useI18n } from "@/lib/i18n";
+import { useForgeShell } from "@/components/shell/app-shell";
+import type { TaskStatus } from "@/lib/types";
+
+function DetailLabel({ label, help }: { label: string; help?: string }) {
+  return (
+    <div className="flex items-center gap-2 text-sm text-white/58">
+      <span>{label}</span>
+      {help ? <InfoTooltip content={help} label={`Explain ${label}`} /> : null}
+    </div>
+  );
+}
+
+const STATUS_META: Array<{
+  status: TaskStatus;
+  label: string;
+  description: string;
+  icon: typeof Clock3;
+}> = [
+  { status: "backlog", label: "Backlog", description: "Not started yet.", icon: Clock3 },
+  { status: "focus", label: "Focus", description: "Ready to start soon.", icon: Target },
+  { status: "in_progress", label: "In progress", description: "Work is active now.", icon: Play },
+  { status: "blocked", label: "Blocked", description: "Something is stopping progress.", icon: CircleAlert },
+  { status: "done", label: "Done", description: "The task is completed.", icon: CheckCheck }
+];
+
+export function TaskDetailPage() {
+  const { t, formatDate, formatDateTime } = useI18n();
+  const shell = useForgeShell();
+  const params = useParams();
+  const queryClient = useQueryClient();
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [statusSheetOpen, setStatusSheetOpen] = useState(false);
+  const [isMobile, setIsMobile] = useState(() => (typeof window !== "undefined" ? window.matchMedia("(max-width: 1023px)").matches : false));
+
+  useEffect(() => {
+    if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
+      return;
+    }
+    const mediaQuery = window.matchMedia("(max-width: 1023px)");
+    const sync = (event?: MediaQueryListEvent) => setIsMobile(event ? event.matches : mediaQuery.matches);
+    sync();
+    if (typeof mediaQuery.addEventListener === "function") {
+      mediaQuery.addEventListener("change", sync);
+      return () => mediaQuery.removeEventListener("change", sync);
+    }
+    mediaQuery.addListener(sync);
+    return () => mediaQuery.removeListener(sync);
+  }, []);
+
+  const taskContextQuery = useQuery({
+    queryKey: ["task-context", params.taskId],
+    queryFn: () => getTaskContext(params.taskId!),
+    enabled: Boolean(params.taskId)
+  });
+
+  const invalidateAll = async () => {
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ["forge-snapshot"] }),
+      queryClient.invalidateQueries({ queryKey: ["task-context", params.taskId] }),
+      queryClient.invalidateQueries({ queryKey: ["activity-archive"] }),
+      queryClient.invalidateQueries({ queryKey: ["project-board"] })
+    ]);
+  };
+
+  const updateTaskMutation = useMutation({
+    mutationFn: ({ taskId, patch }: { taskId: string; patch: Parameters<typeof patchTask>[1] }) => patchTask(taskId, patch),
+    onSuccess: invalidateAll
+  });
+  const uncompleteMutation = useMutation({
+    mutationFn: (taskId: string) => uncompleteTask(taskId),
+    onSuccess: invalidateAll
+  });
+  const removeEventMutation = useMutation({
+    mutationFn: (eventId: string) => removeActivityLog(eventId),
+    onSuccess: invalidateAll
+  });
+  const releaseRunMutation = useMutation({
+    mutationFn: ({ runId, actor, note }: { runId: string; actor?: string; note?: string }) => releaseTaskRun(runId, { actor, note: note ?? "" }),
+    onSuccess: invalidateAll
+  });
+  const completeRunMutation = useMutation({
+    mutationFn: ({ runId, actor, note }: { runId: string; actor?: string; note?: string }) => completeTaskRun(runId, { actor, note: note ?? "" }),
+    onSuccess: invalidateAll
+  });
+
+  const payload = taskContextQuery.data;
+
+  if (taskContextQuery.isLoading) {
+    return <SurfaceSkeleton />;
+  }
+
+  if (taskContextQuery.isError) {
+    return <ErrorState eyebrow={t("common.taskDetail.errorEyebrow")} error={taskContextQuery.error} onRetry={() => void taskContextQuery.refetch()} />;
+  }
+
+  if (!payload) {
+    return <ErrorState eyebrow={t("common.taskDetail.errorEyebrow")} error={new Error(t("common.taskDetail.emptyPayload"))} onRetry={() => void taskContextQuery.refetch()} />;
+  }
+
+  const currentRun = payload.activeTaskRun ?? null;
+  const currentStatus = STATUS_META.find((entry) => entry.status === payload.task.status) ?? STATUS_META[0];
+  const availableStatuses = STATUS_META.filter((entry) => entry.status !== payload.task.status);
+
+  const describeRunStatus = (status: (typeof payload.taskRuns)[number]["status"]) => {
+    switch (status) {
+      case "active":
+        return "Active";
+      case "completed":
+        return "Completed";
+      case "released":
+        return "Paused";
+      case "timed_out":
+        return "Timed out";
+      default:
+        return status;
+    }
+  };
+
+  const handleStatusChange = async (status: TaskStatus) => {
+    await updateTaskMutation.mutateAsync({ taskId: payload.task.id, patch: { status } });
+    setStatusSheetOpen(false);
+  };
+
+  return (
+    <div className="grid gap-5">
+      <PageHero
+        entityKind="task"
+        title={<EntityName kind="task" label={payload.task.title} variant="heading" size="lg" lines={3} className="max-w-full" labelClassName="[overflow-wrap:anywhere]" />}
+        titleText={payload.task.title}
+        description={payload.task.description || "Edit the task, change its status, start work, and review its history from one page."}
+        badge={`${payload.task.points} xp`}
+      />
+
+      <Card className="min-w-0 overflow-hidden">
+        <div className="flex min-w-0 flex-wrap items-start justify-between gap-4">
+          <div className="min-w-0 flex-1">
+            <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">Task</div>
+            <div className="mt-2">
+              <EntityName kind="task" label={payload.task.title} variant="heading" size="xl" lines={3} className="max-w-full" labelClassName="[overflow-wrap:anywhere]" />
+            </div>
+            <p className="mt-3 text-sm leading-6 text-white/60">
+              {payload.task.description || "This page shows the task itself, where it belongs, what state it is in, and what has happened on it so far."}
+            </p>
+          </div>
+          <div className="flex shrink-0 flex-wrap items-center gap-2">
+            <Button
+              pending={taskContextQuery.isFetching}
+              pendingLabel={currentRun ? "Opening" : "Starting"}
+              onClick={async () => {
+                await shell.startTaskNow(payload.task.id);
+                await invalidateAll();
+              }}
+            >
+              <Play className="size-4 fill-current" />
+              {currentRun ? "Focus work" : "Start work"}
+            </Button>
+            {currentRun ? (
+              <>
+                <Button
+                  variant="secondary"
+                  pending={releaseRunMutation.isPending}
+                  pendingLabel="Pausing"
+                  onClick={async () => {
+                    await releaseRunMutation.mutateAsync({ runId: currentRun.id, actor: currentRun.actor, note: currentRun.note });
+                  }}
+                >
+                  Pause
+                </Button>
+                <Button
+                  variant="secondary"
+                  pending={completeRunMutation.isPending}
+                  pendingLabel="Completing"
+                  onClick={async () => {
+                    await completeRunMutation.mutateAsync({ runId: currentRun.id, actor: currentRun.actor, note: currentRun.note });
+                  }}
+                >
+                  Complete
+                </Button>
+              </>
+            ) : null}
+            {isMobile ? (
+              <>
+                <Button variant="secondary" size="sm" aria-label="Change task status" onClick={() => setStatusSheetOpen(true)}>
+                  <currentStatus.icon className="size-4" />
+                </Button>
+                <Button variant="secondary" size="sm" aria-label="Edit task" onClick={() => setDialogOpen(true)}>
+                  <Pencil className="size-4" />
+                </Button>
+              </>
+            ) : (
+              <Button variant="secondary" onClick={() => setDialogOpen(true)}>
+                <Pencil className="size-4" />
+                Edit task
+              </Button>
+            )}
+            {payload.task.status === "done" ? (
+              <Button
+                variant="secondary"
+                onClick={async () => {
+                  await uncompleteMutation.mutateAsync(payload.task.id);
+                }}
+              >
+                Mark as not done
+              </Button>
+            ) : null}
+          </div>
+        </div>
+
+        <div className="mt-5 flex flex-wrap gap-2">
+          <Badge className="bg-white/[0.08] text-white/72">{currentStatus.label}</Badge>
+          <Badge className="bg-white/[0.08] text-white/72">{t(`common.enums.priority.${payload.task.priority}`)}</Badge>
+          <Badge className="bg-white/[0.08] text-white/72">{t(`common.enums.effort.${payload.task.effort}`)}</Badge>
+          <Badge className="bg-white/[0.08] text-white/72">{t(`common.enums.energy.${payload.task.energy}`)}</Badge>
+          <Badge className="bg-white/[0.08] text-white/72">{payload.task.points} xp</Badge>
+          {payload.task.time.totalCreditedSeconds > 0 ? <Badge className="bg-white/[0.08] text-white/72">{Math.floor(payload.task.time.totalCreditedSeconds / 60)} min tracked</Badge> : null}
+          {currentRun ? <Badge className="bg-emerald-500/12 text-emerald-200">Timer active</Badge> : null}
+        </div>
+
+        {!isMobile ? (
+          <div className="mt-5">
+            <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">Status</div>
+            <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-5">
+              {STATUS_META.map((entry) => {
+                const Icon = entry.icon;
+                const selected = entry.status === payload.task.status;
+                return (
+                  <button
+                    key={entry.status}
+                    type="button"
+                    disabled={selected || updateTaskMutation.isPending}
+                    className={`rounded-[18px] border px-3.5 py-3 text-left transition ${
+                      selected
+                        ? "border-[rgba(192,193,255,0.28)] bg-[rgba(192,193,255,0.14)] text-white"
+                        : "border-white/8 bg-white/[0.04] text-white/72 hover:bg-white/[0.08]"
+                    }`}
+                    onClick={() => void handleStatusChange(entry.status)}
+                  >
+                    <div className="flex items-center gap-2">
+                      <Icon className="size-4 shrink-0 text-[var(--primary)]" />
+                      <span className="font-medium">{entry.label}</span>
+                    </div>
+                    <div className="mt-2 text-xs leading-5 text-white/54">{entry.description}</div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        ) : null}
+
+        <div className="mt-5 grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+          <div className="rounded-[20px] bg-white/[0.04] p-4">
+            <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">Linked items</div>
+            <div className="mt-4 grid gap-3">
+              <div>
+                <DetailLabel label="Project" help="The project is the main work stream this task belongs to." />
+                <div className="mt-2">
+                  {payload.project ? (
+                    <Link to={`/projects/${payload.project.id}`} className="inline-flex max-w-full">
+                      <EntityBadge kind="project" label={payload.project.title} compact gradient={false} wrap className="max-w-full" />
+                    </Link>
+                  ) : (
+                    <Badge className="bg-white/[0.08] text-white/65">No project linked</Badge>
+                  )}
+                </div>
+              </div>
+              <div>
+                <DetailLabel label="Goal" help="The goal shows the longer-term result this task supports." />
+                <div className="mt-2">
+                  {payload.goal ? (
+                    <Link to={`/goals/${payload.goal.id}`} className="inline-flex max-w-full">
+                      <EntityBadge kind="goal" label={payload.goal.title} compact gradient={false} wrap className="max-w-full" />
+                    </Link>
+                  ) : (
+                    <Badge className="bg-white/[0.08] text-white/65">No goal linked</Badge>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="rounded-[20px] bg-white/[0.04] p-4">
+            <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">Task details</div>
+            <div className="mt-4 grid gap-3 sm:grid-cols-2">
+              <div className="rounded-[16px] bg-white/[0.03] px-3.5 py-3">
+                <DetailLabel label="Due date" help="Use a due date only when timing actually matters for this task." />
+                <div className="mt-2 text-white">{formatDate(payload.task.dueDate)}</div>
+              </div>
+              <div className="rounded-[16px] bg-white/[0.03] px-3.5 py-3">
+                <DetailLabel label="Owner" help="The owner is the person or role expected to carry this task." />
+                <div className="mt-2 text-white">{payload.task.owner}</div>
+              </div>
+              <div className="rounded-[16px] bg-white/[0.03] px-3.5 py-3">
+                <DetailLabel label="Created" />
+                <div className="mt-2 text-white">{formatDateTime(payload.task.createdAt)}</div>
+              </div>
+              <div className="rounded-[16px] bg-white/[0.03] px-3.5 py-3">
+                <DetailLabel label="Updated" />
+                <div className="mt-2 text-white">{formatDateTime(payload.task.updatedAt)}</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-5 rounded-[20px] bg-white/[0.04] p-4">
+          <div className="flex items-center gap-2 text-sm text-white/58">
+            <span>Current timer</span>
+            <InfoTooltip content="This shows whether work is running on the task right now and how much time has been credited." label="Explain current timer" />
+          </div>
+          <div className="mt-3 text-white">
+            {currentRun
+              ? `${currentRun.timerMode === "planned" ? "Planned" : "Unlimited"} timer active with ${Math.floor(currentRun.creditedSeconds / 60)} credited minutes.`
+              : "No timer is running on this task right now."}
+          </div>
+        </div>
+
+        <div className="mt-5">
+          <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">Activity</div>
+          <div className="mt-4 grid gap-3">
+            {payload.activity.length === 0 ? (
+              <div className="rounded-[18px] bg-white/[0.04] p-4 text-sm text-white/55">No activity has been recorded for this task yet.</div>
+            ) : null}
+            {payload.activity.map((event) => (
+              <div key={event.id} className="rounded-[18px] bg-white/[0.04] p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="font-medium text-white">{getReadableActivityTitle(event)}</div>
+                    <div className="mt-2 text-sm leading-6 text-white/58">{getReadableActivityDescription(event)}</div>
+                    <div className="mt-3 text-[11px] uppercase tracking-[0.16em] text-white/35">{formatDateTime(event.createdAt)}</div>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    className="shrink-0"
+                    onClick={async () => {
+                      await removeEventMutation.mutateAsync(event.id);
+                    }}
+                  >
+                    Remove
+                  </Button>
+                </div>
+                {getActivityEventHref(event) ? (
+                  <Link to={getActivityEventHref(event)!} className="mt-3 inline-flex text-[11px] uppercase tracking-[0.16em] text-[var(--primary)]">
+                    Open related item
+                  </Link>
+                ) : null}
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="mt-5">
+          <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">Timer sessions</div>
+          <div className="mt-4 grid gap-3">
+            {payload.taskRuns.length === 0 ? (
+              <div className="rounded-[18px] bg-white/[0.04] p-4 text-sm text-white/55">No timer sessions have been recorded for this task yet.</div>
+            ) : null}
+            {payload.taskRuns.map((run) => (
+              <div key={run.id} className="rounded-[18px] bg-white/[0.04] p-4">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="font-medium text-white">{run.actor}</div>
+                  <Badge>{describeRunStatus(run.status)}</Badge>
+                </div>
+                <div className="mt-2 text-sm text-white/58">{run.note || t("common.labels.noRunNote")}</div>
+                <div className="mt-3 text-[11px] uppercase tracking-[0.16em] text-white/35">{formatDateTime(run.updatedAt)}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </Card>
+
+      <TaskDialog
+        open={dialogOpen}
+        goals={shell.snapshot.goals}
+        projects={shell.snapshot.dashboard.projects}
+        tags={shell.snapshot.tags}
+        editingTask={payload.task}
+        onOpenChange={setDialogOpen}
+        onSubmit={async (input, taskId) => {
+          if (!taskId) {
+            return;
+          }
+          await updateTaskMutation.mutateAsync({ taskId, patch: input });
+        }}
+      />
+
+      <SheetScaffold
+        open={statusSheetOpen}
+        onOpenChange={setStatusSheetOpen}
+        eyebrow="Task status"
+        title="Change status"
+        description="Pick the state that best matches where this task is right now."
+      >
+        <div className="grid gap-3">
+          {STATUS_META.map((entry) => {
+            const Icon = entry.icon;
+            const selected = entry.status === payload.task.status;
+            return (
+              <button
+                key={entry.status}
+                type="button"
+                disabled={selected || updateTaskMutation.isPending}
+                className={`rounded-[22px] border px-4 py-4 text-left transition ${
+                  selected ? "border-[rgba(192,193,255,0.28)] bg-[rgba(192,193,255,0.14)] text-white" : "border-white/8 bg-white/[0.04] text-white/72 hover:bg-white/[0.08]"
+                }`}
+                onClick={() => void handleStatusChange(entry.status)}
+              >
+                <div className="flex items-center gap-3">
+                  <Icon className="size-4 shrink-0 text-[var(--primary)]" />
+                  <div>
+                    <div className="font-medium">{entry.label}</div>
+                    <div className="mt-1 text-sm text-white/54">{entry.description}</div>
+                  </div>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      </SheetScaffold>
+    </div>
+  );
+}

@@ -1,0 +1,390 @@
+import type { Insight } from "./types";
+
+export interface Domain {
+  id: string;
+  slug: string;
+  title: string;
+  description: string;
+  themeColor: string;
+  sensitive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SchemaCatalogEntry {
+  id: string;
+  slug: string;
+  title: string;
+  family: string;
+  schemaType: "maladaptive" | "adaptive";
+  description: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface EventType {
+  id: string;
+  domainId: string;
+  label: string;
+  description: string;
+  system: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface EmotionDefinition {
+  id: string;
+  domainId: string;
+  label: string;
+  description: string;
+  category: string;
+  system: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PsycheValue {
+  id: string;
+  domainId: string;
+  title: string;
+  description: string;
+  valuedDirection: string;
+  whyItMatters: string;
+  linkedGoalIds: string[];
+  linkedProjectIds: string[];
+  linkedTaskIds: string[];
+  committedActions: string[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface BehaviorPattern {
+  id: string;
+  domainId: string;
+  title: string;
+  description: string;
+  targetBehavior: string;
+  cueContexts: string[];
+  shortTermPayoff: string;
+  longTermCost: string;
+  preferredResponse: string;
+  linkedValueIds: string[];
+  linkedSchemaLabels: string[];
+  linkedModeLabels: string[];
+  linkedModeIds: string[];
+  linkedBeliefIds: string[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface Behavior {
+  id: string;
+  domainId: string;
+  kind: "away" | "committed" | "recovery";
+  title: string;
+  description: string;
+  commonCues: string[];
+  urgeStory: string;
+  shortTermPayoff: string;
+  longTermCost: string;
+  replacementMove: string;
+  repairPlan: string;
+  linkedPatternIds: string[];
+  linkedValueIds: string[];
+  linkedSchemaIds: string[];
+  linkedModeIds: string[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface BeliefEntry {
+  id: string;
+  domainId: string;
+  schemaId: string | null;
+  statement: string;
+  beliefType: "absolute" | "conditional";
+  originNote: string;
+  confidence: number;
+  evidenceFor: string[];
+  evidenceAgainst: string[];
+  flexibleAlternative: string;
+  linkedValueIds: string[];
+  linkedBehaviorIds: string[];
+  linkedModeIds: string[];
+  linkedReportIds: string[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ModeProfile {
+  id: string;
+  domainId: string;
+  family: "coping" | "child" | "critic_parent" | "healthy_adult" | "happy_child";
+  archetype: string;
+  title: string;
+  persona: string;
+  imagery: string;
+  symbolicForm: string;
+  facialExpression: string;
+  fear: string;
+  burden: string;
+  protectiveJob: string;
+  originContext: string;
+  firstAppearanceAt: string | null;
+  linkedPatternIds: string[];
+  linkedBehaviorIds: string[];
+  linkedValueIds: string[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ModeTimelineEntry {
+  id: string;
+  stage: string;
+  modeId: string | null;
+  label: string;
+  note: string;
+}
+
+export interface ModeGuideAnswer {
+  questionKey: string;
+  value: string;
+}
+
+export interface ModeGuideResult {
+  family: "coping" | "child" | "critic_parent" | "healthy_adult" | "happy_child";
+  archetype: string;
+  label: string;
+  confidence: number;
+  reasoning: string;
+}
+
+export interface ModeGuideSession {
+  id: string;
+  summary: string;
+  answers: ModeGuideAnswer[];
+  results: ModeGuideResult[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface TriggerEmotion {
+  id: string;
+  emotionDefinitionId: string | null;
+  label: string;
+  intensity: number;
+  note: string;
+}
+
+export interface TriggerThought {
+  id: string;
+  text: string;
+  parentMode: string;
+  criticMode: string;
+  beliefId: string | null;
+}
+
+export interface TriggerBehavior {
+  id: string;
+  text: string;
+  mode: string;
+  behaviorId: string | null;
+}
+
+export interface TriggerConsequences {
+  selfShortTerm: string[];
+  selfLongTerm: string[];
+  othersShortTerm: string[];
+  othersLongTerm: string[];
+}
+
+export interface TriggerReport {
+  id: string;
+  domainId: string;
+  title: string;
+  status: "draft" | "reviewed" | "integrated";
+  eventTypeId: string | null;
+  customEventType: string;
+  eventSituation: string;
+  occurredAt: string | null;
+  emotions: TriggerEmotion[];
+  thoughts: TriggerThought[];
+  behaviors: TriggerBehavior[];
+  consequences: TriggerConsequences;
+  linkedPatternIds: string[];
+  linkedValueIds: string[];
+  linkedGoalIds: string[];
+  linkedProjectIds: string[];
+  linkedTaskIds: string[];
+  linkedBehaviorIds: string[];
+  linkedBeliefIds: string[];
+  linkedModeIds: string[];
+  modeOverlays: string[];
+  schemaLinks: string[];
+  modeTimeline: ModeTimelineEntry[];
+  nextMoves: string[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface Comment {
+  id: string;
+  entityType: string;
+  entityId: string;
+  anchorKey: string | null;
+  body: string;
+  author: string | null;
+  source: "ui" | "openclaw" | "agent" | "system";
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SchemaPressureEntry {
+  schemaId: string;
+  title: string;
+  activationCount: number;
+}
+
+export interface PsycheOverviewPayload {
+  generatedAt: string;
+  domain: Domain;
+  values: PsycheValue[];
+  patterns: BehaviorPattern[];
+  behaviors: Behavior[];
+  beliefs: BeliefEntry[];
+  modes: ModeProfile[];
+  reports: TriggerReport[];
+  schemaPressure: SchemaPressureEntry[];
+  openInsights: number;
+  unresolvedComments: number;
+  committedActions: string[];
+}
+
+export interface TriggerReportDetailPayload {
+  report: TriggerReport;
+  comments: Comment[];
+  insights: Insight[];
+}
+
+export interface PsycheValueInput {
+  title: string;
+  description: string;
+  valuedDirection: string;
+  whyItMatters: string;
+  linkedGoalIds: string[];
+  linkedProjectIds: string[];
+  linkedTaskIds: string[];
+  committedActions: string[];
+}
+
+export interface BehaviorPatternInput {
+  title: string;
+  description: string;
+  targetBehavior: string;
+  cueContexts: string[];
+  shortTermPayoff: string;
+  longTermCost: string;
+  preferredResponse: string;
+  linkedValueIds: string[];
+  linkedSchemaLabels: string[];
+  linkedModeIds: string[];
+  linkedBeliefIds: string[];
+}
+
+export interface BehaviorInput {
+  kind: "away" | "committed" | "recovery";
+  title: string;
+  description: string;
+  commonCues: string[];
+  urgeStory: string;
+  shortTermPayoff: string;
+  longTermCost: string;
+  replacementMove: string;
+  repairPlan: string;
+  linkedPatternIds: string[];
+  linkedValueIds: string[];
+  linkedSchemaIds: string[];
+  linkedModeIds: string[];
+}
+
+export interface BeliefEntryInput {
+  schemaId: string | null;
+  statement: string;
+  beliefType: "absolute" | "conditional";
+  originNote: string;
+  confidence: number;
+  evidenceFor: string[];
+  evidenceAgainst: string[];
+  flexibleAlternative: string;
+  linkedValueIds: string[];
+  linkedBehaviorIds: string[];
+  linkedModeIds: string[];
+  linkedReportIds: string[];
+}
+
+export interface ModeProfileInput {
+  family: "coping" | "child" | "critic_parent" | "healthy_adult" | "happy_child";
+  archetype: string;
+  title: string;
+  persona: string;
+  imagery: string;
+  symbolicForm: string;
+  facialExpression: string;
+  fear: string;
+  burden: string;
+  protectiveJob: string;
+  originContext: string;
+  firstAppearanceAt: string | null;
+  linkedPatternIds: string[];
+  linkedBehaviorIds: string[];
+  linkedValueIds: string[];
+}
+
+export interface ModeGuideSessionInput {
+  summary: string;
+  answers: ModeGuideAnswer[];
+}
+
+export interface EventTypeInput {
+  label: string;
+  description: string;
+}
+
+export interface EmotionDefinitionInput {
+  label: string;
+  description: string;
+  category: string;
+}
+
+export interface TriggerReportInput {
+  title: string;
+  status: "draft" | "reviewed" | "integrated";
+  eventTypeId: string | null;
+  customEventType: string;
+  eventSituation: string;
+  occurredAt: string | null;
+  emotions: TriggerEmotion[];
+  thoughts: TriggerThought[];
+  behaviors: TriggerBehavior[];
+  consequences: TriggerConsequences;
+  linkedPatternIds: string[];
+  linkedValueIds: string[];
+  linkedGoalIds: string[];
+  linkedProjectIds: string[];
+  linkedTaskIds: string[];
+  linkedBehaviorIds: string[];
+  linkedBeliefIds: string[];
+  linkedModeIds: string[];
+  modeOverlays: string[];
+  schemaLinks: string[];
+  modeTimeline: ModeTimelineEntry[];
+  nextMoves: string[];
+}
+
+export interface CommentInput {
+  entityType: string;
+  entityId: string;
+  anchorKey?: string | null;
+  body: string;
+  author?: string | null;
+}

@@ -1,0 +1,20 @@
+{
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "../src",
+    "outDir": "./dist",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "declaration": true,
+    "types": ["node"],
+    "lib": ["ES2022", "DOM"],
+    "verbatimModuleSyntax": true
+  },
+  "include": [
+    "../src/openclaw/index.ts",
+    "../src/openclaw/api-client.ts",
+    "../src/openclaw/routes.ts",
+    "../src/openclaw/tools.ts",
+    "../src/openclaw/parity.ts"
+  ]
+}

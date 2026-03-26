@@ -1,0 +1,26 @@
+[package]
+name = "forge-tauri"
+version = "0.1.0"
+edition = "2021"
+description = "Forge desktop shell and local API"
+
+[lib]
+name = "forge_tauri"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+anyhow = "1"
+axum = { version = "0.8", features = ["macros"] }
+futures-util = "0.3"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sqlx = { version = "0.8", features = ["sqlite", "runtime-tokio-rustls", "uuid", "json"] }
+tauri = { version = "2", features = [] }
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "sync", "time", "net"] }
+tower-http = { version = "0.6", features = ["cors", "trace"] }
+utoipa = { version = "5", features = ["uuid"] }
+uuid = { version = "1", features = ["serde", "v7"] }
+

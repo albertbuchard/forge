@@ -1,0 +1,58 @@
+{
+  "id": "forge",
+  "name": "Forge",
+  "description": "Thin OpenClaw adapter for the live Forge /api/v1 collaboration API.",
+  "version": "0.2.1",
+  "skills": ["./skills"],
+  "uiHints": {
+    "baseUrl": {
+      "label": "Forge Base URL",
+      "help": "Base URL of the live Forge API bridge.",
+      "placeholder": "http://127.0.0.1:3017"
+    },
+    "apiToken": {
+      "label": "Forge API Token",
+      "help": "Optional bearer token. Leave blank for one-step localhost or Tailscale operator-session bootstrap.",
+      "sensitive": true,
+      "placeholder": "fg_live_..."
+    },
+    "actorLabel": {
+      "label": "Actor Label",
+      "help": "Recorded in Forge provenance headers for plugin-originated writes.",
+      "placeholder": "aurel"
+    },
+    "timeoutMs": {
+      "label": "Request Timeout (ms)",
+      "help": "Maximum time to wait before the plugin aborts an upstream Forge request.",
+      "advanced": true
+    }
+  },
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "baseUrl": {
+        "type": "string",
+        "default": "http://127.0.0.1:3017",
+        "description": "Base URL of the live Forge API bridge."
+      },
+      "apiToken": {
+        "type": "string",
+        "default": "",
+        "description": "Optional bearer token for remote or explicit scoped access. Localhost and Tailscale Forge instances can bootstrap an operator session automatically."
+      },
+      "actorLabel": {
+        "type": "string",
+        "default": "aurel",
+        "description": "Actor label recorded in Forge provenance headers."
+      },
+      "timeoutMs": {
+        "type": "integer",
+        "default": 15000,
+        "minimum": 1000,
+        "maximum": 120000,
+        "description": "Timeout for proxy calls from the OpenClaw plugin to Forge."
+      }
+    }
+  }
+}

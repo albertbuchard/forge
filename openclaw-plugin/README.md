@@ -1,0 +1,38 @@
+# Forge OpenClaw Plugin
+
+`forge-openclaw-plugin` is the publishable OpenClaw package for Forge.
+
+## Install
+
+Current OpenClaw builds should use package discovery:
+
+```bash
+openclaw plugins install forge-openclaw-plugin
+openclaw gateway restart
+```
+
+Older OpenClaw builds can keep using the repo/manual install path during the transition:
+
+```bash
+openclaw plugins install ./projects/forge
+openclaw gateway restart
+```
+
+That repo-local path is the fallback only. The published package stays on the SDK `definePluginEntry` entrypoint and does not rename the plugin, routes, tools, or config keys.
+
+## Recommended usage
+
+The public mental model is intentionally small:
+
+1. `forge_get_operator_overview`
+2. `forge_search_entities`
+3. `forge_create_entities` or `forge_update_entities`
+4. `forge_delete_entities` or `forge_restore_entities` when needed
+5. `forge_post_insight` for recommendations
+
+The skill is entity-format-driven. It teaches the agent how to:
+
+- keep the conversation natural
+- make only gentle end-of-message save suggestions
+- ask only for missing fields
+- capture goals, projects, tasks, values, patterns, behaviors, beliefs, and trigger reports

@@ -1,0 +1,42 @@
+{
+  "name": "forge-openclaw-plugin",
+  "version": "0.2.1",
+  "description": "Thin OpenClaw adapter for the live Forge /api/v1 collaboration API.",
+  "type": "module",
+  "license": "MIT",
+  "private": false,
+  "publishConfig": {
+    "access": "public"
+  },
+  "keywords": [
+    "forge",
+    "openclaw",
+    "plugin",
+    "agent",
+    "productivity"
+  ],
+  "files": [
+    "dist",
+    "skills",
+    "README.md",
+    "openclaw.plugin.json"
+  ],
+  "types": "./dist/openclaw/index.d.ts",
+  "exports": {
+    ".": "./dist/openclaw/index.js"
+  },
+  "openclaw": {
+    "extensions": [
+      "./dist/openclaw/index.js"
+    ]
+  },
+  "peerDependencies": {
+    "openclaw": "^2026.3.22"
+  },
+  "dependencies": {
+    "@sinclair/typebox": "^0.34.48"
+  },
+  "scripts": {
+    "build": "npm exec -- tsc -p tsconfig.build.json"
+  }
+}
