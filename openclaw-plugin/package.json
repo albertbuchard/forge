@@ -1,6 +1,6 @@
 {
   "name": "forge-openclaw-plugin",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "description": "Thin OpenClaw adapter for the live Forge /api/v1 collaboration API.",
   "type": "module",
   "license": "MIT",
