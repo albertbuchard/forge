@@ -1,16 +1,40 @@
+import { buildForgeBaseUrl, buildForgeWebAppUrl, type ForgePluginConfig } from "./api-client.js";
+import { primeForgeRuntime } from "./local-runtime.js";
 import { registerForgePluginCli, registerForgePluginRoutes } from "./routes.js";
 import { registerForgePluginTools } from "./tools.js";
-import type { ForgePluginConfig } from "./api-client.js";
 import type { ForgePluginConfigSchema, ForgePluginRegistrationApi } from "./plugin-sdk-types.js";
 
-type RawPluginConfig = Partial<Record<"baseUrl" | "apiToken" | "actorLabel" | "timeoutMs", unknown>>;
+type RawPluginConfig = Partial<Record<"origin" | "port" | "apiToken" | "actorLabel" | "timeoutMs", unknown>>;
 
 export const FORGE_PLUGIN_ID = "forge-openclaw-plugin";
 export const FORGE_PLUGIN_NAME = "Forge";
-export const FORGE_PLUGIN_DESCRIPTION = "Thin OpenClaw adapter for the live Forge /api/v1 collaboration API.";
+export const FORGE_PLUGIN_DESCRIPTION = "Curated OpenClaw adapter for the Forge collaboration API, UI entrypoint, and localhost auto-start runtime.";
+export const DEFAULT_FORGE_ORIGIN = "http://127.0.0.1";
+export const DEFAULT_FORGE_PORT = 4317;
 
 function normalizeString(value: unknown, fallback: string) {
   return typeof value === "string" && value.trim().length > 0 ? value.trim() : fallback;
+}
+
+function normalizeOrigin(value: unknown, fallback: string) {
+  const candidate = normalizeString(value, fallback);
+  try {
+    const url = new URL(candidate);
+    url.port = "";
+    url.pathname = "/";
+    url.search = "";
+    url.hash = "";
+    return url.origin;
+  } catch {
+    return fallback;
+  }
+}
+
+function normalizePort(value: unknown, fallback: number) {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return fallback;
+  }
+  return Math.min(65535, Math.max(1, Math.round(value)));
 }
 
 function normalizeTimeout(value: unknown, fallback: number) {
@@ -22,8 +46,13 @@ function normalizeTimeout(value: unknown, fallback: number) {
 
 export function resolveForgePluginConfig(pluginConfig: unknown): ForgePluginConfig {
   const raw = (pluginConfig ?? {}) as RawPluginConfig;
+  const origin = normalizeOrigin(raw.origin, DEFAULT_FORGE_ORIGIN);
+  const port = normalizePort(raw.port, DEFAULT_FORGE_PORT);
   return {
-    baseUrl: normalizeString(raw.baseUrl, "http://127.0.0.1:3017"),
+    origin,
+    port,
+    baseUrl: buildForgeBaseUrl(origin, port),
+    webAppUrl: buildForgeWebAppUrl(origin, port),
     apiToken: typeof raw.apiToken === "string" ? raw.apiToken.trim() : "",
     actorLabel: normalizeString(raw.actorLabel, "aurel"),
     timeoutMs: normalizeTimeout(raw.timeoutMs, 15_000)
@@ -38,10 +67,17 @@ export const forgePluginConfigSchema: ForgePluginConfigSchema = {
     type: "object",
     additionalProperties: false,
     properties: {
-      baseUrl: {
+      origin: {
         type: "string",
-        default: "http://127.0.0.1:3017",
-        description: "Base URL of the live Forge API bridge."
+        default: DEFAULT_FORGE_ORIGIN,
+        description: "Forge protocol and host without the port. Example: http://127.0.0.1. Localhost targets auto-start the bundled Forge runtime."
+      },
+      port: {
+        type: "integer",
+        default: DEFAULT_FORGE_PORT,
+        minimum: 1,
+        maximum: 65535,
+        description: "Forge server port. Override this when your local machine uses a different port."
       },
       apiToken: {
         type: "string",
@@ -63,10 +99,15 @@ export const forgePluginConfigSchema: ForgePluginConfigSchema = {
     }
   },
   uiHints: {
-    baseUrl: {
-      label: "Forge Base URL",
-      help: "Base URL of the live Forge API bridge.",
-      placeholder: "http://127.0.0.1:3017"
+    origin: {
+      label: "Forge Origin",
+      help: "Protocol and host for Forge without the port. Example: http://127.0.0.1. Localhost targets auto-start Forge.",
+      placeholder: "http://127.0.0.1"
+    },
+    port: {
+      label: "Forge Port",
+      help: "Forge server port. Change this if your local machine uses another port.",
+      placeholder: "4317"
     },
     apiToken: {
       label: "Forge API Token",
@@ -89,6 +130,7 @@ export const forgePluginConfigSchema: ForgePluginConfigSchema = {
 
 export function registerForgePlugin(api: ForgePluginRegistrationApi) {
   const config = resolveForgePluginConfig(api.pluginConfig);
+  primeForgeRuntime(config);
   registerForgePluginRoutes(api, config);
   registerForgePluginCli(api, config);
   registerForgePluginTools(api, config);

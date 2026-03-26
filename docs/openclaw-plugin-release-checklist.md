@@ -16,18 +16,21 @@ Use this checklist before publishing `forge-openclaw-plugin`.
 4. Smoke check local runtime:
    - `/api/v1/health`
    - `/api/v1/operator/overview`
+   - `/api/v1/agents/onboarding`
    - `/api/v1/entities/search`
    - `/forge/v1/entities/search`
+   - `/forge/v1/ui`
 5. Smoke install the package in a clean OpenClaw workspace:
    - `openclaw plugins install ./openclaw-plugin`
    - `openclaw gateway restart`
    - `forge doctor`
 6. Verify the skill still foregrounds:
    - `forge_get_operator_overview`
+   - `forge_get_ui_entrypoint`
    - `forge_search_entities`
    - batch create/update/delete/restore
    - `forge_post_insight`
    - entity format cards
-   - non-intrusive end-of-message save suggestions
+   - non-intrusive end-of-message save suggestions and occasional UI hints
 7. Publish the package artifact.
 8. Re-run a clean install using the published package name and confirm `forge doctor` and `forge overview` still succeed.

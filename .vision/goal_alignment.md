@@ -100,6 +100,7 @@ Forge must expose a stable API and OpenClaw integration so trusted agents can:
 - create and update work
 - log evidence
 - store structured insights
+- hand off to the Forge UI when visual review or editing is the better workflow
 
 All agent work must remain scoped, auditable, and provenance-backed.
 
@@ -108,6 +109,9 @@ All agent work must remain scoped, auditable, and provenance-backed.
 - local-first architecture
 - canonical production stack: React 19 + TypeScript 5 + Vite 6 + Tailwind CSS 4 + Tauri 2 + Rust + Axum + Tokio + SQLx + SQLite
 - current live bridge: Node/Fastify server under `/api/v1`
+- current plugin contract: curated OpenClaw surface with overview, onboarding, batch entity operations, insights, and UI entrypoint only
+- localhost plugin installs should be able to start Forge automatically on the configured local port
+- local default runtime port: `4317`
 - stable REST + OpenAPI 3.1 contract
 - SQLite with migrations, FTS5, JSON1, WAL mode, and append-only event logging
 - soft delete by default, restore via settings bin, hard delete only when explicit

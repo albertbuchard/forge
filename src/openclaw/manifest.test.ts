@@ -7,15 +7,23 @@ describe("forge plugin manifest", () => {
     expect(manifest).toMatchObject({
       id: "forge-openclaw-plugin",
       name: "Forge",
-      description: expect.any(String),
+      description: expect.stringContaining("Curated OpenClaw adapter"),
       version: expect.any(String),
       skills: ["./skills"]
     });
     expect(manifest.uiHints).toMatchObject({
-      baseUrl: expect.objectContaining({ label: expect.any(String) }),
+      origin: expect.objectContaining({ label: expect.any(String) }),
+      port: expect.objectContaining({ label: expect.any(String) }),
       apiToken: expect.objectContaining({ sensitive: true }),
       actorLabel: expect.objectContaining({ label: expect.any(String) }),
       timeoutMs: expect.objectContaining({ advanced: true })
+    });
+    expect(manifest.configSchema).toMatchObject({
+      type: "object",
+      properties: {
+        origin: expect.objectContaining({ default: "http://127.0.0.1" }),
+        port: expect.objectContaining({ default: 4317 })
+      }
     });
   });
 

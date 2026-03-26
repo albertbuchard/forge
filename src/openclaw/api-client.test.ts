@@ -1,7 +1,16 @@
 import type { IncomingMessage } from "node:http";
 import { Readable } from "node:stream";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { ensureForgeRuntimeReady } from "./local-runtime";
+
+vi.mock("./local-runtime", () => ({
+  ensureForgeRuntimeReady: vi.fn().mockResolvedValue(undefined)
+}));
+
 import {
+  buildForgeBaseUrl,
+  buildForgeWebAppUrl,
+  callConfiguredForgeApi,
   callForgeApi,
   readJsonRequestBody,
   writePluginError,
@@ -27,6 +36,11 @@ describe("openclaw api client", () => {
     vi.unstubAllGlobals();
   });
 
+  it("builds Forge API and UI URLs from origin plus port", () => {
+    expect(buildForgeBaseUrl("http://127.0.0.1", 4317)).toBe("http://127.0.0.1:4317");
+    expect(buildForgeWebAppUrl("http://127.0.0.1", 4317)).toBe("http://127.0.0.1:4317/forge/");
+  });
+
   it("forwards Forge auth and provenance headers", async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(JSON.stringify({ ok: true }), {
@@ -37,19 +51,19 @@ describe("openclaw api client", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     await callForgeApi({
-      baseUrl: "http://127.0.0.1:3017",
+      baseUrl: "http://127.0.0.1:4317",
       apiToken: "fg_live_token",
       actorLabel: "aurel",
       timeoutMs: 4000,
       method: "POST",
-      path: "/api/v1/tasks",
-      body: { title: "Ship plugin" },
+      path: "/api/v1/entities/create",
+      body: { operations: [] },
       idempotencyKey: "abc-123"
     });
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
     const [url, init] = fetchMock.mock.calls[0] as [URL, RequestInit];
-    expect(url.toString()).toBe("http://127.0.0.1:3017/api/v1/tasks");
+    expect(url.toString()).toBe("http://127.0.0.1:4317/api/v1/entities/create");
     expect(init.method).toBe("POST");
     expect(init.headers).toMatchObject({
       authorization: "Bearer fg_live_token",
@@ -58,6 +72,34 @@ describe("openclaw api client", () => {
       "idempotency-key": "abc-123",
       "content-type": "application/json"
     });
+  });
+
+  it("ensures the local Forge runtime before configured requests", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ ok: true }), {
+        status: 200,
+        headers: { "content-type": "application/json" }
+      })
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const config = {
+      origin: "http://127.0.0.1",
+      port: 4317,
+      baseUrl: "http://127.0.0.1:4317",
+      webAppUrl: "http://127.0.0.1:4317/forge/",
+      apiToken: "fg_live_token",
+      actorLabel: "aurel",
+      timeoutMs: 4000
+    } as const;
+
+    await callConfiguredForgeApi(config, {
+      method: "GET",
+      path: "/api/v1/health"
+    });
+
+    expect(ensureForgeRuntimeReady).toHaveBeenCalledWith(config);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
   it("bootstraps a local operator session when no apiToken is configured", async () => {
@@ -81,20 +123,20 @@ describe("openclaw api client", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     await callForgeApi({
-      baseUrl: "http://127.0.0.1:3017",
+      baseUrl: "http://127.0.0.1:4317",
       actorLabel: "aurel",
       timeoutMs: 4000,
       method: "POST",
-      path: "/api/v1/tasks",
-      body: { title: "Ship plugin" }
+      path: "/api/v1/entities/search",
+      body: { searches: [] }
     });
 
     expect(fetchMock).toHaveBeenCalledTimes(2);
     const [bootstrapUrl] = fetchMock.mock.calls[0] as [URL, RequestInit];
-    expect(bootstrapUrl.toString()).toBe("http://127.0.0.1:3017/api/v1/auth/operator-session");
+    expect(bootstrapUrl.toString()).toBe("http://127.0.0.1:4317/api/v1/auth/operator-session");
 
     const [url, init] = fetchMock.mock.calls[1] as [URL, RequestInit];
-    expect(url.toString()).toBe("http://127.0.0.1:3017/api/v1/tasks");
+    expect(url.toString()).toBe("http://127.0.0.1:4317/api/v1/entities/search");
     expect(init.headers).toMatchObject({
       cookie: "forge_operator_session=fg_session_cookie",
       "x-forge-source": "openclaw",
@@ -104,17 +146,17 @@ describe("openclaw api client", () => {
   });
 
   it("parses JSON request bodies and supports empty-object writes", async () => {
-    const request = Readable.from([JSON.stringify({ title: "New task" })]) as Readable & {
+    const request = Readable.from([JSON.stringify({ query: "deep work" })]) as Readable & {
       headers: Record<string, string>;
       method: string;
       url: string;
     };
     request.headers = {};
     request.method = "POST";
-    request.url = "/forge/v1/tasks";
+    request.url = "/forge/v1/entities/search";
 
     await expect(readJsonRequestBody(request as unknown as IncomingMessage, { emptyObject: true })).resolves.toEqual({
-      title: "New task"
+      query: "deep work"
     });
 
     const emptyRequest = Readable.from([]) as Readable & {
@@ -124,7 +166,7 @@ describe("openclaw api client", () => {
     };
     emptyRequest.headers = {};
     emptyRequest.method = "POST";
-    emptyRequest.url = "/forge/v1/tasks";
+    emptyRequest.url = "/forge/v1/entities/search";
 
     await expect(readJsonRequestBody(emptyRequest as unknown as IncomingMessage, { emptyObject: true })).resolves.toEqual({});
   });

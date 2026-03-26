@@ -42,6 +42,7 @@ Treat this as the public mental model:
 
 Read first:
 - `forge_get_operator_overview`
+- `forge_get_ui_entrypoint` when the user should continue in the visual Forge UI
 
 High-level entity workflow:
 - `forge_search_entities`
@@ -53,8 +54,6 @@ High-level entity workflow:
 Agent-authored recommendations:
 - `forge_post_insight`
 
-Narrow CRUD tools still exist for exact operations, timers, settings, approvals, comments, rewards, and specialized Psyche flows, but they are fallback tools and should not be the main advertised workflow.
-
 ## Source of truth
 
 Forge remains the source of truth.
@@ -62,6 +61,7 @@ Forge remains the source of truth.
 Use:
 - plugin routes under `/forge/v1/...`
 - the batch entity tools for most entity work
+- `forge_get_ui_entrypoint` when the user asks for the UI URL or would benefit from switching into the visual interface
 - `forge_post_insight` for structured recommendations
 
 Do not:
@@ -74,13 +74,7 @@ Do not:
 1. Start with `forge_get_operator_overview` unless the user is clearly asking for one exact known record.
 2. Before creating or updating ambiguous entities, use `forge_search_entities` to check for duplicates.
 3. Prefer batch tools even for small multi-step work when they keep the operation coherent.
-4. Use narrow tools only when the job is genuinely specialized:
-   - live timers and work logging
-   - settings
-   - approvals
-   - comments
-   - rewards
-   - exact single-record fallback flows
+4. When review, editing, Kanban movement, or Psyche exploration would be easier visually, use `forge_get_ui_entrypoint` and offer the Forge UI lightly near the end of the message.
 
 ## When to offer saving to Forge
 
@@ -127,6 +121,23 @@ Use `forge_post_insight` when you want to store that recommendation with agent p
 Do not use an insight as a substitute for the main conversation. The main reply should still help the user directly.
 If storing the insight would be useful, mention it lightly near the end of the response, for example:
 - "There may be a useful insight here about how this pattern keeps showing up. If you want, I can turn it into a structured Forge insight so it stays visible."
+
+## When to suggest the Forge UI
+
+Suggest the Forge UI lightly when it would genuinely help:
+- Kanban review or lane movement
+- reviewing several linked goals, projects, or tasks
+- editing a record with a lot of connected context
+- Psyche graph or report exploration
+
+Good style:
+- "If you want, I can also give you the direct Forge UI link so you can review it visually there."
+- "This may be easier to inspect directly in Forge. If useful, I can pull the UI entrypoint for you."
+
+Bad style:
+- repeating it every turn
+- replacing the main answer with a redirect
+- suggesting the UI when the user clearly wants to stay in chat
 
 ## Entity format cards
 
@@ -322,7 +333,6 @@ Remote non-local installs should use a token.
 1. Prefer `forge_get_operator_overview` first.
 2. Prefer `forge_search_entities` before create/update when duplicate risk exists.
 3. Prefer batch tools for multi-entity work.
-4. Use `forge_log_work` if the work already happened.
-5. Use `forge_post_insight` for structured recommendations.
-6. Respect sensitive Psyche scopes. Psyche is not casual metadata.
-7. Default delete is soft delete. Hard delete requires explicit user intent.
+4. Use `forge_post_insight` for structured recommendations.
+5. Respect sensitive Psyche scopes. Psyche is not casual metadata.
+6. Default delete is soft delete. Hard delete requires explicit user intent.

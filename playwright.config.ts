@@ -11,7 +11,7 @@ export default defineConfig({
   retries: process.env.CI ? 2 : 0,
   reporter: process.env.CI ? [["github"], ["html", { open: "never" }]] : [["list"]],
   use: {
-    baseURL: "http://127.0.0.1:3017/forge/",
+    baseURL: "http://127.0.0.1:4317/forge/",
     trace: "retain-on-failure",
     screenshot: "only-on-failure",
     video: "retain-on-failure"
@@ -28,7 +28,7 @@ export default defineConfig({
   ],
   webServer: {
     command: "npm run build && node --import tsx server/src/e2e-server.ts",
-    port: 3017,
+    port: 4317,
     timeout: 120_000,
     reuseExistingServer: !process.env.CI
   }

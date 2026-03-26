@@ -617,6 +617,20 @@ export interface AgentOnboardingPayload {
     settingsBin: string;
     batchSearch: string;
   };
+  recommendedPluginTools: {
+    bootstrap: string[];
+    uiWorkflow: string[];
+    entityWorkflow: string[];
+    insightWorkflow: string[];
+  };
+  interactionGuidance: {
+    conversationMode: string;
+    saveSuggestionPlacement: string;
+    saveSuggestionTone: string;
+    maxQuestionsPerTurn: number;
+    duplicateCheckRoute: string;
+    uiSuggestionRule: string;
+  };
   mutationGuidance: {
     preferredBatchRoutes: {
       create: string;

@@ -324,6 +324,7 @@ function buildAgentOnboardingPayload(request: {
     },
     recommendedPluginTools: {
       bootstrap: ["forge_get_operator_overview"],
+      uiWorkflow: ["forge_get_ui_entrypoint"],
       entityWorkflow: [
         "forge_search_entities",
         "forge_create_entities",
@@ -338,7 +339,8 @@ function buildAgentOnboardingPayload(request: {
       saveSuggestionPlacement: "end_of_message",
       saveSuggestionTone: "gentle_optional",
       maxQuestionsPerTurn: 3,
-      duplicateCheckRoute: "/api/v1/entities/search"
+      duplicateCheckRoute: "/api/v1/entities/search",
+      uiSuggestionRule: "offer_visual_ui_when_review_or_editing_would_be_easier"
     },
     mutationGuidance: {
       preferredBatchRoutes: {

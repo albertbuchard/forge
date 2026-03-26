@@ -13,7 +13,7 @@ async function issueOperatorSessionCookie(app: Awaited<ReturnType<typeof buildSe
     method: "GET",
     url: "/api/v1/auth/operator-session",
     headers: {
-      host: "127.0.0.1:3017"
+      host: "127.0.0.1:4317"
     }
   });
   assert.equal(response.statusCode, 200);
@@ -160,7 +160,7 @@ test("goal detail, operator context, and retroactive work logging are available 
       method: "GET",
       url: "/api/v1/operator/overview",
       headers: {
-        host: "127.0.0.1:3017",
+        host: "127.0.0.1:4317",
         cookie: operatorCookie
       }
     });
@@ -177,8 +177,8 @@ test("goal detail, operator context, and retroactive work logging are available 
     assert.ok(Array.isArray(overview.operator.focusTasks));
     assert.equal(overview.routeGuide.preferredStart, "/api/v1/operator/overview");
     assert.ok(overview.routeGuide.mainRoutes.some((route) => route.id === "psyche_overview"));
-    assert.equal(overview.onboarding.openApiUrl, "http://127.0.0.1:3017/api/v1/openapi.json");
-    assert.equal(overview.onboarding.webAppUrl, "http://127.0.0.1:3017/forge/");
+    assert.equal(overview.onboarding.openApiUrl, "http://127.0.0.1:4317/api/v1/openapi.json");
+    assert.equal(overview.onboarding.webAppUrl, "http://127.0.0.1:4317/forge/");
 
     const logged = await app.inject({
       method: "POST",
@@ -3036,7 +3036,7 @@ test("settings and local agent token management persist through the versioned AP
       method: "GET",
       url: "/api/v1/agents/onboarding",
       headers: {
-        host: "127.0.0.1:3017"
+        host: "127.0.0.1:4317"
       }
     });
     assert.equal(onboarding.statusCode, 200);
@@ -3051,14 +3051,14 @@ test("settings and local agent token management persist through the versioned AP
         authModes: { operatorSession: { tokenRequired: boolean } };
         tokenRecovery: { rawTokenStoredByForge: boolean; recoveryAction: string };
         verificationPaths: { settingsBin: string; batchSearch: string };
-        recommendedPluginTools: { bootstrap: string[]; entityWorkflow: string[]; insightWorkflow: string[] };
-        interactionGuidance: { saveSuggestionPlacement: string; maxQuestionsPerTurn: number; duplicateCheckRoute: string };
+        recommendedPluginTools: { bootstrap: string[]; uiWorkflow: string[]; entityWorkflow: string[]; insightWorkflow: string[] };
+        interactionGuidance: { saveSuggestionPlacement: string; maxQuestionsPerTurn: number; duplicateCheckRoute: string; uiSuggestionRule: string };
         mutationGuidance: { deleteDefault: string; preferredBatchRoutes: { create: string; update: string; delete: string; restore: string; search: string } };
       };
     };
-    assert.equal(onboardingBody.onboarding.forgeBaseUrl, "http://127.0.0.1:3017");
-    assert.equal(onboardingBody.onboarding.webAppUrl, "http://127.0.0.1:3017/forge/");
-    assert.equal(onboardingBody.onboarding.openApiUrl, "http://127.0.0.1:3017/api/v1/openapi.json");
+    assert.equal(onboardingBody.onboarding.forgeBaseUrl, "http://127.0.0.1:4317");
+    assert.equal(onboardingBody.onboarding.webAppUrl, "http://127.0.0.1:4317/forge/");
+    assert.equal(onboardingBody.onboarding.openApiUrl, "http://127.0.0.1:4317/api/v1/openapi.json");
     assert.equal(onboardingBody.onboarding.defaultConnectionMode, "operator_session");
     assert.deepEqual(onboardingBody.onboarding.recommendedScopes, [
       "read",
@@ -3078,6 +3078,7 @@ test("settings and local agent token management persist through the versioned AP
     assert.equal(onboardingBody.onboarding.verificationPaths.settingsBin, "/api/v1/settings/bin");
     assert.equal(onboardingBody.onboarding.verificationPaths.batchSearch, "/api/v1/entities/search");
     assert.deepEqual(onboardingBody.onboarding.recommendedPluginTools.bootstrap, ["forge_get_operator_overview"]);
+    assert.deepEqual(onboardingBody.onboarding.recommendedPluginTools.uiWorkflow, ["forge_get_ui_entrypoint"]);
     assert.deepEqual(onboardingBody.onboarding.recommendedPluginTools.entityWorkflow, [
       "forge_search_entities",
       "forge_create_entities",
@@ -3089,6 +3090,7 @@ test("settings and local agent token management persist through the versioned AP
     assert.equal(onboardingBody.onboarding.interactionGuidance.saveSuggestionPlacement, "end_of_message");
     assert.equal(onboardingBody.onboarding.interactionGuidance.maxQuestionsPerTurn, 3);
     assert.equal(onboardingBody.onboarding.interactionGuidance.duplicateCheckRoute, "/api/v1/entities/search");
+    assert.equal(onboardingBody.onboarding.interactionGuidance.uiSuggestionRule, "offer_visual_ui_when_review_or_editing_would_be_easier");
     assert.equal(onboardingBody.onboarding.mutationGuidance.deleteDefault, "soft");
     assert.equal(onboardingBody.onboarding.mutationGuidance.preferredBatchRoutes.create, "/api/v1/entities/create");
     assert.equal(onboardingBody.onboarding.mutationGuidance.preferredBatchRoutes.update, "/api/v1/entities/update");

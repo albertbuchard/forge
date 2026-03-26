@@ -11,7 +11,7 @@ It is meant to run:
 
 ### One-step app run
 
-This is the main end-user path. It builds the web app and serves the full Forge runtime on port `3017`.
+This is the main end-user path. It builds the web app and serves the full Forge runtime on port `4317`.
 
 ```bash
 npm install
@@ -20,12 +20,12 @@ npm run start
 
 Then open:
 
-- local: [http://127.0.0.1:3017/forge/](http://127.0.0.1:3017/forge/)
-- Tailscale: `http://<your-device>.ts.net:3017/forge/`
+- local: [http://127.0.0.1:4317/forge/](http://127.0.0.1:4317/forge/)
+- Tailscale: `http://<your-device>.ts.net:4317/forge/`
 
 Forge health is available at:
 
-- [http://127.0.0.1:3017/api/v1/health](http://127.0.0.1:3017/api/v1/health)
+- [http://127.0.0.1:4317/api/v1/health](http://127.0.0.1:4317/api/v1/health)
 
 ### Development mode
 
@@ -44,7 +44,7 @@ npm run dev:web
 Then open:
 
 - Vite dev app: [http://127.0.0.1:3027](http://127.0.0.1:3027)
-- runtime API: [http://127.0.0.1:3017/api/v1/health](http://127.0.0.1:3017/api/v1/health)
+- runtime API: [http://127.0.0.1:4317/api/v1/health](http://127.0.0.1:4317/api/v1/health)
 
 ## Local and Tailscale access
 

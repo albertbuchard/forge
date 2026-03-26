@@ -1,46 +1,26 @@
 export type ApiRouteKey = `${Uppercase<string>} ${string}`;
 
-export type ForgePluginRouteExclusion = {
+export type ForgeSupportedPluginApiRoute = {
   method: Uppercase<string>;
   path: string;
-  reason:
-    | "browser-session-telemetry"
-    | "legacy-alias"
-    | "operator-token-bootstrap"
-    | "sse-forwarding";
+  purpose:
+    | "diagnostics"
+    | "overview"
+    | "onboarding"
+    | "entities"
+    | "insights";
 };
 
-export const FORGE_PLUGIN_ROUTE_EXCLUSIONS: ForgePluginRouteExclusion[] = [
-  {
-    method: "GET",
-    path: "/api/v1/campaigns",
-    reason: "legacy-alias"
-  },
-  {
-    method: "POST",
-    path: "/api/v1/settings/tokens",
-    reason: "operator-token-bootstrap"
-  },
-  {
-    method: "POST",
-    path: "/api/v1/settings/tokens/:id/rotate",
-    reason: "operator-token-bootstrap"
-  },
-  {
-    method: "POST",
-    path: "/api/v1/settings/tokens/:id/revoke",
-    reason: "operator-token-bootstrap"
-  },
-  {
-    method: "POST",
-    path: "/api/v1/session-events",
-    reason: "browser-session-telemetry"
-  },
-  {
-    method: "GET",
-    path: "/api/v1/events/stream",
-    reason: "sse-forwarding"
-  }
+export const FORGE_SUPPORTED_PLUGIN_API_ROUTES: ForgeSupportedPluginApiRoute[] = [
+  { method: "GET", path: "/api/v1/health", purpose: "diagnostics" },
+  { method: "GET", path: "/api/v1/operator/overview", purpose: "overview" },
+  { method: "GET", path: "/api/v1/agents/onboarding", purpose: "onboarding" },
+  { method: "POST", path: "/api/v1/entities/search", purpose: "entities" },
+  { method: "POST", path: "/api/v1/entities/create", purpose: "entities" },
+  { method: "POST", path: "/api/v1/entities/update", purpose: "entities" },
+  { method: "POST", path: "/api/v1/entities/delete", purpose: "entities" },
+  { method: "POST", path: "/api/v1/entities/restore", purpose: "entities" },
+  { method: "POST", path: "/api/v1/insights", purpose: "insights" }
 ];
 
 export function makeApiRouteKey(method: string, path: string): ApiRouteKey {
@@ -48,6 +28,6 @@ export function makeApiRouteKey(method: string, path: string): ApiRouteKey {
   return `${method.toUpperCase()} ${normalizedPath}` as ApiRouteKey;
 }
 
-export function collectExcludedApiRouteKeys() {
-  return new Set(FORGE_PLUGIN_ROUTE_EXCLUSIONS.map((route) => makeApiRouteKey(route.method, route.path)));
+export function collectSupportedPluginApiRouteKeys() {
+  return new Set(FORGE_SUPPORTED_PLUGIN_API_ROUTES.map((route) => makeApiRouteKey(route.method, route.path)));
 }

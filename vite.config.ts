@@ -14,7 +14,7 @@ function normalizeBasePath(value: string) {
 
 export default defineConfig(({ command }) => {
   const base = normalizeBasePath(process.env.FORGE_BASE_PATH ?? (command === "build" ? "/forge/" : "/"));
-  const apiTarget = process.env.FORGE_API_ORIGIN ?? "http://127.0.0.1:3017";
+  const apiTarget = process.env.FORGE_API_ORIGIN ?? "http://127.0.0.1:4317";
 
   return {
     base,
@@ -42,7 +42,7 @@ export default defineConfig(({ command }) => {
     },
     preview: {
       host: "0.0.0.0",
-      port: 3017,
+      port: 4317,
       strictPort: true
     },
     build: {

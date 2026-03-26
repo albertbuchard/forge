@@ -1185,6 +1185,8 @@ export function buildOpenApiDocument() {
       "tokenRecovery",
       "requiredHeaders",
       "verificationPaths",
+      "recommendedPluginTools",
+      "interactionGuidance",
       "mutationGuidance"
     ],
     properties: {
@@ -1262,6 +1264,30 @@ export function buildOpenApiDocument() {
           weeklyReview: { type: "string" },
           settingsBin: { type: "string" },
           batchSearch: { type: "string" }
+        }
+      },
+      recommendedPluginTools: {
+        type: "object",
+        additionalProperties: false,
+        required: ["bootstrap", "uiWorkflow", "entityWorkflow", "insightWorkflow"],
+        properties: {
+          bootstrap: arrayOf({ type: "string" }),
+          uiWorkflow: arrayOf({ type: "string" }),
+          entityWorkflow: arrayOf({ type: "string" }),
+          insightWorkflow: arrayOf({ type: "string" })
+        }
+      },
+      interactionGuidance: {
+        type: "object",
+        additionalProperties: false,
+        required: ["conversationMode", "saveSuggestionPlacement", "saveSuggestionTone", "maxQuestionsPerTurn", "duplicateCheckRoute", "uiSuggestionRule"],
+        properties: {
+          conversationMode: { type: "string" },
+          saveSuggestionPlacement: { type: "string" },
+          saveSuggestionTone: { type: "string" },
+          maxQuestionsPerTurn: { type: "integer" },
+          duplicateCheckRoute: { type: "string" },
+          uiSuggestionRule: { type: "string" }
         }
       },
       mutationGuidance: {
@@ -1904,6 +1930,36 @@ export function buildOpenApiDocument() {
       }
     },
     paths: {
+      "/api/v1/health": {
+        get: {
+          summary: "Get Forge API health and watchdog status",
+          responses: {
+            "200": jsonResponse(
+              {
+                type: "object",
+                required: ["ok", "app", "now", "watchdog"],
+                properties: {
+                  ok: { type: "boolean" },
+                  app: { type: "string", enum: ["forge"] },
+                  now: { type: "string", format: "date-time" },
+                  watchdog: {
+                    type: "object",
+                    required: ["enabled", "healthy", "state", "reason", "status"],
+                    properties: {
+                      enabled: { type: "boolean" },
+                      healthy: { type: "boolean" },
+                      state: { type: "string", enum: ["disabled", "idle", "healthy", "degraded"] },
+                      reason: { anyOf: [{ type: "string" }, { type: "null" }] },
+                      status: { anyOf: [{ type: "object", additionalProperties: true }, { type: "null" }] }
+                    }
+                  }
+                }
+              },
+              "Forge health payload"
+            )
+          }
+        }
+      },
       "/api/v1/context": {
         get: {
           summary: "Get the full Forge snapshot for the routed app shell",

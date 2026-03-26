@@ -1,7 +1,7 @@
 {
   "name": "forge-openclaw-plugin",
   "version": "0.2.4",
-  "description": "Thin OpenClaw adapter for the live Forge /api/v1 collaboration API.",
+  "description": "Curated OpenClaw adapter for the Forge collaboration API, UI entrypoint, and localhost auto-start runtime.",
   "type": "module",
   "license": "MIT",
   "private": false,
@@ -17,6 +17,7 @@
   ],
   "files": [
     "dist",
+    "server",
     "skills",
     "README.md",
     "openclaw.plugin.json"
@@ -34,9 +35,12 @@
     "openclaw": "^2026.3.22"
   },
   "dependencies": {
-    "@sinclair/typebox": "^0.34.48"
+    "@fastify/cors": "^10.0.1",
+    "@sinclair/typebox": "^0.34.48",
+    "fastify": "^5.2.1",
+    "zod": "^3.25.67"
   },
   "scripts": {
-    "build": "npm exec -- tsc -p tsconfig.build.json"
+    "build": "node ./scripts/build.mjs"
   }
 }

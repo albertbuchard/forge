@@ -127,15 +127,19 @@ The preferred agent workflow is:
 - search before creating duplicates
 - use batch entity tools for normal multi-entity work
 - store recommendations as structured insights
+- use the Forge UI entrypoint when review, editing, Kanban movement, or Psyche exploration is better handled visually
 
 Agent collaboration should feel helpful and low-pressure.
 The main conversation comes first; saving to Forge should be an optional, non-intrusive offer.
+The OpenClaw plugin should stay curated and professional: overview, onboarding, batch entity operations, insight posting, and UI entrypoint only.
+For localhost targets, the plugin should self-host the Forge runtime so install and first use stay close to one step.
 
 ## Runtime and stack
 
 Current live runtime:
 - React 19 + TypeScript 5 + Vite 6 frontend
 - Node/Fastify `/api/v1` bridge
+- local default Forge runtime port `4317`, with the web app served at `/forge/`
 
 Canonical long-term stack:
 - Tauri 2

@@ -13,6 +13,9 @@
   "include": [
     "../src/openclaw/index.ts",
     "../src/openclaw/api-client.ts",
+    "../src/openclaw/local-runtime.ts",
+    "../src/openclaw/plugin-entry-shared.ts",
+    "../src/openclaw/plugin-sdk-types.ts",
     "../src/openclaw/routes.ts",
     "../src/openclaw/tools.ts",
     "../src/openclaw/parity.ts"

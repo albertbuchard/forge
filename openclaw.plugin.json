@@ -1,16 +1,21 @@
 {
   "id": "forge-openclaw-plugin",
   "name": "Forge",
-  "description": "Thin OpenClaw adapter for the live Forge /api/v1 collaboration API.",
+  "description": "Curated OpenClaw adapter for the Forge collaboration API, UI entrypoint, and localhost auto-start runtime.",
   "version": "0.2.4",
   "skills": [
     "./skills"
   ],
   "uiHints": {
-    "baseUrl": {
-      "label": "Forge Base URL",
-      "help": "Base URL of the live Forge API bridge.",
-      "placeholder": "http://127.0.0.1:3017"
+    "origin": {
+      "label": "Forge Origin",
+      "help": "Protocol and host for Forge without the port. Example: http://127.0.0.1. Localhost targets auto-start Forge.",
+      "placeholder": "http://127.0.0.1"
+    },
+    "port": {
+      "label": "Forge Port",
+      "help": "Forge server port. Change this if your local machine uses another port.",
+      "placeholder": "4317"
     },
     "apiToken": {
       "label": "Forge API Token",
@@ -33,10 +38,17 @@
     "type": "object",
     "additionalProperties": false,
     "properties": {
-      "baseUrl": {
+      "origin": {
         "type": "string",
-        "default": "http://127.0.0.1:3017",
-        "description": "Base URL of the live Forge API bridge."
+        "default": "http://127.0.0.1",
+        "description": "Forge protocol and host without the port. Example: http://127.0.0.1. Localhost targets auto-start the bundled Forge runtime."
+      },
+      "port": {
+        "type": "integer",
+        "default": 4317,
+        "minimum": 1,
+        "maximum": 65535,
+        "description": "Forge server port. Override this when your local machine uses a different port."
       },
       "apiToken": {
         "type": "string",

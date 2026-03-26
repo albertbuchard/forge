@@ -20,7 +20,7 @@ export class ConfigurationManager extends AbstractManager {
   readRuntimeConfig(overrides: { dataRoot?: string } = {}): ForgeRuntimeConfig {
     return {
       host: this.env.HOST?.trim() || "0.0.0.0",
-      port: Number(this.env.PORT ?? 3017),
+      port: Number(this.env.PORT ?? 4317),
       basePath: this.normalizeBasePath(this.env.FORGE_BASE_PATH ?? "/forge/"),
       dataRoot: overrides.dataRoot ? overrides.dataRoot : this.env.FORGE_DATA_ROOT?.trim() || null,
       sessionCookieName: this.env.FORGE_OPERATOR_SESSION_COOKIE?.trim() || "forge_operator_session",

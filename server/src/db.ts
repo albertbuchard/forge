@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import { mkdir, readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -8,8 +7,10 @@ function nowIso(): string {
   return new Date().toISOString();
 }
 
-function makeId(prefix: string): string {
-  return `${prefix}_${randomUUID().replaceAll("-", "").slice(0, 10)}`;
+function dateOffsetIso(days: number): string {
+  const date = new Date();
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
 }
 
 const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
@@ -97,67 +98,62 @@ function seedData(): void {
 
   const database = getDatabase();
   const now = nowIso();
-
-  const tags = [
-    { id: makeId("tag"), name: "Vitality", kind: "value", color: "#d6b98a", description: "Energy, health, and body stewardship." },
-    { id: makeId("tag"), name: "Craft", kind: "value", color: "#f5efe6", description: "Deliberate skill building and quality." },
-    { id: makeId("tag"), name: "Relationships", kind: "value", color: "#7dd3fc", description: "Shared presence, trust, and love." },
-    { id: makeId("tag"), name: "Deep Work", kind: "execution", color: "#f97316", description: "Protected focus blocks and cognitively hard work." },
-    { id: makeId("tag"), name: "Admin", kind: "category", color: "#71717a", description: "Operational tasks that keep life moving." },
-    { id: makeId("tag"), name: "Momentum", kind: "execution", color: "#34d399", description: "Fast wins that keep the board moving." },
-    { id: makeId("tag"), name: "Reflection", kind: "category", color: "#a78bfa", description: "Review, journaling, and strategy." },
-    { id: makeId("tag"), name: "Health", kind: "category", color: "#ef4444", description: "Training, food, and recovery." }
-  ];
-
-  const insertTag = database.prepare(`
-    INSERT INTO tags (id, name, kind, color, description, created_at)
-    VALUES (?, ?, ?, ?, ?, ?)
-  `);
-  for (const tag of tags) {
-    insertTag.run(tag.id, tag.name, tag.kind, tag.color, tag.description, now);
-  }
-
-  const goals = [
-    {
-      id: makeId("goal"),
-      title: "Build a durable body and calm energy",
-      description: "Train, recover, and keep health rituals consistent enough that energy becomes an asset, not a bottleneck.",
-      horizon: "year",
-      status: "active",
-      targetPoints: 480,
-      themeColor: "#d6b98a",
-      tagNames: ["Vitality", "Health"]
-    },
-    {
-      id: makeId("goal"),
-      title: "Ship meaningful creative work every week",
-      description: "Turn strategic creative goals into visible output with protected deep-work blocks and honest review loops.",
-      horizon: "quarter",
-      status: "active",
-      targetPoints: 520,
-      themeColor: "#f5efe6",
-      tagNames: ["Craft", "Deep Work", "Reflection"]
-    },
-    {
-      id: makeId("goal"),
-      title: "Strengthen shared life systems",
-      description: "Reduce drag in shared obligations and keep admin, planning, and relationship care from slipping.",
-      horizon: "year",
-      status: "active",
-      targetPoints: 360,
-      themeColor: "#7dd3fc",
-      tagNames: ["Relationships", "Admin", "Momentum"]
-    }
-  ] as const;
-
   const insertGoal = database.prepare(`
     INSERT INTO goals (id, title, description, horizon, status, target_points, theme_color, created_at, updated_at)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+  const insertTag = database.prepare(`
+    INSERT INTO tags (id, name, kind, color, description, created_at)
+    VALUES (?, ?, ?, ?, ?, ?)
   `);
   const insertGoalTag = database.prepare(`
     INSERT INTO goal_tags (goal_id, tag_id)
     VALUES (?, ?)
   `);
+  const insertProject = database.prepare(`
+    INSERT INTO projects (id, goal_id, title, description, status, theme_color, target_points, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+  const insertTask = database.prepare(`
+    INSERT INTO tasks (
+      id, title, description, status, priority, owner, goal_id, project_id, due_date, effort, energy, points, sort_order, completed_at, created_at, updated_at
+    )
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+  const insertTaskTag = database.prepare(`
+    INSERT INTO task_tags (task_id, tag_id)
+    VALUES (?, ?)
+  `);
+
+  const goals = [
+    {
+      id: "goal_be_a_good_person",
+      title: "Be a good person",
+      description: "Live in a way that is kind, honest, and helpful to other people.",
+      horizon: "lifetime",
+      status: "active",
+      targetPoints: 1000,
+      themeColor: "#f5efe6"
+    },
+    {
+      id: "goal_build_forge",
+      title: "Build Forge into a premium operating system",
+      description: "Turn Forge into a sharp, trustworthy life system with strong daily execution.",
+      horizon: "year",
+      status: "active",
+      targetPoints: 720,
+      themeColor: "#9dc4ff"
+    },
+    {
+      id: "goal_train_body",
+      title: "Train with consistency",
+      description: "Keep health, training, and recovery visible in the weekly operating rhythm.",
+      horizon: "quarter",
+      status: "active",
+      targetPoints: 360,
+      themeColor: "#f4b97a"
+    }
+  ];
 
   for (const goal of goals) {
     insertGoal.run(
@@ -171,177 +167,178 @@ function seedData(): void {
       now,
       now
     );
-    for (const tagName of goal.tagNames) {
-      const tag = tags.find((entry) => entry.name === tagName);
-      if (tag) {
-        insertGoalTag.run(goal.id, tag.id);
-      }
-    }
   }
+
+  const tags = [
+    ["tag_vitality", "Vitality", "value", "#f59e0b", "Health, training, and physical energy."],
+    ["tag_deep_work", "Deep Work", "execution", "#8b5cf6", "Protected focus and cognitively demanding work."],
+    ["tag_relationships", "Relationships", "value", "#ef4444", "Important human connection and maintenance."],
+    ["tag_systems", "Systems", "category", "#14b8a6", "Operational scaffolding, review, and maintenance."],
+    ["tag_craft", "Craft", "category", "#60a5fa", "Making the product sharper and more intentional."],
+    ["tag_recovery", "Recovery", "execution", "#22c55e", "Recovery, decompression, and reset work."]
+  ] as const;
+
+  for (const [id, name, kind, color, description] of tags) {
+    insertTag.run(id, name, kind, color, description, now);
+  }
+
+  insertGoalTag.run("goal_be_a_good_person", "tag_relationships");
+  insertGoalTag.run("goal_build_forge", "tag_craft");
+  insertGoalTag.run("goal_build_forge", "tag_systems");
+  insertGoalTag.run("goal_train_body", "tag_vitality");
+  insertGoalTag.run("goal_train_body", "tag_recovery");
+
+  insertProject.run(
+    "project_relationships_ritual",
+    "goal_be_a_good_person",
+    "Keep the relationship ritual visible",
+    "Protect simple weekly actions that maintain important relationships and personal integrity.",
+    "active",
+    "#fb7185",
+    90,
+    now,
+    now
+  );
+  insertProject.run(
+    "project_forge_mobile",
+    "goal_build_forge",
+    "Ship the Forge flagship workflow",
+    "Tighten the main execution loop, Kanban, and OpenClaw collaboration surface.",
+    "active",
+    "#7dd3fc",
+    240,
+    now,
+    now
+  );
+  insertProject.run(
+    "project_strength_cycle",
+    "goal_train_body",
+    "Run the current strength cycle",
+    "Keep the training block visible with recovery and progression.",
+    "active",
+    "#f59e0b",
+    120,
+    now,
+    now
+  );
 
   const tasks = [
     {
-      title: "Lock four training sessions into the next 10 days",
-      description: "Schedule sessions, recovery windows, and prep checklist so the week starts with certainty.",
+      id: "task_flagship_review",
+      title: "Review the Forge flagship flow",
+      description: "Walk Overview, Today, Kanban, and Psyche to identify friction before the next pass.",
       status: "focus",
       priority: "high",
       owner: "Albert",
-      goalTitle: "Build a durable body and calm energy",
-      dueDate: "2026-03-24",
-      effort: "deep",
-      energy: "steady",
-      points: 65,
-      projectTitle: "Energy Foundation Sprint",
-      tagNames: ["Vitality", "Health", "Momentum"]
-    },
-    {
-      title: "Draft the premium weekly review ritual",
-      description: "Create a short review format that reconnects finished tasks to life goals and next moves.",
-      status: "in_progress",
-      priority: "critical",
-      owner: "Aurel",
-      goalTitle: "Ship meaningful creative work every week",
-      dueDate: "2026-03-23",
+      goalId: "goal_build_forge",
+      projectId: "project_forge_mobile",
+      dueDate: dateOffsetIso(1),
       effort: "deep",
       energy: "high",
-      points: 90,
-      projectTitle: "Weekly Creative Shipping System",
-      tagNames: ["Craft", "Reflection", "Deep Work"]
+      points: 55,
+      sortOrder: 100,
+      completedAt: null
     },
     {
-      title: "Consolidate shared bills and admin follow-ups",
-      description: "Clear the lingering small obligations and tag what should be automated next.",
+      id: "task_plugin_surface",
+      title: "Slim the OpenClaw plugin surface",
+      description: "Keep the plugin focused on overview, batch entities, insights, and UI entry.",
+      status: "in_progress",
+      priority: "high",
+      owner: "Albert",
+      goalId: "goal_build_forge",
+      projectId: "project_forge_mobile",
+      dueDate: dateOffsetIso(0),
+      effort: "deep",
+      energy: "high",
+      points: 34,
+      sortOrder: 200,
+      completedAt: null
+    },
+    {
+      id: "task_weekly_review",
+      title: "Prepare the weekly review ritual",
+      description: "Make sure the review captures drift, signals, and visible wins.",
       status: "backlog",
       priority: "medium",
       owner: "Albert",
-      goalTitle: "Strengthen shared life systems",
-      dueDate: "2026-03-28",
-      effort: "light",
-      energy: "low",
-      points: 35,
-      projectTitle: "Shared Life Admin Reset",
-      tagNames: ["Admin", "Relationships"]
-    },
-    {
-      title: "Finish movement session and recovery log",
-      description: "Complete the session, note soreness/energy, and mark the habit chain cleanly.",
-      status: "done",
-      priority: "high",
-      owner: "Albert",
-      goalTitle: "Build a durable body and calm energy",
-      dueDate: "2026-03-21",
+      goalId: "goal_be_a_good_person",
+      projectId: "project_relationships_ritual",
+      dueDate: dateOffsetIso(3),
       effort: "deep",
       energy: "steady",
-      points: 55,
-      projectTitle: "Energy Foundation Sprint",
-      completedAt: "2026-03-21T17:10:00.000Z",
-      tagNames: ["Vitality", "Health"]
+      points: 21,
+      sortOrder: 300,
+      completedAt: null
     },
     {
-      title: "Prepare relationship night plan",
-      description: "Choose the plan, reserve time, and remove logistics from the weekend.",
+      id: "task_strength_session",
+      title: "Complete the lower-body strength session",
+      description: "Keep the training cycle alive with one deliberate session.",
       status: "blocked",
       priority: "medium",
-      owner: "Aurel",
-      goalTitle: "Strengthen shared life systems",
-      dueDate: "2026-03-26",
-      effort: "light",
+      owner: "Albert",
+      goalId: "goal_train_body",
+      projectId: "project_strength_cycle",
+      dueDate: dateOffsetIso(-1),
+      effort: "deep",
       energy: "steady",
-      points: 45,
-      projectTitle: "Shared Life Admin Reset",
-      tagNames: ["Relationships", "Momentum"]
-    }
-  ] as const;
-
-  const goalByTitle = new Map(goals.map((goal) => [goal.title, goal.id]));
-  const projects = [
-    {
-      id: makeId("project"),
-      goalTitle: "Build a durable body and calm energy",
-      title: "Energy Foundation Sprint",
-      description: "Build the routines, scheduling, and recovery rhythm that make consistent physical energy possible.",
-      status: "active",
-      themeColor: "#d6b98a",
-      targetPoints: 240
+      points: 18,
+      sortOrder: 400,
+      completedAt: null
     },
     {
-      id: makeId("project"),
-      goalTitle: "Ship meaningful creative work every week",
-      title: "Weekly Creative Shipping System",
-      description: "Create a repeatable system for deep work, reviews, and visible weekly output.",
-      status: "active",
-      themeColor: "#f5efe6",
-      targetPoints: 260
-    },
-    {
-      id: makeId("project"),
-      goalTitle: "Strengthen shared life systems",
-      title: "Shared Life Admin Reset",
-      description: "Reduce friction in logistics, planning, and recurring obligations that support shared life.",
-      status: "active",
-      themeColor: "#7dd3fc",
-      targetPoints: 180
+      id: "task_recovery_walk",
+      title: "Take the recovery walk",
+      description: "Short reset to keep energy stable after the work block.",
+      status: "done",
+      priority: "low",
+      owner: "Albert",
+      goalId: "goal_train_body",
+      projectId: "project_strength_cycle",
+      dueDate: dateOffsetIso(-2),
+      effort: "light",
+      energy: "low",
+      points: 60,
+      sortOrder: 500,
+      completedAt: now
     }
-  ] as const;
-  const tagByName = new Map(tags.map((tag) => [tag.name, tag.id]));
-  const projectByTitle = new Map(projects.map((project) => [project.title, project.id]));
-  const insertProject = database.prepare(`
-    INSERT INTO projects (id, goal_id, title, description, status, theme_color, target_points, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `);
-  const insertTask = database.prepare(`
-    INSERT INTO tasks (
-      id, title, description, status, priority, owner, goal_id, project_id, due_date, effort, energy, points, sort_order,
-      completed_at, created_at, updated_at
-    )
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `);
-  const insertTaskTag = database.prepare(`
-    INSERT INTO task_tags (task_id, tag_id)
-    VALUES (?, ?)
-  `);
+  ];
 
-  for (const project of projects) {
-    insertProject.run(
-      project.id,
-      goalByTitle.get(project.goalTitle) ?? null,
-      project.title,
-      project.description,
-      project.status,
-      project.themeColor,
-      project.targetPoints,
-      now,
-      now
-    );
-  }
-
-  tasks.forEach((task, index) => {
-    const taskId = makeId("task");
+  for (const task of tasks) {
     insertTask.run(
-      taskId,
+      task.id,
       task.title,
       task.description,
       task.status,
       task.priority,
       task.owner,
-      goalByTitle.get(task.goalTitle) ?? null,
-      projectByTitle.get(task.projectTitle) ?? null,
+      task.goalId,
+      task.projectId,
       task.dueDate,
       task.effort,
       task.energy,
       task.points,
-      index,
-      ("completedAt" in task ? task.completedAt : null) ?? null,
+      task.sortOrder,
+      task.completedAt,
       now,
       now
     );
-    for (const tagName of task.tagNames) {
-      const tagId = tagByName.get(tagName);
-      if (tagId) {
-        insertTaskTag.run(taskId, tagId);
-      }
-    }
-  });
+  }
+
+  const taskTags = [
+    ["task_flagship_review", "tag_deep_work"],
+    ["task_flagship_review", "tag_craft"],
+    ["task_plugin_surface", "tag_systems"],
+    ["task_plugin_surface", "tag_craft"],
+    ["task_weekly_review", "tag_relationships"],
+    ["task_strength_session", "tag_vitality"],
+    ["task_recovery_walk", "tag_recovery"]
+  ] as const;
+
+  for (const [taskId, tagId] of taskTags) {
+    insertTaskTag.run(taskId, tagId);
+  }
 }
 
 export async function initializeDatabase(): Promise<void> {

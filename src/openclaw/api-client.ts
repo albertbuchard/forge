@@ -1,5 +1,6 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import packageJson from "../../package.json" with { type: "json" };
+import { ensureForgeRuntimeReady } from "./local-runtime.js";
 
 const DEFAULT_REQUEST_BODY_LIMIT = 256_000;
 const DEFAULT_RESPONSE_BODY_LIMIT = 2_000_000;
@@ -7,7 +8,10 @@ const DEFAULT_RESPONSE_BODY_LIMIT = 2_000_000;
 export type ForgeHttpMethod = "GET" | "POST" | "PATCH" | "PUT" | "DELETE";
 
 export type ForgePluginConfig = {
+  origin: string;
+  port: number;
   baseUrl: string;
+  webAppUrl: string;
   apiToken: string;
   actorLabel: string;
   timeoutMs: number;
@@ -26,6 +30,8 @@ export type CallForgeApiArgs = {
   idempotencyKey?: string | null;
   extraHeaders?: Record<string, string | null | undefined>;
 };
+
+export type CallConfiguredForgeApiArgs = Omit<CallForgeApiArgs, "baseUrl" | "apiToken" | "actorLabel" | "timeoutMs">;
 
 export type ForgeProxyResponse = {
   status: number;
@@ -55,8 +61,21 @@ function normalizeBaseUrl(baseUrl: string) {
   return baseUrl.endsWith("/") ? baseUrl : `${baseUrl}/`;
 }
 
-function normalizeOrigin(baseUrl: string) {
+function normalizeOriginUrl(baseUrl: string) {
   return new URL(normalizeBaseUrl(baseUrl)).origin;
+}
+
+export function buildForgeBaseUrl(origin: string, port: number) {
+  const url = new URL(origin.endsWith("/") ? origin : `${origin}/`);
+  url.port = String(port);
+  url.pathname = "/";
+  url.search = "";
+  url.hash = "";
+  return url.origin;
+}
+
+export function buildForgeWebAppUrl(origin: string, port: number) {
+  return `${buildForgeBaseUrl(origin, port)}/forge/`;
 }
 
 function isTailscaleIpv4(hostname: string) {
@@ -170,7 +189,7 @@ function buildRequestHeaders(args: CallForgeApiArgs) {
 }
 
 async function ensureOperatorSessionCookie(baseUrl: string, timeoutMs: number) {
-  const origin = normalizeOrigin(baseUrl);
+  const origin = normalizeOriginUrl(baseUrl);
   const cached = operatorSessionCookies.get(origin);
   if (cached) {
     return cached;
@@ -225,6 +244,17 @@ export async function callForgeApi(args: CallForgeApiArgs): Promise<ForgeProxyRe
   return callForgeApiInternal(args, false);
 }
 
+export async function callConfiguredForgeApi(config: ForgePluginConfig, args: CallConfiguredForgeApiArgs): Promise<ForgeProxyResponse> {
+  await ensureForgeRuntimeReady(config);
+  return callForgeApi({
+    baseUrl: config.baseUrl,
+    apiToken: config.apiToken,
+    actorLabel: config.actorLabel,
+    timeoutMs: config.timeoutMs,
+    ...args
+  });
+}
+
 async function callForgeApiInternal(args: CallForgeApiArgs, retriedWithFreshSession: boolean): Promise<ForgeProxyResponse> {
   const controller = new AbortController();
   const timeoutMs = Math.max(1000, args.timeoutMs ?? 15_000);
@@ -245,7 +275,7 @@ async function callForgeApiInternal(args: CallForgeApiArgs, retriedWithFreshSess
     });
 
     if (!args.apiToken && sessionCookie && response.status === 401 && !retriedWithFreshSession) {
-      operatorSessionCookies.delete(normalizeOrigin(args.baseUrl));
+      operatorSessionCookies.delete(normalizeOriginUrl(args.baseUrl));
       return callForgeApiInternal(args, true);
     }
 
@@ -323,7 +353,7 @@ export function requireApiToken(config: ForgePluginConfig) {
     throw new ForgePluginError(
       401,
       "forge_plugin_token_required",
-      "Forge apiToken is required for remote mutating plugin routes that cannot use local or Tailscale operator-session bootstrap"
+      "Forge apiToken is required for remote plugin mutations when this target cannot use local or Tailscale operator-session bootstrap"
     );
   }
 }
@@ -332,6 +362,12 @@ export function writeJsonResponse(response: ServerResponse, status: number, body
   response.statusCode = status;
   response.setHeader("content-type", "application/json; charset=utf-8");
   response.end(JSON.stringify(body));
+}
+
+export function writeRedirectResponse(response: ServerResponse, location: string) {
+  response.statusCode = 302;
+  response.setHeader("location", location);
+  response.end("");
 }
 
 export function writeForgeProxyResponse(response: ServerResponse, result: ForgeProxyResponse) {

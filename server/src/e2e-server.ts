@@ -4,7 +4,7 @@ import { mkdtemp } from "node:fs/promises";
 import { buildServer } from "./app.js";
 import { closeDatabase } from "./db.js";
 
-const port = Number(process.env.PORT ?? 3017);
+const port = Number(process.env.PORT ?? 4317);
 const host = process.env.HOST ?? "127.0.0.1";
 const dataRoot = process.env.FORGE_E2E_DATA_ROOT ?? (await mkdtemp(path.join(os.tmpdir(), "forge-e2e-")));
 
