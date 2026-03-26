@@ -3051,9 +3051,32 @@ test("settings and local agent token management persist through the versioned AP
         authModes: { operatorSession: { tokenRequired: boolean } };
         tokenRecovery: { rawTokenStoredByForge: boolean; recoveryAction: string };
         verificationPaths: { settingsBin: string; batchSearch: string };
-        recommendedPluginTools: { bootstrap: string[]; uiWorkflow: string[]; entityWorkflow: string[]; insightWorkflow: string[] };
-        interactionGuidance: { saveSuggestionPlacement: string; maxQuestionsPerTurn: number; duplicateCheckRoute: string; uiSuggestionRule: string };
-        mutationGuidance: { deleteDefault: string; preferredBatchRoutes: { create: string; update: string; delete: string; restore: string; search: string } };
+        recommendedPluginTools: {
+          bootstrap: string[];
+          readModels: string[];
+          uiWorkflow: string[];
+          entityWorkflow: string[];
+          workWorkflow: string[];
+          insightWorkflow: string[];
+        };
+        interactionGuidance: {
+          saveSuggestionPlacement: string;
+          maxQuestionsPerTurn: number;
+          duplicateCheckRoute: string;
+          uiSuggestionRule: string;
+          browserFallbackRule: string;
+          writeConsentRule: string;
+        };
+        mutationGuidance: {
+          deleteDefault: string;
+          preferredBatchRoutes: { create: string; update: string; delete: string; restore: string; search: string };
+          batchingRule: string;
+          searchRule: string;
+          createRule: string;
+          updateRule: string;
+          createExample: string;
+          updateExample: string;
+        };
       };
     };
     assert.equal(onboardingBody.onboarding.forgeBaseUrl, "http://127.0.0.1:4317");
@@ -3078,6 +3101,13 @@ test("settings and local agent token management persist through the versioned AP
     assert.equal(onboardingBody.onboarding.verificationPaths.settingsBin, "/api/v1/settings/bin");
     assert.equal(onboardingBody.onboarding.verificationPaths.batchSearch, "/api/v1/entities/search");
     assert.deepEqual(onboardingBody.onboarding.recommendedPluginTools.bootstrap, ["forge_get_operator_overview"]);
+    assert.deepEqual(onboardingBody.onboarding.recommendedPluginTools.readModels, [
+      "forge_get_operator_context",
+      "forge_get_current_work",
+      "forge_get_psyche_overview",
+      "forge_get_xp_metrics",
+      "forge_get_weekly_review"
+    ]);
     assert.deepEqual(onboardingBody.onboarding.recommendedPluginTools.uiWorkflow, ["forge_get_ui_entrypoint"]);
     assert.deepEqual(onboardingBody.onboarding.recommendedPluginTools.entityWorkflow, [
       "forge_search_entities",
@@ -3086,17 +3116,33 @@ test("settings and local agent token management persist through the versioned AP
       "forge_delete_entities",
       "forge_restore_entities"
     ]);
+    assert.deepEqual(onboardingBody.onboarding.recommendedPluginTools.workWorkflow, [
+      "forge_log_work",
+      "forge_start_task_run",
+      "forge_heartbeat_task_run",
+      "forge_focus_task_run",
+      "forge_complete_task_run",
+      "forge_release_task_run"
+    ]);
     assert.deepEqual(onboardingBody.onboarding.recommendedPluginTools.insightWorkflow, ["forge_post_insight"]);
     assert.equal(onboardingBody.onboarding.interactionGuidance.saveSuggestionPlacement, "end_of_message");
     assert.equal(onboardingBody.onboarding.interactionGuidance.maxQuestionsPerTurn, 3);
     assert.equal(onboardingBody.onboarding.interactionGuidance.duplicateCheckRoute, "/api/v1/entities/search");
     assert.equal(onboardingBody.onboarding.interactionGuidance.uiSuggestionRule, "offer_visual_ui_when_review_or_editing_would_be_easier");
+    assert.match(onboardingBody.onboarding.interactionGuidance.browserFallbackRule, /Do not open the Forge UI or a browser/);
+    assert.match(onboardingBody.onboarding.interactionGuidance.writeConsentRule, /Only write after explicit save intent/);
     assert.equal(onboardingBody.onboarding.mutationGuidance.deleteDefault, "soft");
     assert.equal(onboardingBody.onboarding.mutationGuidance.preferredBatchRoutes.create, "/api/v1/entities/create");
     assert.equal(onboardingBody.onboarding.mutationGuidance.preferredBatchRoutes.update, "/api/v1/entities/update");
     assert.equal(onboardingBody.onboarding.mutationGuidance.preferredBatchRoutes.delete, "/api/v1/entities/delete");
     assert.equal(onboardingBody.onboarding.mutationGuidance.preferredBatchRoutes.restore, "/api/v1/entities/restore");
     assert.equal(onboardingBody.onboarding.mutationGuidance.preferredBatchRoutes.search, "/api/v1/entities/search");
+    assert.match(onboardingBody.onboarding.mutationGuidance.batchingRule, /accept operations as arrays/);
+    assert.match(onboardingBody.onboarding.mutationGuidance.searchRule, /accepts searches as an array/);
+    assert.match(onboardingBody.onboarding.mutationGuidance.createRule, /entityType and full data/);
+    assert.match(onboardingBody.onboarding.mutationGuidance.updateRule, /entityType, id, and patch/);
+    assert.match(onboardingBody.onboarding.mutationGuidance.createExample, /\"operations\":\[/);
+    assert.match(onboardingBody.onboarding.mutationGuidance.updateExample, /\"patch\":/);
 
     const rotated = await app.inject({
       method: "POST",

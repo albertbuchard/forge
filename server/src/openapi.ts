@@ -1269,31 +1269,56 @@ export function buildOpenApiDocument() {
       recommendedPluginTools: {
         type: "object",
         additionalProperties: false,
-        required: ["bootstrap", "uiWorkflow", "entityWorkflow", "insightWorkflow"],
+        required: ["bootstrap", "readModels", "uiWorkflow", "entityWorkflow", "workWorkflow", "insightWorkflow"],
         properties: {
           bootstrap: arrayOf({ type: "string" }),
+          readModels: arrayOf({ type: "string" }),
           uiWorkflow: arrayOf({ type: "string" }),
           entityWorkflow: arrayOf({ type: "string" }),
+          workWorkflow: arrayOf({ type: "string" }),
           insightWorkflow: arrayOf({ type: "string" })
         }
       },
       interactionGuidance: {
         type: "object",
         additionalProperties: false,
-        required: ["conversationMode", "saveSuggestionPlacement", "saveSuggestionTone", "maxQuestionsPerTurn", "duplicateCheckRoute", "uiSuggestionRule"],
+        required: [
+          "conversationMode",
+          "saveSuggestionPlacement",
+          "saveSuggestionTone",
+          "maxQuestionsPerTurn",
+          "duplicateCheckRoute",
+          "uiSuggestionRule",
+          "browserFallbackRule",
+          "writeConsentRule"
+        ],
         properties: {
           conversationMode: { type: "string" },
           saveSuggestionPlacement: { type: "string" },
           saveSuggestionTone: { type: "string" },
           maxQuestionsPerTurn: { type: "integer" },
           duplicateCheckRoute: { type: "string" },
-          uiSuggestionRule: { type: "string" }
+          uiSuggestionRule: { type: "string" },
+          browserFallbackRule: { type: "string" },
+          writeConsentRule: { type: "string" }
         }
       },
       mutationGuidance: {
         type: "object",
         additionalProperties: false,
-        required: ["preferredBatchRoutes", "deleteDefault", "hardDeleteRequiresExplicitMode", "restoreSummary", "entityDeleteSummary"],
+        required: [
+          "preferredBatchRoutes",
+          "deleteDefault",
+          "hardDeleteRequiresExplicitMode",
+          "restoreSummary",
+          "entityDeleteSummary",
+          "batchingRule",
+          "searchRule",
+          "createRule",
+          "updateRule",
+          "createExample",
+          "updateExample"
+        ],
         properties: {
           preferredBatchRoutes: {
             type: "object",
@@ -1310,7 +1335,13 @@ export function buildOpenApiDocument() {
           deleteDefault: { type: "string", enum: ["soft", "hard"] },
           hardDeleteRequiresExplicitMode: { type: "boolean" },
           restoreSummary: { type: "string" },
-          entityDeleteSummary: { type: "string" }
+          entityDeleteSummary: { type: "string" },
+          batchingRule: { type: "string" },
+          searchRule: { type: "string" },
+          createRule: { type: "string" },
+          updateRule: { type: "string" },
+          createExample: { type: "string" },
+          updateExample: { type: "string" }
         }
       }
     }

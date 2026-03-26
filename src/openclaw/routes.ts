@@ -181,10 +181,37 @@ export const FORGE_PLUGIN_ROUTE_GROUPS: RouteGroup[] = [
     upstreamPath: "/api/v1/operator/overview",
     target: (_match: RegExpMatchArray, url: URL) => passthroughSearch("/api/v1/operator/overview", url)
   }),
+  exact("/forge/v1/operator/context", {
+    method: "GET",
+    upstreamPath: "/api/v1/operator/context",
+    target: (_match: RegExpMatchArray, url: URL) => passthroughSearch("/api/v1/operator/context", url)
+  }),
   exact("/forge/v1/agents/onboarding", {
     method: "GET",
     upstreamPath: "/api/v1/agents/onboarding",
     target: (_match: RegExpMatchArray, url: URL) => passthroughSearch("/api/v1/agents/onboarding", url)
+  }),
+  exact("/forge/v1/psyche/overview", {
+    method: "GET",
+    upstreamPath: "/api/v1/psyche/overview",
+    target: (_match: RegExpMatchArray, url: URL) => passthroughSearch("/api/v1/psyche/overview", url)
+  }),
+  exact("/forge/v1/metrics/xp", {
+    method: "GET",
+    upstreamPath: "/api/v1/metrics/xp",
+    target: (_match: RegExpMatchArray, url: URL) => passthroughSearch("/api/v1/metrics/xp", url)
+  }),
+  exact("/forge/v1/reviews/weekly", {
+    method: "GET",
+    upstreamPath: "/api/v1/reviews/weekly",
+    target: (_match: RegExpMatchArray, url: URL) => passthroughSearch("/api/v1/reviews/weekly", url)
+  }),
+  exact("/forge/v1/operator/log-work", {
+    method: "POST",
+    upstreamPath: "/api/v1/operator/log-work",
+    requestBody: "json",
+    requiresToken: true,
+    target: (_match: RegExpMatchArray, url: URL) => passthroughSearch("/api/v1/operator/log-work", url)
   }),
   exact("/forge/v1/insights", {
     method: "POST",
@@ -236,6 +263,64 @@ export const FORGE_PLUGIN_ROUTE_GROUPS: RouteGroup[] = [
         requestBody: "json",
         requiresToken: true,
         target: (_match: RegExpMatchArray, url: URL) => passthroughSearch("/api/v1/entities/restore", url)
+      }
+    ]
+  },
+  {
+    path: "/forge/v1/tasks",
+    match: "prefix",
+    operations: [
+      {
+        method: "POST",
+        pattern: /^\/forge\/v1\/tasks\/([^/]+)\/runs$/,
+        upstreamPath: "/api/v1/tasks/:id/runs",
+        requestBody: "json",
+        requiresToken: true,
+        target: (match: RegExpMatchArray, url: URL) => passthroughSearch(`/api/v1/tasks/${match[1]}/runs`, url)
+      }
+    ]
+  },
+  {
+    path: "/forge/v1/task-runs",
+    match: "prefix",
+    operations: [
+      {
+        method: "GET",
+        pattern: /^\/forge\/v1\/task-runs$/,
+        upstreamPath: "/api/v1/task-runs",
+        target: (_match: RegExpMatchArray, url: URL) => passthroughSearch("/api/v1/task-runs", url)
+      },
+      {
+        method: "POST",
+        pattern: /^\/forge\/v1\/task-runs\/([^/]+)\/heartbeat$/,
+        upstreamPath: "/api/v1/task-runs/:id/heartbeat",
+        requestBody: "json",
+        requiresToken: true,
+        target: (match: RegExpMatchArray, url: URL) => passthroughSearch(`/api/v1/task-runs/${match[1]}/heartbeat`, url)
+      },
+      {
+        method: "POST",
+        pattern: /^\/forge\/v1\/task-runs\/([^/]+)\/focus$/,
+        upstreamPath: "/api/v1/task-runs/:id/focus",
+        requestBody: "json",
+        requiresToken: true,
+        target: (match: RegExpMatchArray, url: URL) => passthroughSearch(`/api/v1/task-runs/${match[1]}/focus`, url)
+      },
+      {
+        method: "POST",
+        pattern: /^\/forge\/v1\/task-runs\/([^/]+)\/complete$/,
+        upstreamPath: "/api/v1/task-runs/:id/complete",
+        requestBody: "json",
+        requiresToken: true,
+        target: (match: RegExpMatchArray, url: URL) => passthroughSearch(`/api/v1/task-runs/${match[1]}/complete`, url)
+      },
+      {
+        method: "POST",
+        pattern: /^\/forge\/v1\/task-runs\/([^/]+)\/release$/,
+        upstreamPath: "/api/v1/task-runs/:id/release",
+        requestBody: "json",
+        requiresToken: true,
+        target: (match: RegExpMatchArray, url: URL) => passthroughSearch(`/api/v1/task-runs/${match[1]}/release`, url)
       }
     ]
   },

@@ -137,23 +137,43 @@ describe("forge openclaw plugin", () => {
     expect(routes.map((route) => route.path)).toEqual([
       "/forge/v1/health",
       "/forge/v1/operator/overview",
+      "/forge/v1/operator/context",
       "/forge/v1/agents/onboarding",
+      "/forge/v1/psyche/overview",
+      "/forge/v1/metrics/xp",
+      "/forge/v1/reviews/weekly",
+      "/forge/v1/operator/log-work",
       "/forge/v1/insights",
       "/forge/v1/entities",
+      "/forge/v1/tasks",
+      "/forge/v1/task-runs",
       "/forge/v1/ui"
     ]);
     expect(routes.find((route) => route.path === "/forge/v1/entities")?.match).toBe("prefix");
+    expect(routes.find((route) => route.path === "/forge/v1/tasks")?.match).toBe("prefix");
+    expect(routes.find((route) => route.path === "/forge/v1/task-runs")?.match).toBe("prefix");
 
     const toolNames = tools.map((tool) => tool.name).sort();
     expect(toolNames).toEqual([
+      "forge_complete_task_run",
       "forge_create_entities",
       "forge_delete_entities",
+      "forge_focus_task_run",
       "forge_get_agent_onboarding",
+      "forge_get_current_work",
+      "forge_get_operator_context",
       "forge_get_operator_overview",
+      "forge_get_psyche_overview",
       "forge_get_ui_entrypoint",
+      "forge_get_weekly_review",
+      "forge_get_xp_metrics",
+      "forge_heartbeat_task_run",
+      "forge_log_work",
       "forge_post_insight",
+      "forge_release_task_run",
       "forge_restore_entities",
       "forge_search_entities",
+      "forge_start_task_run",
       "forge_update_entities"
     ]);
 

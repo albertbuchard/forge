@@ -109,7 +109,7 @@ All agent work must remain scoped, auditable, and provenance-backed.
 - local-first architecture
 - canonical production stack: React 19 + TypeScript 5 + Vite 6 + Tailwind CSS 4 + Tauri 2 + Rust + Axum + Tokio + SQLx + SQLite
 - current live bridge: Node/Fastify server under `/api/v1`
-- current plugin contract: curated OpenClaw surface with overview, onboarding, batch entity operations, insights, and UI entrypoint only
+- current plugin contract: curated OpenClaw surface with overview, current context, Psyche/XP/review reads, batch entity operations, retroactive work logging, real task-run controls, insights, and UI entrypoint
 - localhost plugin installs should be able to start Forge automatically on the configured local port
 - local default runtime port: `4317`
 - stable REST + OpenAPI 3.1 contract

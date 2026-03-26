@@ -619,8 +619,10 @@ export interface AgentOnboardingPayload {
   };
   recommendedPluginTools: {
     bootstrap: string[];
+    readModels: string[];
     uiWorkflow: string[];
     entityWorkflow: string[];
+    workWorkflow: string[];
     insightWorkflow: string[];
   };
   interactionGuidance: {
@@ -630,6 +632,8 @@ export interface AgentOnboardingPayload {
     maxQuestionsPerTurn: number;
     duplicateCheckRoute: string;
     uiSuggestionRule: string;
+    browserFallbackRule: string;
+    writeConsentRule: string;
   };
   mutationGuidance: {
     preferredBatchRoutes: {
@@ -643,6 +647,12 @@ export interface AgentOnboardingPayload {
     hardDeleteRequiresExplicitMode: boolean;
     restoreSummary: string;
     entityDeleteSummary: string;
+    batchingRule: string;
+    searchRule: string;
+    createRule: string;
+    updateRule: string;
+    createExample: string;
+    updateExample: string;
   };
 }
 

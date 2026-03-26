@@ -26,11 +26,35 @@ That repo-local path is the fallback only. The published package stays on the SD
 The public mental model is intentionally small:
 
 1. `forge_get_operator_overview`
-2. `forge_get_ui_entrypoint` when the user should continue in the visual Forge UI
-3. `forge_search_entities`
-4. `forge_create_entities` or `forge_update_entities`
-5. `forge_delete_entities` or `forge_restore_entities` when needed
-6. `forge_post_insight` for recommendations
+2. `forge_get_operator_context` or `forge_get_current_work` for live work and board state
+3. `forge_get_psyche_overview`, `forge_get_xp_metrics`, and `forge_get_weekly_review` for read-heavy guidance
+4. `forge_get_ui_entrypoint` when the user should continue in the visual Forge UI
+5. `forge_search_entities`
+6. `forge_create_entities` or `forge_update_entities`
+7. `forge_delete_entities` or `forge_restore_entities` when needed
+8. `forge_log_work` for retroactive work
+9. `forge_start_task_run`, `forge_heartbeat_task_run`, `forge_focus_task_run`, `forge_complete_task_run`, and `forge_release_task_run` for real live work
+10. `forge_post_insight` for recommendations
+
+Use the UI entrypoint sparingly.
+Do not open the Forge UI or a browser just to create or update normal records that the batch entity tools already cover.
+If an entity is only implied in the discussion, help first and offer Forge lightly near the end; only write after explicit save intent.
+
+The batch tools are array-first:
+
+- `forge_search_entities` takes `searches: []`
+- `forge_create_entities` takes `operations: []`, and each create operation must include `entityType` and full `data`
+- `forge_update_entities` takes `operations: []`, and each update operation must include `entityType`, `id`, and `patch`
+- `forge_delete_entities` and `forge_restore_entities` also take `operations: []`
+
+Batch several related creates together in one request when the user is asking for multiple goals, projects, or tasks at once.
+
+Live work is not just task status:
+
+- use `forge_start_task_run` to begin actual work
+- use `forge_release_task_run` to stop without completing
+- use `forge_complete_task_run` to finish and collect the real work reward path
+- use `forge_log_work` only for retroactive work that already happened
 
 The skill is entity-format-driven. It teaches the agent how to:
 

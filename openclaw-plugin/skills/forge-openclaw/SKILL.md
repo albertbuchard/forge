@@ -1,11 +1,16 @@
 ---
 name: forge-openclaw
-description: Use the Forge OpenClaw plugin to collaborate with Forge through explicit plugin-owned routes and tools backed by the live /api/v1 contract.
+description: Use the Forge OpenClaw plugin through its small batch-first tool surface. If a goal, task, project, trigger pattern, or insight is implied, help first, then end with one light offer to save it in Forge. Only write after explicit save intent.
 ---
 
 # Forge OpenClaw
 
 Use this skill when Forge is available as a native OpenClaw plugin and you need truthful, structured access to the live Forge system.
+
+Core behavior:
+- implied entity -> help first -> end with one short Forge save offer
+- explicit save intent -> use the Forge batch tools
+- no browser/UI workaround for normal creation or updates
 
 Forge is a life operating system with:
 - goals
@@ -27,6 +32,15 @@ Default flow:
 4. Ask only for the missing fields.
 5. Ask at most 1 to 3 questions at a time.
 
+Write-consent rule:
+- if the user only implies a goal, project, task, value, pattern, belief, behavior, trigger report, or insight, do not write to Forge yet
+- first help in the normal conversation
+- then add one light end-of-message offer to save it in Forge
+- only call `forge_create_entities`, `forge_update_entities`, `forge_delete_entities`, `forge_restore_entities`, or `forge_post_insight` when:
+  - the user explicitly asks to save, add, store, create, update, delete, or log it in Forge
+  - the user accepts your prior Forge save offer
+  - you are already inside an active Forge intake or editing flow that the user clearly consented to
+
 Good suggestion style:
 - "This sounds like a concrete project. If you want, we can break it down and store it in Forge."
 - "This sounds like an important trigger event. If you want, we can map it together and save it in Forge."
@@ -42,6 +56,11 @@ Treat this as the public mental model:
 
 Read first:
 - `forge_get_operator_overview`
+- `forge_get_operator_context`
+- `forge_get_current_work`
+- `forge_get_psyche_overview`
+- `forge_get_xp_metrics`
+- `forge_get_weekly_review`
 - `forge_get_ui_entrypoint` when the user should continue in the visual Forge UI
 
 High-level entity workflow:
@@ -51,8 +70,44 @@ High-level entity workflow:
 - `forge_delete_entities`
 - `forge_restore_entities`
 
+Operational workflow:
+- `forge_log_work`
+- `forge_start_task_run`
+- `forge_heartbeat_task_run`
+- `forge_focus_task_run`
+- `forge_complete_task_run`
+- `forge_release_task_run`
+
 Agent-authored recommendations:
 - `forge_post_insight`
+
+## Exact tool list and execution rules
+
+When the user asks which Forge tools are available, list exactly these tools and then use them:
+- `forge_get_operator_overview`
+- `forge_get_operator_context`
+- `forge_get_agent_onboarding`
+- `forge_get_psyche_overview`
+- `forge_get_xp_metrics`
+- `forge_get_weekly_review`
+- `forge_get_current_work`
+- `forge_get_ui_entrypoint`
+- `forge_search_entities`
+- `forge_create_entities`
+- `forge_update_entities`
+- `forge_delete_entities`
+- `forge_restore_entities`
+- `forge_log_work`
+- `forge_start_task_run`
+- `forge_heartbeat_task_run`
+- `forge_focus_task_run`
+- `forge_complete_task_run`
+- `forge_release_task_run`
+- `forge_post_insight`
+
+Do not say you are missing a Forge creation path when `forge_create_entities` is available.
+Do not open the Forge UI or a browser as a workaround for normal entity creation or updates.
+Use `forge_get_ui_entrypoint` only when visual review or editing is genuinely the better workflow.
 
 ## Source of truth
 
@@ -67,14 +122,106 @@ Use:
 Do not:
 - mutate storage directly
 - scrape the UI instead of using the API
+- open a browser just to create or edit records that the batch tools already cover
 - invent entities outside the real Forge model
 
 ## Overview-first and batch-first rules
 
-1. Start with `forge_get_operator_overview` unless the user is clearly asking for one exact known record.
+1. Start with `forge_get_operator_overview`, `forge_get_operator_context`, or `forge_get_current_work` unless the user is clearly asking for one exact known record.
 2. Before creating or updating ambiguous entities, use `forge_search_entities` to check for duplicates.
 3. Prefer batch tools even for small multi-step work when they keep the operation coherent.
 4. When review, editing, Kanban movement, or Psyche exploration would be easier visually, use `forge_get_ui_entrypoint` and offer the Forge UI lightly near the end of the message.
+5. Do not write to Forge purely because an entity is implied. Implied entities get a save offer first; explicit user intent gets the actual write.
+
+## Live work rules
+
+Use real task-run tools for live work.
+Do not pretend a status change is the same thing as starting or stopping work.
+
+- starting live work: `forge_start_task_run`
+- keeping a run alive: `forge_heartbeat_task_run`
+- making a run current: `forge_focus_task_run`
+- finishing work: `forge_complete_task_run`
+- stopping without completion: `forge_release_task_run`
+- retroactive work that already happened: `forge_log_work`
+
+For "what am I working on right now?", prefer `forge_get_current_work` or `forge_get_operator_context`, not a naive search for `in_progress` tasks alone.
+
+## Exact batch payload rules
+
+`forge_search_entities`:
+- pass `searches` as an array
+- each search item can include `entityTypes`, `query`, `ids`, `status`, `linkedTo`, `includeDeleted`, `limit`, and `clientRef`
+
+`forge_create_entities`:
+- pass `operations` as an array
+- each create operation must include:
+  - `entityType`
+  - `data`
+- `data` is required; `entityType` alone is not enough
+- if the user wants several goals, projects, or tasks created together, put them in one batched `operations` array
+
+`forge_update_entities`:
+- pass `operations` as an array
+- each update operation must include:
+  - `entityType`
+  - `id`
+  - `patch`
+- `patch` is required
+
+`forge_delete_entities`:
+- pass `operations` as an array
+- each delete operation must include:
+  - `entityType`
+  - `id`
+- `mode` is optional and defaults to soft-delete behavior unless hard is explicit
+
+`forge_restore_entities`:
+- pass `operations` as an array
+- each restore operation must include:
+  - `entityType`
+  - `id`
+
+Good create example:
+
+```json
+{
+  "operations": [
+    {
+      "entityType": "goal",
+      "data": {
+        "title": "Create meaningfully"
+      },
+      "clientRef": "goal-create-1"
+    },
+    {
+      "entityType": "goal",
+      "data": {
+        "title": "Build a beautiful family"
+      },
+      "clientRef": "goal-create-2"
+    }
+  ]
+}
+```
+
+Good update example:
+
+```json
+{
+  "operations": [
+    {
+      "entityType": "task",
+      "id": "task_123",
+      "patch": {
+        "status": "focus",
+        "priority": "high"
+      },
+      "clientRef": "task-update-1"
+    }
+  ]
+}
+```
 
 ## When to offer saving to Forge
 
@@ -97,6 +244,11 @@ Do not offer when:
 - the user needs support or clarity first
 - the record is still too vague to name honestly
 - the user already declined
+
+If the signal is strong but the user has not asked to save yet, end the message with one optional line such as:
+- "This sounds like a real project. If you want, we can turn it into a Forge project and anchor the first task."
+- "This looks like a meaningful trigger pattern. If you want, we can map it and store it in Forge."
+- "This sounds like a concrete task cluster. If you want, I can add it to Forge as a small task set."
 
 ## What insights are for
 

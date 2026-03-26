@@ -4,13 +4,23 @@ Forge ships a native OpenClaw plugin add-on with a deliberately small public sur
 
 The intended workflow is:
 
-- start with `forge_get_operator_overview`
+- start with `forge_get_operator_overview`, `forge_get_operator_context`, or `forge_get_current_work`
+- use `forge_get_psyche_overview`, `forge_get_xp_metrics`, and `forge_get_weekly_review` for read-heavy guidance
 - use `forge_search_entities` before mutating when duplicates are possible
 - create, update, delete, and restore through the batch entity tools
+- use `forge_log_work` for retroactive work
+- use the task-run tools for real live work: `forge_start_task_run`, `forge_heartbeat_task_run`, `forge_focus_task_run`, `forge_complete_task_run`, `forge_release_task_run`
 - store agent-authored recommendations with `forge_post_insight`
 - use `forge_get_ui_entrypoint` when the user should continue in the visual Forge UI
 
-The plugin no longer mirrors Forge’s full CRUD and UI API. Forge itself still has the full `/api/v1` surface for the web app and internal runtime.
+The execution rule is:
+
+- do not open the Forge UI or a browser just to create or update normal records that the batch entity tools already cover
+- only use the UI entrypoint when visual review, multi-record editing, Kanban movement, or Psyche exploration is genuinely the better workflow
+- if an entity is only implied in the discussion, do not write immediately; help first, then offer Forge lightly near the end, and only write after explicit save intent
+
+The plugin no longer mirrors Forge’s raw CRUD and UI API. Forge itself still has the full `/api/v1` surface for the web app and internal runtime.
+Instead, the plugin exposes a curated operational surface: overview, current context, Psyche/XP/review reads, batch entity mutations, retroactive work logging, real task-run control, insight posting, and UI entry.
 When the configured origin is `localhost` or `127.0.0.1`, the plugin auto-starts the bundled Forge runtime on the configured port.
 
 ## Which manifest does what
@@ -112,14 +122,95 @@ The hint should stay optional and end-weighted, not pushy.
 The curated tool contract is:
 
 - `forge_get_operator_overview`
+- `forge_get_operator_context`
 - `forge_get_agent_onboarding`
+- `forge_get_psyche_overview`
+- `forge_get_xp_metrics`
+- `forge_get_weekly_review`
+- `forge_get_current_work`
 - `forge_get_ui_entrypoint`
 - `forge_search_entities`
 - `forge_create_entities`
 - `forge_update_entities`
 - `forge_delete_entities`
 - `forge_restore_entities`
+- `forge_log_work`
+- `forge_start_task_run`
+- `forge_heartbeat_task_run`
+- `forge_focus_task_run`
+- `forge_complete_task_run`
+- `forge_release_task_run`
 - `forge_post_insight`
+
+Live work rule:
+- do not fake start or stop work by only moving task status
+- use the real task-run tools for active work
+- use `forge_log_work` only when the work already happened and you are logging it after the fact
+
+## Exact batch payload rules
+
+The high-level Forge mutation tools are array-first.
+
+`forge_search_entities`:
+- pass `searches` as an array
+
+`forge_create_entities`:
+- pass `operations` as an array
+- each operation must include `entityType` and full `data`
+- `entityType` alone is not enough
+- batch multiple creates together in one request when they belong to the same user ask
+
+`forge_update_entities`:
+- pass `operations` as an array
+- each operation must include `entityType`, `id`, and `patch`
+
+`forge_delete_entities`:
+- pass `operations` as an array with `entityType` and `id`
+- delete defaults to soft unless hard is explicit
+
+`forge_restore_entities`:
+- pass `operations` as an array with `entityType` and `id`
+
+Example create payload:
+
+```json
+{
+  "operations": [
+    {
+      "entityType": "goal",
+      "data": {
+        "title": "Create meaningfully"
+      },
+      "clientRef": "goal-create-1"
+    },
+    {
+      "entityType": "goal",
+      "data": {
+        "title": "Build a beautiful family"
+      },
+      "clientRef": "goal-create-2"
+    }
+  ]
+}
+```
+
+Example update payload:
+
+```json
+{
+  "operations": [
+    {
+      "entityType": "task",
+      "id": "task_123",
+      "patch": {
+        "status": "focus",
+        "priority": "high"
+      },
+      "clientRef": "task-update-1"
+    }
+  ]
+}
+```
 
 The curated route contract is:
 

@@ -324,6 +324,13 @@ function buildAgentOnboardingPayload(request: {
     },
     recommendedPluginTools: {
       bootstrap: ["forge_get_operator_overview"],
+      readModels: [
+        "forge_get_operator_context",
+        "forge_get_current_work",
+        "forge_get_psyche_overview",
+        "forge_get_xp_metrics",
+        "forge_get_weekly_review"
+      ],
       uiWorkflow: ["forge_get_ui_entrypoint"],
       entityWorkflow: [
         "forge_search_entities",
@@ -331,6 +338,14 @@ function buildAgentOnboardingPayload(request: {
         "forge_update_entities",
         "forge_delete_entities",
         "forge_restore_entities"
+      ],
+      workWorkflow: [
+        "forge_log_work",
+        "forge_start_task_run",
+        "forge_heartbeat_task_run",
+        "forge_focus_task_run",
+        "forge_complete_task_run",
+        "forge_release_task_run"
       ],
       insightWorkflow: ["forge_post_insight"]
     },
@@ -340,7 +355,11 @@ function buildAgentOnboardingPayload(request: {
       saveSuggestionTone: "gentle_optional",
       maxQuestionsPerTurn: 3,
       duplicateCheckRoute: "/api/v1/entities/search",
-      uiSuggestionRule: "offer_visual_ui_when_review_or_editing_would_be_easier"
+      uiSuggestionRule: "offer_visual_ui_when_review_or_editing_would_be_easier",
+      browserFallbackRule:
+        "Do not open the Forge UI or a browser just to create or update normal entities when the batch entity tools can do the job.",
+      writeConsentRule:
+        "If an entity is only implied, keep helping in the main conversation and offer Forge lightly at the end. Only write after explicit save intent or after the user accepts the Forge save offer."
     },
     mutationGuidance: {
       preferredBatchRoutes: {
@@ -353,7 +372,16 @@ function buildAgentOnboardingPayload(request: {
       deleteDefault: "soft",
       hardDeleteRequiresExplicitMode: true,
       restoreSummary: "Restore soft-deleted entities through the restore route or the settings bin.",
-      entityDeleteSummary: "Entity DELETE routes default to soft delete. Pass mode=hard only when permanent removal is intended."
+      entityDeleteSummary: "Entity DELETE routes default to soft delete. Pass mode=hard only when permanent removal is intended.",
+      batchingRule:
+        "forge_create_entities, forge_update_entities, forge_delete_entities, and forge_restore_entities all accept operations as arrays. Batch multiple related mutations together in one request when possible.",
+      searchRule: "forge_search_entities accepts searches as an array. Search before create or update when duplicate risk exists.",
+      createRule: "Each create operation must include entityType and full data. entityType alone is not enough.",
+      updateRule: "Each update operation must include entityType, id, and patch.",
+      createExample:
+        '{"operations":[{"entityType":"goal","data":{"title":"Create meaningfully"},"clientRef":"goal-create-1"},{"entityType":"goal","data":{"title":"Build a beautiful family"},"clientRef":"goal-create-2"}]}',
+      updateExample:
+        '{"operations":[{"entityType":"task","id":"task_123","patch":{"status":"focus","priority":"high"},"clientRef":"task-update-1"}]}'
     }
   };
 }
@@ -655,6 +683,18 @@ function buildOperatorOverviewRouteGuide() {
         id: "entity_batch_mutation",
         path: "/api/v1/entities/{create|update|delete|restore}",
         summary: "Preferred multi-entity mutation surface for agents. Delete defaults to soft delete and restore reverses soft deletion.",
+        requiredScope: "write"
+      },
+      {
+        id: "operator_log_work",
+        path: "/api/v1/operator/log-work",
+        summary: "Retroactively log real work and receive updated XP without pretending a live task run happened.",
+        requiredScope: "write"
+      },
+      {
+        id: "task_runs",
+        path: "/api/v1/tasks/:id/runs + /api/v1/task-runs/*",
+        summary: "Canonical live-work surface for starting, refreshing, focusing, completing, and releasing active task runs.",
         requiredScope: "write"
       }
     ]

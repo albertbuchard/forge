@@ -131,7 +131,7 @@ The preferred agent workflow is:
 
 Agent collaboration should feel helpful and low-pressure.
 The main conversation comes first; saving to Forge should be an optional, non-intrusive offer.
-The OpenClaw plugin should stay curated and professional: overview, onboarding, batch entity operations, insight posting, and UI entrypoint only.
+The OpenClaw plugin should stay curated and professional: overview, current context, Psyche/XP/review reads, batch entity operations, retroactive work logging, real task-run control, insight posting, and UI entrypoint.
 For localhost targets, the plugin should self-host the Forge runtime so install and first use stay close to one step.
 
 ## Runtime and stack
