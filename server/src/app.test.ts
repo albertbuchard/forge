@@ -3050,6 +3050,19 @@ test("settings and local agent token management persist through the versioned AP
         recommendedAutonomyMode: string;
         authModes: { operatorSession: { tokenRequired: boolean } };
         tokenRecovery: { rawTokenStoredByForge: boolean; recoveryAction: string };
+        conceptModel: { goal: string; taskRun: string; psyche: string };
+        relationshipModel: string[];
+        entityCatalog: Array<{
+          entityType: string;
+          minimumCreateFields: string[];
+          relationshipRules: string[];
+          fieldGuide: Array<{ name: string; required: boolean }>;
+        }>;
+        toolInputCatalog: Array<{
+          toolName: string;
+          requiredFields: string[];
+          inputShape: string;
+        }>;
         verificationPaths: { settingsBin: string; batchSearch: string };
         recommendedPluginTools: {
           bootstrap: string[];
@@ -3098,6 +3111,29 @@ test("settings and local agent token management persist through the versioned AP
     assert.equal(onboardingBody.onboarding.authModes.operatorSession.tokenRequired, false);
     assert.equal(onboardingBody.onboarding.tokenRecovery.rawTokenStoredByForge, false);
     assert.equal(onboardingBody.onboarding.tokenRecovery.recoveryAction, "rotate_or_issue_new_token");
+    assert.match(onboardingBody.onboarding.conceptModel.goal, /Goals anchor projects/);
+    assert.match(onboardingBody.onboarding.conceptModel.taskRun, /live work session/);
+    assert.match(onboardingBody.onboarding.conceptModel.psyche, /sensitive/);
+    assert.ok(onboardingBody.onboarding.relationshipModel.some((rule) => /Projects belong to one goal/.test(rule)));
+    const goalEntity = onboardingBody.onboarding.entityCatalog.find((entity) => entity.entityType === "goal");
+    assert.ok(goalEntity);
+    assert.ok(goalEntity.minimumCreateFields.includes("title"));
+    assert.ok(goalEntity.fieldGuide.some((field) => field.name === "horizon" && field.required === false));
+    const beliefEntity = onboardingBody.onboarding.entityCatalog.find((entity) => entity.entityType === "belief_entry");
+    assert.ok(beliefEntity);
+    assert.ok(beliefEntity.fieldGuide.some((field) => field.name === "statement" && field.required));
+    assert.ok(beliefEntity.fieldGuide.some((field) => field.name === "beliefType" && field.required));
+    const triggerReportEntity = onboardingBody.onboarding.entityCatalog.find((entity) => entity.entityType === "trigger_report");
+    assert.ok(triggerReportEntity);
+    assert.ok(triggerReportEntity.fieldGuide.some((field) => field.name === "emotions"));
+    const createTool = onboardingBody.onboarding.toolInputCatalog.find((tool) => tool.toolName === "forge_create_entities");
+    assert.ok(createTool);
+    assert.ok(createTool.requiredFields.includes("operations[].data"));
+    assert.match(createTool.inputShape, /operations/);
+    const startRunTool = onboardingBody.onboarding.toolInputCatalog.find((tool) => tool.toolName === "forge_start_task_run");
+    assert.ok(startRunTool);
+    assert.ok(startRunTool.requiredFields.includes("taskId"));
+    assert.ok(startRunTool.requiredFields.includes("actor"));
     assert.equal(onboardingBody.onboarding.verificationPaths.settingsBin, "/api/v1/settings/bin");
     assert.equal(onboardingBody.onboarding.verificationPaths.batchSearch, "/api/v1/entities/search");
     assert.deepEqual(onboardingBody.onboarding.recommendedPluginTools.bootstrap, ["forge_get_operator_overview"]);

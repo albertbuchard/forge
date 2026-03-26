@@ -1184,6 +1184,10 @@ export function buildOpenApiDocument() {
       "authModes",
       "tokenRecovery",
       "requiredHeaders",
+      "conceptModel",
+      "relationshipModel",
+      "entityCatalog",
+      "toolInputCatalog",
       "verificationPaths",
       "recommendedPluginTools",
       "interactionGuidance",
@@ -1254,6 +1258,60 @@ export function buildOpenApiDocument() {
           actor: { type: "string" }
         }
       },
+      conceptModel: {
+        type: "object",
+        additionalProperties: false,
+        required: ["goal", "project", "task", "taskRun", "insight", "psyche"],
+        properties: {
+          goal: { type: "string" },
+          project: { type: "string" },
+          task: { type: "string" },
+          taskRun: { type: "string" },
+          insight: { type: "string" },
+          psyche: { type: "string" }
+        }
+      },
+      relationshipModel: arrayOf({ type: "string" }),
+      entityCatalog: arrayOf({
+        type: "object",
+        additionalProperties: false,
+        required: ["entityType", "purpose", "minimumCreateFields", "relationshipRules", "searchHints", "fieldGuide"],
+        properties: {
+          entityType: { type: "string" },
+          purpose: { type: "string" },
+          minimumCreateFields: arrayOf({ type: "string" }),
+          relationshipRules: arrayOf({ type: "string" }),
+          searchHints: arrayOf({ type: "string" }),
+          fieldGuide: arrayOf({
+            type: "object",
+            additionalProperties: false,
+            required: ["name", "type", "required", "description"],
+            properties: {
+              name: { type: "string" },
+              type: { type: "string" },
+              required: { type: "boolean" },
+              description: { type: "string" },
+              enumValues: arrayOf({ type: "string" }),
+              defaultValue: { oneOf: [{ type: "string" }, { type: "number" }, { type: "boolean" }, { type: "null" }] },
+              nullable: { type: "boolean" }
+            }
+          })
+        }
+      }),
+      toolInputCatalog: arrayOf({
+        type: "object",
+        additionalProperties: false,
+        required: ["toolName", "summary", "whenToUse", "inputShape", "requiredFields", "notes", "example"],
+        properties: {
+          toolName: { type: "string" },
+          summary: { type: "string" },
+          whenToUse: { type: "string" },
+          inputShape: { type: "string" },
+          requiredFields: arrayOf({ type: "string" }),
+          notes: arrayOf({ type: "string" }),
+          example: { type: "string" }
+        }
+      }),
       verificationPaths: {
         type: "object",
         additionalProperties: false,

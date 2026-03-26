@@ -49,6 +49,19 @@ The batch tools are array-first:
 
 Batch several related creates together in one request when the user is asking for multiple goals, projects, or tasks at once.
 
+The live onboarding payload is the deep contract for agents. It now includes:
+
+- `conceptModel`: what the main Forge concepts mean
+- `relationshipModel`: how goals, projects, tasks, task runs, Psyche entities, and insights connect
+- `entityCatalog`: exact field-level definitions for real Forge entity payloads
+- `toolInputCatalog`: exact mutation and live-work input shapes with examples
+
+That means the agent should use the real route-facing fields, for example:
+
+- `belief_entry` uses `statement` and `beliefType`
+- `behavior_pattern` uses `cueContexts`, `shortTermPayoff`, `longTermCost`, and `preferredResponse`
+- `trigger_report` uses nested `emotions`, `thoughts`, `behaviors`, and `consequences`
+
 Live work is not just task status:
 
 - use `forge_start_task_run` to begin actual work

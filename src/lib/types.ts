@@ -570,6 +570,35 @@ export interface SettingsBinPayload {
   records: DeletedEntityRecord[];
 }
 
+export interface AgentOnboardingFieldGuide {
+  name: string;
+  type: string;
+  required: boolean;
+  description: string;
+  enumValues?: string[];
+  defaultValue?: string | number | boolean | null;
+  nullable?: boolean;
+}
+
+export interface AgentOnboardingEntityGuide {
+  entityType: CrudEntityType;
+  purpose: string;
+  minimumCreateFields: string[];
+  relationshipRules: string[];
+  searchHints: string[];
+  fieldGuide: AgentOnboardingFieldGuide[];
+}
+
+export interface AgentOnboardingToolGuide {
+  toolName: string;
+  summary: string;
+  whenToUse: string;
+  inputShape: string;
+  requiredFields: string[];
+  notes: string[];
+  example: string;
+}
+
 export interface AgentOnboardingPayload {
   forgeBaseUrl: string;
   webAppUrl: string;
@@ -610,6 +639,17 @@ export interface AgentOnboardingPayload {
     source: string;
     actor: string;
   };
+  conceptModel: {
+    goal: string;
+    project: string;
+    task: string;
+    taskRun: string;
+    insight: string;
+    psyche: string;
+  };
+  relationshipModel: string[];
+  entityCatalog: AgentOnboardingEntityGuide[];
+  toolInputCatalog: AgentOnboardingToolGuide[];
   verificationPaths: {
     context: string;
     xpMetrics: string;

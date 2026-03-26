@@ -23,6 +23,30 @@ The plugin no longer mirrors Forge’s raw CRUD and UI API. Forge itself still h
 Instead, the plugin exposes a curated operational surface: overview, current context, Psyche/XP/review reads, batch entity mutations, retroactive work logging, real task-run control, insight posting, and UI entry.
 When the configured origin is `localhost` or `127.0.0.1`, the plugin auto-starts the bundled Forge runtime on the configured port.
 
+## Agent understanding contract
+
+The agent should not have to guess Forge shapes.
+
+The live onboarding route now returns:
+
+- `conceptModel`: what goals, projects, tasks, task runs, insights, and Psyche records actually mean
+- `relationshipModel`: how those records relate to each other
+- `entityCatalog`: exact per-entity field guides with real route-facing field names, required fields, enums, defaults, and relationship rules
+- `toolInputCatalog`: exact input contracts and examples for the mutation and live-work tools
+
+The intended usage is:
+
+1. call `forge_get_agent_onboarding` when tool semantics are uncertain
+2. use the exact field names from onboarding
+3. do not invent friendlier aliases that the API does not accept
+
+Important examples:
+
+- `belief_entry` uses `statement` and `beliefType`, not ad-hoc fields like `title` or `belief`
+- `behavior_pattern` uses `cueContexts`, `shortTermPayoff`, `longTermCost`, and `preferredResponse`
+- `trigger_report` uses nested arrays for `emotions`, `thoughts`, and `behaviors`, plus a structured `consequences` object
+- live work is handled through task runs, not just task status
+
 ## Which manifest does what
 
 There are three files involved on purpose:
@@ -171,6 +195,32 @@ The high-level Forge mutation tools are array-first.
 `forge_restore_entities`:
 - pass `operations` as an array with `entityType` and `id`
 
+## Exact operational payload rules
+
+`forge_log_work`:
+- use for work that already happened
+- pass either `taskId` or `title`
+
+`forge_start_task_run`:
+- required: `taskId`, `actor`
+- optional: `timerMode`, `plannedDurationSeconds`, `isCurrent`, `leaseTtlSeconds`, `note`
+- if `timerMode` is `planned`, `plannedDurationSeconds` is required
+
+`forge_heartbeat_task_run`:
+- required: `taskRunId`
+- optional: `actor`, `leaseTtlSeconds`, `note`
+
+`forge_focus_task_run`:
+- required: `taskRunId`
+
+`forge_complete_task_run`:
+- required: `taskRunId`
+- optional: `actor`, `note`
+
+`forge_release_task_run`:
+- required: `taskRunId`
+- optional: `actor`, `note`
+
 Example create payload:
 
 ```json
@@ -209,6 +259,20 @@ Example update payload:
       "clientRef": "task-update-1"
     }
   ]
+}
+```
+
+Example live-work start payload:
+
+```json
+{
+  "taskId": "task_123",
+  "actor": "aurel",
+  "timerMode": "planned",
+  "plannedDurationSeconds": 1500,
+  "isCurrent": true,
+  "leaseTtlSeconds": 900,
+  "note": "Starting focused writing block"
 }
 ```
 

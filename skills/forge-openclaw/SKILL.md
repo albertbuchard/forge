@@ -1,6 +1,6 @@
 ---
 name: forge-openclaw
-description: Use the Forge OpenClaw plugin through its small batch-first tool surface. If a goal, task, project, trigger pattern, or insight is implied, help first, then end with one light offer to save it in Forge. Only write after explicit save intent.
+description: Use the Forge OpenClaw plugin through its exact route-facing tool surface. For clearly implied Forge entities, help first and end with one light optional Forge save offer. For explicit save requests, honor the requested entity type, ask only for missing required fields, and use the real Forge payload shapes.
 ---
 
 # Forge OpenClaw
@@ -11,6 +11,14 @@ Core behavior:
 - implied entity -> help first -> end with one short Forge save offer
 - explicit save intent -> use the Forge batch tools
 - no browser/UI workaround for normal creation or updates
+
+Non-negotiable execution rules:
+- If a goal, project, task, value, pattern, behavior, belief, trigger report, insight, or retroactive work item is clearly implied but the user has not asked to save it yet, help normally and then end with exactly one short optional Forge offer unless the user is in acute distress.
+- If the user explicitly asks to save something in Forge and required fields are still missing, do not complain about schemas and do not guess. Ask only for the missing required fields or the one most decision-critical optional field, with at most 1 to 3 focused questions.
+- If the user explicitly asks to save several related records at once and enough information is present, use one batched `forge_create_entities` call instead of serial one-by-one creation.
+- Do not say you cannot create something when `forge_create_entities`, `forge_update_entities`, or the task-run tools already cover it.
+- If the user explicitly names the target entity type, honor that entity type. Do not silently replace a requested `behavior_pattern`, `belief_entry`, `trigger_report`, `goal`, `project`, or `task` with an `insight`.
+- If a related insight already exists but the user is now asking for a formal entity, treat the old insight as context only. Search for an existing entity of the requested type; if it does not exist, create or intake the requested type instead of redirecting back to the insight.
 
 Forge is a life operating system with:
 - goals
@@ -223,6 +231,84 @@ Good update example:
 }
 ```
 
+## Exact operational payload rules
+
+`forge_log_work`:
+- use this only for retroactive work that already happened
+- pass either:
+  - `taskId` to log completed work against an existing task
+  - or `title` to create/log a completed work item when no task exists yet
+- optional fields:
+  - `description`, `summary`
+  - `goalId`, `projectId`
+  - `owner`
+  - `status`, `priority`
+  - `dueDate`
+  - `effort`, `energy`
+  - `points`
+  - `tagIds`
+
+`forge_start_task_run`:
+- truthful way to begin live work
+- required:
+  - `taskId`
+  - `actor`
+- optional:
+  - `timerMode`: `planned` or `unlimited`
+  - `plannedDurationSeconds`
+  - `isCurrent`
+  - `leaseTtlSeconds`
+  - `note`
+- rule:
+  - if `timerMode` is `planned`, `plannedDurationSeconds` is required
+  - if `timerMode` is `unlimited`, omit `plannedDurationSeconds` or pass `null`
+
+`forge_heartbeat_task_run`:
+- use during ongoing live work
+- required:
+  - `taskRunId`
+- optional:
+  - `actor`
+  - `leaseTtlSeconds`
+  - `note`
+
+`forge_focus_task_run`:
+- use when one active run should become the current visible run
+- required:
+  - `taskRunId`
+- optional:
+  - `actor`
+
+`forge_complete_task_run`:
+- truthful way to finish live work
+- required:
+  - `taskRunId`
+- optional:
+  - `actor`
+  - `note`
+
+`forge_release_task_run`:
+- truthful way to stop live work without completing the task
+- required:
+  - `taskRunId`
+- optional:
+  - `actor`
+  - `note`
+
+Example live-work start:
+
+```json
+{
+  "taskId": "task_123",
+  "actor": "aurel",
+  "timerMode": "planned",
+  "plannedDurationSeconds": 1500,
+  "isCurrent": true,
+  "leaseTtlSeconds": 900,
+  "note": "Starting focused writing block"
+}
+```
+
 ## When to offer saving to Forge
 
 Offer once, gently, near the end of the reply, when the signal is strong.
@@ -293,7 +379,7 @@ Bad style:
 
 ## Entity format cards
 
-These are the main advertised formats. Use them to decide what to ask next.
+These are the real route-facing formats. Use the exact field names below, not approximations.
 
 ### `goal`
 
@@ -306,6 +392,9 @@ Minimum fields:
 Useful optional fields:
 - `description`: why it matters or what success looks like
 - `horizon`: `quarter`, `year`, or `lifetime`
+- `status`: `active`, `paused`, or `completed`
+- `targetPoints`: point target for the goal
+- `themeColor`: hex color such as `#c8a46b`
 - `tagIds`: values, categories, or execution tags when already known
 
 What to ask:
@@ -325,7 +414,8 @@ Minimum fields:
 Useful optional fields:
 - `description`: desired outcome or scope
 - `status`: `active`, `paused`, or `completed`
-- `themeColor`: optional visual/editorial color
+- `targetPoints`: point target for the project
+- `themeColor`: optional visual/editorial color such as `#c0c1ff`
 
 What to ask:
 - "What should this project be called?"
@@ -346,6 +436,11 @@ Useful optional fields:
 - `dueDate`: when it matters
 - `priority`: `low`, `medium`, `high`, or `critical`
 - `status`: `backlog`, `focus`, `in_progress`, `blocked`, or `done`
+- `owner`: defaults to `Albert` unless a different owner is intended
+- `effort`: `light`, `deep`, or `marathon`
+- `energy`: `low`, `steady`, or `high`
+- `points`: reward value for the task
+- `tagIds`: existing tag ids
 - `description`: useful detail, not a paragraph by default
 
 What to ask:
@@ -363,13 +458,17 @@ Minimum fields:
 
 Useful optional fields:
 - `description`: what the value means in practice
+- `valuedDirection`: direction or way of being this value points toward
+- `whyItMatters`: why this matters to the user
 - `linkedGoalIds`
 - `linkedProjectIds`
 - `linkedTaskIds`
+- `committedActions`: small concrete actions that enact the value
 
 What to ask:
 - "What value or direction does this point toward?"
 - "How would you describe that value in your own words?"
+- "Why does this value matter right now?"
 - "Do you want it linked to an existing goal, project, or task?"
 
 ### `behavior_pattern`
@@ -382,14 +481,23 @@ Minimum fields:
 
 Useful optional fields:
 - `description`: what usually happens
-- `triggerCue`: what tends to start it
+- `targetBehavior`: the visible behavior this loop tends to produce
+- `cueContexts`: what tends to start it
+- `shortTermPayoff`: what the loop gives immediately
+- `longTermCost`: what it costs later
+- `preferredResponse`: the preferred alternative move
 - `linkedValueIds`
-- `linkedReportIds`
+- `linkedSchemaLabels`
+- `linkedModeLabels`
+- `linkedModeIds`
+- `linkedBeliefIds`
 
 What to ask:
 - "What would you call this pattern?"
 - "What usually triggers it?"
 - "What tends to happen once the pattern starts?"
+- "What does it give you in the short term, and what does it cost later?"
+- "What response would you rather make instead?"
 
 ### `behavior`
 
@@ -402,14 +510,23 @@ Minimum fields:
 Useful optional fields:
 - `kind`: `away`, `committed`, or `recovery`
 - `description`: short context
+- `commonCues`: common cues for the behavior
+- `urgeStory`: what the urge or inner story feels like
+- `shortTermPayoff`
+- `longTermCost`
+- `replacementMove`
+- `repairPlan`
 - `linkedPatternIds`
 - `linkedValueIds`
-- `linkedReportIds`
+- `linkedSchemaIds`
+- `linkedModeIds`
 
 What to ask:
 - "What happened, in plain language?"
 - "Would you classify it as away, committed, or recovery?"
-- "Do you want it linked to a pattern, value, or report?"
+- "What cues or urge story usually show up?"
+- "What move would you want available instead?"
+- "Do you want it linked to a pattern, value, schema, or mode?"
 
 ### `belief_entry`
 
@@ -417,17 +534,58 @@ Purpose:
 - a belief worth tracking, examining, or linking to schema work
 
 Minimum fields:
-- `title`: short label or belief title
+- `statement`: the belief statement
+- `beliefType`: `absolute` or `conditional`
 
 Useful optional fields:
-- `belief`: the actual belief statement
-- `schemaFamily`: maladaptive or adaptive framing when known
+- `schemaId`: linked schema catalog id if known
+- `originNote`: where the belief seems to come from
+- `confidence`: 0 to 100
+- `evidenceFor`
+- `evidenceAgainst`
+- `flexibleAlternative`
+- `linkedValueIds`
+- `linkedBehaviorIds`
+- `linkedModeIds`
 - `linkedReportIds`
 
 What to ask:
 - "What is the belief in one sentence?"
-- "Does it feel like an old pressure theme or a healthier stabilizing one?"
+- "Is it more absolute or conditional?"
+- "How true does it feel from 0 to 100?"
+- "What supports it, and what weakens it?"
+- "What would be a more flexible alternative?"
 - "Is this tied to a specific trigger report?"
+
+### `mode_profile`
+
+Purpose:
+- a schema mode profile such as critic, child, coping, or healthy adult
+
+Minimum fields:
+- `family`: `coping`, `child`, `critic_parent`, `healthy_adult`, or `happy_child`
+- `title`: mode name
+
+Useful optional fields:
+- `archetype`
+- `persona`
+- `imagery`
+- `symbolicForm`
+- `facialExpression`
+- `fear`
+- `burden`
+- `protectiveJob`
+- `originContext`
+- `firstAppearanceAt`
+- `linkedPatternIds`
+- `linkedBehaviorIds`
+- `linkedValueIds`
+
+What to ask:
+- "What kind of mode is this: coping, child, critic-parent, healthy-adult, or happy-child?"
+- "What would you call this mode?"
+- "What does it fear, carry, or try to protect?"
+- "Do you want it linked to patterns, behaviors, or values?"
 
 ### `trigger_report`
 
@@ -438,17 +596,27 @@ Minimum fields:
 - `title`: short name for the incident
 
 Useful optional fields:
-- `eventSummary`: what happened
+- `status`: `draft`, `reviewed`, or `integrated`
 - `eventTypeId`
-- `emotionIds`
-- `thoughtSummary`
-- `behaviorSummary`
-- `nextMove`
+- `customEventType`
+- `eventSituation`
+- `occurredAt`
+- `emotions`: array of `{ emotionDefinitionId|null, label, intensity, note }`
+- `thoughts`: array of `{ text, parentMode, criticMode, beliefId|null }`
+- `behaviors`: array of `{ text, mode, behaviorId|null }`
+- `consequences`: object with `selfShortTerm`, `selfLongTerm`, `othersShortTerm`, `othersLongTerm`
+- `nextMoves`
 - `linkedGoalIds`
 - `linkedProjectIds`
 - `linkedTaskIds`
 - `linkedPatternIds`
 - `linkedValueIds`
+- `linkedBehaviorIds`
+- `linkedBeliefIds`
+- `linkedModeIds`
+- `modeOverlays`
+- `schemaLinks`
+- `modeTimeline`
 
 What to ask:
 - "What happened?"
@@ -456,6 +624,7 @@ What to ask:
 - "What thoughts or beliefs showed up?"
 - "What did you do next?"
 - "What would be a useful next move now?"
+- "Do you want this linked to a value, pattern, belief, mode, goal, project, or task?"
 
 ## Mapping guidance
 
@@ -488,3 +657,4 @@ Remote non-local installs should use a token.
 4. Use `forge_post_insight` for structured recommendations.
 5. Respect sensitive Psyche scopes. Psyche is not casual metadata.
 6. Default delete is soft delete. Hard delete requires explicit user intent.
+7. Use the exact route-facing field names from this skill or from `forge_get_agent_onboarding`; do not invent friendlier field aliases that the API does not support.

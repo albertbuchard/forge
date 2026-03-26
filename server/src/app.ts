@@ -258,6 +258,368 @@ function getRequestOrigin(request: {
   return `${protocol}://${host}`;
 }
 
+const AGENT_ONBOARDING_ENTITY_CATALOG = [
+  {
+    entityType: "goal",
+    purpose: "A long-horizon outcome or direction. Goals anchor projects and tasks.",
+    minimumCreateFields: ["title"],
+    relationshipRules: [
+      "Goals sit above projects and tasks.",
+      "Projects should usually link to one goal through goalId.",
+      "Tasks can link directly to a goal when no project exists yet."
+    ],
+    searchHints: ["Search by title before creating a new goal.", "Use status filters when looking for paused or completed goals."],
+    fieldGuide: [
+      { name: "title", type: "string", required: true, description: "Human-readable goal name." },
+      { name: "description", type: "string", required: false, description: "Why the goal matters or what success looks like.", defaultValue: "" },
+      { name: "horizon", type: "quarter|year|lifetime", required: false, description: "How far out the goal is meant to live.", enumValues: ["quarter", "year", "lifetime"], defaultValue: "year" },
+      { name: "status", type: "active|paused|completed", required: false, description: "Current lifecycle state for the goal.", enumValues: ["active", "paused", "completed"], defaultValue: "active" },
+      { name: "targetPoints", type: "integer", required: false, description: "Approximate XP/point target for the goal.", defaultValue: 400 },
+      { name: "themeColor", type: "hex-color", required: false, description: "Visual color used in the UI.", defaultValue: "#c8a46b" },
+      { name: "tagIds", type: "string[]", required: false, description: "Existing tag ids linked to the goal.", defaultValue: [] }
+    ]
+  },
+  {
+    entityType: "project",
+    purpose: "A concrete multi-step workstream under a goal.",
+    minimumCreateFields: ["goalId", "title"],
+    relationshipRules: [
+      "Every project belongs to a goal through goalId.",
+      "Tasks can link to a project through projectId.",
+      "Projects inherit strategic meaning from their parent goal."
+    ],
+    searchHints: ["Search by title inside the target goal before creating a new project."],
+    fieldGuide: [
+      { name: "goalId", type: "string", required: true, description: "Existing parent goal id." },
+      { name: "title", type: "string", required: true, description: "Project name." },
+      { name: "description", type: "string", required: false, description: "Desired outcome or scope.", defaultValue: "" },
+      { name: "status", type: "active|paused|completed", required: false, description: "Lifecycle state.", enumValues: ["active", "paused", "completed"], defaultValue: "active" },
+      { name: "targetPoints", type: "integer", required: false, description: "Approximate XP/point target for the project.", defaultValue: 240 },
+      { name: "themeColor", type: "hex-color", required: false, description: "Visual color used in the UI.", defaultValue: "#c0c1ff" }
+    ]
+  },
+  {
+    entityType: "task",
+    purpose: "A concrete actionable work item. Tasks are what the user actually does.",
+    minimumCreateFields: ["title"],
+    relationshipRules: [
+      "A task can link to a goal, a project, both, or neither.",
+      "Live work is tracked by task runs, not by task status alone.",
+      "A task status of in_progress does not guarantee a live active run."
+    ],
+    searchHints: ["Search by title before creating a duplicate task.", "Use linkedTo filters when you know the parent goal or project."],
+    fieldGuide: [
+      { name: "title", type: "string", required: true, description: "Concrete action label." },
+      { name: "description", type: "string", required: false, description: "Helpful context or acceptance notes.", defaultValue: "" },
+      { name: "status", type: "backlog|focus|in_progress|blocked|done", required: false, description: "Board lane or completion state.", enumValues: ["backlog", "focus", "in_progress", "blocked", "done"], defaultValue: "backlog" },
+      { name: "priority", type: "low|medium|high|critical", required: false, description: "Relative urgency.", enumValues: ["low", "medium", "high", "critical"], defaultValue: "medium" },
+      { name: "owner", type: "string", required: false, description: "Human-facing owner label.", defaultValue: "Albert" },
+      { name: "goalId", type: "string|null", required: false, description: "Linked goal id.", defaultValue: null, nullable: true },
+      { name: "projectId", type: "string|null", required: false, description: "Linked project id.", defaultValue: null, nullable: true },
+      { name: "dueDate", type: "YYYY-MM-DD|null", required: false, description: "Optional due date.", defaultValue: null, nullable: true },
+      { name: "effort", type: "light|deep|marathon", required: false, description: "How heavy the task feels.", enumValues: ["light", "deep", "marathon"], defaultValue: "deep" },
+      { name: "energy", type: "low|steady|high", required: false, description: "Energy demand.", enumValues: ["low", "steady", "high"], defaultValue: "steady" },
+      { name: "points", type: "integer", required: false, description: "Reward value for the task.", defaultValue: 40 },
+      { name: "sortOrder", type: "integer", required: false, description: "Lane ordering hint when set explicitly." },
+      { name: "tagIds", type: "string[]", required: false, description: "Existing tag ids linked to the task.", defaultValue: [] }
+    ]
+  },
+  {
+    entityType: "insight",
+    purpose: "An agent-authored observation or recommendation grounded in Forge data.",
+    minimumCreateFields: ["title", "summary", "recommendation"],
+    relationshipRules: [
+      "Insights can optionally point at one entity through entityType and entityId.",
+      "Use insights for interpretation or advice, not as a replacement for goals, tasks, or trigger reports."
+    ],
+    searchHints: ["Search recent insights before posting a new one if the same pattern may already be captured."],
+    fieldGuide: [
+      { name: "entityType", type: "string|null", required: false, description: "Optional linked entity type.", defaultValue: null, nullable: true },
+      { name: "entityId", type: "string|null", required: false, description: "Optional linked entity id.", defaultValue: null, nullable: true },
+      { name: "timeframeLabel", type: "string|null", required: false, description: "Optional time window label.", defaultValue: null, nullable: true },
+      { name: "title", type: "string", required: true, description: "Insight title." },
+      { name: "summary", type: "string", required: true, description: "Short explanation of the pattern or tension." },
+      { name: "recommendation", type: "string", required: true, description: "Actionable next move or reframing." },
+      { name: "rationale", type: "string", required: false, description: "Why this insight is grounded in the data.", defaultValue: "" },
+      { name: "confidence", type: "number", required: false, description: "Confidence from 0 to 1.", defaultValue: 0.7 },
+      { name: "visibility", type: "string", required: false, description: "Visibility mode for the insight.", defaultValue: "visible" },
+      { name: "ctaLabel", type: "string", required: false, description: "CTA shown in the UI.", defaultValue: "Review insight" }
+    ]
+  },
+  {
+    entityType: "psyche_value",
+    purpose: "An ACT-style value or direction the user wants to orient toward.",
+    minimumCreateFields: ["title"],
+    relationshipRules: [
+      "Values can link to goals, projects, and tasks.",
+      "Patterns, behaviors, beliefs, and reports can all point back to values."
+    ],
+    searchHints: ["Search by title before creating a new value.", "Use linkedTo if the value should already be attached to a goal or task."],
+    fieldGuide: [
+      { name: "title", type: "string", required: true, description: "Value name." },
+      { name: "description", type: "string", required: false, description: "What the value means in practice.", defaultValue: "" },
+      { name: "valuedDirection", type: "string", required: false, description: "Direction or way of being the value points toward.", defaultValue: "" },
+      { name: "whyItMatters", type: "string", required: false, description: "Why the value matters to the user.", defaultValue: "" },
+      { name: "linkedGoalIds", type: "string[]", required: false, description: "Linked goal ids.", defaultValue: [] },
+      { name: "linkedProjectIds", type: "string[]", required: false, description: "Linked project ids.", defaultValue: [] },
+      { name: "linkedTaskIds", type: "string[]", required: false, description: "Linked task ids.", defaultValue: [] },
+      { name: "committedActions", type: "string[]", required: false, description: "Small concrete actions that enact the value.", defaultValue: [] }
+    ]
+  },
+  {
+    entityType: "behavior_pattern",
+    purpose: "A recurring loop or trigger-response pattern.",
+    minimumCreateFields: ["title"],
+    relationshipRules: [
+      "Patterns can link to values, beliefs, and modes.",
+      "Trigger reports can link back to patterns they instantiate."
+    ],
+    searchHints: ["Search by title or by trigger language before creating a new pattern."],
+    fieldGuide: [
+      { name: "title", type: "string", required: true, description: "Short pattern name." },
+      { name: "description", type: "string", required: false, description: "What usually happens in this loop.", defaultValue: "" },
+      { name: "targetBehavior", type: "string", required: false, description: "The visible behavior this pattern tends to produce.", defaultValue: "" },
+      { name: "cueContexts", type: "string[]", required: false, description: "Typical cues, contexts, or triggers.", defaultValue: [] },
+      { name: "shortTermPayoff", type: "string", required: false, description: "What the loop gives immediately.", defaultValue: "" },
+      { name: "longTermCost", type: "string", required: false, description: "What the loop costs later.", defaultValue: "" },
+      { name: "preferredResponse", type: "string", required: false, description: "Preferred alternative response.", defaultValue: "" },
+      { name: "linkedValueIds", type: "string[]", required: false, description: "Linked value ids.", defaultValue: [] },
+      { name: "linkedSchemaLabels", type: "string[]", required: false, description: "Schema labels involved in the pattern.", defaultValue: [] },
+      { name: "linkedModeLabels", type: "string[]", required: false, description: "Mode labels involved in the pattern.", defaultValue: [] },
+      { name: "linkedModeIds", type: "string[]", required: false, description: "Linked mode ids.", defaultValue: [] },
+      { name: "linkedBeliefIds", type: "string[]", required: false, description: "Linked belief ids.", defaultValue: [] }
+    ]
+  },
+  {
+    entityType: "behavior",
+    purpose: "A concrete behavior pattern element or habit worth tracking directly.",
+    minimumCreateFields: ["kind", "title"],
+    relationshipRules: [
+      "Behaviors can connect to behavior patterns, values, schemas, and modes.",
+      "Trigger reports can link to behaviors they contained."
+    ],
+    searchHints: ["Search by title and kind before creating a new behavior."],
+    fieldGuide: [
+      { name: "kind", type: "away|committed|recovery", required: true, description: "Whether the behavior moves away from values, toward them, or repairs after rupture.", enumValues: ["away", "committed", "recovery"] },
+      { name: "title", type: "string", required: true, description: "Behavior label." },
+      { name: "description", type: "string", required: false, description: "What the behavior looks like.", defaultValue: "" },
+      { name: "commonCues", type: "string[]", required: false, description: "Typical cues for this behavior.", defaultValue: [] },
+      { name: "urgeStory", type: "string", required: false, description: "What the inner urge or story feels like.", defaultValue: "" },
+      { name: "shortTermPayoff", type: "string", required: false, description: "Immediate payoff.", defaultValue: "" },
+      { name: "longTermCost", type: "string", required: false, description: "Longer-term cost.", defaultValue: "" },
+      { name: "replacementMove", type: "string", required: false, description: "Preferred replacement move.", defaultValue: "" },
+      { name: "repairPlan", type: "string", required: false, description: "Repair plan after the behavior occurs.", defaultValue: "" },
+      { name: "linkedPatternIds", type: "string[]", required: false, description: "Linked behavior pattern ids.", defaultValue: [] },
+      { name: "linkedValueIds", type: "string[]", required: false, description: "Linked value ids.", defaultValue: [] },
+      { name: "linkedSchemaIds", type: "string[]", required: false, description: "Linked schema ids.", defaultValue: [] },
+      { name: "linkedModeIds", type: "string[]", required: false, description: "Linked mode ids.", defaultValue: [] }
+    ]
+  },
+  {
+    entityType: "belief_entry",
+    purpose: "A belief or schema-linked statement worth tracking and testing.",
+    minimumCreateFields: ["statement", "beliefType"],
+    relationshipRules: [
+      "Beliefs can link to values, behaviors, modes, and trigger reports.",
+      "Behavior patterns can point to beliefs that keep the loop alive."
+    ],
+    searchHints: ["Search by statement or known schema theme before creating a new belief entry."],
+    fieldGuide: [
+      { name: "schemaId", type: "string|null", required: false, description: "Optional linked schema catalog id.", defaultValue: null, nullable: true },
+      { name: "statement", type: "string", required: true, description: "Belief statement in the user's own words." },
+      { name: "beliefType", type: "absolute|conditional", required: true, description: "Whether the belief is absolute or if-then shaped.", enumValues: ["absolute", "conditional"] },
+      { name: "originNote", type: "string", required: false, description: "Where the belief seems to come from.", defaultValue: "" },
+      { name: "confidence", type: "integer", required: false, description: "How strongly the belief feels true from 0 to 100.", defaultValue: 60 },
+      { name: "evidenceFor", type: "string[]", required: false, description: "Evidence that seems to support the belief.", defaultValue: [] },
+      { name: "evidenceAgainst", type: "string[]", required: false, description: "Evidence that weakens the belief.", defaultValue: [] },
+      { name: "flexibleAlternative", type: "string", required: false, description: "More flexible alternative belief.", defaultValue: "" },
+      { name: "linkedValueIds", type: "string[]", required: false, description: "Linked value ids.", defaultValue: [] },
+      { name: "linkedBehaviorIds", type: "string[]", required: false, description: "Linked behavior ids.", defaultValue: [] },
+      { name: "linkedModeIds", type: "string[]", required: false, description: "Linked mode ids.", defaultValue: [] },
+      { name: "linkedReportIds", type: "string[]", required: false, description: "Linked trigger report ids.", defaultValue: [] }
+    ]
+  },
+  {
+    entityType: "mode_profile",
+    purpose: "A schema-mode profile such as critic, child, coping, or healthy adult parts.",
+    minimumCreateFields: ["family", "title"],
+    relationshipRules: [
+      "Modes can link to patterns, behaviors, and values.",
+      "Trigger reports can include linkedModeIds and modeOverlays that reference modes."
+    ],
+    searchHints: ["Search by title or family before creating a new mode profile."],
+    fieldGuide: [
+      { name: "family", type: "coping|child|critic_parent|healthy_adult|happy_child", required: true, description: "Mode family.", enumValues: ["coping", "child", "critic_parent", "healthy_adult", "happy_child"] },
+      { name: "title", type: "string", required: true, description: "Mode title." },
+      { name: "archetype", type: "string", required: false, description: "Optional archetype label.", defaultValue: "" },
+      { name: "persona", type: "string", required: false, description: "Narrative or felt sense of the mode.", defaultValue: "" },
+      { name: "imagery", type: "string", required: false, description: "Imagery associated with the mode.", defaultValue: "" },
+      { name: "symbolicForm", type: "string", required: false, description: "Symbolic form or metaphor.", defaultValue: "" },
+      { name: "facialExpression", type: "string", required: false, description: "Typical facial expression or posture.", defaultValue: "" },
+      { name: "fear", type: "string", required: false, description: "Core fear carried by the mode.", defaultValue: "" },
+      { name: "burden", type: "string", required: false, description: "Burden or pain the mode carries.", defaultValue: "" },
+      { name: "protectiveJob", type: "string", required: false, description: "What job the mode thinks it is doing.", defaultValue: "" },
+      { name: "originContext", type: "string", required: false, description: "Where the mode seems to come from.", defaultValue: "" },
+      { name: "firstAppearanceAt", type: "string|null", required: false, description: "Optional first-seen marker.", defaultValue: null, nullable: true },
+      { name: "linkedPatternIds", type: "string[]", required: false, description: "Linked pattern ids.", defaultValue: [] },
+      { name: "linkedBehaviorIds", type: "string[]", required: false, description: "Linked behavior ids.", defaultValue: [] },
+      { name: "linkedValueIds", type: "string[]", required: false, description: "Linked value ids.", defaultValue: [] }
+    ]
+  },
+  {
+    entityType: "trigger_report",
+    purpose: "A structured reflective incident report that ties situation, emotions, thoughts, behaviors, consequences, and next moves together.",
+    minimumCreateFields: ["title"],
+    relationshipRules: [
+      "Trigger reports can link to values, goals, projects, tasks, patterns, behaviors, beliefs, and modes.",
+      "A report is the best container for one specific emotionally meaningful episode.",
+      "Use reports when you need one event chain, not just a generic pattern."
+    ],
+    searchHints: ["Search by title, event wording, or linked entities before creating a duplicate report."],
+    fieldGuide: [
+      { name: "title", type: "string", required: true, description: "Short name for the incident." },
+      { name: "status", type: "draft|reviewed|integrated", required: false, description: "Reflection progress state.", enumValues: ["draft", "reviewed", "integrated"], defaultValue: "draft" },
+      { name: "eventTypeId", type: "string|null", required: false, description: "Known event type id if already cataloged.", defaultValue: null, nullable: true },
+      { name: "customEventType", type: "string", required: false, description: "Free-text event type when no existing type fits.", defaultValue: "" },
+      { name: "eventSituation", type: "string", required: false, description: "What happened in the situation.", defaultValue: "" },
+      { name: "occurredAt", type: "string|null", required: false, description: "When it happened.", defaultValue: null, nullable: true },
+      { name: "emotions", type: "array", required: false, description: "List of { emotionDefinitionId|null, label, intensity 0-100, note } items.", defaultValue: [] },
+      { name: "thoughts", type: "array", required: false, description: "List of { text, parentMode, criticMode, beliefId|null } items.", defaultValue: [] },
+      { name: "behaviors", type: "array", required: false, description: "List of { text, mode, behaviorId|null } items.", defaultValue: [] },
+      { name: "consequences", type: "object", required: false, description: "Object with selfShortTerm, selfLongTerm, othersShortTerm, othersLongTerm string arrays." },
+      { name: "linkedPatternIds", type: "string[]", required: false, description: "Linked pattern ids.", defaultValue: [] },
+      { name: "linkedValueIds", type: "string[]", required: false, description: "Linked value ids.", defaultValue: [] },
+      { name: "linkedGoalIds", type: "string[]", required: false, description: "Linked goal ids.", defaultValue: [] },
+      { name: "linkedProjectIds", type: "string[]", required: false, description: "Linked project ids.", defaultValue: [] },
+      { name: "linkedTaskIds", type: "string[]", required: false, description: "Linked task ids.", defaultValue: [] },
+      { name: "linkedBehaviorIds", type: "string[]", required: false, description: "Linked behavior ids.", defaultValue: [] },
+      { name: "linkedBeliefIds", type: "string[]", required: false, description: "Linked belief ids.", defaultValue: [] },
+      { name: "linkedModeIds", type: "string[]", required: false, description: "Linked mode ids.", defaultValue: [] },
+      { name: "modeOverlays", type: "string[]", required: false, description: "Free-text mode overlays or labels noticed in the report.", defaultValue: [] },
+      { name: "schemaLinks", type: "string[]", required: false, description: "Free-text schema links or themes.", defaultValue: [] },
+      { name: "modeTimeline", type: "array", required: false, description: "List of { stage, modeId|null, label, note } items describing the sequence of modes.", defaultValue: [] },
+      { name: "nextMoves", type: "string[]", required: false, description: "Concrete next steps or repair moves.", defaultValue: [] }
+    ]
+  }
+] as const;
+
+const AGENT_ONBOARDING_TOOL_INPUT_CATALOG = [
+  {
+    toolName: "forge_search_entities",
+    summary: "Search Forge entities before create or update.",
+    whenToUse: "Use when duplicate risk exists or when you need ids before mutating.",
+    inputShape: "{ searches: Array<{ entityTypes?: CrudEntityType[], query?: string, ids?: string[], status?: string[], linkedTo?: { entityType, id }, includeDeleted?: boolean, limit?: number, clientRef?: string }> }",
+    requiredFields: ["searches"],
+    notes: [
+      "searches is always an array, even for a single search.",
+      "linkedTo is useful when looking for items under one parent entity."
+    ],
+    example: '{"searches":[{"entityTypes":["goal"],"query":"Create meaningfully","limit":10,"clientRef":"goal-search-1"}]}'
+  },
+  {
+    toolName: "forge_create_entities",
+    summary: "Create one or more entities in one ordered batch.",
+    whenToUse: "Use after explicit save intent and after duplicate checks when needed.",
+    inputShape: "{ atomic?: boolean, operations: Array<{ entityType: CrudEntityType, clientRef?: string, data: object }> }",
+    requiredFields: ["operations", "operations[].entityType", "operations[].data"],
+    notes: [
+      "entityType alone is never enough; full data is required.",
+      "Batch multiple related creates together when they come from one user ask."
+    ],
+    example: '{"operations":[{"entityType":"goal","data":{"title":"Create meaningfully","horizon":"lifetime"},"clientRef":"goal-1"},{"entityType":"project","data":{"goalId":"goal_123","title":"Launch the first public Forge plugin build"},"clientRef":"project-1"}]}'
+  },
+  {
+    toolName: "forge_update_entities",
+    summary: "Patch one or more entities in one ordered batch.",
+    whenToUse: "Use when ids are known and the user explicitly wants a change persisted.",
+    inputShape: "{ atomic?: boolean, operations: Array<{ entityType: CrudEntityType, id: string, clientRef?: string, patch: object }> }",
+    requiredFields: ["operations", "operations[].entityType", "operations[].id", "operations[].patch"],
+    notes: ["patch is partial; only send the fields that should change."],
+    example: '{"operations":[{"entityType":"task","id":"task_123","patch":{"status":"focus","priority":"high"},"clientRef":"task-patch-1"}]}'
+  },
+  {
+    toolName: "forge_delete_entities",
+    summary: "Delete one or more entities through the batch delete flow.",
+    whenToUse: "Use for explicit delete intent only.",
+    inputShape: "{ atomic?: boolean, operations: Array<{ entityType: CrudEntityType, id: string, clientRef?: string, mode?: \"soft\"|\"hard\", reason?: string }> }",
+    requiredFields: ["operations", "operations[].entityType", "operations[].id"],
+    notes: ["Delete defaults to soft.", "Use mode=hard only for explicit permanent removal."],
+    example: '{"operations":[{"entityType":"task","id":"task_123","mode":"soft","reason":"Merged into another task"}]}'
+  },
+  {
+    toolName: "forge_restore_entities",
+    summary: "Restore soft-deleted entities from the settings bin.",
+    whenToUse: "Use when the user wants an entity brought back after a soft delete.",
+    inputShape: "{ atomic?: boolean, operations: Array<{ entityType: CrudEntityType, id: string, clientRef?: string }> }",
+    requiredFields: ["operations", "operations[].entityType", "operations[].id"],
+    notes: ["Restore only works for soft-deleted entities."],
+    example: '{"operations":[{"entityType":"goal","id":"goal_123","clientRef":"goal-restore-1"}]}'
+  },
+  {
+    toolName: "forge_post_insight",
+    summary: "Store an agent-authored insight.",
+    whenToUse: "Use when you have a data-grounded observation or recommendation worth keeping visible in Forge.",
+    inputShape: "{ entityType?: string|null, entityId?: string|null, timeframeLabel?: string|null, title: string, summary: string, recommendation: string, rationale?: string, confidence?: number, visibility?: string, ctaLabel?: string }",
+    requiredFields: ["title", "summary", "recommendation"],
+    notes: ["Insights are for interpretation and advice, not for replacing user-owned goals or tasks."],
+    example: '{"entityType":"goal","entityId":"goal_123","title":"Admin drag is masking momentum","summary":"Creative progress is happening, but admin cleanup keeps interrupting it.","recommendation":"Protect one clean creative block and isolate admin into a separate recurring task.","confidence":0.82}'
+  },
+  {
+    toolName: "forge_log_work",
+    summary: "Log work that already happened.",
+    whenToUse: "Use for retroactive work, not for starting a live session.",
+    inputShape: "{ taskId?: string, title?: string, description?: string, summary?: string, goalId?: string|null, projectId?: string|null, owner?: string, status?: TaskStatus, priority?: TaskPriority, dueDate?: string|null, effort?: TaskEffort, energy?: TaskEnergy, points?: number, tagIds?: string[] }",
+    requiredFields: ["taskId or title"],
+    notes: ["Use taskId when logging work against an existing task.", "Use title when a new completed work item should be created and logged."],
+    example: '{"taskId":"task_123","summary":"Finished the review draft and cleaned the notes.","points":40}'
+  },
+  {
+    toolName: "forge_start_task_run",
+    summary: "Start truthful live work on a task.",
+    whenToUse: "Use when the user wants to begin working now.",
+    inputShape: "{ taskId: string, actor: string, timerMode?: \"planned\"|\"unlimited\", plannedDurationSeconds?: number|null, isCurrent?: boolean, leaseTtlSeconds?: number, note?: string }",
+    requiredFields: ["taskId", "actor"],
+    notes: ["If timerMode is planned, plannedDurationSeconds is required.", "If timerMode is unlimited, plannedDurationSeconds must be null or omitted."],
+    example: '{"taskId":"task_123","actor":"aurel","timerMode":"planned","plannedDurationSeconds":1500,"isCurrent":true,"leaseTtlSeconds":900,"note":"Starting focused writing block"}'
+  },
+  {
+    toolName: "forge_heartbeat_task_run",
+    summary: "Refresh an active run lease while work continues.",
+    whenToUse: "Use periodically during ongoing live work.",
+    inputShape: "{ taskRunId: string, actor?: string, leaseTtlSeconds?: number, note?: string }",
+    requiredFields: ["taskRunId"],
+    notes: ["Heartbeat extends the lease and can update the note."],
+    example: '{"taskRunId":"run_123","actor":"aurel","leaseTtlSeconds":900,"note":"Still in the block"}'
+  },
+  {
+    toolName: "forge_focus_task_run",
+    summary: "Mark one active run as the current focus.",
+    whenToUse: "Use when several runs exist and one should be the visible current run.",
+    inputShape: "{ taskRunId: string, actor?: string }",
+    requiredFields: ["taskRunId"],
+    notes: ["This does not complete or release a run; it just changes current focus."],
+    example: '{"taskRunId":"run_123","actor":"aurel"}'
+  },
+  {
+    toolName: "forge_complete_task_run",
+    summary: "Finish an active run as completed work.",
+    whenToUse: "Use when the user has finished the live work block.",
+    inputShape: "{ taskRunId: string, actor?: string, note?: string }",
+    requiredFields: ["taskRunId"],
+    notes: ["This is the truthful way to finish live work and award completion effects."],
+    example: '{"taskRunId":"run_123","actor":"aurel","note":"Finished the review draft"}'
+  },
+  {
+    toolName: "forge_release_task_run",
+    summary: "Stop an active run without marking the task complete.",
+    whenToUse: "Use when the user is stopping or pausing work without completion.",
+    inputShape: "{ taskRunId: string, actor?: string, note?: string }",
+    requiredFields: ["taskRunId"],
+    notes: ["Use this instead of faking a stop by only changing task status."],
+    example: '{"taskRunId":"run_123","actor":"aurel","note":"Stopping for now; blocked on feedback"}'
+  }
+] as const;
+
 function buildAgentOnboardingPayload(request: {
   protocol: string;
   hostname: string;
@@ -315,6 +677,26 @@ function buildAgentOnboardingPayload(request: {
       source: "X-Forge-Source: agent",
       actor: "X-Forge-Actor: <agent-label>"
     },
+    conceptModel: {
+      goal: "Long-horizon direction or outcome. Goals anchor projects and sometimes tasks directly.",
+      project: "A multi-step workstream under one goal. Projects organize related tasks.",
+      task: "A concrete actionable work item. Task status is board state, not proof of live work.",
+      taskRun: "A live work session attached to a task. Start, heartbeat, focus, complete, and release runs instead of faking work with status alone.",
+      insight: "An agent-authored observation or recommendation grounded in Forge data.",
+      psyche:
+        "Forge Psyche is the reflective domain for values, patterns, behaviors, beliefs, modes, and trigger reports. It is sensitive and should be handled deliberately."
+    },
+    relationshipModel: [
+      "Goals are the top-level strategic layer.",
+      "Projects belong to one goal through goalId.",
+      "Tasks can belong to a goal, a project, both, or neither.",
+      "Task runs represent live work sessions on tasks and are separate from task status.",
+      "Psyche values can link to goals, projects, and tasks.",
+      "Behavior patterns, behaviors, beliefs, modes, and trigger reports cross-link to describe one reflective model rather than isolated records.",
+      "Insights can point at one entity, but they exist to capture interpretation or advice rather than raw work items."
+    ],
+    entityCatalog: AGENT_ONBOARDING_ENTITY_CATALOG,
+    toolInputCatalog: AGENT_ONBOARDING_TOOL_INPUT_CATALOG,
     verificationPaths: {
       context: "/api/v1/context",
       xpMetrics: "/api/v1/metrics/xp",
