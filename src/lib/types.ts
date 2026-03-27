@@ -599,6 +599,17 @@ export interface AgentOnboardingToolGuide {
   example: string;
 }
 
+export interface AgentOnboardingPsychePlaybook {
+  focus: string;
+  useWhen: string;
+  coachingGoal: string;
+  askSequence: string[];
+  requiredForCreate: string[];
+  highValueOptionalFields: string[];
+  exampleQuestions: string[];
+  notes: string[];
+}
+
 export interface AgentOnboardingPayload {
   forgeBaseUrl: string;
   webAppUrl: string;
@@ -647,6 +658,19 @@ export interface AgentOnboardingPayload {
     insight: string;
     psyche: string;
   };
+  psycheSubmoduleModel: {
+    value: string;
+    behaviorPattern: string;
+    behavior: string;
+    beliefEntry: string;
+    schemaCatalog: string;
+    modeProfile: string;
+    modeGuideSession: string;
+    eventType: string;
+    emotionDefinition: string;
+    triggerReport: string;
+  };
+  psycheCoachingPlaybooks: AgentOnboardingPsychePlaybook[];
   relationshipModel: string[];
   entityCatalog: AgentOnboardingEntityGuide[];
   toolInputCatalog: AgentOnboardingToolGuide[];
@@ -656,6 +680,9 @@ export interface AgentOnboardingPayload {
     weeklyReview: string;
     settingsBin: string;
     batchSearch: string;
+    psycheSchemaCatalog: string;
+    psycheEventTypes: string;
+    psycheEmotions: string;
   };
   recommendedPluginTools: {
     bootstrap: string[];

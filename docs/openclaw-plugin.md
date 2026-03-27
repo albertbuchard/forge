@@ -30,6 +30,8 @@ The agent should not have to guess Forge shapes.
 The live onboarding route now returns:
 
 - `conceptModel`: what goals, projects, tasks, task runs, insights, and Psyche records actually mean
+- `psycheSubmoduleModel`: what values, patterns, behaviors, beliefs, schema catalog entries, modes, mode guides, event types, emotion definitions, and trigger reports are for
+- `psycheCoachingPlaybooks`: how the agent should guide pattern analysis, belief/schema intake, mode work, and trigger reports
 - `relationshipModel`: how those records relate to each other
 - `entityCatalog`: exact per-entity field guides with real route-facing field names, required fields, enums, defaults, and relationship rules
 - `toolInputCatalog`: exact input contracts and examples for the mutation and live-work tools
@@ -44,6 +46,8 @@ Important examples:
 
 - `belief_entry` uses `statement` and `beliefType`, not ad-hoc fields like `title` or `belief`
 - `behavior_pattern` uses `cueContexts`, `shortTermPayoff`, `longTermCost`, and `preferredResponse`
+- `mode_guide_session` stores `summary`, `answers`, and `results`, not a free-form note
+- `event_type` and `emotion_definition` are reusable Psyche taxonomies that support reports
 - `trigger_report` uses nested arrays for `emotions`, `thoughts`, and `behaviors`, plus a structured `consequences` object
 - live work is handled through task runs, not just task status
 

@@ -1185,6 +1185,8 @@ export function buildOpenApiDocument() {
       "tokenRecovery",
       "requiredHeaders",
       "conceptModel",
+      "psycheSubmoduleModel",
+      "psycheCoachingPlaybooks",
       "relationshipModel",
       "entityCatalog",
       "toolInputCatalog",
@@ -1271,6 +1273,58 @@ export function buildOpenApiDocument() {
           psyche: { type: "string" }
         }
       },
+      psycheSubmoduleModel: {
+        type: "object",
+        additionalProperties: false,
+        required: [
+          "value",
+          "behaviorPattern",
+          "behavior",
+          "beliefEntry",
+          "schemaCatalog",
+          "modeProfile",
+          "modeGuideSession",
+          "eventType",
+          "emotionDefinition",
+          "triggerReport"
+        ],
+        properties: {
+          value: { type: "string" },
+          behaviorPattern: { type: "string" },
+          behavior: { type: "string" },
+          beliefEntry: { type: "string" },
+          schemaCatalog: { type: "string" },
+          modeProfile: { type: "string" },
+          modeGuideSession: { type: "string" },
+          eventType: { type: "string" },
+          emotionDefinition: { type: "string" },
+          triggerReport: { type: "string" }
+        }
+      },
+      psycheCoachingPlaybooks: arrayOf({
+        type: "object",
+        additionalProperties: false,
+        required: [
+          "focus",
+          "useWhen",
+          "coachingGoal",
+          "askSequence",
+          "requiredForCreate",
+          "highValueOptionalFields",
+          "exampleQuestions",
+          "notes"
+        ],
+        properties: {
+          focus: { type: "string" },
+          useWhen: { type: "string" },
+          coachingGoal: { type: "string" },
+          askSequence: arrayOf({ type: "string" }),
+          requiredForCreate: arrayOf({ type: "string" }),
+          highValueOptionalFields: arrayOf({ type: "string" }),
+          exampleQuestions: arrayOf({ type: "string" }),
+          notes: arrayOf({ type: "string" })
+        }
+      }),
       relationshipModel: arrayOf({ type: "string" }),
       entityCatalog: arrayOf({
         type: "object",
@@ -1315,13 +1369,16 @@ export function buildOpenApiDocument() {
       verificationPaths: {
         type: "object",
         additionalProperties: false,
-        required: ["context", "xpMetrics", "weeklyReview", "settingsBin", "batchSearch"],
+        required: ["context", "xpMetrics", "weeklyReview", "settingsBin", "batchSearch", "psycheSchemaCatalog", "psycheEventTypes", "psycheEmotions"],
         properties: {
           context: { type: "string" },
           xpMetrics: { type: "string" },
           weeklyReview: { type: "string" },
           settingsBin: { type: "string" },
-          batchSearch: { type: "string" }
+          batchSearch: { type: "string" },
+          psycheSchemaCatalog: { type: "string" },
+          psycheEventTypes: { type: "string" },
+          psycheEmotions: { type: "string" }
         }
       },
       recommendedPluginTools: {

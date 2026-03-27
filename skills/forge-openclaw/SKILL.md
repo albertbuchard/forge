@@ -28,6 +28,36 @@ Forge is a life operating system with:
 - comments, insights, and approvals
 - a sensitive Psyche module for values, patterns, beliefs, behaviors, modes, and trigger reports
 
+## How Forge Psyche works
+
+Treat Psyche as a connected reflective submodule, not a bucket of unrelated notes.
+
+The Psyche model is:
+- `psyche_value`: the direction of life or way of being the user wants to move toward
+- `behavior_pattern`: the recurring loop, usually best framed as a CBT functional analysis
+- `behavior`: one trackable move or tendency, classified as `away`, `committed`, or `recovery`
+- `belief_entry`: the user's own explicit belief statement, including how strongly it feels true and what evidence supports or weakens it
+- `schema catalog`: the reference taxonomy of maladaptive and adaptive schemas; this is not the same thing as a `belief_entry`
+- `mode_profile`: a durable description of a recurring part-state or strategy, such as critic, child, coping, or healthy adult
+- `mode_guide_session`: a guided reasoning record with answers and candidate mode interpretations
+- `event_type`: reusable trigger taxonomy for reports
+- `emotion_definition`: reusable emotion vocabulary for reports
+- `trigger_report`: one concrete incident chain, from situation through emotions, thoughts, behaviors, consequences, and next moves
+
+Use the right container:
+- repeated loop across situations -> `behavior_pattern`
+- one specific episode -> `trigger_report`
+- one explicit belief sentence -> `belief_entry`
+- one part/state/strategy -> `mode_profile`
+- one action tendency or move -> `behavior`
+- one direction the user cares about -> `psyche_value`
+- one agent-authored observation or recommendation -> `insight`
+
+Schema rule:
+- `schemaId` belongs to `belief_entry` and should only use a real schema catalog id when you actually know the match
+- if you do not know a real schema catalog match, omit `schemaId`; do not invent one
+- schema pressure can still be captured in plain language through the belief statement, evidence, flexible alternative, or report `schemaLinks`
+
 ## Public working posture
 
 Keep the main discussion natural.
@@ -381,6 +411,96 @@ Bad style:
 
 These are the real route-facing formats. Use the exact field names below, not approximations.
 
+## Psyche coaching playbooks
+
+### Pattern work = CBT functional analysis
+
+When the user is describing a recurring loop, guide them through this order:
+1. Name the pattern in plain language.
+2. Identify the cue or context.
+3. Describe what happens once it starts.
+4. Clarify the short-term payoff or protection.
+5. Clarify the long-term cost.
+6. Name the preferred alternative response.
+
+This usually maps to `behavior_pattern` with:
+- `title`
+- `description`
+- `targetBehavior`
+- `cueContexts`
+- `shortTermPayoff`
+- `longTermCost`
+- `preferredResponse`
+
+Good questions:
+- "What usually sets this loop off?"
+- "What do you tend to do next?"
+- "What does that move do for you immediately?"
+- "What does it cost later?"
+- "If the loop loosened a little, what would you want to do instead?"
+
+### Belief and schema work
+
+When the user is describing a painful rule, self-judgment, or predictive script, guide them toward one explicit belief sentence.
+
+Use this order:
+1. Capture the belief in the user's own words.
+2. Decide whether it is `absolute` or `conditional`.
+3. Estimate confidence from 0 to 100.
+4. Ask what seems to support it.
+5. Ask what weakens it.
+6. Ask for a more flexible alternative.
+7. Only then link a `schemaId` if a real schema catalog match is known.
+
+This usually maps to `belief_entry`.
+
+Good questions:
+- "What is the sentence your mind keeps pushing here?"
+- "Is it more of an always/never belief, or an if-then rule?"
+- "How true does it feel right now from 0 to 100?"
+- "What seems to support it?"
+- "What weakens it?"
+- "What would a more flexible alternative sound like?"
+
+### Mode work
+
+When the user is describing a part, stance, protector, critic, or child-state, help them name the mode and what it is trying to do.
+
+Use this order:
+1. Pick the `family`.
+2. Name the mode.
+3. Describe the persona or imagery.
+4. Clarify its fear.
+5. Clarify its burden.
+6. Clarify its protective job.
+7. Optionally note origin context and linked patterns or behaviors.
+
+This usually maps to `mode_profile`.
+If the user needs guided exploration first, use a `mode_guide_session` to capture answers plus candidate interpretations.
+
+### Trigger report work
+
+When the user is describing one specific incident, do not flatten it into a pattern too early. Build the episode chain first.
+
+Use this order:
+1. Name the incident briefly.
+2. Describe what happened.
+3. Capture emotions and intensity.
+4. Capture thoughts or meanings.
+5. Capture behaviors.
+6. Capture short-term and long-term consequences.
+7. Capture next moves and links to values, patterns, beliefs, modes, goals, projects, or tasks.
+
+This usually maps to `trigger_report`.
+
+Good questions:
+- "What happened, as concretely as you can say it?"
+- "What emotions were there, and how intense were they?"
+- "What thoughts or meanings showed up?"
+- "What did you do next?"
+- "What did that do for you short term, and what did it cost later?"
+- "What would be the next good move now?"
+
 ### `goal`
 
 Purpose:
@@ -556,6 +676,7 @@ What to ask:
 - "What supports it, and what weakens it?"
 - "What would be a more flexible alternative?"
 - "Is this tied to a specific trigger report?"
+- "Does it seem linked to a known schema, or should we leave `schemaId` empty for now?"
 
 ### `mode_profile`
 
@@ -586,6 +707,24 @@ What to ask:
 - "What would you call this mode?"
 - "What does it fear, carry, or try to protect?"
 - "Do you want it linked to patterns, behaviors, or values?"
+
+### `mode_guide_session`
+
+Purpose:
+- a guided mode-mapping session that stores answers and candidate interpretations before or alongside a durable mode profile
+
+Minimum fields:
+- `summary`: short summary of what the guided session explored
+- `answers`: array of `{ questionKey, value }`
+- `results`: array of `{ family, archetype, label, confidence, reasoning }`
+
+Useful optional fields:
+- none beyond the guided answer/result structure; this is already a structured worksheet
+
+What to ask:
+- "What question are we trying to answer about this mode?"
+- "What answers should be captured explicitly?"
+- "What candidate modes seem plausible, and why?"
 
 ### `trigger_report`
 
@@ -626,6 +765,38 @@ What to ask:
 - "What would be a useful next move now?"
 - "Do you want this linked to a value, pattern, belief, mode, goal, project, or task?"
 
+### `event_type`
+
+Purpose:
+- reusable event taxonomy for trigger reports
+
+Minimum fields:
+- `label`: the event type label
+
+Useful optional fields:
+- `description`: what kind of incident this label is meant to capture
+
+What to ask:
+- "What should this event type be called?"
+- "What kind of incident does it represent?"
+
+### `emotion_definition`
+
+Purpose:
+- reusable emotion vocabulary for trigger reports
+
+Minimum fields:
+- `label`: the emotion label
+
+Useful optional fields:
+- `description`: what the label is meant to capture
+- `category`: optional grouping such as threat, anger, grief, shame, or connection
+
+What to ask:
+- "What emotion label do you want to reuse?"
+- "How would you describe it?"
+- "Does it belong to a broader category?"
+
 ## Mapping guidance
 
 Prefer:
@@ -636,7 +807,11 @@ Prefer:
 - `behavior_pattern` for a repeating loop
 - `behavior` for one behavior or behavior tendency
 - `belief_entry` for a trackable belief
+- `mode_profile` for a recurring part-state
+- `mode_guide_session` for guided mode interpretation
 - `trigger_report` for a specific reflective event chain
+- `event_type` for reusable report taxonomy
+- `emotion_definition` for reusable emotion vocabulary
 - `insight` when the agent is storing a data-grounded observation or recommendation rather than the user’s own work item or reflection record
 
 ## Auth and provenance

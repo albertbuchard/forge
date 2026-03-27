@@ -3051,6 +3051,13 @@ test("settings and local agent token management persist through the versioned AP
         authModes: { operatorSession: { tokenRequired: boolean } };
         tokenRecovery: { rawTokenStoredByForge: boolean; recoveryAction: string };
         conceptModel: { goal: string; taskRun: string; psyche: string };
+        psycheSubmoduleModel: { behaviorPattern: string; beliefEntry: string; schemaCatalog: string; triggerReport: string };
+        psycheCoachingPlaybooks: Array<{
+          focus: string;
+          askSequence: string[];
+          requiredForCreate: string[];
+          exampleQuestions: string[];
+        }>;
         relationshipModel: string[];
         entityCatalog: Array<{
           entityType: string;
@@ -3063,7 +3070,7 @@ test("settings and local agent token management persist through the versioned AP
           requiredFields: string[];
           inputShape: string;
         }>;
-        verificationPaths: { settingsBin: string; batchSearch: string };
+        verificationPaths: { settingsBin: string; batchSearch: string; psycheSchemaCatalog: string; psycheEventTypes: string; psycheEmotions: string };
         recommendedPluginTools: {
           bootstrap: string[];
           readModels: string[];
@@ -3114,6 +3121,18 @@ test("settings and local agent token management persist through the versioned AP
     assert.match(onboardingBody.onboarding.conceptModel.goal, /Goals anchor projects/);
     assert.match(onboardingBody.onboarding.conceptModel.taskRun, /live work session/);
     assert.match(onboardingBody.onboarding.conceptModel.psyche, /sensitive/);
+    assert.match(onboardingBody.onboarding.psycheSubmoduleModel.behaviorPattern, /CBT-style loop/);
+    assert.match(onboardingBody.onboarding.psycheSubmoduleModel.beliefEntry, /belief statement/);
+    assert.match(onboardingBody.onboarding.psycheSubmoduleModel.schemaCatalog, /reference taxonomy/);
+    assert.match(onboardingBody.onboarding.psycheSubmoduleModel.triggerReport, /incident chain/);
+    const patternPlaybook = onboardingBody.onboarding.psycheCoachingPlaybooks.find((playbook) => playbook.focus === "behavior_pattern");
+    assert.ok(patternPlaybook);
+    assert.ok(patternPlaybook.askSequence.some((step) => /short-term payoff/i.test(step)));
+    assert.ok(patternPlaybook.exampleQuestions.some((question) => /What usually sets this loop off/i.test(question)));
+    const beliefPlaybook = onboardingBody.onboarding.psycheCoachingPlaybooks.find((playbook) => playbook.focus === "belief_entry");
+    assert.ok(beliefPlaybook);
+    assert.ok(beliefPlaybook.requiredForCreate.includes("statement"));
+    assert.ok(beliefPlaybook.requiredForCreate.includes("beliefType"));
     assert.ok(onboardingBody.onboarding.relationshipModel.some((rule) => /Projects belong to one goal/.test(rule)));
     const goalEntity = onboardingBody.onboarding.entityCatalog.find((entity) => entity.entityType === "goal");
     assert.ok(goalEntity);
@@ -3123,6 +3142,16 @@ test("settings and local agent token management persist through the versioned AP
     assert.ok(beliefEntity);
     assert.ok(beliefEntity.fieldGuide.some((field) => field.name === "statement" && field.required));
     assert.ok(beliefEntity.fieldGuide.some((field) => field.name === "beliefType" && field.required));
+    const eventTypeEntity = onboardingBody.onboarding.entityCatalog.find((entity) => entity.entityType === "event_type");
+    assert.ok(eventTypeEntity);
+    assert.ok(eventTypeEntity.minimumCreateFields.includes("label"));
+    const emotionEntity = onboardingBody.onboarding.entityCatalog.find((entity) => entity.entityType === "emotion_definition");
+    assert.ok(emotionEntity);
+    assert.ok(emotionEntity.fieldGuide.some((field) => field.name === "category"));
+    const modeGuideEntity = onboardingBody.onboarding.entityCatalog.find((entity) => entity.entityType === "mode_guide_session");
+    assert.ok(modeGuideEntity);
+    assert.ok(modeGuideEntity.minimumCreateFields.includes("answers"));
+    assert.ok(modeGuideEntity.minimumCreateFields.includes("results"));
     const triggerReportEntity = onboardingBody.onboarding.entityCatalog.find((entity) => entity.entityType === "trigger_report");
     assert.ok(triggerReportEntity);
     assert.ok(triggerReportEntity.fieldGuide.some((field) => field.name === "emotions"));
@@ -3136,6 +3165,9 @@ test("settings and local agent token management persist through the versioned AP
     assert.ok(startRunTool.requiredFields.includes("actor"));
     assert.equal(onboardingBody.onboarding.verificationPaths.settingsBin, "/api/v1/settings/bin");
     assert.equal(onboardingBody.onboarding.verificationPaths.batchSearch, "/api/v1/entities/search");
+    assert.equal(onboardingBody.onboarding.verificationPaths.psycheSchemaCatalog, "/api/v1/psyche/schema-catalog");
+    assert.equal(onboardingBody.onboarding.verificationPaths.psycheEventTypes, "/api/v1/psyche/event-types");
+    assert.equal(onboardingBody.onboarding.verificationPaths.psycheEmotions, "/api/v1/psyche/emotions");
     assert.deepEqual(onboardingBody.onboarding.recommendedPluginTools.bootstrap, ["forge_get_operator_overview"]);
     assert.deepEqual(onboardingBody.onboarding.recommendedPluginTools.readModels, [
       "forge_get_operator_context",

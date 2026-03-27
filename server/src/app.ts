@@ -347,6 +347,35 @@ const AGENT_ONBOARDING_ENTITY_CATALOG = [
     ]
   },
   {
+    entityType: "event_type",
+    purpose: "A reusable event taxonomy label for trigger reports, such as criticism, conflict, rupture, or overload.",
+    minimumCreateFields: ["label"],
+    relationshipRules: [
+      "Trigger reports can reference one event type through eventTypeId.",
+      "Use event types to normalize repeated report categories instead of inventing new wording every time."
+    ],
+    searchHints: ["Search by label before creating a new event type.", "Prefer existing event types when one clearly fits the situation."],
+    fieldGuide: [
+      { name: "label", type: "string", required: true, description: "Human-readable event type label." },
+      { name: "description", type: "string", required: false, description: "What kind of incident this event type represents.", defaultValue: "" }
+    ]
+  },
+  {
+    entityType: "emotion_definition",
+    purpose: "A reusable emotion vocabulary item for trigger reports, such as shame, anger, grief, or relief.",
+    minimumCreateFields: ["label"],
+    relationshipRules: [
+      "Trigger report emotions can reference an emotion definition through emotionDefinitionId.",
+      "Use emotion definitions to normalize repeated emotional labels across reports."
+    ],
+    searchHints: ["Search by label before creating a new emotion definition.", "Prefer an existing emotion definition when the label already captures the feeling well."],
+    fieldGuide: [
+      { name: "label", type: "string", required: true, description: "Emotion label." },
+      { name: "description", type: "string", required: false, description: "What this emotion label is meant to capture.", defaultValue: "" },
+      { name: "category", type: "string", required: false, description: "Optional grouping such as threat, grief, anger, or connection.", defaultValue: "" }
+    ]
+  },
+  {
     entityType: "psyche_value",
     purpose: "An ACT-style value or direction the user wants to orient toward.",
     minimumCreateFields: ["title"],
@@ -467,6 +496,21 @@ const AGENT_ONBOARDING_ENTITY_CATALOG = [
     ]
   },
   {
+    entityType: "mode_guide_session",
+    purpose: "A guided mode-mapping session that stores structured answers and candidate mode interpretations.",
+    minimumCreateFields: ["summary", "answers", "results"],
+    relationshipRules: [
+      "Mode guide sessions help the user reason toward likely modes before or alongside mode profiles.",
+      "Use mode guide sessions for guided interpretation, not as a replacement for durable mode profiles."
+    ],
+    searchHints: ["Search by summary when revisiting a prior guided mode session."],
+    fieldGuide: [
+      { name: "summary", type: "string", required: true, description: "Short summary of what the guided session explored." },
+      { name: "answers", type: "array", required: true, description: "List of { questionKey, value } items capturing the user's guided answers." },
+      { name: "results", type: "array", required: true, description: "List of { family, archetype, label, confidence 0-1, reasoning } candidate mode interpretations." }
+    ]
+  },
+  {
     entityType: "trigger_report",
     purpose: "A structured reflective incident report that ties situation, emotions, thoughts, behaviors, consequences, and next moves together.",
     minimumCreateFields: ["title"],
@@ -499,6 +543,113 @@ const AGENT_ONBOARDING_ENTITY_CATALOG = [
       { name: "schemaLinks", type: "string[]", required: false, description: "Free-text schema links or themes.", defaultValue: [] },
       { name: "modeTimeline", type: "array", required: false, description: "List of { stage, modeId|null, label, note } items describing the sequence of modes.", defaultValue: [] },
       { name: "nextMoves", type: "string[]", required: false, description: "Concrete next steps or repair moves.", defaultValue: [] }
+    ]
+  }
+] as const;
+
+const AGENT_ONBOARDING_PSYCHE_PLAYBOOKS = [
+  {
+    focus: "behavior_pattern",
+    useWhen: "Use for a recurring loop that shows up across multiple situations and can be described as cue -> response -> payoff -> cost -> preferred response.",
+    coachingGoal: "Help the user build a CBT-style functional analysis instead of just naming the problem vaguely.",
+    askSequence: [
+      "Name the loop in plain language.",
+      "Identify the typical cue or context.",
+      "Describe the visible behavior or sequence once it starts.",
+      "Clarify the short-term payoff or protection.",
+      "Clarify the long-term cost.",
+      "Name the preferred alternative response."
+    ],
+    requiredForCreate: ["title"],
+    highValueOptionalFields: ["description", "targetBehavior", "cueContexts", "shortTermPayoff", "longTermCost", "preferredResponse", "linkedBeliefIds", "linkedModeIds", "linkedValueIds"],
+    exampleQuestions: [
+      "What usually sets this loop off?",
+      "What do you tend to do next, outwardly or inwardly?",
+      "What does that move do for you immediately?",
+      "What does it cost you later?",
+      "If this loop loosened a little, what response would you want to make instead?"
+    ],
+    notes: [
+      "A pattern is usually the best Psyche container for functional analysis.",
+      "If the user is describing one specific episode rather than a repeated loop, prefer a trigger report."
+    ]
+  },
+  {
+    focus: "belief_entry",
+    useWhen: "Use for a belief, rule, or self-statement that keeps showing up in reactions, especially when the user can phrase it as a sentence.",
+    coachingGoal: "Turn implicit self-talk or schema pressure into one explicit belief statement that can be tested and linked to patterns, reports, and modes.",
+    askSequence: [
+      "Capture the belief in the user's own words.",
+      "Decide whether it is absolute or conditional.",
+      "Estimate how true it feels from 0 to 100.",
+      "Collect evidence for and evidence against.",
+      "Offer a more flexible alternative belief.",
+      "Link a schemaId only when a real schema catalog match is known."
+    ],
+    requiredForCreate: ["statement", "beliefType"],
+    highValueOptionalFields: ["schemaId", "confidence", "originNote", "evidenceFor", "evidenceAgainst", "flexibleAlternative", "linkedReportIds", "linkedBehaviorIds", "linkedModeIds"],
+    exampleQuestions: [
+      "What is the sentence your mind seems to be pushing here?",
+      "Is it more of an always/never belief, or an if-then rule?",
+      "How true does it feel right now from 0 to 100?",
+      "What seems to support it, and what weakens it?",
+      "What would a more flexible alternative sound like?"
+    ],
+    notes: [
+      "Schema catalog entries are reference concepts; belief_entry is the user-owned record.",
+      "If no schema catalog match is known, omit schemaId rather than inventing one."
+    ]
+  },
+  {
+    focus: "mode_profile",
+    useWhen: "Use when the user is describing a recurring part-state, protector, critic, vulnerable child state, or healthy adult stance.",
+    coachingGoal: "Help the user describe what the mode is trying to do, what it fears, and how it presents, rather than reducing it to a label only.",
+    askSequence: [
+      "Choose the mode family first.",
+      "Name the mode.",
+      "Describe the felt persona or imagery.",
+      "Clarify its fear, burden, and protective job.",
+      "Optionally note origin context and linked patterns or behaviors."
+    ],
+    requiredForCreate: ["family", "title"],
+    highValueOptionalFields: ["persona", "imagery", "fear", "burden", "protectiveJob", "originContext", "linkedPatternIds", "linkedBehaviorIds", "linkedValueIds"],
+    exampleQuestions: [
+      "What kind of part does this feel like: coping, child, critic-parent, healthy-adult, or happy-child?",
+      "If you gave this mode a name, what would it be?",
+      "What is it afraid would happen if it stopped doing its job?",
+      "What burden or pain does it seem to carry?"
+    ],
+    notes: [
+      "Mode profiles are durable parts descriptions.",
+      "Mode guide sessions are the guided reasoning process that can lead toward a mode profile."
+    ]
+  },
+  {
+    focus: "trigger_report",
+    useWhen: "Use for one specific emotionally meaningful incident that should be mapped from situation through emotions, thoughts, behaviors, consequences, and next moves.",
+    coachingGoal: "Help the user build a Spark-to-Pivot style incident chain with enough structure to learn from one episode.",
+    askSequence: [
+      "Name the incident briefly.",
+      "Describe what happened in the situation.",
+      "Capture emotions and intensity.",
+      "Capture thoughts or belief-linked interpretations.",
+      "Capture behaviors and immediate coping moves.",
+      "Capture short-term and long-term consequences.",
+      "Identify next moves and linked patterns, beliefs, modes, values, or tasks."
+    ],
+    requiredForCreate: ["title"],
+    highValueOptionalFields: ["eventTypeId", "customEventType", "eventSituation", "occurredAt", "emotions", "thoughts", "behaviors", "consequences", "modeTimeline", "nextMoves", "linkedPatternIds", "linkedBeliefIds", "linkedModeIds", "linkedValueIds"],
+    exampleQuestions: [
+      "What happened, as concretely as you can say it?",
+      "What emotions were there, and how intense were they?",
+      "What thoughts or meanings showed up?",
+      "What did you do next?",
+      "What did that do for you short term, and what did it cost later?",
+      "What would be the next good move now?"
+    ],
+    notes: [
+      "Use eventTypeId only when a known event taxonomy item fits; otherwise use customEventType.",
+      "Use emotionDefinitionId only when a known emotion definition fits; otherwise keep the raw label."
     ]
   }
 ] as const;
@@ -686,6 +837,19 @@ function buildAgentOnboardingPayload(request: {
       psyche:
         "Forge Psyche is the reflective domain for values, patterns, behaviors, beliefs, modes, and trigger reports. It is sensitive and should be handled deliberately."
     },
+    psycheSubmoduleModel: {
+      value: "A value is the direction the user wants to move toward. Values orient action and can link back to goals, projects, tasks, and Psyche records.",
+      behaviorPattern: "A behavior pattern is the recurring CBT-style loop: cue/context, visible response, short-term payoff, long-term cost, and preferred response.",
+      behavior: "A behavior record is one trackable move or tendency, classified as away, committed, or recovery.",
+      beliefEntry: "A belief entry is the user's own trackable belief statement, including beliefType, confidence, evidence, and a more flexible alternative.",
+      schemaCatalog: "The schema catalog is the reference taxonomy of maladaptive and adaptive schemas. Belief entries can optionally point to one schema by schemaId, but the schema catalog is not itself the user's belief record.",
+      modeProfile: "A mode profile is a durable description of a recurring part-state or strategy, including family, fear, burden, protective job, and origin context.",
+      modeGuideSession: "A mode guide session is the guided reasoning worksheet that stores answers and candidate mode interpretations before or alongside a durable mode profile.",
+      eventType: "An event type is reusable incident taxonomy for trigger reports, such as criticism, conflict, rupture, or overload.",
+      emotionDefinition: "An emotion definition is reusable emotion vocabulary for trigger reports. Reports can either reference one or fall back to raw labels.",
+      triggerReport: "A trigger report is the one-episode incident chain: situation, emotions, thoughts, behaviors, consequences, mode overlays, schema links, and next moves."
+    },
+    psycheCoachingPlaybooks: AGENT_ONBOARDING_PSYCHE_PLAYBOOKS,
     relationshipModel: [
       "Goals are the top-level strategic layer.",
       "Projects belong to one goal through goalId.",
@@ -702,7 +866,10 @@ function buildAgentOnboardingPayload(request: {
       xpMetrics: "/api/v1/metrics/xp",
       weeklyReview: "/api/v1/reviews/weekly",
       settingsBin: "/api/v1/settings/bin",
-      batchSearch: "/api/v1/entities/search"
+      batchSearch: "/api/v1/entities/search",
+      psycheSchemaCatalog: "/api/v1/psyche/schema-catalog",
+      psycheEventTypes: "/api/v1/psyche/event-types",
+      psycheEmotions: "/api/v1/psyche/emotions"
     },
     recommendedPluginTools: {
       bootstrap: ["forge_get_operator_overview"],

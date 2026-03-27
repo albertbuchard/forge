@@ -52,6 +52,8 @@ Batch several related creates together in one request when the user is asking fo
 The live onboarding payload is the deep contract for agents. It now includes:
 
 - `conceptModel`: what the main Forge concepts mean
+- `psycheSubmoduleModel`: what the Psyche records and reference taxonomies are for
+- `psycheCoachingPlaybooks`: how to guide users through pattern, belief/schema, mode, and trigger-report intake
 - `relationshipModel`: how goals, projects, tasks, task runs, Psyche entities, and insights connect
 - `entityCatalog`: exact field-level definitions for real Forge entity payloads
 - `toolInputCatalog`: exact mutation and live-work input shapes with examples
@@ -60,6 +62,8 @@ That means the agent should use the real route-facing fields, for example:
 
 - `belief_entry` uses `statement` and `beliefType`
 - `behavior_pattern` uses `cueContexts`, `shortTermPayoff`, `longTermCost`, and `preferredResponse`
+- `mode_guide_session` uses `summary`, `answers`, and `results`
+- `event_type` and `emotion_definition` are reusable report vocabularies
 - `trigger_report` uses nested `emotions`, `thoughts`, `behaviors`, and `consequences`
 
 Live work is not just task status:
