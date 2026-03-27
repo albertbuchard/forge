@@ -1,0 +1,295 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Forge OpenClaw Plugin</title>
+    <meta
+      name="description"
+      content="Forge is an OpenClaw plugin for goals, projects, tasks, live work sessions, XP, review, and Psyche records."
+    />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;700;800&family=Sora:wght@500;700;800&family=Space+Grotesk:wght@500;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="page-shell">
+      <div class="ambient ambient-a"></div>
+      <div class="ambient ambient-b"></div>
+      <div class="ambient-grid"></div>
+
+      <header class="topbar">
+        <a class="brand" href="https://github.com/albertbuchard/forge">
+          <span class="brand-mark">F</span>
+          <span class="brand-copy">
+            <strong>Forge</strong>
+            <span>OpenClaw plugin</span>
+          </span>
+        </a>
+        <nav class="topnav">
+          <a href="#features">Features</a>
+          <a href="#entities">Entities</a>
+          <a href="#install">Install</a>
+          <a href="#publish">Publish</a>
+        </nav>
+        <a class="button ghost" href="https://github.com/albertbuchard/forge/tree/main/openclaw-plugin">Source</a>
+      </header>
+
+      <main class="page">
+        <section class="hero">
+          <div class="hero-copy">
+            <p class="eyebrow">Forge OpenClaw Plugin</p>
+            <h1>Make OpenClaw track what matters, what is happening, and why it keeps happening.</h1>
+            <p class="lede">
+              Forge gives OpenClaw a serious operational surface for goals, projects, tasks, real live
+              work sessions, weekly review, XP, and a structured Psyche layer for values, patterns,
+              beliefs, modes, and trigger reports.
+            </p>
+            <div class="hero-actions">
+              <a class="button primary" href="https://www.npmjs.com/package/forge-openclaw-plugin">Install from npm</a>
+              <a class="button secondary" href="https://github.com/albertbuchard/forge">GitHub repo</a>
+            </div>
+            <div class="install-card" id="install">
+              <div class="install-head">
+                <span class="terminal-dot red"></span>
+                <span class="terminal-dot amber"></span>
+                <span class="terminal-dot green"></span>
+                <span>Quick install</span>
+              </div>
+              <pre><code>openclaw plugins install forge-openclaw-plugin
+openclaw gateway restart</code></pre>
+            </div>
+          <div class="stat-row">
+            <div class="stat-pill">
+              <span class="stat-label">Plugin id</span>
+              <strong>forge-openclaw-plugin</strong>
+              </div>
+              <div class="stat-pill">
+                <span class="stat-label">Local runtime</span>
+                <strong>Auto-start on localhost</strong>
+              </div>
+            <div class="stat-pill">
+              <span class="stat-label">Default port</span>
+              <strong>4317</strong>
+            </div>
+          </div>
+          </div>
+
+          <div class="hero-visual">
+            <div class="preview-frame">
+              <div class="preview-topbar">
+                <span></span>
+                <span></span>
+                <span></span>
+              </div>
+              <img
+                src="./assets/forge-overview-dashboard.png"
+                alt="Forge overview dashboard showing goals, streak, XP, and milestone progress"
+              />
+            </div>
+          </div>
+        </section>
+
+        <section class="section mission" id="features">
+          <div class="section-heading">
+            <p class="eyebrow">What This Is</p>
+            <h2>A real planning, execution, and reflection system for OpenClaw.</h2>
+          </div>
+          <div class="mission-grid">
+            <article class="card feature-card">
+              <p>
+                Forge is not just a task list. It is one place for long-term goals, active projects,
+                concrete tasks, truthful live work sessions, weekly review, XP feedback, and a Psyche
+                model for recurring patterns.
+              </p>
+            </article>
+            <article class="card feature-card">
+              <p>
+                The plugin does not dump a giant mirror of raw CRUD into the agent. It exposes the
+                operational surface that actually matters: reading context, batch entity mutations,
+                live work control, insight posting, and visual handoff into the Forge UI.
+              </p>
+            </article>
+            <article class="card feature-card">
+              <p>
+                On localhost targets, the plugin can auto-start the bundled Forge runtime. That keeps
+                installation simple: install the plugin, restart OpenClaw, and point it at
+                <code>127.0.0.1:4317</code>.
+              </p>
+            </article>
+          </div>
+        </section>
+
+        <section class="section gallery">
+          <div class="gallery-copy">
+            <p class="eyebrow">Product Surfaces</p>
+            <h2>Designed for operational clarity and deep reflective work.</h2>
+            <p>
+              The overview keeps goals, streaks, current work, and progression visible. The Psyche graph
+              makes beliefs, values, projects, and goals legible in one connected surface instead of
+              scattering them across loose notes.
+            </p>
+          </div>
+          <div class="gallery-grid">
+            <figure class="shot shot-large">
+              <img
+                src="./assets/forge-overview-dashboard.png"
+                alt="Forge overview dashboard showing goals, streak, XP, and milestone progress"
+              />
+              <figcaption>Overview dashboard with momentum, live work state, and progression.</figcaption>
+            </figure>
+            <figure class="shot">
+              <img
+                src="./assets/forge-psyche-graph.png"
+                alt="Forge Psyche graph showing goals, values, beliefs, and linked projects"
+              />
+              <figcaption>Psyche graph connecting goals, values, beliefs, and projects.</figcaption>
+            </figure>
+          </div>
+        </section>
+
+        <section class="section signal-strip">
+          <div class="signal-card">
+            <span class="signal-label">Overview</span>
+            <strong>Momentum, streaks, live work, and active priorities in one shell.</strong>
+          </div>
+          <div class="signal-card signal-psyche">
+            <span class="signal-label">Psyche</span>
+            <strong>Values, beliefs, modes, and trigger chains connected instead of scattered.</strong>
+          </div>
+          <div class="signal-card signal-action">
+            <span class="signal-label">Execution</span>
+            <strong>Real task runs, retroactive work, and review instead of fake status toggles.</strong>
+          </div>
+        </section>
+
+        <section class="section entity-section" id="entities">
+          <div class="section-heading">
+            <p class="eyebrow">Core Entities</p>
+            <h2>Clear objects with clear jobs.</h2>
+          </div>
+          <div class="entity-grid">
+            <article class="card entity-card">
+              <strong>goal</strong>
+              <p>A meaningful long-term direction or outcome.</p>
+            </article>
+            <article class="card entity-card">
+              <strong>project</strong>
+              <p>A bounded piece of work that moves a goal forward.</p>
+            </article>
+            <article class="card entity-card">
+              <strong>task</strong>
+              <p>A concrete action item or deliverable.</p>
+            </article>
+            <article class="card entity-card">
+              <strong>task_run</strong>
+              <p>One real live work session on a task.</p>
+            </article>
+            <article class="card entity-card">
+              <strong>insight</strong>
+              <p>An agent-written observation or recommendation based on Forge data.</p>
+            </article>
+            <article class="card entity-card">
+              <strong>psyche_value</strong>
+              <p>A value or direction the user wants to live toward.</p>
+            </article>
+            <article class="card entity-card">
+              <strong>behavior_pattern</strong>
+              <p>A repeating emotional and behavioral loop across situations.</p>
+            </article>
+            <article class="card entity-card">
+              <strong>belief_entry</strong>
+              <p>One explicit belief sentence the user carries.</p>
+            </article>
+            <article class="card entity-card">
+              <strong>mode_profile</strong>
+              <p>One recurring inner state, strategy, or role.</p>
+            </article>
+            <article class="card entity-card">
+              <strong>trigger_report</strong>
+              <p>One specific emotionally important episode mapped in sequence.</p>
+            </article>
+          </div>
+        </section>
+
+        <section class="section tools-section">
+          <div class="section-heading">
+            <p class="eyebrow">Operational Surface</p>
+            <h2>Small enough to stay reliable. Broad enough to actually run Forge.</h2>
+          </div>
+          <div class="tools-layout">
+            <article class="card tools-card">
+              <h3>Read and orient</h3>
+              <ul>
+                <li><code>forge_get_operator_overview</code></li>
+                <li><code>forge_get_operator_context</code></li>
+                <li><code>forge_get_current_work</code></li>
+                <li><code>forge_get_psyche_overview</code></li>
+                <li><code>forge_get_xp_metrics</code></li>
+                <li><code>forge_get_weekly_review</code></li>
+              </ul>
+            </article>
+            <article class="card tools-card">
+              <h3>Create and update</h3>
+              <ul>
+                <li><code>forge_search_entities</code></li>
+                <li><code>forge_create_entities</code></li>
+                <li><code>forge_update_entities</code></li>
+                <li><code>forge_delete_entities</code></li>
+                <li><code>forge_restore_entities</code></li>
+                <li><code>forge_post_insight</code></li>
+              </ul>
+            </article>
+            <article class="card tools-card">
+              <h3>Track real work</h3>
+              <ul>
+                <li><code>forge_start_task_run</code></li>
+                <li><code>forge_heartbeat_task_run</code></li>
+                <li><code>forge_focus_task_run</code></li>
+                <li><code>forge_complete_task_run</code></li>
+                <li><code>forge_release_task_run</code></li>
+                <li><code>forge_log_work</code></li>
+              </ul>
+            </article>
+          </div>
+        </section>
+
+        <section class="section publish-section" id="publish">
+          <div class="publish-panel">
+            <div class="publish-copy">
+              <p class="eyebrow">Publish Path</p>
+              <h2>npm package first. Public GitHub repo alongside it.</h2>
+              <p>
+                The clean distribution path for Forge today is to publish
+                <code>forge-openclaw-plugin</code> to npm, keep the public Forge repository up to date,
+                and point OpenClaw installs at the npm package.
+              </p>
+              <p>
+                The docs and screenshots on this page are designed to be the public landing surface for
+                that package and repository.
+              </p>
+            </div>
+            <div class="publish-links">
+              <a class="link-card" href="https://www.npmjs.com/package/forge-openclaw-plugin">
+                <strong>npm package</strong>
+                <span>forge-openclaw-plugin</span>
+              </a>
+              <a class="link-card" href="https://github.com/albertbuchard/forge">
+                <strong>GitHub repository</strong>
+                <span>albertbuchard/forge</span>
+              </a>
+              <a class="link-card" href="https://github.com/albertbuchard/forge/tree/main/openclaw-plugin">
+                <strong>Package source</strong>
+                <span>openclaw-plugin/</span>
+              </a>
+            </div>
+          </div>
+        </section>
+      </main>
+    </div>
+  </body>
+</html>
