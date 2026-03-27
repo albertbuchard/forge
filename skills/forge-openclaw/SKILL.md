@@ -28,6 +28,142 @@ Forge is a life operating system with:
 - comments, insights, and approvals
 - a sensitive Psyche module for values, patterns, beliefs, behaviors, modes, and trigger reports
 
+## What Forge is
+
+Forge is a structured life and execution system.
+It connects:
+- long-horizon direction
+- active projects
+- concrete tasks
+- truthful live work sessions
+- XP/reward history
+- reflective Psyche records
+
+The core stack of meaning is:
+- `goal` -> the long-horizon direction
+- `project` -> the active workstream under a goal
+- `task` -> the concrete action item
+- `task_run` -> the real live work session on a task
+- `insight` -> an agent-authored observation or recommendation grounded in Forge data
+
+The core Psyche stack is:
+- `psyche_value` -> what matters or what direction the user wants to live toward
+- `behavior_pattern` -> the repeating loop across situations
+- `behavior` -> one recurring move or action tendency
+- `belief_entry` -> one explicit belief statement the user carries
+- `mode_profile` -> one recurring part-state or protector/critic/child stance
+- `trigger_report` -> one specific emotionally meaningful episode
+
+How the entities relate:
+- goals anchor projects
+- projects organize tasks
+- tasks are what the user can actually do
+- task runs are separate from task status and are the truthful record of live work
+- Psyche records can link back to goals, projects, tasks, and to each other
+- insights sit on top of the data as interpretation, not as a replacement for the raw records
+
+## What data structures the tools expect
+
+The agent must use the real route-facing payload shapes, not conversational approximations.
+
+The main rule is:
+- search uses `searches: []`
+- batch create/update/delete/restore use `operations: []`
+- each item inside those arrays must use the exact expected fields
+
+Exact high-level shapes:
+
+`forge_search_entities`
+```json
+{
+  "searches": [
+    {
+      "entityTypes": ["goal", "project", "task"],
+      "query": "string",
+      "ids": ["optional-id"],
+      "status": ["optional-status"],
+      "linkedTo": { "entityType": "goal", "id": "goal_123" },
+      "includeDeleted": false,
+      "limit": 10,
+      "clientRef": "optional-search-ref"
+    }
+  ]
+}
+```
+
+`forge_create_entities`
+```json
+{
+  "atomic": true,
+  "operations": [
+    {
+      "entityType": "goal",
+      "data": {
+        "title": "Create meaningfully"
+      },
+      "clientRef": "goal-create-1"
+    }
+  ]
+}
+```
+
+`forge_update_entities`
+```json
+{
+  "atomic": true,
+  "operations": [
+    {
+      "entityType": "task",
+      "id": "task_123",
+      "patch": {
+        "status": "focus"
+      },
+      "clientRef": "task-update-1"
+    }
+  ]
+}
+```
+
+`forge_delete_entities`
+```json
+{
+  "operations": [
+    {
+      "entityType": "task",
+      "id": "task_123",
+      "mode": "soft",
+      "reason": "Merged into another task",
+      "clientRef": "task-delete-1"
+    }
+  ]
+}
+```
+
+`forge_restore_entities`
+```json
+{
+  "operations": [
+    {
+      "entityType": "task",
+      "id": "task_123",
+      "clientRef": "task-restore-1"
+    }
+  ]
+}
+```
+
+Operational shapes:
+- `forge_start_task_run`: `{ taskId, actor, timerMode?, plannedDurationSeconds?, isCurrent?, leaseTtlSeconds?, note? }`
+- `forge_heartbeat_task_run`: `{ taskRunId, actor?, leaseTtlSeconds?, note? }`
+- `forge_focus_task_run`: `{ taskRunId, actor? }`
+- `forge_complete_task_run`: `{ taskRunId, actor?, note? }`
+- `forge_release_task_run`: `{ taskRunId, actor?, note? }`
+- `forge_log_work`: retroactive work object with `taskId` or `title`
+
+Do not invent fields.
+Do not rename fields to friendlier labels.
+If the exact field name is unclear, read `forge_get_agent_onboarding` first and use that contract.
+
 ## How Forge Psyche works
 
 Treat Psyche as a connected reflective submodule, not a bucket of unrelated notes.
