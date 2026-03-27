@@ -387,7 +387,7 @@ const AGENT_ONBOARDING_ENTITY_CATALOG = [
     fieldGuide: [
       { name: "title", type: "string", required: true, description: "Value name." },
       { name: "description", type: "string", required: false, description: "What the value means in practice.", defaultValue: "" },
-      { name: "valuedDirection", type: "string", required: false, description: "Direction or way of being the value points toward.", defaultValue: "" },
+      { name: "valuedDirection", type: "string", required: false, description: "How the user wants to live or act when guided by this value.", defaultValue: "" },
       { name: "whyItMatters", type: "string", required: false, description: "Why the value matters to the user.", defaultValue: "" },
       { name: "linkedGoalIds", type: "string[]", required: false, description: "Linked goal ids.", defaultValue: [] },
       { name: "linkedProjectIds", type: "string[]", required: false, description: "Linked project ids.", defaultValue: [] },
@@ -539,8 +539,8 @@ const AGENT_ONBOARDING_ENTITY_CATALOG = [
       { name: "linkedBehaviorIds", type: "string[]", required: false, description: "Linked behavior ids.", defaultValue: [] },
       { name: "linkedBeliefIds", type: "string[]", required: false, description: "Linked belief ids.", defaultValue: [] },
       { name: "linkedModeIds", type: "string[]", required: false, description: "Linked mode ids.", defaultValue: [] },
-      { name: "modeOverlays", type: "string[]", required: false, description: "Free-text mode overlays or labels noticed in the report.", defaultValue: [] },
-      { name: "schemaLinks", type: "string[]", required: false, description: "Free-text schema links or themes.", defaultValue: [] },
+      { name: "modeOverlays", type: "string[]", required: false, description: "Extra mode labels noticed during the incident.", defaultValue: [] },
+      { name: "schemaLinks", type: "string[]", required: false, description: "Schema names or themes that seem related to the incident.", defaultValue: [] },
       { name: "modeTimeline", type: "array", required: false, description: "List of { stage, modeId|null, label, note } items describing the sequence of modes.", defaultValue: [] },
       { name: "nextMoves", type: "string[]", required: false, description: "Concrete next steps or repair moves.", defaultValue: [] }
     ]
@@ -577,7 +577,7 @@ const AGENT_ONBOARDING_PSYCHE_PLAYBOOKS = [
   {
     focus: "belief_entry",
     useWhen: "Use for a belief, rule, or self-statement that keeps showing up in reactions, especially when the user can phrase it as a sentence.",
-    coachingGoal: "Turn implicit self-talk or schema pressure into one explicit belief statement that can be tested and linked to patterns, reports, and modes.",
+    coachingGoal: "Turn implicit self-talk or a likely schema theme into one explicit belief statement that can be tested and linked to patterns, reports, and modes.",
     askSequence: [
       "Capture the belief in the user's own words.",
       "Decide whether it is absolute or conditional.",
@@ -627,7 +627,7 @@ const AGENT_ONBOARDING_PSYCHE_PLAYBOOKS = [
   {
     focus: "trigger_report",
     useWhen: "Use for one specific emotionally meaningful incident that should be mapped from situation through emotions, thoughts, behaviors, consequences, and next moves.",
-    coachingGoal: "Help the user build a Spark-to-Pivot style incident chain with enough structure to learn from one episode.",
+    coachingGoal: "Help the user build a clear incident chain with enough structure to learn from one episode.",
     askSequence: [
       "Name the incident briefly.",
       "Describe what happened in the situation.",
@@ -847,7 +847,7 @@ function buildAgentOnboardingPayload(request: {
       modeGuideSession: "A mode guide session is the guided reasoning worksheet that stores answers and candidate mode interpretations before or alongside a durable mode profile.",
       eventType: "An event type is reusable incident taxonomy for trigger reports, such as criticism, conflict, rupture, or overload.",
       emotionDefinition: "An emotion definition is reusable emotion vocabulary for trigger reports. Reports can either reference one or fall back to raw labels.",
-      triggerReport: "A trigger report is the one-episode incident chain: situation, emotions, thoughts, behaviors, consequences, mode overlays, schema links, and next moves."
+      triggerReport: "A trigger report is the one-episode incident chain: situation, emotions, thoughts, behaviors, consequences, extra mode labels, schema themes, and next moves."
     },
     psycheCoachingPlaybooks: AGENT_ONBOARDING_PSYCHE_PLAYBOOKS,
     relationshipModel: [

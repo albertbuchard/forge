@@ -20,7 +20,7 @@ Non-negotiable execution rules:
 - If the user explicitly names the target entity type, honor that entity type. Do not silently replace a requested `behavior_pattern`, `belief_entry`, `trigger_report`, `goal`, `project`, or `task` with an `insight`.
 - If a related insight already exists but the user is now asking for a formal entity, treat the old insight as context only. Search for an existing entity of the requested type; if it does not exist, create or intake the requested type instead of redirecting back to the insight.
 
-Forge is a life operating system with:
+Forge is a personal planning, execution, and reflection app with:
 - goals
 - projects
 - tasks
@@ -169,7 +169,7 @@ If the exact field name is unclear, read `forge_get_agent_onboarding` first and 
 Treat Psyche as a connected reflective submodule, not a bucket of unrelated notes.
 
 The Psyche model is:
-- `psyche_value`: the direction of life or way of being the user wants to move toward
+- `psyche_value`: how the user wants to live or act
 - `behavior_pattern`: the recurring loop, usually best framed as a CBT functional analysis
 - `behavior`: one trackable move or tendency, classified as `away`, `committed`, or `recovery`
 - `belief_entry`: the user's own explicit belief statement, including how strongly it feels true and what evidence supports or weakens it
@@ -192,7 +192,7 @@ Use the right container:
 Schema rule:
 - `schemaId` belongs to `belief_entry` and should only use a real schema catalog id when you actually know the match
 - if you do not know a real schema catalog match, omit `schemaId`; do not invent one
-- schema pressure can still be captured in plain language through the belief statement, evidence, flexible alternative, or report `schemaLinks`
+- likely schema themes can still be captured in plain language through the belief statement, evidence, flexible alternative, or report `schemaLinks`
 
 ## Public working posture
 
@@ -237,14 +237,14 @@ Read first:
 - `forge_get_weekly_review`
 - `forge_get_ui_entrypoint` when the user should continue in the visual Forge UI
 
-High-level entity workflow:
+Main entity tools:
 - `forge_search_entities`
 - `forge_create_entities`
 - `forge_update_entities`
 - `forge_delete_entities`
 - `forge_restore_entities`
 
-Operational workflow:
+Live work tools:
 - `forge_log_work`
 - `forge_start_task_run`
 - `forge_heartbeat_task_run`
@@ -281,7 +281,7 @@ When the user asks which Forge tools are available, list exactly these tools and
 
 Do not say you are missing a Forge creation path when `forge_create_entities` is available.
 Do not open the Forge UI or a browser as a workaround for normal entity creation or updates.
-Use `forge_get_ui_entrypoint` only when visual review or editing is genuinely the better workflow.
+Use `forge_get_ui_entrypoint` only when visual review or editing is genuinely the better option.
 
 ## Source of truth
 
@@ -547,7 +547,7 @@ Bad style:
 
 These are the real route-facing formats. Use the exact field names below, not approximations.
 
-## Psyche coaching playbooks
+## How To Guide Psyche Intake
 
 ### Pattern work = CBT functional analysis
 
@@ -714,7 +714,7 @@ Minimum fields:
 
 Useful optional fields:
 - `description`: what the value means in practice
-- `valuedDirection`: direction or way of being this value points toward
+- `valuedDirection`: how the user wants to live or act when guided by this value
 - `whyItMatters`: why this matters to the user
 - `linkedGoalIds`
 - `linkedProjectIds`
@@ -889,7 +889,7 @@ Useful optional fields:
 - `linkedBehaviorIds`
 - `linkedBeliefIds`
 - `linkedModeIds`
-- `modeOverlays`
+- `modeOverlays`: extra mode labels noticed during the incident
 - `schemaLinks`
 - `modeTimeline`
 
