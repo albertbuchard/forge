@@ -30,68 +30,149 @@ Forge is a personal planning, execution, and reflection app with:
 
 ## What Forge is
 
-Forge is a structured life and execution system.
-It connects:
-- long-horizon direction
-- active projects
-- concrete tasks
-- truthful live work sessions
-- XP/reward history
-- reflective Psyche records
+Forge is the user's structured personal system for planning, doing work, reflecting on patterns, and keeping a truthful record of what is happening.
 
-The core stack of meaning is:
-- `goal` -> the long-horizon direction
-- `project` -> the active workstream under a goal
-- `task` -> the concrete action item
-- `task_run` -> the real live work session on a task
-- `insight` -> an agent-authored observation or recommendation grounded in Forge data
+Use Forge whenever the user is talking about something that should be stored, searched, updated, reviewed, started, stopped, or explained inside Forge.
 
-The core Psyche stack is:
-- `psyche_value` -> what matters or what direction the user wants to live toward
-- `behavior_pattern` -> the repeating loop across situations
-- `behavior` -> one recurring move or action tendency
-- `belief_entry` -> one explicit belief statement the user carries
-- `mode_profile` -> one recurring part-state or protector/critic/child stance
-- `trigger_report` -> one specific emotionally meaningful episode
+That includes every time the user is talking about one of these things:
+- a `goal`
+- a `project`
+- a `task`
+- a live work session on a task, called a `task_run`
+- an `insight`
+- a `psyche_value`
+- a `behavior_pattern`
+- a `behavior`
+- a `belief_entry`
+- a `mode_profile`
+- a `mode_guide_session`
+- a `trigger_report`
+- a reusable `event_type`
+- a reusable `emotion_definition`
 
-How the entities relate:
-- goals anchor projects
-- projects organize tasks
-- tasks are what the user can actually do
-- task runs are separate from task status and are the truthful record of live work
-- Psyche records can link back to goals, projects, tasks, and to each other
-- insights sit on top of the data as interpretation, not as a replacement for the raw records
+Forge has two big parts:
+- the planning and execution part: goals, projects, tasks, live work, XP, weekly review
+- the Psyche part: values, patterns, beliefs, modes, and trigger reports
 
-## What data structures the tools expect
+The planning chain is simple:
+- a `goal` is something important the user wants in life or over the long term
+- a `project` is a concrete piece of work under a goal
+- a `task` is a concrete action item under a project or goal
+- a `task_run` is a real live work session on a task
+- an `insight` is an agent-written observation, pattern, recommendation, or warning based on Forge data
 
-The agent must use the real route-facing payload shapes, not conversational approximations.
+The Psyche chain is also simple:
+- a `psyche_value` is a direction the user wants to live toward, such as honesty, stability, courage, or compassion
+- a `behavior_pattern` is a repeating loop, for example: trigger -> emotion -> thought -> action -> short-term relief -> long-term cost
+- a `behavior` is one recurring action tendency, such as doomscrolling, avoiding, apologizing too fast, or taking a walk to regulate
+- a `belief_entry` is one explicit belief sentence the user carries, such as "If I disappoint people, they will leave me"
+- a `mode_profile` is one recurring state or inner role, such as critic, abandoned child, overcontroller, detached protector, or healthy adult
+- a `mode_guide_session` is a structured guided exploration of what mode may be active
+- a `trigger_report` is one specific incident written as a sequence: what happened, what the user felt, what the user thought, what the user did, what happened next, and what would help next time
+- an `event_type` is a reusable label for trigger reports, such as conflict, rejection, uncertainty, criticism, or loss of control
+- an `emotion_definition` is a reusable named emotion entry, such as shame, anger, fear, grief, or relief
 
-The main rule is:
-- search uses `searches: []`
-- batch create/update/delete/restore use `operations: []`
-- each item inside those arrays must use the exact expected fields
+How the main entities relate:
+- goals can contain projects and tasks
+- projects usually belong to a goal
+- tasks may belong directly to a goal, to a project, or to both
+- task runs belong to tasks and are the truthful record of live work
+- Psyche entities can link back to goals, projects, tasks, and to each other
+- insights are commentary on top of the data; they do not replace the raw records
 
-Exact high-level shapes:
+## Every Forge entity in plain language
 
-`forge_search_entities`
+`goal`
+- what it is: a meaningful direction or outcome the user wants over time
+- use it for: "be a great father", "build a beautiful family", "create meaningfully"
+- do not use it for: one-off action items
+
+`project`
+- what it is: a bounded piece of work that moves a goal forward
+- use it for: "Launch Forge plugin", "Plan summer move", "Repair relationship with X"
+- do not use it for: abstract lifelong direction
+
+`task`
+- what it is: a concrete next action or deliverable
+- use it for: "Draft the plugin README", "Call the landlord", "Book therapy session"
+- do not use it for: vague ambitions
+
+`task_run`
+- what it is: one real live working session on a task
+- use it for: starting, tracking, focusing, completing, or releasing current work
+- do not confuse it with: task status; a task can be `in_progress` without an active task run
+
+`insight`
+- what it is: an agent-authored observation, recommendation, or warning based on what Forge already knows
+- use it for: "You keep starting relationship repair work late at night when you are already depleted"
+- do not use it for: replacing a requested goal, task, pattern, belief, or trigger report
+
+`psyche_value`
+- what it is: a value or direction the user wants to live toward
+- use it for: honesty, courage, compassion, steadiness, creativity
+
+`behavior_pattern`
+- what it is: a repeating loop across situations
+- use it for: CBT-style functional analysis of a recurring problem
+- example pattern: "When my father texts late at night, I freeze, feel dread, think I am trapped, doomscroll, get temporary relief, and feel worse the next day"
+
+`behavior`
+- what it is: one recurring move or action tendency
+- use it for: withdraw, attack, appease, numb out, ask for reassurance, take a walk
+
+`belief_entry`
+- what it is: one explicit belief sentence the user carries
+- use it for: "If I fail once, I am useless", "If I set a boundary, people will punish me"
+- note: this is the user's actual belief statement, not a diagnostic label
+
+`mode_profile`
+- what it is: one recurring state, voice, or protective role
+- use it for: inner critic, panicked child, detached protector, overcontroller, healthy adult
+
+`mode_guide_session`
+- what it is: a guided exploration record used to understand what mode may be active right now
+- use it for: interactive coaching and interpretation, not as the durable final profile
+
+`trigger_report`
+- what it is: one specific emotionally important episode
+- use it for: one argument, one panic spiral, one difficult text exchange, one meeting that triggered shame
+
+`event_type`
+- what it is: a reusable category for trigger reports
+- use it for: rejection, criticism, conflict, uncertainty, abandonment cue
+
+`emotion_definition`
+- what it is: a reusable emotion entry
+- use it for: fear, shame, anger, sadness, relief, disgust
+
+## Exact object shapes the tools expect
+
+Use the exact field names. Do not invent friendlier names. Do not rename keys. If you are unsure, read `forge_get_agent_onboarding` first.
+
+The core batch rule is simple:
+- `forge_search_entities` expects a top-level `searches` array
+- `forge_create_entities`, `forge_update_entities`, `forge_delete_entities`, and `forge_restore_entities` expect a top-level `operations` array
+- each array item must use the exact documented fields for that tool
+
+`forge_search_entities` expects:
 ```json
 {
   "searches": [
     {
       "entityTypes": ["goal", "project", "task"],
-      "query": "string",
+      "query": "find writing goals",
       "ids": ["optional-id"],
       "status": ["optional-status"],
       "linkedTo": { "entityType": "goal", "id": "goal_123" },
       "includeDeleted": false,
       "limit": 10,
-      "clientRef": "optional-search-ref"
+      "clientRef": "search-1"
     }
   ]
 }
 ```
 
-`forge_create_entities`
+`forge_create_entities` expects:
 ```json
 {
   "atomic": true,
@@ -102,12 +183,20 @@ Exact high-level shapes:
         "title": "Create meaningfully"
       },
       "clientRef": "goal-create-1"
+    },
+    {
+      "entityType": "project",
+      "data": {
+        "title": "Publish Forge plugin",
+        "goalIds": ["goal_123"]
+      },
+      "clientRef": "project-create-1"
     }
   ]
 }
 ```
 
-`forge_update_entities`
+`forge_update_entities` expects:
 ```json
 {
   "atomic": true,
@@ -124,7 +213,7 @@ Exact high-level shapes:
 }
 ```
 
-`forge_delete_entities`
+`forge_delete_entities` expects:
 ```json
 {
   "operations": [
@@ -139,7 +228,7 @@ Exact high-level shapes:
 }
 ```
 
-`forge_restore_entities`
+`forge_restore_entities` expects:
 ```json
 {
   "operations": [
@@ -152,47 +241,64 @@ Exact high-level shapes:
 }
 ```
 
-Operational shapes:
-- `forge_start_task_run`: `{ taskId, actor, timerMode?, plannedDurationSeconds?, isCurrent?, leaseTtlSeconds?, note? }`
-- `forge_heartbeat_task_run`: `{ taskRunId, actor?, leaseTtlSeconds?, note? }`
-- `forge_focus_task_run`: `{ taskRunId, actor? }`
-- `forge_complete_task_run`: `{ taskRunId, actor?, note? }`
-- `forge_release_task_run`: `{ taskRunId, actor?, note? }`
-- `forge_log_work`: retroactive work object with `taskId` or `title`
-
-Do not invent fields.
-Do not rename fields to friendlier labels.
-If the exact field name is unclear, read `forge_get_agent_onboarding` first and use that contract.
+Live work tools expect these exact top-level objects:
+- `forge_start_task_run`: `{ "taskId": "...", "actor": "...", "timerMode?": "...", "plannedDurationSeconds?": 1500, "isCurrent?": true, "leaseTtlSeconds?": 900, "note?": "..." }`
+- `forge_heartbeat_task_run`: `{ "taskRunId": "...", "actor?": "...", "leaseTtlSeconds?": 900, "note?": "..." }`
+- `forge_focus_task_run`: `{ "taskRunId": "...", "actor?": "..." }`
+- `forge_complete_task_run`: `{ "taskRunId": "...", "actor?": "...", "note?": "..." }`
+- `forge_release_task_run`: `{ "taskRunId": "...", "actor?": "...", "note?": "..." }`
+- `forge_log_work`: a retroactive work object with either a real `taskId` or a standalone `title`
 
 ## How Forge Psyche works
 
-Treat Psyche as a connected reflective submodule, not a bucket of unrelated notes.
+Treat Psyche as a structured reflective system, not as a loose note box.
 
-The Psyche model is:
-- `psyche_value`: how the user wants to live or act
-- `behavior_pattern`: the recurring loop, usually best framed as a CBT functional analysis
-- `behavior`: one trackable move or tendency, classified as `away`, `committed`, or `recovery`
-- `belief_entry`: the user's own explicit belief statement, including how strongly it feels true and what evidence supports or weakens it
-- `schema catalog`: the reference taxonomy of maladaptive and adaptive schemas; this is not the same thing as a `belief_entry`
-- `mode_profile`: a durable description of a recurring part-state or strategy, such as critic, child, coping, or healthy adult
-- `mode_guide_session`: a guided reasoning record with answers and candidate mode interpretations
-- `event_type`: reusable trigger taxonomy for reports
-- `emotion_definition`: reusable emotion vocabulary for reports
-- `trigger_report`: one concrete incident chain, from situation through emotions, thoughts, behaviors, consequences, and next moves
-
-Use the right container:
+Use the right Psyche entity:
 - repeated loop across situations -> `behavior_pattern`
 - one specific episode -> `trigger_report`
 - one explicit belief sentence -> `belief_entry`
-- one part/state/strategy -> `mode_profile`
-- one action tendency or move -> `behavior`
+- one recurring state or inner role -> `mode_profile`
+- one action tendency -> `behavior`
 - one direction the user cares about -> `psyche_value`
-- one agent-authored observation or recommendation -> `insight`
+- one agent-authored recommendation -> `insight`
+
+For a `behavior_pattern`, think like a CBT functional analysis. Try to get:
+- cue or situation
+- emotions
+- automatic thoughts
+- urges or actions
+- short-term payoff
+- long-term cost
+- preferred replacement response
+
+For a `belief_entry`, try to get:
+- the exact belief sentence
+- how strongly it feels true
+- evidence that seems to support it
+- evidence against it
+- a more flexible alternative belief
+- `schemaId` only if a real schema catalog match is known
+
+For a `trigger_report`, try to get:
+- what happened
+- emotions and intensity
+- thoughts
+- behaviors
+- short-term consequences
+- longer-term consequences
+- what would help next time
+
+For a `mode_profile`, try to get:
+- mode name
+- what it is trying to protect against
+- what it pushes the user to do
+- what it costs the user
+- what healthier response should lead
 
 Schema rule:
-- `schemaId` belongs to `belief_entry` and should only use a real schema catalog id when you actually know the match
-- if you do not know a real schema catalog match, omit `schemaId`; do not invent one
-- likely schema themes can still be captured in plain language through the belief statement, evidence, flexible alternative, or report `schemaLinks`
+- `schemaId` belongs to `belief_entry`
+- only use a real schema catalog id when you actually know the match
+- if you do not know the match, leave `schemaId` out
 
 ## Public working posture
 
