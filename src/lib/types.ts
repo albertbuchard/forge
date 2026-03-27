@@ -587,6 +587,7 @@ export interface AgentOnboardingEntityGuide {
   relationshipRules: string[];
   searchHints: string[];
   fieldGuide: AgentOnboardingFieldGuide[];
+  examples?: string[];
 }
 
 export interface AgentOnboardingToolGuide {

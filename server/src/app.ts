@@ -269,6 +269,10 @@ const AGENT_ONBOARDING_ENTITY_CATALOG = [
       "Tasks can link directly to a goal when no project exists yet."
     ],
     searchHints: ["Search by title before creating a new goal.", "Use status filters when looking for paused or completed goals."],
+    examples: [
+      '{"title":"Create meaningfully","horizon":"lifetime","description":"Make work that is honest, beautiful, and published."}',
+      '{"title":"Build a beautiful family","horizon":"lifetime","description":"Invest in love, stability, and shared rituals."}'
+    ],
     fieldGuide: [
       { name: "title", type: "string", required: true, description: "Human-readable goal name." },
       { name: "description", type: "string", required: false, description: "Why the goal matters or what success looks like.", defaultValue: "" },
@@ -289,6 +293,7 @@ const AGENT_ONBOARDING_ENTITY_CATALOG = [
       "Projects inherit strategic meaning from their parent goal."
     ],
     searchHints: ["Search by title inside the target goal before creating a new project."],
+    examples: ['{"goalId":"goal_create_meaningfully","title":"Launch the public Forge plugin","description":"Ship a real public release that people can install."}'],
     fieldGuide: [
       { name: "goalId", type: "string", required: true, description: "Existing parent goal id." },
       { name: "title", type: "string", required: true, description: "Project name." },
@@ -308,6 +313,7 @@ const AGENT_ONBOARDING_ENTITY_CATALOG = [
       "A task status of in_progress does not guarantee a live active run."
     ],
     searchHints: ["Search by title before creating a duplicate task.", "Use linkedTo filters when you know the parent goal or project."],
+    examples: ['{"title":"Write the plugin release notes","projectId":"project_forge_plugin_launch","status":"focus","priority":"high"}'],
     fieldGuide: [
       { name: "title", type: "string", required: true, description: "Concrete action label." },
       { name: "description", type: "string", required: false, description: "Helpful context or acceptance notes.", defaultValue: "" },
@@ -333,6 +339,7 @@ const AGENT_ONBOARDING_ENTITY_CATALOG = [
       "Use insights for interpretation or advice, not as a replacement for goals, tasks, or trigger reports."
     ],
     searchHints: ["Search recent insights before posting a new one if the same pattern may already be captured."],
+    examples: ['{"entityType":"goal","entityId":"goal_create_meaningfully","title":"Admin drag is masking momentum","summary":"Creative progress is happening, but admin cleanup keeps interrupting it.","recommendation":"Protect one clean creative block and isolate admin into a separate recurring task."}'],
     fieldGuide: [
       { name: "entityType", type: "string|null", required: false, description: "Optional linked entity type.", defaultValue: null, nullable: true },
       { name: "entityId", type: "string|null", required: false, description: "Optional linked entity id.", defaultValue: null, nullable: true },
@@ -384,6 +391,7 @@ const AGENT_ONBOARDING_ENTITY_CATALOG = [
       "Patterns, behaviors, beliefs, and reports can all point back to values."
     ],
     searchHints: ["Search by title before creating a new value.", "Use linkedTo if the value should already be attached to a goal or task."],
+    examples: ['{"title":"Steadiness","valuedDirection":"Respond calmly instead of collapsing or reacting fast.","whyItMatters":"I want to stay grounded in relationships and work."}'],
     fieldGuide: [
       { name: "title", type: "string", required: true, description: "Value name." },
       { name: "description", type: "string", required: false, description: "What the value means in practice.", defaultValue: "" },
@@ -404,6 +412,7 @@ const AGENT_ONBOARDING_ENTITY_CATALOG = [
       "Trigger reports can link back to patterns they instantiate."
     ],
     searchHints: ["Search by title or by trigger language before creating a new pattern."],
+    examples: ['{"title":"Late-night father text freeze","cueContexts":["Father texts late at night"],"targetBehavior":"Freeze, avoid replying, and doomscroll","shortTermPayoff":"Avoids immediate overwhelm","longTermCost":"Sleep loss, guilt, and dread","preferredResponse":"Pause, regulate, and reply on my own terms the next morning"}'],
     fieldGuide: [
       { name: "title", type: "string", required: true, description: "Short pattern name." },
       { name: "description", type: "string", required: false, description: "What usually happens in this loop.", defaultValue: "" },
@@ -428,6 +437,7 @@ const AGENT_ONBOARDING_ENTITY_CATALOG = [
       "Trigger reports can link to behaviors they contained."
     ],
     searchHints: ["Search by title and kind before creating a new behavior."],
+    examples: ['{"kind":"away","title":"Doomscroll after conflict cue","commonCues":["Received a critical text"],"shortTermPayoff":"Numbs the anxiety","longTermCost":"Loses time and deepens shame","replacementMove":"Put phone down and take one slow lap outside"}'],
     fieldGuide: [
       { name: "kind", type: "away|committed|recovery", required: true, description: "Whether the behavior moves away from values, toward them, or repairs after rupture.", enumValues: ["away", "committed", "recovery"] },
       { name: "title", type: "string", required: true, description: "Behavior label." },
@@ -453,6 +463,7 @@ const AGENT_ONBOARDING_ENTITY_CATALOG = [
       "Behavior patterns can point to beliefs that keep the loop alive."
     ],
     searchHints: ["Search by statement or known schema theme before creating a new belief entry."],
+    examples: ['{"statement":"If I disappoint people, they will leave me.","beliefType":"conditional","confidence":82,"evidenceFor":["People got cold when I failed them before"],"evidenceAgainst":["Some people stayed with me even after conflict"],"flexibleAlternative":"Disappointing someone can strain a relationship, but it does not automatically mean abandonment."}'],
     fieldGuide: [
       { name: "schemaId", type: "string|null", required: false, description: "Optional linked schema catalog id.", defaultValue: null, nullable: true },
       { name: "statement", type: "string", required: true, description: "Belief statement in the user's own words." },
@@ -477,6 +488,7 @@ const AGENT_ONBOARDING_ENTITY_CATALOG = [
       "Trigger reports can include linkedModeIds and modeOverlays that reference modes."
     ],
     searchHints: ["Search by title or family before creating a new mode profile."],
+    examples: ['{"family":"coping","title":"Cold controller","fear":"If I soften, I will be humiliated or lose control.","protectiveJob":"Stay hyper-competent and unreachable when threatened."}'],
     fieldGuide: [
       { name: "family", type: "coping|child|critic_parent|healthy_adult|happy_child", required: true, description: "Mode family.", enumValues: ["coping", "child", "critic_parent", "healthy_adult", "happy_child"] },
       { name: "title", type: "string", required: true, description: "Mode title." },
@@ -504,6 +516,7 @@ const AGENT_ONBOARDING_ENTITY_CATALOG = [
       "Use mode guide sessions for guided interpretation, not as a replacement for durable mode profiles."
     ],
     searchHints: ["Search by summary when revisiting a prior guided mode session."],
+    examples: ['{"summary":"Mapping the part that takes over under criticism","answers":[{"questionKey":"felt_shift","value":"I go cold and rigid"}],"results":[{"family":"coping","archetype":"detached_protector","label":"Cold controller","confidence":0.74,"reasoning":"It distances from shame and tries to stay untouchable."}]}'],
     fieldGuide: [
       { name: "summary", type: "string", required: true, description: "Short summary of what the guided session explored." },
       { name: "answers", type: "array", required: true, description: "List of { questionKey, value } items capturing the user's guided answers." },
@@ -520,6 +533,7 @@ const AGENT_ONBOARDING_ENTITY_CATALOG = [
       "Use reports when you need one event chain, not just a generic pattern."
     ],
     searchHints: ["Search by title, event wording, or linked entities before creating a duplicate report."],
+    examples: ['{"title":"Partner said we need to talk and I spiraled","customEventType":"relationship threat","eventSituation":"My partner texted that we needed to talk tonight.","emotions":[{"label":"fear","intensity":85},{"label":"shame","intensity":60}],"thoughts":[{"text":"This means I messed everything up."}],"behaviors":[{"text":"Paced, catastrophized, and checked my phone repeatedly"}],"nextMoves":["Wait until we speak before predicting the outcome","Write down the facts I actually know"]}'],
     fieldGuide: [
       { name: "title", type: "string", required: true, description: "Short name for the incident." },
       { name: "status", type: "draft|reviewed|integrated", required: false, description: "Reflection progress state.", enumValues: ["draft", "reviewed", "integrated"], defaultValue: "draft" },

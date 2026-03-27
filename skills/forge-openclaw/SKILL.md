@@ -658,6 +658,15 @@ What to ask:
 - "Why does it matter to you?"
 - "Is this a quarter, year, or lifetime horizon?"
 
+Example:
+```json
+{
+  "title": "Create meaningfully",
+  "horizon": "lifetime",
+  "description": "Make work that is honest, beautiful, and published."
+}
+```
+
 ### `project`
 
 Purpose:
@@ -677,6 +686,15 @@ What to ask:
 - "What should this project be called?"
 - "Which goal does it support?"
 - "What outcome do you want this project to produce?"
+
+Example:
+```json
+{
+  "goalId": "goal_create_meaningfully",
+  "title": "Launch the public Forge plugin",
+  "description": "Ship a real public release that people can install."
+}
+```
 
 ### `task`
 
@@ -704,6 +722,16 @@ What to ask:
 - "Should this live under an existing goal or project?"
 - "Does it need a due date or priority?"
 
+Example:
+```json
+{
+  "title": "Write the plugin release notes",
+  "projectId": "project_forge_plugin_launch",
+  "status": "focus",
+  "priority": "high"
+}
+```
+
 ### `psyche_value`
 
 Purpose:
@@ -726,6 +754,15 @@ What to ask:
 - "How would you describe that value in your own words?"
 - "Why does this value matter right now?"
 - "Do you want it linked to an existing goal, project, or task?"
+
+Example:
+```json
+{
+  "title": "Steadiness",
+  "valuedDirection": "Respond calmly instead of collapsing or reacting fast.",
+  "whyItMatters": "I want to stay grounded in relationships and work."
+}
+```
 
 ### `behavior_pattern`
 
@@ -755,6 +792,18 @@ What to ask:
 - "What does it give you in the short term, and what does it cost later?"
 - "What response would you rather make instead?"
 
+Example:
+```json
+{
+  "title": "Late-night father text freeze",
+  "cueContexts": ["Father texts late at night"],
+  "targetBehavior": "Freeze, avoid replying, and doomscroll",
+  "shortTermPayoff": "Avoids immediate overwhelm",
+  "longTermCost": "Sleep loss, guilt, and dread",
+  "preferredResponse": "Pause, regulate, and reply on my own terms the next morning"
+}
+```
+
 ### `behavior`
 
 Purpose:
@@ -783,6 +832,18 @@ What to ask:
 - "What cues or urge story usually show up?"
 - "What move would you want available instead?"
 - "Do you want it linked to a pattern, value, schema, or mode?"
+
+Example:
+```json
+{
+  "kind": "away",
+  "title": "Doomscroll after conflict cue",
+  "commonCues": ["Received a critical text"],
+  "shortTermPayoff": "Numbs the anxiety",
+  "longTermCost": "Loses time and deepens shame",
+  "replacementMove": "Put phone down and take one slow lap outside"
+}
+```
 
 ### `belief_entry`
 
@@ -814,6 +875,18 @@ What to ask:
 - "Is this tied to a specific trigger report?"
 - "Does it seem linked to a known schema, or should we leave `schemaId` empty for now?"
 
+Example:
+```json
+{
+  "statement": "If I disappoint people, they will leave me.",
+  "beliefType": "conditional",
+  "confidence": 82,
+  "evidenceFor": ["People got cold when I failed them before"],
+  "evidenceAgainst": ["Some people stayed with me even after conflict"],
+  "flexibleAlternative": "Disappointing someone can strain a relationship, but it does not automatically mean abandonment."
+}
+```
+
 ### `mode_profile`
 
 Purpose:
@@ -844,6 +917,16 @@ What to ask:
 - "What does it fear, carry, or try to protect?"
 - "Do you want it linked to patterns, behaviors, or values?"
 
+Example:
+```json
+{
+  "family": "coping",
+  "title": "Cold controller",
+  "fear": "If I soften, I will be humiliated or lose control.",
+  "protectiveJob": "Stay hyper-competent and unreachable when threatened."
+}
+```
+
 ### `mode_guide_session`
 
 Purpose:
@@ -861,6 +944,23 @@ What to ask:
 - "What question are we trying to answer about this mode?"
 - "What answers should be captured explicitly?"
 - "What candidate modes seem plausible, and why?"
+
+Example:
+```json
+{
+  "summary": "Mapping the part that takes over under criticism",
+  "answers": [{ "questionKey": "felt_shift", "value": "I go cold and rigid" }],
+  "results": [
+    {
+      "family": "coping",
+      "archetype": "detached_protector",
+      "label": "Cold controller",
+      "confidence": 0.74,
+      "reasoning": "It distances from shame and tries to stay untouchable."
+    }
+  ]
+}
+```
 
 ### `trigger_report`
 
@@ -900,6 +1000,25 @@ What to ask:
 - "What did you do next?"
 - "What would be a useful next move now?"
 - "Do you want this linked to a value, pattern, belief, mode, goal, project, or task?"
+
+Example:
+```json
+{
+  "title": "Partner said we need to talk and I spiraled",
+  "customEventType": "relationship threat",
+  "eventSituation": "My partner texted that we needed to talk tonight.",
+  "emotions": [
+    { "label": "fear", "intensity": 85 },
+    { "label": "shame", "intensity": 60 }
+  ],
+  "thoughts": [{ "text": "This means I messed everything up." }],
+  "behaviors": [{ "text": "Paced, catastrophized, and checked my phone repeatedly" }],
+  "nextMoves": [
+    "Wait until we speak before predicting the outcome",
+    "Write down the facts I actually know"
+  ]
+}
+```
 
 ### `event_type`
 
