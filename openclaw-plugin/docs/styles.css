@@ -255,6 +255,31 @@ p {
   margin: 28px 0 26px;
 }
 
+.ui-callout {
+  margin: 0 0 24px;
+  padding: 18px 20px;
+  background: linear-gradient(135deg, rgba(192, 193, 255, 0.12), rgba(78, 222, 163, 0.08));
+  border: 1px solid var(--panel-edge);
+  border-radius: 22px;
+  box-shadow: var(--shadow-lg);
+}
+
+.ui-callout strong {
+  display: block;
+  margin-bottom: 8px;
+  color: var(--text);
+  font-family: "Sora", sans-serif;
+  font-size: 1rem;
+}
+
+.ui-callout p {
+  margin: 0;
+}
+
+.ui-callout p + p {
+  margin-top: 10px;
+}
+
 .button {
   display: inline-flex;
   align-items: center;

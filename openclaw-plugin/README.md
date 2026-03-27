@@ -3,6 +3,22 @@
 `forge-openclaw-plugin` is the publishable OpenClaw package for Forge.
 When the plugin targets `localhost` or `127.0.0.1`, it auto-starts the bundled Forge runtime so the local install path stays one-step.
 
+## Open the UI
+
+If you want the actual Forge app, not just the plugin tools, ask your OpenClaw agent:
+
+- `Open the Forge UI`
+- `Give me the Forge UI address`
+- `Take me to Forge`
+
+For a normal local install, the Forge UI address is usually:
+
+```text
+http://127.0.0.1:4317/forge/
+```
+
+You can also ask the agent to call the UI entry tool and return the exact current address.
+
 ## What Forge looks like
 
 Overview dashboard:
@@ -24,7 +40,15 @@ Forge is a personal system for:
 - weekly review and XP feedback
 - structured Psyche records such as values, patterns, beliefs, modes, and trigger reports
 
-This plugin gives OpenClaw a clean operational surface for that system. It does not try to mirror every raw Forge route. Instead, it gives the agent the read tools, batch entity tools, live-work tools, insight tool, and UI entrypoint it actually needs.
+This plugin gives OpenClaw the tools it needs to work with that system. It can read current state, search records, create and update records, control live work sessions, post insights, and hand the user off to the Forge UI when the visual workflow is easier.
+
+Examples:
+
+- “Save this as a project in Forge.”
+- “Show me my current work in Forge.”
+- “Start a real work session on this task.”
+- “Map this as a behavior pattern.”
+- “Open the Forge UI.”
 
 ## Install
 
@@ -46,7 +70,7 @@ That repo-local path is the fallback only. The published package stays on the SD
 
 ## Recommended usage
 
-The public mental model is intentionally small:
+The main mental model is intentionally small:
 
 1. `forge_get_operator_overview`
 2. `forge_get_operator_context` or `forge_get_current_work` for live work and board state
@@ -60,7 +84,7 @@ The public mental model is intentionally small:
 10. `forge_post_insight` for recommendations
 
 Use the UI entrypoint sparingly.
-Do not open the Forge UI or a browser just to create or update normal records that the batch entity tools already cover.
+Do not open the Forge UI or a browser just to create or update normal records that the tools already cover.
 If an entity is only implied in the discussion, help first and offer Forge lightly near the end; only write after explicit save intent.
 
 The batch tools are array-first:

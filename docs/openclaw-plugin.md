@@ -2,6 +2,20 @@
 
 Forge ships a native OpenClaw plugin add-on with a deliberately small public surface.
 
+## Open the UI
+
+If the user wants the actual Forge app, tell them they can either:
+
+- ask the agent to open the Forge UI
+- ask the agent to give them the Forge UI address
+
+Useful example replies:
+
+- “I can open the Forge UI for you.”
+- “The local Forge UI address is `http://127.0.0.1:4317/forge/`.”
+
+Use the UI route or tool when the user wants visual review, Kanban movement, graph exploration, or broader editing in the Forge app itself.
+
 ## Screenshots
 
 Overview dashboard:
@@ -29,8 +43,8 @@ The execution rule is:
 - only use the UI entrypoint when visual review, multi-record editing, Kanban movement, or Psyche exploration is genuinely the better workflow
 - if an entity is only implied in the discussion, do not write immediately; help first, then offer Forge lightly near the end, and only write after explicit save intent
 
-The plugin no longer mirrors Forge’s raw CRUD and UI API. Forge itself still has the full `/api/v1` surface for the web app and internal runtime.
-Instead, the plugin exposes a curated operational surface: overview, current context, Psyche/XP/review reads, batch entity mutations, retroactive work logging, real task-run control, insight posting, and UI entry.
+The plugin no longer mirrors every Forge route. Forge itself still has the full `/api/v1` surface for the web app and internal runtime.
+Instead, the plugin exposes the parts the agent actually needs: overview, current context, Psyche and XP reads, batch entity mutations, retroactive work logging, real task-run control, insight posting, and UI entry.
 When the configured origin is `localhost` or `127.0.0.1`, the plugin auto-starts the bundled Forge runtime on the configured port.
 
 ## Agent understanding contract

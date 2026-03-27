@@ -43,15 +43,27 @@
         <section class="hero">
           <div class="hero-copy">
             <p class="eyebrow">Forge OpenClaw Plugin</p>
-            <h1>Make OpenClaw track what matters, what is happening, and why it keeps happening.</h1>
+            <h1>Give OpenClaw one clear place to manage work and reflective records.</h1>
             <p class="lede">
-              Forge gives OpenClaw a serious operational surface for goals, projects, tasks, real live
-              work sessions, weekly review, XP, and a structured Psyche layer for values, patterns,
-              beliefs, modes, and trigger reports.
+              Forge lets OpenClaw work with goals, projects, tasks, real work sessions, weekly review,
+              and Psyche records such as values, patterns, beliefs, modes, and trigger reports.
             </p>
             <div class="hero-actions">
               <a class="button primary" href="https://www.npmjs.com/package/forge-openclaw-plugin">Install from npm</a>
               <a class="button secondary" href="https://github.com/albertbuchard/forge">GitHub repo</a>
+            </div>
+            <div class="ui-callout">
+              <strong>Want to open Forge itself?</strong>
+              <p>
+                Ask your OpenClaw agent to open the Forge UI or to give you the local Forge address.
+                The usual local address is <code>http://127.0.0.1:4317/forge/</code>.
+              </p>
+              <p>
+                Example prompts:
+                <code>Open the Forge UI</code>,
+                <code>Give me the Forge UI address</code>,
+                <code>Take me to Forge</code>
+              </p>
             </div>
             <div class="install-card" id="install">
               <div class="install-head">
@@ -102,16 +114,15 @@ openclaw gateway restart</code></pre>
           <div class="mission-grid">
             <article class="card feature-card">
               <p>
-                Forge is not just a task list. It is one place for long-term goals, active projects,
-                concrete tasks, truthful live work sessions, weekly review, XP feedback, and a Psyche
-                model for recurring patterns.
+                Forge is one place for long-term goals, active projects, concrete tasks, honest live
+                work sessions, weekly review, XP feedback, and structured Psyche records.
               </p>
             </article>
             <article class="card feature-card">
               <p>
-                The plugin does not dump a giant mirror of raw CRUD into the agent. It exposes the
-                operational surface that actually matters: reading context, batch entity mutations,
-                live work control, insight posting, and visual handoff into the Forge UI.
+                The plugin gives the agent the parts it actually needs: read current context, search
+                records, create or update records, control live work sessions, post insights, and hand
+                the user off to the UI when the visual workflow is easier.
               </p>
             </article>
             <article class="card feature-card">
@@ -127,11 +138,11 @@ openclaw gateway restart</code></pre>
         <section class="section gallery">
           <div class="gallery-copy">
             <p class="eyebrow">Product Surfaces</p>
-            <h2>Designed for operational clarity and deep reflective work.</h2>
+            <h2>Two main surfaces: work management and Psyche mapping.</h2>
             <p>
-              The overview keeps goals, streaks, current work, and progression visible. The Psyche graph
-              makes beliefs, values, projects, and goals legible in one connected surface instead of
-              scattering them across loose notes.
+              The overview keeps goals, current work, weekly XP, and progress visible. The Psyche graph
+              shows how values, beliefs, projects, and goals connect, so the user does not have to keep
+              these links in scattered notes.
             </p>
           </div>
           <div class="gallery-grid">
@@ -170,48 +181,48 @@ openclaw gateway restart</code></pre>
         <section class="section entity-section" id="entities">
           <div class="section-heading">
             <p class="eyebrow">Core Entities</p>
-            <h2>Clear objects with clear jobs.</h2>
+            <h2>These are the main record types Forge stores.</h2>
           </div>
           <div class="entity-grid">
             <article class="card entity-card">
               <strong>goal</strong>
-              <p>A meaningful long-term direction or outcome.</p>
+              <p>A long-term direction or outcome, such as building a stable family or shipping meaningful work.</p>
             </article>
             <article class="card entity-card">
               <strong>project</strong>
-              <p>A bounded piece of work that moves a goal forward.</p>
+              <p>A bounded piece of work under a goal, such as launching the Forge plugin or planning a move.</p>
             </article>
             <article class="card entity-card">
               <strong>task</strong>
-              <p>A concrete action item or deliverable.</p>
+              <p>A concrete action or deliverable, such as drafting a README or calling a landlord.</p>
             </article>
             <article class="card entity-card">
               <strong>task_run</strong>
-              <p>One real live work session on a task.</p>
+              <p>One real live work session on a task. It is the truthful record of work happening now.</p>
             </article>
             <article class="card entity-card">
               <strong>insight</strong>
-              <p>An agent-written observation or recommendation based on Forge data.</p>
+              <p>An agent-written observation, recommendation, or warning based on Forge data.</p>
             </article>
             <article class="card entity-card">
               <strong>psyche_value</strong>
-              <p>A value or direction the user wants to live toward.</p>
+              <p>A value or direction the user wants to live toward, such as honesty, courage, or steadiness.</p>
             </article>
             <article class="card entity-card">
               <strong>behavior_pattern</strong>
-              <p>A repeating emotional and behavioral loop across situations.</p>
+              <p>A repeating loop across situations, including cue, thought, emotion, action, payoff, and cost.</p>
             </article>
             <article class="card entity-card">
               <strong>belief_entry</strong>
-              <p>One explicit belief sentence the user carries.</p>
+              <p>One explicit belief sentence, such as “If I disappoint people, they will leave me.”</p>
             </article>
             <article class="card entity-card">
               <strong>mode_profile</strong>
-              <p>One recurring inner state, strategy, or role.</p>
+              <p>One recurring inner state or role, such as inner critic, detached protector, or healthy adult.</p>
             </article>
             <article class="card entity-card">
               <strong>trigger_report</strong>
-              <p>One specific emotionally important episode mapped in sequence.</p>
+              <p>One specific emotionally important episode recorded as what happened, what was felt, what was thought, and what happened next.</p>
             </article>
           </div>
         </section>
