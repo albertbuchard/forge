@@ -28,6 +28,10 @@ vi.mock("@/pages/projects-page", () => ({
   ProjectsPage: () => <div>Projects route</div>
 }));
 
+vi.mock("@/pages/campaigns-page", () => ({
+  CampaignsPage: () => <div>Campaigns route</div>
+}));
+
 vi.mock("@/pages/kanban-page", () => ({
   KanbanPage: () => <div>Kanban route</div>
 }));
@@ -167,7 +171,7 @@ describe("App routing", () => {
     expect(await screen.findByText("Psyche mode guide route")).toBeInTheDocument();
   });
 
-  it("redirects legacy campaigns to projects", async () => {
+  it("renders the campaigns route inside the shell", async () => {
     render(
       <MemoryRouter initialEntries={["/campaigns"]}>
         <App />
@@ -175,7 +179,7 @@ describe("App routing", () => {
     );
 
     expect(await screen.findByText("Forge shell")).toBeInTheDocument();
-    expect(await screen.findByText("Projects route")).toBeInTheDocument();
+    expect(await screen.findByText("Campaigns route")).toBeInTheDocument();
   });
 
   it("renders goal, project, and task detail routes inside the shell", async () => {

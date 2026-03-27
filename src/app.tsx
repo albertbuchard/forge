@@ -1,6 +1,7 @@
 import { Navigate, Route, Routes } from "react-router-dom";
 import { AppShell } from "@/components/shell/app-shell";
 import { ActivityPage } from "@/pages/activity-page";
+import { CampaignsPage } from "@/pages/campaigns-page";
 import { GoalDetailPage } from "@/pages/goal-detail-page";
 import { GoalsPage } from "@/pages/goals-page";
 import { InsightsPage } from "@/pages/insights-page";
@@ -36,7 +37,7 @@ export function App() {
         <Route path="goals/:goalId" element={<GoalDetailPage />} />
         <Route path="projects" element={<ProjectsPage />} />
         <Route path="projects/:projectId" element={<ProjectDetailPage />} />
-        <Route path="campaigns" element={<Navigate to="/projects" replace />} />
+        <Route path="campaigns" element={<CampaignsPage />} />
         <Route path="psyche" element={<PsychePage />} />
         <Route path="psyche/values" element={<PsycheValuesPage />} />
         <Route path="psyche/patterns" element={<PsychePatternsPage />} />

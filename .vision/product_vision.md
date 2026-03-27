@@ -103,9 +103,14 @@ reflections. The Psyche Report detail page should let the user inspect one repor
 full. The Goal Map page should visualize how goals connect to related entities through a
 graph that uses the same identity system as the rest of the app.
 
-The Campaigns page exists in the route tree and should eventually be treated as a
-first-class planning surface rather than a placeholder. If it remains in the product,
-its role must be explained clearly and not left vague.
+The Campaigns page is a first-class planning surface. In the current Forge data model,
+campaigns are not a separate persisted entity type; the page is a strategic portfolio
+view over projects grouped by the life goals they serve. Its job is to help the user
+see where multiple projects are concentrating effort, which strategic arcs are under-
+resourced, which campaign lanes are blocked, and where to go next. The page must not
+redirect to Projects or reuse project copy verbatim. It should explain clearly that a
+campaign is the planning posture across one goal and its attached projects, then link
+directly into the underlying goals and project boards.
 
 ## The Core Interaction Model
 
@@ -162,6 +167,11 @@ for iconography. The API runtime is Fastify 5, started through `tsx`, and served
 locally on port `4317` by default. The web application lives under the `/forge/` base
 path, and the versioned REST contract is documented through OpenAPI 3.1 at
 `/api/v1/openapi.json`.
+
+Fresh production databases must start empty of fake user goals, projects, and tasks.
+Demo or showcase content is allowed only through explicit bootstrap paths, fixtures, or
+test-only seeding. The live runtime is expected to show truthful empty states until the
+user creates real records.
 
 Forge also carries a binding long-term stack direction for a local desktop product. The
 canonical target stack is Tauri 2 with Rust, Axum, Tokio, SQLx, and SQLite. The data

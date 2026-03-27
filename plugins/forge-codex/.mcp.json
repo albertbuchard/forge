@@ -1,0 +1,17 @@
+{
+  "mcpServers": {
+    "forge": {
+      "command": "/bin/zsh",
+      "args": [
+        "./scripts/run-mcp.sh"
+      ],
+      "cwd": ".",
+      "env": {
+        "FORGE_ORIGIN": "http://127.0.0.1",
+        "FORGE_PORT": "4317",
+        "FORGE_ACTOR_LABEL": "codex",
+        "FORGE_TIMEOUT_MS": "15000"
+      }
+    }
+  }
+}

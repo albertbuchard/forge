@@ -17,6 +17,7 @@ const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "
 const migrationsDir = path.join(projectRoot, "server", "migrations");
 
 let dataRoot = process.cwd();
+let seedDemoDataEnabled = false;
 
 let db: DatabaseSync | null = null;
 let transactionDepth = 0;
@@ -72,10 +73,13 @@ export function runInTransaction<T>(operation: () => T): T {
   }
 }
 
-export function configureDatabase(options: { dataRoot?: string } = {}): void {
+export function configureDatabase(options: { dataRoot?: string; seedDemoData?: boolean } = {}): void {
   if (options.dataRoot) {
     dataRoot = path.resolve(options.dataRoot);
     closeDatabase();
+  }
+  if (typeof options.seedDemoData === "boolean") {
+    seedDemoDataEnabled = options.seedDemoData;
   }
 }
 
@@ -376,7 +380,13 @@ export async function initializeDatabase(): Promise<void> {
     }
   }
 
-  seedData();
+  if (seedDemoDataEnabled) {
+    seedData();
+  }
+}
+
+export function configureDatabaseSeeding(enabled: boolean): void {
+  seedDemoDataEnabled = enabled;
 }
 
 export function closeDatabase(): void {

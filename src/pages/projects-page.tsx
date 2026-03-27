@@ -19,6 +19,16 @@ export function ProjectsPage() {
         titleText="Projects"
         description="Projects are the concrete paths that move a life goal forward. Each project owns its own tasks, its own board, and its own evidence of progress."
         badge={`${snapshot.dashboard.projects.length} projects`}
+        actions={
+          snapshot.dashboard.projects.length > 0 ? (
+            <Link
+              to="/campaigns"
+              className="inline-flex min-h-10 items-center rounded-full border border-white/8 bg-white/[0.04] px-4 py-2 text-sm whitespace-nowrap text-white/68 transition hover:bg-white/[0.08] hover:text-white"
+            >
+              Open campaigns
+            </Link>
+          ) : null
+        }
       />
 
       {snapshot.dashboard.projects.length === 0 ? (

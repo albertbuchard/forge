@@ -1,0 +1,10 @@
+import { type ForgePluginConfig } from "./api-client.js";
+import type { ForgePluginConfigSchema, ForgePluginRegistrationApi } from "./plugin-sdk-types.js";
+export declare const FORGE_PLUGIN_ID = "forge-openclaw-plugin";
+export declare const FORGE_PLUGIN_NAME = "Forge";
+export declare const FORGE_PLUGIN_DESCRIPTION = "Curated OpenClaw adapter for the Forge collaboration API, UI entrypoint, and localhost auto-start runtime.";
+export declare const DEFAULT_FORGE_ORIGIN = "http://127.0.0.1";
+export declare const DEFAULT_FORGE_PORT = 4317;
+export declare function resolveForgePluginConfig(pluginConfig: unknown): ForgePluginConfig;
+export declare const forgePluginConfigSchema: ForgePluginConfigSchema;
+export declare function registerForgePlugin(api: ForgePluginRegistrationApi): void;

@@ -9,7 +9,7 @@ import { computeWorkTime } from "./work-time.js";
 
 async function setupDatabase(prefix: string) {
   const rootDir = await mkdtemp(path.join(os.tmpdir(), prefix));
-  configureDatabase({ dataRoot: rootDir });
+  configureDatabase({ dataRoot: rootDir, seedDemoData: true });
   await initializeDatabase();
   getSettings();
   return rootDir;

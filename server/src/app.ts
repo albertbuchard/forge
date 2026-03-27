@@ -1,7 +1,7 @@
 import Fastify from "fastify";
 import cors from "@fastify/cors";
 import { ZodError } from "zod";
-import { configureDatabase } from "./db.js";
+import { configureDatabase, configureDatabaseSeeding } from "./db.js";
 import { HttpError, isHttpError, type ValidationIssue } from "./errors.js";
 import { listActivityEvents, listActivityEventsForTask, removeActivityEvent } from "./repositories/activity-events.js";
 import {
@@ -1293,10 +1293,11 @@ function buildOperatorOverview(request: {
   };
 }
 
-export async function buildServer(options: { dataRoot?: string; taskRunWatchdog?: false | TaskRunWatchdogOptions } = {}) {
+export async function buildServer(options: { dataRoot?: string; seedDemoData?: boolean; taskRunWatchdog?: false | TaskRunWatchdogOptions } = {}) {
   const managers = createManagerRuntime({ dataRoot: options.dataRoot });
   const runtimeConfig = managers.configuration.readRuntimeConfig({ dataRoot: options.dataRoot });
   configureDatabase({ dataRoot: runtimeConfig.dataRoot ?? undefined });
+  configureDatabaseSeeding(options.seedDemoData ?? false);
   await managers.migration.initialize();
   const app = Fastify({
     logger: false,

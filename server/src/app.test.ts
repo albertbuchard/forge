@@ -24,7 +24,7 @@ async function issueOperatorSessionCookie(app: Awaited<ReturnType<typeof buildSe
 
 test("dashboard bootstraps goals, tasks, tags, and premium stats", async () => {
   const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-dashboard-"));
-  const app = await buildServer({ dataRoot: rootDir });
+  const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
 
   try {
     const response = await app.inject({
@@ -60,7 +60,7 @@ test("dashboard bootstraps goals, tasks, tags, and premium stats", async () => {
 
 test("task creation and column movement persist through the API", async () => {
   const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-task-move-"));
-  const app = await buildServer({ dataRoot: rootDir });
+  const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
 
   try {
     const operatorCookie = await issueOperatorSessionCookie(app);
@@ -121,7 +121,7 @@ test("task creation and column movement persist through the API", async () => {
 
 test("goal detail, operator context, and retroactive work logging are available on the versioned API", async () => {
   const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-operator-context-"));
-  const app = await buildServer({ dataRoot: rootDir });
+  const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
 
   try {
     const operatorCookie = await issueOperatorSessionCookie(app);
@@ -212,7 +212,7 @@ test("goal detail, operator context, and retroactive work logging are available 
 
 test("built frontend assets are served correctly from the /forge base path", async () => {
   const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-web-basepath-"));
-  const app = await buildServer({ dataRoot: rootDir });
+  const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
 
   try {
     const indexResponse = await app.inject({
@@ -249,7 +249,7 @@ test("built frontend assets are served correctly from the /forge base path", asy
 
 test("reward rules can be updated and manual bonus XP stays explainable", async () => {
   const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-reward-ops-"));
-  const app = await buildServer({ dataRoot: rootDir });
+  const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
 
   try {
     const operatorCookie = await issueOperatorSessionCookie(app);
@@ -312,7 +312,7 @@ test("reward rules can be updated and manual bonus XP stays explainable", async 
 
 test("versioned goal creation and updates persist through the API", async () => {
   const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-goal-v1-"));
-  const app = await buildServer({ dataRoot: rootDir });
+  const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
 
   try {
     const operatorCookie = await issueOperatorSessionCookie(app);
@@ -374,7 +374,7 @@ test("versioned goal creation and updates persist through the API", async () => 
 
 test("smart tag suggestions use text cues and goal context", async () => {
   const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-tag-suggest-"));
-  const app = await buildServer({ dataRoot: rootDir });
+  const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
 
   try {
     const dashboard = await app.inject({ method: "GET", url: "/api/dashboard" });
@@ -405,7 +405,7 @@ test("smart tag suggestions use text cues and goal context", async () => {
 
 test("task updates persist metadata and tag edits through the API", async () => {
   const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-task-update-"));
-  const app = await buildServer({ dataRoot: rootDir });
+  const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
 
   try {
     const operatorCookie = await issueOperatorSessionCookie(app);
@@ -474,7 +474,7 @@ test("task updates persist metadata and tag edits through the API", async () => 
 
 test("versioned task context exposes evidence and task-run state for inspection", async () => {
   const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-v1-task-context-"));
-  const app = await buildServer({ dataRoot: rootDir });
+  const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
 
   try {
     const operatorCookie = await issueOperatorSessionCookie(app);
@@ -525,7 +525,7 @@ test("versioned task context exposes evidence and task-run state for inspection"
 
 test("versioned API exposes stable reads and task-run writes for agents", async () => {
   const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-v1-agent-surface-"));
-  const app = await buildServer({ dataRoot: rootDir });
+  const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
 
   try {
     const operatorCookie = await issueOperatorSessionCookie(app);
@@ -635,7 +635,7 @@ test("versioned API exposes stable reads and task-run writes for agents", async 
 
 test("versioned goal, tag, and project surfaces are available without legacy routes", async () => {
   const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-v1-goal-tag-project-"));
-  const app = await buildServer({ dataRoot: rootDir });
+  const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
 
   try {
     const operatorCookie = await issueOperatorSessionCookie(app);
@@ -735,7 +735,7 @@ test("versioned goal, tag, and project surfaces are available without legacy rou
 
 test("compatibility routes are marked deprecated and event stream metadata is explicit", async () => {
   const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-compat-deprecation-"));
-  const app = await buildServer({ dataRoot: rootDir });
+  const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
 
   try {
     const compatibilityResponse = await app.inject({ method: "GET", url: "/api/goals" });
@@ -759,7 +759,7 @@ test("compatibility routes are marked deprecated and event stream metadata is ex
 
 test("command-center context exposes derived achievements and milestone rewards", async () => {
   const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-gamification-signals-"));
-  const app = await buildServer({ dataRoot: rootDir });
+  const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
 
   try {
     const response = await app.inject({ method: "GET", url: "/api/v1/context" });
@@ -783,7 +783,7 @@ test("command-center context exposes derived achievements and milestone rewards"
 
 test("command-center context exposes first-class projects across dashboard and overview", async () => {
   const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-project-snapshot-"));
-  const app = await buildServer({ dataRoot: rootDir });
+  const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
 
   try {
     const response = await app.inject({ method: "GET", url: "/api/v1/context" });
@@ -807,7 +807,7 @@ test("command-center context exposes first-class projects across dashboard and o
 
 test("openapi document exposes schema-backed versioned contracts", async () => {
   const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-openapi-contract-"));
-  const app = await buildServer({ dataRoot: rootDir });
+  const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
 
   try {
     const response = await app.inject({ method: "GET", url: "/api/v1/openapi.json" });
@@ -909,7 +909,7 @@ test("openapi document exposes schema-backed versioned contracts", async () => {
 
 test("versioned CRUD routes support get, update, and delete for tags, comments, tasks, projects, and goals", async () => {
   const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-versioned-crud-"));
-  const app = await buildServer({ dataRoot: rootDir });
+  const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
 
   try {
     const operatorCookie = await issueOperatorSessionCookie(app);
@@ -1119,7 +1119,7 @@ test("versioned CRUD routes support get, update, and delete for tags, comments, 
 
 test("completed tasks can be reopened and lose their completion XP", async () => {
   const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-uncomplete-task-"));
-  const app = await buildServer({ dataRoot: rootDir });
+  const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
 
   try {
     const operatorCookie = await issueOperatorSessionCookie(app);
@@ -1164,7 +1164,7 @@ test("completed tasks can be reopened and lose their completion XP", async () =>
 
 test("domains endpoint exposes psyche as a sensitive first-class domain", async () => {
   const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-domains-psyche-"));
-  const app = await buildServer({ dataRoot: rootDir });
+  const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
 
   try {
     const response = await app.inject({ method: "GET", url: "/api/v1/domains" });
@@ -1180,7 +1180,7 @@ test("domains endpoint exposes psyche as a sensitive first-class domain", async 
 
 test("trigger reports persist structured CBT fields and earn bounded reflection XP", async () => {
   const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-trigger-report-"));
-  const app = await buildServer({ dataRoot: rootDir });
+  const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
 
   try {
     const operatorCookie = await issueOperatorSessionCookie(app);
@@ -1266,7 +1266,7 @@ test("trigger reports persist structured CBT fields and earn bounded reflection 
 
 test("psyche comments persist and scoped tokens cannot read psyche without explicit grant", async () => {
   const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-psyche-comment-scope-"));
-  const app = await buildServer({ dataRoot: rootDir });
+  const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
 
   try {
     const operatorCookie = await issueOperatorSessionCookie(app);
@@ -1381,7 +1381,7 @@ test("psyche comments persist and scoped tokens cannot read psyche without expli
 
 test("psyche behaviors, beliefs, modes, and custom taxonomies persist through the versioned API", async () => {
   const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-psyche-expanded-"));
-  const app = await buildServer({ dataRoot: rootDir });
+  const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
 
   try {
     const operatorCookie = await issueOperatorSessionCookie(app);
@@ -1659,7 +1659,7 @@ test("psyche behaviors, beliefs, modes, and custom taxonomies persist through th
 
 test("psyche delete routes prune linked references instead of leaving stale ids behind", async () => {
   const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-psyche-delete-crud-"));
-  const app = await buildServer({ dataRoot: rootDir });
+  const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
 
   try {
     const operatorCookie = await issueOperatorSessionCookie(app);
@@ -1954,7 +1954,7 @@ test("psyche delete routes prune linked references instead of leaving stale ids 
 
 test("activity correction hides removed events from the default archive", async () => {
   const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-activity-correction-"));
-  const app = await buildServer({ dataRoot: rootDir });
+  const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
 
   try {
     const operatorCookie = await issueOperatorSessionCookie(app);
@@ -2005,7 +2005,7 @@ test("activity correction hides removed events from the default archive", async 
 
 test("task creation rejects unknown goal references with a 404 and no partial write", async () => {
   const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-task-bad-goal-"));
-  const app = await buildServer({ dataRoot: rootDir });
+  const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
 
   try {
     const operatorCookie = await issueOperatorSessionCookie(app);
@@ -2044,7 +2044,7 @@ test("task creation rejects unknown goal references with a 404 and no partial wr
 
 test("task-run completion and release endpoints are idempotent for same-actor retries", async () => {
   const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-task-run-idempotency-"));
-  const app = await buildServer({ dataRoot: rootDir, taskRunWatchdog: false });
+  const app = await buildServer({ dataRoot: rootDir, seedDemoData: true, taskRunWatchdog: false });
 
   try {
     const operatorCookie = await issueOperatorSessionCookie(app);
@@ -2161,7 +2161,7 @@ test("task-run completion and release endpoints are idempotent for same-actor re
 
 test("task creation is idempotent when the same Idempotency-Key is retried", async () => {
   const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-task-idempotent-"));
-  const app = await buildServer({ dataRoot: rootDir });
+  const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
 
   try {
     const operatorCookie = await issueOperatorSessionCookie(app);
@@ -2226,7 +2226,7 @@ test("task creation is idempotent when the same Idempotency-Key is retried", asy
 
 test("task creation rejects reusing an Idempotency-Key with a different payload", async () => {
   const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-task-idempotency-conflict-"));
-  const app = await buildServer({ dataRoot: rootDir });
+  const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
 
   try {
     const operatorCookie = await issueOperatorSessionCookie(app);
@@ -2283,7 +2283,7 @@ test("task creation rejects reusing an Idempotency-Key with a different payload"
 
 test("metrics and programmable task filters are exposed for OpenClaw", async () => {
   const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-openclaw-"));
-  const app = await buildServer({ dataRoot: rootDir });
+  const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
 
   try {
     const metricsResponse = await app.inject({ method: "GET", url: "/api/metrics" });
@@ -2323,7 +2323,7 @@ test("metrics and programmable task filters are exposed for OpenClaw", async () 
 
 test("activity endpoints capture mutations with source attribution", async () => {
   const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-activity-"));
-  const app = await buildServer({ dataRoot: rootDir });
+  const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
 
   try {
     const operatorCookie = await issueOperatorSessionCookie(app);
@@ -2412,7 +2412,7 @@ test("activity endpoints capture mutations with source attribution", async () =>
 
 test("task context bundles goal linkage, run state, and task-scoped evidence", async () => {
   const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-task-context-"));
-  const app = await buildServer({ dataRoot: rootDir });
+  const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
 
   try {
     const operatorCookie = await issueOperatorSessionCookie(app);
@@ -2489,7 +2489,7 @@ test("task context bundles goal linkage, run state, and task-scoped evidence", a
 
 test("goal updates reject unknown tags with a 404", async () => {
   const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-goal-bad-tag-"));
-  const app = await buildServer({ dataRoot: rootDir });
+  const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
 
   try {
     const operatorCookie = await issueOperatorSessionCookie(app);
@@ -2524,7 +2524,7 @@ test("goal updates reject unknown tags with a 404", async () => {
 
 test("insights and weekly review read models are exposed for the routed shell", async () => {
   const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-insights-review-"));
-  const app = await buildServer({ dataRoot: rootDir });
+  const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
 
   try {
     const insights = await app.inject({ method: "GET", url: "/api/v1/insights" });
@@ -2561,7 +2561,7 @@ test("insights and weekly review read models are exposed for the routed shell", 
 
 test("soft delete, restore, hard delete, and the settings bin stay in sync for anchored collaboration", async () => {
   const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-soft-delete-bin-"));
-  const app = await buildServer({ dataRoot: rootDir });
+  const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
 
   try {
     const operatorCookie = await issueOperatorSessionCookie(app);
@@ -2708,7 +2708,7 @@ test("soft delete, restore, hard delete, and the settings bin stay in sync for a
 
 test("atomic batch create rolls back earlier successes when a later operation fails", async () => {
   const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-atomic-batch-create-"));
-  const app = await buildServer({ dataRoot: rootDir });
+  const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
 
   try {
     const operatorCookie = await issueOperatorSessionCookie(app);
@@ -2763,7 +2763,7 @@ test("atomic batch create rolls back earlier successes when a later operation fa
 
 test("batch entity routes create, update, and search entities through the shared capability matrix", async () => {
   const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-batch-entity-routes-"));
-  const app = await buildServer({ dataRoot: rootDir });
+  const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
 
   try {
     const operatorCookie = await issueOperatorSessionCookie(app);
@@ -2849,7 +2849,7 @@ test("batch entity routes create, update, and search entities through the shared
 
 test("batch entity routes require auth and return validation failures with machine-readable details", async () => {
   const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-batch-entity-errors-"));
-  const app = await buildServer({ dataRoot: rootDir });
+  const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
 
   try {
     const unauthenticated = await app.inject({
@@ -2922,7 +2922,7 @@ test("CRUD capability matrix keeps user-facing delete/bin entities explicit", ()
 
 test("settings and local agent token management persist through the versioned API", async () => {
   const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-settings-api-"));
-  const app = await buildServer({ dataRoot: rootDir });
+  const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
 
   try {
     const operatorCookie = await issueOperatorSessionCookie(app);
@@ -3246,7 +3246,7 @@ test("settings and local agent token management persist through the versioned AP
 
 test("collaboration routes persist insights, feedback, and approval-gated agent actions", async () => {
   const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-collab-api-"));
-  const app = await buildServer({ dataRoot: rootDir });
+  const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
 
   try {
     const operatorCookie = await issueOperatorSessionCookie(app);
@@ -3378,7 +3378,7 @@ test("collaboration routes persist insights, feedback, and approval-gated agent 
 
 test("session events and reward endpoints expose bounded ambient XP", async () => {
   const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-session-rewards-"));
-  const app = await buildServer({ dataRoot: rootDir });
+  const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
 
   try {
     const operatorCookie = await issueOperatorSessionCookie(app);
@@ -3430,7 +3430,7 @@ test("session events and reward endpoints expose bounded ambient XP", async () =
 
 test("task timers can be started, heartbeated, focused, and completed", async () => {
   const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-task-runs-"));
-  const app = await buildServer({ dataRoot: rootDir });
+  const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
 
   try {
     const operatorCookie = await issueOperatorSessionCookie(app);
@@ -3559,7 +3559,7 @@ test("task timers can be started, heartbeated, focused, and completed", async ()
 
 test("task run conflicts return structured lease details for recovery", async () => {
   const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-task-run-conflict-"));
-  const app = await buildServer({ dataRoot: rootDir });
+  const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
 
   try {
     const operatorCookie = await issueOperatorSessionCookie(app);
@@ -3622,7 +3622,7 @@ test("task run conflicts return structured lease details for recovery", async ()
 
 test("task timer starts respect the max active task setting", async () => {
   const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-task-run-cap-"));
-  const app = await buildServer({ dataRoot: rootDir });
+  const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
 
   try {
     const operatorCookie = await issueOperatorSessionCookie(app);
@@ -3676,7 +3676,7 @@ test("task timer starts respect the max active task setting", async () => {
 
 test("inactive task run mutations return the current run state", async () => {
   const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-task-run-inactive-"));
-  const app = await buildServer({ dataRoot: rootDir });
+  const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
 
   try {
     const operatorCookie = await issueOperatorSessionCookie(app);
@@ -3733,7 +3733,7 @@ test("inactive task run mutations return the current run state", async () => {
 
 test("expired task runs recover cleanly after their lease lapses", async () => {
   const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-task-run-timeout-"));
-  const app = await buildServer({ dataRoot: rootDir });
+  const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
 
   try {
     const operatorCookie = await issueOperatorSessionCookie(app);
@@ -3802,6 +3802,7 @@ test("watchdog reconcile endpoint lets operators force recovery and inspect stat
   const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-watchdog-reconcile-"));
   const app = await buildServer({
     dataRoot: rootDir,
+    seedDemoData: true,
     taskRunWatchdog: {
       intervalMs: 60_000
     }
@@ -3867,6 +3868,7 @@ test("v1 health reports degraded status when watchdog recovery fails", async () 
   let calls = 0;
   const app = await buildServer({
     dataRoot: rootDir,
+    seedDemoData: true,
     taskRunWatchdog: {
       intervalMs: 60_000,
       reconcile: ({ now }) => {

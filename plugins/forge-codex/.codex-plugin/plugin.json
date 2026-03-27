@@ -1,0 +1,38 @@
+{
+  "name": "forge-codex",
+  "version": "0.1.0",
+  "description": "Curated Codex plugin for the Forge life operating system, with a bundled local runtime.",
+  "author": {
+    "name": "Forge",
+    "url": "https://github.com/omarclaw/aurel-monorepo"
+  },
+  "repository": "https://github.com/omarclaw/aurel-monorepo",
+  "license": "UNLICENSED",
+  "keywords": [
+    "forge",
+    "productivity",
+    "life-os",
+    "mcp",
+    "codex"
+  ],
+  "skills": "./skills",
+  "mcpServers": "./.mcp.json",
+  "interface": {
+    "displayName": "Forge",
+    "shortDescription": "Read and update Forge through a curated MCP tool surface with bundled local startup.",
+    "longDescription": "Repo-local Codex plugin for Forge. It carries a bundled built Forge runtime and exposes the same curated interaction model as the Forge OpenClaw adapter: operator overview first, batch entity tools for normal work, structured insights, current work controls, and UI handoff when a visual workflow is better.",
+    "developerName": "Forge",
+    "category": "Productivity",
+    "capabilities": [
+      "Interactive",
+      "Read",
+      "Write"
+    ],
+    "defaultPrompt": [
+      "Open Forge and show me the current operator overview.",
+      "Search Forge before creating new tasks or projects.",
+      "Store a structured insight in Forge after reviewing the overview."
+    ],
+    "brandColor": "#6f78ff"
+  }
+}

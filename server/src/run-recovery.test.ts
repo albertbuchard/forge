@@ -12,7 +12,7 @@ test("startup recovery marks expired task runs timed out after a restart gap", a
   const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-startup-recovery-"));
 
   try {
-    configureDatabase({ dataRoot: rootDir });
+    configureDatabase({ dataRoot: rootDir, seedDemoData: true });
     await initializeDatabase();
 
     const taskId = listTasks()[0]!.id;
@@ -29,7 +29,7 @@ test("startup recovery marks expired task runs timed out after a restart gap", a
 
     closeDatabase();
 
-    configureDatabase({ dataRoot: rootDir });
+    configureDatabase({ dataRoot: rootDir, seedDemoData: true });
     await initializeDatabase();
 
     const summary = recoverExpiredTaskRunsOnStartup({
@@ -52,7 +52,7 @@ test("startup recovery stays a no-op when there are no expired task runs", async
   const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-startup-recovery-noop-"));
 
   try {
-    configureDatabase({ dataRoot: rootDir });
+    configureDatabase({ dataRoot: rootDir, seedDemoData: true });
     await initializeDatabase();
 
     const summary = recoverExpiredTaskRunsOnStartup({

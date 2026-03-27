@@ -141,6 +141,12 @@ details. Persistence and runtime services implement storage and execution. The p
 layer renders the product. Routes, pages, jobs, and plugin tools should depend on
 managers instead of embedding policy ad hoc.
 
+Fresh runtime storage must be truthful. A brand-new production database may include
+system catalogs, settings defaults, and migration-backed support tables, but it must
+not silently invent personal goals, projects, tasks, or activity just to make the UI
+look populated. If sample content is needed for tests or demos, it must be opt-in and
+explicitly marked as fixture data.
+
 ## Quality Bar
 
 These standards are binding. Forge is only aligned when the product explains itself in

@@ -1,6 +1,6 @@
 import * as Dialog from "@radix-ui/react-dialog";
 import { useEffect, useMemo, useState } from "react";
-import { ArrowRight, BrainCircuit, BriefcaseBusiness, Clock3, LayoutDashboard, Search, Settings, Target, Zap } from "lucide-react";
+import { ArrowRight, BrainCircuit, BriefcaseBusiness, Clock3, LayoutDashboard, Layers3, Search, Settings, Target, Zap } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { EntityName } from "@/components/ui/entity-name";
 import { Input } from "@/components/ui/input";
@@ -42,6 +42,7 @@ export function CommandPalette({ open, onOpenChange, snapshot }: CommandPaletteP
       { id: "route-psyche", title: t("common.routeLabels.psyche"), detail: t("common.commandPalette.routePsyche"), href: "/psyche", category: t("common.commandPalette.categoryRoute") },
       { id: "route-goals", title: t("common.routeLabels.goals"), detail: t("common.commandPalette.routeGoals"), href: "/goals", category: t("common.commandPalette.categoryRoute") },
       { id: "route-projects", title: t("common.routeLabels.projects"), detail: t("common.commandPalette.routeProjects"), href: "/projects", category: t("common.commandPalette.categoryRoute") },
+      { id: "route-campaigns", title: t("common.routeLabels.campaigns"), detail: t("common.commandPalette.routeCampaigns"), href: "/campaigns", category: t("common.commandPalette.categoryRoute") },
       { id: "route-review", title: t("common.routeLabels.review"), detail: t("common.commandPalette.routeReview"), href: "/review/weekly", category: t("common.commandPalette.categoryRoute") },
       { id: "route-settings", title: t("common.routeLabels.settings"), detail: t("common.commandPalette.routeSettings"), href: "/settings", category: t("common.commandPalette.categoryRoute") }
     ];
@@ -107,6 +108,7 @@ export function CommandPalette({ open, onOpenChange, snapshot }: CommandPaletteP
                 { label: t("common.routeLabels.psyche"), icon: BrainCircuit },
                 { label: t("common.routeLabels.goals"), icon: Target },
                 { label: t("common.routeLabels.projects"), icon: BriefcaseBusiness },
+                { label: t("common.routeLabels.campaigns"), icon: Layers3 },
                 { label: t("common.routeLabels.settings"), icon: Settings }
               ].map((entry) => (
                 <span key={entry.label} className="inline-flex min-h-10 items-center gap-2 rounded-full bg-white/[0.04] px-3 py-2 text-xs text-white/58">

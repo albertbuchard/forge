@@ -1,6 +1,6 @@
 ---
 name: forge-openclaw
-description: Use the Forge OpenClaw plugin through its exact route-facing tool surface. For clearly implied Forge entities, help first and end with one light optional Forge save offer. For explicit save requests, honor the requested entity type, ask only for missing required fields, and use the real Forge payload shapes.
+description: use this when the user is talking about a goal, project, task, task run, insight, psyche value, behavior pattern, behavior, belief entry, mode profile, mode guide session, trigger report, event type, or emotion definition. identify which entity best matches what the user means, ask only the needed step-by-step questions to complete the entity, and save or update it using the forge schema. also use it when the user wants to structure work, run projects, organize tasks kanban-style, track active sessions, or turn reflections into structured records.Use the Forge OpenClaw plugin through its exact route-facing tool surface. For clearly implied Forge entities, end with one light optional Forge save offer at the end of your message. For explicit save requests, honor the requested entity type, ask only for missing required fields, and use the real Forge payload shapes.
 ---
 
 # Forge OpenClaw
