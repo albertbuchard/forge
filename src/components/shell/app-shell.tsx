@@ -12,7 +12,6 @@ import {
   Clock3,
   Flame,
   LayoutDashboard,
-  Layers3,
   Radar,
   RefreshCcw,
   Search,
@@ -73,7 +72,6 @@ const PRIMARY_ROUTES = [
   { to: "/overview", labelKey: "common.routeLabels.overview", detailKey: "common.routeDetails.overview", icon: LayoutDashboard },
   { to: "/goals", labelKey: "common.routeLabels.goals", detailKey: "common.routeDetails.goals", icon: Target },
   { to: "/projects", labelKey: "common.routeLabels.projects", detailKey: "common.routeDetails.projects", icon: BriefcaseBusiness },
-  { to: "/campaigns", labelKey: "common.routeLabels.campaigns", detailKey: "common.routeDetails.campaigns", icon: Layers3 },
   { to: "/kanban", labelKey: "common.routeLabels.kanban", detailKey: "common.routeDetails.kanban", icon: Zap },
   { to: "/today", labelKey: "common.routeLabels.today", detailKey: "common.routeDetails.today", icon: Clock3 },
   { to: "/psyche", labelKey: "common.routeLabels.psyche", detailKey: "common.routeDetails.psyche", icon: BrainCircuit },
@@ -83,8 +81,8 @@ const PRIMARY_ROUTES = [
   { to: "/settings", labelKey: "common.routeLabels.settings", detailKey: "common.routeDetails.settings", icon: Settings }
 ] as const;
 
-const MOBILE_CORE_ROUTES = [PRIMARY_ROUTES[0], PRIMARY_ROUTES[5], PRIMARY_ROUTES[4], PRIMARY_ROUTES[6]] as const;
-const MOBILE_MORE_ROUTES = [PRIMARY_ROUTES[1], PRIMARY_ROUTES[2], PRIMARY_ROUTES[3], PRIMARY_ROUTES[7], PRIMARY_ROUTES[8], PRIMARY_ROUTES[9], PRIMARY_ROUTES[10]] as const;
+const MOBILE_CORE_ROUTES = [PRIMARY_ROUTES[0], PRIMARY_ROUTES[4], PRIMARY_ROUTES[3], PRIMARY_ROUTES[5]] as const;
+const MOBILE_MORE_ROUTES = [PRIMARY_ROUTES[1], PRIMARY_ROUTES[2], PRIMARY_ROUTES[6], PRIMARY_ROUTES[7], PRIMARY_ROUTES[8], PRIMARY_ROUTES[9]] as const;
 
 function formatCompactNumber(value: number) {
   return new Intl.NumberFormat("en", {

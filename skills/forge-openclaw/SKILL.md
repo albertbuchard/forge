@@ -1,6 +1,6 @@
 ---
 name: forge-openclaw
-description: use this when the user is talking about a goal, project, task, task run, insight, psyche value, behavior pattern, behavior, belief entry, mode profile, mode guide session, trigger report, event type, or emotion definition. identify which entity best matches what the user means, ask only the needed step-by-step questions to complete the entity, and save or update it using the forge schema. also use it when the user wants to structure work, run projects, organize tasks kanban-style, track active sessions, or turn reflections into structured records. for clearly implied Forge entities, help first and end with one light optional Forge save offer, for example: "This sounds like a real project. If you want, we can break it down and store it in Forge."
+description: use this when the user is talking about a goal, project, task, task run, insight, psyche value, behavior pattern, behavior, belief entry, mode profile, mode guide session, trigger report, event type, or emotion definition. identify the exact Forge entity, name it explicitly, ask only the needed step-by-step questions to complete it, and save or update it using the Forge schema. whenever one of those entities is clearly present in the conversation, the user should be prompted to save it in Forge and, if they agree, guided through a short series of questions that fills the entity fields. also use it when the user wants to structure work, run projects, organize tasks kanban-style, track active sessions, or turn reflections into structured records.
 ---
 
 # Forge OpenClaw
@@ -8,12 +8,14 @@ description: use this when the user is talking about a goal, project, task, task
 Use this skill when Forge is available as a native OpenClaw plugin and you need truthful, structured access to the live Forge system.
 
 Core behavior:
-- implied entity -> help first -> end with one short Forge save offer
+- implied or explicit entity -> identify the exact Forge entity -> prompt to save in Forge -> if accepted, ask a short field-filling question sequence
 - explicit save intent -> use the Forge batch tools
 - no browser/UI workaround for normal creation or updates
 
 Non-negotiable execution rules:
-- If a goal, project, task, value, pattern, behavior, belief, trigger report, insight, or retroactive work item is clearly implied but the user has not asked to save it yet, help normally and then end with exactly one short optional Forge offer unless the user is in acute distress.
+- If any Forge entity is clearly present in the conversation, name the entity type explicitly and prompt the user to save it in Forge unless the user is in acute distress or explicitly does not want Forge.
+- The entity prompt must use the real Forge entity names. Valid user-facing entity names are: `goal`, `project`, `task`, `task_run`, `insight`, `psyche_value`, `behavior_pattern`, `behavior`, `belief_entry`, `mode_profile`, `mode_guide_session`, `trigger_report`, `event_type`, and `emotion_definition`.
+- Do not use vague umbrella wording when a real entity fits. Say `project`, not "initiative" or "campaign". Say `behavior_pattern`, not "theme". Say `trigger_report`, not "incident note".
 - If the user explicitly asks to save something in Forge and required fields are still missing, do not complain about schemas and do not guess. Ask only for the missing required fields or the one most decision-critical optional field, with at most 1 to 3 focused questions.
 - If the user explicitly asks to save several related records at once and enough information is present, use one batched `forge_create_entities` call instead of serial one-by-one creation.
 - Do not say you cannot create something when `forge_create_entities`, `forge_update_entities`, or the task-run tools already cover it.
@@ -307,28 +309,31 @@ Do not turn every conversation into a form.
 
 Default flow:
 1. Continue the normal discussion first.
-2. If something clearly looks like a Forge entity, add one short optional suggestion near the end.
-3. Only start collection questions if the user accepts.
-4. Ask only for the missing fields.
-5. Ask at most 1 to 3 questions at a time.
+2. If something clearly matches a Forge entity, state the exact entity type plainly.
+3. Prompt the user to save it in Forge.
+4. Only start collection questions if the user accepts.
+5. Ask only for the missing fields.
+6. Ask at most 1 to 3 questions at a time.
 
 Write-consent rule:
 - if the user only implies a goal, project, task, value, pattern, belief, behavior, trigger report, or insight, do not write to Forge yet
 - first help in the normal conversation
-- then add one light end-of-message offer to save it in Forge
+- then add one clear end-of-message prompt to save it in Forge
 - only call `forge_create_entities`, `forge_update_entities`, `forge_delete_entities`, `forge_restore_entities`, or `forge_post_insight` when:
   - the user explicitly asks to save, add, store, create, update, delete, or log it in Forge
-  - the user accepts your prior Forge save offer
+  - the user accepts your prior Forge save prompt
   - you are already inside an active Forge intake or editing flow that the user clearly consented to
 
-Good suggestion style:
-- "This sounds like a concrete project. If you want, we can break it down and store it in Forge."
-- "This sounds like a real project. If you want, we can break it down and store it in Forge."
-- "This sounds like an important trigger event. If you want, we can map it together and save it in Forge."
+Good prompt style:
+- "This is a `project` in Forge. Do you want to save it?"
+- "This is a `behavior_pattern` in Forge. Do you want to map it and save it?"
+- "This is a `trigger_report` in Forge. Do you want to capture it and save it?"
+- "If yes, I’ll ask a short series of questions to fill the fields."
 
-Bad suggestion style:
+Bad prompt style:
 - interrupting the main reply too early
 - sounding pushy or repetitive
+- using a vague label instead of the real entity name
 - asking for every field before the user has agreed to save it
 
 ## Advertised plugin interface
@@ -412,7 +417,7 @@ Do not:
 2. Before creating or updating ambiguous entities, use `forge_search_entities` to check for duplicates.
 3. Prefer batch tools even for small multi-step work when they keep the operation coherent.
 4. When review, editing, Kanban movement, or Psyche exploration would be easier visually, use `forge_get_ui_entrypoint` and offer the Forge UI lightly near the end of the message.
-5. Do not write to Forge purely because an entity is implied. Implied entities get a save offer first; explicit user intent gets the actual write.
+5. Do not write to Forge purely because an entity is implied. Implied entities get a Forge save prompt first; explicit user intent gets the actual write.
 
 ## Live work rules
 

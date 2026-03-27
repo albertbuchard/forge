@@ -103,14 +103,12 @@ reflections. The Psyche Report detail page should let the user inspect one repor
 full. The Goal Map page should visualize how goals connect to related entities through a
 graph that uses the same identity system as the rest of the app.
 
-The Campaigns page is a first-class planning surface. In the current Forge data model,
-campaigns are not a separate persisted entity type; the page is a strategic portfolio
-view over projects grouped by the life goals they serve. Its job is to help the user
-see where multiple projects are concentrating effort, which strategic arcs are under-
-resourced, which campaign lanes are blocked, and where to go next. The page must not
-redirect to Projects or reuse project copy verbatim. It should explain clearly that a
-campaign is the planning posture across one goal and its attached projects, then link
-directly into the underlying goals and project boards.
+Forge must not introduce alternate product names for existing entities. Projects are
+projects. Goals are goals. Values, beliefs, behaviors, modes, patterns, reports,
+insights, rewards, and tasks should keep those exact names. If an old compatibility
+route such as `/campaigns` still exists, it must remain a deprecated redirect or API
+alias only. The user-facing product should not present campaigns as a separate concept
+when the real underlying entity is a project.
 
 ## The Core Interaction Model
 
