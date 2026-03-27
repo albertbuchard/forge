@@ -3,6 +3,29 @@
 `forge-openclaw-plugin` is the publishable OpenClaw package for Forge.
 When the plugin targets `localhost` or `127.0.0.1`, it auto-starts the bundled Forge runtime so the local install path stays one-step.
 
+## What Forge looks like
+
+Overview dashboard:
+
+![Forge overview dashboard](https://raw.githubusercontent.com/albertbuchard/forge/main/openclaw-plugin/docs/assets/forge-overview-dashboard.png)
+
+Psyche graph:
+
+![Forge Psyche graph](https://raw.githubusercontent.com/albertbuchard/forge/main/openclaw-plugin/docs/assets/forge-psyche-graph.png)
+
+## What this plugin is
+
+Forge is a personal system for:
+
+- long-term goals
+- active projects
+- concrete tasks
+- truthful live work sessions
+- weekly review and XP feedback
+- structured Psyche records such as values, patterns, beliefs, modes, and trigger reports
+
+This plugin gives OpenClaw a clean operational surface for that system. It does not try to mirror every raw Forge route. Instead, it gives the agent the read tools, batch entity tools, live-work tools, insight tool, and UI entrypoint it actually needs.
+
 ## Install
 
 Current OpenClaw builds should use package discovery:
@@ -82,3 +105,18 @@ The skill is entity-format-driven. It teaches the agent how to:
 - capture goals, projects, tasks, values, patterns, behaviors, beliefs, and trigger reports
 
 For local use, set the plugin origin to `http://127.0.0.1` or `http://localhost` and the plugin will bring Forge up on the configured port automatically.
+
+## Publishing and listing
+
+The reliable publication path for the Forge plugin is:
+
+1. publish `forge-openclaw-plugin` to npm
+2. verify `openclaw plugins install forge-openclaw-plugin`
+3. add Forge to the OpenClaw community plugin listing with the npm package and GitHub repo
+
+ClawHub note:
+
+- OpenClaw's public docs clearly position ClawHub as the skills registry.
+- The community plugin listing requirements still ask for npm publication and a public GitHub repository.
+- So the safe publish path for the Forge plugin itself is npm + GitHub + community listing.
+- If you want Forge discoverability inside ClawHub as well, publish a companion Forge skill there separately. That is additive. It does not replace the npm plugin package.

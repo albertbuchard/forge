@@ -2,6 +2,16 @@
 
 Forge ships a native OpenClaw plugin add-on with a deliberately small public surface.
 
+## Screenshots
+
+Overview dashboard:
+
+![Forge overview dashboard](../openclaw-plugin/docs/assets/forge-overview-dashboard.png)
+
+Psyche graph:
+
+![Forge Psyche graph](../openclaw-plugin/docs/assets/forge-psyche-graph.png)
+
 The intended workflow is:
 
 - start with `forge_get_operator_overview`, `forge_get_operator_context`, or `forge_get_current_work`
@@ -81,6 +91,24 @@ For older OpenClaw builds that still need the repo-local fallback entry:
 openclaw plugins install ./projects/forge
 openclaw gateway restart
 ```
+
+## Publishing path
+
+For the Forge plugin itself, the safe public distribution path is:
+
+1. publish the npm package `forge-openclaw-plugin`
+2. verify install with `openclaw plugins install forge-openclaw-plugin`
+3. submit Forge to the OpenClaw community plugin listing with:
+   - the npm package name
+   - the public GitHub repository
+   - install and setup docs
+
+ClawHub clarification:
+
+- the official OpenClaw docs clearly document ClawHub as the public skill registry
+- the community plugin listing requirements still point plugin authors to npm and GitHub
+- so Forge should be treated as an npm-published OpenClaw plugin first
+- if desired, Forge can also ship a separate companion skill to ClawHub for discovery, but that is not the main plugin publish path
 
 ## Enable it
 

@@ -5,6 +5,15 @@
   "type": "module",
   "license": "MIT",
   "private": false,
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/albertbuchard/forge.git",
+    "directory": "openclaw-plugin"
+  },
+  "homepage": "https://github.com/albertbuchard/forge/tree/main/openclaw-plugin#readme",
+  "bugs": {
+    "url": "https://github.com/albertbuchard/forge/issues"
+  },
   "publishConfig": {
     "access": "public"
   },
