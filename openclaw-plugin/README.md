@@ -59,6 +59,21 @@ openclaw plugins install forge-openclaw-plugin
 openclaw gateway restart
 ```
 
+Then make sure the plugin is enabled in your OpenClaw config:
+
+```json5
+{
+  plugins: {
+    allow: ["forge-openclaw-plugin"],
+    entries: {
+      "forge-openclaw-plugin": {
+        enabled: true
+      }
+    }
+  }
+}
+```
+
 Older OpenClaw builds can keep using the repo/manual install path during the transition:
 
 ```bash

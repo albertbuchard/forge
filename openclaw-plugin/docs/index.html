@@ -75,6 +75,15 @@
               <pre><code>openclaw plugins install forge-openclaw-plugin
 openclaw gateway restart</code></pre>
             </div>
+            <div class="ui-callout">
+              <strong>Make sure the plugin is enabled</strong>
+              <p>
+                After install, check that <code>forge-openclaw-plugin</code> is present in
+                <code>plugins.allow</code> and that
+                <code>plugins.entries["forge-openclaw-plugin"].enabled</code> is set to
+                <code>true</code>.
+              </p>
+            </div>
           <div class="stat-row">
             <div class="stat-pill">
               <span class="stat-label">Plugin id</span>
@@ -131,6 +140,35 @@ openclaw gateway restart</code></pre>
                 installation simple: install the plugin, restart OpenClaw, and point it at
                 <code>127.0.0.1:4317</code>.
               </p>
+            </article>
+          </div>
+        </section>
+
+        <section class="section tools-section">
+          <div class="section-heading">
+            <p class="eyebrow">Enable Step</p>
+            <h2>Install, enable, restart.</h2>
+          </div>
+          <div class="tools-layout">
+            <article class="card tools-card">
+              <h3>1. Install</h3>
+              <pre><code>openclaw plugins install forge-openclaw-plugin
+openclaw gateway restart</code></pre>
+            </article>
+            <article class="card tools-card">
+              <h3>2. Enable</h3>
+              <pre><code>{
+  plugins: {
+    allow: ["forge-openclaw-plugin"],
+    entries: {
+      "forge-openclaw-plugin": { enabled: true }
+    }
+  }
+}</code></pre>
+            </article>
+            <article class="card tools-card">
+              <h3>3. Open Forge</h3>
+              <p>Ask your agent: <code>Open the Forge UI</code> or <code>Give me the Forge UI address</code>.</p>
             </article>
           </div>
         </section>
