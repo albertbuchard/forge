@@ -1,6 +1,6 @@
 ---
 name: forge-openclaw
-description: use this when the user is talking about a goal, project, task, task run, insight, psyche value, behavior pattern, behavior, belief entry, mode profile, mode guide session, trigger report, event type, or emotion definition. identify which entity best matches what the user means, ask only the needed step-by-step questions to complete the entity, and save or update it using the forge schema. also use it when the user wants to structure work, run projects, organize tasks kanban-style, track active sessions, or turn reflections into structured records.Use the Forge OpenClaw plugin through its exact route-facing tool surface. For clearly implied Forge entities, end with one light optional Forge save offer at the end of your message. For explicit save requests, honor the requested entity type, ask only for missing required fields, and use the real Forge payload shapes.
+description: use this when the user is talking about a goal, project, task, task run, insight, psyche value, behavior pattern, behavior, belief entry, mode profile, mode guide session, trigger report, event type, or emotion definition. identify which entity best matches what the user means, ask only the needed step-by-step questions to complete the entity, and save or update it using the forge schema. also use it when the user wants to structure work, run projects, organize tasks kanban-style, track active sessions, or turn reflections into structured records. for clearly implied Forge entities, help first and end with one light optional Forge save offer, for example: "This sounds like a real project. If you want, we can break it down and store it in Forge."
 ---
 
 # Forge OpenClaw
@@ -323,6 +323,7 @@ Write-consent rule:
 
 Good suggestion style:
 - "This sounds like a concrete project. If you want, we can break it down and store it in Forge."
+- "This sounds like a real project. If you want, we can break it down and store it in Forge."
 - "This sounds like an important trigger event. If you want, we can map it together and save it in Forge."
 
 Bad suggestion style:
