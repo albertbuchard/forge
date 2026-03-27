@@ -76,12 +76,10 @@
 openclaw gateway restart</code></pre>
             </div>
             <div class="ui-callout">
-              <strong>Make sure the plugin is enabled</strong>
+              <strong>If it is not active yet, run this</strong>
               <p>
-                After install, check that <code>forge-openclaw-plugin</code> is present in
-                <code>plugins.allow</code> and that
-                <code>plugins.entries["forge-openclaw-plugin"].enabled</code> is set to
-                <code>true</code>.
+                <code>openclaw plugins enable forge-openclaw-plugin</code><br />
+                <code>openclaw gateway restart</code>
               </p>
             </div>
           <div class="stat-row">
@@ -157,14 +155,8 @@ openclaw gateway restart</code></pre>
             </article>
             <article class="card tools-card">
               <h3>2. Enable</h3>
-              <pre><code>{
-  plugins: {
-    allow: ["forge-openclaw-plugin"],
-    entries: {
-      "forge-openclaw-plugin": { enabled: true }
-    }
-  }
-}</code></pre>
+              <pre><code>openclaw plugins enable forge-openclaw-plugin
+openclaw gateway restart</code></pre>
             </article>
             <article class="card tools-card">
               <h3>3. Open Forge</h3>

@@ -59,7 +59,14 @@ openclaw plugins install forge-openclaw-plugin
 openclaw gateway restart
 ```
 
-Then make sure the plugin is enabled in your OpenClaw config:
+If your OpenClaw install does not enable it automatically, run:
+
+```bash
+openclaw plugins enable forge-openclaw-plugin
+openclaw gateway restart
+```
+
+Equivalent config:
 
 ```json5
 {
