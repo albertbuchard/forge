@@ -8,6 +8,9 @@ const packageRoot = path.resolve(scriptDir, "..");
 const repoRoot = path.resolve(packageRoot, "..");
 const pluginDistDir = path.join(packageRoot, "dist");
 const pluginServerDir = path.join(packageRoot, "server");
+const codexRuntimeRoot = path.join(repoRoot, "plugins", "forge-codex", "runtime");
+const codexRuntimeDistDir = path.join(codexRuntimeRoot, "dist");
+const codexRuntimeMigrationsDir = path.join(codexRuntimeRoot, "server", "migrations");
 const repoWebDistDir = path.join(repoRoot, "dist");
 const repoMigrationsDir = path.join(repoRoot, "server", "migrations");
 
@@ -55,3 +58,10 @@ await run("npm", ["run", "build"], repoRoot);
 await cp(repoWebDistDir, pluginDistDir, { recursive: true, force: true });
 await mkdir(path.join(pluginServerDir), { recursive: true });
 await cp(repoMigrationsDir, path.join(pluginServerDir, "migrations"), { recursive: true, force: true });
+
+await rm(codexRuntimeDistDir, { recursive: true, force: true });
+await rm(codexRuntimeMigrationsDir, { recursive: true, force: true });
+await mkdir(codexRuntimeRoot, { recursive: true });
+await cp(pluginDistDir, codexRuntimeDistDir, { recursive: true, force: true });
+await mkdir(path.join(codexRuntimeRoot, "server"), { recursive: true });
+await cp(repoMigrationsDir, codexRuntimeMigrationsDir, { recursive: true, force: true });

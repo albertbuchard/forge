@@ -13,6 +13,7 @@ function dateOffsetIso(days) {
 const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 const migrationsDir = path.join(projectRoot, "server", "migrations");
 let dataRoot = process.cwd();
+let seedDemoDataEnabled = false;
 let db = null;
 let transactionDepth = 0;
 let savepointCounter = 0;
@@ -71,6 +72,9 @@ export function configureDatabase(options = {}) {
     if (options.dataRoot) {
         dataRoot = path.resolve(options.dataRoot);
         closeDatabase();
+    }
+    if (typeof options.seedDemoData === "boolean") {
+        seedDemoDataEnabled = options.seedDemoData;
     }
 }
 async function listMigrationFiles() {
@@ -294,7 +298,12 @@ export async function initializeDatabase() {
             throw error;
         }
     }
-    seedData();
+    if (seedDemoDataEnabled) {
+        seedData();
+    }
+}
+export function configureDatabaseSeeding(enabled) {
+    seedDemoDataEnabled = enabled;
 }
 export function closeDatabase() {
     if (db) {

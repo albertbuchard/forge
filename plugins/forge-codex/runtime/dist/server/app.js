@@ -1,14 +1,14 @@
 import Fastify from "fastify";
 import cors from "@fastify/cors";
 import { ZodError } from "zod";
-import { configureDatabase } from "./db.js";
+import { configureDatabase, configureDatabaseSeeding } from "./db.js";
 import { isHttpError } from "./errors.js";
 import { listActivityEvents, listActivityEventsForTask, removeActivityEvent } from "./repositories/activity-events.js";
 import { approveApprovalRequest, createAgentAction, createInsight, createInsightFeedback, deleteInsight, getInsightById, listAgentActions, listApprovalRequests, listInsights, rejectApprovalRequest, updateInsight } from "./repositories/collaboration.js";
 import { listEventLog } from "./repositories/event-log.js";
 import { createGoal, getGoalById, listGoals, updateGoal } from "./repositories/goals.js";
-import { createComment, getCommentById, listComments, updateComment } from "./repositories/comments.js";
 import { listDomains } from "./repositories/domains.js";
+import { buildNotesSummaryByEntity, createNote, getNoteById, listNotes, updateNote } from "./repositories/notes.js";
 import { createBehavior, createBehaviorPattern, createBeliefEntry, createEmotionDefinition, createEventType, createModeGuideSession, createModeProfile, createPsycheValue, createTriggerReport, getBehaviorById, getBehaviorPatternById, getBeliefEntryById, getEmotionDefinitionById, getEventTypeById, getModeGuideSessionById, getModeProfileById, getPsycheValueById, getTriggerReportById, listBehaviors, listBehaviorPatterns, listBeliefEntries, listEmotionDefinitions, listEventTypes, listModeGuideSessions, listModeProfiles, listPsycheValues, listSchemaCatalog, listTriggerReports, updateBehavior, updateBehaviorPattern, updateBeliefEntry, updateEmotionDefinition, updateEventType, updateModeGuideSession, updateModeProfile, updatePsycheValue, updateTriggerReport } from "./repositories/psyche.js";
 import { createProject, updateProject } from "./repositories/projects.js";
 import { createManualRewardGrant, getDailyAmbientXp, getRewardRuleById, listRewardLedger, listRewardRules, recordSessionEvent, updateRewardRule } from "./repositories/rewards.js";
@@ -26,8 +26,8 @@ import { getProjectBoard, listProjectSummaries } from "./services/projects.js";
 import { getWeeklyReviewPayload } from "./services/reviews.js";
 import { createTaskRunWatchdog } from "./services/task-run-watchdog.js";
 import { suggestTags } from "./services/tagging.js";
-import { PSYCHE_ENTITY_TYPES, createBehaviorSchema, commentListQuerySchema, createBeliefEntrySchema, createBehaviorPatternSchema, createCommentSchema, createEmotionDefinitionSchema, createEventTypeSchema, createModeGuideSessionSchema, createModeProfileSchema, createPsycheValueSchema, createTriggerReportSchema, updateBehaviorSchema, updateBeliefEntrySchema, updateBehaviorPatternSchema, updateCommentSchema, updateEmotionDefinitionSchema, updateEventTypeSchema, updateModeGuideSessionSchema, updateModeProfileSchema, updatePsycheValueSchema, updateTriggerReportSchema } from "./psyche-types.js";
-import { activityListQuerySchema, activitySourceSchema, createAgentActionSchema, createAgentTokenSchema, batchCreateEntitiesSchema, batchDeleteEntitiesSchema, batchRestoreEntitiesSchema, batchSearchEntitiesSchema, batchUpdateEntitiesSchema, createGoalSchema, createInsightFeedbackSchema, createInsightSchema, createProjectSchema, createManualRewardGrantSchema, createSessionEventSchema, createTagSchema, updateTagSchema, createTaskSchema, eventsListQuerySchema, operatorLogWorkSchema, projectBoardPayloadSchema, projectListQuerySchema, entityDeleteQuerySchema, removeActivityEventSchema, resolveApprovalRequestSchema, rewardsLedgerQuerySchema, taskContextPayloadSchema, taskRunClaimSchema, taskRunFocusSchema, taskRunFinishSchema, taskRunHeartbeatSchema, taskRunListQuerySchema, taskListQuerySchema, tagSuggestionRequestSchema, uncompleteTaskSchema, updateSettingsSchema, updateGoalSchema, updateInsightSchema, updateProjectSchema, updateRewardRuleSchema, updateTaskSchema } from "./types.js";
+import { PSYCHE_ENTITY_TYPES, createBehaviorSchema, createBeliefEntrySchema, createBehaviorPatternSchema, createEmotionDefinitionSchema, createEventTypeSchema, createModeGuideSessionSchema, createModeProfileSchema, createPsycheValueSchema, createTriggerReportSchema, updateBehaviorSchema, updateBeliefEntrySchema, updateBehaviorPatternSchema, updateEmotionDefinitionSchema, updateEventTypeSchema, updateModeGuideSessionSchema, updateModeProfileSchema, updatePsycheValueSchema, updateTriggerReportSchema } from "./psyche-types.js";
+import { activityListQuerySchema, activitySourceSchema, createAgentActionSchema, createAgentTokenSchema, batchCreateEntitiesSchema, batchDeleteEntitiesSchema, batchRestoreEntitiesSchema, batchSearchEntitiesSchema, batchUpdateEntitiesSchema, createGoalSchema, createInsightFeedbackSchema, createInsightSchema, createNoteSchema, createProjectSchema, createManualRewardGrantSchema, createSessionEventSchema, createTagSchema, notesListQuerySchema, updateTagSchema, createTaskSchema, eventsListQuerySchema, operatorLogWorkSchema, projectBoardPayloadSchema, projectListQuerySchema, entityDeleteQuerySchema, removeActivityEventSchema, resolveApprovalRequestSchema, rewardsLedgerQuerySchema, taskContextPayloadSchema, taskRunClaimSchema, taskRunFocusSchema, taskRunFinishSchema, taskRunHeartbeatSchema, taskRunListQuerySchema, taskListQuerySchema, tagSuggestionRequestSchema, uncompleteTaskSchema, updateSettingsSchema, updateGoalSchema, updateInsightSchema, updateNoteSchema, updateProjectSchema, updateRewardRuleSchema, updateTaskSchema } from "./types.js";
 import { buildOpenApiDocument } from "./openapi.js";
 import { registerWebRoutes } from "./web.js";
 import { createManagerRuntime } from "./managers/runtime.js";
@@ -122,6 +122,10 @@ const AGENT_ONBOARDING_ENTITY_CATALOG = [
             "Tasks can link directly to a goal when no project exists yet."
         ],
         searchHints: ["Search by title before creating a new goal.", "Use status filters when looking for paused or completed goals."],
+        examples: [
+            '{"title":"Create meaningfully","horizon":"lifetime","description":"Make work that is honest, beautiful, and published."}',
+            '{"title":"Build a beautiful family","horizon":"lifetime","description":"Invest in love, stability, and shared rituals."}'
+        ],
         fieldGuide: [
             { name: "title", type: "string", required: true, description: "Human-readable goal name." },
             { name: "description", type: "string", required: false, description: "Why the goal matters or what success looks like.", defaultValue: "" },
@@ -129,7 +133,8 @@ const AGENT_ONBOARDING_ENTITY_CATALOG = [
             { name: "status", type: "active|paused|completed", required: false, description: "Current lifecycle state for the goal.", enumValues: ["active", "paused", "completed"], defaultValue: "active" },
             { name: "targetPoints", type: "integer", required: false, description: "Approximate XP/point target for the goal.", defaultValue: 400 },
             { name: "themeColor", type: "hex-color", required: false, description: "Visual color used in the UI.", defaultValue: "#c8a46b" },
-            { name: "tagIds", type: "string[]", required: false, description: "Existing tag ids linked to the goal.", defaultValue: [] }
+            { name: "tagIds", type: "string[]", required: false, description: "Existing tag ids linked to the goal.", defaultValue: [] },
+            { name: "notes", type: "Array<{ contentMarkdown, author?, links? }>", required: false, description: "Optional nested notes that will auto-link to the new goal.", defaultValue: [] }
         ]
     },
     {
@@ -142,13 +147,15 @@ const AGENT_ONBOARDING_ENTITY_CATALOG = [
             "Projects inherit strategic meaning from their parent goal."
         ],
         searchHints: ["Search by title inside the target goal before creating a new project."],
+        examples: ['{"goalId":"goal_create_meaningfully","title":"Launch the public Forge plugin","description":"Ship a real public release that people can install."}'],
         fieldGuide: [
             { name: "goalId", type: "string", required: true, description: "Existing parent goal id." },
             { name: "title", type: "string", required: true, description: "Project name." },
             { name: "description", type: "string", required: false, description: "Desired outcome or scope.", defaultValue: "" },
             { name: "status", type: "active|paused|completed", required: false, description: "Lifecycle state.", enumValues: ["active", "paused", "completed"], defaultValue: "active" },
             { name: "targetPoints", type: "integer", required: false, description: "Approximate XP/point target for the project.", defaultValue: 240 },
-            { name: "themeColor", type: "hex-color", required: false, description: "Visual color used in the UI.", defaultValue: "#c0c1ff" }
+            { name: "themeColor", type: "hex-color", required: false, description: "Visual color used in the UI.", defaultValue: "#c0c1ff" },
+            { name: "notes", type: "Array<{ contentMarkdown, author?, links? }>", required: false, description: "Optional nested notes that will auto-link to the new project.", defaultValue: [] }
         ]
     },
     {
@@ -161,6 +168,7 @@ const AGENT_ONBOARDING_ENTITY_CATALOG = [
             "A task status of in_progress does not guarantee a live active run."
         ],
         searchHints: ["Search by title before creating a duplicate task.", "Use linkedTo filters when you know the parent goal or project."],
+        examples: ['{"title":"Write the plugin release notes","projectId":"project_forge_plugin_launch","status":"focus","priority":"high"}'],
         fieldGuide: [
             { name: "title", type: "string", required: true, description: "Concrete action label." },
             { name: "description", type: "string", required: false, description: "Helpful context or acceptance notes.", defaultValue: "" },
@@ -174,7 +182,27 @@ const AGENT_ONBOARDING_ENTITY_CATALOG = [
             { name: "energy", type: "low|steady|high", required: false, description: "Energy demand.", enumValues: ["low", "steady", "high"], defaultValue: "steady" },
             { name: "points", type: "integer", required: false, description: "Reward value for the task.", defaultValue: 40 },
             { name: "sortOrder", type: "integer", required: false, description: "Lane ordering hint when set explicitly." },
-            { name: "tagIds", type: "string[]", required: false, description: "Existing tag ids linked to the task.", defaultValue: [] }
+            { name: "tagIds", type: "string[]", required: false, description: "Existing tag ids linked to the task.", defaultValue: [] },
+            { name: "notes", type: "Array<{ contentMarkdown, author?, links? }>", required: false, description: "Optional nested notes that will auto-link to the new task.", defaultValue: [] }
+        ]
+    },
+    {
+        entityType: "note",
+        purpose: "A Markdown note that can link to one or many Forge entities.",
+        minimumCreateFields: ["contentMarkdown", "links"],
+        relationshipRules: [
+            "Notes can link to goals, projects, tasks, Psyche records, and other supported Forge entities.",
+            "When nested under another create flow, notes auto-link to that new entity and can optionally include extra links."
+        ],
+        searchHints: ["Search by Markdown content, author, or linked entity before creating a duplicate note."],
+        examples: [
+            '{"contentMarkdown":"Finished the review pass and captured the remaining edge cases.","links":[{"entityType":"task","entityId":"task_123"}]}',
+            '{"contentMarkdown":"Observed a stronger protector response after the meeting.","author":"forge-agent","links":[{"entityType":"trigger_report","entityId":"report_123"},{"entityType":"behavior_pattern","entityId":"pattern_123"}]}'
+        ],
+        fieldGuide: [
+            { name: "contentMarkdown", type: "string", required: true, description: "Markdown body of the note." },
+            { name: "author", type: "string|null", required: false, description: "Optional display author for the note.", defaultValue: null, nullable: true },
+            { name: "links", type: "Array<{ entityType, entityId, anchorKey? }>", required: true, description: "Entities this note should link to." }
         ]
     },
     {
@@ -186,6 +214,7 @@ const AGENT_ONBOARDING_ENTITY_CATALOG = [
             "Use insights for interpretation or advice, not as a replacement for goals, tasks, or trigger reports."
         ],
         searchHints: ["Search recent insights before posting a new one if the same pattern may already be captured."],
+        examples: ['{"entityType":"goal","entityId":"goal_create_meaningfully","title":"Admin drag is masking momentum","summary":"Creative progress is happening, but admin cleanup keeps interrupting it.","recommendation":"Protect one clean creative block and isolate admin into a separate recurring task."}'],
         fieldGuide: [
             { name: "entityType", type: "string|null", required: false, description: "Optional linked entity type.", defaultValue: null, nullable: true },
             { name: "entityId", type: "string|null", required: false, description: "Optional linked entity id.", defaultValue: null, nullable: true },
@@ -200,6 +229,35 @@ const AGENT_ONBOARDING_ENTITY_CATALOG = [
         ]
     },
     {
+        entityType: "event_type",
+        purpose: "A reusable event taxonomy label for trigger reports, such as criticism, conflict, rupture, or overload.",
+        minimumCreateFields: ["label"],
+        relationshipRules: [
+            "Trigger reports can reference one event type through eventTypeId.",
+            "Use event types to normalize repeated report categories instead of inventing new wording every time."
+        ],
+        searchHints: ["Search by label before creating a new event type.", "Prefer existing event types when one clearly fits the situation."],
+        fieldGuide: [
+            { name: "label", type: "string", required: true, description: "Human-readable event type label." },
+            { name: "description", type: "string", required: false, description: "What kind of incident this event type represents.", defaultValue: "" }
+        ]
+    },
+    {
+        entityType: "emotion_definition",
+        purpose: "A reusable emotion vocabulary item for trigger reports, such as shame, anger, grief, or relief.",
+        minimumCreateFields: ["label"],
+        relationshipRules: [
+            "Trigger report emotions can reference an emotion definition through emotionDefinitionId.",
+            "Use emotion definitions to normalize repeated emotional labels across reports."
+        ],
+        searchHints: ["Search by label before creating a new emotion definition.", "Prefer an existing emotion definition when the label already captures the feeling well."],
+        fieldGuide: [
+            { name: "label", type: "string", required: true, description: "Emotion label." },
+            { name: "description", type: "string", required: false, description: "What this emotion label is meant to capture.", defaultValue: "" },
+            { name: "category", type: "string", required: false, description: "Optional grouping such as threat, grief, anger, or connection.", defaultValue: "" }
+        ]
+    },
+    {
         entityType: "psyche_value",
         purpose: "An ACT-style value or direction the user wants to orient toward.",
         minimumCreateFields: ["title"],
@@ -208,10 +266,11 @@ const AGENT_ONBOARDING_ENTITY_CATALOG = [
             "Patterns, behaviors, beliefs, and reports can all point back to values."
         ],
         searchHints: ["Search by title before creating a new value.", "Use linkedTo if the value should already be attached to a goal or task."],
+        examples: ['{"title":"Steadiness","valuedDirection":"Respond calmly instead of collapsing or reacting fast.","whyItMatters":"I want to stay grounded in relationships and work."}'],
         fieldGuide: [
             { name: "title", type: "string", required: true, description: "Value name." },
             { name: "description", type: "string", required: false, description: "What the value means in practice.", defaultValue: "" },
-            { name: "valuedDirection", type: "string", required: false, description: "Direction or way of being the value points toward.", defaultValue: "" },
+            { name: "valuedDirection", type: "string", required: false, description: "How the user wants to live or act when guided by this value.", defaultValue: "" },
             { name: "whyItMatters", type: "string", required: false, description: "Why the value matters to the user.", defaultValue: "" },
             { name: "linkedGoalIds", type: "string[]", required: false, description: "Linked goal ids.", defaultValue: [] },
             { name: "linkedProjectIds", type: "string[]", required: false, description: "Linked project ids.", defaultValue: [] },
@@ -228,6 +287,7 @@ const AGENT_ONBOARDING_ENTITY_CATALOG = [
             "Trigger reports can link back to patterns they instantiate."
         ],
         searchHints: ["Search by title or by trigger language before creating a new pattern."],
+        examples: ['{"title":"Late-night father text freeze","cueContexts":["Father texts late at night"],"targetBehavior":"Freeze, avoid replying, and doomscroll","shortTermPayoff":"Avoids immediate overwhelm","longTermCost":"Sleep loss, guilt, and dread","preferredResponse":"Pause, regulate, and reply on my own terms the next morning"}'],
         fieldGuide: [
             { name: "title", type: "string", required: true, description: "Short pattern name." },
             { name: "description", type: "string", required: false, description: "What usually happens in this loop.", defaultValue: "" },
@@ -252,6 +312,7 @@ const AGENT_ONBOARDING_ENTITY_CATALOG = [
             "Trigger reports can link to behaviors they contained."
         ],
         searchHints: ["Search by title and kind before creating a new behavior."],
+        examples: ['{"kind":"away","title":"Doomscroll after conflict cue","commonCues":["Received a critical text"],"shortTermPayoff":"Numbs the anxiety","longTermCost":"Loses time and deepens shame","replacementMove":"Put phone down and take one slow lap outside"}'],
         fieldGuide: [
             { name: "kind", type: "away|committed|recovery", required: true, description: "Whether the behavior moves away from values, toward them, or repairs after rupture.", enumValues: ["away", "committed", "recovery"] },
             { name: "title", type: "string", required: true, description: "Behavior label." },
@@ -277,6 +338,7 @@ const AGENT_ONBOARDING_ENTITY_CATALOG = [
             "Behavior patterns can point to beliefs that keep the loop alive."
         ],
         searchHints: ["Search by statement or known schema theme before creating a new belief entry."],
+        examples: ['{"statement":"If I disappoint people, they will leave me.","beliefType":"conditional","confidence":82,"evidenceFor":["People got cold when I failed them before"],"evidenceAgainst":["Some people stayed with me even after conflict"],"flexibleAlternative":"Disappointing someone can strain a relationship, but it does not automatically mean abandonment."}'],
         fieldGuide: [
             { name: "schemaId", type: "string|null", required: false, description: "Optional linked schema catalog id.", defaultValue: null, nullable: true },
             { name: "statement", type: "string", required: true, description: "Belief statement in the user's own words." },
@@ -301,6 +363,7 @@ const AGENT_ONBOARDING_ENTITY_CATALOG = [
             "Trigger reports can include linkedModeIds and modeOverlays that reference modes."
         ],
         searchHints: ["Search by title or family before creating a new mode profile."],
+        examples: ['{"family":"coping","title":"Cold controller","fear":"If I soften, I will be humiliated or lose control.","protectiveJob":"Stay hyper-competent and unreachable when threatened."}'],
         fieldGuide: [
             { name: "family", type: "coping|child|critic_parent|healthy_adult|happy_child", required: true, description: "Mode family.", enumValues: ["coping", "child", "critic_parent", "healthy_adult", "happy_child"] },
             { name: "title", type: "string", required: true, description: "Mode title." },
@@ -320,6 +383,22 @@ const AGENT_ONBOARDING_ENTITY_CATALOG = [
         ]
     },
     {
+        entityType: "mode_guide_session",
+        purpose: "A guided mode-mapping session that stores structured answers and candidate mode interpretations.",
+        minimumCreateFields: ["summary", "answers", "results"],
+        relationshipRules: [
+            "Mode guide sessions help the user reason toward likely modes before or alongside mode profiles.",
+            "Use mode guide sessions for guided interpretation, not as a replacement for durable mode profiles."
+        ],
+        searchHints: ["Search by summary when revisiting a prior guided mode session."],
+        examples: ['{"summary":"Mapping the part that takes over under criticism","answers":[{"questionKey":"felt_shift","value":"I go cold and rigid"}],"results":[{"family":"coping","archetype":"detached_protector","label":"Cold controller","confidence":0.74,"reasoning":"It distances from shame and tries to stay untouchable."}]}'],
+        fieldGuide: [
+            { name: "summary", type: "string", required: true, description: "Short summary of what the guided session explored." },
+            { name: "answers", type: "array", required: true, description: "List of { questionKey, value } items capturing the user's guided answers." },
+            { name: "results", type: "array", required: true, description: "List of { family, archetype, label, confidence 0-1, reasoning } candidate mode interpretations." }
+        ]
+    },
+    {
         entityType: "trigger_report",
         purpose: "A structured reflective incident report that ties situation, emotions, thoughts, behaviors, consequences, and next moves together.",
         minimumCreateFields: ["title"],
@@ -329,6 +408,7 @@ const AGENT_ONBOARDING_ENTITY_CATALOG = [
             "Use reports when you need one event chain, not just a generic pattern."
         ],
         searchHints: ["Search by title, event wording, or linked entities before creating a duplicate report."],
+        examples: ['{"title":"Partner said we need to talk and I spiraled","customEventType":"relationship threat","eventSituation":"My partner texted that we needed to talk tonight.","emotions":[{"label":"fear","intensity":85},{"label":"shame","intensity":60}],"thoughts":[{"text":"This means I messed everything up."}],"behaviors":[{"text":"Paced, catastrophized, and checked my phone repeatedly"}],"nextMoves":["Wait until we speak before predicting the outcome","Write down the facts I actually know"]}'],
         fieldGuide: [
             { name: "title", type: "string", required: true, description: "Short name for the incident." },
             { name: "status", type: "draft|reviewed|integrated", required: false, description: "Reflection progress state.", enumValues: ["draft", "reviewed", "integrated"], defaultValue: "draft" },
@@ -348,10 +428,116 @@ const AGENT_ONBOARDING_ENTITY_CATALOG = [
             { name: "linkedBehaviorIds", type: "string[]", required: false, description: "Linked behavior ids.", defaultValue: [] },
             { name: "linkedBeliefIds", type: "string[]", required: false, description: "Linked belief ids.", defaultValue: [] },
             { name: "linkedModeIds", type: "string[]", required: false, description: "Linked mode ids.", defaultValue: [] },
-            { name: "modeOverlays", type: "string[]", required: false, description: "Free-text mode overlays or labels noticed in the report.", defaultValue: [] },
-            { name: "schemaLinks", type: "string[]", required: false, description: "Free-text schema links or themes.", defaultValue: [] },
+            { name: "modeOverlays", type: "string[]", required: false, description: "Extra mode labels noticed during the incident.", defaultValue: [] },
+            { name: "schemaLinks", type: "string[]", required: false, description: "Schema names or themes that seem related to the incident.", defaultValue: [] },
             { name: "modeTimeline", type: "array", required: false, description: "List of { stage, modeId|null, label, note } items describing the sequence of modes.", defaultValue: [] },
             { name: "nextMoves", type: "string[]", required: false, description: "Concrete next steps or repair moves.", defaultValue: [] }
+        ]
+    }
+];
+const AGENT_ONBOARDING_PSYCHE_PLAYBOOKS = [
+    {
+        focus: "behavior_pattern",
+        useWhen: "Use for a recurring loop that shows up across multiple situations and can be described as cue -> response -> payoff -> cost -> preferred response.",
+        coachingGoal: "Help the user build a CBT-style functional analysis instead of just naming the problem vaguely.",
+        askSequence: [
+            "Name the loop in plain language.",
+            "Identify the typical cue or context.",
+            "Describe the visible behavior or sequence once it starts.",
+            "Clarify the short-term payoff or protection.",
+            "Clarify the long-term cost.",
+            "Name the preferred alternative response."
+        ],
+        requiredForCreate: ["title"],
+        highValueOptionalFields: ["description", "targetBehavior", "cueContexts", "shortTermPayoff", "longTermCost", "preferredResponse", "linkedBeliefIds", "linkedModeIds", "linkedValueIds"],
+        exampleQuestions: [
+            "What usually sets this loop off?",
+            "What do you tend to do next, outwardly or inwardly?",
+            "What does that move do for you immediately?",
+            "What does it cost you later?",
+            "If this loop loosened a little, what response would you want to make instead?"
+        ],
+        notes: [
+            "A pattern is usually the best Psyche container for functional analysis.",
+            "If the user is describing one specific episode rather than a repeated loop, prefer a trigger report."
+        ]
+    },
+    {
+        focus: "belief_entry",
+        useWhen: "Use for a belief, rule, or self-statement that keeps showing up in reactions, especially when the user can phrase it as a sentence.",
+        coachingGoal: "Turn implicit self-talk or a likely schema theme into one explicit belief statement that can be tested and linked to patterns, reports, and modes.",
+        askSequence: [
+            "Capture the belief in the user's own words.",
+            "Decide whether it is absolute or conditional.",
+            "Estimate how true it feels from 0 to 100.",
+            "Collect evidence for and evidence against.",
+            "Offer a more flexible alternative belief.",
+            "Link a schemaId only when a real schema catalog match is known."
+        ],
+        requiredForCreate: ["statement", "beliefType"],
+        highValueOptionalFields: ["schemaId", "confidence", "originNote", "evidenceFor", "evidenceAgainst", "flexibleAlternative", "linkedReportIds", "linkedBehaviorIds", "linkedModeIds"],
+        exampleQuestions: [
+            "What is the sentence your mind seems to be pushing here?",
+            "Is it more of an always/never belief, or an if-then rule?",
+            "How true does it feel right now from 0 to 100?",
+            "What seems to support it, and what weakens it?",
+            "What would a more flexible alternative sound like?"
+        ],
+        notes: [
+            "Schema catalog entries are reference concepts; belief_entry is the user-owned record.",
+            "If no schema catalog match is known, omit schemaId rather than inventing one."
+        ]
+    },
+    {
+        focus: "mode_profile",
+        useWhen: "Use when the user is describing a recurring part-state, protector, critic, vulnerable child state, or healthy adult stance.",
+        coachingGoal: "Help the user describe what the mode is trying to do, what it fears, and how it presents, rather than reducing it to a label only.",
+        askSequence: [
+            "Choose the mode family first.",
+            "Name the mode.",
+            "Describe the felt persona or imagery.",
+            "Clarify its fear, burden, and protective job.",
+            "Optionally note origin context and linked patterns or behaviors."
+        ],
+        requiredForCreate: ["family", "title"],
+        highValueOptionalFields: ["persona", "imagery", "fear", "burden", "protectiveJob", "originContext", "linkedPatternIds", "linkedBehaviorIds", "linkedValueIds"],
+        exampleQuestions: [
+            "What kind of part does this feel like: coping, child, critic-parent, healthy-adult, or happy-child?",
+            "If you gave this mode a name, what would it be?",
+            "What is it afraid would happen if it stopped doing its job?",
+            "What burden or pain does it seem to carry?"
+        ],
+        notes: [
+            "Mode profiles are durable parts descriptions.",
+            "Mode guide sessions are the guided reasoning process that can lead toward a mode profile."
+        ]
+    },
+    {
+        focus: "trigger_report",
+        useWhen: "Use for one specific emotionally meaningful incident that should be mapped from situation through emotions, thoughts, behaviors, consequences, and next moves.",
+        coachingGoal: "Help the user build a clear incident chain with enough structure to learn from one episode.",
+        askSequence: [
+            "Name the incident briefly.",
+            "Describe what happened in the situation.",
+            "Capture emotions and intensity.",
+            "Capture thoughts or belief-linked interpretations.",
+            "Capture behaviors and immediate coping moves.",
+            "Capture short-term and long-term consequences.",
+            "Identify next moves and linked patterns, beliefs, modes, values, or tasks."
+        ],
+        requiredForCreate: ["title"],
+        highValueOptionalFields: ["eventTypeId", "customEventType", "eventSituation", "occurredAt", "emotions", "thoughts", "behaviors", "consequences", "modeTimeline", "nextMoves", "linkedPatternIds", "linkedBeliefIds", "linkedModeIds", "linkedValueIds"],
+        exampleQuestions: [
+            "What happened, as concretely as you can say it?",
+            "What emotions were there, and how intense were they?",
+            "What thoughts or meanings showed up?",
+            "What did you do next?",
+            "What did that do for you short term, and what did it cost later?",
+            "What would be the next good move now?"
+        ],
+        notes: [
+            "Use eventTypeId only when a known event taxonomy item fits; otherwise use customEventType.",
+            "Use emotionDefinitionId only when a known emotion definition fits; otherwise keep the raw label."
         ]
     }
 ];
@@ -376,9 +562,10 @@ const AGENT_ONBOARDING_TOOL_INPUT_CATALOG = [
         requiredFields: ["operations", "operations[].entityType", "operations[].data"],
         notes: [
             "entityType alone is never enough; full data is required.",
-            "Batch multiple related creates together when they come from one user ask."
+            "Batch multiple related creates together when they come from one user ask.",
+            "Goal, project, and task creates can include notes: [{ contentMarkdown, author?, links? }] and Forge will auto-link those notes to the newly created entity."
         ],
-        example: '{"operations":[{"entityType":"goal","data":{"title":"Create meaningfully","horizon":"lifetime"},"clientRef":"goal-1"},{"entityType":"project","data":{"goalId":"goal_123","title":"Launch the first public Forge plugin build"},"clientRef":"project-1"}]}'
+        example: '{"operations":[{"entityType":"task","data":{"title":"Write the public release notes","projectId":"project_123","status":"focus","notes":[{"contentMarkdown":"Starting from the changelog draft and the last QA pass."}]},"clientRef":"task-1"}]}'
     },
     {
         toolName: "forge_update_entities",
@@ -420,10 +607,10 @@ const AGENT_ONBOARDING_TOOL_INPUT_CATALOG = [
         toolName: "forge_log_work",
         summary: "Log work that already happened.",
         whenToUse: "Use for retroactive work, not for starting a live session.",
-        inputShape: "{ taskId?: string, title?: string, description?: string, summary?: string, goalId?: string|null, projectId?: string|null, owner?: string, status?: TaskStatus, priority?: TaskPriority, dueDate?: string|null, effort?: TaskEffort, energy?: TaskEnergy, points?: number, tagIds?: string[] }",
+        inputShape: "{ taskId?: string, title?: string, description?: string, summary?: string, goalId?: string|null, projectId?: string|null, owner?: string, status?: TaskStatus, priority?: TaskPriority, dueDate?: string|null, effort?: TaskEffort, energy?: TaskEnergy, points?: number, tagIds?: string[], closeoutNote?: { contentMarkdown: string, author?: string|null, links?: Array<{ entityType, entityId, anchorKey? }> } }",
         requiredFields: ["taskId or title"],
-        notes: ["Use taskId when logging work against an existing task.", "Use title when a new completed work item should be created and logged."],
-        example: '{"taskId":"task_123","summary":"Finished the review draft and cleaned the notes.","points":40}'
+        notes: ["Use taskId when logging work against an existing task.", "Use title when a new completed work item should be created and logged.", "closeoutNote persists the work summary as a real linked note."],
+        example: '{"taskId":"task_123","summary":"Finished the review draft and cleaned the notes.","points":40,"closeoutNote":{"contentMarkdown":"Finished the review draft, cleaned the note structure, and left one follow-up for QA."}}'
     },
     {
         toolName: "forge_start_task_run",
@@ -456,19 +643,19 @@ const AGENT_ONBOARDING_TOOL_INPUT_CATALOG = [
         toolName: "forge_complete_task_run",
         summary: "Finish an active run as completed work.",
         whenToUse: "Use when the user has finished the live work block.",
-        inputShape: "{ taskRunId: string, actor?: string, note?: string }",
+        inputShape: "{ taskRunId: string, actor?: string, note?: string, closeoutNote?: { contentMarkdown: string, author?: string|null, links?: Array<{ entityType, entityId, anchorKey? }> } }",
         requiredFields: ["taskRunId"],
-        notes: ["This is the truthful way to finish live work and award completion effects."],
-        example: '{"taskRunId":"run_123","actor":"aurel","note":"Finished the review draft"}'
+        notes: ["This is the truthful way to finish live work and award completion effects.", "closeoutNote persists a real linked note instead of only updating the transient run note."],
+        example: '{"taskRunId":"run_123","actor":"aurel","note":"Finished the review draft","closeoutNote":{"contentMarkdown":"Completed the draft review and listed the follow-up fixes."}}'
     },
     {
         toolName: "forge_release_task_run",
         summary: "Stop an active run without marking the task complete.",
         whenToUse: "Use when the user is stopping or pausing work without completion.",
-        inputShape: "{ taskRunId: string, actor?: string, note?: string }",
+        inputShape: "{ taskRunId: string, actor?: string, note?: string, closeoutNote?: { contentMarkdown: string, author?: string|null, links?: Array<{ entityType, entityId, anchorKey? }> } }",
         requiredFields: ["taskRunId"],
-        notes: ["Use this instead of faking a stop by only changing task status."],
-        example: '{"taskRunId":"run_123","actor":"aurel","note":"Stopping for now; blocked on feedback"}'
+        notes: ["Use this instead of faking a stop by only changing task status.", "closeoutNote is useful for documenting blockers or handoff context."],
+        example: '{"taskRunId":"run_123","actor":"aurel","note":"Stopping for now; blocked on feedback","closeoutNote":{"contentMarkdown":"Blocked on feedback from design before I can continue."}}'
     }
 ];
 function buildAgentOnboardingPayload(request) {
@@ -492,7 +679,7 @@ function buildAgentOnboardingPayload(request) {
             "rewards.manage",
             "psyche.read",
             "psyche.write",
-            "psyche.comment",
+            "psyche.note",
             "psyche.insight",
             "psyche.mode"
         ],
@@ -528,14 +715,29 @@ function buildAgentOnboardingPayload(request) {
             project: "A multi-step workstream under one goal. Projects organize related tasks.",
             task: "A concrete actionable work item. Task status is board state, not proof of live work.",
             taskRun: "A live work session attached to a task. Start, heartbeat, focus, complete, and release runs instead of faking work with status alone.",
+            note: "A Markdown work note that can link to one or many entities. Use notes for progress evidence, context, and close-out summaries.",
             insight: "An agent-authored observation or recommendation grounded in Forge data.",
             psyche: "Forge Psyche is the reflective domain for values, patterns, behaviors, beliefs, modes, and trigger reports. It is sensitive and should be handled deliberately."
         },
+        psycheSubmoduleModel: {
+            value: "A value is the direction the user wants to move toward. Values orient action and can link back to goals, projects, tasks, and Psyche records.",
+            behaviorPattern: "A behavior pattern is the recurring CBT-style loop: cue/context, visible response, short-term payoff, long-term cost, and preferred response.",
+            behavior: "A behavior record is one trackable move or tendency, classified as away, committed, or recovery.",
+            beliefEntry: "A belief entry is the user's own trackable belief statement, including beliefType, confidence, evidence, and a more flexible alternative.",
+            schemaCatalog: "The schema catalog is the reference taxonomy of maladaptive and adaptive schemas. Belief entries can optionally point to one schema by schemaId, but the schema catalog is not itself the user's belief record.",
+            modeProfile: "A mode profile is a durable description of a recurring part-state or strategy, including family, fear, burden, protective job, and origin context.",
+            modeGuideSession: "A mode guide session is the guided reasoning worksheet that stores answers and candidate mode interpretations before or alongside a durable mode profile.",
+            eventType: "An event type is reusable incident taxonomy for trigger reports, such as criticism, conflict, rupture, or overload.",
+            emotionDefinition: "An emotion definition is reusable emotion vocabulary for trigger reports. Reports can either reference one or fall back to raw labels.",
+            triggerReport: "A trigger report is the one-episode incident chain: situation, emotions, thoughts, behaviors, consequences, extra mode labels, schema themes, and next moves."
+        },
+        psycheCoachingPlaybooks: AGENT_ONBOARDING_PSYCHE_PLAYBOOKS,
         relationshipModel: [
             "Goals are the top-level strategic layer.",
             "Projects belong to one goal through goalId.",
             "Tasks can belong to a goal, a project, both, or neither.",
             "Task runs represent live work sessions on tasks and are separate from task status.",
+            "Notes can link to one or many entities and are the canonical place for Markdown progress context or close-out evidence.",
             "Psyche values can link to goals, projects, and tasks.",
             "Behavior patterns, behaviors, beliefs, modes, and trigger reports cross-link to describe one reflective model rather than isolated records.",
             "Insights can point at one entity, but they exist to capture interpretation or advice rather than raw work items."
@@ -547,7 +749,10 @@ function buildAgentOnboardingPayload(request) {
             xpMetrics: "/api/v1/metrics/xp",
             weeklyReview: "/api/v1/reviews/weekly",
             settingsBin: "/api/v1/settings/bin",
-            batchSearch: "/api/v1/entities/search"
+            batchSearch: "/api/v1/entities/search",
+            psycheSchemaCatalog: "/api/v1/psyche/schema-catalog",
+            psycheEventTypes: "/api/v1/psyche/event-types",
+            psycheEmotions: "/api/v1/psyche/emotions"
         },
         recommendedPluginTools: {
             bootstrap: ["forge_get_operator_overview"],
@@ -922,6 +1127,7 @@ export async function buildServer(options = {}) {
     const managers = createManagerRuntime({ dataRoot: options.dataRoot });
     const runtimeConfig = managers.configuration.readRuntimeConfig({ dataRoot: options.dataRoot });
     configureDatabase({ dataRoot: runtimeConfig.dataRoot ?? undefined });
+    configureDatabaseSeeding(options.seedDemoData ?? false);
     await managers.migration.initialize();
     const app = Fastify({
         logger: false,
@@ -992,12 +1198,12 @@ export async function buildServer(options = {}) {
         }
         return context;
     };
-    const requireCommentAccess = (headers, entityType, detail) => {
+    const requireNoteAccess = (headers, entityType, detail) => {
         const context = authenticateRequest(headers);
         if (isPsycheEntityType(entityType)) {
             if (isPsycheAuthRequired()) {
                 managers.authorization.requireAuthenticatedActor(context, detail);
-                managers.authorization.requireTokenScope(context, "psyche.comment", {
+                managers.authorization.requireAnyTokenScope(context, ["psyche.note"], {
                     entityType,
                     ...(detail ?? {})
                 });
@@ -1400,7 +1606,7 @@ export async function buildServer(options = {}) {
         }
         return {
             report,
-            comments: listComments({ entityType: "trigger_report", entityId: id }),
+            notes: listNotes({ linkedEntityType: "trigger_report", linkedEntityId: id, limit: 50 }),
             insights: listInsights({ entityType: "trigger_report", entityId: id, limit: 50 })
         };
     });
@@ -1424,65 +1630,73 @@ export async function buildServer(options = {}) {
         }
         return { report };
     });
-    app.get("/api/v1/comments", async (request) => {
-        const query = commentListQuerySchema.parse(request.query ?? {});
-        if (isPsycheEntityType(query.entityType)) {
-            requirePsycheScopedAccess(request.headers, ["psyche.read"], { route: "/api/v1/comments", entityType: query.entityType });
+    app.get("/api/v1/notes", async (request) => {
+        const query = notesListQuerySchema.parse(request.query ?? {});
+        if (isPsycheEntityType(query.linkedEntityType)) {
+            requirePsycheScopedAccess(request.headers, ["psyche.read"], {
+                route: "/api/v1/notes",
+                entityType: query.linkedEntityType
+            });
         }
-        return { comments: listComments(query) };
+        return { notes: listNotes(query) };
     });
-    app.post("/api/v1/comments", async (request, reply) => {
-        const input = createCommentSchema.parse(request.body ?? {});
-        const auth = requireCommentAccess(request.headers, input.entityType, {
-            route: "/api/v1/comments",
-            entityType: input.entityType
+    app.post("/api/v1/notes", async (request, reply) => {
+        const input = createNoteSchema.parse(request.body ?? {});
+        const firstLinkedEntityType = input.links[0]?.entityType;
+        const auth = requireNoteAccess(request.headers, firstLinkedEntityType, {
+            route: "/api/v1/notes",
+            entityType: firstLinkedEntityType ?? null
         });
-        const comment = createComment(input, toActivityContext(auth));
+        const note = createNote(input, toActivityContext(auth));
         reply.code(201);
-        return { comment };
+        return { note };
     });
-    app.get("/api/v1/comments/:id", async (request, reply) => {
+    app.get("/api/v1/notes/:id", async (request, reply) => {
         const { id } = request.params;
-        const current = getCommentById(id);
-        const auth = requireCommentAccess(request.headers, current?.entityType, {
-            route: "/api/v1/comments/:id",
-            entityType: current?.entityType ?? null
-        });
-        void auth;
+        const current = getNoteById(id);
+        const psycheEntityType = current?.links.find((link) => isPsycheEntityType(link.entityType))?.entityType;
+        if (psycheEntityType) {
+            requirePsycheScopedAccess(request.headers, ["psyche.read"], {
+                route: "/api/v1/notes/:id",
+                entityType: psycheEntityType
+            });
+        }
         if (!current) {
             reply.code(404);
-            return { error: "Comment not found" };
+            return { error: "Note not found" };
         }
-        return { comment: current };
+        return { note: current };
     });
-    app.patch("/api/v1/comments/:id", async (request, reply) => {
+    app.patch("/api/v1/notes/:id", async (request, reply) => {
         const { id } = request.params;
-        const patch = updateCommentSchema.parse(request.body ?? {});
-        const current = getCommentById(id);
-        const auth = requireCommentAccess(request.headers, current?.entityType, {
-            route: "/api/v1/comments/:id",
-            entityType: current?.entityType ?? null
+        const patch = updateNoteSchema.parse(request.body ?? {});
+        const current = getNoteById(id);
+        const linkedEntityType = current?.links[0]?.entityType ?? patch.links?.[0]?.entityType ?? null;
+        const auth = requireNoteAccess(request.headers, linkedEntityType, {
+            route: "/api/v1/notes/:id",
+            entityType: linkedEntityType
         });
-        const comment = updateComment(id, patch, toActivityContext(auth));
-        if (!comment) {
+        const note = updateNote(id, patch, toActivityContext(auth));
+        if (!note) {
             reply.code(404);
-            return { error: "Comment not found" };
+            return { error: "Note not found" };
         }
-        return { comment };
+        return { note };
     });
-    app.delete("/api/v1/comments/:id", async (request, reply) => {
+    app.delete("/api/v1/notes/:id", async (request, reply) => {
         const { id } = request.params;
-        const current = getCommentById(id);
-        const auth = requireCommentAccess(request.headers, current?.entityType, {
-            route: "/api/v1/comments/:id",
-            entityType: current?.entityType ?? null
+        const current = getNoteById(id);
+        const linkedEntityType = current?.links.find((link) => isPsycheEntityType(link.entityType))?.entityType ?? current?.links[0]?.entityType ?? null;
+        const auth = requireNoteAccess(request.headers, linkedEntityType, {
+            route: "/api/v1/notes/:id",
+            entityType: linkedEntityType
         });
-        const comment = deleteEntity("comment", id, entityDeleteQuerySchema.parse(request.query ?? {}), toActivityContext(auth));
-        if (!comment) {
+        const note = deleteEntity("note", id, entityDeleteQuerySchema.parse(request.query ?? {}), toActivityContext(auth));
+        if (!note) {
             reply.code(404);
-            return { error: "Comment not found" };
+            return { error: "Note not found" };
         }
-        return { comment };
+        return { note };
     });
     app.get("/api/v1/projects", async (request) => {
         const query = projectListQuerySchema.parse(request.query ?? {});
@@ -1935,7 +2149,8 @@ export async function buildServer(options = {}) {
             project: task.projectId ? listProjectSummaries().find((project) => project.id === task.projectId) ?? null : null,
             activeTaskRun: taskRuns.find((run) => run.status === "active") ?? null,
             taskRuns,
-            activity: listActivityEventsForTask(id, 20)
+            activity: listActivityEventsForTask(id, 20),
+            notesSummaryByEntity: buildNotesSummaryByEntity()
         });
     });
     app.get("/api/v1/tasks/:id/context", async (request, reply) => {
@@ -1952,7 +2167,8 @@ export async function buildServer(options = {}) {
             project: task.projectId ? listProjectSummaries().find((project) => project.id === task.projectId) ?? null : null,
             activeTaskRun: taskRuns.find((run) => run.status === "active") ?? null,
             taskRuns,
-            activity: listActivityEventsForTask(id, 20)
+            activity: listActivityEventsForTask(id, 20),
+            notesSummaryByEntity: buildNotesSummaryByEntity()
         });
     });
     app.post("/api/goals", async (request, reply) => {
@@ -2139,7 +2355,8 @@ export async function buildServer(options = {}) {
                 effort: input.effort,
                 energy: input.energy,
                 points: input.points,
-                tagIds: input.tagIds
+                tagIds: input.tagIds,
+                notes: input.closeoutNote ? [input.closeoutNote] : undefined
             }, toActivityContext(auth));
             if (!task) {
                 reply.code(404);
@@ -2163,7 +2380,8 @@ export async function buildServer(options = {}) {
             effort: input.effort ?? "deep",
             energy: input.energy ?? "steady",
             points: input.points ?? 40,
-            tagIds: input.tagIds ?? []
+            tagIds: input.tagIds ?? [],
+            notes: input.closeoutNote ? [input.closeoutNote] : []
         }), toActivityContext(auth));
         reply.code(201);
         return { task, xp: buildXpMetricsPayload() };

@@ -3,6 +3,7 @@ import { getDatabase, runInTransaction } from "../db.js";
 import { HttpError } from "../errors.js";
 import { computeWorkTime } from "../services/work-time.js";
 import { recordActivityEvent } from "./activity-events.js";
+import { createLinkedNotes } from "./notes.js";
 import { recordTaskRunCompletionReward, recordTaskRunProgressRewards, recordTaskRunStartReward } from "./rewards.js";
 import { getTaskById, updateTaskInTransaction } from "./tasks.js";
 import { taskRunClaimSchema, taskRunSchema } from "../types.js";
@@ -477,6 +478,7 @@ function finishTaskRun(taskRunId, nextStatus, timestampColumn, input, now, activ
                 });
             }
         }
+        createLinkedNotes(input.closeoutNote ? [input.closeoutNote] : [], { entityType: "task", entityId: run.taskId, anchorKey: null }, { source: activity.source, actor: input.actor ?? run.actor });
         return run;
     });
 }

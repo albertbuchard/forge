@@ -5,6 +5,7 @@ export type ForgePluginConfig = {
     port: number;
     baseUrl: string;
     webAppUrl: string;
+    dataRoot: string;
     apiToken: string;
     actorLabel: string;
     timeoutMs: number;

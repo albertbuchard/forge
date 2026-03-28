@@ -21,8 +21,9 @@ export const activityEntityTypeSchema = z.enum([
     "behavior",
     "belief_entry",
     "mode_profile",
+    "mode_guide_session",
     "trigger_report",
-    "comment",
+    "note",
     "event_type",
     "emotion_definition",
     "tag",
@@ -50,7 +51,7 @@ export const crudEntityTypeSchema = z.enum([
     "project",
     "task",
     "tag",
-    "comment",
+    "note",
     "insight",
     "psyche_value",
     "behavior_pattern",
@@ -121,6 +122,27 @@ export const taskTimeSummarySchema = z.object({
     hasCurrentRun: z.boolean(),
     currentRunId: z.string().nullable()
 });
+export const noteLinkSchema = z.object({
+    entityType: crudEntityTypeSchema,
+    entityId: nonEmptyTrimmedString,
+    anchorKey: trimmedString.nullable().default(null)
+});
+export const noteSchema = z.object({
+    id: z.string(),
+    contentMarkdown: nonEmptyTrimmedString,
+    contentPlain: trimmedString,
+    author: z.string().nullable(),
+    source: activitySourceSchema,
+    createdAt: z.string(),
+    updatedAt: z.string(),
+    links: z.array(noteLinkSchema).min(1)
+});
+export const noteSummarySchema = z.object({
+    count: z.number().int().nonnegative(),
+    latestNoteId: z.string().nullable(),
+    latestCreatedAt: z.string().nullable()
+});
+export const notesSummaryByEntitySchema = z.record(z.string(), noteSummarySchema);
 export const goalSchema = z.object({
     id: z.string(),
     title: nonEmptyTrimmedString,
@@ -299,7 +321,8 @@ export const dashboardPayloadSchema = z.object({
     gamification: gamificationProfileSchema,
     achievements: z.array(achievementSignalSchema),
     milestoneRewards: z.array(milestoneRewardSchema),
-    recentActivity: z.array(activityEventSchema)
+    recentActivity: z.array(activityEventSchema),
+    notesSummaryByEntity: notesSummaryByEntitySchema.default({})
 });
 export const contextDomainBalanceSchema = z.object({
     tagId: z.string(),
@@ -379,13 +402,15 @@ export const taskContextPayloadSchema = z.object({
     project: projectSummarySchema.nullable(),
     activeTaskRun: taskRunSchema.nullable(),
     taskRuns: z.array(taskRunSchema),
-    activity: z.array(activityEventSchema)
+    activity: z.array(activityEventSchema),
+    notesSummaryByEntity: notesSummaryByEntitySchema.default({})
 });
 export const projectBoardPayloadSchema = z.object({
     project: projectSummarySchema,
     goal: goalSchema,
     tasks: z.array(taskSchema),
-    activity: z.array(activityEventSchema)
+    activity: z.array(activityEventSchema),
+    notesSummaryByEntity: notesSummaryByEntitySchema.default({})
 });
 export const insightsHeatmapCellSchema = z.object({
     id: z.string(),
@@ -697,6 +722,34 @@ export const settingsBinPayloadSchema = z.object({
     countsByEntityType: z.record(z.string(), z.number().int().nonnegative()),
     records: z.array(deletedEntityRecordSchema)
 });
+export const createNoteLinkSchema = z.object({
+    entityType: crudEntityTypeSchema,
+    entityId: nonEmptyTrimmedString,
+    anchorKey: trimmedString.nullable().default(null)
+});
+export const createNoteSchema = z.object({
+    contentMarkdown: nonEmptyTrimmedString,
+    author: trimmedString.nullable().default(null),
+    links: z.array(createNoteLinkSchema).min(1)
+});
+export const nestedCreateNoteSchema = z.object({
+    contentMarkdown: nonEmptyTrimmedString,
+    author: trimmedString.nullable().default(null),
+    links: z.array(createNoteLinkSchema).default([])
+});
+export const updateNoteSchema = z.object({
+    contentMarkdown: nonEmptyTrimmedString.optional(),
+    author: trimmedString.nullable().optional(),
+    links: z.array(createNoteLinkSchema).min(1).optional()
+});
+export const notesListQuerySchema = z.object({
+    linkedEntityType: crudEntityTypeSchema.optional(),
+    linkedEntityId: nonEmptyTrimmedString.optional(),
+    anchorKey: trimmedString.nullable().optional(),
+    author: trimmedString.optional(),
+    query: trimmedString.optional(),
+    limit: z.coerce.number().int().positive().max(200).optional()
+});
 export const taskListQuerySchema = z.object({
     status: taskStatusSchema.optional(),
     owner: nonEmptyTrimmedString.optional(),
@@ -731,7 +784,8 @@ export const createGoalSchema = z.object({
     status: goalStatusSchema.default("active"),
     targetPoints: z.number().int().min(25).max(10000).default(400),
     themeColor: z.string().regex(/^#[0-9a-fA-F]{6}$/).default("#c8a46b"),
-    tagIds: uniqueStringArraySchema.default([])
+    tagIds: uniqueStringArraySchema.default([]),
+    notes: z.array(nestedCreateNoteSchema).default([])
 });
 export const updateGoalSchema = createGoalSchema.partial();
 export const createTagSchema = z.object({
@@ -747,7 +801,8 @@ export const createProjectSchema = z.object({
     description: trimmedString.default(""),
     status: projectStatusSchema.default("active"),
     targetPoints: z.number().int().min(25).max(10000).default(240),
-    themeColor: z.string().regex(/^#[0-9a-fA-F]{6}$/).default("#c0c1ff")
+    themeColor: z.string().regex(/^#[0-9a-fA-F]{6}$/).default("#c0c1ff"),
+    notes: z.array(nestedCreateNoteSchema).default([])
 });
 export const updateProjectSchema = createProjectSchema.partial();
 export const taskMutationShape = {
@@ -763,7 +818,8 @@ export const taskMutationShape = {
     energy: taskEnergySchema.default("steady"),
     points: z.number().int().min(5).max(500).default(40),
     sortOrder: z.number().int().nonnegative().optional(),
-    tagIds: uniqueStringArraySchema.default([])
+    tagIds: uniqueStringArraySchema.default([]),
+    notes: z.array(nestedCreateNoteSchema).default([])
 };
 export const createTaskSchema = z.object(taskMutationShape);
 export const updateTaskSchema = z.object({
@@ -779,7 +835,8 @@ export const updateTaskSchema = z.object({
     energy: taskEnergySchema.optional(),
     points: z.number().int().min(5).max(500).optional(),
     sortOrder: z.number().int().nonnegative().optional(),
-    tagIds: uniqueStringArraySchema.optional()
+    tagIds: uniqueStringArraySchema.optional(),
+    notes: z.array(nestedCreateNoteSchema).optional()
 });
 export const tagSuggestionRequestSchema = z.object({
     title: trimmedString.default(""),
@@ -817,7 +874,8 @@ export const taskRunHeartbeatSchema = z.object({
 });
 export const taskRunFinishSchema = z.object({
     actor: nonEmptyTrimmedString.optional(),
-    note: trimmedString.default("")
+    note: trimmedString.default(""),
+    closeoutNote: nestedCreateNoteSchema.optional()
 });
 export const taskRunFocusSchema = z.object({
     actor: nonEmptyTrimmedString.optional()
@@ -982,7 +1040,8 @@ export const operatorLogWorkSchema = z
     effort: taskEffortSchema.optional(),
     energy: taskEnergySchema.optional(),
     points: z.number().int().min(5).max(500).optional(),
-    tagIds: uniqueStringArraySchema.optional()
+    tagIds: uniqueStringArraySchema.optional(),
+    closeoutNote: nestedCreateNoteSchema.optional()
 })
     .superRefine((value, context) => {
     if (!value.taskId && (!value.title || value.title.trim().length === 0)) {

@@ -3,7 +3,6 @@ const trimmedString = z.string().trim();
 const nonEmptyTrimmedString = trimmedString.min(1);
 const uniqueStringArraySchema = z.array(nonEmptyTrimmedString);
 export const triggerReportStatusSchema = z.enum(["draft", "reviewed", "integrated"]);
-export const commentSourceSchema = z.enum(["ui", "openclaw", "agent", "system"]);
 export const behaviorKindSchema = z.enum(["away", "committed", "recovery"]);
 export const beliefTypeSchema = z.enum(["absolute", "conditional"]);
 export const modeFamilySchema = z.enum(["coping", "child", "critic_parent", "healthy_adult", "happy_child"]);
@@ -225,17 +224,6 @@ export const triggerReportSchema = z.object({
     createdAt: z.string(),
     updatedAt: z.string()
 });
-export const commentSchema = z.object({
-    id: z.string(),
-    entityType: nonEmptyTrimmedString,
-    entityId: nonEmptyTrimmedString,
-    anchorKey: trimmedString.nullable(),
-    body: nonEmptyTrimmedString,
-    author: trimmedString.nullable(),
-    source: commentSourceSchema,
-    createdAt: z.string(),
-    updatedAt: z.string()
-});
 export const schemaPressureEntrySchema = z.object({
     schemaId: z.string(),
     title: nonEmptyTrimmedString,
@@ -252,7 +240,7 @@ export const psycheOverviewPayloadSchema = z.object({
     reports: z.array(triggerReportSchema),
     schemaPressure: z.array(schemaPressureEntrySchema),
     openInsights: z.number().int().nonnegative(),
-    unresolvedComments: z.number().int().nonnegative(),
+    openNotes: z.number().int().nonnegative(),
     committedActions: z.array(trimmedString)
 });
 export const createPsycheValueSchema = z.object({
@@ -376,20 +364,3 @@ export const createTriggerReportSchema = z.object({
     nextMoves: z.array(trimmedString).default([])
 });
 export const updateTriggerReportSchema = createTriggerReportSchema.partial();
-export const createCommentSchema = z.object({
-    entityType: nonEmptyTrimmedString,
-    entityId: nonEmptyTrimmedString,
-    anchorKey: trimmedString.nullable().default(null),
-    body: nonEmptyTrimmedString,
-    author: trimmedString.nullable().default(null)
-});
-export const updateCommentSchema = z.object({
-    body: nonEmptyTrimmedString,
-    author: trimmedString.nullable().default(null)
-});
-export const commentsListQuerySchema = z.object({
-    entityType: nonEmptyTrimmedString.optional(),
-    entityId: nonEmptyTrimmedString.optional(),
-    limit: z.coerce.number().int().positive().max(200).optional()
-});
-export const commentListQuerySchema = commentsListQuerySchema;
