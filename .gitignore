@@ -18,4 +18,6 @@ playwright-report/
 test-results/
 tmp-width-probe.cjs
 openclaw-plugin/*.tgz
+openclaw-plugin/data/
+plugins/forge-codex/runtime/data/
 .vision/psyche-template/views/screenshot_2026_03_23_at_17.10.30.png/
