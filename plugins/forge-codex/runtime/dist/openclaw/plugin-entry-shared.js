@@ -104,7 +104,7 @@ export const forgePluginConfigSchema = {
                 default: DEFAULT_FORGE_PORT,
                 minimum: 1,
                 maximum: 65535,
-                description: "Forge server port. Override this when your local machine uses a different port."
+                description: "Forge server port. Override this only when you want to pin a specific port. Default localhost installs can move to the next free port automatically if 4317 is already taken."
             },
             dataRoot: {
                 type: "string",
@@ -138,7 +138,7 @@ export const forgePluginConfigSchema = {
         },
         port: {
             label: "Forge Port",
-            help: "Forge server port. Change this if your local machine uses another port.",
+            help: "Forge server port. Change this only when you want to pin a specific port. Default localhost installs can move to the next free port automatically if 4317 is busy.",
             placeholder: "4317"
         },
         dataRoot: {
