@@ -1,8 +1,10 @@
 name: OpenClaw Plugin
 
 on:
+  workflow_dispatch:
   push:
     paths:
+      - ".github/workflows/openclaw-plugin.yml"
       - "openclaw-plugin/**"
       - "openclaw.plugin.json"
       - "skills/forge-openclaw/**"
@@ -13,6 +15,7 @@ on:
       - "package.json"
   pull_request:
     paths:
+      - ".github/workflows/openclaw-plugin.yml"
       - "openclaw-plugin/**"
       - "openclaw.plugin.json"
       - "skills/forge-openclaw/**"
