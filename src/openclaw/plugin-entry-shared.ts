@@ -4,7 +4,7 @@ import { registerForgePluginCli, registerForgePluginRoutes } from "./routes.js";
 import { registerForgePluginTools } from "./tools.js";
 import type { ForgePluginConfigSchema, ForgePluginRegistrationApi } from "./plugin-sdk-types.js";
 
-type RawPluginConfig = Partial<Record<"origin" | "port" | "apiToken" | "actorLabel" | "timeoutMs", unknown>>;
+type RawPluginConfig = Partial<Record<"origin" | "port" | "dataRoot" | "apiToken" | "actorLabel" | "timeoutMs", unknown>>;
 
 export const FORGE_PLUGIN_ID = "forge-openclaw-plugin";
 export const FORGE_PLUGIN_NAME = "Forge";
@@ -53,6 +53,7 @@ export function resolveForgePluginConfig(pluginConfig: unknown): ForgePluginConf
     port,
     baseUrl: buildForgeBaseUrl(origin, port),
     webAppUrl: buildForgeWebAppUrl(origin, port),
+    dataRoot: typeof raw.dataRoot === "string" ? raw.dataRoot.trim() : "",
     apiToken: typeof raw.apiToken === "string" ? raw.apiToken.trim() : "",
     actorLabel: normalizeString(raw.actorLabel, "aurel"),
     timeoutMs: normalizeTimeout(raw.timeoutMs, 15_000)
@@ -78,6 +79,11 @@ export const forgePluginConfigSchema: ForgePluginConfigSchema = {
         minimum: 1,
         maximum: 65535,
         description: "Forge server port. Override this when your local machine uses a different port."
+      },
+      dataRoot: {
+        type: "string",
+        default: "",
+        description: "Optional absolute path for the Forge data folder root. Leave blank to use the runtime working directory."
       },
       apiToken: {
         type: "string",
@@ -108,6 +114,12 @@ export const forgePluginConfigSchema: ForgePluginConfigSchema = {
       label: "Forge Port",
       help: "Forge server port. Change this if your local machine uses another port.",
       placeholder: "4317"
+    },
+    dataRoot: {
+      label: "Forge Data Root",
+      help: "Optional absolute folder path for Forge data. Use this when you want Forge to read and write a specific data directory instead of the runtime working directory.",
+      placeholder: "/Users/you/forge-data",
+      advanced: true
     },
     apiToken: {
       label: "Forge API Token",

@@ -139,6 +139,7 @@ Example config:
         config: {
           origin: "http://127.0.0.1",
           port: 4317,
+          dataRoot: "/absolute/path/to/forge-data",
           apiToken: "",
           actorLabel: "aurel",
           timeoutMs: 15000
@@ -151,6 +152,7 @@ Example config:
 
 `origin` is the protocol + host without the port.
 `port` is split out explicitly so local collisions are easy to fix without rebuilding the whole URL.
+`dataRoot` is optional. Use it when you want the local Forge runtime to use a specific data folder instead of the runtime working directory.
 
 ## Local and remote connection modes
 

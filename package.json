@@ -10,11 +10,11 @@
     ]
   },
   "scripts": {
-    "dev": "vite",
+    "dev": "concurrently -k -n server,web -c cyan,magenta \"npm run dev:server\" \"npm run dev:web\"",
     "dev:web": "vite",
-    "dev:server": "tsx watch server/src/index.ts",
+    "dev:server": "HOST=127.0.0.1 PORT=4317 tsx watch server/src/index.ts",
     "start": "npm run build && npm run start:web",
-    "start:web": "tsx server/src/index.ts",
+    "start:web": "HOST=127.0.0.1 PORT=4317 tsx server/src/index.ts",
     "tauri:dev": "tauri dev",
     "build": "vite build",
     "preview": "vite preview",
@@ -62,6 +62,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.29.0",
+    "concurrently": "^9.2.1",
     "@playwright/test": "^1.53.0",
     "@tailwindcss/vite": "^4.1.11",
     "@tauri-apps/cli": "^2.8.0",

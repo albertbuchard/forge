@@ -19,6 +19,8 @@ http://127.0.0.1:4317/forge/
 
 You can also ask the agent to call the UI entry tool and return the exact current address.
 
+If you want Forge to use a specific local data folder, set `dataRoot` in the plugin config. The local runtime will then store its database under `data/forge.sqlite` inside that folder instead of using the runtime working directory.
+
 ## What Forge looks like
 
 Overview dashboard:
@@ -74,7 +76,10 @@ Equivalent config:
     allow: ["forge-openclaw-plugin"],
     entries: {
       "forge-openclaw-plugin": {
-        enabled: true
+        enabled: true,
+        config: {
+          dataRoot: "/absolute/path/to/forge-data"
+        }
       }
     }
   }

@@ -14,6 +14,7 @@ describe("forge plugin manifest", () => {
     expect(manifest.uiHints).toMatchObject({
       origin: expect.objectContaining({ label: expect.any(String) }),
       port: expect.objectContaining({ label: expect.any(String) }),
+      dataRoot: expect.objectContaining({ advanced: true }),
       apiToken: expect.objectContaining({ sensitive: true }),
       actorLabel: expect.objectContaining({ label: expect.any(String) }),
       timeoutMs: expect.objectContaining({ advanced: true })
@@ -22,7 +23,8 @@ describe("forge plugin manifest", () => {
       type: "object",
       properties: {
         origin: expect.objectContaining({ default: "http://127.0.0.1" }),
-        port: expect.objectContaining({ default: 4317 })
+        port: expect.objectContaining({ default: 4317 }),
+        dataRoot: expect.objectContaining({ default: "" })
       }
     });
   });

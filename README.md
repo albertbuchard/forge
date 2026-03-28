@@ -29,15 +29,21 @@ Forge health is available at:
 
 ### Development mode
 
-Run the backend/runtime:
+The simple path is:
+
+```bash
+npm run dev
+```
+
+That starts both:
+
+- the backend/runtime on `127.0.0.1:4317`
+- the live Vite frontend on `127.0.0.1:3027`
+
+If you want to run them separately, you still can:
 
 ```bash
 npm run dev:server
-```
-
-Run the live Vite frontend in another terminal:
-
-```bash
 npm run dev:web
 ```
 
@@ -45,6 +51,28 @@ Then open:
 
 - Vite dev app: [http://127.0.0.1:3027](http://127.0.0.1:3027)
 - runtime API: [http://127.0.0.1:4317/api/v1/health](http://127.0.0.1:4317/api/v1/health)
+
+### Choose a data folder
+
+Forge can use a custom data root instead of the current working directory.
+
+Run Forge against an explicit data folder like this:
+
+```bash
+FORGE_DATA_ROOT=/absolute/path/to/forge-data npm run dev
+```
+
+Or for the production-style local runtime:
+
+```bash
+FORGE_DATA_ROOT=/absolute/path/to/forge-data npm run start
+```
+
+Forge will then read and write its SQLite files under:
+
+```text
+$FORGE_DATA_ROOT/data/forge.sqlite
+```
 
 ## Local and Tailscale access
 

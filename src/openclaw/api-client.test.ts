@@ -88,6 +88,7 @@ describe("openclaw api client", () => {
       port: 4317,
       baseUrl: "http://127.0.0.1:4317",
       webAppUrl: "http://127.0.0.1:4317/forge/",
+      dataRoot: "",
       apiToken: "fg_live_token",
       actorLabel: "aurel",
       timeoutMs: 4000

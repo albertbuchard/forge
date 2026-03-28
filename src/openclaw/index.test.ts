@@ -95,6 +95,7 @@ describe("forge openclaw plugin", () => {
       port: 4317,
       baseUrl: "http://127.0.0.1:4317",
       webAppUrl: "http://127.0.0.1:4317/forge/",
+      dataRoot: "",
       apiToken: "",
       actorLabel: "aurel",
       timeoutMs: 15000
@@ -110,6 +111,7 @@ describe("forge openclaw plugin", () => {
       pluginConfig: {
         origin: "http://127.0.0.1",
         port: 4317,
+        dataRoot: "/tmp/forge-data",
         apiToken: "fg_live_test",
         actorLabel: "aurel"
       },
@@ -189,7 +191,8 @@ describe("forge openclaw plugin", () => {
     expect(primeForgeRuntime).toHaveBeenCalledWith(
       expect.objectContaining({
         origin: "http://127.0.0.1",
-        port: 4317
+        port: 4317,
+        dataRoot: "/tmp/forge-data"
       })
     );
   });

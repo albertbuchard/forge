@@ -89,7 +89,8 @@ function spawnManagedRuntime(config: ForgePluginConfig, plan: ForgeRuntimeLaunch
       ...process.env,
       HOST: "127.0.0.1",
       PORT: String(config.port),
-      FORGE_BASE_PATH: "/forge/"
+      FORGE_BASE_PATH: "/forge/",
+      ...(config.dataRoot ? { FORGE_DATA_ROOT: config.dataRoot } : {})
     },
     stdio: "ignore",
     detached: true
