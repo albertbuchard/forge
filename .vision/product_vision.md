@@ -181,7 +181,8 @@ path, and the versioned REST contract is documented through OpenAPI 3.1 at
 Fresh production databases must start empty of fake user goals, projects, and tasks.
 Demo or showcase content is allowed only through explicit bootstrap paths, fixtures, or
 test-only seeding. The live runtime is expected to show truthful empty states until the
-user creates real records.
+user creates real records. In the current implementation, demo fixtures are only loaded
+through the dedicated `npm run demo:seed` command against a fresh runtime root.
 
 Forge also carries a binding long-term stack direction for a local desktop product. The
 canonical target stack is Tauri 2 with Rust, Axum, Tokio, SQLx, and SQLite. The data

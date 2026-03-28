@@ -14,6 +14,8 @@
     "dev:openclaw-data": "node ./scripts/with-openclaw-plugin-data-root.mjs npm run dev",
     "dev:web": "vite",
     "dev:server": "HOST=127.0.0.1 PORT=4317 tsx watch server/src/index.ts",
+    "demo:seed": "node --import tsx server/src/seed-demo.ts",
+    "demo:seed:openclaw-data": "node ./scripts/with-openclaw-plugin-data-root.mjs npm run demo:seed",
     "start": "npm run build && npm run start:web",
     "start:openclaw-data": "node ./scripts/with-openclaw-plugin-data-root.mjs npm run start",
     "start:web": "HOST=127.0.0.1 PORT=4317 tsx server/src/index.ts",

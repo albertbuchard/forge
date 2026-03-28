@@ -99,6 +99,25 @@ Forge will then read and write its SQLite files under:
 $FORGE_DATA_ROOT/data/forge.sqlite
 ```
 
+Fresh runtimes stay empty by default. Forge does not auto-create personal goals,
+projects, tasks, or activity during startup.
+
+### Demo fixture bootstrap
+
+If you want explicit showcase data for a demo or screenshot pass, seed it into a fresh
+runtime root yourself:
+
+```bash
+FORGE_DATA_ROOT=/absolute/path/to/forge-demo npm run demo:seed
+```
+
+That command refuses to run against a runtime that already contains user content.
+For a linked OpenClaw plugin data root, use:
+
+```bash
+npm run demo:seed:openclaw-data
+```
+
 ## Local and Tailscale access
 
 Forge is intended to be usable directly in the browser, not only through OpenClaw.

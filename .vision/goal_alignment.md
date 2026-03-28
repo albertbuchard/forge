@@ -157,7 +157,9 @@ Fresh runtime storage must be truthful. A brand-new production database may incl
 system catalogs, settings defaults, and migration-backed support tables, but it must
 not silently invent personal goals, projects, tasks, or activity just to make the UI
 look populated. If sample content is needed for tests or demos, it must be opt-in and
-explicitly marked as fixture data.
+explicitly marked as fixture data. In the current Forge runtime that means demo
+content is only introduced through the explicit `npm run demo:seed` bootstrap path
+against a fresh `FORGE_DATA_ROOT`, never during normal app startup.
 
 ## Quality Bar
 
