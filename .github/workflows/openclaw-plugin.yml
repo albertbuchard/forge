@@ -36,5 +36,6 @@ jobs:
       - run: npm exec -- tsc --noEmit
       - run: npm exec -- tsc -p server/tsconfig.json --noEmit
       - run: npm exec -- vitest run src/openclaw/parity.test.ts src/openclaw/index.test.ts src/openclaw/api-client.test.ts src/openclaw/manifest.test.ts
+      - run: npm run build
       - run: node --import tsx --test --test-concurrency=1 server/src/app.test.ts
       - run: npm run build:openclaw-plugin
