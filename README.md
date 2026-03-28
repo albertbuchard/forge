@@ -99,24 +99,6 @@ Forge will then read and write its SQLite files under:
 $FORGE_DATA_ROOT/data/forge.sqlite
 ```
 
-## Notes model
-
-Forge notes are:
-
-- Markdown-first
-- searchable through SQLite FTS
-- linkable to one or many entities
-- creatable inline when creating a goal, project, or task through nested `notes`
-- persistable as durable work evidence through `closeoutNote` on task completion, task release, and retroactive work logging
-
-The product also includes:
-
-- inline notes surfaces on the main goal, project, task, and trigger report detail views
-- note-count links on the main entity cards and Psyche cards
-- a global `/forge/notes` search page
-
-Some notes can also be pinned to a sub-part of an entity with an internal anchor key. The main user-facing case today is trigger report stage notes like Spark, Story, State, Lens, and Pivot.
-
 ## Local and Tailscale access
 
 Forge is intended to be usable directly in the browser, not only through OpenClaw.
@@ -208,6 +190,17 @@ See:
 - [`docs/openclaw-plugin.md`](docs/openclaw-plugin.md)
 - [`docs/openclaw-plugin-release-checklist.md`](docs/openclaw-plugin-release-checklist.md)
 - [`docs/public-repo-workflow.md`](docs/public-repo-workflow.md)
+
+## Quality checks
+
+Useful validation commands from this repo root:
+
+```bash
+npm run check
+npm run check:server
+npm test
+npm run test:server
+```
 
 ## Product URLs
 

@@ -51,6 +51,12 @@ Forge is a personal system for:
 
 This plugin gives OpenClaw the tools it needs to work with that system. It can read current state, search records, create and update records, control live work sessions, post insights, and hand the user off to the Forge UI when the visual workflow is easier.
 It also understands Forge `note` records, which are Markdown-based, searchable, and linkable across one or many entities.
+Notes support includes:
+
+- `note` as the durable collaboration entity
+- notes surfaced directly in the Forge UI, including the global `/forge/notes` page
+- nested `notes` on goal, project, and task creation
+- `closeoutNote` on live-work endpoints when the summary should become a durable linked note
 
 Examples:
 
@@ -73,6 +79,13 @@ If your OpenClaw install does not enable it automatically, run:
 
 ```bash
 openclaw plugins enable forge-openclaw-plugin
+openclaw gateway restart
+```
+
+For release-parity local development from this repo:
+
+```bash
+openclaw plugins install ./projects/forge/openclaw-plugin
 openclaw gateway restart
 ```
 
@@ -116,7 +129,7 @@ Then restart the gateway:
 openclaw gateway restart
 ```
 
-Older OpenClaw builds can keep using the repo/manual install path during the transition:
+Older OpenClaw builds can keep using the repo-root fallback entry during the transition:
 
 ```bash
 openclaw plugins install ./projects/forge

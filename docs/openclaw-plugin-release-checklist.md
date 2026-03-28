@@ -13,33 +13,39 @@ Use this checklist before publishing `forge-openclaw-plugin`.
    - `npm exec -- vitest run src/openclaw/parity.test.ts src/openclaw/index.test.ts src/openclaw/api-client.test.ts src/openclaw/manifest.test.ts`
    - `node --import tsx --test --test-concurrency=1 server/src/app.test.ts`
    - `npm run build:openclaw-plugin`
-4. Smoke check local runtime:
+4. Confirm the notes rollout is reflected in the public plugin/docs surface:
+   - `note` is the only collaboration record terminology
+   - no public docs or skills still mention `/api/v1/comments`, `psyche.comment`, or legacy comments
+   - plugin docs explain nested `notes`, `closeoutNote`, and searchable `/forge/notes`
+5. Smoke check local runtime:
    - `/api/v1/health`
    - `/api/v1/operator/overview`
    - `/api/v1/agents/onboarding`
    - `/api/v1/entities/search`
+   - `/api/v1/notes`
    - `/forge/v1/entities/search`
    - `/forge/v1/ui`
-5. Smoke install the package in a clean OpenClaw workspace:
+6. Smoke install the package in a clean OpenClaw workspace:
    - `openclaw plugins install ./openclaw-plugin`
    - `openclaw gateway restart`
    - `forge doctor`
-6. Verify the skill still foregrounds:
+7. Verify the skill still foregrounds:
    - `forge_get_operator_overview`
    - `forge_get_ui_entrypoint`
    - `forge_search_entities`
    - batch create/update/delete/restore
+   - first-class `note` usage, nested `notes`, and `closeoutNote`
    - `forge_post_insight`
    - entity format cards
    - non-intrusive end-of-message save suggestions and occasional UI hints
-7. Publish the package artifact.
+8. Publish the package artifact.
    - `cd openclaw-plugin && npm publish --access public`
    - if npm 2FA is enabled, use `npm publish --access public --otp=<code>`
-8. Re-run a clean install using the published package name and confirm `forge doctor` and `forge overview` still succeed.
-9. Submit or update the OpenClaw community plugin listing entry with:
+9. Re-run a clean install using the published package name and confirm `forge doctor` and `forge overview` still succeed.
+10. Submit or update the OpenClaw community plugin listing entry with:
    - npm package: `forge-openclaw-plugin`
    - repo: `https://github.com/albertbuchard/forge`
    - install docs: `openclaw-plugin/README.md`
-10. ClawHub follow-up if desired:
+11. ClawHub follow-up if desired:
    - publish a companion Forge skill there for discovery
    - do not treat ClawHub as the primary Forge plugin distribution path unless OpenClaw's plugin docs change

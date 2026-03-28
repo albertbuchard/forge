@@ -47,6 +47,19 @@ The intended workflow is:
 - store agent-authored recommendations with `forge_post_insight`
 - use `forge_get_ui_entrypoint` when the user should continue in the visual Forge UI
 
+## Notes contract
+
+Forge notes are the durable collaboration record across the app, API, and plugin surface.
+
+- use `note` as the only collaboration entity name
+- use `/api/v1/notes` and the batch entity routes, not legacy comment routes
+- notes can link to one or many goals, projects, tasks, and Psyche records
+- goal, project, and task creation can include nested `notes`
+- task completion, task release, and retroactive work logging can include `closeoutNote`
+- the main detail views and the global `/forge/notes` page now surface these records directly in the UI
+
+Some notes can also be pinned to a sub-part of an entity with an anchor key. The main user-facing case today is stage-specific trigger report notes such as Spark, Story, State, Lens, and Pivot.
+
 The execution rule is:
 
 - do not open the Forge UI or a browser just to create or update normal records that the batch entity tools already cover
@@ -402,7 +415,6 @@ curl -X POST http://127.0.0.1:4317/api/v1/settings/tokens \
       "psyche.read",
       "psyche.write",
       "psyche.note",
-      "psyche.comment",
       "psyche.insight",
       "psyche.mode"
     ]
