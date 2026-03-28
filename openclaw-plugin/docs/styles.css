@@ -273,6 +273,18 @@ p {
   margin: 26px 0 22px;
 }
 
+.hero-list {
+  margin: 0 0 24px;
+  padding-left: 20px;
+  display: grid;
+  gap: 8px;
+  line-height: 1.65;
+}
+
+.hero-list li::marker {
+  color: var(--secondary);
+}
+
 .button {
   display: inline-flex;
   align-items: center;
@@ -678,6 +690,10 @@ p {
 
   .hero-actions {
     flex-direction: column;
+  }
+
+  .hero-list {
+    padding-left: 18px;
   }
 
   .card,

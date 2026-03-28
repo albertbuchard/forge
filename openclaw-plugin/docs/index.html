@@ -45,21 +45,28 @@
         <section class="hero">
           <div class="hero-copy">
             <p class="eyebrow">Forge For OpenClaw</p>
-            <h1>One place to run your goals, work, notes, and reflection.</h1>
+            <h1>Your OpenClaw agent can run your goals, tasks, work sessions, and notes in Forge.</h1>
             <p class="lede">
-              Forge is a local-first planning and execution system. It gives OpenClaw a real place to
-              store long-term goals, active projects, concrete tasks, live work sessions, linked notes,
-              weekly review, and Psyche records such as values, beliefs, patterns, and trigger reports.
+              Forge gives your agent a real workspace instead of scattered chat memory. It can create
+              goals, break them into projects, manage tasks on a Kanban board, start and complete real
+              work sessions, save linked notes, track XP, and store Psyche records such as values,
+              beliefs, patterns, and trigger reports.
             </p>
             <p class="lede">
-              If you want one serious system instead of scattered notes and half-finished task lists,
-              Forge is the operating layer. Install the plugin, allow it, restart OpenClaw, and check
-              that the runtime is actually up.
+              The point is simple: you can tell your agent what you are trying to do, and Forge gives it
+              a proper place to save the work, run the board, and keep the context attached to what
+              actually happened.
             </p>
             <div class="hero-actions">
               <a class="button primary" href="#getting-started">Get Started</a>
               <a class="button secondary" href="https://github.com/albertbuchard/forge">View Source</a>
             </div>
+            <ul class="hero-list">
+              <li>Turn a goal into projects and tasks.</li>
+              <li>Run tasks on a real Kanban board.</li>
+              <li>Start, stop, and complete live work sessions.</li>
+              <li>Save notes, insights, XP, and Psyche records in the same place.</li>
+            </ul>
             <div class="stat-row">
               <div class="stat-pill">
                 <span class="stat-label">Plugin Id</span>
@@ -94,35 +101,40 @@
         <section class="section intro-section" id="what-is-forge">
           <div class="section-heading">
             <p class="eyebrow">What Forge Is</p>
-            <h2>Forge is not just a task list.</h2>
+            <h2>Forge is the part that gives your agent somewhere real to work.</h2>
+            <p class="section-copy">
+              Without Forge, your agent can talk about plans. With Forge, your agent can actually save
+              the plan, organize the work, run the board, track the session, and keep the notes and
+              progress tied to the right records.
+            </p>
           </div>
           <div class="intro-grid">
             <article class="card">
-              <h3>Plan with real structure</h3>
+              <h3>Create goals, projects, and tasks</h3>
               <p>
-                Forge stores goals, projects, and tasks as connected records so you can see why a task
-                matters instead of rebuilding that context in your head.
+                Your agent can turn vague intentions into a clear structure: a goal, the projects under
+                it, and the tasks that need to happen next.
               </p>
             </article>
             <article class="card">
-              <h3>Track real work</h3>
+              <h3>Run the Kanban board</h3>
               <p>
-                Work sessions are real runs with real time, not fake checkboxes. OpenClaw can start,
-                focus, complete, and review them through the plugin.
+                Forge is not just storage. It has a real board with columns like backlog, focus, in
+                progress, blocked, and done, so the work can actually move.
               </p>
             </article>
             <article class="card">
-              <h3>Keep useful notes</h3>
+              <h3>Track live work and XP</h3>
               <p>
-                Notes are first-class Markdown records. They can link to goals, projects, tasks, and
-                Psyche records so progress, evidence, and handoff context stay attached to the work.
+                Work sessions are real timed runs. Your agent can start them, focus them, complete them,
+                and Forge keeps the XP and review trail attached to what really happened.
               </p>
             </article>
             <article class="card">
-              <h3>Reflect without losing the plot</h3>
+              <h3>Keep notes and Psyche records together</h3>
               <p>
-                Psyche records help you track values, beliefs, modes, patterns, and trigger reports
-                without separating reflection from the rest of your actual life and work system.
+                Notes, insights, values, beliefs, patterns, and trigger reports all stay linked to the
+                work instead of getting lost in separate documents and chats.
               </p>
             </article>
           </div>
@@ -250,12 +262,11 @@ openclaw forge status</code></pre>
 
         <section class="section records-section" id="records">
           <div class="section-heading">
-            <p class="eyebrow">What Forge Stores</p>
-            <h2>These are the main record types you work with.</h2>
+            <p class="eyebrow">What The Agent Can Save</p>
+            <h2>Forge gives the agent a small set of clear record types.</h2>
             <p class="section-copy">
-              Forge keeps the naming plain. A goal is a goal. A project is a project. A task is a task.
-              The plugin exposes these records to OpenClaw so the agent can read, create, update, and
-              manage them without inventing a second system.
+              The names stay literal. A goal is a goal. A project is a project. A task is a task. That
+              keeps the product easy to understand and makes the agent’s actions easy to check afterward.
             </p>
           </div>
           <div class="record-grid">
@@ -305,89 +316,83 @@ openclaw forge status</code></pre>
         <section class="section examples-section" id="examples">
           <div class="section-heading">
             <p class="eyebrow">Real Examples</p>
-            <h2>What using Forge actually looks like.</h2>
+            <h2>What it looks like when your agent actually uses Forge.</h2>
             <p class="section-copy">
-              These are the normal kinds of interactions Forge is built for. The point is not just to
-              store records. The point is to help you decide what matters, work on it, and keep the
-              evidence connected.
+              These are normal, concrete things you can ask for. The value is that the agent does not
+              just answer you in chat. It can save the result in a workspace that you can open and keep using.
             </p>
           </div>
 
           <div class="example-grid">
             <article class="card example-card">
-              <span class="example-kicker">Goals and projects</span>
-              <h3>Turn a direction into real work</h3>
+              <span class="example-kicker">Goal planning</span>
+              <h3>“Turn this big goal into a real plan.”</h3>
               <p>
-                You create a goal like <code>Build a stable, healthy body</code>. Under it, you create
-                a project like <code>Spring training block</code>. Inside that project, you add tasks
-                like <code>Book Tuesday gym session</code>, <code>Plan meal prep</code>, and
-                <code>Track sleep for 7 days</code>.
+                You tell the agent: <code>I want to get in shape and stop improvising my health.</code>
+                It can create a goal like <code>Build a stable, healthy body</code>, add a project like
+                <code>Spring training block</code>, and create the first tasks under it.
               </p>
               <p>
-                Forge keeps the whole chain visible, so when you look at a task you can still see the
-                project and goal it belongs to.
+                When you open Forge later, the goal, project, and tasks are already connected.
               </p>
             </article>
 
             <article class="card example-card">
               <span class="example-kicker">Kanban tasks</span>
-              <h3>Run your work on a board that means something</h3>
+              <h3>“Show me what is blocked and move the important task to focus.”</h3>
               <p>
-                You keep tasks in columns like backlog, focus, in progress, blocked, and done. A task
-                such as <code>Write plugin install guide</code> can start in backlog, move to focus when
-                it matters today, shift to in progress once work begins, and land in done when the write-up
-                is actually finished.
+                Forge tasks live on a real board with columns like backlog, focus, in progress, blocked,
+                and done. Your agent can help you inspect that state and update tasks like
+                <code>Write plugin install guide</code> so the board reflects the actual work.
               </p>
               <p>
-                The board is not just a pretty view. It is the main execution surface for the project.
+                The Kanban board is one of the main reasons Forge exists, so it should be named directly
+                and shown early, not buried behind abstract product talk.
               </p>
             </article>
 
             <article class="card example-card">
               <span class="example-kicker">Live work</span>
-              <h3>Track real sessions, not just finished tasks</h3>
+              <h3>“Start work on this task now.”</h3>
               <p>
-                You start a task run on <code>Refactor Forge install docs</code>. Forge records when the
-                session started, keeps it visible as your current work, and lets OpenClaw focus, release,
-                or complete the run.
+                You tell the agent to start work on <code>Refactor Forge install docs</code>. Forge starts
+                a real task run, records the session, and keeps it visible as your current work until you
+                release or complete it.
               </p>
               <p>
-                That means the system can tell the difference between a task that exists and work that
-                truly happened.
+                This is not just changing a task status. It is recording an actual work session.
               </p>
             </article>
 
             <article class="card example-card">
               <span class="example-kicker">XP and review</span>
-              <h3>Make progress visible</h3>
+              <h3>“What did I actually get done this week?”</h3>
               <p>
-                When you start work, keep going, and complete meaningful tasks, Forge records XP and
-                shows the reward trail in weekly review. Instead of a vague feeling that you were busy,
-                you can see the work sessions, completions, and momentum that actually happened.
+                Forge tracks the work sessions and completions, then shows the XP and review trail. That
+                lets your agent answer with more than vibes. It can point to actual work that happened.
               </p>
             </article>
 
             <article class="card example-card">
               <span class="example-kicker">Notes</span>
-              <h3>Keep useful context attached to the work</h3>
+              <h3>“Save this as context on the task.”</h3>
               <p>
-                After finishing <code>Write plugin install guide</code>, you save a note with what was
-                changed, what still feels risky, and which commands were tested. That note can stay
-                linked to the task, the project, and the wider goal instead of living in a random text file.
+                After finishing <code>Write plugin install guide</code>, your agent can save a note with
+                what changed, what still feels risky, and which commands were tested. That note stays
+                linked to the task, project, or goal instead of disappearing in chat history.
               </p>
             </article>
 
             <article class="card example-card">
               <span class="example-kicker">Psyche</span>
-              <h3>Track patterns that affect the work</h3>
+              <h3>“Save this pattern because it keeps happening.”</h3>
               <p>
                 You notice a repeating loop: when release steps feel messy, you delay them, then feel
-                shame, then avoid the task even more. In Forge, you can store that as a pattern, link it
-                to a belief like <code>If I get one release step wrong, the whole thing is a disaster</code>,
-                and attach a trigger report when a real episode happens.
+                shame, then avoid the task even more. Forge lets your agent save that as a pattern, link
+                it to a belief, and attach a trigger report when a real episode happens.
               </p>
               <p>
-                That keeps reflection grounded in the same system as your goals and tasks.
+                That way the reflection side of Forge is still tied to the real work side.
               </p>
             </article>
           </div>
