@@ -498,6 +498,12 @@ export function patchInsight(insightId: string, patch: Partial<Pick<Insight, "st
   });
 }
 
+export function deleteInsight(insightId: string) {
+  return request<{ insight: Insight }>(`/api/v1/insights/${insightId}`, {
+    method: "DELETE"
+  });
+}
+
 export function submitInsightFeedback(insightId: string, feedbackType: InsightFeedback["feedbackType"], note = "") {
   return request<{ feedback: InsightFeedback }>(`/api/v1/insights/${insightId}/feedback`, {
     method: "POST",

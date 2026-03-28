@@ -91,6 +91,9 @@ clear activity log rather than a vague “stream.”
 The Insights page should present structured observations, interpretations, or proposals
 that the user or trusted agents have stored. It should help with synthesis while staying
 grounded in the real data and entities already in Forge.
+Its action model must be explicit: Accept keeps a recommendation acknowledged, Apply
+turns it into a real Forge record such as a task, project, goal, or linked note, and
+Dismiss removes it from the active feed.
 
 The Settings area should explain the current configuration of the runtime, rewards,
 agents, token flows, multitasking limits, time-accounting mode, recovery tools, and

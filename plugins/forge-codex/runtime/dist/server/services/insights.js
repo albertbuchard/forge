@@ -71,16 +71,16 @@ export function getInsightsPayload(now = new Date()) {
         executionTrends: trends,
         domainBalance,
         coaching: {
-            title: hottestGoal ? `Protect ${hottestGoal.title}` : "Rebuild momentum",
+            title: hottestGoal ? `Protect progress on ${hottestGoal.title}` : "Rebuild momentum",
             summary: blockedTasks > 0
-                ? `${blockedTasks} blocked task${blockedTasks === 1 ? "" : "s"} are leaking velocity out of the system.`
+                ? `${blockedTasks} blocked task${blockedTasks === 1 ? "" : "s"} are slowing active work across Forge right now.`
                 : overdueTasks > 0
-                    ? `${overdueTasks} overdue task${overdueTasks === 1 ? "" : "s"} are the main drag vector right now.`
+                    ? `${overdueTasks} overdue task${overdueTasks === 1 ? "" : "s"} are creating the biggest execution drag right now.`
                     : "Recent evidence shows enough movement to push the next arc more aggressively.",
             recommendation: blockedTasks > 0
-                ? "Clear one blocked task before adding more new work."
+                ? "Clear one blocked task before adding more new work so the active lane can move again."
                 : hottestGoal
-                    ? `Queue the next decisive move for ${hottestGoal.title} and keep a deep-work lane active.`
+                    ? `Create or schedule the next concrete move under ${hottestGoal.title}, then protect one deep-work lane to carry it forward this week.`
                     : "Pick one life goal, one project, and one task to stabilize the next 24 hours.",
             ctaLabel: "Trigger coaching insight"
         },

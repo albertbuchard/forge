@@ -80,6 +80,10 @@ and where reflection should connect back to real projects or tasks.
 Insights are structured interpretations, observations, or recommendations that can be
 stored by the user or trusted agents. They should never replace the raw operating
 record, but they should help the user make sense of it.
+Accepting an insight should mean keeping it as an acknowledged recommendation. Applying
+an insight should mean turning it into a concrete Forge record such as a task, project,
+goal, or linked note. Dismissing an insight should remove it rather than leaving dead
+cards behind in the main feed.
 
 ## Required Product Behavior
 

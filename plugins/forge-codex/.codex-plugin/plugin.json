@@ -1,6 +1,6 @@
 {
   "name": "forge-codex",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Curated Codex plugin for the Forge life operating system, with a bundled local runtime.",
   "author": {
     "name": "Forge",
