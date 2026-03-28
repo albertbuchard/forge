@@ -4,6 +4,7 @@ import { runInTransaction } from "../db.js";
 import { HttpError } from "../errors.js";
 import { recordActivityEvent } from "./activity-events.js";
 import { filterDeletedEntities, filterDeletedIds, isEntityDeleted } from "./deleted-entities.js";
+import { getGoalById } from "./goals.js";
 import { ensureDefaultProjectForGoal, getProjectById } from "./projects.js";
 import { pruneLinkedEntityReferences } from "./psyche.js";
 import { awardTaskCompletionReward, reverseLatestTaskCompletionReward } from "./rewards.js";
@@ -89,10 +90,13 @@ function normalizeCompletedAt(status: string, existingCompletedAt: string | null
 }
 
 function resolveProjectAndGoalIds(input: { goalId?: string | null; projectId?: string | null }, current?: Task) {
-  const requestedGoalId = input.goalId === undefined ? current?.goalId ?? null : input.goalId;
+  const currentGoalId = current?.goalId && getGoalById(current.goalId) ? current.goalId : null;
+  const currentProject = current?.projectId ? getProjectById(current.projectId) ?? null : null;
+  const currentProjectId = currentProject?.id ?? null;
+  const requestedGoalId = input.goalId === undefined ? currentGoalId : input.goalId;
   const goalChangedWithoutProjectOverride =
     current !== undefined && input.goalId !== undefined && input.goalId !== current.goalId && input.projectId === undefined;
-  const requestedProjectId = input.projectId === undefined ? (goalChangedWithoutProjectOverride ? null : current?.projectId ?? null) : input.projectId;
+  const requestedProjectId = input.projectId === undefined ? (goalChangedWithoutProjectOverride ? null : currentProjectId) : input.projectId;
 
   if (requestedProjectId) {
     const project = getProjectById(requestedProjectId);

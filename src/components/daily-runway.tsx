@@ -1,4 +1,5 @@
 import { ArrowRight, CheckCheck, Crosshair, Play, ShieldAlert } from "lucide-react";
+import type { KeyboardEvent } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { EntityBadge } from "@/components/ui/entity-badge";
@@ -13,6 +14,13 @@ function getGoalTitle(task: Task, goals: Goal[], fallback: string) {
 
 function getTaskTags(task: Task, tags: Tag[]) {
   return task.tagIds.map((tagId) => tags.find((tag) => tag.id === tagId)).filter(Boolean) as Tag[];
+}
+
+function handleCardKeyDown(event: KeyboardEvent<HTMLElement>, onActivate: () => void) {
+  if (event.key === "Enter" || event.key === " ") {
+    event.preventDefault();
+    onActivate();
+  }
 }
 
 function getNextAction(task: Task, labels: Record<"backlog" | "focus" | "in_progress" | "blocked", string>): { label: string; nextStatus?: TaskStatus; action: "start" | "move"; icon: typeof Crosshair } | null {
@@ -77,15 +85,18 @@ export function DailyRunway({
             const isSelected = selectedTaskId === task.id;
 
             return (
-              <button
+              <article
                 key={task.id}
-                type="button"
+                role="button"
+                tabIndex={0}
+                aria-pressed={isSelected}
                 className={`grid w-full gap-3 rounded-[22px] px-4 py-4 text-left transition ${
                   isSelected
                     ? "bg-[linear-gradient(180deg,rgba(192,193,255,0.16),rgba(192,193,255,0.05))] shadow-[inset_0_0_0_1px_rgba(192,193,255,0.2)]"
                     : "bg-white/[0.03] hover:bg-white/[0.06]"
                 }`}
                 onClick={() => onSelectTask(task.id)}
+                onKeyDown={(event) => handleCardKeyDown(event, () => onSelectTask(task.id))}
               >
                 <div className="flex min-w-0 items-start justify-between gap-4">
                   <div className="min-w-0 flex-1">
@@ -138,7 +149,7 @@ export function DailyRunway({
                     </Button>
                   ) : null}
                 </div>
-              </button>
+              </article>
             );
           })}
         </div>

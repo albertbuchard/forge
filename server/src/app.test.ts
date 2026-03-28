@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { buildServer } from "./app.js";
-import { closeDatabase } from "./db.js";
+import { closeDatabase, getDatabase } from "./db.js";
 import { getCrudEntityCapabilityMatrix } from "./services/entity-crud.js";
 import type { StartupTaskRunRecoverySummary } from "./services/run-recovery.js";
 
@@ -2035,6 +2035,36 @@ test("task creation rejects unknown goal references with a 404 and no partial wr
     const after = await app.inject({ method: "GET", url: "/api/tasks" });
     const afterCount = (after.json() as { tasks: Array<{ id: string }> }).tasks.length;
     assert.equal(afterCount, beforeCount);
+  } finally {
+    await app.close();
+    closeDatabase();
+    await rm(rootDir, { recursive: true, force: true });
+  }
+});
+
+test("task status updates survive stale deleted goal links", async () => {
+  const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-task-stale-goal-"));
+  const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
+
+  try {
+    const operatorCookie = await issueOperatorSessionCookie(app);
+    getDatabase().prepare(`DELETE FROM goals WHERE id = ?`).run("goal_be_a_good_person");
+
+    const moved = await app.inject({
+      method: "PATCH",
+      url: "/api/v1/tasks/task_weekly_review",
+      headers: {
+        cookie: operatorCookie
+      },
+      payload: {
+        status: "focus"
+      }
+    });
+
+    assert.equal(moved.statusCode, 200);
+    const movedTask = (moved.json() as { task: { status: string; goalId: string | null } }).task;
+    assert.equal(movedTask.status, "focus");
+    assert.equal(movedTask.goalId, null);
   } finally {
     await app.close();
     closeDatabase();
