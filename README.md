@@ -1,8 +1,7 @@
 # Forge
 
 Forge is the actual web app and API runtime for the life operating system under `projects/forge`.
-Markdown `note` records are first-class Forge entities and can link to one or many goals, projects, tasks, and Psyche records so progress evidence and handoff context stay searchable across the product.
-Notes are the only durable collaboration record now. Forge no longer uses the old legacy `comment` model or `/api/v1/comments` compatibility routes.
+It is the main browser app, local API runtime, and OpenClaw-backed integration surface for the Forge product.
 
 It is meant to run:
 - locally in the browser
