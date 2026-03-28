@@ -1,5 +1,5 @@
 import { spawn, type ChildProcess } from "node:child_process";
-import { existsSync } from "node:fs";
+import { closeSync, existsSync, mkdirSync, openSync } from "node:fs";
 import { homedir } from "node:os";
 import path from "node:path";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
@@ -22,6 +22,14 @@ type ForgeRuntimeState = {
   port: number;
   baseUrl: string;
   startedAt: string;
+  logPath: string | null;
+};
+
+type ForgeRuntimeExitDetails = {
+  pid: number;
+  code: number | null;
+  signal: NodeJS.Signals | null;
+  logPath: string | null;
 };
 
 export type ForgeRuntimeStopResult = {
@@ -62,7 +70,10 @@ export type ForgeRuntimeRestartResult = {
 
 let managedRuntimeChild: ChildProcess | null = null;
 let managedRuntimeKey: string | null = null;
+let managedRuntimeLogPath: string | null = null;
+let lastRuntimeExitDetails: ForgeRuntimeExitDetails | null = null;
 let startupPromise: Promise<void> | null = null;
+const dependencyInstallPromises = new Map<string, Promise<void>>();
 
 function runtimeKey(config: ForgePluginConfig) {
   return `${config.origin}:${config.port}`;
@@ -81,7 +92,8 @@ async function writeRuntimeState(config: ForgePluginConfig, pid: number) {
     origin: config.origin,
     port: config.port,
     baseUrl: config.baseUrl,
-    startedAt: new Date().toISOString()
+    startedAt: new Date().toISOString(),
+    logPath: managedRuntimeLogPath
   };
   await writeFile(statePath, `${JSON.stringify(payload, null, 2)}\n`, "utf8");
 }
@@ -102,7 +114,8 @@ async function readRuntimeState(config: ForgePluginConfig): Promise<ForgeRuntime
       origin: typeof parsed.origin === "string" ? parsed.origin : config.origin,
       port: typeof parsed.port === "number" ? parsed.port : config.port,
       baseUrl: typeof parsed.baseUrl === "string" ? parsed.baseUrl : config.baseUrl,
-      startedAt: typeof parsed.startedAt === "string" ? parsed.startedAt : new Date(0).toISOString()
+      startedAt: typeof parsed.startedAt === "string" ? parsed.startedAt : new Date(0).toISOString(),
+      logPath: typeof parsed.logPath === "string" ? parsed.logPath : null
     };
   } catch {
     return null;
@@ -139,6 +152,107 @@ function isLocalOrigin(origin: string) {
 
 function getCurrentModuleRoot() {
   return path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
+}
+
+function getRuntimeLogPath(config: ForgePluginConfig) {
+  const origin = new URL(config.origin).hostname.toLowerCase().replace(/[^a-z0-9._-]+/g, "-");
+  return path.join(homedir(), ".openclaw", "logs", "forge-openclaw-plugin", `${origin}-${config.port}.log`);
+}
+
+function openRuntimeLogFile(logPath: string) {
+  mkdirSync(path.dirname(logPath), { recursive: true });
+  return openSync(logPath, "a");
+}
+
+function isPackagedServerPlan(plan: ForgeRuntimeLaunchPlan) {
+  return plan.entryFile.endsWith(path.join("dist", "server", "index.js"));
+}
+
+function getNpmInvocation() {
+  const binDir = path.dirname(process.execPath);
+  const npmCli = process.platform === "win32" ? path.join(binDir, "npm.cmd") : path.join(binDir, "npm");
+  if (existsSync(npmCli)) {
+    return {
+      command: process.execPath,
+      args: [npmCli]
+    };
+  }
+
+  return {
+    command: "npm",
+    args: []
+  };
+}
+
+async function getMissingRuntimeDependencies(packageRoot: string) {
+  const packageJsonPath = path.join(packageRoot, "package.json");
+  const packageJson = JSON.parse(await readFile(packageJsonPath, "utf8")) as {
+    dependencies?: Record<string, string>;
+  };
+  const dependencyNames = Object.keys(packageJson.dependencies ?? {});
+
+  return dependencyNames.filter((dependencyName) =>
+    !existsSync(path.join(packageRoot, "node_modules", dependencyName, "package.json"))
+  );
+}
+
+async function installMissingRuntimeDependencies(packageRoot: string, logPath: string) {
+  const { command, args } = getNpmInvocation();
+  const logFd = openRuntimeLogFile(logPath);
+
+  try {
+    await new Promise<void>((resolve, reject) => {
+      const child = spawn(command, [...args, "install", "--omit=dev", "--silent", "--ignore-scripts"], {
+        cwd: packageRoot,
+        env: process.env,
+        stdio: ["ignore", logFd, logFd]
+      });
+
+      child.once("error", reject);
+      child.once("exit", (code, signal) => {
+        if (code === 0) {
+          resolve();
+          return;
+        }
+
+        reject(new Error(`npm dependency install exited with ${signal ? `signal ${signal}` : `code ${code ?? "unknown"}`}`));
+      });
+    });
+  } finally {
+    closeSync(logFd);
+  }
+}
+
+async function ensurePackagedRuntimeDependencies(plan: ForgeRuntimeLaunchPlan, config: ForgePluginConfig) {
+  if (!isPackagedServerPlan(plan)) {
+    return;
+  }
+
+  const missingDependencies = await getMissingRuntimeDependencies(plan.packageRoot);
+  if (missingDependencies.length === 0) {
+    return;
+  }
+
+  const logPath = getRuntimeLogPath(config);
+  managedRuntimeLogPath = logPath;
+  const installKey = plan.packageRoot;
+  const existingInstall = dependencyInstallPromises.get(installKey);
+  if (existingInstall) {
+    return existingInstall;
+  }
+
+  const installPromise = installMissingRuntimeDependencies(plan.packageRoot, logPath)
+    .catch((error) => {
+      throw new Error(
+        `Forge runtime dependencies are missing (${missingDependencies.join(", ")}) and automatic install failed. Check logs at ${logPath}. Cause: ${error instanceof Error ? error.message : String(error)}`
+      );
+    })
+    .finally(() => {
+      dependencyInstallPromises.delete(installKey);
+    });
+
+  dependencyInstallPromises.set(installKey, installPromise);
+  return installPromise;
 }
 
 function resolveLaunchPlan(): ForgeRuntimeLaunchPlan | null {
@@ -188,8 +302,10 @@ async function isForgeHealthy(config: ForgePluginConfig, timeoutMs: number) {
 }
 
 function spawnManagedRuntime(config: ForgePluginConfig, plan: ForgeRuntimeLaunchPlan) {
-  const isPackagedServer = plan.entryFile.endsWith(path.join("dist", "server", "index.js"));
+  const isPackagedServer = isPackagedServerPlan(plan);
   const args = isPackagedServer ? [plan.entryFile] : [plan.entryFile, path.join(plan.packageRoot, "server", "src", "index.ts")];
+  const logPath = getRuntimeLogPath(config);
+  const logFd = openRuntimeLogFile(logPath);
   const child = spawn(process.execPath, args, {
     cwd: plan.packageRoot,
     env: {
@@ -199,12 +315,21 @@ function spawnManagedRuntime(config: ForgePluginConfig, plan: ForgeRuntimeLaunch
       FORGE_BASE_PATH: "/forge/",
       ...(config.dataRoot ? { FORGE_DATA_ROOT: config.dataRoot } : {})
     },
-    stdio: "ignore",
+    stdio: ["ignore", logFd, logFd],
     detached: true
   });
+  closeSync(logFd);
 
   child.unref();
-  child.once("exit", () => {
+  managedRuntimeLogPath = logPath;
+  lastRuntimeExitDetails = null;
+  child.once("exit", (code, signal) => {
+    lastRuntimeExitDetails = {
+      pid: child.pid ?? -1,
+      code,
+      signal,
+      logPath
+    };
     if (managedRuntimeChild === child) {
       managedRuntimeChild = null;
       managedRuntimeKey = null;
@@ -219,15 +344,33 @@ function spawnManagedRuntime(config: ForgePluginConfig, plan: ForgeRuntimeLaunch
   });
 }
 
-async function waitForRuntime(config: ForgePluginConfig, timeoutMs: number) {
+function formatRuntimeFailure(details: ForgeRuntimeExitDetails | null, config: ForgePluginConfig) {
+  if (!details) {
+    return `Forge local runtime did not become healthy at ${config.baseUrl} within ${STARTUP_TIMEOUT_MS}ms`;
+  }
+
+  const suffix = details.logPath ? ` Check logs at ${details.logPath}.` : "";
+  if (details.signal) {
+    return `Forge local runtime exited before becoming healthy at ${config.baseUrl} (signal ${details.signal}).${suffix}`;
+  }
+  if (typeof details.code === "number") {
+    return `Forge local runtime exited before becoming healthy at ${config.baseUrl} (code ${details.code}).${suffix}`;
+  }
+  return `Forge local runtime exited before becoming healthy at ${config.baseUrl}.${suffix}`;
+}
+
+async function waitForRuntime(config: ForgePluginConfig, timeoutMs: number, expectedPid: number | null) {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     if (await isForgeHealthy(config, HEALTHCHECK_TIMEOUT_MS)) {
       return;
     }
+    if (expectedPid !== null && lastRuntimeExitDetails?.pid === expectedPid) {
+      throw new Error(formatRuntimeFailure(lastRuntimeExitDetails, config));
+    }
     await new Promise((resolve) => setTimeout(resolve, HEALTHCHECK_INTERVAL_MS));
   }
-  throw new Error(`Forge local runtime did not become healthy at ${config.baseUrl} within ${timeoutMs}ms`);
+  throw new Error(formatRuntimeFailure(lastRuntimeExitDetails, config));
 }
 
 export async function ensureForgeRuntimeReady(config: ForgePluginConfig) {
@@ -253,10 +396,11 @@ export async function ensureForgeRuntimeReady(config: ForgePluginConfig) {
     if (await isForgeHealthy(config, HEALTHCHECK_TIMEOUT_MS)) {
       return;
     }
+    await ensurePackagedRuntimeDependencies(plan, config);
     if (!managedRuntimeChild || managedRuntimeKey !== key || managedRuntimeChild.killed) {
       spawnManagedRuntime(config, plan);
     }
-    await waitForRuntime(config, STARTUP_TIMEOUT_MS);
+    await waitForRuntime(config, STARTUP_TIMEOUT_MS, managedRuntimeChild?.pid ?? null);
   })().finally(() => {
     startupPromise = null;
   });
@@ -277,6 +421,17 @@ export async function startForgeRuntime(config: ForgePluginConfig): Promise<Forg
   }
 
   const existingState = await readRuntimeState(config);
+  if (!existingState && (await isForgeHealthy(config, HEALTHCHECK_TIMEOUT_MS))) {
+    return {
+      ok: true,
+      started: false,
+      managed: false,
+      message: `Forge is already running on ${config.baseUrl}, but it does not look like a plugin-managed runtime.`,
+      pid: null,
+      baseUrl: config.baseUrl
+    };
+  }
+
   if (existingState && processExists(existingState.pid) && (await isForgeHealthy(config, HEALTHCHECK_TIMEOUT_MS))) {
     return {
       ok: true,
@@ -290,6 +445,17 @@ export async function startForgeRuntime(config: ForgePluginConfig): Promise<Forg
 
   await ensureForgeRuntimeReady(config);
   const state = await readRuntimeState(config);
+  if (!state && (await isForgeHealthy(config, HEALTHCHECK_TIMEOUT_MS))) {
+    return {
+      ok: true,
+      started: false,
+      managed: false,
+      message: `Forge is healthy on ${config.baseUrl}, but it does not look like a plugin-managed runtime.`,
+      pid: null,
+      baseUrl: config.baseUrl
+    };
+  }
+
   return {
     ok: true,
     started: true,

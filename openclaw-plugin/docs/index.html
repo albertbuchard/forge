@@ -89,12 +89,15 @@
                 <span class="terminal-dot green"></span>
                 <span>Reliable local install flow</span>
               </div>
-              <pre><code>openclaw plugins install forge-openclaw-plugin
+              <div class="command-shell">
+                <button class="copy-button" type="button" data-copy-target="install-flow">Copy</button>
+                <pre><code id="install-flow">openclaw plugins install forge-openclaw-plugin
 openclaw plugins enable forge-openclaw-plugin
 node -e 'const fs=require("fs"); const p=process.env.HOME+"/.openclaw/openclaw.json"; const j=JSON.parse(fs.readFileSync(p,"utf8")); j.plugins ??= {}; j.plugins.allow = Array.from(new Set([...(j.plugins.allow || []), "forge-openclaw-plugin"])); fs.writeFileSync(p, JSON.stringify(j, null, 2)+"\n");'
 openclaw gateway restart
 openclaw forge health
 openclaw forge status</code></pre>
+              </div>
             </div>
             <div class="ui-callout success">
               <strong>What the verify step does</strong>
@@ -119,6 +122,14 @@ openclaw forge status</code></pre>
                 Run <code>openclaw forge start</code>, <code>openclaw forge stop</code>, <code>openclaw forge restart</code>,
                 or <code>openclaw forge status</code> to manage a Forge runtime that OpenClaw auto-started itself.
                 If Forge was started some other way, the commands explain that instead of killing unrelated local processes.
+              </p>
+              <p>
+                If startup fails, check <code>~/.openclaw/logs/forge-openclaw-plugin/127.0.0.1-4317.log</code> for the captured
+                runtime stdout and stderr.
+              </p>
+              <p>
+                On clean installs, the plugin also repairs missing bundled runtime dependencies on first local start before
+                launching Forge.
               </p>
             </div>
           <div class="stat-row">
@@ -186,28 +197,43 @@ openclaw forge status</code></pre>
             <p class="eyebrow">Real Install Flow</p>
             <h2>Install it, allow it, restart, and verify that Forge is really up.</h2>
           </div>
-          <div class="tools-layout">
-            <article class="card tools-card">
+          <div class="install-steps-layout">
+            <article class="card tools-card command-card">
               <h3>1. Install</h3>
-              <pre><code>openclaw plugins install forge-openclaw-plugin
+              <div class="command-shell">
+                <button class="copy-button" type="button" data-copy-target="install-step-1">Copy</button>
+                <pre><code id="install-step-1">openclaw plugins install forge-openclaw-plugin
 openclaw plugins enable forge-openclaw-plugin</code></pre>
+              </div>
             </article>
-            <article class="card tools-card">
+            <article class="card tools-card command-card command-card-wide">
               <h3>2. Repair allow list</h3>
-              <pre><code>node -e 'const fs=require("fs"); const p=process.env.HOME+"/.openclaw/openclaw.json"; const j=JSON.parse(fs.readFileSync(p,"utf8")); j.plugins ??= {}; j.plugins.allow = Array.from(new Set([...(j.plugins.allow || []), "forge-openclaw-plugin"])); fs.writeFileSync(p, JSON.stringify(j, null, 2)+"\n");'</code></pre>
+              <div class="command-shell">
+                <button class="copy-button" type="button" data-copy-target="install-step-2">Copy</button>
+                <pre><code id="install-step-2">node -e 'const fs=require("fs"); const p=process.env.HOME+"/.openclaw/openclaw.json"; const j=JSON.parse(fs.readFileSync(p,"utf8")); j.plugins ??= {}; j.plugins.allow = Array.from(new Set([...(j.plugins.allow || []), "forge-openclaw-plugin"])); fs.writeFileSync(p, JSON.stringify(j, null, 2)+"\n");'</code></pre>
+              </div>
             </article>
-            <article class="card tools-card">
+            <article class="card tools-card command-card">
               <h3>3. Restart</h3>
-              <pre><code>openclaw gateway restart</code></pre>
+              <div class="command-shell">
+                <button class="copy-button" type="button" data-copy-target="install-step-3">Copy</button>
+                <pre><code id="install-step-3">openclaw gateway restart</code></pre>
+              </div>
             </article>
-            <article class="card tools-card">
+            <article class="card tools-card command-card">
               <h3>4. Verify</h3>
-              <pre><code>openclaw forge health
+              <div class="command-shell">
+                <button class="copy-button" type="button" data-copy-target="install-step-4">Copy</button>
+                <pre><code id="install-step-4">openclaw forge health
 openclaw forge status</code></pre>
+              </div>
             </article>
-            <article class="card tools-card">
+            <article class="card tools-card command-card">
               <h3>5. Check the result</h3>
-              <pre><code>openclaw config get plugins.allow --json</code></pre>
+              <div class="command-shell">
+                <button class="copy-button" type="button" data-copy-target="install-step-5">Copy</button>
+                <pre><code id="install-step-5">openclaw config get plugins.allow --json</code></pre>
+              </div>
             </article>
             <article class="card tools-card">
               <h3>6. Open Forge</h3>
@@ -392,5 +418,36 @@ openclaw forge status</code></pre>
         </section>
       </main>
     </div>
+    <script>
+      const copyButtons = document.querySelectorAll("[data-copy-target]");
+      async function copyCommand(targetId, button) {
+        const code = document.getElementById(targetId);
+        if (!code) return;
+        const text = code.textContent ?? "";
+        try {
+          await navigator.clipboard.writeText(text);
+        } catch {
+          const helper = document.createElement("textarea");
+          helper.value = text;
+          helper.setAttribute("readonly", "");
+          helper.style.position = "absolute";
+          helper.style.left = "-9999px";
+          document.body.appendChild(helper);
+          helper.select();
+          document.execCommand("copy");
+          document.body.removeChild(helper);
+        }
+        const previous = button.textContent;
+        button.textContent = "Copied";
+        button.dataset.copied = "true";
+        window.setTimeout(() => {
+          button.textContent = previous;
+          button.dataset.copied = "false";
+        }, 1600);
+      }
+      copyButtons.forEach((button) => {
+        button.addEventListener("click", () => copyCommand(button.dataset.copyTarget, button));
+      });
+    </script>
   </body>
 </html>

@@ -447,3 +447,4 @@ openclaw forge route-check
 
 `openclaw forge doctor` checks connectivity, onboarding, and curated route coverage.
 `openclaw forge start`, `openclaw forge stop`, `openclaw forge restart`, and `openclaw forge status` manage the local Forge runtime when it is being handled by the OpenClaw plugin. If Forge was started some other way, they report that instead of killing random local processes.
+If the local runtime fails before it becomes healthy, check `~/.openclaw/logs/forge-openclaw-plugin/127.0.0.1-4317.log` for the captured Forge stdout/stderr from the plugin-managed child process. On clean installs, the plugin also attempts to repair missing bundled runtime dependencies on first local start before it launches Forge.

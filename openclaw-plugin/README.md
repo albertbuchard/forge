@@ -214,6 +214,16 @@ openclaw forge status
 
 These commands only manage the runtime when it was auto-started by the OpenClaw plugin. If Forge was started manually some other way, they tell you that instead of killing unrelated processes.
 
+If the local runtime fails to come up, check the plugin-managed runtime log at:
+
+```bash
+~/.openclaw/logs/forge-openclaw-plugin/127.0.0.1-4317.log
+```
+
+On clean installs, the plugin now also repairs missing bundled runtime dependencies on first local start before it launches Forge.
+
+The startup error now points at that log file when the child process exits before Forge becomes healthy.
+
 ## Publishing and listing
 
 The reliable publication path for the Forge plugin is:

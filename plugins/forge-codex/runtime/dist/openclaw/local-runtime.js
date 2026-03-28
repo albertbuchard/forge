@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { existsSync } from "node:fs";
+import { closeSync, existsSync, mkdirSync, openSync } from "node:fs";
 import { homedir } from "node:os";
 import path from "node:path";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
@@ -10,7 +10,10 @@ const HEALTHCHECK_TIMEOUT_MS = 1_500;
 const HEALTHCHECK_INTERVAL_MS = 250;
 let managedRuntimeChild = null;
 let managedRuntimeKey = null;
+let managedRuntimeLogPath = null;
+let lastRuntimeExitDetails = null;
 let startupPromise = null;
+const dependencyInstallPromises = new Map();
 function runtimeKey(config) {
     return `${config.origin}:${config.port}`;
 }
@@ -26,7 +29,8 @@ async function writeRuntimeState(config, pid) {
         origin: config.origin,
         port: config.port,
         baseUrl: config.baseUrl,
-        startedAt: new Date().toISOString()
+        startedAt: new Date().toISOString(),
+        logPath: managedRuntimeLogPath
     };
     await writeFile(statePath, `${JSON.stringify(payload, null, 2)}\n`, "utf8");
 }
@@ -45,7 +49,8 @@ async function readRuntimeState(config) {
             origin: typeof parsed.origin === "string" ? parsed.origin : config.origin,
             port: typeof parsed.port === "number" ? parsed.port : config.port,
             baseUrl: typeof parsed.baseUrl === "string" ? parsed.baseUrl : config.baseUrl,
-            startedAt: typeof parsed.startedAt === "string" ? parsed.startedAt : new Date(0).toISOString()
+            startedAt: typeof parsed.startedAt === "string" ? parsed.startedAt : new Date(0).toISOString(),
+            logPath: typeof parsed.logPath === "string" ? parsed.logPath : null
         };
     }
     catch {
@@ -81,6 +86,86 @@ function isLocalOrigin(origin) {
 }
 function getCurrentModuleRoot() {
     return path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
+}
+function getRuntimeLogPath(config) {
+    const origin = new URL(config.origin).hostname.toLowerCase().replace(/[^a-z0-9._-]+/g, "-");
+    return path.join(homedir(), ".openclaw", "logs", "forge-openclaw-plugin", `${origin}-${config.port}.log`);
+}
+function openRuntimeLogFile(logPath) {
+    mkdirSync(path.dirname(logPath), { recursive: true });
+    return openSync(logPath, "a");
+}
+function isPackagedServerPlan(plan) {
+    return plan.entryFile.endsWith(path.join("dist", "server", "index.js"));
+}
+function getNpmInvocation() {
+    const binDir = path.dirname(process.execPath);
+    const npmCli = process.platform === "win32" ? path.join(binDir, "npm.cmd") : path.join(binDir, "npm");
+    if (existsSync(npmCli)) {
+        return {
+            command: process.execPath,
+            args: [npmCli]
+        };
+    }
+    return {
+        command: "npm",
+        args: []
+    };
+}
+async function getMissingRuntimeDependencies(packageRoot) {
+    const packageJsonPath = path.join(packageRoot, "package.json");
+    const packageJson = JSON.parse(await readFile(packageJsonPath, "utf8"));
+    const dependencyNames = Object.keys(packageJson.dependencies ?? {});
+    return dependencyNames.filter((dependencyName) => !existsSync(path.join(packageRoot, "node_modules", dependencyName, "package.json")));
+}
+async function installMissingRuntimeDependencies(packageRoot, logPath) {
+    const { command, args } = getNpmInvocation();
+    const logFd = openRuntimeLogFile(logPath);
+    try {
+        await new Promise((resolve, reject) => {
+            const child = spawn(command, [...args, "install", "--omit=dev", "--silent", "--ignore-scripts"], {
+                cwd: packageRoot,
+                env: process.env,
+                stdio: ["ignore", logFd, logFd]
+            });
+            child.once("error", reject);
+            child.once("exit", (code, signal) => {
+                if (code === 0) {
+                    resolve();
+                    return;
+                }
+                reject(new Error(`npm dependency install exited with ${signal ? `signal ${signal}` : `code ${code ?? "unknown"}`}`));
+            });
+        });
+    }
+    finally {
+        closeSync(logFd);
+    }
+}
+async function ensurePackagedRuntimeDependencies(plan, config) {
+    if (!isPackagedServerPlan(plan)) {
+        return;
+    }
+    const missingDependencies = await getMissingRuntimeDependencies(plan.packageRoot);
+    if (missingDependencies.length === 0) {
+        return;
+    }
+    const logPath = getRuntimeLogPath(config);
+    managedRuntimeLogPath = logPath;
+    const installKey = plan.packageRoot;
+    const existingInstall = dependencyInstallPromises.get(installKey);
+    if (existingInstall) {
+        return existingInstall;
+    }
+    const installPromise = installMissingRuntimeDependencies(plan.packageRoot, logPath)
+        .catch((error) => {
+        throw new Error(`Forge runtime dependencies are missing (${missingDependencies.join(", ")}) and automatic install failed. Check logs at ${logPath}. Cause: ${error instanceof Error ? error.message : String(error)}`);
+    })
+        .finally(() => {
+        dependencyInstallPromises.delete(installKey);
+    });
+    dependencyInstallPromises.set(installKey, installPromise);
+    return installPromise;
 }
 function resolveLaunchPlan() {
     const moduleRoot = getCurrentModuleRoot();
@@ -126,8 +211,10 @@ async function isForgeHealthy(config, timeoutMs) {
     }
 }
 function spawnManagedRuntime(config, plan) {
-    const isPackagedServer = plan.entryFile.endsWith(path.join("dist", "server", "index.js"));
+    const isPackagedServer = isPackagedServerPlan(plan);
     const args = isPackagedServer ? [plan.entryFile] : [plan.entryFile, path.join(plan.packageRoot, "server", "src", "index.ts")];
+    const logPath = getRuntimeLogPath(config);
+    const logFd = openRuntimeLogFile(logPath);
     const child = spawn(process.execPath, args, {
         cwd: plan.packageRoot,
         env: {
@@ -137,11 +224,20 @@ function spawnManagedRuntime(config, plan) {
             FORGE_BASE_PATH: "/forge/",
             ...(config.dataRoot ? { FORGE_DATA_ROOT: config.dataRoot } : {})
         },
-        stdio: "ignore",
+        stdio: ["ignore", logFd, logFd],
         detached: true
     });
+    closeSync(logFd);
     child.unref();
-    child.once("exit", () => {
+    managedRuntimeLogPath = logPath;
+    lastRuntimeExitDetails = null;
+    child.once("exit", (code, signal) => {
+        lastRuntimeExitDetails = {
+            pid: child.pid ?? -1,
+            code,
+            signal,
+            logPath
+        };
         if (managedRuntimeChild === child) {
             managedRuntimeChild = null;
             managedRuntimeKey = null;
@@ -154,15 +250,31 @@ function spawnManagedRuntime(config, plan) {
         // State tracking is best effort. Runtime health checks remain authoritative.
     });
 }
-async function waitForRuntime(config, timeoutMs) {
+function formatRuntimeFailure(details, config) {
+    if (!details) {
+        return `Forge local runtime did not become healthy at ${config.baseUrl} within ${STARTUP_TIMEOUT_MS}ms`;
+    }
+    const suffix = details.logPath ? ` Check logs at ${details.logPath}.` : "";
+    if (details.signal) {
+        return `Forge local runtime exited before becoming healthy at ${config.baseUrl} (signal ${details.signal}).${suffix}`;
+    }
+    if (typeof details.code === "number") {
+        return `Forge local runtime exited before becoming healthy at ${config.baseUrl} (code ${details.code}).${suffix}`;
+    }
+    return `Forge local runtime exited before becoming healthy at ${config.baseUrl}.${suffix}`;
+}
+async function waitForRuntime(config, timeoutMs, expectedPid) {
     const deadline = Date.now() + timeoutMs;
     while (Date.now() < deadline) {
         if (await isForgeHealthy(config, HEALTHCHECK_TIMEOUT_MS)) {
             return;
         }
+        if (expectedPid !== null && lastRuntimeExitDetails?.pid === expectedPid) {
+            throw new Error(formatRuntimeFailure(lastRuntimeExitDetails, config));
+        }
         await new Promise((resolve) => setTimeout(resolve, HEALTHCHECK_INTERVAL_MS));
     }
-    throw new Error(`Forge local runtime did not become healthy at ${config.baseUrl} within ${timeoutMs}ms`);
+    throw new Error(formatRuntimeFailure(lastRuntimeExitDetails, config));
 }
 export async function ensureForgeRuntimeReady(config) {
     if (!isLocalOrigin(config.origin)) {
@@ -183,10 +295,11 @@ export async function ensureForgeRuntimeReady(config) {
         if (await isForgeHealthy(config, HEALTHCHECK_TIMEOUT_MS)) {
             return;
         }
+        await ensurePackagedRuntimeDependencies(plan, config);
         if (!managedRuntimeChild || managedRuntimeKey !== key || managedRuntimeChild.killed) {
             spawnManagedRuntime(config, plan);
         }
-        await waitForRuntime(config, STARTUP_TIMEOUT_MS);
+        await waitForRuntime(config, STARTUP_TIMEOUT_MS, managedRuntimeChild?.pid ?? null);
     })().finally(() => {
         startupPromise = null;
     });
@@ -204,6 +317,16 @@ export async function startForgeRuntime(config) {
         };
     }
     const existingState = await readRuntimeState(config);
+    if (!existingState && (await isForgeHealthy(config, HEALTHCHECK_TIMEOUT_MS))) {
+        return {
+            ok: true,
+            started: false,
+            managed: false,
+            message: `Forge is already running on ${config.baseUrl}, but it does not look like a plugin-managed runtime.`,
+            pid: null,
+            baseUrl: config.baseUrl
+        };
+    }
     if (existingState && processExists(existingState.pid) && (await isForgeHealthy(config, HEALTHCHECK_TIMEOUT_MS))) {
         return {
             ok: true,
@@ -216,6 +339,16 @@ export async function startForgeRuntime(config) {
     }
     await ensureForgeRuntimeReady(config);
     const state = await readRuntimeState(config);
+    if (!state && (await isForgeHealthy(config, HEALTHCHECK_TIMEOUT_MS))) {
+        return {
+            ok: true,
+            started: false,
+            managed: false,
+            message: `Forge is healthy on ${config.baseUrl}, but it does not look like a plugin-managed runtime.`,
+            pid: null,
+            baseUrl: config.baseUrl
+        };
+    }
     return {
         ok: true,
         started: true,
