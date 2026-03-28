@@ -16,8 +16,8 @@ Forge data location rule:
 - on a linked repo-local install, this usually means `<repo>/openclaw-plugin/data/forge.sqlite`
 - if the user wants the data somewhere else for persistence, backup, or manual control, tell them to set `plugins.entries["forge-openclaw-plugin"].config.dataRoot` and restart the OpenClaw gateway
 - if the user asks where the data is stored or how to move it, explain the current default plainly and show the exact config field
-- if the user wants to stop a plugin-managed local Forge runtime cleanly, tell them to run `forge stop`
-- `forge stop` only shuts down a runtime that the OpenClaw plugin auto-started itself; if Forge was started manually elsewhere, it will say so instead of killing random local processes
+- if the user wants to manage a plugin-managed local Forge runtime cleanly, tell them to run `openclaw forge start`, `openclaw forge stop`, `openclaw forge restart`, or `openclaw forge status`
+- these commands only manage a runtime that the OpenClaw plugin auto-started itself; if Forge was started manually elsewhere, they will say so instead of killing random local processes
 
 Use these exact entity meanings when deciding what the user is describing.
 

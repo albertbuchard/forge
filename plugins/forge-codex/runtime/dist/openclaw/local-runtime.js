@@ -192,6 +192,39 @@ export async function ensureForgeRuntimeReady(config) {
     });
     return startupPromise;
 }
+export async function startForgeRuntime(config) {
+    if (!isLocalOrigin(config.origin)) {
+        return {
+            ok: false,
+            started: false,
+            managed: false,
+            message: "Forge start only supports local plugin-managed runtimes. Remote Forge targets must be started where they are hosted.",
+            pid: null,
+            baseUrl: config.baseUrl
+        };
+    }
+    const existingState = await readRuntimeState(config);
+    if (existingState && processExists(existingState.pid) && (await isForgeHealthy(config, HEALTHCHECK_TIMEOUT_MS))) {
+        return {
+            ok: true,
+            started: false,
+            managed: true,
+            message: `Forge is already running on ${config.baseUrl}.`,
+            pid: existingState.pid,
+            baseUrl: config.baseUrl
+        };
+    }
+    await ensureForgeRuntimeReady(config);
+    const state = await readRuntimeState(config);
+    return {
+        ok: true,
+        started: true,
+        managed: true,
+        message: `Started the plugin-managed Forge runtime on ${config.baseUrl}.`,
+        pid: state?.pid ?? managedRuntimeChild?.pid ?? null,
+        baseUrl: config.baseUrl
+    };
+}
 export function primeForgeRuntime(config) {
     void ensureForgeRuntimeReady(config).catch(() => {
         // Keep plugin registration non-blocking. Failures surface on first real call.
@@ -253,5 +286,113 @@ export async function stopForgeRuntime(config) {
         managed: true,
         message: `Stopped the plugin-managed Forge runtime on ${config.baseUrl}.`,
         pid: state.pid
+    };
+}
+export async function getForgeRuntimeStatus(config) {
+    const healthy = await isForgeHealthy(config, HEALTHCHECK_TIMEOUT_MS);
+    const state = await readRuntimeState(config);
+    const pid = state?.pid ?? null;
+    const managed = Boolean(state);
+    const running = healthy || (pid !== null && processExists(pid));
+    if (!isLocalOrigin(config.origin)) {
+        return {
+            ok: healthy,
+            running: healthy,
+            healthy,
+            managed: false,
+            message: healthy
+                ? `Forge is reachable at ${config.baseUrl}. Runtime lifecycle is managed remotely.`
+                : `Forge is not reachable at ${config.baseUrl}. Runtime lifecycle is managed remotely.`,
+            pid: null,
+            baseUrl: config.baseUrl
+        };
+    }
+    if (managed && pid !== null && !processExists(pid)) {
+        await clearRuntimeState(config);
+        return {
+            ok: true,
+            running: false,
+            healthy: false,
+            managed: true,
+            message: "The saved Forge runtime PID was stale. The plugin-managed runtime is stopped.",
+            pid,
+            baseUrl: config.baseUrl
+        };
+    }
+    if (healthy && managed) {
+        return {
+            ok: true,
+            running: true,
+            healthy: true,
+            managed: true,
+            message: `Forge is running and healthy on ${config.baseUrl}.`,
+            pid,
+            baseUrl: config.baseUrl
+        };
+    }
+    if (healthy) {
+        return {
+            ok: true,
+            running: true,
+            healthy: true,
+            managed: false,
+            message: `Forge is running on ${config.baseUrl}, but it does not look like a plugin-managed runtime.`,
+            pid: null,
+            baseUrl: config.baseUrl
+        };
+    }
+    if (managed) {
+        return {
+            ok: true,
+            running: false,
+            healthy: false,
+            managed: true,
+            message: "The plugin-managed Forge runtime is stopped.",
+            pid,
+            baseUrl: config.baseUrl
+        };
+    }
+    return {
+        ok: true,
+        running: false,
+        healthy: false,
+        managed: false,
+        message: "Forge is not running through the plugin-managed local runtime.",
+        pid: null,
+        baseUrl: config.baseUrl
+    };
+}
+export async function restartForgeRuntime(config) {
+    if (!isLocalOrigin(config.origin)) {
+        return {
+            ok: false,
+            restarted: false,
+            managed: false,
+            message: "Forge restart only supports local plugin-managed runtimes. Remote Forge targets must be restarted where they are hosted.",
+            pid: null,
+            baseUrl: config.baseUrl
+        };
+    }
+    const stopResult = await stopForgeRuntime(config);
+    if (!stopResult.ok) {
+        return {
+            ok: false,
+            restarted: false,
+            managed: stopResult.managed,
+            message: stopResult.message,
+            pid: stopResult.pid,
+            baseUrl: config.baseUrl
+        };
+    }
+    const startResult = await startForgeRuntime(config);
+    return {
+        ok: startResult.ok,
+        restarted: startResult.ok,
+        managed: true,
+        message: startResult.ok
+            ? `Restarted the plugin-managed Forge runtime on ${config.baseUrl}.`
+            : startResult.message,
+        pid: startResult.pid,
+        baseUrl: config.baseUrl
     };
 }

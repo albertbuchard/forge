@@ -425,14 +425,17 @@ curl -X POST http://127.0.0.1:4317/api/v1/settings/tokens \
 
 ```bash
 openclaw plugins info forge-openclaw-plugin
-forge health
-forge overview
-forge onboarding
-forge ui
-forge stop
-forge doctor
-forge route-check
+openclaw forge health
+openclaw forge overview
+openclaw forge onboarding
+openclaw forge ui
+openclaw forge start
+openclaw forge stop
+openclaw forge restart
+openclaw forge status
+openclaw forge doctor
+openclaw forge route-check
 ```
 
-`forge doctor` checks connectivity, onboarding, and curated route coverage.
-`forge stop` cleanly stops the local Forge runtime only when it was auto-started by the OpenClaw plugin. If Forge was started some other way, it reports that instead of killing random local processes.
+`openclaw forge doctor` checks connectivity, onboarding, and curated route coverage.
+`openclaw forge start`, `openclaw forge stop`, `openclaw forge restart`, and `openclaw forge status` manage the local Forge runtime when it is being handled by the OpenClaw plugin. If Forge was started some other way, they report that instead of killing random local processes.

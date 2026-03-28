@@ -202,13 +202,16 @@ The skill is entity-format-driven. It teaches the agent how to:
 
 For local use, set the plugin origin to `http://127.0.0.1` or `http://localhost` and the plugin will bring Forge up on the configured port automatically.
 
-If you want to stop that plugin-managed local runtime cleanly, use:
+If you want to manage that plugin-managed local runtime cleanly, use:
 
 ```bash
-forge stop
+openclaw forge start
+openclaw forge stop
+openclaw forge restart
+openclaw forge status
 ```
 
-This only stops the runtime when it was auto-started by the OpenClaw plugin. If Forge was started manually some other way, `forge stop` tells you that instead of killing unrelated processes.
+These commands only manage the runtime when it was auto-started by the OpenClaw plugin. If Forge was started manually some other way, they tell you that instead of killing unrelated processes.
 
 ## Publishing and listing
 

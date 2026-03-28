@@ -2,17 +2,42 @@ import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { Readable } from "node:stream";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { primeForgeRuntime, stopForgeRuntime } from "./local-runtime";
+import { getForgeRuntimeStatus, primeForgeRuntime, restartForgeRuntime, startForgeRuntime, stopForgeRuntime } from "./local-runtime";
 
 vi.mock("./local-runtime", () => ({
   ensureForgeRuntimeReady: vi.fn().mockResolvedValue(undefined),
   primeForgeRuntime: vi.fn(),
+  startForgeRuntime: vi.fn().mockResolvedValue({
+    ok: true,
+    started: true,
+    managed: true,
+    message: "Started the plugin-managed Forge runtime on http://127.0.0.1:4317.",
+    pid: 12345,
+    baseUrl: "http://127.0.0.1:4317"
+  }),
   stopForgeRuntime: vi.fn().mockResolvedValue({
     ok: true,
     stopped: true,
     managed: true,
     message: "Stopped the plugin-managed Forge runtime on http://127.0.0.1:4317.",
     pid: 12345
+  }),
+  restartForgeRuntime: vi.fn().mockResolvedValue({
+    ok: true,
+    restarted: true,
+    managed: true,
+    message: "Restarted the plugin-managed Forge runtime on http://127.0.0.1:4317.",
+    pid: 12345,
+    baseUrl: "http://127.0.0.1:4317"
+  }),
+  getForgeRuntimeStatus: vi.fn().mockResolvedValue({
+    ok: true,
+    running: true,
+    healthy: true,
+    managed: true,
+    message: "Forge is running and healthy on http://127.0.0.1:4317.",
+    pid: 12345,
+    baseUrl: "http://127.0.0.1:4317"
   })
 }));
 
@@ -192,7 +217,10 @@ describe("forge openclaw plugin", () => {
       "overview",
       "onboarding",
       "ui",
+      "start",
       "stop",
+      "restart",
+      "status",
       "doctor",
       "route-check"
     ]);
@@ -205,7 +233,7 @@ describe("forge openclaw plugin", () => {
     );
   });
 
-  it("exposes a forge stop CLI action for plugin-managed local runtimes", async () => {
+  it("exposes forge runtime lifecycle CLI actions for plugin-managed local runtimes", async () => {
     const program = createCommand("root");
     vi.spyOn(console, "log").mockImplementation(() => {});
     registerForgePlugin({
@@ -225,13 +253,44 @@ describe("forge openclaw plugin", () => {
     });
 
     const forgeCommand = program.children[0];
+    const startCommand = forgeCommand?.children.find((child) => child.name === "start");
     const stopCommand = forgeCommand?.children.find((child) => child.name === "stop");
+    const restartCommand = forgeCommand?.children.find((child) => child.name === "restart");
+    const statusCommand = forgeCommand?.children.find((child) => child.name === "status");
+    expect(startCommand).toBeDefined();
     expect(stopCommand).toBeDefined();
+    expect(restartCommand).toBeDefined();
+    expect(statusCommand).toBeDefined();
+    expect(startCommand?.actions).toHaveLength(1);
     expect(stopCommand?.actions).toHaveLength(1);
+    expect(restartCommand?.actions).toHaveLength(1);
+    expect(statusCommand?.actions).toHaveLength(1);
+
+    await startCommand?.actions[0]?.();
 
     await stopCommand?.actions[0]?.();
+    await restartCommand?.actions[0]?.();
+    await statusCommand?.actions[0]?.();
 
+    expect(startForgeRuntime).toHaveBeenCalledWith(
+      expect.objectContaining({
+        origin: "http://127.0.0.1",
+        port: 4317
+      })
+    );
     expect(stopForgeRuntime).toHaveBeenCalledWith(
+      expect.objectContaining({
+        origin: "http://127.0.0.1",
+        port: 4317
+      })
+    );
+    expect(restartForgeRuntime).toHaveBeenCalledWith(
+      expect.objectContaining({
+        origin: "http://127.0.0.1",
+        port: 4317
+      })
+    );
+    expect(getForgeRuntimeStatus).toHaveBeenCalledWith(
       expect.objectContaining({
         origin: "http://127.0.0.1",
         port: 4317

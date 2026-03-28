@@ -1,5 +1,5 @@
 import { canBootstrapOperatorSession, callConfiguredForgeApi, expectForgeSuccess, readJsonRequestBody, readSingleHeaderValue, requireApiToken, writeForgeProxyResponse, writePluginError, writeRedirectResponse } from "./api-client.js";
-import { stopForgeRuntime } from "./local-runtime.js";
+import { getForgeRuntimeStatus, restartForgeRuntime, startForgeRuntime, stopForgeRuntime } from "./local-runtime.js";
 import { collectSupportedPluginApiRouteKeys, makeApiRouteKey } from "./parity.js";
 function passthroughSearch(path, url) {
     return `${path}${url.search}`;
@@ -375,8 +375,17 @@ export function registerForgePluginCli(api, config) {
         command.command("ui").description("Print the Forge UI entrypoint").action(async () => {
             console.log(JSON.stringify({ webAppUrl: await resolveForgeUiUrl(config), pluginUiRoute: "/forge/v1/ui" }, null, 2));
         });
+        command.command("start").description("Start the local Forge runtime when it is managed by the OpenClaw plugin").action(async () => {
+            console.log(JSON.stringify(await startForgeRuntime(config), null, 2));
+        });
         command.command("stop").description("Stop the local Forge runtime when it was auto-started by the OpenClaw plugin").action(async () => {
             console.log(JSON.stringify(await stopForgeRuntime(config), null, 2));
+        });
+        command.command("restart").description("Restart the local Forge runtime when it is managed by the OpenClaw plugin").action(async () => {
+            console.log(JSON.stringify(await restartForgeRuntime(config), null, 2));
+        });
+        command.command("status").description("Report whether the local Forge runtime is running and whether it is plugin-managed").action(async () => {
+            console.log(JSON.stringify(await getForgeRuntimeStatus(config), null, 2));
         });
         command.command("doctor").description("Run plugin connectivity and curated route diagnostics").action(async () => {
             console.log(JSON.stringify(await runDoctor(config), null, 2));
