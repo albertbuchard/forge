@@ -2,11 +2,18 @@ import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { Readable } from "node:stream";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { primeForgeRuntime } from "./local-runtime";
+import { primeForgeRuntime, stopForgeRuntime } from "./local-runtime";
 
 vi.mock("./local-runtime", () => ({
   ensureForgeRuntimeReady: vi.fn().mockResolvedValue(undefined),
-  primeForgeRuntime: vi.fn()
+  primeForgeRuntime: vi.fn(),
+  stopForgeRuntime: vi.fn().mockResolvedValue({
+    ok: true,
+    stopped: true,
+    managed: true,
+    message: "Stopped the plugin-managed Forge runtime on http://127.0.0.1:4317.",
+    pid: 12345
+  })
 }));
 
 import rootPackageJson from "../../package.json";
@@ -185,6 +192,7 @@ describe("forge openclaw plugin", () => {
       "overview",
       "onboarding",
       "ui",
+      "stop",
       "doctor",
       "route-check"
     ]);
@@ -193,6 +201,40 @@ describe("forge openclaw plugin", () => {
         origin: "http://127.0.0.1",
         port: 4317,
         dataRoot: "/tmp/forge-data"
+      })
+    );
+  });
+
+  it("exposes a forge stop CLI action for plugin-managed local runtimes", async () => {
+    const program = createCommand("root");
+    vi.spyOn(console, "log").mockImplementation(() => {});
+    registerForgePlugin({
+      pluginConfig: {
+        origin: "http://127.0.0.1",
+        port: 4317
+      },
+      registerHttpRoute() {},
+      registerTool() {},
+      registerCli(registrar) {
+        registrar({
+          program: program as never,
+          config: {} as never,
+          logger: {} as never
+        });
+      }
+    });
+
+    const forgeCommand = program.children[0];
+    const stopCommand = forgeCommand?.children.find((child) => child.name === "stop");
+    expect(stopCommand).toBeDefined();
+    expect(stopCommand?.actions).toHaveLength(1);
+
+    await stopCommand?.actions[0]?.();
+
+    expect(stopForgeRuntime).toHaveBeenCalledWith(
+      expect.objectContaining({
+        origin: "http://127.0.0.1",
+        port: 4317
       })
     );
   });

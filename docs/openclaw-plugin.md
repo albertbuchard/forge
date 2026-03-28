@@ -429,8 +429,10 @@ forge health
 forge overview
 forge onboarding
 forge ui
+forge stop
 forge doctor
 forge route-check
 ```
 
 `forge doctor` checks connectivity, onboarding, and curated route coverage.
+`forge stop` cleanly stops the local Forge runtime only when it was auto-started by the OpenClaw plugin. If Forge was started some other way, it reports that instead of killing random local processes.

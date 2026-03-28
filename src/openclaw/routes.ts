@@ -12,6 +12,7 @@ import {
   type ForgeHttpMethod,
   type ForgePluginConfig
 } from "./api-client.js";
+import { stopForgeRuntime } from "./local-runtime.js";
 import { collectSupportedPluginApiRouteKeys, makeApiRouteKey, type ApiRouteKey } from "./parity.js";
 import type { ForgePluginCliApi, ForgePluginRouteApi, ForgeRegisteredHttpRoute } from "./plugin-sdk-types.js";
 
@@ -472,6 +473,9 @@ export function registerForgePluginCli(api: ForgePluginCliApi, config: ForgePlug
       command.command("onboarding").description("Print the Forge agent onboarding contract").action(createCliAction(config, "/api/v1/agents/onboarding"));
       command.command("ui").description("Print the Forge UI entrypoint").action(async () => {
         console.log(JSON.stringify({ webAppUrl: await resolveForgeUiUrl(config), pluginUiRoute: "/forge/v1/ui" }, null, 2));
+      });
+      command.command("stop").description("Stop the local Forge runtime when it was auto-started by the OpenClaw plugin").action(async () => {
+        console.log(JSON.stringify(await stopForgeRuntime(config), null, 2));
       });
       command.command("doctor").description("Run plugin connectivity and curated route diagnostics").action(async () => {
         console.log(JSON.stringify(await runDoctor(config), null, 2));
