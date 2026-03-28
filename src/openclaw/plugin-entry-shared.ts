@@ -1,3 +1,6 @@
+import { existsSync, readFileSync } from "node:fs";
+import { homedir } from "node:os";
+import path from "node:path";
 import { buildForgeBaseUrl, buildForgeWebAppUrl, type ForgePluginConfig } from "./api-client.js";
 import { primeForgeRuntime } from "./local-runtime.js";
 import { registerForgePluginCli, registerForgePluginRoutes } from "./routes.js";
@@ -11,6 +14,7 @@ export const FORGE_PLUGIN_NAME = "Forge";
 export const FORGE_PLUGIN_DESCRIPTION = "Curated OpenClaw adapter for the Forge collaboration API, UI entrypoint, and localhost auto-start runtime.";
 export const DEFAULT_FORGE_ORIGIN = "http://127.0.0.1";
 export const DEFAULT_FORGE_PORT = 4317;
+const LOCAL_HOSTNAMES = new Set(["127.0.0.1", "localhost", "::1"]);
 
 function normalizeString(value: unknown, fallback: string) {
   return typeof value === "string" && value.trim().length > 0 ? value.trim() : fallback;
@@ -44,15 +48,49 @@ function normalizeTimeout(value: unknown, fallback: number) {
   return Math.min(120_000, Math.max(1000, Math.round(value)));
 }
 
+function isLocalOrigin(origin: string) {
+  try {
+    return LOCAL_HOSTNAMES.has(new URL(origin).hostname.toLowerCase());
+  } catch {
+    return false;
+  }
+}
+
+function getPreferredLocalPortPath(origin: string) {
+  const hostname = new URL(origin).hostname.toLowerCase().replace(/[^a-z0-9._-]+/g, "-");
+  return path.join(homedir(), ".openclaw", "run", FORGE_PLUGIN_ID, `${hostname}-preferred-port.json`);
+}
+
+function readPreferredLocalPort(origin: string) {
+  if (!isLocalOrigin(origin)) {
+    return null;
+  }
+
+  try {
+    const preferredPortPath = getPreferredLocalPortPath(origin);
+    if (!existsSync(preferredPortPath)) {
+      return null;
+    }
+
+    const payload = JSON.parse(readFileSync(preferredPortPath, "utf8")) as { port?: unknown };
+    return typeof payload.port === "number" && Number.isFinite(payload.port) ? payload.port : null;
+  } catch {
+    return null;
+  }
+}
+
 export function resolveForgePluginConfig(pluginConfig: unknown): ForgePluginConfig {
   const raw = (pluginConfig ?? {}) as RawPluginConfig;
   const origin = normalizeOrigin(raw.origin, DEFAULT_FORGE_ORIGIN);
-  const port = normalizePort(raw.port, DEFAULT_FORGE_PORT);
+  const hasConfiguredPort = typeof raw.port === "number" && Number.isFinite(raw.port);
+  const preferredPort = hasConfiguredPort ? null : readPreferredLocalPort(origin);
+  const port = normalizePort(hasConfiguredPort ? raw.port : preferredPort ?? DEFAULT_FORGE_PORT, DEFAULT_FORGE_PORT);
   return {
     origin,
     port,
     baseUrl: buildForgeBaseUrl(origin, port),
     webAppUrl: buildForgeWebAppUrl(origin, port),
+    portSource: hasConfiguredPort ? "configured" : preferredPort !== null ? "preferred" : "default",
     dataRoot: typeof raw.dataRoot === "string" ? raw.dataRoot.trim() : "",
     apiToken: typeof raw.apiToken === "string" ? raw.apiToken.trim() : "",
     actorLabel: normalizeString(raw.actorLabel, "aurel"),
@@ -78,7 +116,7 @@ export const forgePluginConfigSchema: ForgePluginConfigSchema = {
         default: DEFAULT_FORGE_PORT,
         minimum: 1,
         maximum: 65535,
-        description: "Forge server port. Override this when your local machine uses a different port."
+        description: "Forge server port. Override this only when you want to pin a specific port. Default localhost installs can move to the next free port automatically if 4317 is already taken."
       },
       dataRoot: {
         type: "string",
@@ -112,7 +150,7 @@ export const forgePluginConfigSchema: ForgePluginConfigSchema = {
     },
     port: {
       label: "Forge Port",
-      help: "Forge server port. Change this if your local machine uses another port.",
+      help: "Forge server port. Change this only when you want to pin a specific port. Default localhost installs can move to the next free port automatically if 4317 is busy.",
       placeholder: "4317"
     },
     dataRoot: {

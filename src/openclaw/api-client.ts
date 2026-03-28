@@ -12,6 +12,7 @@ export type ForgePluginConfig = {
   port: number;
   baseUrl: string;
   webAppUrl: string;
+  portSource: "configured" | "default" | "preferred";
   dataRoot: string;
   apiToken: string;
   actorLabel: string;

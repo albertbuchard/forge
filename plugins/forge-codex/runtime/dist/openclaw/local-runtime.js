@@ -1,5 +1,6 @@
 import { spawn } from "node:child_process";
 import { closeSync, existsSync, mkdirSync, openSync } from "node:fs";
+import net from "node:net";
 import { homedir } from "node:os";
 import path from "node:path";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
@@ -8,18 +9,79 @@ const LOCAL_HOSTNAMES = new Set(["127.0.0.1", "localhost", "::1"]);
 const STARTUP_TIMEOUT_MS = 15_000;
 const HEALTHCHECK_TIMEOUT_MS = 1_500;
 const HEALTHCHECK_INTERVAL_MS = 250;
+const EXISTING_RUNTIME_GRACE_MS = 3_000;
+const MAX_PORT_SCAN_ATTEMPTS = 20;
+const FORGE_PLUGIN_ID = "forge-openclaw-plugin";
 let managedRuntimeChild = null;
 let managedRuntimeKey = null;
 let managedRuntimeLogPath = null;
 let lastRuntimeExitDetails = null;
 let startupPromise = null;
+let startupRuntimeKey = null;
 const dependencyInstallPromises = new Map();
 function runtimeKey(config) {
     return `${config.origin}:${config.port}`;
 }
+function buildForgeBaseUrl(origin, port) {
+    const url = new URL(origin.endsWith("/") ? origin : `${origin}/`);
+    url.port = String(port);
+    url.pathname = "/";
+    url.search = "";
+    url.hash = "";
+    return url.origin;
+}
+function buildForgeWebAppUrl(origin, port) {
+    return `${buildForgeBaseUrl(origin, port)}/forge/`;
+}
 function getRuntimeStatePath(config) {
     const origin = new URL(config.origin).hostname.toLowerCase().replace(/[^a-z0-9._-]+/g, "-");
-    return path.join(homedir(), ".openclaw", "run", "forge-openclaw-plugin", `${origin}-${config.port}.json`);
+    return path.join(homedir(), ".openclaw", "run", FORGE_PLUGIN_ID, `${origin}-${config.port}.json`);
+}
+function getPreferredPortStatePath(origin) {
+    const hostname = new URL(origin).hostname.toLowerCase().replace(/[^a-z0-9._-]+/g, "-");
+    return path.join(homedir(), ".openclaw", "run", FORGE_PLUGIN_ID, `${hostname}-preferred-port.json`);
+}
+function applyPortToConfig(config, port, portSource) {
+    config.port = port;
+    config.baseUrl = buildForgeBaseUrl(config.origin, port);
+    config.webAppUrl = buildForgeWebAppUrl(config.origin, port);
+    config.portSource = portSource;
+}
+async function writePreferredPortState(config, port) {
+    const statePath = getPreferredPortStatePath(config.origin);
+    await mkdir(path.dirname(statePath), { recursive: true });
+    await writeFile(statePath, `${JSON.stringify({ origin: config.origin, port, updatedAt: new Date().toISOString() }, null, 2)}\n`, "utf8");
+}
+async function isPortAvailable(host, port) {
+    return await new Promise((resolve) => {
+        const server = net.createServer();
+        server.unref();
+        server.once("error", (error) => {
+            resolve(error.code !== "EADDRINUSE");
+        });
+        server.listen({ host, port, exclusive: true }, () => {
+            server.close(() => resolve(true));
+        });
+    });
+}
+async function findAvailableLocalPort(host, startPort) {
+    for (let candidate = Math.max(1, startPort), attempts = 0; candidate <= 65_535 && attempts < MAX_PORT_SCAN_ATTEMPTS; candidate += 1, attempts += 1) {
+        if (await isPortAvailable(host, candidate)) {
+            return candidate;
+        }
+    }
+    return null;
+}
+async function relocateLocalRuntimePort(config) {
+    if (config.portSource === "configured") {
+        throw new Error(`Configured Forge port ${config.port} is already in use on ${new URL(config.origin).hostname}. Set a different plugin port or stop the process using it.`);
+    }
+    const nextPort = await findAvailableLocalPort("127.0.0.1", config.port + 1);
+    if (nextPort === null) {
+        throw new Error(`Forge could not find a free localhost port after ${config.port}.`);
+    }
+    applyPortToConfig(config, nextPort, "preferred");
+    await writePreferredPortState(config, nextPort);
 }
 async function writeRuntimeState(config, pid) {
     const statePath = getRuntimeStatePath(config);
@@ -89,7 +151,7 @@ function getCurrentModuleRoot() {
 }
 function getRuntimeLogPath(config) {
     const origin = new URL(config.origin).hostname.toLowerCase().replace(/[^a-z0-9._-]+/g, "-");
-    return path.join(homedir(), ".openclaw", "logs", "forge-openclaw-plugin", `${origin}-${config.port}.log`);
+    return path.join(homedir(), ".openclaw", "logs", FORGE_PLUGIN_ID, `${origin}-${config.port}.log`);
 }
 function openRuntimeLogFile(logPath) {
     mkdirSync(path.dirname(logPath), { recursive: true });
@@ -210,7 +272,7 @@ async function isForgeHealthy(config, timeoutMs) {
         clearTimeout(timeout);
     }
 }
-function spawnManagedRuntime(config, plan) {
+async function spawnManagedRuntime(config, plan) {
     const isPackagedServer = isPackagedServerPlan(plan);
     const args = isPackagedServer ? [plan.entryFile] : [plan.entryFile, path.join(plan.packageRoot, "server", "src", "index.ts")];
     const logPath = getRuntimeLogPath(config);
@@ -246,9 +308,20 @@ function spawnManagedRuntime(config, plan) {
     });
     managedRuntimeChild = child;
     managedRuntimeKey = runtimeKey(config);
-    void writeRuntimeState(config, child.pid).catch(() => {
-        // State tracking is best effort. Runtime health checks remain authoritative.
-    });
+    try {
+        await writeRuntimeState(config, child.pid);
+    }
+    catch (error) {
+        managedRuntimeChild = null;
+        managedRuntimeKey = null;
+        try {
+            process.kill(child.pid, "SIGTERM");
+        }
+        catch {
+            // If the child already exited we still want to surface the state-write failure.
+        }
+        throw new Error(`Forge local runtime started on ${config.baseUrl}, but the plugin could not persist its state. ${error instanceof Error ? error.message : String(error)}`);
+    }
 }
 function formatRuntimeFailure(details, config) {
     if (!details) {
@@ -283,8 +356,21 @@ export async function ensureForgeRuntimeReady(config) {
     if (await isForgeHealthy(config, HEALTHCHECK_TIMEOUT_MS)) {
         return;
     }
+    const savedState = await readRuntimeState(config);
+    if (savedState && !processExists(savedState.pid)) {
+        await clearRuntimeState(config);
+    }
+    else if (savedState && processExists(savedState.pid)) {
+        try {
+            await waitForRuntime(config, EXISTING_RUNTIME_GRACE_MS, null);
+            return;
+        }
+        catch {
+            await stopForgeRuntime(config);
+        }
+    }
     const key = runtimeKey(config);
-    if (startupPromise && managedRuntimeKey === key) {
+    if (startupPromise && (startupRuntimeKey === null || startupRuntimeKey === key)) {
         return startupPromise;
     }
     const plan = resolveLaunchPlan();
@@ -295,13 +381,22 @@ export async function ensureForgeRuntimeReady(config) {
         if (await isForgeHealthy(config, HEALTHCHECK_TIMEOUT_MS)) {
             return;
         }
+        startupRuntimeKey = runtimeKey(config);
+        if (!(await isPortAvailable("127.0.0.1", config.port))) {
+            await relocateLocalRuntimePort(config);
+            startupRuntimeKey = runtimeKey(config);
+            if (await isForgeHealthy(config, HEALTHCHECK_TIMEOUT_MS)) {
+                return;
+            }
+        }
         await ensurePackagedRuntimeDependencies(plan, config);
         if (!managedRuntimeChild || managedRuntimeKey !== key || managedRuntimeChild.killed) {
-            spawnManagedRuntime(config, plan);
+            await spawnManagedRuntime(config, plan);
         }
         await waitForRuntime(config, STARTUP_TIMEOUT_MS, managedRuntimeChild?.pid ?? null);
     })().finally(() => {
         startupPromise = null;
+        startupRuntimeKey = null;
     });
     return startupPromise;
 }

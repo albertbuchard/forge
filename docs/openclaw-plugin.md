@@ -68,7 +68,7 @@ The execution rule is:
 
 The plugin no longer mirrors every Forge route. Forge itself still has the full `/api/v1` surface for the web app and internal runtime.
 Instead, the plugin exposes the parts the agent actually needs: overview, current context, Psyche and XP reads, batch entity mutations, retroactive work logging, real task-run control, insight posting, and UI entry.
-When the configured origin is `localhost` or `127.0.0.1`, the plugin auto-starts the bundled Forge runtime on the configured port.
+When the configured origin is `localhost` or `127.0.0.1`, the plugin auto-starts the bundled Forge runtime. Default localhost installs prefer `4317`, but if that port is already occupied the plugin now moves to the next free local port and remembers it for future runs unless the user explicitly pinned a different port.
 
 ## Agent understanding contract
 

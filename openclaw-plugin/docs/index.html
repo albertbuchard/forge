@@ -65,7 +65,8 @@
               <strong>Want to open Forge itself?</strong>
               <p>
                 Ask your OpenClaw agent to open the Forge UI or to give you the local Forge address.
-                The usual local address is <code>http://127.0.0.1:4317/forge/</code>.
+                The usual local address is <code>http://127.0.0.1:4317/forge/</code>, but if <code>4317</code> is already occupied
+                the plugin can move Forge to the next free localhost port and remember that choice.
               </p>
               <p>
                 Example prompts:
@@ -103,8 +104,8 @@ openclaw forge status</code></pre>
               <strong>What the verify step does</strong>
               <p>
                 <code>openclaw forge health</code> confirms that the plugin entrypoint is live and that the local Forge server
-                is actually answering on <code>127.0.0.1:4317</code>. <code>openclaw forge status</code> tells you whether the
-                runtime is plugin-managed or something you started manually elsewhere.
+                is actually answering on the resolved local Forge address. <code>openclaw forge status</code> tells you whether the
+                runtime is plugin-managed, what port it chose, or whether something else on the machine was started manually.
               </p>
             </div>
             <div class="ui-callout warning">
@@ -124,12 +125,13 @@ openclaw forge status</code></pre>
                 If Forge was started some other way, the commands explain that instead of killing unrelated local processes.
               </p>
               <p>
-                If startup fails, check <code>~/.openclaw/logs/forge-openclaw-plugin/127.0.0.1-4317.log</code> for the captured
+                If startup fails, check <code>~/.openclaw/logs/forge-openclaw-plugin/&lt;host&gt;-&lt;port&gt;.log</code> for the captured
                 runtime stdout and stderr.
               </p>
               <p>
                 On clean installs, the plugin also repairs missing bundled runtime dependencies on first local start before
-                launching Forge.
+                launching Forge. If the default local port <code>4317</code> is already taken, the plugin will fall forward to the
+                next free localhost port unless you explicitly pinned a different port in plugin config.
               </p>
             </div>
           <div class="stat-row">

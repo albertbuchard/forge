@@ -201,7 +201,7 @@ The skill is entity-format-driven. It teaches the agent how to:
 - ask only for missing fields
 - capture goals, projects, tasks, values, patterns, behaviors, beliefs, and trigger reports
 
-For local use, set the plugin origin to `http://127.0.0.1` or `http://localhost` and the plugin will bring Forge up on the configured port automatically.
+For local use, set the plugin origin to `http://127.0.0.1` or `http://localhost` and the plugin will bring Forge up automatically. If you leave the default localhost setup alone and `4317` is already taken, Forge now moves to the next free local port and remembers that choice for future runs.
 
 If you want to manage that plugin-managed local runtime cleanly, use:
 
@@ -217,7 +217,7 @@ These commands only manage the runtime when it was auto-started by the OpenClaw 
 If the local runtime fails to come up, check the plugin-managed runtime log at:
 
 ```bash
-~/.openclaw/logs/forge-openclaw-plugin/127.0.0.1-4317.log
+~/.openclaw/logs/forge-openclaw-plugin/<host>-<port>.log
 ```
 
 On clean installs, the plugin now also repairs missing bundled runtime dependencies on first local start before it launches Forge.

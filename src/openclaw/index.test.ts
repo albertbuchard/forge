@@ -1,6 +1,7 @@
-import { readdirSync, readFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { Readable } from "node:stream";
+import { tmpdir } from "node:os";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { getForgeRuntimeStatus, primeForgeRuntime, restartForgeRuntime, startForgeRuntime, stopForgeRuntime } from "./local-runtime";
 
@@ -127,11 +128,34 @@ describe("forge openclaw plugin", () => {
       port: 4317,
       baseUrl: "http://127.0.0.1:4317",
       webAppUrl: "http://127.0.0.1:4317/forge/",
+      portSource: "default",
       dataRoot: "",
       apiToken: "",
       actorLabel: "aurel",
       timeoutMs: 15000
     });
+  });
+
+  it("reuses a saved preferred local port when the user did not configure one explicitly", () => {
+    const tempHome = mkdtempSync(join(tmpdir(), "forge-openclaw-pref-"));
+    vi.stubEnv("HOME", tempHome);
+    const preferredPortPath = join(tempHome, ".openclaw", "run", "forge-openclaw-plugin", "127.0.0.1-preferred-port.json");
+    mkdirSync(join(tempHome, ".openclaw", "run", "forge-openclaw-plugin"), { recursive: true });
+    writeFileSync(preferredPortPath, `${JSON.stringify({ origin: "http://127.0.0.1", port: 4318 }, null, 2)}\n`, "utf8");
+
+    expect(resolveForgePluginConfig(undefined)).toEqual({
+      origin: "http://127.0.0.1",
+      port: 4318,
+      baseUrl: "http://127.0.0.1:4318",
+      webAppUrl: "http://127.0.0.1:4318/forge/",
+      portSource: "preferred",
+      dataRoot: "",
+      apiToken: "",
+      actorLabel: "aurel",
+      timeoutMs: 15000
+    });
+
+    rmSync(tempHome, { recursive: true, force: true });
   });
 
   it("registers the curated Forge route groups, tools, and CLI commands", () => {
