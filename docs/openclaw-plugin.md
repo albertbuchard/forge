@@ -112,15 +112,23 @@ Current OpenClaw builds should use package discovery:
 
 ```bash
 openclaw plugins install forge-openclaw-plugin
+openclaw plugins enable forge-openclaw-plugin
+node -e 'const fs=require("fs"); const p=process.env.HOME+"/.openclaw/openclaw.json"; const j=JSON.parse(fs.readFileSync(p,"utf8")); j.plugins ??= {}; j.plugins.allow = Array.from(new Set([...(j.plugins.allow || []), "forge-openclaw-plugin"])); fs.writeFileSync(p, JSON.stringify(j, null, 2)+"\n");'
 openclaw gateway restart
+openclaw forge health
 ```
 
 For release-parity local development:
 
 ```bash
 openclaw plugins install ./projects/forge/openclaw-plugin
+openclaw plugins enable forge-openclaw-plugin
+node -e 'const fs=require("fs"); const p=process.env.HOME+"/.openclaw/openclaw.json"; const j=JSON.parse(fs.readFileSync(p,"utf8")); j.plugins ??= {}; j.plugins.allow = Array.from(new Set([...(j.plugins.allow || []), "forge-openclaw-plugin"])); fs.writeFileSync(p, JSON.stringify(j, null, 2)+"\n");'
 openclaw gateway restart
+openclaw forge health
 ```
+
+`openclaw plugins enable forge-openclaw-plugin` sets the enabled flag, but it does not by itself guarantee that `plugins.allow` contains the plugin id. The `node -e ...` command above preserves the current allow list and appends `"forge-openclaw-plugin"` if it is missing.
 
 For older OpenClaw builds that still need the repo-local fallback entry:
 

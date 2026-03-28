@@ -43,14 +43,23 @@
         <section class="hero">
           <div class="hero-copy">
             <p class="eyebrow">Forge OpenClaw Plugin</p>
-            <h1>Give OpenClaw one clear place to manage work and reflective records.</h1>
+            <h1>Install Forge cleanly, allow it, and verify the local runtime actually came up.</h1>
             <p class="lede">
-              Forge lets OpenClaw work with goals, projects, tasks, real work sessions, weekly review,
-              and Psyche records such as values, patterns, beliefs, modes, and trigger reports.
+              Forge gives OpenClaw one place for goals, projects, tasks, notes, live work sessions,
+              weekly review, and Psyche records. The reliable local flow is: install the plugin,
+              make sure it is allowed and enabled, restart the gateway, then verify Forge with a real command.
             </p>
             <div class="hero-actions">
               <a class="button primary" href="https://www.npmjs.com/package/forge-openclaw-plugin">Install from npm</a>
               <a class="button secondary" href="https://github.com/albertbuchard/forge">GitHub repo</a>
+            </div>
+            <div class="ui-callout warning">
+              <strong>If Forge installs but does not run</strong>
+              <p>
+                The usual cause is that the plugin is installed but not yet active in OpenClaw config.
+                If you see an empty <code>plugins.allow</code> problem, or Forge never starts on localhost,
+                check the allow list directly after install instead of assuming the plugin was fully activated.
+              </p>
             </div>
             <div class="ui-callout">
               <strong>Want to open Forge itself?</strong>
@@ -78,16 +87,30 @@
                 <span class="terminal-dot red"></span>
                 <span class="terminal-dot amber"></span>
                 <span class="terminal-dot green"></span>
-                <span>Quick install</span>
+                <span>Reliable local install flow</span>
               </div>
               <pre><code>openclaw plugins install forge-openclaw-plugin
-openclaw gateway restart</code></pre>
+openclaw plugins enable forge-openclaw-plugin
+node -e 'const fs=require("fs"); const p=process.env.HOME+"/.openclaw/openclaw.json"; const j=JSON.parse(fs.readFileSync(p,"utf8")); j.plugins ??= {}; j.plugins.allow = Array.from(new Set([...(j.plugins.allow || []), "forge-openclaw-plugin"])); fs.writeFileSync(p, JSON.stringify(j, null, 2)+"\n");'
+openclaw gateway restart
+openclaw forge health
+openclaw forge status</code></pre>
             </div>
-            <div class="ui-callout">
-              <strong>If it is not active yet, run this</strong>
+            <div class="ui-callout success">
+              <strong>What the verify step does</strong>
               <p>
-                <code>openclaw plugins enable forge-openclaw-plugin</code><br />
-                <code>openclaw gateway restart</code>
+                <code>openclaw forge health</code> confirms that the plugin entrypoint is live and that the local Forge server
+                is actually answering on <code>127.0.0.1:4317</code>. <code>openclaw forge status</code> tells you whether the
+                runtime is plugin-managed or something you started manually elsewhere.
+              </p>
+            </div>
+            <div class="ui-callout warning">
+              <strong>Always repair the allow list after enable on flaky installs</strong>
+              <p>
+                <code>openclaw plugins enable forge-openclaw-plugin</code> only marks the plugin enabled.
+                If your OpenClaw build keeps leaving <code>plugins.allow</code> empty or stale, run the
+                exact repair command above right after enable. It preserves the rest of the allow list
+                and appends <code>forge-openclaw-plugin</code> if it is missing.
               </p>
             </div>
             <div class="ui-callout">
@@ -160,30 +183,42 @@ openclaw gateway restart</code></pre>
 
         <section class="section tools-section">
           <div class="section-heading">
-            <p class="eyebrow">Enable Step</p>
-            <h2>Install, enable, restart.</h2>
+            <p class="eyebrow">Real Install Flow</p>
+            <h2>Install it, allow it, restart, and verify that Forge is really up.</h2>
           </div>
           <div class="tools-layout">
             <article class="card tools-card">
               <h3>1. Install</h3>
               <pre><code>openclaw plugins install forge-openclaw-plugin
-openclaw gateway restart</code></pre>
+openclaw plugins enable forge-openclaw-plugin</code></pre>
             </article>
             <article class="card tools-card">
-              <h3>2. Enable</h3>
-              <pre><code>openclaw plugins enable forge-openclaw-plugin
-openclaw gateway restart</code></pre>
+              <h3>2. Repair allow list</h3>
+              <pre><code>node -e 'const fs=require("fs"); const p=process.env.HOME+"/.openclaw/openclaw.json"; const j=JSON.parse(fs.readFileSync(p,"utf8")); j.plugins ??= {}; j.plugins.allow = Array.from(new Set([...(j.plugins.allow || []), "forge-openclaw-plugin"])); fs.writeFileSync(p, JSON.stringify(j, null, 2)+"\n");'</code></pre>
             </article>
             <article class="card tools-card">
-              <h3>3. Open Forge</h3>
+              <h3>3. Restart</h3>
+              <pre><code>openclaw gateway restart</code></pre>
+            </article>
+            <article class="card tools-card">
+              <h3>4. Verify</h3>
+              <pre><code>openclaw forge health
+openclaw forge status</code></pre>
+            </article>
+            <article class="card tools-card">
+              <h3>5. Check the result</h3>
+              <pre><code>openclaw config get plugins.allow --json</code></pre>
+            </article>
+            <article class="card tools-card">
+              <h3>6. Open Forge</h3>
               <p>Ask your agent: <code>Open the Forge UI</code> or <code>Give me the Forge UI address</code>.</p>
             </article>
             <article class="card tools-card">
-              <h3>4. Stop Forge cleanly</h3>
-              <p>Run <code>forge stop</code> when you want to shut down the plugin-managed local Forge runtime without hunting for ports or PIDs.</p>
+              <h3>7. Runtime controls</h3>
+              <p>Use <code>openclaw forge start</code>, <code>stop</code>, <code>restart</code>, and <code>status</code> for the plugin-managed local runtime.</p>
             </article>
             <article class="card tools-card">
-              <h3>5. Change data folder</h3>
+              <h3>8. Change data folder</h3>
               <p>Set <code>plugins.entries["forge-openclaw-plugin"].config.dataRoot</code> if you want the data outside the default install path.</p>
             </article>
           </div>

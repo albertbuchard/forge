@@ -215,8 +215,8 @@ h3 {
 }
 
 h1 {
-  max-width: 11ch;
-  font-size: clamp(3.2rem, 7vw, 6.2rem);
+  max-width: 13ch;
+  font-size: clamp(2.5rem, 4.8vw, 4.3rem);
   letter-spacing: -0.05em;
 }
 
@@ -262,6 +262,16 @@ p {
   border: 1px solid var(--panel-edge);
   border-radius: 22px;
   box-shadow: var(--shadow-lg);
+}
+
+.ui-callout.warning {
+  background: linear-gradient(135deg, rgba(255, 185, 95, 0.16), rgba(192, 193, 255, 0.12));
+  border-color: rgba(255, 185, 95, 0.34);
+}
+
+.ui-callout.success {
+  background: linear-gradient(135deg, rgba(78, 222, 163, 0.15), rgba(192, 193, 255, 0.08));
+  border-color: rgba(78, 222, 163, 0.28);
 }
 
 .ui-callout strong {
@@ -540,7 +550,7 @@ p {
 }
 
 .tools-layout {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
 .tools-card ul {
