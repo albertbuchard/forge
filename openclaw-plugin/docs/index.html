@@ -65,6 +65,14 @@
                 <code>Take me to Forge</code>
               </p>
             </div>
+            <div class="ui-callout">
+              <strong>Where the data lives by default</strong>
+              <p>
+                On a normal OpenClaw install, Forge usually stores its SQLite data at
+                <code>~/.openclaw/extensions/forge-openclaw-plugin/data/forge.sqlite</code>.
+                If you want the data somewhere else, set <code>dataRoot</code> in the plugin config and restart the gateway.
+              </p>
+            </div>
             <div class="install-card" id="install">
               <div class="install-head">
                 <span class="terminal-dot red"></span>
@@ -161,6 +169,10 @@ openclaw gateway restart</code></pre>
             <article class="card tools-card">
               <h3>3. Open Forge</h3>
               <p>Ask your agent: <code>Open the Forge UI</code> or <code>Give me the Forge UI address</code>.</p>
+            </article>
+            <article class="card tools-card">
+              <h3>4. Change data folder</h3>
+              <p>Set <code>plugins.entries["forge-openclaw-plugin"].config.dataRoot</code> if you want the data outside the default install path.</p>
             </article>
           </div>
         </section>

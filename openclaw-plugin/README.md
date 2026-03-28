@@ -21,6 +21,13 @@ You can also ask the agent to call the UI entry tool and return the exact curren
 
 If you want Forge to use a specific local data folder, set `dataRoot` in the plugin config. The local runtime will then store its database under `data/forge.sqlite` inside that folder instead of using the runtime working directory.
 
+Default data path:
+
+- normal npm/OpenClaw install: usually `~/.openclaw/extensions/forge-openclaw-plugin/data/forge.sqlite`
+- linked repo-local install: usually `<your-repo>/openclaw-plugin/data/forge.sqlite`
+
+If you want the data to live somewhere else for persistence or backup reasons, set `dataRoot` explicitly in the plugin config and restart the gateway.
+
 ## What Forge looks like
 
 Overview dashboard:
@@ -43,6 +50,7 @@ Forge is a personal system for:
 - structured Psyche records such as values, patterns, beliefs, modes, and trigger reports
 
 This plugin gives OpenClaw the tools it needs to work with that system. It can read current state, search records, create and update records, control live work sessions, post insights, and hand the user off to the Forge UI when the visual workflow is easier.
+It also understands Forge `note` records, which are Markdown-based, searchable, and linkable across one or many entities.
 
 Examples:
 
@@ -86,6 +94,28 @@ Equivalent config:
 }
 ```
 
+If you want to move the data folder, edit the same config entry and set:
+
+```json5
+{
+  plugins: {
+    entries: {
+      "forge-openclaw-plugin": {
+        config: {
+          dataRoot: "/absolute/path/to/forge-data"
+        }
+      }
+    }
+  }
+}
+```
+
+Then restart the gateway:
+
+```bash
+openclaw gateway restart
+```
+
 Older OpenClaw builds can keep using the repo/manual install path during the transition:
 
 ```bash
@@ -118,6 +148,7 @@ The batch tools are array-first:
 
 - `forge_search_entities` takes `searches: []`
 - `forge_create_entities` takes `operations: []`, and each create operation must include `entityType` and full `data`
+- goal, project, and task creates can include nested `notes`, which Forge turns into linked note entities automatically
 - `forge_update_entities` takes `operations: []`, and each update operation must include `entityType`, `id`, and `patch`
 - `forge_delete_entities` and `forge_restore_entities` also take `operations: []`
 
@@ -145,6 +176,7 @@ Live work is not just task status:
 - use `forge_start_task_run` to begin actual work
 - use `forge_release_task_run` to stop without completing
 - use `forge_complete_task_run` to finish and collect the real work reward path
+- include `closeoutNote` on `forge_complete_task_run`, `forge_release_task_run`, or `forge_log_work` when the summary should become a durable linked note
 - use `forge_log_work` only for retroactive work that already happened
 
 The skill is entity-format-driven. It teaches the agent how to:

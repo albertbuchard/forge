@@ -1,6 +1,7 @@
 # Forge
 
 Forge is the actual web app and API runtime for the life operating system under `projects/forge`.
+Markdown `note` records are first-class Forge entities and can link to one or many goals, projects, tasks, and Psyche records so progress evidence and handoff context stay searchable across the product.
 
 It is meant to run:
 - locally in the browser
@@ -54,7 +55,19 @@ Then open:
 
 ### Choose a data folder
 
-Forge can use a custom data root instead of the current working directory.
+By default, Forge stores data under the active runtime root in:
+
+```text
+<runtime-root>/data/forge.sqlite
+```
+
+That means:
+
+- normal OpenClaw plugin install: usually `~/.openclaw/extensions/forge-openclaw-plugin/data/forge.sqlite`
+- linked repo-local plugin install: usually `<repo>/openclaw-plugin/data/forge.sqlite`
+- repo app runtime started from this project: usually `<repo>/data/forge.sqlite`
+
+Forge can also use a custom data root instead of the current working directory or install path.
 
 Run Forge against an explicit data folder like this:
 

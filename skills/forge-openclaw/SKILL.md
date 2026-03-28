@@ -5,9 +5,17 @@ description: use when the user wants to save, search, update, review, start, sto
 
 Forge is the user's structured system for planning work, doing work, reflecting on patterns, and keeping a truthful record of what is happening. Use it when the user is clearly working inside that system, or when they are describing something that naturally belongs there and would benefit from being stored, updated, reviewed, or acted on in Forge. Keep the conversation natural first. Do not turn every message into intake. When a real Forge entity is clearly present, name the exact entity type plainly, help with the substance of the conversation, and then offer Forge once, lightly, if storing it would genuinely help.
 
-Forge has two major domains. The planning side covers goals, projects, tasks, live work sessions, and agent-authored insights. The Psyche side covers values, patterns, behaviors, beliefs, modes, guided mode sessions, trigger reports, event types, and reusable emotion definitions. The model should use the real entity names, not vague substitutes. Say `project`, not “initiative”. Say `behavior_pattern`, not “theme”. Say `trigger_report`, not “incident note”.
+Forge has two major domains. The planning side covers goals, projects, tasks, notes, live work sessions, and agent-authored insights. The Psyche side covers values, patterns, behaviors, beliefs, modes, guided mode sessions, trigger reports, event types, and reusable emotion definitions. The model should use the real entity names, not vague substitutes. Say `project`, not “initiative”. Say `behavior_pattern`, not “theme”. Say `trigger_report`, not “incident note”.
 
 Write to Forge only with clear user consent. If the user is just thinking aloud, helping first is usually better than writing immediately. After helping, you may offer one short Forge prompt if the match is strong. If the user agrees, ask only for the missing fields and only one to three focused questions at a time. Do not offer Forge again after a decline unless the user reopens it.
+
+Forge data location rule:
+
+- by default, Forge stores data under the active runtime root at `data/forge.sqlite`
+- on a normal OpenClaw install, this usually means `~/.openclaw/extensions/forge-openclaw-plugin/data/forge.sqlite`
+- on a linked repo-local install, this usually means `<repo>/openclaw-plugin/data/forge.sqlite`
+- if the user wants the data somewhere else for persistence, backup, or manual control, tell them to set `plugins.entries["forge-openclaw-plugin"].config.dataRoot` and restart the OpenClaw gateway
+- if the user asks where the data is stored or how to move it, explain the current default plainly and show the exact config field
 
 Use these exact entity meanings when deciding what the user is describing.
 
@@ -18,6 +26,8 @@ Use these exact entity meanings when deciding what the user is describing.
 `task` is a concrete action item or deliverable. Use it for “draft the plugin README”, “call the landlord”, or “book therapy session”.
 
 `task_run` is one truthful live work session on a task. It is not the same thing as task status.
+
+`note` is a Markdown evidence record that can link to one or many entities. Use it for work summaries, context, progress logs, handoff explanations, or reflective detail that should stay searchable and attached to the right records.
 
 `insight` is an agent-authored observation, recommendation, or warning grounded in Forge data. It does not replace a requested goal, project, task, pattern, belief, or trigger report.
 
@@ -159,7 +169,7 @@ Use the batch entity tools for stored records:
 `forge_search_entities`, `forge_create_entities`, `forge_update_entities`, `forge_delete_entities`, `forge_restore_entities`
 
 These tools operate on:
-`goal`, `project`, `task`, `psyche_value`, `behavior_pattern`, `behavior`, `belief_entry`, `mode_profile`, `mode_guide_session`, `trigger_report`, `event_type`, `emotion_definition`
+`goal`, `project`, `task`, `note`, `psyche_value`, `behavior_pattern`, `behavior`, `belief_entry`, `mode_profile`, `mode_guide_session`, `trigger_report`, `event_type`, `emotion_definition`
 
 Use live work tools for `task_run`:
 `forge_log_work`, `forge_start_task_run`, `forge_heartbeat_task_run`, `forge_focus_task_run`, `forge_complete_task_run`, `forge_release_task_run`
@@ -175,6 +185,8 @@ Use these exact payload expectations.
 `forge_create_entities`, `forge_update_entities`, `forge_delete_entities`, and `forge_restore_entities` expect a top-level `operations` array.
 
 For create operations, each item must include `entityType` and `data`.
+
+When creating `goal`, `project`, or `task`, the create payload may also include `notes: [{ contentMarkdown, author?, links? }]`. Forge will create real linked `note` entities automatically and attach them to the new parent record.
 
 For update operations, each item must include `entityType`, `id`, and `patch`.
 
@@ -196,11 +208,11 @@ Use `forge_heartbeat_task_run` to keep an active run alive.
 
 Use `forge_focus_task_run` when one active run should become the current visible run.
 
-Use `forge_complete_task_run` to finish live work.
+Use `forge_complete_task_run` to finish live work. When the user or agent wants to preserve what was done, include `closeoutNote` so Forge creates a real linked `note` instead of losing that explanation inside ephemeral run metadata.
 
-Use `forge_release_task_run` to stop live work without completing the task.
+Use `forge_release_task_run` to stop live work without completing the task. `closeoutNote` is also available there for handoff or pause context.
 
-Use `forge_log_work` only for retroactive work that already happened.
+Use `forge_log_work` only for retroactive work that already happened. If the user explains the work in a way that should be preserved, include `closeoutNote`.
 
 Use these interaction rules.
 

@@ -16,6 +16,15 @@ Useful example replies:
 
 Use the UI route or tool when the user wants visual review, Kanban movement, graph exploration, or broader editing in the Forge app itself.
 
+## Data folder
+
+By default, Forge stores its SQLite data under the active runtime root:
+
+- normal npm/OpenClaw install: usually `~/.openclaw/extensions/forge-openclaw-plugin/data/forge.sqlite`
+- linked repo-local plugin install: usually `<repo>/openclaw-plugin/data/forge.sqlite`
+
+If the user wants the data somewhere else for persistence, backup, or manual control, set `dataRoot` in the Forge plugin config and restart the gateway.
+
 ## Screenshots
 
 Overview dashboard:
@@ -34,6 +43,7 @@ The intended workflow is:
 - create, update, delete, and restore through the batch entity tools
 - use `forge_log_work` for retroactive work
 - use the task-run tools for real live work: `forge_start_task_run`, `forge_heartbeat_task_run`, `forge_focus_task_run`, `forge_complete_task_run`, `forge_release_task_run`
+- use first-class `note` entities for Markdown progress evidence, handoff context, and multi-entity work summaries
 - store agent-authored recommendations with `forge_post_insight`
 - use `forge_get_ui_entrypoint` when the user should continue in the visual Forge UI
 
@@ -153,6 +163,28 @@ Example config:
 `origin` is the protocol + host without the port.
 `port` is split out explicitly so local collisions are easy to fix without rebuilding the whole URL.
 `dataRoot` is optional. Use it when you want the local Forge runtime to use a specific data folder instead of the runtime working directory.
+
+Changing the data folder means changing this exact config entry:
+
+```json5
+{
+  plugins: {
+    entries: {
+      "forge-openclaw-plugin": {
+        config: {
+          dataRoot: "/absolute/path/to/forge-data"
+        }
+      }
+    }
+  }
+}
+```
+
+Then restart OpenClaw:
+
+```bash
+openclaw gateway restart
+```
 
 ## Local and remote connection modes
 
@@ -369,6 +401,7 @@ curl -X POST http://127.0.0.1:4317/api/v1/settings/tokens \
       "rewards.manage",
       "psyche.read",
       "psyche.write",
+      "psyche.note",
       "psyche.comment",
       "psyche.insight",
       "psyche.mode"
