@@ -209,8 +209,8 @@ code,
   display: grid;
   grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.05fr);
   gap: 28px;
-  align-items: center;
-  min-height: calc(100vh - 210px);
+  align-items: start;
+  min-height: auto;
 }
 
 .hero-copy {
@@ -409,6 +409,7 @@ p {
 .info-grid,
 .gallery-grid,
 .record-grid,
+.psyche-grid,
 .example-grid,
 .command-grid,
 .faq-list,
@@ -430,6 +431,10 @@ p {
 
 .record-grid {
   grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+.psyche-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
 .example-grid {
@@ -599,6 +604,7 @@ p {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
+  .psyche-grid,
   .publish-links {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -621,6 +627,7 @@ p {
   .info-grid,
   .gallery-grid,
   .record-grid,
+  .psyche-grid,
   .example-grid,
   .command-grid,
   .faq-list,
