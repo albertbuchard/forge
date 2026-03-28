@@ -171,6 +171,7 @@ export function KanbanPage() {
           tasks={filteredTasks}
           goals={shell.snapshot.goals}
           tags={shell.snapshot.tags}
+          notesSummaryByEntity={shell.snapshot.dashboard.notesSummaryByEntity}
           selectedTaskId={selectedTaskId}
           onMove={async (taskId, nextStatus) => {
             await shell.patchTaskStatus(taskId, nextStatus);

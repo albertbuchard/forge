@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { SurfaceSkeleton } from "@/components/experience/surface-skeleton";
 import { SheetScaffold } from "@/components/experience/sheet-scaffold";
+import { EntityNotesSurface } from "@/components/notes/entity-notes-surface";
 import { TaskDialog } from "@/components/task-dialog";
 import { PageHero } from "@/components/shell/page-hero";
 import { Button } from "@/components/ui/button";
@@ -23,7 +24,7 @@ import { InfoTooltip } from "@/components/ui/info-tooltip";
 import { ErrorState } from "@/components/ui/page-state";
 import { completeTaskRun, getTaskContext, patchTask, releaseTaskRun, removeActivityLog, uncompleteTask } from "@/lib/api";
 import { getReadableActivityDescription, getReadableActivityTitle } from "@/lib/activity-copy";
-import { getActivityEventHref } from "@/lib/entity-links";
+import { getActivityEventCtaLabel, getActivityEventHref } from "@/lib/entity-links";
 import { useI18n } from "@/lib/i18n";
 import { useForgeShell } from "@/components/shell/app-shell";
 import type { TaskStatus } from "@/lib/types";
@@ -341,6 +342,19 @@ export function TaskDetailPage() {
         </div>
 
         <div className="mt-5">
+          <EntityNotesSurface
+            entityType="task"
+            entityId={payload.task.id}
+            title="Task notes"
+            description="Capture real progress, blockers, and context in Markdown so the task keeps a durable work log."
+            invalidateQueryKeys={[
+              ["task-context", params.taskId],
+              ...(payload.task.projectId ? ([["project-board", payload.task.projectId]] as const) : [])
+            ]}
+          />
+        </div>
+
+        <div className="mt-5">
           <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">Activity</div>
           <div className="mt-4 grid gap-3">
             {payload.activity.length === 0 ? (
@@ -364,9 +378,9 @@ export function TaskDetailPage() {
                     Remove
                   </Button>
                 </div>
-                {getActivityEventHref(event) ? (
+                {getActivityEventHref(event) && getActivityEventCtaLabel(event) ? (
                   <Link to={getActivityEventHref(event)!} className="mt-3 inline-flex text-[11px] uppercase tracking-[0.16em] text-[var(--primary)]">
-                    Open related item
+                    {getActivityEventCtaLabel(event)}
                   </Link>
                 ) : null}
               </div>

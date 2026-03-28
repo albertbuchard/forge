@@ -5,7 +5,7 @@ import { ActivityTable } from "@/components/activity-table";
 import { Card } from "@/components/ui/card";
 import { EmptyState, ErrorState, LoadingState } from "@/components/ui/page-state";
 import { listActivity, removeActivityLog } from "@/lib/api";
-import { getActivityEventHref } from "@/lib/entity-links";
+import { getActivityEventCtaLabel, getActivityEventHref } from "@/lib/entity-links";
 import { formatDateTime } from "@/lib/utils";
 
 export function ActivityPage() {
@@ -100,9 +100,9 @@ export function ActivityPage() {
                       <div className="font-medium text-white">{event.title}</div>
                       <div className="mt-2 text-sm text-white/58">{event.description}</div>
                       <div className="mt-3 text-[11px] uppercase tracking-[0.16em] text-white/35">{formatDateTime(event.createdAt)}</div>
-                      {getActivityEventHref(event) ? (
+                      {getActivityEventHref(event) && getActivityEventCtaLabel(event) ? (
                         <Link to={getActivityEventHref(event)!} className="mt-3 inline-flex text-[11px] uppercase tracking-[0.16em] text-[var(--primary)]">
-                          Open related item
+                          {getActivityEventCtaLabel(event)}
                         </Link>
                       ) : null}
                     </div>

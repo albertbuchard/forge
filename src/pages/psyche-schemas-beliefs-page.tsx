@@ -3,10 +3,12 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSearchParams } from "react-router-dom";
 import { SchemaBadge } from "@/components/psyche/schema-badge";
 import { FlowField, QuestionFlowDialog, type QuestionFlowStep } from "@/components/flows/question-flow-dialog";
+import { EntityNoteCountLink } from "@/components/notes/entity-note-count-link";
 import { AtlasPanel } from "@/components/psyche/atlas-panel";
 import { EntityLinkMultiSelect, type EntityLinkOption } from "@/components/psyche/entity-link-multiselect";
 import { PsycheSectionNav } from "@/components/psyche/psyche-section-nav";
 import { psycheFocusClass, usePsycheFocusTarget } from "@/components/psyche/use-psyche-focus-target";
+import { useForgeShell } from "@/components/shell/app-shell";
 import { PageHero } from "@/components/shell/page-hero";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -16,6 +18,7 @@ import { ErrorState, LoadingState } from "@/components/ui/page-state";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { prependEntityToCollection } from "@/lib/query-cache";
+import { getEntityNotesSummary } from "@/lib/note-helpers";
 import { beliefEntrySchema, type BeliefEntryInput } from "@/lib/psyche-schemas";
 import type { Behavior, BeliefEntry, ModeProfile, PsycheValue, SchemaCatalogEntry, TriggerReport } from "@/lib/psyche-types";
 import { findSchemaForLink, getSchemaFamilyLabel, getSchemaTypeHelpText, getSchemaTypeLabel, getSchemaVisual } from "@/lib/schema-visuals";
@@ -166,6 +169,7 @@ function SchemaSection({
 }
 
 export function PsycheSchemasBeliefsPage() {
+  const shell = useForgeShell();
   const queryClient = useQueryClient();
   const [searchParams, setSearchParams] = useSearchParams();
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -186,6 +190,7 @@ export function PsycheSchemasBeliefsPage() {
   const values = valuesQuery.data?.values ?? [];
   const reports = reportsQuery.data?.reports ?? [];
   const focusedBeliefId = searchParams.get("focus");
+  const notesSummaryByEntity = shell.snapshot.dashboard.notesSummaryByEntity;
 
   usePsycheFocusTarget(focusedBeliefId);
 
@@ -647,20 +652,28 @@ export function PsycheSchemasBeliefsPage() {
                 const schema = belief.schemaId ? (schemaMap.get(belief.schemaId) ?? null) : null;
                 const isFocused = focusedBeliefId === belief.id;
                 return (
-                  <button
+                  <div
                     key={belief.id}
-                    type="button"
                     data-psyche-focus-id={belief.id}
                     className={`rounded-[24px] border border-white/8 bg-white/[0.04] p-4 text-left transition hover:bg-white/[0.08] ${psycheFocusClass(isFocused)}`}
-                    onClick={() => {
-                      setEditingBelief(belief);
-                      setDraft(beliefToInput(belief));
-                      setDialogOpen(true);
-                    }}
                   >
                     <div className="flex items-start justify-between gap-3">
                       <div className="font-medium text-white">{belief.statement}</div>
-                      <Badge>{belief.confidence}% grip</Badge>
+                      <div className="flex flex-wrap items-center justify-end gap-2">
+                        <EntityNoteCountLink entityType="belief_entry" entityId={belief.id} count={getEntityNotesSummary(notesSummaryByEntity, "belief_entry", belief.id).count} />
+                        <Badge>{belief.confidence}% grip</Badge>
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          onClick={() => {
+                            setEditingBelief(belief);
+                            setDraft(beliefToInput(belief));
+                            setDialogOpen(true);
+                          }}
+                        >
+                          Edit
+                        </Button>
+                      </div>
                     </div>
                     <div className="mt-2 text-sm leading-6 text-white/58">{belief.flexibleAlternative || "No flexible alternative recorded yet."}</div>
                     <div className="mt-3 flex flex-wrap gap-2">
@@ -669,7 +682,7 @@ export function PsycheSchemasBeliefsPage() {
                         <EntityBadge key={mode.id} kind="mode" label={mode.title} compact />
                       ))}
                     </div>
-                  </button>
+                  </div>
                 );
               })
             )}

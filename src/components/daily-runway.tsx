@@ -1,12 +1,14 @@
 import { ArrowRight, CheckCheck, Crosshair, Play, ShieldAlert } from "lucide-react";
 import type { KeyboardEvent } from "react";
+import { EntityNoteCountLink } from "@/components/notes/entity-note-count-link";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { EntityBadge } from "@/components/ui/entity-badge";
 import { EntityName } from "@/components/ui/entity-name";
 import { InfoTooltip } from "@/components/ui/info-tooltip";
 import { useI18n } from "@/lib/i18n";
-import type { Goal, Tag, Task, TaskStatus } from "@/lib/types";
+import { getEntityNotesSummary } from "@/lib/note-helpers";
+import type { Goal, NotesSummaryByEntity, Tag, Task, TaskStatus } from "@/lib/types";
 
 function getGoalTitle(task: Task, goals: Goal[], fallback: string) {
   return goals.find((goal) => goal.id === task.goalId)?.title ?? fallback;
@@ -43,6 +45,7 @@ export function DailyRunway({
   timeline,
   goals,
   tags,
+  notesSummaryByEntity,
   selectedTaskId,
   onSelectTask,
   onMove,
@@ -52,6 +55,7 @@ export function DailyRunway({
   timeline: Array<{ id: string; label: string; tasks: Task[] }>;
   goals: Goal[];
   tags: Tag[];
+  notesSummaryByEntity?: NotesSummaryByEntity;
   selectedTaskId: string | null;
   onSelectTask: (taskId: string) => void;
   onMove: (taskId: string, nextStatus: TaskStatus) => Promise<void>;
@@ -83,6 +87,7 @@ export function DailyRunway({
             const nextAction = getNextAction(task, nextActionLabels);
             const taskTags = getTaskTags(task, tags).slice(0, 2);
             const isSelected = selectedTaskId === task.id;
+            const noteCount = getEntityNotesSummary(notesSummaryByEntity, "task", task.id).count;
 
             return (
               <article
@@ -117,6 +122,7 @@ export function DailyRunway({
 
                 <div className="flex flex-wrap gap-2">
                   <Badge className="bg-[var(--primary)]/14 text-[var(--primary)]">{task.points} xp</Badge>
+                  <EntityNoteCountLink entityType="task" entityId={task.id} count={noteCount} />
                   {task.time.totalCreditedSeconds > 0 ? <Badge className="bg-white/[0.08] text-white/70">{Math.floor(task.time.totalCreditedSeconds / 60)} min tracked</Badge> : null}
                   <Badge className="bg-white/[0.08] text-white/70">{task.effort}</Badge>
                   <Badge className="bg-white/[0.08] text-white/70">{formatDate(task.dueDate)}</Badge>

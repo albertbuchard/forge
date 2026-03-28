@@ -22,7 +22,10 @@ import { EntityBadge } from "@/components/ui/entity-badge";
 import { EntityName } from "@/components/ui/entity-name";
 import { cn } from "@/lib/utils";
 import { useI18n } from "@/lib/i18n";
+import { getEntityNotesSummary } from "@/lib/note-helpers";
 import type { Goal, Tag, Task, TaskStatus } from "@/lib/types";
+import type { NotesSummaryByEntity } from "@/lib/types";
+import { EntityNoteCountLink } from "@/components/notes/entity-note-count-link";
 
 export const LANE_ORDER: TaskStatus[] = ["backlog", "focus", "in_progress", "blocked", "done"];
 
@@ -99,7 +102,8 @@ function TaskCardShell({
   onQuickReopen,
   onStepTask,
   onOpenTask,
-  onEditTask
+  onEditTask,
+  notesSummaryByEntity
 }: {
   task: Task;
   goal: Goal | undefined;
@@ -118,10 +122,12 @@ function TaskCardShell({
   onStepTask?: (taskId: string, direction: "previous" | "next") => Promise<void>;
   onOpenTask?: (taskId: string) => void;
   onEditTask?: (taskId: string) => void;
+  notesSummaryByEntity?: NotesSummaryByEntity;
 }) {
   const { t, formatDate } = useI18n();
   const previousStatus = LANE_ORDER[LANE_ORDER.indexOf(task.status) - 1] ?? null;
   const nextStatus = LANE_ORDER[LANE_ORDER.indexOf(task.status) + 1] ?? null;
+  const noteCount = getEntityNotesSummary(notesSummaryByEntity, "task", task.id).count;
 
   return (
     <article
@@ -224,6 +230,7 @@ function TaskCardShell({
       <p className="mt-1.5 line-clamp-3 [overflow-wrap:anywhere] text-[12px] leading-5 text-white/62">{task.description || t("common.executionBoard.noExecutionNote")}</p>
       <div className="mt-2.5 flex min-w-0 flex-wrap gap-1.5">
         {goal ? <EntityBadge kind="goal" label={goal.title} compact wrap className="min-w-0 max-w-full" /> : null}
+        <EntityNoteCountLink entityType="task" entityId={task.id} count={noteCount} />
         {task.time.totalCreditedSeconds > 0 ? <Badge className="bg-white/8 text-white/72">{Math.floor(task.time.totalCreditedSeconds / 60)} min</Badge> : null}
         {task.time.activeRunCount > 0 ? <Badge className="bg-emerald-500/12 text-emerald-200">{task.time.activeRunCount} live</Badge> : null}
         {tags.slice(0, 2).map((tag) => (
@@ -270,6 +277,7 @@ function SortableTaskCard(props: {
   onStepTask?: (taskId: string, direction: "previous" | "next") => Promise<void>;
   onOpenTask?: (taskId: string) => void;
   onEditTask?: (taskId: string) => void;
+  notesSummaryByEntity?: NotesSummaryByEntity;
 }) {
   const { task, sortableId } = props;
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
@@ -291,6 +299,7 @@ function SortableTaskCard(props: {
       isMobile={props.isMobile}
       onStartTask={props.onStartTask}
       onStepTask={props.onStepTask}
+      notesSummaryByEntity={props.notesSummaryByEntity}
       style={{
         transform: CSS.Transform.toString(transform),
         transition
@@ -366,7 +375,8 @@ export function ExecutionBoard({
   onStartTask,
   onQuickReopenTask,
   onOpenTask,
-  onEditTask
+  onEditTask,
+  notesSummaryByEntity
 }: {
   tasks: Task[];
   goals: Goal[];
@@ -378,6 +388,7 @@ export function ExecutionBoard({
   onQuickReopenTask?: (taskId: string) => Promise<void>;
   onOpenTask?: (taskId: string) => void;
   onEditTask?: (taskId: string) => void;
+  notesSummaryByEntity?: NotesSummaryByEntity;
 }) {
   const { t } = useI18n();
   const boardInstanceId = useId();
@@ -572,6 +583,7 @@ export function ExecutionBoard({
                         onStepTask={handleStepTask}
                         onOpenTask={onOpenTask}
                         onEditTask={onEditTask}
+                        notesSummaryByEntity={notesSummaryByEntity}
                       />
                     ))}
                     {laneTasks.length === 0 ? (
@@ -612,6 +624,7 @@ export function ExecutionBoard({
                         onStepTask={handleStepTask}
                         onOpenTask={onOpenTask}
                         onEditTask={onEditTask}
+                        notesSummaryByEntity={notesSummaryByEntity}
                       />
                     ))}
                     {laneTasks.length === 0 ? (
@@ -639,6 +652,7 @@ export function ExecutionBoard({
               isMobile={isMobileBoard}
               onSelect={() => {}}
               onStartTask={onStartTask}
+              notesSummaryByEntity={notesSummaryByEntity}
             />
           </div>
         ) : null}

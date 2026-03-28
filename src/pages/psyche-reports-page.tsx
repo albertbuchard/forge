@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useSearchParams } from "react-router-dom";
 import { FlowField, QuestionFlowDialog, type QuestionFlowStep } from "@/components/flows/question-flow-dialog";
+import { EntityNoteCountLink } from "@/components/notes/entity-note-count-link";
 import { AtlasPanel } from "@/components/psyche/atlas-panel";
 import { EntityLinkMultiSelect, type EntityLinkOption } from "@/components/psyche/entity-link-multiselect";
 import { SchemaBadge } from "@/components/psyche/schema-badge";
@@ -13,6 +14,7 @@ import {
   ThoughtRowsEditor
 } from "@/components/psyche/report-chain-fields";
 import { PsycheSectionNav } from "@/components/psyche/psyche-section-nav";
+import { useForgeShell } from "@/components/shell/app-shell";
 import { PageHero } from "@/components/shell/page-hero";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -22,6 +24,7 @@ import { EmptyState, ErrorState, LoadingState } from "@/components/ui/page-state
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { prependEntityToCollection } from "@/lib/query-cache";
+import { getEntityNotesSummary } from "@/lib/note-helpers";
 import {
   createBehavior,
   createBelief,
@@ -94,6 +97,7 @@ const DEFAULT_REPORT_DRAFT: ReportDraft = {
 };
 
 export function PsycheReportsPage() {
+  const shell = useForgeShell();
   const queryClient = useQueryClient();
   const [searchParams, setSearchParams] = useSearchParams();
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -116,6 +120,7 @@ export function PsycheReportsPage() {
   const schemas = schemasQuery.data?.schemas ?? [];
   const eventTypes = eventTypesQuery.data?.eventTypes ?? [];
   const emotions = emotionsQuery.data?.emotions ?? [];
+  const notesSummaryByEntity = shell.snapshot.dashboard.notesSummaryByEntity;
 
   useEffect(() => {
     if (searchParams.get("create") === "1") {
@@ -533,13 +538,19 @@ export function PsycheReportsPage() {
             />
           ) : (
             reports.map((report) => (
-              <Link key={report.id} to={`/psyche/reports/${report.id}`} className="rounded-[28px] border border-white/8 bg-white/[0.04] p-5 transition hover:bg-white/[0.07]">
+              <div key={report.id} className="rounded-[28px] border border-white/8 bg-white/[0.04] p-5 transition hover:bg-white/[0.07]">
                 <div className="flex flex-wrap items-start justify-between gap-4">
                   <div>
                     <EntityName kind="report" label={report.title} variant="heading" size="xl" />
                     <div className="mt-2 text-sm text-white/54">{report.customEventType || report.eventSituation}</div>
                   </div>
-                  <Badge>{report.status}</Badge>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <EntityNoteCountLink entityType="trigger_report" entityId={report.id} count={getEntityNotesSummary(notesSummaryByEntity, "trigger_report", report.id).count} />
+                    <Badge>{report.status}</Badge>
+                    <Link to={`/psyche/reports/${report.id}`} className="inline-flex min-h-10 items-center rounded-full bg-white/[0.08] px-3 py-2 text-sm text-white transition hover:bg-white/[0.12]">
+                      Open report
+                    </Link>
+                  </div>
                 </div>
                 <div className="mt-5 grid gap-3 xl:grid-cols-4">
                   <div className="rounded-[20px] bg-white/[0.04] p-4">
@@ -572,7 +583,7 @@ export function PsycheReportsPage() {
                     <div className="mt-3 text-sm leading-6 text-white/66">{report.nextMoves[0] ?? "No next move yet"}</div>
                   </div>
                 </div>
-              </Link>
+              </div>
             ))
           )}
         </div>

@@ -5,6 +5,7 @@ import { SurfaceSkeleton } from "@/components/experience/surface-skeleton";
 import { ProjectDialog } from "@/components/project-dialog";
 import { TaskDialog } from "@/components/task-dialog";
 import { ExecutionBoard } from "@/components/execution-board";
+import { EntityNotesSurface } from "@/components/notes/entity-notes-surface";
 import { PageHero } from "@/components/shell/page-hero";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -86,6 +87,7 @@ export function ProjectDetailPage() {
   const nextTask = payload.tasks.find((task) => task.status === "focus" || task.status === "in_progress") ?? payload.tasks[0] ?? null;
   const driftTask = payload.tasks.find((task) => task.status === "blocked") ?? payload.tasks.find((task) => task.status === "backlog") ?? null;
   const latestEvidence = payload.activity[0] ?? null;
+  const notesSummaryByEntity = "notesSummaryByEntity" in payload ? payload.notesSummaryByEntity : shell.snapshot.dashboard.notesSummaryByEntity;
 
   return (
     <div className="grid min-w-0 gap-5">
@@ -183,6 +185,7 @@ export function ProjectDetailPage() {
         tasks={payload.tasks}
         goals={shell.snapshot.goals}
         tags={shell.snapshot.tags}
+        notesSummaryByEntity={notesSummaryByEntity}
         selectedTaskId={null}
         onMove={async (taskId, nextStatus) => {
           await shell.patchTaskStatus(taskId, nextStatus);
@@ -193,6 +196,16 @@ export function ProjectDetailPage() {
           await reopenMutation.mutateAsync(taskId);
         }}
       />
+
+      {!isLegacyProject ? (
+        <EntityNotesSurface
+          entityType="project"
+          entityId={payload.project.id}
+          title="Project notes"
+          description="Keep rollout notes, checkpoints, and cross-task context attached to the project itself."
+          invalidateQueryKeys={[["project-board", params.projectId]]}
+        />
+      ) : null}
 
       <Card className="min-w-0">
         <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">{t("common.projectDetail.sectionEvidence")}</div>

@@ -19,3 +19,19 @@ export function getActivityEventHref(event: ActivityEvent): string | null {
 
   return null;
 }
+
+export function getActivityEventCtaLabel(event: ActivityEvent): string | null {
+  if (event.entityType === "goal") {
+    return "Open goal";
+  }
+
+  if (event.entityType === "project") {
+    return "Open project";
+  }
+
+  if (event.entityType === "task" || event.entityType === "task_run") {
+    return "Open task";
+  }
+
+  return null;
+}

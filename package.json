@@ -11,9 +11,11 @@
   },
   "scripts": {
     "dev": "concurrently -k -n server,web -c cyan,magenta \"npm run dev:server\" \"npm run dev:web\"",
+    "dev:openclaw-data": "node ./scripts/with-openclaw-plugin-data-root.mjs npm run dev",
     "dev:web": "vite",
     "dev:server": "HOST=127.0.0.1 PORT=4317 tsx watch server/src/index.ts",
     "start": "npm run build && npm run start:web",
+    "start:openclaw-data": "node ./scripts/with-openclaw-plugin-data-root.mjs npm run start",
     "start:web": "HOST=127.0.0.1 PORT=4317 tsx server/src/index.ts",
     "tauri:dev": "tauri dev",
     "build": "vite build",

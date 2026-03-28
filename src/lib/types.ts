@@ -10,7 +10,7 @@ export type CrudEntityType =
   | "project"
   | "task"
   | "tag"
-  | "comment"
+  | "note"
   | "insight"
   | "psyche_value"
   | "behavior_pattern"
@@ -30,6 +30,31 @@ export interface TaskTimeSummary {
   hasCurrentRun: boolean;
   currentRunId: string | null;
 }
+
+export interface NoteLink {
+  entityType: CrudEntityType;
+  entityId: string;
+  anchorKey: string | null;
+}
+
+export interface Note {
+  id: string;
+  contentMarkdown: string;
+  contentPlain: string;
+  author: string | null;
+  source: "ui" | "openclaw" | "agent" | "system";
+  createdAt: string;
+  updatedAt: string;
+  links: NoteLink[];
+}
+
+export interface NoteSummary {
+  count: number;
+  latestNoteId: string | null;
+  latestCreatedAt: string | null;
+}
+
+export type NotesSummaryByEntity = Record<string, NoteSummary>;
 
 export interface Tag {
   id: string;
@@ -152,6 +177,11 @@ export interface TaskRunHeartbeatInput {
 export interface TaskRunFinishInput {
   actor?: string;
   note: string;
+  closeoutNote?: {
+    contentMarkdown: string;
+    author?: string | null;
+    links?: NoteLink[];
+  };
 }
 
 export interface AchievementSignal {
@@ -195,6 +225,7 @@ export interface TaskContext {
   activeTaskRun: TaskRun | null;
   taskRuns: TaskRun[];
   activity: ActivityEvent[];
+  notesSummaryByEntity: NotesSummaryByEntity;
 }
 
 export interface ProjectBoardPayload {
@@ -202,6 +233,7 @@ export interface ProjectBoardPayload {
   goal: Goal;
   tasks: Task[];
   activity: ActivityEvent[];
+  notesSummaryByEntity: NotesSummaryByEntity;
 }
 
 export interface InsightsHeatmapCell {
@@ -486,6 +518,7 @@ export interface OperatorLogWorkInput {
   taskId?: string;
   title?: string;
   description?: string;
+  summary?: string;
   owner?: string;
   goalId?: string | null;
   projectId?: string | null;
@@ -496,6 +529,11 @@ export interface OperatorLogWorkInput {
   dueDate?: string | null;
   points?: number;
   tagIds?: string[];
+  closeoutNote?: {
+    contentMarkdown: string;
+    author?: string | null;
+    links?: NoteLink[];
+  };
 }
 
 export interface OperatorLogWorkResult {
@@ -656,6 +694,7 @@ export interface AgentOnboardingPayload {
     project: string;
     task: string;
     taskRun: string;
+    note: string;
     insight: string;
     psyche: string;
   };
@@ -802,6 +841,7 @@ export interface ForgeSnapshot {
     achievements: AchievementSignal[];
     milestoneRewards: MilestoneReward[];
     recentActivity: ActivityEvent[];
+    notesSummaryByEntity: NotesSummaryByEntity;
   };
   overview: {
     generatedAt: string;

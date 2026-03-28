@@ -2,10 +2,13 @@ import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSearchParams } from "react-router-dom";
 import { FlowField, QuestionFlowDialog, type QuestionFlowStep } from "@/components/flows/question-flow-dialog";
+import { EntityNoteCountLink } from "@/components/notes/entity-note-count-link";
 import { AtlasPanel } from "@/components/psyche/atlas-panel";
 import { EntityLinkMultiSelect, type EntityLinkOption } from "@/components/psyche/entity-link-multiselect";
 import { ModeChip } from "@/components/psyche/mode-chip";
 import { PsycheSectionNav } from "@/components/psyche/psyche-section-nav";
+import { psycheFocusClass, usePsycheFocusTarget } from "@/components/psyche/use-psyche-focus-target";
+import { useForgeShell } from "@/components/shell/app-shell";
 import { PageHero } from "@/components/shell/page-hero";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -15,6 +18,7 @@ import { ErrorState, LoadingState } from "@/components/ui/page-state";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { prependEntityToCollection } from "@/lib/query-cache";
+import { getEntityNotesSummary } from "@/lib/note-helpers";
 import { modeProfileSchema, type ModeProfileInput } from "@/lib/psyche-schemas";
 import type { Behavior, BehaviorPattern, ModeProfile, PsycheValue } from "@/lib/psyche-types";
 import { createBehavior, createBehaviorPattern, createMode, createPsycheValue, listBehaviors, listBehaviorPatterns, listModes, listPsycheValues, patchMode } from "@/lib/api";
@@ -66,6 +70,7 @@ const familyLabelMap: Record<ModeProfile["family"], string> = {
 };
 
 export function PsycheModesPage() {
+  const shell = useForgeShell();
   const queryClient = useQueryClient();
   const [searchParams, setSearchParams] = useSearchParams();
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -81,6 +86,10 @@ export function PsycheModesPage() {
   const patterns = patternsQuery.data?.patterns ?? [];
   const behaviors = behaviorsQuery.data?.behaviors ?? [];
   const values = valuesQuery.data?.values ?? [];
+  const focusedModeId = searchParams.get("focus");
+  const notesSummaryByEntity = shell.snapshot.dashboard.notesSummaryByEntity;
+
+  usePsycheFocusTarget(focusedModeId);
 
   useEffect(() => {
     if (searchParams.get("create") === "1") {
@@ -441,21 +450,34 @@ export function PsycheModesPage() {
                   </div>
                 ) : (
                   groupedModes[family].map((mode) => (
-                    <button
+                    <div
                       key={mode.id}
-                      type="button"
-                      className="rounded-[22px] bg-white/[0.04] p-4 text-left transition hover:bg-white/[0.08]"
-                      onClick={() => {
-                        setEditingMode(mode);
-                        setDraft(modeToInput(mode));
-                        setDialogOpen(true);
-                      }}
+                      data-psyche-focus-id={mode.id}
+                      className={`rounded-[22px] bg-white/[0.04] p-4 text-left transition hover:bg-white/[0.08] ${psycheFocusClass(focusedModeId === mode.id)}`}
                     >
-                      <EntityBadge kind="mode" compact gradient={false} />
-                      <EntityName kind="mode" label={mode.title} variant="heading" size="lg" />
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div>
+                          <EntityBadge kind="mode" compact gradient={false} />
+                          <EntityName kind="mode" label={mode.title} variant="heading" size="lg" />
+                        </div>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <EntityNoteCountLink entityType="mode_profile" entityId={mode.id} count={getEntityNotesSummary(notesSummaryByEntity, "mode_profile", mode.id).count} />
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            onClick={() => {
+                              setEditingMode(mode);
+                              setDraft(modeToInput(mode));
+                              setDialogOpen(true);
+                            }}
+                          >
+                            Edit
+                          </Button>
+                        </div>
+                      </div>
                       <div className="mt-2 text-sm text-white/52">{mode.archetype}</div>
                       <div className="mt-3 text-sm leading-6 text-white/62">{mode.persona || mode.protectiveJob || "Open the mode to add persona and protective details."}</div>
-                    </button>
+                    </div>
                   ))
                 )}
               </div>

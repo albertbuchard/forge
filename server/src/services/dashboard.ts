@@ -1,5 +1,6 @@
 import { listGoals } from "../repositories/goals.js";
 import { listActivityEvents } from "../repositories/activity-events.js";
+import { buildNotesSummaryByEntity } from "../repositories/notes.js";
 import { listTagsByIds, listTags } from "../repositories/tags.js";
 import { listTasks } from "../repositories/tasks.js";
 import { buildAchievementSignals, buildGamificationProfile, buildMilestoneRewards } from "./gamification.js";
@@ -182,6 +183,7 @@ export function getDashboard(): DashboardPayload {
   const achievements = buildAchievementSignals(goals, tasks, now);
   const milestoneRewards = buildMilestoneRewards(goals, tasks, now);
   const recentActivity = listActivityEvents({ limit: 12 });
+  const notesSummaryByEntity = buildNotesSummaryByEntity();
   return dashboardPayloadSchema.parse({
     stats,
     goals: goalCards,
@@ -194,6 +196,7 @@ export function getDashboard(): DashboardPayload {
     gamification,
     achievements,
     milestoneRewards,
-    recentActivity
+    recentActivity,
+    notesSummaryByEntity
   });
 }

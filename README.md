@@ -2,6 +2,7 @@
 
 Forge is the actual web app and API runtime for the life operating system under `projects/forge`.
 Markdown `note` records are first-class Forge entities and can link to one or many goals, projects, tasks, and Psyche records so progress evidence and handoff context stay searchable across the product.
+Notes are the only durable collaboration record now. Forge no longer uses the old legacy `comment` model or `/api/v1/comments` compatibility routes.
 
 It is meant to run:
 - locally in the browser
@@ -53,6 +54,18 @@ Then open:
 - Vite dev app: [http://127.0.0.1:3027](http://127.0.0.1:3027)
 - runtime API: [http://127.0.0.1:4317/api/v1/health](http://127.0.0.1:4317/api/v1/health)
 
+If you want the repo app to run against the OpenClaw plugin data folder directly, use:
+
+```bash
+npm run dev:openclaw-data
+```
+
+For a production-style local run against that same data root:
+
+```bash
+npm run start:openclaw-data
+```
+
 ### Choose a data folder
 
 By default, Forge stores data under the active runtime root in:
@@ -86,6 +99,24 @@ Forge will then read and write its SQLite files under:
 ```text
 $FORGE_DATA_ROOT/data/forge.sqlite
 ```
+
+## Notes model
+
+Forge notes are:
+
+- Markdown-first
+- searchable through SQLite FTS
+- linkable to one or many entities
+- creatable inline when creating a goal, project, or task through nested `notes`
+- persistable as durable work evidence through `closeoutNote` on task completion, task release, and retroactive work logging
+
+The product also includes:
+
+- inline notes surfaces on the main goal, project, task, and trigger report detail views
+- note-count links on the main entity cards and Psyche cards
+- a global `/forge/notes` search page
+
+Some notes can also be pinned to a sub-part of an entity with an internal anchor key. The main user-facing case today is trigger report stage notes like Spark, Story, State, Lens, and Pivot.
 
 ## Local and Tailscale access
 
@@ -166,6 +197,13 @@ openclaw gateway restart
 ```
 
 If Forge is local or on Tailscale, `apiToken` can stay blank and the plugin will bootstrap an operator session automatically.
+
+Useful repo scripts for plugin work:
+
+```bash
+npm run build:openclaw-plugin
+npm run check:openclaw-plugin
+```
 
 See:
 - [`docs/openclaw-plugin.md`](docs/openclaw-plugin.md)

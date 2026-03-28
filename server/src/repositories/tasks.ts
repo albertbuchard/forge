@@ -5,6 +5,7 @@ import { HttpError } from "../errors.js";
 import { recordActivityEvent } from "./activity-events.js";
 import { filterDeletedEntities, filterDeletedIds, isEntityDeleted } from "./deleted-entities.js";
 import { getGoalById } from "./goals.js";
+import { createLinkedNotes } from "./notes.js";
 import { ensureDefaultProjectForGoal, getProjectById } from "./projects.js";
 import { pruneLinkedEntityReferences } from "./psyche.js";
 import { awardTaskCompletionReward, reverseLatestTaskCompletionReward } from "./rewards.js";
@@ -92,6 +93,7 @@ function normalizeCompletedAt(status: string, existingCompletedAt: string | null
 function resolveProjectAndGoalIds(input: { goalId?: string | null; projectId?: string | null }, current?: Task) {
   const currentGoalId = current?.goalId && getGoalById(current.goalId) ? current.goalId : null;
   const currentProject = current?.projectId ? getProjectById(current.projectId) ?? null : null;
+  const currentProjectGoalId = currentProject?.goalId && getGoalById(currentProject.goalId) ? currentProject.goalId : null;
   const currentProjectId = currentProject?.id ?? null;
   const requestedGoalId = input.goalId === undefined ? currentGoalId : input.goalId;
   const goalChangedWithoutProjectOverride =
@@ -103,11 +105,12 @@ function resolveProjectAndGoalIds(input: { goalId?: string | null; projectId?: s
     if (!project) {
       throw new HttpError(404, "project_not_found", `Project ${requestedProjectId} does not exist`);
     }
-    if (requestedGoalId && project.goalId !== requestedGoalId) {
+    const projectGoalId = getGoalById(project.goalId) ? project.goalId : null;
+    if (requestedGoalId && projectGoalId && project.goalId !== requestedGoalId) {
       throw new HttpError(409, "project_goal_mismatch", `Project ${requestedProjectId} does not belong to goal ${requestedGoalId}`);
     }
     return {
-      goalId: project.goalId,
+      goalId: projectGoalId,
       projectId: project.id
     };
   }
@@ -251,6 +254,9 @@ function updateTaskRecord(current: Task, input: UpdateTaskInput, activity?: Acti
       reverseLatestTaskCompletionReward(updated, activity);
     }
   }
+  if (updated) {
+    createLinkedNotes(input.notes, { entityType: "task", entityId: updated.id, anchorKey: null }, activity ?? { source: "ui", actor: null });
+  }
   return updated;
 }
 
@@ -270,7 +276,12 @@ function fingerprintTaskCreate(input: CreateTaskInput): string {
         energy: input.energy,
         points: input.points,
         sortOrder: input.sortOrder ?? null,
-        tagIds: input.tagIds
+        tagIds: input.tagIds,
+        notes: input.notes.map((note) => ({
+          contentMarkdown: note.contentMarkdown,
+          author: note.author,
+          links: note.links
+        }))
       })
     )
     .digest("hex");
@@ -335,6 +346,7 @@ function insertTaskRecord(input: CreateTaskInput, activity?: ActivityContext): T
       awardTaskCompletionReward(task, activity);
     }
   }
+  createLinkedNotes(input.notes, { entityType: "task", entityId: task.id, anchorKey: null }, activity ?? { source: "ui", actor: null });
   return task;
 }
 
@@ -508,13 +520,6 @@ export function deleteTask(taskId: string, activity?: ActivityContext): Task | u
 
   return runInTransaction(() => {
     pruneLinkedEntityReferences("task", taskId);
-    getDatabase()
-      .prepare(
-        `DELETE FROM entity_comments
-         WHERE entity_type = 'task'
-           AND entity_id = ?`
-      )
-      .run(taskId);
     getDatabase()
       .prepare(`DELETE FROM tasks WHERE id = ?`)
       .run(taskId);

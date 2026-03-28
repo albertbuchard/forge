@@ -83,6 +83,7 @@ function createSnapshot(): ForgeSnapshot {
       suggestedTags: [],
       owners: [],
       executionBuckets: [],
+      notesSummaryByEntity: {},
       gamification: {
         totalXp: 0,
         level: 1,

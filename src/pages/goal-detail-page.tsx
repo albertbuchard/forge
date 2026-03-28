@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { GoalDialog } from "@/components/goal-dialog";
 import { ProjectDialog } from "@/components/project-dialog";
+import { EntityNotesSurface } from "@/components/notes/entity-notes-surface";
 import { PageHero } from "@/components/shell/page-hero";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -154,6 +155,13 @@ export function GoalDetailPage() {
           </Card>
         </div>
       </section>
+
+      <EntityNotesSurface
+        entityType="goal"
+        entityId={goal.id}
+        title="Goal notes"
+        description="Use notes to capture strategy changes, meaning shifts, and progress context that belongs at the goal level."
+      />
 
       <Card>
         <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">{t("common.goalDetail.sectionEvidence")}</div>

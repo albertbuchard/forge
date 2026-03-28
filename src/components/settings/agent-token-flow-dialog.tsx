@@ -10,7 +10,7 @@ const FULL_OPERATOR_SCOPES = [
   "rewards.manage",
   "psyche.read",
   "psyche.write",
-  "psyche.comment",
+  "psyche.note",
   "psyche.insight",
   "psyche.mode"
 ] as const;
@@ -22,7 +22,7 @@ const TOKEN_SCOPE_OPTIONS = [
   { value: "rewards.manage", label: "Rewards", description: "Tune reward rules and issue explainable bonus XP grants." },
   { value: "psyche.read", label: "Psyche read", description: "Read sensitive values, patterns, and trigger analyses." },
   { value: "psyche.write", label: "Psyche write", description: "Create and update sensitive therapeutic records." },
-  { value: "psyche.comment", label: "Psyche comment", description: "Comment on reflection records without broader write access." },
+  { value: "psyche.note", label: "Psyche note", description: "Create and edit Markdown notes linked to reflective records." },
   { value: "psyche.insight", label: "Psyche insight", description: "Store therapeutic insights on Psyche entities." },
   { value: "psyche.mode", label: "Psyche mode", description: "Name, refine, and map mode profiles and guided mode results." }
 ] as const;

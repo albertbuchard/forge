@@ -3,6 +3,7 @@ import { getDatabase, runInTransaction } from "../db.js";
 import { recordActivityEvent } from "./activity-events.js";
 import { filterDeletedEntities, filterDeletedIds, isEntityDeleted } from "./deleted-entities.js";
 import { recordEventLog } from "./event-log.js";
+import { unlinkNotesForEntity } from "./notes.js";
 import {
   recordPsycheClarityReward,
   recordPsycheReflectionReward
@@ -593,14 +594,8 @@ function getRow<T>(sql: string, id: string): T | undefined {
   return getDatabase().prepare(sql).get(id) as T | undefined;
 }
 
-function deleteEntityComments(entityType: string, entityId: string): void {
-  getDatabase()
-    .prepare(
-      `DELETE FROM entity_comments
-       WHERE entity_type = ?
-         AND entity_id = ?`
-    )
-    .run(entityType, entityId);
+function unlinkEntityNotes(entityType: string, entityId: string): void {
+  unlinkNotesForEntity(entityType as Parameters<typeof unlinkNotesForEntity>[0], entityId, { source: "system", actor: null });
 }
 
 function rewriteJsonColumn<T>(table: string, column: string, transform: (value: T) => T): void {
@@ -778,7 +773,7 @@ export function deleteEventType(eventTypeId: string, context: PsycheContext): Ev
   }
 
   return runInTransaction(() => {
-    deleteEntityComments("event_type", eventTypeId);
+    unlinkEntityNotes("event_type", eventTypeId);
     getDatabase()
       .prepare(`DELETE FROM event_types WHERE id = ?`)
       .run(eventTypeId);
@@ -898,7 +893,7 @@ export function deleteEmotionDefinition(emotionId: string, context: PsycheContex
 
   return runInTransaction(() => {
     nullifyTriggerEmotionReferences(emotionId);
-    deleteEntityComments("emotion_definition", emotionId);
+    unlinkEntityNotes("emotion_definition", emotionId);
     getDatabase()
       .prepare(`DELETE FROM emotion_definitions WHERE id = ?`)
       .run(emotionId);
@@ -1055,7 +1050,7 @@ export function deletePsycheValue(valueId: string, context: PsycheContext): Psyc
     removeIdFromStringArrayColumn("belief_entries", "linked_value_ids_json", valueId);
     removeIdFromStringArrayColumn("mode_profiles", "linked_value_ids_json", valueId);
     removeIdFromStringArrayColumn("trigger_reports", "linked_value_ids_json", valueId);
-    deleteEntityComments("psyche_value", valueId);
+    unlinkEntityNotes("psyche_value", valueId);
     getDatabase()
       .prepare(`DELETE FROM psyche_values WHERE id = ?`)
       .run(valueId);
@@ -1225,7 +1220,7 @@ export function deleteBehaviorPattern(patternId: string, context: PsycheContext)
     removeIdFromStringArrayColumn("psyche_behaviors", "linked_pattern_ids_json", patternId);
     removeIdFromStringArrayColumn("mode_profiles", "linked_pattern_ids_json", patternId);
     removeIdFromStringArrayColumn("trigger_reports", "linked_pattern_ids_json", patternId);
-    deleteEntityComments("behavior_pattern", patternId);
+    unlinkEntityNotes("behavior_pattern", patternId);
     getDatabase()
       .prepare(`DELETE FROM behavior_patterns WHERE id = ?`)
       .run(patternId);
@@ -1387,7 +1382,7 @@ export function deleteBehavior(behaviorId: string, context: PsycheContext): Beha
     removeIdFromStringArrayColumn("mode_profiles", "linked_behavior_ids_json", behaviorId);
     removeIdFromStringArrayColumn("trigger_reports", "linked_behavior_ids_json", behaviorId);
     nullifyTriggerBehaviorReferences(behaviorId);
-    deleteEntityComments("behavior", behaviorId);
+    unlinkEntityNotes("behavior", behaviorId);
     getDatabase()
       .prepare(`DELETE FROM psyche_behaviors WHERE id = ?`)
       .run(behaviorId);
@@ -1546,7 +1541,7 @@ export function deleteBeliefEntry(beliefId: string, context: PsycheContext): Bel
     removeIdFromStringArrayColumn("behavior_patterns", "linked_belief_ids_json", beliefId);
     removeIdFromStringArrayColumn("trigger_reports", "linked_belief_ids_json", beliefId);
     nullifyTriggerThoughtBeliefReferences(beliefId);
-    deleteEntityComments("belief_entry", beliefId);
+    unlinkEntityNotes("belief_entry", beliefId);
     getDatabase()
       .prepare(`DELETE FROM belief_entries WHERE id = ?`)
       .run(beliefId);
@@ -1713,7 +1708,7 @@ export function deleteModeProfile(modeId: string, context: PsycheContext): ModeP
     removeIdFromStringArrayColumn("belief_entries", "linked_mode_ids_json", modeId);
     removeIdFromStringArrayColumn("trigger_reports", "linked_mode_ids_json", modeId);
     nullifyTriggerTimelineModeReferences(modeId);
-    deleteEntityComments("mode_profile", modeId);
+    unlinkEntityNotes("mode_profile", modeId);
     getDatabase()
       .prepare(`DELETE FROM mode_profiles WHERE id = ?`)
       .run(modeId);
@@ -2046,7 +2041,7 @@ export function deleteTriggerReport(reportId: string, context: PsycheContext): T
 
   return runInTransaction(() => {
     removeIdFromStringArrayColumn("belief_entries", "linked_report_ids_json", reportId);
-    deleteEntityComments("trigger_report", reportId);
+    unlinkEntityNotes("trigger_report", reportId);
     getDatabase()
       .prepare(`DELETE FROM trigger_reports WHERE id = ?`)
       .run(reportId);

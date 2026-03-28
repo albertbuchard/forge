@@ -19,8 +19,8 @@ import {
 } from "./repositories/collaboration.js";
 import { listEventLog } from "./repositories/event-log.js";
 import { createGoal, getGoalById, listGoals, updateGoal } from "./repositories/goals.js";
-import { createComment, getCommentById, listComments, updateComment } from "./repositories/comments.js";
 import { listDomains } from "./repositories/domains.js";
+import { buildNotesSummaryByEntity, createNote, getNoteById, listNotes, updateNote } from "./repositories/notes.js";
 import {
   createBehavior,
   createBehaviorPattern,
@@ -95,10 +95,8 @@ import { suggestTags } from "./services/tagging.js";
 import {
   PSYCHE_ENTITY_TYPES,
   createBehaviorSchema,
-  commentListQuerySchema,
   createBeliefEntrySchema,
   createBehaviorPatternSchema,
-  createCommentSchema,
   createEmotionDefinitionSchema,
   createEventTypeSchema,
   createModeGuideSessionSchema,
@@ -108,7 +106,6 @@ import {
   updateBehaviorSchema,
   updateBeliefEntrySchema,
   updateBehaviorPatternSchema,
-  updateCommentSchema,
   updateEmotionDefinitionSchema,
   updateEventTypeSchema,
   updateModeGuideSessionSchema,
@@ -129,10 +126,12 @@ import {
   createGoalSchema,
   createInsightFeedbackSchema,
   createInsightSchema,
+  createNoteSchema,
   createProjectSchema,
   createManualRewardGrantSchema,
   createSessionEventSchema,
   createTagSchema,
+  notesListQuerySchema,
   updateTagSchema,
   createTaskSchema,
   eventsListQuerySchema,
@@ -155,6 +154,7 @@ import {
   updateSettingsSchema,
   updateGoalSchema,
   updateInsightSchema,
+  updateNoteSchema,
   updateProjectSchema,
   updateRewardRuleSchema,
   updateTaskSchema
@@ -280,7 +280,8 @@ const AGENT_ONBOARDING_ENTITY_CATALOG = [
       { name: "status", type: "active|paused|completed", required: false, description: "Current lifecycle state for the goal.", enumValues: ["active", "paused", "completed"], defaultValue: "active" },
       { name: "targetPoints", type: "integer", required: false, description: "Approximate XP/point target for the goal.", defaultValue: 400 },
       { name: "themeColor", type: "hex-color", required: false, description: "Visual color used in the UI.", defaultValue: "#c8a46b" },
-      { name: "tagIds", type: "string[]", required: false, description: "Existing tag ids linked to the goal.", defaultValue: [] }
+      { name: "tagIds", type: "string[]", required: false, description: "Existing tag ids linked to the goal.", defaultValue: [] },
+      { name: "notes", type: "Array<{ contentMarkdown, author?, links? }>", required: false, description: "Optional nested notes that will auto-link to the new goal.", defaultValue: [] }
     ]
   },
   {
@@ -300,7 +301,8 @@ const AGENT_ONBOARDING_ENTITY_CATALOG = [
       { name: "description", type: "string", required: false, description: "Desired outcome or scope.", defaultValue: "" },
       { name: "status", type: "active|paused|completed", required: false, description: "Lifecycle state.", enumValues: ["active", "paused", "completed"], defaultValue: "active" },
       { name: "targetPoints", type: "integer", required: false, description: "Approximate XP/point target for the project.", defaultValue: 240 },
-      { name: "themeColor", type: "hex-color", required: false, description: "Visual color used in the UI.", defaultValue: "#c0c1ff" }
+      { name: "themeColor", type: "hex-color", required: false, description: "Visual color used in the UI.", defaultValue: "#c0c1ff" },
+      { name: "notes", type: "Array<{ contentMarkdown, author?, links? }>", required: false, description: "Optional nested notes that will auto-link to the new project.", defaultValue: [] }
     ]
   },
   {
@@ -327,7 +329,27 @@ const AGENT_ONBOARDING_ENTITY_CATALOG = [
       { name: "energy", type: "low|steady|high", required: false, description: "Energy demand.", enumValues: ["low", "steady", "high"], defaultValue: "steady" },
       { name: "points", type: "integer", required: false, description: "Reward value for the task.", defaultValue: 40 },
       { name: "sortOrder", type: "integer", required: false, description: "Lane ordering hint when set explicitly." },
-      { name: "tagIds", type: "string[]", required: false, description: "Existing tag ids linked to the task.", defaultValue: [] }
+      { name: "tagIds", type: "string[]", required: false, description: "Existing tag ids linked to the task.", defaultValue: [] },
+      { name: "notes", type: "Array<{ contentMarkdown, author?, links? }>", required: false, description: "Optional nested notes that will auto-link to the new task.", defaultValue: [] }
+    ]
+  },
+  {
+    entityType: "note",
+    purpose: "A Markdown note that can link to one or many Forge entities.",
+    minimumCreateFields: ["contentMarkdown", "links"],
+    relationshipRules: [
+      "Notes can link to goals, projects, tasks, Psyche records, and other supported Forge entities.",
+      "When nested under another create flow, notes auto-link to that new entity and can optionally include extra links."
+    ],
+    searchHints: ["Search by Markdown content, author, or linked entity before creating a duplicate note."],
+    examples: [
+      '{"contentMarkdown":"Finished the review pass and captured the remaining edge cases.","links":[{"entityType":"task","entityId":"task_123"}]}',
+      '{"contentMarkdown":"Observed a stronger protector response after the meeting.","author":"forge-agent","links":[{"entityType":"trigger_report","entityId":"report_123"},{"entityType":"behavior_pattern","entityId":"pattern_123"}]}'
+    ],
+    fieldGuide: [
+      { name: "contentMarkdown", type: "string", required: true, description: "Markdown body of the note." },
+      { name: "author", type: "string|null", required: false, description: "Optional display author for the note.", defaultValue: null, nullable: true },
+      { name: "links", type: "Array<{ entityType, entityId, anchorKey? }>", required: true, description: "Entities this note should link to." }
     ]
   },
   {
@@ -689,9 +711,10 @@ const AGENT_ONBOARDING_TOOL_INPUT_CATALOG = [
     requiredFields: ["operations", "operations[].entityType", "operations[].data"],
     notes: [
       "entityType alone is never enough; full data is required.",
-      "Batch multiple related creates together when they come from one user ask."
+      "Batch multiple related creates together when they come from one user ask.",
+      "Goal, project, and task creates can include notes: [{ contentMarkdown, author?, links? }] and Forge will auto-link those notes to the newly created entity."
     ],
-    example: '{"operations":[{"entityType":"goal","data":{"title":"Create meaningfully","horizon":"lifetime"},"clientRef":"goal-1"},{"entityType":"project","data":{"goalId":"goal_123","title":"Launch the first public Forge plugin build"},"clientRef":"project-1"}]}'
+    example: '{"operations":[{"entityType":"task","data":{"title":"Write the public release notes","projectId":"project_123","status":"focus","notes":[{"contentMarkdown":"Starting from the changelog draft and the last QA pass."}]},"clientRef":"task-1"}]}'
   },
   {
     toolName: "forge_update_entities",
@@ -733,10 +756,10 @@ const AGENT_ONBOARDING_TOOL_INPUT_CATALOG = [
     toolName: "forge_log_work",
     summary: "Log work that already happened.",
     whenToUse: "Use for retroactive work, not for starting a live session.",
-    inputShape: "{ taskId?: string, title?: string, description?: string, summary?: string, goalId?: string|null, projectId?: string|null, owner?: string, status?: TaskStatus, priority?: TaskPriority, dueDate?: string|null, effort?: TaskEffort, energy?: TaskEnergy, points?: number, tagIds?: string[] }",
+    inputShape: "{ taskId?: string, title?: string, description?: string, summary?: string, goalId?: string|null, projectId?: string|null, owner?: string, status?: TaskStatus, priority?: TaskPriority, dueDate?: string|null, effort?: TaskEffort, energy?: TaskEnergy, points?: number, tagIds?: string[], closeoutNote?: { contentMarkdown: string, author?: string|null, links?: Array<{ entityType, entityId, anchorKey? }> } }",
     requiredFields: ["taskId or title"],
-    notes: ["Use taskId when logging work against an existing task.", "Use title when a new completed work item should be created and logged."],
-    example: '{"taskId":"task_123","summary":"Finished the review draft and cleaned the notes.","points":40}'
+    notes: ["Use taskId when logging work against an existing task.", "Use title when a new completed work item should be created and logged.", "closeoutNote persists the work summary as a real linked note."],
+    example: '{"taskId":"task_123","summary":"Finished the review draft and cleaned the notes.","points":40,"closeoutNote":{"contentMarkdown":"Finished the review draft, cleaned the note structure, and left one follow-up for QA."}}'
   },
   {
     toolName: "forge_start_task_run",
@@ -769,19 +792,19 @@ const AGENT_ONBOARDING_TOOL_INPUT_CATALOG = [
     toolName: "forge_complete_task_run",
     summary: "Finish an active run as completed work.",
     whenToUse: "Use when the user has finished the live work block.",
-    inputShape: "{ taskRunId: string, actor?: string, note?: string }",
+    inputShape: "{ taskRunId: string, actor?: string, note?: string, closeoutNote?: { contentMarkdown: string, author?: string|null, links?: Array<{ entityType, entityId, anchorKey? }> } }",
     requiredFields: ["taskRunId"],
-    notes: ["This is the truthful way to finish live work and award completion effects."],
-    example: '{"taskRunId":"run_123","actor":"aurel","note":"Finished the review draft"}'
+    notes: ["This is the truthful way to finish live work and award completion effects.", "closeoutNote persists a real linked note instead of only updating the transient run note."],
+    example: '{"taskRunId":"run_123","actor":"aurel","note":"Finished the review draft","closeoutNote":{"contentMarkdown":"Completed the draft review and listed the follow-up fixes."}}'
   },
   {
     toolName: "forge_release_task_run",
     summary: "Stop an active run without marking the task complete.",
     whenToUse: "Use when the user is stopping or pausing work without completion.",
-    inputShape: "{ taskRunId: string, actor?: string, note?: string }",
+    inputShape: "{ taskRunId: string, actor?: string, note?: string, closeoutNote?: { contentMarkdown: string, author?: string|null, links?: Array<{ entityType, entityId, anchorKey? }> } }",
     requiredFields: ["taskRunId"],
-    notes: ["Use this instead of faking a stop by only changing task status."],
-    example: '{"taskRunId":"run_123","actor":"aurel","note":"Stopping for now; blocked on feedback"}'
+    notes: ["Use this instead of faking a stop by only changing task status.", "closeoutNote is useful for documenting blockers or handoff context."],
+    example: '{"taskRunId":"run_123","actor":"aurel","note":"Stopping for now; blocked on feedback","closeoutNote":{"contentMarkdown":"Blocked on feedback from design before I can continue."}}'
   }
 ] as const;
 
@@ -811,7 +834,7 @@ function buildAgentOnboardingPayload(request: {
       "rewards.manage",
       "psyche.read",
       "psyche.write",
-      "psyche.comment",
+      "psyche.note",
       "psyche.insight",
       "psyche.mode"
     ],
@@ -847,6 +870,7 @@ function buildAgentOnboardingPayload(request: {
       project: "A multi-step workstream under one goal. Projects organize related tasks.",
       task: "A concrete actionable work item. Task status is board state, not proof of live work.",
       taskRun: "A live work session attached to a task. Start, heartbeat, focus, complete, and release runs instead of faking work with status alone.",
+      note: "A Markdown work note that can link to one or many entities. Use notes for progress evidence, context, and close-out summaries.",
       insight: "An agent-authored observation or recommendation grounded in Forge data.",
       psyche:
         "Forge Psyche is the reflective domain for values, patterns, behaviors, beliefs, modes, and trigger reports. It is sensitive and should be handled deliberately."
@@ -869,6 +893,7 @@ function buildAgentOnboardingPayload(request: {
       "Projects belong to one goal through goalId.",
       "Tasks can belong to a goal, a project, both, or neither.",
       "Task runs represent live work sessions on tasks and are separate from task status.",
+      "Notes can link to one or many entities and are the canonical place for Markdown progress context or close-out evidence.",
       "Psyche values can link to goals, projects, and tasks.",
       "Behavior patterns, behaviors, beliefs, modes, and trigger reports cross-link to describe one reflective model rather than isolated records.",
       "Insights can point at one entity, but they exist to capture interpretation or advice rather than raw work items."
@@ -1372,7 +1397,7 @@ export async function buildServer(options: { dataRoot?: string; seedDemoData?: b
     }
     return context;
   };
-  const requireCommentAccess = (
+  const requireNoteAccess = (
     headers: Record<string, unknown>,
     entityType: string | null | undefined,
     detail?: Record<string, unknown>
@@ -1381,7 +1406,7 @@ export async function buildServer(options: { dataRoot?: string; seedDemoData?: b
     if (isPsycheEntityType(entityType)) {
       if (isPsycheAuthRequired()) {
         managers.authorization.requireAuthenticatedActor(context, detail);
-        managers.authorization.requireTokenScope(context, "psyche.comment", {
+        managers.authorization.requireAnyTokenScope(context, ["psyche.note"], {
           entityType,
           ...(detail ?? {})
         });
@@ -1793,7 +1818,7 @@ export async function buildServer(options: { dataRoot?: string; seedDemoData?: b
     }
     return {
       report,
-      comments: listComments({ entityType: "trigger_report", entityId: id }),
+      notes: listNotes({ linkedEntityType: "trigger_report", linkedEntityId: id, limit: 50 }),
       insights: listInsights({ entityType: "trigger_report", entityId: id, limit: 50 })
     };
   });
@@ -1817,65 +1842,73 @@ export async function buildServer(options: { dataRoot?: string; seedDemoData?: b
     }
     return { report };
   });
-  app.get("/api/v1/comments", async (request) => {
-    const query = commentListQuerySchema.parse(request.query ?? {});
-    if (isPsycheEntityType(query.entityType)) {
-      requirePsycheScopedAccess(request.headers as Record<string, unknown>, ["psyche.read"], { route: "/api/v1/comments", entityType: query.entityType });
+  app.get("/api/v1/notes", async (request) => {
+    const query = notesListQuerySchema.parse(request.query ?? {});
+    if (isPsycheEntityType(query.linkedEntityType)) {
+      requirePsycheScopedAccess(request.headers as Record<string, unknown>, ["psyche.read"], {
+        route: "/api/v1/notes",
+        entityType: query.linkedEntityType
+      });
     }
-    return { comments: listComments(query) };
+    return { notes: listNotes(query) };
   });
-  app.post("/api/v1/comments", async (request, reply) => {
-    const input = createCommentSchema.parse(request.body ?? {});
-    const auth = requireCommentAccess(request.headers as Record<string, unknown>, input.entityType, {
-      route: "/api/v1/comments",
-      entityType: input.entityType
+  app.post("/api/v1/notes", async (request, reply) => {
+    const input = createNoteSchema.parse(request.body ?? {});
+    const firstLinkedEntityType = input.links[0]?.entityType;
+    const auth = requireNoteAccess(request.headers as Record<string, unknown>, firstLinkedEntityType, {
+      route: "/api/v1/notes",
+      entityType: firstLinkedEntityType ?? null
     });
-    const comment = createComment(input, toActivityContext(auth));
+    const note = createNote(input, toActivityContext(auth));
     reply.code(201);
-    return { comment };
+    return { note };
   });
-  app.get("/api/v1/comments/:id", async (request, reply) => {
+  app.get("/api/v1/notes/:id", async (request, reply) => {
     const { id } = request.params as { id: string };
-    const current = getCommentById(id);
-    const auth = requireCommentAccess(request.headers as Record<string, unknown>, current?.entityType, {
-      route: "/api/v1/comments/:id",
-      entityType: current?.entityType ?? null
-    });
-    void auth;
+    const current = getNoteById(id);
+    const psycheEntityType = current?.links.find((link) => isPsycheEntityType(link.entityType))?.entityType;
+    if (psycheEntityType) {
+      requirePsycheScopedAccess(request.headers as Record<string, unknown>, ["psyche.read"], {
+        route: "/api/v1/notes/:id",
+        entityType: psycheEntityType
+      });
+    }
     if (!current) {
       reply.code(404);
-      return { error: "Comment not found" };
+      return { error: "Note not found" };
     }
-    return { comment: current };
+    return { note: current };
   });
-  app.patch("/api/v1/comments/:id", async (request, reply) => {
+  app.patch("/api/v1/notes/:id", async (request, reply) => {
     const { id } = request.params as { id: string };
-    const patch = updateCommentSchema.parse(request.body ?? {});
-    const current = getCommentById(id);
-    const auth = requireCommentAccess(request.headers as Record<string, unknown>, current?.entityType, {
-      route: "/api/v1/comments/:id",
-      entityType: current?.entityType ?? null
+    const patch = updateNoteSchema.parse(request.body ?? {});
+    const current = getNoteById(id);
+    const linkedEntityType = current?.links[0]?.entityType ?? patch.links?.[0]?.entityType ?? null;
+    const auth = requireNoteAccess(request.headers as Record<string, unknown>, linkedEntityType, {
+      route: "/api/v1/notes/:id",
+      entityType: linkedEntityType
     });
-    const comment = updateComment(id, patch, toActivityContext(auth));
-    if (!comment) {
+    const note = updateNote(id, patch, toActivityContext(auth));
+    if (!note) {
       reply.code(404);
-      return { error: "Comment not found" };
+      return { error: "Note not found" };
     }
-    return { comment };
+    return { note };
   });
-  app.delete("/api/v1/comments/:id", async (request, reply) => {
+  app.delete("/api/v1/notes/:id", async (request, reply) => {
     const { id } = request.params as { id: string };
-    const current = getCommentById(id);
-    const auth = requireCommentAccess(request.headers as Record<string, unknown>, current?.entityType, {
-      route: "/api/v1/comments/:id",
-      entityType: current?.entityType ?? null
+    const current = getNoteById(id);
+    const linkedEntityType = current?.links.find((link) => isPsycheEntityType(link.entityType))?.entityType ?? current?.links[0]?.entityType ?? null;
+    const auth = requireNoteAccess(request.headers as Record<string, unknown>, linkedEntityType, {
+      route: "/api/v1/notes/:id",
+      entityType: linkedEntityType
     });
-    const comment = deleteEntity("comment", id, entityDeleteQuerySchema.parse(request.query ?? {}), toActivityContext(auth));
-    if (!comment) {
+    const note = deleteEntity("note", id, entityDeleteQuerySchema.parse(request.query ?? {}), toActivityContext(auth));
+    if (!note) {
       reply.code(404);
-      return { error: "Comment not found" };
+      return { error: "Note not found" };
     }
-    return { comment };
+    return { note };
   });
   app.get("/api/v1/projects", async (request) => {
     const query = projectListQuerySchema.parse(request.query ?? {});
@@ -2358,7 +2391,8 @@ export async function buildServer(options: { dataRoot?: string; seedDemoData?: b
       project: task.projectId ? listProjectSummaries().find((project) => project.id === task.projectId) ?? null : null,
       activeTaskRun: taskRuns.find((run) => run.status === "active") ?? null,
       taskRuns,
-      activity: listActivityEventsForTask(id, 20)
+      activity: listActivityEventsForTask(id, 20),
+      notesSummaryByEntity: buildNotesSummaryByEntity()
     });
   });
   app.get("/api/v1/tasks/:id/context", async (request, reply) => {
@@ -2376,7 +2410,8 @@ export async function buildServer(options: { dataRoot?: string; seedDemoData?: b
       project: task.projectId ? listProjectSummaries().find((project) => project.id === task.projectId) ?? null : null,
       activeTaskRun: taskRuns.find((run) => run.status === "active") ?? null,
       taskRuns,
-      activity: listActivityEventsForTask(id, 20)
+      activity: listActivityEventsForTask(id, 20),
+      notesSummaryByEntity: buildNotesSummaryByEntity()
     });
   });
 
@@ -2571,7 +2606,8 @@ export async function buildServer(options: { dataRoot?: string; seedDemoData?: b
           effort: input.effort,
           energy: input.energy,
           points: input.points,
-          tagIds: input.tagIds
+          tagIds: input.tagIds,
+          notes: input.closeoutNote ? [input.closeoutNote] : undefined
         },
         toActivityContext(auth)
       );
@@ -2600,7 +2636,8 @@ export async function buildServer(options: { dataRoot?: string; seedDemoData?: b
         effort: input.effort ?? "deep",
         energy: input.energy ?? "steady",
         points: input.points ?? 40,
-        tagIds: input.tagIds ?? []
+        tagIds: input.tagIds ?? [],
+        notes: input.closeoutNote ? [input.closeoutNote] : []
       }),
       toActivityContext(auth)
     );

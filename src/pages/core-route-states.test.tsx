@@ -108,6 +108,7 @@ function createSnapshot(overrides: Partial<ForgeSnapshot> = {}): ForgeSnapshot {
       suggestedTags: [],
       owners: [],
       executionBuckets: [],
+      notesSummaryByEntity: {},
       gamification: {
         totalXp: 0,
         level: 1,

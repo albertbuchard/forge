@@ -16,6 +16,7 @@ import type {
   OperatorLogWorkResult,
   InsightFeedback,
   InsightsPayload,
+  Note,
   Project,
   ProjectBoardPayload,
   ProjectSummary,
@@ -43,8 +44,6 @@ import type {
   BehaviorPatternInput,
   BeliefEntry,
   BeliefEntryInput,
-  Comment,
-  CommentInput,
   Domain,
   EmotionDefinition,
   EmotionDefinitionInput,
@@ -412,45 +411,65 @@ export function deleteTriggerReport(reportId: string) {
   });
 }
 
-export function listComments(input: {
-  entityType?: string;
-  entityId?: string;
+export function listNotes(input: {
+  linkedEntityType?: CrudEntityType;
+  linkedEntityId?: string;
+  anchorKey?: string | null;
+  author?: string;
+  query?: string;
   limit?: number;
 } = {}) {
   const search = new URLSearchParams();
-  if (input.entityType) {
-    search.set("entityType", input.entityType);
+  if (input.linkedEntityType) {
+    search.set("linkedEntityType", input.linkedEntityType);
   }
-  if (input.entityId) {
-    search.set("entityId", input.entityId);
+  if (input.linkedEntityId) {
+    search.set("linkedEntityId", input.linkedEntityId);
+  }
+  if (input.anchorKey !== undefined && input.anchorKey !== null) {
+    search.set("anchorKey", input.anchorKey);
+  }
+  if (input.author) {
+    search.set("author", input.author);
+  }
+  if (input.query) {
+    search.set("query", input.query);
   }
   if (input.limit) {
     search.set("limit", String(input.limit));
   }
   const suffix = search.size > 0 ? `?${search.toString()}` : "";
-  return request<{ comments: Comment[] }>(`/api/v1/comments${suffix}`);
+  return request<{ notes: Note[] }>(`/api/v1/notes${suffix}`);
 }
 
-export function createComment(input: CommentInput) {
-  return request<{ comment: Comment }>("/api/v1/comments", {
+export function createNote(input: {
+  contentMarkdown: string;
+  author?: string | null;
+  links: Array<{ entityType: CrudEntityType; entityId: string; anchorKey?: string | null }>;
+}) {
+  return request<{ note: Note }>("/api/v1/notes", {
     method: "POST",
     body: JSON.stringify(input)
   });
 }
 
-export function getComment(commentId: string) {
-  return request<{ comment: Comment }>(`/api/v1/comments/${commentId}`);
-}
-
-export function patchComment(commentId: string, patch: Partial<CommentInput>) {
-  return request<{ comment: Comment }>(`/api/v1/comments/${commentId}`, {
+export function patchNote(
+  noteId: string,
+  patch: {
+    contentMarkdown?: string;
+    author?: string | null;
+    links?: Array<{ entityType: CrudEntityType; entityId: string; anchorKey?: string | null }>;
+  }
+) {
+  return request<{ note: Note }>(`/api/v1/notes/${noteId}`, {
     method: "PATCH",
     body: JSON.stringify(patch)
   });
 }
 
-export function deleteComment(commentId: string) {
-  return request<{ comment: Comment }>(`/api/v1/comments/${commentId}`, {
+export function deleteNote(noteId: string, mode: DeleteMode = "soft") {
+  const suffix = mode === "soft" ? "" : `?mode=${mode}`;
+  return request<{ note: Note }>(`/api/v1/notes/${noteId}${suffix}`, {
     method: "DELETE"
   });
 }

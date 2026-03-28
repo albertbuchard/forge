@@ -1,5 +1,6 @@
 import { Link } from "react-router-dom";
 import { PageHero } from "@/components/shell/page-hero";
+import { EntityNoteCountLink } from "@/components/notes/entity-note-count-link";
 import { GoalStudio } from "@/components/goal-studio";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
@@ -8,6 +9,7 @@ import { EntityName } from "@/components/ui/entity-name";
 import { EmptyState } from "@/components/ui/page-state";
 import { ProgressMeter } from "@/components/ui/progress-meter";
 import { useForgeShell } from "@/components/shell/app-shell";
+import { getEntityNotesSummary } from "@/lib/note-helpers";
 
 export function GoalsPage() {
   const shell = useForgeShell();
@@ -50,6 +52,7 @@ export function GoalsPage() {
         <div className="grid gap-4">
             {shell.snapshot.dashboard.goals.map((goal) => {
               const linkedProjects = projectsByGoal.get(goal.id) ?? [];
+              const goalNotes = getEntityNotesSummary(shell.snapshot.dashboard.notesSummaryByEntity, "goal", goal.id);
               return (
                 <Link
                   key={goal.id}
@@ -86,6 +89,9 @@ export function GoalsPage() {
                       </div>
                       <div className="mt-4">
                         <ProgressMeter value={goal.progress} />
+                      </div>
+                      <div className="mt-4">
+                        <EntityNoteCountLink entityType="goal" entityId={goal.id} count={goalNotes.count} />
                       </div>
                     </div>
 

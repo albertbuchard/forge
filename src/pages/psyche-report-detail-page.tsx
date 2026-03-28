@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useParams } from "react-router-dom";
 import { ChainCanvas } from "@/components/psyche/chain-canvas";
 import { InsightFlowDialog } from "@/components/insights/insight-flow-dialog";
+import { EntityNotesSurface } from "@/components/notes/entity-notes-surface";
 import { SchemaBadge } from "@/components/psyche/schema-badge";
 import {
   BehaviorRowsEditor,
@@ -22,7 +23,6 @@ import { ErrorState } from "@/components/ui/page-state";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import {
-  createComment,
   createInsight,
   getTriggerReport,
   listBehaviors,
@@ -96,7 +96,6 @@ export function PsycheReportDetailPage() {
   const queryClient = useQueryClient();
   const [activeStage, setActiveStage] = useState("spark");
   const [draft, setDraft] = useState<ReportEditorShape | null>(null);
-  const [commentBody, setCommentBody] = useState("");
   const [insightFlowOpen, setInsightFlowOpen] = useState(false);
   const reportQuery = useQuery({
     queryKey: ["forge-psyche-report", reportId],
@@ -163,20 +162,6 @@ export function PsycheReportDetailPage() {
     }
   });
 
-  const commentMutation = useMutation({
-    mutationFn: async (body: string) =>
-      createComment({
-        entityType: "trigger_report",
-        entityId: reportId!,
-        anchorKey: activeStage,
-        body
-      }),
-    onSuccess: async () => {
-      setCommentBody("");
-      await queryClient.invalidateQueries({ queryKey: ["forge-psyche-report", reportId] });
-    }
-  });
-
   const insightMutation = useMutation({
     mutationFn: createInsight,
     onSuccess: async () => {
@@ -207,7 +192,6 @@ export function PsycheReportDetailPage() {
   const schemas = schemasQuery.data?.schemas ?? [];
   const eventTypes = eventTypesQuery.data?.eventTypes ?? [];
   const emotions = emotionsQuery.data?.emotions ?? [];
-  const activeStageComments = payload.comments.filter((comment) => comment.anchorKey === activeStage || comment.anchorKey === null);
   const stages = [
     { id: "spark", label: "Spark", summary: "What happened concretely?" },
     { id: "wave", label: "Wave", summary: "What emotional wave moved through you?" },
@@ -450,21 +434,16 @@ export function PsycheReportDetailPage() {
           ) : null}
         </div>
       </div>
-      <div className="rounded-[22px] bg-white/[0.04] p-4">
-        <div className="text-[11px] uppercase tracking-[0.16em] text-white/38">Anchored comments on {activeStage}</div>
-        <div className="mt-3 grid gap-2">
-          {activeStageComments.map((comment) => (
-            <div key={comment.id} className="rounded-[16px] bg-white/[0.04] px-3 py-3 text-sm text-white/72">
-              <div>{comment.body}</div>
-              <div className="mt-2 text-xs text-white/38">{comment.author ?? comment.source} • {formatDateTime(comment.createdAt)}</div>
-            </div>
-          ))}
-          <Textarea value={commentBody} onChange={(event) => setCommentBody(event.target.value)} placeholder={`Add a note about ${activeStage}...`} />
-          <Button variant="secondary" pending={commentMutation.isPending} onClick={() => void commentMutation.mutateAsync(commentBody)}>
-            Add comment
-          </Button>
-        </div>
-      </div>
+      <EntityNotesSurface
+        entityType="trigger_report"
+        entityId={report.id}
+        anchorKey={activeStage}
+        includeAnchorlessWhenAnchored
+        compact
+        title={`Stage notes on ${activeStage}`}
+        description="Use anchored Markdown notes to capture what became clear at this stage of the chain."
+        invalidateQueryKeys={[["forge-psyche-report", reportId], ["forge-psyche-reports"], ["forge-psyche-overview"]]}
+      />
       <div className="rounded-[22px] bg-white/[0.04] p-4">
         <div className="text-[11px] uppercase tracking-[0.16em] text-white/38">Insights</div>
         <div className="mt-3 grid gap-2">

@@ -5,6 +5,7 @@ import { GoalDetailPage } from "@/pages/goal-detail-page";
 import { GoalsPage } from "@/pages/goals-page";
 import { InsightsPage } from "@/pages/insights-page";
 import { KanbanPage } from "@/pages/kanban-page";
+import { NotesPage } from "@/pages/notes-page";
 import { OverviewPage } from "@/pages/overview-page";
 import { ProjectDetailPage } from "@/pages/project-detail-page";
 import { ProjectsPage } from "@/pages/projects-page";
@@ -48,6 +49,7 @@ export function App() {
         <Route path="psyche/modes" element={<PsycheModesPage />} />
         <Route path="psyche/modes/guide" element={<PsycheModeGuidePage />} />
         <Route path="kanban" element={<KanbanPage />} />
+        <Route path="notes" element={<NotesPage />} />
         <Route path="today" element={<TodayPage />} />
         <Route path="activity" element={<ActivityPage />} />
         <Route path="insights" element={<InsightsPage />} />

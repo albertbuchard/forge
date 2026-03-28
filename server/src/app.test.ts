@@ -5,6 +5,7 @@ import path from "node:path";
 import test from "node:test";
 import { buildServer } from "./app.js";
 import { closeDatabase, getDatabase } from "./db.js";
+import { upsertDeletedEntityRecord } from "./repositories/deleted-entities.js";
 import { getCrudEntityCapabilityMatrix } from "./services/entity-crud.js";
 import type { StartupTaskRunRecoverySummary } from "./services/run-recovery.js";
 
@@ -841,7 +842,7 @@ test("openapi document exposes schema-backed versioned contracts", async () => {
     assert.ok(body.components?.schemas?.EventType);
     assert.ok(body.components?.schemas?.EmotionDefinition);
     assert.ok(body.components?.schemas?.TriggerReport);
-    assert.ok(body.components?.schemas?.Comment);
+    assert.ok(body.components?.schemas?.Note);
     assert.ok(body.components?.schemas?.PsycheOverviewPayload);
     assert.ok(body.components?.schemas?.ApprovalRequest);
     assert.ok(body.components?.schemas?.RewardLedgerEvent);
@@ -870,8 +871,8 @@ test("openapi document exposes schema-backed versioned contracts", async () => {
     assert.ok(body.paths?.["/api/v1/psyche/emotions/{id}"]);
     assert.ok(body.paths?.["/api/v1/psyche/reports"]);
     assert.ok(body.paths?.["/api/v1/psyche/reports/{id}"]);
-    assert.ok(body.paths?.["/api/v1/comments"]);
-    assert.ok(body.paths?.["/api/v1/comments/{id}"]);
+    assert.ok(body.paths?.["/api/v1/notes"]);
+    assert.ok(body.paths?.["/api/v1/notes/{id}"]);
     assert.ok(body.paths?.["/api/v1/tags"]);
     assert.ok(body.paths?.["/api/v1/tags/{id}"]);
     assert.ok(body.paths?.["/api/v1/projects"]);
@@ -907,7 +908,7 @@ test("openapi document exposes schema-backed versioned contracts", async () => {
   }
 });
 
-test("versioned CRUD routes support get, update, and delete for tags, comments, tasks, projects, and goals", async () => {
+test("versioned CRUD routes support get, update, and delete for tags, notes, tasks, projects, and goals", async () => {
   const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-versioned-crud-"));
   const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
 
@@ -1019,61 +1020,59 @@ test("versioned CRUD routes support get, update, and delete for tags, comments, 
     assert.equal(taskAfterTagDelete.statusCode, 200);
     assert.deepEqual((taskAfterTagDelete.json() as { task: { tagIds: string[] } }).task.tagIds, []);
 
-    const commentResponse = await app.inject({
+    const noteResponse = await app.inject({
       method: "POST",
-      url: "/api/v1/comments",
+      url: "/api/v1/notes",
       headers: {
         cookie: operatorCookie
       },
       payload: {
-        entityType: "task",
-        entityId: taskId,
-        anchorKey: null,
-        body: "CRUD comment body",
-        author: "Albert"
+        contentMarkdown: "CRUD note body",
+        author: "Albert",
+        links: [{ entityType: "task", entityId: taskId, anchorKey: null }]
       }
     });
-    assert.equal(commentResponse.statusCode, 201);
-    const commentId = (commentResponse.json() as { comment: { id: string } }).comment.id;
+    assert.equal(noteResponse.statusCode, 201);
+    const noteId = (noteResponse.json() as { note: { id: string } }).note.id;
 
-    const commentGetResponse = await app.inject({
+    const noteGetResponse = await app.inject({
       method: "GET",
-      url: `/api/v1/comments/${commentId}`,
+      url: `/api/v1/notes/${noteId}`,
       headers: {
         cookie: operatorCookie
       }
     });
-    assert.equal(commentGetResponse.statusCode, 200);
+    assert.equal(noteGetResponse.statusCode, 200);
 
-    const commentPatchResponse = await app.inject({
+    const notePatchResponse = await app.inject({
       method: "PATCH",
-      url: `/api/v1/comments/${commentId}`,
+      url: `/api/v1/notes/${noteId}`,
       headers: {
         cookie: operatorCookie
       },
       payload: {
-        body: "CRUD comment body updated"
+        contentMarkdown: "CRUD note body updated"
       }
     });
-    assert.equal(commentPatchResponse.statusCode, 200);
+    assert.equal(notePatchResponse.statusCode, 200);
 
-    const commentDeleteResponse = await app.inject({
+    const noteDeleteResponse = await app.inject({
       method: "DELETE",
-      url: `/api/v1/comments/${commentId}`,
+      url: `/api/v1/notes/${noteId}`,
       headers: {
         cookie: operatorCookie
       }
     });
-    assert.equal(commentDeleteResponse.statusCode, 200);
+    assert.equal(noteDeleteResponse.statusCode, 200);
 
-    const deletedCommentGet = await app.inject({
+    const deletedNoteGet = await app.inject({
       method: "GET",
-      url: `/api/v1/comments/${commentId}`,
+      url: `/api/v1/notes/${noteId}`,
       headers: {
         cookie: operatorCookie
       }
     });
-    assert.equal(deletedCommentGet.statusCode, 404);
+    assert.equal(deletedNoteGet.statusCode, 404);
 
     const taskDeleteResponse = await app.inject({
       method: "DELETE",
@@ -1264,8 +1263,8 @@ test("trigger reports persist structured CBT fields and earn bounded reflection 
   }
 });
 
-test("psyche comments persist and scoped tokens cannot read psyche without explicit grant", async () => {
-  const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-psyche-comment-scope-"));
+test("psyche notes persist and scoped tokens cannot read psyche without explicit grant", async () => {
+  const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-psyche-note-scope-"));
   const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
 
   try {
@@ -1277,7 +1276,7 @@ test("psyche comments persist and scoped tokens cannot read psyche without expli
         cookie: operatorCookie
       },
       payload: {
-        title: "Trigger report for comment scope test",
+        title: "Trigger report for note scope test",
         status: "draft",
         eventSituation: "A short delay triggered spiraling prediction.",
         occurredAt: null,
@@ -1302,30 +1301,29 @@ test("psyche comments persist and scoped tokens cannot read psyche without expli
     });
     const reportId = (reportResponse.json() as { report: { id: string } }).report.id;
 
-    const commentResponse = await app.inject({
+    const noteResponse = await app.inject({
       method: "POST",
-      url: "/api/v1/comments",
+      url: "/api/v1/notes",
       headers: {
         cookie: operatorCookie
       },
       payload: {
-        entityType: "trigger_report",
-        entityId: reportId,
-        body: "Notice the abandonment story before acting on it."
+        contentMarkdown: "Notice the abandonment story before acting on it.",
+        links: [{ entityType: "trigger_report", entityId: reportId, anchorKey: null }]
       }
     });
-    assert.equal(commentResponse.statusCode, 201);
+    assert.equal(noteResponse.statusCode, 201);
 
-    const commentList = await app.inject({
+    const noteList = await app.inject({
       method: "GET",
-      url: `/api/v1/comments?entityType=trigger_report&entityId=${reportId}`,
+      url: `/api/v1/notes?linkedEntityType=trigger_report&linkedEntityId=${reportId}`,
       headers: {
         cookie: operatorCookie
       }
     });
-    assert.equal(commentList.statusCode, 200);
-    const commentBody = commentList.json() as { comments: Array<{ body: string }> };
-    assert.ok(commentBody.comments.some((comment) => comment.body.includes("abandonment story")));
+    assert.equal(noteList.statusCode, 200);
+    const noteBody = noteList.json() as { notes: Array<{ contentMarkdown: string }> };
+    assert.ok(noteBody.notes.some((entry) => entry.contentMarkdown.includes("abandonment story")));
 
     const tokenResponse = await app.inject({
       method: "POST",
@@ -1862,19 +1860,17 @@ test("psyche delete routes prune linked references instead of leaving stale ids 
       })).json() as { report: { id: string } }
     ).report.id;
 
-    const reportCommentResponse = await app.inject({
+    const reportNoteResponse = await app.inject({
       method: "POST",
-      url: "/api/v1/comments",
+      url: "/api/v1/notes",
       headers: psycheHeaders,
       payload: {
-        entityType: "trigger_report",
-        entityId: reportId,
-        anchorKey: null,
-        body: "This comment should disappear with the report.",
-        author: "Albert"
+        contentMarkdown: "This note should disappear with the report.",
+        author: "Albert",
+        links: [{ entityType: "trigger_report", entityId: reportId, anchorKey: null }]
       }
     });
-    assert.equal(reportCommentResponse.statusCode, 201);
+    assert.equal(reportNoteResponse.statusCode, 201);
 
     assert.equal((await app.inject({ method: "DELETE", url: `/api/v1/psyche/beliefs/${beliefId}`, headers: psycheHeaders })).statusCode, 200);
     const reportAfterBeliefDelete = await app.inject({ method: "GET", url: `/api/v1/psyche/reports/${reportId}`, headers: psycheHeaders });
@@ -1939,12 +1935,12 @@ test("psyche delete routes prune linked references instead of leaving stale ids 
     assert.equal((await app.inject({ method: "DELETE", url: `/api/v1/psyche/reports/${reportId}`, headers: psycheHeaders })).statusCode, 200);
     const deletedReportGet = await app.inject({ method: "GET", url: `/api/v1/psyche/reports/${reportId}`, headers: psycheHeaders });
     assert.equal(deletedReportGet.statusCode, 404);
-    const reportComments = await app.inject({
+    const reportNotes = await app.inject({
       method: "GET",
-      url: `/api/v1/comments?entityType=trigger_report&entityId=${reportId}`,
+      url: `/api/v1/notes?linkedEntityType=trigger_report&linkedEntityId=${reportId}`,
       headers: psycheHeaders
     });
-    assert.deepEqual((reportComments.json() as { comments: unknown[] }).comments, []);
+    assert.deepEqual((reportNotes.json() as { notes: unknown[] }).notes, []);
   } finally {
     await app.close();
     closeDatabase();
@@ -2042,13 +2038,25 @@ test("task creation rejects unknown goal references with a 404 and no partial wr
   }
 });
 
-test("task status updates survive stale deleted goal links", async () => {
+test("task status updates survive soft-deleted goal links and preserve project context", async () => {
   const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-task-stale-goal-"));
   const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
 
   try {
     const operatorCookie = await issueOperatorSessionCookie(app);
-    getDatabase().prepare(`DELETE FROM goals WHERE id = ?`).run("goal_be_a_good_person");
+    upsertDeletedEntityRecord({
+      entityType: "goal",
+      entityId: "goal_be_a_good_person",
+      title: "Be a good person",
+      snapshot: {
+        id: "goal_be_a_good_person",
+        title: "Be a good person"
+      },
+      context: {
+        source: "system",
+        actor: null
+      }
+    });
 
     const moved = await app.inject({
       method: "PATCH",
@@ -2062,9 +2070,56 @@ test("task status updates survive stale deleted goal links", async () => {
     });
 
     assert.equal(moved.statusCode, 200);
-    const movedTask = (moved.json() as { task: { status: string; goalId: string | null } }).task;
+    const movedTask = (moved.json() as { task: { status: string; goalId: string | null; projectId: string | null } }).task;
     assert.equal(movedTask.status, "focus");
     assert.equal(movedTask.goalId, null);
+    assert.equal(movedTask.projectId, "project_relationships_ritual");
+  } finally {
+    await app.close();
+    closeDatabase();
+    await rm(rootDir, { recursive: true, force: true });
+  }
+});
+
+test("entity creation can include nested notes that auto-link to the new parent", async () => {
+  const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-nested-notes-create-"));
+  const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
+
+  try {
+    const operatorCookie = await issueOperatorSessionCookie(app);
+    const created = await app.inject({
+      method: "POST",
+      url: "/api/v1/goals",
+      headers: {
+        cookie: operatorCookie
+      },
+      payload: {
+        title: "Nested note goal",
+        description: "Goal created with automatic note linking.",
+        notes: [
+          {
+            contentMarkdown: "Initial goal note from nested create.",
+            author: "OpenClaw"
+          }
+        ]
+      }
+    });
+
+    assert.equal(created.statusCode, 201);
+    const goalId = (created.json() as { goal: { id: string } }).goal.id;
+
+    const notes = await app.inject({
+      method: "GET",
+      url: `/api/v1/notes?linkedEntityType=goal&linkedEntityId=${goalId}`,
+      headers: {
+        cookie: operatorCookie
+      }
+    });
+
+    assert.equal(notes.statusCode, 200);
+    const notesBody = notes.json() as { notes: Array<{ contentMarkdown: string; links: Array<{ entityType: string; entityId: string }> }> };
+    assert.ok(notesBody.notes.some((entry) => entry.contentMarkdown.includes("nested create")));
+    assert.ok(notesBody.notes.some((entry) => entry.links.some((link) => link.entityType === "goal" && link.entityId === goalId)));
   } finally {
     await app.close();
     closeDatabase();
@@ -2181,6 +2236,67 @@ test("task-run completion and release endpoints are idempotent for same-actor re
       (releasedRetry.json() as { taskRun: { id: string; status: string; releasedAt: string | null } }).taskRun,
       releasedRun
     );
+  } finally {
+    await app.close();
+    closeDatabase();
+    await rm(rootDir, { recursive: true, force: true });
+  }
+});
+
+test("task-run completion can persist a closeout note linked to the task", async () => {
+  const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-task-run-closeout-note-"));
+  const app = await buildServer({ dataRoot: rootDir, seedDemoData: true, taskRunWatchdog: false });
+
+  try {
+    const operatorCookie = await issueOperatorSessionCookie(app);
+    const tasksResponse = await app.inject({ method: "GET", url: "/api/v1/tasks?limit=1" });
+    const taskId = (tasksResponse.json() as { tasks: Array<{ id: string }> }).tasks[0]!.id;
+
+    const claimed = await app.inject({
+      method: "POST",
+      url: `/api/v1/tasks/${taskId}/runs`,
+      headers: {
+        cookie: operatorCookie
+      },
+      payload: {
+        actor: "OpenClaw",
+        leaseTtlSeconds: 300,
+        note: "Starting closeout-note coverage."
+      }
+    });
+
+    assert.equal(claimed.statusCode, 201);
+    const runId = (claimed.json() as { taskRun: { id: string } }).taskRun.id;
+
+    const completed = await app.inject({
+      method: "POST",
+      url: `/api/v1/task-runs/${runId}/complete`,
+      headers: {
+        cookie: operatorCookie
+      },
+      payload: {
+        actor: "OpenClaw",
+        note: "Run finished.",
+        closeoutNote: {
+          contentMarkdown: "Wrapped the work and captured the handoff.",
+          author: "OpenClaw"
+        }
+      }
+    });
+
+    assert.equal(completed.statusCode, 200);
+
+    const notes = await app.inject({
+      method: "GET",
+      url: `/api/v1/notes?linkedEntityType=task&linkedEntityId=${taskId}`,
+      headers: {
+        cookie: operatorCookie
+      }
+    });
+
+    assert.equal(notes.statusCode, 200);
+    const notesBody = notes.json() as { notes: Array<{ contentMarkdown: string }> };
+    assert.ok(notesBody.notes.some((entry) => entry.contentMarkdown.includes("captured the handoff")));
   } finally {
     await app.close();
     closeDatabase();
@@ -2599,18 +2715,17 @@ test("soft delete, restore, hard delete, and the settings bin stay in sync for a
     const goalsResponse = await app.inject({ method: "GET", url: "/api/v1/goals" });
     const goalId = (goalsResponse.json() as { goals: Array<{ id: string }> }).goals[0]!.id;
 
-    const commentResponse = await app.inject({
+    const noteResponse = await app.inject({
       method: "POST",
-      url: "/api/v1/comments",
+      url: "/api/v1/notes",
       headers: { cookie: operatorCookie },
       payload: {
-        entityType: "goal",
-        entityId: goalId,
-        body: "This goal has collaboration attached to it."
+        contentMarkdown: "This goal has collaboration attached to it.",
+        links: [{ entityType: "goal", entityId: goalId, anchorKey: null }]
       }
     });
-    assert.equal(commentResponse.statusCode, 201);
-    const commentId = (commentResponse.json() as { comment: { id: string } }).comment.id;
+    assert.equal(noteResponse.statusCode, 201);
+    const noteId = (noteResponse.json() as { note: { id: string } }).note.id;
 
     const insightResponse = await app.inject({
       method: "POST",
@@ -2645,12 +2760,12 @@ test("soft delete, restore, hard delete, and the settings bin stay in sync for a
     const deletedGoal = await app.inject({ method: "GET", url: `/api/v1/goals/${goalId}` });
     assert.equal(deletedGoal.statusCode, 404);
 
-    const hiddenComments = await app.inject({
+    const hiddenNotes = await app.inject({
       method: "GET",
-      url: `/api/v1/comments?entityType=goal&entityId=${goalId}`,
+      url: `/api/v1/notes?linkedEntityType=goal&linkedEntityId=${goalId}`,
       headers: { cookie: operatorCookie }
     });
-    assert.deepEqual((hiddenComments.json() as { comments: unknown[] }).comments, []);
+    assert.deepEqual((hiddenNotes.json() as { notes: unknown[] }).notes, []);
 
     const hiddenInsight = await app.inject({
       method: "GET",
@@ -2671,7 +2786,7 @@ test("soft delete, restore, hard delete, and the settings bin stay in sync for a
       };
     };
     assert.ok(binBody.bin.records.some((record) => record.entityType === "goal" && record.entityId === goalId));
-    assert.ok(binBody.bin.records.some((record) => record.entityType === "comment" && record.entityId === commentId));
+    assert.ok(binBody.bin.records.some((record) => record.entityType === "note" && record.entityId === noteId));
     assert.ok(binBody.bin.records.some((record) => record.entityType === "insight" && record.entityId === insightId));
 
     const restored = await app.inject({
@@ -2687,12 +2802,12 @@ test("soft delete, restore, hard delete, and the settings bin stay in sync for a
     const restoredGoal = await app.inject({ method: "GET", url: `/api/v1/goals/${goalId}` });
     assert.equal(restoredGoal.statusCode, 200);
 
-    const restoredComments = await app.inject({
+    const restoredNotes = await app.inject({
       method: "GET",
-      url: `/api/v1/comments?entityType=goal&entityId=${goalId}`,
+      url: `/api/v1/notes?linkedEntityType=goal&linkedEntityId=${goalId}`,
       headers: { cookie: operatorCookie }
     });
-    assert.ok((restoredComments.json() as { comments: Array<{ id: string }> }).comments.some((comment) => comment.id === commentId));
+    assert.ok((restoredNotes.json() as { notes: Array<{ id: string }> }).notes.some((entry) => entry.id === noteId));
 
     const restoredInsight = await app.inject({
       method: "GET",
@@ -2932,13 +3047,13 @@ test("CRUD capability matrix keeps user-facing delete/bin entities explicit", ()
     "behavior",
     "behavior_pattern",
     "belief_entry",
-    "comment",
     "emotion_definition",
     "event_type",
     "goal",
     "insight",
     "mode_guide_session",
     "mode_profile",
+    "note",
     "project",
     "psyche_value",
     "tag",
@@ -3080,7 +3195,7 @@ test("settings and local agent token management persist through the versioned AP
         recommendedAutonomyMode: string;
         authModes: { operatorSession: { tokenRequired: boolean } };
         tokenRecovery: { rawTokenStoredByForge: boolean; recoveryAction: string };
-        conceptModel: { goal: string; taskRun: string; psyche: string };
+        conceptModel: { goal: string; taskRun: string; note: string; psyche: string };
         psycheSubmoduleModel: { behaviorPattern: string; beliefEntry: string; schemaCatalog: string; triggerReport: string };
         psycheCoachingPlaybooks: Array<{
           focus: string;
@@ -3140,7 +3255,7 @@ test("settings and local agent token management persist through the versioned AP
       "rewards.manage",
       "psyche.read",
       "psyche.write",
-      "psyche.comment",
+      "psyche.note",
       "psyche.insight",
       "psyche.mode"
     ]);
@@ -3150,6 +3265,7 @@ test("settings and local agent token management persist through the versioned AP
     assert.equal(onboardingBody.onboarding.tokenRecovery.recoveryAction, "rotate_or_issue_new_token");
     assert.match(onboardingBody.onboarding.conceptModel.goal, /Goals anchor projects/);
     assert.match(onboardingBody.onboarding.conceptModel.taskRun, /live work session/);
+    assert.match(onboardingBody.onboarding.conceptModel.note, /Markdown work note/);
     assert.match(onboardingBody.onboarding.conceptModel.psyche, /sensitive/);
     assert.match(onboardingBody.onboarding.psycheSubmoduleModel.behaviorPattern, /CBT-style loop/);
     assert.match(onboardingBody.onboarding.psycheSubmoduleModel.beliefEntry, /belief statement/);

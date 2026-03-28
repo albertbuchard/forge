@@ -273,8 +273,9 @@ export function buildOpenApiDocument() {
           "behavior",
           "belief_entry",
           "mode_profile",
+          "mode_guide_session",
           "trigger_report",
-          "comment",
+          "note",
           "tag",
           "task_run",
           "system",
@@ -321,6 +322,49 @@ export function buildOpenApiDocument() {
     }
   };
 
+  const noteLink = {
+    type: "object",
+    additionalProperties: false,
+    required: ["entityType", "entityId", "anchorKey"],
+    properties: {
+      entityType: { type: "string" },
+      entityId: { type: "string" },
+      anchorKey: nullable({ type: "string" })
+    }
+  };
+
+  const note = {
+    type: "object",
+    additionalProperties: false,
+    required: ["id", "contentMarkdown", "contentPlain", "author", "source", "createdAt", "updatedAt", "links"],
+    properties: {
+      id: { type: "string" },
+      contentMarkdown: { type: "string" },
+      contentPlain: { type: "string" },
+      author: nullable({ type: "string" }),
+      source: { type: "string", enum: ["ui", "openclaw", "agent", "system"] },
+      createdAt: { type: "string", format: "date-time" },
+      updatedAt: { type: "string", format: "date-time" },
+      links: arrayOf({ $ref: "#/components/schemas/NoteLink" })
+    }
+  };
+
+  const noteSummary = {
+    type: "object",
+    additionalProperties: false,
+    required: ["count", "latestNoteId", "latestCreatedAt"],
+    properties: {
+      count: { type: "integer" },
+      latestNoteId: nullable({ type: "string" }),
+      latestCreatedAt: nullable({ type: "string", format: "date-time" })
+    }
+  };
+
+  const notesSummaryByEntity = {
+    type: "object",
+    additionalProperties: { $ref: "#/components/schemas/NoteSummary" }
+  };
+
   const achievementSignal = {
     type: "object",
     additionalProperties: false,
@@ -355,7 +399,7 @@ export function buildOpenApiDocument() {
   const dashboardPayload = {
     type: "object",
     additionalProperties: false,
-    required: ["stats", "goals", "projects", "tasks", "tags", "suggestedTags", "owners", "executionBuckets", "gamification", "achievements", "milestoneRewards", "recentActivity"],
+    required: ["stats", "goals", "projects", "tasks", "tags", "suggestedTags", "owners", "executionBuckets", "gamification", "achievements", "milestoneRewards", "recentActivity", "notesSummaryByEntity"],
     properties: {
       stats: {
         type: "object",
@@ -392,7 +436,8 @@ export function buildOpenApiDocument() {
       gamification: { $ref: "#/components/schemas/GamificationProfile" },
       achievements: arrayOf({ $ref: "#/components/schemas/AchievementSignal" }),
       milestoneRewards: arrayOf({ $ref: "#/components/schemas/MilestoneReward" }),
-      recentActivity: arrayOf({ $ref: "#/components/schemas/ActivityEvent" })
+      recentActivity: arrayOf({ $ref: "#/components/schemas/ActivityEvent" }),
+      notesSummaryByEntity: { $ref: "#/components/schemas/NotesSummaryByEntity" }
     }
   };
 
@@ -561,26 +606,28 @@ export function buildOpenApiDocument() {
   const taskContextPayload = {
     type: "object",
     additionalProperties: false,
-    required: ["task", "goal", "project", "activeTaskRun", "taskRuns", "activity"],
+    required: ["task", "goal", "project", "activeTaskRun", "taskRuns", "activity", "notesSummaryByEntity"],
     properties: {
       task: { $ref: "#/components/schemas/Task" },
       goal: nullable({ $ref: "#/components/schemas/Goal" }),
       project: nullable({ $ref: "#/components/schemas/ProjectSummary" }),
       activeTaskRun: nullable({ $ref: "#/components/schemas/TaskRun" }),
       taskRuns: arrayOf({ $ref: "#/components/schemas/TaskRun" }),
-      activity: arrayOf({ $ref: "#/components/schemas/ActivityEvent" })
+      activity: arrayOf({ $ref: "#/components/schemas/ActivityEvent" }),
+      notesSummaryByEntity: { $ref: "#/components/schemas/NotesSummaryByEntity" }
     }
   };
 
   const projectBoardPayload = {
     type: "object",
     additionalProperties: false,
-    required: ["project", "goal", "tasks", "activity"],
+    required: ["project", "goal", "tasks", "activity", "notesSummaryByEntity"],
     properties: {
       project: { $ref: "#/components/schemas/ProjectSummary" },
       goal: { $ref: "#/components/schemas/Goal" },
       tasks: arrayOf({ $ref: "#/components/schemas/Task" }),
-      activity: arrayOf({ $ref: "#/components/schemas/ActivityEvent" })
+      activity: arrayOf({ $ref: "#/components/schemas/ActivityEvent" }),
+      notesSummaryByEntity: { $ref: "#/components/schemas/NotesSummaryByEntity" }
     }
   };
 
@@ -775,7 +822,17 @@ export function buildOpenApiDocument() {
     additionalProperties: false,
     properties: {
       actor: { type: "string" },
-      note: { type: "string", default: "" }
+      note: { type: "string", default: "" },
+      closeoutNote: {
+        type: "object",
+        additionalProperties: false,
+        required: ["contentMarkdown"],
+        properties: {
+          contentMarkdown: { type: "string" },
+          author: nullable({ type: "string" }),
+          links: arrayOf({ $ref: "#/components/schemas/NoteLink" })
+        }
+      }
     }
   };
 
@@ -1263,12 +1320,13 @@ export function buildOpenApiDocument() {
       conceptModel: {
         type: "object",
         additionalProperties: false,
-        required: ["goal", "project", "task", "taskRun", "insight", "psyche"],
+        required: ["goal", "project", "task", "taskRun", "note", "insight", "psyche"],
         properties: {
           goal: { type: "string" },
           project: { type: "string" },
           task: { type: "string" },
           taskRun: { type: "string" },
+          note: { type: "string" },
           insight: { type: "string" },
           psyche: { type: "string" }
         }
@@ -1821,23 +1879,6 @@ export function buildOpenApiDocument() {
     }
   };
 
-  const comment = {
-    type: "object",
-    additionalProperties: false,
-    required: ["id", "entityType", "entityId", "anchorKey", "body", "author", "source", "createdAt", "updatedAt"],
-    properties: {
-      id: { type: "string" },
-      entityType: { type: "string" },
-      entityId: { type: "string" },
-      anchorKey: nullable({ type: "string" }),
-      body: { type: "string" },
-      author: nullable({ type: "string" }),
-      source: { type: "string", enum: ["ui", "openclaw", "agent", "system"] },
-      createdAt: { type: "string", format: "date-time" },
-      updatedAt: { type: "string", format: "date-time" }
-    }
-  };
-
   const triggerReport = {
     type: "object",
     additionalProperties: false,
@@ -1966,7 +2007,7 @@ export function buildOpenApiDocument() {
       "schemaPressure",
       "reports",
       "openInsights",
-      "unresolvedComments",
+      "openNotes",
       "committedActions"
     ],
     properties: {
@@ -1989,7 +2030,7 @@ export function buildOpenApiDocument() {
       }),
       reports: arrayOf({ $ref: "#/components/schemas/TriggerReport" }),
       openInsights: { type: "integer" },
-      unresolvedComments: { type: "integer" },
+      openNotes: { type: "integer" },
       committedActions: arrayOf({ type: "string" })
     }
   };
@@ -2058,7 +2099,10 @@ export function buildOpenApiDocument() {
         ModeProfile: modeProfile,
         ModeGuideSession: modeGuideSession,
         TriggerReport: triggerReport,
-        Comment: comment,
+        NoteLink: noteLink,
+        Note: note,
+        NoteSummary: noteSummary,
+        NotesSummaryByEntity: notesSummaryByEntity,
         PsycheOverviewPayload: psycheOverviewPayload,
         Insight: insight,
         InsightFeedback: insightFeedback,
@@ -2524,15 +2568,15 @@ export function buildOpenApiDocument() {
       },
       "/api/v1/psyche/reports/{id}": {
         get: {
-          summary: "Get a trigger report with comments and linked insights",
+          summary: "Get a trigger report with linked notes and insights",
           responses: {
             "200": jsonResponse(
               {
                 type: "object",
-                required: ["report", "comments", "insights"],
+                required: ["report", "notes", "insights"],
                 properties: {
                   report: { $ref: "#/components/schemas/TriggerReport" },
-                  comments: arrayOf({ $ref: "#/components/schemas/Comment" }),
+                  notes: arrayOf({ $ref: "#/components/schemas/Note" }),
                   insights: arrayOf({ $ref: "#/components/schemas/Insight" })
                 }
               },
@@ -2556,41 +2600,41 @@ export function buildOpenApiDocument() {
           }
         }
       },
-      "/api/v1/comments": {
+      "/api/v1/notes": {
         get: {
-          summary: "List comments on Forge entities",
+          summary: "List notes linked to Forge entities",
           responses: {
-            "200": jsonResponse({ type: "object", required: ["comments"], properties: { comments: arrayOf({ $ref: "#/components/schemas/Comment" }) } }, "Comment collection"),
+            "200": jsonResponse({ type: "object", required: ["notes"], properties: { notes: arrayOf({ $ref: "#/components/schemas/Note" }) } }, "Note collection"),
             default: { $ref: "#/components/responses/Error" }
           }
         },
         post: {
-          summary: "Create a comment on a Forge entity",
+          summary: "Create a note linked to one or more Forge entities",
           responses: {
-            "201": jsonResponse({ type: "object", required: ["comment"], properties: { comment: { $ref: "#/components/schemas/Comment" } } }, "Created comment"),
+            "201": jsonResponse({ type: "object", required: ["note"], properties: { note: { $ref: "#/components/schemas/Note" } } }, "Created note"),
             default: { $ref: "#/components/responses/Error" }
           }
         }
       },
-      "/api/v1/comments/{id}": {
+      "/api/v1/notes/{id}": {
         get: {
-          summary: "Get a comment",
+          summary: "Get a note",
           responses: {
-            "200": jsonResponse({ type: "object", required: ["comment"], properties: { comment: { $ref: "#/components/schemas/Comment" } } }, "Comment"),
+            "200": jsonResponse({ type: "object", required: ["note"], properties: { note: { $ref: "#/components/schemas/Note" } } }, "Note"),
             default: { $ref: "#/components/responses/Error" }
           }
         },
         patch: {
-          summary: "Update a comment",
+          summary: "Update a note",
           responses: {
-            "200": jsonResponse({ type: "object", required: ["comment"], properties: { comment: { $ref: "#/components/schemas/Comment" } } }, "Updated comment"),
+            "200": jsonResponse({ type: "object", required: ["note"], properties: { note: { $ref: "#/components/schemas/Note" } } }, "Updated note"),
             default: { $ref: "#/components/responses/Error" }
           }
         },
         delete: {
-          summary: "Delete a comment",
+          summary: "Delete a note",
           responses: {
-            "200": jsonResponse({ type: "object", required: ["comment"], properties: { comment: { $ref: "#/components/schemas/Comment" } } }, "Deleted comment"),
+            "200": jsonResponse({ type: "object", required: ["note"], properties: { note: { $ref: "#/components/schemas/Note" } } }, "Deleted note"),
             default: { $ref: "#/components/responses/Error" }
           }
         }

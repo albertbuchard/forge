@@ -1,5 +1,6 @@
 import { listActivityEvents } from "../repositories/activity-events.js";
 import { getGoalById, listGoals } from "../repositories/goals.js";
+import { buildNotesSummaryByEntity } from "../repositories/notes.js";
 import { getProjectById, listProjects } from "../repositories/projects.js";
 import { listTasks } from "../repositories/tasks.js";
 import { emptyTaskTimeSummary } from "./work-time.js";
@@ -86,6 +87,7 @@ export function getProjectBoard(projectId: string): ProjectBoardPayload | undefi
       listActivityEvents({ entityType: "task", limit: 100 }).filter((event) =>
         listTasks({ projectId }).some((task) => task.id === event.entityId)
       ).slice(0, 20)
-    )
+    ),
+    notesSummaryByEntity: buildNotesSummaryByEntity()
   });
 }

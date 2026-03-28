@@ -1,6 +1,6 @@
 import * as Dialog from "@radix-ui/react-dialog";
 import { useEffect, useMemo, useState } from "react";
-import { ArrowRight, BrainCircuit, BriefcaseBusiness, Clock3, LayoutDashboard, Search, Settings, Target, Zap } from "lucide-react";
+import { ArrowRight, BrainCircuit, BriefcaseBusiness, Clock3, LayoutDashboard, NotebookPen, Search, Settings, Target, Zap } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { EntityName } from "@/components/ui/entity-name";
 import { Input } from "@/components/ui/input";
@@ -40,6 +40,7 @@ export function CommandPalette({ open, onOpenChange, snapshot }: CommandPaletteP
       { id: "route-today", title: t("common.routeLabels.today"), detail: t("common.commandPalette.routeToday"), href: "/today", category: t("common.commandPalette.categoryRoute") },
       { id: "route-kanban", title: t("common.routeLabels.kanban"), detail: t("common.commandPalette.routeKanban"), href: "/kanban", category: t("common.commandPalette.categoryRoute") },
       { id: "route-psyche", title: t("common.routeLabels.psyche"), detail: t("common.commandPalette.routePsyche"), href: "/psyche", category: t("common.commandPalette.categoryRoute") },
+      { id: "route-notes", title: t("common.routeLabels.notes"), detail: t("common.commandPalette.routeNotes"), href: "/notes", category: t("common.commandPalette.categoryRoute") },
       { id: "route-goals", title: t("common.routeLabels.goals"), detail: t("common.commandPalette.routeGoals"), href: "/goals", category: t("common.commandPalette.categoryRoute") },
       { id: "route-projects", title: t("common.routeLabels.projects"), detail: t("common.commandPalette.routeProjects"), href: "/projects", category: t("common.commandPalette.categoryRoute") },
       { id: "route-review", title: t("common.routeLabels.review"), detail: t("common.commandPalette.routeReview"), href: "/review/weekly", category: t("common.commandPalette.categoryRoute") },
@@ -104,6 +105,7 @@ export function CommandPalette({ open, onOpenChange, snapshot }: CommandPaletteP
                 { label: t("common.routeLabels.overview"), icon: LayoutDashboard },
                 { label: t("common.routeLabels.today"), icon: Clock3 },
                 { label: t("common.routeLabels.kanban"), icon: Zap },
+                { label: t("common.routeLabels.notes"), icon: NotebookPen },
                 { label: t("common.routeLabels.psyche"), icon: BrainCircuit },
                 { label: t("common.routeLabels.goals"), icon: Target },
                 { label: t("common.routeLabels.projects"), icon: BriefcaseBusiness },

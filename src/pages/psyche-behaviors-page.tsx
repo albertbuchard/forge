@@ -2,12 +2,14 @@ import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSearchParams } from "react-router-dom";
 import { FlowField, QuestionFlowDialog, type QuestionFlowStep } from "@/components/flows/question-flow-dialog";
+import { EntityNoteCountLink } from "@/components/notes/entity-note-count-link";
 import { AtlasPanel } from "@/components/psyche/atlas-panel";
 import { EntityLinkMultiSelect, type EntityLinkOption } from "@/components/psyche/entity-link-multiselect";
 import { PsycheSectionNav } from "@/components/psyche/psyche-section-nav";
 import { ReturnPathStrip } from "@/components/psyche/return-path-strip";
 import { SchemaBadge } from "@/components/psyche/schema-badge";
 import { psycheFocusClass, usePsycheFocusTarget } from "@/components/psyche/use-psyche-focus-target";
+import { useForgeShell } from "@/components/shell/app-shell";
 import { PageHero } from "@/components/shell/page-hero";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -16,6 +18,7 @@ import { ErrorState, LoadingState } from "@/components/ui/page-state";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { prependEntityToCollection } from "@/lib/query-cache";
+import { getEntityNotesSummary } from "@/lib/note-helpers";
 import { behaviorSchema, type BehaviorInput } from "@/lib/psyche-schemas";
 import type { Behavior, BehaviorPattern, ModeProfile, PsycheValue, SchemaCatalogEntry } from "@/lib/psyche-types";
 import { getSchemaFamilyLabel } from "@/lib/schema-visuals";
@@ -62,6 +65,7 @@ const kindTitleMap: Record<Behavior["kind"], string> = {
 };
 
 export function PsycheBehaviorsPage() {
+  const shell = useForgeShell();
   const queryClient = useQueryClient();
   const [searchParams, setSearchParams] = useSearchParams();
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -80,6 +84,7 @@ export function PsycheBehaviorsPage() {
   const schemas = schemasQuery.data?.schemas ?? [];
   const modes = modesQuery.data?.modes ?? [];
   const focusedBehaviorId = searchParams.get("focus");
+  const notesSummaryByEntity = shell.snapshot.dashboard.notesSummaryByEntity;
 
   usePsycheFocusTarget(focusedBehaviorId);
 
@@ -442,21 +447,31 @@ export function PsycheBehaviorsPage() {
                 </div>
               ) : (
                 grouped[kind].map((behavior) => (
-                  <button
+                  <div
                     key={behavior.id}
-                    type="button"
                     data-psyche-focus-id={behavior.id}
                     className={`rounded-[22px] border border-white/8 bg-white/[0.04] p-4 text-left transition hover:bg-white/[0.08] ${psycheFocusClass(focusedBehaviorId === behavior.id)}`}
-                    onClick={() => {
-                      setEditingBehavior(behavior);
-                      setDraft(behaviorToInput(behavior));
-                      setDialogOpen(true);
-                    }}
                   >
-                    <div className="font-medium text-white">{behavior.title}</div>
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div className="font-medium text-white">{behavior.title}</div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <EntityNoteCountLink entityType="behavior" entityId={behavior.id} count={getEntityNotesSummary(notesSummaryByEntity, "behavior", behavior.id).count} />
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          onClick={() => {
+                            setEditingBehavior(behavior);
+                            setDraft(behaviorToInput(behavior));
+                            setDialogOpen(true);
+                          }}
+                        >
+                          Edit
+                        </Button>
+                      </div>
+                    </div>
                     <div className="mt-2 text-sm leading-6 text-white/58">{behavior.description}</div>
                     <div className="mt-3 text-sm text-white/46">{behavior.replacementMove || behavior.repairPlan || "No recovery step recorded yet."}</div>
-                  </button>
+                  </div>
                 ))
               )}
             </div>

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSearchParams } from "react-router-dom";
 import { FlowField, QuestionFlowDialog, type QuestionFlowStep } from "@/components/flows/question-flow-dialog";
+import { EntityNoteCountLink } from "@/components/notes/entity-note-count-link";
 import { AtlasPanel } from "@/components/psyche/atlas-panel";
 import { OrbitMap } from "@/components/psyche/orbit-map";
 import { PsycheSectionNav } from "@/components/psyche/psyche-section-nav";
@@ -16,6 +17,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { createPsycheValue, listPsycheValues, patchPsycheValue } from "@/lib/api";
 import { getEntityButtonClassName } from "@/lib/entity-visuals";
+import { getEntityNotesSummary } from "@/lib/note-helpers";
 import { psycheValueSchema, type PsycheValueInput } from "@/lib/psyche-schemas";
 import type { PsycheValue } from "@/lib/psyche-types";
 
@@ -62,6 +64,7 @@ export function PsycheValuesPage() {
 
   const values = valuesQuery.data?.values ?? [];
   const focusedValueId = searchParams.get("focus");
+  const notesSummaryByEntity = shell.snapshot.dashboard.notesSummaryByEntity;
 
   usePsycheFocusTarget(focusedValueId);
 
@@ -277,6 +280,7 @@ export function PsycheValuesPage() {
               const linkedProjects = shell.snapshot.dashboard.projects.filter((project) => value.linkedProjectIds.includes(project.id));
               const linkedTasks = shell.snapshot.tasks.filter((task) => value.linkedTaskIds.includes(task.id));
               const isFocused = focusedValueId === value.id;
+              const noteCount = getEntityNotesSummary(notesSummaryByEntity, "psyche_value", value.id).count;
               return (
                 <div key={value.id} data-psyche-focus-id={value.id} className={`rounded-[26px] border border-white/8 bg-white/[0.04] p-5 transition ${psycheFocusClass(isFocused)}`}>
                   <div className="flex flex-wrap items-start justify-between gap-4">
@@ -284,16 +288,19 @@ export function PsycheValuesPage() {
                       <EntityName kind="value" label={value.title} variant="heading" size="xl" />
                       <div className="mt-2 text-sm text-[var(--tertiary)]">{value.valuedDirection}</div>
                     </div>
-                    <Button
-                      variant="secondary"
-                      onClick={() => {
-                        setEditingValue(value);
-                        setDraft(valueToInput(value));
-                        setDialogOpen(true);
-                      }}
-                    >
-                      Edit
-                    </Button>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <EntityNoteCountLink entityType="psyche_value" entityId={value.id} count={noteCount} />
+                      <Button
+                        variant="secondary"
+                        onClick={() => {
+                          setEditingValue(value);
+                          setDraft(valueToInput(value));
+                          setDialogOpen(true);
+                        }}
+                      >
+                        Edit
+                      </Button>
+                    </div>
                   </div>
                   <p className="mt-4 max-w-3xl text-sm leading-7 text-white/60">{value.description}</p>
                   <div className="mt-5 grid gap-4 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">

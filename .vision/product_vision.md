@@ -31,6 +31,12 @@ be able to connect back to a project or task when relevant. A reward should be
 traceable to actual behavior. This is what makes Forge an operating system rather than
 just a set of pages.
 
+Notes are part of that operating model. A note is not a decorative comment field
+inside another record. It is a first-class Markdown entity that can attach to one or
+many goals, projects, tasks, and Psyche records so the user can preserve progress
+evidence, close-out summaries, and contextual explanation without fragmenting the data
+model.
+
 ## What The Main Views Are Supposed To Do
 
 The Overview page is the user's high-level control room. It should summarize the state
@@ -70,6 +76,9 @@ The Task detail page should present a task plainly. The title, status, project, 
 owner, due date, time tracked, active timer state, and clear actions such as Start
 work, Pause, Complete, Edit, and Delete should appear before filler text. If a user
 wants to understand or act on a task, this page should make that obvious immediately.
+At the bottom of each main detail page, Forge should show a coherent notes surface that
+renders Markdown cleanly, supports quick authoring with preview, and makes linked work
+evidence feel native instead of bolted on.
 
 The Weekly Review page should help the user examine what moved, what stalled, what was
 learned, and where next adjustments are needed. It should turn the operating record into
@@ -186,6 +195,9 @@ plugin should help an agent understand the app itself, the meaning of each entit
 expected workflow, and when to use the UI instead of mutating data directly. The user
 should feel that agent help is natural language on top of a real operating system, not a
 parallel product with different rules.
+Agents should be explicitly guided to use notes for progress explanations, task
+close-out context, and multi-entity evidence capture, including nested `notes` during
+entity creation and explicit close-out notes when work is completed or logged.
 That means the onboarding and skill surfaces must include exact route-facing field
 names, payload shapes, enums, relationship rules, and examples. High-level guidance is
 not enough if it leaves the agent guessing about what the routes actually accept.

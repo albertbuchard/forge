@@ -66,6 +66,12 @@ sustaining work, completing work, and preserving momentum should all create expl
 reward events. XP is not decoration. It is a legible reward ledger that should always
 come from real product data.
 
+Notes are first-class Markdown evidence records. A note can link to one or many goals,
+projects, tasks, Psyche records, or reports. Notes are where the user or an agent
+should capture what changed, what was learned, what was worked on, or what contextual
+detail should remain attached to the operating record without polluting the main entity
+schema.
+
 Psyche is Forge's structured reflection domain. It contains values, beliefs and
 schemas, behaviors, modes, patterns, reports, and the goal map. These records help the
 user understand why they behave as they do, which patterns repeat, which values matter,
@@ -105,10 +111,12 @@ mobile version must intentionally reorganize it rather than letting it overflow.
 
 Forge is also an agent-facing product. The API and the OpenClaw integration must allow
 trusted agents to inspect current context, search entities before creating duplicates,
-create and update goals, projects, tasks, comments, tags, and Psyche records, control
-task timers, and write structured insights. These capabilities must match the real
-product. If the UI can do something important, the versioned API and the curated agent
-surface should expose it too unless there is a deliberate safety reason not to.
+create and update goals, projects, tasks, notes, tags, and Psyche records, control
+task timers, and write structured insights. Notes must be linkable to one or many
+entities, batch-manageable, searchable, and creatable inline when a parent entity is
+created. These capabilities must match the real product. If the UI can do something
+important, the versioned API and the curated agent surface should expose it too unless
+there is a deliberate safety reason not to.
 
 The agent contract must stay explicit and auditable. Mutations should be scoped,
 recoverable where appropriate, and visible in the product afterward. Forge should help

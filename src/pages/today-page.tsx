@@ -1,5 +1,6 @@
 import { Link, useNavigate } from "react-router-dom";
 import { PageHero } from "@/components/shell/page-hero";
+import { EntityNoteCountLink } from "@/components/notes/entity-note-count-link";
 import { DailyRunway } from "@/components/daily-runway";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
@@ -107,6 +108,7 @@ export function TodayPage() {
             timeline={shell.snapshot.today.timeline}
             goals={shell.snapshot.goals}
             tags={shell.snapshot.tags}
+            notesSummaryByEntity={shell.snapshot.dashboard.notesSummaryByEntity}
             selectedTaskId={directive?.id ?? null}
             onSelectTask={(taskId) => navigate(`/tasks/${taskId}`)}
             onStartTask={async (taskId) => {
@@ -136,6 +138,7 @@ export function TodayPage() {
                 <div className="flex flex-wrap gap-2">
                   {shell.snapshot.today.directive.goalTitle ? <Badge className="bg-white/[0.08] text-white/72">{shell.snapshot.today.directive.goalTitle}</Badge> : null}
                   <Badge className="bg-white/[0.08] text-white/72">{shell.snapshot.today.directive.sessionLabel}</Badge>
+                  <EntityNoteCountLink entityType="task" entityId={directive.id} count={shell.snapshot.dashboard.notesSummaryByEntity[`task:${directive.id}`]?.count ?? 0} />
                 </div>
               </button>
             ) : (

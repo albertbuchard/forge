@@ -2,12 +2,14 @@ import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSearchParams } from "react-router-dom";
 import { FlowField, QuestionFlowDialog, type QuestionFlowStep } from "@/components/flows/question-flow-dialog";
+import { EntityNoteCountLink } from "@/components/notes/entity-note-count-link";
 import { AtlasPanel } from "@/components/psyche/atlas-panel";
 import { EntityLinkMultiSelect, type EntityLinkOption } from "@/components/psyche/entity-link-multiselect";
 import { OrbitMap } from "@/components/psyche/orbit-map";
 import { PsycheSectionNav } from "@/components/psyche/psyche-section-nav";
 import { SchemaBadge } from "@/components/psyche/schema-badge";
 import { psycheFocusClass, usePsycheFocusTarget } from "@/components/psyche/use-psyche-focus-target";
+import { useForgeShell } from "@/components/shell/app-shell";
 import { PageHero } from "@/components/shell/page-hero";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -17,6 +19,7 @@ import { ErrorState, LoadingState } from "@/components/ui/page-state";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { prependEntityToCollection } from "@/lib/query-cache";
+import { getEntityNotesSummary } from "@/lib/note-helpers";
 import { behaviorPatternSchema, type BehaviorPatternInput } from "@/lib/psyche-schemas";
 import type { BehaviorPattern, BeliefEntry, ModeProfile, SchemaCatalogEntry } from "@/lib/psyche-types";
 import { findSchemaForLink, getSchemaFamilyLabel } from "@/lib/schema-visuals";
@@ -53,6 +56,7 @@ function patternToInput(pattern: BehaviorPattern): BehaviorPatternInput {
 }
 
 export function PsychePatternsPage() {
+  const shell = useForgeShell();
   const queryClient = useQueryClient();
   const [searchParams, setSearchParams] = useSearchParams();
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -91,6 +95,7 @@ export function PsychePatternsPage() {
   const beliefs = beliefsQuery.data?.beliefs ?? [];
   const behaviors = behaviorsQuery.data?.behaviors ?? [];
   const focusedPatternId = searchParams.get("focus");
+  const notesSummaryByEntity = shell.snapshot.dashboard.notesSummaryByEntity;
 
   usePsycheFocusTarget(focusedPatternId);
 
@@ -425,6 +430,7 @@ export function PsychePatternsPage() {
               const linkedModes = modes.filter((mode) => pattern.linkedModeIds.includes(mode.id));
               const linkedBeliefs = beliefs.filter((belief) => pattern.linkedBeliefIds.includes(belief.id));
               const isFocused = focusedPatternId === pattern.id;
+              const noteCount = getEntityNotesSummary(notesSummaryByEntity, "behavior_pattern", pattern.id).count;
               return (
                 <div key={pattern.id} data-psyche-focus-id={pattern.id} className={`rounded-[28px] border border-white/8 bg-white/[0.04] p-5 transition ${psycheFocusClass(isFocused)}`}>
                   <div className="flex flex-wrap items-start justify-between gap-4">
@@ -432,16 +438,19 @@ export function PsychePatternsPage() {
                       <EntityName kind="pattern" label={pattern.title} variant="heading" size="xl" />
                       <div className="mt-2 text-sm leading-7 text-white/58">{pattern.description}</div>
                     </div>
-                    <Button
-                      variant="secondary"
-                      onClick={() => {
-                        setEditingPattern(pattern);
-                        setDraft(patternToInput(pattern));
-                        setDialogOpen(true);
-                      }}
-                    >
-                      Edit
-                    </Button>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <EntityNoteCountLink entityType="behavior_pattern" entityId={pattern.id} count={noteCount} />
+                      <Button
+                        variant="secondary"
+                        onClick={() => {
+                          setEditingPattern(pattern);
+                          setDraft(patternToInput(pattern));
+                          setDialogOpen(true);
+                        }}
+                      >
+                        Edit
+                      </Button>
+                    </div>
                   </div>
                   <div className="mt-5 grid gap-3 xl:grid-cols-4">
                     <div className="rounded-[22px] bg-white/[0.04] p-4">

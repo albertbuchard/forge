@@ -137,7 +137,8 @@ export function normalizeForgeSnapshot(raw: ForgeSnapshot | LegacySnapshot): For
       },
       achievements: raw.dashboard?.achievements ?? [],
       milestoneRewards: raw.dashboard?.milestoneRewards ?? [],
-      recentActivity: raw.dashboard?.recentActivity ?? []
+      recentActivity: raw.dashboard?.recentActivity ?? [],
+      notesSummaryByEntity: raw.dashboard?.notesSummaryByEntity ?? {}
     },
     overview: {
       generatedAt: raw.overview?.generatedAt ?? new Date().toISOString(),

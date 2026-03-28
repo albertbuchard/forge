@@ -1,4 +1,4 @@
-import type { Insight } from "./types";
+import type { Insight, Note } from "./types";
 
 export interface Domain {
   id: string;
@@ -227,18 +227,6 @@ export interface TriggerReport {
   updatedAt: string;
 }
 
-export interface Comment {
-  id: string;
-  entityType: string;
-  entityId: string;
-  anchorKey: string | null;
-  body: string;
-  author: string | null;
-  source: "ui" | "openclaw" | "agent" | "system";
-  createdAt: string;
-  updatedAt: string;
-}
-
 export interface SchemaPressureEntry {
   schemaId: string;
   title: string;
@@ -256,13 +244,13 @@ export interface PsycheOverviewPayload {
   reports: TriggerReport[];
   schemaPressure: SchemaPressureEntry[];
   openInsights: number;
-  unresolvedComments: number;
+  openNotes: number;
   committedActions: string[];
 }
 
 export interface TriggerReportDetailPayload {
   report: TriggerReport;
-  comments: Comment[];
+  notes: Note[];
   insights: Insight[];
 }
 
@@ -379,12 +367,4 @@ export interface TriggerReportInput {
   schemaLinks: string[];
   modeTimeline: ModeTimelineEntry[];
   nextMoves: string[];
-}
-
-export interface CommentInput {
-  entityType: string;
-  entityId: string;
-  anchorKey?: string | null;
-  body: string;
-  author?: string | null;
 }

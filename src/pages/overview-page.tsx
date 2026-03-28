@@ -1,5 +1,6 @@
 import { Link } from "react-router-dom";
 import { FlagshipSignalDeck } from "@/components/experience/flagship-signal-deck";
+import { EntityNoteCountLink } from "@/components/notes/entity-note-count-link";
 import { PageHero } from "@/components/shell/page-hero";
 import { XpCommandDeck } from "@/components/xp/xp-command-deck";
 import { ProgressMeter } from "@/components/ui/progress-meter";
@@ -14,6 +15,7 @@ import { EmptyState } from "@/components/ui/page-state";
 import { useForgeShell } from "@/components/shell/app-shell";
 import { getReadableActivityDescription, getReadableActivityTitle } from "@/lib/activity-copy";
 import { useI18n } from "@/lib/i18n";
+import { getEntityNotesSummary } from "@/lib/note-helpers";
 
 export function OverviewPage() {
   const { t, formatDateTime } = useI18n();
@@ -219,6 +221,9 @@ export function OverviewPage() {
                     <div className="mt-4">
                       <ProgressMeter value={goal.progress} />
                     </div>
+                    <div className="mt-4">
+                      <EntityNoteCountLink entityType="goal" entityId={goal.id} count={getEntityNotesSummary(snapshot.dashboard.notesSummaryByEntity, "goal", goal.id).count} />
+                    </div>
                   </InteractiveCard>
                 ))}
               </div>
@@ -247,6 +252,9 @@ export function OverviewPage() {
                       <div className="mt-2 text-sm text-white/58">{project.description}</div>
                       <div className="mt-3">
                         <EntityBadge kind="goal" label={project.goalTitle} compact />
+                      </div>
+                      <div className="mt-4">
+                        <EntityNoteCountLink entityType="project" entityId={project.id} count={getEntityNotesSummary(snapshot.dashboard.notesSummaryByEntity, "project", project.id).count} />
                       </div>
                     </InteractiveCard>
                   ))}
@@ -279,6 +287,9 @@ export function OverviewPage() {
                         ) : (
                           <div className="text-[11px] uppercase tracking-[0.16em] text-white/40">{t("common.overview.noProjectYet")}</div>
                         )}
+                      </div>
+                      <div className="mt-4">
+                        <EntityNoteCountLink entityType="task" entityId={task.id} count={getEntityNotesSummary(snapshot.dashboard.notesSummaryByEntity, "task", task.id).count} />
                       </div>
                     </InteractiveCard>
                   ))}

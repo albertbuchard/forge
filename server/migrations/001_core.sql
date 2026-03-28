@@ -331,3 +331,81 @@ CREATE INDEX IF NOT EXISTS idx_session_events_session ON session_events(session_
 CREATE INDEX IF NOT EXISTS idx_session_events_type ON session_events(event_type, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_operator_sessions_active
   ON operator_sessions(revoked_at, expires_at, last_used_at DESC);
+
+ALTER TABLE task_runs ADD COLUMN timer_mode TEXT NOT NULL DEFAULT 'unlimited';
+ALTER TABLE task_runs ADD COLUMN planned_duration_seconds INTEGER;
+ALTER TABLE task_runs ADD COLUMN is_current INTEGER NOT NULL DEFAULT 0;
+
+UPDATE task_runs
+SET timer_mode = 'unlimited',
+    planned_duration_seconds = NULL
+WHERE timer_mode IS NULL OR timer_mode = '';
+
+ALTER TABLE app_settings ADD COLUMN max_active_tasks INTEGER NOT NULL DEFAULT 2;
+ALTER TABLE app_settings ADD COLUMN time_accounting_mode TEXT NOT NULL DEFAULT 'split';
+ALTER TABLE app_settings ADD COLUMN psyche_auth_required INTEGER NOT NULL DEFAULT 0;
+
+CREATE INDEX IF NOT EXISTS idx_task_runs_actor_status_claimed
+  ON task_runs(actor, status, claimed_at);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_task_runs_single_current_per_actor
+  ON task_runs(actor)
+  WHERE status = 'active' AND is_current = 1;
+
+CREATE TABLE deleted_entities (
+  entity_type TEXT NOT NULL,
+  entity_id TEXT NOT NULL,
+  title TEXT NOT NULL,
+  subtitle TEXT NOT NULL DEFAULT '',
+  deleted_at TEXT NOT NULL,
+  deleted_by_actor TEXT,
+  deleted_source TEXT NOT NULL,
+  delete_reason TEXT NOT NULL DEFAULT '',
+  snapshot_json TEXT NOT NULL,
+  PRIMARY KEY (entity_type, entity_id)
+);
+
+CREATE INDEX idx_deleted_entities_deleted_at
+  ON deleted_entities (deleted_at DESC);
+
+CREATE TABLE IF NOT EXISTS notes (
+  id TEXT PRIMARY KEY,
+  content_markdown TEXT NOT NULL,
+  content_plain TEXT NOT NULL DEFAULT '',
+  author TEXT,
+  source TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS note_links (
+  note_id TEXT NOT NULL,
+  entity_type TEXT NOT NULL,
+  entity_id TEXT NOT NULL,
+  anchor_key TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL,
+  PRIMARY KEY (note_id, entity_type, entity_id, anchor_key),
+  FOREIGN KEY (note_id) REFERENCES notes(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_note_links_target
+  ON note_links (entity_type, entity_id, created_at DESC);
+
+CREATE VIRTUAL TABLE IF NOT EXISTS notes_fts
+USING fts5(
+  note_id UNINDEXED,
+  content_plain,
+  author
+);
+
+INSERT INTO notes_fts (note_id, content_plain, author)
+SELECT
+  notes.id,
+  notes.content_plain,
+  COALESCE(notes.author, '')
+FROM notes
+WHERE NOT EXISTS (
+  SELECT 1
+  FROM notes_fts
+  WHERE notes_fts.note_id = notes.id
+);

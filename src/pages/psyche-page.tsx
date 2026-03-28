@@ -190,8 +190,8 @@ export function PsychePage() {
               <div className="mt-2 font-display text-4xl text-white">{overview.openInsights}</div>
             </div>
             <div className="rounded-[22px] bg-white/[0.04] px-4 py-4">
-              <div className="text-sm text-white/58">Comments</div>
-              <div className="mt-2 font-display text-4xl text-white">{overview.unresolvedComments}</div>
+              <div className="text-sm text-white/58">Notes</div>
+              <div className="mt-2 font-display text-4xl text-white">{overview.openNotes}</div>
             </div>
           </div>
           <div className="mt-4 text-sm text-white/60">

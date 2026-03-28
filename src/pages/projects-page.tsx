@@ -1,5 +1,6 @@
 import { Link } from "react-router-dom";
 import { PageHero } from "@/components/shell/page-hero";
+import { EntityNoteCountLink } from "@/components/notes/entity-note-count-link";
 import { Badge } from "@/components/ui/badge";
 import { EntityBadge } from "@/components/ui/entity-badge";
 import { EntityName } from "@/components/ui/entity-name";
@@ -7,6 +8,7 @@ import { EmptyState } from "@/components/ui/page-state";
 import { ProgressMeter } from "@/components/ui/progress-meter";
 import { InteractiveCard } from "@/components/ui/interactive-card";
 import { useForgeShell } from "@/components/shell/app-shell";
+import { getEntityNotesSummary } from "@/lib/note-helpers";
 
 export function ProjectsPage() {
   const { snapshot } = useForgeShell();
@@ -34,7 +36,9 @@ export function ProjectsPage() {
         />
       ) : (
         <div className="grid gap-4 lg:grid-cols-2 2xl:grid-cols-3">
-          {snapshot.dashboard.projects.map((project) => (
+          {snapshot.dashboard.projects.map((project) => {
+            const projectNotes = getEntityNotesSummary(snapshot.dashboard.notesSummaryByEntity, "project", project.id);
+            return (
             <InteractiveCard key={project.id} to={`/projects/${project.id}`} className="transition">
               <div className="flex items-center justify-between gap-3">
                 <EntityBadge kind="goal" label={project.goalTitle} compact />
@@ -66,8 +70,11 @@ export function ProjectsPage() {
               <div className="mt-5 text-[11px] uppercase tracking-[0.16em] text-white/40">
                 {project.nextTaskTitle ? `Next move: ${project.nextTaskTitle}` : "Ready for the next task"}
               </div>
+              <div className="mt-4">
+                <EntityNoteCountLink entityType="project" entityId={project.id} count={projectNotes.count} />
+              </div>
             </InteractiveCard>
-          ))}
+          );})}
         </div>
       )}
     </div>

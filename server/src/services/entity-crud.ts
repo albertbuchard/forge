@@ -1,11 +1,10 @@
 import { getDatabase, runInTransaction } from "../db.js";
-import { deleteComment, getCommentById, listComments, updateComment, createComment } from "../repositories/comments.js";
 import { createInsight, deleteInsight, getInsightById, listInsights, updateInsight } from "../repositories/collaboration.js";
+import { createNote, deleteNote, getNoteById, listNotes, unlinkNotesForEntity, updateNote } from "../repositories/notes.js";
 import {
   createBehaviorPatternSchema,
   createBehaviorSchema,
   createBeliefEntrySchema,
-  createCommentSchema,
   createEmotionDefinitionSchema,
   createEventTypeSchema,
   createModeGuideSessionSchema,
@@ -15,7 +14,6 @@ import {
   updateBehaviorPatternSchema,
   updateBehaviorSchema,
   updateBeliefEntrySchema,
-  updateCommentSchema,
   updateEmotionDefinitionSchema,
   updateEventTypeSchema,
   updateModeGuideSessionSchema,
@@ -99,11 +97,13 @@ import type {
 import {
   createGoalSchema,
   createInsightSchema,
+  createNoteSchema,
   createProjectSchema,
   createTagSchema,
   createTaskSchema,
   updateGoalSchema,
   updateInsightSchema,
+  updateNoteSchema,
   updateProjectSchema,
   updateTagSchema,
   updateTaskSchema
@@ -185,14 +185,14 @@ const CRUD_ENTITY_CAPABILITIES: Record<CrudEntityType, CrudEntityCapability> = {
     update: (id, patch, context) => updateTag(id, patch as never, context) as Record<string, unknown> | undefined,
     hardDelete: (id, context) => deleteTag(id, context) as Record<string, unknown> | undefined
   },
-  comment: {
-    entityType: "comment",
-    routeBase: "/api/v1/comments",
-    list: () => listComments() as Array<Record<string, unknown>>,
-    get: (id) => getCommentById(id) as Record<string, unknown> | undefined,
-    create: (data, context) => createComment(data as never, context) as Record<string, unknown>,
-    update: (id, patch, context) => updateComment(id, patch as never, context) as Record<string, unknown> | undefined,
-    hardDelete: (id, context) => deleteComment(id, context) as Record<string, unknown> | undefined
+  note: {
+    entityType: "note",
+    routeBase: "/api/v1/notes",
+    list: () => listNotes() as Array<Record<string, unknown>>,
+    get: (id) => getNoteById(id) as Record<string, unknown> | undefined,
+    create: (data, context) => createNote(data as never, context) as Record<string, unknown>,
+    update: (id, patch, context) => updateNote(id, patch as never, context) as Record<string, unknown> | undefined,
+    hardDelete: (id, context) => deleteNote(id, context) as Record<string, unknown> | undefined
   },
   insight: {
     entityType: "insight",
@@ -305,7 +305,7 @@ const CREATE_ENTITY_SCHEMAS: Record<CrudEntityType, { parse: (value: unknown) =>
   project: createProjectSchema,
   task: createTaskSchema,
   tag: createTagSchema,
-  comment: createCommentSchema,
+  note: createNoteSchema,
   insight: createInsightSchema,
   psyche_value: createPsycheValueSchema,
   behavior_pattern: createBehaviorPatternSchema,
@@ -323,7 +323,7 @@ const UPDATE_ENTITY_SCHEMAS: Record<CrudEntityType, { parse: (value: unknown) =>
   project: updateProjectSchema,
   task: updateTaskSchema,
   tag: updateTagSchema,
-  comment: updateCommentSchema,
+  note: updateNoteSchema,
   insight: updateInsightSchema,
   psyche_value: updatePsycheValueSchema,
   behavior_pattern: updateBehaviorPatternSchema,
@@ -483,7 +483,19 @@ function matchesLinkedTo(entityType: CrudEntityType, entity: Record<string, unkn
       return linkedTo.entityType === "goal" && entity.goalId === linkedTo.id;
     case "task":
       return (linkedTo.entityType === "goal" && entity.goalId === linkedTo.id) || (linkedTo.entityType === "project" && entity.projectId === linkedTo.id);
-    case "comment":
+    case "note":
+      return (
+        Array.isArray(entity.links) &&
+        entity.links.some(
+          (link) =>
+            typeof link === "object" &&
+            link !== null &&
+            "entityType" in link &&
+            "entityId" in link &&
+            link.entityType === linkedTo.entityType &&
+            link.entityId === linkedTo.id
+        )
+      );
     case "insight":
       return entity.entityType === linkedTo.entityType && entity.entityId === linkedTo.id;
     case "psyche_value":
@@ -565,18 +577,7 @@ function purgeAnchoredCollaboration(entityType: CrudEntityType, entityId: string
       .run(...insightIds.map((row) => row.id));
   }
 
-  const commentIds = getDatabase()
-    .prepare(`SELECT id FROM entity_comments WHERE entity_type = ? AND entity_id = ?`)
-    .all(entityType, entityId) as Array<{ id: string }>;
-  if (commentIds.length > 0) {
-    const placeholders = commentIds.map(() => "?").join(", ");
-    getDatabase()
-      .prepare(`DELETE FROM entity_comments WHERE id IN (${placeholders})`)
-      .run(...commentIds.map((row) => row.id));
-    getDatabase()
-      .prepare(`DELETE FROM deleted_entities WHERE entity_type = 'comment' AND entity_id IN (${placeholders})`)
-      .run(...commentIds.map((row) => row.id));
-  }
+  unlinkNotesForEntity(entityType, entityId, { source: "system", actor: null });
 }
 
 export function deleteEntity(entityType: CrudEntityType, id: string, options: { mode?: DeleteMode; reason?: string }, context: CrudContext) {
@@ -606,14 +607,14 @@ export function deleteEntity(entityType: CrudEntityType, id: string, options: { 
         deleteReason: options.reason ?? "",
         context
       });
-      if (entityType !== "comment" && entityType !== "insight") {
+      if (entityType !== "note" && entityType !== "insight") {
         cascadeSoftDeleteAnchoredCollaboration(entityType, id, context, options.reason ?? "");
       }
       return entity;
     }
 
     clearDeletedEntityRecord(entityType, id);
-    if (entityType !== "comment" && entityType !== "insight") {
+    if (entityType !== "note" && entityType !== "insight") {
       purgeAnchoredCollaboration(entityType, id);
     }
     const deleted = capability.hardDelete(id, context);
@@ -628,7 +629,7 @@ export function restoreEntity(entityType: CrudEntityType, id: string) {
     if (!deleted) {
       return undefined;
     }
-    if (entityType !== "comment" && entityType !== "insight") {
+    if (entityType !== "note" && entityType !== "insight") {
       restoreAnchoredCollaboration(entityType, id);
     }
     return getCapability(entityType).get(id) ?? deleted.snapshot;
@@ -731,9 +732,10 @@ export function restoreEntities(input: BatchRestoreEntitiesInput): { results: En
 
 export function searchEntities(input: BatchSearchEntitiesInput): { results: EntityOperationResult[] } {
   const deleted = listDeletedEntities();
+  const defaultEntityTypes = Object.keys(CRUD_ENTITY_CAPABILITIES) as CrudEntityType[];
   return {
     results: input.searches.map((search) => {
-      const entityTypes = search.entityTypes && search.entityTypes.length > 0 ? search.entityTypes : Object.keys(CRUD_ENTITY_CAPABILITIES) as CrudEntityType[];
+      const entityTypes = search.entityTypes && search.entityTypes.length > 0 ? search.entityTypes : defaultEntityTypes;
       const liveMatches = entityTypes.flatMap((entityType) =>
         getCapability(entityType)
           .list()

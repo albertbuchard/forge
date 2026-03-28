@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { getDatabase, runInTransaction } from "../db.js";
 import { recordActivityEvent } from "./activity-events.js";
 import { filterDeletedEntities, isEntityDeleted } from "./deleted-entities.js";
+import { createLinkedNotes } from "./notes.js";
 import { assertGoalExists } from "../services/relations.js";
 import { getGoalById } from "./goals.js";
 import { pruneLinkedEntityReferences } from "./psyche.js";
@@ -131,6 +132,11 @@ export function createProject(input: CreateProjectInput, activity?: ActivityCont
       .run(id, parsed.goalId, parsed.title, parsed.description, parsed.status, parsed.themeColor, parsed.targetPoints, now, now);
 
     const project = getProjectById(id)!;
+    createLinkedNotes(
+      parsed.notes,
+      { entityType: "project", entityId: project.id, anchorKey: null },
+      activity ?? { source: "ui", actor: null }
+    );
     if (activity) {
       recordActivityEvent({
         entityType: "project",
@@ -249,13 +255,6 @@ export function deleteProject(projectId: string, activity?: ActivityContext): Pr
 
   return runInTransaction(() => {
     pruneLinkedEntityReferences("project", projectId);
-    getDatabase()
-      .prepare(
-        `DELETE FROM entity_comments
-         WHERE entity_type = 'project'
-           AND entity_id = ?`
-      )
-      .run(projectId);
     getDatabase()
       .prepare(`DELETE FROM projects WHERE id = ?`)
       .run(projectId);

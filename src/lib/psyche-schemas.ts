@@ -160,14 +160,6 @@ export const triggerReportSchema = z.object({
   nextMoves: z.array(trimmed).default([])
 });
 
-export const commentSchema = z.object({
-  entityType: nonEmpty,
-  entityId: nonEmpty,
-  anchorKey: trimmed.nullable().optional(),
-  body: nonEmpty,
-  author: trimmed.nullable().optional()
-});
-
 export type PsycheValueInput = z.infer<typeof psycheValueSchema>;
 export type BehaviorPatternInput = z.infer<typeof behaviorPatternSchema>;
 export type BehaviorInput = z.infer<typeof behaviorSchema>;
@@ -177,4 +169,3 @@ export type ModeGuideSessionInput = z.infer<typeof modeGuideSessionSchema>;
 export type EventTypeInput = z.infer<typeof eventTypeSchema>;
 export type EmotionDefinitionInput = z.infer<typeof emotionDefinitionSchema>;
 export type TriggerReportInput = z.infer<typeof triggerReportSchema>;
-export type CommentInput = z.infer<typeof commentSchema>;

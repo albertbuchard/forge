@@ -1,6 +1,6 @@
 import { getDomainBySlug } from "../repositories/domains.js";
-import { listComments } from "../repositories/comments.js";
 import { listInsights } from "../repositories/collaboration.js";
+import { listNotes } from "../repositories/notes.js";
 import {
   listBehaviorPatterns,
   listBehaviors,
@@ -34,9 +34,9 @@ export function getPsycheOverview(): PsycheOverviewPayload {
   const modes = listModeProfiles();
   const reports = listTriggerReports(5);
   const schemaCatalog = listSchemaCatalog();
-  const comments = listComments({ limit: 200 });
+  const notes = listNotes({ limit: 200 });
   const openInsights = listInsights({ limit: 100 }).filter((insight) => insight.entityType && PSYCHE_ENTITY_TYPE_SET.has(insight.entityType)).length;
-  const unresolvedComments = comments.filter((comment) => PSYCHE_ENTITY_TYPE_SET.has(comment.entityType)).length;
+  const openNotes = notes.filter((note) => note.links.some((link) => PSYCHE_ENTITY_TYPE_SET.has(link.entityType))).length;
   const committedActions = [
     ...values.flatMap((value) => value.committedActions),
     ...behaviors.filter((behavior) => behavior.kind === "committed").map((behavior) => behavior.title),
@@ -70,7 +70,7 @@ export function getPsycheOverview(): PsycheOverviewPayload {
     reports,
     schemaPressure,
     openInsights,
-    unresolvedComments,
+    openNotes,
     committedActions
   });
 }

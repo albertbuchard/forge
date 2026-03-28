@@ -5,7 +5,6 @@ const nonEmptyTrimmedString = trimmedString.min(1);
 const uniqueStringArraySchema = z.array(nonEmptyTrimmedString);
 
 export const triggerReportStatusSchema = z.enum(["draft", "reviewed", "integrated"]);
-export const commentSourceSchema = z.enum(["ui", "openclaw", "agent", "system"]);
 export const behaviorKindSchema = z.enum(["away", "committed", "recovery"]);
 export const beliefTypeSchema = z.enum(["absolute", "conditional"]);
 export const modeFamilySchema = z.enum(["coping", "child", "critic_parent", "healthy_adult", "happy_child"]);
@@ -247,18 +246,6 @@ export const triggerReportSchema = z.object({
   updatedAt: z.string()
 });
 
-export const commentSchema = z.object({
-  id: z.string(),
-  entityType: nonEmptyTrimmedString,
-  entityId: nonEmptyTrimmedString,
-  anchorKey: trimmedString.nullable(),
-  body: nonEmptyTrimmedString,
-  author: trimmedString.nullable(),
-  source: commentSourceSchema,
-  createdAt: z.string(),
-  updatedAt: z.string()
-});
-
 export const schemaPressureEntrySchema = z.object({
   schemaId: z.string(),
   title: nonEmptyTrimmedString,
@@ -276,7 +263,7 @@ export const psycheOverviewPayloadSchema = z.object({
   reports: z.array(triggerReportSchema),
   schemaPressure: z.array(schemaPressureEntrySchema),
   openInsights: z.number().int().nonnegative(),
-  unresolvedComments: z.number().int().nonnegative(),
+  openNotes: z.number().int().nonnegative(),
   committedActions: z.array(trimmedString)
 });
 
@@ -419,27 +406,6 @@ export const createTriggerReportSchema = z.object({
 
 export const updateTriggerReportSchema = createTriggerReportSchema.partial();
 
-export const createCommentSchema = z.object({
-  entityType: nonEmptyTrimmedString,
-  entityId: nonEmptyTrimmedString,
-  anchorKey: trimmedString.nullable().default(null),
-  body: nonEmptyTrimmedString,
-  author: trimmedString.nullable().default(null)
-});
-
-export const updateCommentSchema = z.object({
-  body: nonEmptyTrimmedString,
-  author: trimmedString.nullable().default(null)
-});
-
-export const commentsListQuerySchema = z.object({
-  entityType: nonEmptyTrimmedString.optional(),
-  entityId: nonEmptyTrimmedString.optional(),
-  limit: z.coerce.number().int().positive().max(200).optional()
-});
-
-export const commentListQuerySchema = commentsListQuerySchema;
-
 export type Domain = z.infer<typeof domainSchema>;
 export type SchemaCatalogEntry = z.infer<typeof schemaCatalogEntrySchema>;
 export type EventType = z.infer<typeof eventTypeSchema>;
@@ -452,7 +418,6 @@ export type ModeProfile = z.infer<typeof modeProfileSchema>;
 export type ModeTimelineEntry = z.infer<typeof modeTimelineEntrySchema>;
 export type ModeGuideSession = z.infer<typeof modeGuideSessionSchema>;
 export type TriggerReport = z.infer<typeof triggerReportSchema>;
-export type Comment = z.infer<typeof commentSchema>;
 export type PsycheOverviewPayload = z.infer<typeof psycheOverviewPayloadSchema>;
 export type CreatePsycheValueInput = z.infer<typeof createPsycheValueSchema>;
 export type UpdatePsycheValueInput = z.infer<typeof updatePsycheValueSchema>;
@@ -472,6 +437,3 @@ export type CreateEmotionDefinitionInput = z.infer<typeof createEmotionDefinitio
 export type UpdateEmotionDefinitionInput = z.infer<typeof updateEmotionDefinitionSchema>;
 export type CreateTriggerReportInput = z.infer<typeof createTriggerReportSchema>;
 export type UpdateTriggerReportInput = z.infer<typeof updateTriggerReportSchema>;
-export type CreateCommentInput = z.infer<typeof createCommentSchema>;
-export type UpdateCommentInput = z.infer<typeof updateCommentSchema>;
-export type CommentsListQuery = z.infer<typeof commentsListQuerySchema>;
