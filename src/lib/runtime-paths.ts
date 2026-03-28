@@ -21,6 +21,10 @@ function getBaseUrl() {
 }
 
 export function resolveForgePath(pathname: string) {
+  if (pathname.startsWith("/api/")) {
+    return pathname;
+  }
+
   const normalized = pathname.startsWith("/") ? pathname.slice(1) : pathname;
   return new URL(normalized, getBaseUrl()).pathname;
 }

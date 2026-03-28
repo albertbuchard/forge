@@ -88,13 +88,16 @@ async function parseResponseBody(response: Response) {
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const headers = new Headers(init?.headers);
+  headers.set("x-forge-source", "ui");
+
+  if (init?.body !== undefined && !headers.has("content-type")) {
+    headers.set("content-type", "application/json");
+  }
+
   const response = await fetch(resolveForgePath(path), {
     credentials: "same-origin",
-    headers: {
-      "content-type": "application/json",
-      "x-forge-source": "ui",
-      ...(init?.headers ?? {})
-    },
+    headers,
     ...init
   });
 

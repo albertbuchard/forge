@@ -163,7 +163,7 @@ export function InsightsPage() {
     <div className="grid gap-5">
       <PageHero
         title="Insights"
-        description="Track the live coaching signal, store insights through a guided flow, and decide which recommendations should actually change the system."
+        description="Save useful advice from you or your agent, review what seems worth acting on, and turn the good ones into real work when the timing is right."
         badge={`${insights.openCount} open`}
         actions={
           <Button onClick={() => setFlowOpen(true)}>
@@ -208,8 +208,8 @@ export function InsightsPage() {
                 label="Explain execution trends"
               />
             </div>
-            <div className="mt-4 h-72">
-              <ResponsiveContainer width="100%" height="100%">
+            <div className="mt-4 h-72 min-w-0">
+              <ResponsiveContainer width="100%" height="100%" minWidth={280} minHeight={288}>
                 <AreaChart data={insights.executionTrends}>
                   <defs>
                     <linearGradient id="insight-xp" x1="0" y1="0" x2="0" y2="1">
@@ -227,11 +227,19 @@ export function InsightsPage() {
             <div className="mt-4 flex flex-wrap gap-3">
               <div className="inline-flex items-center gap-2 rounded-full bg-white/[0.04] px-3 py-2 text-sm text-white/64">
                 <span className="size-2.5 rounded-full bg-[#c0c1ff]" />
-                Completed XP
+                <span>Completed XP</span>
+                <InfoTooltip
+                  content="Completed XP is the reward Forge logged for finished work in each time window. It helps you see whether things are actually getting finished, not just started."
+                  label="Explain completed XP"
+                />
               </div>
               <div className="inline-flex items-center gap-2 rounded-full bg-white/[0.04] px-3 py-2 text-sm text-white/64">
                 <span className="size-2.5 rounded-full bg-[#4edea3]" />
-                Focus score
+                <span>Focus score</span>
+                <InfoTooltip
+                  content="Focus score is Forge's rough read of how much active execution pressure was present in each window, based on focused and completed work."
+                  label="Explain focus score"
+                />
               </div>
             </div>
             <div className="mt-3 text-sm leading-6 text-white/54">
@@ -276,9 +284,9 @@ export function InsightsPage() {
           <Card>
             <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">Store insight</div>
             <div className="mt-4 rounded-[22px] bg-white/[0.04] p-5">
-              <div className="font-medium text-white">Use the guided flow instead of a raw admin form</div>
+              <div className="font-medium text-white">Capture advice without forcing it into a task too early</div>
               <div className="mt-2 text-sm leading-7 text-white/60">
-                Capture the insight headline, what you are seeing, the recommendation, and where it belongs in one focused sequence.
+                Insights are saved suggestions from you or your agent. Use them when something feels worth remembering, but it is not ready to become a goal, project, or task yet.
               </div>
               <div className="mt-4">
                 <Button onClick={() => setFlowOpen(true)}>
@@ -309,14 +317,14 @@ export function InsightsPage() {
                     </div>
                     {insight.status === "applied" ? (
                       <div className="mt-4 rounded-[16px] border border-emerald-400/18 bg-emerald-400/8 px-4 py-3 text-sm text-emerald-100/88">
-                        Applied insights stay here as proof that the recommendation turned into a real Forge record.
+                        This insight has already been turned into a real Forge record, so it stays here as a trace of what happened.
                       </div>
                     ) : (
                       <>
                         <div className="mt-4 text-sm text-white/52">
                           {insight.status === "accepted"
-                            ? "Accepted means you agree with the recommendation. Apply turns it into a real record when you are ready."
-                            : "Accept keeps the recommendation acknowledged. Apply creates a real Forge record now. Dismiss removes the insight."}
+                            ? "Accepted means this feels useful and worth keeping in view. Apply turns it into a real goal, project, task, or note when you are ready."
+                            : "Accept keeps this advice on the board. Apply turns it into a real Forge record now. Dismiss deletes it from the list."}
                         </div>
                         <div className="mt-4 flex flex-wrap gap-2">
                           {insight.status !== "accepted" ? (
