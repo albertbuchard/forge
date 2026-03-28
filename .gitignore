@@ -20,4 +20,13 @@ tmp-width-probe.cjs
 openclaw-plugin/*.tgz
 openclaw-plugin/data/
 plugins/forge-codex/runtime/data/
+# Keep publishable plugin manifests and bundled runtime assets trackable.
+!openclaw-plugin/package.json
+!openclaw-plugin/openclaw.plugin.json
+!plugins/forge-codex/.codex-plugin/
+!plugins/forge-codex/.codex-plugin/plugin.json
+!plugins/forge-codex/runtime/
+!plugins/forge-codex/runtime/package.json
+!plugins/forge-codex/runtime/dist/
+!plugins/forge-codex/runtime/dist/**
 .vision/psyche-template/views/screenshot_2026_03_23_at_17.10.30.png/
