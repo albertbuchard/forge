@@ -53,6 +53,11 @@
               beliefs, patterns, and trigger reports.
             </p>
             <p class="lede">
+              The Psyche side is not an afterthought. Forge includes structured mental-health and
+              reflection tracking inspired by third-wave CBT, ACT, and schema-style work, so your agent
+              can help you save patterns, beliefs, values, and trigger reports in a form that stays useful.
+            </p>
+            <p class="lede">
               The point is simple: you can tell your agent what you are trying to do, and Forge gives it
               a proper place to save the work, run the board, and keep the context attached to what
               actually happened.
@@ -99,6 +104,38 @@
                 alt="Forge overview dashboard showing goals, streak, XP, and milestone progress"
               />
             </div>
+          </div>
+        </section>
+
+        <section class="section interaction-section">
+          <div class="section-heading">
+            <p class="eyebrow">Real Agent Interactions</p>
+            <h2>These are the kinds of things your agent can save in Forge.</h2>
+            <p class="section-copy">
+              The screenshots below show two different kinds of work: task execution on the Forge side,
+              and value-based Psyche tracking on the mental-health and reflection side.
+            </p>
+          </div>
+          <div class="interaction-grid">
+            <figure class="shot interaction-shot">
+              <img
+                src="./assets/forge-agent-task-example.png"
+                alt="Agent interaction that creates a Forge task and starts a 15 minute work block"
+              />
+              <figcaption>
+                Example: the agent creates a task in Forge and starts a real 15-minute work block on it.
+              </figcaption>
+            </figure>
+            <figure class="shot interaction-shot">
+              <img
+                src="./assets/forge-agent-psyche-example.png"
+                alt="Agent interaction that saves a psyche value and a committed action in Forge"
+              />
+              <figcaption>
+                Example: the agent saves a value and a committed action in the Psyche module instead of
+                leaving it buried in chat.
+              </figcaption>
+            </figure>
           </div>
         </section>
 
@@ -155,56 +192,54 @@
             </p>
           </div>
 
-          <div class="install-layout">
-            <div class="install-card">
-              <div class="install-head">
-                <span class="terminal-dot red"></span>
-                <span class="terminal-dot amber"></span>
-                <span class="terminal-dot green"></span>
-                <span>Install Forge on a local OpenClaw machine</span>
-              </div>
-              <div class="command-shell">
-                <button class="copy-button" type="button" data-copy-target="install-flow">Copy</button>
-                <pre><code id="install-flow">openclaw plugins install forge-openclaw-plugin
+          <div class="install-card">
+            <div class="install-head">
+              <span class="terminal-dot red"></span>
+              <span class="terminal-dot amber"></span>
+              <span class="terminal-dot green"></span>
+              <span>Install Forge on a local OpenClaw machine</span>
+            </div>
+            <div class="command-shell">
+              <button class="copy-button" type="button" data-copy-target="install-flow">Copy</button>
+              <pre><code id="install-flow">openclaw plugins install forge-openclaw-plugin
 openclaw plugins enable forge-openclaw-plugin
 node -e 'const fs=require("fs"); const p=process.env.HOME+"/.openclaw/openclaw.json"; const j=JSON.parse(fs.readFileSync(p,"utf8")); j.plugins ??= {}; j.plugins.allow = Array.from(new Set([...(j.plugins.allow || []), "forge-openclaw-plugin"])); fs.writeFileSync(p, JSON.stringify(j, null, 2)+"\n");'
 openclaw gateway restart
 openclaw forge health
 openclaw forge status</code></pre>
-              </div>
-            </div>
-
-            <div class="step-grid">
-              <article class="card step-card">
-                <span class="step-number">1</span>
-                <h3>Install the plugin</h3>
-                <p>Install the published package, then enable it in OpenClaw.</p>
-              </article>
-              <article class="card step-card">
-                <span class="step-number">2</span>
-                <h3>Repair the allow list</h3>
-                <p>
-                  Some OpenClaw builds leave the plugin enabled but not allowed. The Node command above
-                  appends <code>forge-openclaw-plugin</code> without breaking the rest of your allow list.
-                </p>
-              </article>
-              <article class="card step-card">
-                <span class="step-number">3</span>
-                <h3>Restart OpenClaw</h3>
-                <p>Restart the gateway so the plugin entrypoint and the local Forge runtime load for real.</p>
-              </article>
-              <article class="card step-card">
-                <span class="step-number">4</span>
-                <h3>Verify the runtime</h3>
-                <p>
-                  <code>openclaw forge health</code> checks the server. <code>openclaw forge status</code>
-                  tells you whether Forge is running, healthy, and managed by the plugin.
-                </p>
-              </article>
             </div>
           </div>
 
-          <div class="info-grid">
+          <div class="step-grid install-step-grid">
+            <article class="card step-card">
+              <span class="step-number">1</span>
+              <h3>Install the plugin</h3>
+              <p>Install the published package, then enable it in OpenClaw.</p>
+            </article>
+            <article class="card step-card">
+              <span class="step-number">2</span>
+              <h3>Repair the allow list</h3>
+              <p>
+                Some OpenClaw builds leave the plugin enabled but not allowed. The Node command above
+                appends <code>forge-openclaw-plugin</code> without breaking the rest of your allow list.
+              </p>
+            </article>
+            <article class="card step-card">
+              <span class="step-number">3</span>
+              <h3>Restart OpenClaw</h3>
+              <p>Restart the gateway so the plugin entrypoint and the local Forge runtime load for real.</p>
+            </article>
+            <article class="card step-card">
+              <span class="step-number">4</span>
+              <h3>Verify the runtime</h3>
+              <p>
+                <code>openclaw forge health</code> checks the server. <code>openclaw forge status</code>
+                tells you whether Forge is running, healthy, and managed by the plugin.
+              </p>
+            </article>
+          </div>
+
+          <div class="info-grid install-info-grid">
             <article class="card info-card">
               <h3>Open the UI</h3>
               <p>

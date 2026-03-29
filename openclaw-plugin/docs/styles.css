@@ -408,6 +408,7 @@ p {
 .step-grid,
 .info-grid,
 .gallery-grid,
+.interaction-grid,
 .record-grid,
 .psyche-grid,
 .example-grid,
@@ -423,10 +424,18 @@ p {
 }
 
 .step-grid,
-.info-grid,
 .command-grid,
 .faq-list {
   grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.info-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.interaction-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
 }
 
 .record-grid {
@@ -461,13 +470,6 @@ p {
   display: block;
   color: var(--text);
   font-size: 1.02rem;
-}
-
-.install-layout {
-  display: grid;
-  grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr);
-  gap: 22px;
-  align-items: start;
 }
 
 .install-card {
@@ -567,6 +569,11 @@ p {
   height: 100%;
 }
 
+.install-step-grid,
+.install-info-grid {
+  margin-top: 20px;
+}
+
 .step-number,
 .example-kicker {
   display: inline-block;
@@ -600,11 +607,13 @@ p {
 }
 
 @media (max-width: 1180px) {
+  .info-grid,
   .record-grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
   .psyche-grid,
+  .interaction-grid,
   .publish-links {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -621,11 +630,11 @@ p {
   }
 
   .hero,
-  .install-layout,
   .intro-grid,
   .step-grid,
   .info-grid,
   .gallery-grid,
+  .interaction-grid,
   .record-grid,
   .psyche-grid,
   .example-grid,
