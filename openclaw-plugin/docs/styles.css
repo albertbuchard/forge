@@ -408,6 +408,7 @@ p {
 .step-grid,
 .info-grid,
 .gallery-grid,
+.surface-grid,
 .interaction-grid,
 .record-grid,
 .psyche-grid,
@@ -455,19 +456,26 @@ p {
   align-items: stretch;
 }
 
+.surface-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: stretch;
+}
+
 .gallery-grid .shot {
   display: flex;
   flex-direction: column;
   height: 100%;
 }
 
-.gallery-grid .shot img {
+.gallery-grid .shot img,
+.surface-grid .shot img {
   width: 100%;
   aspect-ratio: 16 / 10;
   object-fit: cover;
 }
 
-.gallery-grid .shot figcaption {
+.gallery-grid .shot figcaption,
+.surface-grid .shot figcaption {
   min-height: 7.5rem;
 }
 
@@ -663,6 +671,7 @@ p {
   .intro-grid,
   .info-grid,
   .gallery-grid,
+  .surface-grid,
   .interaction-grid,
   .record-grid,
   .psyche-grid,
