@@ -9,6 +9,8 @@ Forge has two major domains. The planning side covers goals, projects, tasks, no
 
 Write to Forge only with clear user consent. If the user is just thinking aloud, helping first is usually better than writing immediately. After helping, you may offer one short Forge prompt if the match is strong. If the user agrees, ask only for the missing fields and only one to three focused questions at a time. Do not offer Forge again after a decline unless the user reopens it.
 
+Optional recurring automation templates live in `cron_jobs.md` next to this skill. Use that file only when the user explicitly asks for recurring Forge automations, cron jobs, scheduled check-ins, or a recurring synthesis workflow. Treat those templates as adaptable examples: customize titles, delivery channels, linked projects, and tone for the current user instead of assuming any personal defaults.
+
 Forge data location rule:
 
 - by default, Forge stores data under the active runtime root at `data/forge.sqlite`
