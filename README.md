@@ -1,5 +1,7 @@
 # Forge
 
+[GitHub Pages plugin site](https://albertbuchard.github.io/forge/)
+
 Forge is an OpenClaw plugin for project management and mental health tracking.
 
 That is the main way to understand this repo now.
