@@ -1,618 +1,608 @@
 <!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Forge for OpenClaw</title>
-    <meta
-      name="description"
-      content="Forge is an OpenClaw plugin for project management and mental health tracking, with Kanban work, live sessions, linked notes, XP, and a Psyche module influenced by third-wave CBT, ACT, and schema therapy."
-    />
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;700;800&family=Sora:wght@500;700;800&family=Space+Grotesk:wght@500;700&display=swap"
-      rel="stylesheet"
-    />
-    <link rel="stylesheet" href="./styles.css" />
-  </head>
-  <body>
-    <div class="page-shell">
-      <div class="ambient ambient-a"></div>
-      <div class="ambient ambient-b"></div>
-      <div class="ambient-grid"></div>
 
-      <header class="topbar">
-        <a class="brand" href="https://github.com/albertbuchard/forge">
-          <span class="brand-mark">F</span>
-          <span class="brand-copy">
-            <strong>Forge</strong>
-            <span>OpenClaw plugin</span>
-          </span>
-        </a>
-        <nav class="topnav">
-          <a href="#what-is-forge">What It Is</a>
-          <a href="#getting-started">Getting Started</a>
-          <a href="#records">Records</a>
-          <a href="#examples">Examples</a>
-          <a href="#commands">Commands</a>
-          <a href="#faq">FAQ</a>
-        </nav>
-        <a class="button ghost" href="https://www.npmjs.com/package/forge-openclaw-plugin">npm</a>
-      </header>
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Forge for OpenClaw</title>
+  <meta name="description"
+    content="Forge is an OpenClaw plugin for project management and mental health tracking, with Kanban work, live sessions, linked notes, XP, and a Psyche module influenced by third-wave CBT, ACT, and schema therapy." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;700;800&family=Sora:wght@500;700;800&family=Space+Grotesk:wght@500;700&display=swap"
+    rel="stylesheet" />
+  <link rel="stylesheet" href="./styles.css" />
+</head>
 
-      <main class="page">
-        <section class="hero">
-          <div class="hero-copy">
-            <p class="eyebrow">Forge For OpenClaw</p>
-            <h1>An OpenClaw plugin for project management and mental health tracking.</h1>
-            <p class="lede">
-              Forge gives your OpenClaw agent a clear workspace for project management and structured
-              mental-health tracking. It can create goals, break them into projects, manage tasks on a
-              Kanban board, start and complete real work sessions, save linked notes, and track XP in a
-              way you can inspect later.
-            </p>
-            <p class="lede">
-              It also includes Psyche: a structured reflection module explicitly influenced by
-              third-wave CBT, ACT, and schema therapy. That gives the agent a durable place to save
-              values, beliefs, modes, patterns, and trigger reports instead of leaving psychologically
-              important material buried in chat.
-            </p>
-            <p class="lede">
-              Forge is meant to complement OpenClaw's open-ended natural-language memory, not replace
-              it. Unstructured memory is strong for nuance, context, and flexible expression. Forge adds
-              the explicit operational and psychological layer alongside that, so work and reflection
-              can stay structured, revisitable, and actionable over time.
-            </p>
-            <div class="hero-actions">
-              <a class="button primary" href="#getting-started">Get Started</a>
-              <a class="button secondary" href="https://github.com/albertbuchard/forge">View Source</a>
+<body>
+  <div class="page-shell">
+    <div class="ambient ambient-a"></div>
+    <div class="ambient ambient-b"></div>
+    <div class="ambient-grid"></div>
+
+    <header class="topbar">
+      <a class="brand" href="https://github.com/albertbuchard/forge">
+        <span class="brand-mark">F</span>
+        <span class="brand-copy">
+          <strong>Forge</strong>
+          <span>OpenClaw plugin</span>
+        </span>
+      </a>
+      <nav class="topnav">
+        <a href="#what-is-forge">What It Is</a>
+        <a href="#getting-started">Getting Started</a>
+        <a href="#records">Records</a>
+        <a href="#examples">Examples</a>
+        <a href="#commands">Commands</a>
+        <a href="#faq">FAQ</a>
+      </nav>
+      <a class="button ghost" href="https://www.npmjs.com/package/forge-openclaw-plugin">npm</a>
+    </header>
+
+    <main class="page">
+      <section class="hero">
+        <div class="hero-copy">
+          <p class="eyebrow">Forge For OpenClaw</p>
+          <h1>An OpenClaw plugin for project management and mental health tracking.</h1>
+          <p class="lede">
+            Forge gives your OpenClaw agent structured memory and tools for project management and
+            mental-health tracking. It can track your life goals, break them into projects, manage tasks using
+            a Kanban board, and track live work sessions with a gamified XP system to reward progress and consistency.
+          </p>
+          <p class="lede">
+            The mental health module, Psyche, is explicitly influenced by
+            third-wave CBT, ACT, and schema therapy. That gives the agent a durable place to save
+            values, beliefs, modes, patterns, and trigger reports instead of leaving psychologically
+            important material buried in chat.
+          </p>
+          <p class="lede">
+            Forge is meant to complement OpenClaw's open-ended natural-language memory, not replace
+            it. Open-ended memory is strong for rich context, nuance, and flexible expression.
+            Forge adds a more explicit operational layer alongside that, so agents can persist,
+            inspect, update, and act on structured units of work and psychologically relevant state over time.
+          </p>
+          <div class="hero-actions">
+            <a class="button primary" href="#getting-started">Get Started</a>
+            <a class="button secondary" href="https://github.com/albertbuchard/forge">View Source</a>
+          </div>
+          <ul class="hero-list">
+            <li>Turn a goal into projects and tasks.</li>
+            <li>Run tasks on a real Kanban board.</li>
+            <li>Start, stop, and complete live work sessions.</li>
+            <li>Save notes, insights, XP, and Psyche records in the same place.</li>
+          </ul>
+          <div class="stat-row">
+            <div class="stat-pill">
+              <span class="stat-label">Plugin Id</span>
+              <strong>forge-openclaw-plugin</strong>
             </div>
-            <ul class="hero-list">
-              <li>Turn a goal into projects and tasks.</li>
-              <li>Run tasks on a real Kanban board.</li>
-              <li>Start, stop, and complete live work sessions.</li>
-              <li>Save notes, insights, XP, and Psyche records in the same place.</li>
-            </ul>
-            <div class="stat-row">
-              <div class="stat-pill">
-                <span class="stat-label">Plugin Id</span>
-                <strong>forge-openclaw-plugin</strong>
-              </div>
-              <div class="stat-pill">
-                <span class="stat-label">Default Local Port</span>
-                <strong>4317</strong>
-              </div>
-              <div class="stat-pill">
-                <span class="stat-label">Managed Commands</span>
-                <strong>start, stop, restart, status</strong>
-              </div>
+            <div class="stat-pill">
+              <span class="stat-label">Default Local Port</span>
+              <strong>4317</strong>
+            </div>
+            <div class="stat-pill">
+              <span class="stat-label">Managed Commands</span>
+              <strong>start, stop, restart, status</strong>
             </div>
           </div>
+        </div>
 
-          <div class="hero-visual">
-            <div class="preview-frame">
-              <div class="preview-topbar">
-                <span></span>
-                <span></span>
-                <span></span>
-              </div>
-              <img
-                src="./assets/forge-overview-dashboard.png"
-                alt="Forge overview dashboard showing goals, streak, XP, and milestone progress"
-              />
+        <div class="hero-visual">
+          <div class="preview-frame">
+            <div class="preview-topbar">
+              <span></span>
+              <span></span>
+              <span></span>
             </div>
+            <img src="./assets/forge-overview-dashboard.png"
+              alt="Forge overview dashboard showing goals, streak, XP, and milestone progress" />
           </div>
-        </section>
+        </div>
+      </section>
 
-        <section class="section interaction-section">
-          <div class="section-heading">
-            <p class="eyebrow">Real Agent Interactions</p>
-            <h2>These are the kinds of things your agent can save in Forge.</h2>
-            <p class="section-copy">
-              The screenshots below show two different kinds of work: task execution on the Forge side,
-              and value-based Psyche tracking on the mental-health and reflection side.
+      <section class="section interaction-section">
+        <div class="section-heading">
+          <p class="eyebrow">Real Agent Interactions</p>
+          <h2>These are the kinds of things your agent can save in Forge.</h2>
+          <p class="section-copy">
+            The screenshots below show two different kinds of work: task execution on the Forge side,
+            and value-based Psyche tracking on the mental-health and reflection side.
+          </p>
+        </div>
+        <div class="interaction-grid">
+          <figure class="shot interaction-shot">
+            <img src="./assets/forge-agent-task-example.png"
+              alt="Agent interaction that creates a Forge task and starts a 15 minute work block" />
+            <figcaption>
+              Example: the agent creates a task in Forge and starts a real 15-minute work block on it.
+            </figcaption>
+          </figure>
+          <figure class="shot interaction-shot">
+            <img src="./assets/forge-agent-psyche-example.png"
+              alt="Agent interaction that saves a psyche value and a committed action in Forge" />
+            <figcaption>
+              Example: the agent saves a value and a committed action in the Psyche module instead of
+              leaving it buried in chat.
+            </figcaption>
+          </figure>
+        </div>
+      </section>
+
+      <section class="section intro-section" id="what-is-forge">
+        <div class="section-heading">
+          <p class="eyebrow">What Forge Is</p>
+          <h2>Forge adds an explicit operational layer next to OpenClaw's unstructured memory.</h2>
+          <p class="section-copy">
+            Open-ended memory is good at nuance and conversation. Forge complements it with a clearer
+            layer for goals, projects, tasks, work sessions, notes, and psychologically relevant state
+            that should remain inspectable and editable over time. That includes a Psyche module
+            explicitly shaped by third-wave CBT, ACT, and schema-therapy ideas.
+          </p>
+        </div>
+        <div class="intro-grid">
+          <article class="card">
+            <h3>Create goals, projects, and tasks</h3>
+            <p>
+              Your agent can turn vague intentions into a clear structure: a goal, the projects under
+              it, and the tasks that need to happen next.
             </p>
-          </div>
-          <div class="interaction-grid">
-            <figure class="shot interaction-shot">
-              <img
-                src="./assets/forge-agent-task-example.png"
-                alt="Agent interaction that creates a Forge task and starts a 15 minute work block"
-              />
-              <figcaption>
-                Example: the agent creates a task in Forge and starts a real 15-minute work block on it.
-              </figcaption>
-            </figure>
-            <figure class="shot interaction-shot">
-              <img
-                src="./assets/forge-agent-psyche-example.png"
-                alt="Agent interaction that saves a psyche value and a committed action in Forge"
-              />
-              <figcaption>
-                Example: the agent saves a value and a committed action in the Psyche module instead of
-                leaving it buried in chat.
-              </figcaption>
-            </figure>
-          </div>
-        </section>
-
-        <section class="section intro-section" id="what-is-forge">
-          <div class="section-heading">
-            <p class="eyebrow">What Forge Is</p>
-            <h2>Forge adds an explicit operational layer next to OpenClaw's unstructured memory.</h2>
-            <p class="section-copy">
-              Open-ended memory is good at nuance and conversation. Forge complements it with a clearer
-              layer for goals, projects, tasks, work sessions, notes, and psychologically relevant state
-              that should remain inspectable and editable over time. That includes a Psyche module
-              explicitly shaped by third-wave CBT, ACT, and schema-therapy ideas.
+          </article>
+          <article class="card">
+            <h3>Run the Kanban board</h3>
+            <p>
+              Forge is not just storage. It has a real board with columns like backlog, focus, in
+              progress, blocked, and done, so the work can actually move.
             </p>
-          </div>
-          <div class="intro-grid">
-            <article class="card">
-              <h3>Create goals, projects, and tasks</h3>
-              <p>
-                Your agent can turn vague intentions into a clear structure: a goal, the projects under
-                it, and the tasks that need to happen next.
-              </p>
-            </article>
-            <article class="card">
-              <h3>Run the Kanban board</h3>
-              <p>
-                Forge is not just storage. It has a real board with columns like backlog, focus, in
-                progress, blocked, and done, so the work can actually move.
-              </p>
-            </article>
-            <article class="card">
-              <h3>Track live work and XP</h3>
-              <p>
-                Work sessions are real timed runs. Your agent can start them, focus them, complete them,
-                and Forge keeps the XP and review trail attached to what really happened.
-              </p>
-            </article>
-            <article class="card">
-              <h3>Keep notes and Psyche records together</h3>
-              <p>
-                Notes, insights, values, beliefs, patterns, and trigger reports all stay linked to the
-                work instead of getting lost in separate documents and chats.
-              </p>
-            </article>
-          </div>
-        </section>
-
-        <section class="section getting-started" id="getting-started">
-          <div class="section-heading">
-            <p class="eyebrow">Getting Started</p>
-            <h2>Use this install flow.</h2>
-            <p class="section-copy">
-              This is the reliable local setup. The important part is that <code>enable</code> is not
-              enough on its own. After enabling the plugin, make sure it is in the allow list, then
-              restart OpenClaw and verify that Forge really started.
+          </article>
+          <article class="card">
+            <h3>Track live work and XP</h3>
+            <p>
+              Work sessions are real timed runs. Your agent can start them, focus them, complete them,
+              and Forge keeps the XP and review trail attached to what really happened.
             </p>
-          </div>
+          </article>
+          <article class="card">
+            <h3>Keep notes and Psyche records together</h3>
+            <p>
+              Notes, insights, values, beliefs, patterns, and trigger reports all stay linked to the
+              work instead of getting lost in separate documents and chats.
+            </p>
+          </article>
+        </div>
+      </section>
 
-          <div class="install-card">
-            <div class="install-head">
-              <span class="terminal-dot red"></span>
-              <span class="terminal-dot amber"></span>
-              <span class="terminal-dot green"></span>
-              <span>Install Forge on a local OpenClaw machine</span>
-            </div>
-            <div class="command-shell">
-              <button class="copy-button" type="button" data-copy-target="install-flow">Copy</button>
-              <pre><code id="install-flow">openclaw plugins install forge-openclaw-plugin
+      <section class="section getting-started" id="getting-started">
+        <div class="section-heading">
+          <p class="eyebrow">Getting Started</p>
+          <h2>Use this install flow.</h2>
+          <p class="section-copy">
+            This is the reliable local setup. The important part is that <code>enable</code> is not
+            enough on its own. After enabling the plugin, make sure it is in the allow list, then
+            restart OpenClaw and verify that Forge really started.
+          </p>
+        </div>
+
+        <div class="install-card">
+          <div class="install-head">
+            <span class="terminal-dot red"></span>
+            <span class="terminal-dot amber"></span>
+            <span class="terminal-dot green"></span>
+            <span>Install Forge on a local OpenClaw machine</span>
+          </div>
+          <div class="command-shell">
+            <button class="copy-button" type="button" data-copy-target="install-flow">Copy</button>
+            <pre><code id="install-flow">openclaw plugins install forge-openclaw-plugin
 openclaw plugins enable forge-openclaw-plugin
 node -e 'const fs=require("fs"); const p=process.env.HOME+"/.openclaw/openclaw.json"; const j=JSON.parse(fs.readFileSync(p,"utf8")); j.plugins ??= {}; j.plugins.allow = Array.from(new Set([...(j.plugins.allow || []), "forge-openclaw-plugin"])); fs.writeFileSync(p, JSON.stringify(j, null, 2)+"\n");'
 openclaw gateway restart
 openclaw forge health
 openclaw forge status</code></pre>
-            </div>
           </div>
+        </div>
 
-          <div class="step-grid install-step-grid">
-            <article class="card step-card">
-              <span class="step-number">1</span>
-              <h3>Install the plugin</h3>
-              <p>Install the published package, then enable it in OpenClaw.</p>
-            </article>
-            <article class="card step-card">
-              <span class="step-number">2</span>
-              <h3>Repair the allow list</h3>
-              <p>
-                Some OpenClaw builds leave the plugin enabled but not allowed. The Node command above
-                appends <code>forge-openclaw-plugin</code> without breaking the rest of your allow list.
-              </p>
-            </article>
-            <article class="card step-card">
-              <span class="step-number">3</span>
-              <h3>Restart OpenClaw</h3>
-              <p>Restart the gateway so the plugin entrypoint and the local Forge runtime load for real.</p>
-            </article>
-            <article class="card step-card">
-              <span class="step-number">4</span>
-              <h3>Verify the runtime</h3>
-              <p>
-                <code>openclaw forge health</code> checks the server. <code>openclaw forge status</code>
-                tells you whether Forge is running, healthy, and managed by the plugin.
-              </p>
-            </article>
-          </div>
-
-          <div class="info-grid install-info-grid">
-            <article class="card info-card">
-              <h3>Open the UI</h3>
-              <p>
-                Ask your OpenClaw agent to open Forge or give you the local address. The normal local UI
-                address is usually <code>http://127.0.0.1:4317/forge/</code>.
-              </p>
-              <p>
-                If <code>4317</code> is already taken, Forge can move to the next free local port and
-                remember that choice for future runs.
-              </p>
-            </article>
-            <article class="card info-card">
-              <h3>Where the data lives</h3>
-              <p>
-                On a normal install, Forge usually stores its SQLite data under
-                <code>~/.openclaw/extensions/forge-openclaw-plugin/data/forge.sqlite</code>.
-              </p>
-              <p>
-                If you want the data somewhere else, set <code>dataRoot</code> in the plugin config and
-                restart the gateway.
-              </p>
-            </article>
-            <article class="card info-card">
-              <h3>If startup fails</h3>
-              <p>
-                Check the runtime log at
-                <code>~/.openclaw/logs/forge-openclaw-plugin/&lt;host&gt;-&lt;port&gt;.log</code>.
-              </p>
-              <p>
-                That log captures the Forge child process output, which is the fastest way to see port
-                errors, missing dependencies, or runtime crashes.
-              </p>
-            </article>
-          </div>
-        </section>
-
-        <section class="section gallery">
-          <div class="section-heading">
-            <p class="eyebrow">What It Looks Like</p>
-            <h2>The product has both an execution side and a reflection side.</h2>
-          </div>
-          <div class="gallery-grid">
-            <figure class="shot shot-large">
-              <img
-                src="./assets/forge-overview-dashboard.png"
-                alt="Forge overview dashboard showing goals, streak, XP, and milestone progress"
-              />
-              <figcaption>Overview keeps active work, progress, rewards, and direction in one place.</figcaption>
-            </figure>
-            <figure class="shot">
-              <img
-                src="./assets/forge-psyche-graph.png"
-                alt="Forge Psyche graph showing goals, values, beliefs, and linked projects"
-              />
-              <figcaption>Psyche records stay connected to the rest of the system instead of living in a separate notebook.</figcaption>
-            </figure>
-          </div>
-        </section>
-
-        <section class="section records-section" id="records">
-          <div class="section-heading">
-            <p class="eyebrow">What The Agent Can Save</p>
-            <h2>Forge gives the agent a small set of clear record types.</h2>
-            <p class="section-copy">
-              The names stay literal. A goal is a goal. A project is a project. A task is a task. That
-              keeps the product easy to understand and makes the agent’s actions easy to check afterward.
+        <div class="step-grid install-step-grid">
+          <article class="card step-card">
+            <span class="step-number">1</span>
+            <h3>Install the plugin</h3>
+            <p>Install the published package, then enable it in OpenClaw.</p>
+          </article>
+          <article class="card step-card">
+            <span class="step-number">2</span>
+            <h3>Repair the allow list</h3>
+            <p>
+              Some OpenClaw builds leave the plugin enabled but not allowed. The Node command above
+              appends <code>forge-openclaw-plugin</code> without breaking the rest of your allow list.
             </p>
-          </div>
-          <div class="record-grid">
-            <article class="card record-card">
-              <strong>Goals</strong>
-              <p>Long-term directions you care about, such as health, family, money, or creative work.</p>
-            </article>
-            <article class="card record-card">
-              <strong>Projects</strong>
-              <p>Concrete bodies of work that move one goal forward.</p>
-            </article>
-            <article class="card record-card">
-              <strong>Tasks</strong>
-              <p>Specific actions inside projects that can be scheduled, moved, started, and completed.</p>
-            </article>
-            <article class="card record-card">
-              <strong>Task Runs</strong>
-              <p>Real work sessions with real time, focus state, and completion history.</p>
-            </article>
-            <article class="card record-card">
-              <strong>Notes</strong>
-              <p>Markdown notes that can attach to one or many records as evidence, handoff, or context.</p>
-            </article>
-            <article class="card record-card">
-              <strong>Insights</strong>
-              <p>Saved observations or recommendations from you or a trusted agent.</p>
-            </article>
-            <article class="card record-card">
-              <strong>Values</strong>
-              <p>Important directions or principles you want your actions to reflect.</p>
-            </article>
-            <article class="card record-card">
-              <strong>Beliefs</strong>
-              <p>Explicit belief sentences that shape behavior, for better or worse.</p>
-            </article>
-            <article class="card record-card">
-              <strong>Patterns</strong>
-              <p>Repeating loops with triggers, actions, short-term payoff, and long-term cost.</p>
-            </article>
-            <article class="card record-card">
-              <strong>Trigger Reports</strong>
-              <p>Structured records of emotionally important episodes, including what happened and what followed.</p>
-            </article>
-          </div>
-        </section>
-
-        <section class="section psyche-section">
-          <div class="section-heading">
-            <p class="eyebrow">Why Psyche Matters</p>
-            <h2>Psyche complements unstructured memory with explicit mental-health and reflection records.</h2>
-            <p class="section-copy">
-              The Psyche side of Forge is explicitly influenced by third-wave CBT, ACT, and schema
-              therapy. In plain language, that means it helps you and your agent save values, beliefs,
-              modes, patterns, and trigger reports in a way that is structured enough to stay useful
-              over time.
+          </article>
+          <article class="card step-card">
+            <span class="step-number">3</span>
+            <h3>Restart OpenClaw</h3>
+            <p>Restart the gateway so the plugin entrypoint and the local Forge runtime load for real.</p>
+          </article>
+          <article class="card step-card">
+            <span class="step-number">4</span>
+            <h3>Verify the runtime</h3>
+            <p>
+              <code>openclaw forge health</code> checks the server. <code>openclaw forge status</code>
+              tells you whether Forge is running, healthy, and managed by the plugin.
             </p>
-          </div>
-          <div class="psyche-grid">
-            <article class="card psyche-card">
-              <h3>Complements open-ended memory</h3>
-              <p>
-                Open-ended conversation is good at nuance and flexible expression. Forge adds a clearer
-                store for things like recurring beliefs, behavior patterns, values, and trigger reports
-                when those should stay stable and reviewable over time.
-              </p>
-            </article>
-            <article class="card psyche-card">
-              <h3>Grounded in life and work</h3>
-              <p>
-                Psyche records are not meant to float separately from the rest of the product. They can
-                stay linked to goals, projects, tasks, notes, and reports so reflection stays connected
-                to what is happening in your life and work.
-              </p>
-            </article>
-            <article class="card psyche-card">
-              <h3>Built for modern therapeutic thinking</h3>
-              <p>
-                Forge does not pretend to replace therapy. What it does do is give you a clean place to
-                save the kind of structured material that shows up in CBT, ACT, and schema work: values,
-                thoughts, beliefs, coping modes, patterns, and trigger episodes.
-              </p>
-            </article>
-          </div>
-        </section>
+          </article>
+        </div>
 
-        <section class="section examples-section" id="examples">
-          <div class="section-heading">
-            <p class="eyebrow">Real Examples</p>
-            <h2>What it looks like when your agent actually uses Forge.</h2>
-            <p class="section-copy">
-              These are normal, concrete things you can ask for. The value is that the agent does not
-              just answer you in chat. It can save the result in a workspace that you can open and keep using.
+        <div class="info-grid install-info-grid">
+          <article class="card info-card">
+            <h3>Open the UI</h3>
+            <p>
+              Ask your OpenClaw agent to open Forge or give you the local address. The normal local UI
+              address is usually <code>http://127.0.0.1:4317/forge/</code>.
             </p>
-          </div>
+            <p>
+              If <code>4317</code> is already taken, Forge can move to the next free local port and
+              remember that choice for future runs.
+            </p>
+          </article>
+          <article class="card info-card">
+            <h3>Where the data lives</h3>
+            <p>
+              On a normal install, Forge usually stores its SQLite data under
+              <code>~/.openclaw/extensions/forge-openclaw-plugin/data/forge.sqlite</code>.
+            </p>
+            <p>
+              If you want the data somewhere else, set <code>dataRoot</code> in the plugin config and
+              restart the gateway.
+            </p>
+          </article>
+          <article class="card info-card">
+            <h3>If startup fails</h3>
+            <p>
+              Check the runtime log at
+              <code>~/.openclaw/logs/forge-openclaw-plugin/&lt;host&gt;-&lt;port&gt;.log</code>.
+            </p>
+            <p>
+              That log captures the Forge child process output, which is the fastest way to see port
+              errors, missing dependencies, or runtime crashes.
+            </p>
+          </article>
+        </div>
+      </section>
 
-          <div class="example-grid">
-            <article class="card example-card">
-              <span class="example-kicker">Goal planning</span>
-              <h3>“Turn this big goal into a real plan.”</h3>
-              <p>
-                You tell the agent: <code>I want to get in shape and stop improvising my health.</code>
-                It can create a goal like <code>Build a stable, healthy body</code>, add a project like
-                <code>Spring training block</code>, and create the first tasks under it.
-              </p>
-              <p>
-                When you open Forge later, the goal, project, and tasks are already connected.
-              </p>
-            </article>
+      <section class="section gallery">
+        <div class="section-heading">
+          <p class="eyebrow">What It Looks Like</p>
+          <h2>The product has both an execution side and a reflection side.</h2>
+        </div>
+        <div class="gallery-grid">
+          <figure class="shot shot-large">
+            <img src="./assets/forge-overview-dashboard.png"
+              alt="Forge overview dashboard showing goals, streak, XP, and milestone progress" />
+            <figcaption>Overview keeps active work, progress, rewards, and direction in one place.</figcaption>
+          </figure>
+          <figure class="shot">
+            <img src="./assets/forge-psyche-graph.png"
+              alt="Forge Psyche graph showing goals, values, beliefs, and linked projects" />
+            <figcaption>Psyche records stay connected to the rest of the system instead of living in a separate
+              notebook.</figcaption>
+          </figure>
+        </div>
+      </section>
 
-            <article class="card example-card">
-              <span class="example-kicker">Kanban tasks</span>
-              <h3>“Show me what is blocked and move the important task to focus.”</h3>
-              <p>
-                Forge tasks live on a real board with columns like backlog, focus, in progress, blocked,
-                and done. Your agent can help you inspect that state and update tasks like
-                <code>Write plugin install guide</code> so the board reflects the actual work.
-              </p>
-              <p>
-                The Kanban board is one of the main reasons Forge exists, so it should be named directly
-                and shown early, not buried behind abstract product talk.
-              </p>
-            </article>
+      <section class="section records-section" id="records">
+        <div class="section-heading">
+          <p class="eyebrow">What The Agent Can Save</p>
+          <h2>Forge gives the agent a small set of clear record types.</h2>
+          <p class="section-copy">
+            The names stay literal. A goal is a goal. A project is a project. A task is a task. That
+            keeps the product easy to understand and makes the agent’s actions easy to check afterward.
+          </p>
+        </div>
+        <div class="record-grid">
+          <article class="card record-card">
+            <strong>Goals</strong>
+            <p>Long-term directions you care about, such as health, family, money, or creative work.</p>
+          </article>
+          <article class="card record-card">
+            <strong>Projects</strong>
+            <p>Concrete bodies of work that move one goal forward.</p>
+          </article>
+          <article class="card record-card">
+            <strong>Tasks</strong>
+            <p>Specific actions inside projects that can be scheduled, moved, started, and completed.</p>
+          </article>
+          <article class="card record-card">
+            <strong>Task Runs</strong>
+            <p>Real work sessions with real time, focus state, and completion history.</p>
+          </article>
+          <article class="card record-card">
+            <strong>Notes</strong>
+            <p>Markdown notes that can attach to one or many records as evidence, handoff, or context.</p>
+          </article>
+          <article class="card record-card">
+            <strong>Insights</strong>
+            <p>Saved observations or recommendations from you or a trusted agent.</p>
+          </article>
+          <article class="card record-card">
+            <strong>Values</strong>
+            <p>Important directions or principles you want your actions to reflect.</p>
+          </article>
+          <article class="card record-card">
+            <strong>Beliefs</strong>
+            <p>Explicit belief sentences that shape behavior, for better or worse.</p>
+          </article>
+          <article class="card record-card">
+            <strong>Patterns</strong>
+            <p>Repeating loops with triggers, actions, short-term payoff, and long-term cost.</p>
+          </article>
+          <article class="card record-card">
+            <strong>Trigger Reports</strong>
+            <p>Structured records of emotionally important episodes, including what happened and what followed.</p>
+          </article>
+        </div>
+      </section>
 
-            <article class="card example-card">
-              <span class="example-kicker">Live work</span>
-              <h3>“Start work on this task now.”</h3>
-              <p>
-                You tell the agent to start work on <code>Refactor Forge install docs</code>. Forge starts
-                a real task run, records the session, and keeps it visible as your current work until you
-                release or complete it.
-              </p>
-              <p>
-                This is not just changing a task status. It is recording an actual work session.
-              </p>
-            </article>
+      <section class="section psyche-section">
+        <div class="section-heading">
+          <p class="eyebrow">Why Psyche Matters</p>
+          <h2>Psyche complements unstructured memory with explicit mental-health and reflection records.</h2>
+          <p class="section-copy">
+            The Psyche side of Forge is explicitly influenced by third-wave CBT, ACT, and schema
+            therapy. In plain language, that means it helps you and your agent save values, beliefs,
+            modes, patterns, and trigger reports in a way that is structured enough to stay useful
+            over time.
+          </p>
+        </div>
+        <div class="psyche-grid">
+          <article class="card psyche-card">
+            <h3>Complements open-ended memory</h3>
+            <p>
+              Open-ended conversation is good at nuance and flexible expression. Forge adds a clearer
+              store for things like recurring beliefs, behavior patterns, values, and trigger reports
+              when those should stay stable and reviewable over time.
+            </p>
+          </article>
+          <article class="card psyche-card">
+            <h3>Grounded in life and work</h3>
+            <p>
+              Psyche records are not meant to float separately from the rest of the product. They can
+              stay linked to goals, projects, tasks, notes, and reports so reflection stays connected
+              to what is happening in your life and work.
+            </p>
+          </article>
+          <article class="card psyche-card">
+            <h3>Built for modern therapeutic thinking</h3>
+            <p>
+              Forge does not pretend to replace therapy. What it does do is give you a clean place to
+              save the kind of structured material that shows up in CBT, ACT, and schema work: values,
+              thoughts, beliefs, coping modes, patterns, and trigger episodes.
+            </p>
+          </article>
+        </div>
+      </section>
 
-            <article class="card example-card">
-              <span class="example-kicker">XP and review</span>
-              <h3>“What did I actually get done this week?”</h3>
-              <p>
-                Forge tracks the work sessions and completions, then shows the XP and review trail. That
-                lets your agent answer with more than vibes. It can point to actual work that happened.
-              </p>
-            </article>
+      <section class="section examples-section" id="examples">
+        <div class="section-heading">
+          <p class="eyebrow">Real Examples</p>
+          <h2>What it looks like when your agent actually uses Forge.</h2>
+          <p class="section-copy">
+            These are normal, concrete things you can ask for. The value is that the agent does not
+            just answer you in chat. It can save the result in a workspace that you can open and keep using.
+          </p>
+        </div>
 
-            <article class="card example-card">
-              <span class="example-kicker">Notes</span>
-              <h3>“Save this as context on the task.”</h3>
-              <p>
-                After finishing <code>Write plugin install guide</code>, your agent can save a note with
-                what changed, what still feels risky, and which commands were tested. That note stays
-                linked to the task, project, or goal instead of disappearing in chat history.
-              </p>
-            </article>
+        <div class="example-grid">
+          <article class="card example-card">
+            <span class="example-kicker">Goal planning</span>
+            <h3>“Turn this big goal into a real plan.”</h3>
+            <p>
+              You tell the agent: <code>I want to get in shape and stop improvising my health.</code>
+              It can create a goal like <code>Build a stable, healthy body</code>, add a project like
+              <code>Spring training block</code>, and create the first tasks under it.
+            </p>
+            <p>
+              When you open Forge later, the goal, project, and tasks are already connected.
+            </p>
+          </article>
 
-            <article class="card example-card">
-              <span class="example-kicker">Psyche</span>
-              <h3>“Save this pattern because it keeps happening.”</h3>
-              <p>
-                You notice a repeating loop: when release steps feel messy, you delay them, then feel
-                shame, then avoid the task even more. Forge lets your agent save that as a pattern, link
-                it to a belief, and attach a trigger report when a real episode happens.
-              </p>
-              <p>
-                That way the reflection side of Forge is still tied to the real work side.
-              </p>
-            </article>
-          </div>
-        </section>
+          <article class="card example-card">
+            <span class="example-kicker">Kanban tasks</span>
+            <h3>“Show me what is blocked and move the important task to focus.”</h3>
+            <p>
+              Forge tasks live on a real board with columns like backlog, focus, in progress, blocked,
+              and done. Your agent can help you inspect that state and update tasks like
+              <code>Write plugin install guide</code> so the board reflects the actual work.
+            </p>
+            <p>
+              The Kanban board is one of the main reasons Forge exists, so it should be named directly
+              and shown early, not buried behind abstract product talk.
+            </p>
+          </article>
 
-        <section class="section commands-section" id="commands">
-          <div class="section-heading">
-            <p class="eyebrow">Commands</p>
-            <h2>These are the commands a normal user actually needs.</h2>
-          </div>
-          <div class="command-grid">
-            <article class="card">
-              <h3>Check whether Forge is up</h3>
-              <div class="command-shell compact">
-                <button class="copy-button" type="button" data-copy-target="cmd-health">Copy</button>
-                <pre><code id="cmd-health">openclaw forge health
+          <article class="card example-card">
+            <span class="example-kicker">Live work</span>
+            <h3>“Start work on this task now.”</h3>
+            <p>
+              You tell the agent to start work on <code>Refactor Forge install docs</code>. Forge starts
+              a real task run, records the session, and keeps it visible as your current work until you
+              release or complete it.
+            </p>
+            <p>
+              This is not just changing a task status. It is recording an actual work session.
+            </p>
+          </article>
+
+          <article class="card example-card">
+            <span class="example-kicker">XP and review</span>
+            <h3>“What did I actually get done this week?”</h3>
+            <p>
+              Forge tracks the work sessions and completions, then shows the XP and review trail. That
+              lets your agent answer with more than vibes. It can point to actual work that happened.
+            </p>
+          </article>
+
+          <article class="card example-card">
+            <span class="example-kicker">Notes</span>
+            <h3>“Save this as context on the task.”</h3>
+            <p>
+              After finishing <code>Write plugin install guide</code>, your agent can save a note with
+              what changed, what still feels risky, and which commands were tested. That note stays
+              linked to the task, project, or goal instead of disappearing in chat history.
+            </p>
+          </article>
+
+          <article class="card example-card">
+            <span class="example-kicker">Psyche</span>
+            <h3>“Save this pattern because it keeps happening.”</h3>
+            <p>
+              You notice a repeating loop: when release steps feel messy, you delay them, then feel
+              shame, then avoid the task even more. Forge lets your agent save that as a pattern, link
+              it to a belief, and attach a trigger report when a real episode happens.
+            </p>
+            <p>
+              That way the reflection side of Forge is still tied to the real work side.
+            </p>
+          </article>
+        </div>
+      </section>
+
+      <section class="section commands-section" id="commands">
+        <div class="section-heading">
+          <p class="eyebrow">Commands</p>
+          <h2>These are the commands a normal user actually needs.</h2>
+        </div>
+        <div class="command-grid">
+          <article class="card">
+            <h3>Check whether Forge is up</h3>
+            <div class="command-shell compact">
+              <button class="copy-button" type="button" data-copy-target="cmd-health">Copy</button>
+              <pre><code id="cmd-health">openclaw forge health
 openclaw forge status</code></pre>
-              </div>
-            </article>
-            <article class="card">
-              <h3>Manage the local runtime</h3>
-              <div class="command-shell compact">
-                <button class="copy-button" type="button" data-copy-target="cmd-runtime">Copy</button>
-                <pre><code id="cmd-runtime">openclaw forge start
+            </div>
+          </article>
+          <article class="card">
+            <h3>Manage the local runtime</h3>
+            <div class="command-shell compact">
+              <button class="copy-button" type="button" data-copy-target="cmd-runtime">Copy</button>
+              <pre><code id="cmd-runtime">openclaw forge start
 openclaw forge stop
 openclaw forge restart
 openclaw forge status</code></pre>
-              </div>
-            </article>
-            <article class="card">
-              <h3>Check the allow list</h3>
-              <div class="command-shell compact">
-                <button class="copy-button" type="button" data-copy-target="cmd-allow">Copy</button>
-                <pre><code id="cmd-allow">openclaw config get plugins.allow --json</code></pre>
-              </div>
-            </article>
-            <article class="card">
-              <h3>Read the runtime log</h3>
-              <div class="command-shell compact">
-                <button class="copy-button" type="button" data-copy-target="cmd-log">Copy</button>
-                <pre><code id="cmd-log">tail -n 120 ~/.openclaw/logs/forge-openclaw-plugin/&lt;host&gt;-&lt;port&gt;.log</code></pre>
-              </div>
-            </article>
-          </div>
-        </section>
-
-        <section class="section faq-section" id="faq">
-          <div class="section-heading">
-            <p class="eyebrow">FAQ</p>
-            <h2>Common problems, after the main setup is already clear.</h2>
-          </div>
-          <div class="faq-list">
-            <article class="card faq-card">
-              <h3>Forge installed, but nothing starts</h3>
-              <p>
-                The most common cause is that the plugin was installed and enabled, but not added to
-                <code>plugins.allow</code>. Run the full install flow above, especially the allow-list
-                repair command, then restart the gateway.
-              </p>
-            </article>
-            <article class="card faq-card">
-              <h3>Why is Forge not on port 4317?</h3>
-              <p>
-                If something else already uses <code>4317</code>, Forge can move to the next free local
-                port. Use <code>openclaw forge status</code> to see the actual base URL it chose.
-              </p>
-            </article>
-            <article class="card faq-card">
-              <h3>Can I store the data somewhere else?</h3>
-              <p>
-                Yes. Set <code>dataRoot</code> in the Forge plugin config, restart the gateway, and Forge
-                will use that folder instead of its default runtime path.
-              </p>
-            </article>
-            <article class="card faq-card">
-              <h3>Where do I go if the runtime crashes?</h3>
-              <p>
-                Read the runtime log at
-                <code>~/.openclaw/logs/forge-openclaw-plugin/&lt;host&gt;-&lt;port&gt;.log</code>. It captures
-                the child process output from the actual Forge server.
-              </p>
-            </article>
-          </div>
-        </section>
-
-        <section class="section publish-section">
-          <div class="publish-panel">
-            <div class="publish-copy">
-              <p class="eyebrow">Source</p>
-              <h2>Forge is published as an npm plugin with a public GitHub repository.</h2>
-              <p>
-                If you want the package, use npm. If you want the source, docs, screenshots, or local
-                development path, use the repository.
-              </p>
             </div>
-            <div class="publish-links">
-              <a class="link-card" href="https://www.npmjs.com/package/forge-openclaw-plugin">
-                <strong>npm package</strong>
-                <span>forge-openclaw-plugin</span>
-              </a>
-              <a class="link-card" href="https://github.com/albertbuchard/forge">
-                <strong>GitHub repository</strong>
-                <span>albertbuchard/forge</span>
-              </a>
-              <a class="link-card" href="https://github.com/albertbuchard/forge/tree/main/openclaw-plugin">
-                <strong>Package source</strong>
-                <span>openclaw-plugin/</span>
-              </a>
+          </article>
+          <article class="card">
+            <h3>Check the allow list</h3>
+            <div class="command-shell compact">
+              <button class="copy-button" type="button" data-copy-target="cmd-allow">Copy</button>
+              <pre><code id="cmd-allow">openclaw config get plugins.allow --json</code></pre>
             </div>
+          </article>
+          <article class="card">
+            <h3>Read the runtime log</h3>
+            <div class="command-shell compact">
+              <button class="copy-button" type="button" data-copy-target="cmd-log">Copy</button>
+              <pre><code id="cmd-log">tail -n 120 ~/.openclaw/logs/forge-openclaw-plugin/&lt;host&gt;-&lt;port&gt;.log</code></pre>
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <section class="section faq-section" id="faq">
+        <div class="section-heading">
+          <p class="eyebrow">FAQ</p>
+          <h2>Common problems, after the main setup is already clear.</h2>
+        </div>
+        <div class="faq-list">
+          <article class="card faq-card">
+            <h3>Forge installed, but nothing starts</h3>
+            <p>
+              The most common cause is that the plugin was installed and enabled, but not added to
+              <code>plugins.allow</code>. Run the full install flow above, especially the allow-list
+              repair command, then restart the gateway.
+            </p>
+          </article>
+          <article class="card faq-card">
+            <h3>Why is Forge not on port 4317?</h3>
+            <p>
+              If something else already uses <code>4317</code>, Forge can move to the next free local
+              port. Use <code>openclaw forge status</code> to see the actual base URL it chose.
+            </p>
+          </article>
+          <article class="card faq-card">
+            <h3>Can I store the data somewhere else?</h3>
+            <p>
+              Yes. Set <code>dataRoot</code> in the Forge plugin config, restart the gateway, and Forge
+              will use that folder instead of its default runtime path.
+            </p>
+          </article>
+          <article class="card faq-card">
+            <h3>Where do I go if the runtime crashes?</h3>
+            <p>
+              Read the runtime log at
+              <code>~/.openclaw/logs/forge-openclaw-plugin/&lt;host&gt;-&lt;port&gt;.log</code>. It captures
+              the child process output from the actual Forge server.
+            </p>
+          </article>
+        </div>
+      </section>
+
+      <section class="section publish-section">
+        <div class="publish-panel">
+          <div class="publish-copy">
+            <p class="eyebrow">Source</p>
+            <h2>Forge is published as an npm plugin with a public GitHub repository.</h2>
+            <p>
+              If you want the package, use npm. If you want the source, docs, screenshots, or local
+              development path, use the repository.
+            </p>
           </div>
-        </section>
-      </main>
-    </div>
-    <script>
-      const copyButtons = document.querySelectorAll("[data-copy-target]");
-      async function copyCommand(targetId, button) {
-        const code = document.getElementById(targetId);
-        if (!code) return;
-        const text = code.textContent ?? "";
-        try {
-          await navigator.clipboard.writeText(text);
-        } catch {
-          const helper = document.createElement("textarea");
-          helper.value = text;
-          helper.setAttribute("readonly", "");
-          helper.style.position = "absolute";
-          helper.style.left = "-9999px";
-          document.body.appendChild(helper);
-          helper.select();
-          document.execCommand("copy");
-          document.body.removeChild(helper);
-        }
-        const previous = button.textContent;
-        button.textContent = "Copied";
-        button.dataset.copied = "true";
-        window.setTimeout(() => {
-          button.textContent = previous;
-          button.dataset.copied = "false";
-        }, 1600);
+          <div class="publish-links">
+            <a class="link-card" href="https://www.npmjs.com/package/forge-openclaw-plugin">
+              <strong>npm package</strong>
+              <span>forge-openclaw-plugin</span>
+            </a>
+            <a class="link-card" href="https://github.com/albertbuchard/forge">
+              <strong>GitHub repository</strong>
+              <span>albertbuchard/forge</span>
+            </a>
+            <a class="link-card" href="https://github.com/albertbuchard/forge/tree/main/openclaw-plugin">
+              <strong>Package source</strong>
+              <span>openclaw-plugin/</span>
+            </a>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+  <script>
+    const copyButtons = document.querySelectorAll("[data-copy-target]");
+    async function copyCommand(targetId, button) {
+      const code = document.getElementById(targetId);
+      if (!code) return;
+      const text = code.textContent ?? "";
+      try {
+        await navigator.clipboard.writeText(text);
+      } catch {
+        const helper = document.createElement("textarea");
+        helper.value = text;
+        helper.setAttribute("readonly", "");
+        helper.style.position = "absolute";
+        helper.style.left = "-9999px";
+        document.body.appendChild(helper);
+        helper.select();
+        document.execCommand("copy");
+        document.body.removeChild(helper);
       }
-      copyButtons.forEach((button) => {
-        button.addEventListener("click", () => copyCommand(button.dataset.copyTarget, button));
-      });
-    </script>
-  </body>
+      const previous = button.textContent;
+      button.textContent = "Copied";
+      button.dataset.copied = "true";
+      window.setTimeout(() => {
+        button.textContent = previous;
+        button.dataset.copied = "false";
+      }, 1600);
+    }
+    copyButtons.forEach((button) => {
+      button.addEventListener("click", () => copyCommand(button.dataset.copyTarget, button));
+    });
+  </script>
+</body>
+
 </html>
