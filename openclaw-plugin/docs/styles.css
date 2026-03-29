@@ -451,8 +451,8 @@ p {
 }
 
 .gallery-grid {
-  grid-template-columns: minmax(0, 1.12fr) minmax(0, 0.88fr);
-  align-items: start;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: stretch;
 }
 
 .gallery-grid .shot {
@@ -465,6 +465,10 @@ p {
   width: 100%;
   aspect-ratio: 16 / 10;
   object-fit: cover;
+}
+
+.gallery-grid .shot figcaption {
+  min-height: 7.5rem;
 }
 
 .shot figcaption {
