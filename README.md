@@ -4,8 +4,6 @@
 
 Forge is an OpenClaw plugin for project management and mental health tracking.
 
-That is the main way to understand this repo now.
-
 Forge gives an OpenClaw agent a structured workspace for:
 
 - goals, projects, and Kanban tasks
