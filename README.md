@@ -1,232 +1,228 @@
 # Forge
 
-Forge is the actual web app and API runtime for the life operating system under `projects/forge`.
-It is the main browser app, local API runtime, and OpenClaw-backed integration surface for the Forge product.
+Forge is an OpenClaw plugin for project management and mental health tracking.
 
-It is meant to run:
-- locally in the browser
-- over Tailscale in the browser
-- through OpenClaw when you want agent access
+That is the main way to understand this repo now.
 
-## Run Forge
+Forge gives an OpenClaw agent a structured workspace for:
 
-### One-step app run
+- goals, projects, and Kanban tasks
+- real timed work sessions
+- linked Markdown notes
+- XP, momentum, and weekly review
+- Psyche records such as values, beliefs, patterns, modes, and trigger reports
+- saved insights that can be accepted, applied, or dismissed
 
-This is the main end-user path. It builds the web app and serves the full Forge runtime on port `4317`.
+It complements OpenClaw's open-ended natural-language memory with a more explicit layer the agent can inspect, update, and act on over time.
+
+## Install Forge In OpenClaw
+
+For most people, this is the important path.
+
+Install the published plugin:
+
+```bash
+openclaw plugins install forge-openclaw-plugin
+openclaw plugins enable forge-openclaw-plugin
+node -e 'const fs=require("fs"); const p=process.env.HOME+"/.openclaw/openclaw.json"; const j=JSON.parse(fs.readFileSync(p,"utf8")); j.plugins ??= {}; j.plugins.allow = Array.from(new Set([...(j.plugins.allow || []), "forge-openclaw-plugin"])); fs.writeFileSync(p, JSON.stringify(j, null, 2)+"\n");'
+openclaw gateway restart
+openclaw forge health
+openclaw forge status
+```
+
+Why the `node -e ...` step is there:
+
+- current OpenClaw builds can leave the plugin enabled but not present in `plugins.allow`
+- if that happens, the plugin is installed but its entrypoint does not actually load
+- the command above preserves the rest of the allow list and appends `forge-openclaw-plugin` if it is missing
+
+For release-parity local development from this repo:
+
+```bash
+openclaw plugins install ./openclaw-plugin
+openclaw plugins enable forge-openclaw-plugin
+node -e 'const fs=require("fs"); const p=process.env.HOME+"/.openclaw/openclaw.json"; const j=JSON.parse(fs.readFileSync(p,"utf8")); j.plugins ??= {}; j.plugins.allow = Array.from(new Set([...(j.plugins.allow || []), "forge-openclaw-plugin"])); fs.writeFileSync(p, JSON.stringify(j, null, 2)+"\n");'
+openclaw gateway restart
+openclaw forge health
+openclaw forge status
+```
+
+Normal local UI address:
+
+- [http://127.0.0.1:4317/forge/](http://127.0.0.1:4317/forge/)
+
+If `4317` is already occupied, the plugin-managed local runtime can move to the next free local port and remember that port for later runs.
+
+## What The Plugin Gives You
+
+The OpenClaw plugin exposes both runtime control and agent-facing checks:
+
+```bash
+openclaw forge health
+openclaw forge overview
+openclaw forge onboarding
+openclaw forge ui
+openclaw forge start
+openclaw forge stop
+openclaw forge restart
+openclaw forge status
+openclaw forge doctor
+openclaw forge route-check
+```
+
+Important behavior:
+
+- `start`, `stop`, `restart`, and `status` manage Forge when the runtime was auto-started by the plugin
+- `doctor` checks plugin connectivity and curated route coverage
+- `ui` prints the current Forge UI entrypoint
+- `overview` and `onboarding` expose the current operator snapshot and the agent contract
+
+## What Forge Includes Today
+
+The current app surface in this repo includes:
+
+- `Overview`: high-level control room for active work, streaks, rewards, and direction
+- `Today`: daily execution surface
+- `Kanban`: task board with task movement and work-start actions
+- `Goals` and goal detail pages
+- `Projects` and project detail pages
+- `Tasks` and task detail pages
+- `Notes`
+- `Activity`
+- `Insights`
+- `Weekly Review`
+- `Settings`
+- `Settings -> Agents`
+- `Settings -> Rewards`
+- `Settings -> Bin`
+- `Psyche`
+- `Psyche -> Values`
+- `Psyche -> Patterns`
+- `Psyche -> Behaviors`
+- `Psyche -> Reports`
+- `Psyche -> Goal Map`
+- `Psyche -> Schemas & Beliefs`
+- `Psyche -> Modes`
+- `Psyche -> Mode Guide`
+
+The Psyche side is explicitly influenced by third-wave CBT, ACT, and schema-therapy-style work. It is meant to give the agent a durable place to store values, beliefs, modes, patterns, and trigger reports in a structured form instead of leaving them scattered in chat.
+
+## Settings And Auth
+
+Forge does have settings and token management, but the current UI is not the old "Collaboration Settings" model.
+
+What exists now:
+
+- `Settings` for general runtime/profile preferences
+- `Settings -> Agents` for local agent token issuing, rotation, revocation, and onboarding guidance
+- `Settings -> Rewards` for reward-rule configuration
+- `Settings -> Bin` for restore and hard-delete flows
+
+For localhost and Tailscale use, Forge can bootstrap an operator session automatically.
+
+For explicit agent auth, Forge also supports managed bearer tokens through the settings and API layer:
+
+- `GET /api/v1/settings`
+- `PATCH /api/v1/settings`
+- `POST /api/v1/settings/tokens`
+
+If you need a new token, the current UI path is `Settings -> Agents`, not `Collaboration Settings`.
+
+## Data And Logs
+
+Typical data location:
+
+- published plugin install: `~/.openclaw/extensions/forge-openclaw-plugin/data/forge.sqlite`
+- repo-local plugin install: `<repo>/openclaw-plugin/data/forge.sqlite`
+- repo app runtime: `<repo>/data/forge.sqlite`
+
+If you want a different data root, set `dataRoot` in the plugin config and restart the gateway.
+
+If the plugin-managed local runtime fails to start, check:
+
+```text
+~/.openclaw/logs/forge-openclaw-plugin/<host>-<port>.log
+```
+
+That log is the fastest place to catch port conflicts, dependency issues, or runtime crashes.
+
+## Run Forge From The Repo Without OpenClaw
+
+This is the secondary path.
+
+Install dependencies:
 
 ```bash
 npm install
-npm run start
 ```
 
-Then open:
-
-- local: [http://127.0.0.1:4317/forge/](http://127.0.0.1:4317/forge/)
-- Tailscale: `http://<your-device>.ts.net:4317/forge/`
-
-Forge health is available at:
-
-- [http://127.0.0.1:4317/api/v1/health](http://127.0.0.1:4317/api/v1/health)
-
-### Development mode
-
-The simple path is:
+Run the full local development setup:
 
 ```bash
 npm run dev
 ```
 
-That starts both:
+That starts:
 
 - the backend/runtime on `127.0.0.1:4317`
-- the live Vite frontend on `127.0.0.1:3027`
+- the Vite frontend on `127.0.0.1:3027`
 
-If you want to run them separately, you still can:
+If you want the dev frontend to use the same `/forge/` base path as the built app:
 
 ```bash
-npm run dev:server
-npm run dev:web
+FORGE_BASE_PATH=/forge/ npm run dev
 ```
 
-Then open:
+Production-style local run:
 
-- Vite dev app: [http://127.0.0.1:3027](http://127.0.0.1:3027)
-- runtime API: [http://127.0.0.1:4317/api/v1/health](http://127.0.0.1:4317/api/v1/health)
+```bash
+npm run start
+```
 
-If you want the repo app to run against the OpenClaw plugin data folder directly, use:
+Useful URLs:
+
+- built app: [http://127.0.0.1:4317/forge/](http://127.0.0.1:4317/forge/)
+- API health: [http://127.0.0.1:4317/api/v1/health](http://127.0.0.1:4317/api/v1/health)
+- OpenAPI: [http://127.0.0.1:4317/api/v1/openapi.json](http://127.0.0.1:4317/api/v1/openapi.json)
+- Vite dev frontend: [http://127.0.0.1:3027](http://127.0.0.1:3027)
+
+If you want the repo app to run against the OpenClaw plugin data folder directly:
 
 ```bash
 npm run dev:openclaw-data
-```
-
-For a production-style local run against that same data root:
-
-```bash
 npm run start:openclaw-data
 ```
 
-### Choose a data folder
+## Demo Data
 
-By default, Forge stores data under the active runtime root in:
+Fresh runtimes stay empty by default. Forge does not invent personal goals, projects, tasks, or activity on startup.
 
-```text
-<runtime-root>/data/forge.sqlite
-```
-
-That means:
-
-- normal OpenClaw plugin install: usually `~/.openclaw/extensions/forge-openclaw-plugin/data/forge.sqlite`
-- linked repo-local plugin install: usually `<repo>/openclaw-plugin/data/forge.sqlite`
-- repo app runtime started from this project: usually `<repo>/data/forge.sqlite`
-
-Forge can also use a custom data root instead of the current working directory or install path.
-
-Run Forge against an explicit data folder like this:
-
-```bash
-FORGE_DATA_ROOT=/absolute/path/to/forge-data npm run dev
-```
-
-Or for the production-style local runtime:
-
-```bash
-FORGE_DATA_ROOT=/absolute/path/to/forge-data npm run start
-```
-
-Forge will then read and write its SQLite files under:
-
-```text
-$FORGE_DATA_ROOT/data/forge.sqlite
-```
-
-Fresh runtimes stay empty by default. Forge does not auto-create personal goals,
-projects, tasks, or activity during startup.
-
-### Demo fixture bootstrap
-
-If you want explicit showcase data for a demo or screenshot pass, seed it into a fresh
-runtime root yourself:
+If you want explicit showcase data in a fresh runtime:
 
 ```bash
 FORGE_DATA_ROOT=/absolute/path/to/forge-demo npm run demo:seed
 ```
 
-That command refuses to run against a runtime that already contains user content.
-For a linked OpenClaw plugin data root, use:
+For the linked OpenClaw plugin data root:
 
 ```bash
 npm run demo:seed:openclaw-data
 ```
 
-## Local and Tailscale access
-
-Forge is intended to be usable directly in the browser, not only through OpenClaw.
-
-Default runtime posture:
-- listens on `0.0.0.0`
-- serves the built browser app under `/forge/`
-- allows trusted local operator-session bootstrap from:
-  - `localhost`
-  - `127.0.0.1`
-  - `*.ts.net`
-  - Tailscale `100.64.0.0/10`
-
-That means local and Tailscale users can open the browser app directly and use Forge without creating a token first.
-
-## Security modes
-
-Forge supports two main connection modes:
-
-### 1. Quick connect
-
-Recommended for:
-- localhost
-- Tailscale
-
-Behavior:
-- no token required up front
-- Forge issues a local operator session cookie
-- the browser app and OpenClaw can both use that operator session on trusted local networks
-
-### 2. Managed token
-
-Recommended for:
-- explicit scoped agent credentials
-- remote non-Tailscale access
-- long-lived agent identities with separate provenance
-
-Behavior:
-- token is generated once
-- Forge stores only the hash and prefix
-- the raw token is shown once and cannot be recovered later
-
-## Recovery and reset
-
-### If you lose a token
-
-Do not try to recover the old raw token. Forge does not store it in recoverable form.
-
-Instead:
-
-1. Open Forge in the browser locally or over Tailscale.
-2. Go to `Settings` -> `Collaboration Settings`.
-3. Either:
-   - rotate the existing token and reveal a new raw token once
-   - or issue a new token and migrate integrations to it
-4. Update OpenClaw or any other agent config.
-5. Revoke stale credentials after cutover.
-
-### If you want to reset local access
-
-Forge operator sessions can be reset from the same settings screen with `Reset operator session`.
-
-That clears the current operator-session cookie so you can bootstrap a fresh one.
-
-## OpenClaw
-
-OpenClaw now has two supported install paths:
-
-- local development from this repo: `openclaw plugins install ./projects/forge/openclaw-plugin`
-- published package install: `openclaw plugins install forge-openclaw-plugin`
-
-For local/Tailscale development:
-
-```bash
-openclaw plugins install ./projects/forge/openclaw-plugin
-openclaw gateway restart
-```
-
-If Forge is local or on Tailscale, `apiToken` can stay blank and the plugin will bootstrap an operator session automatically.
-
-Useful repo scripts for plugin work:
-
-```bash
-npm run build:openclaw-plugin
-npm run check:openclaw-plugin
-```
-
-See:
-- [`docs/openclaw-plugin.md`](docs/openclaw-plugin.md)
-- [`docs/openclaw-plugin-release-checklist.md`](docs/openclaw-plugin-release-checklist.md)
-- [`docs/public-repo-workflow.md`](docs/public-repo-workflow.md)
-
-## Quality checks
-
-Useful validation commands from this repo root:
+## Useful Repo Commands
 
 ```bash
 npm run check
 npm run check:server
 npm test
 npm run test:server
+npm run build:openclaw-plugin
+npm run check:openclaw-plugin
 ```
 
-## Product URLs
+## Related Docs
 
-The important URLs are:
-
-- web app: `/forge/`
-- API health: `/api/v1/health`
-- OpenAPI: `/api/v1/openapi.json`
-- settings: `/api/v1/settings`
-- operator-session bootstrap: `/api/v1/auth/operator-session`
+- [`openclaw-plugin/README.md`](openclaw-plugin/README.md)
+- [`docs/openclaw-plugin.md`](docs/openclaw-plugin.md)
+- [`docs/openclaw-plugin-release-checklist.md`](docs/openclaw-plugin-release-checklist.md)
+- [`docs/public-repo-workflow.md`](docs/public-repo-workflow.md)
