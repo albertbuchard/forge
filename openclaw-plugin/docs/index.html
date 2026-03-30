@@ -263,6 +263,17 @@ openclaw forge status</code></pre>
             </article>
             <article class="card step-card">
               <span class="step-number">4</span>
+              <h3>Allow the Forge tools for your agent</h3>
+              <p>
+                Open <strong>OpenClaw -&gt; Agents</strong>, choose the agent
+                you actually use, and turn on all the tool cards under
+                <code>forge-openclaw-plugin</code>. If those toggles stay off,
+                the agent can act like Forge does not exist even when the
+                plugin and runtime are healthy.
+              </p>
+            </article>
+            <article class="card step-card">
+              <span class="step-number">5</span>
               <h3>Verify the runtime</h3>
               <p>
                 <code>openclaw forge health</code> checks the server.
@@ -674,6 +685,16 @@ openclaw forge status</code></pre>
                 enabled, but not added to <code>plugins.allow</code>. Run the
                 full install flow above, especially the allow-list repair
                 command, then restart the gateway.
+              </p>
+            </article>
+            <article class="card faq-card">
+              <h3>My agent refuses to tell me about Forge information</h3>
+              <p>
+                Check <strong>OpenClaw -&gt; Agents</strong> first. The Forge
+                plugin can be installed, enabled, and healthy while the agent
+                still has the <code>forge-openclaw-plugin</code> tools turned
+                off on the agent tool page. Turn on all Forge tool cards for
+                the agent you are actually using, then try again.
               </p>
             </article>
             <article class="card faq-card">

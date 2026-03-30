@@ -36,6 +36,11 @@ openclaw forge health
 openclaw forge status
 ```
 
+Then open `OpenClaw -> Agents`, select the agent you want to use with Forge,
+and allow all tool cards under `forge-openclaw-plugin`. If the Forge plugin is
+installed but those tool toggles stay off, the agent may act like it cannot
+read Forge at all even though the runtime is healthy.
+
 Why the `node -e ...` step is there:
 
 - current OpenClaw builds can leave the plugin enabled but not present in `plugins.allow`
@@ -53,11 +58,20 @@ openclaw forge health
 openclaw forge status
 ```
 
+The same tool-permission step still applies for repo-local installs: open
+`OpenClaw -> Agents`, choose your agent, and allow every
+`forge-openclaw-plugin` tool card.
+
 Normal local UI address:
 
 - [http://127.0.0.1:4317/forge/](http://127.0.0.1:4317/forge/)
 
 If `4317` is already occupied, the plugin-managed local runtime can move to the next free local port and remember that port for later runs.
+
+If the agent refuses to tell you about Forge information, check the OpenClaw
+agent tool page before debugging the runtime. The most common cause is that the
+Forge plugin is installed and healthy, but the agent does not have the
+`forge-openclaw-plugin` tools allowed in `OpenClaw -> Agents`.
 
 ## What The Plugin Gives You
 
