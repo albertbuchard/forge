@@ -79,6 +79,7 @@ function createSnapshot(): ForgeSnapshot {
       goals: [],
       projects: [],
       tasks: [],
+      habits: [],
       tags: [],
       suggestedTags: [],
       owners: [],
@@ -115,6 +116,7 @@ function createSnapshot(): ForgeSnapshot {
       projects: [],
       activeGoals: [],
       topTasks: [],
+      dueHabits: [],
       recentEvidence: [],
       achievements: [],
       domainBalance: [],
@@ -129,8 +131,10 @@ function createSnapshot(): ForgeSnapshot {
         sessionLabel: "No directive"
       },
       timeline: [],
+      dueHabits: [],
       dailyQuests: [],
       milestoneRewards: [],
+      recentHabitRewards: [],
       momentum: {
         streakDays: 0,
         momentumScore: 0,
@@ -148,6 +152,7 @@ function createSnapshot(): ForgeSnapshot {
     projects: [],
     tags: [],
     tasks: [],
+    habits: [],
     activity: [],
     activeTaskRuns: []
   };

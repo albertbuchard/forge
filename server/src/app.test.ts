@@ -211,6 +211,39 @@ test("goal detail, operator context, and retroactive work logging are available 
   }
 });
 
+test("health probe can expose the effective runtime storage root for OpenClaw runtime checks", async () => {
+  const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-health-probe-"));
+  const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
+
+  try {
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/v1/health",
+      headers: {
+        "x-forge-runtime-probe": "1"
+      }
+    });
+
+    assert.equal(response.statusCode, 200);
+    const body = response.json() as {
+      ok: boolean;
+      runtime?: {
+        pid: number;
+        storageRoot: string;
+        basePath: string;
+      };
+    };
+    assert.equal(body.ok, true);
+    assert.equal(body.runtime?.pid, process.pid);
+    assert.equal(body.runtime?.storageRoot, rootDir);
+    assert.equal(body.runtime?.basePath, "/forge/");
+  } finally {
+    await app.close();
+    closeDatabase();
+    await rm(rootDir, { recursive: true, force: true });
+  }
+});
+
 test("built frontend assets are served correctly from the /forge base path", async () => {
   const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-web-basepath-"));
   const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
@@ -824,6 +857,8 @@ test("openapi document exposes schema-backed versioned contracts", async () => {
     assert.ok(body.components?.schemas?.TaskContextPayload);
     assert.ok(body.components?.schemas?.ProjectSummary);
     assert.ok(body.components?.schemas?.ProjectBoardPayload);
+    assert.ok(body.components?.schemas?.Habit);
+    assert.ok(body.components?.schemas?.HabitCheckIn);
     assert.ok(body.components?.schemas?.InsightsPayload);
     assert.ok(body.components?.schemas?.WeeklyReviewPayload);
     assert.ok(body.components?.schemas?.SettingsPayload);
@@ -873,6 +908,9 @@ test("openapi document exposes schema-backed versioned contracts", async () => {
     assert.ok(body.paths?.["/api/v1/psyche/reports/{id}"]);
     assert.ok(body.paths?.["/api/v1/notes"]);
     assert.ok(body.paths?.["/api/v1/notes/{id}"]);
+    assert.ok(body.paths?.["/api/v1/habits"]);
+    assert.ok(body.paths?.["/api/v1/habits/{id}"]);
+    assert.ok(body.paths?.["/api/v1/habits/{id}/check-ins"]);
     assert.ok(body.paths?.["/api/v1/tags"]);
     assert.ok(body.paths?.["/api/v1/tags/{id}"]);
     assert.ok(body.paths?.["/api/v1/projects"]);
@@ -1256,6 +1294,96 @@ test("trigger reports persist structured CBT fields and earn bounded reflection 
     assert.equal(rewards.statusCode, 200);
     const rewardsBody = rewards.json() as { ledger: Array<{ deltaXp: number; reasonTitle: string }> };
     assert.ok(rewardsBody.ledger.some((event) => event.deltaXp > 0 && event.reasonTitle.includes("Psyche reflection captured")));
+  } finally {
+    await app.close();
+    closeDatabase();
+    await rm(rootDir, { recursive: true, force: true });
+  }
+});
+
+test("habits persist with check-ins and XP updates through the versioned API", async () => {
+  const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-habits-"));
+  const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
+
+  try {
+    const operatorCookie = await issueOperatorSessionCookie(app);
+    const goalId = (await app.inject({ method: "GET", url: "/api/v1/goals" }).then((response) => (response.json() as { goals: Array<{ id: string }> }).goals[0]!.id));
+    const projectId = (await app.inject({ method: "GET", url: "/api/v1/projects" }).then((response) => (response.json() as { projects: Array<{ id: string }> }).projects[0]!.id));
+    const taskId = (await app.inject({ method: "GET", url: "/api/v1/tasks?limit=1" }).then((response) => (response.json() as { tasks: Array<{ id: string }> }).tasks[0]!.id));
+
+    const created = await app.inject({
+      method: "POST",
+      url: "/api/v1/habits",
+      headers: { cookie: operatorCookie },
+      payload: {
+        title: "Phone stays outside the bed zone",
+        description: "Treat bedtime as a protected recovery habit.",
+        polarity: "positive",
+        frequency: "daily",
+        targetCount: 1,
+        linkedGoalIds: [goalId],
+        linkedProjectIds: [projectId],
+        linkedTaskIds: [taskId],
+        rewardXp: 14,
+        penaltyXp: 9
+      }
+    });
+
+    assert.equal(created.statusCode, 201);
+    const createdHabit = (created.json() as {
+      habit: {
+        id: string;
+        linkedBehaviorId: string | null;
+        linkedGoalIds: string[];
+        linkedProjectIds: string[];
+        linkedTaskIds: string[];
+      };
+    }).habit;
+    assert.equal(createdHabit.linkedBehaviorId, null);
+    assert.deepEqual(createdHabit.linkedGoalIds, [goalId]);
+    assert.deepEqual(createdHabit.linkedProjectIds, [projectId]);
+    assert.deepEqual(createdHabit.linkedTaskIds, [taskId]);
+
+    const updated = await app.inject({
+      method: "PATCH",
+      url: `/api/v1/habits/${createdHabit.id}`,
+      headers: { cookie: operatorCookie },
+      payload: {
+        frequency: "weekly",
+        weekDays: [1, 3, 5],
+        linkedTaskIds: []
+      }
+    });
+    assert.equal(updated.statusCode, 200);
+    const updatedHabit = (updated.json() as { habit: { frequency: string; weekDays: number[]; linkedTaskIds: string[] } }).habit;
+    assert.equal(updatedHabit.frequency, "weekly");
+    assert.deepEqual(updatedHabit.weekDays, [1, 3, 5]);
+    assert.deepEqual(updatedHabit.linkedTaskIds, []);
+
+    const checkIn = await app.inject({
+      method: "POST",
+      url: `/api/v1/habits/${createdHabit.id}/check-ins`,
+      headers: { cookie: operatorCookie },
+      payload: {
+        dateKey: "2026-03-30",
+        status: "done"
+      }
+    });
+    assert.equal(checkIn.statusCode, 200);
+    const checkInBody = checkIn.json() as {
+      habit: { lastCheckInStatus: string | null; completionRate: number; checkIns: Array<{ dateKey: string; deltaXp: number }> };
+      metrics: { recentLedger: Array<{ entityType: string; entityId: string; deltaXp: number }> };
+    };
+    assert.equal(checkInBody.habit.lastCheckInStatus, "done");
+    assert.ok(checkInBody.habit.completionRate >= 100);
+    assert.equal(checkInBody.habit.checkIns[0]?.dateKey, "2026-03-30");
+    assert.ok(checkInBody.habit.checkIns[0]?.deltaXp > 0);
+    assert.ok(checkInBody.metrics.recentLedger.some((entry) => entry.entityType === "habit" && entry.entityId === createdHabit.id));
+
+    const listed = await app.inject({ method: "GET", url: "/api/v1/habits" });
+    assert.equal(listed.statusCode, 200);
+    const listedBody = listed.json() as { habits: Array<{ id: string }> };
+    assert.ok(listedBody.habits.some((habit) => habit.id === createdHabit.id));
   } finally {
     await app.close();
     closeDatabase();
@@ -3050,6 +3178,7 @@ test("CRUD capability matrix keeps user-facing delete/bin entities explicit", ()
     "emotion_definition",
     "event_type",
     "goal",
+    "habit",
     "insight",
     "mode_guide_session",
     "mode_profile",

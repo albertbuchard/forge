@@ -1,9 +1,10 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { SettingsSectionNav } from "@/components/settings/settings-section-nav";
 import { XpCommandDeck } from "@/components/xp/xp-command-deck";
 import { PageHero } from "@/components/shell/page-hero";
+import { useForgeShell } from "@/components/shell/app-shell";
 import { SurfaceSkeleton } from "@/components/experience/surface-skeleton";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -15,12 +16,13 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   createManualRewardGrant,
   ensureOperatorSession,
+  getPsycheOverview,
   getXpMetrics,
   listRewardLedger,
   listRewardRules,
   patchRewardRule
 } from "@/lib/api";
-import type { RewardRule } from "@/lib/types";
+import type { RewardRule, RewardableEntityType } from "@/lib/types";
 
 type RewardRuleFormValues = {
   title: string;
@@ -30,7 +32,7 @@ type RewardRuleFormValues = {
 };
 
 type BonusGrantFormValues = {
-  entityType: string;
+  entityType: RewardableEntityType;
   entityId: string;
   deltaXp: number;
   reasonTitle: string;
@@ -53,6 +55,7 @@ function parseRecordJson(raw: string) {
 }
 
 export function SettingsRewardsPage() {
+  const shell = useForgeShell();
   const queryClient = useQueryClient();
   const [selectedRuleId, setSelectedRuleId] = useState("");
   const [ruleConfigError, setRuleConfigError] = useState<string | null>(null);
@@ -77,6 +80,10 @@ export function SettingsRewardsPage() {
     queryKey: ["forge-reward-ledger"],
     queryFn: () => listRewardLedger(30),
     enabled: operatorReady
+  });
+  const psycheOverviewQuery = useQuery({
+    queryKey: ["forge-psyche-overview"],
+    queryFn: async () => (await getPsycheOverview()).overview
   });
 
   const rewardRuleForm = useForm<RewardRuleFormValues>({
@@ -124,6 +131,35 @@ export function SettingsRewardsPage() {
   });
 
   const rewardRules = rewardRulesQuery.data?.rules ?? [];
+  const rewardableOptionsByType = useMemo(
+    () => ({
+      system: [{ id: "operator_manual_reward", label: "Operator reward ledger" }],
+      goal: shell.snapshot.goals.map((goal) => ({ id: goal.id, label: goal.title })),
+      project: shell.snapshot.dashboard.projects.map((project) => ({ id: project.id, label: project.title })),
+      task: shell.snapshot.tasks.map((task) => ({ id: task.id, label: task.title })),
+      habit: shell.snapshot.habits.map((habit) => ({ id: habit.id, label: habit.title })),
+      tag: shell.snapshot.tags.map((tag) => ({ id: tag.id, label: tag.name })),
+      note: [],
+      insight: [],
+      psyche_value: (psycheOverviewQuery.data?.values ?? []).map((value) => ({ id: value.id, label: value.title })),
+      behavior_pattern: (psycheOverviewQuery.data?.patterns ?? []).map((pattern) => ({ id: pattern.id, label: pattern.title })),
+      behavior: (psycheOverviewQuery.data?.behaviors ?? []).map((behavior) => ({ id: behavior.id, label: behavior.title })),
+      belief_entry: (psycheOverviewQuery.data?.beliefs ?? []).map((belief) => ({ id: belief.id, label: belief.statement })),
+      mode_profile: (psycheOverviewQuery.data?.modes ?? []).map((mode) => ({ id: mode.id, label: mode.title })),
+      trigger_report: (psycheOverviewQuery.data?.reports ?? []).map((report) => ({ id: report.id, label: report.title }))
+    }),
+    [psycheOverviewQuery.data, shell.snapshot.dashboard.projects, shell.snapshot.goals, shell.snapshot.habits, shell.snapshot.tags, shell.snapshot.tasks]
+  );
+
+  useEffect(() => {
+    const currentType = bonusForm.getValues("entityType");
+    const currentId = bonusForm.getValues("entityId");
+    const options = rewardableOptionsByType[currentType] ?? [];
+    if (currentId && options.some((option) => option.id === currentId)) {
+      return;
+    }
+    bonusForm.setValue("entityId", options[0]?.id ?? "");
+  }, [bonusForm, rewardableOptionsByType]);
 
   useEffect(() => {
     if (!rewardRules.length) return;
@@ -289,11 +325,29 @@ export function SettingsRewardsPage() {
                   <div className="grid gap-4 md:grid-cols-2">
                     <label className="grid gap-2">
                       <span className="text-sm text-white/58">Entity type</span>
-                      <Input {...bonusForm.register("entityType")} />
+                      <select
+                        className="rounded-[14px] bg-white/[0.06] px-3 py-3 text-white"
+                        {...bonusForm.register("entityType")}
+                      >
+                        {Object.keys(rewardableOptionsByType).map((entityType) => (
+                          <option key={entityType} value={entityType}>
+                            {entityType.replaceAll("_", " ")}
+                          </option>
+                        ))}
+                      </select>
                     </label>
                     <label className="grid gap-2">
                       <span className="text-sm text-white/58">Entity id</span>
-                      <Input placeholder="task_123" {...bonusForm.register("entityId")} />
+                      <select
+                        className="rounded-[14px] bg-white/[0.06] px-3 py-3 text-white"
+                        {...bonusForm.register("entityId")}
+                      >
+                        {(rewardableOptionsByType[bonusForm.watch("entityType")] ?? []).map((option) => (
+                          <option key={option.id} value={option.id}>
+                            {option.label}
+                          </option>
+                        ))}
+                      </select>
                     </label>
                   </div>
                   <div className="grid gap-4 md:grid-cols-2">

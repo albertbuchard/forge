@@ -25,6 +25,7 @@ export function OverviewPage() {
   const nextMilestone = snapshot.dashboard.milestoneRewards.find((reward) => !reward.completed) ?? snapshot.dashboard.milestoneRewards[0] ?? null;
   const unlockedAchievements = snapshot.dashboard.achievements.filter((achievement) => achievement.unlocked).length;
   const topTask = snapshot.overview.topTasks[0] ?? null;
+  const topHabit = snapshot.overview.dueHabits[0] ?? null;
   const topGoal = snapshot.overview.activeGoals[0] ?? null;
   const driftGoal = snapshot.overview.neglectedGoals[0] ?? null;
   const latestEvidence = snapshot.overview.recentEvidence[0] ?? null;
@@ -55,14 +56,17 @@ export function OverviewPage() {
     snapshot.overview.projects.length > 0 ||
     snapshot.overview.topTasks.length > 0 ||
     snapshot.overview.recentEvidence.length > 0 ||
+    snapshot.overview.dueHabits.length > 0 ||
     snapshot.overview.neglectedGoals.length > 0;
   const overviewSignals = [
     {
       id: "top-task",
-      label: topTask ? "Top task" : "Top goal",
+      label: topTask ? "Top task" : topHabit ? "Due habit" : "Top goal",
       title:
         topTask ? (
           <EntityName kind="task" label={topTask.title} lines={3} labelClassName="[overflow-wrap:anywhere]" />
+        ) : topHabit ? (
+          <EntityName kind="habit" label={topHabit.title} lines={3} labelClassName="[overflow-wrap:anywhere]" />
         ) : topGoal ? (
           <EntityName kind="goal" label={topGoal.title} lines={3} labelClassName="[overflow-wrap:anywhere]" />
         ) : (
@@ -70,11 +74,12 @@ export function OverviewPage() {
         ),
       detail:
         topTask?.description ||
+        topHabit?.description ||
         topGoal?.description ||
         t("common.todayPage.noDirectiveDetail"),
-      badge: topTask ? `${topTask.points} xp` : `${snapshot.overview.strategicHeader.focusTasks} focus tasks`,
-      href: topTask ? `/tasks/${topTask.id}` : topGoal ? `/goals/${topGoal.id}` : "/goals",
-      actionLabel: topTask ? "Open task" : "Open goal"
+      badge: topTask ? `${topTask.points} xp` : topHabit ? `${topHabit.rewardXp} xp` : `${snapshot.overview.strategicHeader.focusTasks} focus tasks`,
+      href: topTask ? `/tasks/${topTask.id}` : topHabit ? "/habits" : topGoal ? `/goals/${topGoal.id}` : "/goals",
+      actionLabel: topTask ? "Open task" : topHabit ? "Open habits" : "Open goal"
     },
     {
       id: "reward",
@@ -120,6 +125,9 @@ export function OverviewPage() {
     }
     if (event.entityType === "task") {
       return `/tasks/${event.entityId}`;
+    }
+    if (event.entityType === "habit") {
+      return "/habits";
     }
     if (event.entityType === "task_run" && typeof event.metadata.taskId === "string") {
       return `/tasks/${event.metadata.taskId}`;
@@ -255,6 +263,34 @@ export function OverviewPage() {
                       </div>
                       <div className="mt-4">
                         <EntityNoteCountLink entityType="project" entityId={project.id} count={getEntityNotesSummary(snapshot.dashboard.notesSummaryByEntity, "project", project.id).count} />
+                      </div>
+                    </InteractiveCard>
+                  ))}
+                </div>
+              )}
+            </Card>
+
+            <Card>
+              <div className="flex items-center gap-2 font-label text-[11px] uppercase tracking-[0.18em] text-white/45">
+                <span>Due habits</span>
+                <InfoTooltip content="Recurring commitments or slips that still need a truthful check-in today." />
+              </div>
+              {snapshot.overview.dueHabits.length === 0 ? (
+                <div className="mt-4 rounded-[20px] bg-white/[0.04] p-4 text-sm text-white/58">No habits are due right now.</div>
+              ) : (
+                <div className="mt-4 grid gap-3">
+                  {snapshot.overview.dueHabits.slice(0, 4).map((habit) => (
+                    <InteractiveCard key={habit.id} to="/habits" className="rounded-[20px] px-4 py-4">
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="flex min-w-0 items-center gap-2">
+                          <EntityBadge kind="habit" compact gradient={false} />
+                          <EntityName kind="habit" label={habit.title} className="min-w-0" showIcon={false} lines={2} labelClassName="[overflow-wrap:anywhere]" />
+                        </div>
+                        <Badge wrap>{habit.rewardXp} xp</Badge>
+                      </div>
+                      <div className="mt-2 text-sm text-white/58">{habit.description || "Recurring operating commitment."}</div>
+                      <div className="mt-4">
+                        <EntityNoteCountLink entityType="habit" entityId={habit.id} count={getEntityNotesSummary(snapshot.dashboard.notesSummaryByEntity, "habit", habit.id).count} />
                       </div>
                     </InteractiveCard>
                   ))}

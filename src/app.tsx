@@ -3,6 +3,7 @@ import { AppShell } from "@/components/shell/app-shell";
 import { ActivityPage } from "@/pages/activity-page";
 import { GoalDetailPage } from "@/pages/goal-detail-page";
 import { GoalsPage } from "@/pages/goals-page";
+import { HabitsPage } from "@/pages/habits-page";
 import { InsightsPage } from "@/pages/insights-page";
 import { KanbanPage } from "@/pages/kanban-page";
 import { NotesPage } from "@/pages/notes-page";
@@ -34,6 +35,7 @@ export function App() {
         <Route index element={<Navigate to="/overview" replace />} />
         <Route path="overview" element={<OverviewPage />} />
         <Route path="goals" element={<GoalsPage />} />
+        <Route path="habits" element={<HabitsPage />} />
         <Route path="goals/:goalId" element={<GoalDetailPage />} />
         <Route path="projects" element={<ProjectsPage />} />
         <Route path="projects/:projectId" element={<ProjectDetailPage />} />

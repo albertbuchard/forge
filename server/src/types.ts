@@ -12,8 +12,13 @@ export const taskDueFilterSchema = z.enum(["overdue", "today", "week"]);
 export const taskRunStatusSchema = z.enum(["active", "completed", "released", "timed_out"]);
 export const taskTimerModeSchema = z.enum(["planned", "unlimited"]);
 export const timeAccountingModeSchema = z.enum(["split", "parallel", "primary_only"]);
+export const habitFrequencySchema = z.enum(["daily", "weekly"]);
+export const habitPolaritySchema = z.enum(["positive", "negative"]);
+export const habitStatusSchema = z.enum(["active", "paused", "archived"]);
+export const habitCheckInStatusSchema = z.enum(["done", "missed"]);
 export const activityEntityTypeSchema = z.enum([
   "task",
+  "habit",
   "goal",
   "project",
   "domain",
@@ -51,6 +56,7 @@ export const crudEntityTypeSchema = z.enum([
   "goal",
   "project",
   "task",
+  "habit",
   "tag",
   "note",
   "insight",
@@ -62,6 +68,22 @@ export const crudEntityTypeSchema = z.enum([
   "mode_guide_session",
   "event_type",
   "emotion_definition",
+  "trigger_report"
+]);
+export const rewardableEntityTypeSchema = z.enum([
+  "system",
+  "goal",
+  "project",
+  "task",
+  "habit",
+  "tag",
+  "note",
+  "insight",
+  "psyche_value",
+  "behavior_pattern",
+  "behavior",
+  "belief_entry",
+  "mode_profile",
   "trigger_report"
 ]);
 export const deleteModeSchema = z.enum(["soft", "hard"]);
@@ -235,6 +257,50 @@ export const taskRunSchema = z.object({
   updatedAt: z.string()
 });
 
+export const habitCheckInSchema = z.object({
+  id: z.string(),
+  habitId: z.string(),
+  dateKey: z.string(),
+  status: habitCheckInStatusSchema,
+  note: z.string(),
+  deltaXp: z.number().int(),
+  createdAt: z.string(),
+  updatedAt: z.string()
+});
+
+export const habitSchema = z.object({
+  id: z.string(),
+  title: nonEmptyTrimmedString,
+  description: trimmedString,
+  status: habitStatusSchema,
+  polarity: habitPolaritySchema,
+  frequency: habitFrequencySchema,
+  targetCount: z.number().int().positive(),
+  weekDays: z.array(z.number().int().min(0).max(6)).default([]),
+  linkedGoalIds: uniqueStringArraySchema.default([]),
+  linkedProjectIds: uniqueStringArraySchema.default([]),
+  linkedTaskIds: uniqueStringArraySchema.default([]),
+  linkedValueIds: uniqueStringArraySchema.default([]),
+  linkedPatternIds: uniqueStringArraySchema.default([]),
+  linkedBehaviorIds: uniqueStringArraySchema.default([]),
+  linkedBeliefIds: uniqueStringArraySchema.default([]),
+  linkedModeIds: uniqueStringArraySchema.default([]),
+  linkedReportIds: uniqueStringArraySchema.default([]),
+  linkedBehaviorId: z.string().nullable(),
+  linkedBehaviorTitle: z.string().nullable(),
+  linkedBehaviorTitles: z.array(z.string()).default([]),
+  rewardXp: z.number().int().positive(),
+  penaltyXp: z.number().int().positive(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+  lastCheckInAt: z.string().nullable(),
+  lastCheckInStatus: habitCheckInStatusSchema.nullable(),
+  streakCount: z.number().int().nonnegative(),
+  completionRate: z.number().min(0).max(100),
+  dueToday: z.boolean(),
+  checkIns: z.array(habitCheckInSchema).default([])
+});
+
 export const activityEventSchema = z.object({
   id: z.string(),
   entityType: activityEntityTypeSchema,
@@ -346,6 +412,7 @@ export const dashboardPayloadSchema = z.object({
   goals: z.array(dashboardGoalSchema),
   projects: z.array(projectSummarySchema),
   tasks: z.array(taskSchema),
+  habits: z.array(habitSchema),
   tags: z.array(tagSchema),
   suggestedTags: z.array(tagSchema),
   owners: z.array(z.string()),
@@ -389,6 +456,7 @@ export const overviewContextSchema = z.object({
   projects: z.array(projectSummarySchema),
   activeGoals: z.array(dashboardGoalSchema),
   topTasks: z.array(taskSchema),
+  dueHabits: z.array(habitSchema),
   recentEvidence: z.array(activityEventSchema),
   achievements: z.array(achievementSignalSchema),
   domainBalance: z.array(contextDomainBalanceSchema),
@@ -419,8 +487,10 @@ export const todayContextSchema = z.object({
     sessionLabel: z.string()
   }),
   timeline: z.array(todayTimelineBucketSchema),
+  dueHabits: z.array(habitSchema),
   dailyQuests: z.array(todayQuestSchema),
   milestoneRewards: z.array(milestoneRewardSchema),
+  recentHabitRewards: z.array(z.lazy(() => rewardLedgerEventSchema)).default([]),
   momentum: z.object({
     streakDays: z.number().int().nonnegative(),
     momentumScore: z.number().int().min(0).max(100),
@@ -721,6 +791,7 @@ export const operatorContextPayloadSchema = z.object({
   generatedAt: z.string(),
   activeProjects: z.array(projectSummarySchema),
   focusTasks: z.array(taskSchema),
+  dueHabits: z.array(habitSchema),
   currentBoard: z.object({
     backlog: z.array(taskSchema),
     focus: z.array(taskSchema),
@@ -742,7 +813,7 @@ export const updateRewardRuleSchema = z.object({
 });
 
 export const createManualRewardGrantSchema = z.object({
-  entityType: nonEmptyTrimmedString,
+  entityType: rewardableEntityTypeSchema,
   entityId: nonEmptyTrimmedString,
   deltaXp: z.number().int().refine((value) => value !== 0, {
     message: "deltaXp must not be zero"
@@ -857,6 +928,13 @@ export const projectListQuerySchema = z.object({
   limit: z.coerce.number().int().positive().max(100).optional()
 });
 
+export const habitListQuerySchema = z.object({
+  status: habitStatusSchema.optional(),
+  polarity: habitPolaritySchema.optional(),
+  dueToday: z.coerce.boolean().optional(),
+  limit: z.coerce.number().int().positive().max(100).optional()
+});
+
 export const createGoalSchema = z.object({
   title: nonEmptyTrimmedString,
   description: trimmedString.default(""),
@@ -909,6 +987,66 @@ export const taskMutationShape = {
 };
 
 export const createTaskSchema = z.object(taskMutationShape);
+const habitMutationShape = {
+  title: nonEmptyTrimmedString,
+  description: trimmedString.default(""),
+  status: habitStatusSchema.default("active"),
+  polarity: habitPolaritySchema.default("positive"),
+  frequency: habitFrequencySchema.default("daily"),
+  targetCount: z.number().int().min(1).max(14).default(1),
+  weekDays: z.array(z.number().int().min(0).max(6)).max(7).default([]),
+  linkedGoalIds: uniqueStringArraySchema.default([]),
+  linkedProjectIds: uniqueStringArraySchema.default([]),
+  linkedTaskIds: uniqueStringArraySchema.default([]),
+  linkedValueIds: uniqueStringArraySchema.default([]),
+  linkedPatternIds: uniqueStringArraySchema.default([]),
+  linkedBehaviorIds: uniqueStringArraySchema.default([]),
+  linkedBeliefIds: uniqueStringArraySchema.default([]),
+  linkedModeIds: uniqueStringArraySchema.default([]),
+  linkedReportIds: uniqueStringArraySchema.default([]),
+  linkedBehaviorId: nonEmptyTrimmedString.nullable().default(null),
+  rewardXp: z.number().int().min(1).max(100).default(12),
+  penaltyXp: z.number().int().min(1).max(100).default(8)
+};
+
+export const createHabitSchema = z.object(habitMutationShape).superRefine((value, context) => {
+    if (value.frequency === "weekly" && value.weekDays.length === 0) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["weekDays"],
+        message: "Select at least one weekday for weekly habits"
+      });
+    }
+  });
+export const updateHabitSchema = z.object({
+  title: nonEmptyTrimmedString.optional(),
+  description: trimmedString.optional(),
+  status: habitStatusSchema.optional(),
+  polarity: habitPolaritySchema.optional(),
+  frequency: habitFrequencySchema.optional(),
+  targetCount: z.number().int().min(1).max(14).optional(),
+  weekDays: z.array(z.number().int().min(0).max(6)).max(7).optional(),
+  linkedGoalIds: uniqueStringArraySchema.optional(),
+  linkedProjectIds: uniqueStringArraySchema.optional(),
+  linkedTaskIds: uniqueStringArraySchema.optional(),
+  linkedValueIds: uniqueStringArraySchema.optional(),
+  linkedPatternIds: uniqueStringArraySchema.optional(),
+  linkedBehaviorIds: uniqueStringArraySchema.optional(),
+  linkedBeliefIds: uniqueStringArraySchema.optional(),
+  linkedModeIds: uniqueStringArraySchema.optional(),
+  linkedReportIds: uniqueStringArraySchema.optional(),
+  linkedBehaviorId: nonEmptyTrimmedString.nullable().optional(),
+  rewardXp: z.number().int().min(1).max(100).optional(),
+  penaltyXp: z.number().int().min(1).max(100).optional()
+}).superRefine((value, context) => {
+  if (value.frequency === "weekly" && value.weekDays !== undefined && value.weekDays.length === 0) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["weekDays"],
+      message: "Select at least one weekday for weekly habits"
+    });
+  }
+});
 export const updateTaskSchema = z.object({
   title: nonEmptyTrimmedString.optional(),
   description: trimmedString.optional(),
@@ -971,6 +1109,12 @@ export const taskRunFinishSchema = z.object({
 
 export const taskRunFocusSchema = z.object({
   actor: nonEmptyTrimmedString.optional()
+});
+
+export const createHabitCheckInSchema = z.object({
+  dateKey: dateOnlySchema.default(new Date().toISOString().slice(0, 10)),
+  status: habitCheckInStatusSchema,
+  note: trimmedString.default("")
 });
 
 export const updateSettingsSchema = z.object({
@@ -1182,6 +1326,8 @@ export const operatorLogWorkResultSchema = z.object({
 });
 
 export type CreateGoalInput = z.infer<typeof createGoalSchema>;
+export type CreateHabitCheckInInput = z.infer<typeof createHabitCheckInSchema>;
+export type CreateHabitInput = z.infer<typeof createHabitSchema>;
 export type CreateProjectInput = z.infer<typeof createProjectSchema>;
 export type CreateTagInput = z.infer<typeof createTagSchema>;
 export type CreateTaskInput = z.infer<typeof createTaskSchema>;
@@ -1247,6 +1393,9 @@ export type ActivityEntityType = z.infer<typeof activityEntityTypeSchema>;
 export type ActivitySource = z.infer<typeof activitySourceSchema>;
 export type Goal = z.infer<typeof goalSchema>;
 export type GoalStatus = z.infer<typeof goalStatusSchema>;
+export type Habit = z.infer<typeof habitSchema>;
+export type HabitCheckIn = z.infer<typeof habitCheckInSchema>;
+export type HabitListQuery = z.infer<typeof habitListQuerySchema>;
 export type Tag = z.infer<typeof tagSchema>;
 export type TagKind = z.infer<typeof tagKindSchema>;
 export type Task = z.infer<typeof taskSchema>;
@@ -1269,6 +1418,7 @@ export type TimeAccountingMode = z.infer<typeof timeAccountingModeSchema>;
 export type TaskStatus = z.infer<typeof taskStatusSchema>;
 export type UpdateTagInput = z.infer<typeof updateTagSchema>;
 export type UpdateGoalInput = z.infer<typeof updateGoalSchema>;
+export type UpdateHabitInput = z.infer<typeof updateHabitSchema>;
 export type UpdateInsightInput = z.infer<typeof updateInsightSchema>;
 export type UpdateNoteInput = z.infer<typeof updateNoteSchema>;
 export type UpdateProjectInput = z.infer<typeof updateProjectSchema>;

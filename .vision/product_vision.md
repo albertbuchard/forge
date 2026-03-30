@@ -37,6 +37,12 @@ many goals, projects, tasks, and Psyche records so the user can preserve progres
 evidence, close-out summaries, and contextual explanation without fragmenting the data
 model.
 
+Habits should be first-class recurring records, not tasks in disguise. They need their
+own navigation entry and management page, with frequency rules, positive and negative
+variants, and XP logic that makes completion and omission feel materially different.
+They should also link back to Psyche behaviors so the system can connect action to the
+underlying pattern rather than treating habit tracking as a detached checklist.
+
 ## What The Main Views Are Supposed To Do
 
 The Overview page is the user's high-level control room. It should summarize the state

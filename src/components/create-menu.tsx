@@ -16,7 +16,7 @@ import type { DashboardGoal, Goal, ProjectSummary, Tag } from "@/lib/types";
 const MOBILE_BREAKPOINT_QUERY = "(max-width: 1023px)";
 
 type CreateAction = {
-  id: "goal" | "project" | "task" | "value" | "pattern" | "behavior" | "report";
+  id: "goal" | "project" | "task" | "habit" | "value" | "pattern" | "behavior" | "report";
   kind: EntityKind;
   group: "Execution" | "Psyche";
   title: string;
@@ -189,6 +189,17 @@ export function CreateMenu({
       onSelect: () => {
         setMenuOpen(false);
         setTaskOpen(true);
+      }
+    },
+    {
+      id: "habit",
+      kind: "habit",
+      group: "Execution",
+      title: "Habit",
+      description: "Track a recurring commitment or recurring slip with explicit XP logic.",
+      onSelect: () => {
+        setMenuOpen(false);
+        navigate("/habits?create=1");
       }
     },
     {

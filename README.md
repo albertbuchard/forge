@@ -2,18 +2,24 @@
 
 [GitHub Pages plugin site](https://albertbuchard.github.io/forge/)
 
-Forge is an OpenClaw plugin for project management and mental health tracking.
+Forge is a local-first life direction, execution, and reflection system with a full web UI, a Fastify API, and an OpenClaw plugin.
 
-Forge gives an OpenClaw agent a structured workspace for:
+Forge gives the user and trusted agents one structured operating record for:
 
-- goals, projects, and Kanban tasks
+- life goals, projects, and Kanban tasks
 - real timed work sessions
 - linked Markdown notes
 - XP, momentum, and weekly review
 - Psyche records such as values, beliefs, patterns, modes, and trigger reports
 - saved insights that can be accepted, applied, or dismissed
 
-It complements OpenClaw's open-ended natural-language memory with a more explicit layer the agent can inspect, update, and act on over time.
+The repo contains three connected runtime surfaces:
+
+- the Forge web app under `/forge/`
+- the local Fastify API at `/api/v1/*`
+- the OpenClaw plugin that exposes the curated agent-facing contract
+
+The OpenClaw plugin complements the core product. It is not the whole product.
 
 ## Install Forge In OpenClaw
 
@@ -84,9 +90,10 @@ The current app surface in this repo includes:
 - `Overview`: high-level control room for active work, streaks, rewards, and direction
 - `Today`: daily execution surface
 - `Kanban`: task board with task movement and work-start actions
+- `Habits`: recurring commitments and recurring slips with explicit XP consequences, linked to goals, projects, tasks, values, patterns, behaviors, beliefs, modes, and trigger reports
 - `Goals` and goal detail pages
 - `Projects` and project detail pages
-- `Tasks` and task detail pages
+- task detail pages
 - `Notes`
 - `Activity`
 - `Insights`
@@ -94,6 +101,7 @@ The current app surface in this repo includes:
 - `Settings`
 - `Settings -> Agents`
 - `Settings -> Rewards`
+  The rewards surface now includes an audited manual bonus workflow with validated entity selection across habits, goals, projects, tasks, and durable Psyche records.
 - `Settings -> Bin`
 - `Psyche`
 - `Psyche -> Values`
@@ -107,9 +115,11 @@ The current app surface in this repo includes:
 
 The Psyche side is explicitly influenced by third-wave CBT, ACT, and schema-therapy-style work. It is meant to give the agent a durable place to store values, beliefs, modes, patterns, and trigger reports in a structured form instead of leaving them scattered in chat.
 
+There is no separate top-level `/tasks` index route in the current app. Task navigation is detail-first from Today, Kanban, Projects, Goals, Overview, Activity, and Notes.
+
 ## Settings And Auth
 
-Forge does have settings and token management, but the current UI is not the old "Collaboration Settings" model.
+Forge has settings and token management, but the current UI is not the older "Collaboration Settings" model.
 
 What exists now:
 

@@ -45,11 +45,13 @@ Forge is a personal system for:
 - long-term goals
 - active projects
 - concrete tasks
+- recurring habits
 - truthful live work sessions
 - weekly review and XP feedback
 - structured Psyche records such as values, patterns, beliefs, modes, and trigger reports
 
 This plugin gives OpenClaw the tools it needs to work with that system. It can read current state, search records, create and update records, control live work sessions, post insights, and hand the user off to the Forge UI when the visual workflow is easier.
+It can also grant an explicit audited XP bonus or penalty through the dedicated reward-bonus route when the normal automatic task or habit reward flows are not the right fit.
 It also understands Forge `note` records, which are Markdown-based, searchable, and linkable across one or many entities.
 Notes support includes:
 
@@ -150,9 +152,10 @@ The main mental model is intentionally small:
 5. `forge_search_entities`
 6. `forge_create_entities` or `forge_update_entities`
 7. `forge_delete_entities` or `forge_restore_entities` when needed
-8. `forge_log_work` for retroactive work
-9. `forge_start_task_run`, `forge_heartbeat_task_run`, `forge_focus_task_run`, `forge_complete_task_run`, and `forge_release_task_run` for real live work
-10. `forge_post_insight` for recommendations
+8. `forge_grant_reward_bonus` for explicit audited manual XP changes
+9. `forge_log_work` for retroactive work
+10. `forge_start_task_run`, `forge_heartbeat_task_run`, `forge_focus_task_run`, `forge_complete_task_run`, and `forge_release_task_run` for real live work
+11. `forge_post_insight` for recommendations
 
 Use the UI entrypoint sparingly.
 Do not open the Forge UI or a browser just to create or update normal records that the tools already cover.

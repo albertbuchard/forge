@@ -1,4 +1,4 @@
-import type { Goal, ProjectSummary } from "@/lib/types";
+import type { Goal, Habit, ProjectSummary } from "@/lib/types";
 import type { Behavior, BeliefEntry, PsycheValue, TriggerReport } from "@/lib/psyche-types";
 import type { PsycheGraphEdge, PsycheGraphField, PsycheGraphNode, PsycheGraphTone } from "@/components/psyche/psyche-graph";
 import type { EntityKind } from "@/lib/entity-visuals";
@@ -7,6 +7,7 @@ export interface GoalGravityCluster {
   goal: Goal;
   linkedValues: PsycheValue[];
   linkedProjects: ProjectSummary[];
+  linkedHabits: Habit[];
   linkedReports: TriggerReport[];
   linkedBehaviors: Behavior[];
   linkedBeliefs: BeliefEntry[];
@@ -195,7 +196,7 @@ export function buildGoalGravityScene(clusters: GoalGravityCluster[], { compact 
   clusters.forEach((cluster, clusterIndex) => {
     const goalX = startX + clusterIndex * spacing;
     const goalY = clusterIndex % 2 === 0 ? 92 : 146;
-    const frictionCount = cluster.linkedBehaviors.length + cluster.linkedBeliefs.length + cluster.linkedReports.length;
+    const frictionCount = cluster.linkedBehaviors.length + cluster.linkedBeliefs.length + cluster.linkedReports.length + cluster.linkedHabits.length;
     const goalNodeId = `goal:${cluster.goal.id}`;
 
     nodes.push({
@@ -218,13 +219,14 @@ export function buildGoalGravityScene(clusters: GoalGravityCluster[], { compact 
       ctaLabel: "Open goal",
       tone: "amber",
       entityKind: "goal",
-      chips: cluster.linkedValues.slice(0, 4).map((value) => value.title),
-      stats: [
-        `${cluster.linkedValues.length} linked value${cluster.linkedValues.length === 1 ? "" : "s"}`,
-        `${cluster.linkedProjects.length} live project${cluster.linkedProjects.length === 1 ? "" : "s"}`,
-        `${frictionCount} friction signal${frictionCount === 1 ? "" : "s"}`
-      ]
-    };
+        chips: cluster.linkedValues.slice(0, 4).map((value) => value.title),
+        stats: [
+          `${cluster.linkedValues.length} linked value${cluster.linkedValues.length === 1 ? "" : "s"}`,
+          `${cluster.linkedProjects.length} live project${cluster.linkedProjects.length === 1 ? "" : "s"}`,
+          `${cluster.linkedHabits.length} linked habit${cluster.linkedHabits.length === 1 ? "" : "s"}`,
+          `${frictionCount} friction signal${frictionCount === 1 ? "" : "s"}`
+        ]
+      };
 
     if (frictionCount > 0) {
       fields.push({
@@ -327,6 +329,44 @@ export function buildGoalGravityScene(clusters: GoalGravityCluster[], { compact 
         entityKind: "project",
         chips: [project.status, project.goalTitle],
         stats: [`${project.progress}% progress`, `${project.activeTaskCount} active task${project.activeTaskCount === 1 ? "" : "s"}`]
+      };
+    });
+
+    cluster.linkedHabits.slice(0, compact ? 2 : 3).forEach((habit, habitIndex) => {
+      const nodeId = `habit:${habit.id}`;
+      const habitSize = estimateRectNodeSize(habit.title, { compact });
+      const habitX = goalX - (compact ? 44 : 58);
+      const habitY = goalY + (compact ? 228 : 294) + habitIndex * (compact ? 92 : 104);
+      nodes.push({
+        id: nodeId,
+        kind: "habit",
+        x: habitX,
+        y: habitY,
+        width: habitSize.width,
+        height: habitSize.height,
+        tone: "mint",
+        label: habit.title,
+        meta: habit.polarity,
+        href: "/habits"
+      });
+      edges.push({
+        id: `${goalNodeId}->${nodeId}`,
+        from: goalNodeId,
+        to: nodeId,
+        tone: "mint",
+        strength: habit.dueToday ? "high" : "medium"
+      });
+      inspectors[nodeId] = {
+        id: nodeId,
+        eyebrow: "Habit",
+        title: habit.title,
+        summary: habit.description || "Recurring operating record connected directly to this goal field.",
+        href: "/habits",
+        ctaLabel: "Open habits",
+        tone: "mint",
+        entityKind: "habit",
+        chips: [habit.polarity, habit.frequency, habit.dueToday ? "due today" : "checked in"],
+        stats: [`${habit.streakCount} streak`, `${habit.rewardXp}/${habit.penaltyXp} xp flow`]
       };
     });
 

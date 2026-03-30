@@ -225,6 +225,7 @@ describe("forge openclaw plugin", () => {
       "forge_get_ui_entrypoint",
       "forge_get_weekly_review",
       "forge_get_xp_metrics",
+      "forge_grant_reward_bonus",
       "forge_heartbeat_task_run",
       "forge_log_work",
       "forge_post_insight",

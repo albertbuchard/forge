@@ -3,7 +3,7 @@ import { ENTITY_KINDS, getEntityVisual, isEntityKind } from "@/lib/entity-visual
 
 describe("entity visuals", () => {
   it("defines a stable visual entry for every supported entity kind", () => {
-    expect(ENTITY_KINDS).toEqual(["goal", "project", "task", "value", "pattern", "behavior", "belief", "mode", "report"]);
+    expect(ENTITY_KINDS).toEqual(["goal", "project", "task", "habit", "value", "pattern", "behavior", "belief", "mode", "report"]);
 
     for (const kind of ENTITY_KINDS) {
       const visual = getEntityVisual(kind);

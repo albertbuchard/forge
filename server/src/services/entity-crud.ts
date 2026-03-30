@@ -32,6 +32,7 @@ import {
   upsertDeletedEntityRecord
 } from "../repositories/deleted-entities.js";
 import { createGoal, deleteGoal, getGoalById, listGoals, updateGoal } from "../repositories/goals.js";
+import { createHabit, deleteHabit, getHabitById, listHabits, updateHabit } from "../repositories/habits.js";
 import {
   createBehavior,
   createBehaviorPattern,
@@ -96,12 +97,14 @@ import type {
 } from "../types.js";
 import {
   createGoalSchema,
+  createHabitSchema,
   createInsightSchema,
   createNoteSchema,
   createProjectSchema,
   createTagSchema,
   createTaskSchema,
   updateGoalSchema,
+  updateHabitSchema,
   updateInsightSchema,
   updateNoteSchema,
   updateProjectSchema,
@@ -175,6 +178,15 @@ const CRUD_ENTITY_CAPABILITIES: Record<CrudEntityType, CrudEntityCapability> = {
     create: (data, context) => createTask(data as never, context) as Record<string, unknown>,
     update: (id, patch, context) => updateTask(id, patch as never, context) as Record<string, unknown> | undefined,
     hardDelete: (id, context) => deleteTask(id, context) as Record<string, unknown> | undefined
+  },
+  habit: {
+    entityType: "habit",
+    routeBase: "/api/v1/habits",
+    list: () => listHabits() as Array<Record<string, unknown>>,
+    get: (id) => getHabitById(id) as Record<string, unknown> | undefined,
+    create: (data, context) => createHabit(data as never, context) as Record<string, unknown>,
+    update: (id, patch, context) => updateHabit(id, patch as never, context) as Record<string, unknown> | undefined,
+    hardDelete: (id, context) => deleteHabit(id, context) as Record<string, unknown> | undefined
   },
   tag: {
     entityType: "tag",
@@ -304,6 +316,7 @@ const CREATE_ENTITY_SCHEMAS: Record<CrudEntityType, { parse: (value: unknown) =>
   goal: createGoalSchema,
   project: createProjectSchema,
   task: createTaskSchema,
+  habit: createHabitSchema,
   tag: createTagSchema,
   note: createNoteSchema,
   insight: createInsightSchema,
@@ -322,6 +335,7 @@ const UPDATE_ENTITY_SCHEMAS: Record<CrudEntityType, { parse: (value: unknown) =>
   goal: updateGoalSchema,
   project: updateProjectSchema,
   task: updateTaskSchema,
+  habit: updateHabitSchema,
   tag: updateTagSchema,
   note: updateNoteSchema,
   insight: updateInsightSchema,
@@ -483,6 +497,18 @@ function matchesLinkedTo(entityType: CrudEntityType, entity: Record<string, unkn
       return linkedTo.entityType === "goal" && entity.goalId === linkedTo.id;
     case "task":
       return (linkedTo.entityType === "goal" && entity.goalId === linkedTo.id) || (linkedTo.entityType === "project" && entity.projectId === linkedTo.id);
+    case "habit":
+      return (
+        (linkedTo.entityType === "goal" && Array.isArray(entity.linkedGoalIds) && entity.linkedGoalIds.includes(linkedTo.id)) ||
+        (linkedTo.entityType === "project" && Array.isArray(entity.linkedProjectIds) && entity.linkedProjectIds.includes(linkedTo.id)) ||
+        (linkedTo.entityType === "task" && Array.isArray(entity.linkedTaskIds) && entity.linkedTaskIds.includes(linkedTo.id)) ||
+        (linkedTo.entityType === "psyche_value" && Array.isArray(entity.linkedValueIds) && entity.linkedValueIds.includes(linkedTo.id)) ||
+        (linkedTo.entityType === "behavior_pattern" && Array.isArray(entity.linkedPatternIds) && entity.linkedPatternIds.includes(linkedTo.id)) ||
+        (linkedTo.entityType === "behavior" && Array.isArray(entity.linkedBehaviorIds) && entity.linkedBehaviorIds.includes(linkedTo.id)) ||
+        (linkedTo.entityType === "belief_entry" && Array.isArray(entity.linkedBeliefIds) && entity.linkedBeliefIds.includes(linkedTo.id)) ||
+        (linkedTo.entityType === "mode_profile" && Array.isArray(entity.linkedModeIds) && entity.linkedModeIds.includes(linkedTo.id)) ||
+        (linkedTo.entityType === "trigger_report" && Array.isArray(entity.linkedReportIds) && entity.linkedReportIds.includes(linkedTo.id))
+      );
     case "note":
       return (
         Array.isArray(entity.links) &&

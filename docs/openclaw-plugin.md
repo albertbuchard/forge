@@ -12,7 +12,7 @@ If the user wants the actual Forge app, tell them they can either:
 Useful example replies:
 
 - “I can open the Forge UI for you.”
-- “The local Forge UI address is `http://127.0.0.1:4317/forge/`.”
+- “The local Forge UI address is usually `http://127.0.0.1:4317/forge/`, but localhost installs can move to the next free port if `4317` is already taken.”
 
 Use the UI route or tool when the user wants visual review, Kanban movement, graph exploration, or broader editing in the Forge app itself.
 
@@ -43,6 +43,7 @@ The intended workflow is:
 - create, update, delete, and restore through the batch entity tools
 - use `forge_log_work` for retroactive work
 - use the task-run tools for real live work: `forge_start_task_run`, `forge_heartbeat_task_run`, `forge_focus_task_run`, `forge_complete_task_run`, `forge_release_task_run`
+- use `forge_grant_reward_bonus` only when a manual XP bonus or penalty should be explicit and auditable
 - use first-class `note` entities for Markdown progress evidence, handoff context, and multi-entity work summaries
 - store agent-authored recommendations with `forge_post_insight`
 - use `forge_get_ui_entrypoint` when the user should continue in the visual Forge UI
@@ -77,6 +78,7 @@ The agent should not have to guess Forge shapes.
 The live onboarding route now returns:
 
 - `conceptModel`: what goals, projects, tasks, task runs, insights, and Psyche records actually mean
+- habits are part of that concept model and are first-class in batch entity workflows, note links, search, and delete/restore
 - `psycheSubmoduleModel`: what values, patterns, behaviors, beliefs, schema catalog entries, modes, mode guides, event types, emotion definitions, and trigger reports are for
 - `psycheCoachingPlaybooks`: how the agent should guide pattern analysis, belief/schema intake, mode work, and trigger reports
 - `relationshipModel`: how those records relate to each other
@@ -395,7 +397,7 @@ The curated route contract is:
 Best path:
 
 1. open Forge in the browser locally or over Tailscale
-2. go to `Settings` -> `Collaboration Settings`
+2. go to `Settings` -> `Agents`
 3. issue or rotate a token there
 4. copy the raw `fg_live_...` token when it is revealed once
 5. paste it into `plugins.entries["forge-openclaw-plugin"].config.apiToken`

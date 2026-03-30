@@ -8,6 +8,7 @@ import type {
   ApprovalRequest,
   EventLogEntry,
   Goal,
+  Habit,
   ForgeSnapshot,
   Insight,
   OperatorOverviewPayload,
@@ -65,6 +66,7 @@ import type {
   CreateAgentTokenInput,
   CreateInsightInput,
   GoalMutationInput,
+  HabitMutationInput,
   ProjectMutationInput,
   QuickTaskInput,
   SettingsMutationInput,
@@ -520,6 +522,62 @@ export function getWeeklyReview() {
 
 export function listProjects() {
   return request<{ projects: ProjectSummary[] }>("/api/v1/projects");
+}
+
+export function listHabits(input: {
+  status?: Habit["status"];
+  polarity?: Habit["polarity"];
+  dueToday?: boolean;
+  limit?: number;
+} = {}) {
+  const search = new URLSearchParams();
+  if (input.status) {
+    search.set("status", input.status);
+  }
+  if (input.polarity) {
+    search.set("polarity", input.polarity);
+  }
+  if (input.dueToday) {
+    search.set("dueToday", "true");
+  }
+  if (input.limit) {
+    search.set("limit", String(input.limit));
+  }
+  const suffix = search.size > 0 ? `?${search.toString()}` : "";
+  return request<{ habits: Habit[] }>(`/api/v1/habits${suffix}`);
+}
+
+export function createHabit(input: HabitMutationInput) {
+  return request<{ habit: Habit }>("/api/v1/habits", {
+    method: "POST",
+    body: JSON.stringify({
+      ...input,
+      linkedBehaviorId: input.linkedBehaviorId || null
+    })
+  });
+}
+
+export function patchHabit(habitId: string, patch: Partial<HabitMutationInput>) {
+  return request<{ habit: Habit }>(`/api/v1/habits/${habitId}`, {
+    method: "PATCH",
+    body: JSON.stringify({
+      ...patch,
+      linkedBehaviorId: patch.linkedBehaviorId === "" ? null : patch.linkedBehaviorId
+    })
+  });
+}
+
+export function deleteHabit(habitId: string) {
+  return request<{ habit: Habit }>(`/api/v1/habits/${habitId}`, {
+    method: "DELETE"
+  });
+}
+
+export function createHabitCheckIn(habitId: string, input: { dateKey?: string; status: "done" | "missed"; note?: string }) {
+  return request<{ habit: Habit; metrics: XpMetricsPayload }>(`/api/v1/habits/${habitId}/check-ins`, {
+    method: "POST",
+    body: JSON.stringify(input)
+  });
 }
 
 export function listTags() {

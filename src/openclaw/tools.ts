@@ -316,6 +316,22 @@ export function registerForgePluginTools(api: ForgePluginToolApi, config: ForgeP
   });
 
   registerWriteTool(api, config, {
+    name: "forge_grant_reward_bonus",
+    label: "Forge Grant Reward Bonus",
+    description: "Grant an explicit manual XP bonus or penalty with provenance. Use only for auditable operator judgement beyond the normal task-run and habit reward flows.",
+    parameters: Type.Object({
+      entityType: Type.String({ minLength: 1 }),
+      entityId: Type.String({ minLength: 1 }),
+      deltaXp: Type.Number(),
+      reasonTitle: Type.String({ minLength: 1 }),
+      reasonSummary: optionalString(),
+      metadata: Type.Optional(Type.Record(Type.String(), Type.Any()))
+    }),
+    method: "POST",
+    path: "/api/v1/rewards/bonus"
+  });
+
+  registerWriteTool(api, config, {
     name: "forge_post_insight",
     label: "Forge Post Insight",
     description: "Post a structured Forge insight after reading the overview. This stores an agent-authored observation or recommendation with provenance.",

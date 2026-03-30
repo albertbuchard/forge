@@ -1,7 +1,7 @@
 import type { LucideIcon } from "lucide-react";
-import { FileText, FolderOpen, Heart, ListTodo, Quote, Repeat, Route, Shapes, Target } from "lucide-react";
+import { FileText, FolderOpen, Heart, ListTodo, Quote, RefreshCw, Repeat, Route, Shapes, Target } from "lucide-react";
 
-export type EntityKind = "goal" | "project" | "task" | "value" | "pattern" | "behavior" | "belief" | "mode" | "report";
+export type EntityKind = "goal" | "project" | "task" | "habit" | "value" | "pattern" | "behavior" | "belief" | "mode" | "report";
 
 export type EntityVisualDefinition = {
   kind: EntityKind;
@@ -14,7 +14,7 @@ export type EntityVisualDefinition = {
   buttonClassName: string;
 };
 
-export const ENTITY_KINDS: EntityKind[] = ["goal", "project", "task", "value", "pattern", "behavior", "belief", "mode", "report"];
+export const ENTITY_KINDS: EntityKind[] = ["goal", "project", "task", "habit", "value", "pattern", "behavior", "belief", "mode", "report"];
 
 const ENTITY_VISUALS: Record<EntityKind, EntityVisualDefinition> = {
   goal: {
@@ -52,6 +52,18 @@ const ENTITY_VISUALS: Record<EntityKind, EntityVisualDefinition> = {
     subtleBadgeClassName: "border-indigo-300/18 bg-[rgba(129,140,248,0.08)] text-indigo-100",
     buttonClassName:
       "border-indigo-300/20 bg-[rgba(129,140,248,0.12)] text-indigo-50 hover:bg-[rgba(129,140,248,0.18)]"
+  },
+  habit: {
+    kind: "habit",
+    label: "Habit",
+    icon: RefreshCw,
+    iconClassName: "text-teal-100",
+    nameClassName: "text-teal-100",
+    badgeClassName:
+      "border-teal-300/24 bg-[linear-gradient(135deg,rgba(45,212,191,0.22),rgba(45,212,191,0.08))] text-teal-50",
+    subtleBadgeClassName: "border-teal-300/18 bg-[rgba(45,212,191,0.08)] text-teal-100",
+    buttonClassName:
+      "border-teal-300/20 bg-[rgba(45,212,191,0.12)] text-teal-50 hover:bg-[rgba(45,212,191,0.18)]"
   },
   value: {
     kind: "value",

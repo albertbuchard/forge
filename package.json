@@ -3,7 +3,7 @@
   "version": "0.2.0",
   "private": true,
   "type": "module",
-  "description": "Forge premium life operating system.",
+  "description": "Local-first life direction, execution, and reflection system for Forge.",
   "openclaw": {
     "extensions": [
       "./src/openclaw/index.legacy.ts"
@@ -14,6 +14,7 @@
     "dev:openclaw-data": "node ./scripts/with-openclaw-plugin-data-root.mjs npm run dev",
     "dev:web": "vite",
     "dev:server": "HOST=127.0.0.1 PORT=4317 tsx watch server/src/index.ts",
+    "dev:server:openclaw-data": "node ./scripts/with-openclaw-plugin-data-root.mjs npm run dev:server",
     "demo:seed": "node --import tsx server/src/seed-demo.ts",
     "demo:seed:openclaw-data": "node ./scripts/with-openclaw-plugin-data-root.mjs npm run demo:seed",
     "smoke:published-openclaw-plugin": "bash ./scripts/smoke-test-published-openclaw-plugin.sh",

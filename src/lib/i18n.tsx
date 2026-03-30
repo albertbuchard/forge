@@ -129,6 +129,7 @@ function createEnglishDictionary() {
       routeLabels: {
         overview: "Overview",
         goals: "Goals",
+        habits: "Habits",
         projects: "Projects",
         kanban: "Kanban",
         today: "Today",
@@ -142,6 +143,7 @@ function createEnglishDictionary() {
       routeDetails: {
         overview: "See priorities, momentum, and recent evidence in one place.",
         goals: "Keep long-term direction connected to day-to-day work.",
+        habits: "Track recurring commitments and recurring slips with explicit XP consequences.",
         projects: "Track the initiatives currently moving your goals forward.",
         kanban: "Move active work across the board without losing context.",
         today: "Focus today on the clearest next move.",
@@ -162,8 +164,8 @@ function createEnglishDictionary() {
         newGoalDescription: "Define a long-term direction.",
         newProject: "New project",
         newProjectDescription: "Add a concrete initiative under a life goal.",
-      newTask: "New task",
-      newTaskDescription: "Capture the next actionable step in a project."
+        newTask: "New task",
+        newTaskDescription: "Capture the next actionable step in a project."
     },
     commandPalette: {
       searchPlaceholder: "Jump to a route, goal, project, or focus task",
@@ -178,6 +180,7 @@ function createEnglishDictionary() {
       routeNotes: "Search notes.",
       routePsyche: "Open Psyche.",
       routeGoals: "Open your life goals.",
+      routeHabits: "Open your habits.",
       routeProjects: "Open your projects.",
       routeReview: "Open weekly review.",
       routeSettings: "Open settings.",
@@ -629,6 +632,7 @@ export const fr: typeof en = {
     routeLabels: {
       overview: "Vue d'ensemble",
       goals: "Objectifs",
+      habits: "Habitudes",
       projects: "Projets",
       kanban: "Kanban",
       today: "Aujourd'hui",
@@ -642,6 +646,7 @@ export const fr: typeof en = {
     routeDetails: {
       overview: "Voyez les priorités, le momentum et les preuves récentes au même endroit.",
       goals: "Reliez la direction long terme au travail du quotidien.",
+      habits: "Suivez les engagements récurrents et les rechutes avec des conséquences XP explicites.",
       projects: "Suivez les initiatives qui font avancer vos objectifs.",
       kanban: "Faites progresser le travail actif sans perdre le contexte.",
       today: "Concentrez aujourd'hui sur le prochain mouvement le plus net.",
@@ -678,6 +683,7 @@ export const fr: typeof en = {
       routeNotes: "Rechercher les notes.",
       routePsyche: "Ouvrir Psyche.",
       routeGoals: "Ouvrir vos objectifs de vie.",
+      routeHabits: "Ouvrir vos habitudes.",
       routeProjects: "Ouvrir vos projets.",
       routeReview: "Ouvrir la revue hebdomadaire.",
       routeSettings: "Ouvrir les réglages.",

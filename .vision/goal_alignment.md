@@ -57,6 +57,11 @@ A task is a specific unit of action. Tasks live inside projects, can move throug
 states such as backlog, focus, in progress, blocked, and done, and can be started as
 real timed work sessions.
 
+A habit is a recurring commitment tracked separately from tasks. Habits need their own
+management surface, recurrence rules, and clear XP consequences so they do not become
+just another task subtype. Positive habits should reward completion and penalize misses;
+negative habits should invert that logic.
+
 A task run is a live or historical work session attached to a task. It records when
 work started, whether the session is planned or unlimited, how much wall time passed,
 how much credited time was earned, and whether the run is the user's current focus.

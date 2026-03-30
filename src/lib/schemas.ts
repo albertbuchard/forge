@@ -81,6 +81,38 @@ export const quickTaskSchema = z.object({
   tagIds: z.array(z.string())
 });
 
+export const habitMutationSchema = z
+  .object({
+    title: z.string().trim().min(1, "Title is required"),
+    description: z.string().trim(),
+    status: z.enum(["active", "paused", "archived"]),
+    polarity: z.enum(["positive", "negative"]),
+    frequency: z.enum(["daily", "weekly"]),
+    targetCount: z.coerce.number().int().min(1).max(14),
+    weekDays: z.array(z.number().int().min(0).max(6)).max(7),
+    linkedGoalIds: z.array(z.string().trim().min(1)),
+    linkedProjectIds: z.array(z.string().trim().min(1)),
+    linkedTaskIds: z.array(z.string().trim().min(1)),
+    linkedValueIds: z.array(z.string().trim().min(1)),
+    linkedPatternIds: z.array(z.string().trim().min(1)),
+    linkedBehaviorIds: z.array(z.string().trim().min(1)),
+    linkedBeliefIds: z.array(z.string().trim().min(1)),
+    linkedModeIds: z.array(z.string().trim().min(1)),
+    linkedReportIds: z.array(z.string().trim().min(1)),
+    linkedBehaviorId: z.string().trim(),
+    rewardXp: z.coerce.number().int().min(1).max(100),
+    penaltyXp: z.coerce.number().int().min(1).max(100)
+  })
+  .superRefine((value, context) => {
+    if (value.frequency === "weekly" && value.weekDays.length === 0) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["weekDays"],
+        message: "Pick at least one weekday"
+      });
+    }
+  });
+
 export const tagMutationSchema = z.object({
   name: z.string().trim().min(1, "Name is required"),
   kind: z.enum(["value", "category", "execution"]),
@@ -94,4 +126,5 @@ export type SettingsMutationInput = z.infer<typeof settingsMutationSchema>;
 export type CreateAgentTokenInput = z.infer<typeof createAgentTokenSchema>;
 export type CreateInsightInput = z.infer<typeof createInsightSchema>;
 export type QuickTaskInput = z.infer<typeof quickTaskSchema>;
+export type HabitMutationInput = z.infer<typeof habitMutationSchema>;
 export type TagMutationInput = z.infer<typeof tagMutationSchema>;

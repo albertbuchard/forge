@@ -32,6 +32,10 @@ export function PsycheGoalMapPage() {
     return shell.snapshot.goals.map((goal) => {
       const linkedValues = overview.values.filter((value) => value.linkedGoalIds.includes(goal.id));
       const linkedProjects = shell.snapshot.dashboard.projects.filter((project) => project.goalId === goal.id);
+      const linkedHabits = shell.snapshot.habits.filter((habit) =>
+        habit.linkedGoalIds.includes(goal.id) ||
+        habit.linkedValueIds.some((valueId) => linkedValues.some((value) => value.id === valueId))
+      );
       const linkedReports = overview.reports.filter((report) => report.linkedGoalIds.includes(goal.id));
       const linkedBehaviors = overview.behaviors.filter((behavior) =>
         behavior.linkedValueIds.some((valueId) => linkedValues.some((value) => value.id === valueId))
@@ -44,12 +48,13 @@ export function PsycheGoalMapPage() {
         goal,
         linkedValues,
         linkedProjects,
+        linkedHabits,
         linkedReports,
         linkedBehaviors,
         linkedBeliefs
       };
     });
-  }, [overview, shell.snapshot.dashboard.projects, shell.snapshot.goals]);
+  }, [overview, shell.snapshot.dashboard.projects, shell.snapshot.goals, shell.snapshot.habits]);
 
   const scene = useMemo(() => buildGoalGravityScene(clusters), [clusters]);
 
@@ -78,7 +83,7 @@ export function PsycheGoalMapPage() {
       <PageHero
         title="Goal Map"
         titleText="Goal Map"
-        description="Values orbit each goal. Reports, beliefs, behaviors, and projects reveal where the orbit gets disrupted and how execution reconnects."
+        description="Values orbit each goal. Habits, reports, beliefs, behaviors, and projects reveal where the orbit gets disrupted and how execution reconnects."
         badge={`${clusters.length} goal${clusters.length === 1 ? "" : "s"}`}
         actions={
           <>
@@ -110,6 +115,7 @@ export function PsycheGoalMapPage() {
             { label: "Values", kind: "value" },
             { label: "Beliefs", kind: "belief" },
             { label: "Behaviors", kind: "behavior" },
+            { label: "Habits", kind: "habit" },
             { label: "Projects", kind: "project" },
             { label: "Reports", kind: "report" }
           ]}

@@ -39,6 +39,10 @@ export function PsychePage() {
     return shell.snapshot.goals.slice(0, 3).map((goal) => {
       const linkedValues = overview.values.filter((value) => value.linkedGoalIds.includes(goal.id));
       const linkedProjects = shell.snapshot.dashboard.projects.filter((project) => project.goalId === goal.id);
+      const linkedHabits = shell.snapshot.habits.filter((habit) =>
+        habit.linkedGoalIds.includes(goal.id) ||
+        habit.linkedValueIds.some((valueId) => linkedValues.some((value) => value.id === valueId))
+      );
       const linkedReports = overview.reports.filter((report) => report.linkedGoalIds.includes(goal.id));
       const linkedBehaviors = overview.behaviors.filter((behavior) =>
         behavior.linkedValueIds.some((valueId) => linkedValues.some((value) => value.id === valueId))
@@ -51,12 +55,13 @@ export function PsychePage() {
         goal,
         linkedValues,
         linkedProjects,
+        linkedHabits,
         linkedReports,
         linkedBehaviors,
         linkedBeliefs
       };
     });
-  }, [overview, shell.snapshot.dashboard.projects, shell.snapshot.goals]);
+  }, [overview, shell.snapshot.dashboard.projects, shell.snapshot.goals, shell.snapshot.habits]);
 
   const scene = useMemo(() => buildGoalGravityScene(clusters, { compact: true }), [clusters]);
 
@@ -81,7 +86,7 @@ export function PsychePage() {
       <PageHero
         title="Psyche"
         titleText="Psyche"
-        description="See your goals, values, beliefs, behaviors, projects, and reports together, then open the goal map when you want the full structure."
+        description="See your goals, values, habits, beliefs, behaviors, projects, and reports together, then open the goal map when you want the full structure."
         badge={`${overview.domain.title} active`}
         actions={
           <>
@@ -99,7 +104,7 @@ export function PsychePage() {
           testId="psyche-hub-graph"
           compact
           title="Reflective pulse and live entity field"
-          hint="This is the live field. Select any goal, value, belief, behavior, project, or report, then open the full goal map when you want the wider structure."
+          hint="This is the live field. Select any goal, value, habit, belief, behavior, project, or report, then open the full goal map when you want the wider structure."
           nodes={scene.nodes}
           edges={scene.edges}
           fields={scene.fields}
@@ -109,6 +114,7 @@ export function PsychePage() {
           legend={[
             { label: "Goals", kind: "goal" },
             { label: "Values", kind: "value" },
+            { label: "Habits", kind: "habit" },
             { label: "Behaviors", kind: "behavior" }
           ]}
           action={

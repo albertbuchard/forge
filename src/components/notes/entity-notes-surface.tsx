@@ -89,6 +89,7 @@ export function EntityNotesSurface({
       goal: shell.snapshot.goals.map((goal) => ({ id: goal.id, label: goal.title })),
       project: shell.snapshot.dashboard.projects.map((project) => ({ id: project.id, label: project.title })),
       task: shell.snapshot.tasks.map((task) => ({ id: task.id, label: task.title })),
+      habit: shell.snapshot.habits.map((habit) => ({ id: habit.id, label: habit.title })),
       tag: shell.snapshot.tags.map((tag) => ({ id: tag.id, label: tag.name })),
       note: (notesQuery.data?.notes ?? []).map((note) => ({ id: note.id, label: note.contentPlain || note.contentMarkdown })),
       insight: [],
@@ -111,6 +112,7 @@ export function EntityNotesSurface({
       reportsQuery.data?.reports,
       shell.snapshot.dashboard.projects,
       shell.snapshot.goals,
+      shell.snapshot.habits,
       shell.snapshot.tags,
       shell.snapshot.tasks,
       valuesQuery.data?.values
@@ -245,7 +247,7 @@ export function EntityNotesSurface({
           value={draft.entityType}
           onChange={(event) => setDraft({ ...draft, entityType: event.target.value as CrudEntityType, entityId: "" })}
         >
-          {(["goal", "project", "task", "psyche_value", "behavior_pattern", "behavior", "belief_entry", "mode_profile", "mode_guide_session", "event_type", "emotion_definition", "trigger_report"] as const).map((option) => (
+          {(["goal", "project", "task", "habit", "psyche_value", "behavior_pattern", "behavior", "belief_entry", "mode_profile", "mode_guide_session", "event_type", "emotion_definition", "trigger_report"] as const).map((option) => (
             <option key={option} value={option}>
               {formatEntityTypeLabel(option)}
             </option>

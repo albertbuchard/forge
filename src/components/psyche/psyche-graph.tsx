@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils";
 
 export type PsycheGraphTone = "mint" | "sky" | "violet" | "rose" | "amber" | "orange" | "blue" | "slate";
 
-export type PsycheGraphNodeKind = "goal" | "value" | "behavior" | "belief" | "report" | "project" | "ghost";
+export type PsycheGraphNodeKind = "goal" | "value" | "behavior" | "belief" | "report" | "project" | "habit" | "ghost";
 
 export interface PsycheGraphNode {
   id: string;
@@ -89,6 +89,7 @@ function getEntityKindForNode(nodeKind: PsycheGraphNodeKind): EntityKind | null 
     case "belief":
     case "report":
     case "project":
+    case "habit":
       return nodeKind;
     default:
       return null;
@@ -111,6 +112,8 @@ function getToneForNode(node: PsycheGraphNode): PsycheGraphTone {
       return "orange";
     case "project":
       return "sky";
+    case "habit":
+      return "mint";
     case "report":
       return "blue";
     default:

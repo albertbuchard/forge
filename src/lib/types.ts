@@ -5,10 +5,15 @@ export type TaskEnergy = "low" | "steady" | "high";
 export type AppLocale = "en" | "fr";
 export type TaskTimerMode = "planned" | "unlimited";
 export type TimeAccountingMode = "split" | "parallel" | "primary_only";
+export type HabitFrequency = "daily" | "weekly";
+export type HabitPolarity = "positive" | "negative";
+export type HabitStatus = "active" | "paused" | "archived";
+export type HabitCheckInStatus = "done" | "missed";
 export type CrudEntityType =
   | "goal"
   | "project"
   | "task"
+  | "habit"
   | "tag"
   | "note"
   | "insight"
@@ -20,6 +25,21 @@ export type CrudEntityType =
   | "mode_guide_session"
   | "event_type"
   | "emotion_definition"
+  | "trigger_report";
+export type RewardableEntityType =
+  | "system"
+  | "goal"
+  | "project"
+  | "task"
+  | "habit"
+  | "tag"
+  | "note"
+  | "insight"
+  | "psyche_value"
+  | "behavior_pattern"
+  | "behavior"
+  | "belief_entry"
+  | "mode_profile"
   | "trigger_report";
 export type DeleteMode = "soft" | "hard";
 
@@ -157,6 +177,50 @@ export interface TaskRun {
   releasedAt: string | null;
   timedOutAt: string | null;
   updatedAt: string;
+}
+
+export interface HabitCheckIn {
+  id: string;
+  habitId: string;
+  dateKey: string;
+  status: HabitCheckInStatus;
+  note: string;
+  deltaXp: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface Habit {
+  id: string;
+  title: string;
+  description: string;
+  status: HabitStatus;
+  polarity: HabitPolarity;
+  frequency: HabitFrequency;
+  targetCount: number;
+  weekDays: number[];
+  linkedGoalIds: string[];
+  linkedProjectIds: string[];
+  linkedTaskIds: string[];
+  linkedValueIds: string[];
+  linkedPatternIds: string[];
+  linkedBehaviorIds: string[];
+  linkedBeliefIds: string[];
+  linkedModeIds: string[];
+  linkedReportIds: string[];
+  linkedBehaviorId: string | null;
+  linkedBehaviorTitle: string | null;
+  linkedBehaviorTitles: string[];
+  rewardXp: number;
+  penaltyXp: number;
+  createdAt: string;
+  updatedAt: string;
+  lastCheckInAt: string | null;
+  lastCheckInStatus: HabitCheckInStatus | null;
+  streakCount: number;
+  completionRate: number;
+  dueToday: boolean;
+  checkIns: HabitCheckIn[];
 }
 
 export interface TaskRunClaimInput {
@@ -446,6 +510,7 @@ export interface OperatorContextPayload {
   generatedAt: string;
   activeProjects: ProjectSummary[];
   focusTasks: Task[];
+  dueHabits: Habit[];
   currentBoard: {
     backlog: Task[];
     focus: Task[];
@@ -506,7 +571,7 @@ export interface UpdateRewardRuleInput {
 }
 
 export interface CreateManualRewardGrantInput {
-  entityType: string;
+  entityType: RewardableEntityType;
   entityId: string;
   deltaXp: number;
   reasonTitle: string;
@@ -827,6 +892,7 @@ export interface ForgeSnapshot {
     goals: DashboardGoal[];
     projects: ProjectSummary[];
     tasks: Task[];
+    habits: Habit[];
     tags: Tag[];
     suggestedTags: Tag[];
     owners: string[];
@@ -858,6 +924,7 @@ export interface ForgeSnapshot {
     projects: ProjectSummary[];
     activeGoals: DashboardGoal[];
     topTasks: Task[];
+    dueHabits: Habit[];
     recentEvidence: ActivityEvent[];
     achievements: AchievementSignal[];
     domainBalance: ContextDomainBalance[];
@@ -876,6 +943,7 @@ export interface ForgeSnapshot {
       label: string;
       tasks: Task[];
     }>;
+    dueHabits: Habit[];
     dailyQuests: Array<{
       id: string;
       title: string;
@@ -885,6 +953,7 @@ export interface ForgeSnapshot {
       completed: boolean;
     }>;
     milestoneRewards: MilestoneReward[];
+    recentHabitRewards: RewardLedgerEvent[];
     momentum: {
       streakDays: number;
       momentumScore: number;
@@ -902,6 +971,7 @@ export interface ForgeSnapshot {
   projects: ProjectSummary[];
   tags: Tag[];
   tasks: Task[];
+  habits: Habit[];
   activity: ActivityEvent[];
   activeTaskRuns: TaskRun[];
 }

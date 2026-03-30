@@ -1,6 +1,7 @@
 import { listActivityEvents } from "../repositories/activity-events.js";
 import { listInsights } from "../repositories/collaboration.js";
 import { listGoals } from "../repositories/goals.js";
+import { listHabits } from "../repositories/habits.js";
 import { listTasks } from "../repositories/tasks.js";
 import { getOverviewContext } from "./context.js";
 import { buildGamificationProfile } from "./gamification.js";
@@ -37,7 +38,7 @@ function buildHeatmap(tasks: Task[], now: Date): InsightsHeatmapCell[] {
 export function getInsightsPayload(now = new Date()): InsightsPayload {
   const goals = listGoals();
   const tasks = listTasks();
-  const gamification = buildGamificationProfile(goals, tasks, now);
+  const gamification = buildGamificationProfile(goals, tasks, listHabits(), now);
   const overview = getOverviewContext(now);
   const activity = listActivityEvents({ limit: 60 });
   const trends = Array.from({ length: 6 }, (_, offset) => {

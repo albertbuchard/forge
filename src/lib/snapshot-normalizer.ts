@@ -1,4 +1,4 @@
-import type { ForgeSnapshot, ProjectSummary, Task } from "./types";
+import type { ForgeSnapshot, Habit, ProjectSummary, Task } from "./types";
 
 type LegacyProjectLike = Partial<ProjectSummary> & {
   summary?: string;
@@ -76,6 +76,41 @@ function normalizeProject(project: LegacyProjectLike | undefined): ProjectSummar
   };
 }
 
+function normalizeHabit(habit: Partial<Habit> | undefined): Habit {
+  return {
+    id: habit?.id ?? "",
+    title: habit?.title ?? "",
+    description: habit?.description ?? "",
+    status: habit?.status ?? "active",
+    polarity: habit?.polarity ?? "positive",
+    frequency: habit?.frequency ?? "daily",
+    targetCount: habit?.targetCount ?? 1,
+    weekDays: habit?.weekDays ?? [],
+    linkedGoalIds: habit?.linkedGoalIds ?? [],
+    linkedProjectIds: habit?.linkedProjectIds ?? [],
+    linkedTaskIds: habit?.linkedTaskIds ?? [],
+    linkedValueIds: habit?.linkedValueIds ?? [],
+    linkedPatternIds: habit?.linkedPatternIds ?? [],
+    linkedBehaviorIds: habit?.linkedBehaviorIds ?? [],
+    linkedBeliefIds: habit?.linkedBeliefIds ?? [],
+    linkedModeIds: habit?.linkedModeIds ?? [],
+    linkedReportIds: habit?.linkedReportIds ?? [],
+    linkedBehaviorId: habit?.linkedBehaviorId ?? null,
+    linkedBehaviorTitle: habit?.linkedBehaviorTitle ?? null,
+    linkedBehaviorTitles: habit?.linkedBehaviorTitles ?? [],
+    rewardXp: habit?.rewardXp ?? 12,
+    penaltyXp: habit?.penaltyXp ?? 8,
+    createdAt: habit?.createdAt ?? new Date(0).toISOString(),
+    updatedAt: habit?.updatedAt ?? new Date(0).toISOString(),
+    lastCheckInAt: habit?.lastCheckInAt ?? null,
+    lastCheckInStatus: habit?.lastCheckInStatus ?? null,
+    streakCount: habit?.streakCount ?? 0,
+    completionRate: habit?.completionRate ?? 0,
+    dueToday: habit?.dueToday ?? false,
+    checkIns: habit?.checkIns ?? []
+  };
+}
+
 export function normalizeForgeSnapshot(raw: ForgeSnapshot | LegacySnapshot): ForgeSnapshot {
   const legacy = raw as LegacySnapshot;
   const rootProjects = (legacy.projects ?? legacy.campaigns ?? []).map(normalizeProject);
@@ -116,6 +151,7 @@ export function normalizeForgeSnapshot(raw: ForgeSnapshot | LegacySnapshot): For
       goals: raw.dashboard?.goals ?? [],
       projects: dashboardProjects,
       tasks: (raw.dashboard?.tasks ?? []).map(normalizeTask),
+      habits: (raw.dashboard?.habits ?? raw.habits ?? []).map(normalizeHabit),
       tags: raw.dashboard?.tags ?? [],
       suggestedTags: raw.dashboard?.suggestedTags ?? [],
       owners: raw.dashboard?.owners ?? [],
@@ -155,6 +191,7 @@ export function normalizeForgeSnapshot(raw: ForgeSnapshot | LegacySnapshot): For
       projects: overviewProjects,
       activeGoals: raw.overview?.activeGoals ?? [],
       topTasks: (raw.overview?.topTasks ?? []).map(normalizeTask),
+      dueHabits: (raw.overview?.dueHabits ?? raw.today?.dueHabits ?? raw.dashboard?.habits ?? []).map(normalizeHabit),
       recentEvidence: raw.overview?.recentEvidence ?? [],
       achievements: raw.overview?.achievements ?? [],
       domainBalance: raw.overview?.domainBalance ?? [],
@@ -172,8 +209,10 @@ export function normalizeForgeSnapshot(raw: ForgeSnapshot | LegacySnapshot): For
         ...bucket,
         tasks: (bucket.tasks ?? []).map(normalizeTask)
       })),
+      dueHabits: (raw.today?.dueHabits ?? raw.overview?.dueHabits ?? raw.dashboard?.habits ?? []).map(normalizeHabit),
       dailyQuests: raw.today?.dailyQuests ?? [],
       milestoneRewards: raw.today?.milestoneRewards ?? [],
+      recentHabitRewards: raw.today?.recentHabitRewards ?? [],
       momentum: {
         streakDays: raw.today?.momentum?.streakDays ?? 0,
         momentumScore: raw.today?.momentum?.momentumScore ?? 0,
@@ -191,6 +230,7 @@ export function normalizeForgeSnapshot(raw: ForgeSnapshot | LegacySnapshot): For
     projects: rootProjects,
     tags: raw.tags ?? [],
     tasks: (raw.tasks ?? []).map(normalizeTask),
+    habits: (raw.habits ?? raw.dashboard?.habits ?? []).map(normalizeHabit),
     activity: raw.activity ?? [],
     activeTaskRuns: raw.activeTaskRuns ?? []
   };

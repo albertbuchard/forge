@@ -1,5 +1,7 @@
 import { listActivityEvents } from "../repositories/activity-events.js";
 import { listGoals } from "../repositories/goals.js";
+import { listHabits } from "../repositories/habits.js";
+import { listRewardLedger } from "../repositories/rewards.js";
 import { listTags, listTagsByIds } from "../repositories/tags.js";
 import { listTasks } from "../repositories/tasks.js";
 import { getDashboard } from "./dashboard.js";
@@ -135,6 +137,7 @@ export function getOverviewContext(now = new Date()): OverviewContext {
   const dashboard = getDashboard();
   const focusTasks = dashboard.tasks.filter((task) => task.status === "focus" || task.status === "in_progress").length;
   const overdueTasks = dashboard.tasks.filter((task) => task.status !== "done" && task.dueDate !== null && task.dueDate < now.toISOString().slice(0, 10)).length;
+  const dueHabits = dashboard.habits.filter((habit) => habit.dueToday).slice(0, 6);
   return overviewContextSchema.parse({
     generatedAt: now.toISOString(),
     strategicHeader: {
@@ -150,8 +153,9 @@ export function getOverviewContext(now = new Date()): OverviewContext {
     projects: dashboard.projects.slice(0, 5),
     activeGoals: dashboard.goals.filter((goal) => goal.status === "active").slice(0, 6),
     topTasks: sortStrategicTasks(dashboard.tasks.filter((task) => task.status !== "done")).slice(0, 6),
+    dueHabits,
     recentEvidence: listActivityEvents({ limit: 12 }),
-    achievements: buildAchievementSignals(listGoals(), listTasks(), now),
+    achievements: buildAchievementSignals(listGoals(), listTasks(), listHabits(), now),
     domainBalance: buildDomainBalance(listGoals(), listTasks()),
     neglectedGoals: buildNeglectedGoals(listGoals(), listTasks(), now)
   });
@@ -160,10 +164,12 @@ export function getOverviewContext(now = new Date()): OverviewContext {
 export function getTodayContext(now = new Date()): TodayContext {
   const goals = listGoals();
   const tasks = listTasks();
-  const gamification = buildGamificationProfile(goals, tasks, now);
+  const habits = listHabits();
+  const gamification = buildGamificationProfile(goals, tasks, habits, now);
   const inProgressTasks = sortStrategicTasks(tasks.filter((task) => task.status === "in_progress")).slice(0, 4);
   const readyTasks = sortStrategicTasks(tasks.filter((task) => task.status === "focus" || task.status === "backlog")).slice(0, 4);
   const deferredTasks = sortStrategicTasks(tasks.filter((task) => task.status === "blocked")).slice(0, 4);
+  const dueHabits = habits.filter((habit) => habit.dueToday).slice(0, 6);
   const completedTasks = [...tasks]
     .filter((task) => task.status === "done" && task.completedAt !== null)
     .sort((left, right) => Date.parse(right.completedAt ?? "") - Date.parse(left.completedAt ?? ""))
@@ -213,12 +219,16 @@ export function getTodayContext(now = new Date()): TodayContext {
         completed: false
       }
     ],
-    milestoneRewards: buildMilestoneRewards(goals, tasks, now),
+    dueHabits,
+    milestoneRewards: buildMilestoneRewards(goals, tasks, habits, now),
+    recentHabitRewards: listRewardLedger({ entityType: "habit", limit: 8 }),
     momentum: {
       streakDays: gamification.streakDays,
       momentumScore: gamification.momentumScore,
       recoveryHint:
-        overdueCount > 0
+        dueHabits.length > 0
+          ? `${dueHabits.length} habit${dueHabits.length === 1 ? "" : "s"} still need a check-in today. Closing one will keep momentum honest.`
+          : overdueCount > 0
           ? `Clear ${overdueCount} overdue task${overdueCount === 1 ? "" : "s"} to keep momentum from decaying.`
           : "No overdue drag right now. Preserve the rhythm with one decisive completion."
     }

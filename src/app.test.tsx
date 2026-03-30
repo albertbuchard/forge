@@ -24,6 +24,10 @@ vi.mock("@/pages/goals-page", () => ({
   GoalsPage: () => <div>Goals route</div>
 }));
 
+vi.mock("@/pages/habits-page", () => ({
+  HabitsPage: () => <div>Habits route</div>
+}));
+
 vi.mock("@/pages/projects-page", () => ({
   ProjectsPage: () => <div>Projects route</div>
 }));
@@ -176,6 +180,17 @@ describe("App routing", () => {
 
     expect(await screen.findByText("Forge shell")).toBeInTheDocument();
     expect(await screen.findByText("Projects route")).toBeInTheDocument();
+  });
+
+  it("renders the habits route inside the shell", async () => {
+    render(
+      <MemoryRouter initialEntries={["/habits"]}>
+        <App />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText("Forge shell")).toBeInTheDocument();
+    expect(await screen.findByText("Habits route")).toBeInTheDocument();
   });
 
   it("renders goal, project, and task detail routes inside the shell", async () => {

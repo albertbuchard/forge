@@ -1,11 +1,12 @@
 ---
 name: forge-openclaw
-description: use when the user wants to save, search, update, review, start, stop, or explain work or psyche records inside forge, or when the conversation is clearly about a forge entity such as a goal, project, task, task_run, insight, psyche_value, behavior_pattern, behavior, belief_entry, mode_profile, mode_guide_session, trigger_report, event_type, or emotion_definition. identify the exact forge entity, keep the main conversation natural, offer saving once when helpful, ask only for missing fields, and use the correct forge tool and payload shape.
+description: use when the user wants to save, search, update, review, start, stop, reward, or explain work or psyche records inside forge, or when the conversation is clearly about a forge entity such as a goal, project, task, habit, task_run, insight, psyche_value, behavior_pattern, behavior, belief_entry, mode_profile, mode_guide_session, trigger_report, event_type, or emotion_definition. identify the exact forge entity, keep the main conversation natural, offer saving once when helpful, ask only for missing fields, and use the correct forge tool and payload shape.
 ---
 
 Forge is the user's structured system for planning work, doing work, reflecting on patterns, and keeping a truthful record of what is happening. Use it when the user is clearly working inside that system, or when they are describing something that naturally belongs there and would benefit from being stored, updated, reviewed, or acted on in Forge. Keep the conversation natural first. Do not turn every message into intake. When a real Forge entity is clearly present, name the exact entity type plainly, help with the substance of the conversation, and then offer Forge once, lightly, if storing it would genuinely help.
 
 Forge has two major domains. The planning side covers goals, projects, tasks, notes, live work sessions, and agent-authored insights. The Psyche side covers values, patterns, behaviors, beliefs, modes, guided mode sessions, trigger reports, event types, and reusable emotion definitions. The model should use the real entity names, not vague substitutes. Say `project`, not “initiative”. Say `behavior_pattern`, not “theme”. Say `trigger_report`, not “incident note”.
+Habits are a first-class recurring entity in the planning side. They can link directly to goals, projects, tasks, values, patterns, behaviors, beliefs, modes, and trigger reports, and they participate in the same searchable noteable graph as the rest of Forge.
 
 Write to Forge only with clear user consent. If the user is just thinking aloud, helping first is usually better than writing immediately. After helping, you may offer one short Forge prompt if the match is strong. If the user agrees, ask only for the missing fields and only one to three focused questions at a time. Do not offer Forge again after a decline unless the user reopens it.
 
@@ -81,6 +82,15 @@ Ask:
 1. What is the task in one concrete sentence?
 2. Should it live under an existing goal or project?
 3. Does it need a due date, priority, or owner?
+
+`habit`
+Use for a recurring commitment or recurring slip with explicit cadence and XP consequences.
+Minimum field: `title`
+Usually useful: `polarity`, `frequency`, `linkedGoalIds`, `linkedProjectIds`, `linkedTaskIds`, `linkedValueIds`, `linkedPatternIds`, `linkedBehaviorIds`, `linkedBeliefIds`, `linkedModeIds`, `linkedReportIds`
+Ask:
+1. What is the recurring behavior in one concrete sentence?
+2. Is doing it good (`positive`) or a slip (`negative`)?
+3. What should it link back to in Forge or Psyche?
 
 `task_run`
 Use for live work happening now.
@@ -173,12 +183,13 @@ Use the batch entity tools for stored records:
 `forge_search_entities`, `forge_create_entities`, `forge_update_entities`, `forge_delete_entities`, `forge_restore_entities`
 
 These tools operate on:
-`goal`, `project`, `task`, `note`, `psyche_value`, `behavior_pattern`, `behavior`, `belief_entry`, `mode_profile`, `mode_guide_session`, `trigger_report`, `event_type`, `emotion_definition`
+`goal`, `project`, `task`, `habit`, `note`, `psyche_value`, `behavior_pattern`, `behavior`, `belief_entry`, `mode_profile`, `mode_guide_session`, `trigger_report`, `event_type`, `emotion_definition`
 
 Use live work tools for `task_run`:
 `forge_log_work`, `forge_start_task_run`, `forge_heartbeat_task_run`, `forge_focus_task_run`, `forge_complete_task_run`, `forge_release_task_run`
 
 Use `forge_post_insight` for `insight`.
+Use `forge_grant_reward_bonus` only for explicit manual XP bonuses or penalties that should be auditable and cannot be expressed through the normal task-run or habit check-in routes.
 
 Do not say you lack a creation path when these tools cover the request. Do not open the Forge UI or a browser for normal creation or updates that the tools already support. Use `forge_get_ui_entrypoint` only when visual review, Kanban movement, graph exploration, or complex multi-record editing would genuinely be easier there.
 
@@ -249,6 +260,7 @@ When the user asks which Forge tools are available, list exactly these tools:
 `forge_update_entities`
 `forge_delete_entities`
 `forge_restore_entities`
+`forge_grant_reward_bonus`
 `forge_log_work`
 `forge_start_task_run`
 `forge_heartbeat_task_run`

@@ -255,6 +255,91 @@ export function buildOpenApiDocument() {
     }
   };
 
+  const habitCheckIn = {
+    type: "object",
+    additionalProperties: false,
+    required: ["id", "habitId", "dateKey", "status", "note", "deltaXp", "createdAt", "updatedAt"],
+    properties: {
+      id: { type: "string" },
+      habitId: { type: "string" },
+      dateKey: { type: "string", format: "date" },
+      status: { type: "string", enum: ["done", "missed"] },
+      note: { type: "string" },
+      deltaXp: { type: "integer" },
+      createdAt: { type: "string", format: "date-time" },
+      updatedAt: { type: "string", format: "date-time" }
+    }
+  };
+
+  const habit = {
+    type: "object",
+    additionalProperties: false,
+    required: [
+      "id",
+      "title",
+      "description",
+      "status",
+      "polarity",
+      "frequency",
+      "targetCount",
+      "weekDays",
+      "linkedGoalIds",
+      "linkedProjectIds",
+      "linkedTaskIds",
+      "linkedValueIds",
+      "linkedPatternIds",
+      "linkedBehaviorIds",
+      "linkedBeliefIds",
+      "linkedModeIds",
+      "linkedReportIds",
+      "linkedBehaviorId",
+      "linkedBehaviorTitle",
+      "linkedBehaviorTitles",
+      "rewardXp",
+      "penaltyXp",
+      "createdAt",
+      "updatedAt",
+      "lastCheckInAt",
+      "lastCheckInStatus",
+      "streakCount",
+      "completionRate",
+      "dueToday",
+      "checkIns"
+    ],
+    properties: {
+      id: { type: "string" },
+      title: { type: "string" },
+      description: { type: "string" },
+      status: { type: "string", enum: ["active", "paused", "archived"] },
+      polarity: { type: "string", enum: ["positive", "negative"] },
+      frequency: { type: "string", enum: ["daily", "weekly"] },
+      targetCount: { type: "integer" },
+      weekDays: arrayOf({ type: "integer" }),
+      linkedGoalIds: arrayOf({ type: "string" }),
+      linkedProjectIds: arrayOf({ type: "string" }),
+      linkedTaskIds: arrayOf({ type: "string" }),
+      linkedValueIds: arrayOf({ type: "string" }),
+      linkedPatternIds: arrayOf({ type: "string" }),
+      linkedBehaviorIds: arrayOf({ type: "string" }),
+      linkedBeliefIds: arrayOf({ type: "string" }),
+      linkedModeIds: arrayOf({ type: "string" }),
+      linkedReportIds: arrayOf({ type: "string" }),
+      linkedBehaviorId: nullable({ type: "string" }),
+      linkedBehaviorTitle: nullable({ type: "string" }),
+      linkedBehaviorTitles: arrayOf({ type: "string" }),
+      rewardXp: { type: "integer" },
+      penaltyXp: { type: "integer" },
+      createdAt: { type: "string", format: "date-time" },
+      updatedAt: { type: "string", format: "date-time" },
+      lastCheckInAt: nullable({ type: "string", format: "date-time" }),
+      lastCheckInStatus: nullable({ type: "string", enum: ["done", "missed"] }),
+      streakCount: { type: "integer" },
+      completionRate: { type: "number" },
+      dueToday: { type: "boolean" },
+      checkIns: arrayOf({ $ref: "#/components/schemas/HabitCheckIn" })
+    }
+  };
+
   const activityEvent = {
     type: "object",
     additionalProperties: false,
@@ -265,6 +350,7 @@ export function buildOpenApiDocument() {
         type: "string",
         enum: [
           "task",
+          "habit",
           "goal",
           "project",
           "domain",
@@ -399,7 +485,7 @@ export function buildOpenApiDocument() {
   const dashboardPayload = {
     type: "object",
     additionalProperties: false,
-    required: ["stats", "goals", "projects", "tasks", "tags", "suggestedTags", "owners", "executionBuckets", "gamification", "achievements", "milestoneRewards", "recentActivity", "notesSummaryByEntity"],
+    required: ["stats", "goals", "projects", "tasks", "habits", "tags", "suggestedTags", "owners", "executionBuckets", "gamification", "achievements", "milestoneRewards", "recentActivity", "notesSummaryByEntity"],
     properties: {
       stats: {
         type: "object",
@@ -418,6 +504,7 @@ export function buildOpenApiDocument() {
       goals: arrayOf({ $ref: "#/components/schemas/DashboardGoal" }),
       projects: arrayOf({ $ref: "#/components/schemas/ProjectSummary" }),
       tasks: arrayOf({ $ref: "#/components/schemas/Task" }),
+      habits: arrayOf({ $ref: "#/components/schemas/Habit" }),
       tags: arrayOf({ $ref: "#/components/schemas/Tag" }),
       suggestedTags: arrayOf({ $ref: "#/components/schemas/Tag" }),
       owners: arrayOf({ type: "string" }),
@@ -444,7 +531,7 @@ export function buildOpenApiDocument() {
   const overviewContext = {
     type: "object",
     additionalProperties: false,
-    required: ["generatedAt", "strategicHeader", "projects", "activeGoals", "topTasks", "recentEvidence", "achievements", "domainBalance", "neglectedGoals"],
+    required: ["generatedAt", "strategicHeader", "projects", "activeGoals", "topTasks", "dueHabits", "recentEvidence", "achievements", "domainBalance", "neglectedGoals"],
     properties: {
       generatedAt: { type: "string", format: "date-time" },
       strategicHeader: {
@@ -465,6 +552,7 @@ export function buildOpenApiDocument() {
       projects: arrayOf({ $ref: "#/components/schemas/ProjectSummary" }),
       activeGoals: arrayOf({ $ref: "#/components/schemas/DashboardGoal" }),
       topTasks: arrayOf({ $ref: "#/components/schemas/Task" }),
+      dueHabits: arrayOf({ $ref: "#/components/schemas/Habit" }),
       recentEvidence: arrayOf({ $ref: "#/components/schemas/ActivityEvent" }),
       achievements: arrayOf({ $ref: "#/components/schemas/AchievementSignal" }),
       domainBalance: arrayOf({
@@ -498,7 +586,7 @@ export function buildOpenApiDocument() {
   const todayContext = {
     type: "object",
     additionalProperties: false,
-    required: ["generatedAt", "directive", "timeline", "dailyQuests", "milestoneRewards", "momentum"],
+    required: ["generatedAt", "directive", "timeline", "dueHabits", "dailyQuests", "milestoneRewards", "recentHabitRewards", "momentum"],
     properties: {
       generatedAt: { type: "string", format: "date-time" },
       directive: {
@@ -522,6 +610,7 @@ export function buildOpenApiDocument() {
           tasks: arrayOf({ $ref: "#/components/schemas/Task" })
         }
       }),
+      dueHabits: arrayOf({ $ref: "#/components/schemas/Habit" }),
       dailyQuests: arrayOf({
         type: "object",
         additionalProperties: false,
@@ -536,6 +625,7 @@ export function buildOpenApiDocument() {
         }
       }),
       milestoneRewards: arrayOf({ $ref: "#/components/schemas/MilestoneReward" }),
+      recentHabitRewards: arrayOf({ $ref: "#/components/schemas/RewardLedgerEvent" }),
       momentum: {
         type: "object",
         additionalProperties: false,
@@ -575,7 +665,7 @@ export function buildOpenApiDocument() {
   const forgeSnapshot = {
     type: "object",
     additionalProperties: false,
-    required: ["meta", "metrics", "dashboard", "overview", "today", "risk", "goals", "projects", "tags", "tasks", "activeTaskRuns", "activity"],
+    required: ["meta", "metrics", "dashboard", "overview", "today", "risk", "goals", "projects", "tags", "tasks", "habits", "activeTaskRuns", "activity"],
     properties: {
       meta: {
         type: "object",
@@ -598,6 +688,7 @@ export function buildOpenApiDocument() {
       projects: arrayOf({ $ref: "#/components/schemas/ProjectSummary" }),
       tags: arrayOf({ $ref: "#/components/schemas/Tag" }),
       tasks: arrayOf({ $ref: "#/components/schemas/Task" }),
+      habits: arrayOf({ $ref: "#/components/schemas/Habit" }),
       activeTaskRuns: arrayOf({ $ref: "#/components/schemas/TaskRun" }),
       activity: arrayOf({ $ref: "#/components/schemas/ActivityEvent" })
     }
@@ -1088,6 +1179,7 @@ export function buildOpenApiDocument() {
       "generatedAt",
       "activeProjects",
       "focusTasks",
+      "dueHabits",
       "currentBoard",
       "recentActivity",
       "recentTaskRuns",
@@ -1098,6 +1190,7 @@ export function buildOpenApiDocument() {
       generatedAt: { type: "string", format: "date-time" },
       activeProjects: arrayOf({ $ref: "#/components/schemas/ProjectSummary" }),
       focusTasks: arrayOf({ $ref: "#/components/schemas/Task" }),
+      dueHabits: arrayOf({ $ref: "#/components/schemas/Habit" }),
       currentBoard: {
         type: "object",
         additionalProperties: false,
@@ -2060,6 +2153,8 @@ export function buildOpenApiDocument() {
         ProjectSummary: projectSummary,
         Task: task,
         TaskRun: taskRun,
+        HabitCheckIn: habitCheckIn,
+        Habit: habit,
         ActivityEvent: activityEvent,
         GamificationProfile: gamificationProfile,
         AchievementSignal: achievementSignal,
@@ -2831,6 +2926,108 @@ export function buildOpenApiDocument() {
                 }
               },
               "Deleted goal"
+            ),
+            "404": { $ref: "#/components/responses/Error" }
+          }
+        }
+      },
+      "/api/v1/habits": {
+        get: {
+          summary: "List habits with current streak and due-today state",
+          responses: {
+            "200": jsonResponse(
+              {
+                type: "object",
+                required: ["habits"],
+                properties: {
+                  habits: arrayOf({ $ref: "#/components/schemas/Habit" })
+                }
+              },
+              "Habit collection"
+            )
+          }
+        },
+        post: {
+          summary: "Create a habit",
+          responses: {
+            "201": jsonResponse(
+              {
+                type: "object",
+                required: ["habit"],
+                properties: {
+                  habit: { $ref: "#/components/schemas/Habit" }
+                }
+              },
+              "Created habit"
+            ),
+            default: { $ref: "#/components/responses/Error" }
+          }
+        }
+      },
+      "/api/v1/habits/{id}": {
+        get: {
+          summary: "Get a habit",
+          responses: {
+            "200": jsonResponse(
+              {
+                type: "object",
+                required: ["habit"],
+                properties: {
+                  habit: { $ref: "#/components/schemas/Habit" }
+                }
+              },
+              "Habit"
+            ),
+            "404": { $ref: "#/components/responses/Error" }
+          }
+        },
+        patch: {
+          summary: "Update a habit",
+          responses: {
+            "200": jsonResponse(
+              {
+                type: "object",
+                required: ["habit"],
+                properties: {
+                  habit: { $ref: "#/components/schemas/Habit" }
+                }
+              },
+              "Updated habit"
+            ),
+            "404": { $ref: "#/components/responses/Error" }
+          }
+        },
+        delete: {
+          summary: "Delete a habit",
+          responses: {
+            "200": jsonResponse(
+              {
+                type: "object",
+                required: ["habit"],
+                properties: {
+                  habit: { $ref: "#/components/schemas/Habit" }
+                }
+              },
+              "Deleted habit"
+            ),
+            "404": { $ref: "#/components/responses/Error" }
+          }
+        }
+      },
+      "/api/v1/habits/{id}/check-ins": {
+        post: {
+          summary: "Record a habit outcome for one day",
+          responses: {
+            "200": jsonResponse(
+              {
+                type: "object",
+                required: ["habit", "metrics"],
+                properties: {
+                  habit: { $ref: "#/components/schemas/Habit" },
+                  metrics: { $ref: "#/components/schemas/XpMetricsPayload" }
+                }
+              },
+              "Habit check-in result"
             ),
             "404": { $ref: "#/components/responses/Error" }
           }
