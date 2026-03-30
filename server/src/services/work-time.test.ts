@@ -70,6 +70,36 @@ function insertRun(options: {
     );
 }
 
+function insertWorkAdjustment(options: {
+  id: string;
+  entityType: "task" | "project";
+  entityId: string;
+  requestedDeltaMinutes: number;
+  appliedDeltaMinutes: number;
+}) {
+  getDatabase()
+    .prepare(
+      `INSERT INTO work_adjustments (
+         id,
+         entity_type,
+         entity_id,
+         requested_delta_minutes,
+         applied_delta_minutes,
+         note,
+         actor,
+         source,
+         created_at
+       ) VALUES (?, ?, ?, ?, ?, '', 'Aurel', 'ui', CURRENT_TIMESTAMP)`
+    )
+    .run(
+      options.id,
+      options.entityType,
+      options.entityId,
+      options.requestedDeltaMinutes,
+      options.appliedDeltaMinutes
+    );
+}
+
 test("computeWorkTime applies split, parallel, and primary_only accounting for overlapping timers", async () => {
   const rootDir = await setupDatabase("forge-work-time-accounting-");
 
@@ -159,6 +189,54 @@ test("computeWorkTime derives planned timer overtime and task totals", async () 
     assert.equal(summary?.totalCreditedSeconds, 1200);
     assert.equal(summary?.activeRunCount, 1);
     assert.equal(summary?.currentRunId, "run_planned");
+  } finally {
+    closeDatabase();
+    await rm(rootDir, { recursive: true, force: true });
+  }
+});
+
+test("computeWorkTime folds signed manual adjustments into task totals without distorting live timer metrics", async () => {
+  const rootDir = await setupDatabase("forge-work-time-adjustments-");
+
+  try {
+    const database = getDatabase();
+    const task = database.prepare("SELECT id FROM tasks ORDER BY id ASC LIMIT 1").get() as { id: string };
+    assert.ok(task.id);
+
+    insertRun({
+      id: "run_adjusted",
+      taskId: task.id,
+      actor: "Aurel",
+      claimedAt: "2026-03-26T10:00:00.000Z",
+      leaseExpiresAt: "2026-03-26T10:10:00.000Z",
+      isCurrent: true
+    });
+    insertWorkAdjustment({
+      id: "wadj_plus",
+      entityType: "task",
+      entityId: task.id,
+      requestedDeltaMinutes: 25,
+      appliedDeltaMinutes: 25
+    });
+    insertWorkAdjustment({
+      id: "wadj_minus",
+      entityType: "task",
+      entityId: task.id,
+      requestedDeltaMinutes: -10,
+      appliedDeltaMinutes: -10
+    });
+
+    const computation = computeWorkTime(new Date("2026-03-26T10:10:00.000Z"));
+    const metric = computation.runMetrics.get("run_adjusted");
+    const summary = computation.taskSummaries.get(task.id);
+
+    assert.equal(metric?.elapsedWallSeconds, 600);
+    assert.equal(metric?.creditedSeconds, 600);
+    assert.equal(summary?.liveTrackedSeconds, 600);
+    assert.equal(summary?.liveCreditedSeconds, 600);
+    assert.equal(summary?.manualAdjustedSeconds, 900);
+    assert.equal(summary?.totalTrackedSeconds, 1500);
+    assert.equal(summary?.totalCreditedSeconds, 1500);
   } finally {
     closeDatabase();
     await rm(rootDir, { recursive: true, force: true });

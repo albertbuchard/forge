@@ -115,10 +115,22 @@ export function buildOpenApiDocument() {
   const taskTimeSummary = {
     type: "object",
     additionalProperties: false,
-    required: ["totalTrackedSeconds", "totalCreditedSeconds", "activeRunCount", "hasCurrentRun", "currentRunId"],
+    required: [
+      "totalTrackedSeconds",
+      "totalCreditedSeconds",
+      "liveTrackedSeconds",
+      "liveCreditedSeconds",
+      "manualAdjustedSeconds",
+      "activeRunCount",
+      "hasCurrentRun",
+      "currentRunId"
+    ],
     properties: {
       totalTrackedSeconds: { type: "integer" },
       totalCreditedSeconds: { type: "number" },
+      liveTrackedSeconds: { type: "integer" },
+      liveCreditedSeconds: { type: "number" },
+      manualAdjustedSeconds: { type: "integer" },
       activeRunCount: { type: "integer" },
       hasCurrentRun: { type: "boolean" },
       currentRunId: nullable({ type: "string" })
@@ -932,6 +944,59 @@ export function buildOpenApiDocument() {
     additionalProperties: false,
     properties: {
       actor: { type: "string" }
+    }
+  };
+
+  const workAdjustment = {
+    type: "object",
+    additionalProperties: false,
+    required: ["id", "entityType", "entityId", "requestedDeltaMinutes", "appliedDeltaMinutes", "note", "actor", "source", "createdAt"],
+    properties: {
+      id: { type: "string" },
+      entityType: { type: "string", enum: ["task", "project"] },
+      entityId: { type: "string" },
+      requestedDeltaMinutes: { type: "integer" },
+      appliedDeltaMinutes: { type: "integer" },
+      note: { type: "string" },
+      actor: nullable({ type: "string" }),
+      source: { type: "string", enum: ["ui", "openclaw", "agent", "system"] },
+      createdAt: { type: "string", format: "date-time" }
+    }
+  };
+
+  const workAdjustmentTargetSummary = {
+    type: "object",
+    additionalProperties: false,
+    required: ["entityType", "entityId", "title", "time"],
+    properties: {
+      entityType: { type: "string", enum: ["task", "project"] },
+      entityId: { type: "string" },
+      title: { type: "string" },
+      time: { $ref: "#/components/schemas/TaskTimeSummary" }
+    }
+  };
+
+  const workAdjustmentInput = {
+    type: "object",
+    additionalProperties: false,
+    required: ["entityType", "entityId", "deltaMinutes"],
+    properties: {
+      entityType: { type: "string", enum: ["task", "project"] },
+      entityId: { type: "string" },
+      deltaMinutes: { type: "integer" },
+      note: { type: "string", default: "" }
+    }
+  };
+
+  const workAdjustmentResult = {
+    type: "object",
+    additionalProperties: false,
+    required: ["adjustment", "target", "reward", "metrics"],
+    properties: {
+      adjustment: { $ref: "#/components/schemas/WorkAdjustment" },
+      target: { $ref: "#/components/schemas/WorkAdjustmentTargetSummary" },
+      reward: nullable({ $ref: "#/components/schemas/RewardLedgerEvent" }),
+      metrics: { $ref: "#/components/schemas/XpMetricsPayload" }
     }
   };
 
@@ -2175,6 +2240,10 @@ export function buildOpenApiDocument() {
         TaskRunHeartbeatInput: taskRunHeartbeatInput,
         TaskRunFinishInput: taskRunFinishInput,
         TaskRunFocusInput: taskRunFocusInput,
+        WorkAdjustment: workAdjustment,
+        WorkAdjustmentTargetSummary: workAdjustmentTargetSummary,
+        WorkAdjustmentInput: workAdjustmentInput,
+        WorkAdjustmentResult: workAdjustmentResult,
         SettingsUpdateInput: settingsUpdateInput,
         AgentOnboardingPayload: agentOnboardingPayload,
         DeletedEntityRecord: deletedEntityRecord,
@@ -3176,6 +3245,26 @@ export function buildOpenApiDocument() {
                 }
               },
               "Created task and XP state"
+            ),
+            "404": { $ref: "#/components/responses/Error" }
+          }
+        }
+      },
+      "/api/v1/work-adjustments": {
+        post: {
+          summary: "Add or remove tracked work minutes on an existing task or project and return fresh XP state",
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/WorkAdjustmentInput" }
+              }
+            }
+          },
+          responses: {
+            "201": jsonResponse(
+              { $ref: "#/components/schemas/WorkAdjustmentResult" },
+              "Created work adjustment and refreshed XP state"
             ),
             "404": { $ref: "#/components/responses/Error" }
           }

@@ -39,6 +39,9 @@ function normalizeTask(task: Partial<Task> | undefined): Task {
     time: task?.time ?? {
       totalTrackedSeconds: 0,
       totalCreditedSeconds: 0,
+      liveTrackedSeconds: 0,
+      liveCreditedSeconds: 0,
+      manualAdjustedSeconds: 0,
       activeRunCount: 0,
       hasCurrentRun: false,
       currentRunId: null
@@ -69,6 +72,9 @@ function normalizeProject(project: LegacyProjectLike | undefined): ProjectSummar
     time: project?.time ?? {
       totalTrackedSeconds: 0,
       totalCreditedSeconds: 0,
+      liveTrackedSeconds: 0,
+      liveCreditedSeconds: 0,
+      manualAdjustedSeconds: 0,
       activeRunCount: 0,
       hasCurrentRun: false,
       currentRunId: null

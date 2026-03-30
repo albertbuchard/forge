@@ -201,6 +201,7 @@ describe("forge openclaw plugin", () => {
       "/forge/v1/metrics/xp",
       "/forge/v1/reviews/weekly",
       "/forge/v1/operator/log-work",
+      "/forge/v1/work-adjustments",
       "/forge/v1/insights",
       "/forge/v1/entities",
       "/forge/v1/tasks",
@@ -213,6 +214,7 @@ describe("forge openclaw plugin", () => {
 
     const toolNames = tools.map((tool) => tool.name).sort();
     expect(toolNames).toEqual([
+      "forge_adjust_work_minutes",
       "forge_complete_task_run",
       "forge_create_entities",
       "forge_delete_entities",

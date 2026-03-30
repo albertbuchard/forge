@@ -4,6 +4,7 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { SurfaceSkeleton } from "@/components/experience/surface-skeleton";
 import { ProjectDialog } from "@/components/project-dialog";
 import { TaskDialog } from "@/components/task-dialog";
+import { WorkAdjustmentDialog } from "@/components/work-adjustment-dialog";
 import { ExecutionBoard } from "@/components/execution-board";
 import { EntityNotesSurface } from "@/components/notes/entity-notes-surface";
 import { PageHero } from "@/components/shell/page-hero";
@@ -13,7 +14,7 @@ import { Card } from "@/components/ui/card";
 import { EntityBadge } from "@/components/ui/entity-badge";
 import { EntityName } from "@/components/ui/entity-name";
 import { ErrorState } from "@/components/ui/page-state";
-import { getProjectBoard, patchTask, uncompleteTask } from "@/lib/api";
+import { createWorkAdjustment, getProjectBoard, patchTask, uncompleteTask } from "@/lib/api";
 import { getReadableActivityDescription, getReadableActivityTitle } from "@/lib/activity-copy";
 import { getActivityEventHref } from "@/lib/entity-links";
 import { useI18n } from "@/lib/i18n";
@@ -31,6 +32,7 @@ export function ProjectDetailPage() {
   const queryClient = useQueryClient();
   const [projectDialogOpen, setProjectDialogOpen] = useState(false);
   const [taskDialogOpen, setTaskDialogOpen] = useState(false);
+  const [workAdjustmentOpen, setWorkAdjustmentOpen] = useState(false);
   const legacyProject = shell.snapshot.dashboard.projects.find((project) => project.id === params.projectId) ?? null;
   const goal = legacyProject ? shell.snapshot.goals.find((entry) => entry.id === legacyProject.goalId) ?? null : null;
   const fallbackTasks = legacyProject
@@ -60,6 +62,18 @@ export function ProjectDetailPage() {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["forge-snapshot"] }),
         queryClient.invalidateQueries({ queryKey: ["project-board", params.projectId] })
+      ]);
+    }
+  });
+  const workAdjustmentMutation = useMutation({
+    mutationFn: createWorkAdjustment,
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["forge-snapshot"] }),
+        queryClient.invalidateQueries({ queryKey: ["project-board", params.projectId] }),
+        queryClient.invalidateQueries({ queryKey: ["forge-xp-metrics"] }),
+        queryClient.invalidateQueries({ queryKey: ["forge-reward-ledger"] }),
+        queryClient.invalidateQueries({ queryKey: ["forge-operator-context"] })
       ]);
     }
   });
@@ -110,6 +124,7 @@ export function ProjectDetailPage() {
 
       <div className="flex flex-wrap gap-3">
         <Button onClick={() => setTaskDialogOpen(true)}>{t("common.projectDetail.addTask")}</Button>
+        {!isLegacyProject ? <Button variant="secondary" onClick={() => setWorkAdjustmentOpen(true)}>Adjust work</Button> : null}
         {!isLegacyProject ? (
           <Button variant="secondary" onClick={() => setProjectDialogOpen(true)}>
             {t("common.projectDetail.editProject")}
@@ -256,6 +271,21 @@ export function ProjectDetailPage() {
           await queryClient.invalidateQueries({ queryKey: ["project-board", params.projectId] });
         }}
       />
+
+      {!isLegacyProject ? (
+        <WorkAdjustmentDialog
+          open={workAdjustmentOpen}
+          onOpenChange={setWorkAdjustmentOpen}
+          entityType="project"
+          entityId={payload.project.id}
+          targetLabel={payload.project.title}
+          currentCreditedSeconds={payload.project.time.totalCreditedSeconds}
+          pending={workAdjustmentMutation.isPending}
+          onSubmit={async (input) => {
+            await workAdjustmentMutation.mutateAsync(input);
+          }}
+        />
+      ) : null}
     </div>
   );
 }

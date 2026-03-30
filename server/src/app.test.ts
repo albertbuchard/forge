@@ -244,6 +244,127 @@ test("health probe can expose the effective runtime storage root for OpenClaw ru
   }
 });
 
+test("work adjustments add and remove signed minutes on tasks and projects with symmetric XP", async () => {
+  const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-work-adjustments-"));
+  const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
+
+  try {
+    const operatorCookie = await issueOperatorSessionCookie(app);
+    const snapshotResponse = await app.inject({ method: "GET", url: "/api/v1/context" });
+    const snapshot = snapshotResponse.json() as {
+      tasks: Array<{ id: string; title: string; projectId: string | null }>;
+      metrics: { totalXp: number };
+    };
+    const task = snapshot.tasks[0]!;
+    assert.ok(task?.projectId);
+
+    const addTaskAdjustment = await app.inject({
+      method: "POST",
+      url: "/api/v1/work-adjustments",
+      headers: {
+        cookie: operatorCookie
+      },
+      payload: {
+        entityType: "task",
+        entityId: task.id,
+        deltaMinutes: 25,
+        note: "Captured a real review block that happened off-timer."
+      }
+    });
+
+    assert.equal(addTaskAdjustment.statusCode, 201);
+    const addTaskBody = addTaskAdjustment.json() as {
+      adjustment: { appliedDeltaMinutes: number };
+      reward: { deltaXp: number } | null;
+      target: { time: { totalCreditedSeconds: number } };
+    };
+    assert.equal(addTaskBody.adjustment.appliedDeltaMinutes, 25);
+    assert.equal(addTaskBody.reward?.deltaXp, 8);
+    assert.equal(addTaskBody.target.time.totalCreditedSeconds, 1500);
+
+    const taskContextAfterAdd = await app.inject({
+      method: "GET",
+      url: `/api/v1/tasks/${task.id}/context`
+    });
+    const taskContextBody = taskContextAfterAdd.json() as {
+      activity: Array<{ eventType: string; metadata: { appliedDeltaMinutes?: number } }>;
+    };
+    assert.ok(taskContextBody.activity.some((event) => event.eventType === "work_adjusted" && event.metadata.appliedDeltaMinutes === 25));
+
+    const removeTaskAdjustment = await app.inject({
+      method: "POST",
+      url: "/api/v1/work-adjustments",
+      headers: {
+        cookie: operatorCookie
+      },
+      payload: {
+        entityType: "task",
+        entityId: task.id,
+        deltaMinutes: -30,
+        note: "Corrected an overcounted estimate."
+      }
+    });
+
+    assert.equal(removeTaskAdjustment.statusCode, 201);
+    const removeTaskBody = removeTaskAdjustment.json() as {
+      adjustment: { requestedDeltaMinutes: number; appliedDeltaMinutes: number };
+      reward: { deltaXp: number } | null;
+      target: { time: { totalCreditedSeconds: number } };
+    };
+    assert.equal(removeTaskBody.adjustment.requestedDeltaMinutes, -30);
+    assert.equal(removeTaskBody.adjustment.appliedDeltaMinutes, -25);
+    assert.equal(removeTaskBody.reward?.deltaXp, -8);
+    assert.equal(removeTaskBody.target.time.totalCreditedSeconds, 0);
+
+    const addProjectAdjustment = await app.inject({
+      method: "POST",
+      url: "/api/v1/work-adjustments",
+      headers: {
+        cookie: operatorCookie
+      },
+      payload: {
+        entityType: "project",
+        entityId: task.projectId,
+        deltaMinutes: 15,
+        note: "Captured project-level planning time."
+      }
+    });
+
+    assert.equal(addProjectAdjustment.statusCode, 201);
+    const addProjectBody = addProjectAdjustment.json() as {
+      reward: { deltaXp: number } | null;
+      target: { time: { totalCreditedSeconds: number } };
+      metrics: { profile: { totalXp: number } };
+    };
+    assert.equal(addProjectBody.reward?.deltaXp, 4);
+    assert.equal(addProjectBody.target.time.totalCreditedSeconds, 900);
+    assert.equal(addProjectBody.metrics.profile.totalXp, snapshot.metrics.totalXp + 4);
+
+    const projectBoard = await app.inject({
+      method: "GET",
+      url: `/api/v1/projects/${task.projectId}/board`
+    });
+    const projectBoardBody = projectBoard.json() as {
+      activity: Array<{ entityType: string; eventType: string }>;
+    };
+    assert.ok(projectBoardBody.activity.some((event) => event.entityType === "project" && event.eventType === "work_adjusted"));
+
+    const onboarding = await app.inject({
+      method: "GET",
+      url: "/api/v1/agents/onboarding"
+    });
+    const onboardingBody = onboarding.json() as {
+      onboarding: { toolInputCatalog: Array<{ toolName: string }>; recommendedPluginTools: { workWorkflow: string[] } };
+    };
+    assert.ok(onboardingBody.onboarding.toolInputCatalog.some((tool) => tool.toolName === "forge_adjust_work_minutes"));
+    assert.ok(onboardingBody.onboarding.recommendedPluginTools.workWorkflow.includes("forge_adjust_work_minutes"));
+  } finally {
+    await app.close();
+    closeDatabase();
+    await rm(rootDir, { recursive: true, force: true });
+  }
+});
+
 test("built frontend assets are served correctly from the /forge base path", async () => {
   const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-web-basepath-"));
   const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
@@ -3460,6 +3581,7 @@ test("settings and local agent token management persist through the versioned AP
       "forge_restore_entities"
     ]);
     assert.deepEqual(onboardingBody.onboarding.recommendedPluginTools.workWorkflow, [
+      "forge_adjust_work_minutes",
       "forge_log_work",
       "forge_start_task_run",
       "forge_heartbeat_task_run",

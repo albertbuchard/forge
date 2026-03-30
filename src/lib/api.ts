@@ -15,6 +15,7 @@ import type {
   OperatorContextPayload,
   OperatorLogWorkInput,
   OperatorLogWorkResult,
+  WorkAdjustmentResult,
   InsightFeedback,
   InsightsPayload,
   Note,
@@ -922,6 +923,18 @@ export function getTaskContext(taskId: string) {
 
 export function logOperatorWork(input: OperatorLogWorkInput) {
   return request<OperatorLogWorkResult>("/api/v1/operator/log-work", {
+    method: "POST",
+    body: JSON.stringify(input)
+  });
+}
+
+export function createWorkAdjustment(input: {
+  entityType: "task" | "project";
+  entityId: string;
+  deltaMinutes: number;
+  note?: string;
+}) {
+  return request<WorkAdjustmentResult>("/api/v1/work-adjustments", {
     method: "POST",
     body: JSON.stringify(input)
   });

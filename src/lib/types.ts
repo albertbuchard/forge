@@ -9,6 +9,7 @@ export type HabitFrequency = "daily" | "weekly";
 export type HabitPolarity = "positive" | "negative";
 export type HabitStatus = "active" | "paused" | "archived";
 export type HabitCheckInStatus = "done" | "missed";
+export type WorkAdjustmentEntityType = "task" | "project";
 export type CrudEntityType =
   | "goal"
   | "project"
@@ -46,9 +47,38 @@ export type DeleteMode = "soft" | "hard";
 export interface TaskTimeSummary {
   totalTrackedSeconds: number;
   totalCreditedSeconds: number;
+  liveTrackedSeconds: number;
+  liveCreditedSeconds: number;
+  manualAdjustedSeconds: number;
   activeRunCount: number;
   hasCurrentRun: boolean;
   currentRunId: string | null;
+}
+
+export interface WorkAdjustment {
+  id: string;
+  entityType: WorkAdjustmentEntityType;
+  entityId: string;
+  requestedDeltaMinutes: number;
+  appliedDeltaMinutes: number;
+  note: string;
+  actor: string | null;
+  source: "ui" | "openclaw" | "agent" | "system";
+  createdAt: string;
+}
+
+export interface WorkAdjustmentTargetSummary {
+  entityType: WorkAdjustmentEntityType;
+  entityId: string;
+  title: string;
+  time: TaskTimeSummary;
+}
+
+export interface WorkAdjustmentResult {
+  adjustment: WorkAdjustment;
+  target: WorkAdjustmentTargetSummary;
+  reward: RewardLedgerEvent | null;
+  metrics: XpMetricsPayload;
 }
 
 export interface NoteLink {

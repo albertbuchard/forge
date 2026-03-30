@@ -66,6 +66,11 @@ A task run is a live or historical work session attached to a task. It records w
 work started, whether the session is planned or unlimited, how much wall time passed,
 how much credited time was earned, and whether the run is the user's current focus.
 
+A work adjustment is a signed retrospective minute correction attached to an existing
+task or project. It is not a hidden task run. It exists so the user or a trusted
+agent can truthfully add or remove tracked minutes after the fact, with the clamp and
+XP effects remaining explicit and auditable.
+
 Rewards are the structured XP outcomes attached to meaningful behavior. Starting work,
 sustaining work, completing work, and preserving momentum should all create explainable
 reward events. XP is not decoration. It is a legible reward ledger that should always
@@ -104,6 +109,10 @@ cards must wrap text cleanly, and direct actions such as starting work or changi
 state must be obvious. The Today view must explain today's work plainly, foreground XP
 and priorities, and help the user choose or start the next useful task without vague
 copy. The task detail page must put task data and task actions before commentary.
+It must also expose truthful time-accounting controls: live task runs for work that is
+happening now, completion-style retroactive logging for work that already happened, and
+signed minute adjustments when existing tracked time needs correction without inventing
+a fake live session.
 
 The live timer system must stay visible in app chrome. Starting work, pausing work,
 switching focus, and completing work should all be easy from the global app bar. When
@@ -121,7 +130,8 @@ mobile version must intentionally reorganize it rather than letting it overflow.
 Forge is also an agent-facing product. The API and the OpenClaw integration must allow
 trusted agents to inspect current context, search entities before creating duplicates,
 create and update goals, projects, tasks, notes, tags, and Psyche records, control
-task timers, and write structured insights. Notes must be linkable to one or many
+task timers, post signed minute work adjustments on tasks and projects, and write
+structured insights. Notes must be linkable to one or many
 entities, batch-manageable, searchable, and creatable inline when a parent entity is
 created. These capabilities must match the real product. If the UI can do something
 important, the versioned API and the curated agent surface should expose it too unless

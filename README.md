@@ -7,7 +7,7 @@ Forge is a local-first life direction, execution, and reflection system with a f
 Forge gives the user and trusted agents one structured operating record for:
 
 - life goals, projects, and Kanban tasks
-- real timed work sessions
+- real timed work sessions and signed retrospective minute corrections
 - linked Markdown notes
 - XP, momentum, and weekly review
 - Psyche records such as values, beliefs, patterns, modes, and trigger reports
@@ -62,6 +62,12 @@ The same tool-permission step still applies for repo-local installs: open
 `OpenClaw -> Agents`, choose your agent, and allow every
 `forge-openclaw-plugin` tool card.
 
+Forge now has three distinct work-accounting paths:
+
+- live work uses task runs
+- completion-style retroactive work uses `/api/v1/operator/log-work`
+- signed minute corrections on existing tasks or projects use `/api/v1/work-adjustments`
+
 Normal local UI address:
 
 - [http://127.0.0.1:4317/forge/](http://127.0.0.1:4317/forge/)
@@ -107,7 +113,7 @@ The current app surface in this repo includes:
 - `Habits`: recurring commitments and recurring slips with explicit XP consequences, linked to goals, projects, tasks, values, patterns, behaviors, beliefs, modes, and trigger reports
 - `Goals` and goal detail pages
 - `Projects` and project detail pages
-- task detail pages
+- task detail pages with `Adjust work` for signed minute corrections
 - `Notes`
 - `Activity`
 - `Insights`
@@ -128,6 +134,12 @@ The current app surface in this repo includes:
 - `Psyche -> Mode Guide`
 
 The Psyche side is explicitly influenced by third-wave CBT, ACT, and schema-therapy-style work. It is meant to give the agent a durable place to store values, beliefs, modes, patterns, and trigger reports in a structured form instead of leaving them scattered in chat.
+
+Time accounting is intentionally split by truth source:
+
+- use live task runs when the work is happening now
+- use `operator/log-work` when the work already happened and should be recorded as a finished work item
+- use `work-adjustments` when a task or project already exists and only the tracked minutes need to be added or corrected
 
 There is no separate top-level `/tasks` index route in the current app. Task navigation is detail-first from Today, Kanban, Projects, Goals, Overview, Activity, and Notes.
 

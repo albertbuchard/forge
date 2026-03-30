@@ -45,6 +45,9 @@ const project: ProjectSummary = {
   time: {
     totalTrackedSeconds: 0,
     totalCreditedSeconds: 0,
+    liveTrackedSeconds: 0,
+    liveCreditedSeconds: 0,
+    manualAdjustedSeconds: 0,
     activeRunCount: 0,
     hasCurrentRun: false,
     currentRunId: null
@@ -72,6 +75,9 @@ const task: Task = {
   time: {
     totalTrackedSeconds: 0,
     totalCreditedSeconds: 0,
+    liveTrackedSeconds: 0,
+    liveCreditedSeconds: 0,
+    manualAdjustedSeconds: 0,
     activeRunCount: 0,
     hasCurrentRun: false,
     currentRunId: null

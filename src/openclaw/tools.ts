@@ -332,6 +332,20 @@ export function registerForgePluginTools(api: ForgePluginToolApi, config: ForgeP
   });
 
   registerWriteTool(api, config, {
+    name: "forge_adjust_work_minutes",
+    label: "Forge Adjust Work Minutes",
+    description: "Add or remove tracked work minutes on an existing task or project without creating a live task run. Forge applies symmetric XP changes when the total crosses reward buckets.",
+    parameters: Type.Object({
+      entityType: Type.Union([Type.Literal("task"), Type.Literal("project")]),
+      entityId: Type.String({ minLength: 1 }),
+      deltaMinutes: Type.Integer(),
+      note: optionalString()
+    }),
+    method: "POST",
+    path: "/api/v1/work-adjustments"
+  });
+
+  registerWriteTool(api, config, {
     name: "forge_post_insight",
     label: "Forge Post Insight",
     description: "Post a structured Forge insight after reading the overview. This stores an agent-authored observation or recommendation with provenance.",

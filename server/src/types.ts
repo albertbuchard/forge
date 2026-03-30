@@ -16,6 +16,7 @@ export const habitFrequencySchema = z.enum(["daily", "weekly"]);
 export const habitPolaritySchema = z.enum(["positive", "negative"]);
 export const habitStatusSchema = z.enum(["active", "paused", "archived"]);
 export const habitCheckInStatusSchema = z.enum(["done", "missed"]);
+export const workAdjustmentEntityTypeSchema = z.enum(["task", "project"]);
 export const activityEntityTypeSchema = z.enum([
   "task",
   "habit",
@@ -151,9 +152,40 @@ export const tagSchema = z.object({
 export const taskTimeSummarySchema = z.object({
   totalTrackedSeconds: z.number().int().nonnegative(),
   totalCreditedSeconds: z.number().nonnegative(),
+  liveTrackedSeconds: z.number().int().nonnegative().default(0),
+  liveCreditedSeconds: z.number().nonnegative().default(0),
+  manualAdjustedSeconds: z.number().int().default(0),
   activeRunCount: z.number().int().nonnegative(),
   hasCurrentRun: z.boolean(),
   currentRunId: z.string().nullable()
+});
+
+export const workAdjustmentSchema = z.object({
+  id: z.string(),
+  entityType: workAdjustmentEntityTypeSchema,
+  entityId: z.string(),
+  requestedDeltaMinutes: z.number().int().refine((value) => value !== 0, {
+    message: "requestedDeltaMinutes must not be zero"
+  }),
+  appliedDeltaMinutes: z.number().int(),
+  note: z.string(),
+  actor: z.string().nullable(),
+  source: activitySourceSchema,
+  createdAt: z.string()
+});
+
+export const workAdjustmentTargetSummarySchema = z.object({
+  entityType: workAdjustmentEntityTypeSchema,
+  entityId: z.string(),
+  title: z.string(),
+  time: taskTimeSummarySchema
+});
+
+export const workAdjustmentResultSchema = z.object({
+  adjustment: workAdjustmentSchema,
+  target: workAdjustmentTargetSummarySchema,
+  reward: z.lazy(() => rewardLedgerEventSchema).nullable(),
+  metrics: z.lazy(() => xpMetricsPayloadSchema)
 });
 
 export const noteLinkSchema = z.object({
@@ -227,6 +259,9 @@ export const taskSchema = z.object({
   time: taskTimeSummarySchema.default({
     totalTrackedSeconds: 0,
     totalCreditedSeconds: 0,
+    liveTrackedSeconds: 0,
+    liveCreditedSeconds: 0,
+    manualAdjustedSeconds: 0,
     activeRunCount: 0,
     hasCurrentRun: false,
     currentRunId: null
@@ -821,6 +856,15 @@ export const createManualRewardGrantSchema = z.object({
   reasonTitle: nonEmptyTrimmedString,
   reasonSummary: trimmedString.default(""),
   metadata: z.record(z.string(), rewardConfigValueSchema).default({})
+});
+
+export const createWorkAdjustmentSchema = z.object({
+  entityType: workAdjustmentEntityTypeSchema,
+  entityId: nonEmptyTrimmedString,
+  deltaMinutes: z.number().int().refine((value) => value !== 0, {
+    message: "deltaMinutes must not be zero"
+  }),
+  note: trimmedString.default("")
 });
 
 export const settingsPayloadSchema = z.object({
@@ -1432,7 +1476,11 @@ export type CreateInsightInput = z.infer<typeof createInsightSchema>;
 export type CreateNoteInput = z.infer<typeof createNoteSchema>;
 export type NestedCreateNoteInput = z.infer<typeof nestedCreateNoteSchema>;
 export type CreateManualRewardGrantInput = z.infer<typeof createManualRewardGrantSchema>;
+export type CreateWorkAdjustmentInput = z.infer<typeof createWorkAdjustmentSchema>;
 export type CreateSessionEventInput = z.infer<typeof createSessionEventSchema>;
+export type WorkAdjustment = z.infer<typeof workAdjustmentSchema>;
+export type WorkAdjustmentEntityType = z.infer<typeof workAdjustmentEntityTypeSchema>;
+export type WorkAdjustmentResult = z.infer<typeof workAdjustmentResultSchema>;
 export type OperatorLogWorkInput = z.infer<typeof operatorLogWorkSchema>;
 export type OperatorLogWorkResult = z.infer<typeof operatorLogWorkResultSchema>;
 export type RemoveActivityEventInput = z.infer<typeof removeActivityEventSchema>;

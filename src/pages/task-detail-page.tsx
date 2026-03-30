@@ -14,6 +14,7 @@ import { SurfaceSkeleton } from "@/components/experience/surface-skeleton";
 import { SheetScaffold } from "@/components/experience/sheet-scaffold";
 import { EntityNotesSurface } from "@/components/notes/entity-notes-surface";
 import { TaskDialog } from "@/components/task-dialog";
+import { WorkAdjustmentDialog } from "@/components/work-adjustment-dialog";
 import { PageHero } from "@/components/shell/page-hero";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -22,7 +23,7 @@ import { EntityBadge } from "@/components/ui/entity-badge";
 import { EntityName } from "@/components/ui/entity-name";
 import { InfoTooltip } from "@/components/ui/info-tooltip";
 import { ErrorState } from "@/components/ui/page-state";
-import { completeTaskRun, getTaskContext, patchTask, releaseTaskRun, removeActivityLog, uncompleteTask } from "@/lib/api";
+import { completeTaskRun, createWorkAdjustment, getTaskContext, patchTask, releaseTaskRun, removeActivityLog, uncompleteTask } from "@/lib/api";
 import { getReadableActivityDescription, getReadableActivityTitle } from "@/lib/activity-copy";
 import { getActivityEventCtaLabel, getActivityEventHref } from "@/lib/entity-links";
 import { useI18n } from "@/lib/i18n";
@@ -57,6 +58,7 @@ export function TaskDetailPage() {
   const params = useParams();
   const queryClient = useQueryClient();
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [workAdjustmentOpen, setWorkAdjustmentOpen] = useState(false);
   const [statusSheetOpen, setStatusSheetOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(() => (typeof window !== "undefined" ? window.matchMedia("(max-width: 1023px)").matches : false));
 
@@ -86,7 +88,10 @@ export function TaskDetailPage() {
       queryClient.invalidateQueries({ queryKey: ["forge-snapshot"] }),
       queryClient.invalidateQueries({ queryKey: ["task-context", params.taskId] }),
       queryClient.invalidateQueries({ queryKey: ["activity-archive"] }),
-      queryClient.invalidateQueries({ queryKey: ["project-board"] })
+      queryClient.invalidateQueries({ queryKey: ["project-board"] }),
+      queryClient.invalidateQueries({ queryKey: ["forge-xp-metrics"] }),
+      queryClient.invalidateQueries({ queryKey: ["forge-reward-ledger"] }),
+      queryClient.invalidateQueries({ queryKey: ["forge-operator-context"] })
     ]);
   };
 
@@ -108,6 +113,10 @@ export function TaskDetailPage() {
   });
   const completeRunMutation = useMutation({
     mutationFn: ({ runId, actor, note }: { runId: string; actor?: string; note?: string }) => completeTaskRun(runId, { actor, note: note ?? "" }),
+    onSuccess: invalidateAll
+  });
+  const workAdjustmentMutation = useMutation({
+    mutationFn: createWorkAdjustment,
     onSuccess: invalidateAll
   });
 
@@ -206,6 +215,10 @@ export function TaskDetailPage() {
                 </Button>
               </>
             ) : null}
+            <Button variant="secondary" onClick={() => setWorkAdjustmentOpen(true)}>
+              <Clock3 className="size-4" />
+              Adjust work
+            </Button>
             {isMobile ? (
               <>
                 <Button variant="secondary" size="sm" aria-label="Change task status" onClick={() => setStatusSheetOpen(true)}>
@@ -420,6 +433,19 @@ export function TaskDetailPage() {
             return;
           }
           await updateTaskMutation.mutateAsync({ taskId, patch: input });
+        }}
+      />
+
+      <WorkAdjustmentDialog
+        open={workAdjustmentOpen}
+        onOpenChange={setWorkAdjustmentOpen}
+        entityType="task"
+        entityId={payload.task.id}
+        targetLabel={payload.task.title}
+        currentCreditedSeconds={payload.task.time.totalCreditedSeconds}
+        pending={workAdjustmentMutation.isPending}
+        onSubmit={async (input) => {
+          await workAdjustmentMutation.mutateAsync(input);
         }}
       />
 

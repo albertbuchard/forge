@@ -186,7 +186,7 @@ These tools operate on:
 `goal`, `project`, `task`, `habit`, `note`, `psyche_value`, `behavior_pattern`, `behavior`, `belief_entry`, `mode_profile`, `mode_guide_session`, `trigger_report`, `event_type`, `emotion_definition`
 
 Use live work tools for `task_run`:
-`forge_log_work`, `forge_start_task_run`, `forge_heartbeat_task_run`, `forge_focus_task_run`, `forge_complete_task_run`, `forge_release_task_run`
+`forge_adjust_work_minutes`, `forge_log_work`, `forge_start_task_run`, `forge_heartbeat_task_run`, `forge_focus_task_run`, `forge_complete_task_run`, `forge_release_task_run`
 
 Use `forge_post_insight` for `insight`.
 Use `forge_grant_reward_bonus` only for explicit manual XP bonuses or penalties that should be auditable and cannot be expressed through the normal task-run or habit check-in routes.
@@ -229,6 +229,10 @@ Use `forge_release_task_run` to stop live work without completing the task. `clo
 
 Use `forge_log_work` only for retroactive work that already happened. If the user explains the work in a way that should be preserved, include `closeoutNote`.
 
+Use `forge_adjust_work_minutes` when the task or project already exists and the user only needs tracked minutes corrected up or down. This is the truthful path for signed retrospective minute adjustments and it automatically applies symmetric XP changes when reward buckets are crossed.
+
+Do not use `forge_adjust_work_minutes` to simulate a live session. Live work still belongs in `forge_start_task_run` and the rest of the task-run workflow.
+
 Use these interaction rules.
 
 Keep the main discussion natural. Do not turn every conversation into a form. Do not offer Forge for every passing mention. Offer it once, near the end, only when the signal is strong and storing would help.
@@ -261,6 +265,7 @@ When the user asks which Forge tools are available, list exactly these tools:
 `forge_delete_entities`
 `forge_restore_entities`
 `forge_grant_reward_bonus`
+`forge_adjust_work_minutes`
 `forge_log_work`
 `forge_start_task_run`
 `forge_heartbeat_task_run`

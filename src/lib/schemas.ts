@@ -113,6 +113,13 @@ export const habitMutationSchema = z
     }
   });
 
+export const workAdjustmentMutationSchema = z.object({
+  entityType: z.enum(["task", "project"]),
+  entityId: z.string().trim().min(1, "A target is required"),
+  deltaMinutes: z.coerce.number().int().refine((value) => value !== 0, "Minutes must not be zero"),
+  note: z.string().trim()
+});
+
 export const tagMutationSchema = z.object({
   name: z.string().trim().min(1, "Name is required"),
   kind: z.enum(["value", "category", "execution"]),
@@ -127,4 +134,5 @@ export type CreateAgentTokenInput = z.infer<typeof createAgentTokenSchema>;
 export type CreateInsightInput = z.infer<typeof createInsightSchema>;
 export type QuickTaskInput = z.infer<typeof quickTaskSchema>;
 export type HabitMutationInput = z.infer<typeof habitMutationSchema>;
+export type WorkAdjustmentMutationInput = z.infer<typeof workAdjustmentMutationSchema>;
 export type TagMutationInput = z.infer<typeof tagMutationSchema>;

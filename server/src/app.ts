@@ -1,9 +1,9 @@
 import Fastify from "fastify";
 import cors from "@fastify/cors";
 import { ZodError } from "zod";
-import { configureDatabase, configureDatabaseSeeding } from "./db.js";
+import { configureDatabase, configureDatabaseSeeding, runInTransaction } from "./db.js";
 import { HttpError, isHttpError, type ValidationIssue } from "./errors.js";
-import { listActivityEvents, listActivityEventsForTask, removeActivityEvent } from "./repositories/activity-events.js";
+import { listActivityEvents, listActivityEventsForTask, recordActivityEvent, removeActivityEvent } from "./repositories/activity-events.js";
 import {
   approveApprovalRequest,
   createAgentAction,
@@ -68,6 +68,7 @@ import {
   getRewardRuleById,
   listRewardLedger,
   listRewardRules,
+  recordWorkAdjustmentReward,
   recordSessionEvent,
   updateRewardRule
 } from "./repositories/rewards.js";
@@ -75,6 +76,7 @@ import { listAgentIdentities, getSettings, isPsycheAuthRequired, updateSettings,
 import { createTag, getTagById, listTags, updateTag } from "./repositories/tags.js";
 import { claimTaskRun, completeTaskRun, focusTaskRun, heartbeatTaskRun, listTaskRuns, recoverTimedOutTaskRuns, releaseTaskRun } from "./repositories/task-runs.js";
 import { createTask, createTaskWithIdempotency, getTaskById, listTasks, uncompleteTask, updateTask } from "./repositories/tasks.js";
+import { createWorkAdjustment } from "./repositories/work-adjustments.js";
 import { getDashboard } from "./services/dashboard.js";
 import { getOverviewContext, getRiskContext, getTodayContext } from "./services/context.js";
 import { buildGamificationOverview, buildGamificationProfile, buildXpMomentumPulse } from "./services/gamification.js";
@@ -89,7 +91,7 @@ import {
   updateEntities
 } from "./services/entity-crud.js";
 import { getPsycheOverview } from "./services/psyche.js";
-import { getProjectBoard, listProjectSummaries } from "./services/projects.js";
+import { getProjectBoard, getProjectSummary, listProjectSummaries } from "./services/projects.js";
 import { getWeeklyReviewPayload } from "./services/reviews.js";
 import { createTaskRunWatchdog, type TaskRunWatchdogOptions } from "./services/task-run-watchdog.js";
 import { suggestTags } from "./services/tagging.js";
@@ -133,6 +135,7 @@ import {
   createHabitCheckInSchema,
   createHabitSchema,
   createSessionEventSchema,
+  createWorkAdjustmentSchema,
   createTagSchema,
   notesListQuerySchema,
   updateTagSchema,
@@ -162,7 +165,10 @@ import {
   updateNoteSchema,
   updateProjectSchema,
   updateRewardRuleSchema,
-  updateTaskSchema
+  updateTaskSchema,
+  workAdjustmentResultSchema,
+  type TaskTimeSummary,
+  type WorkAdjustmentEntityType
 } from "./types.js";
 import { buildOpenApiDocument } from "./openapi.js";
 import { registerWebRoutes } from "./web.js";
@@ -800,12 +806,30 @@ const AGENT_ONBOARDING_TOOL_INPUT_CATALOG = [
     example: '{"entityType":"goal","entityId":"goal_123","title":"Admin drag is masking momentum","summary":"Creative progress is happening, but admin cleanup keeps interrupting it.","recommendation":"Protect one clean creative block and isolate admin into a separate recurring task.","confidence":0.82}'
   },
   {
+    toolName: "forge_adjust_work_minutes",
+    summary: "Add or remove tracked work minutes on a task or project without creating a live task run.",
+    whenToUse: "Use for truthful retrospective minute corrections. Use this instead of forge_log_work when the task or project already exists and only tracked minutes need adjusting.",
+    inputShape: "{ entityType: \"task\"|\"project\", entityId: string, deltaMinutes: integer, note?: string }",
+    requiredFields: ["entityType", "entityId", "deltaMinutes"],
+    notes: [
+      "Positive deltaMinutes add tracked minutes and may award XP when a progress bucket is crossed.",
+      "Negative deltaMinutes remove tracked minutes and may reverse XP symmetrically when a progress bucket is crossed downward.",
+      "Requires rewards.manage and write scopes."
+    ],
+    example: "{\"entityType\":\"task\",\"entityId\":\"task_123\",\"deltaMinutes\":25,\"note\":\"Captured the off-timer review pass from this morning.\"}"
+  },
+  {
     toolName: "forge_log_work",
     summary: "Log work that already happened.",
-    whenToUse: "Use for retroactive work, not for starting a live session.",
+    whenToUse: "Use for completion-style retroactive work, not for starting a live session or adjusting minutes on an existing record.",
     inputShape: "{ taskId?: string, title?: string, description?: string, summary?: string, goalId?: string|null, projectId?: string|null, owner?: string, status?: TaskStatus, priority?: TaskPriority, dueDate?: string|null, effort?: TaskEffort, energy?: TaskEnergy, points?: number, tagIds?: string[], closeoutNote?: { contentMarkdown: string, author?: string|null, links?: Array<{ entityType, entityId, anchorKey? }> } }",
     requiredFields: ["taskId or title"],
-    notes: ["Use taskId when logging work against an existing task.", "Use title when a new completed work item should be created and logged.", "closeoutNote persists the work summary as a real linked note."],
+    notes: [
+      "Use taskId when logging work against an existing task.",
+      "Use title when a new completed work item should be created and logged.",
+      "Use forge_adjust_work_minutes for signed minute corrections on existing tasks or projects.",
+      "closeoutNote persists the work summary as a real linked note."
+    ],
     example: '{"taskId":"task_123","summary":"Finished the review draft and cleaned the notes.","points":40,"closeoutNote":{"contentMarkdown":"Finished the review draft, cleaned the note structure, and left one follow-up for QA."}}'
   },
   {
@@ -977,6 +1001,7 @@ function buildAgentOnboardingPayload(request: {
       ],
       rewardWorkflow: ["forge_grant_reward_bonus"],
       workWorkflow: [
+        "forge_adjust_work_minutes",
         "forge_log_work",
         "forge_start_task_run",
         "forge_heartbeat_task_run",
@@ -1241,6 +1266,63 @@ function buildXpMetricsPayload() {
   };
 }
 
+function resolveWorkAdjustmentTarget(entityType: WorkAdjustmentEntityType, entityId: string): {
+  entityType: WorkAdjustmentEntityType;
+  entityId: string;
+  title: string;
+  time: TaskTimeSummary;
+} | null {
+  if (entityType === "task") {
+    const task = getTaskById(entityId);
+    return task
+      ? {
+          entityType,
+          entityId: task.id,
+          title: task.title,
+          time: task.time
+        }
+      : null;
+  }
+
+  const project = getProjectSummary(entityId);
+  return project
+    ? {
+        entityType,
+        entityId: project.id,
+        title: project.title,
+        time: project.time
+      }
+    : null;
+}
+
+function clampWorkAdjustmentMinutes(deltaMinutes: number, currentCreditedSeconds: number): number {
+  if (deltaMinutes >= 0) {
+    return deltaMinutes;
+  }
+
+  const maxRemovableMinutes = Math.max(0, Math.floor(currentCreditedSeconds / 60));
+  return -Math.min(Math.abs(deltaMinutes), maxRemovableMinutes);
+}
+
+function describeWorkAdjustment(input: {
+  entityType: WorkAdjustmentEntityType;
+  targetTitle: string;
+  requestedDeltaMinutes: number;
+  appliedDeltaMinutes: number;
+}): { title: string; description: string } {
+  const entityLabel = input.entityType === "task" ? "Task" : "Project";
+  const requestedLabel = `${Math.abs(input.requestedDeltaMinutes)} minute${Math.abs(input.requestedDeltaMinutes) === 1 ? "" : "s"}`;
+  const appliedLabel = `${Math.abs(input.appliedDeltaMinutes)} minute${Math.abs(input.appliedDeltaMinutes) === 1 ? "" : "s"}`;
+  const direction = input.appliedDeltaMinutes >= 0 ? "added" : "removed";
+  const clamped = input.requestedDeltaMinutes !== input.appliedDeltaMinutes;
+  return {
+    title: `${entityLabel} work adjusted: ${input.targetTitle}`,
+    description: clamped
+      ? `${requestedLabel} requested, ${appliedLabel} ${direction} after clamping to the currently tracked time.`
+      : `${appliedLabel} ${direction} from the tracked work total.`
+  };
+}
+
 function buildOperatorContext() {
   const tasks = listTasks();
   const dueHabits = listHabits({ dueToday: true }).slice(0, 12);
@@ -1335,6 +1417,12 @@ function buildOperatorOverviewRouteGuide() {
         id: "entity_batch_mutation",
         path: "/api/v1/entities/{create|update|delete|restore}",
         summary: "Preferred multi-entity mutation surface for agents. Delete defaults to soft delete and restore reverses soft deletion.",
+        requiredScope: "write"
+      },
+      {
+        id: "work_adjustments",
+        path: "/api/v1/work-adjustments",
+        summary: "Signed retrospective minute adjustments for existing tasks or projects, with symmetric progress-XP updates and clamp protection.",
         requiredScope: "write"
       },
       {
@@ -2767,6 +2855,79 @@ export async function buildServer(options: { dataRoot?: string; seedDemoData?: b
 
     reply.code(201);
     return { task, xp: buildXpMetricsPayload() };
+  });
+  app.post("/api/v1/work-adjustments", async (request, reply) => {
+    const auth = requireScopedAccess(request.headers as Record<string, unknown>, ["write", "rewards.manage"], { route: "/api/v1/work-adjustments" });
+    const input = createWorkAdjustmentSchema.parse(request.body ?? {});
+    const currentTarget = resolveWorkAdjustmentTarget(input.entityType, input.entityId);
+
+    if (!currentTarget) {
+      reply.code(404);
+      return { error: `${input.entityType === "task" ? "Task" : "Project"} not found` };
+    }
+
+    const appliedDeltaMinutes = clampWorkAdjustmentMinutes(input.deltaMinutes, currentTarget.time.totalCreditedSeconds);
+    const nextCreditedSeconds = Math.max(0, currentTarget.time.totalCreditedSeconds + appliedDeltaMinutes * 60);
+
+    const result = runInTransaction(() => {
+      const adjustment = createWorkAdjustment(
+        {
+          ...input,
+          appliedDeltaMinutes
+        },
+        toActivityContext(auth)
+      );
+      const reward = recordWorkAdjustmentReward({
+        entityType: input.entityType,
+        entityId: input.entityId,
+        targetTitle: currentTarget.title,
+        actor: auth.actor ?? null,
+        source: auth.source,
+        requestedDeltaMinutes: input.deltaMinutes,
+        appliedDeltaMinutes,
+        previousCreditedSeconds: currentTarget.time.totalCreditedSeconds,
+        nextCreditedSeconds,
+        adjustmentId: adjustment.id
+      });
+      const copy = describeWorkAdjustment({
+        entityType: input.entityType,
+        targetTitle: currentTarget.title,
+        requestedDeltaMinutes: input.deltaMinutes,
+        appliedDeltaMinutes
+      });
+      recordActivityEvent({
+        entityType: input.entityType,
+        entityId: input.entityId,
+        eventType: "work_adjusted",
+        title: copy.title,
+        description: copy.description,
+        actor: auth.actor ?? null,
+        source: auth.source,
+        metadata: {
+          adjustmentId: adjustment.id,
+          requestedDeltaMinutes: input.deltaMinutes,
+          appliedDeltaMinutes,
+          rewardDeltaXp: reward?.deltaXp ?? 0,
+          rewardId: reward?.id ?? null,
+          note: input.note || null
+        }
+      });
+
+      return { adjustment, reward };
+    });
+
+    const updatedTarget = resolveWorkAdjustmentTarget(input.entityType, input.entityId);
+    if (!updatedTarget) {
+      throw new HttpError(500, "work_adjustment_target_missing", `Could not reload ${input.entityType} ${input.entityId} after adjustment`);
+    }
+
+    reply.code(201);
+    return workAdjustmentResultSchema.parse({
+      adjustment: result.adjustment,
+      target: updatedTarget,
+      reward: result.reward,
+      metrics: buildXpMetricsPayload()
+    });
   });
   app.post("/api/v1/tasks/:id/uncomplete", async (request, reply) => {
     const auth = requireScopedAccess(request.headers as Record<string, unknown>, ["write"], { route: "/api/v1/tasks/:id/uncomplete" });

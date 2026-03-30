@@ -41,7 +41,8 @@ The intended workflow is:
 - use `forge_get_psyche_overview`, `forge_get_xp_metrics`, and `forge_get_weekly_review` for read-heavy guidance
 - use `forge_search_entities` before mutating when duplicates are possible
 - create, update, delete, and restore through the batch entity tools
-- use `forge_log_work` for retroactive work
+- use `forge_adjust_work_minutes` for signed minute corrections on existing tasks or projects
+- use `forge_log_work` for completion-style retroactive work
 - use the task-run tools for real live work: `forge_start_task_run`, `forge_heartbeat_task_run`, `forge_focus_task_run`, `forge_complete_task_run`, `forge_release_task_run`
 - use `forge_grant_reward_bonus` only when a manual XP bonus or penalty should be explicit and auditable
 - use first-class `note` entities for Markdown progress evidence, handoff context, and multi-entity work summaries
@@ -68,7 +69,7 @@ The execution rule is:
 - if an entity is only implied in the discussion, do not write immediately; help first, then offer Forge lightly near the end, and only write after explicit save intent
 
 The plugin no longer mirrors every Forge route. Forge itself still has the full `/api/v1` surface for the web app and internal runtime.
-Instead, the plugin exposes the parts the agent actually needs: overview, current context, Psyche and XP reads, batch entity mutations, retroactive work logging, real task-run control, insight posting, and UI entry.
+Instead, the plugin exposes the parts the agent actually needs: overview, current context, Psyche and XP reads, batch entity mutations, signed minute corrections, completion-style retroactive work logging, real task-run control, insight posting, and UI entry.
 When the configured origin is `localhost` or `127.0.0.1`, the plugin auto-starts the bundled Forge runtime. Default localhost installs prefer `4317`, but if that port is already occupied the plugin now moves to the next free local port and remembers it for future runs unless the user explicitly pinned a different port.
 
 ## Agent understanding contract
@@ -99,6 +100,7 @@ Important examples:
 - `event_type` and `emotion_definition` are reusable Psyche taxonomies that support reports
 - `trigger_report` uses nested arrays for `emotions`, `thoughts`, and `behaviors`, plus a structured `consequences` object
 - live work is handled through task runs, not just task status
+- minute corrections on existing tasks or projects go through `/api/v1/work-adjustments`, not `/api/v1/operator/log-work`
 
 ## Which manifest does what
 
@@ -261,6 +263,7 @@ The curated tool contract is:
 - `forge_update_entities`
 - `forge_delete_entities`
 - `forge_restore_entities`
+- `forge_adjust_work_minutes`
 - `forge_log_work`
 - `forge_start_task_run`
 - `forge_heartbeat_task_run`
@@ -272,7 +275,8 @@ The curated tool contract is:
 Live work rule:
 - do not fake start or stop work by only moving task status
 - use the real task-run tools for active work
-- use `forge_log_work` only when the work already happened and you are logging it after the fact
+- use `forge_adjust_work_minutes` when a task or project already exists and only the tracked minutes need correction
+- use `forge_log_work` only when the work already happened and you are logging it as a finished work item after the fact
 
 ## Exact batch payload rules
 
@@ -303,6 +307,12 @@ The high-level Forge mutation tools are array-first.
 `forge_log_work`:
 - use for work that already happened
 - pass either `taskId` or `title`
+
+`forge_adjust_work_minutes`:
+- use for signed minute changes on an existing `task` or `project`
+- required: `entityType`, `entityId`, `deltaMinutes`
+- optional: `note`
+- `deltaMinutes` must be non-zero and Forge clamps negative removals so credited time never goes below zero
 
 `forge_start_task_run`:
 - required: `taskId`, `actor`

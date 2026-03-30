@@ -3,6 +3,7 @@ import { getDatabase } from "../db.js";
 import { recordEventLog } from "./event-log.js";
 import {
   createManualRewardGrantSchema,
+  workAdjustmentEntityTypeSchema,
   rewardLedgerEventSchema,
   rewardRuleSchema,
   sessionEventSchema,
@@ -270,6 +271,23 @@ export function getRewardRuleById(ruleId: string): RewardRule | undefined {
 
 function getRuleByCode(code: string): RewardRule | undefined {
   return listRewardRules().find((rule) => rule.code === code);
+}
+
+export function getTaskRunProgressRewardCadence(): {
+  rule: RewardRule | undefined;
+  intervalMinutes: number;
+  intervalSeconds: number;
+  fixedXp: number;
+} {
+  ensureDefaultRewardRules();
+  const rule = getRuleByCode("task_run_progress");
+  const intervalMinutes = Math.max(1, Number(rule?.config.intervalMinutes ?? 10));
+  return {
+    rule,
+    intervalMinutes,
+    intervalSeconds: intervalMinutes * 60,
+    fixedXp: Number(rule?.config.fixedXp ?? 4)
+  };
 }
 
 export function updateRewardRule(
@@ -724,11 +742,7 @@ export function recordTaskRunProgressRewards(
   source: ActivitySource,
   creditedSeconds: number
 ): RewardLedgerEvent[] {
-  ensureDefaultRewardRules();
-  const rule = getRuleByCode("task_run_progress");
-  const intervalMinutes = Math.max(1, Number(rule?.config.intervalMinutes ?? 10));
-  const intervalSeconds = intervalMinutes * 60;
-  const fixedXp = Number(rule?.config.fixedXp ?? 4);
+  const { rule, intervalMinutes, intervalSeconds, fixedXp } = getTaskRunProgressRewardCadence();
   const earnedBuckets = Math.floor(Math.max(0, creditedSeconds) / intervalSeconds);
   if (earnedBuckets <= 0) {
     return [];
@@ -790,6 +804,70 @@ export function recordTaskRunProgressRewards(
   }
 
   return rewards;
+}
+
+export function recordWorkAdjustmentReward(input: {
+  entityType: "task" | "project";
+  entityId: string;
+  targetTitle: string;
+  actor?: string | null;
+  source: ActivitySource;
+  requestedDeltaMinutes: number;
+  appliedDeltaMinutes: number;
+  previousCreditedSeconds: number;
+  nextCreditedSeconds: number;
+  adjustmentId: string;
+}): RewardLedgerEvent | null {
+  const { rule, intervalMinutes, intervalSeconds, fixedXp } = getTaskRunProgressRewardCadence();
+  const entityType = workAdjustmentEntityTypeSchema.parse(input.entityType);
+  const previousBuckets = Math.floor(Math.max(0, input.previousCreditedSeconds) / intervalSeconds);
+  const nextBuckets = Math.floor(Math.max(0, input.nextCreditedSeconds) / intervalSeconds);
+  const bucketDelta = nextBuckets - previousBuckets;
+
+  if (bucketDelta === 0) {
+    return null;
+  }
+
+  const deltaXp = bucketDelta * fixedXp;
+  const direction = bucketDelta > 0 ? "added" : "removed";
+  const appliedMinutes = Math.abs(input.appliedDeltaMinutes);
+  const eventLog = recordEventLog({
+    eventKind: "reward.work_adjustment",
+    entityType,
+    entityId: input.entityId,
+    actor: input.actor ?? null,
+    source: input.source,
+    metadata: {
+      adjustmentId: input.adjustmentId,
+      requestedDeltaMinutes: input.requestedDeltaMinutes,
+      appliedDeltaMinutes: input.appliedDeltaMinutes,
+      bucketDelta,
+      deltaXp
+    }
+  });
+
+  return insertLedgerEvent({
+    ruleId: rule?.id ?? null,
+    eventLogId: eventLog.id,
+    entityType,
+    entityId: input.entityId,
+    actor: input.actor ?? null,
+    source: input.source,
+    deltaXp,
+    reasonTitle: bucketDelta > 0 ? "Manual work minutes added" : "Manual work minutes removed",
+    reasonSummary: `${appliedMinutes} manual minute${appliedMinutes === 1 ? "" : "s"} ${direction}, shifting ${Math.abs(bucketDelta)} ${intervalMinutes}-minute reward bucket${Math.abs(bucketDelta) === 1 ? "" : "s"} for ${input.targetTitle}.`,
+    reversibleGroup: `work_adjustment:${entityType}:${input.entityId}:${input.adjustmentId}`,
+    metadata: {
+      adjustmentId: input.adjustmentId,
+      requestedDeltaMinutes: input.requestedDeltaMinutes,
+      appliedDeltaMinutes: input.appliedDeltaMinutes,
+      previousCreditedSeconds: input.previousCreditedSeconds,
+      nextCreditedSeconds: input.nextCreditedSeconds,
+      bucketDelta,
+      intervalMinutes,
+      rewardCategory: "manual_work_adjustment"
+    }
+  });
 }
 
 export function recordSessionEvent(

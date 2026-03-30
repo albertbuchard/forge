@@ -52,6 +52,7 @@ Forge is a personal system for:
 
 This plugin gives OpenClaw the tools it needs to work with that system. It can read current state, search records, create and update records, control live work sessions, post insights, and hand the user off to the Forge UI when the visual workflow is easier.
 It can also grant an explicit audited XP bonus or penalty through the dedicated reward-bonus route when the normal automatic task or habit reward flows are not the right fit.
+It can also add or remove tracked minutes on existing tasks or projects through a dedicated signed work-adjustment route without pretending that a live task run happened.
 It also understands Forge `note` records, which are Markdown-based, searchable, and linkable across one or many entities.
 Notes support includes:
 
@@ -153,9 +154,10 @@ The main mental model is intentionally small:
 6. `forge_create_entities` or `forge_update_entities`
 7. `forge_delete_entities` or `forge_restore_entities` when needed
 8. `forge_grant_reward_bonus` for explicit audited manual XP changes
-9. `forge_log_work` for retroactive work
-10. `forge_start_task_run`, `forge_heartbeat_task_run`, `forge_focus_task_run`, `forge_complete_task_run`, and `forge_release_task_run` for real live work
-11. `forge_post_insight` for recommendations
+9. `forge_adjust_work_minutes` for signed minute corrections on existing tasks or projects
+10. `forge_log_work` for completion-style retroactive work
+11. `forge_start_task_run`, `forge_heartbeat_task_run`, `forge_focus_task_run`, `forge_complete_task_run`, and `forge_release_task_run` for real live work
+12. `forge_post_insight` for recommendations
 
 Use the UI entrypoint sparingly.
 Do not open the Forge UI or a browser just to create or update normal records that the tools already cover.
@@ -194,7 +196,9 @@ Live work is not just task status:
 - use `forge_release_task_run` to stop without completing
 - use `forge_complete_task_run` to finish and collect the real work reward path
 - include `closeoutNote` on `forge_complete_task_run`, `forge_release_task_run`, or `forge_log_work` when the summary should become a durable linked note
-- use `forge_log_work` only for retroactive work that already happened
+- use `forge_log_work` only for completion-style retroactive work that already happened
+- use `forge_adjust_work_minutes` when the task or project already exists and only tracked minutes need to move up or down
+- do not use `forge_adjust_work_minutes` to fake a live session; it is for truthful retrospective minute corrections only
 
 The skill is entity-format-driven. It teaches the agent how to:
 

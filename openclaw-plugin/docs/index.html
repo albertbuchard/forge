@@ -186,11 +186,13 @@
               </p>
             </article>
             <article class="card">
-              <h3>Track live work and XP</h3>
+              <h3>Track live work, corrections, and XP</h3>
               <p>
                 Work sessions are real timed runs. Your agent can start them,
                 focus them, complete them, and Forge keeps the XP and review
-                trail attached to what really happened.
+                trail attached to what really happened. If minutes need to be
+                corrected later, Forge also supports signed work adjustments on
+                existing tasks and projects instead of faking a live session.
               </p>
             </article>
             <article class="card">
@@ -583,6 +585,20 @@ openclaw forge status</code></pre>
               </p>
             </article>
             <article class="card example-card">
+              <span class="example-kicker">Minute corrections</span>
+              <h3>“Add 30 minutes to this project without starting a timer.”</h3>
+              <p>
+                If work already happened away from the live timer, Forge can
+                add or remove tracked minutes on an existing task or project.
+                The correction is explicit, clamped so tracked time cannot go
+                negative, and the XP shift stays explainable.
+              </p>
+              <p>
+                That is a different path from starting a live task run or
+                logging a finished work item after the fact.
+              </p>
+            </article>
+            <article class="card example-card">
               <span class="example-kicker">Notes</span>
               <h3>“Save this as context on the task.”</h3>
               <p>
@@ -695,6 +711,16 @@ openclaw forge status</code></pre>
                 still has the <code>forge-openclaw-plugin</code> tools turned
                 off on the agent tool page. Turn on all Forge tool cards for
                 the agent you are actually using, then try again.
+              </p>
+            </article>
+            <article class="card faq-card">
+              <h3>When should I use adjust work instead of log work?</h3>
+              <p>
+                Use live task runs when the work is happening now. Use
+                <code>log work</code> when the work already happened and should
+                be recorded as a finished work item. Use <code>adjust work</code>
+                when the task or project already exists and only the tracked
+                minutes need to move up or down.
               </p>
             </article>
             <article class="card faq-card">

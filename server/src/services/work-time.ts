@@ -1,4 +1,5 @@
 import { getDatabase } from "../db.js";
+import { listTaskWorkAdjustmentSecondsMap } from "../repositories/work-adjustments.js";
 import type { TaskRun, TaskTimeSummary, TimeAccountingMode } from "../types.js";
 
 type TaskRunTimingRow = {
@@ -196,6 +197,9 @@ export function computeWorkTime(now = new Date()): TimeComputation {
     const existing = taskSummaries.get(timing.row.task_id) ?? {
       totalTrackedSeconds: 0,
       totalCreditedSeconds: 0,
+      liveTrackedSeconds: 0,
+      liveCreditedSeconds: 0,
+      manualAdjustedSeconds: 0,
       activeRunCount: 0,
       hasCurrentRun: false,
       currentRunId: null
@@ -204,9 +208,27 @@ export function computeWorkTime(now = new Date()): TimeComputation {
     taskSummaries.set(timing.row.task_id, {
       totalTrackedSeconds: existing.totalTrackedSeconds + elapsedWallSeconds,
       totalCreditedSeconds: roundCreditedSeconds(existing.totalCreditedSeconds + creditedSeconds),
+      liveTrackedSeconds: existing.liveTrackedSeconds + elapsedWallSeconds,
+      liveCreditedSeconds: roundCreditedSeconds(existing.liveCreditedSeconds + creditedSeconds),
+      manualAdjustedSeconds: existing.manualAdjustedSeconds,
       activeRunCount: existing.activeRunCount + (timing.row.status === "active" ? 1 : 0),
       hasCurrentRun: existing.hasCurrentRun || isCurrent,
       currentRunId: isCurrent ? timing.row.id : existing.currentRunId
+    });
+  }
+
+  const adjustmentSecondsByTaskId = listTaskWorkAdjustmentSecondsMap();
+  for (const [taskId, adjustmentSeconds] of adjustmentSecondsByTaskId.entries()) {
+    const existing = taskSummaries.get(taskId) ?? emptyTaskTimeSummary();
+    taskSummaries.set(taskId, {
+      totalTrackedSeconds: Math.max(0, existing.totalTrackedSeconds + adjustmentSeconds),
+      totalCreditedSeconds: roundCreditedSeconds(Math.max(0, existing.totalCreditedSeconds + adjustmentSeconds)),
+      liveTrackedSeconds: existing.liveTrackedSeconds,
+      liveCreditedSeconds: existing.liveCreditedSeconds,
+      manualAdjustedSeconds: existing.manualAdjustedSeconds + adjustmentSeconds,
+      activeRunCount: existing.activeRunCount,
+      hasCurrentRun: existing.hasCurrentRun,
+      currentRunId: existing.currentRunId
     });
   }
 
@@ -221,6 +243,9 @@ export function emptyTaskTimeSummary(): TaskTimeSummary {
   return {
     totalTrackedSeconds: 0,
     totalCreditedSeconds: 0,
+    liveTrackedSeconds: 0,
+    liveCreditedSeconds: 0,
+    manualAdjustedSeconds: 0,
     activeRunCount: 0,
     hasCurrentRun: false,
     currentRunId: null
@@ -238,6 +263,9 @@ export function sumTaskTimeSummaries(taskIds: string[], summaries: Map<string, T
       return {
         totalTrackedSeconds: accumulator.totalTrackedSeconds + summary.totalTrackedSeconds,
         totalCreditedSeconds: roundCreditedSeconds(accumulator.totalCreditedSeconds + summary.totalCreditedSeconds),
+        liveTrackedSeconds: accumulator.liveTrackedSeconds + summary.liveTrackedSeconds,
+        liveCreditedSeconds: roundCreditedSeconds(accumulator.liveCreditedSeconds + summary.liveCreditedSeconds),
+        manualAdjustedSeconds: accumulator.manualAdjustedSeconds + summary.manualAdjustedSeconds,
         activeRunCount: accumulator.activeRunCount + summary.activeRunCount,
         hasCurrentRun: accumulator.hasCurrentRun || summary.hasCurrentRun,
         currentRunId: accumulator.currentRunId ?? summary.currentRunId

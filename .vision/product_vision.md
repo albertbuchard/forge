@@ -76,12 +76,14 @@ goals without burying the meaning of the project behind jargon.
 
 The Project detail page should be board-first and action-first. The main task board for
 the project should dominate the page, because that is the work surface. Project status,
-progress, and evidence should support that execution surface rather than crowd it out.
+progress, tracked-time summary, signed work-adjustment controls, and evidence should
+support that execution surface rather than crowd it out.
 
 The Task detail page should present a task plainly. The title, status, project, goal,
 owner, due date, time tracked, active timer state, and clear actions such as Start
-work, Pause, Complete, Edit, and Delete should appear before filler text. If a user
-wants to understand or act on a task, this page should make that obvious immediately.
+work, Pause, Complete, Adjust work, Edit, and Delete should appear before filler text.
+If a user wants to understand or act on a task, this page should make that obvious
+immediately.
 At the bottom of each main detail page, Forge should show a coherent notes surface that
 renders Markdown cleanly, supports quick authoring with preview, and makes linked work
 evidence feel native instead of bolted on.
@@ -142,6 +144,13 @@ which is where the user can see active work, start new work, switch focus, pause
 or complete work. The Kanban page and task detail page should also offer direct Start
 work actions. Starting a task should move it into `in_progress`, start a real task run,
 and visibly update the timer state.
+
+Forge should expose three explicit execution-accounting paths and keep them separate in
+both the UI and the API. Live work uses task runs. Completion-style retrospective work
+uses the operator work-log flow when the work already happened and should be recorded
+as a finished item. Signed minute corrections on existing tasks or projects use the
+work-adjustment flow so tracked time can be repaired without pretending a live session
+occurred.
 
 XP should be visible, emotionally legible, and tightly bound to real behavior. Starting
 work, sustaining work, finishing work, and completing meaningful tasks should all earn

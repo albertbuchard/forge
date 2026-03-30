@@ -19,6 +19,7 @@ describe("forge plugin route parity", () => {
     expect(report.mirrored).toContain("POST /api/v1/entities/update");
     expect(report.mirrored).toContain("POST /api/v1/entities/delete");
     expect(report.mirrored).toContain("POST /api/v1/entities/restore");
+    expect(report.mirrored).toContain("POST /api/v1/work-adjustments");
     expect(report.mirrored).toContain("POST /api/v1/insights");
   });
 
@@ -28,6 +29,7 @@ describe("forge plugin route parity", () => {
     expect(supported.has("GET /api/v1/operator/overview")).toBe(true);
     expect(supported.has("GET /api/v1/agents/onboarding")).toBe(true);
     expect(supported.has("POST /api/v1/entities/search")).toBe(true);
+    expect(supported.has("POST /api/v1/work-adjustments")).toBe(true);
     expect(supported.has("POST /api/v1/insights")).toBe(true);
   });
 
