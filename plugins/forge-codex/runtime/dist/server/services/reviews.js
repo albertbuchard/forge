@@ -1,5 +1,6 @@
 import { listActivityEvents } from "../repositories/activity-events.js";
 import { listGoals } from "../repositories/goals.js";
+import { listHabits } from "../repositories/habits.js";
 import { listTasks } from "../repositories/tasks.js";
 import { buildGamificationProfile } from "./gamification.js";
 import { weeklyReviewPayloadSchema } from "../types.js";
@@ -36,7 +37,7 @@ function dailyBuckets(tasks, start) {
 export function getWeeklyReviewPayload(now = new Date()) {
     const goals = listGoals();
     const tasks = listTasks();
-    const gamification = buildGamificationProfile(goals, tasks, now);
+    const gamification = buildGamificationProfile(goals, tasks, listHabits(), now);
     const weekStart = startOfWeek(now);
     const weekEnd = addDays(weekStart, 6);
     const weekTasks = tasks.filter((task) => task.updatedAt >= weekStart.toISOString() && task.updatedAt <= addDays(weekEnd, 1).toISOString());

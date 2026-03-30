@@ -44,6 +44,22 @@ const DEFAULT_RULES = [
         config: { fixedXp: 15 }
     },
     {
+        id: "reward_rule_habit_aligned",
+        family: "consistency",
+        code: "habit_aligned",
+        title: "Habit alignment",
+        description: "Award XP when a habit outcome matches the intended direction.",
+        config: { award: "habit.rewardXp" }
+    },
+    {
+        id: "reward_rule_habit_misaligned",
+        family: "recovery",
+        code: "habit_misaligned",
+        title: "Habit miss",
+        description: "Apply a small XP penalty when a habit outcome moves against the intended direction.",
+        config: { penalty: "habit.penaltyXp" }
+    },
+    {
         id: "reward_rule_psyche_reflection_capture",
         family: "alignment",
         code: "psyche_reflection_capture",
@@ -632,6 +648,52 @@ export function recordSessionEvent(input, activity, now = new Date()) {
         }
     }, now);
     return { sessionEvent, rewardEvent };
+}
+export function recordHabitCheckInReward(habit, status, dateKey, activity) {
+    ensureDefaultRewardRules();
+    const aligned = (habit.polarity === "positive" && status === "done") ||
+        (habit.polarity === "negative" && status === "missed");
+    const rule = getRuleByCode(aligned ? "habit_aligned" : "habit_misaligned");
+    const deltaXp = aligned ? habit.rewardXp : -Math.abs(habit.penaltyXp);
+    const actionLabel = habit.polarity === "positive"
+        ? status === "done"
+            ? "completed"
+            : "missed"
+        : status === "done"
+            ? "performed"
+            : "resisted";
+    const eventLog = recordEventLog({
+        eventKind: aligned ? "reward.habit_aligned" : "reward.habit_misaligned",
+        entityType: "habit",
+        entityId: habit.id,
+        actor: activity.actor ?? null,
+        source: activity.source,
+        metadata: {
+            habitId: habit.id,
+            status,
+            polarity: habit.polarity,
+            dateKey,
+            deltaXp
+        }
+    });
+    return insertLedgerEvent({
+        ruleId: rule?.id ?? null,
+        eventLogId: eventLog.id,
+        entityType: "habit",
+        entityId: habit.id,
+        actor: activity.actor ?? null,
+        source: activity.source,
+        deltaXp,
+        reasonTitle: aligned ? `${habit.title} aligned` : `${habit.title} slipped`,
+        reasonSummary: `Habit ${actionLabel} on ${dateKey}.`,
+        reversibleGroup: `habit:${habit.id}:${dateKey}`,
+        metadata: {
+            habitId: habit.id,
+            status,
+            polarity: habit.polarity,
+            dateKey
+        }
+    });
 }
 export function listSessionEvents(limit = 50) {
     const rows = getDatabase()

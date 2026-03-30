@@ -12,9 +12,15 @@ function startOfWeek(date) {
 function dayKey(isoDate) {
     return isoDate.slice(0, 10);
 }
-function calculateStreak(tasks, now) {
-    const completedDays = new Set(tasks
-        .flatMap((task) => (task.status === "done" && task.completedAt !== null ? [dayKey(task.completedAt)] : [])));
+function isAlignedHabitCheckIn(habit, checkIn) {
+    return (habit.polarity === "positive" && checkIn.status === "done") || (habit.polarity === "negative" && checkIn.status === "missed");
+}
+function calculateStreak(tasks, habits, now) {
+    const completedDays = new Set([
+        ...tasks
+            .flatMap((task) => (task.status === "done" && task.completedAt !== null ? [dayKey(task.completedAt)] : [])),
+        ...habits.flatMap((habit) => habit.checkIns.filter((checkIn) => isAlignedHabitCheckIn(habit, checkIn)).map((checkIn) => checkIn.dateKey))
+    ]);
     if (completedDays.size === 0) {
         return 0;
     }
@@ -41,17 +47,27 @@ function latestCompletionForTasks(tasks) {
         .flatMap((task) => (task.completedAt ? [task.completedAt] : []))
         .sort((left, right) => Date.parse(right) - Date.parse(left))[0] ?? null;
 }
-export function buildGamificationProfile(goals, tasks, now = new Date()) {
+function latestAlignedHabitAt(habits) {
+    return habits
+        .flatMap((habit) => habit.checkIns
+        .filter((checkIn) => isAlignedHabitCheckIn(habit, checkIn))
+        .map((checkIn) => checkIn.createdAt))
+        .sort((left, right) => Date.parse(right) - Date.parse(left))[0] ?? null;
+}
+export function buildGamificationProfile(goals, tasks, habits, now = new Date()) {
     const weekStart = startOfWeek(now).toISOString();
     const doneTasks = tasks.filter((task) => task.status === "done");
     const totalXp = getTotalXp();
     const weeklyXp = getWeeklyXp(weekStart);
     const focusTasks = tasks.filter((task) => task.status === "focus" || task.status === "in_progress").length;
     const overdueTasks = tasks.filter((task) => task.status !== "done" && task.dueDate !== null && task.dueDate < now.toISOString().slice(0, 10)).length;
+    const dueHabits = habits.filter((habit) => habit.dueToday).length;
+    const alignedHabitCheckIns = habits.flatMap((habit) => habit.checkIns.filter((checkIn) => isAlignedHabitCheckIn(habit, checkIn)));
+    const habitMomentum = habits.reduce((sum, habit) => sum + habit.streakCount * 3 + (habit.dueToday ? -4 : 2), 0);
     const alignedDonePoints = doneTasks
         .filter((task) => task.goalId !== null && task.tagIds.length > 0)
         .reduce((sum, task) => sum + task.points, 0);
-    const streakDays = calculateStreak(tasks, now);
+    const streakDays = calculateStreak(tasks, habits, now);
     const levelState = calculateLevel(totalXp);
     const goalScores = goals
         .map((goal) => ({
@@ -69,17 +85,20 @@ export function buildGamificationProfile(goals, tasks, now = new Date()) {
         weeklyXp,
         streakDays,
         comboMultiplier: Number((1 + Math.min(0.75, streakDays * 0.05)).toFixed(2)),
-        momentumScore: Math.max(0, Math.min(100, Math.round(weeklyXp / 6 + alignedDonePoints / 20 + focusTasks * 5 - overdueTasks * 9))),
+        momentumScore: Math.max(0, Math.min(100, Math.round(weeklyXp / 6 + alignedDonePoints / 20 + focusTasks * 5 + alignedHabitCheckIns.length * 4 + habitMomentum - overdueTasks * 9 - dueHabits * 3))),
         topGoalId: topGoal?.goalId ?? null,
         topGoalTitle: topGoal?.goalTitle ?? null
     });
 }
-export function buildAchievementSignals(goals, tasks, now = new Date()) {
-    const profile = buildGamificationProfile(goals, tasks, now);
+export function buildAchievementSignals(goals, tasks, habits, now = new Date()) {
+    const profile = buildGamificationProfile(goals, tasks, habits, now);
     const doneTasks = tasks.filter((task) => task.status === "done");
     const alignedDoneTasks = doneTasks.filter((task) => task.goalId !== null && task.tagIds.length > 0);
     const focusTasks = tasks.filter((task) => task.status === "focus" || task.status === "in_progress");
     const highValueGoals = goals.filter((goal) => doneTasks.some((task) => task.goalId === goal.id));
+    const alignedHabitCount = habits.reduce((sum, habit) => sum + habit.checkIns.filter((checkIn) => isAlignedHabitCheckIn(habit, checkIn)).length, 0);
+    const topHabitStreak = Math.max(0, ...habits.map((habit) => habit.streakCount));
+    const latestHabitWin = latestAlignedHabitAt(habits);
     return [
         {
             id: "streak-operator",
@@ -125,15 +144,34 @@ export function buildAchievementSignals(goals, tasks, now = new Date()) {
             progressLabel: `${Math.min(focusTasks.length, 1)}/1 live directives`,
             unlocked: focusTasks.length > 0,
             unlockedAt: focusTasks.length > 0 ? now.toISOString() : null
+        },
+        {
+            id: "habit-keeper",
+            title: "Habit Keeper",
+            summary: "Turn recurring behavior into visible operating evidence.",
+            tier: alignedHabitCount >= 12 ? "gold" : alignedHabitCount >= 6 ? "silver" : "bronze",
+            progressLabel: `${Math.min(alignedHabitCount, 12)}/12 aligned habit wins`,
+            unlocked: alignedHabitCount >= 12,
+            unlockedAt: alignedHabitCount >= 12 ? latestHabitWin : null
+        },
+        {
+            id: "ritual-pressure",
+            title: "Ritual Pressure",
+            summary: "Keep one habit alive long enough that it changes the texture of the week.",
+            tier: topHabitStreak >= 10 ? "gold" : "silver",
+            progressLabel: `${Math.min(topHabitStreak, 10)}/10 habit streak`,
+            unlocked: topHabitStreak >= 10,
+            unlockedAt: topHabitStreak >= 10 ? latestHabitWin : null
         }
     ].map((achievement) => achievementSignalSchema.parse(achievement));
 }
-export function buildMilestoneRewards(goals, tasks, now = new Date()) {
-    const profile = buildGamificationProfile(goals, tasks, now);
+export function buildMilestoneRewards(goals, tasks, habits, now = new Date()) {
+    const profile = buildGamificationProfile(goals, tasks, habits, now);
     const doneTasks = tasks.filter((task) => task.status === "done");
     const topGoal = profile.topGoalId ? goals.find((goal) => goal.id === profile.topGoalId) ?? null : null;
     const topGoalXp = topGoal ? doneTasks.filter((task) => task.goalId === topGoal.id).reduce((sum, task) => sum + task.points, 0) : 0;
     const completedToday = doneTasks.filter((task) => task.completedAt?.slice(0, 10) === now.toISOString().slice(0, 10)).length;
+    const alignedHabitCount = habits.reduce((sum, habit) => sum + habit.checkIns.filter((checkIn) => isAlignedHabitCheckIn(habit, checkIn)).length, 0);
     return [
         {
             id: "next-level",
@@ -174,13 +212,23 @@ export function buildMilestoneRewards(goals, tasks, now = new Date()) {
             current: topGoal ? topGoalXp : 0,
             target: topGoal ? topGoal.targetPoints : 1,
             completed: topGoal ? topGoalXp >= topGoal.targetPoints : false
+        },
+        {
+            id: "habit-mass",
+            title: "Habit mass threshold",
+            summary: "Make recurring behavior part of the same reward engine as tasks and projects.",
+            rewardLabel: "Consistency cache +75 xp",
+            progressLabel: `${Math.min(alignedHabitCount, 14)}/14 aligned habit check-ins`,
+            current: alignedHabitCount,
+            target: 14,
+            completed: alignedHabitCount >= 14
         }
     ].map((reward) => milestoneRewardSchema.parse(reward));
 }
-export function buildXpMomentumPulse(goals, tasks, now = new Date()) {
-    const profile = buildGamificationProfile(goals, tasks, now);
-    const achievements = buildAchievementSignals(goals, tasks, now);
-    const milestoneRewards = buildMilestoneRewards(goals, tasks, now);
+export function buildXpMomentumPulse(goals, tasks, habits, now = new Date()) {
+    const profile = buildGamificationProfile(goals, tasks, habits, now);
+    const achievements = buildAchievementSignals(goals, tasks, habits, now);
+    const milestoneRewards = buildMilestoneRewards(goals, tasks, habits, now);
     const nextMilestone = milestoneRewards.find((reward) => !reward.completed) ?? milestoneRewards[0] ?? null;
     const unlockedAchievements = achievements.filter((achievement) => achievement.unlocked).length;
     const status = profile.momentumScore >= 80 ? "surging" : profile.momentumScore >= 60 ? "steady" : "recovering";
@@ -206,10 +254,10 @@ export function buildXpMomentumPulse(goals, tasks, now = new Date()) {
         nextMilestoneLabel: nextMilestone?.rewardLabel ?? "Keep building visible momentum"
     };
 }
-export function buildGamificationOverview(goals, tasks, now = new Date()) {
+export function buildGamificationOverview(goals, tasks, habits, now = new Date()) {
     return gamificationOverviewSchema.parse({
-        profile: buildGamificationProfile(goals, tasks, now),
-        achievements: buildAchievementSignals(goals, tasks, now),
-        milestoneRewards: buildMilestoneRewards(goals, tasks, now)
+        profile: buildGamificationProfile(goals, tasks, habits, now),
+        achievements: buildAchievementSignals(goals, tasks, habits, now),
+        milestoneRewards: buildMilestoneRewards(goals, tasks, habits, now)
     });
 }

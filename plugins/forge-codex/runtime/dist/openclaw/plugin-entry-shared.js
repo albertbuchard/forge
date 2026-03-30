@@ -40,6 +40,12 @@ function normalizeTimeout(value, fallback) {
     }
     return Math.min(120_000, Math.max(1000, Math.round(value)));
 }
+function normalizeDataRoot(value) {
+    if (typeof value !== "string" || value.trim().length === 0) {
+        return "";
+    }
+    return path.resolve(value.trim());
+}
 function isLocalOrigin(origin) {
     try {
         return LOCAL_HOSTNAMES.has(new URL(origin).hostname.toLowerCase());
@@ -80,7 +86,7 @@ export function resolveForgePluginConfig(pluginConfig) {
         baseUrl: buildForgeBaseUrl(origin, port),
         webAppUrl: buildForgeWebAppUrl(origin, port),
         portSource: hasConfiguredPort ? "configured" : preferredPort !== null ? "preferred" : "default",
-        dataRoot: typeof raw.dataRoot === "string" ? raw.dataRoot.trim() : "",
+        dataRoot: normalizeDataRoot(raw.dataRoot),
         apiToken: typeof raw.apiToken === "string" ? raw.apiToken.trim() : "",
         actorLabel: normalizeString(raw.actorLabel, "aurel"),
         timeoutMs: normalizeTimeout(raw.timeoutMs, 15_000)

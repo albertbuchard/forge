@@ -47,6 +47,25 @@ function applyPortToConfig(config, port, portSource) {
     config.webAppUrl = buildForgeWebAppUrl(config.origin, port);
     config.portSource = portSource;
 }
+function getExpectedDataRoot(config) {
+    return config.dataRoot.trim().length > 0 ? path.resolve(config.dataRoot) : null;
+}
+function isExpectedDataRoot(expectedDataRoot, actualDataRoot) {
+    if (!expectedDataRoot) {
+        return true;
+    }
+    if (!actualDataRoot) {
+        return false;
+    }
+    return path.resolve(actualDataRoot) === expectedDataRoot;
+}
+function formatRuntimeDataRootMismatch(config, expectedDataRoot, actualDataRoot) {
+    return [
+        `Forge is already responding on ${config.baseUrl}, but it is using storage root ${actualDataRoot ?? "(unknown)"}.`,
+        `The OpenClaw plugin is configured to use ${expectedDataRoot}.`,
+        "Restart the plugin-managed runtime or stop the conflicting Forge server so the configured dataRoot can take over."
+    ].join(" ");
+}
 async function writePreferredPortState(config, port) {
     const statePath = getPreferredPortStatePath(config.origin);
     await mkdir(path.dirname(statePath), { recursive: true });
@@ -272,6 +291,43 @@ async function isForgeHealthy(config, timeoutMs) {
         clearTimeout(timeout);
     }
 }
+async function probeForgeRuntime(config, timeoutMs) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+        const response = await fetch(new URL("/api/v1/health", config.baseUrl), {
+            method: "GET",
+            headers: {
+                accept: "application/json",
+                "x-forge-runtime-probe": "1"
+            },
+            signal: controller.signal
+        });
+        if (!response.ok) {
+            return { healthy: false, pid: null, storageRoot: null, basePath: null };
+        }
+        const payload = (await response.json());
+        return {
+            healthy: true,
+            pid: typeof payload.runtime?.pid === "number" && Number.isFinite(payload.runtime.pid) ? Math.trunc(payload.runtime.pid) : null,
+            storageRoot: typeof payload.runtime?.storageRoot === "string" ? path.resolve(payload.runtime.storageRoot) : null,
+            basePath: typeof payload.runtime?.basePath === "string" ? payload.runtime.basePath : null
+        };
+    }
+    catch {
+        return { healthy: false, pid: null, storageRoot: null, basePath: null };
+    }
+    finally {
+        clearTimeout(timeout);
+    }
+}
+async function adoptManagedRuntimeState(config, probe) {
+    if (probe.pid === null || !processExists(probe.pid)) {
+        return false;
+    }
+    await writeRuntimeState(config, probe.pid);
+    return true;
+}
 async function spawnManagedRuntime(config, plan) {
     const isPackagedServer = isPackagedServerPlan(plan);
     const args = isPackagedServer ? [plan.entryFile] : [plan.entryFile, path.join(plan.packageRoot, "server", "src", "index.ts")];
@@ -353,7 +409,13 @@ export async function ensureForgeRuntimeReady(config) {
     if (!isLocalOrigin(config.origin)) {
         return;
     }
-    if (await isForgeHealthy(config, HEALTHCHECK_TIMEOUT_MS)) {
+    const expectedDataRoot = getExpectedDataRoot(config);
+    const initialProbe = await probeForgeRuntime(config, HEALTHCHECK_TIMEOUT_MS);
+    if (initialProbe.healthy && isExpectedDataRoot(expectedDataRoot, initialProbe.storageRoot)) {
+        const existingState = await readRuntimeState(config);
+        if (!existingState) {
+            await adoptManagedRuntimeState(config, initialProbe);
+        }
         return;
     }
     const savedState = await readRuntimeState(config);
@@ -361,12 +423,29 @@ export async function ensureForgeRuntimeReady(config) {
         await clearRuntimeState(config);
     }
     else if (savedState && processExists(savedState.pid)) {
+        if (initialProbe.healthy && !isExpectedDataRoot(expectedDataRoot, initialProbe.storageRoot)) {
+            await stopForgeRuntime(config);
+        }
+        else {
+            try {
+                await waitForRuntime(config, EXISTING_RUNTIME_GRACE_MS, null);
+                return;
+            }
+            catch {
+                await stopForgeRuntime(config);
+            }
+        }
+    }
+    else if (initialProbe.healthy) {
+        if (!isExpectedDataRoot(expectedDataRoot, initialProbe.storageRoot)) {
+            throw new Error(formatRuntimeDataRootMismatch(config, expectedDataRoot, initialProbe.storageRoot));
+        }
         try {
             await waitForRuntime(config, EXISTING_RUNTIME_GRACE_MS, null);
             return;
         }
         catch {
-            await stopForgeRuntime(config);
+            // There is no plugin-managed pid to stop here; fall through into normal startup handling.
         }
     }
     const key = runtimeKey(config);
@@ -378,14 +457,16 @@ export async function ensureForgeRuntimeReady(config) {
         return;
     }
     startupPromise = (async () => {
-        if (await isForgeHealthy(config, HEALTHCHECK_TIMEOUT_MS)) {
+        const probeBeforeStart = await probeForgeRuntime(config, HEALTHCHECK_TIMEOUT_MS);
+        if (probeBeforeStart.healthy && isExpectedDataRoot(expectedDataRoot, probeBeforeStart.storageRoot)) {
             return;
         }
         startupRuntimeKey = runtimeKey(config);
         if (!(await isPortAvailable("127.0.0.1", config.port))) {
             await relocateLocalRuntimePort(config);
             startupRuntimeKey = runtimeKey(config);
-            if (await isForgeHealthy(config, HEALTHCHECK_TIMEOUT_MS)) {
+            const probeAfterRelocation = await probeForgeRuntime(config, HEALTHCHECK_TIMEOUT_MS);
+            if (probeAfterRelocation.healthy && isExpectedDataRoot(expectedDataRoot, probeAfterRelocation.storageRoot)) {
                 return;
             }
         }
@@ -394,6 +475,10 @@ export async function ensureForgeRuntimeReady(config) {
             await spawnManagedRuntime(config, plan);
         }
         await waitForRuntime(config, STARTUP_TIMEOUT_MS, managedRuntimeChild?.pid ?? null);
+        const probeAfterStart = await probeForgeRuntime(config, HEALTHCHECK_TIMEOUT_MS);
+        if (!probeAfterStart.healthy || !isExpectedDataRoot(expectedDataRoot, probeAfterStart.storageRoot)) {
+            throw new Error(formatRuntimeDataRootMismatch(config, expectedDataRoot, probeAfterStart.storageRoot));
+        }
     })().finally(() => {
         startupPromise = null;
         startupRuntimeKey = null;
@@ -411,8 +496,26 @@ export async function startForgeRuntime(config) {
             baseUrl: config.baseUrl
         };
     }
-    const existingState = await readRuntimeState(config);
-    if (!existingState && (await isForgeHealthy(config, HEALTHCHECK_TIMEOUT_MS))) {
+    const expectedDataRoot = getExpectedDataRoot(config);
+    const probe = await probeForgeRuntime(config, HEALTHCHECK_TIMEOUT_MS);
+    let existingState = await readRuntimeState(config);
+    if (!existingState && probe.healthy && isExpectedDataRoot(expectedDataRoot, probe.storageRoot)) {
+        const adopted = await adoptManagedRuntimeState(config, probe);
+        if (adopted) {
+            existingState = await readRuntimeState(config);
+        }
+    }
+    if (probe.healthy && !isExpectedDataRoot(expectedDataRoot, probe.storageRoot)) {
+        return {
+            ok: false,
+            started: false,
+            managed: Boolean(existingState),
+            message: formatRuntimeDataRootMismatch(config, expectedDataRoot, probe.storageRoot),
+            pid: existingState?.pid ?? null,
+            baseUrl: config.baseUrl
+        };
+    }
+    if (!existingState && probe.healthy) {
         return {
             ok: true,
             started: false,
@@ -422,7 +525,7 @@ export async function startForgeRuntime(config) {
             baseUrl: config.baseUrl
         };
     }
-    if (existingState && processExists(existingState.pid) && (await isForgeHealthy(config, HEALTHCHECK_TIMEOUT_MS))) {
+    if (existingState && processExists(existingState.pid) && probe.healthy) {
         return {
             ok: true,
             started: false,
@@ -517,8 +620,16 @@ export async function stopForgeRuntime(config) {
     };
 }
 export async function getForgeRuntimeStatus(config) {
-    const healthy = await isForgeHealthy(config, HEALTHCHECK_TIMEOUT_MS);
-    const state = await readRuntimeState(config);
+    const expectedDataRoot = getExpectedDataRoot(config);
+    const probe = await probeForgeRuntime(config, HEALTHCHECK_TIMEOUT_MS);
+    const healthy = probe.healthy;
+    let state = await readRuntimeState(config);
+    if (!state && healthy && isExpectedDataRoot(expectedDataRoot, probe.storageRoot)) {
+        const adopted = await adoptManagedRuntimeState(config, probe);
+        if (adopted) {
+            state = await readRuntimeState(config);
+        }
+    }
     const pid = state?.pid ?? null;
     const managed = Boolean(state);
     const running = healthy || (pid !== null && processExists(pid));
@@ -548,6 +659,17 @@ export async function getForgeRuntimeStatus(config) {
         };
     }
     if (healthy && managed) {
+        if (!isExpectedDataRoot(expectedDataRoot, probe.storageRoot)) {
+            return {
+                ok: false,
+                running: true,
+                healthy: true,
+                managed: true,
+                message: formatRuntimeDataRootMismatch(config, expectedDataRoot, probe.storageRoot),
+                pid,
+                baseUrl: config.baseUrl
+            };
+        }
         return {
             ok: true,
             running: true,
@@ -559,6 +681,17 @@ export async function getForgeRuntimeStatus(config) {
         };
     }
     if (healthy) {
+        if (!isExpectedDataRoot(expectedDataRoot, probe.storageRoot)) {
+            return {
+                ok: false,
+                running: true,
+                healthy: true,
+                managed: false,
+                message: formatRuntimeDataRootMismatch(config, expectedDataRoot, probe.storageRoot),
+                pid: null,
+                baseUrl: config.baseUrl
+            };
+        }
         return {
             ok: true,
             running: true,

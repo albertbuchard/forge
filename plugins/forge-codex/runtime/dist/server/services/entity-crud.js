@@ -4,11 +4,12 @@ import { createNote, deleteNote, getNoteById, listNotes, unlinkNotesForEntity, u
 import { createBehaviorPatternSchema, createBehaviorSchema, createBeliefEntrySchema, createEmotionDefinitionSchema, createEventTypeSchema, createModeGuideSessionSchema, createModeProfileSchema, createPsycheValueSchema, createTriggerReportSchema, updateBehaviorPatternSchema, updateBehaviorSchema, updateBeliefEntrySchema, updateEmotionDefinitionSchema, updateEventTypeSchema, updateModeGuideSessionSchema, updateModeProfileSchema, updatePsycheValueSchema, updateTriggerReportSchema } from "../psyche-types.js";
 import { buildSettingsBinPayload, cascadeSoftDeleteAnchoredCollaboration, clearDeletedEntityRecord, getDeletedEntityRecord, listDeletedEntities, restoreAnchoredCollaboration, restoreDeletedEntityRecord, upsertDeletedEntityRecord } from "../repositories/deleted-entities.js";
 import { createGoal, deleteGoal, getGoalById, listGoals, updateGoal } from "../repositories/goals.js";
+import { createHabit, deleteHabit, getHabitById, listHabits, updateHabit } from "../repositories/habits.js";
 import { createBehavior, createBehaviorPattern, createBeliefEntry, createEmotionDefinition, createEventType, createModeGuideSession, createModeProfile, createPsycheValue, createTriggerReport, deleteBehavior, deleteBehaviorPattern, deleteBeliefEntry, deleteEmotionDefinition, deleteEventType, deleteModeGuideSession, deleteModeProfile, deletePsycheValue, deleteTriggerReport, getBehaviorById, getBehaviorPatternById, getBeliefEntryById, getEmotionDefinitionById, getEventTypeById, getModeGuideSessionById, getModeProfileById, getPsycheValueById, getTriggerReportById, listBehaviors, listBehaviorPatterns, listBeliefEntries, listEmotionDefinitions, listEventTypes, listModeGuideSessions, listModeProfiles, listPsycheValues, listTriggerReports, updateBehavior, updateBehaviorPattern, updateBeliefEntry, updateEmotionDefinition, updateEventType, updateModeGuideSession, updateModeProfile, updatePsycheValue, updateTriggerReport } from "../repositories/psyche.js";
 import { createProject, deleteProject, getProjectById, listProjects, updateProject } from "../repositories/projects.js";
 import { createTag, deleteTag, getTagById, listTags, updateTag } from "../repositories/tags.js";
 import { createTask, deleteTask, getTaskById, listTasks, updateTask } from "../repositories/tasks.js";
-import { createGoalSchema, createInsightSchema, createNoteSchema, createProjectSchema, createTagSchema, createTaskSchema, updateGoalSchema, updateInsightSchema, updateNoteSchema, updateProjectSchema, updateTagSchema, updateTaskSchema } from "../types.js";
+import { createGoalSchema, createHabitSchema, createInsightSchema, createNoteSchema, createProjectSchema, createTagSchema, createTaskSchema, updateGoalSchema, updateHabitSchema, updateInsightSchema, updateNoteSchema, updateProjectSchema, updateTagSchema, updateTaskSchema } from "../types.js";
 class AtomicBatchRollback extends Error {
     index;
     code;
@@ -48,6 +49,15 @@ const CRUD_ENTITY_CAPABILITIES = {
         create: (data, context) => createTask(data, context),
         update: (id, patch, context) => updateTask(id, patch, context),
         hardDelete: (id, context) => deleteTask(id, context)
+    },
+    habit: {
+        entityType: "habit",
+        routeBase: "/api/v1/habits",
+        list: () => listHabits(),
+        get: (id) => getHabitById(id),
+        create: (data, context) => createHabit(data, context),
+        update: (id, patch, context) => updateHabit(id, patch, context),
+        hardDelete: (id, context) => deleteHabit(id, context)
     },
     tag: {
         entityType: "tag",
@@ -174,6 +184,7 @@ const CREATE_ENTITY_SCHEMAS = {
     goal: createGoalSchema,
     project: createProjectSchema,
     task: createTaskSchema,
+    habit: createHabitSchema,
     tag: createTagSchema,
     note: createNoteSchema,
     insight: createInsightSchema,
@@ -191,6 +202,7 @@ const UPDATE_ENTITY_SCHEMAS = {
     goal: updateGoalSchema,
     project: updateProjectSchema,
     task: updateTaskSchema,
+    habit: updateHabitSchema,
     tag: updateTagSchema,
     note: updateNoteSchema,
     insight: updateInsightSchema,
@@ -312,6 +324,16 @@ function matchesLinkedTo(entityType, entity, linkedTo) {
             return linkedTo.entityType === "goal" && entity.goalId === linkedTo.id;
         case "task":
             return (linkedTo.entityType === "goal" && entity.goalId === linkedTo.id) || (linkedTo.entityType === "project" && entity.projectId === linkedTo.id);
+        case "habit":
+            return ((linkedTo.entityType === "goal" && Array.isArray(entity.linkedGoalIds) && entity.linkedGoalIds.includes(linkedTo.id)) ||
+                (linkedTo.entityType === "project" && Array.isArray(entity.linkedProjectIds) && entity.linkedProjectIds.includes(linkedTo.id)) ||
+                (linkedTo.entityType === "task" && Array.isArray(entity.linkedTaskIds) && entity.linkedTaskIds.includes(linkedTo.id)) ||
+                (linkedTo.entityType === "psyche_value" && Array.isArray(entity.linkedValueIds) && entity.linkedValueIds.includes(linkedTo.id)) ||
+                (linkedTo.entityType === "behavior_pattern" && Array.isArray(entity.linkedPatternIds) && entity.linkedPatternIds.includes(linkedTo.id)) ||
+                (linkedTo.entityType === "behavior" && Array.isArray(entity.linkedBehaviorIds) && entity.linkedBehaviorIds.includes(linkedTo.id)) ||
+                (linkedTo.entityType === "belief_entry" && Array.isArray(entity.linkedBeliefIds) && entity.linkedBeliefIds.includes(linkedTo.id)) ||
+                (linkedTo.entityType === "mode_profile" && Array.isArray(entity.linkedModeIds) && entity.linkedModeIds.includes(linkedTo.id)) ||
+                (linkedTo.entityType === "trigger_report" && Array.isArray(entity.linkedReportIds) && entity.linkedReportIds.includes(linkedTo.id)));
         case "note":
             return (Array.isArray(entity.links) &&
                 entity.links.some((link) => typeof link === "object" &&

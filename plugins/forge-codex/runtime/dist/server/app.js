@@ -7,6 +7,7 @@ import { listActivityEvents, listActivityEventsForTask, removeActivityEvent } fr
 import { approveApprovalRequest, createAgentAction, createInsight, createInsightFeedback, deleteInsight, getInsightById, listAgentActions, listApprovalRequests, listInsights, rejectApprovalRequest, updateInsight } from "./repositories/collaboration.js";
 import { listEventLog } from "./repositories/event-log.js";
 import { createGoal, getGoalById, listGoals, updateGoal } from "./repositories/goals.js";
+import { createHabit, createHabitCheckIn, getHabitById, listHabits, updateHabit } from "./repositories/habits.js";
 import { listDomains } from "./repositories/domains.js";
 import { buildNotesSummaryByEntity, createNote, getNoteById, listNotes, updateNote } from "./repositories/notes.js";
 import { createBehavior, createBehaviorPattern, createBeliefEntry, createEmotionDefinition, createEventType, createModeGuideSession, createModeProfile, createPsycheValue, createTriggerReport, getBehaviorById, getBehaviorPatternById, getBeliefEntryById, getEmotionDefinitionById, getEventTypeById, getModeGuideSessionById, getModeProfileById, getPsycheValueById, getTriggerReportById, listBehaviors, listBehaviorPatterns, listBeliefEntries, listEmotionDefinitions, listEventTypes, listModeGuideSessions, listModeProfiles, listPsycheValues, listSchemaCatalog, listTriggerReports, updateBehavior, updateBehaviorPattern, updateBeliefEntry, updateEmotionDefinition, updateEventType, updateModeGuideSession, updateModeProfile, updatePsycheValue, updateTriggerReport } from "./repositories/psyche.js";
@@ -27,7 +28,7 @@ import { getWeeklyReviewPayload } from "./services/reviews.js";
 import { createTaskRunWatchdog } from "./services/task-run-watchdog.js";
 import { suggestTags } from "./services/tagging.js";
 import { PSYCHE_ENTITY_TYPES, createBehaviorSchema, createBeliefEntrySchema, createBehaviorPatternSchema, createEmotionDefinitionSchema, createEventTypeSchema, createModeGuideSessionSchema, createModeProfileSchema, createPsycheValueSchema, createTriggerReportSchema, updateBehaviorSchema, updateBeliefEntrySchema, updateBehaviorPatternSchema, updateEmotionDefinitionSchema, updateEventTypeSchema, updateModeGuideSessionSchema, updateModeProfileSchema, updatePsycheValueSchema, updateTriggerReportSchema } from "./psyche-types.js";
-import { activityListQuerySchema, activitySourceSchema, createAgentActionSchema, createAgentTokenSchema, batchCreateEntitiesSchema, batchDeleteEntitiesSchema, batchRestoreEntitiesSchema, batchSearchEntitiesSchema, batchUpdateEntitiesSchema, createGoalSchema, createInsightFeedbackSchema, createInsightSchema, createNoteSchema, createProjectSchema, createManualRewardGrantSchema, createSessionEventSchema, createTagSchema, notesListQuerySchema, updateTagSchema, createTaskSchema, eventsListQuerySchema, operatorLogWorkSchema, projectBoardPayloadSchema, projectListQuerySchema, entityDeleteQuerySchema, removeActivityEventSchema, resolveApprovalRequestSchema, rewardsLedgerQuerySchema, taskContextPayloadSchema, taskRunClaimSchema, taskRunFocusSchema, taskRunFinishSchema, taskRunHeartbeatSchema, taskRunListQuerySchema, taskListQuerySchema, tagSuggestionRequestSchema, uncompleteTaskSchema, updateSettingsSchema, updateGoalSchema, updateInsightSchema, updateNoteSchema, updateProjectSchema, updateRewardRuleSchema, updateTaskSchema } from "./types.js";
+import { activityListQuerySchema, activitySourceSchema, createAgentActionSchema, createAgentTokenSchema, batchCreateEntitiesSchema, batchDeleteEntitiesSchema, batchRestoreEntitiesSchema, batchSearchEntitiesSchema, batchUpdateEntitiesSchema, createGoalSchema, createInsightFeedbackSchema, createInsightSchema, createNoteSchema, createProjectSchema, createManualRewardGrantSchema, createHabitCheckInSchema, createHabitSchema, createSessionEventSchema, createTagSchema, notesListQuerySchema, updateTagSchema, createTaskSchema, eventsListQuerySchema, operatorLogWorkSchema, projectBoardPayloadSchema, projectListQuerySchema, entityDeleteQuerySchema, removeActivityEventSchema, resolveApprovalRequestSchema, rewardsLedgerQuerySchema, habitListQuerySchema, taskContextPayloadSchema, taskRunClaimSchema, taskRunFocusSchema, taskRunFinishSchema, taskRunHeartbeatSchema, taskRunListQuerySchema, taskListQuerySchema, tagSuggestionRequestSchema, uncompleteTaskSchema, updateSettingsSchema, updateGoalSchema, updateHabitSchema, updateInsightSchema, updateNoteSchema, updateProjectSchema, updateRewardRuleSchema, updateTaskSchema } from "./types.js";
 import { buildOpenApiDocument } from "./openapi.js";
 import { registerWebRoutes } from "./web.js";
 import { createManagerRuntime } from "./managers/runtime.js";
@@ -184,6 +185,39 @@ const AGENT_ONBOARDING_ENTITY_CATALOG = [
             { name: "sortOrder", type: "integer", required: false, description: "Lane ordering hint when set explicitly." },
             { name: "tagIds", type: "string[]", required: false, description: "Existing tag ids linked to the task.", defaultValue: [] },
             { name: "notes", type: "Array<{ contentMarkdown, author?, links? }>", required: false, description: "Optional nested notes that will auto-link to the new task.", defaultValue: [] }
+        ]
+    },
+    {
+        entityType: "habit",
+        purpose: "A recurring commitment or recurring slip with explicit cadence, graph links, and XP consequences.",
+        minimumCreateFields: ["title"],
+        relationshipRules: [
+            "Habits can link directly to goals, projects, tasks, values, patterns, behaviors, beliefs, modes, and trigger reports.",
+            "Habits are recurring records, not task variants, and they participate in search, notes, delete/restore, and XP.",
+            "linkedBehaviorId remains a compatibility alias; linkedBehaviorIds is the canonical array form."
+        ],
+        searchHints: ["Search by title before creating a duplicate habit.", "Use linkedTo when the habit should already be attached to a goal, project, task, or Psyche entity."],
+        examples: ['{"title":"Morning training","frequency":"daily","polarity":"positive","linkedGoalIds":["goal_train_body"],"linkedValueIds":["value_steadiness"],"linkedBehaviorIds":["behavior_regulating_walk"]}'],
+        fieldGuide: [
+            { name: "title", type: "string", required: true, description: "Concrete recurring behavior label." },
+            { name: "description", type: "string", required: false, description: "What counts as success or failure for this habit.", defaultValue: "" },
+            { name: "status", type: "active|paused|archived", required: false, description: "Lifecycle state.", enumValues: ["active", "paused", "archived"], defaultValue: "active" },
+            { name: "polarity", type: "positive|negative", required: false, description: "Whether doing the behavior is aligned or misaligned.", enumValues: ["positive", "negative"], defaultValue: "positive" },
+            { name: "frequency", type: "daily|weekly", required: false, description: "Recurrence cadence.", enumValues: ["daily", "weekly"], defaultValue: "daily" },
+            { name: "targetCount", type: "integer", required: false, description: "How many repetitions define the cadence window.", defaultValue: 1 },
+            { name: "weekDays", type: "integer[]", required: false, description: "Weekday numbers for weekly habits where Monday is 1 and Sunday is 0.", defaultValue: [] },
+            { name: "linkedGoalIds", type: "string[]", required: false, description: "Linked goal ids.", defaultValue: [] },
+            { name: "linkedProjectIds", type: "string[]", required: false, description: "Linked project ids.", defaultValue: [] },
+            { name: "linkedTaskIds", type: "string[]", required: false, description: "Linked task ids.", defaultValue: [] },
+            { name: "linkedValueIds", type: "string[]", required: false, description: "Linked value ids.", defaultValue: [] },
+            { name: "linkedPatternIds", type: "string[]", required: false, description: "Linked pattern ids.", defaultValue: [] },
+            { name: "linkedBehaviorIds", type: "string[]", required: false, description: "Canonical linked behavior ids.", defaultValue: [] },
+            { name: "linkedBehaviorId", type: "string|null", required: false, description: "Compatibility alias for the first linked behavior id.", defaultValue: null, nullable: true },
+            { name: "linkedBeliefIds", type: "string[]", required: false, description: "Linked belief ids.", defaultValue: [] },
+            { name: "linkedModeIds", type: "string[]", required: false, description: "Linked mode ids.", defaultValue: [] },
+            { name: "linkedReportIds", type: "string[]", required: false, description: "Linked trigger report ids.", defaultValue: [] },
+            { name: "rewardXp", type: "integer", required: false, description: "XP granted on aligned check-ins.", defaultValue: 12 },
+            { name: "penaltyXp", type: "integer", required: false, description: "XP removed on misaligned check-ins.", defaultValue: 8 }
         ]
     },
     {
@@ -595,6 +629,15 @@ const AGENT_ONBOARDING_TOOL_INPUT_CATALOG = [
         example: '{"operations":[{"entityType":"goal","id":"goal_123","clientRef":"goal-restore-1"}]}'
     },
     {
+        toolName: "forge_grant_reward_bonus",
+        summary: "Grant an explicit manual XP bonus or penalty with clear provenance.",
+        whenToUse: "Use when the user or operator explicitly wants an auditable reward adjustment beyond the automatic task and habit reward paths.",
+        inputShape: "{ entityType: RewardableEntityType, entityId: string, deltaXp: integer, reasonTitle: string, reasonSummary?: string, metadata?: object }",
+        requiredFields: ["entityType", "entityId", "deltaXp", "reasonTitle"],
+        notes: ["Requires rewards.manage and write scopes.", "Use this for explicit operator judgement, not as a substitute for normal task_run or habit check-in rewards."],
+        example: '{"entityType":"habit","entityId":"habit_morning_training","deltaXp":18,"reasonTitle":"Operator bonus","reasonSummary":"Stayed with the habit through unusual travel friction.","metadata":{"manual":true,"source":"agent"}}'
+    },
+    {
         toolName: "forge_post_insight",
         summary: "Store an agent-authored insight.",
         whenToUse: "Use when you have a data-grounded observation or recommendation worth keeping visible in Forge.",
@@ -736,6 +779,7 @@ function buildAgentOnboardingPayload(request) {
             "Goals are the top-level strategic layer.",
             "Projects belong to one goal through goalId.",
             "Tasks can belong to a goal, a project, both, or neither.",
+            "Habits are recurring records that can connect directly to goals, projects, tasks, and durable Psyche entities.",
             "Task runs represent live work sessions on tasks and are separate from task status.",
             "Notes can link to one or many entities and are the canonical place for Markdown progress context or close-out evidence.",
             "Psyche values can link to goals, projects, and tasks.",
@@ -771,6 +815,7 @@ function buildAgentOnboardingPayload(request) {
                 "forge_delete_entities",
                 "forge_restore_entities"
             ],
+            rewardWorkflow: ["forge_grant_reward_bonus"],
             workWorkflow: [
                 "forge_log_work",
                 "forge_start_task_run",
@@ -955,7 +1000,17 @@ function buildHealthPayload(taskRunWatchdog, extras = {}) {
         ...extras
     };
 }
+function shouldIncludeRuntimeProbe(headers) {
+    const probeHeader = headers["x-forge-runtime-probe"];
+    if (Array.isArray(probeHeader)) {
+        return probeHeader.some((value) => typeof value === "string" && value.trim() === "1");
+    }
+    return typeof probeHeader === "string" && probeHeader.trim() === "1";
+}
 function buildV1Context() {
+    const goals = listGoals();
+    const tasks = listTasks();
+    const habits = listHabits();
     return {
         meta: {
             apiVersion: "v1",
@@ -964,15 +1019,16 @@ function buildV1Context() {
             backend: "forge-node-runtime",
             mode: "transitional-node"
         },
-        metrics: buildGamificationProfile(listGoals(), listTasks()),
+        metrics: buildGamificationProfile(goals, tasks, habits),
         dashboard: getDashboard(),
         overview: getOverviewContext(),
         today: getTodayContext(),
         risk: getRiskContext(),
-        goals: listGoals(),
+        goals,
         projects: listProjectSummaries(),
         tags: listTags(),
-        tasks: listTasks(),
+        tasks,
+        habits,
         activeTaskRuns: listTaskRuns({ active: true, limit: 25 }),
         activity: listActivityEvents({ limit: 25 })
     };
@@ -980,8 +1036,9 @@ function buildV1Context() {
 function buildXpMetricsPayload() {
     const goals = listGoals();
     const tasks = listTasks();
+    const habits = listHabits();
     const rules = listRewardRules();
-    const gamificationOverview = buildGamificationOverview(goals, tasks);
+    const gamificationOverview = buildGamificationOverview(goals, tasks, habits);
     const dailyAmbientCap = rules
         .filter((rule) => rule.family === "ambient")
         .reduce((max, rule) => Math.max(max, Number(rule.config.dailyCap ?? 0)), 0) || 12;
@@ -989,7 +1046,7 @@ function buildXpMetricsPayload() {
         profile: gamificationOverview.profile,
         achievements: gamificationOverview.achievements,
         milestoneRewards: gamificationOverview.milestoneRewards,
-        momentumPulse: buildXpMomentumPulse(goals, tasks),
+        momentumPulse: buildXpMomentumPulse(goals, tasks, habits),
         recentLedger: listRewardLedger({ limit: 25 }),
         rules,
         dailyAmbientXp: getDailyAmbientXp(new Date().toISOString().slice(0, 10)),
@@ -998,6 +1055,7 @@ function buildXpMetricsPayload() {
 }
 function buildOperatorContext() {
     const tasks = listTasks();
+    const dueHabits = listHabits({ dueToday: true }).slice(0, 12);
     const activeProjects = listProjectSummaries({ status: "active" }).filter((project) => project.activeTaskCount > 0 || project.completedTaskCount > 0);
     const focusTasks = tasks.filter((task) => task.status === "focus" || task.status === "in_progress");
     const recommendedNextTask = focusTasks[0] ??
@@ -1008,6 +1066,7 @@ function buildOperatorContext() {
         generatedAt: new Date().toISOString(),
         activeProjects: activeProjects.slice(0, 8),
         focusTasks: focusTasks.slice(0, 12),
+        dueHabits,
         currentBoard: {
             backlog: tasks.filter((task) => task.status === "backlog").slice(0, 20),
             focus: tasks.filter((task) => task.status === "focus").slice(0, 20),
@@ -1231,9 +1290,18 @@ export async function buildServer(options = {}) {
         return context;
     };
     app.get("/api/health", async () => buildHealthPayload(taskRunWatchdog));
-    app.get("/api/v1/health", async () => buildHealthPayload(taskRunWatchdog, {
+    app.get("/api/v1/health", async (request) => buildHealthPayload(taskRunWatchdog, {
         apiVersion: "v1",
-        backend: "forge-node-runtime"
+        backend: "forge-node-runtime",
+        ...(shouldIncludeRuntimeProbe(request.headers)
+            ? {
+                runtime: {
+                    pid: process.pid,
+                    storageRoot: runtimeConfig.dataRoot ?? process.cwd(),
+                    basePath: runtimeConfig.basePath
+                }
+            }
+            : {})
     }));
     app.get("/api/v1/auth/operator-session", async (request, reply) => ({
         session: managers.session.ensureLocalOperatorSession(request.headers, reply)
@@ -1721,6 +1789,19 @@ export async function buildServer(options = {}) {
         const query = taskListQuerySchema.parse(request.query ?? {});
         return { tasks: listTasks(query) };
     });
+    app.get("/api/v1/habits", async (request) => {
+        const query = habitListQuerySchema.parse(request.query ?? {});
+        return { habits: listHabits(query) };
+    });
+    app.get("/api/v1/habits/:id", async (request, reply) => {
+        const { id } = request.params;
+        const habit = getHabitById(id);
+        if (!habit) {
+            reply.code(404);
+            return { error: "Habit not found" };
+        }
+        return { habit };
+    });
     app.get("/api/v1/projects/:id", async (request, reply) => {
         const { id } = request.params;
         const project = listProjectSummaries().find((entry) => entry.id === id);
@@ -1764,7 +1845,7 @@ export async function buildServer(options = {}) {
         return { event };
     });
     app.get("/api/v1/metrics", async () => ({
-        metrics: buildGamificationOverview(listGoals(), listTasks())
+        metrics: buildGamificationOverview(listGoals(), listTasks(), listHabits())
     }));
     app.get("/api/v1/metrics/xp", async () => ({
         metrics: buildXpMetricsPayload()
@@ -1944,6 +2025,12 @@ export async function buildServer(options = {}) {
         reply.code(201);
         return { project };
     });
+    app.post("/api/v1/habits", async (request, reply) => {
+        const auth = requireScopedAccess(request.headers, ["write"], { route: "/api/v1/habits" });
+        const habit = createHabit(createHabitSchema.parse(request.body ?? {}), toActivityContext(auth));
+        reply.code(201);
+        return { habit };
+    });
     app.patch("/api/v1/projects/:id", async (request, reply) => {
         const auth = requireScopedAccess(request.headers, ["write"], { route: "/api/v1/projects/:id" });
         const { id } = request.params;
@@ -1963,6 +2050,36 @@ export async function buildServer(options = {}) {
             return { error: "Project not found" };
         }
         return { project };
+    });
+    app.patch("/api/v1/habits/:id", async (request, reply) => {
+        const auth = requireScopedAccess(request.headers, ["write"], { route: "/api/v1/habits/:id" });
+        const { id } = request.params;
+        const habit = updateHabit(id, updateHabitSchema.parse(request.body ?? {}), toActivityContext(auth));
+        if (!habit) {
+            reply.code(404);
+            return { error: "Habit not found" };
+        }
+        return { habit };
+    });
+    app.delete("/api/v1/habits/:id", async (request, reply) => {
+        const auth = requireScopedAccess(request.headers, ["write"], { route: "/api/v1/habits/:id" });
+        const { id } = request.params;
+        const habit = deleteEntity("habit", id, entityDeleteQuerySchema.parse(request.query ?? {}), toActivityContext(auth));
+        if (!habit) {
+            reply.code(404);
+            return { error: "Habit not found" };
+        }
+        return { habit };
+    });
+    app.post("/api/v1/habits/:id/check-ins", async (request, reply) => {
+        const auth = requireScopedAccess(request.headers, ["write"], { route: "/api/v1/habits/:id/check-ins" });
+        const { id } = request.params;
+        const habit = createHabitCheckIn(id, createHabitCheckInSchema.parse(request.body ?? {}), toActivityContext(auth));
+        if (!habit) {
+            reply.code(404);
+            return { error: "Habit not found" };
+        }
+        return { habit, metrics: buildXpMetricsPayload() };
     });
     app.patch("/api/v1/settings", async (request) => {
         const auth = requireScopedAccess(request.headers, ["write"], { route: "/api/v1/settings" });
@@ -2072,7 +2189,7 @@ export async function buildServer(options = {}) {
     app.get("/api/metrics", async (_request, reply) => {
         markCompatibilityRoute(reply);
         return {
-            metrics: buildGamificationProfile(listGoals(), listTasks())
+            metrics: buildGamificationProfile(listGoals(), listTasks(), listHabits())
         };
     });
     app.get("/api/task-runs", async (request, reply) => {
@@ -2102,7 +2219,7 @@ export async function buildServer(options = {}) {
         markCompatibilityRoute(reply);
         const query = taskListQuerySchema.parse(request.query ?? {});
         return {
-            metrics: buildGamificationProfile(listGoals(), listTasks()),
+            metrics: buildGamificationProfile(listGoals(), listTasks(), listHabits()),
             dashboard: getDashboard(),
             overview: getOverviewContext(),
             today: getTodayContext(),
@@ -2111,6 +2228,7 @@ export async function buildServer(options = {}) {
             projects: listProjectSummaries(),
             tags: listTags(),
             tasks: listTasks(query),
+            habits: listHabits(),
             activeTaskRuns: listTaskRuns({ active: true, limit: 25 }),
             activity: listActivityEvents({ limit: 25 })
         };

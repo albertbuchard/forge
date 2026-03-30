@@ -1,5 +1,6 @@
 import { listGoals } from "../repositories/goals.js";
 import { listActivityEvents } from "../repositories/activity-events.js";
+import { listHabits } from "../repositories/habits.js";
 import { buildNotesSummaryByEntity } from "../repositories/notes.js";
 import { listTagsByIds, listTags } from "../repositories/tags.js";
 import { listTasks } from "../repositories/tasks.js";
@@ -116,6 +117,7 @@ function buildGoalSummary(tasks, goalId) {
 export function getDashboard() {
     const goals = listGoals();
     const tasks = listTasks();
+    const habits = listHabits();
     const tags = listTags();
     const now = new Date();
     const weekStart = startOfWeek(now).toISOString();
@@ -150,9 +152,9 @@ export function getDashboard() {
     const suggestedTags = tags.filter((tag) => ["value", "execution"].includes(tag.kind)).slice(0, 6);
     const owners = [...new Set(tasks.map((task) => task.owner).filter(Boolean))].sort((left, right) => left.localeCompare(right));
     const executionBuckets = buildExecutionBuckets(tasks, todayIso, weekEndIso);
-    const gamification = buildGamificationProfile(goals, tasks, now);
-    const achievements = buildAchievementSignals(goals, tasks, now);
-    const milestoneRewards = buildMilestoneRewards(goals, tasks, now);
+    const gamification = buildGamificationProfile(goals, tasks, habits, now);
+    const achievements = buildAchievementSignals(goals, tasks, habits, now);
+    const milestoneRewards = buildMilestoneRewards(goals, tasks, habits, now);
     const recentActivity = listActivityEvents({ limit: 12 });
     const notesSummaryByEntity = buildNotesSummaryByEntity();
     return dashboardPayloadSchema.parse({
@@ -160,6 +162,7 @@ export function getDashboard() {
         goals: goalCards,
         projects,
         tasks,
+        habits,
         tags,
         suggestedTags,
         owners,
