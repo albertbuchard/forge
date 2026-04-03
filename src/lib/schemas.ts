@@ -50,7 +50,18 @@ export const settingsMutationSchema = z.object({
     timeAccountingMode: z.enum(["split", "parallel", "primary_only"])
   }),
   themePreference: z.enum(["obsidian", "solar", "system"]),
-  localePreference: appLocaleSchema
+  localePreference: appLocaleSchema,
+  calendarProviders: z
+    .object({
+      microsoft: z
+        .object({
+          clientId: z.string().trim(),
+          tenantId: z.string().trim(),
+          redirectUri: z.string().trim()
+        })
+        .optional()
+    })
+    .optional()
 });
 
 export const createAgentTokenSchema = z.object({

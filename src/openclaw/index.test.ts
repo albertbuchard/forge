@@ -123,17 +123,24 @@ describe("forge openclaw plugin", () => {
   });
 
   it("normalizes plugin config defaults", () => {
-    expect(resolveForgePluginConfig(undefined)).toEqual({
-      origin: "http://127.0.0.1",
-      port: 4317,
-      baseUrl: "http://127.0.0.1:4317",
-      webAppUrl: "http://127.0.0.1:4317/forge/",
-      portSource: "default",
-      dataRoot: "",
-      apiToken: "",
-      actorLabel: "aurel",
-      timeoutMs: 15000
-    });
+    const tempHome = mkdtempSync(join(tmpdir(), "forge-openclaw-defaults-"));
+    vi.stubEnv("HOME", tempHome);
+
+    try {
+      expect(resolveForgePluginConfig(undefined)).toEqual({
+        origin: "http://127.0.0.1",
+        port: 4317,
+        baseUrl: "http://127.0.0.1:4317",
+        webAppUrl: "http://127.0.0.1:4317/forge/",
+        portSource: "default",
+        dataRoot: "",
+        apiToken: "",
+        actorLabel: "aurel",
+        timeoutMs: 15000
+      });
+    } finally {
+      rmSync(tempHome, { recursive: true, force: true });
+    }
   });
 
   it("reuses a saved preferred local port when the user did not configure one explicitly", () => {

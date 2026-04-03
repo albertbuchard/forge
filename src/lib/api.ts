@@ -535,6 +535,7 @@ export function listNotes(
       entityType: CrudEntityType;
       entityId: string;
     }>;
+    tags?: string[];
     textTerms?: string[];
     author?: string;
     query?: string;
@@ -555,6 +556,11 @@ export function listNotes(
   }
   for (const link of input.linkedTo ?? []) {
     search.append("linkedTo", `${link.entityType}:${link.entityId}`);
+  }
+  for (const tag of input.tags ?? []) {
+    if (tag.trim()) {
+      search.append("tags", tag.trim());
+    }
   }
   for (const term of input.textTerms ?? []) {
     if (term.trim()) {
@@ -583,6 +589,8 @@ export function listNotes(
 export function createNote(input: {
   contentMarkdown: string;
   author?: string | null;
+  tags?: string[];
+  destroyAt?: string | null;
   links: Array<{
     entityType: CrudEntityType;
     entityId: string;
@@ -600,6 +608,8 @@ export function patchNote(
   patch: {
     contentMarkdown?: string;
     author?: string | null;
+    tags?: string[];
+    destroyAt?: string | null;
     links?: Array<{
       entityType: CrudEntityType;
       entityId: string;
@@ -684,9 +694,12 @@ export function getWeeklyReview() {
 }
 
 export function finalizeWeeklyReview() {
-  return request<FinalizeWeeklyReviewResult>("/api/v1/reviews/weekly/finalize", {
-    method: "POST"
-  });
+  return request<FinalizeWeeklyReviewResult>(
+    "/api/v1/reviews/weekly/finalize",
+    {
+      method: "POST"
+    }
+  );
 }
 
 export function getCalendarOverview(
@@ -753,6 +766,29 @@ export function startMicrosoftCalendarOauth(input: { label?: string }) {
       body: JSON.stringify(input)
     }
   );
+}
+
+export function testMicrosoftCalendarOauthConfiguration(input: {
+  clientId: string;
+  tenantId?: string;
+  redirectUri: string;
+}) {
+  return request<{
+    result: {
+      ok: true;
+      message: string;
+      normalizedConfig: {
+        clientId: string;
+        tenantId: string;
+        redirectUri: string;
+        usesClientSecret: false;
+        readOnly: true;
+      };
+    };
+  }>("/api/v1/calendar/oauth/microsoft/test-config", {
+    method: "POST",
+    body: JSON.stringify(input)
+  });
 }
 
 export function getMicrosoftCalendarOauthSession(sessionId: string) {
@@ -850,7 +886,9 @@ export function deleteCalendarConnection(connectionId: string) {
 }
 
 export function listCalendarResources() {
-  return request<{ calendars: CalendarResource[] }>("/api/v1/calendar/calendars");
+  return request<{ calendars: CalendarResource[] }>(
+    "/api/v1/calendar/calendars"
+  );
 }
 
 export function listWorkBlockTemplates() {
@@ -977,16 +1015,22 @@ export function patchCalendarEvent(
     }>;
   }>
 ) {
-  return request<{ event: CalendarEvent }>(`/api/v1/calendar/events/${eventId}`, {
-    method: "PATCH",
-    body: JSON.stringify(patch)
-  });
+  return request<{ event: CalendarEvent }>(
+    `/api/v1/calendar/events/${eventId}`,
+    {
+      method: "PATCH",
+      body: JSON.stringify(patch)
+    }
+  );
 }
 
 export function deleteCalendarEvent(eventId: string) {
-  return request<{ event: CalendarEvent }>(`/api/v1/calendar/events/${eventId}`, {
-    method: "DELETE"
-  });
+  return request<{ event: CalendarEvent }>(
+    `/api/v1/calendar/events/${eventId}`,
+    {
+      method: "DELETE"
+    }
+  );
 }
 
 export function createTaskTimebox(input: {
@@ -1464,9 +1508,12 @@ export function patchProject(
 
 export function deleteProject(projectId: string, mode: DeleteMode = "soft") {
   const suffix = mode === "hard" ? "?mode=hard" : "";
-  return request<{ project: Project }>(`/api/v1/projects/${projectId}${suffix}`, {
-    method: "DELETE"
-  });
+  return request<{ project: Project }>(
+    `/api/v1/projects/${projectId}${suffix}`,
+    {
+      method: "DELETE"
+    }
+  );
 }
 
 export function patchGoal(goalId: string, patch: Partial<GoalMutationInput>) {

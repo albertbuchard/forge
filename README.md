@@ -2,7 +2,7 @@
 
 [GitHub Pages plugin site](https://albertbuchard.github.io/forge/)
 
-Forge is a local-first life direction, execution, and reflection system with a full web UI, a Fastify API, and an OpenClaw plugin.
+Forge is a local-first life direction, execution, and reflection system with a full web UI, a Fastify API, and curated agent integrations for OpenClaw, Hermes, and Codex.
 
 Forge gives the user and trusted agents one structured operating record for:
 
@@ -21,13 +21,15 @@ Project lifecycle is status-driven and shared across UI, API, and agent tools:
 - setting a project to `completed` automatically closes linked unfinished tasks through the normal task-completion path
 - project delete defaults to soft removal, with restore and hard delete available through the normal delete/bin flows
 
-The repo contains three connected runtime surfaces:
+The repo contains the Forge app and API plus three agent-facing adapter surfaces:
 
 - the Forge web app under `/forge/`
 - the local Fastify API at `/api/v1/*`
-- the OpenClaw plugin that exposes the curated agent-facing contract
+- the published OpenClaw plugin under [`openclaw-plugin/`](./openclaw-plugin)
+- the repo-local Hermes plugin under [`plugins/forge-hermes/`](./plugins/forge-hermes)
+- the repo-local Codex plugin under [`plugins/forge-codex/`](./plugins/forge-codex)
 
-The OpenClaw plugin complements the core product. It is not the whole product.
+The agent plugins complement the core product. They are not the whole product.
 
 ## Install Forge In OpenClaw
 
@@ -70,6 +72,79 @@ The same tool-permission step still applies for repo-local installs: open
 `OpenClaw -> Agents`, choose your agent, and allow every
 `forge-openclaw-plugin` tool card.
 
+## Install Forge In Hermes
+
+Forge also ships a repo-local Hermes plugin that follows Hermes' native plugin layout.
+
+From this repo:
+
+```bash
+npm install
+./plugins/forge-hermes/scripts/install.sh
+```
+
+That links the plugin into `~/.hermes/plugins/forge` and creates a persisted config at
+`~/.hermes/forge/config.json`.
+
+The Hermes plugin uses the same curated Forge tool contract as the OpenClaw adapter and
+installs a bundled Forge skill on first load. By default it stores its runtime data in
+`~/.hermes/forge`, so local Hermes usage does not fall back to the repo root or
+overwrite another Forge runtime accidentally.
+
+Default config behavior:
+
+- origin defaults to `http://127.0.0.1`
+- port defaults to `4317` but can auto-relocate to the next free local port when it is not explicitly pinned
+- actor label defaults to `hermes`
+- data root defaults to `~/.hermes/forge`
+
+You can change the data folder or pin a different port by editing
+`~/.hermes/forge/config.json` or by re-running the installer with environment overrides:
+
+```bash
+./plugins/forge-hermes/scripts/install.sh --data-root /absolute/path/to/forge-data
+```
+
+If you want a repo-level helper similar to the OpenClaw smoke/push flow, use:
+
+```bash
+npm run install:local-hermes-plugin
+```
+
+That links the local Hermes plugin, writes a reversible config snapshot, points Forge at
+a temporary Hermes data root, chooses a free localhost port for that temp runtime, and
+runs a runtime smoke check. Restore the previous Hermes plugin/config snapshot with:
+
+```bash
+bash ./scripts/install-local-hermes-plugin.sh restore
+```
+
+For an actual Hermes release from the monorepo root, use:
+
+```bash
+../scripts/release-forge-hermes-plugin.sh patch
+```
+
+If you want Hermes and OpenClaw released together on one shared version, use:
+
+```bash
+../scripts/release-forge-agent-plugins.sh patch
+```
+
+Supported overrides:
+
+- `FORGE_API_TOKEN`
+- `FORGE_TIMEOUT_MS`
+- `FORGE_DATA_ROOT`
+- `FORGE_PORT`
+- `FORGE_ORIGIN`
+- `FORGE_ACTOR_LABEL`
+
+When the target is local and Forge is not already running, the Hermes plugin reuses the
+repo's tested Forge local-runtime bootstrap path before making the request. That means
+it gets the same health checks, preferred-port memory, conflict detection, and
+data-root mismatch protection as the OpenClaw adapter.
+
 Forge now has three distinct work-accounting paths:
 
 - live work uses task runs
@@ -81,7 +156,7 @@ Forge also now has a first-class calendar execution layer:
 - Google Calendar, Apple Calendar, Exchange Online, and custom CalDAV connections
 - native Forge calendar events that exist even without a provider connection
 - mirrored external events plus a dedicated Forge calendar per connection
-- Exchange Online uses Microsoft Graph and is currently read-only in Forge, with a guided Microsoft sign-in flow in Settings instead of manual user-entered OAuth secrets
+- Exchange Online uses Microsoft Graph and is currently read-only in Forge, with local Settings-managed Microsoft client ID, tenant, and redirect URI fields followed by a guided Microsoft sign-in flow instead of manual user-entered OAuth secrets
 - canonical internal events with separate provider source mappings and Forge links
 - recurring half-day work blocks such as Main Activity, Secondary Activity, Third Activity, Rest, or Custom
 - task and project scheduling rules stored on the normal entity records
@@ -137,7 +212,7 @@ The current app surface in this repo includes:
 - `Calendar`
   The calendar workspace is now display-first: the week view sits at the top, native Forge events and provider events appear beside Forge work blocks and timeboxes, drag-and-drop rescheduling stays available, and guided actions open modals for native events, work blocks, task scheduling rules, and task timeboxing.
 - `Settings -> Calendar`
-  Provider setup and connection management now live in Settings, with a guided connection flow plus a step-by-step setup guide for Google Calendar, Apple Calendar autodiscovery, Exchange Online through Microsoft Graph sign-in, and custom CalDAV.
+  Provider setup and connection management now live in Settings, with a guided connection flow plus a step-by-step setup guide for Google Calendar, Apple Calendar autodiscovery, Exchange Online through Microsoft Graph sign-in after local app-registration setup, and custom CalDAV.
 - task detail pages with `Adjust work` for signed minute corrections
   Task detail now also exposes calendar scheduling rules, planned duration, and a live “allowed now / blocked now” calendar status.
 - project detail pages now expose project-level scheduling defaults that tasks can inherit or override
@@ -294,5 +369,7 @@ npm run check:openclaw-plugin
 
 - [`openclaw-plugin/README.md`](openclaw-plugin/README.md)
 - [`docs/openclaw-plugin.md`](docs/openclaw-plugin.md)
+- [`plugins/forge-hermes/README.md`](plugins/forge-hermes/README.md)
+- [`docs/hermes-plugin.md`](docs/hermes-plugin.md)
 - [`docs/openclaw-plugin-release-checklist.md`](docs/openclaw-plugin-release-checklist.md)
 - [`docs/public-repo-workflow.md`](docs/public-repo-workflow.md)

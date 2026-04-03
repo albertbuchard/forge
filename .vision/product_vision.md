@@ -35,7 +35,11 @@ Notes are part of that operating model. A note is not a decorative comment field
 inside another record. It is a first-class Markdown entity that can attach to one or
 many goals, projects, tasks, and Psyche records so the user can preserve progress
 evidence, close-out summaries, and contextual explanation without fragmenting the data
-model.
+model. Notes should support note-owned tags so the user can classify them with custom
+labels or with explicit cognitive memory-system labels such as working memory,
+short-term memory, episodic memory, semantic memory, and procedural memory. Notes
+should also be able to act as ephemeral scratch memory: when the user sets a destroy
+time, Forge should automatically remove the note once that time passes.
 
 Habits should be first-class recurring records, not tasks in disguise. They need their
 own navigation entry and management page, with frequency rules, positive and negative
@@ -103,7 +107,9 @@ mirrors selected calendars into Forge but does not receive Forge-owned work bloc
 timeboxes, or native event projections yet. In the current self-hosted local Forge
 runtime, its setup path should be a guided Microsoft public-client sign-in flow with
 PKCE in Settings rather than a user-facing form for client secrets or refresh
-tokens.
+tokens. For self-hosted local Forge, the Microsoft client ID, tenant, and redirect
+URI should be configurable from the Calendar settings UI itself so the operator does
+not have to treat backend env vars as the primary setup surface.
 
 The Project detail page should be board-first and action-first. The main task board for
 the project should dominate the page, because that is the work surface. Project status,
@@ -121,9 +127,11 @@ At the bottom of each main detail page, Forge should show a coherent notes surfa
 renders Markdown cleanly, supports quick authoring with preview, and makes linked work
 evidence feel native instead of bolted on.
 Forge should also have a dedicated Notes page that treats notes as first-class entities:
-searchable, editable, deletable, filterable by linked entities, date, and free-text
-chips, and able to create standalone linked notes without forcing the user through some
-other entity flow first.
+searchable, editable, deletable, filterable by linked entities, note tags, date, and
+free-text chips, and able to create standalone linked notes without forcing the user
+through some other entity flow first. The Notes page and the inline note surfaces on
+detail pages should both expose memory-tag presets, custom tag entry, and ephemeral
+destroy-time controls instead of reserving that metadata for a hidden advanced editor.
 
 The Weekly Review page should help the user examine what moved, what stalled, what was
 learned, and where next adjustments are needed. It should turn the operating record into
@@ -251,7 +259,9 @@ Kanban interactions, Framer Motion for motion, Recharts for charts, and Lucide R
 for iconography. The API runtime is Fastify 5, started through `tsx`, and served
 locally on port `4317` by default. The web application lives under the `/forge/` base
 path, and the versioned REST contract is documented through OpenAPI 3.1 at
-`/api/v1/openapi.json`. Calendar provider sync runs inside this live runtime today,
+`/api/v1/openapi.json`. The current agent-integration stack spans the published
+OpenClaw adapter, a repo-local Hermes plugin built with Hermes' Python plugin format,
+and a repo-local Codex MCP adapter. Calendar provider sync runs inside this live runtime today,
 with Google Calendar, Apple Calendar, and custom CalDAV adapters, encrypted provider
 credentials, migration-backed calendar tables, and a dedicated Forge calendar per
 connection. Apple setup is discovery-first from `https://caldav.icloud.com` rather
@@ -274,12 +284,13 @@ license to become architecturally vague.
 ## Agent And API Vision
 
 Forge should be a product that trusted agents can use competently. The API and the
-OpenClaw integration should expose the real entity model, timer controls, settings
-controls, insight flows, and Psyche operations in a curated but complete way. The
-plugin should help an agent understand the app itself, the meaning of each entity, the
-expected workflow, and when to use the UI instead of mutating data directly. The user
-should feel that agent help is natural language on top of a real operating system, not a
-parallel product with different rules.
+curated agent adapters should expose the real entity model, timer controls, settings
+controls, insight flows, and Psyche operations in a curated but complete way. Today
+that includes the published OpenClaw plugin plus repo-local Hermes and Codex adapters.
+Each of those integrations should help an agent understand the app itself, the meaning
+of each entity, the expected workflow, and when to use the UI instead of mutating data
+directly. The user should feel that agent help is natural language on top of a real
+operating system, not a parallel product with different rules.
 Agents should be explicitly guided to use notes for progress explanations, task
 close-out context, and multi-entity evidence capture, including nested `notes` during
 entity creation and explicit close-out notes when work is completed or logged.

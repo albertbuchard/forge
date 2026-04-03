@@ -5,11 +5,14 @@ import path from "node:path";
 import test from "node:test";
 import { buildServer } from "./app.js";
 import { closeDatabase, getDatabase } from "./db.js";
+import { createCalendarEvent } from "./repositories/calendar.js";
 import { upsertDeletedEntityRecord } from "./repositories/deleted-entities.js";
 import { getCrudEntityCapabilityMatrix } from "./services/entity-crud.js";
 import type { StartupTaskRunRecoverySummary } from "./services/run-recovery.js";
 
-async function issueOperatorSessionCookie(app: Awaited<ReturnType<typeof buildServer>>) {
+async function issueOperatorSessionCookie(
+  app: Awaited<ReturnType<typeof buildServer>>
+) {
   const response = await app.inject({
     method: "GET",
     url: "/api/v1/auth/operator-session",
@@ -48,7 +51,9 @@ test("dashboard bootstraps goals, tasks, tags, and premium stats", async () => {
     assert.ok(body.tags.length >= 6);
     assert.ok(body.owners.includes("Albert"));
     assert.equal(body.executionBuckets.length, 4);
-    assert.ok(body.executionBuckets.some((bucket) => bucket.id === "focus_now"));
+    assert.ok(
+      body.executionBuckets.some((bucket) => bucket.id === "focus_now")
+    );
     assert.ok(body.stats.totalPoints >= 55);
     assert.ok(body.stats.overdueTasks >= 0);
     assert.ok(body.stats.dueThisWeek >= 0);
@@ -65,7 +70,10 @@ test("task creation and column movement persist through the API", async () => {
 
   try {
     const operatorCookie = await issueOperatorSessionCookie(app);
-    const dashboard = await app.inject({ method: "GET", url: "/api/dashboard" });
+    const dashboard = await app.inject({
+      method: "GET",
+      url: "/api/dashboard"
+    });
     const payload = dashboard.json() as {
       goals: Array<{ id: string }>;
       tags: Array<{ id: string; kind: string }>;
@@ -95,7 +103,9 @@ test("task creation and column movement persist through the API", async () => {
     });
 
     assert.equal(created.statusCode, 201);
-    const createdTask = (created.json() as { task: { id: string; status: string } }).task;
+    const createdTask = (
+      created.json() as { task: { id: string; status: string } }
+    ).task;
     assert.equal(createdTask.status, "focus");
 
     const moved = await app.inject({
@@ -110,7 +120,9 @@ test("task creation and column movement persist through the API", async () => {
     });
 
     assert.equal(moved.statusCode, 200);
-    const movedTask = (moved.json() as { task: { status: string; completedAt: string | null } }).task;
+    const movedTask = (
+      moved.json() as { task: { status: string; completedAt: string | null } }
+    ).task;
     assert.equal(movedTask.status, "done");
     assert.ok(movedTask.completedAt);
   } finally {
@@ -121,13 +133,19 @@ test("task creation and column movement persist through the API", async () => {
 });
 
 test("goal detail, operator context, and retroactive work logging are available on the versioned API", async () => {
-  const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-operator-context-"));
+  const rootDir = await mkdtemp(
+    path.join(os.tmpdir(), "forge-operator-context-")
+  );
   const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
 
   try {
     const operatorCookie = await issueOperatorSessionCookie(app);
-    const goalsResponse = await app.inject({ method: "GET", url: "/api/v1/goals" });
-    const goals = (goalsResponse.json() as { goals: Array<{ id: string }> }).goals;
+    const goalsResponse = await app.inject({
+      method: "GET",
+      url: "/api/v1/goals"
+    });
+    const goals = (goalsResponse.json() as { goals: Array<{ id: string }> })
+      .goals;
     const goalId = goals[0]!.id;
 
     const goalResponse = await app.inject({
@@ -146,13 +164,21 @@ test("goal detail, operator context, and retroactive work logging are available 
       }
     });
     assert.equal(operatorContext.statusCode, 200);
-    const context = (operatorContext.json() as {
-      context: {
-        activeProjects: Array<{ id: string }>;
-        currentBoard: { backlog: Array<unknown>; focus: Array<unknown>; inProgress: Array<unknown>; blocked: Array<unknown>; done: Array<unknown> };
-        xp: { profile: { level: number } };
-      };
-    }).context;
+    const context = (
+      operatorContext.json() as {
+        context: {
+          activeProjects: Array<{ id: string }>;
+          currentBoard: {
+            backlog: Array<unknown>;
+            focus: Array<unknown>;
+            inProgress: Array<unknown>;
+            blocked: Array<unknown>;
+            done: Array<unknown>;
+          };
+          xp: { profile: { level: number } };
+        };
+      }
+    ).context;
     assert.ok(context.activeProjects.length >= 1);
     assert.ok(Array.isArray(context.currentBoard.backlog));
     assert.ok(typeof context.xp.profile.level === "number");
@@ -166,19 +192,34 @@ test("goal detail, operator context, and retroactive work logging are available 
       }
     });
     assert.equal(operatorOverview.statusCode, 200);
-    const overview = (operatorOverview.json() as {
-      overview: {
-        snapshot: { goals: Array<{ id: string }> };
-        operator: { focusTasks: Array<unknown> };
-        routeGuide: { preferredStart: string; mainRoutes: Array<{ id: string }> };
-        onboarding: { openApiUrl: string; webAppUrl: string };
-      };
-    }).overview;
+    const overview = (
+      operatorOverview.json() as {
+        overview: {
+          snapshot: { goals: Array<{ id: string }> };
+          operator: { focusTasks: Array<unknown> };
+          routeGuide: {
+            preferredStart: string;
+            mainRoutes: Array<{ id: string }>;
+          };
+          onboarding: { openApiUrl: string; webAppUrl: string };
+        };
+      }
+    ).overview;
     assert.ok(overview.snapshot.goals.length >= 1);
     assert.ok(Array.isArray(overview.operator.focusTasks));
-    assert.equal(overview.routeGuide.preferredStart, "/api/v1/operator/overview");
-    assert.ok(overview.routeGuide.mainRoutes.some((route) => route.id === "psyche_overview"));
-    assert.equal(overview.onboarding.openApiUrl, "http://127.0.0.1:4317/api/v1/openapi.json");
+    assert.equal(
+      overview.routeGuide.preferredStart,
+      "/api/v1/operator/overview"
+    );
+    assert.ok(
+      overview.routeGuide.mainRoutes.some(
+        (route) => route.id === "psyche_overview"
+      )
+    );
+    assert.equal(
+      overview.onboarding.openApiUrl,
+      "http://127.0.0.1:4317/api/v1/openapi.json"
+    );
     assert.equal(overview.onboarding.webAppUrl, "http://127.0.0.1:4317/forge/");
 
     const logged = await app.inject({
@@ -212,12 +253,17 @@ test("goal detail, operator context, and retroactive work logging are available 
 });
 
 test("native Forge calendar events can be created, linked, updated, and removed without a provider connection", async () => {
-  const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-native-calendar-events-"));
+  const rootDir = await mkdtemp(
+    path.join(os.tmpdir(), "forge-native-calendar-events-")
+  );
   const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
 
   try {
     const operatorCookie = await issueOperatorSessionCookie(app);
-    const snapshotResponse = await app.inject({ method: "GET", url: "/api/v1/context" });
+    const snapshotResponse = await app.inject({
+      method: "GET",
+      url: "/api/v1/context"
+    });
     const snapshot = snapshotResponse.json() as {
       goals: Array<{ id: string; title: string }>;
       projects: Array<{ id: string; title: string }>;
@@ -231,7 +277,8 @@ test("native Forge calendar events can be created, linked, updated, and removed 
       },
       payload: {
         title: "Forge-native planning block",
-        description: "A local-first event that should still work without Google or Apple.",
+        description:
+          "A local-first event that should still work without Google or Apple.",
         location: "Deep work room",
         startAt: "2026-04-06T08:00:00.000Z",
         endAt: "2026-04-06T09:30:00.000Z",
@@ -249,14 +296,16 @@ test("native Forge calendar events can be created, linked, updated, and removed 
     });
 
     assert.equal(created.statusCode, 201);
-    const createdEvent = (created.json() as {
-      event: {
-        id: string;
-        originType: string;
-        links: Array<{ entityType: string; entityId: string }>;
-        sourceMappings: unknown[];
-      };
-    }).event;
+    const createdEvent = (
+      created.json() as {
+        event: {
+          id: string;
+          originType: string;
+          links: Array<{ entityType: string; entityId: string }>;
+          sourceMappings: unknown[];
+        };
+      }
+    ).event;
     assert.equal(createdEvent.originType, "native");
     assert.equal(createdEvent.links.length, 1);
     assert.equal(createdEvent.sourceMappings.length, 0);
@@ -280,12 +329,18 @@ test("native Forge calendar events can be created, linked, updated, and removed 
     });
 
     assert.equal(updated.statusCode, 200);
-    const updatedEvent = (updated.json() as {
-      event: {
-        title: string;
-        links: Array<{ entityType: string; entityId: string; relationshipType: string }>;
-      };
-    }).event;
+    const updatedEvent = (
+      updated.json() as {
+        event: {
+          title: string;
+          links: Array<{
+            entityType: string;
+            entityId: string;
+            relationshipType: string;
+          }>;
+        };
+      }
+    ).event;
     assert.equal(updatedEvent.title, "Forge-native planning review");
     assert.equal(updatedEvent.links.length, 1);
     assert.equal(updatedEvent.links[0]?.entityType, "project");
@@ -330,7 +385,9 @@ test("native Forge calendar events can be created, linked, updated, and removed 
       };
     };
     assert.ok(
-      afterDeleteBody.calendar.events.every((event) => event.id !== createdEvent.id)
+      afterDeleteBody.calendar.events.every(
+        (event) => event.id !== createdEvent.id
+      )
     );
   } finally {
     await app.close();
@@ -340,7 +397,9 @@ test("native Forge calendar events can be created, linked, updated, and removed 
 });
 
 test("calendar resource listing normalizes blank timezones to UTC", async () => {
-  const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-calendar-resource-timezone-"));
+  const rootDir = await mkdtemp(
+    path.join(os.tmpdir(), "forge-calendar-resource-timezone-")
+  );
   const app = await buildServer({ dataRoot: rootDir, seedDemoData: false });
 
   try {
@@ -410,7 +469,9 @@ test("calendar resource listing normalizes blank timezones to UTC", async () => 
 });
 
 test("calendar connection metadata exposes Exchange Online as read only", async () => {
-  const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-calendar-providers-"));
+  const rootDir = await mkdtemp(
+    path.join(os.tmpdir(), "forge-calendar-providers-")
+  );
   const app = await buildServer({ dataRoot: rootDir, seedDemoData: false });
 
   try {
@@ -428,15 +489,73 @@ test("calendar connection metadata exposes Exchange Online as read only", async 
         connectionHelp: string;
       }>;
     };
-    const exchangeProvider = body.providers.find((provider) => provider.provider === "microsoft");
+    const exchangeProvider = body.providers.find(
+      (provider) => provider.provider === "microsoft"
+    );
     assert.ok(exchangeProvider);
     assert.equal(exchangeProvider?.label, "Exchange Online");
     assert.equal(exchangeProvider?.supportsDedicatedForgeCalendar, false);
-    assert.match(exchangeProvider?.connectionHelp ?? "", /sign in with microsoft/i);
+    assert.match(
+      exchangeProvider?.connectionHelp ?? "",
+      /microsoft client id|sign-in flow/i
+    );
     assert.deepEqual(
       body.providers.map((provider) => provider.provider),
       ["google", "apple", "microsoft", "caldav"]
     );
+  } finally {
+    await app.close();
+    await rm(rootDir, { recursive: true, force: true });
+  }
+});
+
+test("microsoft local auth config can be validated without env secrets", async () => {
+  const rootDir = await mkdtemp(
+    path.join(os.tmpdir(), "forge-microsoft-config-test-")
+  );
+  const app = await buildServer({ dataRoot: rootDir, seedDemoData: false });
+
+  try {
+    const operatorCookie = await issueOperatorSessionCookie(app);
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/v1/calendar/oauth/microsoft/test-config",
+      headers: {
+        cookie: operatorCookie
+      },
+      payload: {
+        clientId: "00000000-0000-0000-0000-000000000000",
+        tenantId: "common",
+        redirectUri:
+          "http://127.0.0.1:4317/api/v1/calendar/oauth/microsoft/callback"
+      }
+    });
+
+    assert.equal(response.statusCode, 200);
+    const body = response.json() as {
+      result: {
+        ok: boolean;
+        message: string;
+        normalizedConfig: {
+          clientId: string;
+          redirectUri: string;
+          usesClientSecret: boolean;
+          readOnly: boolean;
+        };
+      };
+    };
+    assert.equal(body.result.ok, true);
+    assert.equal(
+      body.result.normalizedConfig.clientId,
+      "00000000-0000-0000-0000-000000000000"
+    );
+    assert.equal(
+      body.result.normalizedConfig.redirectUri,
+      "http://127.0.0.1:4317/api/v1/calendar/oauth/microsoft/callback"
+    );
+    assert.equal(body.result.normalizedConfig.usesClientSecret, false);
+    assert.equal(body.result.normalizedConfig.readOnly, true);
+    assert.match(body.result.message, /final verification/i);
   } finally {
     await app.close();
     await rm(rootDir, { recursive: true, force: true });
@@ -477,12 +596,17 @@ test("health probe can expose the effective runtime storage root for OpenClaw ru
 });
 
 test("work adjustments add and remove signed minutes on tasks and projects with symmetric XP", async () => {
-  const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-work-adjustments-"));
+  const rootDir = await mkdtemp(
+    path.join(os.tmpdir(), "forge-work-adjustments-")
+  );
   const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
 
   try {
     const operatorCookie = await issueOperatorSessionCookie(app);
-    const snapshotResponse = await app.inject({ method: "GET", url: "/api/v1/context" });
+    const snapshotResponse = await app.inject({
+      method: "GET",
+      url: "/api/v1/context"
+    });
     const snapshot = snapshotResponse.json() as {
       tasks: Array<{ id: string; title: string; projectId: string | null }>;
       metrics: { totalXp: number };
@@ -519,9 +643,18 @@ test("work adjustments add and remove signed minutes on tasks and projects with 
       url: `/api/v1/tasks/${task.id}/context`
     });
     const taskContextBody = taskContextAfterAdd.json() as {
-      activity: Array<{ eventType: string; metadata: { appliedDeltaMinutes?: number } }>;
+      activity: Array<{
+        eventType: string;
+        metadata: { appliedDeltaMinutes?: number };
+      }>;
     };
-    assert.ok(taskContextBody.activity.some((event) => event.eventType === "work_adjusted" && event.metadata.appliedDeltaMinutes === 25));
+    assert.ok(
+      taskContextBody.activity.some(
+        (event) =>
+          event.eventType === "work_adjusted" &&
+          event.metadata.appliedDeltaMinutes === 25
+      )
+    );
 
     const removeTaskAdjustment = await app.inject({
       method: "POST",
@@ -539,7 +672,10 @@ test("work adjustments add and remove signed minutes on tasks and projects with 
 
     assert.equal(removeTaskAdjustment.statusCode, 201);
     const removeTaskBody = removeTaskAdjustment.json() as {
-      adjustment: { requestedDeltaMinutes: number; appliedDeltaMinutes: number };
+      adjustment: {
+        requestedDeltaMinutes: number;
+        appliedDeltaMinutes: number;
+      };
       reward: { deltaXp: number } | null;
       target: { time: { totalCreditedSeconds: number } };
     };
@@ -570,7 +706,10 @@ test("work adjustments add and remove signed minutes on tasks and projects with 
     };
     assert.equal(addProjectBody.reward?.deltaXp, 4);
     assert.equal(addProjectBody.target.time.totalCreditedSeconds, 900);
-    assert.equal(addProjectBody.metrics.profile.totalXp, snapshot.metrics.totalXp + 4);
+    assert.equal(
+      addProjectBody.metrics.profile.totalXp,
+      snapshot.metrics.totalXp + 4
+    );
 
     const projectBoard = await app.inject({
       method: "GET",
@@ -579,17 +718,33 @@ test("work adjustments add and remove signed minutes on tasks and projects with 
     const projectBoardBody = projectBoard.json() as {
       activity: Array<{ entityType: string; eventType: string }>;
     };
-    assert.ok(projectBoardBody.activity.some((event) => event.entityType === "project" && event.eventType === "work_adjusted"));
+    assert.ok(
+      projectBoardBody.activity.some(
+        (event) =>
+          event.entityType === "project" && event.eventType === "work_adjusted"
+      )
+    );
 
     const onboarding = await app.inject({
       method: "GET",
       url: "/api/v1/agents/onboarding"
     });
     const onboardingBody = onboarding.json() as {
-      onboarding: { toolInputCatalog: Array<{ toolName: string }>; recommendedPluginTools: { workWorkflow: string[] } };
+      onboarding: {
+        toolInputCatalog: Array<{ toolName: string }>;
+        recommendedPluginTools: { workWorkflow: string[] };
+      };
     };
-    assert.ok(onboardingBody.onboarding.toolInputCatalog.some((tool) => tool.toolName === "forge_adjust_work_minutes"));
-    assert.ok(onboardingBody.onboarding.recommendedPluginTools.workWorkflow.includes("forge_adjust_work_minutes"));
+    assert.ok(
+      onboardingBody.onboarding.toolInputCatalog.some(
+        (tool) => tool.toolName === "forge_adjust_work_minutes"
+      )
+    );
+    assert.ok(
+      onboardingBody.onboarding.recommendedPluginTools.workWorkflow.includes(
+        "forge_adjust_work_minutes"
+      )
+    );
   } finally {
     await app.close();
     closeDatabase();
@@ -610,7 +765,9 @@ test("built frontend assets are served correctly from the /forge base path", asy
     assert.match(indexResponse.headers["content-type"] ?? "", /text\/html/);
     assert.match(indexResponse.body, /\/forge\/assets\//);
 
-    const assetMatch = indexResponse.body.match(/src="(\/forge\/assets\/[^"]+\.js)"/);
+    const assetMatch = indexResponse.body.match(
+      /src="(\/forge\/assets\/[^"]+\.js)"/
+    );
     assert.ok(assetMatch);
 
     const assetResponse = await app.inject({
@@ -618,7 +775,10 @@ test("built frontend assets are served correctly from the /forge base path", asy
       url: assetMatch[1]!
     });
     assert.equal(assetResponse.statusCode, 200);
-    assert.match(assetResponse.headers["content-type"] ?? "", /application\/javascript/);
+    assert.match(
+      assetResponse.headers["content-type"] ?? "",
+      /application\/javascript/
+    );
 
     const spaRouteResponse = await app.inject({
       method: "GET",
@@ -648,7 +808,9 @@ test("reward rules can be updated and manual bonus XP stays explainable", async 
       }
     });
     assert.equal(rulesResponse.statusCode, 200);
-    const rules = (rulesResponse.json() as { rules: Array<{ id: string; active: boolean }> }).rules;
+    const rules = (
+      rulesResponse.json() as { rules: Array<{ id: string; active: boolean }> }
+    ).rules;
     const ruleId = rules[0]!.id;
 
     const updatedResponse = await app.inject({
@@ -663,7 +825,11 @@ test("reward rules can be updated and manual bonus XP stays explainable", async 
       }
     });
     assert.equal(updatedResponse.statusCode, 200);
-    const updatedRule = (updatedResponse.json() as { rule: { id: string; active: boolean; description: string } }).rule;
+    const updatedRule = (
+      updatedResponse.json() as {
+        rule: { id: string; active: boolean; description: string };
+      }
+    ).rule;
     assert.equal(updatedRule.id, ruleId);
     assert.equal(updatedRule.active, false);
     assert.equal(updatedRule.description, "Temporarily disabled in test.");
@@ -683,13 +849,17 @@ test("reward rules can be updated and manual bonus XP stays explainable", async 
       }
     });
     assert.equal(bonusResponse.statusCode, 201);
-    const bonus = (bonusResponse.json() as {
+    const bonus = bonusResponse.json() as {
       reward: { deltaXp: number; reasonTitle: string };
       metrics: { recentLedger: Array<{ reasonTitle: string }> };
-    });
+    };
     assert.equal(bonus.reward.deltaXp, 12);
     assert.equal(bonus.reward.reasonTitle, "Operator bonus");
-    assert.ok(bonus.metrics.recentLedger.some((entry) => entry.reasonTitle === "Operator bonus"));
+    assert.ok(
+      bonus.metrics.recentLedger.some(
+        (entry) => entry.reasonTitle === "Operator bonus"
+      )
+    );
   } finally {
     await app.close();
     closeDatabase();
@@ -703,7 +873,10 @@ test("versioned goal creation and updates persist through the API", async () => 
 
   try {
     const operatorCookie = await issueOperatorSessionCookie(app);
-    const dashboard = await app.inject({ method: "GET", url: "/api/dashboard" });
+    const dashboard = await app.inject({
+      method: "GET",
+      url: "/api/dashboard"
+    });
     const payload = dashboard.json() as {
       goals: Array<{ id: string; tagIds: string[] }>;
       tags: Array<{ id: string }>;
@@ -728,8 +901,15 @@ test("versioned goal creation and updates persist through the API", async () => 
     });
 
     assert.equal(created.statusCode, 201);
-    const createdGoal = (created.json() as { goal: { id: string; title: string; tagIds: string[] } }).goal;
-    assert.equal(createdGoal.title, "Build resilient energy for the next quarter");
+    const createdGoal = (
+      created.json() as {
+        goal: { id: string; title: string; tagIds: string[] };
+      }
+    ).goal;
+    assert.equal(
+      createdGoal.title,
+      "Build resilient energy for the next quarter"
+    );
     assert.deepEqual([...createdGoal.tagIds].sort(), [...nextTagIds].sort());
 
     const updated = await app.inject({
@@ -747,7 +927,16 @@ test("versioned goal creation and updates persist through the API", async () => 
     });
 
     assert.equal(updated.statusCode, 200);
-    const goal = (updated.json() as { goal: { title: string; status: string; targetPoints: number; tagIds: string[] } }).goal;
+    const goal = (
+      updated.json() as {
+        goal: {
+          title: string;
+          status: string;
+          targetPoints: number;
+          tagIds: string[];
+        };
+      }
+    ).goal;
     assert.equal(goal.title, "Build resilient energy for the next season");
     assert.equal(goal.status, "paused");
     assert.equal(goal.targetPoints, 720);
@@ -764,7 +953,10 @@ test("smart tag suggestions use text cues and goal context", async () => {
   const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
 
   try {
-    const dashboard = await app.inject({ method: "GET", url: "/api/dashboard" });
+    const dashboard = await app.inject({
+      method: "GET",
+      url: "/api/dashboard"
+    });
     const payload = dashboard.json() as {
       goals: Array<{ id: string }>;
     };
@@ -796,7 +988,10 @@ test("task updates persist metadata and tag edits through the API", async () => 
 
   try {
     const operatorCookie = await issueOperatorSessionCookie(app);
-    const dashboard = await app.inject({ method: "GET", url: "/api/dashboard" });
+    const dashboard = await app.inject({
+      method: "GET",
+      url: "/api/dashboard"
+    });
     const payload = dashboard.json() as {
       goals: Array<{ id: string }>;
       tasks: Array<{ id: string }>;
@@ -828,20 +1023,22 @@ test("task updates persist metadata and tag edits through the API", async () => 
     });
 
     assert.equal(updated.statusCode, 200);
-    const task = (updated.json() as {
-      task: {
-        title: string;
-        owner: string;
-        goalId: string | null;
-        status: string;
-        priority: string;
-        dueDate: string | null;
-        effort: string;
-        energy: string;
-        points: number;
-        tagIds: string[];
-      };
-    }).task;
+    const task = (
+      updated.json() as {
+        task: {
+          title: string;
+          owner: string;
+          goalId: string | null;
+          status: string;
+          priority: string;
+          dueDate: string | null;
+          effort: string;
+          energy: string;
+          points: number;
+          tagIds: string[];
+        };
+      }
+    ).task;
     assert.equal(task.title, "Rewrite the weekly review for clarity");
     assert.equal(task.owner, "Aurel");
     assert.equal(task.goalId, goalId);
@@ -860,12 +1057,17 @@ test("task updates persist metadata and tag edits through the API", async () => 
 });
 
 test("versioned task context exposes evidence and task-run state for inspection", async () => {
-  const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-v1-task-context-"));
+  const rootDir = await mkdtemp(
+    path.join(os.tmpdir(), "forge-v1-task-context-")
+  );
   const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
 
   try {
     const operatorCookie = await issueOperatorSessionCookie(app);
-    const dashboard = await app.inject({ method: "GET", url: "/api/dashboard" });
+    const dashboard = await app.inject({
+      method: "GET",
+      url: "/api/dashboard"
+    });
     const payload = dashboard.json() as {
       tasks: Array<{ id: string }>;
     };
@@ -911,31 +1113,49 @@ test("versioned task context exposes evidence and task-run state for inspection"
 });
 
 test("versioned API exposes stable reads and task-run writes for agents", async () => {
-  const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-v1-agent-surface-"));
+  const rootDir = await mkdtemp(
+    path.join(os.tmpdir(), "forge-v1-agent-surface-")
+  );
   const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
 
   try {
     const operatorCookie = await issueOperatorSessionCookie(app);
-    const goalsResponse = await app.inject({ method: "GET", url: "/api/v1/goals" });
+    const goalsResponse = await app.inject({
+      method: "GET",
+      url: "/api/v1/goals"
+    });
     assert.equal(goalsResponse.statusCode, 200);
     const goalsBody = goalsResponse.json() as { goals: Array<{ id: string }> };
     assert.ok(goalsBody.goals.length >= 1);
 
-    const tagsResponse = await app.inject({ method: "GET", url: "/api/v1/tags" });
+    const tagsResponse = await app.inject({
+      method: "GET",
+      url: "/api/v1/tags"
+    });
     assert.equal(tagsResponse.statusCode, 200);
     const tagsBody = tagsResponse.json() as { tags: Array<{ id: string }> };
     assert.ok(tagsBody.tags.length >= 1);
 
-    const metricsResponse = await app.inject({ method: "GET", url: "/api/v1/metrics" });
+    const metricsResponse = await app.inject({
+      method: "GET",
+      url: "/api/v1/metrics"
+    });
     assert.equal(metricsResponse.statusCode, 200);
     const metricsBody = metricsResponse.json() as {
-      metrics: { profile: { level: number }; achievements: Array<{ id: string }>; milestoneRewards: Array<{ id: string }> };
+      metrics: {
+        profile: { level: number };
+        achievements: Array<{ id: string }>;
+        milestoneRewards: Array<{ id: string }>;
+      };
     };
     assert.ok(metricsBody.metrics.profile.level >= 1);
     assert.ok(metricsBody.metrics.achievements.length >= 1);
     assert.ok(metricsBody.metrics.milestoneRewards.length >= 1);
 
-    const dashboard = await app.inject({ method: "GET", url: "/api/dashboard" });
+    const dashboard = await app.inject({
+      method: "GET",
+      url: "/api/dashboard"
+    });
     const payload = dashboard.json() as {
       tasks: Array<{ id: string }>;
     };
@@ -958,7 +1178,8 @@ test("versioned API exposes stable reads and task-run writes for agents", async 
       }
     });
     assert.equal(tokenResponse.statusCode, 201);
-    const agentToken = (tokenResponse.json() as { token: { token: string } }).token.token;
+    const agentToken = (tokenResponse.json() as { token: { token: string } })
+      .token.token;
     const agentHeaders = {
       authorization: `Bearer ${agentToken}`,
       "x-forge-source": "agent",
@@ -976,13 +1197,24 @@ test("versioned API exposes stable reads and task-run writes for agents", async 
       }
     });
     assert.equal(claim.statusCode, 201);
-    const claimBody = claim.json() as { taskRun: { id: string; status: string } };
+    const claimBody = claim.json() as {
+      taskRun: { id: string; status: string };
+    };
     assert.equal(claimBody.taskRun.status, "active");
 
-    const taskRunsResponse = await app.inject({ method: "GET", url: "/api/v1/task-runs?active=true&limit=5" });
+    const taskRunsResponse = await app.inject({
+      method: "GET",
+      url: "/api/v1/task-runs?active=true&limit=5"
+    });
     assert.equal(taskRunsResponse.statusCode, 200);
-    const taskRunsBody = taskRunsResponse.json() as { taskRuns: Array<{ id: string }> };
-    assert.ok(taskRunsBody.taskRuns.some((taskRun) => taskRun.id === claimBody.taskRun.id));
+    const taskRunsBody = taskRunsResponse.json() as {
+      taskRuns: Array<{ id: string }>;
+    };
+    assert.ok(
+      taskRunsBody.taskRuns.some(
+        (taskRun) => taskRun.id === claimBody.taskRun.id
+      )
+    );
 
     const heartbeat = await app.inject({
       method: "POST",
@@ -1009,10 +1241,17 @@ test("versioned API exposes stable reads and task-run writes for agents", async 
     const releaseBody = release.json() as { taskRun: { status: string } };
     assert.equal(releaseBody.taskRun.status, "released");
 
-    const activityResponse = await app.inject({ method: "GET", url: "/api/v1/activity?entityType=task_run&limit=5" });
+    const activityResponse = await app.inject({
+      method: "GET",
+      url: "/api/v1/activity?entityType=task_run&limit=5"
+    });
     assert.equal(activityResponse.statusCode, 200);
-    const activityBody = activityResponse.json() as { activity: Array<{ entityType: string }> };
-    assert.ok(activityBody.activity.some((event) => event.entityType === "task_run"));
+    const activityBody = activityResponse.json() as {
+      activity: Array<{ entityType: string }>;
+    };
+    assert.ok(
+      activityBody.activity.some((event) => event.entityType === "task_run")
+    );
   } finally {
     await app.close();
     closeDatabase();
@@ -1021,7 +1260,9 @@ test("versioned API exposes stable reads and task-run writes for agents", async 
 });
 
 test("versioned goal, tag, and project surfaces are available without legacy routes", async () => {
-  const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-v1-goal-tag-project-"));
+  const rootDir = await mkdtemp(
+    path.join(os.tmpdir(), "forge-v1-goal-tag-project-")
+  );
   const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
 
   try {
@@ -1040,7 +1281,8 @@ test("versioned goal, tag, and project surfaces are available without legacy rou
       }
     });
     assert.equal(createdTagResponse.statusCode, 201);
-    const createdTag = (createdTagResponse.json() as { tag: { id: string } }).tag;
+    const createdTag = (createdTagResponse.json() as { tag: { id: string } })
+      .tag;
 
     const createdGoalResponse = await app.inject({
       method: "POST",
@@ -1059,7 +1301,9 @@ test("versioned goal, tag, and project surfaces are available without legacy rou
       }
     });
     assert.equal(createdGoalResponse.statusCode, 201);
-    const createdGoal = (createdGoalResponse.json() as { goal: { id: string; title: string } }).goal;
+    const createdGoal = (
+      createdGoalResponse.json() as { goal: { id: string; title: string } }
+    ).goal;
 
     const updatedGoalResponse = await app.inject({
       method: "PATCH",
@@ -1072,7 +1316,9 @@ test("versioned goal, tag, and project surfaces are available without legacy rou
       }
     });
     assert.equal(updatedGoalResponse.statusCode, 200);
-    const updatedGoal = (updatedGoalResponse.json() as { goal: { status: string } }).goal;
+    const updatedGoal = (
+      updatedGoalResponse.json() as { goal: { status: string } }
+    ).goal;
     assert.equal(updatedGoal.status, "paused");
 
     const createdProjectResponse = await app.inject({
@@ -1091,7 +1337,11 @@ test("versioned goal, tag, and project surfaces are available without legacy rou
       }
     });
     assert.equal(createdProjectResponse.statusCode, 201);
-    const createdProject = (createdProjectResponse.json() as { project: { id: string; goalId: string } }).project;
+    const createdProject = (
+      createdProjectResponse.json() as {
+        project: { id: string; goalId: string };
+      }
+    ).project;
     assert.equal(createdProject.goalId, createdGoal.id);
 
     const projectsResponse = await app.inject({
@@ -1099,9 +1349,13 @@ test("versioned goal, tag, and project surfaces are available without legacy rou
       url: `/api/v1/projects?goalId=${createdGoal.id}`
     });
     assert.equal(projectsResponse.statusCode, 200);
-    const projectsBody = projectsResponse.json() as { projects: Array<{ goalId: string }> };
+    const projectsBody = projectsResponse.json() as {
+      projects: Array<{ goalId: string }>;
+    };
     assert.ok(Array.isArray(projectsBody.projects));
-    assert.ok(projectsBody.projects.some((project) => project.goalId === createdGoal.id));
+    assert.ok(
+      projectsBody.projects.some((project) => project.goalId === createdGoal.id)
+    );
 
     const aliasResponse = await app.inject({
       method: "GET",
@@ -1110,8 +1364,13 @@ test("versioned goal, tag, and project surfaces are available without legacy rou
     assert.equal(aliasResponse.statusCode, 200);
     assert.equal(aliasResponse.headers.deprecation, "true");
     assert.equal(aliasResponse.headers.sunset, "transitional-node");
-    assert.equal(aliasResponse.headers.link, "</api/v1/projects>; rel=\"successor-version\"");
-    const aliasBody = aliasResponse.json() as { projects: Array<{ goalId: string }> };
+    assert.equal(
+      aliasResponse.headers.link,
+      '</api/v1/projects>; rel="successor-version"'
+    );
+    const aliasBody = aliasResponse.json() as {
+      projects: Array<{ goalId: string }>;
+    };
     assert.ok(Array.isArray(aliasBody.projects));
   } finally {
     await app.close();
@@ -1121,22 +1380,34 @@ test("versioned goal, tag, and project surfaces are available without legacy rou
 });
 
 test("compatibility routes are marked deprecated and event stream metadata is explicit", async () => {
-  const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-compat-deprecation-"));
+  const rootDir = await mkdtemp(
+    path.join(os.tmpdir(), "forge-compat-deprecation-")
+  );
   const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
 
   try {
-    const compatibilityResponse = await app.inject({ method: "GET", url: "/api/goals" });
+    const compatibilityResponse = await app.inject({
+      method: "GET",
+      url: "/api/goals"
+    });
     assert.equal(compatibilityResponse.statusCode, 200);
     assert.equal(compatibilityResponse.headers.deprecation, "true");
 
-    const eventsMetaResponse = await app.inject({ method: "GET", url: "/api/v1/events/meta" });
+    const eventsMetaResponse = await app.inject({
+      method: "GET",
+      url: "/api/v1/events/meta"
+    });
     assert.equal(eventsMetaResponse.statusCode, 200);
     const metaBody = eventsMetaResponse.json() as {
       events: { retryMs: number; events: Array<{ name: string }> };
     };
     assert.equal(metaBody.events.retryMs, 3000);
-    assert.ok(metaBody.events.events.some((event) => event.name === "activity"));
-    assert.ok(metaBody.events.events.some((event) => event.name === "heartbeat"));
+    assert.ok(
+      metaBody.events.events.some((event) => event.name === "activity")
+    );
+    assert.ok(
+      metaBody.events.events.some((event) => event.name === "heartbeat")
+    );
   } finally {
     await app.close();
     closeDatabase();
@@ -1145,14 +1416,22 @@ test("compatibility routes are marked deprecated and event stream metadata is ex
 });
 
 test("command-center context exposes derived achievements and milestone rewards", async () => {
-  const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-gamification-signals-"));
+  const rootDir = await mkdtemp(
+    path.join(os.tmpdir(), "forge-gamification-signals-")
+  );
   const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
 
   try {
-    const response = await app.inject({ method: "GET", url: "/api/v1/context" });
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/v1/context"
+    });
     assert.equal(response.statusCode, 200);
     const body = response.json() as {
-      dashboard: { achievements: Array<{ id: string }>; milestoneRewards: Array<{ id: string }> };
+      dashboard: {
+        achievements: Array<{ id: string }>;
+        milestoneRewards: Array<{ id: string }>;
+      };
       overview: { achievements: Array<{ id: string }> };
       today: { milestoneRewards: Array<{ id: string }> };
     };
@@ -1169,11 +1448,16 @@ test("command-center context exposes derived achievements and milestone rewards"
 });
 
 test("command-center context exposes first-class projects across dashboard and overview", async () => {
-  const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-project-snapshot-"));
+  const rootDir = await mkdtemp(
+    path.join(os.tmpdir(), "forge-project-snapshot-")
+  );
   const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
 
   try {
-    const response = await app.inject({ method: "GET", url: "/api/v1/context" });
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/v1/context"
+    });
     assert.equal(response.statusCode, 200);
     const body = response.json() as {
       projects: Array<{ id: string; goalId: string }>;
@@ -1183,7 +1467,9 @@ test("command-center context exposes first-class projects across dashboard and o
 
     assert.ok(body.projects.length >= 1);
     assert.ok(body.dashboard.projects.length >= 1);
-    assert.ok(body.dashboard.projects.every((project) => project.goalId.length > 0));
+    assert.ok(
+      body.dashboard.projects.every((project) => project.goalId.length > 0)
+    );
     assert.ok(body.overview.projects.length >= 1);
   } finally {
     await app.close();
@@ -1193,11 +1479,16 @@ test("command-center context exposes first-class projects across dashboard and o
 });
 
 test("openapi document exposes schema-backed versioned contracts", async () => {
-  const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-openapi-contract-"));
+  const rootDir = await mkdtemp(
+    path.join(os.tmpdir(), "forge-openapi-contract-")
+  );
   const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
 
   try {
-    const response = await app.inject({ method: "GET", url: "/api/v1/openapi.json" });
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/v1/openapi.json"
+    });
     assert.equal(response.statusCode, 200);
     const body = response.json() as {
       openapi: string;
@@ -1223,8 +1514,13 @@ test("openapi document exposes schema-backed versioned contracts", async () => {
     assert.ok(body.components?.schemas?.Behavior);
     assert.ok(body.components?.schemas?.BeliefEntry);
     assert.ok(body.components?.schemas?.SchemaCatalogEntry);
-    const schemaCatalogEntry = body.components?.schemas?.SchemaCatalogEntry as { properties?: { schemaType?: { enum?: string[] } } };
-    assert.deepEqual(schemaCatalogEntry.properties?.schemaType?.enum, ["maladaptive", "adaptive"]);
+    const schemaCatalogEntry = body.components?.schemas?.SchemaCatalogEntry as {
+      properties?: { schemaType?: { enum?: string[] } };
+    };
+    assert.deepEqual(schemaCatalogEntry.properties?.schemaType?.enum, [
+      "maladaptive",
+      "adaptive"
+    ]);
     assert.ok(body.components?.schemas?.ModeProfile);
     assert.ok(body.components?.schemas?.ModeGuideSession);
     assert.ok(body.components?.schemas?.EventType);
@@ -1273,9 +1569,18 @@ test("openapi document exposes schema-backed versioned contracts", async () => {
       patch?: { description?: string };
       delete?: { description?: string };
     };
-    assert.match(projectPatchOperation.patch?.description ?? "", /status-driven/);
-    assert.match(projectPatchOperation.patch?.description ?? "", /auto-completes linked unfinished tasks/);
-    assert.match(projectPatchOperation.delete?.description ?? "", /soft delete/);
+    assert.match(
+      projectPatchOperation.patch?.description ?? "",
+      /status-driven/
+    );
+    assert.match(
+      projectPatchOperation.patch?.description ?? "",
+      /auto-completes linked unfinished tasks/
+    );
+    assert.match(
+      projectPatchOperation.delete?.description ?? "",
+      /soft delete/
+    );
     assert.ok(body.paths?.["/api/v1/tasks/{id}/context"]);
     assert.ok(body.paths?.["/api/v1/tasks/{id}/uncomplete"]);
     assert.ok(body.paths?.["/api/v1/activity/{id}/remove"]);
@@ -1307,7 +1612,9 @@ test("openapi document exposes schema-backed versioned contracts", async () => {
 });
 
 test("versioned CRUD routes support get, update, and delete for tags, notes, tasks, projects, and goals", async () => {
-  const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-versioned-crud-"));
+  const rootDir = await mkdtemp(
+    path.join(os.tmpdir(), "forge-versioned-crud-")
+  );
   const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
 
   try {
@@ -1348,7 +1655,8 @@ test("versioned CRUD routes support get, update, and delete for tags, notes, tas
       }
     });
     assert.equal(projectResponse.statusCode, 201);
-    const projectId = (projectResponse.json() as { project: { id: string } }).project.id;
+    const projectId = (projectResponse.json() as { project: { id: string } })
+      .project.id;
 
     const tagResponse = await app.inject({
       method: "POST",
@@ -1366,7 +1674,10 @@ test("versioned CRUD routes support get, update, and delete for tags, notes, tas
     assert.equal(tagResponse.statusCode, 201);
     const tagId = (tagResponse.json() as { tag: { id: string } }).tag.id;
 
-    const tagGetResponse = await app.inject({ method: "GET", url: `/api/v1/tags/${tagId}` });
+    const tagGetResponse = await app.inject({
+      method: "GET",
+      url: `/api/v1/tags/${tagId}`
+    });
     assert.equal(tagGetResponse.statusCode, 200);
 
     const tagPatchResponse = await app.inject({
@@ -1414,9 +1725,15 @@ test("versioned CRUD routes support get, update, and delete for tags, notes, tas
     });
     assert.equal(tagDeleteResponse.statusCode, 200);
 
-    const taskAfterTagDelete = await app.inject({ method: "GET", url: `/api/v1/tasks/${taskId}` });
+    const taskAfterTagDelete = await app.inject({
+      method: "GET",
+      url: `/api/v1/tasks/${taskId}`
+    });
     assert.equal(taskAfterTagDelete.statusCode, 200);
-    assert.deepEqual((taskAfterTagDelete.json() as { task: { tagIds: string[] } }).task.tagIds, []);
+    assert.deepEqual(
+      (taskAfterTagDelete.json() as { task: { tagIds: string[] } }).task.tagIds,
+      []
+    );
 
     const noteResponse = await app.inject({
       method: "POST",
@@ -1481,7 +1798,10 @@ test("versioned CRUD routes support get, update, and delete for tags, notes, tas
     });
     assert.equal(taskDeleteResponse.statusCode, 200);
 
-    const deletedTaskGet = await app.inject({ method: "GET", url: `/api/v1/tasks/${taskId}` });
+    const deletedTaskGet = await app.inject({
+      method: "GET",
+      url: `/api/v1/tasks/${taskId}`
+    });
     assert.equal(deletedTaskGet.statusCode, 404);
 
     const projectDeleteResponse = await app.inject({
@@ -1493,7 +1813,10 @@ test("versioned CRUD routes support get, update, and delete for tags, notes, tas
     });
     assert.equal(projectDeleteResponse.statusCode, 200);
 
-    const deletedProjectGet = await app.inject({ method: "GET", url: `/api/v1/projects/${projectId}` });
+    const deletedProjectGet = await app.inject({
+      method: "GET",
+      url: `/api/v1/projects/${projectId}`
+    });
     assert.equal(deletedProjectGet.statusCode, 404);
 
     const goalDeleteResponse = await app.inject({
@@ -1505,7 +1828,10 @@ test("versioned CRUD routes support get, update, and delete for tags, notes, tas
     });
     assert.equal(goalDeleteResponse.statusCode, 200);
 
-    const deletedGoalGet = await app.inject({ method: "GET", url: `/api/v1/goals/${goalId}` });
+    const deletedGoalGet = await app.inject({
+      method: "GET",
+      url: `/api/v1/goals/${goalId}`
+    });
     assert.equal(deletedGoalGet.statusCode, 404);
   } finally {
     await app.close();
@@ -1515,7 +1841,9 @@ test("versioned CRUD routes support get, update, and delete for tags, notes, tas
 });
 
 test("project lifecycle patching suspends, finishes, restarts, and keeps finish idempotent", async () => {
-  const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-project-lifecycle-"));
+  const rootDir = await mkdtemp(
+    path.join(os.tmpdir(), "forge-project-lifecycle-")
+  );
   const app = await buildServer({ dataRoot: rootDir, seedDemoData: false });
 
   try {
@@ -1551,7 +1879,8 @@ test("project lifecycle patching suspends, finishes, restarts, and keeps finish 
       }
     });
     assert.equal(projectResponse.statusCode, 201);
-    const projectId = (projectResponse.json() as { project: { id: string } }).project.id;
+    const projectId = (projectResponse.json() as { project: { id: string } })
+      .project.id;
 
     const createTask = async (title: string, status: "backlog" | "focus") => {
       const response = await app.inject({
@@ -1587,9 +1916,15 @@ test("project lifecycle patching suspends, finishes, restarts, and keeps finish 
       payload: { status: "paused" }
     });
     assert.equal(pauseResponse.statusCode, 200);
-    assert.equal((pauseResponse.json() as { project: { status: string } }).project.status, "paused");
+    assert.equal(
+      (pauseResponse.json() as { project: { status: string } }).project.status,
+      "paused"
+    );
 
-    const pausedTask = await app.inject({ method: "GET", url: `/api/v1/tasks/${taskOneId}` });
+    const pausedTask = await app.inject({
+      method: "GET",
+      url: `/api/v1/tasks/${taskOneId}`
+    });
     const pausedTaskBody = pausedTask.json() as { task: { status: string } };
     assert.equal(pausedTaskBody.task.status, "focus");
 
@@ -1600,12 +1935,19 @@ test("project lifecycle patching suspends, finishes, restarts, and keeps finish 
       payload: { status: "completed" }
     });
     assert.equal(finishResponse.statusCode, 200);
-    assert.equal((finishResponse.json() as { project: { status: string } }).project.status, "completed");
+    assert.equal(
+      (finishResponse.json() as { project: { status: string } }).project.status,
+      "completed"
+    );
 
-    const finishedTaskOne = (await app.inject({ method: "GET", url: `/api/v1/tasks/${taskOneId}` })).json() as {
+    const finishedTaskOne = (
+      await app.inject({ method: "GET", url: `/api/v1/tasks/${taskOneId}` })
+    ).json() as {
       task: { status: string; completedAt: string | null };
     };
-    const finishedTaskTwo = (await app.inject({ method: "GET", url: `/api/v1/tasks/${taskTwoId}` })).json() as {
+    const finishedTaskTwo = (
+      await app.inject({ method: "GET", url: `/api/v1/tasks/${taskTwoId}` })
+    ).json() as {
       task: { status: string; completedAt: string | null };
     };
     assert.equal(finishedTaskOne.task.status, "done");
@@ -1613,16 +1955,24 @@ test("project lifecycle patching suspends, finishes, restarts, and keeps finish 
     assert.ok(finishedTaskOne.task.completedAt);
     assert.ok(finishedTaskTwo.task.completedAt);
 
-    const activityAfterFinish = await app.inject({ method: "GET", url: "/api/v1/activity?limit=100" });
+    const activityAfterFinish = await app.inject({
+      method: "GET",
+      url: "/api/v1/activity?limit=100"
+    });
     const activityAfterFinishBody = activityAfterFinish.json() as {
-      activity: Array<{ entityType: string; entityId: string; eventType: string }>;
+      activity: Array<{
+        entityType: string;
+        entityId: string;
+        eventType: string;
+      }>;
     };
-    const taskCompletionEventsAfterFinish = activityAfterFinishBody.activity.filter(
-      (event) =>
-        event.entityType === "task" &&
-        event.eventType === "task_completed" &&
-        (event.entityId === taskOneId || event.entityId === taskTwoId)
-    );
+    const taskCompletionEventsAfterFinish =
+      activityAfterFinishBody.activity.filter(
+        (event) =>
+          event.entityType === "task" &&
+          event.eventType === "task_completed" &&
+          (event.entityId === taskOneId || event.entityId === taskTwoId)
+      );
     assert.equal(taskCompletionEventsAfterFinish.length, 2);
 
     const finishAgainResponse = await app.inject({
@@ -1633,16 +1983,24 @@ test("project lifecycle patching suspends, finishes, restarts, and keeps finish 
     });
     assert.equal(finishAgainResponse.statusCode, 200);
 
-    const activityAfterSecondFinish = await app.inject({ method: "GET", url: "/api/v1/activity?limit=100" });
+    const activityAfterSecondFinish = await app.inject({
+      method: "GET",
+      url: "/api/v1/activity?limit=100"
+    });
     const activityAfterSecondFinishBody = activityAfterSecondFinish.json() as {
-      activity: Array<{ entityType: string; entityId: string; eventType: string }>;
+      activity: Array<{
+        entityType: string;
+        entityId: string;
+        eventType: string;
+      }>;
     };
-    const taskCompletionEventsAfterSecondFinish = activityAfterSecondFinishBody.activity.filter(
-      (event) =>
-        event.entityType === "task" &&
-        event.eventType === "task_completed" &&
-        (event.entityId === taskOneId || event.entityId === taskTwoId)
-    );
+    const taskCompletionEventsAfterSecondFinish =
+      activityAfterSecondFinishBody.activity.filter(
+        (event) =>
+          event.entityType === "task" &&
+          event.eventType === "task_completed" &&
+          (event.entityId === taskOneId || event.entityId === taskTwoId)
+      );
     assert.equal(taskCompletionEventsAfterSecondFinish.length, 2);
 
     const restartResponse = await app.inject({
@@ -1652,10 +2010,19 @@ test("project lifecycle patching suspends, finishes, restarts, and keeps finish 
       payload: { status: "active" }
     });
     assert.equal(restartResponse.statusCode, 200);
-    assert.equal((restartResponse.json() as { project: { status: string } }).project.status, "active");
+    assert.equal(
+      (restartResponse.json() as { project: { status: string } }).project
+        .status,
+      "active"
+    );
 
-    const restartedTask = await app.inject({ method: "GET", url: `/api/v1/tasks/${taskOneId}` });
-    const restartedTaskBody = restartedTask.json() as { task: { status: string } };
+    const restartedTask = await app.inject({
+      method: "GET",
+      url: `/api/v1/tasks/${taskOneId}`
+    });
+    const restartedTaskBody = restartedTask.json() as {
+      task: { status: string };
+    };
     assert.equal(restartedTaskBody.task.status, "done");
   } finally {
     await app.close();
@@ -1665,7 +2032,9 @@ test("project lifecycle patching suspends, finishes, restarts, and keeps finish 
 });
 
 test("project delete routes support soft delete, restore, and hard delete", async () => {
-  const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-project-delete-modes-"));
+  const rootDir = await mkdtemp(
+    path.join(os.tmpdir(), "forge-project-delete-modes-")
+  );
   const app = await buildServer({ dataRoot: rootDir, seedDemoData: false });
 
   try {
@@ -1731,8 +2100,18 @@ test("project delete routes support soft delete, restore, and hard delete", asyn
     const binBody = binResponse.json() as {
       bin: { records: Array<{ entityType: string; entityId: string }> };
     };
-    assert.ok(binBody.bin.records.some((record) => record.entityType === "project" && record.entityId === softProjectId));
-    assert.ok(!binBody.bin.records.some((record) => record.entityType === "project" && record.entityId === hardProjectId));
+    assert.ok(
+      binBody.bin.records.some(
+        (record) =>
+          record.entityType === "project" && record.entityId === softProjectId
+      )
+    );
+    assert.ok(
+      !binBody.bin.records.some(
+        (record) =>
+          record.entityType === "project" && record.entityId === hardProjectId
+      )
+    );
 
     const restoreResponse = await app.inject({
       method: "POST",
@@ -1743,7 +2122,10 @@ test("project delete routes support soft delete, restore, and hard delete", asyn
       }
     });
     assert.equal(restoreResponse.statusCode, 200);
-    const restoredProject = await app.inject({ method: "GET", url: `/api/v1/projects/${softProjectId}` });
+    const restoredProject = await app.inject({
+      method: "GET",
+      url: `/api/v1/projects/${softProjectId}`
+    });
     assert.equal(restoredProject.statusCode, 200);
   } finally {
     await app.close();
@@ -1753,13 +2135,19 @@ test("project delete routes support soft delete, restore, and hard delete", asyn
 });
 
 test("completed tasks can be reopened and lose their completion XP", async () => {
-  const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-uncomplete-task-"));
+  const rootDir = await mkdtemp(
+    path.join(os.tmpdir(), "forge-uncomplete-task-")
+  );
   const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
 
   try {
     const operatorCookie = await issueOperatorSessionCookie(app);
-    const tasksResponse = await app.inject({ method: "GET", url: "/api/v1/tasks?limit=1" });
-    const taskId = (tasksResponse.json() as { tasks: Array<{ id: string }> }).tasks[0]!.id;
+    const tasksResponse = await app.inject({
+      method: "GET",
+      url: "/api/v1/tasks?limit=1"
+    });
+    const taskId = (tasksResponse.json() as { tasks: Array<{ id: string }> })
+      .tasks[0]!.id;
 
     const completeResponse = await app.inject({
       method: "PATCH",
@@ -1771,8 +2159,13 @@ test("completed tasks can be reopened and lose their completion XP", async () =>
     });
     assert.equal(completeResponse.statusCode, 200);
 
-    const metricsAfterComplete = await app.inject({ method: "GET", url: "/api/v1/context" });
-    const xpAfterComplete = (metricsAfterComplete.json() as { metrics: { totalXp: number } }).metrics.totalXp;
+    const metricsAfterComplete = await app.inject({
+      method: "GET",
+      url: "/api/v1/context"
+    });
+    const xpAfterComplete = (
+      metricsAfterComplete.json() as { metrics: { totalXp: number } }
+    ).metrics.totalXp;
 
     const reopenResponse = await app.inject({
       method: "POST",
@@ -1783,12 +2176,21 @@ test("completed tasks can be reopened and lose their completion XP", async () =>
       payload: {}
     });
     assert.equal(reopenResponse.statusCode, 200);
-    const reopenedTask = (reopenResponse.json() as { task: { status: string; completedAt: string | null } }).task;
+    const reopenedTask = (
+      reopenResponse.json() as {
+        task: { status: string; completedAt: string | null };
+      }
+    ).task;
     assert.notEqual(reopenedTask.status, "done");
     assert.equal(reopenedTask.completedAt, null);
 
-    const metricsAfterReopen = await app.inject({ method: "GET", url: "/api/v1/context" });
-    const xpAfterReopen = (metricsAfterReopen.json() as { metrics: { totalXp: number } }).metrics.totalXp;
+    const metricsAfterReopen = await app.inject({
+      method: "GET",
+      url: "/api/v1/context"
+    });
+    const xpAfterReopen = (
+      metricsAfterReopen.json() as { metrics: { totalXp: number } }
+    ).metrics.totalXp;
     assert.ok(xpAfterReopen < xpAfterComplete);
   } finally {
     await app.close();
@@ -1798,14 +2200,25 @@ test("completed tasks can be reopened and lose their completion XP", async () =>
 });
 
 test("domains endpoint exposes psyche as a sensitive first-class domain", async () => {
-  const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-domains-psyche-"));
+  const rootDir = await mkdtemp(
+    path.join(os.tmpdir(), "forge-domains-psyche-")
+  );
   const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
 
   try {
-    const response = await app.inject({ method: "GET", url: "/api/v1/domains" });
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/v1/domains"
+    });
     assert.equal(response.statusCode, 200);
-    const body = response.json() as { domains: Array<{ slug: string; sensitive: boolean }> };
-    assert.ok(body.domains.some((domain) => domain.slug === "psyche" && domain.sensitive === true));
+    const body = response.json() as {
+      domains: Array<{ slug: string; sensitive: boolean }>;
+    };
+    assert.ok(
+      body.domains.some(
+        (domain) => domain.slug === "psyche" && domain.sensitive === true
+      )
+    );
   } finally {
     await app.close();
     closeDatabase();
@@ -1814,7 +2227,9 @@ test("domains endpoint exposes psyche as a sensitive first-class domain", async 
 });
 
 test("trigger reports persist structured CBT fields and earn bounded reflection XP", async () => {
-  const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-trigger-report-"));
+  const rootDir = await mkdtemp(
+    path.join(os.tmpdir(), "forge-trigger-report-")
+  );
   const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
 
   try {
@@ -1828,16 +2243,26 @@ test("trigger reports persist structured CBT fields and earn bounded reflection 
       payload: {
         title: "Silence after a vulnerable message",
         status: "draft",
-        eventSituation: "I sent an emotionally open message and then saw no reply for several hours.",
+        eventSituation:
+          "I sent an emotionally open message and then saw no reply for several hours.",
         occurredAt: "2026-03-23T19:30:00.000Z",
         emotions: [
           { id: "emotion_1", label: "fear", intensity: 82, note: "tight chest" }
         ],
         thoughts: [
-          { id: "thought_1", text: "I am being abandoned", parentMode: "demanding parent", criticMode: "inner critic" }
+          {
+            id: "thought_1",
+            text: "I am being abandoned",
+            parentMode: "demanding parent",
+            criticMode: "inner critic"
+          }
         ],
         behaviors: [
-          { id: "behavior_1", text: "checked the phone repeatedly", mode: "vulnerable child" }
+          {
+            id: "behavior_1",
+            text: "checked the phone repeatedly",
+            mode: "vulnerable child"
+          }
         ],
         consequences: {
           selfShortTerm: ["temporary monitoring relief"],
@@ -1879,8 +2304,15 @@ test("trigger reports persist structured CBT fields and earn bounded reflection 
     assert.equal(detailBody.report.emotions[0]?.label, "fear");
     assert.equal(detailBody.report.emotions[0]?.intensity, 82);
     assert.equal(detailBody.report.thoughts[0]?.text, "I am being abandoned");
-    assert.equal(detailBody.report.behaviors[0]?.text, "checked the phone repeatedly");
-    assert.ok(detailBody.report.consequences.selfLongTerm.includes("more attachment panic"));
+    assert.equal(
+      detailBody.report.behaviors[0]?.text,
+      "checked the phone repeatedly"
+    );
+    assert.ok(
+      detailBody.report.consequences.selfLongTerm.includes(
+        "more attachment panic"
+      )
+    );
 
     const rewards = await app.inject({
       method: "GET",
@@ -1890,8 +2322,16 @@ test("trigger reports persist structured CBT fields and earn bounded reflection 
       }
     });
     assert.equal(rewards.statusCode, 200);
-    const rewardsBody = rewards.json() as { ledger: Array<{ deltaXp: number; reasonTitle: string }> };
-    assert.ok(rewardsBody.ledger.some((event) => event.deltaXp > 0 && event.reasonTitle.includes("Psyche reflection captured")));
+    const rewardsBody = rewards.json() as {
+      ledger: Array<{ deltaXp: number; reasonTitle: string }>;
+    };
+    assert.ok(
+      rewardsBody.ledger.some(
+        (event) =>
+          event.deltaXp > 0 &&
+          event.reasonTitle.includes("Psyche reflection captured")
+      )
+    );
   } finally {
     await app.close();
     closeDatabase();
@@ -1905,9 +2345,25 @@ test("habits persist with check-ins and XP updates through the versioned API", a
 
   try {
     const operatorCookie = await issueOperatorSessionCookie(app);
-    const goalId = (await app.inject({ method: "GET", url: "/api/v1/goals" }).then((response) => (response.json() as { goals: Array<{ id: string }> }).goals[0]!.id));
-    const projectId = (await app.inject({ method: "GET", url: "/api/v1/projects" }).then((response) => (response.json() as { projects: Array<{ id: string }> }).projects[0]!.id));
-    const taskId = (await app.inject({ method: "GET", url: "/api/v1/tasks?limit=1" }).then((response) => (response.json() as { tasks: Array<{ id: string }> }).tasks[0]!.id));
+    const goalId = await app
+      .inject({ method: "GET", url: "/api/v1/goals" })
+      .then(
+        (response) =>
+          (response.json() as { goals: Array<{ id: string }> }).goals[0]!.id
+      );
+    const projectId = await app
+      .inject({ method: "GET", url: "/api/v1/projects" })
+      .then(
+        (response) =>
+          (response.json() as { projects: Array<{ id: string }> }).projects[0]!
+            .id
+      );
+    const taskId = await app
+      .inject({ method: "GET", url: "/api/v1/tasks?limit=1" })
+      .then(
+        (response) =>
+          (response.json() as { tasks: Array<{ id: string }> }).tasks[0]!.id
+      );
 
     const created = await app.inject({
       method: "POST",
@@ -1928,15 +2384,17 @@ test("habits persist with check-ins and XP updates through the versioned API", a
     });
 
     assert.equal(created.statusCode, 201);
-    const createdHabit = (created.json() as {
-      habit: {
-        id: string;
-        linkedBehaviorId: string | null;
-        linkedGoalIds: string[];
-        linkedProjectIds: string[];
-        linkedTaskIds: string[];
-      };
-    }).habit;
+    const createdHabit = (
+      created.json() as {
+        habit: {
+          id: string;
+          linkedBehaviorId: string | null;
+          linkedGoalIds: string[];
+          linkedProjectIds: string[];
+          linkedTaskIds: string[];
+        };
+      }
+    ).habit;
     assert.equal(createdHabit.linkedBehaviorId, null);
     assert.deepEqual(createdHabit.linkedGoalIds, [goalId]);
     assert.deepEqual(createdHabit.linkedProjectIds, [projectId]);
@@ -1953,7 +2411,15 @@ test("habits persist with check-ins and XP updates through the versioned API", a
       }
     });
     assert.equal(updated.statusCode, 200);
-    const updatedHabit = (updated.json() as { habit: { frequency: string; weekDays: number[]; linkedTaskIds: string[] } }).habit;
+    const updatedHabit = (
+      updated.json() as {
+        habit: {
+          frequency: string;
+          weekDays: number[];
+          linkedTaskIds: string[];
+        };
+      }
+    ).habit;
     assert.equal(updatedHabit.frequency, "weekly");
     assert.deepEqual(updatedHabit.weekDays, [1, 3, 5]);
     assert.deepEqual(updatedHabit.linkedTaskIds, []);
@@ -1969,14 +2435,29 @@ test("habits persist with check-ins and XP updates through the versioned API", a
     });
     assert.equal(checkIn.statusCode, 200);
     const checkInBody = checkIn.json() as {
-      habit: { lastCheckInStatus: string | null; completionRate: number; checkIns: Array<{ dateKey: string; deltaXp: number }> };
-      metrics: { recentLedger: Array<{ entityType: string; entityId: string; deltaXp: number }> };
+      habit: {
+        lastCheckInStatus: string | null;
+        completionRate: number;
+        checkIns: Array<{ dateKey: string; deltaXp: number }>;
+      };
+      metrics: {
+        recentLedger: Array<{
+          entityType: string;
+          entityId: string;
+          deltaXp: number;
+        }>;
+      };
     };
     assert.equal(checkInBody.habit.lastCheckInStatus, "done");
     assert.ok(checkInBody.habit.completionRate >= 100);
     assert.equal(checkInBody.habit.checkIns[0]?.dateKey, "2026-03-30");
     assert.ok(checkInBody.habit.checkIns[0]?.deltaXp > 0);
-    assert.ok(checkInBody.metrics.recentLedger.some((entry) => entry.entityType === "habit" && entry.entityId === createdHabit.id));
+    assert.ok(
+      checkInBody.metrics.recentLedger.some(
+        (entry) =>
+          entry.entityType === "habit" && entry.entityId === createdHabit.id
+      )
+    );
 
     const listed = await app.inject({ method: "GET", url: "/api/v1/habits" });
     assert.equal(listed.statusCode, 200);
@@ -1990,7 +2471,9 @@ test("habits persist with check-ins and XP updates through the versioned API", a
 });
 
 test("psyche notes persist and scoped tokens cannot read psyche without explicit grant", async () => {
-  const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-psyche-note-scope-"));
+  const rootDir = await mkdtemp(
+    path.join(os.tmpdir(), "forge-psyche-note-scope-")
+  );
   const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
 
   try {
@@ -2025,7 +2508,8 @@ test("psyche notes persist and scoped tokens cannot read psyche without explicit
         nextMoves: []
       }
     });
-    const reportId = (reportResponse.json() as { report: { id: string } }).report.id;
+    const reportId = (reportResponse.json() as { report: { id: string } })
+      .report.id;
 
     const noteResponse = await app.inject({
       method: "POST",
@@ -2035,7 +2519,9 @@ test("psyche notes persist and scoped tokens cannot read psyche without explicit
       },
       payload: {
         contentMarkdown: "Notice the abandonment story before acting on it.",
-        links: [{ entityType: "trigger_report", entityId: reportId, anchorKey: null }]
+        links: [
+          { entityType: "trigger_report", entityId: reportId, anchorKey: null }
+        ]
       }
     });
     assert.equal(noteResponse.statusCode, 201);
@@ -2048,8 +2534,14 @@ test("psyche notes persist and scoped tokens cannot read psyche without explicit
       }
     });
     assert.equal(noteList.statusCode, 200);
-    const noteBody = noteList.json() as { notes: Array<{ contentMarkdown: string }> };
-    assert.ok(noteBody.notes.some((entry) => entry.contentMarkdown.includes("abandonment story")));
+    const noteBody = noteList.json() as {
+      notes: Array<{ contentMarkdown: string }>;
+    };
+    assert.ok(
+      noteBody.notes.some((entry) =>
+        entry.contentMarkdown.includes("abandonment story")
+      )
+    );
 
     const tokenResponse = await app.inject({
       method: "POST",
@@ -2068,7 +2560,8 @@ test("psyche notes persist and scoped tokens cannot read psyche without explicit
         scopes: ["read", "write", "insights"]
       }
     });
-    const token = (tokenResponse.json() as { token: { token: string } }).token.token;
+    const token = (tokenResponse.json() as { token: { token: string } }).token
+      .token;
 
     const securePsyche = await app.inject({
       method: "PATCH",
@@ -2104,17 +2597,39 @@ test("psyche notes persist and scoped tokens cannot read psyche without explicit
 });
 
 test("psyche behaviors, beliefs, modes, and custom taxonomies persist through the versioned API", async () => {
-  const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-psyche-expanded-"));
+  const rootDir = await mkdtemp(
+    path.join(os.tmpdir(), "forge-psyche-expanded-")
+  );
   const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
 
   try {
     const operatorCookie = await issueOperatorSessionCookie(app);
     const psycheHeaders = { cookie: operatorCookie };
-    const schemasResponse = await app.inject({ method: "GET", url: "/api/v1/psyche/schema-catalog", headers: psycheHeaders });
+    const schemasResponse = await app.inject({
+      method: "GET",
+      url: "/api/v1/psyche/schema-catalog",
+      headers: psycheHeaders
+    });
     assert.equal(schemasResponse.statusCode, 200);
-    const schemas = (schemasResponse.json() as { schemas: Array<{ id: string; title: string; schemaType: "maladaptive" | "adaptive" }> }).schemas;
-    assert.ok(schemas.some((schema) => schema.schemaType === "adaptive" && schema.title === "Stable Attachment"));
-    const schemaId = schemas.find((schema) => schema.schemaType === "maladaptive")!.id;
+    const schemas = (
+      schemasResponse.json() as {
+        schemas: Array<{
+          id: string;
+          title: string;
+          schemaType: "maladaptive" | "adaptive";
+        }>;
+      }
+    ).schemas;
+    assert.ok(
+      schemas.some(
+        (schema) =>
+          schema.schemaType === "adaptive" &&
+          schema.title === "Stable Attachment"
+      )
+    );
+    const schemaId = schemas.find(
+      (schema) => schema.schemaType === "maladaptive"
+    )!.id;
 
     const eventTypeResponse = await app.inject({
       method: "POST",
@@ -2126,7 +2641,9 @@ test("psyche behaviors, beliefs, modes, and custom taxonomies persist through th
       }
     });
     assert.equal(eventTypeResponse.statusCode, 201);
-    const eventTypeId = (eventTypeResponse.json() as { eventType: { id: string } }).eventType.id;
+    const eventTypeId = (
+      eventTypeResponse.json() as { eventType: { id: string } }
+    ).eventType.id;
     const eventTypeDetailResponse = await app.inject({
       method: "GET",
       url: `/api/v1/psyche/event-types/${eventTypeId}`,
@@ -2138,12 +2655,18 @@ test("psyche behaviors, beliefs, modes, and custom taxonomies persist through th
       url: `/api/v1/psyche/event-types/${eventTypeId}`,
       headers: psycheHeaders,
       payload: {
-        description: "Moments where attachment panic rises after distance and silence."
+        description:
+          "Moments where attachment panic rises after distance and silence."
       }
     });
     assert.equal(eventTypePatchResponse.statusCode, 200);
-    const eventTypePatchBody = eventTypePatchResponse.json() as { eventType: { description: string } };
-    assert.equal(eventTypePatchBody.eventType.description, "Moments where attachment panic rises after distance and silence.");
+    const eventTypePatchBody = eventTypePatchResponse.json() as {
+      eventType: { description: string };
+    };
+    assert.equal(
+      eventTypePatchBody.eventType.description,
+      "Moments where attachment panic rises after distance and silence."
+    );
 
     const emotionResponse = await app.inject({
       method: "POST",
@@ -2156,7 +2679,8 @@ test("psyche behaviors, beliefs, modes, and custom taxonomies persist through th
       }
     });
     assert.equal(emotionResponse.statusCode, 201);
-    const emotionId = (emotionResponse.json() as { emotion: { id: string } }).emotion.id;
+    const emotionId = (emotionResponse.json() as { emotion: { id: string } })
+      .emotion.id;
     const emotionDetailResponse = await app.inject({
       method: "GET",
       url: `/api/v1/psyche/emotions/${emotionId}`,
@@ -2172,7 +2696,9 @@ test("psyche behaviors, beliefs, modes, and custom taxonomies persist through th
       }
     });
     assert.equal(emotionPatchResponse.statusCode, 200);
-    const emotionPatchBody = emotionPatchResponse.json() as { emotion: { category: string } };
+    const emotionPatchBody = emotionPatchResponse.json() as {
+      emotion: { category: string };
+    };
     assert.equal(emotionPatchBody.emotion.category, "attachment-longing");
 
     const valueResponse = await app.inject({
@@ -2190,7 +2716,8 @@ test("psyche behaviors, beliefs, modes, and custom taxonomies persist through th
         committedActions: ["Pause before sending a follow-up text"]
       }
     });
-    const valueId = (valueResponse.json() as { value: { id: string } }).value.id;
+    const valueId = (valueResponse.json() as { value: { id: string } }).value
+      .id;
 
     const patternResponse = await app.inject({
       method: "POST",
@@ -2209,7 +2736,8 @@ test("psyche behaviors, beliefs, modes, and custom taxonomies persist through th
         linkedModeLabels: ["vulnerable child"]
       }
     });
-    const patternId = (patternResponse.json() as { pattern: { id: string } }).pattern.id;
+    const patternId = (patternResponse.json() as { pattern: { id: string } })
+      .pattern.id;
 
     const modeResponse = await app.inject({
       method: "POST",
@@ -2257,7 +2785,8 @@ test("psyche behaviors, beliefs, modes, and custom taxonomies persist through th
       }
     });
     assert.equal(behaviorResponse.statusCode, 201);
-    const behaviorId = (behaviorResponse.json() as { behavior: { id: string } }).behavior.id;
+    const behaviorId = (behaviorResponse.json() as { behavior: { id: string } })
+      .behavior.id;
 
     const beliefResponse = await app.inject({
       method: "POST",
@@ -2271,7 +2800,8 @@ test("psyche behaviors, beliefs, modes, and custom taxonomies persist through th
         confidence: 86,
         evidenceFor: ["Silence has preceded rupture before"],
         evidenceAgainst: ["People also go quiet when tired or busy"],
-        flexibleAlternative: "Silence can mean distance, but it does not prove abandonment.",
+        flexibleAlternative:
+          "Silence can mean distance, but it does not prove abandonment.",
         linkedValueIds: [valueId],
         linkedBehaviorIds: [behaviorId],
         linkedModeIds: [modeId],
@@ -2279,7 +2809,8 @@ test("psyche behaviors, beliefs, modes, and custom taxonomies persist through th
       }
     });
     assert.equal(beliefResponse.statusCode, 201);
-    const beliefId = (beliefResponse.json() as { belief: { id: string } }).belief.id;
+    const beliefId = (beliefResponse.json() as { belief: { id: string } })
+      .belief.id;
 
     const guideResponse = await app.inject({
       method: "POST",
@@ -2296,8 +2827,12 @@ test("psyche behaviors, beliefs, modes, and custom taxonomies persist through th
       }
     });
     assert.equal(guideResponse.statusCode, 201);
-    const guideBody = guideResponse.json() as { session: { id: string; results: Array<{ family: string }> } };
-    assert.ok(guideBody.session.results.some((result) => result.family === "child"));
+    const guideBody = guideResponse.json() as {
+      session: { id: string; results: Array<{ family: string }> };
+    };
+    assert.ok(
+      guideBody.session.results.some((result) => result.family === "child")
+    );
     const guideId = guideBody.session.id;
     const guideDetailResponse = await app.inject({
       method: "GET",
@@ -2314,8 +2849,13 @@ test("psyche behaviors, beliefs, modes, and custom taxonomies persist through th
       }
     });
     assert.equal(guidePatchResponse.statusCode, 200);
-    const guidePatchBody = guidePatchResponse.json() as { session: { summary: string } };
-    assert.equal(guidePatchBody.session.summary, "Recent rupture-style trigger with stronger freeze response");
+    const guidePatchBody = guidePatchResponse.json() as {
+      session: { summary: string };
+    };
+    assert.equal(
+      guidePatchBody.session.summary,
+      "Recent rupture-style trigger with stronger freeze response"
+    );
 
     const reportResponse = await app.inject({
       method: "POST",
@@ -2328,9 +2868,32 @@ test("psyche behaviors, beliefs, modes, and custom taxonomies persist through th
         customEventType: "",
         eventSituation: "Several hours passed after an intimate message.",
         occurredAt: "2026-03-23T19:30:00.000Z",
-        emotions: [{ id: "emotion_1", emotionDefinitionId: emotionId, label: "aching tenderness", intensity: 72, note: "chest ache" }],
-        thoughts: [{ id: "thought_1", text: "I am being left", parentMode: "demanding parent", criticMode: "punitive critic", beliefId }],
-        behaviors: [{ id: "behavior_1", text: "Checked the thread repeatedly", mode: "Tender alarm child", behaviorId }],
+        emotions: [
+          {
+            id: "emotion_1",
+            emotionDefinitionId: emotionId,
+            label: "aching tenderness",
+            intensity: 72,
+            note: "chest ache"
+          }
+        ],
+        thoughts: [
+          {
+            id: "thought_1",
+            text: "I am being left",
+            parentMode: "demanding parent",
+            criticMode: "punitive critic",
+            beliefId
+          }
+        ],
+        behaviors: [
+          {
+            id: "behavior_1",
+            text: "Checked the thread repeatedly",
+            mode: "Tender alarm child",
+            behaviorId
+          }
+        ],
         consequences: {
           selfShortTerm: ["Temporary monitoring relief"],
           selfLongTerm: ["More panic"],
@@ -2347,12 +2910,21 @@ test("psyche behaviors, beliefs, modes, and custom taxonomies persist through th
         linkedModeIds: [modeId],
         modeOverlays: ["Tender alarm child"],
         schemaLinks: ["abandonment"],
-        modeTimeline: [{ id: "timeline_1", stage: "spark", modeId, label: "Tender alarm child", note: "Alarm rises immediately" }],
+        modeTimeline: [
+          {
+            id: "timeline_1",
+            stage: "spark",
+            modeId,
+            label: "Tender alarm child",
+            note: "Alarm rises immediately"
+          }
+        ],
         nextMoves: ["Wait before sending a second message"]
       }
     });
     assert.equal(reportResponse.statusCode, 201);
-    const reportId = (reportResponse.json() as { report: { id: string } }).report.id;
+    const reportId = (reportResponse.json() as { report: { id: string } })
+      .report.id;
 
     const detailResponse = await app.inject({
       method: "GET",
@@ -2382,7 +2954,9 @@ test("psyche behaviors, beliefs, modes, and custom taxonomies persist through th
 });
 
 test("psyche delete routes prune linked references instead of leaving stale ids behind", async () => {
-  const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-psyche-delete-crud-"));
+  const rootDir = await mkdtemp(
+    path.join(os.tmpdir(), "forge-psyche-delete-crud-")
+  );
   const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
 
   try {
@@ -2391,199 +2965,269 @@ test("psyche delete routes prune linked references instead of leaving stale ids 
       cookie: operatorCookie
     };
 
-    const schemaResponse = await app.inject({ method: "GET", url: "/api/v1/psyche/schema-catalog", headers: psycheHeaders });
-    const schemaId = (schemaResponse.json() as { schemas: Array<{ id: string; schemaType: "maladaptive" | "adaptive" }> }).schemas.find((schema) => schema.schemaType === "maladaptive")!.id;
+    const schemaResponse = await app.inject({
+      method: "GET",
+      url: "/api/v1/psyche/schema-catalog",
+      headers: psycheHeaders
+    });
+    const schemaId = (
+      schemaResponse.json() as {
+        schemas: Array<{ id: string; schemaType: "maladaptive" | "adaptive" }>;
+      }
+    ).schemas.find((schema) => schema.schemaType === "maladaptive")!.id;
 
-    const goalResponse = await app.inject({ method: "GET", url: "/api/v1/goals" });
-    const goalId = (goalResponse.json() as { goals: Array<{ id: string }> }).goals[0]!.id;
-    const projectResponse = await app.inject({ method: "GET", url: `/api/v1/projects?goalId=${goalId}` });
-    const projectId = (projectResponse.json() as { projects: Array<{ id: string }> }).projects[0]!.id;
-    const taskResponse = await app.inject({ method: "GET", url: `/api/v1/tasks?projectId=${projectId}&limit=1` });
-    const taskId = (taskResponse.json() as { tasks: Array<{ id: string }> }).tasks[0]!.id;
+    const goalResponse = await app.inject({
+      method: "GET",
+      url: "/api/v1/goals"
+    });
+    const goalId = (goalResponse.json() as { goals: Array<{ id: string }> })
+      .goals[0]!.id;
+    const projectResponse = await app.inject({
+      method: "GET",
+      url: `/api/v1/projects?goalId=${goalId}`
+    });
+    const projectId = (
+      projectResponse.json() as { projects: Array<{ id: string }> }
+    ).projects[0]!.id;
+    const taskResponse = await app.inject({
+      method: "GET",
+      url: `/api/v1/tasks?projectId=${projectId}&limit=1`
+    });
+    const taskId = (taskResponse.json() as { tasks: Array<{ id: string }> })
+      .tasks[0]!.id;
 
     const eventTypeId = (
-      (await app.inject({
-        method: "POST",
-        url: "/api/v1/psyche/event-types",
-        headers: psycheHeaders,
-        payload: {
-          label: "Deletion trigger",
-          description: "Custom event type for delete coverage."
-        }
-      })).json() as { eventType: { id: string } }
+      (
+        await app.inject({
+          method: "POST",
+          url: "/api/v1/psyche/event-types",
+          headers: psycheHeaders,
+          payload: {
+            label: "Deletion trigger",
+            description: "Custom event type for delete coverage."
+          }
+        })
+      ).json() as { eventType: { id: string } }
     ).eventType.id;
 
     const emotionId = (
-      (await app.inject({
-        method: "POST",
-        url: "/api/v1/psyche/emotions",
-        headers: psycheHeaders,
-        payload: {
-          label: "Delete-cover emotion",
-          description: "Emotion used for delete coverage.",
-          category: "test"
-        }
-      })).json() as { emotion: { id: string } }
+      (
+        await app.inject({
+          method: "POST",
+          url: "/api/v1/psyche/emotions",
+          headers: psycheHeaders,
+          payload: {
+            label: "Delete-cover emotion",
+            description: "Emotion used for delete coverage.",
+            category: "test"
+          }
+        })
+      ).json() as { emotion: { id: string } }
     ).emotion.id;
 
     const valueId = (
-      (await app.inject({
-        method: "POST",
-        url: "/api/v1/psyche/values",
-        headers: psycheHeaders,
-        payload: {
-          title: "Stay grounded",
-          description: "Delete coverage value.",
-          valuedDirection: "Grounded action",
-          whyItMatters: "Avoid stale references.",
-          linkedGoalIds: [goalId],
-          linkedProjectIds: [projectId],
-          linkedTaskIds: [taskId],
-          committedActions: ["Pause"]
-        }
-      })).json() as { value: { id: string } }
+      (
+        await app.inject({
+          method: "POST",
+          url: "/api/v1/psyche/values",
+          headers: psycheHeaders,
+          payload: {
+            title: "Stay grounded",
+            description: "Delete coverage value.",
+            valuedDirection: "Grounded action",
+            whyItMatters: "Avoid stale references.",
+            linkedGoalIds: [goalId],
+            linkedProjectIds: [projectId],
+            linkedTaskIds: [taskId],
+            committedActions: ["Pause"]
+          }
+        })
+      ).json() as { value: { id: string } }
     ).value.id;
 
     const patternId = (
-      (await app.inject({
-        method: "POST",
-        url: "/api/v1/psyche/patterns",
-        headers: psycheHeaders,
-        payload: {
-          title: "Delete-cover pattern",
-          description: "Pattern used for delete coverage.",
-          targetBehavior: "Checking",
-          cueContexts: ["Uncertainty"],
-          shortTermPayoff: "Relief",
-          longTermCost: "More panic",
-          preferredResponse: "Ground first",
-          linkedValueIds: [valueId],
-          linkedSchemaLabels: ["abandonment"],
-          linkedModeLabels: ["vulnerable child"]
-        }
-      })).json() as { pattern: { id: string } }
+      (
+        await app.inject({
+          method: "POST",
+          url: "/api/v1/psyche/patterns",
+          headers: psycheHeaders,
+          payload: {
+            title: "Delete-cover pattern",
+            description: "Pattern used for delete coverage.",
+            targetBehavior: "Checking",
+            cueContexts: ["Uncertainty"],
+            shortTermPayoff: "Relief",
+            longTermCost: "More panic",
+            preferredResponse: "Ground first",
+            linkedValueIds: [valueId],
+            linkedSchemaLabels: ["abandonment"],
+            linkedModeLabels: ["vulnerable child"]
+          }
+        })
+      ).json() as { pattern: { id: string } }
     ).pattern.id;
 
     const modeId = (
-      (await app.inject({
-        method: "POST",
-        url: "/api/v1/psyche/modes",
-        headers: psycheHeaders,
-        payload: {
-          family: "child",
-          archetype: "vulnerable",
-          title: "Delete-cover mode",
-          persona: "An alarmed younger self",
-          imagery: "Phone glow",
-          symbolicForm: "Glass orb",
-          facialExpression: "Worried",
-          fear: "Abandonment",
-          burden: "Loneliness",
-          protectiveJob: "Seek certainty",
-          originContext: "Old rupture",
-          firstAppearanceAt: "2026-03-24T10:00:00.000Z",
-          linkedPatternIds: [patternId],
-          linkedBehaviorIds: [],
-          linkedValueIds: [valueId]
-        }
-      })).json() as { mode: { id: string } }
+      (
+        await app.inject({
+          method: "POST",
+          url: "/api/v1/psyche/modes",
+          headers: psycheHeaders,
+          payload: {
+            family: "child",
+            archetype: "vulnerable",
+            title: "Delete-cover mode",
+            persona: "An alarmed younger self",
+            imagery: "Phone glow",
+            symbolicForm: "Glass orb",
+            facialExpression: "Worried",
+            fear: "Abandonment",
+            burden: "Loneliness",
+            protectiveJob: "Seek certainty",
+            originContext: "Old rupture",
+            firstAppearanceAt: "2026-03-24T10:00:00.000Z",
+            linkedPatternIds: [patternId],
+            linkedBehaviorIds: [],
+            linkedValueIds: [valueId]
+          }
+        })
+      ).json() as { mode: { id: string } }
     ).mode.id;
 
     const behaviorId = (
-      (await app.inject({
-        method: "POST",
-        url: "/api/v1/psyche/behaviors",
-        headers: psycheHeaders,
-        payload: {
-          kind: "away",
-          title: "Delete-cover behavior",
-          description: "Behavior used for delete coverage.",
-          commonCues: ["Silence"],
-          urgeStory: "Check again",
-          shortTermPayoff: "Certainty",
-          longTermCost: "More dependence",
-          replacementMove: "Wait ten minutes",
-          repairPlan: "Return to grounded action",
-          linkedPatternIds: [patternId],
-          linkedValueIds: [valueId],
-          linkedSchemaIds: [schemaId],
-          linkedModeIds: [modeId]
-        }
-      })).json() as { behavior: { id: string } }
+      (
+        await app.inject({
+          method: "POST",
+          url: "/api/v1/psyche/behaviors",
+          headers: psycheHeaders,
+          payload: {
+            kind: "away",
+            title: "Delete-cover behavior",
+            description: "Behavior used for delete coverage.",
+            commonCues: ["Silence"],
+            urgeStory: "Check again",
+            shortTermPayoff: "Certainty",
+            longTermCost: "More dependence",
+            replacementMove: "Wait ten minutes",
+            repairPlan: "Return to grounded action",
+            linkedPatternIds: [patternId],
+            linkedValueIds: [valueId],
+            linkedSchemaIds: [schemaId],
+            linkedModeIds: [modeId]
+          }
+        })
+      ).json() as { behavior: { id: string } }
     ).behavior.id;
 
     const beliefId = (
-      (await app.inject({
-        method: "POST",
-        url: "/api/v1/psyche/beliefs",
-        headers: psycheHeaders,
-        payload: {
-          schemaId,
-          statement: "Silence means I am about to be left.",
-          beliefType: "absolute",
-          originNote: "Delete coverage belief",
-          confidence: 75,
-          evidenceFor: ["Past ruptures"],
-          evidenceAgainst: ["People get busy"],
-          flexibleAlternative: "Silence is data, not proof.",
-          linkedValueIds: [valueId],
-          linkedBehaviorIds: [behaviorId],
-          linkedModeIds: [modeId],
-          linkedReportIds: []
-        }
-      })).json() as { belief: { id: string } }
+      (
+        await app.inject({
+          method: "POST",
+          url: "/api/v1/psyche/beliefs",
+          headers: psycheHeaders,
+          payload: {
+            schemaId,
+            statement: "Silence means I am about to be left.",
+            beliefType: "absolute",
+            originNote: "Delete coverage belief",
+            confidence: 75,
+            evidenceFor: ["Past ruptures"],
+            evidenceAgainst: ["People get busy"],
+            flexibleAlternative: "Silence is data, not proof.",
+            linkedValueIds: [valueId],
+            linkedBehaviorIds: [behaviorId],
+            linkedModeIds: [modeId],
+            linkedReportIds: []
+          }
+        })
+      ).json() as { belief: { id: string } }
     ).belief.id;
 
     const modeGuideId = (
-      (await app.inject({
-        method: "POST",
-        url: "/api/v1/psyche/mode-guides",
-        headers: psycheHeaders,
-        payload: {
-          summary: "Delete coverage mode guide",
-          answers: [
-            { questionKey: "coping_response", value: "freeze" },
-            { questionKey: "child_state", value: "vulnerable" }
-          ]
-        }
-      })).json() as { session: { id: string } }
+      (
+        await app.inject({
+          method: "POST",
+          url: "/api/v1/psyche/mode-guides",
+          headers: psycheHeaders,
+          payload: {
+            summary: "Delete coverage mode guide",
+            answers: [
+              { questionKey: "coping_response", value: "freeze" },
+              { questionKey: "child_state", value: "vulnerable" }
+            ]
+          }
+        })
+      ).json() as { session: { id: string } }
     ).session.id;
 
     const reportId = (
-      (await app.inject({
-        method: "POST",
-        url: "/api/v1/psyche/reports",
-        headers: psycheHeaders,
-        payload: {
-          title: "Delete coverage report",
-          status: "draft",
-          eventTypeId,
-          customEventType: "",
-          eventSituation: "A long silence after a message.",
-          occurredAt: "2026-03-24T20:00:00.000Z",
-          emotions: [{ id: "emotion_1", emotionDefinitionId: emotionId, label: "Delete-cover emotion", intensity: 70, note: "" }],
-          thoughts: [{ id: "thought_1", text: "I am being left", parentMode: "critic", criticMode: "punitive", beliefId }],
-          behaviors: [{ id: "behavior_1", text: "Checked again", mode: "Delete-cover mode", behaviorId }],
-          consequences: {
-            selfShortTerm: ["Relief"],
-            selfLongTerm: ["More panic"],
-            othersShortTerm: ["Pressure"],
-            othersLongTerm: ["Distance"]
-          },
-          linkedPatternIds: [patternId],
-          linkedValueIds: [valueId],
-          linkedGoalIds: [goalId],
-          linkedProjectIds: [projectId],
-          linkedTaskIds: [taskId],
-          linkedBehaviorIds: [behaviorId],
-          linkedBeliefIds: [beliefId],
-          linkedModeIds: [modeId],
-          modeOverlays: ["Delete-cover mode"],
-          schemaLinks: ["abandonment"],
-          modeTimeline: [{ id: "timeline_1", stage: "spark", modeId, label: "Delete-cover mode", note: "" }],
-          nextMoves: ["Wait"]
-        }
-      })).json() as { report: { id: string } }
+      (
+        await app.inject({
+          method: "POST",
+          url: "/api/v1/psyche/reports",
+          headers: psycheHeaders,
+          payload: {
+            title: "Delete coverage report",
+            status: "draft",
+            eventTypeId,
+            customEventType: "",
+            eventSituation: "A long silence after a message.",
+            occurredAt: "2026-03-24T20:00:00.000Z",
+            emotions: [
+              {
+                id: "emotion_1",
+                emotionDefinitionId: emotionId,
+                label: "Delete-cover emotion",
+                intensity: 70,
+                note: ""
+              }
+            ],
+            thoughts: [
+              {
+                id: "thought_1",
+                text: "I am being left",
+                parentMode: "critic",
+                criticMode: "punitive",
+                beliefId
+              }
+            ],
+            behaviors: [
+              {
+                id: "behavior_1",
+                text: "Checked again",
+                mode: "Delete-cover mode",
+                behaviorId
+              }
+            ],
+            consequences: {
+              selfShortTerm: ["Relief"],
+              selfLongTerm: ["More panic"],
+              othersShortTerm: ["Pressure"],
+              othersLongTerm: ["Distance"]
+            },
+            linkedPatternIds: [patternId],
+            linkedValueIds: [valueId],
+            linkedGoalIds: [goalId],
+            linkedProjectIds: [projectId],
+            linkedTaskIds: [taskId],
+            linkedBehaviorIds: [behaviorId],
+            linkedBeliefIds: [beliefId],
+            linkedModeIds: [modeId],
+            modeOverlays: ["Delete-cover mode"],
+            schemaLinks: ["abandonment"],
+            modeTimeline: [
+              {
+                id: "timeline_1",
+                stage: "spark",
+                modeId,
+                label: "Delete-cover mode",
+                note: ""
+              }
+            ],
+            nextMoves: ["Wait"]
+          }
+        })
+      ).json() as { report: { id: string } }
     ).report.id;
 
     const reportNoteResponse = await app.inject({
@@ -2593,46 +3237,159 @@ test("psyche delete routes prune linked references instead of leaving stale ids 
       payload: {
         contentMarkdown: "This note should disappear with the report.",
         author: "Albert",
-        links: [{ entityType: "trigger_report", entityId: reportId, anchorKey: null }]
+        links: [
+          { entityType: "trigger_report", entityId: reportId, anchorKey: null }
+        ]
       }
     });
     assert.equal(reportNoteResponse.statusCode, 201);
 
-    assert.equal((await app.inject({ method: "DELETE", url: `/api/v1/psyche/beliefs/${beliefId}`, headers: psycheHeaders })).statusCode, 200);
-    const reportAfterBeliefDelete = await app.inject({ method: "GET", url: `/api/v1/psyche/reports/${reportId}`, headers: psycheHeaders });
+    assert.equal(
+      (
+        await app.inject({
+          method: "DELETE",
+          url: `/api/v1/psyche/beliefs/${beliefId}`,
+          headers: psycheHeaders
+        })
+      ).statusCode,
+      200
+    );
+    const reportAfterBeliefDelete = await app.inject({
+      method: "GET",
+      url: `/api/v1/psyche/reports/${reportId}`,
+      headers: psycheHeaders
+    });
     assert.equal(reportAfterBeliefDelete.statusCode, 200);
     const reportAfterBeliefDeleteBody = reportAfterBeliefDelete.json() as {
-      report: { linkedBeliefIds: string[]; thoughts: Array<{ beliefId: string | null }> };
+      report: {
+        linkedBeliefIds: string[];
+        thoughts: Array<{ beliefId: string | null }>;
+      };
     };
     assert.deepEqual(reportAfterBeliefDeleteBody.report.linkedBeliefIds, []);
-    assert.equal(reportAfterBeliefDeleteBody.report.thoughts[0]?.beliefId, null);
+    assert.equal(
+      reportAfterBeliefDeleteBody.report.thoughts[0]?.beliefId,
+      null
+    );
 
-    assert.equal((await app.inject({ method: "DELETE", url: `/api/v1/psyche/modes/${modeId}`, headers: psycheHeaders })).statusCode, 200);
-    const behaviorAfterModeDelete = await app.inject({ method: "GET", url: `/api/v1/psyche/behaviors/${behaviorId}`, headers: psycheHeaders });
+    assert.equal(
+      (
+        await app.inject({
+          method: "DELETE",
+          url: `/api/v1/psyche/modes/${modeId}`,
+          headers: psycheHeaders
+        })
+      ).statusCode,
+      200
+    );
+    const behaviorAfterModeDelete = await app.inject({
+      method: "GET",
+      url: `/api/v1/psyche/behaviors/${behaviorId}`,
+      headers: psycheHeaders
+    });
     assert.equal(behaviorAfterModeDelete.statusCode, 200);
-    assert.deepEqual((behaviorAfterModeDelete.json() as { behavior: { linkedModeIds: string[] } }).behavior.linkedModeIds, []);
-    const reportAfterModeDelete = await app.inject({ method: "GET", url: `/api/v1/psyche/reports/${reportId}`, headers: psycheHeaders });
+    assert.deepEqual(
+      (
+        behaviorAfterModeDelete.json() as {
+          behavior: { linkedModeIds: string[] };
+        }
+      ).behavior.linkedModeIds,
+      []
+    );
+    const reportAfterModeDelete = await app.inject({
+      method: "GET",
+      url: `/api/v1/psyche/reports/${reportId}`,
+      headers: psycheHeaders
+    });
     const reportAfterModeDeleteBody = reportAfterModeDelete.json() as {
-      report: { linkedModeIds: string[]; modeTimeline: Array<{ modeId: string | null }> };
+      report: {
+        linkedModeIds: string[];
+        modeTimeline: Array<{ modeId: string | null }>;
+      };
     };
     assert.deepEqual(reportAfterModeDeleteBody.report.linkedModeIds, []);
-    assert.equal(reportAfterModeDeleteBody.report.modeTimeline[0]?.modeId, null);
+    assert.equal(
+      reportAfterModeDeleteBody.report.modeTimeline[0]?.modeId,
+      null
+    );
 
-    assert.equal((await app.inject({ method: "DELETE", url: `/api/v1/psyche/event-types/${eventTypeId}`, headers: psycheHeaders })).statusCode, 200);
-    assert.equal((await app.inject({ method: "DELETE", url: `/api/v1/psyche/emotions/${emotionId}`, headers: psycheHeaders })).statusCode, 200);
-    const reportAfterEventEmotionDelete = await app.inject({ method: "GET", url: `/api/v1/psyche/reports/${reportId}`, headers: psycheHeaders });
-    const reportAfterEventEmotionDeleteBody = reportAfterEventEmotionDelete.json() as {
-      report: { eventTypeId: string | null; emotions: Array<{ emotionDefinitionId: string | null }> };
-    };
+    assert.equal(
+      (
+        await app.inject({
+          method: "DELETE",
+          url: `/api/v1/psyche/event-types/${eventTypeId}`,
+          headers: psycheHeaders
+        })
+      ).statusCode,
+      200
+    );
+    assert.equal(
+      (
+        await app.inject({
+          method: "DELETE",
+          url: `/api/v1/psyche/emotions/${emotionId}`,
+          headers: psycheHeaders
+        })
+      ).statusCode,
+      200
+    );
+    const reportAfterEventEmotionDelete = await app.inject({
+      method: "GET",
+      url: `/api/v1/psyche/reports/${reportId}`,
+      headers: psycheHeaders
+    });
+    const reportAfterEventEmotionDeleteBody =
+      reportAfterEventEmotionDelete.json() as {
+        report: {
+          eventTypeId: string | null;
+          emotions: Array<{ emotionDefinitionId: string | null }>;
+        };
+      };
     assert.equal(reportAfterEventEmotionDeleteBody.report.eventTypeId, null);
-    assert.equal(reportAfterEventEmotionDeleteBody.report.emotions[0]?.emotionDefinitionId, null);
+    assert.equal(
+      reportAfterEventEmotionDeleteBody.report.emotions[0]?.emotionDefinitionId,
+      null
+    );
 
-    assert.equal((await app.inject({ method: "DELETE", url: `/api/v1/psyche/patterns/${patternId}`, headers: psycheHeaders })).statusCode, 200);
-    const behaviorAfterPatternDelete = await app.inject({ method: "GET", url: `/api/v1/psyche/behaviors/${behaviorId}`, headers: psycheHeaders });
-    assert.deepEqual((behaviorAfterPatternDelete.json() as { behavior: { linkedPatternIds: string[] } }).behavior.linkedPatternIds, []);
+    assert.equal(
+      (
+        await app.inject({
+          method: "DELETE",
+          url: `/api/v1/psyche/patterns/${patternId}`,
+          headers: psycheHeaders
+        })
+      ).statusCode,
+      200
+    );
+    const behaviorAfterPatternDelete = await app.inject({
+      method: "GET",
+      url: `/api/v1/psyche/behaviors/${behaviorId}`,
+      headers: psycheHeaders
+    });
+    assert.deepEqual(
+      (
+        behaviorAfterPatternDelete.json() as {
+          behavior: { linkedPatternIds: string[] };
+        }
+      ).behavior.linkedPatternIds,
+      []
+    );
 
-    assert.equal((await app.inject({ method: "DELETE", url: `/api/v1/psyche/values/${valueId}`, headers: psycheHeaders })).statusCode, 200);
-    const reportAfterValueDelete = await app.inject({ method: "GET", url: `/api/v1/psyche/reports/${reportId}`, headers: psycheHeaders });
+    assert.equal(
+      (
+        await app.inject({
+          method: "DELETE",
+          url: `/api/v1/psyche/values/${valueId}`,
+          headers: psycheHeaders
+        })
+      ).statusCode,
+      200
+    );
+    const reportAfterValueDelete = await app.inject({
+      method: "GET",
+      url: `/api/v1/psyche/reports/${reportId}`,
+      headers: psycheHeaders
+    });
     const reportAfterValueDeleteBody = reportAfterValueDelete.json() as {
       report: {
         linkedValueIds: string[];
@@ -2643,23 +3400,73 @@ test("psyche delete routes prune linked references instead of leaving stale ids 
     };
     assert.deepEqual(reportAfterValueDeleteBody.report.linkedValueIds, []);
     assert.deepEqual(reportAfterValueDeleteBody.report.linkedGoalIds, [goalId]);
-    assert.deepEqual(reportAfterValueDeleteBody.report.linkedProjectIds, [projectId]);
+    assert.deepEqual(reportAfterValueDeleteBody.report.linkedProjectIds, [
+      projectId
+    ]);
     assert.deepEqual(reportAfterValueDeleteBody.report.linkedTaskIds, [taskId]);
 
-    assert.equal((await app.inject({ method: "DELETE", url: `/api/v1/psyche/behaviors/${behaviorId}`, headers: psycheHeaders })).statusCode, 200);
-    const reportAfterBehaviorDelete = await app.inject({ method: "GET", url: `/api/v1/psyche/reports/${reportId}`, headers: psycheHeaders });
+    assert.equal(
+      (
+        await app.inject({
+          method: "DELETE",
+          url: `/api/v1/psyche/behaviors/${behaviorId}`,
+          headers: psycheHeaders
+        })
+      ).statusCode,
+      200
+    );
+    const reportAfterBehaviorDelete = await app.inject({
+      method: "GET",
+      url: `/api/v1/psyche/reports/${reportId}`,
+      headers: psycheHeaders
+    });
     const reportAfterBehaviorDeleteBody = reportAfterBehaviorDelete.json() as {
-      report: { linkedBehaviorIds: string[]; behaviors: Array<{ behaviorId: string | null }> };
+      report: {
+        linkedBehaviorIds: string[];
+        behaviors: Array<{ behaviorId: string | null }>;
+      };
     };
-    assert.deepEqual(reportAfterBehaviorDeleteBody.report.linkedBehaviorIds, []);
-    assert.equal(reportAfterBehaviorDeleteBody.report.behaviors[0]?.behaviorId, null);
+    assert.deepEqual(
+      reportAfterBehaviorDeleteBody.report.linkedBehaviorIds,
+      []
+    );
+    assert.equal(
+      reportAfterBehaviorDeleteBody.report.behaviors[0]?.behaviorId,
+      null
+    );
 
-    assert.equal((await app.inject({ method: "DELETE", url: `/api/v1/psyche/mode-guides/${modeGuideId}`, headers: psycheHeaders })).statusCode, 200);
-    const deletedModeGuideGet = await app.inject({ method: "GET", url: `/api/v1/psyche/mode-guides/${modeGuideId}`, headers: psycheHeaders });
+    assert.equal(
+      (
+        await app.inject({
+          method: "DELETE",
+          url: `/api/v1/psyche/mode-guides/${modeGuideId}`,
+          headers: psycheHeaders
+        })
+      ).statusCode,
+      200
+    );
+    const deletedModeGuideGet = await app.inject({
+      method: "GET",
+      url: `/api/v1/psyche/mode-guides/${modeGuideId}`,
+      headers: psycheHeaders
+    });
     assert.equal(deletedModeGuideGet.statusCode, 404);
 
-    assert.equal((await app.inject({ method: "DELETE", url: `/api/v1/psyche/reports/${reportId}`, headers: psycheHeaders })).statusCode, 200);
-    const deletedReportGet = await app.inject({ method: "GET", url: `/api/v1/psyche/reports/${reportId}`, headers: psycheHeaders });
+    assert.equal(
+      (
+        await app.inject({
+          method: "DELETE",
+          url: `/api/v1/psyche/reports/${reportId}`,
+          headers: psycheHeaders
+        })
+      ).statusCode,
+      200
+    );
+    const deletedReportGet = await app.inject({
+      method: "GET",
+      url: `/api/v1/psyche/reports/${reportId}`,
+      headers: psycheHeaders
+    });
     assert.equal(deletedReportGet.statusCode, 404);
     const reportNotes = await app.inject({
       method: "GET",
@@ -2675,7 +3482,9 @@ test("psyche delete routes prune linked references instead of leaving stale ids 
 });
 
 test("activity correction hides removed events from the default archive", async () => {
-  const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-activity-correction-"));
+  const rootDir = await mkdtemp(
+    path.join(os.tmpdir(), "forge-activity-correction-")
+  );
   const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
 
   try {
@@ -2698,8 +3507,13 @@ test("activity correction hides removed events from the default archive", async 
     });
     assert.equal(createdGoalResponse.statusCode, 201);
 
-    const initialActivity = await app.inject({ method: "GET", url: "/api/v1/activity?limit=1" });
-    const eventId = (initialActivity.json() as { activity: Array<{ id: string }> }).activity[0]!.id;
+    const initialActivity = await app.inject({
+      method: "GET",
+      url: "/api/v1/activity?limit=1"
+    });
+    const eventId = (
+      initialActivity.json() as { activity: Array<{ id: string }> }
+    ).activity[0]!.id;
 
     const removeResponse = await app.inject({
       method: "POST",
@@ -2711,12 +3525,22 @@ test("activity correction hides removed events from the default archive", async 
     });
     assert.equal(removeResponse.statusCode, 200);
 
-    const afterRemoval = await app.inject({ method: "GET", url: "/api/v1/activity?limit=100" });
-    const visibleIds = (afterRemoval.json() as { activity: Array<{ id: string }> }).activity.map((event) => event.id);
+    const afterRemoval = await app.inject({
+      method: "GET",
+      url: "/api/v1/activity?limit=100"
+    });
+    const visibleIds = (
+      afterRemoval.json() as { activity: Array<{ id: string }> }
+    ).activity.map((event) => event.id);
     assert.ok(!visibleIds.includes(eventId));
 
-    const correctedHistory = await app.inject({ method: "GET", url: "/api/v1/activity?limit=100&includeCorrected=true" });
-    const correctedIds = (correctedHistory.json() as { activity: Array<{ id: string }> }).activity.map((event) => event.id);
+    const correctedHistory = await app.inject({
+      method: "GET",
+      url: "/api/v1/activity?limit=100&includeCorrected=true"
+    });
+    const correctedIds = (
+      correctedHistory.json() as { activity: Array<{ id: string }> }
+    ).activity.map((event) => event.id);
     assert.ok(correctedIds.includes(eventId));
   } finally {
     await app.close();
@@ -2732,7 +3556,8 @@ test("task creation rejects unknown goal references with a 404 and no partial wr
   try {
     const operatorCookie = await issueOperatorSessionCookie(app);
     const before = await app.inject({ method: "GET", url: "/api/tasks" });
-    const beforeCount = (before.json() as { tasks: Array<{ id: string }> }).tasks.length;
+    const beforeCount = (before.json() as { tasks: Array<{ id: string }> })
+      .tasks.length;
 
     const response = await app.inject({
       method: "POST",
@@ -2755,7 +3580,8 @@ test("task creation rejects unknown goal references with a 404 and no partial wr
     });
 
     const after = await app.inject({ method: "GET", url: "/api/tasks" });
-    const afterCount = (after.json() as { tasks: Array<{ id: string }> }).tasks.length;
+    const afterCount = (after.json() as { tasks: Array<{ id: string }> }).tasks
+      .length;
     assert.equal(afterCount, beforeCount);
   } finally {
     await app.close();
@@ -2765,7 +3591,9 @@ test("task creation rejects unknown goal references with a 404 and no partial wr
 });
 
 test("task status updates survive soft-deleted goal links and preserve project context", async () => {
-  const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-task-stale-goal-"));
+  const rootDir = await mkdtemp(
+    path.join(os.tmpdir(), "forge-task-stale-goal-")
+  );
   const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
 
   try {
@@ -2796,7 +3624,15 @@ test("task status updates survive soft-deleted goal links and preserve project c
     });
 
     assert.equal(moved.statusCode, 200);
-    const movedTask = (moved.json() as { task: { status: string; goalId: string | null; projectId: string | null } }).task;
+    const movedTask = (
+      moved.json() as {
+        task: {
+          status: string;
+          goalId: string | null;
+          projectId: string | null;
+        };
+      }
+    ).task;
     assert.equal(movedTask.status, "focus");
     assert.equal(movedTask.goalId, null);
     assert.equal(movedTask.projectId, "project_relationships_ritual");
@@ -2808,7 +3644,9 @@ test("task status updates survive soft-deleted goal links and preserve project c
 });
 
 test("entity creation can include nested notes that auto-link to the new parent", async () => {
-  const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-nested-notes-create-"));
+  const rootDir = await mkdtemp(
+    path.join(os.tmpdir(), "forge-nested-notes-create-")
+  );
   const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
 
   try {
@@ -2843,9 +3681,24 @@ test("entity creation can include nested notes that auto-link to the new parent"
     });
 
     assert.equal(notes.statusCode, 200);
-    const notesBody = notes.json() as { notes: Array<{ contentMarkdown: string; links: Array<{ entityType: string; entityId: string }> }> };
-    assert.ok(notesBody.notes.some((entry) => entry.contentMarkdown.includes("nested create")));
-    assert.ok(notesBody.notes.some((entry) => entry.links.some((link) => link.entityType === "goal" && link.entityId === goalId)));
+    const notesBody = notes.json() as {
+      notes: Array<{
+        contentMarkdown: string;
+        links: Array<{ entityType: string; entityId: string }>;
+      }>;
+    };
+    assert.ok(
+      notesBody.notes.some((entry) =>
+        entry.contentMarkdown.includes("nested create")
+      )
+    );
+    assert.ok(
+      notesBody.notes.some((entry) =>
+        entry.links.some(
+          (link) => link.entityType === "goal" && link.entityId === goalId
+        )
+      )
+    );
   } finally {
     await app.close();
     closeDatabase();
@@ -2854,7 +3707,9 @@ test("entity creation can include nested notes that auto-link to the new parent"
 });
 
 test("notes list supports linked entity arrays, free-text chips, and updated date bounds", async () => {
-  const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-notes-query-filters-"));
+  const rootDir = await mkdtemp(
+    path.join(os.tmpdir(), "forge-notes-query-filters-")
+  );
   const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
 
   try {
@@ -2870,7 +3725,13 @@ test("notes list supports linked entity arrays, free-text chips, and updated dat
       payload: {
         contentMarkdown: "Release note edge cases collected in one place.",
         author: "Forge Agent",
-        links: [{ entityType: "task", entityId: "task_plugin_surface", anchorKey: null }]
+        links: [
+          {
+            entityType: "task",
+            entityId: "task_plugin_surface",
+            anchorKey: null
+          }
+        ]
       }
     });
     assert.equal(firstNote.statusCode, 201);
@@ -2884,7 +3745,13 @@ test("notes list supports linked entity arrays, free-text chips, and updated dat
       payload: {
         contentMarkdown: "Handoff wiki page for the mobile project.",
         author: "Albert",
-        links: [{ entityType: "project", entityId: "project_forge_mobile", anchorKey: null }]
+        links: [
+          {
+            entityType: "project",
+            entityId: "project_forge_mobile",
+            anchorKey: null
+          }
+        ]
       }
     });
     assert.equal(secondNote.statusCode, 201);
@@ -2900,10 +3767,116 @@ test("notes list supports linked entity arrays, free-text chips, and updated dat
     });
 
     assert.equal(filtered.statusCode, 200);
-    const body = filtered.json() as { notes: Array<{ contentMarkdown: string }> };
+    const body = filtered.json() as {
+      notes: Array<{ contentMarkdown: string }>;
+    };
     assert.equal(body.notes.length, 2);
-    assert.ok(body.notes.some((entry) => entry.contentMarkdown.includes("Release note edge cases")));
-    assert.ok(body.notes.some((entry) => entry.contentMarkdown.includes("Handoff wiki page")));
+    assert.ok(
+      body.notes.some((entry) =>
+        entry.contentMarkdown.includes("Release note edge cases")
+      )
+    );
+    assert.ok(
+      body.notes.some((entry) =>
+        entry.contentMarkdown.includes("Handoff wiki page")
+      )
+    );
+  } finally {
+    await app.close();
+    closeDatabase();
+    await rm(rootDir, { recursive: true, force: true });
+  }
+});
+
+test("notes support custom and memory tags plus ephemeral auto-destruction", async () => {
+  const rootDir = await mkdtemp(
+    path.join(os.tmpdir(), "forge-note-tags-expiry-")
+  );
+  const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
+
+  try {
+    const operatorCookie = await issueOperatorSessionCookie(app);
+    const durableNote = await app.inject({
+      method: "POST",
+      url: "/api/v1/notes",
+      headers: {
+        cookie: operatorCookie
+      },
+      payload: {
+        contentMarkdown: "Keep the active plugin session state visible.",
+        author: "Albert",
+        tags: ["Working memory", "release-handoff"],
+        destroyAt: null,
+        links: [
+          {
+            entityType: "task",
+            entityId: "task_plugin_surface",
+            anchorKey: null
+          }
+        ]
+      }
+    });
+    assert.equal(durableNote.statusCode, 201);
+    const durableBody = durableNote.json() as {
+      note: { id: string; tags: string[]; destroyAt: string | null };
+    };
+    assert.deepEqual(durableBody.note.tags, [
+      "Working memory",
+      "release-handoff"
+    ]);
+    assert.equal(durableBody.note.destroyAt, null);
+
+    const expiringNote = await app.inject({
+      method: "POST",
+      url: "/api/v1/notes",
+      headers: {
+        cookie: operatorCookie
+      },
+      payload: {
+        contentMarkdown:
+          "This should self-destruct after the immediate handoff.",
+        author: "Albert",
+        tags: ["Short-term memory"],
+        destroyAt: new Date(Date.now() - 60_000).toISOString(),
+        links: [
+          {
+            entityType: "project",
+            entityId: "project_forge_mobile",
+            anchorKey: null
+          }
+        ]
+      }
+    });
+    assert.equal(expiringNote.statusCode, 201);
+    const expiringBody = expiringNote.json() as { note: { id: string } };
+
+    const filtered = await app.inject({
+      method: "GET",
+      url: "/api/v1/notes?tags=working%20memory",
+      headers: {
+        cookie: operatorCookie
+      }
+    });
+
+    assert.equal(filtered.statusCode, 200);
+    const filteredBody = filtered.json() as {
+      notes: Array<{ id: string; tags: string[] }>;
+    };
+    assert.equal(filteredBody.notes.length, 1);
+    assert.equal(filteredBody.notes[0]?.id, durableBody.note.id);
+    assert.deepEqual(filteredBody.notes[0]?.tags, [
+      "Working memory",
+      "release-handoff"
+    ]);
+
+    const expiredGet = await app.inject({
+      method: "GET",
+      url: `/api/v1/notes/${expiringBody.note.id}`,
+      headers: {
+        cookie: operatorCookie
+      }
+    });
+    assert.equal(expiredGet.statusCode, 404);
   } finally {
     await app.close();
     closeDatabase();
@@ -2912,13 +3885,23 @@ test("notes list supports linked entity arrays, free-text chips, and updated dat
 });
 
 test("task-run completion and release endpoints are idempotent for same-actor retries", async () => {
-  const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-task-run-idempotency-"));
-  const app = await buildServer({ dataRoot: rootDir, seedDemoData: true, taskRunWatchdog: false });
+  const rootDir = await mkdtemp(
+    path.join(os.tmpdir(), "forge-task-run-idempotency-")
+  );
+  const app = await buildServer({
+    dataRoot: rootDir,
+    seedDemoData: true,
+    taskRunWatchdog: false
+  });
 
   try {
     const operatorCookie = await issueOperatorSessionCookie(app);
-    const tasksResponse = await app.inject({ method: "GET", url: "/api/tasks?limit=1" });
-    const taskId = (tasksResponse.json() as { tasks: Array<{ id: string }> }).tasks[0]!.id;
+    const tasksResponse = await app.inject({
+      method: "GET",
+      url: "/api/tasks?limit=1"
+    });
+    const taskId = (tasksResponse.json() as { tasks: Array<{ id: string }> })
+      .tasks[0]!.id;
 
     const claimed = await app.inject({
       method: "POST",
@@ -2934,7 +3917,8 @@ test("task-run completion and release endpoints are idempotent for same-actor re
     });
 
     assert.equal(claimed.statusCode, 201);
-    const claimedRunId = (claimed.json() as { taskRun: { id: string } }).taskRun.id;
+    const claimedRunId = (claimed.json() as { taskRun: { id: string } }).taskRun
+      .id;
 
     const completed = await app.inject({
       method: "POST",
@@ -2949,7 +3933,11 @@ test("task-run completion and release endpoints are idempotent for same-actor re
     });
 
     assert.equal(completed.statusCode, 200);
-    const completedRun = (completed.json() as { taskRun: { id: string; status: string; completedAt: string | null } }).taskRun;
+    const completedRun = (
+      completed.json() as {
+        taskRun: { id: string; status: string; completedAt: string | null };
+      }
+    ).taskRun;
     assert.equal(completedRun.status, "completed");
     assert.ok(completedRun.completedAt);
 
@@ -2967,7 +3955,11 @@ test("task-run completion and release endpoints are idempotent for same-actor re
 
     assert.equal(completedRetry.statusCode, 200);
     assert.deepEqual(
-      (completedRetry.json() as { taskRun: { id: string; status: string; completedAt: string | null } }).taskRun,
+      (
+        completedRetry.json() as {
+          taskRun: { id: string; status: string; completedAt: string | null };
+        }
+      ).taskRun,
       completedRun
     );
 
@@ -2985,7 +3977,9 @@ test("task-run completion and release endpoints are idempotent for same-actor re
     });
 
     assert.equal(claimedForRelease.statusCode, 201);
-    const releaseRunId = (claimedForRelease.json() as { taskRun: { id: string } }).taskRun.id;
+    const releaseRunId = (
+      claimedForRelease.json() as { taskRun: { id: string } }
+    ).taskRun.id;
 
     const released = await app.inject({
       method: "POST",
@@ -3000,7 +3994,11 @@ test("task-run completion and release endpoints are idempotent for same-actor re
     });
 
     assert.equal(released.statusCode, 200);
-    const releasedRun = (released.json() as { taskRun: { id: string; status: string; releasedAt: string | null } }).taskRun;
+    const releasedRun = (
+      released.json() as {
+        taskRun: { id: string; status: string; releasedAt: string | null };
+      }
+    ).taskRun;
     assert.equal(releasedRun.status, "released");
     assert.ok(releasedRun.releasedAt);
 
@@ -3017,7 +4015,11 @@ test("task-run completion and release endpoints are idempotent for same-actor re
 
     assert.equal(releasedRetry.statusCode, 200);
     assert.deepEqual(
-      (releasedRetry.json() as { taskRun: { id: string; status: string; releasedAt: string | null } }).taskRun,
+      (
+        releasedRetry.json() as {
+          taskRun: { id: string; status: string; releasedAt: string | null };
+        }
+      ).taskRun,
       releasedRun
     );
   } finally {
@@ -3028,13 +4030,23 @@ test("task-run completion and release endpoints are idempotent for same-actor re
 });
 
 test("task-run completion can persist a closeout note linked to the task", async () => {
-  const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-task-run-closeout-note-"));
-  const app = await buildServer({ dataRoot: rootDir, seedDemoData: true, taskRunWatchdog: false });
+  const rootDir = await mkdtemp(
+    path.join(os.tmpdir(), "forge-task-run-closeout-note-")
+  );
+  const app = await buildServer({
+    dataRoot: rootDir,
+    seedDemoData: true,
+    taskRunWatchdog: false
+  });
 
   try {
     const operatorCookie = await issueOperatorSessionCookie(app);
-    const tasksResponse = await app.inject({ method: "GET", url: "/api/v1/tasks?limit=1" });
-    const taskId = (tasksResponse.json() as { tasks: Array<{ id: string }> }).tasks[0]!.id;
+    const tasksResponse = await app.inject({
+      method: "GET",
+      url: "/api/v1/tasks?limit=1"
+    });
+    const taskId = (tasksResponse.json() as { tasks: Array<{ id: string }> })
+      .tasks[0]!.id;
 
     const claimed = await app.inject({
       method: "POST",
@@ -3079,8 +4091,14 @@ test("task-run completion can persist a closeout note linked to the task", async
     });
 
     assert.equal(notes.statusCode, 200);
-    const notesBody = notes.json() as { notes: Array<{ contentMarkdown: string }> };
-    assert.ok(notesBody.notes.some((entry) => entry.contentMarkdown.includes("captured the handoff")));
+    const notesBody = notes.json() as {
+      notes: Array<{ contentMarkdown: string }>;
+    };
+    assert.ok(
+      notesBody.notes.some((entry) =>
+        entry.contentMarkdown.includes("captured the handoff")
+      )
+    );
   } finally {
     await app.close();
     closeDatabase();
@@ -3088,14 +4106,18 @@ test("task-run completion can persist a closeout note linked to the task", async
   }
 });
 
-
 test("task creation is idempotent when the same Idempotency-Key is retried", async () => {
-  const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-task-idempotent-"));
+  const rootDir = await mkdtemp(
+    path.join(os.tmpdir(), "forge-task-idempotent-")
+  );
   const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
 
   try {
     const operatorCookie = await issueOperatorSessionCookie(app);
-    const dashboard = await app.inject({ method: "GET", url: "/api/dashboard" });
+    const dashboard = await app.inject({
+      method: "GET",
+      url: "/api/dashboard"
+    });
     const payload = dashboard.json() as {
       goals: Array<{ id: string }>;
       tasks: Array<{ id: string }>;
@@ -3105,7 +4127,8 @@ test("task creation is idempotent when the same Idempotency-Key is retried", asy
 
     const taskPayload = {
       title: "Retry-safe focus block",
-      description: "This should not duplicate when the client retries after a timeout.",
+      description:
+        "This should not duplicate when the client retries after a timeout.",
       status: "focus",
       priority: "high",
       owner: "Albert",
@@ -3145,7 +4168,8 @@ test("task creation is idempotent when the same Idempotency-Key is retried", asy
     assert.equal(replayTask.id, firstTask.id);
 
     const after = await app.inject({ method: "GET", url: "/api/tasks" });
-    const afterCount = (after.json() as { tasks: Array<{ id: string }> }).tasks.length;
+    const afterCount = (after.json() as { tasks: Array<{ id: string }> }).tasks
+      .length;
     assert.equal(afterCount, beforeCount + 1);
   } finally {
     await app.close();
@@ -3155,12 +4179,17 @@ test("task creation is idempotent when the same Idempotency-Key is retried", asy
 });
 
 test("task creation rejects reusing an Idempotency-Key with a different payload", async () => {
-  const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-task-idempotency-conflict-"));
+  const rootDir = await mkdtemp(
+    path.join(os.tmpdir(), "forge-task-idempotency-conflict-")
+  );
   const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
 
   try {
     const operatorCookie = await issueOperatorSessionCookie(app);
-    const dashboard = await app.inject({ method: "GET", url: "/api/dashboard" });
+    const dashboard = await app.inject({
+      method: "GET",
+      url: "/api/dashboard"
+    });
     const payload = dashboard.json() as {
       goals: Array<{ id: string }>;
       tags: Array<{ id: string }>;
@@ -3201,7 +4230,8 @@ test("task creation rejects reusing an Idempotency-Key with a different payload"
     assert.equal(conflict.statusCode, 409);
     assert.deepEqual(conflict.json(), {
       code: "idempotency_conflict",
-      error: "Idempotency key was already used for a different task creation payload",
+      error:
+        "Idempotency key was already used for a different task creation payload",
       statusCode: 409
     });
   } finally {
@@ -3216,9 +4246,16 @@ test("metrics and programmable task filters are exposed for OpenClaw", async () 
   const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
 
   try {
-    const metricsResponse = await app.inject({ method: "GET", url: "/api/metrics" });
+    const metricsResponse = await app.inject({
+      method: "GET",
+      url: "/api/metrics"
+    });
     assert.equal(metricsResponse.statusCode, 200);
-    const metrics = (metricsResponse.json() as { metrics: { level: number; totalXp: number; nextLevelXp: number } }).metrics;
+    const metrics = (
+      metricsResponse.json() as {
+        metrics: { level: number; totalXp: number; nextLevelXp: number };
+      }
+    ).metrics;
     assert.ok(metrics.level >= 1);
     assert.ok(metrics.totalXp >= 0);
     assert.ok(metrics.nextLevelXp > 0);
@@ -3228,7 +4265,9 @@ test("metrics and programmable task filters are exposed for OpenClaw", async () 
       url: "/api/tasks?owner=Albert&due=week&limit=3"
     });
     assert.equal(filteredTasksResponse.statusCode, 200);
-    const filteredTasks = (filteredTasksResponse.json() as { tasks: Array<{ owner: string }> }).tasks;
+    const filteredTasks = (
+      filteredTasksResponse.json() as { tasks: Array<{ owner: string }> }
+    ).tasks;
     assert.ok(filteredTasks.length >= 1);
     assert.ok(filteredTasks.every((task) => task.owner === "Albert"));
 
@@ -3257,7 +4296,10 @@ test("activity endpoints capture mutations with source attribution", async () =>
 
   try {
     const operatorCookie = await issueOperatorSessionCookie(app);
-    const dashboard = await app.inject({ method: "GET", url: "/api/dashboard" });
+    const dashboard = await app.inject({
+      method: "GET",
+      url: "/api/dashboard"
+    });
     const payload = dashboard.json() as {
       goals: Array<{ id: string }>;
       tasks: Array<{ id: string }>;
@@ -3310,15 +4352,35 @@ test("activity endpoints capture mutations with source attribution", async () =>
       url: "/api/activity?limit=10"
     });
     assert.equal(activityResponse.statusCode, 200);
-    const activity = (activityResponse.json() as {
-      activity: Array<{ entityType: string; entityId: string; source: string; title: string }>;
-    }).activity;
+    const activity = (
+      activityResponse.json() as {
+        activity: Array<{
+          entityType: string;
+          entityId: string;
+          source: string;
+          title: string;
+        }>;
+      }
+    ).activity;
 
-    assert.ok(activity.some((event) => event.entityType === "task" && event.entityId === taskId && event.source === "openclaw"));
-    assert.ok(activity.some((event) => event.entityType === "goal" && event.source === "ui"));
     assert.ok(
       activity.some(
-        (event) => event.entityType === "task_run" && (event.title.includes("started") || event.title.includes("claimed"))
+        (event) =>
+          event.entityType === "task" &&
+          event.entityId === taskId &&
+          event.source === "openclaw"
+      )
+    );
+    assert.ok(
+      activity.some(
+        (event) => event.entityType === "goal" && event.source === "ui"
+      )
+    );
+    assert.ok(
+      activity.some(
+        (event) =>
+          event.entityType === "task_run" &&
+          (event.title.includes("started") || event.title.includes("claimed"))
       )
     );
 
@@ -3346,7 +4408,10 @@ test("task context bundles goal linkage, run state, and task-scoped evidence", a
 
   try {
     const operatorCookie = await issueOperatorSessionCookie(app);
-    const dashboard = await app.inject({ method: "GET", url: "/api/dashboard" });
+    const dashboard = await app.inject({
+      method: "GET",
+      url: "/api/dashboard"
+    });
     const payload = dashboard.json() as {
       goals: Array<{ id: string; title: string }>;
     };
@@ -3370,7 +4435,9 @@ test("task context bundles goal linkage, run state, and task-scoped evidence", a
       }
     });
     assert.equal(createdTask.statusCode, 201);
-    const task = (createdTask.json() as { task: { id: string; goalId: string } }).task;
+    const task = (
+      createdTask.json() as { task: { id: string; goalId: string } }
+    ).task;
 
     const runClaim = await app.inject({
       method: "POST",
@@ -3407,9 +4474,25 @@ test("task context bundles goal linkage, run state, and task-scoped evidence", a
     assert.equal(context.goal?.title, payload.goals[0]!.title);
     assert.equal(context.activeTaskRun?.id, claimedRun.id);
     assert.equal(context.activeTaskRun?.status, "active");
-    assert.ok(context.taskRuns.some((entry) => entry.id === claimedRun.id && entry.taskId === task.id));
-    assert.ok(context.activity.some((event) => event.entityType === "task" && event.entityId === task.id && event.source === "openclaw"));
-    assert.ok(context.activity.some((event) => event.entityType === "task_run" && event.entityId === claimedRun.id));
+    assert.ok(
+      context.taskRuns.some(
+        (entry) => entry.id === claimedRun.id && entry.taskId === task.id
+      )
+    );
+    assert.ok(
+      context.activity.some(
+        (event) =>
+          event.entityType === "task" &&
+          event.entityId === task.id &&
+          event.source === "openclaw"
+      )
+    );
+    assert.ok(
+      context.activity.some(
+        (event) =>
+          event.entityType === "task_run" && event.entityId === claimedRun.id
+      )
+    );
   } finally {
     await app.close();
     closeDatabase();
@@ -3423,7 +4506,10 @@ test("goal updates reject unknown tags with a 404", async () => {
 
   try {
     const operatorCookie = await issueOperatorSessionCookie(app);
-    const dashboard = await app.inject({ method: "GET", url: "/api/dashboard" });
+    const dashboard = await app.inject({
+      method: "GET",
+      url: "/api/dashboard"
+    });
     const payload = dashboard.json() as {
       goals: Array<{ id: string; tagIds: string[] }>;
     };
@@ -3453,11 +4539,16 @@ test("goal updates reject unknown tags with a 404", async () => {
 });
 
 test("insights and weekly review read models are exposed for the routed shell", async () => {
-  const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-insights-review-"));
+  const rootDir = await mkdtemp(
+    path.join(os.tmpdir(), "forge-insights-review-")
+  );
   const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
 
   try {
-    const insights = await app.inject({ method: "GET", url: "/api/v1/insights" });
+    const insights = await app.inject({
+      method: "GET",
+      url: "/api/v1/insights"
+    });
     assert.equal(insights.statusCode, 200);
     const insightsBody = insights.json() as {
       insights: {
@@ -3470,7 +4561,10 @@ test("insights and weekly review read models are exposed for the routed shell", 
     assert.ok(insightsBody.insights.executionTrends.length >= 1);
     assert.ok(insightsBody.insights.coaching.title.length > 0);
 
-    const review = await app.inject({ method: "GET", url: "/api/v1/reviews/weekly" });
+    const review = await app.inject({
+      method: "GET",
+      url: "/api/v1/reviews/weekly"
+    });
     assert.equal(review.statusCode, 200);
     const reviewBody = review.json() as {
       review: {
@@ -3490,13 +4584,18 @@ test("insights and weekly review read models are exposed for the routed shell", 
 });
 
 test("weekly review finalization is idempotent and updates the review payload", async () => {
-  const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-weekly-review-finalize-"));
+  const rootDir = await mkdtemp(
+    path.join(os.tmpdir(), "forge-weekly-review-finalize-")
+  );
   const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
 
   try {
     const operatorCookie = await issueOperatorSessionCookie(app);
 
-    const initialReview = await app.inject({ method: "GET", url: "/api/v1/reviews/weekly" });
+    const initialReview = await app.inject({
+      method: "GET",
+      url: "/api/v1/reviews/weekly"
+    });
     assert.equal(initialReview.statusCode, 200);
     const initialBody = initialReview.json() as {
       review: {
@@ -3517,8 +4616,15 @@ test("weekly review finalization is idempotent and updates the review payload", 
     assert.equal(firstFinalize.statusCode, 201);
     const firstBody = firstFinalize.json() as {
       closure: { id: string; weekKey: string; rewardId: string };
-      reward: { id: string; deltaXp: number; entityType: string; entityId: string };
-      review: { completion: { finalized: boolean; finalizedAt: string | null } };
+      reward: {
+        id: string;
+        deltaXp: number;
+        entityType: string;
+        entityId: string;
+      };
+      review: {
+        completion: { finalized: boolean; finalizedAt: string | null };
+      };
       metrics: { recentLedger: Array<{ id: string; deltaXp: number }> };
     };
     assert.equal(firstBody.closure.weekKey, initialBody.review.weekKey);
@@ -3528,7 +4634,13 @@ test("weekly review finalization is idempotent and updates the review payload", 
     assert.equal(firstBody.reward.entityId, initialBody.review.weekKey);
     assert.equal(firstBody.review.completion.finalized, true);
     assert.ok(firstBody.review.completion.finalizedAt);
-    assert.ok(firstBody.metrics.recentLedger.some((entry) => entry.id === firstBody.reward.id && entry.deltaXp === firstBody.reward.deltaXp));
+    assert.ok(
+      firstBody.metrics.recentLedger.some(
+        (entry) =>
+          entry.id === firstBody.reward.id &&
+          entry.deltaXp === firstBody.reward.deltaXp
+      )
+    );
 
     const secondFinalize = await app.inject({
       method: "POST",
@@ -3547,11 +4659,18 @@ test("weekly review finalization is idempotent and updates the review payload", 
     assert.equal(secondBody.reward.id, firstBody.reward.id);
     assert.equal(secondBody.reward.deltaXp, firstBody.reward.deltaXp);
 
-    const reviewAfterFinalize = await app.inject({ method: "GET", url: "/api/v1/reviews/weekly" });
+    const reviewAfterFinalize = await app.inject({
+      method: "GET",
+      url: "/api/v1/reviews/weekly"
+    });
     assert.equal(reviewAfterFinalize.statusCode, 200);
     const reviewAfterBody = reviewAfterFinalize.json() as {
       review: {
-        completion: { finalized: boolean; finalizedAt: string | null; finalizedBy: string | null };
+        completion: {
+          finalized: boolean;
+          finalizedAt: string | null;
+          finalizedBy: string | null;
+        };
       };
     };
     assert.equal(reviewAfterBody.review.completion.finalized, true);
@@ -3565,14 +4684,20 @@ test("weekly review finalization is idempotent and updates the review payload", 
 });
 
 test("soft delete, restore, hard delete, and the settings bin stay in sync for anchored collaboration", async () => {
-  const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-soft-delete-bin-"));
+  const rootDir = await mkdtemp(
+    path.join(os.tmpdir(), "forge-soft-delete-bin-")
+  );
   const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
 
   try {
     const operatorCookie = await issueOperatorSessionCookie(app);
 
-    const goalsResponse = await app.inject({ method: "GET", url: "/api/v1/goals" });
-    const goalId = (goalsResponse.json() as { goals: Array<{ id: string }> }).goals[0]!.id;
+    const goalsResponse = await app.inject({
+      method: "GET",
+      url: "/api/v1/goals"
+    });
+    const goalId = (goalsResponse.json() as { goals: Array<{ id: string }> })
+      .goals[0]!.id;
 
     const noteResponse = await app.inject({
       method: "POST",
@@ -3599,7 +4724,8 @@ test("soft delete, restore, hard delete, and the settings bin stay in sync for a
         timeframeLabel: "This week",
         title: "Protect the goal from drift",
         summary: "The goal needs one concrete project pulse this week.",
-        recommendation: "Review the linked project and create one visible next task.",
+        recommendation:
+          "Review the linked project and create one visible next task.",
         rationale: "",
         confidence: 0.78,
         visibility: "visible",
@@ -3607,7 +4733,8 @@ test("soft delete, restore, hard delete, and the settings bin stay in sync for a
       }
     });
     assert.equal(insightResponse.statusCode, 201);
-    const insightId = (insightResponse.json() as { insight: { id: string } }).insight.id;
+    const insightId = (insightResponse.json() as { insight: { id: string } })
+      .insight.id;
 
     const softDeleteGoal = await app.inject({
       method: "DELETE",
@@ -3616,7 +4743,10 @@ test("soft delete, restore, hard delete, and the settings bin stay in sync for a
     });
     assert.equal(softDeleteGoal.statusCode, 200);
 
-    const deletedGoal = await app.inject({ method: "GET", url: `/api/v1/goals/${goalId}` });
+    const deletedGoal = await app.inject({
+      method: "GET",
+      url: `/api/v1/goals/${goalId}`
+    });
     assert.equal(deletedGoal.statusCode, 404);
 
     const hiddenNotes = await app.inject({
@@ -3644,9 +4774,22 @@ test("soft delete, restore, hard delete, and the settings bin stay in sync for a
         records: Array<{ entityType: string; entityId: string }>;
       };
     };
-    assert.ok(binBody.bin.records.some((record) => record.entityType === "goal" && record.entityId === goalId));
-    assert.ok(binBody.bin.records.some((record) => record.entityType === "note" && record.entityId === noteId));
-    assert.ok(binBody.bin.records.some((record) => record.entityType === "insight" && record.entityId === insightId));
+    assert.ok(
+      binBody.bin.records.some(
+        (record) => record.entityType === "goal" && record.entityId === goalId
+      )
+    );
+    assert.ok(
+      binBody.bin.records.some(
+        (record) => record.entityType === "note" && record.entityId === noteId
+      )
+    );
+    assert.ok(
+      binBody.bin.records.some(
+        (record) =>
+          record.entityType === "insight" && record.entityId === insightId
+      )
+    );
 
     const restored = await app.inject({
       method: "POST",
@@ -3658,7 +4801,10 @@ test("soft delete, restore, hard delete, and the settings bin stay in sync for a
     });
     assert.equal(restored.statusCode, 200);
 
-    const restoredGoal = await app.inject({ method: "GET", url: `/api/v1/goals/${goalId}` });
+    const restoredGoal = await app.inject({
+      method: "GET",
+      url: `/api/v1/goals/${goalId}`
+    });
     assert.equal(restoredGoal.statusCode, 200);
 
     const restoredNotes = await app.inject({
@@ -3666,7 +4812,11 @@ test("soft delete, restore, hard delete, and the settings bin stay in sync for a
       url: `/api/v1/notes?linkedEntityType=goal&linkedEntityId=${goalId}`,
       headers: { cookie: operatorCookie }
     });
-    assert.ok((restoredNotes.json() as { notes: Array<{ id: string }> }).notes.some((entry) => entry.id === noteId));
+    assert.ok(
+      (restoredNotes.json() as { notes: Array<{ id: string }> }).notes.some(
+        (entry) => entry.id === noteId
+      )
+    );
 
     const restoredInsight = await app.inject({
       method: "GET",
@@ -3702,7 +4852,12 @@ test("soft delete, restore, hard delete, and the settings bin stay in sync for a
         records: Array<{ entityType: string; entityId: string }>;
       };
     };
-    assert.ok(!binAfterHardDeleteBody.bin.records.some((record) => record.entityType === "insight" && record.entityId === insightId));
+    assert.ok(
+      !binAfterHardDeleteBody.bin.records.some(
+        (record) =>
+          record.entityType === "insight" && record.entityId === insightId
+      )
+    );
   } finally {
     await app.close();
     closeDatabase();
@@ -3711,13 +4866,20 @@ test("soft delete, restore, hard delete, and the settings bin stay in sync for a
 });
 
 test("atomic batch create rolls back earlier successes when a later operation fails", async () => {
-  const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-atomic-batch-create-"));
+  const rootDir = await mkdtemp(
+    path.join(os.tmpdir(), "forge-atomic-batch-create-")
+  );
   const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
 
   try {
     const operatorCookie = await issueOperatorSessionCookie(app);
-    const beforeResponse = await app.inject({ method: "GET", url: "/api/v1/goals" });
-    const beforeCount = (beforeResponse.json() as { goals: Array<{ id: string }> }).goals.length;
+    const beforeResponse = await app.inject({
+      method: "GET",
+      url: "/api/v1/goals"
+    });
+    const beforeCount = (
+      beforeResponse.json() as { goals: Array<{ id: string }> }
+    ).goals.length;
 
     const createResponse = await app.inject({
       method: "POST",
@@ -3747,17 +4909,28 @@ test("atomic batch create rolls back earlier successes when a later operation fa
 
     assert.equal(createResponse.statusCode, 200);
     const createBody = createResponse.json() as {
-      results: Array<{ ok: boolean; clientRef?: string; error?: { code: string } }>;
+      results: Array<{
+        ok: boolean;
+        clientRef?: string;
+        error?: { code: string };
+      }>;
     };
     assert.equal(createBody.results[0]?.ok, false);
     assert.equal(createBody.results[0]?.error?.code, "rolled_back");
     assert.equal(createBody.results[1]?.ok, false);
     assert.equal(createBody.results[1]?.error?.code, "create_failed");
 
-    const afterResponse = await app.inject({ method: "GET", url: "/api/v1/goals" });
-    const afterGoals = (afterResponse.json() as { goals: Array<{ id: string; title: string }> }).goals;
+    const afterResponse = await app.inject({
+      method: "GET",
+      url: "/api/v1/goals"
+    });
+    const afterGoals = (
+      afterResponse.json() as { goals: Array<{ id: string; title: string }> }
+    ).goals;
     assert.equal(afterGoals.length, beforeCount);
-    assert.ok(!afterGoals.some((goal) => goal.title === "Atomic rollback guardrail"));
+    assert.ok(
+      !afterGoals.some((goal) => goal.title === "Atomic rollback guardrail")
+    );
   } finally {
     await app.close();
     closeDatabase();
@@ -3766,7 +4939,9 @@ test("atomic batch create rolls back earlier successes when a later operation fa
 });
 
 test("batch entity routes create, update, and search entities through the shared capability matrix", async () => {
-  const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-batch-entity-routes-"));
+  const rootDir = await mkdtemp(
+    path.join(os.tmpdir(), "forge-batch-entity-routes-")
+  );
   const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
 
   try {
@@ -3795,7 +4970,10 @@ test("batch entity routes create, update, and search entities through the shared
       results: Array<{ ok: boolean; entity?: { id: string; title: string } }>;
     };
     assert.equal(createBody.results[0]?.ok, true);
-    assert.equal(createBody.results[0]?.entity?.title, "Publish the Forge OpenClaw plugin");
+    assert.equal(
+      createBody.results[0]?.entity?.title,
+      "Publish the Forge OpenClaw plugin"
+    );
     const createdGoalId = createBody.results[0]?.entity?.id;
     assert.ok(createdGoalId);
 
@@ -3809,7 +4987,8 @@ test("batch entity routes create, update, and search entities through the shared
             entityType: "goal",
             id: createdGoalId,
             patch: {
-              description: "Ship the public plugin package, docs, tests, and release workflow."
+              description:
+                "Ship the public plugin package, docs, tests, and release workflow."
             }
           }
         ]
@@ -3818,10 +4997,16 @@ test("batch entity routes create, update, and search entities through the shared
 
     assert.equal(updateResponse.statusCode, 200);
     const updateBody = updateResponse.json() as {
-      results: Array<{ ok: boolean; entity?: { id: string; description: string } }>;
+      results: Array<{
+        ok: boolean;
+        entity?: { id: string; description: string };
+      }>;
     };
     assert.equal(updateBody.results[0]?.ok, true);
-    assert.equal(updateBody.results[0]?.entity?.description, "Ship the public plugin package, docs, tests, and release workflow.");
+    assert.equal(
+      updateBody.results[0]?.entity?.description,
+      "Ship the public plugin package, docs, tests, and release workflow."
+    );
 
     const searchResponse = await app.inject({
       method: "POST",
@@ -3840,10 +5025,17 @@ test("batch entity routes create, update, and search entities through the shared
 
     assert.equal(searchResponse.statusCode, 200);
     const searchBody = searchResponse.json() as {
-      results: Array<{ ok: boolean; matches?: Array<{ entityType: string; id: string }> }>;
+      results: Array<{
+        ok: boolean;
+        matches?: Array<{ entityType: string; id: string }>;
+      }>;
     };
     assert.equal(searchBody.results[0]?.ok, true);
-    assert.ok(searchBody.results[0]?.matches?.some((match) => match.entityType === "goal" && match.id === createdGoalId));
+    assert.ok(
+      searchBody.results[0]?.matches?.some(
+        (match) => match.entityType === "goal" && match.id === createdGoalId
+      )
+    );
   } finally {
     await app.close();
     closeDatabase();
@@ -3852,15 +5044,26 @@ test("batch entity routes create, update, and search entities through the shared
 });
 
 test("calendar entities work through the generic batch routes and keep calendar-specific side effects", async () => {
-  const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-batch-calendar-entities-"));
+  const rootDir = await mkdtemp(
+    path.join(os.tmpdir(), "forge-batch-calendar-entities-")
+  );
   const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
 
   try {
     const operatorCookie = await issueOperatorSessionCookie(app);
-    const tasksResponse = await app.inject({ method: "GET", url: "/api/v1/tasks" });
-    const projectsResponse = await app.inject({ method: "GET", url: "/api/v1/projects" });
-    const taskId = (tasksResponse.json() as { tasks: Array<{ id: string }> }).tasks[0]!.id;
-    const projectId = (projectsResponse.json() as { projects: Array<{ id: string }> }).projects[0]!.id;
+    const tasksResponse = await app.inject({
+      method: "GET",
+      url: "/api/v1/tasks"
+    });
+    const projectsResponse = await app.inject({
+      method: "GET",
+      url: "/api/v1/projects"
+    });
+    const taskId = (tasksResponse.json() as { tasks: Array<{ id: string }> })
+      .tasks[0]!.id;
+    const projectId = (
+      projectsResponse.json() as { projects: Array<{ id: string }> }
+    ).projects[0]!.id;
 
     const createResponse = await app.inject({
       method: "POST",
@@ -3877,7 +5080,13 @@ test("calendar entities work through the generic batch routes and keep calendar-
               endAt: "2026-04-07T09:00:00.000Z",
               timezone: "Europe/Zurich",
               preferredCalendarId: null,
-              links: [{ entityType: "project", entityId: projectId, relationshipType: "meeting_for" }]
+              links: [
+                {
+                  entityType: "project",
+                  entityId: projectId,
+                  relationshipType: "meeting_for"
+                }
+              ]
             }
           },
           {
@@ -3912,12 +5121,25 @@ test("calendar entities work through the generic batch routes and keep calendar-
 
     assert.equal(createResponse.statusCode, 200);
     const createBody = createResponse.json() as {
-      results: Array<{ ok: boolean; entityType?: string; entity?: { id: string; title: string; originType?: string } }>;
+      results: Array<{
+        ok: boolean;
+        entityType?: string;
+        entity?: { id: string; title: string; originType?: string };
+      }>;
     };
-    assert.equal(createBody.results.every((result) => result.ok), true);
-    const createdEvent = createBody.results.find((result) => result.entityType === "calendar_event")?.entity;
-    const createdBlock = createBody.results.find((result) => result.entityType === "work_block_template")?.entity;
-    const createdTimebox = createBody.results.find((result) => result.entityType === "task_timebox")?.entity;
+    assert.equal(
+      createBody.results.every((result) => result.ok),
+      true
+    );
+    const createdEvent = createBody.results.find(
+      (result) => result.entityType === "calendar_event"
+    )?.entity;
+    const createdBlock = createBody.results.find(
+      (result) => result.entityType === "work_block_template"
+    )?.entity;
+    const createdTimebox = createBody.results.find(
+      (result) => result.entityType === "task_timebox"
+    )?.entity;
     assert.ok(createdEvent?.id);
     assert.equal(createdEvent?.originType, "native");
     assert.ok(createdBlock?.id);
@@ -3958,12 +5180,33 @@ test("calendar entities work through the generic batch routes and keep calendar-
 
     assert.equal(updateResponse.statusCode, 200);
     const updateBody = updateResponse.json() as {
-      results: Array<{ ok: boolean; entityType?: string; entity?: { title?: string; status?: string } }>;
+      results: Array<{
+        ok: boolean;
+        entityType?: string;
+        entity?: { title?: string; status?: string };
+      }>;
     };
-    assert.equal(updateBody.results.every((result) => result.ok), true);
-    assert.equal(updateBody.results.find((result) => result.entityType === "calendar_event")?.entity?.title, "Generic batch planning review moved");
-    assert.equal(updateBody.results.find((result) => result.entityType === "work_block_template")?.entity?.title, "Secondary Activity Updated");
-    assert.equal(updateBody.results.find((result) => result.entityType === "task_timebox")?.entity?.status, "active");
+    assert.equal(
+      updateBody.results.every((result) => result.ok),
+      true
+    );
+    assert.equal(
+      updateBody.results.find(
+        (result) => result.entityType === "calendar_event"
+      )?.entity?.title,
+      "Generic batch planning review moved"
+    );
+    assert.equal(
+      updateBody.results.find(
+        (result) => result.entityType === "work_block_template"
+      )?.entity?.title,
+      "Secondary Activity Updated"
+    );
+    assert.equal(
+      updateBody.results.find((result) => result.entityType === "task_timebox")
+        ?.entity?.status,
+      "active"
+    );
 
     const deleteResponse = await app.inject({
       method: "POST",
@@ -3980,9 +5223,16 @@ test("calendar entities work through the generic batch routes and keep calendar-
 
     assert.equal(deleteResponse.statusCode, 200);
     const deleteBody = deleteResponse.json() as {
-      results: Array<{ ok: boolean; entityType?: string; entity?: { id: string } }>;
+      results: Array<{
+        ok: boolean;
+        entityType?: string;
+        entity?: { id: string };
+      }>;
     };
-    assert.equal(deleteBody.results.every((result) => result.ok), true);
+    assert.equal(
+      deleteBody.results.every((result) => result.ok),
+      true
+    );
 
     const overviewAfterDelete = await app.inject({
       method: "GET",
@@ -3995,9 +5245,21 @@ test("calendar entities work through the generic batch routes and keep calendar-
         timeboxes: Array<{ id: string }>;
       };
     };
-    assert.ok(!overviewBody.calendar.events.some((event) => event.id === createdEvent!.id));
-    assert.ok(!overviewBody.calendar.workBlockTemplates.some((template) => template.id === createdBlock!.id));
-    assert.ok(!overviewBody.calendar.timeboxes.some((timebox) => timebox.id === createdTimebox!.id));
+    assert.ok(
+      !overviewBody.calendar.events.some(
+        (event) => event.id === createdEvent!.id
+      )
+    );
+    assert.ok(
+      !overviewBody.calendar.workBlockTemplates.some(
+        (template) => template.id === createdBlock!.id
+      )
+    );
+    assert.ok(
+      !overviewBody.calendar.timeboxes.some(
+        (timebox) => timebox.id === createdTimebox!.id
+      )
+    );
 
     const binResponse = await app.inject({
       method: "GET",
@@ -4009,9 +5271,131 @@ test("calendar entities work through the generic batch routes and keep calendar-
         records: Array<{ entityType: string; entityId: string }>;
       };
     };
-    assert.ok(!binBody.bin.records.some((record) => record.entityType === "calendar_event" && record.entityId === createdEvent!.id));
-    assert.ok(!binBody.bin.records.some((record) => record.entityType === "work_block_template" && record.entityId === createdBlock!.id));
-    assert.ok(!binBody.bin.records.some((record) => record.entityType === "task_timebox" && record.entityId === createdTimebox!.id));
+    assert.ok(
+      !binBody.bin.records.some(
+        (record) =>
+          record.entityType === "calendar_event" &&
+          record.entityId === createdEvent!.id
+      )
+    );
+    assert.ok(
+      !binBody.bin.records.some(
+        (record) =>
+          record.entityType === "work_block_template" &&
+          record.entityId === createdBlock!.id
+      )
+    );
+    assert.ok(
+      !binBody.bin.records.some(
+        (record) =>
+          record.entityType === "task_timebox" &&
+          record.entityId === createdTimebox!.id
+      )
+    );
+  } finally {
+    await app.close();
+    closeDatabase();
+    await rm(rootDir, { recursive: true, force: true });
+  }
+});
+
+test("calendar events omit preferredCalendarId to use the default writable calendar", async () => {
+  const rootDir = await mkdtemp(
+    path.join(os.tmpdir(), "forge-calendar-default-writable-")
+  );
+  const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
+
+  try {
+    const database = getDatabase();
+    database
+      .prepare(
+        `INSERT INTO stored_secrets (id, cipher_text, description, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?)`
+      )
+      .run(
+        "secret_default_write",
+        "{}",
+        "default writable calendar test secret",
+        "2026-04-03T00:00:00.000Z",
+        "2026-04-03T00:00:00.000Z"
+      );
+    database
+      .prepare(
+        `INSERT INTO calendar_connections (
+           id, provider, label, account_label, status, config_json, credentials_secret_id, forge_calendar_id, last_synced_at, last_sync_error, created_at, updated_at
+         )
+         VALUES (?, ?, ?, ?, 'connected', ?, ?, NULL, NULL, NULL, ?, ?)`
+      )
+      .run(
+        "calconn_default_write",
+        "caldav",
+        "Default write calendar",
+        "operator@example.com",
+        "{}",
+        "secret_default_write",
+        "2026-04-03T00:00:00.000Z",
+        "2026-04-03T00:00:00.000Z"
+      );
+    database
+      .prepare(
+        `INSERT INTO calendar_calendars (
+           id, connection_id, remote_id, title, description, color, timezone, is_primary, can_write, forge_managed, selected_for_sync, last_synced_at, created_at, updated_at
+         )
+         VALUES (?, ?, ?, ?, ?, ?, ?, 1, 1, 1, 1, NULL, ?, ?)`
+      )
+      .run(
+        "calendar_default_write",
+        "calconn_default_write",
+        "https://caldav.example.com/calendars/forge/",
+        "Forge",
+        "Dedicated Forge calendar",
+        "#7dd3fc",
+        "Europe/Zurich",
+        "2026-04-03T00:00:00.000Z",
+        "2026-04-03T00:00:00.000Z"
+      );
+    database
+      .prepare(
+        `UPDATE calendar_connections
+         SET forge_calendar_id = ?
+         WHERE id = ?`
+      )
+      .run("calendar_default_write", "calconn_default_write");
+
+    const syncedEvent = createCalendarEvent({
+      title: "Auto-sync event",
+      description: "",
+      location: "",
+      startAt: "2026-04-08T11:00:00.000Z",
+      endAt: "2026-04-08T12:00:00.000Z",
+      timezone: "Europe/Zurich",
+      isAllDay: false,
+      availability: "busy",
+      eventType: "",
+      categories: [],
+      links: []
+    });
+
+    assert.equal(syncedEvent.calendarId, "calendar_default_write");
+    assert.equal(syncedEvent.connectionId, "calconn_default_write");
+
+    const forgeOnlyEvent = createCalendarEvent({
+      title: "Explicit Forge-only event",
+      description: "",
+      location: "",
+      startAt: "2026-04-08T13:00:00.000Z",
+      endAt: "2026-04-08T14:00:00.000Z",
+      timezone: "Europe/Zurich",
+      isAllDay: false,
+      availability: "busy",
+      eventType: "",
+      categories: [],
+      preferredCalendarId: null,
+      links: []
+    });
+
+    assert.equal(forgeOnlyEvent.calendarId, null);
+    assert.equal(forgeOnlyEvent.connectionId, null);
   } finally {
     await app.close();
     closeDatabase();
@@ -4020,7 +5404,9 @@ test("calendar entities work through the generic batch routes and keep calendar-
 });
 
 test("batch entity routes require auth and return validation failures with machine-readable details", async () => {
-  const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-batch-entity-errors-"));
+  const rootDir = await mkdtemp(
+    path.join(os.tmpdir(), "forge-batch-entity-errors-")
+  );
   const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
 
   try {
@@ -4067,13 +5453,17 @@ test("batch entity routes require auth and return validation failures with machi
 });
 
 test("work blocks support holiday ranges without storing repeated daily rows", async () => {
-  const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-work-block-ranges-"));
+  const rootDir = await mkdtemp(
+    path.join(os.tmpdir(), "forge-work-block-ranges-")
+  );
   const app = await buildServer({ dataRoot: rootDir, seedDemoData: false });
 
   try {
     const operatorCookie = await issueOperatorSessionCookie(app);
     const instanceTable = getDatabase()
-      .prepare(`SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'work_block_instances'`)
+      .prepare(
+        `SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'work_block_instances'`
+      )
       .get() as { name: string } | undefined;
     assert.equal(instanceTable, undefined);
 
@@ -4098,9 +5488,16 @@ test("work blocks support holiday ranges without storing repeated daily rows", a
     });
 
     assert.equal(created.statusCode, 201);
-    const createdTemplate = (created.json() as {
-      template: { id: string; kind: string; startsOn: string | null; endsOn: string | null };
-    }).template;
+    const createdTemplate = (
+      created.json() as {
+        template: {
+          id: string;
+          kind: string;
+          startsOn: string | null;
+          endsOn: string | null;
+        };
+      }
+    ).template;
     assert.equal(createdTemplate.kind, "holiday");
     assert.equal(createdTemplate.startsOn, "2026-08-01");
     assert.equal(createdTemplate.endsOn, "2026-08-16");
@@ -4112,7 +5509,11 @@ test("work blocks support holiday ranges without storing repeated daily rows", a
     assert.equal(overview.statusCode, 200);
     const overviewBody = overview.json() as {
       calendar: {
-        workBlockInstances: Array<{ templateId: string; dateKey: string; kind: string }>;
+        workBlockInstances: Array<{
+          templateId: string;
+          dateKey: string;
+          kind: string;
+        }>;
       };
     };
     assert.equal(overviewBody.calendar.workBlockInstances.length, 16);
@@ -4138,9 +5539,11 @@ test("work blocks support holiday ranges without storing repeated daily rows", a
       }
     });
     assert.equal(patched.statusCode, 200);
-    const patchedTemplate = (patched.json() as {
-      template: { title: string; endsOn: string | null };
-    }).template;
+    const patchedTemplate = (
+      patched.json() as {
+        template: { title: string; endsOn: string | null };
+      }
+    ).template;
     assert.equal(patchedTemplate.title, "Summer holiday extended");
     assert.equal(patchedTemplate.endsOn, null);
 
@@ -4156,7 +5559,9 @@ test("work blocks support holiday ranges without storing repeated daily rows", a
     };
     assert.equal(futureBody.calendar.workBlockInstances.length, 3);
     assert.deepEqual(
-      futureBody.calendar.workBlockInstances.map((instance) => instance.dateKey),
+      futureBody.calendar.workBlockInstances.map(
+        (instance) => instance.dateKey
+      ),
       ["2026-09-01", "2026-09-02", "2026-09-03"]
     );
 
@@ -4175,9 +5580,9 @@ test("work blocks support holiday ranges without storing repeated daily rows", a
     });
     assert.equal(afterDelete.statusCode, 200);
     assert.equal(
-      (afterDelete.json() as { templates: Array<{ id: string }> }).templates.some(
-        (template) => template.id === createdTemplate.id
-      ),
+      (
+        afterDelete.json() as { templates: Array<{ id: string }> }
+      ).templates.some((template) => template.id === createdTemplate.id),
       false
     );
   } finally {
@@ -4209,14 +5614,22 @@ test("CRUD capability matrix keeps user-facing delete/bin entities explicit", ()
     "tag",
     "task",
     "task_timebox",
-    "trigger_report"
-    ,
+    "trigger_report",
     "work_block_template"
   ]);
   assert.ok(matrix.every((entry) => entry.pluginExposed === true));
-  const immediateDeleteTypes = matrix.filter((entry) => entry.deleteMode === "immediate").map((entry) => entry.entityType).sort();
-  assert.deepEqual(immediateDeleteTypes, ["calendar_event", "task_timebox", "work_block_template"]);
-  const binTypes = matrix.filter((entry) => entry.inBin).map((entry) => entry.entityType);
+  const immediateDeleteTypes = matrix
+    .filter((entry) => entry.deleteMode === "immediate")
+    .map((entry) => entry.entityType)
+    .sort();
+  assert.deepEqual(immediateDeleteTypes, [
+    "calendar_event",
+    "task_timebox",
+    "work_block_template"
+  ]);
+  const binTypes = matrix
+    .filter((entry) => entry.inBin)
+    .map((entry) => entry.entityType);
   assert.ok(!binTypes.includes("calendar_event"));
   assert.ok(!binTypes.includes("work_block_template"));
   assert.ok(!binTypes.includes("task_timebox"));
@@ -4240,12 +5653,36 @@ test("settings and local agent token management persist through the versioned AP
       settings: {
         themePreference: string;
         execution: { maxActiveTasks: number; timeAccountingMode: string };
+        calendarProviders: {
+          microsoft: {
+            clientId: string;
+            tenantId: string;
+            redirectUri: string;
+            isReadyForSignIn: boolean;
+          };
+        };
         agentTokens: Array<unknown>;
       };
     };
     assert.equal(settingsBody.settings.themePreference, "obsidian");
     assert.equal(settingsBody.settings.execution.maxActiveTasks, 2);
     assert.equal(settingsBody.settings.execution.timeAccountingMode, "split");
+    assert.equal(
+      settingsBody.settings.calendarProviders.microsoft.clientId,
+      ""
+    );
+    assert.equal(
+      settingsBody.settings.calendarProviders.microsoft.tenantId,
+      "common"
+    );
+    assert.equal(
+      settingsBody.settings.calendarProviders.microsoft.redirectUri,
+      "http://127.0.0.1:4317/api/v1/calendar/oauth/microsoft/callback"
+    );
+    assert.equal(
+      settingsBody.settings.calendarProviders.microsoft.isReadyForSignIn,
+      false
+    );
     assert.equal(settingsBody.settings.agentTokens.length, 0);
 
     const updated = await app.inject({
@@ -4264,6 +5701,14 @@ test("settings and local agent token management persist through the versioned AP
           operatorName: "Albert",
           operatorEmail: "albert@example.com",
           operatorTitle: "Systems architect"
+        },
+        calendarProviders: {
+          microsoft: {
+            clientId: "00000000-0000-0000-0000-000000000000",
+            tenantId: "common",
+            redirectUri:
+              "http://127.0.0.1:4317/api/v1/calendar/oauth/microsoft/callback"
+          }
         }
       }
     });
@@ -4273,12 +5718,26 @@ test("settings and local agent token management persist through the versioned AP
         themePreference: string;
         execution: { maxActiveTasks: number; timeAccountingMode: string };
         profile: { operatorTitle: string };
+        calendarProviders: {
+          microsoft: { clientId: string; isReadyForSignIn: boolean };
+        };
       };
     };
     assert.equal(updatedBody.settings.themePreference, "solar");
     assert.equal(updatedBody.settings.execution.maxActiveTasks, 3);
     assert.equal(updatedBody.settings.execution.timeAccountingMode, "parallel");
-    assert.equal(updatedBody.settings.profile.operatorTitle, "Systems architect");
+    assert.equal(
+      updatedBody.settings.profile.operatorTitle,
+      "Systems architect"
+    );
+    assert.equal(
+      updatedBody.settings.calendarProviders.microsoft.clientId,
+      "00000000-0000-0000-0000-000000000000"
+    );
+    assert.equal(
+      updatedBody.settings.calendarProviders.microsoft.isReadyForSignIn,
+      true
+    );
 
     const createdToken = await app.inject({
       method: "POST",
@@ -4310,7 +5769,11 @@ test("settings and local agent token management persist through the versioned AP
     });
     assert.equal(settingsViaToken.statusCode, 200);
     assert.equal(
-      (settingsViaToken.json() as { settings: { execution: { maxActiveTasks: number } } }).settings.execution.maxActiveTasks,
+      (
+        settingsViaToken.json() as {
+          settings: { execution: { maxActiveTasks: number } };
+        }
+      ).settings.execution.maxActiveTasks,
       3
     );
 
@@ -4329,10 +5792,15 @@ test("settings and local agent token management persist through the versioned AP
     });
     assert.equal(updatedViaToken.statusCode, 200);
     const updatedViaTokenBody = updatedViaToken.json() as {
-      settings: { execution: { maxActiveTasks: number; timeAccountingMode: string } };
+      settings: {
+        execution: { maxActiveTasks: number; timeAccountingMode: string };
+      };
     };
     assert.equal(updatedViaTokenBody.settings.execution.maxActiveTasks, 4);
-    assert.equal(updatedViaTokenBody.settings.execution.timeAccountingMode, "primary_only");
+    assert.equal(
+      updatedViaTokenBody.settings.execution.timeAccountingMode,
+      "primary_only"
+    );
 
     const onboarding = await app.inject({
       method: "GET",
@@ -4351,9 +5819,22 @@ test("settings and local agent token management persist through the versioned AP
         recommendedScopes: string[];
         recommendedAutonomyMode: string;
         authModes: { operatorSession: { tokenRequired: boolean } };
-        tokenRecovery: { rawTokenStoredByForge: boolean; recoveryAction: string };
-        conceptModel: { goal: string; taskRun: string; note: string; psyche: string };
-        psycheSubmoduleModel: { behaviorPattern: string; beliefEntry: string; schemaCatalog: string; triggerReport: string };
+        tokenRecovery: {
+          rawTokenStoredByForge: boolean;
+          recoveryAction: string;
+        };
+        conceptModel: {
+          goal: string;
+          taskRun: string;
+          note: string;
+          psyche: string;
+        };
+        psycheSubmoduleModel: {
+          behaviorPattern: string;
+          beliefEntry: string;
+          schemaCatalog: string;
+          triggerReport: string;
+        };
         psycheCoachingPlaybooks: Array<{
           focus: string;
           askSequence: string[];
@@ -4372,7 +5853,13 @@ test("settings and local agent token management persist through the versioned AP
           requiredFields: string[];
           inputShape: string;
         }>;
-        verificationPaths: { settingsBin: string; batchSearch: string; psycheSchemaCatalog: string; psycheEventTypes: string; psycheEmotions: string };
+        verificationPaths: {
+          settingsBin: string;
+          batchSearch: string;
+          psycheSchemaCatalog: string;
+          psycheEventTypes: string;
+          psycheEmotions: string;
+        };
         recommendedPluginTools: {
           bootstrap: string[];
           readModels: string[];
@@ -4392,7 +5879,13 @@ test("settings and local agent token management persist through the versioned AP
         };
         mutationGuidance: {
           deleteDefault: string;
-          preferredBatchRoutes: { create: string; update: string; delete: string; restore: string; search: string };
+          preferredBatchRoutes: {
+            create: string;
+            update: string;
+            delete: string;
+            restore: string;
+            search: string;
+          };
           batchingRule: string;
           searchRule: string;
           createRule: string;
@@ -4402,10 +5895,22 @@ test("settings and local agent token management persist through the versioned AP
         };
       };
     };
-    assert.equal(onboardingBody.onboarding.forgeBaseUrl, "http://127.0.0.1:4317");
-    assert.equal(onboardingBody.onboarding.webAppUrl, "http://127.0.0.1:4317/forge/");
-    assert.equal(onboardingBody.onboarding.openApiUrl, "http://127.0.0.1:4317/api/v1/openapi.json");
-    assert.equal(onboardingBody.onboarding.defaultConnectionMode, "operator_session");
+    assert.equal(
+      onboardingBody.onboarding.forgeBaseUrl,
+      "http://127.0.0.1:4317"
+    );
+    assert.equal(
+      onboardingBody.onboarding.webAppUrl,
+      "http://127.0.0.1:4317/forge/"
+    );
+    assert.equal(
+      onboardingBody.onboarding.openApiUrl,
+      "http://127.0.0.1:4317/api/v1/openapi.json"
+    );
+    assert.equal(
+      onboardingBody.onboarding.defaultConnectionMode,
+      "operator_session"
+    );
     assert.deepEqual(onboardingBody.onboarding.recommendedScopes, [
       "read",
       "write",
@@ -4417,139 +5922,342 @@ test("settings and local agent token management persist through the versioned AP
       "psyche.insight",
       "psyche.mode"
     ]);
-    assert.equal(onboardingBody.onboarding.recommendedAutonomyMode, "approval_required");
-    assert.equal(onboardingBody.onboarding.authModes.operatorSession.tokenRequired, false);
-    assert.equal(onboardingBody.onboarding.tokenRecovery.rawTokenStoredByForge, false);
-    assert.equal(onboardingBody.onboarding.tokenRecovery.recoveryAction, "rotate_or_issue_new_token");
-    assert.match(onboardingBody.onboarding.conceptModel.goal, /Goals anchor projects/);
-    assert.match(onboardingBody.onboarding.conceptModel.taskRun, /live work session/);
-    assert.match(onboardingBody.onboarding.conceptModel.note, /Markdown work note/);
+    assert.equal(
+      onboardingBody.onboarding.recommendedAutonomyMode,
+      "approval_required"
+    );
+    assert.equal(
+      onboardingBody.onboarding.authModes.operatorSession.tokenRequired,
+      false
+    );
+    assert.equal(
+      onboardingBody.onboarding.tokenRecovery.rawTokenStoredByForge,
+      false
+    );
+    assert.equal(
+      onboardingBody.onboarding.tokenRecovery.recoveryAction,
+      "rotate_or_issue_new_token"
+    );
+    assert.match(
+      onboardingBody.onboarding.conceptModel.goal,
+      /Goals anchor projects/
+    );
+    assert.match(
+      onboardingBody.onboarding.conceptModel.taskRun,
+      /live work session/
+    );
+    assert.match(
+      onboardingBody.onboarding.conceptModel.note,
+      /Markdown work note/
+    );
     assert.match(onboardingBody.onboarding.conceptModel.psyche, /sensitive/);
-    assert.match(onboardingBody.onboarding.psycheSubmoduleModel.behaviorPattern, /CBT-style loop/);
-    assert.match(onboardingBody.onboarding.psycheSubmoduleModel.beliefEntry, /belief statement/);
-    assert.match(onboardingBody.onboarding.psycheSubmoduleModel.schemaCatalog, /reference taxonomy/);
-    assert.match(onboardingBody.onboarding.psycheSubmoduleModel.triggerReport, /incident chain/);
-    const patternPlaybook = onboardingBody.onboarding.psycheCoachingPlaybooks.find((playbook) => playbook.focus === "behavior_pattern");
+    assert.match(
+      onboardingBody.onboarding.psycheSubmoduleModel.behaviorPattern,
+      /CBT-style loop/
+    );
+    assert.match(
+      onboardingBody.onboarding.psycheSubmoduleModel.beliefEntry,
+      /belief statement/
+    );
+    assert.match(
+      onboardingBody.onboarding.psycheSubmoduleModel.schemaCatalog,
+      /reference taxonomy/
+    );
+    assert.match(
+      onboardingBody.onboarding.psycheSubmoduleModel.triggerReport,
+      /incident chain/
+    );
+    const patternPlaybook =
+      onboardingBody.onboarding.psycheCoachingPlaybooks.find(
+        (playbook) => playbook.focus === "behavior_pattern"
+      );
     assert.ok(patternPlaybook);
-    assert.ok(patternPlaybook.askSequence.some((step) => /short-term payoff/i.test(step)));
-    assert.ok(patternPlaybook.exampleQuestions.some((question) => /What usually sets this loop off/i.test(question)));
-    const beliefPlaybook = onboardingBody.onboarding.psycheCoachingPlaybooks.find((playbook) => playbook.focus === "belief_entry");
+    assert.ok(
+      patternPlaybook.askSequence.some((step) =>
+        /short-term payoff/i.test(step)
+      )
+    );
+    assert.ok(
+      patternPlaybook.exampleQuestions.some((question) =>
+        /What usually sets this loop off/i.test(question)
+      )
+    );
+    const beliefPlaybook =
+      onboardingBody.onboarding.psycheCoachingPlaybooks.find(
+        (playbook) => playbook.focus === "belief_entry"
+      );
     assert.ok(beliefPlaybook);
     assert.ok(beliefPlaybook.requiredForCreate.includes("statement"));
     assert.ok(beliefPlaybook.requiredForCreate.includes("beliefType"));
-    assert.ok(onboardingBody.onboarding.relationshipModel.some((rule) => /Projects belong to one goal/.test(rule)));
-    const goalEntity = onboardingBody.onboarding.entityCatalog.find((entity) => entity.entityType === "goal");
+    assert.ok(
+      onboardingBody.onboarding.relationshipModel.some((rule) =>
+        /Projects belong to one goal/.test(rule)
+      )
+    );
+    const goalEntity = onboardingBody.onboarding.entityCatalog.find(
+      (entity) => entity.entityType === "goal"
+    );
     assert.ok(goalEntity);
     assert.ok(goalEntity.minimumCreateFields.includes("title"));
-    assert.ok(goalEntity.fieldGuide.some((field) => field.name === "horizon" && field.required === false));
-    const beliefEntity = onboardingBody.onboarding.entityCatalog.find((entity) => entity.entityType === "belief_entry");
+    assert.ok(
+      goalEntity.fieldGuide.some(
+        (field) => field.name === "horizon" && field.required === false
+      )
+    );
+    const beliefEntity = onboardingBody.onboarding.entityCatalog.find(
+      (entity) => entity.entityType === "belief_entry"
+    );
     assert.ok(beliefEntity);
-    assert.ok(beliefEntity.fieldGuide.some((field) => field.name === "statement" && field.required));
-    assert.ok(beliefEntity.fieldGuide.some((field) => field.name === "beliefType" && field.required));
-    const eventTypeEntity = onboardingBody.onboarding.entityCatalog.find((entity) => entity.entityType === "event_type");
+    assert.ok(
+      beliefEntity.fieldGuide.some(
+        (field) => field.name === "statement" && field.required
+      )
+    );
+    assert.ok(
+      beliefEntity.fieldGuide.some(
+        (field) => field.name === "beliefType" && field.required
+      )
+    );
+    const eventTypeEntity = onboardingBody.onboarding.entityCatalog.find(
+      (entity) => entity.entityType === "event_type"
+    );
     assert.ok(eventTypeEntity);
     assert.ok(eventTypeEntity.minimumCreateFields.includes("label"));
-    const calendarEventEntity = onboardingBody.onboarding.entityCatalog.find((entity) => entity.entityType === "calendar_event");
+    const calendarEventEntity = onboardingBody.onboarding.entityCatalog.find(
+      (entity) => entity.entityType === "calendar_event"
+    );
     assert.ok(calendarEventEntity);
     assert.ok(calendarEventEntity.minimumCreateFields.includes("title"));
-    assert.ok(calendarEventEntity.fieldGuide.some((field) => field.name === "preferredCalendarId"));
-    const workBlockEntity = onboardingBody.onboarding.entityCatalog.find((entity) => entity.entityType === "work_block_template");
+    assert.ok(
+      calendarEventEntity.fieldGuide.some(
+        (field) => field.name === "preferredCalendarId"
+      )
+    );
+    const workBlockEntity = onboardingBody.onboarding.entityCatalog.find(
+      (entity) => entity.entityType === "work_block_template"
+    );
     assert.ok(workBlockEntity);
     assert.ok(workBlockEntity.minimumCreateFields.includes("weekDays"));
-    const timeboxEntity = onboardingBody.onboarding.entityCatalog.find((entity) => entity.entityType === "task_timebox");
+    const timeboxEntity = onboardingBody.onboarding.entityCatalog.find(
+      (entity) => entity.entityType === "task_timebox"
+    );
     assert.ok(timeboxEntity);
     assert.ok(timeboxEntity.minimumCreateFields.includes("taskId"));
-    const emotionEntity = onboardingBody.onboarding.entityCatalog.find((entity) => entity.entityType === "emotion_definition");
+    const emotionEntity = onboardingBody.onboarding.entityCatalog.find(
+      (entity) => entity.entityType === "emotion_definition"
+    );
     assert.ok(emotionEntity);
-    assert.ok(emotionEntity.fieldGuide.some((field) => field.name === "category"));
-    const modeGuideEntity = onboardingBody.onboarding.entityCatalog.find((entity) => entity.entityType === "mode_guide_session");
+    assert.ok(
+      emotionEntity.fieldGuide.some((field) => field.name === "category")
+    );
+    const modeGuideEntity = onboardingBody.onboarding.entityCatalog.find(
+      (entity) => entity.entityType === "mode_guide_session"
+    );
     assert.ok(modeGuideEntity);
     assert.ok(modeGuideEntity.minimumCreateFields.includes("answers"));
     assert.ok(modeGuideEntity.minimumCreateFields.includes("results"));
-    const triggerReportEntity = onboardingBody.onboarding.entityCatalog.find((entity) => entity.entityType === "trigger_report");
+    const triggerReportEntity = onboardingBody.onboarding.entityCatalog.find(
+      (entity) => entity.entityType === "trigger_report"
+    );
     assert.ok(triggerReportEntity);
-    assert.ok(triggerReportEntity.fieldGuide.some((field) => field.name === "emotions"));
-    const createTool = onboardingBody.onboarding.toolInputCatalog.find((tool) => tool.toolName === "forge_create_entities");
+    assert.ok(
+      triggerReportEntity.fieldGuide.some((field) => field.name === "emotions")
+    );
+    const createTool = onboardingBody.onboarding.toolInputCatalog.find(
+      (tool) => tool.toolName === "forge_create_entities"
+    );
     assert.ok(createTool);
     assert.ok(createTool.requiredFields.includes("operations[].data"));
     assert.match(createTool.inputShape, /operations/);
     const createToolNotes = (createTool as { notes?: string[] }).notes ?? [];
     assert.match(createToolNotes.join(" "), /calendar_event/);
-    const updateTool = onboardingBody.onboarding.toolInputCatalog.find((tool) => tool.toolName === "forge_update_entities");
+    const updateTool = onboardingBody.onboarding.toolInputCatalog.find(
+      (tool) => tool.toolName === "forge_update_entities"
+    );
     assert.ok(updateTool);
     const updateToolNotes = (updateTool as { notes?: string[] }).notes ?? [];
     assert.match(updateToolNotes.join(" "), /status-driven/);
-    assert.match(updateToolNotes.join(" "), /auto-completes linked unfinished tasks/);
+    assert.match(
+      updateToolNotes.join(" "),
+      /auto-completes linked unfinished tasks/
+    );
     assert.match(updateToolNotes.join(" "), /calendar_event/);
-    const deleteTool = onboardingBody.onboarding.toolInputCatalog.find((tool) => tool.toolName === "forge_delete_entities");
+    const deleteTool = onboardingBody.onboarding.toolInputCatalog.find(
+      (tool) => tool.toolName === "forge_delete_entities"
+    );
     assert.ok(deleteTool);
     const deleteToolNotes = (deleteTool as { notes?: string[] }).notes ?? [];
     assert.match(deleteToolNotes.join(" "), /calendar_event/);
-    assert.ok(!onboardingBody.onboarding.toolInputCatalog.some((tool) => tool.toolName === "forge_create_calendar_event"));
-    const startRunTool = onboardingBody.onboarding.toolInputCatalog.find((tool) => tool.toolName === "forge_start_task_run");
+    assert.ok(
+      !onboardingBody.onboarding.toolInputCatalog.some(
+        (tool) => tool.toolName === "forge_create_calendar_event"
+      )
+    );
+    const startRunTool = onboardingBody.onboarding.toolInputCatalog.find(
+      (tool) => tool.toolName === "forge_start_task_run"
+    );
     assert.ok(startRunTool);
     assert.ok(startRunTool.requiredFields.includes("taskId"));
     assert.ok(startRunTool.requiredFields.includes("actor"));
-    assert.equal(onboardingBody.onboarding.verificationPaths.settingsBin, "/api/v1/settings/bin");
-    assert.equal(onboardingBody.onboarding.verificationPaths.batchSearch, "/api/v1/entities/search");
-    assert.equal(onboardingBody.onboarding.verificationPaths.psycheSchemaCatalog, "/api/v1/psyche/schema-catalog");
-    assert.equal(onboardingBody.onboarding.verificationPaths.psycheEventTypes, "/api/v1/psyche/event-types");
-    assert.equal(onboardingBody.onboarding.verificationPaths.psycheEmotions, "/api/v1/psyche/emotions");
-    assert.deepEqual(onboardingBody.onboarding.recommendedPluginTools.bootstrap, ["forge_get_operator_overview"]);
-    assert.deepEqual(onboardingBody.onboarding.recommendedPluginTools.readModels, [
-      "forge_get_operator_context",
-      "forge_get_current_work",
-      "forge_get_psyche_overview",
-      "forge_get_xp_metrics",
-      "forge_get_weekly_review"
-    ]);
-    assert.deepEqual(onboardingBody.onboarding.recommendedPluginTools.uiWorkflow, ["forge_get_ui_entrypoint"]);
-    assert.deepEqual(onboardingBody.onboarding.recommendedPluginTools.entityWorkflow, [
-      "forge_search_entities",
-      "forge_create_entities",
-      "forge_update_entities",
-      "forge_delete_entities",
-      "forge_restore_entities"
-    ]);
-    assert.deepEqual(onboardingBody.onboarding.recommendedPluginTools.calendarWorkflow, [
-      "forge_get_calendar_overview",
-      "forge_connect_calendar_provider",
-      "forge_sync_calendar_connection",
-      "forge_create_work_block_template",
-      "forge_recommend_task_timeboxes",
-      "forge_create_task_timebox"
-    ]);
-    assert.deepEqual(onboardingBody.onboarding.recommendedPluginTools.workWorkflow, [
-      "forge_adjust_work_minutes",
-      "forge_log_work",
-      "forge_start_task_run",
-      "forge_heartbeat_task_run",
-      "forge_focus_task_run",
-      "forge_complete_task_run",
-      "forge_release_task_run"
-    ]);
-    assert.deepEqual(onboardingBody.onboarding.recommendedPluginTools.insightWorkflow, ["forge_post_insight"]);
-    assert.equal(onboardingBody.onboarding.interactionGuidance.saveSuggestionPlacement, "end_of_message");
-    assert.equal(onboardingBody.onboarding.interactionGuidance.maxQuestionsPerTurn, 3);
-    assert.equal(onboardingBody.onboarding.interactionGuidance.duplicateCheckRoute, "/api/v1/entities/search");
-    assert.equal(onboardingBody.onboarding.interactionGuidance.uiSuggestionRule, "offer_visual_ui_when_review_or_editing_would_be_easier");
-    assert.match(onboardingBody.onboarding.interactionGuidance.browserFallbackRule, /Do not open the Forge UI or a browser/);
-    assert.match(onboardingBody.onboarding.interactionGuidance.writeConsentRule, /Only write after explicit save intent/);
-    assert.equal(onboardingBody.onboarding.mutationGuidance.deleteDefault, "soft");
-    assert.equal(onboardingBody.onboarding.mutationGuidance.preferredBatchRoutes.create, "/api/v1/entities/create");
-    assert.equal(onboardingBody.onboarding.mutationGuidance.preferredBatchRoutes.update, "/api/v1/entities/update");
-    assert.equal(onboardingBody.onboarding.mutationGuidance.preferredBatchRoutes.delete, "/api/v1/entities/delete");
-    assert.equal(onboardingBody.onboarding.mutationGuidance.preferredBatchRoutes.restore, "/api/v1/entities/restore");
-    assert.equal(onboardingBody.onboarding.mutationGuidance.preferredBatchRoutes.search, "/api/v1/entities/search");
-    assert.match(onboardingBody.onboarding.mutationGuidance.batchingRule, /accept operations as arrays/);
-    assert.match(onboardingBody.onboarding.mutationGuidance.searchRule, /accepts searches as an array/);
-    assert.match(onboardingBody.onboarding.mutationGuidance.createRule, /entityType and full data/);
-    assert.match(onboardingBody.onboarding.mutationGuidance.createRule, /calendar_event/);
-    assert.match(onboardingBody.onboarding.mutationGuidance.updateRule, /entityType, id, and patch/);
-    assert.match(onboardingBody.onboarding.mutationGuidance.updateRule, /status patches/);
-    assert.match(onboardingBody.onboarding.mutationGuidance.updateRule, /Calendar-event updates/);
-    assert.match(onboardingBody.onboarding.mutationGuidance.createExample, /\"operations\":\[/);
-    assert.match(onboardingBody.onboarding.mutationGuidance.updateExample, /\"paused\"/);
+    assert.equal(
+      onboardingBody.onboarding.verificationPaths.settingsBin,
+      "/api/v1/settings/bin"
+    );
+    assert.equal(
+      onboardingBody.onboarding.verificationPaths.batchSearch,
+      "/api/v1/entities/search"
+    );
+    assert.equal(
+      onboardingBody.onboarding.verificationPaths.psycheSchemaCatalog,
+      "/api/v1/psyche/schema-catalog"
+    );
+    assert.equal(
+      onboardingBody.onboarding.verificationPaths.psycheEventTypes,
+      "/api/v1/psyche/event-types"
+    );
+    assert.equal(
+      onboardingBody.onboarding.verificationPaths.psycheEmotions,
+      "/api/v1/psyche/emotions"
+    );
+    assert.deepEqual(
+      onboardingBody.onboarding.recommendedPluginTools.bootstrap,
+      ["forge_get_operator_overview"]
+    );
+    assert.deepEqual(
+      onboardingBody.onboarding.recommendedPluginTools.readModels,
+      [
+        "forge_get_operator_context",
+        "forge_get_current_work",
+        "forge_get_psyche_overview",
+        "forge_get_xp_metrics",
+        "forge_get_weekly_review"
+      ]
+    );
+    assert.deepEqual(
+      onboardingBody.onboarding.recommendedPluginTools.uiWorkflow,
+      ["forge_get_ui_entrypoint"]
+    );
+    assert.deepEqual(
+      onboardingBody.onboarding.recommendedPluginTools.entityWorkflow,
+      [
+        "forge_search_entities",
+        "forge_create_entities",
+        "forge_update_entities",
+        "forge_delete_entities",
+        "forge_restore_entities"
+      ]
+    );
+    assert.deepEqual(
+      onboardingBody.onboarding.recommendedPluginTools.calendarWorkflow,
+      [
+        "forge_get_calendar_overview",
+        "forge_connect_calendar_provider",
+        "forge_sync_calendar_connection",
+        "forge_create_work_block_template",
+        "forge_recommend_task_timeboxes",
+        "forge_create_task_timebox"
+      ]
+    );
+    assert.deepEqual(
+      onboardingBody.onboarding.recommendedPluginTools.workWorkflow,
+      [
+        "forge_adjust_work_minutes",
+        "forge_log_work",
+        "forge_start_task_run",
+        "forge_heartbeat_task_run",
+        "forge_focus_task_run",
+        "forge_complete_task_run",
+        "forge_release_task_run"
+      ]
+    );
+    assert.deepEqual(
+      onboardingBody.onboarding.recommendedPluginTools.insightWorkflow,
+      ["forge_post_insight"]
+    );
+    assert.equal(
+      onboardingBody.onboarding.interactionGuidance.saveSuggestionPlacement,
+      "end_of_message"
+    );
+    assert.equal(
+      onboardingBody.onboarding.interactionGuidance.maxQuestionsPerTurn,
+      3
+    );
+    assert.equal(
+      onboardingBody.onboarding.interactionGuidance.duplicateCheckRoute,
+      "/api/v1/entities/search"
+    );
+    assert.equal(
+      onboardingBody.onboarding.interactionGuidance.uiSuggestionRule,
+      "offer_visual_ui_when_review_or_editing_would_be_easier"
+    );
+    assert.match(
+      onboardingBody.onboarding.interactionGuidance.browserFallbackRule,
+      /Do not open the Forge UI or a browser/
+    );
+    assert.match(
+      onboardingBody.onboarding.interactionGuidance.writeConsentRule,
+      /Only write after explicit save intent/
+    );
+    assert.equal(
+      onboardingBody.onboarding.mutationGuidance.deleteDefault,
+      "soft"
+    );
+    assert.equal(
+      onboardingBody.onboarding.mutationGuidance.preferredBatchRoutes.create,
+      "/api/v1/entities/create"
+    );
+    assert.equal(
+      onboardingBody.onboarding.mutationGuidance.preferredBatchRoutes.update,
+      "/api/v1/entities/update"
+    );
+    assert.equal(
+      onboardingBody.onboarding.mutationGuidance.preferredBatchRoutes.delete,
+      "/api/v1/entities/delete"
+    );
+    assert.equal(
+      onboardingBody.onboarding.mutationGuidance.preferredBatchRoutes.restore,
+      "/api/v1/entities/restore"
+    );
+    assert.equal(
+      onboardingBody.onboarding.mutationGuidance.preferredBatchRoutes.search,
+      "/api/v1/entities/search"
+    );
+    assert.match(
+      onboardingBody.onboarding.mutationGuidance.batchingRule,
+      /accept operations as arrays/
+    );
+    assert.match(
+      onboardingBody.onboarding.mutationGuidance.searchRule,
+      /accepts searches as an array/
+    );
+    assert.match(
+      onboardingBody.onboarding.mutationGuidance.createRule,
+      /entityType and full data/
+    );
+    assert.match(
+      onboardingBody.onboarding.mutationGuidance.createRule,
+      /calendar_event/
+    );
+    assert.match(
+      onboardingBody.onboarding.mutationGuidance.updateRule,
+      /entityType, id, and patch/
+    );
+    assert.match(
+      onboardingBody.onboarding.mutationGuidance.updateRule,
+      /status patches/
+    );
+    assert.match(
+      onboardingBody.onboarding.mutationGuidance.updateRule,
+      /Calendar-event updates/
+    );
+    assert.match(
+      onboardingBody.onboarding.mutationGuidance.createExample,
+      /\"operations\":\[/
+    );
+    assert.match(
+      onboardingBody.onboarding.mutationGuidance.updateExample,
+      /\"paused\"/
+    );
 
     const rotated = await app.inject({
       method: "POST",
@@ -4589,8 +6297,12 @@ test("collaboration routes persist insights, feedback, and approval-gated agent 
 
   try {
     const operatorCookie = await issueOperatorSessionCookie(app);
-    const goalsResponse = await app.inject({ method: "GET", url: "/api/v1/goals" });
-    const goalId = (goalsResponse.json() as { goals: Array<{ id: string }> }).goals[0]!.id;
+    const goalsResponse = await app.inject({
+      method: "GET",
+      url: "/api/v1/goals"
+    });
+    const goalId = (goalsResponse.json() as { goals: Array<{ id: string }> })
+      .goals[0]!.id;
 
     const createdToken = await app.inject({
       method: "POST",
@@ -4635,7 +6347,8 @@ test("collaboration routes persist insights, feedback, and approval-gated agent 
         timeframeLabel: "This week",
         title: "Protect the lead goal",
         summary: "Recent activity is concentrated in one goal.",
-        recommendation: "Create another concrete project so the arc stays active.",
+        recommendation:
+          "Create another concrete project so the arc stays active.",
         rationale: "Balanced progress is part of Forge's operating model.",
         confidence: 0.84,
         ctaLabel: "Review insight",
@@ -4643,7 +6356,8 @@ test("collaboration routes persist insights, feedback, and approval-gated agent 
       }
     });
     assert.equal(insightResponse.statusCode, 201);
-    const insightId = (insightResponse.json() as { insight: { id: string } }).insight.id;
+    const insightId = (insightResponse.json() as { insight: { id: string } })
+      .insight.id;
 
     const feedbackResponse = await app.inject({
       method: "POST",
@@ -4656,10 +6370,19 @@ test("collaboration routes persist insights, feedback, and approval-gated agent 
     });
     assert.equal(feedbackResponse.statusCode, 200);
 
-    const xpResponse = await app.inject({ method: "GET", url: "/api/v1/metrics/xp" });
+    const xpResponse = await app.inject({
+      method: "GET",
+      url: "/api/v1/metrics/xp"
+    });
     assert.equal(xpResponse.statusCode, 200);
-    const xpBody = xpResponse.json() as { metrics: { recentLedger: Array<{ reasonTitle: string }> } };
-    assert.ok(xpBody.metrics.recentLedger.some((entry) => entry.reasonTitle === "Insight applied"));
+    const xpBody = xpResponse.json() as {
+      metrics: { recentLedger: Array<{ reasonTitle: string }> };
+    };
+    assert.ok(
+      xpBody.metrics.recentLedger.some(
+        (entry) => entry.reasonTitle === "Insight applied"
+      )
+    );
 
     const actionResponse = await app.inject({
       method: "POST",
@@ -4702,12 +6425,21 @@ test("collaboration routes persist insights, feedback, and approval-gated agent 
       }
     });
     assert.equal(approvalResponse.statusCode, 200);
-    const approvalBody = approvalResponse.json() as { approvalRequest: { status: string } };
+    const approvalBody = approvalResponse.json() as {
+      approvalRequest: { status: string };
+    };
     assert.equal(approvalBody.approvalRequest.status, "executed");
 
-    const projectsResponse = await app.inject({ method: "GET", url: `/api/v1/projects?goalId=${goalId}` });
-    const projectsBody = projectsResponse.json() as { projects: Array<{ title: string }> };
-    assert.ok(projectsBody.projects.some((project) => project.title === "Second Path"));
+    const projectsResponse = await app.inject({
+      method: "GET",
+      url: `/api/v1/projects?goalId=${goalId}`
+    });
+    const projectsBody = projectsResponse.json() as {
+      projects: Array<{ title: string }>;
+    };
+    assert.ok(
+      projectsBody.projects.some((project) => project.title === "Second Path")
+    );
   } finally {
     await app.close();
     closeDatabase();
@@ -4716,7 +6448,9 @@ test("collaboration routes persist insights, feedback, and approval-gated agent 
 });
 
 test("session events and reward endpoints expose bounded ambient XP", async () => {
-  const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-session-rewards-"));
+  const rootDir = await mkdtemp(
+    path.join(os.tmpdir(), "forge-session-rewards-")
+  );
   const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
 
   try {
@@ -4753,12 +6487,25 @@ test("session events and reward endpoints expose bounded ambient XP", async () =
     const rewardsBody = rewardsResponse.json() as {
       ledger: Array<{ reasonTitle: string }>;
     };
-    assert.ok(rewardsBody.ledger.some((entry) => entry.reasonTitle === "Active dwell milestone"));
+    assert.ok(
+      rewardsBody.ledger.some(
+        (entry) => entry.reasonTitle === "Active dwell milestone"
+      )
+    );
 
-    const eventsResponse = await app.inject({ method: "GET", url: "/api/v1/events?limit=10" });
+    const eventsResponse = await app.inject({
+      method: "GET",
+      url: "/api/v1/events?limit=10"
+    });
     assert.equal(eventsResponse.statusCode, 200);
-    const eventsBody = eventsResponse.json() as { events: Array<{ eventKind: string }> };
-    assert.ok(eventsBody.events.some((entry) => entry.eventKind === "session.dwell_120_seconds"));
+    const eventsBody = eventsResponse.json() as {
+      events: Array<{ eventKind: string }>;
+    };
+    assert.ok(
+      eventsBody.events.some(
+        (entry) => entry.eventKind === "session.dwell_120_seconds"
+      )
+    );
   } finally {
     await app.close();
     closeDatabase();
@@ -4766,15 +6513,18 @@ test("session events and reward endpoints expose bounded ambient XP", async () =
   }
 });
 
-
 test("task timers can be started, heartbeated, focused, and completed", async () => {
   const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-task-runs-"));
   const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
 
   try {
     const operatorCookie = await issueOperatorSessionCookie(app);
-    const dashboard = await app.inject({ method: "GET", url: "/api/dashboard" });
-    const taskId = (dashboard.json() as { tasks: Array<{ id: string }> }).tasks[0]!.id;
+    const dashboard = await app.inject({
+      method: "GET",
+      url: "/api/dashboard"
+    });
+    const taskId = (dashboard.json() as { tasks: Array<{ id: string }> })
+      .tasks[0]!.id;
 
     const claimed = await app.inject({
       method: "POST",
@@ -4792,17 +6542,19 @@ test("task timers can be started, heartbeated, focused, and completed", async ()
     });
 
     assert.equal(claimed.statusCode, 201);
-    const claimedRun = (claimed.json() as {
-      taskRun: {
-        id: string;
-        actor: string;
-        status: string;
-        timerMode: string;
-        plannedDurationSeconds: number | null;
-        isCurrent: boolean;
-        creditedSeconds: number;
-      };
-    }).taskRun;
+    const claimedRun = (
+      claimed.json() as {
+        taskRun: {
+          id: string;
+          actor: string;
+          status: string;
+          timerMode: string;
+          plannedDurationSeconds: number | null;
+          isCurrent: boolean;
+          creditedSeconds: number;
+        };
+      }
+    ).taskRun;
     assert.equal(claimedRun.actor, "Aurel");
     assert.equal(claimedRun.status, "active");
     assert.equal(claimedRun.timerMode, "planned");
@@ -4838,7 +6590,9 @@ test("task timers can be started, heartbeated, focused, and completed", async ()
     });
 
     assert.equal(heartbeat.statusCode, 200);
-    const heartbeated = (heartbeat.json() as { taskRun: { note: string; leaseTtlSeconds: number } }).taskRun;
+    const heartbeated = (
+      heartbeat.json() as { taskRun: { note: string; leaseTtlSeconds: number } }
+    ).taskRun;
     assert.equal(heartbeated.note, "Still working.");
     assert.equal(heartbeated.leaseTtlSeconds, 120);
 
@@ -4853,7 +6607,10 @@ test("task timers can be started, heartbeated, focused, and completed", async ()
       }
     });
     assert.equal(focused.statusCode, 200);
-    assert.equal((focused.json() as { taskRun: { isCurrent: boolean } }).taskRun.isCurrent, true);
+    assert.equal(
+      (focused.json() as { taskRun: { isCurrent: boolean } }).taskRun.isCurrent,
+      true
+    );
 
     const completed = await app.inject({
       method: "POST",
@@ -4868,7 +6625,11 @@ test("task timers can be started, heartbeated, focused, and completed", async ()
     });
 
     assert.equal(completed.statusCode, 200);
-    const completedRun = (completed.json() as { taskRun: { status: string; completedAt: string | null } }).taskRun;
+    const completedRun = (
+      completed.json() as {
+        taskRun: { status: string; completedAt: string | null };
+      }
+    ).taskRun;
     assert.equal(completedRun.status, "completed");
     assert.ok(completedRun.completedAt);
 
@@ -4879,14 +6640,21 @@ test("task timers can be started, heartbeated, focused, and completed", async ()
     assert.equal(taskContext.statusCode, 200);
     const taskContextBody = taskContext.json() as {
       task: { status: string; completedAt: string | null };
-      activity: Array<{ entityType: string; eventType: string; actor: string | null }>;
+      activity: Array<{
+        entityType: string;
+        eventType: string;
+        actor: string | null;
+      }>;
     };
 
     assert.equal(taskContextBody.task.status, "done");
     assert.ok(taskContextBody.task.completedAt);
     assert.ok(
       taskContextBody.activity.some(
-        (event) => event.entityType === "task" && event.eventType === "task_completed" && event.actor === "Aurel"
+        (event) =>
+          event.entityType === "task" &&
+          event.eventType === "task_completed" &&
+          event.actor === "Aurel"
       )
     );
   } finally {
@@ -4897,13 +6665,19 @@ test("task timers can be started, heartbeated, focused, and completed", async ()
 });
 
 test("task run conflicts return structured lease details for recovery", async () => {
-  const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-task-run-conflict-"));
+  const rootDir = await mkdtemp(
+    path.join(os.tmpdir(), "forge-task-run-conflict-")
+  );
   const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
 
   try {
     const operatorCookie = await issueOperatorSessionCookie(app);
-    const dashboard = await app.inject({ method: "GET", url: "/api/dashboard" });
-    const taskId = (dashboard.json() as { tasks: Array<{ id: string }> }).tasks[0]!.id;
+    const dashboard = await app.inject({
+      method: "GET",
+      url: "/api/dashboard"
+    });
+    const taskId = (dashboard.json() as { tasks: Array<{ id: string }> })
+      .tasks[0]!.id;
 
     const claimed = await app.inject({
       method: "POST",
@@ -4918,9 +6692,17 @@ test("task run conflicts return structured lease details for recovery", async ()
       }
     });
     assert.equal(claimed.statusCode, 201);
-    const claimedRun = (claimed.json() as {
-      taskRun: { id: string; actor: string; status: string; taskId: string; leaseTtlSeconds: number };
-    }).taskRun;
+    const claimedRun = (
+      claimed.json() as {
+        taskRun: {
+          id: string;
+          actor: string;
+          status: string;
+          taskId: string;
+          leaseTtlSeconds: number;
+        };
+      }
+    ).taskRun;
 
     const conflict = await app.inject({
       method: "POST",
@@ -4942,7 +6724,13 @@ test("task run conflicts return structured lease details for recovery", async ()
       statusCode: number;
       requestedActor: string;
       retryAfterSeconds: number;
-      taskRun: { id: string; actor: string; status: string; taskId: string; leaseTtlSeconds: number };
+      taskRun: {
+        id: string;
+        actor: string;
+        status: string;
+        taskId: string;
+        leaseTtlSeconds: number;
+      };
     };
     assert.equal(conflictBody.code, "task_run_conflict");
     assert.equal(conflictBody.requestedActor, "Albert");
@@ -4965,8 +6753,13 @@ test("task timer starts respect the max active task setting", async () => {
 
   try {
     const operatorCookie = await issueOperatorSessionCookie(app);
-    const dashboard = await app.inject({ method: "GET", url: "/api/dashboard" });
-    const taskIds = (dashboard.json() as { tasks: Array<{ id: string }> }).tasks.slice(0, 3).map((task) => task.id);
+    const dashboard = await app.inject({
+      method: "GET",
+      url: "/api/dashboard"
+    });
+    const taskIds = (dashboard.json() as { tasks: Array<{ id: string }> }).tasks
+      .slice(0, 3)
+      .map((task) => task.id);
     assert.equal(taskIds.length, 3);
 
     for (const taskId of taskIds.slice(0, 2)) {
@@ -5014,13 +6807,19 @@ test("task timer starts respect the max active task setting", async () => {
 });
 
 test("inactive task run mutations return the current run state", async () => {
-  const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-task-run-inactive-"));
+  const rootDir = await mkdtemp(
+    path.join(os.tmpdir(), "forge-task-run-inactive-")
+  );
   const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
 
   try {
     const operatorCookie = await issueOperatorSessionCookie(app);
-    const dashboard = await app.inject({ method: "GET", url: "/api/dashboard" });
-    const taskId = (dashboard.json() as { tasks: Array<{ id: string }> }).tasks[1]!.id;
+    const dashboard = await app.inject({
+      method: "GET",
+      url: "/api/dashboard"
+    });
+    const taskId = (dashboard.json() as { tasks: Array<{ id: string }> })
+      .tasks[1]!.id;
 
     const claimed = await app.inject({
       method: "POST",
@@ -5038,7 +6837,11 @@ test("inactive task run mutations return the current run state", async () => {
     const runId = (claimed.json() as { taskRun: { id: string } }).taskRun.id;
 
     await new Promise((resolve) => setTimeout(resolve, 1100));
-    const recover = await app.inject({ method: "POST", url: "/api/task-runs/recover", payload: { limit: 10 } });
+    const recover = await app.inject({
+      method: "POST",
+      url: "/api/task-runs/recover",
+      payload: { limit: 10 }
+    });
     assert.equal(recover.statusCode, 200);
 
     const heartbeat = await app.inject({
@@ -5071,13 +6874,19 @@ test("inactive task run mutations return the current run state", async () => {
 });
 
 test("expired task runs recover cleanly after their lease lapses", async () => {
-  const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-task-run-timeout-"));
+  const rootDir = await mkdtemp(
+    path.join(os.tmpdir(), "forge-task-run-timeout-")
+  );
   const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
 
   try {
     const operatorCookie = await issueOperatorSessionCookie(app);
-    const dashboard = await app.inject({ method: "GET", url: "/api/dashboard" });
-    const taskId = (dashboard.json() as { tasks: Array<{ id: string }> }).tasks[1]!.id;
+    const dashboard = await app.inject({
+      method: "GET",
+      url: "/api/dashboard"
+    });
+    const taskId = (dashboard.json() as { tasks: Array<{ id: string }> })
+      .tasks[1]!.id;
 
     const claimed = await app.inject({
       method: "POST",
@@ -5106,7 +6915,15 @@ test("expired task runs recover cleanly after their lease lapses", async () => {
     });
 
     assert.equal(recovered.statusCode, 200);
-    const timedOutRuns = (recovered.json() as { timedOutRuns: Array<{ id: string; status: string; timedOutAt: string | null }> }).timedOutRuns;
+    const timedOutRuns = (
+      recovered.json() as {
+        timedOutRuns: Array<{
+          id: string;
+          status: string;
+          timedOutAt: string | null;
+        }>;
+      }
+    ).timedOutRuns;
     assert.equal(timedOutRuns.length, 1);
     assert.equal(timedOutRuns[0]!.id, runId);
     assert.equal(timedOutRuns[0]!.status, "timed_out");
@@ -5126,9 +6943,21 @@ test("expired task runs recover cleanly after their lease lapses", async () => {
     });
 
     assert.equal(reclaimed.statusCode, 201);
-    const activeRuns = await app.inject({ method: "GET", url: "/api/task-runs?active=true" });
-    const activePayload = activeRuns.json() as { taskRuns: Array<{ taskId: string; actor: string; status: string }> };
-    assert.ok(activePayload.taskRuns.some((run) => run.taskId === taskId && run.actor === "Albert" && run.status === "active"));
+    const activeRuns = await app.inject({
+      method: "GET",
+      url: "/api/task-runs?active=true"
+    });
+    const activePayload = activeRuns.json() as {
+      taskRuns: Array<{ taskId: string; actor: string; status: string }>;
+    };
+    assert.ok(
+      activePayload.taskRuns.some(
+        (run) =>
+          run.taskId === taskId &&
+          run.actor === "Albert" &&
+          run.status === "active"
+      )
+    );
   } finally {
     await app.close();
     closeDatabase();
@@ -5136,9 +6965,10 @@ test("expired task runs recover cleanly after their lease lapses", async () => {
   }
 });
 
-
 test("watchdog reconcile endpoint lets operators force recovery and inspect status", async () => {
-  const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-watchdog-reconcile-"));
+  const rootDir = await mkdtemp(
+    path.join(os.tmpdir(), "forge-watchdog-reconcile-")
+  );
   const app = await buildServer({
     dataRoot: rootDir,
     seedDemoData: true,
@@ -5149,8 +6979,12 @@ test("watchdog reconcile endpoint lets operators force recovery and inspect stat
 
   try {
     const operatorCookie = await issueOperatorSessionCookie(app);
-    const dashboard = await app.inject({ method: "GET", url: "/api/dashboard" });
-    const taskId = (dashboard.json() as { tasks: Array<{ id: string }> }).tasks[0]!.id;
+    const dashboard = await app.inject({
+      method: "GET",
+      url: "/api/dashboard"
+    });
+    const taskId = (dashboard.json() as { tasks: Array<{ id: string }> })
+      .tasks[0]!.id;
 
     const claimed = await app.inject({
       method: "POST",
@@ -5177,21 +7011,32 @@ test("watchdog reconcile endpoint lets operators force recovery and inspect stat
 
     const reconcileBody = reconcile.json() as {
       recovery: { recoveredCount: number; recoveredRunIds: string[] };
-      watchdog: { totalRecoveredCount: number; lastRecovery: { recoveredRunIds: string[] } | null };
+      watchdog: {
+        totalRecoveredCount: number;
+        lastRecovery: { recoveredRunIds: string[] } | null;
+      };
     };
     assert.equal(reconcileBody.recovery.recoveredCount, 1);
     assert.deepEqual(reconcileBody.recovery.recoveredRunIds, [runId]);
     assert.equal(reconcileBody.watchdog.totalRecoveredCount, 1);
-    assert.deepEqual(reconcileBody.watchdog.lastRecovery?.recoveredRunIds, [runId]);
+    assert.deepEqual(reconcileBody.watchdog.lastRecovery?.recoveredRunIds, [
+      runId
+    ]);
 
     const runs = await app.inject({
       method: "GET",
       url: `/api/task-runs?taskId=${taskId}`
     });
     assert.equal(runs.statusCode, 200);
-    const recoveredRun = (runs.json() as { taskRuns: Array<{ id: string; status: string; timedOutAt: string | null }> }).taskRuns.find(
-      (entry) => entry.id === runId
-    );
+    const recoveredRun = (
+      runs.json() as {
+        taskRuns: Array<{
+          id: string;
+          status: string;
+          timedOutAt: string | null;
+        }>;
+      }
+    ).taskRuns.find((entry) => entry.id === runId);
     assert.equal(recoveredRun?.status, "timed_out");
     assert.ok(recoveredRun?.timedOutAt);
   } finally {
@@ -5201,9 +7046,10 @@ test("watchdog reconcile endpoint lets operators force recovery and inspect stat
   }
 });
 
-
 test("v1 health reports degraded status when watchdog recovery fails", async () => {
-  const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-watchdog-health-"));
+  const rootDir = await mkdtemp(
+    path.join(os.tmpdir(), "forge-watchdog-health-")
+  );
   let calls = 0;
   const app = await buildServer({
     dataRoot: rootDir,
@@ -5244,7 +7090,10 @@ test("v1 health reports degraded status when watchdog recovery fails", async () 
         healthy: boolean;
         state: string;
         reason: string | null;
-        status: { consecutiveFailures: number; lastError: string | null } | null;
+        status: {
+          consecutiveFailures: number;
+          lastError: string | null;
+        } | null;
       };
     };
     assert.equal(payload.ok, false);
@@ -5253,7 +7102,10 @@ test("v1 health reports degraded status when watchdog recovery fails", async () 
     assert.equal(payload.watchdog.state, "degraded");
     assert.equal(payload.watchdog.reason, "simulated watchdog failure");
     assert.equal(payload.watchdog.status?.consecutiveFailures, 1);
-    assert.equal(payload.watchdog.status?.lastError, "simulated watchdog failure");
+    assert.equal(
+      payload.watchdog.status?.lastError,
+      "simulated watchdog failure"
+    );
   } finally {
     await app.close();
     closeDatabase();

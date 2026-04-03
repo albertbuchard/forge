@@ -1,4 +1,9 @@
-export type TaskStatus = "backlog" | "focus" | "in_progress" | "blocked" | "done";
+export type TaskStatus =
+  | "backlog"
+  | "focus"
+  | "in_progress"
+  | "blocked"
+  | "done";
 export type TaskPriority = "low" | "medium" | "high" | "critical";
 export type TaskEffort = "light" | "deep" | "marathon";
 export type TaskEnergy = "low" | "steady" | "high";
@@ -10,8 +15,17 @@ export type HabitPolarity = "positive" | "negative";
 export type HabitStatus = "active" | "paused" | "archived";
 export type HabitCheckInStatus = "done" | "missed";
 export type CalendarProvider = "google" | "apple" | "caldav" | "microsoft";
-export type CalendarConnectionStatus = "connected" | "needs_attention" | "error";
-export type CalendarEventOrigin = "native" | "google" | "apple" | "caldav" | "microsoft" | "derived";
+export type CalendarConnectionStatus =
+  | "connected"
+  | "needs_attention"
+  | "error";
+export type CalendarEventOrigin =
+  | "native"
+  | "google"
+  | "apple"
+  | "caldav"
+  | "microsoft"
+  | "derived";
 export type CalendarAvailability = "busy" | "free";
 export type WorkBlockKind =
   | "main_activity"
@@ -20,7 +34,11 @@ export type WorkBlockKind =
   | "rest"
   | "holiday"
   | "custom";
-export type CalendarTimeboxStatus = "planned" | "active" | "completed" | "cancelled";
+export type CalendarTimeboxStatus =
+  | "planned"
+  | "active"
+  | "completed"
+  | "cancelled";
 export type CalendarTimeboxSource = "manual" | "suggested" | "live_run";
 export type WorkAdjustmentEntityType = "task" | "project";
 export type CrudEntityType =
@@ -112,6 +130,8 @@ export interface Note {
   createdAt: string;
   updatedAt: string;
   links: NoteLink[];
+  tags?: string[];
+  destroyAt?: string | null;
 }
 
 export interface NoteSummary {
@@ -341,7 +361,13 @@ export interface CalendarEventSource {
   isMasterRecurring: boolean;
   remoteHref: string | null;
   remoteEtag: string | null;
-  syncState: "pending_create" | "pending_update" | "pending_delete" | "synced" | "error" | "deleted";
+  syncState:
+    | "pending_create"
+    | "pending_update"
+    | "pending_delete"
+    | "synced"
+    | "error"
+    | "deleted";
   lastSyncedAt: string | null;
   createdAt: string;
   updatedAt: string;
@@ -750,7 +776,13 @@ export interface AgentAction {
 
 export interface RewardRule {
   id: string;
-  family: "completion" | "consistency" | "alignment" | "recovery" | "collaboration" | "ambient";
+  family:
+    | "completion"
+    | "consistency"
+    | "alignment"
+    | "recovery"
+    | "collaboration"
+    | "ambient";
   code: string;
   title: string;
   description: string;
@@ -920,10 +952,27 @@ export interface SettingsPayload {
     storageMode: "local-first";
     activeSessions: number;
     tokenCount: number;
+    psycheAuthRequired?: boolean;
+  };
+  calendarProviders: {
+    microsoft: {
+      clientId: string;
+      tenantId: string;
+      redirectUri: string;
+      usesClientSecret: false;
+      readOnly: true;
+      authMode: "public_client_pkce";
+      isConfigured: boolean;
+      isReadyForSignIn: boolean;
+      setupMessage: string;
+    };
   };
   agents: AgentIdentity[];
   agentTokens: AgentTokenSummary[];
 }
+
+export type MicrosoftCalendarAuthSettings =
+  SettingsPayload["calendarProviders"]["microsoft"];
 
 export interface DeletedEntityRecord {
   entityType: CrudEntityType;

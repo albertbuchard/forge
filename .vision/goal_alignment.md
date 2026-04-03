@@ -87,9 +87,11 @@ read-only in Forge: it mirrors the selected Microsoft calendars into Forge but d
 not publish Forge-owned work blocks or timeboxes back to Microsoft. In the current
 self-hosted local runtime, Microsoft setup uses a guided MSAL public-client sign-in
 flow with PKCE, so the user does not paste a client secret or refresh token into the
-UI. The default calendar name for the dedicated write surface remains `Forge`, and
-provider credentials must be managed from the Settings area rather than from the
-execution calendar page.
+UI. The Microsoft client ID, tenant, and redirect URI belong to the local Settings
+surface for that Forge runtime rather than to backend env vars as the primary user
+configuration path. The default calendar name for the dedicated write surface remains
+`Forge`, and provider credentials must be managed from the Settings area rather than
+from the execution calendar page.
 
 A work block is a compact recurring availability template such as Main Activity,
 Secondary Activity, Third Activity, Rest, Holiday, or a user-defined custom block.
@@ -121,7 +123,12 @@ Notes are first-class Markdown evidence records. A note can link to one or many 
 projects, tasks, Psyche records, or reports. Notes are where the user or an agent
 should capture what changed, what was learned, what was worked on, or what contextual
 detail should remain attached to the operating record without polluting the main entity
-schema.
+schema. Notes must also support note-owned tags so the user can classify them with
+custom labels or with cognitive memory-system labels such as working memory,
+short-term memory, episodic memory, semantic memory, and procedural memory. Notes may
+also be durable or ephemeral: if a destroy time is set, Forge must automatically
+remove the note once that time passes instead of leaving expired scratch context
+behind indefinitely.
 
 Psyche is Forge's structured reflection domain. It contains values, beliefs and
 schemas, behaviors, modes, patterns, reports, and the goal map. These records help the
@@ -180,17 +187,20 @@ mobile version must intentionally reorganize it rather than letting it overflow.
 
 ## API And Agent Contract
 
-Forge is also an agent-facing product. The API and the OpenClaw integration must allow
-trusted agents to inspect current context, search entities before creating duplicates,
-create and update goals, projects, tasks, notes, tags, and Psyche records, control
-task timers, post signed minute work adjustments on tasks and projects, and write
-structured insights. Notes must be linkable to one or many
-entities, batch-manageable, searchable, and creatable inline when a parent entity is
-created. The real product should also expose a first-class Notes workspace and render
-core entity descriptions as long-form Markdown where detail matters. These capabilities
-must match the real product. If the UI can do something
-important, the versioned API and the curated agent surface should expose it too unless
-there is a deliberate safety reason not to.
+Forge is also an agent-facing product. The API and the curated agent integrations must
+allow trusted agents to inspect current context, search entities before creating
+duplicates, create and update goals, projects, tasks, notes, tags, and Psyche records,
+control task timers, post signed minute work adjustments on tasks and projects, and
+write structured insights. Today that means a published OpenClaw plugin, a repo-local
+Hermes plugin, and a repo-local Codex MCP plugin, all of which should expose the same
+curated Forge operating model rather than drifting into separate products. Notes must be
+linkable to one or many entities, batch-manageable, searchable, taggable, optionally
+ephemeral, and creatable inline when a parent entity is created. The real product
+should also expose a first-class Notes workspace and render core entity descriptions as
+long-form Markdown where detail matters. These capabilities must match the real product.
+If the UI can do something important,
+the versioned API and the curated agent surface should expose it too unless there is a
+deliberate safety reason not to.
 
 The agent contract must stay explicit and auditable. Mutations should be scoped,
 recoverable where appropriate, and visible in the product afterward. Forge should help
@@ -211,7 +221,9 @@ interactions, Framer Motion for motion, Recharts for charts, and Lucide icons fo
 entity iconography. The server runtime is a Fastify 5 API served from `server/src`,
 started with `tsx`, and exposed locally on port `4317` by default with the web app
 mounted under `/forge/`. The public contract is a versioned REST API with an OpenAPI
-3.1 document at `/api/v1/openapi.json`.
+3.1 document at `/api/v1/openapi.json`. Agent adapters currently span the published
+OpenClaw plugin, a repo-local Hermes Agent plugin built with Hermes' Python plugin
+format, and a repo-local Codex MCP plugin.
 
 Forge also has a long-term canonical desktop architecture that remains binding even
 while the current Node bridge is in place. That canonical architecture is Tauri 2 with

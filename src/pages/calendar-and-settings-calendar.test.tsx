@@ -20,10 +20,13 @@ const {
   deleteCalendarEventMock,
   patchTaskMock,
   ensureOperatorSessionMock,
+  getSettingsMock,
   listCalendarConnectionsMock,
   listCalendarResourcesMock,
   discoverCalendarConnectionMock,
+  patchSettingsMock,
   startMicrosoftCalendarOauthMock,
+  testMicrosoftCalendarOauthConfigurationMock,
   getMicrosoftCalendarOauthSessionMock,
   discoverExistingCalendarConnectionMock,
   createCalendarConnectionMock,
@@ -43,10 +46,13 @@ const {
   deleteCalendarEventMock: vi.fn(),
   patchTaskMock: vi.fn(),
   ensureOperatorSessionMock: vi.fn(),
+  getSettingsMock: vi.fn(),
   listCalendarConnectionsMock: vi.fn(),
   listCalendarResourcesMock: vi.fn(),
   discoverCalendarConnectionMock: vi.fn(),
+  patchSettingsMock: vi.fn(),
   startMicrosoftCalendarOauthMock: vi.fn(),
+  testMicrosoftCalendarOauthConfigurationMock: vi.fn(),
   getMicrosoftCalendarOauthSessionMock: vi.fn(),
   discoverExistingCalendarConnectionMock: vi.fn(),
   createCalendarConnectionMock: vi.fn(),
@@ -89,10 +95,13 @@ vi.mock("@/lib/api", () => ({
   deleteCalendarEvent: deleteCalendarEventMock,
   patchTask: patchTaskMock,
   ensureOperatorSession: ensureOperatorSessionMock,
+  getSettings: getSettingsMock,
   listCalendarConnections: listCalendarConnectionsMock,
   listCalendarResources: listCalendarResourcesMock,
   discoverCalendarConnection: discoverCalendarConnectionMock,
+  patchSettings: patchSettingsMock,
   startMicrosoftCalendarOauth: startMicrosoftCalendarOauthMock,
+  testMicrosoftCalendarOauthConfiguration: testMicrosoftCalendarOauthConfigurationMock,
   getMicrosoftCalendarOauthSession: getMicrosoftCalendarOauthSessionMock,
   discoverExistingCalendarConnection: discoverExistingCalendarConnectionMock,
   createCalendarConnection: createCalendarConnectionMock,
@@ -268,6 +277,16 @@ function renderWithRouter(element: React.ReactNode, initialEntry: string) {
   );
 }
 
+function createDeferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((nextResolve, nextReject) => {
+    resolve = nextResolve;
+    reject = nextReject;
+  });
+  return { promise, resolve, reject };
+}
+
 beforeEach(() => {
   window.localStorage.clear();
   useForgeShellMock.mockReturnValue({
@@ -301,6 +320,54 @@ beforeEach(() => {
       actorLabel: "Albert",
       expiresAt: "2026-04-03T10:00:00.000Z"
     }
+  });
+  getSettingsMock.mockResolvedValue({
+    settings: {
+      profile: {
+        operatorName: "Albert",
+        operatorEmail: "albert@example.com",
+        operatorTitle: "Operator"
+      },
+      notifications: {
+        goalDriftAlerts: true,
+        dailyQuestReminders: true,
+        achievementCelebrations: true
+      },
+      execution: {
+        maxActiveTasks: 2,
+        timeAccountingMode: "split"
+      },
+      themePreference: "obsidian",
+      localePreference: "en",
+      security: {
+        integrityScore: 98,
+        lastAuditAt: "2026-04-03T08:00:00.000Z",
+        storageMode: "local-first",
+        activeSessions: 1,
+        tokenCount: 0,
+        psycheAuthRequired: false
+      },
+      calendarProviders: {
+        microsoft: {
+          clientId: "",
+          tenantId: "common",
+          redirectUri:
+            "http://127.0.0.1:4317/api/v1/calendar/oauth/microsoft/callback",
+          usesClientSecret: false,
+          readOnly: true,
+          authMode: "public_client_pkce",
+          isConfigured: false,
+          isReadyForSignIn: false,
+          setupMessage:
+            "Save the Microsoft client ID and the Forge callback redirect URI here before you try to sign in."
+        }
+      },
+      agents: [],
+      agentTokens: []
+    }
+  });
+  patchSettingsMock.mockResolvedValue({
+    settings: {}
   });
   listCalendarConnectionsMock.mockResolvedValue({
     providers: [
@@ -393,6 +460,21 @@ beforeEach(() => {
       accountLabel: null,
       error: null,
       discovery: null
+    }
+  });
+  testMicrosoftCalendarOauthConfigurationMock.mockResolvedValue({
+    result: {
+      ok: true,
+      message:
+        "Forge can open a local Microsoft sign-in with this client ID and redirect URI. Final verification happens when you complete the Microsoft popup and consent.",
+      normalizedConfig: {
+        clientId: "00000000-0000-0000-0000-000000000000",
+        tenantId: "common",
+        redirectUri:
+          "http://127.0.0.1:4317/api/v1/calendar/oauth/microsoft/callback",
+        usesClientSecret: false,
+        readOnly: true
+      }
     }
   });
   getMicrosoftCalendarOauthSessionMock.mockResolvedValue({
@@ -542,7 +624,7 @@ describe("calendar routing surfaces", () => {
     });
   });
 
-  it("shows compact provider badges in the week view and keeps color controls in settings", async () => {
+  it("shows the actual calendar title on week-view event badges", async () => {
     getCalendarOverviewMock.mockResolvedValueOnce({
       calendar: {
         generatedAt: "2026-04-03T08:00:00.000Z",
@@ -602,8 +684,149 @@ describe("calendar routing surfaces", () => {
     renderWithRouter(<CalendarPage />, "/calendar");
 
     expect(await screen.findByText("Week view")).toBeInTheDocument();
-    expect(screen.getByText("Apple")).toBeInTheDocument();
+    expect(screen.getByText("Family")).toBeInTheDocument();
+    expect(screen.queryByText("Apple")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Colors on" })).not.toBeInTheDocument();
+  });
+
+  it("closes the event dialog immediately and updates the week view optimistically", async () => {
+    const saveDeferred = createDeferred<{
+      event: {
+        id: string;
+        connectionId: string | null;
+        calendarId: string | null;
+        remoteId: string | null;
+        ownership: "external" | "forge";
+        originType: "native";
+        status: "confirmed";
+        title: string;
+        description: string;
+        location: string;
+        startAt: string;
+        endAt: string;
+        timezone: string;
+        isAllDay: false;
+        availability: "busy";
+        eventType: "general";
+        categories: string[];
+        sourceMappings: [];
+        links: [];
+        remoteUpdatedAt: null;
+        deletedAt: null;
+        createdAt: string;
+        updatedAt: string;
+      };
+    }>();
+    patchCalendarEventMock.mockReturnValueOnce(saveDeferred.promise);
+    getCalendarOverviewMock.mockResolvedValueOnce({
+      calendar: {
+        generatedAt: "2026-04-03T08:00:00.000Z",
+        providers: [],
+        connections: [],
+        calendars: [
+          {
+            id: "calendar_forge",
+            connectionId: "conn_1",
+            remoteId: "https://caldav.icloud.com/calendars/forge/",
+            title: "Forge",
+            description: "",
+            color: "#7dd3fc",
+            timezone: "Europe/Zurich",
+            isPrimary: false,
+            canWrite: true,
+            selectedForSync: true,
+            forgeManaged: true,
+            lastSyncedAt: null,
+            createdAt: "2026-04-03T08:00:00.000Z",
+            updatedAt: "2026-04-03T08:00:00.000Z"
+          }
+        ],
+        events: [
+          {
+            id: "event_edit",
+            connectionId: "conn_1",
+            calendarId: "calendar_forge",
+            remoteId: "remote_1",
+            ownership: "forge",
+            originType: "native",
+            status: "confirmed",
+            title: "Old title",
+            description: "",
+            location: "",
+            startAt: "2026-03-30T09:00:00.000Z",
+            endAt: "2026-03-30T10:00:00.000Z",
+            timezone: "Europe/Zurich",
+            isAllDay: false,
+            availability: "busy",
+            eventType: "general",
+            categories: [],
+            sourceMappings: [],
+            links: [],
+            remoteUpdatedAt: null,
+            deletedAt: null,
+            createdAt: "2026-04-03T08:00:00.000Z",
+            updatedAt: "2026-04-03T08:00:00.000Z"
+          }
+        ],
+        workBlockTemplates: [],
+        workBlockInstances: [],
+        timeboxes: []
+      }
+    });
+
+    renderWithRouter(<CalendarPage />, "/calendar");
+
+    expect(await screen.findByText("Old title")).toBeInTheDocument();
+    fireEvent.click(screen.getByText("Old title"));
+    expect(await screen.findByText("Refine the Forge event")).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("Title"), {
+      target: { value: "New title" }
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save event" }));
+
+    await waitFor(() => {
+      expect(screen.queryByText("Refine the Forge event")).not.toBeInTheDocument();
+    });
+    expect(screen.getByText("New title")).toBeInTheDocument();
+    expect(screen.getByText("Syncing changes")).toBeInTheDocument();
+
+    saveDeferred.resolve({
+      event: {
+        id: "event_edit",
+        connectionId: "conn_1",
+        calendarId: "calendar_forge",
+        remoteId: "remote_1",
+        ownership: "forge",
+        originType: "native",
+        status: "confirmed",
+        title: "New title",
+        description: "",
+        location: "",
+        startAt: "2026-03-30T09:00:00.000Z",
+        endAt: "2026-03-30T10:00:00.000Z",
+        timezone: "Europe/Zurich",
+        isAllDay: false,
+        availability: "busy",
+        eventType: "general",
+        categories: [],
+        sourceMappings: [],
+        links: [],
+        remoteUpdatedAt: null,
+        deletedAt: null,
+        createdAt: "2026-04-03T08:00:00.000Z",
+        updatedAt: "2026-04-03T08:05:00.000Z"
+      }
+    });
+
+    await waitFor(() => {
+      expect(patchCalendarEventMock).toHaveBeenCalledWith("event_edit", expect.objectContaining({
+        title: "New title"
+      }));
+    });
   });
 
   it("opens the settings calendar guided modal from the deep link intent", async () => {
@@ -627,19 +850,90 @@ describe("calendar routing surfaces", () => {
       close: vi.fn()
     } as unknown as Window;
     vi.spyOn(window, "open").mockReturnValue(popupStub);
+    const readySettings = {
+      settings: {
+        profile: {
+          operatorName: "Albert",
+          operatorEmail: "albert@example.com",
+          operatorTitle: "Operator"
+        },
+        notifications: {
+          goalDriftAlerts: true,
+          dailyQuestReminders: true,
+          achievementCelebrations: true
+        },
+        execution: {
+          maxActiveTasks: 2,
+          timeAccountingMode: "split"
+        },
+        themePreference: "obsidian",
+        localePreference: "en",
+        security: {
+          integrityScore: 98,
+          lastAuditAt: "2026-04-03T08:00:00.000Z",
+          storageMode: "local-first",
+          activeSessions: 1,
+          tokenCount: 0,
+          psycheAuthRequired: false
+        },
+        calendarProviders: {
+          microsoft: {
+            clientId: "00000000-0000-0000-0000-000000000000",
+            tenantId: "common",
+            redirectUri:
+              "http://127.0.0.1:4317/api/v1/calendar/oauth/microsoft/callback",
+            usesClientSecret: false,
+            readOnly: true,
+            authMode: "public_client_pkce",
+            isConfigured: true,
+            isReadyForSignIn: true,
+            setupMessage:
+              "Microsoft local sign-in is configured. Test it if you want, then continue to the guided sign-in flow."
+          }
+        },
+        agents: [],
+        agentTokens: []
+      }
+    };
+    patchSettingsMock.mockImplementation(async () => {
+      getSettingsMock.mockResolvedValue(readySettings);
+      return readySettings;
+    });
 
-    renderWithRouter(<SettingsCalendarPage />, "/settings/calendar?intent=connect&provider=microsoft");
+    renderWithRouter(<SettingsCalendarPage />, "/settings/calendar");
 
     expect((await screen.findAllByText("Exchange Online")).length).toBeGreaterThan(0);
-    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    fireEvent.change(screen.getByPlaceholderText("00000000-0000-0000-0000-000000000000"), {
+      target: { value: "00000000-0000-0000-0000-000000000000" }
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save Microsoft settings" }));
+
+    await waitFor(() => {
+      expect(patchSettingsMock).toHaveBeenCalledWith({
+        calendarProviders: {
+          microsoft: {
+            clientId: "00000000-0000-0000-0000-000000000000",
+            tenantId: "common",
+            redirectUri:
+              "http://127.0.0.1:4317/api/v1/calendar/oauth/microsoft/callback"
+          }
+        }
+      });
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Test Microsoft configuration" }));
+    expect(
+      await screen.findByText(
+        "Forge can open a local Microsoft sign-in with this client ID and redirect URI. Final verification happens when you complete the Microsoft popup and consent."
+      )
+    ).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Sign in with Microsoft" }));
+    expect(await screen.findByText("Connect a calendar provider")).toBeInTheDocument();
     expect(
       await screen.findByRole("button", { name: "Sign in with Microsoft" })
     ).toBeInTheDocument();
-    fireEvent.change(screen.getByDisplayValue("Primary Exchange Online"), {
-      target: { value: "Primary Exchange Online" }
-    });
     expect(screen.queryByPlaceholderText("operator@example.com")).not.toBeInTheDocument();
-    expect(screen.queryByPlaceholderText("00000000-0000-0000-0000-000000000000")).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Sign in with Microsoft" }));
 
     await waitFor(() => {
@@ -664,7 +958,9 @@ describe("calendar routing surfaces", () => {
     });
 
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
-    expect(await screen.findByText("Read only")).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getAllByText("Read only").length).toBeGreaterThan(0);
+    });
     expect(screen.queryByText("Use for Forge writes")).not.toBeInTheDocument();
     expect(screen.queryByText("Create a new Forge calendar")).not.toBeInTheDocument();
 

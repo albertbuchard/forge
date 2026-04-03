@@ -41,7 +41,9 @@ function mapDeletedEntity(row: DeletedEntityRow): DeletedEntityRecord {
   });
 }
 
-function listDeletedEntityRows(entityType?: CrudEntityType): DeletedEntityRow[] {
+function listDeletedEntityRows(
+  entityType?: CrudEntityType
+): DeletedEntityRow[] {
   if (entityType) {
     return getDatabase()
       .prepare(
@@ -62,7 +64,10 @@ function listDeletedEntityRows(entityType?: CrudEntityType): DeletedEntityRow[] 
     .all() as DeletedEntityRow[];
 }
 
-export function getDeletedEntityRecord(entityType: CrudEntityType, entityId: string): DeletedEntityRecord | undefined {
+export function getDeletedEntityRecord(
+  entityType: CrudEntityType,
+  entityId: string
+): DeletedEntityRecord | undefined {
   const row = getDatabase()
     .prepare(
       `SELECT entity_type, entity_id, title, subtitle, deleted_at, deleted_by_actor, deleted_source, delete_reason, snapshot_json
@@ -84,7 +89,10 @@ export function getDeletedEntityIdSet(entityType: CrudEntityType): Set<string> {
   return new Set(rows.map((row) => row.entity_id));
 }
 
-export function isEntityDeleted(entityType: CrudEntityType, entityId: string): boolean {
+export function isEntityDeleted(
+  entityType: CrudEntityType,
+  entityId: string
+): boolean {
   const row = getDatabase()
     .prepare(
       `SELECT 1
@@ -96,7 +104,10 @@ export function isEntityDeleted(entityType: CrudEntityType, entityId: string): b
   return Boolean(row);
 }
 
-export function filterDeletedEntities<T extends { id: string }>(entityType: CrudEntityType, items: T[]): T[] {
+export function filterDeletedEntities<T extends { id: string }>(
+  entityType: CrudEntityType,
+  items: T[]
+): T[] {
   if (items.length === 0) {
     return items;
   }
@@ -107,7 +118,10 @@ export function filterDeletedEntities<T extends { id: string }>(entityType: Crud
   return items.filter((item) => !deletedIds.has(item.id));
 }
 
-export function filterDeletedIds(entityType: CrudEntityType, ids: string[]): string[] {
+export function filterDeletedIds(
+  entityType: CrudEntityType,
+  ids: string[]
+): string[] {
   if (ids.length === 0) {
     return ids;
   }
@@ -156,20 +170,30 @@ export function upsertDeletedEntityRecord(input: {
     );
 }
 
-export function restoreDeletedEntityRecord(entityType: CrudEntityType, entityId: string): DeletedEntityRecord | undefined {
+export function restoreDeletedEntityRecord(
+  entityType: CrudEntityType,
+  entityId: string
+): DeletedEntityRecord | undefined {
   const existing = getDeletedEntityRecord(entityType, entityId);
   if (!existing) {
     return undefined;
   }
   getDatabase()
-    .prepare(`DELETE FROM deleted_entities WHERE entity_type = ? AND entity_id = ?`)
+    .prepare(
+      `DELETE FROM deleted_entities WHERE entity_type = ? AND entity_id = ?`
+    )
     .run(entityType, entityId);
   return existing;
 }
 
-export function clearDeletedEntityRecord(entityType: CrudEntityType, entityId: string): void {
+export function clearDeletedEntityRecord(
+  entityType: CrudEntityType,
+  entityId: string
+): void {
   getDatabase()
-    .prepare(`DELETE FROM deleted_entities WHERE entity_type = ? AND entity_id = ?`)
+    .prepare(
+      `DELETE FROM deleted_entities WHERE entity_type = ? AND entity_id = ?`
+    )
     .run(entityType, entityId);
 }
 
@@ -187,6 +211,8 @@ export function cascadeSoftDeleteAnchoredCollaboration(
          notes.content_plain AS content_plain,
          notes.author AS author,
          notes.source AS source,
+         notes.tags_json AS tags_json,
+         notes.destroy_at AS destroy_at,
          notes.created_at AS created_at,
          notes.updated_at AS updated_at
        FROM notes
@@ -200,14 +226,16 @@ export function cascadeSoftDeleteAnchoredCollaboration(
          AND deleted_entities.entity_id IS NULL`
     )
     .all(parentEntityType, parentEntityId) as Array<{
-      id: string;
-      content_markdown: string;
-      content_plain: string;
-      author: string | null;
-      source: string;
-      created_at: string;
-      updated_at: string;
-    }>;
+    id: string;
+    content_markdown: string;
+    content_plain: string;
+    author: string | null;
+    source: string;
+    tags_json: string;
+    destroy_at: string | null;
+    created_at: string;
+    updated_at: string;
+  }>;
   if (noteRows.length > 0) {
     const placeholders = noteRows.map(() => "?").join(", ");
     const linkRows = getDatabase()
@@ -223,7 +251,10 @@ export function cascadeSoftDeleteAnchoredCollaboration(
       entity_id: string;
       anchor_key: string;
     }>;
-    const linksByNoteId = new Map<string, Array<{ entityType: string; entityId: string; anchorKey: string | null }>>();
+    const linksByNoteId = new Map<
+      string,
+      Array<{ entityType: string; entityId: string; anchorKey: string | null }>
+    >();
     for (const link of linkRows) {
       const current = linksByNoteId.get(link.note_id) ?? [];
       current.push({
@@ -235,18 +266,25 @@ export function cascadeSoftDeleteAnchoredCollaboration(
     }
 
     for (const row of noteRows) {
-      const compact = (row.content_plain || row.content_markdown).replace(/\s+/g, " ").trim();
+      const compact = (row.content_plain || row.content_markdown)
+        .replace(/\s+/g, " ")
+        .trim();
       upsertDeletedEntityRecord({
         entityType: "note",
         entityId: row.id,
         title: compact.slice(0, 72) || "Note",
-        subtitle: compact.length > 72 ? compact.slice(72, 168).trim() : `Linked to ${parentEntityType.replaceAll("_", " ")}`,
+        subtitle:
+          compact.length > 72
+            ? compact.slice(72, 168).trim()
+            : `Linked to ${parentEntityType.replaceAll("_", " ")}`,
         snapshot: {
           id: row.id,
           contentMarkdown: row.content_markdown,
           contentPlain: row.content_plain,
           author: row.author,
           source: row.source,
+          tags: JSON.parse(row.tags_json) as string[],
+          destroyAt: row.destroy_at,
           createdAt: row.created_at,
           updatedAt: row.updated_at,
           links: linksByNoteId.get(row.id) ?? []
@@ -264,12 +302,12 @@ export function cascadeSoftDeleteAnchoredCollaboration(
        WHERE entity_type = ? AND entity_id = ?`
     )
     .all(parentEntityType, parentEntityId) as Array<{
-      id: string;
-      title: string;
-      summary: string;
-      created_at: string;
-      updated_at: string;
-    }>;
+    id: string;
+    title: string;
+    summary: string;
+    created_at: string;
+    updated_at: string;
+  }>;
   for (const row of insightRows) {
     upsertDeletedEntityRecord({
       entityType: "insight",
@@ -291,7 +329,10 @@ export function cascadeSoftDeleteAnchoredCollaboration(
   }
 }
 
-export function restoreAnchoredCollaboration(parentEntityType: CrudEntityType, parentEntityId: string): void {
+export function restoreAnchoredCollaboration(
+  parentEntityType: CrudEntityType,
+  parentEntityId: string
+): void {
   getDatabase()
     .prepare(
       `DELETE FROM deleted_entities

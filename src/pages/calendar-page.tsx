@@ -75,6 +75,12 @@ type CalendarMenuState =
       position: { x: number; y: number };
     };
 
+type CalendarOverviewQueryData = Awaited<ReturnType<typeof getCalendarOverview>>;
+type EventSyncStatus = {
+  tone: "saving" | "error";
+  message: string;
+};
+
 const ENTITY_KIND_BY_TYPE: Partial<Record<CalendarEventLink["entityType"], EntityKind>> = {
   goal: "goal",
   project: "project",
@@ -90,8 +96,7 @@ function buildDefaultEventSeed(day: Date) {
     startAt: start.toISOString(),
     endAt: end.toISOString(),
     timezone: Intl.DateTimeFormat().resolvedOptions().timeZone ?? "UTC",
-    availability: "busy" as const,
-    preferredCalendarId: null
+    availability: "busy" as const
   };
 }
 
@@ -145,6 +150,21 @@ function formatProviderBadgeLabel(originType: CalendarEvent["originType"]) {
     default:
       return "Derived";
   }
+}
+
+function getEventBadgeLabel(
+  event: CalendarEvent,
+  calendarTitleById: Map<string, string>
+) {
+  if (event.calendarId) {
+    const calendarTitle = calendarTitleById.get(event.calendarId)?.trim();
+    if (calendarTitle) {
+      return calendarTitle;
+    }
+  }
+  return event.originType === "native"
+    ? "Forge only"
+    : formatProviderBadgeLabel(event.originType);
 }
 
 function formatWorkBlockKindLabel(kind: WorkBlockKind) {
@@ -204,7 +224,7 @@ export function CalendarPage() {
     endAt: string;
     timezone: string;
     availability: "busy" | "free";
-    preferredCalendarId: string | null;
+    preferredCalendarId?: string | null;
     categories: string[];
     links: Array<{
       entityType: CalendarEventLink["entityType"];
@@ -214,6 +234,7 @@ export function CalendarPage() {
     }>;
   }> | null>(null);
   const [menuState, setMenuState] = useState<CalendarMenuState | null>(null);
+  const [eventSyncStatus, setEventSyncStatus] = useState<EventSyncStatus | null>(null);
 
   const range = useMemo(() => {
     const from = weekStart.toISOString();
@@ -225,6 +246,32 @@ export function CalendarPage() {
     queryKey: ["forge-calendar-overview", range.from, range.to],
     queryFn: () => getCalendarOverview(range)
   });
+  const calendarOverviewQueryKey = ["forge-calendar-overview", range.from, range.to] as const;
+
+  const isEventInVisibleRange = (event: Pick<CalendarEvent, "startAt" | "deletedAt">) => {
+    if (event.deletedAt) {
+      return false;
+    }
+    const eventStartsAt = new Date(event.startAt).getTime();
+    return (
+      eventStartsAt >= new Date(range.from).getTime() &&
+      eventStartsAt < new Date(range.to).getTime()
+    );
+  };
+
+  const setCalendarOverviewData = (
+    updater: (current: CalendarOverviewQueryData) => CalendarOverviewQueryData
+  ) => {
+    queryClient.setQueryData<CalendarOverviewQueryData>(
+      calendarOverviewQueryKey,
+      (current) => {
+        if (!current) {
+          return current;
+        }
+        return updater(current);
+      }
+    );
+  };
 
   const invalidateCalendar = async () => {
     await Promise.all([
@@ -283,7 +330,107 @@ export function CalendarPage() {
 
   const createEventMutation = useMutation({
     mutationFn: createCalendarEvent,
-    onSuccess: invalidateCalendar
+    onMutate: async (input) => {
+      setEventSyncStatus({ tone: "saving", message: "Saving event changes in the background…" });
+      await queryClient.cancelQueries({ queryKey: calendarOverviewQueryKey });
+      const previous = queryClient.getQueryData<CalendarOverviewQueryData>(
+        calendarOverviewQueryKey
+      );
+      const defaultWritableCalendar =
+        previous?.calendar.calendars.find(
+          (calendar) => calendar.canWrite && calendar.selectedForSync
+        ) ??
+        previous?.calendar.calendars.find((calendar) => calendar.canWrite) ??
+        null;
+      const now = new Date().toISOString();
+      const optimisticEvent: CalendarEvent = {
+        id: `calendar_event_optimistic_${Date.now()}`,
+        connectionId: defaultWritableCalendar?.connectionId ?? null,
+        calendarId:
+          input.preferredCalendarId === undefined
+            ? defaultWritableCalendar?.id ?? null
+            : input.preferredCalendarId,
+        remoteId: null,
+        ownership: "forge",
+        originType: "native",
+        status: "confirmed",
+        title: input.title,
+        description: input.description ?? "",
+        location: input.location ?? "",
+        startAt: input.startAt,
+        endAt: input.endAt,
+        timezone:
+          input.timezone ??
+          Intl.DateTimeFormat().resolvedOptions().timeZone ??
+          "UTC",
+        isAllDay: input.isAllDay ?? false,
+        availability: input.availability ?? "busy",
+        eventType: input.eventType ?? "general",
+        categories: input.categories ?? [],
+        sourceMappings: [],
+        links: (input.links ?? []).map((link, index) => ({
+          id: `calendar_event_link_optimistic_${Date.now()}_${index}`,
+          entityType: link.entityType,
+          entityId: link.entityId,
+          relationshipType: link.relationshipType ?? "context",
+          createdAt: now,
+          updatedAt: now
+        })),
+        remoteUpdatedAt: null,
+        deletedAt: null,
+        createdAt: now,
+        updatedAt: now
+      };
+
+      if (previous && isEventInVisibleRange(optimisticEvent)) {
+        setCalendarOverviewData((current) => ({
+          ...current,
+          calendar: {
+            ...current.calendar,
+            events: [optimisticEvent, ...current.calendar.events]
+          }
+        }));
+      }
+
+      return { previous, optimisticEventId: optimisticEvent.id };
+    },
+    onError: (error, _input, context) => {
+      if (context?.previous) {
+        queryClient.setQueryData(calendarOverviewQueryKey, context.previous);
+      }
+      setEventSyncStatus({
+        tone: "error",
+        message:
+          error instanceof Error
+            ? error.message
+            : "Forge could not sync that event change."
+      });
+    },
+    onSuccess: ({ event }, _input, context) => {
+      setEventSyncStatus(null);
+      setCalendarOverviewData((current) => ({
+        ...current,
+        calendar: {
+          ...current.calendar,
+          events: (
+            isEventInVisibleRange(event)
+              ? [
+                  event,
+                  ...current.calendar.events.filter(
+                    (entry) => entry.id !== context?.optimisticEventId
+                  )
+                ]
+              : current.calendar.events.filter(
+                  (entry) => entry.id !== context?.optimisticEventId
+                )
+          ).filter(
+            (entry, index, all) =>
+              all.findIndex((candidate) => candidate.id === entry.id) === index
+          )
+        }
+      }));
+    },
+    onSettled: invalidateCalendar
   });
 
   const patchEventMutation = useMutation({
@@ -294,12 +441,117 @@ export function CalendarPage() {
       eventId: string;
       patch: Parameters<typeof patchCalendarEvent>[1];
     }) => patchCalendarEvent(eventId, patch),
-    onSuccess: invalidateCalendar
+    onMutate: async ({ eventId, patch }) => {
+      setEventSyncStatus({ tone: "saving", message: "Saving event changes in the background…" });
+      await queryClient.cancelQueries({ queryKey: calendarOverviewQueryKey });
+      const previous = queryClient.getQueryData<CalendarOverviewQueryData>(
+        calendarOverviewQueryKey
+      );
+
+      if (previous) {
+        setCalendarOverviewData((current) => {
+          const existingEvent = current.calendar.events.find((entry) => entry.id === eventId);
+          if (!existingEvent) {
+            return current;
+          }
+          const nextEvent: CalendarEvent = {
+            ...existingEvent,
+            ...patch,
+            calendarId:
+              patch.preferredCalendarId === undefined
+                ? existingEvent.calendarId
+                : patch.preferredCalendarId,
+            links:
+              patch.links?.map((link, index) => ({
+                id:
+                  existingEvent.links[index]?.id ??
+                  `calendar_event_link_optimistic_${Date.now()}_${index}`,
+                entityType: link.entityType,
+                entityId: link.entityId,
+                relationshipType: link.relationshipType ?? "context",
+                createdAt: existingEvent.links[index]?.createdAt ?? existingEvent.createdAt,
+                updatedAt: new Date().toISOString()
+              })) ?? existingEvent.links,
+            updatedAt: new Date().toISOString()
+          };
+          return {
+            ...current,
+            calendar: {
+              ...current.calendar,
+              events: current.calendar.events
+                .map((entry) => (entry.id === eventId ? nextEvent : entry))
+                .filter(isEventInVisibleRange)
+            }
+          };
+        });
+      }
+
+      return { previous };
+    },
+    onError: (error, _input, context) => {
+      if (context?.previous) {
+        queryClient.setQueryData(calendarOverviewQueryKey, context.previous);
+      }
+      setEventSyncStatus({
+        tone: "error",
+        message:
+          error instanceof Error
+            ? error.message
+            : "Forge could not sync that event change."
+      });
+    },
+    onSuccess: ({ event }) => {
+      setEventSyncStatus(null);
+      setCalendarOverviewData((current) => ({
+        ...current,
+        calendar: {
+          ...current.calendar,
+          events: current.calendar.events
+            .map((entry) => (entry.id === event.id ? event : entry))
+            .filter(isEventInVisibleRange)
+        }
+      }));
+    },
+    onSettled: invalidateCalendar
   });
 
   const deleteEventMutation = useMutation({
     mutationFn: deleteCalendarEvent,
-    onSuccess: invalidateCalendar
+    onMutate: async (eventId) => {
+      setEventSyncStatus({ tone: "saving", message: "Removing the event in the background…" });
+      await queryClient.cancelQueries({ queryKey: calendarOverviewQueryKey });
+      const previous = queryClient.getQueryData<CalendarOverviewQueryData>(
+        calendarOverviewQueryKey
+      );
+
+      if (previous) {
+        setCalendarOverviewData((current) => ({
+          ...current,
+          calendar: {
+            ...current.calendar,
+            events: current.calendar.events.filter((entry) => entry.id !== eventId)
+          }
+        }));
+      }
+
+      return { previous };
+    },
+    onError: (error, _input, context) => {
+      if (context?.previous) {
+        queryClient.setQueryData(calendarOverviewQueryKey, context.previous);
+      }
+      setEventSyncStatus({
+        tone: "error",
+        message:
+          error instanceof Error
+            ? error.message
+            : "Forge could not delete that event."
+      });
+    },
+    onSuccess: () => {
+      setEventSyncStatus(null);
+    },
+    onSettled: invalidateCalendar
   });
   const calendarData = calendarQuery.data?.calendar;
   const days = useMemo(
@@ -316,10 +568,18 @@ export function CalendarPage() {
     workBlockInstances: [],
     timeboxes: []
   };
+  const calendarTitleById = useMemo(
+    () => new Map(overview.calendars.map((calendar) => [calendar.id, calendar.title])),
+    [overview.calendars]
+  );
   const calendarDisplayColors = useMemo(
     () => buildCalendarDisplayColorMap(overview.calendars, displayPreferences.calendarColors),
     [displayPreferences.calendarColors, overview.calendars]
   );
+  const eventSyncPending =
+    createEventMutation.isPending ||
+    patchEventMutation.isPending ||
+    deleteEventMutation.isPending;
   const plannedTimeboxes = overview.timeboxes.filter((timebox) => timebox.status === "planned");
   const writableCalendars = overview.calendars.filter((calendar) => calendar.canWrite);
   const linkOptions = [
@@ -598,12 +858,29 @@ export function CalendarPage() {
             <p className="mt-2 max-w-3xl text-sm leading-6 text-white/60">
               The calendar is the priority surface here. Connected provider events, recurring work blocks, and owned task timeboxes all stay visible together.
             </p>
+            {eventSyncStatus ? (
+              <div
+                className={`mt-3 inline-flex max-w-full items-center gap-2 rounded-full px-3 py-1.5 text-xs ${
+                  eventSyncStatus.tone === "error"
+                    ? "border border-rose-400/20 bg-rose-400/10 text-rose-200"
+                    : "border border-[var(--primary)]/18 bg-[var(--primary)]/12 text-[var(--primary)]"
+                }`}
+              >
+                {eventSyncStatus.message}
+              </div>
+            ) : null}
           </div>
           <div className="flex flex-wrap gap-2">
             <Badge className="bg-[var(--primary)]/14 text-[var(--primary)]">
               <CalendarDays className="mr-1 size-3.5" />
               Week of {formatWeekday(weekStart)}
             </Badge>
+            {eventSyncPending ? (
+              <Badge className="bg-white/[0.08] text-white/78">
+                <RefreshCcw className="mr-1 size-3.5 animate-spin" />
+                Syncing changes
+              </Badge>
+            ) : null}
             {clipboardEntry ? (
               <Badge className="bg-white/[0.08] text-white/74">
                 {clipboardEntry.mode === "cut" ? "Cut" : "Copied"} · {clipboardEntry.label}
@@ -847,7 +1124,7 @@ export function CalendarPage() {
                       </div>
                       <div className="mt-2 flex min-w-0 flex-wrap items-center gap-1.5">
                         <Badge size="sm" className="max-w-full bg-white/[0.08] px-2 py-0.5 text-[10px] uppercase tracking-[0.14em] text-white/70">
-                          {formatProviderBadgeLabel(event.originType)}
+                          {getEventBadgeLabel(event, calendarTitleById)}
                         </Badge>
                         {event.calendarId && displayPreferences.useCalendarColors ? (
                           <span
@@ -1209,16 +1486,24 @@ export function CalendarPage() {
         seed={eventSeed ?? undefined}
         onSubmit={async (input) => {
           if (selectedEvent) {
-            await patchEventMutation.mutateAsync({
-              eventId: selectedEvent.id,
-              patch: input
-            });
+            const selectedEventId = selectedEvent.id;
+            setEventDialogOpen(false);
+            setSelectedEvent(null);
+            setEventSeed(null);
+            void patchEventMutation
+              .mutateAsync({
+                eventId: selectedEventId,
+                patch: input
+              })
+              .catch(() => undefined);
+            return;
           } else {
-            await createEventMutation.mutateAsync(input);
+            setEventDialogOpen(false);
+            setSelectedEvent(null);
+            setEventSeed(null);
+            void createEventMutation.mutateAsync(input).catch(() => undefined);
+            return;
           }
-          setEventDialogOpen(false);
-          setSelectedEvent(null);
-          setEventSeed(null);
         }}
         pending={createEventMutation.isPending || patchEventMutation.isPending}
       />
@@ -1236,11 +1521,14 @@ export function CalendarPage() {
           if (!renameEvent) {
             return;
           }
-          await patchEventMutation.mutateAsync({
-            eventId: renameEvent.id,
-            patch: { title }
-          });
+          const renameEventId = renameEvent.id;
           setRenameEvent(null);
+          void patchEventMutation
+            .mutateAsync({
+              eventId: renameEventId,
+              patch: { title }
+            })
+            .catch(() => undefined);
         }}
       />
 

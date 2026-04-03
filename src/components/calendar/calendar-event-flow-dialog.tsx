@@ -36,7 +36,7 @@ type EventDraft = {
   endAtLocal: string;
   timezone: string;
   availability: CalendarAvailability;
-  preferredCalendarId: string | null;
+  preferredCalendarId: string | null | undefined;
   categoriesText: string;
   linkQuery: string;
   links: EventLinkDraft[];
@@ -72,7 +72,7 @@ function createDraft(
     endAt: string;
     timezone: string;
     availability: CalendarAvailability;
-    preferredCalendarId: string | null;
+    preferredCalendarId?: string | null;
     categories: string[];
     links: EventLinkDraft[];
   }>
@@ -100,7 +100,10 @@ function createDraft(
       Intl.DateTimeFormat().resolvedOptions().timeZone ??
       "UTC",
     availability: seed?.availability ?? event?.availability ?? "busy",
-    preferredCalendarId: seed?.preferredCalendarId ?? event?.calendarId ?? null,
+    preferredCalendarId:
+      seed && "preferredCalendarId" in seed
+        ? seed.preferredCalendarId
+        : event?.calendarId ?? undefined,
     categoriesText: seed?.categories?.join(", ") ?? event?.categories.join(", ") ?? "",
     linkQuery: "",
     links:
@@ -137,7 +140,7 @@ export function CalendarEventFlowDialog({
     endAt: string;
     timezone: string;
     availability: CalendarAvailability;
-    preferredCalendarId: string | null;
+    preferredCalendarId?: string | null;
     categories: string[];
     links: EventLinkDraft[];
   }>;
@@ -332,6 +335,25 @@ export function CalendarEventFlowDialog({
         render: (value, setValue) => (
           <div className="grid gap-4">
             <div className="grid gap-3">
+              {writableCalendars.length > 0 ? (
+                <button
+                  type="button"
+                  onClick={() => setValue({ preferredCalendarId: undefined })}
+                  className={`rounded-[22px] border px-4 py-4 text-left transition ${
+                    value.preferredCalendarId === undefined
+                      ? "border-[rgba(125,211,252,0.28)] bg-[rgba(125,211,252,0.14)] text-white"
+                      : "border-white/8 bg-white/[0.04] text-white/72 hover:bg-white/[0.07]"
+                  }`}
+                >
+                  <div className="flex items-center gap-2 font-medium">
+                    <CalendarDays className="size-4" />
+                    Default synced calendar
+                  </div>
+                  <div className="mt-2 text-sm leading-6 text-white/55">
+                    Let Forge use the default writable connected calendar automatically.
+                  </div>
+                </button>
+              ) : null}
               <button
                 type="button"
                 onClick={() => setValue({ preferredCalendarId: null })}
@@ -421,7 +443,6 @@ export function CalendarEventFlowDialog({
           endAt: new Date(draft.endAtLocal).toISOString(),
           timezone: draft.timezone.trim() || "UTC",
           availability: draft.availability,
-          preferredCalendarId: draft.preferredCalendarId,
           categories: draft.categoriesText
             .split(",")
             .map((value) => value.trim())
@@ -430,7 +451,10 @@ export function CalendarEventFlowDialog({
             entityType: link.entityType,
             entityId: link.entityId,
             relationshipType: link.relationshipType
-          }))
+          })),
+          ...(draft.preferredCalendarId !== undefined
+            ? { preferredCalendarId: draft.preferredCalendarId }
+            : {})
         });
       }}
       submitLabel={event ? "Save event" : "Create event"}

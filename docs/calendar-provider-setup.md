@@ -9,8 +9,8 @@ Forge sync is provider-aware:
 - Writable providers let Forge write work blocks and owned task timeboxes into a
   dedicated calendar named `Forge`.
 - Exchange Online is currently read-only in Forge through Microsoft Graph.
-- Exchange Online now uses a guided Microsoft sign-in flow in Forge rather than
-  a user-pasted client-secret or refresh-token form.
+- Exchange Online now uses a guided Microsoft sign-in flow in Forge, but that
+  flow still requires a Microsoft app registration first.
 - Read-only `.ics` subscriptions are not enough for writable-provider flows
   because Forge needs write access.
 
@@ -47,40 +47,54 @@ Important note:
 
 Step by step for a self-hosted local Forge install:
 
-1. Create or reuse an Azure app registration for Forge:
+1. Open Microsoft Entra App registrations and create or reuse an app for this
+   local Forge install:
    [https://learn.microsoft.com/en-us/entra/identity-platform/quickstart-register-app](https://learn.microsoft.com/en-us/entra/identity-platform/quickstart-register-app)
-2. In that app registration, enable public client flows / mobile and desktop
-   flow support.
-3. Add a redirect URI for Forge's local callback. The default local Forge
+2. Choose the supported account type that matches your local self-hosted use
+   case. For most personal self-hosted use, a broad delegated choice is the
+   least painful option.
+3. In Authentication, enable mobile and desktop or public client flow support.
+4. Add a redirect URI for Forge's local callback. The default local Forge
    callback is:
    `http://127.0.0.1:4317/api/v1/calendar/oauth/microsoft/callback`
-4. If your Forge server runs on another port, either register that exact
-   callback URI or set `FORGE_MICROSOFT_REDIRECT_URI` to match it.
-5. Add delegated Microsoft Graph calendar permissions such as
-   `Calendars.Read`:
+5. If your Forge server runs on another port or hostname, register that exact
+   callback URI in the Microsoft app registration and copy the same URI into
+   Forge settings.
+6. In API permissions, add delegated Microsoft Graph permissions:
+   - `User.Read`
+   - `Calendars.Read`
+   - `offline_access`
    [https://learn.microsoft.com/en-us/graph/permissions-reference](https://learn.microsoft.com/en-us/graph/permissions-reference)
-6. On the machine running Forge, set:
-   - `FORGE_MICROSOFT_CLIENT_ID=<your public client id>`
-   - optional: `FORGE_MICROSOFT_TENANT_ID=<tenant id or common>`
-   - optional when not using the default callback:
-     `FORGE_MICROSOFT_REDIRECT_URI=http://127.0.0.1:4317/api/v1/calendar/oauth/microsoft/callback`
-7. Restart the Forge server after changing those environment variables.
-8. Open Forge locally and go to `Settings -> Calendar`.
-9. Click `Exchange Online`.
-10. Enter a readable connection label if you want to rename the card.
-11. Click `Sign in with Microsoft`.
-12. Complete the Microsoft popup flow. Forge finishes the local MSAL public-
+7. Grant admin consent if your tenant requires it, or complete the normal
+   user-consent path later during sign-in.
+8. Copy the Application (client) ID from the Microsoft app registration.
+9. Open Forge on the same machine that is running the local Forge backend and
+   go to `Settings -> Calendar`.
+10. In the `Exchange Online local setup` card, enter:
+    - `Microsoft client ID`: the Application (client) ID you copied
+    - `Tenant / authority`: usually `common` unless you need a tenant-specific
+      authority
+    - `Redirect URI`: the exact callback URI registered in Microsoft
+11. Click `Save Microsoft settings`.
+12. Click `Test Microsoft configuration`. Forge only verifies that it can build
+    a local Microsoft sign-in flow from those values; the real proof still
+    comes from the popup completing successfully.
+13. Click `Sign in with Microsoft`.
+14. Complete the Microsoft popup flow. Forge finishes the local MSAL public-
     client authorization-code flow with PKCE on the backend.
-13. After the popup returns, Forge discovers the calendars available to that
+15. After the popup returns, Forge discovers the calendars available to that
     account through Microsoft Graph.
-14. Select which calendars Forge should mirror into the Calendar page.
-15. Save the connection and run the first sync.
+16. Select which calendars Forge should mirror into the Calendar page.
+17. Save the connection and run the first sync.
 
 Important notes:
 
 - No Microsoft client secret is required for the local self-hosted Forge flow.
 - Complete Microsoft setup from a browser on the same machine that is running
   Forge. The default callback is localhost-based.
+- A local Microsoft sign-in cannot work without an app registration. If the
+  user cannot create or access one, the only alternative is a Forge runtime
+  that ships with a shared Microsoft app registration.
 - Exchange Online remains read-only in Forge today: it mirrors selected
   calendars into Forge but does not receive Forge-owned work blocks or
   timeboxes.
@@ -203,4 +217,6 @@ After the connection succeeds:
 - Exchange Online connections are mirrored read-only and do not receive Forge
   writebacks yet
 - The Exchange Online UI is intentionally guided-sign-in based. Users should not
-  be asked for raw Microsoft OAuth client secrets or refresh tokens in settings.
+  be asked for raw Microsoft OAuth client secrets or refresh tokens in settings,
+  but they still must provide a valid Microsoft app registration client ID and
+  redirect URI in Forge's local settings first.

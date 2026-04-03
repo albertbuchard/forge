@@ -8,6 +8,7 @@ import {
   type DAVCalendarObject
 } from "tsdav";
 import { SecretsManager } from "../managers/platform/secrets-manager.js";
+import { getSettings } from "../repositories/settings.js";
 import {
   createCalendarConnectionRecord,
   deleteCalendarConnectionRecord,
@@ -45,7 +46,8 @@ import type {
   CalendarOverviewPayload,
   CreateCalendarConnectionInput,
   DiscoverCalendarConnectionInput,
-  StartMicrosoftCalendarOauthInput
+  StartMicrosoftCalendarOauthInput,
+  TestMicrosoftCalendarOauthConfigurationInput
 } from "../types.js";
 
 type ActivityContext = {
@@ -86,6 +88,7 @@ type MicrosoftCredentials = {
   provider: "microsoft";
   serverUrl: string;
   username: string;
+  clientId: string;
   tenantId: string;
   authority: string;
   homeAccountId: string;
@@ -170,7 +173,10 @@ const GOOGLE_TOKEN_URL = "https://accounts.google.com/o/oauth2/token";
 const APPLE_CALDAV_URL = "https://caldav.icloud.com";
 const MICROSOFT_GRAPH_URL = "https://graph.microsoft.com/v1.0";
 const MICROSOFT_LOGIN_URL = "https://login.microsoftonline.com";
+const MICROSOFT_CALLBACK_PATH = "/api/v1/calendar/oauth/microsoft/callback";
 const MICROSOFT_GRAPH_SCOPES = ["User.Read", "Calendars.Read", "offline_access"];
+const MICROSOFT_CLIENT_ID_PATTERN =
+  /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
 const FORGE_CALENDAR_NAME = "Forge";
 const FORGE_CALENDAR_COLOR = "#7dd3fc";
 
@@ -180,6 +186,9 @@ type MicrosoftOauthPendingSession = {
   label: string | null;
   origin: string;
   redirectUri: string;
+  clientId: string;
+  authority: string;
+  tenantId: string;
   codeVerifier: string | null;
   createdAt: string;
   expiresAt: string;
@@ -192,6 +201,14 @@ type MicrosoftOauthPendingSession = {
 };
 
 const microsoftOauthSessions = new Map<string, MicrosoftOauthPendingSession>();
+
+type MicrosoftOauthConfig = {
+  clientId: string;
+  tenantId: string;
+  redirectUri: string;
+  authority: string;
+  source: "settings" | "env";
+};
 
 export class CalendarConnectionConflictError extends Error {
   connectionId: string;
@@ -214,40 +231,109 @@ function requireSecretRecord<T extends CalendarConnectionCredentialsRecord>(
   return secrets.openJson<T>(cipherText);
 }
 
-function getMicrosoftOAuthConfig() {
-  const clientId = process.env.FORGE_MICROSOFT_CLIENT_ID?.trim() ?? "";
-  const tenantId = process.env.FORGE_MICROSOFT_TENANT_ID?.trim() || "common";
-  const redirectUri = process.env.FORGE_MICROSOFT_REDIRECT_URI?.trim() || null;
-
-  if (!clientId) {
-    throw new Error(
-      "Microsoft sign-in is not configured on this Forge runtime yet. Set FORGE_MICROSOFT_CLIENT_ID first. In local self-hosted mode, no client secret is required; you may also set FORGE_MICROSOFT_TENANT_ID and FORGE_MICROSOFT_REDIRECT_URI when needed."
-    );
-  }
-
-  return { clientId, tenantId, redirectUri };
-}
-
 function microsoftAuthority(tenantId: string) {
   return `${MICROSOFT_LOGIN_URL}/${encodeURIComponent(tenantId || "common")}`;
 }
 
-function resolveMicrosoftRedirectUri(_origin: string) {
-  const config = getMicrosoftOAuthConfig();
-  if (config.redirectUri) {
-    return config.redirectUri;
-  }
-
+function defaultMicrosoftRedirectUri() {
   const port = process.env.PORT?.trim() || "4317";
-  return `http://127.0.0.1:${port}/api/v1/calendar/oauth/microsoft/callback`;
+  return `http://127.0.0.1:${port}${MICROSOFT_CALLBACK_PATH}`;
 }
 
-function createMicrosoftPublicClient(authority: string) {
-  const config = getMicrosoftOAuthConfig();
+function validateMicrosoftRedirectUri(value: string) {
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    throw new Error("Microsoft redirect URI must be a full URL.");
+  }
+
+  if (url.protocol !== "http:" && url.protocol !== "https:") {
+    throw new Error("Microsoft redirect URI must use http or https.");
+  }
+
+  if (url.pathname !== MICROSOFT_CALLBACK_PATH) {
+    throw new Error(
+      `Microsoft redirect URI must end with ${MICROSOFT_CALLBACK_PATH}.`
+    );
+  }
+
+  return url.toString();
+}
+
+function normalizeMicrosoftRedirectUri(value: string | null | undefined) {
+  const trimmed = value?.trim();
+  return validateMicrosoftRedirectUri(
+    trimmed && trimmed.length > 0 ? trimmed : defaultMicrosoftRedirectUri()
+  );
+}
+
+function normalizeMicrosoftTenantId(value: string | null | undefined) {
+  const trimmed = value?.trim();
+  return trimmed && trimmed.length > 0 ? trimmed : "common";
+}
+
+function validateMicrosoftClientId(value: string) {
+  const trimmed = value.trim();
+  if (!MICROSOFT_CLIENT_ID_PATTERN.test(trimmed)) {
+    throw new Error(
+      "Microsoft client IDs must use the standard app registration GUID format."
+    );
+  }
+  return trimmed;
+}
+
+function resolveStoredMicrosoftOAuthSettings() {
+  return getSettings().calendarProviders.microsoft;
+}
+
+function resolveMicrosoftOAuthConfig(
+  override?: Pick<TestMicrosoftCalendarOauthConfigurationInput, "clientId" | "tenantId" | "redirectUri">
+) {
+  const fromSettings = resolveStoredMicrosoftOAuthSettings();
+  const rawSettingsClientId = override?.clientId?.trim() ?? fromSettings.clientId.trim();
+  const settingsTenantId = normalizeMicrosoftTenantId(
+    override?.tenantId ?? fromSettings.tenantId
+  );
+  const settingsRedirectUri = normalizeMicrosoftRedirectUri(
+    override?.redirectUri ?? fromSettings.redirectUri
+  );
+
+  if (rawSettingsClientId.length > 0) {
+    const settingsClientId = validateMicrosoftClientId(rawSettingsClientId);
+    return {
+      clientId: settingsClientId,
+      tenantId: settingsTenantId,
+      redirectUri: settingsRedirectUri,
+      authority: microsoftAuthority(settingsTenantId),
+      source: "settings"
+    } satisfies MicrosoftOauthConfig;
+  }
+
+  const envClientId = process.env.FORGE_MICROSOFT_CLIENT_ID?.trim() ?? "";
+  const envTenantId = normalizeMicrosoftTenantId(process.env.FORGE_MICROSOFT_TENANT_ID);
+  const envRedirectUri = normalizeMicrosoftRedirectUri(process.env.FORGE_MICROSOFT_REDIRECT_URI);
+  if (envClientId.length > 0) {
+    const normalizedEnvClientId = validateMicrosoftClientId(envClientId);
+    return {
+      clientId: normalizedEnvClientId,
+      tenantId: envTenantId,
+      redirectUri: envRedirectUri,
+      authority: microsoftAuthority(envTenantId),
+      source: "env"
+    } satisfies MicrosoftOauthConfig;
+  }
+
+  throw new Error(
+    "Microsoft sign-in is not configured yet. Open Settings -> Calendar, save the Microsoft client ID and redirect URI for this Forge runtime, then try again."
+  );
+}
+
+function createMicrosoftPublicClient(config: Pick<MicrosoftOauthConfig, "clientId" | "authority">) {
   return new PublicClientApplication({
     auth: {
       clientId: config.clientId,
-      authority
+      authority: config.authority
     }
   });
 }
@@ -458,7 +544,10 @@ async function createProviderClient(
   credentials: DiscoverableCredentials | StoredCalendarCredentials
 ): Promise<ProviderState> {
   if (credentials.provider === "microsoft") {
-    const client = createMicrosoftPublicClient(credentials.authority);
+    const client = createMicrosoftPublicClient({
+      clientId: credentials.clientId,
+      authority: credentials.authority
+    });
     await client.getTokenCache().deserialize(credentials.tokenCache);
     const account =
       (await client.getTokenCache().getAccountByHomeId(credentials.homeAccountId)) ??
@@ -641,16 +730,68 @@ function toMicrosoftOauthSessionPayload(
   };
 }
 
+function explainMicrosoftOauthError(input: {
+  error?: string | null;
+  errorDescription?: string | null;
+}) {
+  const raw = `${input.error ?? ""} ${input.errorDescription ?? ""}`.toLowerCase();
+
+  if (raw.includes("aadsts50011") || raw.includes("redirect_uri")) {
+    return "Microsoft rejected the redirect URI. Add the exact Forge callback URI shown in Settings -> Calendar to your app registration, save the settings again, and retry sign-in.";
+  }
+  if (raw.includes("access_denied") || raw.includes("consent")) {
+    return "Microsoft consent was denied or cancelled. Review the requested Graph permissions, then retry the guided sign-in.";
+  }
+  if (raw.includes("aadsts700016") || raw.includes("application") && raw.includes("not found")) {
+    return "Microsoft could not find this client ID in the selected tenant. Check the client ID, supported account type, and tenant setting in Settings -> Calendar.";
+  }
+  if (raw.includes("aadsts50020") || raw.includes("aadsts50194") || raw.includes("tenant")) {
+    return "This account cannot sign in with the current tenant or supported-account setup. Use `common` for a broad self-hosted flow, or change the app registration to match this account type.";
+  }
+  return input.errorDescription?.trim() || input.error?.trim() || "Microsoft sign-in could not be completed.";
+}
+
+export async function testMicrosoftCalendarOauthConfiguration(
+  input: TestMicrosoftCalendarOauthConfigurationInput | null = null
+) {
+  const config = resolveMicrosoftOAuthConfig(input ?? undefined);
+  const client = createMicrosoftPublicClient(config);
+  const crypto = new CryptoProvider();
+  const pkce = await crypto.generatePkceCodes();
+
+  await client.getAuthCodeUrl({
+    redirectUri: config.redirectUri,
+    scopes: MICROSOFT_GRAPH_SCOPES,
+    state: `forge-microsoft-test-${randomUUID()}`,
+    codeChallenge: pkce.challenge,
+    codeChallengeMethod: "S256",
+    prompt: "select_account"
+  });
+
+  return {
+    ok: true as const,
+    message:
+      "Forge can open a local Microsoft sign-in with this client ID and redirect URI. Final verification happens when you complete the Microsoft popup and consent.",
+    normalizedConfig: {
+      clientId: config.clientId,
+      tenantId: config.tenantId,
+      redirectUri: config.redirectUri,
+      usesClientSecret: false as const,
+      readOnly: true as const
+    }
+  };
+}
+
 export async function startMicrosoftCalendarOauth(
   input: StartMicrosoftCalendarOauthInput,
   origin: string
 ) {
   pruneMicrosoftOauthSessions();
-  const config = getMicrosoftOAuthConfig();
+  const config = resolveMicrosoftOAuthConfig();
   const sessionId = randomUUID();
-  const redirectUri = resolveMicrosoftRedirectUri(origin);
-  const authority = microsoftAuthority(config.tenantId);
-  const client = createMicrosoftPublicClient(authority);
+  const redirectUri = config.redirectUri;
+  const authority = config.authority;
+  const client = createMicrosoftPublicClient(config);
   const crypto = new CryptoProvider();
   const pkce = await crypto.generatePkceCodes();
   const authUrl = await client.getAuthCodeUrl({
@@ -668,6 +809,9 @@ export async function startMicrosoftCalendarOauth(
     label: input.label?.trim() || null,
     origin,
     redirectUri,
+    clientId: config.clientId,
+    authority,
+    tenantId: config.tenantId,
     codeVerifier: pkce.verifier,
     createdAt: now.toISOString(),
     expiresAt: new Date(now.getTime() + 15 * 60 * 1000).toISOString(),
@@ -713,7 +857,7 @@ export async function completeMicrosoftCalendarOauth(input: {
   }
   if (input.error) {
     session.status = "error";
-    session.error = input.errorDescription?.trim() || input.error;
+    session.error = explainMicrosoftOauthError(input);
     return { session: toMicrosoftOauthSessionPayload(session) };
   }
   if (!input.code) {
@@ -723,7 +867,10 @@ export async function completeMicrosoftCalendarOauth(input: {
   }
 
   try {
-    const client = createMicrosoftPublicClient(microsoftAuthority(getMicrosoftOAuthConfig().tenantId));
+    const client = createMicrosoftPublicClient({
+      clientId: session.clientId,
+      authority: session.authority
+    });
     if (!session.codeVerifier) {
       throw new Error("The Microsoft sign-in session is missing its PKCE verifier. Start the sign-in again.");
     }
@@ -742,8 +889,9 @@ export async function completeMicrosoftCalendarOauth(input: {
       provider: "microsoft",
       serverUrl: MICROSOFT_GRAPH_URL,
       username: account.username || "microsoft-account",
-      tenantId: getMicrosoftOAuthConfig().tenantId,
-      authority: microsoftAuthority(getMicrosoftOAuthConfig().tenantId),
+      clientId: session.clientId,
+      tenantId: session.tenantId,
+      authority: session.authority,
       homeAccountId: account.homeAccountId,
       tokenCache: client.getTokenCache().serialize(),
       selectedCalendarUrls: []
@@ -1774,7 +1922,7 @@ export function listCalendarProviderMetadata() {
       label: "Exchange Online",
       supportsDedicatedForgeCalendar: false,
       connectionHelp:
-        "Sign in with Microsoft in a guided local popup flow. Forge uses a public-client Microsoft setup, then mirrors the selected calendars in read-only mode for now."
+        "Configure the Microsoft client ID and redirect URI in Settings first, then use the guided Microsoft sign-in flow. Forge mirrors the selected Exchange calendars in read-only mode for now."
     },
     {
       provider: "caldav" as const,

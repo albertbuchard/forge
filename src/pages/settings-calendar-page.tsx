@@ -1,6 +1,16 @@
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { CalendarDays, EyeOff, Link2, RefreshCcw, Settings2, Trash2 } from "lucide-react";
+import {
+  CalendarDays,
+  CheckCircle2,
+  ExternalLink,
+  EyeOff,
+  KeyRound,
+  Link2,
+  RefreshCcw,
+  Settings2,
+  Trash2
+} from "lucide-react";
 import { useSearchParams } from "react-router-dom";
 import { CalendarConnectionFlowDialog } from "@/components/calendar/calendar-connection-flow-dialog";
 import { QuestionFlowDialog, type QuestionFlowStep } from "@/components/flows/question-flow-dialog";
@@ -16,17 +26,20 @@ import {
   deleteCalendarConnection,
   discoverExistingCalendarConnection,
   ensureOperatorSession,
+  getSettings,
   listCalendarConnections,
   listCalendarResources,
   patchCalendarConnection,
-  syncCalendarConnection
+  patchSettings,
+  syncCalendarConnection,
+  testMicrosoftCalendarOauthConfiguration
 } from "@/lib/api";
 import {
   buildCalendarDisplayColorMap,
   readCalendarDisplayPreferences,
   writeCalendarDisplayPreferences
 } from "@/lib/calendar-display-preferences";
-import type { CalendarDiscoveryPayload, CalendarProvider, CalendarResource } from "@/lib/types";
+import type { CalendarDiscoveryPayload, CalendarProvider, CalendarResource, SettingsPayload } from "@/lib/types";
 
 function normalizeCalendarUrl(value: string) {
   try {
@@ -54,22 +67,95 @@ function calendarProviderLabel(provider: CalendarProvider) {
   }
 }
 
+type MicrosoftSettingsDraft = {
+  clientId: string;
+  tenantId: string;
+  redirectUri: string;
+};
+
+const MICROSOFT_CALLBACK_PATH = "/api/v1/calendar/oauth/microsoft/callback";
+const MICROSOFT_CLIENT_ID_PATTERN =
+  /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
+
+function buildMicrosoftSettingsDraft(
+  microsoft: SettingsPayload["calendarProviders"]["microsoft"]
+): MicrosoftSettingsDraft {
+  return {
+    clientId: microsoft.clientId,
+    tenantId: microsoft.tenantId,
+    redirectUri: microsoft.redirectUri
+  };
+}
+
+function validateMicrosoftSettingsDraft(draft: MicrosoftSettingsDraft) {
+  const issues: Partial<Record<keyof MicrosoftSettingsDraft, string>> = {};
+
+  if (!draft.clientId.trim()) {
+    issues.clientId = "Microsoft client ID is required.";
+  } else if (!MICROSOFT_CLIENT_ID_PATTERN.test(draft.clientId.trim())) {
+    issues.clientId = "Use the Microsoft app registration client ID GUID.";
+  }
+
+  if (!draft.redirectUri.trim()) {
+    issues.redirectUri = "Redirect URI is required.";
+  } else {
+    try {
+      const url = new URL(draft.redirectUri.trim());
+      if (url.protocol !== "http:" && url.protocol !== "https:") {
+        issues.redirectUri = "Redirect URI must use http or https.";
+      } else if (url.pathname !== MICROSOFT_CALLBACK_PATH) {
+        issues.redirectUri = `Redirect URI must end with ${MICROSOFT_CALLBACK_PATH}.`;
+      }
+    } catch {
+      issues.redirectUri = "Redirect URI must be a full URL.";
+    }
+  }
+
+  return {
+    issues,
+    isValid: Object.keys(issues).length === 0
+  };
+}
+
+function sameMicrosoftSettingsDraft(
+  left: MicrosoftSettingsDraft,
+  right: MicrosoftSettingsDraft
+) {
+  return (
+    left.clientId.trim() === right.clientId.trim() &&
+    left.tenantId.trim() === right.tenantId.trim() &&
+    left.redirectUri.trim() === right.redirectUri.trim()
+  );
+}
+
 export function SettingsCalendarPage() {
   const queryClient = useQueryClient();
   const [searchParams, setSearchParams] = useSearchParams();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [initialProvider, setInitialProvider] = useState<CalendarProvider>("google");
+  const [dialogInitialStepId, setDialogInitialStepId] = useState<string | undefined>(undefined);
   const [manageConnectionId, setManageConnectionId] = useState<string | null>(null);
   const [managedCalendarUrls, setManagedCalendarUrls] = useState<string[]>([]);
   const [manageSelectionSeeded, setManageSelectionSeeded] = useState(false);
   const [removeConnectionId, setRemoveConnectionId] = useState<string | null>(null);
   const [displayPreferences, setDisplayPreferences] = useState(() => readCalendarDisplayPreferences());
+  const [microsoftSettingsDraft, setMicrosoftSettingsDraft] = useState<MicrosoftSettingsDraft>({
+    clientId: "",
+    tenantId: "common",
+    redirectUri: ""
+  });
 
   const operatorSessionQuery = useQuery({
     queryKey: ["forge-operator-session"],
     queryFn: ensureOperatorSession
   });
   const operatorReady = operatorSessionQuery.isSuccess;
+
+  const settingsQuery = useQuery({
+    queryKey: ["forge-settings"],
+    queryFn: getSettings,
+    enabled: operatorReady
+  });
 
   const connectionsQuery = useQuery({
     queryKey: ["forge-calendar-connections"],
@@ -85,6 +171,7 @@ export function SettingsCalendarPage() {
 
   const invalidateCalendarSettings = async () => {
     await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ["forge-settings"] }),
       queryClient.invalidateQueries({ queryKey: ["forge-calendar-connections"] }),
       queryClient.invalidateQueries({ queryKey: ["forge-calendar-resources"] }),
       queryClient.invalidateQueries({ queryKey: ["forge-calendar-overview"] }),
@@ -118,6 +205,25 @@ export function SettingsCalendarPage() {
     onSuccess: invalidateCalendarSettings
   });
 
+  const saveMicrosoftSettingsMutation = useMutation({
+    mutationFn: (input: MicrosoftSettingsDraft) =>
+      patchSettings({
+        calendarProviders: {
+          microsoft: input
+        }
+      }),
+    onSuccess: invalidateCalendarSettings
+  });
+
+  const testMicrosoftSettingsMutation = useMutation({
+    mutationFn: (input: MicrosoftSettingsDraft) =>
+      testMicrosoftCalendarOauthConfiguration({
+        clientId: input.clientId.trim(),
+        tenantId: input.tenantId.trim() || "common",
+        redirectUri: input.redirectUri.trim()
+      })
+  });
+
   useEffect(() => {
     if (!operatorReady) {
       return;
@@ -132,12 +238,21 @@ export function SettingsCalendarPage() {
         ? provider
         : "google"
     );
+    setDialogInitialStepId(provider === "microsoft" ? "credentials" : undefined);
     setDialogOpen(true);
     const next = new URLSearchParams(searchParams);
     next.delete("intent");
     next.delete("provider");
     setSearchParams(next, { replace: true });
   }, [operatorReady, searchParams, setSearchParams]);
+
+  useEffect(() => {
+    const microsoft = settingsQuery.data?.settings.calendarProviders.microsoft;
+    if (!microsoft) {
+      return;
+    }
+    setMicrosoftSettingsDraft(buildMicrosoftSettingsDraft(microsoft));
+  }, [settingsQuery.data]);
 
   const calendarsByConnection = useMemo(() => {
     const grouped = new Map<string, CalendarResource[]>();
@@ -167,6 +282,23 @@ export function SettingsCalendarPage() {
     () => (manageConnectionId ? calendarsByConnection.get(manageConnectionId) ?? [] : []),
     [calendarsByConnection, manageConnectionId]
   );
+
+  const savedMicrosoftSettings = settingsQuery.data?.settings.calendarProviders.microsoft ?? null;
+  const microsoftValidation = useMemo(
+    () => validateMicrosoftSettingsDraft(microsoftSettingsDraft),
+    [microsoftSettingsDraft]
+  );
+  const hasUnsavedMicrosoftSettings =
+    savedMicrosoftSettings !== null &&
+    !sameMicrosoftSettingsDraft(
+      microsoftSettingsDraft,
+      buildMicrosoftSettingsDraft(savedMicrosoftSettings)
+    );
+  const microsoftSignInDisabled =
+    !savedMicrosoftSettings?.isReadyForSignIn ||
+    !microsoftValidation.isValid ||
+    hasUnsavedMicrosoftSettings ||
+    saveMicrosoftSettingsMutation.isPending;
 
   const managedDiscoveryQuery = useQuery({
     queryKey: ["forge-calendar-connection-discovery", manageConnectionId],
@@ -300,7 +432,12 @@ export function SettingsCalendarPage() {
     [managedConnection, managedDiscoveryQuery]
   );
 
-  if (operatorSessionQuery.isLoading || connectionsQuery.isLoading || calendarsQuery.isLoading) {
+  if (
+    operatorSessionQuery.isLoading ||
+    settingsQuery.isLoading ||
+    connectionsQuery.isLoading ||
+    calendarsQuery.isLoading
+  ) {
     return (
       <SurfaceSkeleton
         eyebrow="Settings · Calendar"
@@ -322,16 +459,25 @@ export function SettingsCalendarPage() {
     );
   }
 
-  if (connectionsQuery.isError || calendarsQuery.isError || !connectionsQuery.data || !calendarsQuery.data) {
+  if (
+    settingsQuery.isError ||
+    connectionsQuery.isError ||
+    calendarsQuery.isError ||
+    !settingsQuery.data?.settings ||
+    !connectionsQuery.data ||
+    !calendarsQuery.data
+  ) {
     return (
       <ErrorState
         eyebrow="Settings · Calendar"
         error={
+          settingsQuery.error ??
           connectionsQuery.error ??
           calendarsQuery.error ??
           new Error("Calendar settings are unavailable.")
         }
         onRetry={() => {
+          void settingsQuery.refetch();
           void connectionsQuery.refetch();
           void calendarsQuery.refetch();
         }}
@@ -340,6 +486,7 @@ export function SettingsCalendarPage() {
   }
 
   const { providers, connections } = connectionsQuery.data;
+  const microsoftSettings = settingsQuery.data.settings.calendarProviders.microsoft;
 
   return (
     <div className="mx-auto grid w-full max-w-[1220px] gap-5">
@@ -352,6 +499,206 @@ export function SettingsCalendarPage() {
       <SettingsSectionNav />
 
       <div className="grid gap-5">
+        <Card className="grid gap-5 rounded-[30px] border border-white/8 bg-[linear-gradient(180deg,rgba(17,28,41,0.98),rgba(9,16,27,0.98))]">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <div className="text-[11px] uppercase tracking-[0.18em] text-white/45">
+                Exchange Online local setup
+              </div>
+              <p className="mt-2 max-w-3xl text-sm leading-6 text-white/60">
+                Self-hosted Forge uses a Microsoft public client with PKCE. Save the Microsoft app registration details here first, then continue to the guided sign-in flow to choose which Exchange calendars Forge should mirror.
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Badge className="bg-sky-400/12 text-sky-100">Read only</Badge>
+              {microsoftSettings.isReadyForSignIn && !hasUnsavedMicrosoftSettings ? (
+                <Badge className="bg-emerald-500/16 text-emerald-100">
+                  <CheckCircle2 className="mr-1 size-3.5" />
+                  Ready for sign-in
+                </Badge>
+              ) : (
+                <Badge className="bg-white/[0.08] text-white/74">
+                  <KeyRound className="mr-1 size-3.5" />
+                  Setup required
+                </Badge>
+              )}
+            </div>
+          </div>
+
+          <div className="grid gap-4 xl:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)]">
+            <div className="grid gap-4">
+              <label className="grid gap-2">
+                <span className="text-sm font-medium text-white">Microsoft client ID</span>
+                <span className="text-sm leading-6 text-white/54">
+                  Use the Application (client) ID from the Microsoft Entra app registration for this local Forge instance.
+                </span>
+                <input
+                  className="min-h-12 rounded-[18px] border border-white/10 bg-white/[0.04] px-4 py-3 text-sm text-white outline-none transition placeholder:text-white/28 focus:border-[var(--primary)]/40 focus:bg-white/[0.06]"
+                  value={microsoftSettingsDraft.clientId}
+                  onChange={(event) =>
+                    setMicrosoftSettingsDraft((current) => ({
+                      ...current,
+                      clientId: event.target.value
+                    }))
+                  }
+                  placeholder="00000000-0000-0000-0000-000000000000"
+                />
+                {microsoftValidation.issues.clientId ? (
+                  <span className="text-sm text-rose-300">
+                    {microsoftValidation.issues.clientId}
+                  </span>
+                ) : null}
+              </label>
+
+              <div className="grid gap-4 md:grid-cols-2">
+                <label className="grid gap-2">
+                  <span className="text-sm font-medium text-white">Tenant / authority</span>
+                  <span className="text-sm leading-6 text-white/54">
+                    Use <span className="font-medium text-white">common</span> for a normal self-hosted delegated flow unless you need a tenant-specific authority.
+                  </span>
+                  <input
+                    className="min-h-12 rounded-[18px] border border-white/10 bg-white/[0.04] px-4 py-3 text-sm text-white outline-none transition placeholder:text-white/28 focus:border-[var(--primary)]/40 focus:bg-white/[0.06]"
+                    value={microsoftSettingsDraft.tenantId}
+                    onChange={(event) =>
+                      setMicrosoftSettingsDraft((current) => ({
+                        ...current,
+                        tenantId: event.target.value
+                      }))
+                    }
+                    placeholder="common"
+                  />
+                </label>
+
+                <div className="grid gap-2 rounded-[22px] border border-white/8 bg-white/[0.04] p-4">
+                  <div className="text-sm font-medium text-white">Microsoft access mode</div>
+                  <p className="text-sm leading-6 text-white/54">
+                    Forge currently requests delegated read access only. Exchange calendars are mirrored into Forge, but Forge does not publish work blocks or owned timeboxes back to Microsoft yet.
+                  </p>
+                  <Badge className="w-fit bg-sky-400/12 text-sky-100">Read-only mirroring</Badge>
+                </div>
+              </div>
+
+              <label className="grid gap-2">
+                <span className="text-sm font-medium text-white">Redirect URI</span>
+                <span className="text-sm leading-6 text-white/54">
+                  Register this exact Forge callback URI in the Microsoft app registration. The default works for the local backend on port 4317.
+                </span>
+                <input
+                  className="min-h-12 rounded-[18px] border border-white/10 bg-white/[0.04] px-4 py-3 text-sm text-white outline-none transition placeholder:text-white/28 focus:border-[var(--primary)]/40 focus:bg-white/[0.06]"
+                  value={microsoftSettingsDraft.redirectUri}
+                  onChange={(event) =>
+                    setMicrosoftSettingsDraft((current) => ({
+                      ...current,
+                      redirectUri: event.target.value
+                    }))
+                  }
+                  placeholder="http://127.0.0.1:4317/api/v1/calendar/oauth/microsoft/callback"
+                />
+                {microsoftValidation.issues.redirectUri ? (
+                  <span className="text-sm text-rose-300">
+                    {microsoftValidation.issues.redirectUri}
+                  </span>
+                ) : null}
+              </label>
+
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  onClick={() =>
+                    void saveMicrosoftSettingsMutation.mutateAsync({
+                      clientId: microsoftSettingsDraft.clientId.trim(),
+                      tenantId: microsoftSettingsDraft.tenantId.trim() || "common",
+                      redirectUri: microsoftSettingsDraft.redirectUri.trim()
+                    })
+                  }
+                  disabled={!microsoftValidation.isValid}
+                  pending={saveMicrosoftSettingsMutation.isPending}
+                  pendingLabel="Saving"
+                >
+                  Save Microsoft settings
+                </Button>
+                <Button
+                  variant="secondary"
+                  onClick={() =>
+                    void testMicrosoftSettingsMutation.mutateAsync(microsoftSettingsDraft)
+                  }
+                  disabled={!microsoftValidation.isValid}
+                  pending={testMicrosoftSettingsMutation.isPending}
+                  pendingLabel="Testing"
+                >
+                  Test Microsoft configuration
+                </Button>
+                <Button
+                  variant="secondary"
+                  onClick={() => {
+                    setInitialProvider("microsoft");
+                    setDialogInitialStepId("credentials");
+                    setDialogOpen(true);
+                  }}
+                  disabled={microsoftSignInDisabled}
+                >
+                  <ExternalLink className="size-4" />
+                  Sign in with Microsoft
+                </Button>
+              </div>
+
+              {saveMicrosoftSettingsMutation.error instanceof Error ? (
+                <div className="rounded-[18px] border border-rose-400/20 bg-rose-400/10 px-4 py-3 text-sm text-rose-100">
+                  {saveMicrosoftSettingsMutation.error.message}
+                </div>
+              ) : null}
+
+              {testMicrosoftSettingsMutation.isSuccess ? (
+                <div className="rounded-[18px] border border-emerald-400/20 bg-emerald-500/[0.08] px-4 py-3 text-sm text-emerald-100">
+                  {testMicrosoftSettingsMutation.data.result.message}
+                </div>
+              ) : null}
+
+              {testMicrosoftSettingsMutation.error instanceof Error ? (
+                <div className="rounded-[18px] border border-rose-400/20 bg-rose-400/10 px-4 py-3 text-sm text-rose-100">
+                  {testMicrosoftSettingsMutation.error.message}
+                </div>
+              ) : null}
+            </div>
+
+            <div className="grid gap-3">
+              <div className="rounded-[24px] border border-white/8 bg-white/[0.04] p-4">
+                <div className="text-sm font-medium text-white">What the user needs first</div>
+                <p className="mt-2 text-sm leading-6 text-white/58">
+                  Microsoft sign-in cannot work until this Forge instance has a registered Microsoft app client ID and callback URI. Forge no longer asks the user for a client secret or refresh token in local self-hosted mode.
+                </p>
+              </div>
+              <div className="rounded-[24px] border border-white/8 bg-white/[0.04] p-4">
+                <div className="text-sm font-medium text-white">Current saved setup</div>
+                <div className="mt-3 grid gap-2 text-sm text-white/66">
+                  <div>
+                    Client ID:{" "}
+                    <span className="font-medium text-white">
+                      {microsoftSettings.clientId || "Not saved yet"}
+                    </span>
+                  </div>
+                  <div>
+                    Tenant:{" "}
+                    <span className="font-medium text-white">
+                      {microsoftSettings.tenantId}
+                    </span>
+                  </div>
+                  <div className="break-all">
+                    Redirect URI:{" "}
+                    <span className="font-medium text-white">
+                      {microsoftSettings.redirectUri}
+                    </span>
+                  </div>
+                </div>
+              </div>
+              <div className="rounded-[24px] border border-white/8 bg-white/[0.04] p-4 text-sm leading-6 text-white/60">
+                {hasUnsavedMicrosoftSettings
+                  ? "Save these Microsoft settings before you try to sign in, otherwise the popup will still use the previous saved configuration."
+                  : microsoftSettings.setupMessage}
+              </div>
+            </div>
+          </div>
+        </Card>
+
         <Card className="grid gap-4 rounded-[30px] border border-white/8 bg-[linear-gradient(180deg,rgba(18,28,38,0.98),rgba(11,17,28,0.98))]">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
@@ -373,6 +720,9 @@ export function SettingsCalendarPage() {
                 type="button"
                 onClick={() => {
                   setInitialProvider(provider.provider);
+                  setDialogInitialStepId(
+                    provider.provider === "microsoft" ? "credentials" : undefined
+                  );
                   setDialogOpen(true);
                 }}
                 className="rounded-[26px] border border-white/8 bg-white/[0.04] p-5 text-left transition hover:bg-white/[0.06]"
@@ -595,8 +945,15 @@ export function SettingsCalendarPage() {
 
       <CalendarConnectionFlowDialog
         open={dialogOpen}
-        onOpenChange={setDialogOpen}
+        onOpenChange={(open) => {
+          setDialogOpen(open);
+          if (!open) {
+            setDialogInitialStepId(undefined);
+          }
+        }}
         initialProvider={initialProvider}
+        initialStepId={dialogInitialStepId}
+        microsoftSetup={microsoftSettings}
         pending={connectMutation.isPending}
         onSubmit={async (input) => {
           await connectMutation.mutateAsync(input);

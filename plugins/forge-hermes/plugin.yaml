@@ -1,0 +1,33 @@
+name: forge
+version: 0.2.18
+description: Curated Hermes plugin for the Forge life operating system
+author: Forge
+provides_tools:
+  - forge_get_operator_overview
+  - forge_get_operator_context
+  - forge_get_agent_onboarding
+  - forge_get_ui_entrypoint
+  - forge_get_psyche_overview
+  - forge_get_xp_metrics
+  - forge_get_weekly_review
+  - forge_get_current_work
+  - forge_search_entities
+  - forge_create_entities
+  - forge_update_entities
+  - forge_delete_entities
+  - forge_restore_entities
+  - forge_grant_reward_bonus
+  - forge_adjust_work_minutes
+  - forge_post_insight
+  - forge_log_work
+  - forge_start_task_run
+  - forge_heartbeat_task_run
+  - forge_focus_task_run
+  - forge_complete_task_run
+  - forge_release_task_run
+  - forge_get_calendar_overview
+  - forge_connect_calendar_provider
+  - forge_sync_calendar_connection
+  - forge_create_work_block_template
+  - forge_recommend_task_timeboxes
+  - forge_create_task_timebox

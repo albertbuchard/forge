@@ -1,9 +1,15 @@
 import { Type, type TObject, type TProperties } from "@sinclair/typebox";
 import type { AgentToolResult } from "@mariozechner/pi-agent-core";
-import { callConfiguredForgeApi, expectForgeSuccess, requireApiToken, type ForgePluginConfig } from "./api-client.js";
+import {
+  callConfiguredForgeApi,
+  expectForgeSuccess,
+  requireApiToken,
+  type ForgePluginConfig
+} from "./api-client.js";
 import type { ForgePluginToolApi } from "./plugin-sdk-types.js";
 
-type StaticLike<T> = T extends TObject<infer _P> ? Record<string, unknown> : never;
+type StaticLike<T> =
+  T extends TObject<infer _P> ? Record<string, unknown> : never;
 
 function jsonResult<T>(payload: T): AgentToolResult<T> {
   return {
@@ -44,8 +50,26 @@ async function runWrite(
 
 const emptyObjectSchema = Type.Object({});
 const optionalString = () => Type.Optional(Type.String());
-const optionalNullableString = () => Type.Optional(Type.Union([Type.String(), Type.Null()]));
-const optionalDeleteMode = () => Type.Optional(Type.Union([Type.Literal("soft"), Type.Literal("hard")]));
+const optionalNullableString = () =>
+  Type.Optional(Type.Union([Type.String(), Type.Null()]));
+const optionalDeleteMode = () =>
+  Type.Optional(Type.Union([Type.Literal("soft"), Type.Literal("hard")]));
+const noteInputSchema = () =>
+  Type.Object({
+    contentMarkdown: Type.String({ minLength: 1 }),
+    author: optionalNullableString(),
+    tags: Type.Optional(Type.Array(Type.String())),
+    destroyAt: optionalNullableString(),
+    links: Type.Optional(
+      Type.Array(
+        Type.Object({
+          entityType: Type.String({ minLength: 1 }),
+          entityId: Type.String({ minLength: 1 }),
+          anchorKey: optionalNullableString()
+        })
+      )
+    )
+  });
 
 async function resolveUiEntrypoint(config: ForgePluginConfig) {
   let webAppUrl = config.webAppUrl;
@@ -78,18 +102,33 @@ async function resolveUiEntrypoint(config: ForgePluginConfig) {
 async function resolveCurrentWork(config: ForgePluginConfig) {
   const payload = await runRead(config, "/api/v1/operator/context");
   const context =
-    typeof payload === "object" && payload !== null && "context" in payload && typeof payload.context === "object" && payload.context !== null
+    typeof payload === "object" &&
+    payload !== null &&
+    "context" in payload &&
+    typeof payload.context === "object" &&
+    payload.context !== null
       ? (payload.context as Record<string, unknown>)
       : null;
 
-  const recentTaskRuns = Array.isArray(context?.recentTaskRuns) ? context.recentTaskRuns : [];
+  const recentTaskRuns = Array.isArray(context?.recentTaskRuns)
+    ? context.recentTaskRuns
+    : [];
   const activeTaskRuns = recentTaskRuns.filter(
-    (run) => typeof run === "object" && run !== null && "status" in run && run.status === "active"
+    (run) =>
+      typeof run === "object" &&
+      run !== null &&
+      "status" in run &&
+      run.status === "active"
   );
-  const focusTasks = Array.isArray(context?.focusTasks) ? context.focusTasks : [];
+  const focusTasks = Array.isArray(context?.focusTasks)
+    ? context.focusTasks
+    : [];
 
   return {
-    generatedAt: typeof context?.generatedAt === "string" ? context.generatedAt : new Date().toISOString(),
+    generatedAt:
+      typeof context?.generatedAt === "string"
+        ? context.generatedAt
+        : new Date().toISOString(),
     activeTaskRuns,
     focusTasks,
     recommendedNextTask: context?.recommendedNextTask ?? null,
@@ -114,7 +153,9 @@ function registerReadTool<T extends TObject<TProperties>>(
     description: options.description,
     parameters: options.parameters ?? emptyObjectSchema,
     async execute(_toolCallId, params) {
-      return jsonResult(await runRead(config, options.path((params ?? {}) as StaticLike<T>)));
+      return jsonResult(
+        await runRead(config, options.path((params ?? {}) as StaticLike<T>))
+      );
     }
   });
 }
@@ -150,32 +191,39 @@ function registerWriteTool<T extends TObject<TProperties>>(
   });
 }
 
-export function registerForgePluginTools(api: ForgePluginToolApi, config: ForgePluginConfig) {
+export function registerForgePluginTools(
+  api: ForgePluginToolApi,
+  config: ForgePluginConfig
+) {
   registerReadTool(api, config, {
     name: "forge_get_operator_overview",
     label: "Forge Operator Overview",
-    description: "Start here for most Forge work. Read the one-shot operator overview with current priorities, momentum, and onboarding guidance before searching or mutating.",
+    description:
+      "Start here for most Forge work. Read the one-shot operator overview with current priorities, momentum, and onboarding guidance before searching or mutating.",
     path: () => "/api/v1/operator/overview"
   });
 
   registerReadTool(api, config, {
     name: "forge_get_operator_context",
     label: "Forge Operator Context",
-    description: "Read the current operational task board, focus queue, recent task runs, and XP state. Use this for current-work questions and work runtime decisions.",
+    description:
+      "Read the current operational task board, focus queue, recent task runs, and XP state. Use this for current-work questions and work runtime decisions.",
     path: () => "/api/v1/operator/context"
   });
 
   registerReadTool(api, config, {
     name: "forge_get_agent_onboarding",
     label: "Forge Agent Onboarding",
-    description: "Fetch the live Forge onboarding contract with the exact Forge tool list, batch payload rules, UI handoff rules, and verification guidance.",
+    description:
+      "Fetch the live Forge onboarding contract with the exact Forge tool list, batch payload rules, UI handoff rules, and verification guidance.",
     path: () => "/api/v1/agents/onboarding"
   });
 
   api.registerTool({
     name: "forge_get_ui_entrypoint",
     label: "Forge UI Entrypoint",
-    description: "Get the live Forge web UI URL and plugin redirect route. Use this only when visual review or editing is genuinely easier, not as a substitute for normal batch entity creation or updates.",
+    description:
+      "Get the live Forge web UI URL and plugin redirect route. Use this only when visual review or editing is genuinely easier, not as a substitute for normal batch entity creation or updates.",
     parameters: emptyObjectSchema,
     async execute() {
       return jsonResult(await resolveUiEntrypoint(config));
@@ -185,28 +233,32 @@ export function registerForgePluginTools(api: ForgePluginToolApi, config: ForgeP
   registerReadTool(api, config, {
     name: "forge_get_psyche_overview",
     label: "Forge Psyche Overview",
-    description: "Read the aggregate Psyche state across values, patterns, behaviors, beliefs, modes, and trigger reports before making Psyche recommendations or updates.",
+    description:
+      "Read the aggregate Psyche state across values, patterns, behaviors, beliefs, modes, and trigger reports before making Psyche recommendations or updates.",
     path: () => "/api/v1/psyche/overview"
   });
 
   registerReadTool(api, config, {
     name: "forge_get_xp_metrics",
     label: "Forge XP Metrics",
-    description: "Read the live XP, level, streak, momentum, and reward metrics.",
+    description:
+      "Read the live XP, level, streak, momentum, and reward metrics.",
     path: () => "/api/v1/metrics/xp"
   });
 
   registerReadTool(api, config, {
     name: "forge_get_weekly_review",
     label: "Forge Weekly Review",
-    description: "Read the current weekly review payload with wins, trends, and reward framing.",
+    description:
+      "Read the current weekly review payload with wins, trends, and reward framing.",
     path: () => "/api/v1/reviews/weekly"
   });
 
   api.registerTool({
     name: "forge_get_current_work",
     label: "Forge Current Work",
-    description: "Get the current live-work picture: active task runs, focus tasks, the recommended next task, and current XP state.",
+    description:
+      "Get the current live-work picture: active task runs, focus tasks, the recommended next task, and current XP state.",
     parameters: emptyObjectSchema,
     async execute() {
       return jsonResult(await resolveCurrentWork(config));
@@ -216,7 +268,8 @@ export function registerForgePluginTools(api: ForgePluginToolApi, config: ForgeP
   registerWriteTool(api, config, {
     name: "forge_search_entities",
     label: "Search Forge Entities",
-    description: "Search Forge entities before creating or updating to avoid duplicates. Pass `searches` as an array, even for one search.",
+    description:
+      "Search Forge entities before creating or updating to avoid duplicates. Pass `searches` as an array, even for one search.",
     parameters: Type.Object({
       searches: Type.Array(
         Type.Object({
@@ -243,7 +296,8 @@ export function registerForgePluginTools(api: ForgePluginToolApi, config: ForgeP
   registerWriteTool(api, config, {
     name: "forge_create_entities",
     label: "Create Forge Entities",
-    description: "Create one or more Forge entities through the ordered batch workflow. Pass `operations` as an array. Each operation must include `entityType` and full `data`. This is the preferred create path for planning, Psyche, and calendar records including calendar_event, work_block_template, and task_timebox.",
+    description:
+      "Create one or more Forge entities through the ordered batch workflow. Pass `operations` as an array. Each operation must include `entityType` and full `data`. This is the preferred create path for planning, Psyche, and calendar records including calendar_event, work_block_template, and task_timebox.",
     parameters: Type.Object({
       atomic: Type.Optional(Type.Boolean()),
       operations: Type.Array(
@@ -261,7 +315,8 @@ export function registerForgePluginTools(api: ForgePluginToolApi, config: ForgeP
   registerWriteTool(api, config, {
     name: "forge_update_entities",
     label: "Update Forge Entities",
-    description: "Update one or more Forge entities through the ordered batch workflow. Pass `operations` as an array. Each operation must include `entityType`, `id`, and `patch`. This is the preferred update path for calendar_event, work_block_template, and task_timebox too; Forge runs calendar sync side effects downstream.",
+    description:
+      "Update one or more Forge entities through the ordered batch workflow. Pass `operations` as an array. Each operation must include `entityType`, `id`, and `patch`. This is the preferred update path for calendar_event, work_block_template, and task_timebox too; Forge runs calendar sync side effects downstream.",
     parameters: Type.Object({
       atomic: Type.Optional(Type.Boolean()),
       operations: Type.Array(
@@ -280,7 +335,8 @@ export function registerForgePluginTools(api: ForgePluginToolApi, config: ForgeP
   registerWriteTool(api, config, {
     name: "forge_delete_entities",
     label: "Delete Forge Entities",
-    description: "Delete Forge entities in one batch request. Pass `operations` as an array with `entityType` and `id`. Delete defaults to soft mode unless hard is requested explicitly. Calendar-domain deletes still run their downstream removal logic, including remote calendar projection cleanup for calendar_event.",
+    description:
+      "Delete Forge entities in one batch request. Pass `operations` as an array with `entityType` and `id`. Delete defaults to soft mode unless hard is requested explicitly. Calendar-domain deletes still run their downstream removal logic, including remote calendar projection cleanup for calendar_event.",
     parameters: Type.Object({
       atomic: Type.Optional(Type.Boolean()),
       operations: Type.Array(
@@ -300,7 +356,8 @@ export function registerForgePluginTools(api: ForgePluginToolApi, config: ForgeP
   registerWriteTool(api, config, {
     name: "forge_restore_entities",
     label: "Restore Forge Entities",
-    description: "Restore soft-deleted Forge entities from the settings bin through the batch workflow. Pass `operations` as an array with `entityType` and `id`.",
+    description:
+      "Restore soft-deleted Forge entities from the settings bin through the batch workflow. Pass `operations` as an array with `entityType` and `id`.",
     parameters: Type.Object({
       atomic: Type.Optional(Type.Boolean()),
       operations: Type.Array(
@@ -318,7 +375,8 @@ export function registerForgePluginTools(api: ForgePluginToolApi, config: ForgeP
   registerWriteTool(api, config, {
     name: "forge_grant_reward_bonus",
     label: "Forge Grant Reward Bonus",
-    description: "Grant an explicit manual XP bonus or penalty with provenance. Use only for auditable operator judgement beyond the normal task-run and habit reward flows.",
+    description:
+      "Grant an explicit manual XP bonus or penalty with provenance. Use only for auditable operator judgement beyond the normal task-run and habit reward flows.",
     parameters: Type.Object({
       entityType: Type.String({ minLength: 1 }),
       entityId: Type.String({ minLength: 1 }),
@@ -334,7 +392,8 @@ export function registerForgePluginTools(api: ForgePluginToolApi, config: ForgeP
   registerWriteTool(api, config, {
     name: "forge_adjust_work_minutes",
     label: "Forge Adjust Work Minutes",
-    description: "Add or remove tracked work minutes on an existing task or project without creating a live task run. Forge applies symmetric XP changes when the total crosses reward buckets.",
+    description:
+      "Add or remove tracked work minutes on an existing task or project without creating a live task run. Forge applies symmetric XP changes when the total crosses reward buckets.",
     parameters: Type.Object({
       entityType: Type.Union([Type.Literal("task"), Type.Literal("project")]),
       entityId: Type.String({ minLength: 1 }),
@@ -348,7 +407,8 @@ export function registerForgePluginTools(api: ForgePluginToolApi, config: ForgeP
   registerWriteTool(api, config, {
     name: "forge_post_insight",
     label: "Forge Post Insight",
-    description: "Post a structured Forge insight after reading the overview. This stores an agent-authored observation or recommendation with provenance.",
+    description:
+      "Post a structured Forge insight after reading the overview. This stores an agent-authored observation or recommendation with provenance.",
     parameters: Type.Object({
       entityType: optionalNullableString(),
       entityId: optionalNullableString(),
@@ -376,14 +436,16 @@ export function registerForgePluginTools(api: ForgePluginToolApi, config: ForgeP
       rationale: typeof params.rationale === "string" ? params.rationale : "",
       confidence: params.confidence,
       visibility: params.visibility,
-      ctaLabel: typeof params.ctaLabel === "string" ? params.ctaLabel : "Review insight"
+      ctaLabel:
+        typeof params.ctaLabel === "string" ? params.ctaLabel : "Review insight"
     })
   });
 
   registerWriteTool(api, config, {
     name: "forge_log_work",
     label: "Forge Log Work",
-    description: "Log retroactive work or mark an existing task as completed through the operator work-log flow. Use this when the user already did the work and wants truthful evidence plus XP.",
+    description:
+      "Log retroactive work or mark an existing task as completed through the operator work-log flow. Use this when the user already did the work and wants truthful evidence plus XP. Prefer closeoutNote when the summary should survive as a real linked note.",
     parameters: Type.Object({
       taskId: optionalString(),
       title: optionalString(),
@@ -398,7 +460,8 @@ export function registerForgePluginTools(api: ForgePluginToolApi, config: ForgeP
       effort: optionalString(),
       energy: optionalString(),
       points: Type.Optional(Type.Integer({ minimum: 5, maximum: 500 })),
-      tagIds: Type.Optional(Type.Array(Type.String()))
+      tagIds: Type.Optional(Type.Array(Type.String())),
+      closeoutNote: Type.Optional(noteInputSchema())
     }),
     method: "POST",
     path: "/api/v1/operator/log-work"
@@ -407,15 +470,22 @@ export function registerForgePluginTools(api: ForgePluginToolApi, config: ForgeP
   api.registerTool({
     name: "forge_start_task_run",
     label: "Forge Start Task Run",
-    description: "Start real live work on a task. This creates or reuses a task run and is the truthful way to start work, not just changing task status.",
+    description:
+      "Start real live work on a task. This creates or reuses a task run and is the truthful way to start work, not just changing task status.",
     parameters: Type.Object({
       taskId: Type.String({ minLength: 1 }),
       actor: Type.String({ minLength: 1 }),
-      timerMode: Type.Optional(Type.Union([Type.Literal("planned"), Type.Literal("unlimited")])),
-      plannedDurationSeconds: Type.Optional(Type.Union([Type.Integer({ minimum: 60, maximum: 86400 }), Type.Null()])),
+      timerMode: Type.Optional(
+        Type.Union([Type.Literal("planned"), Type.Literal("unlimited")])
+      ),
+      plannedDurationSeconds: Type.Optional(
+        Type.Union([Type.Integer({ minimum: 60, maximum: 86400 }), Type.Null()])
+      ),
       overrideReason: optionalNullableString(),
       isCurrent: Type.Optional(Type.Boolean()),
-      leaseTtlSeconds: Type.Optional(Type.Integer({ minimum: 1, maximum: 14400 })),
+      leaseTtlSeconds: Type.Optional(
+        Type.Integer({ minimum: 1, maximum: 14400 })
+      ),
       note: Type.Optional(Type.String())
     }),
     async execute(_toolCallId, params) {
@@ -441,11 +511,14 @@ export function registerForgePluginTools(api: ForgePluginToolApi, config: ForgeP
   api.registerTool({
     name: "forge_heartbeat_task_run",
     label: "Forge Heartbeat Task Run",
-    description: "Refresh the lease on an active task run while work is continuing.",
+    description:
+      "Refresh the lease on an active task run while work is continuing.",
     parameters: Type.Object({
       taskRunId: Type.String({ minLength: 1 }),
       actor: optionalString(),
-      leaseTtlSeconds: Type.Optional(Type.Integer({ minimum: 1, maximum: 14400 })),
+      leaseTtlSeconds: Type.Optional(
+        Type.Integer({ minimum: 1, maximum: 14400 })
+      ),
       note: Type.Optional(Type.String())
     }),
     async execute(_toolCallId, params) {
@@ -467,7 +540,8 @@ export function registerForgePluginTools(api: ForgePluginToolApi, config: ForgeP
   api.registerTool({
     name: "forge_focus_task_run",
     label: "Forge Focus Task Run",
-    description: "Mark an active task run as the current focused run when several runs exist.",
+    description:
+      "Mark an active task run as the current focused run when several runs exist.",
     parameters: Type.Object({
       taskRunId: Type.String({ minLength: 1 }),
       actor: optionalString()
@@ -489,11 +563,13 @@ export function registerForgePluginTools(api: ForgePluginToolApi, config: ForgeP
   api.registerTool({
     name: "forge_complete_task_run",
     label: "Forge Complete Task Run",
-    description: "Finish an active task run as completed work and let Forge award the appropriate completion rewards.",
+    description:
+      "Finish an active task run as completed work and let Forge award the appropriate completion rewards. Prefer closeoutNote when the work summary should become a real linked note.",
     parameters: Type.Object({
       taskRunId: Type.String({ minLength: 1 }),
       actor: optionalString(),
-      note: Type.Optional(Type.String())
+      note: Type.Optional(Type.String()),
+      closeoutNote: Type.Optional(noteInputSchema())
     }),
     async execute(_toolCallId, params) {
       const typed = params as Record<string, unknown>;
@@ -503,7 +579,8 @@ export function registerForgePluginTools(api: ForgePluginToolApi, config: ForgeP
           path: `/api/v1/task-runs/${typed.taskRunId as string}/complete`,
           body: {
             actor: typed.actor,
-            note: typed.note
+            note: typed.note,
+            closeoutNote: typed.closeoutNote
           }
         })
       );
@@ -513,11 +590,13 @@ export function registerForgePluginTools(api: ForgePluginToolApi, config: ForgeP
   api.registerTool({
     name: "forge_release_task_run",
     label: "Forge Release Task Run",
-    description: "Stop an active task run without completing it. Use this to truthfully stop current work.",
+    description:
+      "Stop an active task run without completing it. Use this to truthfully stop current work. Prefer closeoutNote when blockers or handoff context should become a real linked note.",
     parameters: Type.Object({
       taskRunId: Type.String({ minLength: 1 }),
       actor: optionalString(),
-      note: Type.Optional(Type.String())
+      note: Type.Optional(Type.String()),
+      closeoutNote: Type.Optional(noteInputSchema())
     }),
     async execute(_toolCallId, params) {
       const typed = params as Record<string, unknown>;
@@ -527,7 +606,8 @@ export function registerForgePluginTools(api: ForgePluginToolApi, config: ForgeP
           path: `/api/v1/task-runs/${typed.taskRunId as string}/release`,
           body: {
             actor: typed.actor,
-            note: typed.note
+            note: typed.note,
+            closeoutNote: typed.closeoutNote
           }
         })
       );
@@ -537,7 +617,8 @@ export function registerForgePluginTools(api: ForgePluginToolApi, config: ForgeP
   registerReadTool(api, config, {
     name: "forge_get_calendar_overview",
     label: "Forge Calendar Overview",
-    description: "Read the calendar domain in one response: provider metadata, connected calendars, Forge-native events, mirrored events, recurring work blocks, and task timeboxes.",
+    description:
+      "Read the calendar domain in one response: provider metadata, connected calendars, Forge-native events, mirrored events, recurring work blocks, and task timeboxes.",
     parameters: Type.Object({
       from: optionalString(),
       to: optionalString()
@@ -575,7 +656,9 @@ export function registerForgePluginTools(api: ForgePluginToolApi, config: ForgeP
       password: optionalString(),
       serverUrl: optionalString(),
       authSessionId: optionalString(),
-      selectedCalendarUrls: Type.Optional(Type.Array(Type.String({ minLength: 1 }))),
+      selectedCalendarUrls: Type.Optional(
+        Type.Array(Type.String({ minLength: 1 }))
+      ),
       forgeCalendarUrl: optionalString(),
       createForgeCalendar: Type.Optional(Type.Boolean())
     }),
@@ -605,7 +688,8 @@ export function registerForgePluginTools(api: ForgePluginToolApi, config: ForgeP
   registerWriteTool(api, config, {
     name: "forge_create_work_block_template",
     label: "Forge Create Work Block",
-    description: "Create a recurring work-block template such as Main Activity, Secondary Activity, Third Activity, Rest, Holiday, or Custom. This is a planning helper; agents can also use forge_create_entities with entityType work_block_template.",
+    description:
+      "Create a recurring work-block template such as Main Activity, Secondary Activity, Third Activity, Rest, Holiday, or Custom. This is a planning helper; agents can also use forge_create_entities with entityType work_block_template.",
     parameters: Type.Object({
       title: Type.String({ minLength: 1 }),
       kind: Type.Union([
@@ -621,9 +705,16 @@ export function registerForgePluginTools(api: ForgePluginToolApi, config: ForgeP
       weekDays: Type.Array(Type.Integer({ minimum: 0, maximum: 6 })),
       startMinute: Type.Integer({ minimum: 0, maximum: 1440 }),
       endMinute: Type.Integer({ minimum: 0, maximum: 1440 }),
-      startsOn: Type.Optional(Type.Union([Type.String({ minLength: 1 }), Type.Null()])),
-      endsOn: Type.Optional(Type.Union([Type.String({ minLength: 1 }), Type.Null()])),
-      blockingState: Type.Union([Type.Literal("allowed"), Type.Literal("blocked")])
+      startsOn: Type.Optional(
+        Type.Union([Type.String({ minLength: 1 }), Type.Null()])
+      ),
+      endsOn: Type.Optional(
+        Type.Union([Type.String({ minLength: 1 }), Type.Null()])
+      ),
+      blockingState: Type.Union([
+        Type.Literal("allowed"),
+        Type.Literal("blocked")
+      ])
     }),
     method: "POST",
     path: "/api/v1/calendar/work-block-templates"
@@ -632,7 +723,8 @@ export function registerForgePluginTools(api: ForgePluginToolApi, config: ForgeP
   registerWriteTool(api, config, {
     name: "forge_recommend_task_timeboxes",
     label: "Forge Recommend Task Timeboxes",
-    description: "Suggest future task timeboxes that fit the current calendar rules and current schedule.",
+    description:
+      "Suggest future task timeboxes that fit the current calendar rules and current schedule.",
     parameters: Type.Object({
       taskId: Type.String({ minLength: 1 }),
       from: optionalString(),
@@ -646,7 +738,8 @@ export function registerForgePluginTools(api: ForgePluginToolApi, config: ForgeP
   registerWriteTool(api, config, {
     name: "forge_create_task_timebox",
     label: "Forge Create Task Timebox",
-    description: "Create a planned task timebox directly in Forge's calendar domain. This is a planning helper; agents can also use forge_create_entities with entityType task_timebox.",
+    description:
+      "Create a planned task timebox directly in Forge's calendar domain. This is a planning helper; agents can also use forge_create_entities with entityType task_timebox.",
     parameters: Type.Object({
       taskId: Type.String({ minLength: 1 }),
       projectId: optionalNullableString(),

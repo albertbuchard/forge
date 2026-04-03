@@ -332,7 +332,7 @@ The high-level Forge mutation tools are array-first.
 Calendar tools:
 - `forge_get_calendar_overview` for current provider state, native Forge events, mirrored events, work blocks, and timeboxes
 - `forge_create_entities`, `forge_update_entities`, and `forge_delete_entities` for canonical Forge event management plus work blocks and task timeboxes
-- `forge_connect_calendar_provider` and `forge_sync_calendar_connection` for provider setup and sync, including Exchange Online through Microsoft Graph in read-only mode. Exchange Online setup is normally completed through the interactive Settings sign-in flow rather than fully non-interactive agent input.
+- `forge_connect_calendar_provider` and `forge_sync_calendar_connection` for provider setup and sync, including Exchange Online through Microsoft Graph in read-only mode. Exchange Online setup is normally completed through the interactive Settings flow after the local Microsoft client ID, tenant, and redirect URI have been saved in Forge, rather than through fully non-interactive agent input.
 - `forge_create_work_block_template` for recurring half-day, holiday, or custom work blocks
 - work-block templates accept optional `startsOn` / `endsOn` `YYYY-MM-DD` bounds; omitting `endsOn` keeps the block repeating indefinitely
 - holiday blocks should normally use `kind: "holiday"` with `weekDays: [0,1,2,3,4,5,6]` and `startMinute: 0`, `endMinute: 1440`

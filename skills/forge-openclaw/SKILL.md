@@ -1,11 +1,11 @@
 ---
 name: forge-openclaw
-description: use when the user wants to save, search, update, review, start, stop, or explain work or psyche records inside forge, or when the conversation is clearly about a forge entity such as a goal, project, task, task_run, insight, psyche_value, behavior_pattern, behavior, belief_entry, mode_profile, mode_guide_session, trigger_report, event_type, or emotion_definition. identify the exact forge entity, keep the main conversation natural, offer saving once when helpful, ask only for missing fields, and use the correct forge tool and payload shape.
+description: use when the user wants to save, search, update, review, start, stop, reward, or explain work or psyche records inside forge, or when the conversation is clearly about a forge entity such as a goal, project, task, habit, note, calendar_event, work_block_template, task_timebox, task_run, insight, psyche_value, behavior_pattern, behavior, belief_entry, mode_profile, mode_guide_session, trigger_report, event_type, or emotion_definition. identify the exact forge entity, keep the main conversation natural, offer saving once when helpful, ask only for missing fields, and use the correct forge tool and payload shape.
 ---
 
 Forge is the user's structured system for planning work, doing work, reflecting on patterns, and keeping a truthful record of what is happening. Use it when the user is clearly working inside that system, or when they are describing something that naturally belongs there and would benefit from being stored, updated, reviewed, or acted on in Forge. Keep the conversation natural first. Do not turn every message into intake. When a real Forge entity is clearly present, name the exact entity type plainly, help with the substance of the conversation, and then offer Forge once, lightly, if storing it would genuinely help.
 
-Forge has two major domains. The planning side covers goals, projects, tasks, notes, live work sessions, and agent-authored insights. The Psyche side covers values, patterns, behaviors, beliefs, modes, guided mode sessions, trigger reports, event types, and reusable emotion definitions. The model should use the real entity names, not vague substitutes. Say `project`, not “initiative”. Say `behavior_pattern`, not “theme”. Say `trigger_report`, not “incident note”.
+Forge has two major domains. The planning side covers goals, projects, tasks, habits, notes, calendar events, recurring work blocks, task timeboxes, live work sessions, and agent-authored insights. The Psyche side covers values, patterns, behaviors, beliefs, modes, guided mode sessions, trigger reports, event types, and reusable emotion definitions. The model should use the real entity names, not vague substitutes. Say `project`, not “initiative”. Say `behavior_pattern`, not “theme”. Say `trigger_report`, not “incident note”.
 Habits are a first-class recurring entity in the planning side.
 NEGATIVE HABIT CHECK-IN RULE: for a `negative` habit, the correct aligned/resisted outcome is `missed`. `missed` means the bad habit was resisted, the user stayed aligned, and the habit should award its XP bonus.
 
@@ -29,9 +29,15 @@ Use these exact entity meanings when deciding what the user is describing.
 
 `task_run` is one truthful live work session on a task. It is not the same thing as task status.
 
-`note` is a first-class Markdown entity that can link to one or many other entities. Use it for work summaries, context, progress logs, handoff explanations, wiki-style reference pages, or reflective detail that should stay searchable and attached to the right records.
+`note` is a first-class Markdown entity that can link to one or many other entities. Use it for work summaries, context, progress logs, handoff explanations, wiki-style reference pages, or reflective detail that should stay searchable and attached to the right records. Notes also support note-owned `tags` for memory-system labels such as `Working memory`, `Short-term memory`, `Episodic memory`, `Semantic memory`, and `Procedural memory`, plus custom tags. Notes may be durable or ephemeral: if `destroyAt` is set, Forge will delete the note automatically after that time.
 
 `insight` is an agent-authored observation, recommendation, or warning grounded in Forge data. It does not replace a requested goal, project, task, pattern, belief, or trigger report.
+
+`calendar_event` is a canonical Forge event record. It lives in Forge first and can later project to a writable provider calendar.
+
+`work_block_template` is a recurring work-availability template such as Main Activity, Secondary Activity, Third Activity, Rest, Holiday, or Custom.
+
+`task_timebox` is a planned or live calendar slot attached to a task. It is scheduling structure, not proof that work actually started.
 
 `psyche_value` is a direction the user wants to live toward, such as honesty, courage, steadiness, compassion, or creativity.
 
@@ -58,6 +64,7 @@ Use for a meaningful direction over time.
 Minimum field: `title`
 Usually useful: `description`, `horizon`, `status`
 Ask:
+
 1. What should this goal be called?
 2. Why does it matter to you?
 3. Is this a quarter, year, or lifetime horizon?
@@ -67,6 +74,7 @@ Use for a bounded workstream under a goal.
 Minimum field: `title`
 Usually useful: `goalId`, `description`, `status`
 Ask:
+
 1. What should this project be called?
 2. Which goal does it support?
 3. What outcome should it produce?
@@ -76,6 +84,7 @@ Use for one concrete action or deliverable.
 Minimum field: `title`
 Usually useful: `projectId`, `goalId`, `priority`, `dueDate`, `status`, `owner`
 Ask:
+
 1. What is the task in one concrete sentence?
 2. Should it live under an existing goal or project?
 3. Does it need a due date, priority, or owner?
@@ -85,10 +94,12 @@ Use for a recurring commitment or recurring slip with explicit cadence and XP co
 Minimum field: `title`
 Usually useful: `polarity`, `frequency`
 CRITICAL NEGATIVE-HABIT CHECK-IN RULE:
+
 - For a `negative` habit, the correct check-in outcome is `missed`.
 - On a `negative` habit, `missed` means the habit was resisted, the user stayed aligned, and the habit earns its XP bonus.
 - Do not treat `missed` on a `negative` habit as failure. In this case, `missed` is the successful outcome.
-Ask:
+  Ask:
+
 1. What is the recurring behavior in one concrete sentence?
 2. Is doing it good (`positive`) or a slip (`negative`)?
 3. What cadence should it follow?
@@ -103,6 +114,7 @@ Use for a value or committed direction.
 Minimum field: `title`
 Usually useful: `description`, `valuedDirection`, `whyItMatters`, links to goals, projects, or tasks
 Ask:
+
 1. What value or direction is this?
 2. How would you describe it in your own words?
 3. Why does it matter now?
@@ -112,6 +124,7 @@ Use for a recurring loop across situations.
 Minimum field: `title`
 Usually useful: `description`, `targetBehavior`, `cueContexts`, `shortTermPayoff`, `longTermCost`, `preferredResponse`
 Ask:
+
 1. What would you call this pattern?
 2. What usually sets it off, and what tends to happen next?
 3. What does it give you in the short term, what does it cost later, and what response would you rather make?
@@ -121,6 +134,7 @@ Use for one recurring move or action tendency.
 Minimum fields: `kind`, `title`
 Usually useful: `commonCues`, `urgeStory`, `shortTermPayoff`, `longTermCost`, `replacementMove`, `repairPlan`
 Ask:
+
 1. What happened, in plain language?
 2. Is it an `away`, `committed`, or `recovery` behavior?
 3. What cues show up, and what move would you want available instead?
@@ -130,6 +144,7 @@ Use for one explicit belief sentence.
 Minimum fields: `statement`, `beliefType`
 Usually useful: `confidence`, `evidenceFor`, `evidenceAgainst`, `flexibleAlternative`, `originNote`
 Ask:
+
 1. What is the belief in one sentence?
 2. Is it `absolute` or `conditional`, and how true does it feel from 0 to 100?
 3. What supports it, what weakens it, and what would be a more flexible alternative?
@@ -139,6 +154,7 @@ Use for a recurring part-state or inner role.
 Minimum fields: `family`, `title`
 Usually useful: `fear`, `burden`, `protectiveJob`, `originContext`, links to patterns, behaviors, and values
 Ask:
+
 1. What kind of mode is this: `coping`, `child`, `critic_parent`, `healthy_adult`, or `happy_child`?
 2. What should this mode be called?
 3. What does it fear, carry, or try to protect?
@@ -153,6 +169,7 @@ Use for one specific emotionally important episode.
 Minimum field: `title`
 Usually useful: `eventSituation`, `occurredAt`, `emotions`, `thoughts`, `behaviors`, `consequences`, `nextMoves`, links to values, beliefs, patterns, modes, goals, projects, or tasks
 Ask:
+
 1. What happened?
 2. What emotions were present, and how intense were they?
 3. What thoughts showed up, what did you do next, and what would be the useful next move now?
@@ -162,6 +179,7 @@ Use for a reusable trigger category.
 Minimum field: `label`
 Usually useful: `description`
 Ask:
+
 1. What should this event type be called?
 2. What kind of incident does it represent?
 
@@ -170,6 +188,7 @@ Use for a reusable emotion vocabulary entry.
 Minimum field: `label`
 Usually useful: `description`, `category`
 Ask:
+
 1. What emotion label do you want to reuse?
 2. How would you describe it?
 3. Does it belong to a broader category?
@@ -184,7 +203,7 @@ Use the batch entity tools for stored records:
 `forge_search_entities`, `forge_create_entities`, `forge_update_entities`, `forge_delete_entities`, `forge_restore_entities`
 
 These tools operate on:
-`goal`, `project`, `task`, `note`, `calendar_event`, `work_block_template`, `task_timebox`, `psyche_value`, `behavior_pattern`, `behavior`, `belief_entry`, `mode_profile`, `mode_guide_session`, `trigger_report`, `event_type`, `emotion_definition`
+`goal`, `project`, `task`, `habit`, `note`, `calendar_event`, `work_block_template`, `task_timebox`, `psyche_value`, `behavior_pattern`, `behavior`, `belief_entry`, `mode_profile`, `mode_guide_session`, `trigger_report`, `event_type`, `emotion_definition`
 
 Use live work tools for `task_run`:
 `forge_log_work`, `forge_start_task_run`, `forge_heartbeat_task_run`, `forge_focus_task_run`, `forge_complete_task_run`, `forge_release_task_run`
@@ -212,10 +231,12 @@ Calendar entity CRUD uses these same batch tools:
 - create or update planned task slots with `entityType: "task_timebox"`
 
 Forge still runs the downstream calendar behavior after these generic mutations. For `calendar_event`, that includes provider projection sync on create or update and remote projection deletion on delete.
+Calendar date/time rule: when the user gives a local time such as “1pm”, interpret it in the user's timezone, not UTC. Set the payload `timezone` to the user's real timezone and serialize `startAt`, `endAt`, `startsAt`, and `endsAt` so they represent that local wall-clock time correctly. Do not silently treat unspecified local times as `UTC+0`.
+Calendar sync default: unless the user explicitly asks for Forge-only storage, do not set `preferredCalendarId` to `null`. Omit `preferredCalendarId` on event creation so Forge can use the default writable connected calendar automatically. Use `preferredCalendarId: null` only when the user clearly wants the event to stay Forge-only.
 
-When creating `goal`, `project`, or `task`, the create payload may also include `notes: [{ contentMarkdown, author?, links? }]`. Forge will create real linked `note` entities automatically and attach them to the new parent record.
+When creating `goal`, `project`, or `task`, the create payload may also include `notes: [{ contentMarkdown, author?, tags?, destroyAt?, links? }]`. Forge will create real linked `note` entities automatically and attach them to the new parent record.
 
-To create a standalone note directly, use `forge_create_entities` with `entityType: "note"` and `data: { contentMarkdown, author?, links }`. `links` should point at one or more real Forge entities so the note remains connected and searchable across the graph.
+To create a standalone note directly, use `forge_create_entities` with `entityType: "note"` and `data: { contentMarkdown, author?, tags?, destroyAt?, links }`. `links` should point at one or more real Forge entities so the note remains connected and searchable across the graph. Use `tags` for built-in memory-system labels or custom note labels. Use `destroyAt` only when the note should be ephemeral scratch memory that self-destructs later.
 
 For update operations, each item must include `entityType`, `id`, and `patch`.
 
@@ -251,9 +272,9 @@ Use `forge_heartbeat_task_run` to keep an active run alive.
 
 Use `forge_focus_task_run` when one active run should become the current visible run.
 
-Use `forge_complete_task_run` to finish live work. When the user or agent wants to preserve what was done, include `closeoutNote` so Forge creates a real linked `note` instead of losing that explanation inside ephemeral run metadata.
+Use `forge_complete_task_run` to finish live work. When the user or agent wants to preserve what was done, include `closeoutNote` so Forge creates a real linked `note` instead of losing that explanation inside ephemeral run metadata. `closeoutNote` supports the same note fields as normal note creation, including `tags` and `destroyAt`.
 
-Use `forge_release_task_run` to stop live work without completing the task. `closeoutNote` is also available there for handoff or pause context.
+Use `forge_release_task_run` to stop live work without completing the task. `closeoutNote` is also available there for handoff or pause context, including note tags or an ephemeral destroy time when that handoff note should self-delete later.
 
 Use `forge_log_work` only for retroactive work that already happened. If the user explains the work in a way that should be preserved, include `closeoutNote`.
 
@@ -280,15 +301,15 @@ Provider-specific expectations:
 
 - Google and Apple plus writable custom CalDAV connections can mirror selected calendars and publish Forge-owned work blocks or timeboxes into a dedicated `Forge` calendar.
 - Exchange Online uses Microsoft Graph and is read-only in the current Forge implementation. It mirrors the selected calendars into Forge but does not publish work blocks, timeboxes, or native events back to Microsoft.
-- Exchange Online connection setup is guided and interactive. In normal self-hosted local use, the operator should connect Microsoft from `Settings -> Calendar` with the popup sign-in flow backed by a local MSAL public-client configuration.
+- Exchange Online connection setup is guided and interactive. In normal self-hosted local use, the operator must first save the Microsoft client ID, tenant, and redirect URI in `Settings -> Calendar`, then continue through the popup sign-in flow backed by a local MSAL public-client configuration.
 - If an interactive Microsoft auth session has already been completed and the backend gave you an `authSessionId`, then `forge_connect_calendar_provider` accepts `provider: "microsoft"` with `label`, `authSessionId`, and `selectedCalendarUrls`.
 
 Use these exact calendar batch payload shapes when working generically:
 
 - create a native event:
-  `{"operations":[{"entityType":"calendar_event","data":{"title":"Weekly research supervision","startAt":"2026-04-06T08:00:00.000Z","endAt":"2026-04-06T09:00:00.000Z","timezone":"Europe/Zurich","preferredCalendarId":null,"links":[{"entityType":"project","entityId":"project_123","relationshipType":"meeting_for"}]}}]}`
+  `{"operations":[{"entityType":"calendar_event","data":{"title":"Weekly research supervision","startAt":"2026-04-06T06:00:00.000Z","endAt":"2026-04-06T07:00:00.000Z","timezone":"Europe/Zurich","links":[{"entityType":"project","entityId":"project_123","relationshipType":"meeting_for"}]}}]}`
 - update or move an event:
-  `{"operations":[{"entityType":"calendar_event","id":"calevent_123","patch":{"startAt":"2026-04-06T08:30:00.000Z","endAt":"2026-04-06T09:30:00.000Z","preferredCalendarId":"calendar_123"}}]}`
+  `{"operations":[{"entityType":"calendar_event","id":"calevent_123","patch":{"startAt":"2026-04-06T06:30:00.000Z","endAt":"2026-04-06T07:30:00.000Z","timezone":"Europe/Zurich","preferredCalendarId":"calendar_123"}}]}`
 - delete an event:
   `{"operations":[{"entityType":"calendar_event","id":"calevent_123"}]}`
 - create a recurring work block:
@@ -296,7 +317,7 @@ Use these exact calendar batch payload shapes when working generically:
 - create a holiday block:
   `{"operations":[{"entityType":"work_block_template","data":{"title":"Summer holiday","kind":"holiday","color":"#14b8a6","timezone":"Europe/Zurich","weekDays":[0,1,2,3,4,5,6],"startMinute":0,"endMinute":1440,"startsOn":"2026-08-01","endsOn":"2026-08-16","blockingState":"blocked"}}]}`
 - create a planned task slot:
-  `{"operations":[{"entityType":"task_timebox","data":{"taskId":"task_123","projectId":"project_456","title":"Draft the methods section","startsAt":"2026-04-03T08:00:00.000Z","endsAt":"2026-04-03T09:30:00.000Z","source":"suggested"}}]}`
+  `{"operations":[{"entityType":"task_timebox","data":{"taskId":"task_123","projectId":"project_456","title":"Draft the methods section","startsAt":"2026-04-03T06:00:00.000Z","endsAt":"2026-04-03T07:30:00.000Z","source":"suggested"}}]}`
 
 Use these interaction rules.
 

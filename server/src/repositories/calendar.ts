@@ -632,6 +632,21 @@ export function getCalendarById(calendarId: string) {
   return row ? mapCalendar(row) : undefined;
 }
 
+function getDefaultWritableCalendar() {
+  const row = getDatabase()
+    .prepare(
+      `SELECT id, connection_id, remote_id, title, description, color, timezone, is_primary, can_write, selected_for_sync, forge_managed,
+              last_synced_at, created_at, updated_at
+       FROM calendar_calendars
+       WHERE can_write = 1
+         AND (selected_for_sync = 1 OR forge_managed = 1)
+       ORDER BY forge_managed DESC, is_primary DESC, title ASC
+       LIMIT 1`
+    )
+    .get() as CalendarRow | undefined;
+  return row ? mapCalendar(row) : undefined;
+}
+
 export function getCalendarByRemoteId(connectionId: string, remoteId: string) {
   const row = getDatabase()
     .prepare(
@@ -1049,9 +1064,12 @@ export function upsertCalendarEventRecord(connectionId: string, input: CalendarS
 export function createCalendarEvent(input: CreateCalendarEventInput) {
   const now = nowIso();
   const id = `calevent_${randomUUID().replaceAll("-", "").slice(0, 10)}`;
-  const preferredCalendar = input.preferredCalendarId
-    ? getCalendarById(input.preferredCalendarId)
-    : null;
+  const preferredCalendar =
+    input.preferredCalendarId === undefined
+      ? getDefaultWritableCalendar() ?? null
+      : input.preferredCalendarId
+        ? getCalendarById(input.preferredCalendarId)
+        : null;
 
   getDatabase()
     .prepare(
@@ -1839,7 +1857,7 @@ export function getCalendarOverview(query: CalendarAgendaQuery): CalendarOvervie
         provider: "microsoft",
         label: "Exchange Online",
         supportsDedicatedForgeCalendar: false,
-        connectionHelp: "Sign in with Microsoft in a guided local popup flow. Forge uses a public-client Microsoft setup, then mirrors the selected calendars in read-only mode."
+        connectionHelp: "Save the Microsoft client ID and redirect URI in Calendar settings first, then sign in with Microsoft. Forge mirrors the selected calendars in read-only mode."
       },
       {
         provider: "caldav",

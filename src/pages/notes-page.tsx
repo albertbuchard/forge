@@ -1,13 +1,26 @@
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowUpRight, MoreHorizontal, Pencil, Plus, Trash2 } from "lucide-react";
+import {
+  ArrowUpRight,
+  MoreHorizontal,
+  Pencil,
+  Plus,
+  Trash2
+} from "lucide-react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { EntityLinkMultiSelect, type EntityLinkOption } from "@/components/psyche/entity-link-multiselect";
+import {
+  EntityLinkMultiSelect,
+  type EntityLinkOption
+} from "@/components/psyche/entity-link-multiselect";
 import { NoteFilterInput } from "@/components/notes/note-filter-input";
 import { NoteMarkdown } from "@/components/notes/note-markdown";
+import { NoteTagsInput } from "@/components/notes/note-tags-input";
 import { PageHero } from "@/components/shell/page-hero";
 import { useForgeShell } from "@/components/shell/app-shell";
-import { FloatingActionMenu, type FloatingActionMenuItem } from "@/components/ui/floating-action-menu";
+import {
+  FloatingActionMenu,
+  type FloatingActionMenuItem
+} from "@/components/ui/floating-action-menu";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -27,7 +40,19 @@ import {
   deleteNote
 } from "@/lib/api";
 import type { EntityKind } from "@/lib/entity-visuals";
-import { formatAnchorKeyLabel, formatEntityTypeLabel, getEntityRoute, getPrimaryNavigableLink } from "@/lib/note-helpers";
+import {
+  buildDestroyAtFromDelay,
+  formatNoteDestroyAtInput,
+  normalizeNoteTags,
+  parseDateTimeLocalToIso,
+  type NoteDestroyDelayUnit
+} from "@/lib/note-memory-tags";
+import {
+  formatAnchorKeyLabel,
+  formatEntityTypeLabel,
+  getEntityRoute,
+  getPrimaryNavigableLink
+} from "@/lib/note-helpers";
 import type { CrudEntityType, Note, NoteLink } from "@/lib/types";
 
 const FILTERABLE_ENTITY_TYPES = new Set<CrudEntityType>([
@@ -61,6 +86,10 @@ type EditableNoteDraft = {
   contentMarkdown: string;
   author: string;
   linkedValues: string[];
+  tags: string[];
+  destroyAtInput: string;
+  destroyDelayValue: string;
+  destroyDelayUnit: NoteDestroyDelayUnit;
 };
 
 function isCrudEntityType(value: string): value is CrudEntityType {
@@ -71,7 +100,9 @@ function encodeLinkedValue(entityType: CrudEntityType, entityId: string) {
   return `${entityType}:${entityId}`;
 }
 
-function decodeLinkedValue(value: string): { entityType: CrudEntityType; entityId: string } | null {
+function decodeLinkedValue(
+  value: string
+): { entityType: CrudEntityType; entityId: string } | null {
   const separatorIndex = value.indexOf(":");
   if (separatorIndex <= 0 || separatorIndex >= value.length - 1) {
     return null;
@@ -103,25 +134,55 @@ function parseLinkedValues(searchParams: URLSearchParams) {
   ) {
     values.unshift(encodeLinkedValue(legacyEntityType, legacyEntityId));
   }
-  return Array.from(new Set(values.map((value) => value.trim()).filter(Boolean)));
+  return Array.from(
+    new Set(values.map((value) => value.trim()).filter(Boolean))
+  );
 }
 
 function parseTextTerms(searchParams: URLSearchParams) {
-  return Array.from(new Set(searchParams.getAll("textTerms").map((value) => value.trim()).filter(Boolean)));
+  return Array.from(
+    new Set(
+      searchParams
+        .getAll("textTerms")
+        .map((value) => value.trim())
+        .filter(Boolean)
+    )
+  );
 }
 
-function toDraft(note?: Note | null, linkedValues: string[] = []): EditableNoteDraft {
+function parseTagTerms(searchParams: URLSearchParams) {
+  return normalizeNoteTags(searchParams.getAll("tags"));
+}
+
+function toDraft(
+  note?: Note | null,
+  linkedValues: string[] = []
+): EditableNoteDraft {
   return {
     contentMarkdown: note?.contentMarkdown ?? "",
     author: note?.author ?? "",
     linkedValues:
-      note?.links.map((link) => encodeLinkedValue(link.entityType, link.entityId)) ??
-      linkedValues
+      note?.links.map((link) =>
+        encodeLinkedValue(link.entityType, link.entityId)
+      ) ?? linkedValues,
+    tags: normalizeNoteTags(note?.tags ?? []),
+    destroyAtInput: formatNoteDestroyAtInput(note?.destroyAt ?? null),
+    destroyDelayValue: "",
+    destroyDelayUnit: "days"
   };
 }
 
 function sortOptions(options: EntityLinkOption[]) {
-  return [...options].sort((left, right) => left.label.localeCompare(right.label));
+  return [...options].sort((left, right) =>
+    left.label.localeCompare(right.label)
+  );
+}
+
+function resolveDestroyAt(draft: EditableNoteDraft) {
+  return (
+    parseDateTimeLocalToIso(draft.destroyAtInput) ??
+    buildDestroyAtFromDelay(draft.destroyDelayValue, draft.destroyDelayUnit)
+  );
 }
 
 export function NotesPage() {
@@ -129,28 +190,67 @@ export function NotesPage() {
   const queryClient = useQueryClient();
   const shell = useForgeShell();
   const [searchParams, setSearchParams] = useSearchParams();
-  const [selectedEntityValues, setSelectedEntityValues] = useState<string[]>(() => parseLinkedValues(searchParams));
-  const [selectedTextTerms, setSelectedTextTerms] = useState<string[]>(() => parseTextTerms(searchParams));
+  const [selectedEntityValues, setSelectedEntityValues] = useState<string[]>(
+    () => parseLinkedValues(searchParams)
+  );
+  const [selectedTagValues, setSelectedTagValues] = useState<string[]>(() =>
+    parseTagTerms(searchParams)
+  );
+  const [selectedTextTerms, setSelectedTextTerms] = useState<string[]>(() =>
+    parseTextTerms(searchParams)
+  );
   const [author, setAuthor] = useState(searchParams.get("author") ?? "");
-  const [updatedFrom, setUpdatedFrom] = useState(searchParams.get("updatedFrom") ?? "");
-  const [updatedTo, setUpdatedTo] = useState(searchParams.get("updatedTo") ?? "");
+  const [updatedFrom, setUpdatedFrom] = useState(
+    searchParams.get("updatedFrom") ?? ""
+  );
+  const [updatedTo, setUpdatedTo] = useState(
+    searchParams.get("updatedTo") ?? ""
+  );
   const [composerOpen, setComposerOpen] = useState(false);
-  const [composerDraft, setComposerDraft] = useState<EditableNoteDraft>(() => toDraft(null, parseLinkedValues(searchParams)));
+  const [composerDraft, setComposerDraft] = useState<EditableNoteDraft>(() =>
+    toDraft(null, parseLinkedValues(searchParams))
+  );
   const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
-  const [editingDraft, setEditingDraft] = useState<EditableNoteDraft | null>(null);
-  const [menuState, setMenuState] = useState<{ noteId: string; position: { x: number; y: number } } | null>(null);
+  const [editingDraft, setEditingDraft] = useState<EditableNoteDraft | null>(
+    null
+  );
+  const [menuState, setMenuState] = useState<{
+    noteId: string;
+    position: { x: number; y: number };
+  } | null>(null);
 
-  const valuesQuery = useQuery({ queryKey: ["forge-psyche-values"], queryFn: listPsycheValues });
-  const patternsQuery = useQuery({ queryKey: ["forge-psyche-patterns"], queryFn: listBehaviorPatterns });
-  const behaviorsQuery = useQuery({ queryKey: ["forge-psyche-behaviors"], queryFn: listBehaviors });
-  const beliefsQuery = useQuery({ queryKey: ["forge-psyche-beliefs"], queryFn: listBeliefs });
-  const modesQuery = useQuery({ queryKey: ["forge-psyche-modes"], queryFn: listModes });
-  const reportsQuery = useQuery({ queryKey: ["forge-psyche-reports"], queryFn: listTriggerReports });
+  const valuesQuery = useQuery({
+    queryKey: ["forge-psyche-values"],
+    queryFn: listPsycheValues
+  });
+  const patternsQuery = useQuery({
+    queryKey: ["forge-psyche-patterns"],
+    queryFn: listBehaviorPatterns
+  });
+  const behaviorsQuery = useQuery({
+    queryKey: ["forge-psyche-behaviors"],
+    queryFn: listBehaviors
+  });
+  const beliefsQuery = useQuery({
+    queryKey: ["forge-psyche-beliefs"],
+    queryFn: listBeliefs
+  });
+  const modesQuery = useQuery({
+    queryKey: ["forge-psyche-modes"],
+    queryFn: listModes
+  });
+  const reportsQuery = useQuery({
+    queryKey: ["forge-psyche-reports"],
+    queryFn: listTriggerReports
+  });
 
   useEffect(() => {
     const next = new URLSearchParams();
     for (const value of selectedEntityValues) {
       next.append("linkedTo", value);
+    }
+    for (const value of selectedTagValues) {
+      next.append("tags", value);
     }
     for (const term of selectedTextTerms) {
       next.append("textTerms", term);
@@ -165,7 +265,15 @@ export function NotesPage() {
       next.set("updatedTo", updatedTo);
     }
     setSearchParams(next, { replace: true });
-  }, [author, selectedEntityValues, selectedTextTerms, setSearchParams, updatedFrom, updatedTo]);
+  }, [
+    author,
+    selectedEntityValues,
+    selectedTagValues,
+    selectedTextTerms,
+    setSearchParams,
+    updatedFrom,
+    updatedTo
+  ]);
 
   const entityLinkOptions = useMemo(() => {
     const baseOptions: EntityLinkOption[] = [
@@ -283,7 +391,10 @@ export function NotesPage() {
     () =>
       selectedEntityValues
         .map((value) => decodeLinkedValue(value))
-        .filter(Boolean) as Array<{ entityType: CrudEntityType; entityId: string }>,
+        .filter(Boolean) as Array<{
+        entityType: CrudEntityType;
+        entityId: string;
+      }>,
     [selectedEntityValues]
   );
 
@@ -291,6 +402,7 @@ export function NotesPage() {
     queryKey: [
       "notes-index",
       selectedEntityValues.join("|"),
+      selectedTagValues.join("|"),
       selectedTextTerms.join("|"),
       author.trim(),
       updatedFrom,
@@ -299,6 +411,7 @@ export function NotesPage() {
     queryFn: () =>
       listNotes({
         linkedTo: selectedEntityFilters,
+        tags: selectedTagValues,
         textTerms: selectedTextTerms,
         author: author.trim() || undefined,
         updatedFrom: updatedFrom || undefined,
@@ -319,6 +432,8 @@ export function NotesPage() {
       createNote({
         contentMarkdown: draft.contentMarkdown.trim(),
         author: draft.author.trim() || null,
+        tags: normalizeNoteTags(draft.tags),
+        destroyAt: resolveDestroyAt(draft),
         links: draft.linkedValues
           .map((value) => decodeLinkedValue(value))
           .filter(isLinkedEntityRef)
@@ -335,10 +450,18 @@ export function NotesPage() {
   });
 
   const patchMutation = useMutation({
-    mutationFn: async ({ noteId, draft }: { noteId: string; draft: EditableNoteDraft }) =>
+    mutationFn: async ({
+      noteId,
+      draft
+    }: {
+      noteId: string;
+      draft: EditableNoteDraft;
+    }) =>
       patchNote(noteId, {
         contentMarkdown: draft.contentMarkdown.trim(),
         author: draft.author.trim() || null,
+        tags: normalizeNoteTags(draft.tags),
+        destroyAt: resolveDestroyAt(draft),
         links: draft.linkedValues
           .map((value) => decodeLinkedValue(value))
           .filter(isLinkedEntityRef)
@@ -360,12 +483,18 @@ export function NotesPage() {
   });
 
   const visibleNotes = notesQuery.data?.notes ?? [];
-  const activeMenuNote = menuState ? visibleNotes.find((note) => note.id === menuState.noteId) ?? null : null;
-  const activeMenuPrimaryLink = activeMenuNote ? getPrimaryNavigableLink(activeMenuNote) : null;
-  const activeMenuHref =
-    activeMenuPrimaryLink
-      ? getEntityRoute(activeMenuPrimaryLink.entityType, activeMenuPrimaryLink.entityId)
-      : null;
+  const activeMenuNote = menuState
+    ? (visibleNotes.find((note) => note.id === menuState.noteId) ?? null)
+    : null;
+  const activeMenuPrimaryLink = activeMenuNote
+    ? getPrimaryNavigableLink(activeMenuNote)
+    : null;
+  const activeMenuHref = activeMenuPrimaryLink
+    ? getEntityRoute(
+        activeMenuPrimaryLink.entityType,
+        activeMenuPrimaryLink.entityId
+      )
+    : null;
 
   const activeMenuItems = useMemo<FloatingActionMenuItem[]>(() => {
     if (!activeMenuNote) {
@@ -382,14 +511,19 @@ export function NotesPage() {
         disabled: !activeMenuHref,
         onSelect: () => {
           if (activeMenuHref) {
-            navigate(activeMenuHref.includes("#") ? activeMenuHref : `${activeMenuHref}#notes`);
+            navigate(
+              activeMenuHref.includes("#")
+                ? activeMenuHref
+                : `${activeMenuHref}#notes`
+            );
           }
         }
       },
       {
         id: "edit-note",
         label: "Edit note",
-        description: "Update the Markdown body or connected entity links.",
+        description:
+          "Update the Markdown body, note tags, expiry, or connected entity links.",
         icon: Pencil,
         onSelect: () => {
           setEditingNoteId(activeMenuNote.id);
@@ -411,7 +545,13 @@ export function NotesPage() {
   }, [activeMenuHref, activeMenuNote, deleteMutation, navigate]);
 
   if (notesQuery.isError) {
-    return <ErrorState eyebrow="Notes" error={notesQuery.error} onRetry={() => void notesQuery.refetch()} />;
+    return (
+      <ErrorState
+        eyebrow="Notes"
+        error={notesQuery.error}
+        onRetry={() => void notesQuery.refetch()}
+      />
+    );
   }
 
   return (
@@ -419,7 +559,7 @@ export function NotesPage() {
       <PageHero
         title="Notes"
         titleText="Notes"
-        description="Notes are first-class Markdown entities in Forge. Search them by linked records, date, or free text, then create durable notes that stay connected to the rest of the graph."
+        description="Notes are first-class Markdown entities in Forge. Search them by linked records, note tags, date, or free text, then create durable or ephemeral notes that stay connected to the rest of the graph."
         badge={`${visibleNotes.length} visible`}
         actions={
           <Button
@@ -443,14 +583,28 @@ export function NotesPage() {
           onSelectedTextTermsChange={setSelectedTextTerms}
         />
 
+        <NoteTagsInput
+          value={selectedTagValues}
+          onChange={setSelectedTagValues}
+          placeholder="Filter by memory tag or custom note tag"
+        />
+
         <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(12rem,0.38fr)_minmax(12rem,0.38fr)]">
           <Input
             value={author}
             onChange={(event) => setAuthor(event.target.value)}
             placeholder="Filter by author"
           />
-          <Input type="date" value={updatedFrom} onChange={(event) => setUpdatedFrom(event.target.value)} />
-          <Input type="date" value={updatedTo} onChange={(event) => setUpdatedTo(event.target.value)} />
+          <Input
+            type="date"
+            value={updatedFrom}
+            onChange={(event) => setUpdatedFrom(event.target.value)}
+          />
+          <Input
+            type="date"
+            value={updatedTo}
+            onChange={(event) => setUpdatedTo(event.target.value)}
+          />
         </div>
       </Card>
 
@@ -458,9 +612,13 @@ export function NotesPage() {
         <Card className="grid gap-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
-              <div className="font-label text-[11px] uppercase tracking-[0.16em] text-white/42">New note</div>
+              <div className="font-label text-[11px] uppercase tracking-[0.16em] text-white/42">
+                New note
+              </div>
               <div className="mt-2 text-sm leading-6 text-white/58">
-                Notes are independent Markdown entities. Link them to one or more real records so they stay searchable and anchored in context.
+                Notes are independent Markdown entities. Link them to one or
+                more real records, add memory-system or custom tags, and
+                optionally make them ephemeral with an automatic destroy time.
               </div>
             </div>
             <Button
@@ -476,7 +634,12 @@ export function NotesPage() {
 
           <Textarea
             value={composerDraft.contentMarkdown}
-            onChange={(event) => setComposerDraft((current) => ({ ...current, contentMarkdown: event.target.value }))}
+            onChange={(event) =>
+              setComposerDraft((current) => ({
+                ...current,
+                contentMarkdown: event.target.value
+              }))
+            }
             className="min-h-[16rem]"
             placeholder="Write the note in Markdown. This can be as short as a handoff line or as long as a wiki page."
           />
@@ -484,25 +647,97 @@ export function NotesPage() {
           <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)]">
             <Input
               value={composerDraft.author}
-              onChange={(event) => setComposerDraft((current) => ({ ...current, author: event.target.value }))}
+              onChange={(event) =>
+                setComposerDraft((current) => ({
+                  ...current,
+                  author: event.target.value
+                }))
+              }
               placeholder="Optional author"
             />
             <EntityLinkMultiSelect
               options={entityLinkOptions}
               selectedValues={composerDraft.linkedValues}
-              onChange={(values) => setComposerDraft((current) => ({ ...current, linkedValues: values }))}
+              onChange={(values) =>
+                setComposerDraft((current) => ({
+                  ...current,
+                  linkedValues: values
+                }))
+              }
               placeholder="Link this note to goals, tasks, habits, tags, or Psyche records"
               emptyMessage="No matching entities found yet."
             />
           </div>
 
+          <div className="grid gap-3 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)]">
+            <NoteTagsInput
+              value={composerDraft.tags}
+              onChange={(tags) =>
+                setComposerDraft((current) => ({ ...current, tags }))
+              }
+            />
+            <div className="grid gap-3 rounded-[22px] bg-white/[0.03] p-4">
+              <div>
+                <div className="font-label text-[11px] uppercase tracking-[0.16em] text-white/42">
+                  Ephemeral auto-destroy
+                </div>
+                <div className="mt-2 text-xs leading-5 text-white/48">
+                  Set an exact destroy time or a relative delay. Leaving both
+                  blank keeps the note durable.
+                </div>
+              </div>
+              <Input
+                type="datetime-local"
+                value={composerDraft.destroyAtInput}
+                onChange={(event) =>
+                  setComposerDraft((current) => ({
+                    ...current,
+                    destroyAtInput: event.target.value
+                  }))
+                }
+              />
+              <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_10rem]">
+                <Input
+                  type="number"
+                  min="1"
+                  value={composerDraft.destroyDelayValue}
+                  onChange={(event) =>
+                    setComposerDraft((current) => ({
+                      ...current,
+                      destroyDelayValue: event.target.value
+                    }))
+                  }
+                  placeholder="Destroy after"
+                />
+                <select
+                  className="rounded-[14px] border border-white/10 bg-white/[0.04] px-3 py-3 text-sm text-white"
+                  value={composerDraft.destroyDelayUnit}
+                  onChange={(event) =>
+                    setComposerDraft((current) => ({
+                      ...current,
+                      destroyDelayUnit: event.target
+                        .value as NoteDestroyDelayUnit
+                    }))
+                  }
+                >
+                  <option value="hours">Hours</option>
+                  <option value="days">Days</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
           <div className="rounded-[22px] bg-white/[0.03] p-4">
-            <div className="font-label text-[11px] uppercase tracking-[0.16em] text-white/42">Preview</div>
+            <div className="font-label text-[11px] uppercase tracking-[0.16em] text-white/42">
+              Preview
+            </div>
             <div className="mt-3">
               {composerDraft.contentMarkdown.trim() ? (
                 <NoteMarkdown markdown={composerDraft.contentMarkdown} />
               ) : (
-                <div className="text-sm text-white/42">Markdown preview appears here.</div>
+                <div className="text-sm text-white/42">
+                  Markdown preview appears here.
+                </div>
               )}
             </div>
           </div>
@@ -511,7 +746,10 @@ export function NotesPage() {
             <Button
               pending={createMutation.isPending}
               pendingLabel="Saving"
-              disabled={composerDraft.contentMarkdown.trim().length === 0 || composerDraft.linkedValues.length === 0}
+              disabled={
+                composerDraft.contentMarkdown.trim().length === 0 ||
+                composerDraft.linkedValues.length === 0
+              }
               onClick={() => void createMutation.mutateAsync(composerDraft)}
             >
               Save note
@@ -532,14 +770,18 @@ export function NotesPage() {
         <div className="grid gap-3">
           {visibleNotes.map((note) => {
             const primaryLink = getPrimaryNavigableLink(note);
-            const href = primaryLink ? getEntityRoute(primaryLink.entityType, primaryLink.entityId) : null;
-            const isEditing = editingNoteId === note.id && editingDraft !== null;
+            const href = primaryLink
+              ? getEntityRoute(primaryLink.entityType, primaryLink.entityId)
+              : null;
+            const isEditing =
+              editingNoteId === note.id && editingDraft !== null;
             return (
               <Card key={note.id} className="min-w-0 overflow-hidden p-5">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div className="min-w-0">
                     <div className="text-xs uppercase tracking-[0.16em] text-white/38">
-                      {(note.author ?? "Unknown author").toString()} • {new Date(note.updatedAt).toLocaleString()}
+                      {(note.author ?? "Unknown author").toString()} •{" "}
+                      {new Date(note.updatedAt).toLocaleString()}
                     </div>
                     <div className="mt-3 flex flex-wrap gap-2">
                       {note.links.map((link) => (
@@ -549,9 +791,26 @@ export function NotesPage() {
                           wrap
                         >
                           {formatEntityTypeLabel(link.entityType)}
-                          {link.anchorKey ? ` · ${formatAnchorKeyLabel(link.anchorKey)}` : ""}
+                          {link.anchorKey
+                            ? ` · ${formatAnchorKeyLabel(link.anchorKey)}`
+                            : ""}
                         </Badge>
                       ))}
+                      {(note.tags ?? []).map((tag) => (
+                        <Badge
+                          key={`${note.id}-tag-${tag}`}
+                          className="bg-cyan-400/10 text-cyan-50"
+                          wrap
+                        >
+                          {tag}
+                        </Badge>
+                      ))}
+                      {note.destroyAt ? (
+                        <Badge className="bg-amber-400/10 text-amber-100" wrap>
+                          Ephemeral · deletes{" "}
+                          {new Date(note.destroyAt).toLocaleString()}
+                        </Badge>
+                      ) : null}
                     </div>
                   </div>
                   <button
@@ -579,32 +838,131 @@ export function NotesPage() {
                   <div className="mt-4 grid gap-4">
                     <Textarea
                       value={editingDraft.contentMarkdown}
-                      onChange={(event) => setEditingDraft((current) => (current ? { ...current, contentMarkdown: event.target.value } : current))}
+                      onChange={(event) =>
+                        setEditingDraft((current) =>
+                          current
+                            ? {
+                                ...current,
+                                contentMarkdown: event.target.value
+                              }
+                            : current
+                        )
+                      }
                       className="min-h-[14rem]"
                     />
 
                     <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)]">
                       <Input
                         value={editingDraft.author}
-                        onChange={(event) => setEditingDraft((current) => (current ? { ...current, author: event.target.value } : current))}
+                        onChange={(event) =>
+                          setEditingDraft((current) =>
+                            current
+                              ? { ...current, author: event.target.value }
+                              : current
+                          )
+                        }
                         placeholder="Optional author"
                       />
                       <EntityLinkMultiSelect
                         options={entityLinkOptions}
                         selectedValues={editingDraft.linkedValues}
-                        onChange={(values) => setEditingDraft((current) => (current ? { ...current, linkedValues: values } : current))}
+                        onChange={(values) =>
+                          setEditingDraft((current) =>
+                            current
+                              ? { ...current, linkedValues: values }
+                              : current
+                          )
+                        }
                         placeholder="Update the linked entities"
                         emptyMessage="No matching entities found yet."
                       />
                     </div>
 
+                    <div className="grid gap-3 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)]">
+                      <NoteTagsInput
+                        value={editingDraft.tags}
+                        onChange={(tags) =>
+                          setEditingDraft((current) =>
+                            current ? { ...current, tags } : current
+                          )
+                        }
+                      />
+                      <div className="grid gap-3 rounded-[22px] bg-white/[0.03] p-4">
+                        <div>
+                          <div className="font-label text-[11px] uppercase tracking-[0.16em] text-white/42">
+                            Ephemeral auto-destroy
+                          </div>
+                          <div className="mt-2 text-xs leading-5 text-white/48">
+                            Set an exact destroy time or a relative delay.
+                            Leaving both blank keeps the note durable.
+                          </div>
+                        </div>
+                        <Input
+                          type="datetime-local"
+                          value={editingDraft.destroyAtInput}
+                          onChange={(event) =>
+                            setEditingDraft((current) =>
+                              current
+                                ? {
+                                    ...current,
+                                    destroyAtInput: event.target.value
+                                  }
+                                : current
+                            )
+                          }
+                        />
+                        <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_10rem]">
+                          <Input
+                            type="number"
+                            min="1"
+                            value={editingDraft.destroyDelayValue}
+                            onChange={(event) =>
+                              setEditingDraft((current) =>
+                                current
+                                  ? {
+                                      ...current,
+                                      destroyDelayValue: event.target.value
+                                    }
+                                  : current
+                              )
+                            }
+                            placeholder="Destroy after"
+                          />
+                          <select
+                            className="rounded-[14px] border border-white/10 bg-white/[0.04] px-3 py-3 text-sm text-white"
+                            value={editingDraft.destroyDelayUnit}
+                            onChange={(event) =>
+                              setEditingDraft((current) =>
+                                current
+                                  ? {
+                                      ...current,
+                                      destroyDelayUnit: event.target
+                                        .value as NoteDestroyDelayUnit
+                                    }
+                                  : current
+                              )
+                            }
+                          >
+                            <option value="hours">Hours</option>
+                            <option value="days">Days</option>
+                          </select>
+                        </div>
+                      </div>
+                    </div>
+
                     <div className="rounded-[22px] bg-white/[0.03] p-4">
-                      <div className="font-label text-[11px] uppercase tracking-[0.16em] text-white/42">Preview</div>
+                      <div className="font-label text-[11px] uppercase tracking-[0.16em] text-white/42">
+                        Preview
+                      </div>
                       <div className="mt-3">
                         {editingDraft.contentMarkdown.trim() ? (
-                          <NoteMarkdown markdown={editingDraft.contentMarkdown} />
+                          <NoteMarkdown
+                            markdown={editingDraft.contentMarkdown}
+                          />
                         ) : (
-                          <div className="text-sm text-white/42">No content yet.</div>
+                          <div className="text-sm text-white/42">
+                            No content yet.
+                          </div>
                         )}
                       </div>
                     </div>
@@ -622,8 +980,16 @@ export function NotesPage() {
                       <Button
                         pending={patchMutation.isPending}
                         pendingLabel="Saving"
-                        disabled={editingDraft.contentMarkdown.trim().length === 0 || editingDraft.linkedValues.length === 0}
-                        onClick={() => void patchMutation.mutateAsync({ noteId: note.id, draft: editingDraft })}
+                        disabled={
+                          editingDraft.contentMarkdown.trim().length === 0 ||
+                          editingDraft.linkedValues.length === 0
+                        }
+                        onClick={() =>
+                          void patchMutation.mutateAsync({
+                            noteId: note.id,
+                            draft: editingDraft
+                          })
+                        }
                       >
                         Save changes
                       </Button>
@@ -641,7 +1007,10 @@ export function NotesPage() {
                       }}
                       disabled={!href}
                     >
-                      <NoteMarkdown markdown={note.contentMarkdown} className="line-clamp-none" />
+                      <NoteMarkdown
+                        markdown={note.contentMarkdown}
+                        className="line-clamp-none"
+                      />
                     </button>
                     {href ? (
                       <div className="mt-4 inline-flex text-xs uppercase tracking-[0.16em] text-[var(--secondary)]">
@@ -659,7 +1028,11 @@ export function NotesPage() {
       <FloatingActionMenu
         open={Boolean(menuState)}
         title="Note actions"
-        subtitle={activeMenuNote ? activeMenuNote.contentPlain.slice(0, 80) || "Markdown note" : undefined}
+        subtitle={
+          activeMenuNote
+            ? activeMenuNote.contentPlain.slice(0, 80) || "Markdown note"
+            : undefined
+        }
         items={activeMenuItems}
         position={menuState?.position ?? null}
         onClose={() => setMenuState(null)}

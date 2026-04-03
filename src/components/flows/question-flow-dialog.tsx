@@ -127,7 +127,8 @@ export function QuestionFlowDialog<TValue>({
   submitLabel,
   pending = false,
   pendingLabel,
-  error
+  error,
+  initialStepId
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -142,6 +143,7 @@ export function QuestionFlowDialog<TValue>({
   pending?: boolean;
   pendingLabel?: string;
   error?: string | null;
+  initialStepId?: string;
 }) {
   const { t } = useI18n();
   const isMobile = useIsMobileFlow();
@@ -151,8 +153,16 @@ export function QuestionFlowDialog<TValue>({
   useEffect(() => {
     if (!open) {
       setStepIndex(0);
+      return;
     }
-  }, [open]);
+
+    if (initialStepId) {
+      const nextIndex = steps.findIndex((candidate) => candidate.id === initialStepId);
+      setStepIndex(nextIndex >= 0 ? nextIndex : 0);
+      return;
+    }
+    setStepIndex(0);
+  }, [initialStepId, open, steps]);
 
   const setValue = (patch: Partial<TValue>) => {
     onChange({ ...value, ...patch });

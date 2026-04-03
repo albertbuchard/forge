@@ -1,7 +1,13 @@
 import { randomUUID } from "node:crypto";
 import { getDatabase } from "../db.js";
 import { recordActivityEvent } from "./activity-events.js";
-import { filterDeletedEntities, getDeletedEntityRecord, clearDeletedEntityRecord, isEntityDeleted, upsertDeletedEntityRecord } from "./deleted-entities.js";
+import {
+  filterDeletedEntities,
+  getDeletedEntityRecord,
+  clearDeletedEntityRecord,
+  isEntityDeleted,
+  upsertDeletedEntityRecord
+} from "./deleted-entities.js";
 import { recordEventLog } from "./event-log.js";
 import {
   noteSchema,
@@ -25,6 +31,8 @@ type NoteRow = {
   content_plain: string;
   author: string | null;
   source: ActivitySource;
+  tags_json: string;
+  destroy_at: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -46,7 +54,9 @@ function normalizeAnchorKey(anchorKey: string): string | null {
   return anchorKey.trim().length > 0 ? anchorKey : null;
 }
 
-function normalizeLinks(links: CreateNoteInput["links"]): CreateNoteInput["links"] {
+function normalizeLinks(
+  links: CreateNoteInput["links"]
+): CreateNoteInput["links"] {
   const seen = new Set<string>();
   return links.filter((link) => {
     const key = `${link.entityType}:${link.entityId}:${link.anchorKey ?? ""}`;
@@ -56,6 +66,65 @@ function normalizeLinks(links: CreateNoteInput["links"]): CreateNoteInput["links
     seen.add(key);
     return true;
   });
+}
+
+function normalizeTags(tags: string[] | undefined): string[] {
+  if (!tags) {
+    return [];
+  }
+  const seen = new Set<string>();
+  return tags
+    .map((tag) => tag.trim())
+    .filter(Boolean)
+    .filter((tag) => {
+      const normalized = tag.toLowerCase();
+      if (seen.has(normalized)) {
+        return false;
+      }
+      seen.add(normalized);
+      return true;
+    });
+}
+
+function parseTagsJson(raw: string): string[] {
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    return Array.isArray(parsed)
+      ? normalizeTags(
+          parsed.filter((value): value is string => typeof value === "string")
+        )
+      : [];
+  } catch {
+    return [];
+  }
+}
+
+function noteMatchesTextTerm(note: Note, term: string): boolean {
+  const normalized = term.trim().toLowerCase();
+  if (!normalized) {
+    return false;
+  }
+  return note.tags.some((tag) => tag.toLowerCase().includes(normalized));
+}
+
+function cleanupExpiredNotes() {
+  const expiredRows = getDatabase()
+    .prepare(
+      `SELECT id
+       FROM notes
+       WHERE destroy_at IS NOT NULL
+         AND destroy_at != ''
+         AND destroy_at <= ?`
+    )
+    .all(new Date().toISOString()) as Array<{ id: string }>;
+
+  for (const row of expiredRows) {
+    deleteNoteInternal(
+      row.id,
+      { source: "system", actor: null },
+      "Ephemeral note expired"
+    );
+  }
 }
 
 function stripMarkdown(markdown: string): string {
@@ -99,7 +168,7 @@ function buildFtsQuery(query: string): string | null {
 function getNoteRow(noteId: string): NoteRow | undefined {
   return getDatabase()
     .prepare(
-      `SELECT id, content_markdown, content_plain, author, source, created_at, updated_at
+      `SELECT id, content_markdown, content_plain, author, source, tags_json, destroy_at, created_at, updated_at
        FROM notes
        WHERE id = ?`
     )
@@ -136,16 +205,24 @@ function mapNote(row: NoteRow, linkRows: NoteLinkRow[]): Note {
     contentPlain: row.content_plain,
     author: row.author,
     source: row.source,
+    tags: parseTagsJson(row.tags_json),
+    destroyAt: row.destroy_at,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     links: mapLinks(linkRows)
   });
 }
 
-function upsertSearchRow(noteId: string, contentPlain: string, author: string | null) {
+function upsertSearchRow(
+  noteId: string,
+  contentPlain: string,
+  author: string | null
+) {
   getDatabase().prepare(`DELETE FROM notes_fts WHERE note_id = ?`).run(noteId);
   getDatabase()
-    .prepare(`INSERT INTO notes_fts (note_id, content_plain, author) VALUES (?, ?, ?)`)
+    .prepare(
+      `INSERT INTO notes_fts (note_id, content_plain, author) VALUES (?, ?, ?)`
+    )
     .run(noteId, contentPlain, author ?? "");
 }
 
@@ -156,7 +233,7 @@ function deleteSearchRow(noteId: string) {
 function listAllNoteRows(): NoteRow[] {
   return getDatabase()
     .prepare(
-      `SELECT id, content_markdown, content_plain, author, source, created_at, updated_at
+      `SELECT id, content_markdown, content_plain, author, source, tags_json, destroy_at, created_at, updated_at
        FROM notes
        ORDER BY created_at DESC`
     )
@@ -188,17 +265,31 @@ function findMatchingNoteIdsForTextTerms(terms: string[]): Set<string> | null {
   return matches;
 }
 
-function insertLinks(noteId: string, links: CreateNoteInput["links"], createdAt: string) {
+function insertLinks(
+  noteId: string,
+  links: CreateNoteInput["links"],
+  createdAt: string
+) {
   const statement = getDatabase().prepare(
     `INSERT OR IGNORE INTO note_links (note_id, entity_type, entity_id, anchor_key, created_at)
      VALUES (?, ?, ?, ?, ?)`
   );
   for (const link of links) {
-    statement.run(noteId, link.entityType, link.entityId, link.anchorKey ?? "", createdAt);
+    statement.run(
+      noteId,
+      link.entityType,
+      link.entityId,
+      link.anchorKey ?? "",
+      createdAt
+    );
   }
 }
 
-function replaceLinks(noteId: string, links: CreateNoteInput["links"], createdAt: string) {
+function replaceLinks(
+  noteId: string,
+  links: CreateNoteInput["links"],
+  createdAt: string
+) {
   getDatabase().prepare(`DELETE FROM note_links WHERE note_id = ?`).run(noteId);
   insertLinks(noteId, links, createdAt);
 }
@@ -214,7 +305,12 @@ function listNoteLinks(noteId: string): NoteLinkRow[] {
     .all(noteId) as NoteLinkRow[];
 }
 
-function recordNoteActivity(note: Note, eventType: "note.created" | "note.updated" | "note.deleted", title: string, context: NoteContext) {
+function recordNoteActivity(
+  note: Note,
+  eventType: "note.created" | "note.updated" | "note.deleted",
+  title: string,
+  context: NoteContext
+) {
   for (const link of note.links) {
     recordActivityEvent({
       entityType: link.entityType,
@@ -243,7 +339,13 @@ function recordNoteActivity(note: Note, eventType: "note.created" | "note.update
   }
 }
 
-export function getNoteById(noteId: string): Note | undefined {
+export function getNoteById(
+  noteId: string,
+  options: { skipCleanup?: boolean } = {}
+): Note | undefined {
+  if (!options.skipCleanup) {
+    cleanupExpiredNotes();
+  }
   if (isEntityDeleted("note", noteId)) {
     return undefined;
   }
@@ -254,7 +356,13 @@ export function getNoteById(noteId: string): Note | undefined {
   return mapNote(row, listNoteLinks(noteId));
 }
 
-export function getNoteByIdIncludingDeleted(noteId: string): Note | undefined {
+export function getNoteByIdIncludingDeleted(
+  noteId: string,
+  options: { skipCleanup?: boolean } = {}
+): Note | undefined {
+  if (!options.skipCleanup) {
+    cleanupExpiredNotes();
+  }
   const row = getNoteRow(noteId);
   if (!row) {
     const deleted = getDeletedEntityRecord("note", noteId);
@@ -264,10 +372,16 @@ export function getNoteByIdIncludingDeleted(noteId: string): Note | undefined {
 }
 
 export function listNotes(query: NotesListQuery = {}): Note[] {
+  cleanupExpiredNotes();
   const parsed = notesListQuerySchema.parse(query);
   const linkedFilters = [
     ...(parsed.linkedEntityType && parsed.linkedEntityId
-      ? [{ entityType: parsed.linkedEntityType, entityId: parsed.linkedEntityId }]
+      ? [
+          {
+            entityType: parsed.linkedEntityType,
+            entityId: parsed.linkedEntityId
+          }
+        ]
       : []),
     ...parsed.linkedTo
   ];
@@ -294,9 +408,24 @@ export function listNotes(query: NotesListQuery = {}): Note[] {
   return filterDeletedEntities(
     "note",
     rows
-      .filter((row) => (matchingIds ? matchingIds.has(row.id) : true))
-      .filter((row) => (parsed.author ? (row.author ?? "").toLowerCase().includes(parsed.author.toLowerCase()) : true))
+      .filter((row) =>
+        parsed.author
+          ? (row.author ?? "")
+              .toLowerCase()
+              .includes(parsed.author.toLowerCase())
+          : true
+      )
       .map((row) => mapNote(row, linksByNoteId.get(row.id) ?? []))
+      .filter((note) => {
+        if (!matchingIds) {
+          return true;
+        }
+        return (
+          matchingIds.has(note.id) ||
+          parsed.textTerms.some((term) => noteMatchesTextTerm(note, term)) ||
+          (parsed.query ? noteMatchesTextTerm(note, parsed.query) : false)
+        );
+      })
       .filter((note) =>
         linkedFilters.length > 0
           ? note.links.some((link) =>
@@ -307,6 +436,15 @@ export function listNotes(query: NotesListQuery = {}): Note[] {
                   (parsed.anchorKey === undefined
                     ? true
                     : (link.anchorKey ?? null) === parsed.anchorKey)
+              )
+            )
+          : true
+      )
+      .filter((note) =>
+        parsed.tags.length > 0
+          ? parsed.tags.every((filterTag) =>
+              note.tags.some(
+                (noteTag) => noteTag.toLowerCase() === filterTag.toLowerCase()
               )
             )
           : true
@@ -329,9 +467,11 @@ export function listNotes(query: NotesListQuery = {}): Note[] {
 }
 
 export function createNote(input: CreateNoteInput, context: NoteContext): Note {
+  cleanupExpiredNotes();
   const parsed = createNoteSchema.parse({
     ...input,
-    links: normalizeLinks(input.links)
+    links: normalizeLinks(input.links),
+    tags: normalizeTags(input.tags)
   });
   const now = new Date().toISOString();
   const id = `note_${randomUUID().replaceAll("-", "").slice(0, 10)}`;
@@ -339,15 +479,25 @@ export function createNote(input: CreateNoteInput, context: NoteContext): Note {
 
   getDatabase()
     .prepare(
-      `INSERT INTO notes (id, content_markdown, content_plain, author, source, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`
+      `INSERT INTO notes (id, content_markdown, content_plain, author, source, tags_json, destroy_at, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
-    .run(id, parsed.contentMarkdown, contentPlain, parsed.author ?? context.actor ?? null, context.source, now, now);
+    .run(
+      id,
+      parsed.contentMarkdown,
+      contentPlain,
+      parsed.author ?? context.actor ?? null,
+      context.source,
+      JSON.stringify(parsed.tags),
+      parsed.destroyAt,
+      now,
+      now
+    );
   insertLinks(id, parsed.links, now);
   clearDeletedEntityRecord("note", id);
   upsertSearchRow(id, contentPlain, parsed.author ?? context.actor ?? null);
 
-  const note = getNoteById(id)!;
+  const note = getNoteById(id, { skipCleanup: true })!;
   recordNoteActivity(note, "note.created", "Note added", context);
   return note;
 }
@@ -366,6 +516,8 @@ export function createLinkedNotes(
       {
         contentMarkdown: note.contentMarkdown,
         author: note.author,
+        tags: note.tags,
+        destroyAt: note.destroyAt,
         links: [entityLink, ...note.links]
       },
       context
@@ -373,33 +525,51 @@ export function createLinkedNotes(
   );
 }
 
-export function updateNote(noteId: string, input: UpdateNoteInput, context: NoteContext): Note | undefined {
-  const existing = getNoteByIdIncludingDeleted(noteId);
+export function updateNote(
+  noteId: string,
+  input: UpdateNoteInput,
+  context: NoteContext
+): Note | undefined {
+  cleanupExpiredNotes();
+  const existing = getNoteByIdIncludingDeleted(noteId, { skipCleanup: true });
   if (!existing) {
     return undefined;
   }
   const patch = updateNoteSchema.parse({
     ...input,
-    links: input.links ? normalizeLinks(input.links) : undefined
+    links: input.links ? normalizeLinks(input.links) : undefined,
+    tags: input.tags ? normalizeTags(input.tags) : undefined
   });
   const nextMarkdown = patch.contentMarkdown ?? existing.contentMarkdown;
   const nextPlain = stripMarkdown(nextMarkdown);
-  const nextAuthor = patch.author === undefined ? existing.author : patch.author;
+  const nextAuthor =
+    patch.author === undefined ? existing.author : patch.author;
+  const nextTags = patch.tags ?? existing.tags;
+  const nextDestroyAt =
+    patch.destroyAt === undefined ? existing.destroyAt : patch.destroyAt;
   const updatedAt = new Date().toISOString();
 
   getDatabase()
     .prepare(
       `UPDATE notes
-       SET content_markdown = ?, content_plain = ?, author = ?, updated_at = ?
+       SET content_markdown = ?, content_plain = ?, author = ?, tags_json = ?, destroy_at = ?, updated_at = ?
        WHERE id = ?`
     )
-    .run(nextMarkdown, nextPlain, nextAuthor, updatedAt, noteId);
+    .run(
+      nextMarkdown,
+      nextPlain,
+      nextAuthor,
+      JSON.stringify(nextTags),
+      nextDestroyAt,
+      updatedAt,
+      noteId
+    );
 
   if (patch.links) {
     replaceLinks(noteId, patch.links, updatedAt);
   }
 
-  const note = getNoteByIdIncludingDeleted(noteId)!;
+  const note = getNoteByIdIncludingDeleted(noteId, { skipCleanup: true })!;
   if (note.links.length > 0) {
     clearDeletedEntityRecord("note", noteId);
   } else {
@@ -415,23 +585,48 @@ export function updateNote(noteId: string, input: UpdateNoteInput, context: Note
     });
   }
   upsertSearchRow(noteId, nextPlain, nextAuthor);
+  if (nextDestroyAt && Date.parse(nextDestroyAt) <= Date.now()) {
+    deleteNoteInternal(
+      noteId,
+      { source: "system", actor: null },
+      "Ephemeral note expired"
+    );
+    return undefined;
+  }
   recordNoteActivity(note, "note.updated", "Note updated", context);
   return getNoteById(noteId);
 }
 
-export function deleteNote(noteId: string, context: NoteContext): Note | undefined {
-  const existing = getNoteByIdIncludingDeleted(noteId);
+function deleteNoteInternal(
+  noteId: string,
+  context: NoteContext,
+  title: string
+): Note | undefined {
+  const existing = getNoteRow(noteId)
+    ? mapNote(getNoteRow(noteId)!, listNoteLinks(noteId))
+    : (getDeletedEntityRecord("note", noteId)?.snapshot as Note | undefined);
   if (!existing) {
     return undefined;
   }
+  clearDeletedEntityRecord("note", noteId);
   getDatabase().prepare(`DELETE FROM note_links WHERE note_id = ?`).run(noteId);
   getDatabase().prepare(`DELETE FROM notes WHERE id = ?`).run(noteId);
   deleteSearchRow(noteId);
-  recordNoteActivity(existing, "note.deleted", "Note deleted", context);
+  clearDeletedEntityRecord("note", noteId);
+  recordNoteActivity(existing, "note.deleted", title, context);
   return existing;
 }
 
+export function deleteNote(
+  noteId: string,
+  context: NoteContext
+): Note | undefined {
+  cleanupExpiredNotes();
+  return deleteNoteInternal(noteId, context, "Note deleted");
+}
+
 export function buildNotesSummaryByEntity(): NotesSummaryByEntity {
+  cleanupExpiredNotes();
   const rows = getDatabase()
     .prepare(
       `SELECT
@@ -445,14 +640,15 @@ export function buildNotesSummaryByEntity(): NotesSummaryByEntity {
          ON deleted_entities.entity_type = 'note'
         AND deleted_entities.entity_id = notes.id
        WHERE deleted_entities.entity_id IS NULL
+         AND (notes.destroy_at IS NULL OR notes.destroy_at = '' OR notes.destroy_at > ?)
        ORDER BY notes.created_at DESC`
     )
-    .all() as Array<{
-      entity_type: string;
-      entity_id: string;
-      note_id: string;
-      created_at: string;
-    }>;
+    .all(new Date().toISOString()) as Array<{
+    entity_type: string;
+    entity_id: string;
+    note_id: string;
+    created_at: string;
+  }>;
 
   return rows.reduce<NotesSummaryByEntity>((acc, row) => {
     const key = `${row.entity_type}:${row.entity_id}`;
@@ -474,9 +670,16 @@ export function buildNotesSummaryByEntity(): NotesSummaryByEntity {
   }, {});
 }
 
-export function unlinkNotesForEntity(entityType: CrudEntityType, entityId: string, context: NoteContext) {
+export function unlinkNotesForEntity(
+  entityType: CrudEntityType,
+  entityId: string,
+  context: NoteContext
+) {
+  cleanupExpiredNotes();
   const noteIds = getDatabase()
-    .prepare(`SELECT DISTINCT note_id FROM note_links WHERE entity_type = ? AND entity_id = ?`)
+    .prepare(
+      `SELECT DISTINCT note_id FROM note_links WHERE entity_type = ? AND entity_id = ?`
+    )
     .all(entityType, entityId) as Array<{ note_id: string }>;
 
   if (noteIds.length === 0) {

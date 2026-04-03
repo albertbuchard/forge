@@ -26,6 +26,7 @@ import {
 import type {
   CalendarDiscoveryPayload,
   CalendarProvider,
+  MicrosoftCalendarAuthSettings,
   MicrosoftCalendarOauthSession
 } from "@/lib/types";
 
@@ -93,12 +94,16 @@ export function CalendarConnectionFlowDialog({
   open,
   onOpenChange,
   initialProvider = "google",
+  initialStepId,
+  microsoftSetup,
   onSubmit,
   pending = false
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   initialProvider?: CalendarProvider;
+  initialStepId?: string;
+  microsoftSetup: MicrosoftCalendarAuthSettings;
   onSubmit: (
     input:
       | {
@@ -295,6 +300,11 @@ export function CalendarConnectionFlowDialog({
 
   const startMicrosoftFlow = async () => {
     try {
+      if (!microsoftSetup.isReadyForSignIn) {
+        throw new Error(
+          "Finish the Microsoft setup in Settings -> Calendar before starting sign-in."
+        );
+      }
       setSubmitError(null);
       setDiscovery(null);
       const { session } = await startMicrosoftCalendarOauth({
@@ -362,7 +372,7 @@ export function CalendarConnectionFlowDialog({
                   {
                     value: "microsoft",
                     label: "Exchange Online",
-                    description: "Sign in with Microsoft, then mirror selected Exchange Online calendars in read-only mode."
+                    description: "Save the Microsoft app registration fields in Settings, then sign in with Microsoft and mirror selected Exchange Online calendars in read-only mode."
                   },
                   {
                     value: "caldav",
@@ -428,13 +438,13 @@ export function CalendarConnectionFlowDialog({
             : draft.provider === "apple"
               ? "Provide the Apple account email and app-specific password"
               : draft.provider === "microsoft"
-                ? "Sign in with Microsoft"
-                : "Provide the custom CalDAV base URL and credentials",
+              ? "Sign in with Microsoft"
+              : "Provide the custom CalDAV base URL and credentials",
         description:
           draft.provider === "apple"
             ? "Apple discovery starts from https://caldav.icloud.com, so you only need the Apple ID email and app password here."
             : draft.provider === "microsoft"
-              ? "Forge uses a guided Microsoft sign-in popup with a local public-client flow. No client secret is required in the user-facing setup."
+              ? "Forge uses the Microsoft client ID, tenant, and redirect URI saved in Settings -> Calendar, then runs a guided popup sign-in. No client secret is required in the user-facing setup."
               : "Forge stores the secrets securely, then discovers the available calendars before anything is saved.",
         render: (value, setValue) => (
           <div className="grid gap-4">
@@ -458,10 +468,11 @@ export function CalendarConnectionFlowDialog({
                         Guided Microsoft sign-in
                       </div>
                       <p className="mt-2 max-w-2xl text-sm leading-6 text-white/60">
-                        Forge opens a Microsoft login popup, completes a local
-                        MSAL public-client authorization-code flow with PKCE, and
-                        then brings the discovered calendars back here for
-                        selection.
+                        Forge uses the Microsoft client ID and redirect URI saved
+                        in Calendar Settings, opens a Microsoft login popup,
+                        completes a local MSAL public-client authorization-code
+                        flow with PKCE, and then brings the discovered calendars
+                        back here for selection.
                       </p>
                     </div>
                     <Badge className="bg-sky-400/12 text-sky-100">
@@ -469,10 +480,32 @@ export function CalendarConnectionFlowDialog({
                     </Badge>
                   </div>
 
+                  <div className="mt-4 rounded-[18px] bg-white/[0.04] px-4 py-3 text-sm leading-6 text-white/68">
+                    <div>
+                      Saved client ID:{" "}
+                      <span className="font-medium text-white">
+                        {microsoftSetup.clientId || "Not configured yet"}
+                      </span>
+                    </div>
+                    <div>
+                      Tenant:{" "}
+                      <span className="font-medium text-white">
+                        {microsoftSetup.tenantId}
+                      </span>
+                    </div>
+                    <div className="break-all">
+                      Redirect URI:{" "}
+                      <span className="font-medium text-white">
+                        {microsoftSetup.redirectUri}
+                      </span>
+                    </div>
+                  </div>
+
                   <div className="mt-4 flex flex-wrap items-center gap-3">
                     <Button
                       type="button"
                       onClick={() => void startMicrosoftFlow()}
+                      disabled={!microsoftSetup.isReadyForSignIn}
                       pending={microsoftSession?.status === "pending"}
                       pendingLabel="Waiting for Microsoft"
                     >
@@ -498,6 +531,12 @@ export function CalendarConnectionFlowDialog({
                       Online calendars to mirror into the Calendar page.
                     </div>
                   </div>
+
+                  {!microsoftSetup.isReadyForSignIn ? (
+                    <div className="mt-4 rounded-[18px] border border-amber-400/20 bg-amber-400/10 px-4 py-3 text-sm leading-6 text-amber-100">
+                      {microsoftSetup.setupMessage}
+                    </div>
+                  ) : null}
                 </div>
               </div>
             ) : (
@@ -858,6 +897,7 @@ export function CalendarConnectionFlowDialog({
       pending={pending}
       pendingLabel="Connecting"
       error={submitError}
+      initialStepId={initialStepId}
       onSubmit={async () => {
         try {
           setSubmitError(null);

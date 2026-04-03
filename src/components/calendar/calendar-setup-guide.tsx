@@ -70,15 +70,16 @@ const GUIDE_SECTIONS = [
   {
     title: "Exchange Online setup",
     description:
-      "Use Microsoft Graph for Microsoft 365 or Exchange Online calendars. In self-hosted local Forge, this uses a public-client Microsoft sign-in flow with PKCE rather than a user-facing client secret. The connection is still read-only in Forge today.",
+      "Use Microsoft Graph for Microsoft 365 or Exchange Online calendars. In self-hosted local Forge, the user first saves a Microsoft public client ID, tenant, and redirect URI in Settings -> Calendar, then completes a guided local sign-in flow with PKCE. The connection is still read-only in Forge today.",
     bullets: [
-      "Register or reuse a Microsoft Entra app as a public client for your local Forge install.",
-      "Add a localhost redirect URI that points to Forge's Microsoft callback route.",
-      "Set FORGE_MICROSOFT_CLIENT_ID on the machine running Forge. FORGE_MICROSOFT_TENANT_ID is optional and defaults to common.",
-      "Open Forge settings and choose Exchange Online.",
-      "Click Sign in with Microsoft and complete the guided popup flow.",
-      "Forge finishes the local MSAL PKCE flow on the backend and then discovers the calendars for that account automatically.",
-      "After discovery, choose which Exchange Online calendars Forge should mirror into Forge."
+      "Open Microsoft Entra App registrations and create or reuse an app for this local Forge instance.",
+      "Choose a supported account type that matches your self-hosted use case. Use a broad multi-account setup when Forge should work with normal personal or organizational Microsoft sign-ins.",
+      "Enable mobile and desktop or public client flow support for that app registration.",
+      "Add Forge's callback URI to the redirect URI list. The default local callback is http://127.0.0.1:4317/api/v1/calendar/oauth/microsoft/callback.",
+      "Add delegated Graph permissions for User.Read and Calendars.Read, then grant or request consent as required by the tenant.",
+      "Open Forge Settings -> Calendar and save the Microsoft client ID, tenant value, and redirect URI in the Exchange Online setup card.",
+      "Use Test Microsoft configuration to confirm Forge can launch the local sign-in flow.",
+      "Click Sign in with Microsoft, complete the popup flow, and then choose which Exchange Online calendars Forge should mirror."
     ],
     icon: KeyRound,
     links: [
