@@ -11,7 +11,16 @@ import { pruneLinkedEntityReferences } from "./psyche.js";
 import { awardTaskCompletionReward, reverseLatestTaskCompletionReward } from "./rewards.js";
 import { assertTaskRelations } from "../services/relations.js";
 import { computeWorkTime, emptyTaskTimeSummary } from "../services/work-time.js";
-import { taskSchema, type ActivitySource, type CreateTaskInput, type Task, type TaskListQuery, type TaskTimeSummary, type UpdateTaskInput } from "../types.js";
+import {
+  calendarSchedulingRulesSchema,
+  taskSchema,
+  type ActivitySource,
+  type CreateTaskInput,
+  type Task,
+  type TaskListQuery,
+  type TaskTimeSummary,
+  type UpdateTaskInput
+} from "../types.js";
 
 type TaskRow = {
   id: string;
@@ -26,6 +35,8 @@ type TaskRow = {
   effort: string;
   energy: string;
   points: number;
+  planned_duration_seconds: number | null;
+  scheduling_rules_json: string | null;
   sort_order: number;
   completed_at: string | null;
   created_at: string;
@@ -58,6 +69,11 @@ function mapTask(row: TaskRow, time: TaskTimeSummary = emptyTaskTimeSummary()): 
     effort: row.effort,
     energy: row.energy,
     points: row.points,
+    plannedDurationSeconds: row.planned_duration_seconds,
+    schedulingRules:
+      row.scheduling_rules_json === null
+        ? null
+        : calendarSchedulingRulesSchema.parse(JSON.parse(row.scheduling_rules_json)),
     sortOrder: row.sort_order,
     completedAt: row.completed_at,
     createdAt: row.created_at,
@@ -172,7 +188,7 @@ function updateTaskRecord(current: Task, input: UpdateTaskInput, activity?: Acti
     .prepare(
       `UPDATE tasks
        SET title = ?, description = ?, status = ?, priority = ?, owner = ?, goal_id = ?, due_date = ?, effort = ?,
-           energy = ?, points = ?, sort_order = ?, completed_at = ?, updated_at = ?, project_id = ?
+           energy = ?, points = ?, planned_duration_seconds = ?, scheduling_rules_json = ?, sort_order = ?, completed_at = ?, updated_at = ?, project_id = ?
        WHERE id = ?`
     )
     .run(
@@ -186,6 +202,16 @@ function updateTaskRecord(current: Task, input: UpdateTaskInput, activity?: Acti
       input.effort ?? current.effort,
       input.energy ?? current.energy,
       input.points ?? current.points,
+      input.plannedDurationSeconds === undefined
+        ? current.plannedDurationSeconds
+        : input.plannedDurationSeconds,
+      input.schedulingRules === undefined
+        ? current.schedulingRules === null
+          ? null
+          : JSON.stringify(current.schedulingRules)
+        : input.schedulingRules === null
+          ? null
+          : JSON.stringify(input.schedulingRules),
       nextSort,
       completedAt,
       updatedAt,
@@ -275,6 +301,8 @@ function fingerprintTaskCreate(input: CreateTaskInput): string {
         effort: input.effort,
         energy: input.energy,
         points: input.points,
+        plannedDurationSeconds: input.plannedDurationSeconds,
+        schedulingRules: input.schedulingRules,
         sortOrder: input.sortOrder ?? null,
         tagIds: input.tagIds,
         notes: input.notes.map((note) => ({
@@ -300,10 +328,10 @@ function insertTaskRecord(input: CreateTaskInput, activity?: ActivityContext): T
   getDatabase()
     .prepare(
       `INSERT INTO tasks (
-        id, title, description, status, priority, owner, goal_id, project_id, due_date, effort, energy, points, sort_order,
-        completed_at, created_at, updated_at
+        id, title, description, status, priority, owner, goal_id, project_id, due_date, effort, energy, points,
+        planned_duration_seconds, scheduling_rules_json, sort_order, completed_at, created_at, updated_at
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
     .run(
       id,
@@ -318,6 +346,8 @@ function insertTaskRecord(input: CreateTaskInput, activity?: ActivityContext): T
       input.effort,
       input.energy,
       input.points,
+      input.plannedDurationSeconds,
+      input.schedulingRules === null ? null : JSON.stringify(input.schedulingRules),
       sortOrder,
       completedAt,
       now,
@@ -397,7 +427,8 @@ export function listTasks(filters: TaskListQuery = {}): Task[] {
 
   const rows = getDatabase()
     .prepare(
-      `SELECT id, title, description, status, priority, owner, goal_id, project_id, due_date, effort, energy, points, sort_order,
+      `SELECT id, title, description, status, priority, owner, goal_id, project_id, due_date, effort, energy, points,
+              planned_duration_seconds, scheduling_rules_json, sort_order,
               completed_at, created_at, updated_at
        FROM tasks
        ${whereSql}
@@ -427,7 +458,8 @@ export function getTaskById(taskId: string): Task | undefined {
   }
   const row = getDatabase()
     .prepare(
-      `SELECT id, title, description, status, priority, owner, goal_id, project_id, due_date, effort, energy, points, sort_order,
+      `SELECT id, title, description, status, priority, owner, goal_id, project_id, due_date, effort, energy, points,
+              planned_duration_seconds, scheduling_rules_json, sort_order,
               completed_at, created_at, updated_at
        FROM tasks
        WHERE id = ?`

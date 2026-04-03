@@ -1,70 +1,414 @@
 import { useEffect, useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { ArrowUpRight, MoreHorizontal, Pencil, Plus, Trash2 } from "lucide-react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { PageHero } from "@/components/shell/page-hero";
+import { EntityLinkMultiSelect, type EntityLinkOption } from "@/components/psyche/entity-link-multiselect";
+import { NoteFilterInput } from "@/components/notes/note-filter-input";
 import { NoteMarkdown } from "@/components/notes/note-markdown";
+import { PageHero } from "@/components/shell/page-hero";
+import { useForgeShell } from "@/components/shell/app-shell";
+import { FloatingActionMenu, type FloatingActionMenuItem } from "@/components/ui/floating-action-menu";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { EmptyState, ErrorState } from "@/components/ui/page-state";
-import { listNotes } from "@/lib/api";
-import { formatAnchorKeyLabel, getEntityRoute, getPrimaryNavigableLink } from "@/lib/note-helpers";
-import type { CrudEntityType } from "@/lib/types";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  createNote,
+  listBehaviors,
+  listBehaviorPatterns,
+  listBeliefs,
+  listModes,
+  listNotes,
+  listPsycheValues,
+  listTriggerReports,
+  patchNote,
+  deleteNote
+} from "@/lib/api";
+import type { EntityKind } from "@/lib/entity-visuals";
+import { formatAnchorKeyLabel, formatEntityTypeLabel, getEntityRoute, getPrimaryNavigableLink } from "@/lib/note-helpers";
+import type { CrudEntityType, Note, NoteLink } from "@/lib/types";
 
-const FILTER_ENTITY_TYPES: Array<{ value: "" | CrudEntityType; label: string }> = [
-  { value: "", label: "All linked entities" },
-  { value: "goal", label: "Goals" },
-  { value: "project", label: "Projects" },
-  { value: "task", label: "Tasks" },
-  { value: "trigger_report", label: "Trigger reports" },
-  { value: "psyche_value", label: "Values" },
-  { value: "behavior_pattern", label: "Patterns" },
-  { value: "behavior", label: "Behaviors" },
-  { value: "belief_entry", label: "Beliefs" },
-  { value: "mode_profile", label: "Modes" }
-];
+const FILTERABLE_ENTITY_TYPES = new Set<CrudEntityType>([
+  "goal",
+  "project",
+  "task",
+  "habit",
+  "tag",
+  "psyche_value",
+  "behavior_pattern",
+  "behavior",
+  "belief_entry",
+  "mode_profile",
+  "trigger_report"
+]);
+
+const ENTITY_KIND_BY_TYPE: Partial<Record<CrudEntityType, EntityKind>> = {
+  goal: "goal",
+  project: "project",
+  task: "task",
+  habit: "habit",
+  psyche_value: "value",
+  behavior_pattern: "pattern",
+  behavior: "behavior",
+  belief_entry: "belief",
+  mode_profile: "mode",
+  trigger_report: "report"
+};
+
+type EditableNoteDraft = {
+  contentMarkdown: string;
+  author: string;
+  linkedValues: string[];
+};
+
+function isCrudEntityType(value: string): value is CrudEntityType {
+  return FILTERABLE_ENTITY_TYPES.has(value as CrudEntityType);
+}
+
+function encodeLinkedValue(entityType: CrudEntityType, entityId: string) {
+  return `${entityType}:${entityId}`;
+}
+
+function decodeLinkedValue(value: string): { entityType: CrudEntityType; entityId: string } | null {
+  const separatorIndex = value.indexOf(":");
+  if (separatorIndex <= 0 || separatorIndex >= value.length - 1) {
+    return null;
+  }
+  const entityType = value.slice(0, separatorIndex);
+  if (!isCrudEntityType(entityType)) {
+    return null;
+  }
+  return {
+    entityType,
+    entityId: value.slice(separatorIndex + 1)
+  };
+}
+
+function isLinkedEntityRef(
+  value: { entityType: CrudEntityType; entityId: string } | null
+): value is { entityType: CrudEntityType; entityId: string } {
+  return value !== null;
+}
+
+function parseLinkedValues(searchParams: URLSearchParams) {
+  const values = searchParams.getAll("linkedTo");
+  const legacyEntityType = searchParams.get("entityType");
+  const legacyEntityId = searchParams.get("entityId");
+  if (
+    legacyEntityType &&
+    legacyEntityId &&
+    isCrudEntityType(legacyEntityType)
+  ) {
+    values.unshift(encodeLinkedValue(legacyEntityType, legacyEntityId));
+  }
+  return Array.from(new Set(values.map((value) => value.trim()).filter(Boolean)));
+}
+
+function parseTextTerms(searchParams: URLSearchParams) {
+  return Array.from(new Set(searchParams.getAll("textTerms").map((value) => value.trim()).filter(Boolean)));
+}
+
+function toDraft(note?: Note | null, linkedValues: string[] = []): EditableNoteDraft {
+  return {
+    contentMarkdown: note?.contentMarkdown ?? "",
+    author: note?.author ?? "",
+    linkedValues:
+      note?.links.map((link) => encodeLinkedValue(link.entityType, link.entityId)) ??
+      linkedValues
+  };
+}
+
+function sortOptions(options: EntityLinkOption[]) {
+  return [...options].sort((left, right) => left.label.localeCompare(right.label));
+}
 
 export function NotesPage() {
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
-  const linkedEntityTypeParam = searchParams.get("entityType");
-  const linkedEntityIdParam = searchParams.get("entityId");
-  const linkedEntityType = FILTER_ENTITY_TYPES.some((option) => option.value === linkedEntityTypeParam)
-    ? (linkedEntityTypeParam as "" | CrudEntityType)
-    : "";
-  const [query, setQuery] = useState(searchParams.get("query") ?? "");
+  const queryClient = useQueryClient();
+  const shell = useForgeShell();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [selectedEntityValues, setSelectedEntityValues] = useState<string[]>(() => parseLinkedValues(searchParams));
+  const [selectedTextTerms, setSelectedTextTerms] = useState<string[]>(() => parseTextTerms(searchParams));
   const [author, setAuthor] = useState(searchParams.get("author") ?? "");
-  const [entityType, setEntityType] = useState<"" | CrudEntityType>(linkedEntityType);
+  const [updatedFrom, setUpdatedFrom] = useState(searchParams.get("updatedFrom") ?? "");
+  const [updatedTo, setUpdatedTo] = useState(searchParams.get("updatedTo") ?? "");
+  const [composerOpen, setComposerOpen] = useState(false);
+  const [composerDraft, setComposerDraft] = useState<EditableNoteDraft>(() => toDraft(null, parseLinkedValues(searchParams)));
+  const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
+  const [editingDraft, setEditingDraft] = useState<EditableNoteDraft | null>(null);
+  const [menuState, setMenuState] = useState<{ noteId: string; position: { x: number; y: number } } | null>(null);
+
+  const valuesQuery = useQuery({ queryKey: ["forge-psyche-values"], queryFn: listPsycheValues });
+  const patternsQuery = useQuery({ queryKey: ["forge-psyche-patterns"], queryFn: listBehaviorPatterns });
+  const behaviorsQuery = useQuery({ queryKey: ["forge-psyche-behaviors"], queryFn: listBehaviors });
+  const beliefsQuery = useQuery({ queryKey: ["forge-psyche-beliefs"], queryFn: listBeliefs });
+  const modesQuery = useQuery({ queryKey: ["forge-psyche-modes"], queryFn: listModes });
+  const reportsQuery = useQuery({ queryKey: ["forge-psyche-reports"], queryFn: listTriggerReports });
 
   useEffect(() => {
-    setQuery(searchParams.get("query") ?? "");
-    setAuthor(searchParams.get("author") ?? "");
-    setEntityType(linkedEntityType);
-  }, [linkedEntityType, searchParams]);
+    const next = new URLSearchParams();
+    for (const value of selectedEntityValues) {
+      next.append("linkedTo", value);
+    }
+    for (const term of selectedTextTerms) {
+      next.append("textTerms", term);
+    }
+    if (author.trim()) {
+      next.set("author", author.trim());
+    }
+    if (updatedFrom) {
+      next.set("updatedFrom", updatedFrom);
+    }
+    if (updatedTo) {
+      next.set("updatedTo", updatedTo);
+    }
+    setSearchParams(next, { replace: true });
+  }, [author, selectedEntityValues, selectedTextTerms, setSearchParams, updatedFrom, updatedTo]);
+
+  const entityLinkOptions = useMemo(() => {
+    const baseOptions: EntityLinkOption[] = [
+      ...shell.snapshot.goals.map((goal) => ({
+        value: encodeLinkedValue("goal", goal.id),
+        label: goal.title,
+        description: goal.description,
+        searchText: `${goal.title} ${goal.description}`,
+        kind: ENTITY_KIND_BY_TYPE.goal
+      })),
+      ...shell.snapshot.dashboard.projects.map((project) => ({
+        value: encodeLinkedValue("project", project.id),
+        label: project.title,
+        description: project.description,
+        searchText: `${project.title} ${project.description} ${project.goalTitle}`,
+        kind: ENTITY_KIND_BY_TYPE.project
+      })),
+      ...shell.snapshot.tasks.map((task) => ({
+        value: encodeLinkedValue("task", task.id),
+        label: task.title,
+        description: task.description,
+        searchText: `${task.title} ${task.description} ${task.owner}`,
+        kind: ENTITY_KIND_BY_TYPE.task
+      })),
+      ...shell.snapshot.habits.map((habit) => ({
+        value: encodeLinkedValue("habit", habit.id),
+        label: habit.title,
+        description: habit.description,
+        searchText: `${habit.title} ${habit.description}`,
+        kind: ENTITY_KIND_BY_TYPE.habit
+      })),
+      ...shell.snapshot.tags.map((tag) => ({
+        value: encodeLinkedValue("tag", tag.id),
+        label: tag.name,
+        description: tag.description,
+        searchText: `${tag.name} ${tag.kind} ${tag.description}`
+      })),
+      ...((valuesQuery.data?.values ?? []).map((value) => ({
+        value: encodeLinkedValue("psyche_value", value.id),
+        label: value.title,
+        description: value.description,
+        searchText: `${value.title} ${value.description} ${value.valuedDirection}`,
+        kind: ENTITY_KIND_BY_TYPE.psyche_value
+      })) satisfies EntityLinkOption[]),
+      ...((patternsQuery.data?.patterns ?? []).map((pattern) => ({
+        value: encodeLinkedValue("behavior_pattern", pattern.id),
+        label: pattern.title,
+        description: pattern.description,
+        searchText: `${pattern.title} ${pattern.description} ${pattern.targetBehavior}`,
+        kind: ENTITY_KIND_BY_TYPE.behavior_pattern
+      })) satisfies EntityLinkOption[]),
+      ...((behaviorsQuery.data?.behaviors ?? []).map((behavior) => ({
+        value: encodeLinkedValue("behavior", behavior.id),
+        label: behavior.title,
+        description: behavior.description,
+        searchText: `${behavior.title} ${behavior.description} ${behavior.kind}`,
+        kind: ENTITY_KIND_BY_TYPE.behavior
+      })) satisfies EntityLinkOption[]),
+      ...((beliefsQuery.data?.beliefs ?? []).map((belief) => ({
+        value: encodeLinkedValue("belief_entry", belief.id),
+        label: belief.statement,
+        description: belief.flexibleAlternative || belief.originNote,
+        searchText: `${belief.statement} ${belief.flexibleAlternative} ${belief.originNote}`,
+        kind: ENTITY_KIND_BY_TYPE.belief_entry
+      })) satisfies EntityLinkOption[]),
+      ...((modesQuery.data?.modes ?? []).map((mode) => ({
+        value: encodeLinkedValue("mode_profile", mode.id),
+        label: mode.title,
+        description: mode.archetype || mode.family,
+        searchText: `${mode.title} ${mode.archetype} ${mode.family} ${mode.persona}`,
+        kind: ENTITY_KIND_BY_TYPE.mode_profile
+      })) satisfies EntityLinkOption[]),
+      ...((reportsQuery.data?.reports ?? []).map((report) => ({
+        value: encodeLinkedValue("trigger_report", report.id),
+        label: report.title,
+        description: report.eventSituation,
+        searchText: `${report.title} ${report.eventSituation} ${report.customEventType ?? ""}`,
+        kind: ENTITY_KIND_BY_TYPE.trigger_report
+      })) satisfies EntityLinkOption[])
+    ];
+
+    return sortOptions(baseOptions);
+  }, [
+    behaviorsQuery.data?.behaviors,
+    beliefsQuery.data?.beliefs,
+    modesQuery.data?.modes,
+    patternsQuery.data?.patterns,
+    reportsQuery.data?.reports,
+    shell.snapshot.dashboard.projects,
+    shell.snapshot.goals,
+    shell.snapshot.habits,
+    shell.snapshot.tags,
+    shell.snapshot.tasks,
+    valuesQuery.data?.values
+  ]);
+
+  const entityFilterOptions = useMemo(
+    () =>
+      entityLinkOptions.map((option) => {
+        const decoded = decodeLinkedValue(option.value);
+        return {
+          value: option.value,
+          label: option.label,
+          description: option.description,
+          searchText: option.searchText,
+          kind: option.kind,
+          entityType: decoded?.entityType ?? "goal",
+          entityId: decoded?.entityId ?? ""
+        };
+      }),
+    [entityLinkOptions]
+  );
+
+  const selectedEntityFilters = useMemo(
+    () =>
+      selectedEntityValues
+        .map((value) => decodeLinkedValue(value))
+        .filter(Boolean) as Array<{ entityType: CrudEntityType; entityId: string }>,
+    [selectedEntityValues]
+  );
 
   const notesQuery = useQuery({
-    queryKey: ["notes-index", query, author, entityType, linkedEntityIdParam],
+    queryKey: [
+      "notes-index",
+      selectedEntityValues.join("|"),
+      selectedTextTerms.join("|"),
+      author.trim(),
+      updatedFrom,
+      updatedTo
+    ],
     queryFn: () =>
       listNotes({
-        linkedEntityType: linkedEntityType && linkedEntityIdParam ? linkedEntityType : undefined,
-        linkedEntityId: linkedEntityType && linkedEntityIdParam ? linkedEntityIdParam : undefined,
-        query: query.trim() || undefined,
+        linkedTo: selectedEntityFilters,
+        textTerms: selectedTextTerms,
         author: author.trim() || undefined,
-        limit: 120
+        updatedFrom: updatedFrom || undefined,
+        updatedTo: updatedTo || undefined,
+        limit: 200
       })
   });
 
-  const visibleNotes = useMemo(() => {
-    const notes = notesQuery.data?.notes ?? [];
-    return notes.filter((note) =>
-      note.links.some((link) => {
-        if (linkedEntityType && linkedEntityIdParam) {
-          return link.entityType === linkedEntityType && link.entityId === linkedEntityIdParam;
+  const invalidateNotes = async () => {
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ["notes-index"] }),
+      queryClient.invalidateQueries({ queryKey: ["forge-snapshot"] })
+    ]);
+  };
+
+  const createMutation = useMutation({
+    mutationFn: async (draft: EditableNoteDraft) =>
+      createNote({
+        contentMarkdown: draft.contentMarkdown.trim(),
+        author: draft.author.trim() || null,
+        links: draft.linkedValues
+          .map((value) => decodeLinkedValue(value))
+          .filter(isLinkedEntityRef)
+          .map((entry) => ({
+            entityType: entry.entityType,
+            entityId: entry.entityId
+          }))
+      }),
+    onSuccess: async () => {
+      setComposerDraft(toDraft(null, selectedEntityValues));
+      setComposerOpen(false);
+      await invalidateNotes();
+    }
+  });
+
+  const patchMutation = useMutation({
+    mutationFn: async ({ noteId, draft }: { noteId: string; draft: EditableNoteDraft }) =>
+      patchNote(noteId, {
+        contentMarkdown: draft.contentMarkdown.trim(),
+        author: draft.author.trim() || null,
+        links: draft.linkedValues
+          .map((value) => decodeLinkedValue(value))
+          .filter(isLinkedEntityRef)
+          .map((entry) => ({
+            entityType: entry.entityType,
+            entityId: entry.entityId
+          }))
+      }),
+    onSuccess: async () => {
+      setEditingNoteId(null);
+      setEditingDraft(null);
+      await invalidateNotes();
+    }
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (noteId: string) => deleteNote(noteId),
+    onSuccess: invalidateNotes
+  });
+
+  const visibleNotes = notesQuery.data?.notes ?? [];
+  const activeMenuNote = menuState ? visibleNotes.find((note) => note.id === menuState.noteId) ?? null : null;
+  const activeMenuPrimaryLink = activeMenuNote ? getPrimaryNavigableLink(activeMenuNote) : null;
+  const activeMenuHref =
+    activeMenuPrimaryLink
+      ? getEntityRoute(activeMenuPrimaryLink.entityType, activeMenuPrimaryLink.entityId)
+      : null;
+
+  const activeMenuItems = useMemo<FloatingActionMenuItem[]>(() => {
+    if (!activeMenuNote) {
+      return [];
+    }
+    return [
+      {
+        id: "open-linked",
+        label: "Open linked record",
+        description: activeMenuHref
+          ? "Jump back into the main entity this note is attached to."
+          : "This note has no navigable linked record yet.",
+        icon: ArrowUpRight,
+        disabled: !activeMenuHref,
+        onSelect: () => {
+          if (activeMenuHref) {
+            navigate(activeMenuHref.includes("#") ? activeMenuHref : `${activeMenuHref}#notes`);
+          }
         }
-        return entityType ? link.entityType === entityType : true;
-      })
-    );
-  }, [entityType, linkedEntityIdParam, linkedEntityType, notesQuery.data?.notes]);
+      },
+      {
+        id: "edit-note",
+        label: "Edit note",
+        description: "Update the Markdown body or connected entity links.",
+        icon: Pencil,
+        onSelect: () => {
+          setEditingNoteId(activeMenuNote.id);
+          setEditingDraft(toDraft(activeMenuNote));
+        }
+      },
+      {
+        id: "delete-note",
+        label: "Delete note",
+        description: "Soft-delete this note from the main workspace.",
+        icon: Trash2,
+        tone: "danger",
+        disabled: deleteMutation.isPending,
+        onSelect: () => {
+          void deleteMutation.mutateAsync(activeMenuNote.id);
+        }
+      }
+    ];
+  }, [activeMenuHref, activeMenuNote, deleteMutation, navigate]);
 
   if (notesQuery.isError) {
     return <ErrorState eyebrow="Notes" error={notesQuery.error} onRetry={() => void notesQuery.refetch()} />;
@@ -75,73 +419,251 @@ export function NotesPage() {
       <PageHero
         title="Notes"
         titleText="Notes"
-        description={
-          linkedEntityType && linkedEntityIdParam
-            ? "Review the Markdown notes linked to this exact entity, then jump back into the surrounding work."
-            : "Search Markdown notes across Forge by content, author, and linked entity. Each result can jump you straight back to the underlying work."
-        }
+        description="Notes are first-class Markdown entities in Forge. Search them by linked records, date, or free text, then create durable notes that stay connected to the rest of the graph."
         badge={`${visibleNotes.length} visible`}
+        actions={
+          <Button
+            onClick={() => {
+              setComposerDraft(toDraft(null, selectedEntityValues));
+              setComposerOpen(true);
+            }}
+          >
+            <Plus className="size-4" />
+            New note
+          </Button>
+        }
       />
 
       <Card className="grid gap-4">
-        <div className="grid gap-3 lg:grid-cols-[minmax(0,1.4fr)_minmax(12rem,0.7fr)_minmax(14rem,0.8fr)]">
-          <Input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search note content" />
-          <Input value={author} onChange={(event) => setAuthor(event.target.value)} placeholder="Filter by author" />
-          <select
-            value={entityType}
-            onChange={(event) => setEntityType(event.target.value as "" | CrudEntityType)}
-            disabled={Boolean(linkedEntityType && linkedEntityIdParam)}
-            className="rounded-[22px] border border-white/8 bg-white/[0.04] px-4 py-3 text-sm text-white"
-          >
-            {FILTER_ENTITY_TYPES.map((option) => (
-              <option key={option.label} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
+        <NoteFilterInput
+          entityOptions={entityFilterOptions}
+          selectedEntityValues={selectedEntityValues}
+          onSelectedEntityValuesChange={setSelectedEntityValues}
+          selectedTextTerms={selectedTextTerms}
+          onSelectedTextTermsChange={setSelectedTextTerms}
+        />
+
+        <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(12rem,0.38fr)_minmax(12rem,0.38fr)]">
+          <Input
+            value={author}
+            onChange={(event) => setAuthor(event.target.value)}
+            placeholder="Filter by author"
+          />
+          <Input type="date" value={updatedFrom} onChange={(event) => setUpdatedFrom(event.target.value)} />
+          <Input type="date" value={updatedTo} onChange={(event) => setUpdatedTo(event.target.value)} />
         </div>
       </Card>
+
+      {composerOpen ? (
+        <Card className="grid gap-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <div className="font-label text-[11px] uppercase tracking-[0.16em] text-white/42">New note</div>
+              <div className="mt-2 text-sm leading-6 text-white/58">
+                Notes are independent Markdown entities. Link them to one or more real records so they stay searchable and anchored in context.
+              </div>
+            </div>
+            <Button
+              variant="ghost"
+              onClick={() => {
+                setComposerOpen(false);
+                setComposerDraft(toDraft(null, selectedEntityValues));
+              }}
+            >
+              Cancel
+            </Button>
+          </div>
+
+          <Textarea
+            value={composerDraft.contentMarkdown}
+            onChange={(event) => setComposerDraft((current) => ({ ...current, contentMarkdown: event.target.value }))}
+            className="min-h-[16rem]"
+            placeholder="Write the note in Markdown. This can be as short as a handoff line or as long as a wiki page."
+          />
+
+          <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)]">
+            <Input
+              value={composerDraft.author}
+              onChange={(event) => setComposerDraft((current) => ({ ...current, author: event.target.value }))}
+              placeholder="Optional author"
+            />
+            <EntityLinkMultiSelect
+              options={entityLinkOptions}
+              selectedValues={composerDraft.linkedValues}
+              onChange={(values) => setComposerDraft((current) => ({ ...current, linkedValues: values }))}
+              placeholder="Link this note to goals, tasks, habits, tags, or Psyche records"
+              emptyMessage="No matching entities found yet."
+            />
+          </div>
+
+          <div className="rounded-[22px] bg-white/[0.03] p-4">
+            <div className="font-label text-[11px] uppercase tracking-[0.16em] text-white/42">Preview</div>
+            <div className="mt-3">
+              {composerDraft.contentMarkdown.trim() ? (
+                <NoteMarkdown markdown={composerDraft.contentMarkdown} />
+              ) : (
+                <div className="text-sm text-white/42">Markdown preview appears here.</div>
+              )}
+            </div>
+          </div>
+
+          <div className="flex flex-wrap justify-end gap-2">
+            <Button
+              pending={createMutation.isPending}
+              pendingLabel="Saving"
+              disabled={composerDraft.contentMarkdown.trim().length === 0 || composerDraft.linkedValues.length === 0}
+              onClick={() => void createMutation.mutateAsync(composerDraft)}
+            >
+              Save note
+            </Button>
+          </div>
+        </Card>
+      ) : null}
 
       {notesQuery.isLoading ? (
         <Card className="text-sm text-white/58">Loading notes…</Card>
       ) : visibleNotes.length === 0 ? (
-        <EmptyState eyebrow="Notes" title="No matching notes yet" description="Try a broader search or remove one of the filters." />
+        <EmptyState
+          eyebrow="Notes"
+          title="No matching notes yet"
+          description="Try broader linked-entity filters, remove a date bound, or add the first durable note from the button above."
+        />
       ) : (
         <div className="grid gap-3">
           {visibleNotes.map((note) => {
             const primaryLink = getPrimaryNavigableLink(note);
             const href = primaryLink ? getEntityRoute(primaryLink.entityType, primaryLink.entityId) : null;
+            const isEditing = editingNoteId === note.id && editingDraft !== null;
             return (
-              <button
-                key={note.id}
-                type="button"
-                className="rounded-[28px] border border-white/8 bg-[linear-gradient(180deg,rgba(255,255,255,0.05),rgba(255,255,255,0.03))] p-5 text-left transition hover:bg-[linear-gradient(180deg,rgba(255,255,255,0.08),rgba(255,255,255,0.04))]"
-                onClick={() => {
-                  if (href) {
-                    navigate(href.includes("#") ? href : `${href}#notes`);
-                  }
-                }}
-              >
+              <Card key={note.id} className="min-w-0 overflow-hidden p-5">
                 <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div className="text-xs uppercase tracking-[0.16em] text-white/38">
-                    {(note.author ?? "Unknown author").toString()} • {new Date(note.updatedAt).toLocaleString()}
+                  <div className="min-w-0">
+                    <div className="text-xs uppercase tracking-[0.16em] text-white/38">
+                      {(note.author ?? "Unknown author").toString()} • {new Date(note.updatedAt).toLocaleString()}
+                    </div>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {note.links.map((link) => (
+                        <Badge
+                          key={`${note.id}-${link.entityType}-${link.entityId}-${link.anchorKey ?? ""}`}
+                          className="bg-white/[0.08] text-white/68"
+                          wrap
+                        >
+                          {formatEntityTypeLabel(link.entityType)}
+                          {link.anchorKey ? ` · ${formatAnchorKeyLabel(link.anchorKey)}` : ""}
+                        </Badge>
+                      ))}
+                    </div>
                   </div>
-                  <div className="flex flex-wrap gap-2">
-                    {note.links.map((link) => (
-                      <Badge key={`${note.id}-${link.entityType}-${link.entityId}-${link.anchorKey ?? ""}`} className="bg-white/[0.08] text-white/68" wrap>
-                        {link.entityType.replaceAll("_", " ")}{link.anchorKey ? ` · ${formatAnchorKeyLabel(link.anchorKey)}` : ""}
-                      </Badge>
-                    ))}
+                  <button
+                    type="button"
+                    className="rounded-full border border-white/8 bg-white/[0.04] p-2 text-white/58 transition hover:bg-white/[0.08] hover:text-white"
+                    onClick={(event) => {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      const rect = event.currentTarget.getBoundingClientRect();
+                      setMenuState({
+                        noteId: note.id,
+                        position: {
+                          x: rect.right - 8,
+                          y: rect.bottom + 8
+                        }
+                      });
+                    }}
+                    aria-label={`Open actions for note ${note.id}`}
+                  >
+                    <MoreHorizontal className="size-4" />
+                  </button>
+                </div>
+
+                {isEditing ? (
+                  <div className="mt-4 grid gap-4">
+                    <Textarea
+                      value={editingDraft.contentMarkdown}
+                      onChange={(event) => setEditingDraft((current) => (current ? { ...current, contentMarkdown: event.target.value } : current))}
+                      className="min-h-[14rem]"
+                    />
+
+                    <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)]">
+                      <Input
+                        value={editingDraft.author}
+                        onChange={(event) => setEditingDraft((current) => (current ? { ...current, author: event.target.value } : current))}
+                        placeholder="Optional author"
+                      />
+                      <EntityLinkMultiSelect
+                        options={entityLinkOptions}
+                        selectedValues={editingDraft.linkedValues}
+                        onChange={(values) => setEditingDraft((current) => (current ? { ...current, linkedValues: values } : current))}
+                        placeholder="Update the linked entities"
+                        emptyMessage="No matching entities found yet."
+                      />
+                    </div>
+
+                    <div className="rounded-[22px] bg-white/[0.03] p-4">
+                      <div className="font-label text-[11px] uppercase tracking-[0.16em] text-white/42">Preview</div>
+                      <div className="mt-3">
+                        {editingDraft.contentMarkdown.trim() ? (
+                          <NoteMarkdown markdown={editingDraft.contentMarkdown} />
+                        ) : (
+                          <div className="text-sm text-white/42">No content yet.</div>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="flex flex-wrap justify-end gap-2">
+                      <Button
+                        variant="ghost"
+                        onClick={() => {
+                          setEditingNoteId(null);
+                          setEditingDraft(null);
+                        }}
+                      >
+                        Cancel
+                      </Button>
+                      <Button
+                        pending={patchMutation.isPending}
+                        pendingLabel="Saving"
+                        disabled={editingDraft.contentMarkdown.trim().length === 0 || editingDraft.linkedValues.length === 0}
+                        onClick={() => void patchMutation.mutateAsync({ noteId: note.id, draft: editingDraft })}
+                      >
+                        Save changes
+                      </Button>
+                    </div>
                   </div>
-                </div>
-                <div className="mt-4">
-                  <NoteMarkdown markdown={note.contentMarkdown} className="line-clamp-none" />
-                </div>
-              </button>
+                ) : (
+                  <>
+                    <button
+                      type="button"
+                      className="mt-4 w-full text-left"
+                      onClick={() => {
+                        if (href) {
+                          navigate(href.includes("#") ? href : `${href}#notes`);
+                        }
+                      }}
+                      disabled={!href}
+                    >
+                      <NoteMarkdown markdown={note.contentMarkdown} className="line-clamp-none" />
+                    </button>
+                    {href ? (
+                      <div className="mt-4 inline-flex text-xs uppercase tracking-[0.16em] text-[var(--secondary)]">
+                        Open linked record
+                      </div>
+                    ) : null}
+                  </>
+                )}
+              </Card>
             );
           })}
         </div>
       )}
+
+      <FloatingActionMenu
+        open={Boolean(menuState)}
+        title="Note actions"
+        subtitle={activeMenuNote ? activeMenuNote.contentPlain.slice(0, 80) || "Markdown note" : undefined}
+        items={activeMenuItems}
+        position={menuState?.position ?? null}
+        onClose={() => setMenuState(null)}
+      />
     </div>
   );
 }

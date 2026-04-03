@@ -1,5 +1,22 @@
 import { getDatabase, runInTransaction } from "../db.js";
 import { createInsight, deleteInsight, getInsightById, listInsights, updateInsight } from "../repositories/collaboration.js";
+import {
+  createCalendarEvent,
+  createTaskTimebox,
+  createWorkBlockTemplate,
+  deleteCalendarEvent,
+  deleteTaskTimebox,
+  deleteWorkBlockTemplate,
+  getCalendarEventById,
+  getTaskTimeboxById,
+  getWorkBlockTemplateById,
+  listCalendarEvents,
+  listTaskTimeboxes,
+  listWorkBlockTemplates,
+  updateCalendarEvent,
+  updateTaskTimebox,
+  updateWorkBlockTemplate
+} from "../repositories/calendar.js";
 import { createNote, deleteNote, getNoteById, listNotes, unlinkNotesForEntity, updateNote } from "../repositories/notes.js";
 import {
   createBehaviorPatternSchema,
@@ -96,20 +113,26 @@ import type {
   SettingsBinPayload
 } from "../types.js";
 import {
+  createCalendarEventSchema,
   createGoalSchema,
   createHabitSchema,
   createInsightSchema,
   createNoteSchema,
   createProjectSchema,
+  createTaskTimeboxSchema,
   createTagSchema,
   createTaskSchema,
+  createWorkBlockTemplateSchema,
+  updateCalendarEventSchema,
   updateGoalSchema,
   updateHabitSchema,
   updateInsightSchema,
   updateNoteSchema,
   updateProjectSchema,
+  updateTaskTimeboxSchema,
   updateTagSchema,
-  updateTaskSchema
+  updateTaskSchema,
+  updateWorkBlockTemplateSchema
 } from "../types.js";
 
 type CrudContext = {
@@ -144,6 +167,8 @@ class AtomicBatchRollback extends Error {
 type CrudEntityCapability = {
   entityType: CrudEntityType;
   routeBase: string;
+  deleteMode: "soft_default" | "immediate";
+  inBin: boolean;
   list: () => Array<Record<string, unknown>>;
   get: (id: string) => Record<string, unknown> | undefined;
   create: (data: Record<string, unknown>, context: CrudContext) => Record<string, unknown>;
@@ -155,6 +180,8 @@ const CRUD_ENTITY_CAPABILITIES: Record<CrudEntityType, CrudEntityCapability> = {
   goal: {
     entityType: "goal",
     routeBase: "/api/v1/goals",
+    deleteMode: "soft_default",
+    inBin: true,
     list: () => listGoals() as Array<Record<string, unknown>>,
     get: (id) => getGoalById(id) as Record<string, unknown> | undefined,
     create: (data, context) => createGoal(data as never, context) as Record<string, unknown>,
@@ -164,6 +191,8 @@ const CRUD_ENTITY_CAPABILITIES: Record<CrudEntityType, CrudEntityCapability> = {
   project: {
     entityType: "project",
     routeBase: "/api/v1/projects",
+    deleteMode: "soft_default",
+    inBin: true,
     list: () => listProjects() as Array<Record<string, unknown>>,
     get: (id) => getProjectById(id) as Record<string, unknown> | undefined,
     create: (data, context) => createProject(data as never, context) as Record<string, unknown>,
@@ -173,6 +202,8 @@ const CRUD_ENTITY_CAPABILITIES: Record<CrudEntityType, CrudEntityCapability> = {
   task: {
     entityType: "task",
     routeBase: "/api/v1/tasks",
+    deleteMode: "soft_default",
+    inBin: true,
     list: () => listTasks() as Array<Record<string, unknown>>,
     get: (id) => getTaskById(id) as Record<string, unknown> | undefined,
     create: (data, context) => createTask(data as never, context) as Record<string, unknown>,
@@ -182,6 +213,8 @@ const CRUD_ENTITY_CAPABILITIES: Record<CrudEntityType, CrudEntityCapability> = {
   habit: {
     entityType: "habit",
     routeBase: "/api/v1/habits",
+    deleteMode: "soft_default",
+    inBin: true,
     list: () => listHabits() as Array<Record<string, unknown>>,
     get: (id) => getHabitById(id) as Record<string, unknown> | undefined,
     create: (data, context) => createHabit(data as never, context) as Record<string, unknown>,
@@ -191,6 +224,8 @@ const CRUD_ENTITY_CAPABILITIES: Record<CrudEntityType, CrudEntityCapability> = {
   tag: {
     entityType: "tag",
     routeBase: "/api/v1/tags",
+    deleteMode: "soft_default",
+    inBin: true,
     list: () => listTags() as Array<Record<string, unknown>>,
     get: (id) => getTagById(id) as Record<string, unknown> | undefined,
     create: (data, context) => createTag(data as never, context) as Record<string, unknown>,
@@ -200,6 +235,8 @@ const CRUD_ENTITY_CAPABILITIES: Record<CrudEntityType, CrudEntityCapability> = {
   note: {
     entityType: "note",
     routeBase: "/api/v1/notes",
+    deleteMode: "soft_default",
+    inBin: true,
     list: () => listNotes() as Array<Record<string, unknown>>,
     get: (id) => getNoteById(id) as Record<string, unknown> | undefined,
     create: (data, context) => createNote(data as never, context) as Record<string, unknown>,
@@ -209,15 +246,52 @@ const CRUD_ENTITY_CAPABILITIES: Record<CrudEntityType, CrudEntityCapability> = {
   insight: {
     entityType: "insight",
     routeBase: "/api/v1/insights",
+    deleteMode: "soft_default",
+    inBin: true,
     list: () => listInsights() as Array<Record<string, unknown>>,
     get: (id) => getInsightById(id) as Record<string, unknown> | undefined,
     create: (data, context) => createInsight(data as never, context) as Record<string, unknown>,
     update: (id, patch, context) => updateInsight(id, patch as never, context) as Record<string, unknown> | undefined,
     hardDelete: (id, context) => deleteInsight(id, context) as Record<string, unknown> | undefined
   },
+  calendar_event: {
+    entityType: "calendar_event",
+    routeBase: "/api/v1/calendar/events",
+    deleteMode: "immediate",
+    inBin: false,
+    list: () => listCalendarEvents({}) as Array<Record<string, unknown>>,
+    get: (id) => getCalendarEventById(id) as Record<string, unknown> | undefined,
+    create: (data) => createCalendarEvent(data as never) as Record<string, unknown>,
+    update: (id, patch) => updateCalendarEvent(id, patch as never) as Record<string, unknown> | undefined,
+    hardDelete: (id) => deleteCalendarEvent(id) as Record<string, unknown> | undefined
+  },
+  work_block_template: {
+    entityType: "work_block_template",
+    routeBase: "/api/v1/calendar/work-block-templates",
+    deleteMode: "immediate",
+    inBin: false,
+    list: () => listWorkBlockTemplates() as Array<Record<string, unknown>>,
+    get: (id) => getWorkBlockTemplateById(id) as Record<string, unknown> | undefined,
+    create: (data) => createWorkBlockTemplate(data as never) as Record<string, unknown>,
+    update: (id, patch) => updateWorkBlockTemplate(id, patch as never) as Record<string, unknown> | undefined,
+    hardDelete: (id) => deleteWorkBlockTemplate(id) as Record<string, unknown> | undefined
+  },
+  task_timebox: {
+    entityType: "task_timebox",
+    routeBase: "/api/v1/calendar/timeboxes",
+    deleteMode: "immediate",
+    inBin: false,
+    list: () => listTaskTimeboxes({}) as Array<Record<string, unknown>>,
+    get: (id) => getTaskTimeboxById(id) as Record<string, unknown> | undefined,
+    create: (data) => createTaskTimebox(data as never) as Record<string, unknown>,
+    update: (id, patch) => updateTaskTimebox(id, patch as never) as Record<string, unknown> | undefined,
+    hardDelete: (id) => deleteTaskTimebox(id) as Record<string, unknown> | undefined
+  },
   psyche_value: {
     entityType: "psyche_value",
     routeBase: "/api/v1/psyche/values",
+    deleteMode: "soft_default",
+    inBin: true,
     list: () => listPsycheValues() as Array<Record<string, unknown>>,
     get: (id) => getPsycheValueById(id) as Record<string, unknown> | undefined,
     create: (data, context) => createPsycheValue(data as never, context) as Record<string, unknown>,
@@ -227,6 +301,8 @@ const CRUD_ENTITY_CAPABILITIES: Record<CrudEntityType, CrudEntityCapability> = {
   behavior_pattern: {
     entityType: "behavior_pattern",
     routeBase: "/api/v1/psyche/patterns",
+    deleteMode: "soft_default",
+    inBin: true,
     list: () => listBehaviorPatterns() as Array<Record<string, unknown>>,
     get: (id) => getBehaviorPatternById(id) as Record<string, unknown> | undefined,
     create: (data, context) => createBehaviorPattern(data as never, context) as Record<string, unknown>,
@@ -236,6 +312,8 @@ const CRUD_ENTITY_CAPABILITIES: Record<CrudEntityType, CrudEntityCapability> = {
   behavior: {
     entityType: "behavior",
     routeBase: "/api/v1/psyche/behaviors",
+    deleteMode: "soft_default",
+    inBin: true,
     list: () => listBehaviors() as Array<Record<string, unknown>>,
     get: (id) => getBehaviorById(id) as Record<string, unknown> | undefined,
     create: (data, context) => createBehavior(data as never, context) as Record<string, unknown>,
@@ -245,6 +323,8 @@ const CRUD_ENTITY_CAPABILITIES: Record<CrudEntityType, CrudEntityCapability> = {
   belief_entry: {
     entityType: "belief_entry",
     routeBase: "/api/v1/psyche/beliefs",
+    deleteMode: "soft_default",
+    inBin: true,
     list: () => listBeliefEntries() as Array<Record<string, unknown>>,
     get: (id) => getBeliefEntryById(id) as Record<string, unknown> | undefined,
     create: (data, context) => createBeliefEntry(data as never, context) as Record<string, unknown>,
@@ -254,6 +334,8 @@ const CRUD_ENTITY_CAPABILITIES: Record<CrudEntityType, CrudEntityCapability> = {
   mode_profile: {
     entityType: "mode_profile",
     routeBase: "/api/v1/psyche/modes",
+    deleteMode: "soft_default",
+    inBin: true,
     list: () => listModeProfiles() as Array<Record<string, unknown>>,
     get: (id) => getModeProfileById(id) as Record<string, unknown> | undefined,
     create: (data, context) => createModeProfile(data as never, context) as Record<string, unknown>,
@@ -263,6 +345,8 @@ const CRUD_ENTITY_CAPABILITIES: Record<CrudEntityType, CrudEntityCapability> = {
   mode_guide_session: {
     entityType: "mode_guide_session",
     routeBase: "/api/v1/psyche/mode-guides",
+    deleteMode: "soft_default",
+    inBin: true,
     list: () => listModeGuideSessions(200) as Array<Record<string, unknown>>,
     get: (id) => getModeGuideSessionById(id) as Record<string, unknown> | undefined,
     create: (data, context) => createModeGuideSession(data as never, context) as Record<string, unknown>,
@@ -272,6 +356,8 @@ const CRUD_ENTITY_CAPABILITIES: Record<CrudEntityType, CrudEntityCapability> = {
   event_type: {
     entityType: "event_type",
     routeBase: "/api/v1/psyche/event-types",
+    deleteMode: "soft_default",
+    inBin: true,
     list: () => listEventTypes() as Array<Record<string, unknown>>,
     get: (id) => getEventTypeById(id) as Record<string, unknown> | undefined,
     create: (data, context) => createEventType(data as never, context) as Record<string, unknown>,
@@ -281,6 +367,8 @@ const CRUD_ENTITY_CAPABILITIES: Record<CrudEntityType, CrudEntityCapability> = {
   emotion_definition: {
     entityType: "emotion_definition",
     routeBase: "/api/v1/psyche/emotions",
+    deleteMode: "soft_default",
+    inBin: true,
     list: () => listEmotionDefinitions() as Array<Record<string, unknown>>,
     get: (id) => getEmotionDefinitionById(id) as Record<string, unknown> | undefined,
     create: (data, context) => createEmotionDefinition(data as never, context) as Record<string, unknown>,
@@ -290,6 +378,8 @@ const CRUD_ENTITY_CAPABILITIES: Record<CrudEntityType, CrudEntityCapability> = {
   trigger_report: {
     entityType: "trigger_report",
     routeBase: "/api/v1/psyche/reports",
+    deleteMode: "soft_default",
+    inBin: true,
     list: () => listTriggerReports(200) as Array<Record<string, unknown>>,
     get: (id) => getTriggerReportById(id) as Record<string, unknown> | undefined,
     create: (data, context) => createTriggerReport(data as never, context) as Record<string, unknown>,
@@ -303,8 +393,8 @@ export function getCrudEntityCapabilityMatrix() {
     entityType: capability.entityType,
     routeBase: capability.routeBase,
     pluginExposed: true,
-    deleteMode: "soft_default" as const,
-    inBin: true
+    deleteMode: capability.deleteMode,
+    inBin: capability.inBin
   }));
 }
 
@@ -320,6 +410,9 @@ const CREATE_ENTITY_SCHEMAS: Record<CrudEntityType, { parse: (value: unknown) =>
   tag: createTagSchema,
   note: createNoteSchema,
   insight: createInsightSchema,
+  calendar_event: createCalendarEventSchema,
+  work_block_template: createWorkBlockTemplateSchema,
+  task_timebox: createTaskTimeboxSchema,
   psyche_value: createPsycheValueSchema,
   behavior_pattern: createBehaviorPatternSchema,
   behavior: createBehaviorSchema,
@@ -339,6 +432,9 @@ const UPDATE_ENTITY_SCHEMAS: Record<CrudEntityType, { parse: (value: unknown) =>
   tag: updateTagSchema,
   note: updateNoteSchema,
   insight: updateInsightSchema,
+  calendar_event: updateCalendarEventSchema,
+  work_block_template: updateWorkBlockTemplateSchema,
+  task_timebox: updateTaskTimeboxSchema,
   psyche_value: updatePsycheValueSchema,
   behavior_pattern: updateBehaviorPatternSchema,
   behavior: updateBehaviorSchema,
@@ -524,6 +620,24 @@ function matchesLinkedTo(entityType: CrudEntityType, entity: Record<string, unkn
       );
     case "insight":
       return entity.entityType === linkedTo.entityType && entity.entityId === linkedTo.id;
+    case "calendar_event":
+      return (
+        Array.isArray(entity.links) &&
+        entity.links.some(
+          (link) =>
+            typeof link === "object" &&
+            link !== null &&
+            "entityType" in link &&
+            "entityId" in link &&
+            link.entityType === linkedTo.entityType &&
+            link.entityId === linkedTo.id
+        )
+      );
+    case "task_timebox":
+      return (
+        (linkedTo.entityType === "task" && entity.taskId === linkedTo.id) ||
+        (linkedTo.entityType === "project" && entity.projectId === linkedTo.id)
+      );
     case "psyche_value":
       return (
         (linkedTo.entityType === "goal" && Array.isArray(entity.linkedGoalIds) && entity.linkedGoalIds.includes(linkedTo.id)) ||
@@ -609,6 +723,10 @@ function purgeAnchoredCollaboration(entityType: CrudEntityType, entityId: string
 export function deleteEntity(entityType: CrudEntityType, id: string, options: { mode?: DeleteMode; reason?: string }, context: CrudContext) {
   const capability = getCapability(entityType);
   const mode = options.mode ?? "soft";
+  if (capability.deleteMode === "immediate") {
+    clearDeletedEntityRecord(entityType, id);
+    return capability.hardDelete(id, context);
+  }
   const existing = capability.get(id);
   if (!existing) {
     const deleted = getDeletedEntityRecord(entityType, id);

@@ -77,6 +77,26 @@ import { createTag, getTagById, listTags, updateTag } from "./repositories/tags.
 import { claimTaskRun, completeTaskRun, focusTaskRun, heartbeatTaskRun, listTaskRuns, recoverTimedOutTaskRuns, releaseTaskRun } from "./repositories/task-runs.js";
 import { createTask, createTaskWithIdempotency, getTaskById, listTasks, uncompleteTask, updateTask } from "./repositories/tasks.js";
 import { createWorkAdjustment } from "./repositories/work-adjustments.js";
+import {
+  createCalendarEvent,
+  createTaskTimebox,
+  createWorkBlockTemplate,
+  deleteCalendarEvent,
+  deleteTaskTimebox,
+  deleteWorkBlockTemplate,
+  getCalendarConnectionById,
+  getCalendarEventById,
+  listCalendars,
+  listCalendarEvents,
+  listTaskTimeboxes,
+  suggestTaskTimeboxes,
+  listWorkBlockInstances,
+  listWorkBlockTemplates,
+  updateCalendarEvent,
+  updateCalendarConnectionRecord,
+  updateTaskTimebox,
+  updateWorkBlockTemplate
+} from "./repositories/calendar.js";
 import { getDashboard } from "./services/dashboard.js";
 import { getOverviewContext, getRiskContext, getTodayContext } from "./services/context.js";
 import { buildGamificationOverview, buildGamificationProfile, buildXpMomentumPulse } from "./services/gamification.js";
@@ -93,8 +113,26 @@ import {
 import { getPsycheOverview } from "./services/psyche.js";
 import { getProjectBoard, getProjectSummary, listProjectSummaries } from "./services/projects.js";
 import { getWeeklyReviewPayload } from "./services/reviews.js";
+import { finalizeWeeklyReviewClosure } from "./repositories/weekly-reviews.js";
 import { createTaskRunWatchdog, type TaskRunWatchdogOptions } from "./services/task-run-watchdog.js";
 import { suggestTags } from "./services/tagging.js";
+import {
+  CalendarConnectionConflictError,
+  completeMicrosoftCalendarOauth,
+  createCalendarConnection,
+  deleteCalendarEventProjection,
+  discoverCalendarConnection,
+  discoverExistingCalendarConnection,
+  getMicrosoftCalendarOauthSession,
+  listConnectedCalendarConnections,
+  removeCalendarConnection,
+  pushCalendarEventUpdate,
+  readCalendarOverview,
+  syncCalendarConnection,
+  startMicrosoftCalendarOauth,
+  listCalendarProviderMetadata,
+  updateCalendarConnectionSelection
+} from "./services/calendar-runtime.js";
 import {
   PSYCHE_ENTITY_TYPES,
   createBehaviorSchema,
@@ -132,11 +170,18 @@ import {
   createNoteSchema,
   createProjectSchema,
   createManualRewardGrantSchema,
+  createCalendarEventSchema,
   createHabitCheckInSchema,
+  createCalendarConnectionSchema,
+  discoverCalendarConnectionSchema,
+  startMicrosoftCalendarOauthSchema,
   createHabitSchema,
+  createTaskTimeboxSchema,
+  createWorkBlockTemplateSchema,
   createSessionEventSchema,
   createWorkAdjustmentSchema,
   createTagSchema,
+  calendarOverviewQuerySchema,
   notesListQuerySchema,
   updateTagSchema,
   createTaskSchema,
@@ -162,11 +207,17 @@ import {
   updateGoalSchema,
   updateHabitSchema,
   updateInsightSchema,
+  updateCalendarConnectionSchema,
+  updateCalendarEventSchema,
   updateNoteSchema,
   updateProjectSchema,
   updateRewardRuleSchema,
+  updateTaskTimeboxSchema,
   updateTaskSchema,
+  updateWorkBlockTemplateSchema,
   workAdjustmentResultSchema,
+  finalizeWeeklyReviewResultSchema,
+  recommendTaskTimeboxesSchema,
   type TaskTimeSummary,
   type WorkAdjustmentEntityType
 } from "./types.js";
@@ -286,7 +337,7 @@ const AGENT_ONBOARDING_ENTITY_CATALOG = [
     ],
     fieldGuide: [
       { name: "title", type: "string", required: true, description: "Human-readable goal name." },
-      { name: "description", type: "string", required: false, description: "Why the goal matters or what success looks like.", defaultValue: "" },
+      { name: "description", type: "string", required: false, description: "Markdown description for why the goal matters or what success looks like.", defaultValue: "" },
       { name: "horizon", type: "quarter|year|lifetime", required: false, description: "How far out the goal is meant to live.", enumValues: ["quarter", "year", "lifetime"], defaultValue: "year" },
       { name: "status", type: "active|paused|completed", required: false, description: "Current lifecycle state for the goal.", enumValues: ["active", "paused", "completed"], defaultValue: "active" },
       { name: "targetPoints", type: "integer", required: false, description: "Approximate XP/point target for the goal.", defaultValue: 400 },
@@ -309,7 +360,7 @@ const AGENT_ONBOARDING_ENTITY_CATALOG = [
     fieldGuide: [
       { name: "goalId", type: "string", required: true, description: "Existing parent goal id." },
       { name: "title", type: "string", required: true, description: "Project name." },
-      { name: "description", type: "string", required: false, description: "Desired outcome or scope.", defaultValue: "" },
+      { name: "description", type: "string", required: false, description: "Markdown description for the desired outcome or scope.", defaultValue: "" },
       { name: "status", type: "active|paused|completed", required: false, description: "Lifecycle state.", enumValues: ["active", "paused", "completed"], defaultValue: "active" },
       { name: "targetPoints", type: "integer", required: false, description: "Approximate XP/point target for the project.", defaultValue: 240 },
       { name: "themeColor", type: "hex-color", required: false, description: "Visual color used in the UI.", defaultValue: "#c0c1ff" },
@@ -329,7 +380,7 @@ const AGENT_ONBOARDING_ENTITY_CATALOG = [
     examples: ['{"title":"Write the plugin release notes","projectId":"project_forge_plugin_launch","status":"focus","priority":"high"}'],
     fieldGuide: [
       { name: "title", type: "string", required: true, description: "Concrete action label." },
-      { name: "description", type: "string", required: false, description: "Helpful context or acceptance notes.", defaultValue: "" },
+      { name: "description", type: "string", required: false, description: "Markdown context, constraints, or acceptance notes.", defaultValue: "" },
       { name: "status", type: "backlog|focus|in_progress|blocked|done", required: false, description: "Board lane or completion state.", enumValues: ["backlog", "focus", "in_progress", "blocked", "done"], defaultValue: "backlog" },
       { name: "priority", type: "low|medium|high|critical", required: false, description: "Relative urgency.", enumValues: ["low", "medium", "high", "critical"], defaultValue: "medium" },
       { name: "owner", type: "string", required: false, description: "Human-facing owner label.", defaultValue: "Albert" },
@@ -345,6 +396,82 @@ const AGENT_ONBOARDING_ENTITY_CATALOG = [
     ]
   },
   {
+    entityType: "calendar_event",
+    purpose: "A canonical Forge calendar event that can live locally first and then project to connected provider calendars.",
+    minimumCreateFields: ["title", "startAt", "endAt"],
+    relationshipRules: [
+      "Forge stores the canonical event first; provider copies are downstream projections.",
+      "Use links to connect the event to goals, projects, tasks, habits, notes, or Psyche entities.",
+      "preferredCalendarId is optional and only matters when projecting to a writable connected calendar."
+    ],
+    searchHints: ["Search by title or linked entity before creating a duplicate event.", "Use linkedTo when you know the goal, project, task, or habit the event should already reference."],
+    examples: [
+      '{"title":"Weekly research supervision","startAt":"2026-04-06T08:00:00.000Z","endAt":"2026-04-06T09:00:00.000Z","timezone":"Europe/Zurich","preferredCalendarId":null,"links":[{"entityType":"project","entityId":"project_123","relationshipType":"meeting_for"}]}'
+    ],
+    fieldGuide: [
+      { name: "title", type: "string", required: true, description: "Human-readable event title." },
+      { name: "description", type: "string", required: false, description: "Longer event description.", defaultValue: "" },
+      { name: "location", type: "string", required: false, description: "Location or meeting place.", defaultValue: "" },
+      { name: "startAt", type: "ISO datetime", required: true, description: "Start instant in ISO-8601 form." },
+      { name: "endAt", type: "ISO datetime", required: true, description: "End instant in ISO-8601 form." },
+      { name: "timezone", type: "string", required: false, description: "IANA timezone label.", defaultValue: "UTC" },
+      { name: "isAllDay", type: "boolean", required: false, description: "Whether this is an all-day event.", defaultValue: false },
+      { name: "availability", type: "busy|free", required: false, description: "Availability state exposed to scheduling rules.", enumValues: ["busy", "free"], defaultValue: "busy" },
+      { name: "eventType", type: "string", required: false, description: "Optional event category label used by scheduling rules.", defaultValue: "" },
+      { name: "categories", type: "string[]", required: false, description: "Optional provider-style categories.", defaultValue: [] },
+      { name: "preferredCalendarId", type: "string|null", required: false, description: "Writable connected calendar to project into.", defaultValue: null, nullable: true },
+      { name: "links", type: "Array<{ entityType, entityId, relationshipType? }>", required: false, description: "Forge entities linked to this event.", defaultValue: [] }
+    ]
+  },
+  {
+    entityType: "work_block_template",
+    purpose: "A recurring work-availability template such as Main Activity, Secondary Activity, Third Activity, Rest, Holiday, or Custom.",
+    minimumCreateFields: ["title", "kind", "timezone", "weekDays", "startMinute", "endMinute", "blockingState"],
+    relationshipRules: [
+      "Work block templates derive visible calendar instances for the requested range instead of storing one repeated event per day.",
+      "startsOn and endsOn are optional active-date bounds. Leaving endsOn null makes the block repeat indefinitely.",
+      "They are Forge-owned scheduling structures, not mirrored provider events."
+    ],
+    searchHints: ["Search by title or kind before creating a duplicate recurring block."],
+    examples: [
+      '{"title":"Main Activity","kind":"main_activity","color":"#f97316","timezone":"Europe/Zurich","weekDays":[1,2,3,4,5],"startMinute":480,"endMinute":720,"startsOn":"2026-04-06","endsOn":null,"blockingState":"blocked"}',
+      '{"title":"Summer holiday","kind":"holiday","color":"#14b8a6","timezone":"Europe/Zurich","weekDays":[0,1,2,3,4,5,6],"startMinute":0,"endMinute":1440,"startsOn":"2026-08-01","endsOn":"2026-08-16","blockingState":"blocked"}'
+    ],
+    fieldGuide: [
+      { name: "title", type: "string", required: true, description: "Display name for the recurring block." },
+      { name: "kind", type: "main_activity|secondary_activity|third_activity|rest|holiday|custom", required: true, description: "Preset or custom block type.", enumValues: ["main_activity", "secondary_activity", "third_activity", "rest", "holiday", "custom"] },
+      { name: "color", type: "hex-color", required: false, description: "UI color for generated instances.", defaultValue: "#60a5fa" },
+      { name: "timezone", type: "string", required: true, description: "IANA timezone that defines the recurring window." },
+      { name: "weekDays", type: "integer[]", required: true, description: "Weekday numbers where Sunday is 0 and Saturday is 6." },
+      { name: "startMinute", type: "integer", required: true, description: "Minute from midnight where the block starts." },
+      { name: "endMinute", type: "integer", required: true, description: "Minute from midnight where the block ends." },
+      { name: "startsOn", type: "YYYY-MM-DD|null", required: false, description: "Optional first active date for the recurring block.", defaultValue: null, nullable: true },
+      { name: "endsOn", type: "YYYY-MM-DD|null", required: false, description: "Optional last active date. Null means repeat indefinitely.", defaultValue: null, nullable: true },
+      { name: "blockingState", type: "allowed|blocked", required: true, description: "Whether this block generally allows or blocks work.", enumValues: ["allowed", "blocked"] }
+    ]
+  },
+  {
+    entityType: "task_timebox",
+    purpose: "A planned or live calendar slot attached to a task.",
+    minimumCreateFields: ["taskId", "title", "startsAt", "endsAt"],
+    relationshipRules: [
+      "Task timeboxes belong to a task and can optionally carry the parent project id.",
+      "Live task runs can attach to matching timeboxes later; creating a timebox does not start work by itself."
+    ],
+    searchHints: ["Search by task linkage or title before creating another slot for the same work block."],
+    examples: ['{"taskId":"task_123","projectId":"project_456","title":"Draft the methods section","startsAt":"2026-04-03T08:00:00.000Z","endsAt":"2026-04-03T09:30:00.000Z","source":"suggested"}'],
+    fieldGuide: [
+      { name: "taskId", type: "string", required: true, description: "Linked task id." },
+      { name: "projectId", type: "string|null", required: false, description: "Optional parent project id.", defaultValue: null, nullable: true },
+      { name: "title", type: "string", required: true, description: "Timebox title shown on the calendar." },
+      { name: "startsAt", type: "ISO datetime", required: true, description: "Start instant in ISO-8601 form." },
+      { name: "endsAt", type: "ISO datetime", required: true, description: "End instant in ISO-8601 form." },
+      { name: "source", type: "manual|suggested|live_run", required: false, description: "How the timebox was created.", enumValues: ["manual", "suggested", "live_run"], defaultValue: "manual" },
+      { name: "status", type: "planned|active|completed|cancelled", required: false, description: "Current timebox state.", enumValues: ["planned", "active", "completed", "cancelled"], defaultValue: "planned" },
+      { name: "overrideReason", type: "string|null", required: false, description: "Audited reason when the slot overrides a blocked context.", defaultValue: null, nullable: true }
+    ]
+  },
+  {
     entityType: "habit",
     purpose: "A recurring commitment or recurring slip with explicit cadence, graph links, and XP consequences.",
     minimumCreateFields: ["title"],
@@ -357,7 +484,7 @@ const AGENT_ONBOARDING_ENTITY_CATALOG = [
     examples: ['{"title":"Morning training","frequency":"daily","polarity":"positive","linkedGoalIds":["goal_train_body"],"linkedValueIds":["value_steadiness"],"linkedBehaviorIds":["behavior_regulating_walk"]}'],
     fieldGuide: [
       { name: "title", type: "string", required: true, description: "Concrete recurring behavior label." },
-      { name: "description", type: "string", required: false, description: "What counts as success or failure for this habit.", defaultValue: "" },
+      { name: "description", type: "string", required: false, description: "Markdown definition of what counts as success or failure for this habit.", defaultValue: "" },
       { name: "status", type: "active|paused|archived", required: false, description: "Lifecycle state.", enumValues: ["active", "paused", "archived"], defaultValue: "active" },
       { name: "polarity", type: "positive|negative", required: false, description: "Whether doing the behavior is aligned or misaligned.", enumValues: ["positive", "negative"], defaultValue: "positive" },
       { name: "frequency", type: "daily|weekly", required: false, description: "Recurrence cadence.", enumValues: ["daily", "weekly"], defaultValue: "daily" },
@@ -379,11 +506,12 @@ const AGENT_ONBOARDING_ENTITY_CATALOG = [
   },
   {
     entityType: "note",
-    purpose: "A Markdown note that can link to one or many Forge entities.",
+    purpose: "A first-class Markdown note entity that can link to one or many Forge entities.",
     minimumCreateFields: ["contentMarkdown", "links"],
     relationshipRules: [
       "Notes can link to goals, projects, tasks, Psyche records, and other supported Forge entities.",
-      "When nested under another create flow, notes auto-link to that new entity and can optionally include extra links."
+      "When nested under another create flow, notes auto-link to that new entity and can optionally include extra links.",
+      "Agents can also create standalone notes directly through forge_create_entities with entityType note."
     ],
     searchHints: ["Search by Markdown content, author, or linked entity before creating a duplicate note."],
     examples: [
@@ -756,7 +884,8 @@ const AGENT_ONBOARDING_TOOL_INPUT_CATALOG = [
     notes: [
       "entityType alone is never enough; full data is required.",
       "Batch multiple related creates together when they come from one user ask.",
-      "Goal, project, and task creates can include notes: [{ contentMarkdown, author?, links? }] and Forge will auto-link those notes to the newly created entity."
+      "Goal, project, and task creates can include notes: [{ contentMarkdown, author?, links? }] and Forge will auto-link those notes to the newly created entity.",
+      "The same batch create route also handles calendar_event, work_block_template, and task_timebox. Calendar-event creates still trigger downstream projection sync when a writable provider calendar is selected."
     ],
     example: '{"operations":[{"entityType":"task","data":{"title":"Write the public release notes","projectId":"project_123","status":"focus","notes":[{"contentMarkdown":"Starting from the changelog draft and the last QA pass."}]},"clientRef":"task-1"}]}'
   },
@@ -766,8 +895,14 @@ const AGENT_ONBOARDING_TOOL_INPUT_CATALOG = [
     whenToUse: "Use when ids are known and the user explicitly wants a change persisted.",
     inputShape: "{ atomic?: boolean, operations: Array<{ entityType: CrudEntityType, id: string, clientRef?: string, patch: object }> }",
     requiredFields: ["operations", "operations[].entityType", "operations[].id", "operations[].patch"],
-    notes: ["patch is partial; only send the fields that should change."],
-    example: '{"operations":[{"entityType":"task","id":"task_123","patch":{"status":"focus","priority":"high"},"clientRef":"task-patch-1"}]}'
+    notes: [
+      "patch is partial; only send the fields that should change.",
+      "Project lifecycle is status-driven: patch project.status to active, paused, or completed instead of looking for separate suspend, restart, or finish routes.",
+      "Setting project.status to completed finishes the project and auto-completes linked unfinished tasks through the normal task completion path.",
+      "Task and project scheduling rules stay on these same entity patches. Update task.schedulingRules, task.plannedDurationSeconds, or project.schedulingRules here.",
+      "Use this same route to move or relink calendar_event records and to edit work_block_template or task_timebox records without switching to narrower calendar CRUD tools."
+    ],
+    example: '{"operations":[{"entityType":"project","id":"project_123","patch":{"status":"completed"},"clientRef":"project-finish-1"}]}'
   },
   {
     toolName: "forge_delete_entities",
@@ -775,7 +910,12 @@ const AGENT_ONBOARDING_TOOL_INPUT_CATALOG = [
     whenToUse: "Use for explicit delete intent only.",
     inputShape: "{ atomic?: boolean, operations: Array<{ entityType: CrudEntityType, id: string, clientRef?: string, mode?: \"soft\"|\"hard\", reason?: string }> }",
     requiredFields: ["operations", "operations[].entityType", "operations[].id"],
-    notes: ["Delete defaults to soft.", "Use mode=hard only for explicit permanent removal."],
+    notes: [
+      "Delete defaults to soft.",
+      "Use mode=hard only for explicit permanent removal.",
+      "Restoration is only possible after soft delete.",
+      "calendar_event, work_block_template, and task_timebox are immediate calendar-domain deletions: calendar events delete remote projections too, and these records do not go through the settings bin."
+    ],
     example: '{"operations":[{"entityType":"task","id":"task_123","mode":"soft","reason":"Merged into another task"}]}'
   },
   {
@@ -786,6 +926,76 @@ const AGENT_ONBOARDING_TOOL_INPUT_CATALOG = [
     requiredFields: ["operations", "operations[].entityType", "operations[].id"],
     notes: ["Restore only works for soft-deleted entities."],
     example: '{"operations":[{"entityType":"goal","id":"goal_123","clientRef":"goal-restore-1"}]}'
+  },
+  {
+    toolName: "forge_get_calendar_overview",
+    summary: "Read connected calendars, Forge-native events, mirrored events, recurring work blocks, and task timeboxes together.",
+    whenToUse: "Use before calendar-aware planning, slot selection, or scheduling diagnostics.",
+    inputShape: "{ from?: string, to?: string }",
+    requiredFields: [],
+    notes: [
+      "Use ISO datetimes.",
+      "The response includes provider metadata, live connections, mirrored external events, derived work-block instances, and task timeboxes."
+    ],
+    example: '{"from":"2026-04-02T00:00:00.000Z","to":"2026-04-09T00:00:00.000Z"}'
+  },
+  {
+    toolName: "forge_connect_calendar_provider",
+    summary: "Create a Forge calendar connection for Google, Apple, Exchange Online, or custom CalDAV.",
+    whenToUse: "Use only when the operator explicitly wants Forge connected to an external calendar provider.",
+    inputShape:
+      '{ provider: "google"|"apple"|"caldav"|"microsoft", label: string, username?: string, clientId?: string, clientSecret?: string, refreshToken?: string, password?: string, serverUrl?: string, authSessionId?: string, selectedCalendarUrls: string[], forgeCalendarUrl?: string, createForgeCalendar?: boolean }',
+    requiredFields: ["provider", "label", "provider-specific credentials"],
+    notes: [
+      "Google uses OAuth client credentials plus a refresh token.",
+      "Apple starts from https://caldav.icloud.com and autodiscovers the principal plus calendars after authentication.",
+      "Exchange Online uses Microsoft Graph. In the current Forge implementation it is read-only: Forge mirrors the selected calendars but does not publish work blocks or timeboxes back to Microsoft.",
+      "In the current self-hosted local runtime, Exchange Online now uses an interactive Microsoft public-client sign-in flow with PKCE. Non-interactive callers should treat Microsoft connection setup as a Settings-owned operator action unless a completed authSessionId already exists.",
+      "Custom CalDAV uses an account-level server URL, not a single calendar collection URL.",
+      "Writable providers publish Forge work blocks and timeboxes to the dedicated Forge calendar for that connection."
+    ],
+    example:
+      '{"provider":"apple","label":"Primary Apple","username":"operator@example.com","password":"app-password","selectedCalendarUrls":["https://caldav.icloud.com/.../Family/"],"forgeCalendarUrl":"https://caldav.icloud.com/.../Forge/","createForgeCalendar":false}'
+  },
+  {
+    toolName: "forge_create_work_block_template",
+    summary: "Create a recurring half-day, holiday, or custom work-block template.",
+    whenToUse: "Use when the operator wants recurring time windows such as Main Activity, Secondary Activity, Third Activity, Rest, Holiday, or a custom block.",
+    inputShape: '{ title: string, kind: "main_activity"|"secondary_activity"|"third_activity"|"rest"|"holiday"|"custom", color: string, timezone: string, weekDays: integer[], startMinute: integer, endMinute: integer, startsOn?: "YYYY-MM-DD"|null, endsOn?: "YYYY-MM-DD"|null, blockingState: "allowed"|"blocked" }',
+    requiredFields: ["title", "kind", "timezone", "weekDays", "startMinute", "endMinute", "blockingState"],
+    notes: [
+      "Minutes are measured from midnight in the selected timezone.",
+      "startsOn and endsOn are optional date bounds. Leaving endsOn null makes the block repeat indefinitely.",
+      "Use kind=holiday with weekDays [0,1,2,3,4,5,6] and minutes 0-1440 for vacations or other full-day blocked ranges.",
+      "Derived instances appear in calendar overview responses immediately after creation.",
+      "This is a convenience helper; agents can also create work_block_template through forge_create_entities."
+    ],
+    example: '{"title":"Summer holiday","kind":"holiday","color":"#14b8a6","timezone":"Europe/Zurich","weekDays":[0,1,2,3,4,5,6],"startMinute":0,"endMinute":1440,"startsOn":"2026-08-01","endsOn":"2026-08-16","blockingState":"blocked"}'
+  },
+  {
+    toolName: "forge_recommend_task_timeboxes",
+    summary: "Suggest future task slots that fit the current calendar rules and schedule.",
+    whenToUse: "Use when preparing focused work in advance.",
+    inputShape: "{ taskId: string, from?: string, to?: string, limit?: integer }",
+    requiredFields: ["taskId"],
+    notes: [
+      "Recommendations consider mirrored calendar events, recurring work blocks, task or project scheduling rules, and the task's planned duration when available.",
+      "Confirm a suggested slot by creating a task timebox."
+    ],
+    example: '{"taskId":"task_123","from":"2026-04-02T00:00:00.000Z","to":"2026-04-09T00:00:00.000Z","limit":6}'
+  },
+  {
+    toolName: "forge_create_task_timebox",
+    summary: "Create a planned task timebox in the Forge calendar domain.",
+    whenToUse: "Use after choosing a valid future slot or when creating a manual timebox directly.",
+    inputShape: "{ taskId: string, projectId?: string|null, title: string, startsAt: string, endsAt: string, source?: \"manual\"|\"suggested\"|\"live_run\" }",
+    requiredFields: ["taskId", "title", "startsAt", "endsAt"],
+    notes: [
+      "Forge publishes these into the dedicated Forge calendar during provider sync.",
+      "Live task runs can later attach to matching timeboxes.",
+      "This is a convenience helper; agents can also create task_timebox through forge_create_entities."
+    ],
+    example: '{"taskId":"task_123","projectId":"project_456","title":"Draft the methods section","startsAt":"2026-04-03T08:00:00.000Z","endsAt":"2026-04-03T09:30:00.000Z","source":"suggested"}'
   },
   {
     toolName: "forge_grant_reward_bonus",
@@ -836,10 +1046,10 @@ const AGENT_ONBOARDING_TOOL_INPUT_CATALOG = [
     toolName: "forge_start_task_run",
     summary: "Start truthful live work on a task.",
     whenToUse: "Use when the user wants to begin working now.",
-    inputShape: "{ taskId: string, actor: string, timerMode?: \"planned\"|\"unlimited\", plannedDurationSeconds?: number|null, isCurrent?: boolean, leaseTtlSeconds?: number, note?: string }",
+    inputShape: "{ taskId: string, actor: string, timerMode?: \"planned\"|\"unlimited\", plannedDurationSeconds?: number|null, overrideReason?: string|null, isCurrent?: boolean, leaseTtlSeconds?: number, note?: string }",
     requiredFields: ["taskId", "actor"],
-    notes: ["If timerMode is planned, plannedDurationSeconds is required.", "If timerMode is unlimited, plannedDurationSeconds must be null or omitted."],
-    example: '{"taskId":"task_123","actor":"aurel","timerMode":"planned","plannedDurationSeconds":1500,"isCurrent":true,"leaseTtlSeconds":900,"note":"Starting focused writing block"}'
+    notes: ["If timerMode is planned, plannedDurationSeconds is required.", "If timerMode is unlimited, plannedDurationSeconds must be null or omitted.", "If calendar rules currently block the task, pass an explicit overrideReason to proceed and keep the exception auditable."],
+    example: '{"taskId":"task_123","actor":"aurel","timerMode":"planned","plannedDurationSeconds":1500,"overrideReason":"Protected creative block after clinic hours.","isCurrent":true,"leaseTtlSeconds":900,"note":"Starting focused writing block"}'
   },
   {
     toolName: "forge_heartbeat_task_run",
@@ -938,11 +1148,14 @@ function buildAgentOnboardingPayload(request: {
     },
     conceptModel: {
       goal: "Long-horizon direction or outcome. Goals anchor projects and sometimes tasks directly.",
-      project: "A multi-step workstream under one goal. Projects organize related tasks.",
+      project: "A multi-step workstream under one goal. Projects organize related tasks. Project lifecycle is driven by status: active means in play, paused means suspended, and completed means finished. Setting a project to completed auto-completes linked unfinished tasks.",
       task: "A concrete actionable work item. Task status is board state, not proof of live work.",
       taskRun: "A live work session attached to a task. Start, heartbeat, focus, complete, and release runs instead of faking work with status alone.",
       note: "A Markdown work note that can link to one or many entities. Use notes for progress evidence, context, and close-out summaries.",
       insight: "An agent-authored observation or recommendation grounded in Forge data.",
+      calendar: "A connected calendar source mirrored into Forge. Calendar state combines provider events, recurring work blocks, and task timeboxes.",
+      workBlock: "A recurring half-day or custom time window such as Main Activity, Secondary Activity, Third Activity, Rest, Holiday, or Custom. Work blocks can allow or block work by default, can define active date bounds, and remain editable through the calendar surface.",
+      taskTimebox: "A planned or live calendar slot tied to a task. Timeboxes can be suggested in advance or created automatically from active task runs.",
       psyche:
         "Forge Psyche is the reflective domain for values, patterns, behaviors, beliefs, modes, and trigger reports. It is sensitive and should be handled deliberately."
     },
@@ -976,6 +1189,7 @@ function buildAgentOnboardingPayload(request: {
       context: "/api/v1/context",
       xpMetrics: "/api/v1/metrics/xp",
       weeklyReview: "/api/v1/reviews/weekly",
+      calendarOverview: "/api/v1/calendar/overview",
       settingsBin: "/api/v1/settings/bin",
       batchSearch: "/api/v1/entities/search",
       psycheSchemaCatalog: "/api/v1/psyche/schema-catalog",
@@ -1009,6 +1223,14 @@ function buildAgentOnboardingPayload(request: {
         "forge_complete_task_run",
         "forge_release_task_run"
       ],
+      calendarWorkflow: [
+        "forge_get_calendar_overview",
+        "forge_connect_calendar_provider",
+        "forge_sync_calendar_connection",
+        "forge_create_work_block_template",
+        "forge_recommend_task_timeboxes",
+        "forge_create_task_timebox"
+      ],
       insightWorkflow: ["forge_post_insight"]
     },
     interactionGuidance: {
@@ -1033,17 +1255,17 @@ function buildAgentOnboardingPayload(request: {
       },
       deleteDefault: "soft",
       hardDeleteRequiresExplicitMode: true,
-      restoreSummary: "Restore soft-deleted entities through the restore route or the settings bin.",
-      entityDeleteSummary: "Entity DELETE routes default to soft delete. Pass mode=hard only when permanent removal is intended.",
+      restoreSummary: "Restore soft-deleted entities through the restore route or the settings bin. Calendar-domain deletes for calendar_event, work_block_template, and task_timebox are immediate and do not enter the bin.",
+      entityDeleteSummary: "Entity DELETE routes default to soft delete. Pass mode=hard only when permanent removal is intended. Calendar-event deletes still remove remote projections downstream.",
       batchingRule:
         "forge_create_entities, forge_update_entities, forge_delete_entities, and forge_restore_entities all accept operations as arrays. Batch multiple related mutations together in one request when possible.",
       searchRule: "forge_search_entities accepts searches as an array. Search before create or update when duplicate risk exists.",
-      createRule: "Each create operation must include entityType and full data. entityType alone is not enough.",
-      updateRule: "Each update operation must include entityType, id, and patch.",
+      createRule: "Each create operation must include entityType and full data. entityType alone is not enough. This includes calendar_event, work_block_template, and task_timebox alongside the usual planning and Psyche entities.",
+      updateRule: "Each update operation must include entityType, id, and patch. For projects, lifecycle changes are status patches: active to restart, paused to suspend, completed to finish. Keep task and project scheduling rules on those same patch payloads. Calendar-event updates still run downstream provider projection sync.",
       createExample:
         '{"operations":[{"entityType":"goal","data":{"title":"Create meaningfully"},"clientRef":"goal-create-1"},{"entityType":"goal","data":{"title":"Build a beautiful family"},"clientRef":"goal-create-2"}]}',
       updateExample:
-        '{"operations":[{"entityType":"task","id":"task_123","patch":{"status":"focus","priority":"high"},"clientRef":"task-update-1"}]}'
+        '{"operations":[{"entityType":"project","id":"project_123","patch":{"status":"paused","schedulingRules":{"blockWorkBlockKinds":["main_activity"],"allowWorkBlockKinds":["secondary_activity"]}},"clientRef":"project-suspend-1"},{"entityType":"task","id":"task_456","patch":{"plannedDurationSeconds":5400,"schedulingRules":{"allowEventKeywords":["creative"],"blockEventKeywords":["clinic"]}},"clientRef":"task-scheduling-1"}]}'
     }
   };
 }
@@ -1472,6 +1694,18 @@ function buildOperatorOverview(request: {
 
 export async function buildServer(options: { dataRoot?: string; seedDemoData?: boolean; taskRunWatchdog?: false | TaskRunWatchdogOptions } = {}) {
   const managers = createManagerRuntime({ dataRoot: options.dataRoot });
+  managers.externalServices.register("google_calendar", {
+    provider: "google",
+    label: "Google Calendar"
+  });
+  managers.externalServices.register("microsoft_graph_calendar", {
+    provider: "microsoft",
+    label: "Exchange Online"
+  });
+  managers.externalServices.register("caldav", {
+    provider: "caldav",
+    label: "CalDAV"
+  });
   const runtimeConfig = managers.configuration.readRuntimeConfig({ dataRoot: options.dataRoot });
   configureDatabase({ dataRoot: runtimeConfig.dataRoot ?? undefined });
   configureDatabaseSeeding(options.seedDemoData ?? false);
@@ -1527,6 +1761,109 @@ export async function buildServer(options: { dataRoot?: string; seedDemoData?: b
       actor: context.actor,
       source: context.source
     }) as const;
+  const applyBatchCalendarEntityEffects = async (
+    results: Array<{ ok: boolean; entityType?: string; id?: string; entity?: unknown }>,
+    auth: ReturnType<typeof authenticateRequest>,
+    action: "create" | "update" | "delete"
+  ) => {
+    for (const result of results) {
+      if (!result.ok || typeof result.entityType !== "string" || typeof result.id !== "string") {
+        continue;
+      }
+
+      if (result.entityType === "calendar_event") {
+        if (action === "delete") {
+          await deleteCalendarEventProjection(result.id, managers.secrets);
+          const event = (result.entity ?? {}) as Record<string, unknown>;
+          recordActivityEvent({
+            entityType: "calendar_event",
+            entityId: result.id,
+            eventType: "calendar_event_deleted",
+            title: `Calendar event deleted: ${typeof event.title === "string" ? event.title : result.id}`,
+            description: "The Forge calendar event was removed and any projected remote copies were deleted.",
+            actor: auth.actor ?? null,
+            source: auth.source,
+            metadata: {
+              calendarId: typeof event.calendarId === "string" ? event.calendarId : null,
+              originType: typeof event.originType === "string" ? event.originType : null
+            }
+          });
+          continue;
+        }
+
+        await pushCalendarEventUpdate(result.id, managers.secrets);
+        const refreshed = getCalendarEventById(result.id);
+        if (!refreshed) {
+          continue;
+        }
+        result.entity = refreshed;
+        recordActivityEvent({
+          entityType: "calendar_event",
+          entityId: refreshed.id,
+          eventType: action === "create" ? "calendar_event_created" : "calendar_event_updated",
+          title: `Calendar event ${action === "create" ? "created" : "updated"}: ${refreshed.title}`,
+          description:
+            action === "create"
+              ? "A native Forge calendar event was created."
+              : "The Forge calendar event was updated and projected to remote calendars when configured.",
+          actor: auth.actor ?? null,
+          source: auth.source,
+          metadata: {
+            calendarId: refreshed.calendarId,
+            originType: refreshed.originType
+          }
+        });
+        continue;
+      }
+
+      if (result.entityType === "work_block_template" && result.entity && typeof result.entity === "object") {
+        const template = result.entity as { id: string; title: string; kind?: string; blockingState?: string };
+        recordActivityEvent({
+          entityType: "work_block",
+          entityId: template.id,
+          eventType:
+            action === "create" ? "work_block_created" : action === "update" ? "work_block_updated" : "work_block_deleted",
+          title: `Work block ${action}: ${template.title}`,
+          description:
+            action === "create"
+              ? "A recurring work block was added to Forge."
+              : action === "update"
+                ? "The recurring work block was updated."
+                : "The recurring work block was removed.",
+          actor: auth.actor ?? null,
+          source: auth.source,
+          metadata: {
+            kind: template.kind ?? null,
+            blockingState: action === "delete" ? null : template.blockingState ?? null
+          }
+        });
+        continue;
+      }
+
+      if (result.entityType === "task_timebox" && result.entity && typeof result.entity === "object") {
+        const timebox = result.entity as { id: string; title: string; taskId?: string; status?: string };
+        recordActivityEvent({
+          entityType: "task_timebox",
+          entityId: timebox.id,
+          eventType:
+            action === "create" ? "task_timebox_created" : action === "update" ? "task_timebox_updated" : "task_timebox_deleted",
+          title: `Task timebox ${action}: ${timebox.title}`,
+          description:
+            action === "create"
+              ? "A future work slot was planned in Forge."
+              : action === "update"
+                ? "The planned work slot was updated."
+                : "The planned work slot was removed.",
+          actor: auth.actor ?? null,
+          source: auth.source,
+          metadata: {
+            taskId: timebox.taskId ?? null,
+            status: action === "delete" ? null : timebox.status ?? null
+          }
+        });
+      }
+    }
+  };
   const requireOperatorSession = (headers: Record<string, unknown>, detail?: Record<string, unknown>) => {
     const context = authenticateRequest(headers);
     managers.authorization.requireAuthenticatedOperator(context, detail);
@@ -2094,6 +2431,143 @@ export async function buildServer(options: { dataRoot?: string; seedDemoData?: b
     const query = taskListQuerySchema.parse(request.query ?? {});
     return { tasks: listTasks(query) };
   });
+  app.get("/api/v1/calendar/overview", async (request) => {
+    const query = calendarOverviewQuerySchema.parse(request.query ?? {});
+    const now = new Date();
+    const from = query.from ?? new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString();
+    const to = query.to ?? new Date(now.getTime() + 21 * 24 * 60 * 60 * 1000).toISOString();
+    return { calendar: readCalendarOverview({ from, to }) };
+  });
+  app.get("/api/v1/calendar/agenda", async (request) => {
+    const query = calendarOverviewQuerySchema.parse(request.query ?? {});
+    const now = new Date();
+    const from = query.from ?? new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString();
+    const to = query.to ?? new Date(now.getTime() + 21 * 24 * 60 * 60 * 1000).toISOString();
+    return {
+      providers: listCalendarProviderMetadata(),
+      calendars: listCalendars(),
+      events: listCalendarEvents({ from, to }),
+      workBlocks: listWorkBlockInstances({ from, to }),
+      timeboxes: listTaskTimeboxes({ from, to })
+    };
+  });
+  app.get("/api/v1/calendar/connections", async () => ({
+    providers: listCalendarProviderMetadata(),
+    connections: listConnectedCalendarConnections()
+  }));
+  app.post("/api/v1/calendar/oauth/microsoft/start", async (request) => {
+    requireScopedAccess(request.headers as Record<string, unknown>, ["write"], { route: "/api/v1/calendar/oauth/microsoft/start" });
+    return await startMicrosoftCalendarOauth(
+      startMicrosoftCalendarOauthSchema.parse(request.body ?? {}),
+      getRequestOrigin(request)
+    );
+  });
+  app.get("/api/v1/calendar/oauth/microsoft/session/:id", async (request, reply) => {
+    requireScopedAccess(request.headers as Record<string, unknown>, ["write"], { route: "/api/v1/calendar/oauth/microsoft/session/:id" });
+    try {
+      return getMicrosoftCalendarOauthSession((request.params as { id: string }).id);
+    } catch (error) {
+      if (error instanceof Error && error.message.startsWith("Unknown Microsoft calendar auth session")) {
+        reply.code(404);
+        return { error: "Microsoft calendar auth session not found" };
+      }
+      throw error;
+    }
+  });
+  app.get("/api/v1/calendar/oauth/microsoft/callback", async (request, reply) => {
+    const query = request.query as {
+      state?: string;
+      code?: string;
+      error?: string;
+      error_description?: string;
+    };
+    const result = await completeMicrosoftCalendarOauth({
+      state: query.state ?? null,
+      code: query.code ?? null,
+      error: query.error ?? null,
+      errorDescription: query.error_description ?? null
+    });
+    const session = result.session;
+    const escapedOrigin = JSON.stringify(result.openerOrigin || "*");
+    const escapedMessage = JSON.stringify({
+      type: "forge:microsoft-calendar-auth",
+      sessionId: session.sessionId,
+      status: session.status
+    });
+    const body = `<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Forge Microsoft sign-in</title>
+    <style>
+      body{margin:0;font-family:ui-sans-serif,system-ui,sans-serif;background:#0b1320;color:#f8fafc;display:grid;place-items:center;min-height:100vh}
+      main{max-width:28rem;padding:2rem;border:1px solid rgba(255,255,255,.08);border-radius:24px;background:linear-gradient(180deg,rgba(18,28,38,.98),rgba(11,17,28,.98))}
+      h1{margin:0 0 .75rem;font-size:1.15rem}
+      p{margin:0;color:rgba(248,250,252,.72);line-height:1.6}
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>${session.status === "authorized" ? "Microsoft account connected" : "Microsoft sign-in needs attention"}</h1>
+      <p>${session.status === "authorized" ? "Forge received your Microsoft account and sent the result back to the calendar setup flow. You can close this window." : session.error ?? "Forge could not complete Microsoft sign-in. You can close this window and try again from Settings."}</p>
+    </main>
+    <script>
+      const message = ${escapedMessage};
+      const targetOrigin = ${escapedOrigin};
+      try {
+        if (window.opener && !window.opener.closed) {
+          window.opener.postMessage(message, targetOrigin);
+        }
+      } catch {}
+      setTimeout(() => window.close(), 180);
+    </script>
+  </body>
+</html>`;
+    reply.type("text/html; charset=utf-8");
+    return body;
+  });
+  app.post("/api/v1/calendar/discovery", async (request) => {
+    const auth = requireScopedAccess(
+      request.headers as Record<string, unknown>,
+      ["write"],
+      { route: "/api/v1/calendar/discovery" }
+    );
+    const discovery = await discoverCalendarConnection(
+      discoverCalendarConnectionSchema.parse(request.body ?? {})
+    );
+    recordActivityEvent({
+      entityType: "calendar_connection",
+      entityId: "calendar_discovery",
+      eventType: "calendar_connection_discovered",
+      title: `Calendar discovery completed for ${discovery.provider}`,
+      description: "Forge discovered provider calendars before connection setup.",
+      actor: auth.actor ?? null,
+      source: auth.source,
+      metadata: {
+        provider: discovery.provider,
+        calendars: discovery.calendars.length
+      }
+    });
+    return { discovery };
+  });
+  app.get("/api/v1/calendar/calendars", async () => ({
+    calendars: listCalendars()
+  }));
+  app.get("/api/v1/calendar/connections/:id/discovery", async (request, reply) => {
+    requireScopedAccess(request.headers as Record<string, unknown>, ["write"], { route: "/api/v1/calendar/connections/:id/discovery" });
+    const { id } = request.params as { id: string };
+    try {
+      const discovery = await discoverExistingCalendarConnection(id, managers.secrets);
+      return { discovery };
+    } catch (error) {
+      if (error instanceof Error && error.message.startsWith("Unknown calendar connection")) {
+        reply.code(404);
+        return { error: "Calendar connection not found" };
+      }
+      throw error;
+    }
+  });
   app.get("/api/v1/habits", async (request) => {
     const query = habitListQuerySchema.parse(request.query ?? {});
     return { habits: listHabits(query) };
@@ -2336,6 +2810,29 @@ export async function buildServer(options: { dataRoot?: string; seedDemoData?: b
   app.get("/api/v1/reviews/weekly", async () => ({
     review: getWeeklyReviewPayload()
   }));
+  app.post("/api/v1/reviews/weekly/finalize", async (request, reply) => {
+    const auth = requireAuthenticatedActor(request.headers as Record<string, unknown>, { route: "/api/v1/reviews/weekly/finalize" });
+    const currentReview = getWeeklyReviewPayload();
+    const finalized = finalizeWeeklyReviewClosure(
+      {
+        weekKey: currentReview.weekKey,
+        weekStartDate: currentReview.weekStartDate,
+        weekEndDate: currentReview.weekEndDate,
+        windowLabel: currentReview.windowLabel,
+        rewardXp: currentReview.reward.rewardXp,
+        actor: auth.actor,
+        source: auth.source
+      }
+    );
+    const result = finalizeWeeklyReviewResultSchema.parse({
+      closure: finalized.closure,
+      reward: finalized.reward,
+      review: getWeeklyReviewPayload(),
+      metrics: buildXpMetricsPayload()
+    });
+    reply.code(finalized.created ? 201 : 200);
+    return result;
+  });
   app.get("/api/v1/settings", async (request) => {
     requireScopedAccess(request.headers as Record<string, unknown>, ["read", "write"], { route: "/api/v1/settings" });
     return { settings: getSettings() };
@@ -2349,6 +2846,296 @@ export async function buildServer(options: { dataRoot?: string; seedDemoData?: b
     const project = createProject(createProjectSchema.parse(request.body ?? {}), toActivityContext(auth));
     reply.code(201);
     return { project };
+  });
+  app.post("/api/v1/calendar/connections", async (request, reply) => {
+    const auth = requireScopedAccess(request.headers as Record<string, unknown>, ["write"], { route: "/api/v1/calendar/connections" });
+    try {
+      const connection = await createCalendarConnection(
+        createCalendarConnectionSchema.parse(request.body ?? {}),
+        managers.secrets,
+        toActivityContext(auth)
+      );
+      reply.code(201);
+      return { connection };
+    } catch (error) {
+      if (error instanceof CalendarConnectionConflictError) {
+        reply.code(409);
+        return {
+          code: "calendar_connection_duplicate",
+          error: error.message,
+          existingConnectionId: error.connectionId
+        };
+      }
+      throw error;
+    }
+  });
+  app.patch("/api/v1/calendar/connections/:id", async (request, reply) => {
+    const auth = requireScopedAccess(request.headers as Record<string, unknown>, ["write"], { route: "/api/v1/calendar/connections/:id" });
+    const { id } = request.params as { id: string };
+    const patch = updateCalendarConnectionSchema.parse(request.body ?? {});
+    try {
+      const connection =
+        patch.label !== undefined || patch.selectedCalendarUrls !== undefined
+          ? await updateCalendarConnectionSelection(
+              id,
+              {
+                label: patch.label,
+                selectedCalendarUrls: patch.selectedCalendarUrls
+              },
+              managers.secrets,
+              toActivityContext(auth)
+            )
+          : getCalendarConnectionById(id);
+      if (!connection) {
+        reply.code(404);
+        return { error: "Calendar connection not found" };
+      }
+      return { connection: listConnectedCalendarConnections().find((entry) => entry.id === id) };
+    } catch (error) {
+      if (error instanceof Error && error.message.startsWith("Unknown calendar connection")) {
+        reply.code(404);
+        return { error: "Calendar connection not found" };
+      }
+      throw error;
+    }
+  });
+  app.post("/api/v1/calendar/connections/:id/sync", async (request, reply) => {
+    const auth = requireScopedAccess(request.headers as Record<string, unknown>, ["write"], { route: "/api/v1/calendar/connections/:id/sync" });
+    const { id } = request.params as { id: string };
+    const connection = await syncCalendarConnection(id, managers.secrets, toActivityContext(auth));
+    if (!connection) {
+      reply.code(404);
+      return { error: "Calendar connection not found" };
+    }
+    return { connection: listConnectedCalendarConnections().find((entry) => entry.id === id) };
+  });
+  app.delete("/api/v1/calendar/connections/:id", async (request, reply) => {
+    const auth = requireScopedAccess(request.headers as Record<string, unknown>, ["write"], { route: "/api/v1/calendar/connections/:id" });
+    const { id } = request.params as { id: string };
+    const connection = await removeCalendarConnection(id, managers.secrets, toActivityContext(auth));
+    if (!connection) {
+      reply.code(404);
+      return { error: "Calendar connection not found" };
+    }
+    return { connection };
+  });
+  app.get("/api/v1/calendar/work-block-templates", async () => ({
+    templates: listWorkBlockTemplates()
+  }));
+  app.post("/api/v1/calendar/work-block-templates", async (request, reply) => {
+    const auth = requireScopedAccess(request.headers as Record<string, unknown>, ["write"], { route: "/api/v1/calendar/work-block-templates" });
+    const template = createWorkBlockTemplate(createWorkBlockTemplateSchema.parse(request.body ?? {}));
+    recordActivityEvent({
+      entityType: "work_block",
+      entityId: template.id,
+      eventType: "work_block_created",
+      title: `Work block created: ${template.title}`,
+      description: "A recurring work block was added to Forge.",
+      actor: auth.actor ?? null,
+      source: auth.source,
+      metadata: {
+        kind: template.kind,
+        blockingState: template.blockingState
+      }
+    });
+    reply.code(201);
+    return { template };
+  });
+  app.patch("/api/v1/calendar/work-block-templates/:id", async (request, reply) => {
+    const auth = requireScopedAccess(request.headers as Record<string, unknown>, ["write"], { route: "/api/v1/calendar/work-block-templates/:id" });
+    const { id } = request.params as { id: string };
+    const template = updateWorkBlockTemplate(id, updateWorkBlockTemplateSchema.parse(request.body ?? {}));
+    if (!template) {
+      reply.code(404);
+      return { error: "Work block template not found" };
+    }
+    recordActivityEvent({
+      entityType: "work_block",
+      entityId: template.id,
+      eventType: "work_block_updated",
+      title: `Work block updated: ${template.title}`,
+      description: "The recurring work block was updated.",
+      actor: auth.actor ?? null,
+      source: auth.source,
+      metadata: {
+        kind: template.kind,
+        blockingState: template.blockingState
+      }
+    });
+    return { template };
+  });
+  app.delete("/api/v1/calendar/work-block-templates/:id", async (request, reply) => {
+    const auth = requireScopedAccess(request.headers as Record<string, unknown>, ["write"], { route: "/api/v1/calendar/work-block-templates/:id" });
+    const { id } = request.params as { id: string };
+    const template = deleteWorkBlockTemplate(id);
+    if (!template) {
+      reply.code(404);
+      return { error: "Work block template not found" };
+    }
+    recordActivityEvent({
+      entityType: "work_block",
+      entityId: template.id,
+      eventType: "work_block_deleted",
+      title: `Work block deleted: ${template.title}`,
+      description: "The recurring work block was removed.",
+      actor: auth.actor ?? null,
+      source: auth.source,
+      metadata: {
+        kind: template.kind
+      }
+    });
+    return { template };
+  });
+  app.get("/api/v1/calendar/timeboxes", async (request) => {
+    const query = calendarOverviewQuerySchema.parse(request.query ?? {});
+    const now = new Date();
+    const from = query.from ?? new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString();
+    const to = query.to ?? new Date(now.getTime() + 21 * 24 * 60 * 60 * 1000).toISOString();
+    return { timeboxes: listTaskTimeboxes({ from, to }) };
+  });
+  app.post("/api/v1/calendar/timeboxes", async (request, reply) => {
+    const auth = requireScopedAccess(request.headers as Record<string, unknown>, ["write"], { route: "/api/v1/calendar/timeboxes" });
+    const timebox = createTaskTimebox(createTaskTimeboxSchema.parse(request.body ?? {}));
+    recordActivityEvent({
+      entityType: "task_timebox",
+      entityId: timebox.id,
+      eventType: "task_timebox_created",
+      title: `Task timebox created: ${timebox.title}`,
+      description: "A future work slot was planned in Forge.",
+      actor: auth.actor ?? null,
+      source: auth.source,
+      metadata: {
+        taskId: timebox.taskId,
+        status: timebox.status
+      }
+    });
+    reply.code(201);
+    return { timebox };
+  });
+  app.patch("/api/v1/calendar/timeboxes/:id", async (request, reply) => {
+    const auth = requireScopedAccess(request.headers as Record<string, unknown>, ["write"], { route: "/api/v1/calendar/timeboxes/:id" });
+    const { id } = request.params as { id: string };
+    const timebox = updateTaskTimebox(id, updateTaskTimeboxSchema.parse(request.body ?? {}));
+    if (!timebox) {
+      reply.code(404);
+      return { error: "Task timebox not found" };
+    }
+    recordActivityEvent({
+      entityType: "task_timebox",
+      entityId: timebox.id,
+      eventType: "task_timebox_updated",
+      title: `Task timebox updated: ${timebox.title}`,
+      description: "The planned work slot was updated.",
+      actor: auth.actor ?? null,
+      source: auth.source,
+      metadata: {
+        taskId: timebox.taskId,
+        status: timebox.status
+      }
+    });
+    return { timebox };
+  });
+  app.delete("/api/v1/calendar/timeboxes/:id", async (request, reply) => {
+    const auth = requireScopedAccess(request.headers as Record<string, unknown>, ["write"], { route: "/api/v1/calendar/timeboxes/:id" });
+    const { id } = request.params as { id: string };
+    const timebox = deleteTaskTimebox(id);
+    if (!timebox) {
+      reply.code(404);
+      return { error: "Task timebox not found" };
+    }
+    recordActivityEvent({
+      entityType: "task_timebox",
+      entityId: timebox.id,
+      eventType: "task_timebox_deleted",
+      title: `Task timebox deleted: ${timebox.title}`,
+      description: "The planned work slot was removed.",
+      actor: auth.actor ?? null,
+      source: auth.source,
+      metadata: {
+        taskId: timebox.taskId
+      }
+    });
+    return { timebox };
+  });
+  app.post("/api/v1/calendar/timeboxes/recommend", async (request) => {
+    const input = recommendTaskTimeboxesSchema.parse(request.body ?? {});
+    return {
+      timeboxes: suggestTaskTimeboxes(input.taskId, {
+        from: input.from,
+        to: input.to,
+        limit: input.limit
+      })
+    };
+  });
+  app.post("/api/v1/calendar/events", async (request, reply) => {
+    const auth = requireScopedAccess(request.headers as Record<string, unknown>, ["write"], { route: "/api/v1/calendar/events" });
+    const event = createCalendarEvent(createCalendarEventSchema.parse(request.body ?? {}));
+    await pushCalendarEventUpdate(event.id, managers.secrets);
+    const refreshed = getCalendarEventById(event.id)!;
+    recordActivityEvent({
+      entityType: "calendar_event",
+      entityId: refreshed.id,
+      eventType: "calendar_event_created",
+      title: `Calendar event created: ${refreshed.title}`,
+      description: "A native Forge calendar event was created.",
+      actor: auth.actor ?? null,
+      source: auth.source,
+      metadata: {
+        calendarId: refreshed.calendarId,
+        originType: refreshed.originType
+      }
+    });
+    reply.code(201);
+    return { event: refreshed };
+  });
+  app.patch("/api/v1/calendar/events/:id", async (request, reply) => {
+    const auth = requireScopedAccess(request.headers as Record<string, unknown>, ["write"], { route: "/api/v1/calendar/events/:id" });
+    const { id } = request.params as { id: string };
+    const event = updateCalendarEvent(id, updateCalendarEventSchema.parse(request.body ?? {}));
+    if (!event) {
+      reply.code(404);
+      return { error: "Calendar event not found" };
+    }
+    await pushCalendarEventUpdate(id, managers.secrets);
+    const refreshed = getCalendarEventById(id)!;
+    recordActivityEvent({
+      entityType: "calendar_event",
+      entityId: refreshed.id,
+      eventType: "calendar_event_updated",
+      title: `Calendar event updated: ${refreshed.title}`,
+      description: "The Forge calendar event was updated and projected to remote calendars when configured.",
+      actor: auth.actor ?? null,
+      source: auth.source,
+      metadata: {
+        calendarId: refreshed.calendarId,
+        originType: refreshed.originType
+      }
+    });
+    return { event: refreshed };
+  });
+  app.delete("/api/v1/calendar/events/:id", async (request, reply) => {
+    const auth = requireScopedAccess(request.headers as Record<string, unknown>, ["write"], { route: "/api/v1/calendar/events/:id" });
+    const { id } = request.params as { id: string };
+    const event = deleteCalendarEvent(id);
+    if (!event) {
+      reply.code(404);
+      return { error: "Calendar event not found" };
+    }
+    await deleteCalendarEventProjection(id, managers.secrets);
+    recordActivityEvent({
+      entityType: "calendar_event",
+      entityId: event.id,
+      eventType: "calendar_event_deleted",
+      title: `Calendar event deleted: ${event.title}`,
+      description: "The Forge calendar event was removed and any projected remote copies were deleted.",
+      actor: auth.actor ?? null,
+      source: auth.source,
+      metadata: {
+        calendarId: event.calendarId,
+        originType: event.originType
+      }
+    });
+    return { event };
   });
   app.post("/api/v1/habits", async (request, reply) => {
     const auth = requireScopedAccess(request.headers as Record<string, unknown>, ["write"], { route: "/api/v1/habits" });
@@ -2942,15 +3729,21 @@ export async function buildServer(options: { dataRoot?: string; seedDemoData?: b
   });
   app.post("/api/v1/entities/create", async (request) => {
     const auth = requireScopedAccess(request.headers as Record<string, unknown>, ["write"], { route: "/api/v1/entities/create" });
-    return createEntities(batchCreateEntitiesSchema.parse(request.body ?? {}), toActivityContext(auth));
+    const result = createEntities(batchCreateEntitiesSchema.parse(request.body ?? {}), toActivityContext(auth));
+    await applyBatchCalendarEntityEffects(result.results, auth, "create");
+    return result;
   });
   app.post("/api/v1/entities/update", async (request) => {
     const auth = requireScopedAccess(request.headers as Record<string, unknown>, ["write"], { route: "/api/v1/entities/update" });
-    return updateEntities(batchUpdateEntitiesSchema.parse(request.body ?? {}), toActivityContext(auth));
+    const result = updateEntities(batchUpdateEntitiesSchema.parse(request.body ?? {}), toActivityContext(auth));
+    await applyBatchCalendarEntityEffects(result.results, auth, "update");
+    return result;
   });
   app.post("/api/v1/entities/delete", async (request) => {
     const auth = requireScopedAccess(request.headers as Record<string, unknown>, ["write"], { route: "/api/v1/entities/delete" });
-    return deleteEntities(batchDeleteEntitiesSchema.parse(request.body ?? {}), toActivityContext(auth));
+    const result = deleteEntities(batchDeleteEntitiesSchema.parse(request.body ?? {}), toActivityContext(auth));
+    await applyBatchCalendarEntityEffects(result.results, auth, "delete");
+    return result;
   });
   app.post("/api/v1/entities/restore", async (request) => {
     requireScopedAccess(request.headers as Record<string, unknown>, ["write"], { route: "/api/v1/entities/restore" });

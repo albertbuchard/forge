@@ -29,7 +29,10 @@ const ENTITY_LABELS: Record<CrudEntityType, string> = {
   mode_guide_session: "Mode guides",
   event_type: "Event types",
   emotion_definition: "Emotions",
-  trigger_report: "Reports"
+  trigger_report: "Reports",
+  calendar_event: "Calendar events",
+  work_block_template: "Work blocks",
+  task_timebox: "Timeboxes"
 };
 
 const ENTITY_BADGE_KIND: Record<CrudEntityType, ComponentProps<typeof EntityBadge>["kind"] | null> = {
@@ -48,7 +51,10 @@ const ENTITY_BADGE_KIND: Record<CrudEntityType, ComponentProps<typeof EntityBadg
   mode_guide_session: "mode",
   event_type: null,
   emotion_definition: null,
-  trigger_report: "report"
+  trigger_report: "report",
+  calendar_event: null,
+  work_block_template: null,
+  task_timebox: null
 };
 
 function formatDeletedAt(value: string) {

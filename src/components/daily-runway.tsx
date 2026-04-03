@@ -69,7 +69,7 @@ export function DailyRunway({
     blocked: t("common.dailyRunway.actionBlocked")
   } as const;
   return (
-    <div className="grid min-w-0 gap-4 xl:grid-cols-[minmax(0,1.3fr)_minmax(18rem,0.9fr)]">
+    <div className="grid min-w-0 gap-4 2xl:grid-cols-[minmax(0,1.3fr)_minmax(17rem,0.9fr)]">
       <div className="min-w-0 rounded-[24px] bg-white/[0.04] p-4">
         <div className="flex min-w-0 items-start justify-between gap-4">
           <div className="min-w-0">
@@ -169,7 +169,7 @@ export function DailyRunway({
         <h4 className="mt-2 font-display text-2xl text-white">{t("common.dailyRunway.timelineTitle")}</h4>
         <div className="mt-4 grid min-w-0 gap-3">
           {timeline.map((bucket) => (
-            <div key={bucket.id} className="rounded-[20px] bg-white/[0.03] p-4">
+            <div key={bucket.id} className="min-w-0 overflow-hidden rounded-[20px] bg-white/[0.03] p-4">
               <div className="flex items-center justify-between gap-3">
                 <div className="font-medium text-white">{bucket.label}</div>
                 <Badge className="bg-white/[0.08] text-white/65">{bucket.tasks.length}</Badge>
@@ -179,11 +179,11 @@ export function DailyRunway({
                   <button
                     key={task.id}
                     type="button"
-                    className="flex items-center justify-between gap-3 rounded-[16px] bg-white/[0.03] px-3 py-3 text-left transition hover:bg-white/[0.06]"
+                    className="flex min-w-0 items-center justify-between gap-3 overflow-hidden rounded-[16px] bg-white/[0.03] px-3 py-3 text-left transition hover:bg-white/[0.06]"
                     onClick={() => onSelectTask(task.id)}
                   >
-                    <div className="min-w-0">
-                      <EntityName kind="task" label={task.title} className="max-w-full" />
+                    <div className="min-w-0 flex-1">
+                      <EntityName kind="task" label={task.title} className="max-w-full" labelClassName="[overflow-wrap:anywhere]" />
                       <div className="mt-2">
                         <EntityBadge kind="goal" label={getGoalTitle(task, goals, t("common.dailyRunway.unassigned"))} compact gradient={false} />
                       </div>

@@ -1,8 +1,10 @@
 import { useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { GoalDialog } from "@/components/goal-dialog";
+import { NoteMarkdown } from "@/components/notes/note-markdown";
 import { ProjectDialog } from "@/components/project-dialog";
 import { EntityNotesSurface } from "@/components/notes/entity-notes-surface";
+import { ProjectCollectionFilters } from "@/components/projects/project-collection-filters";
 import { PageHero } from "@/components/shell/page-hero";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -14,6 +16,7 @@ import { ProgressMeter } from "@/components/ui/progress-meter";
 import { getReadableActivityDescription, getReadableActivityTitle } from "@/lib/activity-copy";
 import { getActivityEventHref } from "@/lib/entity-links";
 import { useI18n } from "@/lib/i18n";
+import { buildProjectCollectionCounts, filterProjectsByCollectionStatus, type ProjectCollectionStatusFilter } from "@/lib/project-collections";
 import { useForgeShell } from "@/components/shell/app-shell";
 
 export function GoalDetailPage() {
@@ -22,15 +25,19 @@ export function GoalDetailPage() {
   const params = useParams();
   const [goalDialogOpen, setGoalDialogOpen] = useState(false);
   const [projectDialogOpen, setProjectDialogOpen] = useState(false);
+  const [projectFilter, setProjectFilter] = useState<ProjectCollectionStatusFilter>("active");
+  const [pendingRestartProjectId, setPendingRestartProjectId] = useState<string | null>(null);
 
   const goal = shell.snapshot.dashboard.goals.find((entry) => entry.id === params.goalId) ?? null;
 
-  const projects = useMemo(
+  const allProjects = useMemo(
     () => shell.snapshot.dashboard.projects.filter((project) => project.goalId === params.goalId),
     [params.goalId, shell.snapshot.dashboard.projects]
   );
+  const projectCounts = useMemo(() => buildProjectCollectionCounts(allProjects), [allProjects]);
+  const projects = useMemo(() => filterProjectsByCollectionStatus(allProjects, projectFilter), [allProjects, projectFilter]);
 
-  const projectIds = new Set(projects.map((project) => project.id));
+  const projectIds = new Set(allProjects.map((project) => project.id));
   const taskIds = new Set(shell.snapshot.tasks.filter((task) => projectIds.has(task.projectId ?? "")).map((task) => task.id));
   const evidence = shell.snapshot.activity.filter(
     (event) =>
@@ -59,13 +66,31 @@ export function GoalDetailPage() {
   const weakSpot = shell.snapshot.overview.neglectedGoals.find((entry) => entry.goalId === goal.id) ?? null;
   const latestEvidence = evidence[0] ?? null;
 
+  const restartProject = async (projectId: string) => {
+    setPendingRestartProjectId(projectId);
+    try {
+      await shell.patchProject(projectId, { status: "active" });
+    } finally {
+      setPendingRestartProjectId(null);
+    }
+  };
+
   return (
     <div className="grid min-w-0 gap-5">
       <PageHero
         entityKind="goal"
         title={<EntityName kind="goal" label={goal.title} variant="heading" size="lg" />}
         titleText={goal.title}
-        description={goal.description}
+        description={
+          goal.description ? (
+            <NoteMarkdown
+              markdown={goal.description}
+              className="[&>p]:text-[13px] [&>p]:leading-6 [&>blockquote]:text-[13px] [&>ul]:text-[13px] [&>ol]:text-[13px]"
+            />
+          ) : (
+            "No strategic description yet."
+          )
+        }
         badge={t(projects.length === 1 ? "common.goalDetail.heroBadgeOne" : "common.goalDetail.heroBadgeOther", { count: projects.length })}
       />
 
@@ -78,19 +103,31 @@ export function GoalDetailPage() {
 
       <section className="grid min-w-0 gap-5 xl:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)]">
         <Card>
-          <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">{t("common.goalDetail.sectionProjects")}</div>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">{t("common.goalDetail.sectionProjects")}</div>
+            <ProjectCollectionFilters
+              value={projectFilter}
+              counts={projectCounts}
+              onChange={setProjectFilter}
+              className="justify-end"
+            />
+          </div>
           {projects.length === 0 ? (
-            <div className="mt-4 rounded-[20px] bg-white/[0.04] p-4 text-sm text-white/58">{t("common.goalDetail.noProjects")}</div>
+            <div className="mt-4 rounded-[20px] bg-white/[0.04] p-4 text-sm text-white/58">
+              {projectFilter === "active" ? t("common.goalDetail.noProjects") : "No projects match this lifecycle filter yet. Switch filters or restart one to make it active again."}
+            </div>
           ) : (
             <div className="mt-4 grid gap-4 lg:grid-cols-2">
               {projects.map((project) => (
-                <Link key={project.id} to={`/projects/${project.id}`} className="rounded-[22px] bg-white/[0.04] p-5 transition hover:bg-white/[0.08]">
+                <div key={project.id} className="rounded-[22px] bg-white/[0.04] p-5 transition hover:bg-white/[0.08]">
                   <div className="flex items-center justify-between gap-3">
                     <EntityBadge kind="project" compact gradient={false} />
                     <Badge>{project.status}</Badge>
                   </div>
                   <div className="mt-4">
-                    <EntityName kind="project" label={project.title} variant="heading" size="lg" />
+                    <Link to={`/projects/${project.id}`} className="transition hover:opacity-90">
+                      <EntityName kind="project" label={project.title} variant="heading" size="lg" />
+                    </Link>
                   </div>
                   <p className="mt-3 text-sm leading-6 text-white/58">{project.description}</p>
                   <div className="mt-4">
@@ -99,7 +136,23 @@ export function GoalDetailPage() {
                   <div className="mt-4 text-[11px] uppercase tracking-[0.16em] text-white/40">
                     {project.nextTaskTitle ? t("common.goalDetail.nextMove", { value: project.nextTaskTitle }) : t("common.goalDetail.addNextTask")}
                   </div>
-                </Link>
+                  <div className="mt-4 flex flex-wrap justify-between gap-3">
+                    <Link to={`/projects/${project.id}`}>
+                      <Button variant="ghost">Open project</Button>
+                    </Link>
+                    {projectFilter !== "active" && project.status !== "active" ? (
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        pending={pendingRestartProjectId === project.id}
+                        pendingLabel="Restarting…"
+                        onClick={() => void restartProject(project.id)}
+                      >
+                        Restart
+                      </Button>
+                    ) : null}
+                  </div>
+                </div>
               ))}
             </div>
           )}

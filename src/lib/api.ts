@@ -6,7 +6,16 @@ import type {
   OperatorSession,
   CreateManualRewardGrantInput,
   ApprovalRequest,
+  CalendarAvailability,
+  CalendarConnection,
+  CalendarDiscoveryPayload,
+  CalendarEvent,
+  MicrosoftCalendarOauthSession,
+  CalendarOverviewPayload,
+  CalendarResource,
+  CalendarSchedulingRules,
   EventLogEntry,
+  FinalizeWeeklyReviewResult,
   Goal,
   Habit,
   ForgeSnapshot,
@@ -28,6 +37,7 @@ import type {
   SettingsBinPayload,
   Tag,
   Task,
+  TaskTimebox,
   TaskContext,
   TaskRun,
   TaskRunClaimInput,
@@ -35,6 +45,7 @@ import type {
   TaskRunHeartbeatInput,
   UpdateRewardRuleInput,
   WeeklyReviewPayload,
+  WorkBlockTemplate,
   XpMetricsPayload,
   CrudEntityType,
   DeleteMode
@@ -107,7 +118,10 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const body = await parseResponseBody(response);
 
   if (!response.ok) {
-    const maybeBody = typeof body === "object" && body !== null ? (body as Record<string, unknown>) : null;
+    const maybeBody =
+      typeof body === "object" && body !== null
+        ? (body as Record<string, unknown>)
+        : null;
     const details = Array.isArray(maybeBody?.details)
       ? (maybeBody.details as ForgeValidationIssue[])
       : [];
@@ -135,6 +149,17 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return body as T;
 }
 
+function normalizeNestedNotes(
+  notes: Array<{ contentMarkdown: string; author: string }>
+) {
+  return notes
+    .map((note) => ({
+      contentMarkdown: note.contentMarkdown.trim(),
+      author: note.author.trim() || null
+    }))
+    .filter((note) => note.contentMarkdown.length > 0);
+}
+
 export function ensureOperatorSession() {
   return request<{ session: OperatorSession }>("/api/v1/auth/operator-session");
 }
@@ -158,7 +183,9 @@ export function listDomains() {
 }
 
 export function getPsycheOverview() {
-  return request<{ overview: PsycheOverviewPayload }>("/api/v1/psyche/overview");
+  return request<{ overview: PsycheOverviewPayload }>(
+    "/api/v1/psyche/overview"
+  );
 }
 
 export function listPsycheValues() {
@@ -176,7 +203,10 @@ export function createPsycheValue(input: PsycheValueInput) {
   });
 }
 
-export function patchPsycheValue(valueId: string, patch: Partial<PsycheValueInput>) {
+export function patchPsycheValue(
+  valueId: string,
+  patch: Partial<PsycheValueInput>
+) {
   return request<{ value: PsycheValue }>(`/api/v1/psyche/values/${valueId}`, {
     method: "PATCH",
     body: JSON.stringify(patch)
@@ -194,7 +224,9 @@ export function listBehaviorPatterns() {
 }
 
 export function getBehaviorPattern(patternId: string) {
-  return request<{ pattern: BehaviorPattern }>(`/api/v1/psyche/patterns/${patternId}`);
+  return request<{ pattern: BehaviorPattern }>(
+    `/api/v1/psyche/patterns/${patternId}`
+  );
 }
 
 export function createBehaviorPattern(input: BehaviorPatternInput) {
@@ -204,17 +236,26 @@ export function createBehaviorPattern(input: BehaviorPatternInput) {
   });
 }
 
-export function patchBehaviorPattern(patternId: string, patch: Partial<BehaviorPatternInput>) {
-  return request<{ pattern: BehaviorPattern }>(`/api/v1/psyche/patterns/${patternId}`, {
-    method: "PATCH",
-    body: JSON.stringify(patch)
-  });
+export function patchBehaviorPattern(
+  patternId: string,
+  patch: Partial<BehaviorPatternInput>
+) {
+  return request<{ pattern: BehaviorPattern }>(
+    `/api/v1/psyche/patterns/${patternId}`,
+    {
+      method: "PATCH",
+      body: JSON.stringify(patch)
+    }
+  );
 }
 
 export function deleteBehaviorPattern(patternId: string) {
-  return request<{ pattern: BehaviorPattern }>(`/api/v1/psyche/patterns/${patternId}`, {
-    method: "DELETE"
-  });
+  return request<{ pattern: BehaviorPattern }>(
+    `/api/v1/psyche/patterns/${patternId}`,
+    {
+      method: "DELETE"
+    }
+  );
 }
 
 export function listBehaviors() {
@@ -222,7 +263,9 @@ export function listBehaviors() {
 }
 
 export function getBehavior(behaviorId: string) {
-  return request<{ behavior: Behavior }>(`/api/v1/psyche/behaviors/${behaviorId}`);
+  return request<{ behavior: Behavior }>(
+    `/api/v1/psyche/behaviors/${behaviorId}`
+  );
 }
 
 export function createBehavior(input: BehaviorInput) {
@@ -232,21 +275,32 @@ export function createBehavior(input: BehaviorInput) {
   });
 }
 
-export function patchBehavior(behaviorId: string, patch: Partial<BehaviorInput>) {
-  return request<{ behavior: Behavior }>(`/api/v1/psyche/behaviors/${behaviorId}`, {
-    method: "PATCH",
-    body: JSON.stringify(patch)
-  });
+export function patchBehavior(
+  behaviorId: string,
+  patch: Partial<BehaviorInput>
+) {
+  return request<{ behavior: Behavior }>(
+    `/api/v1/psyche/behaviors/${behaviorId}`,
+    {
+      method: "PATCH",
+      body: JSON.stringify(patch)
+    }
+  );
 }
 
 export function deleteBehavior(behaviorId: string) {
-  return request<{ behavior: Behavior }>(`/api/v1/psyche/behaviors/${behaviorId}`, {
-    method: "DELETE"
-  });
+  return request<{ behavior: Behavior }>(
+    `/api/v1/psyche/behaviors/${behaviorId}`,
+    {
+      method: "DELETE"
+    }
+  );
 }
 
 export function listSchemaCatalog() {
-  return request<{ schemas: SchemaCatalogEntry[] }>("/api/v1/psyche/schema-catalog");
+  return request<{ schemas: SchemaCatalogEntry[] }>(
+    "/api/v1/psyche/schema-catalog"
+  );
 }
 
 export function listBeliefs() {
@@ -264,17 +318,26 @@ export function createBelief(input: BeliefEntryInput) {
   });
 }
 
-export function patchBelief(beliefId: string, patch: Partial<BeliefEntryInput>) {
-  return request<{ belief: BeliefEntry }>(`/api/v1/psyche/beliefs/${beliefId}`, {
-    method: "PATCH",
-    body: JSON.stringify(patch)
-  });
+export function patchBelief(
+  beliefId: string,
+  patch: Partial<BeliefEntryInput>
+) {
+  return request<{ belief: BeliefEntry }>(
+    `/api/v1/psyche/beliefs/${beliefId}`,
+    {
+      method: "PATCH",
+      body: JSON.stringify(patch)
+    }
+  );
 }
 
 export function deleteBelief(beliefId: string) {
-  return request<{ belief: BeliefEntry }>(`/api/v1/psyche/beliefs/${beliefId}`, {
-    method: "DELETE"
-  });
+  return request<{ belief: BeliefEntry }>(
+    `/api/v1/psyche/beliefs/${beliefId}`,
+    {
+      method: "DELETE"
+    }
+  );
 }
 
 export function listModes() {
@@ -306,11 +369,15 @@ export function deleteMode(modeId: string) {
 }
 
 export function listModeGuideSessions() {
-  return request<{ sessions: ModeGuideSession[] }>("/api/v1/psyche/mode-guides");
+  return request<{ sessions: ModeGuideSession[] }>(
+    "/api/v1/psyche/mode-guides"
+  );
 }
 
 export function getModeGuideSession(sessionId: string) {
-  return request<{ session: ModeGuideSession }>(`/api/v1/psyche/mode-guides/${sessionId}`);
+  return request<{ session: ModeGuideSession }>(
+    `/api/v1/psyche/mode-guides/${sessionId}`
+  );
 }
 
 export function createModeGuideSession(input: ModeGuideSessionInput) {
@@ -320,17 +387,26 @@ export function createModeGuideSession(input: ModeGuideSessionInput) {
   });
 }
 
-export function patchModeGuideSession(sessionId: string, patch: Partial<ModeGuideSessionInput>) {
-  return request<{ session: ModeGuideSession }>(`/api/v1/psyche/mode-guides/${sessionId}`, {
-    method: "PATCH",
-    body: JSON.stringify(patch)
-  });
+export function patchModeGuideSession(
+  sessionId: string,
+  patch: Partial<ModeGuideSessionInput>
+) {
+  return request<{ session: ModeGuideSession }>(
+    `/api/v1/psyche/mode-guides/${sessionId}`,
+    {
+      method: "PATCH",
+      body: JSON.stringify(patch)
+    }
+  );
 }
 
 export function deleteModeGuideSession(sessionId: string) {
-  return request<{ session: ModeGuideSession }>(`/api/v1/psyche/mode-guides/${sessionId}`, {
-    method: "DELETE"
-  });
+  return request<{ session: ModeGuideSession }>(
+    `/api/v1/psyche/mode-guides/${sessionId}`,
+    {
+      method: "DELETE"
+    }
+  );
 }
 
 export function listEventTypes() {
@@ -338,7 +414,9 @@ export function listEventTypes() {
 }
 
 export function getEventType(eventTypeId: string) {
-  return request<{ eventType: EventType }>(`/api/v1/psyche/event-types/${eventTypeId}`);
+  return request<{ eventType: EventType }>(
+    `/api/v1/psyche/event-types/${eventTypeId}`
+  );
 }
 
 export function createEventType(input: EventTypeInput) {
@@ -348,17 +426,26 @@ export function createEventType(input: EventTypeInput) {
   });
 }
 
-export function patchEventType(eventTypeId: string, patch: Partial<EventTypeInput>) {
-  return request<{ eventType: EventType }>(`/api/v1/psyche/event-types/${eventTypeId}`, {
-    method: "PATCH",
-    body: JSON.stringify(patch)
-  });
+export function patchEventType(
+  eventTypeId: string,
+  patch: Partial<EventTypeInput>
+) {
+  return request<{ eventType: EventType }>(
+    `/api/v1/psyche/event-types/${eventTypeId}`,
+    {
+      method: "PATCH",
+      body: JSON.stringify(patch)
+    }
+  );
 }
 
 export function deleteEventType(eventTypeId: string) {
-  return request<{ eventType: EventType }>(`/api/v1/psyche/event-types/${eventTypeId}`, {
-    method: "DELETE"
-  });
+  return request<{ eventType: EventType }>(
+    `/api/v1/psyche/event-types/${eventTypeId}`,
+    {
+      method: "DELETE"
+    }
+  );
 }
 
 export function listEmotionDefinitions() {
@@ -366,7 +453,9 @@ export function listEmotionDefinitions() {
 }
 
 export function getEmotionDefinition(emotionId: string) {
-  return request<{ emotion: EmotionDefinition }>(`/api/v1/psyche/emotions/${emotionId}`);
+  return request<{ emotion: EmotionDefinition }>(
+    `/api/v1/psyche/emotions/${emotionId}`
+  );
 }
 
 export function createEmotionDefinition(input: EmotionDefinitionInput) {
@@ -376,17 +465,26 @@ export function createEmotionDefinition(input: EmotionDefinitionInput) {
   });
 }
 
-export function patchEmotionDefinition(emotionId: string, patch: Partial<EmotionDefinitionInput>) {
-  return request<{ emotion: EmotionDefinition }>(`/api/v1/psyche/emotions/${emotionId}`, {
-    method: "PATCH",
-    body: JSON.stringify(patch)
-  });
+export function patchEmotionDefinition(
+  emotionId: string,
+  patch: Partial<EmotionDefinitionInput>
+) {
+  return request<{ emotion: EmotionDefinition }>(
+    `/api/v1/psyche/emotions/${emotionId}`,
+    {
+      method: "PATCH",
+      body: JSON.stringify(patch)
+    }
+  );
 }
 
 export function deleteEmotionDefinition(emotionId: string) {
-  return request<{ emotion: EmotionDefinition }>(`/api/v1/psyche/emotions/${emotionId}`, {
-    method: "DELETE"
-  });
+  return request<{ emotion: EmotionDefinition }>(
+    `/api/v1/psyche/emotions/${emotionId}`,
+    {
+      method: "DELETE"
+    }
+  );
 }
 
 export function listTriggerReports() {
@@ -401,30 +499,50 @@ export function createTriggerReport(input: TriggerReportInput) {
 }
 
 export function getTriggerReport(reportId: string) {
-  return request<TriggerReportDetailPayload>(`/api/v1/psyche/reports/${reportId}`);
+  return request<TriggerReportDetailPayload>(
+    `/api/v1/psyche/reports/${reportId}`
+  );
 }
 
-export function patchTriggerReport(reportId: string, patch: Partial<TriggerReportInput>) {
-  return request<{ report: TriggerReport }>(`/api/v1/psyche/reports/${reportId}`, {
-    method: "PATCH",
-    body: JSON.stringify(patch)
-  });
+export function patchTriggerReport(
+  reportId: string,
+  patch: Partial<TriggerReportInput>
+) {
+  return request<{ report: TriggerReport }>(
+    `/api/v1/psyche/reports/${reportId}`,
+    {
+      method: "PATCH",
+      body: JSON.stringify(patch)
+    }
+  );
 }
 
 export function deleteTriggerReport(reportId: string) {
-  return request<{ report: TriggerReport }>(`/api/v1/psyche/reports/${reportId}`, {
-    method: "DELETE"
-  });
+  return request<{ report: TriggerReport }>(
+    `/api/v1/psyche/reports/${reportId}`,
+    {
+      method: "DELETE"
+    }
+  );
 }
 
-export function listNotes(input: {
-  linkedEntityType?: CrudEntityType;
-  linkedEntityId?: string;
-  anchorKey?: string | null;
-  author?: string;
-  query?: string;
-  limit?: number;
-} = {}) {
+export function listNotes(
+  input: {
+    linkedEntityType?: CrudEntityType;
+    linkedEntityId?: string;
+    anchorKey?: string | null;
+    linkedTo?: Array<{
+      entityType: CrudEntityType;
+      entityId: string;
+    }>;
+    textTerms?: string[];
+    author?: string;
+    query?: string;
+    updatedFrom?: string;
+    updatedTo?: string;
+    limit?: number;
+  } = {}
+) {
   const search = new URLSearchParams();
   if (input.linkedEntityType) {
     search.set("linkedEntityType", input.linkedEntityType);
@@ -435,11 +553,25 @@ export function listNotes(input: {
   if (input.anchorKey !== undefined && input.anchorKey !== null) {
     search.set("anchorKey", input.anchorKey);
   }
+  for (const link of input.linkedTo ?? []) {
+    search.append("linkedTo", `${link.entityType}:${link.entityId}`);
+  }
+  for (const term of input.textTerms ?? []) {
+    if (term.trim()) {
+      search.append("textTerms", term.trim());
+    }
+  }
   if (input.author) {
     search.set("author", input.author);
   }
   if (input.query) {
     search.set("query", input.query);
+  }
+  if (input.updatedFrom) {
+    search.set("updatedFrom", input.updatedFrom);
+  }
+  if (input.updatedTo) {
+    search.set("updatedTo", input.updatedTo);
   }
   if (input.limit) {
     search.set("limit", String(input.limit));
@@ -451,7 +583,11 @@ export function listNotes(input: {
 export function createNote(input: {
   contentMarkdown: string;
   author?: string | null;
-  links: Array<{ entityType: CrudEntityType; entityId: string; anchorKey?: string | null }>;
+  links: Array<{
+    entityType: CrudEntityType;
+    entityId: string;
+    anchorKey?: string | null;
+  }>;
 }) {
   return request<{ note: Note }>("/api/v1/notes", {
     method: "POST",
@@ -464,7 +600,11 @@ export function patchNote(
   patch: {
     contentMarkdown?: string;
     author?: string | null;
-    links?: Array<{ entityType: CrudEntityType; entityId: string; anchorKey?: string | null }>;
+    links?: Array<{
+      entityType: CrudEntityType;
+      entityId: string;
+      anchorKey?: string | null;
+    }>;
   }
 ) {
   return request<{ note: Note }>(`/api/v1/notes/${noteId}`, {
@@ -497,7 +637,22 @@ export function createInsight(input: CreateInsightInput) {
   });
 }
 
-export function patchInsight(insightId: string, patch: Partial<Pick<Insight, "status" | "visibility" | "title" | "summary" | "recommendation" | "rationale" | "confidence" | "ctaLabel">>) {
+export function patchInsight(
+  insightId: string,
+  patch: Partial<
+    Pick<
+      Insight,
+      | "status"
+      | "visibility"
+      | "title"
+      | "summary"
+      | "recommendation"
+      | "rationale"
+      | "confidence"
+      | "ctaLabel"
+    >
+  >
+) {
   return request<{ insight: Insight }>(`/api/v1/insights/${insightId}`, {
     method: "PATCH",
     body: JSON.stringify(patch)
@@ -510,27 +665,401 @@ export function deleteInsight(insightId: string) {
   });
 }
 
-export function submitInsightFeedback(insightId: string, feedbackType: InsightFeedback["feedbackType"], note = "") {
-  return request<{ feedback: InsightFeedback }>(`/api/v1/insights/${insightId}/feedback`, {
-    method: "POST",
-    body: JSON.stringify({ feedbackType, note })
-  });
+export function submitInsightFeedback(
+  insightId: string,
+  feedbackType: InsightFeedback["feedbackType"],
+  note = ""
+) {
+  return request<{ feedback: InsightFeedback }>(
+    `/api/v1/insights/${insightId}/feedback`,
+    {
+      method: "POST",
+      body: JSON.stringify({ feedbackType, note })
+    }
+  );
 }
 
 export function getWeeklyReview() {
   return request<{ review: WeeklyReviewPayload }>("/api/v1/reviews/weekly");
 }
 
+export function finalizeWeeklyReview() {
+  return request<FinalizeWeeklyReviewResult>("/api/v1/reviews/weekly/finalize", {
+    method: "POST"
+  });
+}
+
+export function getCalendarOverview(
+  input: {
+    from?: string;
+    to?: string;
+  } = {}
+) {
+  const search = new URLSearchParams();
+  if (input.from) {
+    search.set("from", input.from);
+  }
+  if (input.to) {
+    search.set("to", input.to);
+  }
+  const suffix = search.size > 0 ? `?${search.toString()}` : "";
+  return request<{ calendar: CalendarOverviewPayload }>(
+    `/api/v1/calendar/overview${suffix}`
+  );
+}
+
+export function listCalendarConnections() {
+  return request<{
+    providers: CalendarOverviewPayload["providers"];
+    connections: CalendarConnection[];
+  }>("/api/v1/calendar/connections");
+}
+
+export function discoverCalendarConnection(
+  input:
+    | {
+        provider: "google";
+        username: string;
+        clientId: string;
+        clientSecret: string;
+        refreshToken: string;
+      }
+    | {
+        provider: "apple";
+        username: string;
+        password: string;
+      }
+    | {
+        provider: "caldav";
+        serverUrl: string;
+        username: string;
+        password: string;
+      }
+) {
+  return request<{ discovery: CalendarDiscoveryPayload }>(
+    "/api/v1/calendar/discovery",
+    {
+      method: "POST",
+      body: JSON.stringify(input)
+    }
+  );
+}
+
+export function startMicrosoftCalendarOauth(input: { label?: string }) {
+  return request<{ session: MicrosoftCalendarOauthSession }>(
+    "/api/v1/calendar/oauth/microsoft/start",
+    {
+      method: "POST",
+      body: JSON.stringify(input)
+    }
+  );
+}
+
+export function getMicrosoftCalendarOauthSession(sessionId: string) {
+  return request<{ session: MicrosoftCalendarOauthSession }>(
+    `/api/v1/calendar/oauth/microsoft/session/${sessionId}`
+  );
+}
+
+export function discoverExistingCalendarConnection(connectionId: string) {
+  return request<{ discovery: CalendarDiscoveryPayload }>(
+    `/api/v1/calendar/connections/${connectionId}/discovery`
+  );
+}
+
+export function createCalendarConnection(
+  input:
+    | {
+        provider: "google";
+        label: string;
+        username: string;
+        clientId: string;
+        clientSecret: string;
+        refreshToken: string;
+        selectedCalendarUrls: string[];
+        forgeCalendarUrl?: string | null;
+        createForgeCalendar?: boolean;
+      }
+    | {
+        provider: "apple";
+        label: string;
+        username: string;
+        password: string;
+        selectedCalendarUrls: string[];
+        forgeCalendarUrl?: string | null;
+        createForgeCalendar?: boolean;
+      }
+    | {
+        provider: "caldav";
+        label: string;
+        serverUrl: string;
+        username: string;
+        password: string;
+        selectedCalendarUrls: string[];
+        forgeCalendarUrl?: string | null;
+        createForgeCalendar?: boolean;
+      }
+    | {
+        provider: "microsoft";
+        label: string;
+        authSessionId: string;
+        selectedCalendarUrls: string[];
+      }
+) {
+  return request<{ connection: CalendarConnection }>(
+    "/api/v1/calendar/connections",
+    {
+      method: "POST",
+      body: JSON.stringify(input)
+    }
+  );
+}
+
+export function syncCalendarConnection(connectionId: string) {
+  return request<{ connection: CalendarConnection }>(
+    `/api/v1/calendar/connections/${connectionId}/sync`,
+    {
+      method: "POST"
+    }
+  );
+}
+
+export function patchCalendarConnection(
+  connectionId: string,
+  patch: Partial<{
+    label: string;
+    selectedCalendarUrls: string[];
+  }>
+) {
+  return request<{ connection: CalendarConnection }>(
+    `/api/v1/calendar/connections/${connectionId}`,
+    {
+      method: "PATCH",
+      body: JSON.stringify(patch)
+    }
+  );
+}
+
+export function deleteCalendarConnection(connectionId: string) {
+  return request<{ connection: CalendarConnection }>(
+    `/api/v1/calendar/connections/${connectionId}`,
+    {
+      method: "DELETE"
+    }
+  );
+}
+
+export function listCalendarResources() {
+  return request<{ calendars: CalendarResource[] }>("/api/v1/calendar/calendars");
+}
+
+export function listWorkBlockTemplates() {
+  return request<{ templates: WorkBlockTemplate[] }>(
+    "/api/v1/calendar/work-block-templates"
+  );
+}
+
+export function createWorkBlockTemplate(input: {
+  title: string;
+  kind: WorkBlockTemplate["kind"];
+  color: string;
+  timezone: string;
+  weekDays: number[];
+  startMinute: number;
+  endMinute: number;
+  startsOn?: string | null;
+  endsOn?: string | null;
+  blockingState: WorkBlockTemplate["blockingState"];
+}) {
+  return request<{ template: WorkBlockTemplate }>(
+    "/api/v1/calendar/work-block-templates",
+    {
+      method: "POST",
+      body: JSON.stringify(input)
+    }
+  );
+}
+
+export function patchWorkBlockTemplate(
+  templateId: string,
+  patch: Partial<{
+    title: string;
+    kind: WorkBlockTemplate["kind"];
+    color: string;
+    timezone: string;
+    weekDays: number[];
+    startMinute: number;
+    endMinute: number;
+    startsOn: string | null;
+    endsOn: string | null;
+    blockingState: WorkBlockTemplate["blockingState"];
+  }>
+) {
+  return request<{ template: WorkBlockTemplate }>(
+    `/api/v1/calendar/work-block-templates/${templateId}`,
+    {
+      method: "PATCH",
+      body: JSON.stringify(patch)
+    }
+  );
+}
+
+export function deleteWorkBlockTemplate(templateId: string) {
+  return request<{ template: WorkBlockTemplate }>(
+    `/api/v1/calendar/work-block-templates/${templateId}`,
+    {
+      method: "DELETE"
+    }
+  );
+}
+
+export function listTaskTimeboxes(
+  input: {
+    from?: string;
+    to?: string;
+  } = {}
+) {
+  const search = new URLSearchParams();
+  if (input.from) {
+    search.set("from", input.from);
+  }
+  if (input.to) {
+    search.set("to", input.to);
+  }
+  const suffix = search.size > 0 ? `?${search.toString()}` : "";
+  return request<{ timeboxes: TaskTimebox[] }>(
+    `/api/v1/calendar/timeboxes${suffix}`
+  );
+}
+
+export function createCalendarEvent(input: {
+  title: string;
+  description?: string;
+  location?: string;
+  startAt: string;
+  endAt: string;
+  timezone?: string;
+  isAllDay?: boolean;
+  availability?: CalendarAvailability;
+  eventType?: string;
+  categories?: string[];
+  preferredCalendarId?: string | null;
+  links?: Array<{
+    entityType: CrudEntityType;
+    entityId: string;
+    relationshipType?: string;
+  }>;
+}) {
+  return request<{ event: CalendarEvent }>("/api/v1/calendar/events", {
+    method: "POST",
+    body: JSON.stringify(input)
+  });
+}
+
+export function patchCalendarEvent(
+  eventId: string,
+  patch: Partial<{
+    title: string;
+    description: string;
+    location: string;
+    startAt: string;
+    endAt: string;
+    timezone: string;
+    isAllDay: boolean;
+    availability: CalendarAvailability;
+    eventType: string;
+    categories: string[];
+    preferredCalendarId: string | null;
+    links: Array<{
+      entityType: CrudEntityType;
+      entityId: string;
+      relationshipType?: string;
+    }>;
+  }>
+) {
+  return request<{ event: CalendarEvent }>(`/api/v1/calendar/events/${eventId}`, {
+    method: "PATCH",
+    body: JSON.stringify(patch)
+  });
+}
+
+export function deleteCalendarEvent(eventId: string) {
+  return request<{ event: CalendarEvent }>(`/api/v1/calendar/events/${eventId}`, {
+    method: "DELETE"
+  });
+}
+
+export function createTaskTimebox(input: {
+  taskId: string;
+  projectId?: string | null;
+  title: string;
+  startsAt: string;
+  endsAt: string;
+  source?: TaskTimebox["source"];
+  status?: TaskTimebox["status"];
+  overrideReason?: string | null;
+}) {
+  return request<{ timebox: TaskTimebox }>("/api/v1/calendar/timeboxes", {
+    method: "POST",
+    body: JSON.stringify(input)
+  });
+}
+
+export function patchTaskTimebox(
+  timeboxId: string,
+  patch: Partial<{
+    title: string;
+    startsAt: string;
+    endsAt: string;
+    status: TaskTimebox["status"];
+    overrideReason: string | null;
+  }>
+) {
+  return request<{ timebox: TaskTimebox }>(
+    `/api/v1/calendar/timeboxes/${timeboxId}`,
+    {
+      method: "PATCH",
+      body: JSON.stringify(patch)
+    }
+  );
+}
+
+export function deleteTaskTimebox(timeboxId: string) {
+  return request<{ timebox: TaskTimebox }>(
+    `/api/v1/calendar/timeboxes/${timeboxId}`,
+    {
+      method: "DELETE"
+    }
+  );
+}
+
+export function recommendTaskTimeboxes(input: {
+  taskId: string;
+  from?: string;
+  to?: string;
+  limit?: number;
+}) {
+  return request<{ timeboxes: TaskTimebox[] }>(
+    "/api/v1/calendar/timeboxes/recommend",
+    {
+      method: "POST",
+      body: JSON.stringify(input)
+    }
+  );
+}
+
 export function listProjects() {
   return request<{ projects: ProjectSummary[] }>("/api/v1/projects");
 }
 
-export function listHabits(input: {
-  status?: Habit["status"];
-  polarity?: Habit["polarity"];
-  dueToday?: boolean;
-  limit?: number;
-} = {}) {
+export function listHabits(
+  input: {
+    status?: Habit["status"];
+    polarity?: Habit["polarity"];
+    dueToday?: boolean;
+    limit?: number;
+  } = {}
+) {
   const search = new URLSearchParams();
   if (input.status) {
     search.set("status", input.status);
@@ -558,12 +1087,16 @@ export function createHabit(input: HabitMutationInput) {
   });
 }
 
-export function patchHabit(habitId: string, patch: Partial<HabitMutationInput>) {
+export function patchHabit(
+  habitId: string,
+  patch: Partial<HabitMutationInput>
+) {
   return request<{ habit: Habit }>(`/api/v1/habits/${habitId}`, {
     method: "PATCH",
     body: JSON.stringify({
       ...patch,
-      linkedBehaviorId: patch.linkedBehaviorId === "" ? null : patch.linkedBehaviorId
+      linkedBehaviorId:
+        patch.linkedBehaviorId === "" ? null : patch.linkedBehaviorId
     })
   });
 }
@@ -574,11 +1107,17 @@ export function deleteHabit(habitId: string) {
   });
 }
 
-export function createHabitCheckIn(habitId: string, input: { dateKey?: string; status: "done" | "missed"; note?: string }) {
-  return request<{ habit: Habit; metrics: XpMetricsPayload }>(`/api/v1/habits/${habitId}/check-ins`, {
-    method: "POST",
-    body: JSON.stringify(input)
-  });
+export function createHabitCheckIn(
+  habitId: string,
+  input: { dateKey?: string; status: "done" | "missed"; note?: string }
+) {
+  return request<{ habit: Habit; metrics: XpMetricsPayload }>(
+    `/api/v1/habits/${habitId}/check-ins`,
+    {
+      method: "POST",
+      body: JSON.stringify(input)
+    }
+  );
 }
 
 export function listTags() {
@@ -622,11 +1161,15 @@ export function getProjectBoard(projectId: string) {
 }
 
 export function getOperatorContext() {
-  return request<{ context: OperatorContextPayload }>("/api/v1/operator/context");
+  return request<{ context: OperatorContextPayload }>(
+    "/api/v1/operator/context"
+  );
 }
 
 export function getOperatorOverview() {
-  return request<{ overview: OperatorOverviewPayload }>("/api/v1/operator/overview");
+  return request<{ overview: OperatorOverviewPayload }>(
+    "/api/v1/operator/overview"
+  );
 }
 
 export function getSettings() {
@@ -642,29 +1185,41 @@ export function listAgents() {
 }
 
 export function getAgentOnboarding() {
-  return request<{ onboarding: AgentOnboardingPayload }>("/api/v1/agents/onboarding");
+  return request<{ onboarding: AgentOnboardingPayload }>(
+    "/api/v1/agents/onboarding"
+  );
 }
 
 export function listAgentActions(agentId: string) {
-  return request<{ actions: AgentAction[] }>(`/api/v1/agents/${agentId}/actions`);
+  return request<{ actions: AgentAction[] }>(
+    `/api/v1/agents/${agentId}/actions`
+  );
 }
 
 export function listApprovalRequests() {
-  return request<{ approvalRequests: ApprovalRequest[] }>("/api/v1/approval-requests");
+  return request<{ approvalRequests: ApprovalRequest[] }>(
+    "/api/v1/approval-requests"
+  );
 }
 
 export function approveApprovalRequest(approvalRequestId: string, note = "") {
-  return request<{ approvalRequest: ApprovalRequest }>(`/api/v1/approval-requests/${approvalRequestId}/approve`, {
-    method: "POST",
-    body: JSON.stringify({ note })
-  });
+  return request<{ approvalRequest: ApprovalRequest }>(
+    `/api/v1/approval-requests/${approvalRequestId}/approve`,
+    {
+      method: "POST",
+      body: JSON.stringify({ note })
+    }
+  );
 }
 
 export function rejectApprovalRequest(approvalRequestId: string, note = "") {
-  return request<{ approvalRequest: ApprovalRequest }>(`/api/v1/approval-requests/${approvalRequestId}/reject`, {
-    method: "POST",
-    body: JSON.stringify({ note })
-  });
+  return request<{ approvalRequest: ApprovalRequest }>(
+    `/api/v1/approval-requests/${approvalRequestId}/reject`,
+    {
+      method: "POST",
+      body: JSON.stringify({ note })
+    }
+  );
 }
 
 export function listRewardRules() {
@@ -683,14 +1238,19 @@ export function patchRewardRule(ruleId: string, patch: UpdateRewardRuleInput) {
 }
 
 export function createManualRewardGrant(input: CreateManualRewardGrantInput) {
-  return request<{ reward: RewardLedgerEvent; metrics: XpMetricsPayload }>("/api/v1/rewards/bonus", {
-    method: "POST",
-    body: JSON.stringify(input)
-  });
+  return request<{ reward: RewardLedgerEvent; metrics: XpMetricsPayload }>(
+    "/api/v1/rewards/bonus",
+    {
+      method: "POST",
+      body: JSON.stringify(input)
+    }
+  );
 }
 
 export function listRewardLedger(limit = 50) {
-  return request<{ ledger: RewardLedgerEvent[] }>(`/api/v1/rewards/ledger?limit=${limit}`);
+  return request<{ ledger: RewardLedgerEvent[] }>(
+    `/api/v1/rewards/ledger?limit=${limit}`
+  );
 }
 
 export function getXpMetrics() {
@@ -716,10 +1276,13 @@ export function createEntities(input: {
   }>;
   atomic?: boolean;
 }) {
-  return request<{ results: Array<Record<string, unknown>> }>("/api/v1/entities/create", {
-    method: "POST",
-    body: JSON.stringify(input)
-  });
+  return request<{ results: Array<Record<string, unknown>> }>(
+    "/api/v1/entities/create",
+    {
+      method: "POST",
+      body: JSON.stringify(input)
+    }
+  );
 }
 
 export function updateEntities(input: {
@@ -731,10 +1294,13 @@ export function updateEntities(input: {
   }>;
   atomic?: boolean;
 }) {
-  return request<{ results: Array<Record<string, unknown>> }>("/api/v1/entities/update", {
-    method: "POST",
-    body: JSON.stringify(input)
-  });
+  return request<{ results: Array<Record<string, unknown>> }>(
+    "/api/v1/entities/update",
+    {
+      method: "POST",
+      body: JSON.stringify(input)
+    }
+  );
 }
 
 export function deleteEntities(input: {
@@ -747,10 +1313,13 @@ export function deleteEntities(input: {
   }>;
   atomic?: boolean;
 }) {
-  return request<{ results: Array<Record<string, unknown>> }>("/api/v1/entities/delete", {
-    method: "POST",
-    body: JSON.stringify(input)
-  });
+  return request<{ results: Array<Record<string, unknown>> }>(
+    "/api/v1/entities/delete",
+    {
+      method: "POST",
+      body: JSON.stringify(input)
+    }
+  );
 }
 
 export function restoreEntities(input: {
@@ -761,10 +1330,13 @@ export function restoreEntities(input: {
   }>;
   atomic?: boolean;
 }) {
-  return request<{ results: Array<Record<string, unknown>> }>("/api/v1/entities/restore", {
-    method: "POST",
-    body: JSON.stringify(input)
-  });
+  return request<{ results: Array<Record<string, unknown>> }>(
+    "/api/v1/entities/restore",
+    {
+      method: "POST",
+      body: JSON.stringify(input)
+    }
+  );
 }
 
 export function searchEntities(input: {
@@ -779,17 +1351,23 @@ export function searchEntities(input: {
     clientRef?: string;
   }>;
 }) {
-  return request<{ results: Array<Record<string, unknown>> }>("/api/v1/entities/search", {
-    method: "POST",
-    body: JSON.stringify(input)
-  });
+  return request<{ results: Array<Record<string, unknown>> }>(
+    "/api/v1/entities/search",
+    {
+      method: "POST",
+      body: JSON.stringify(input)
+    }
+  );
 }
 
 export function createAgentToken(input: CreateAgentTokenInput) {
-  return request<{ token: AgentTokenMutationResult }>("/api/v1/settings/tokens", {
-    method: "POST",
-    body: JSON.stringify(input)
-  });
+  return request<{ token: AgentTokenMutationResult }>(
+    "/api/v1/settings/tokens",
+    {
+      method: "POST",
+      body: JSON.stringify(input)
+    }
+  );
 }
 
 export function createAgentAction(input: {
@@ -801,30 +1379,41 @@ export function createAgentAction(input: {
   agentId?: string | null;
   tokenId?: string | null;
 }) {
-  return request<{ action: AgentAction; approvalRequest: ApprovalRequest | null }>("/api/v1/agent-actions", {
+  return request<{
+    action: AgentAction;
+    approvalRequest: ApprovalRequest | null;
+  }>("/api/v1/agent-actions", {
     method: "POST",
     body: JSON.stringify(input)
   });
 }
 
 export function rotateAgentToken(tokenId: string) {
-  return request<{ token: AgentTokenMutationResult }>(`/api/v1/settings/tokens/${tokenId}/rotate`, {
-    method: "POST"
-  });
+  return request<{ token: AgentTokenMutationResult }>(
+    `/api/v1/settings/tokens/${tokenId}/rotate`,
+    {
+      method: "POST"
+    }
+  );
 }
 
 export function revokeAgentToken(tokenId: string) {
-  return request<{ token: { id: string } }>(`/api/v1/settings/tokens/${tokenId}/revoke`, {
-    method: "POST"
-  });
+  return request<{ token: { id: string } }>(
+    `/api/v1/settings/tokens/${tokenId}/revoke`,
+    {
+      method: "POST"
+    }
+  );
 }
 
-export function listActivity(input: {
-  limit?: number;
-  entityType?: string;
-  entityId?: string;
-  includeCorrected?: boolean;
-} = {}) {
+export function listActivity(
+  input: {
+    limit?: number;
+    entityType?: string;
+    entityId?: string;
+    includeCorrected?: boolean;
+  } = {}
+) {
   const search = new URLSearchParams();
   search.set("limit", String(input.limit ?? 100));
   if (input.entityType) {
@@ -836,32 +1425,46 @@ export function listActivity(input: {
   if (input.includeCorrected) {
     search.set("includeCorrected", "true");
   }
-  return request<{ activity: ForgeSnapshot["activity"] }>(`/api/v1/activity?${search.toString()}`);
+  return request<{ activity: ForgeSnapshot["activity"] }>(
+    `/api/v1/activity?${search.toString()}`
+  );
 }
 
 export function createGoal(input: GoalMutationInput) {
   return request<{ goal: Goal }>("/api/v1/goals", {
     method: "POST",
-    body: JSON.stringify(input)
+    body: JSON.stringify({
+      ...input,
+      notes: normalizeNestedNotes(input.notes)
+    })
   });
 }
 
 export function createProject(input: ProjectMutationInput) {
   return request<{ project: Project }>("/api/v1/projects", {
     method: "POST",
-    body: JSON.stringify(input)
+    body: JSON.stringify({
+      ...input,
+      notes: normalizeNestedNotes(input.notes)
+    })
   });
 }
 
-export function patchProject(projectId: string, patch: Partial<ProjectMutationInput>) {
+export function patchProject(
+  projectId: string,
+  patch: Partial<ProjectMutationInput> & {
+    schedulingRules?: CalendarSchedulingRules | null;
+  }
+) {
   return request<{ project: Project }>(`/api/v1/projects/${projectId}`, {
     method: "PATCH",
     body: JSON.stringify(patch)
   });
 }
 
-export function deleteProject(projectId: string) {
-  return request<{ project: Project }>(`/api/v1/projects/${projectId}`, {
+export function deleteProject(projectId: string, mode: DeleteMode = "soft") {
+  const suffix = mode === "hard" ? "?mode=hard" : "";
+  return request<{ project: Project }>(`/api/v1/projects/${projectId}${suffix}`, {
     method: "DELETE"
   });
 }
@@ -884,7 +1487,8 @@ export function createTask(input: QuickTaskInput) {
     ...input,
     goalId: input.goalId || null,
     projectId: input.projectId || null,
-    dueDate: input.dueDate || null
+    dueDate: input.dueDate || null,
+    notes: normalizeNestedNotes(input.notes)
   };
   return request<{ task: Task }>("/api/v1/tasks", {
     method: "POST",
@@ -892,7 +1496,14 @@ export function createTask(input: QuickTaskInput) {
   });
 }
 
-export function patchTask(taskId: string, patch: Partial<QuickTaskInput> & { status?: string }) {
+export function patchTask(
+  taskId: string,
+  patch: Partial<QuickTaskInput> & {
+    status?: string;
+    plannedDurationSeconds?: number | null;
+    schedulingRules?: CalendarSchedulingRules | null;
+  }
+) {
   return request<{ task: unknown }>(`/api/v1/tasks/${taskId}`, {
     method: "PATCH",
     body: JSON.stringify({
@@ -940,7 +1551,10 @@ export function createWorkAdjustment(input: {
   });
 }
 
-export function removeActivityLog(eventId: string, reason = "Removed from the visible archive.") {
+export function removeActivityLog(
+  eventId: string,
+  reason = "Removed from the visible archive."
+) {
   return request<{ event: unknown }>(`/api/v1/activity/${eventId}/remove`, {
     method: "POST",
     body: JSON.stringify({ reason })
@@ -952,7 +1566,10 @@ export function recordSessionEvent(input: {
   eventType: string;
   metrics: Record<string, string | number | boolean | null>;
 }) {
-  return request<{ sessionEvent: unknown; rewardEvent: RewardLedgerEvent | null }>("/api/v1/session-events", {
+  return request<{
+    sessionEvent: unknown;
+    rewardEvent: RewardLedgerEvent | null;
+  }>("/api/v1/session-events", {
     method: "POST",
     body: JSON.stringify(input)
   });
@@ -965,14 +1582,23 @@ export function claimTaskRun(taskId: string, input: TaskRunClaimInput) {
   });
 }
 
-export function heartbeatTaskRun(taskRunId: string, input: TaskRunHeartbeatInput) {
-  return request<{ taskRun: TaskRun }>(`/api/v1/task-runs/${taskRunId}/heartbeat`, {
-    method: "POST",
-    body: JSON.stringify(input)
-  });
+export function heartbeatTaskRun(
+  taskRunId: string,
+  input: TaskRunHeartbeatInput
+) {
+  return request<{ taskRun: TaskRun }>(
+    `/api/v1/task-runs/${taskRunId}/heartbeat`,
+    {
+      method: "POST",
+      body: JSON.stringify(input)
+    }
+  );
 }
 
-export function focusTaskRun(taskRunId: string, input: { actor?: string } = {}) {
+export function focusTaskRun(
+  taskRunId: string,
+  input: { actor?: string } = {}
+) {
   return request<{ taskRun: TaskRun }>(`/api/v1/task-runs/${taskRunId}/focus`, {
     method: "POST",
     body: JSON.stringify(input)
@@ -980,15 +1606,21 @@ export function focusTaskRun(taskRunId: string, input: { actor?: string } = {}) 
 }
 
 export function completeTaskRun(taskRunId: string, input: TaskRunFinishInput) {
-  return request<{ taskRun: TaskRun }>(`/api/v1/task-runs/${taskRunId}/complete`, {
-    method: "POST",
-    body: JSON.stringify(input)
-  });
+  return request<{ taskRun: TaskRun }>(
+    `/api/v1/task-runs/${taskRunId}/complete`,
+    {
+      method: "POST",
+      body: JSON.stringify(input)
+    }
+  );
 }
 
 export function releaseTaskRun(taskRunId: string, input: TaskRunFinishInput) {
-  return request<{ taskRun: TaskRun }>(`/api/v1/task-runs/${taskRunId}/release`, {
-    method: "POST",
-    body: JSON.stringify(input)
-  });
+  return request<{ taskRun: TaskRun }>(
+    `/api/v1/task-runs/${taskRunId}/release`,
+    {
+      method: "POST",
+      body: JSON.stringify(input)
+    }
+  );
 }

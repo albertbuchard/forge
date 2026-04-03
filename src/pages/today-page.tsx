@@ -1,3 +1,6 @@
+import { useMemo } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { CalendarDays, ChevronRight } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import { PageHero } from "@/components/shell/page-hero";
 import { EntityNoteCountLink } from "@/components/notes/entity-note-count-link";
@@ -8,12 +11,48 @@ import { InfoTooltip } from "@/components/ui/info-tooltip";
 import { EmptyState } from "@/components/ui/page-state";
 import { ProgressMeter } from "@/components/ui/progress-meter";
 import { useForgeShell } from "@/components/shell/app-shell";
+import { getCalendarOverview } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
+import type { CalendarEvent } from "@/lib/types";
+
+const MAX_VISIBLE_TODAY_EVENTS = 5;
+
+function buildTodayRange() {
+  const start = new Date();
+  start.setHours(0, 0, 0, 0);
+  const end = new Date(start);
+  end.setDate(end.getDate() + 1);
+  return { start, end, from: start.toISOString(), to: end.toISOString() };
+}
+
+function eventFallsOnDay(event: CalendarEvent, range: { start: Date; end: Date }) {
+  const eventStart = new Date(event.startAt);
+  const eventEnd = new Date(event.endAt);
+  return eventStart < range.end && eventEnd > range.start;
+}
+
+function formatTodayEventWindow(event: CalendarEvent) {
+  if (event.isAllDay) {
+    return "All day";
+  }
+
+  const formatter = new Intl.DateTimeFormat(undefined, {
+    hour: "numeric",
+    minute: "2-digit"
+  });
+
+  return `${formatter.format(new Date(event.startAt))} - ${formatter.format(new Date(event.endAt))}`;
+}
 
 export function TodayPage() {
   const { t } = useI18n();
   const shell = useForgeShell();
   const navigate = useNavigate();
+  const todayRange = useMemo(() => buildTodayRange(), []);
+  const calendarQuery = useQuery({
+    queryKey: ["forge-calendar-overview", todayRange.from, todayRange.to],
+    queryFn: () => getCalendarOverview({ from: todayRange.from, to: todayRange.to })
+  });
   const directive = shell.snapshot.today.directive.task;
   const nextMilestone = shell.snapshot.today.milestoneRewards.find((reward) => !reward.completed) ?? shell.snapshot.today.milestoneRewards[0] ?? null;
   const comebackTask = shell.snapshot.risk.blockedTasks[0] ?? shell.snapshot.risk.overdueTasks[0] ?? null;
@@ -22,14 +61,33 @@ export function TodayPage() {
   const TIME_BOUNTY_XP = 4;
   const TIME_BOUNTY_MINUTES = 10;
   const FINISH_BOUNTY_XP = 20;
+  const todayEvents = useMemo(
+    () =>
+      (calendarQuery.data?.calendar.events ?? [])
+        .filter((event) => !event.deletedAt && event.status !== "cancelled" && eventFallsOnDay(event, todayRange))
+        .sort((left, right) => new Date(left.startAt).getTime() - new Date(right.startAt).getTime()),
+    [calendarQuery.data?.calendar.events, todayRange]
+  );
+  const visibleTodayEvents = todayEvents.slice(0, MAX_VISIBLE_TODAY_EVENTS);
+  const hasCalendarEvents = todayEvents.length > 0;
+  const todayDateLabel = useMemo(
+    () =>
+      new Intl.DateTimeFormat(undefined, {
+        weekday: "short",
+        month: "short",
+        day: "numeric"
+      }).format(todayRange.start),
+    [todayRange.start]
+  );
   const hasTodayData =
     directive !== null ||
     shell.snapshot.overview.topTasks.length > 0 ||
     shell.snapshot.today.dueHabits.length > 0 ||
     shell.snapshot.today.dailyQuests.length > 0 ||
-    shell.snapshot.today.milestoneRewards.length > 0;
+    shell.snapshot.today.milestoneRewards.length > 0 ||
+    hasCalendarEvents;
 
-  if (!hasTodayData) {
+  if (!hasTodayData && !calendarQuery.isLoading) {
     return (
       <div className="grid gap-5">
         <PageHero
@@ -61,7 +119,7 @@ export function TodayPage() {
         badge={`${shell.snapshot.metrics.weeklyXp} weekly xp`}
       />
 
-      <section className="grid gap-3 lg:grid-cols-4">
+      <section className="grid gap-3 sm:grid-cols-2 2xl:grid-cols-4">
         <Card>
           <div className="flex items-center gap-2">
             <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">Weekly XP</div>
@@ -103,7 +161,7 @@ export function TodayPage() {
         </Card>
       </section>
 
-      <section className="grid min-w-0 gap-5 xl:grid-cols-[minmax(0,1.4fr)_24rem]">
+      <section className="grid min-w-0 gap-5 xl:grid-cols-[minmax(0,1.2fr)_minmax(18rem,22rem)] 2xl:grid-cols-[minmax(0,1.35fr)_24rem]">
         <div className="min-w-0">
           <DailyRunway
             tasks={shell.snapshot.overview.topTasks}
@@ -123,6 +181,67 @@ export function TodayPage() {
         </div>
 
         <div className="grid min-w-0 gap-5">
+          {hasCalendarEvents ? (
+            <Card className="min-w-0 overflow-hidden">
+              <div className="flex items-center gap-2">
+                <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">Today&apos;s calendar</div>
+                <InfoTooltip content="These are the calendar events already on today. Open any row to continue in the Calendar page." />
+              </div>
+              <div className="mt-3 flex items-center justify-between gap-3">
+                <div className="flex min-w-0 items-center gap-3">
+                  <div className="inline-flex size-10 shrink-0 items-center justify-center rounded-2xl bg-[var(--primary)]/14 text-[var(--primary)]">
+                    <CalendarDays className="size-4" />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="text-sm font-medium text-white">{todayDateLabel}</div>
+                    <div className="text-sm text-white/58">
+                      {todayEvents.length} event{todayEvents.length === 1 ? "" : "s"} scheduled
+                    </div>
+                  </div>
+                </div>
+                <Link
+                  to="/calendar"
+                  className="inline-flex shrink-0 items-center gap-2 rounded-full bg-white/[0.06] px-3 py-2 text-xs font-medium text-white/72 transition hover:bg-white/[0.1] hover:text-white"
+                >
+                  Open calendar
+                  <ChevronRight className="size-3.5" />
+                </Link>
+              </div>
+              <div className="mt-4 grid gap-2.5">
+                {visibleTodayEvents.map((event) => (
+                  <button
+                    key={event.id}
+                    type="button"
+                    className="grid min-w-0 gap-2 rounded-[18px] bg-white/[0.04] px-3 py-3 text-left transition hover:bg-white/[0.07]"
+                    onClick={() => navigate("/calendar")}
+                  >
+                    <div className="flex min-w-0 items-start justify-between gap-3">
+                      <div className="min-w-0 flex-1">
+                        <div className="truncate text-sm font-medium text-white">{event.title}</div>
+                        <div className="mt-1 text-sm text-white/58">{formatTodayEventWindow(event)}</div>
+                      </div>
+                      <Badge className="shrink-0 bg-white/[0.08] text-white/72">
+                        {event.originType === "native" ? "Forge" : event.originType}
+                      </Badge>
+                    </div>
+                    {event.description ? (
+                      <div className="line-clamp-2 text-sm leading-6 text-white/52">{event.description}</div>
+                    ) : null}
+                  </button>
+                ))}
+                {todayEvents.length > MAX_VISIBLE_TODAY_EVENTS ? (
+                  <Link
+                    to="/calendar"
+                    className="inline-flex items-center justify-between rounded-[18px] bg-white/[0.03] px-3 py-3 text-sm text-white/62 transition hover:bg-white/[0.06] hover:text-white"
+                  >
+                    <span>See {todayEvents.length - MAX_VISIBLE_TODAY_EVENTS} more events in Calendar</span>
+                    <ChevronRight className="size-4" />
+                  </Link>
+                ) : null}
+              </div>
+            </Card>
+          ) : null}
+
           <Card className="min-w-0 overflow-hidden">
             <div className="flex items-center gap-2">
               <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">Current task</div>

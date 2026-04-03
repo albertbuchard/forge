@@ -216,10 +216,14 @@ describe("forge openclaw plugin", () => {
     expect(toolNames).toEqual([
       "forge_adjust_work_minutes",
       "forge_complete_task_run",
+      "forge_connect_calendar_provider",
       "forge_create_entities",
+      "forge_create_task_timebox",
+      "forge_create_work_block_template",
       "forge_delete_entities",
       "forge_focus_task_run",
       "forge_get_agent_onboarding",
+      "forge_get_calendar_overview",
       "forge_get_current_work",
       "forge_get_operator_context",
       "forge_get_operator_overview",
@@ -231,10 +235,12 @@ describe("forge openclaw plugin", () => {
       "forge_heartbeat_task_run",
       "forge_log_work",
       "forge_post_insight",
+      "forge_recommend_task_timeboxes",
       "forge_release_task_run",
       "forge_restore_entities",
       "forge_search_entities",
       "forge_start_task_run",
+      "forge_sync_calendar_connection",
       "forge_update_entities"
     ]);
 

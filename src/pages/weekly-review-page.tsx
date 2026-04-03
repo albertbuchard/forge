@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Bar, BarChart, ResponsiveContainer, XAxis, YAxis } from "recharts";
 import { FlagshipSignalDeck } from "@/components/experience/flagship-signal-deck";
 import { SurfaceSkeleton } from "@/components/experience/surface-skeleton";
@@ -7,14 +7,27 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { ErrorState } from "@/components/ui/page-state";
-import { getWeeklyReview } from "@/lib/api";
+import { finalizeWeeklyReview, getWeeklyReview } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
 
 export function WeeklyReviewPage() {
   const { t } = useI18n();
+  const queryClient = useQueryClient();
   const reviewQuery = useQuery({
     queryKey: ["forge-weekly-review"],
     queryFn: getWeeklyReview
+  });
+  const finalizeMutation = useMutation({
+    mutationFn: finalizeWeeklyReview,
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["forge-weekly-review"] }),
+        queryClient.invalidateQueries({ queryKey: ["forge-xp-metrics"] }),
+        queryClient.invalidateQueries({ queryKey: ["forge-reward-ledger"] }),
+        queryClient.invalidateQueries({ queryKey: ["forge-snapshot"] }),
+        queryClient.invalidateQueries({ queryKey: ["activity-archive"] })
+      ]);
+    }
   });
   const review = reviewQuery.data?.review;
 
@@ -140,7 +153,22 @@ export function WeeklyReviewPage() {
               <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/40">{t("common.weeklyReview.completionBonus")}</div>
               <div className="mt-2 text-3xl text-[var(--primary)]">+{review.reward.rewardXp} XP</div>
             </div>
-            <Button className="mt-4 w-full">{t("common.weeklyReview.finalize")}</Button>
+            <Button
+              className="mt-4 w-full"
+              disabled={review.completion.finalized}
+              pending={finalizeMutation.isPending}
+              pendingLabel={t("common.weeklyReview.finalizePending")}
+              onClick={async () => {
+                await finalizeMutation.mutateAsync();
+              }}
+            >
+              {review.completion.finalized ? t("common.weeklyReview.finalized") : t("common.weeklyReview.finalize")}
+            </Button>
+            <div className="mt-3 text-sm leading-6 text-white/58">
+              {review.completion.finalized
+                ? `${t("common.weeklyReview.finalizedDetail")} ${review.completion.finalizedBy ? `By ${review.completion.finalizedBy}. ` : ""}${review.completion.finalizedAt ? new Date(review.completion.finalizedAt).toLocaleString() : ""}`.trim()
+                : review.reward.summary}
+            </div>
           </Card>
         </div>
       </section>

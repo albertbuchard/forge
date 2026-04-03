@@ -1,6 +1,7 @@
 import { Navigate, Route, Routes } from "react-router-dom";
 import { AppShell } from "@/components/shell/app-shell";
 import { ActivityPage } from "@/pages/activity-page";
+import { CalendarPage } from "@/pages/calendar-page";
 import { GoalDetailPage } from "@/pages/goal-detail-page";
 import { GoalsPage } from "@/pages/goals-page";
 import { HabitsPage } from "@/pages/habits-page";
@@ -23,6 +24,7 @@ import { PsycheValuesPage } from "@/pages/psyche-values-page";
 import { SettingsPage } from "@/pages/settings-page";
 import { SettingsAgentsPage } from "@/pages/settings-agents-page";
 import { SettingsBinPage } from "@/pages/settings-bin-page";
+import { SettingsCalendarPage } from "@/pages/settings-calendar-page";
 import { SettingsRewardsPage } from "@/pages/settings-rewards-page";
 import { TaskDetailPage } from "@/pages/task-detail-page";
 import { TodayPage } from "@/pages/today-page";
@@ -40,6 +42,7 @@ export function App() {
         <Route path="projects" element={<ProjectsPage />} />
         <Route path="projects/:projectId" element={<ProjectDetailPage />} />
         <Route path="campaigns" element={<Navigate to="/projects" replace />} />
+        <Route path="calendar" element={<CalendarPage />} />
         <Route path="psyche" element={<PsychePage />} />
         <Route path="psyche/values" element={<PsycheValuesPage />} />
         <Route path="psyche/patterns" element={<PsychePatternsPage />} />
@@ -57,6 +60,7 @@ export function App() {
         <Route path="insights" element={<InsightsPage />} />
         <Route path="review/weekly" element={<WeeklyReviewPage />} />
         <Route path="settings" element={<SettingsPage />} />
+        <Route path="settings/calendar" element={<SettingsCalendarPage />} />
         <Route path="settings/agents" element={<SettingsAgentsPage />} />
         <Route path="settings/rewards" element={<SettingsRewardsPage />} />
         <Route path="settings/bin" element={<SettingsBinPage />} />

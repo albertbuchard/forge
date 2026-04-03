@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
@@ -6,8 +6,10 @@ import { GoalDetailPage } from "@/pages/goal-detail-page";
 import { GoalsPage } from "@/pages/goals-page";
 import { KanbanPage } from "@/pages/kanban-page";
 import { OverviewPage } from "@/pages/overview-page";
+import { ProjectDetailPage } from "@/pages/project-detail-page";
+import { ProjectsPage } from "@/pages/projects-page";
 import { TodayPage } from "@/pages/today-page";
-import type { ForgeSnapshot } from "@/lib/types";
+import type { CalendarSchedulingRules, ForgeSnapshot } from "@/lib/types";
 
 const { useForgeShellMock, useCommandCenterStoreMock, useQueryMock } = vi.hoisted(() => ({
   useForgeShellMock: vi.fn(),
@@ -65,10 +67,35 @@ vi.mock("@/components/project-dialog", () => ({
   ProjectDialog: () => null
 }));
 
+vi.mock("@/components/task-dialog", () => ({
+  TaskDialog: () => null
+}));
+
+vi.mock("@/components/work-adjustment-dialog", () => ({
+  WorkAdjustmentDialog: () => null
+}));
+
+vi.mock("@/components/notes/entity-notes-surface", () => ({
+  EntityNotesSurface: () => null
+}));
+
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
 });
+
+const EMPTY_RULES: CalendarSchedulingRules = {
+  allowWorkBlockKinds: [],
+  blockWorkBlockKinds: [],
+  allowCalendarIds: [],
+  blockCalendarIds: [],
+  allowEventTypes: [],
+  blockEventTypes: [],
+  allowEventKeywords: [],
+  blockEventKeywords: [],
+  allowAvailability: [],
+  blockAvailability: []
+};
 
 function createSnapshot(overrides: Partial<ForgeSnapshot> = {}): ForgeSnapshot {
   return {
@@ -277,10 +304,326 @@ describe("core route states", () => {
       snapshot: createSnapshot(),
       patchTaskStatus: vi.fn()
     });
+    useQueryMock.mockReturnValue({
+      data: {
+        calendar: {
+          generatedAt: "2026-04-03T08:00:00.000Z",
+          providers: [],
+          connections: [],
+          calendars: [],
+          events: [],
+          workBlockTemplates: [],
+          workBlockInstances: [],
+          timeboxes: []
+        }
+      },
+      isLoading: false,
+      isError: false,
+      error: null,
+      refetch: vi.fn()
+    });
 
     renderWithProviders(<TodayPage />);
 
     expect(screen.getByText("No daily runway yet")).toBeInTheDocument();
     expect(screen.getByText("Open life goals")).toBeInTheDocument();
+  });
+
+  it("shows a compact today calendar card when the day has events", async () => {
+    useForgeShellMock.mockReturnValue({
+      snapshot: createSnapshot(),
+      patchTaskStatus: vi.fn()
+    });
+    useQueryMock.mockReturnValue({
+      data: {
+        calendar: {
+          generatedAt: "2026-03-24T08:00:00.000Z",
+          providers: [],
+          connections: [],
+          calendars: [],
+          events: [
+            {
+              id: "event_today",
+              connectionId: null,
+              calendarId: null,
+              remoteId: null,
+              ownership: "forge",
+              originType: "native",
+              status: "confirmed",
+              title: "Creative sync",
+              description: "Sharpen the brief before writing.",
+              location: "",
+              startAt: "2026-04-03T09:00:00.000Z",
+              endAt: "2026-04-03T10:00:00.000Z",
+              timezone: "UTC",
+              isAllDay: false,
+              availability: "busy",
+              eventType: "focus",
+              categories: [],
+              sourceMappings: [],
+              links: [],
+              remoteUpdatedAt: null,
+              deletedAt: null,
+              createdAt: "2026-04-03T08:00:00.000Z",
+              updatedAt: "2026-04-03T08:00:00.000Z"
+            }
+          ],
+          workBlockTemplates: [],
+          workBlockInstances: [],
+          timeboxes: []
+        }
+      },
+      isLoading: false,
+      isError: false,
+      error: null,
+      refetch: vi.fn()
+    });
+
+    renderWithProviders(<TodayPage />);
+
+    expect(screen.getByText("Today's calendar")).toBeInTheDocument();
+    expect(screen.getByText("Creative sync")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Open calendar/i })).toHaveAttribute("href", "/calendar");
+  });
+
+  it("defaults the projects page to active projects and supports tokenized goal search", async () => {
+    const base = createSnapshot();
+    const tag = {
+      id: "tag_execution",
+      name: "Execution",
+      kind: "execution" as const,
+      color: "#5577cc",
+      description: "Execution tag"
+    };
+    const goal = {
+      id: "goal_health",
+      title: "Deep Health Goal",
+      description: "A long-term body goal.",
+      horizon: "year" as const,
+      status: "active" as const,
+      targetPoints: 500,
+      themeColor: "#5577cc",
+      createdAt: "2026-03-24T08:00:00.000Z",
+      updatedAt: "2026-03-24T08:00:00.000Z",
+      tagIds: [tag.id]
+    };
+    const activeProject = {
+      id: "project_active",
+      goalId: goal.id,
+      goalTitle: goal.title,
+      title: "Body Rebuild Sprint",
+      description: "Active work for health.",
+      status: "active" as const,
+      targetPoints: 180,
+      themeColor: "#5577cc",
+      createdAt: "2026-03-24T08:00:00.000Z",
+      updatedAt: "2026-03-24T08:00:00.000Z",
+      schedulingRules: EMPTY_RULES,
+      activeTaskCount: 1,
+      completedTaskCount: 0,
+      totalTasks: 1,
+      earnedPoints: 0,
+      progress: 0,
+      nextTaskId: "task_health",
+      nextTaskTitle: "Protect the gym block",
+      momentumLabel: "Building momentum",
+      time: {
+        totalTrackedSeconds: 0,
+        totalCreditedSeconds: 0,
+        liveTrackedSeconds: 0,
+        liveCreditedSeconds: 0,
+        manualAdjustedSeconds: 0,
+        activeRunCount: 0,
+        hasCurrentRun: false,
+        currentRunId: null
+      }
+    };
+    const pausedProject = {
+      ...activeProject,
+      id: "project_paused",
+      title: "Paused Writing System",
+      description: "Suspended work for writing.",
+      status: "paused" as const,
+      goalId: "goal_writing",
+      goalTitle: "Creative Work Goal",
+      nextTaskId: null,
+      nextTaskTitle: null
+    };
+    const snapshot = createSnapshot({
+      tags: [tag],
+      tasks: [
+        {
+          id: "task_health",
+          title: "Protect the gym block",
+          description: "Hold the time window.",
+          status: "focus",
+          priority: "medium",
+          owner: "Aurel",
+          goalId: goal.id,
+          projectId: activeProject.id,
+          dueDate: null,
+          effort: "deep",
+          energy: "steady",
+          points: 25,
+          plannedDurationSeconds: null,
+          schedulingRules: null,
+          sortOrder: 0,
+          completedAt: null,
+          createdAt: "2026-03-24T08:00:00.000Z",
+          updatedAt: "2026-03-24T08:00:00.000Z",
+          tagIds: [tag.id],
+          time: activeProject.time
+        }
+      ],
+      dashboard: {
+        ...base.dashboard,
+        goals: [
+          {
+            ...goal,
+            progress: 0,
+            totalTasks: 1,
+            completedTasks: 0,
+            earnedPoints: 0,
+            momentumLabel: "Building pace",
+            tags: [tag]
+          },
+          {
+            ...goal,
+            id: "goal_writing",
+            title: "Creative Work Goal",
+            description: "Writing direction.",
+            tagIds: [],
+            progress: 0,
+            totalTasks: 0,
+            completedTasks: 0,
+            earnedPoints: 0,
+            momentumLabel: "Needs ignition",
+            tags: []
+          }
+        ],
+        projects: [activeProject, pausedProject]
+      }
+    });
+
+    useForgeShellMock.mockReturnValue({
+      snapshot,
+      patchProject: vi.fn()
+    });
+
+    renderWithProviders(<ProjectsPage />);
+
+    expect(screen.getByText("Body Rebuild Sprint")).toBeInTheDocument();
+    expect(screen.queryByText("Paused Writing System")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /Suspended/i }));
+    expect(screen.getByText("Paused Writing System")).toBeInTheDocument();
+    expect(screen.queryByText("Body Rebuild Sprint")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /Active/i }));
+    fireEvent.change(screen.getByPlaceholderText("Type a project name, a goal, a task, or a tag"), {
+      target: { value: "health" }
+    });
+    fireEvent.click(screen.getByRole("button", { name: /Deep Health Goal/i }));
+    expect(screen.getAllByText("Deep Health Goal").length).toBeGreaterThan(1);
+    fireEvent.change(screen.getByPlaceholderText("Type a project name, a goal, a task, or a tag"), {
+      target: { value: "rebuild" }
+    });
+    expect(screen.getByText("Body Rebuild Sprint")).toBeInTheDocument();
+  });
+
+  it("shows restart and delete actions for finished projects on the detail page", async () => {
+    const base = createSnapshot();
+    const goal = {
+      id: "goal_finished",
+      title: "Ship the finished project",
+      description: "Finished project coverage.",
+      horizon: "quarter" as const,
+      status: "active" as const,
+      targetPoints: 300,
+      themeColor: "#5577cc",
+      createdAt: "2026-03-24T08:00:00.000Z",
+      updatedAt: "2026-03-24T08:00:00.000Z",
+      tagIds: []
+    };
+    const project = {
+      id: "project_finished",
+      goalId: goal.id,
+      goalTitle: goal.title,
+      title: "Finished Project",
+      description: "A project that is already done.",
+      status: "completed" as const,
+      targetPoints: 180,
+      themeColor: "#5577cc",
+      schedulingRules: EMPTY_RULES,
+      createdAt: "2026-03-24T08:00:00.000Z",
+      updatedAt: "2026-03-24T08:00:00.000Z",
+      activeTaskCount: 0,
+      completedTaskCount: 2,
+      totalTasks: 2,
+      earnedPoints: 50,
+      progress: 100,
+      nextTaskId: null,
+      nextTaskTitle: null,
+      momentumLabel: "Closing strong",
+      time: {
+        totalTrackedSeconds: 0,
+        totalCreditedSeconds: 0,
+        liveTrackedSeconds: 0,
+        liveCreditedSeconds: 0,
+        manualAdjustedSeconds: 0,
+        activeRunCount: 0,
+        hasCurrentRun: false,
+        currentRunId: null
+      }
+    };
+
+    useForgeShellMock.mockReturnValue({
+      snapshot: createSnapshot({
+        ...base,
+        goals: [goal],
+        dashboard: {
+          ...base.dashboard,
+          projects: [project],
+          goals: [
+            {
+              ...goal,
+              progress: 100,
+              totalTasks: 2,
+              completedTasks: 2,
+              earnedPoints: 50,
+              momentumLabel: "Strong momentum",
+              tags: []
+            }
+          ]
+        }
+      }),
+      createTask: vi.fn(),
+      patchTaskStatus: vi.fn(),
+      patchProject: vi.fn()
+    });
+    useQueryMock.mockReturnValue({
+      data: {
+        project,
+        goal,
+        tasks: [],
+        activity: [],
+        notesSummaryByEntity: {}
+      },
+      isError: false,
+      error: null,
+      refetch: vi.fn()
+    });
+
+    renderWithProviders(
+      <Routes>
+        <Route path="/projects/:projectId" element={<ProjectDetailPage />} />
+      </Routes>,
+      "/projects/project_finished"
+    );
+
+    expect(screen.getByRole("button", { name: "Restart" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Delete" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Finish" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Suspend" })).not.toBeInTheDocument();
   });
 });

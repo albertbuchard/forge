@@ -11,7 +11,9 @@ import {
   Target
 } from "lucide-react";
 import { SurfaceSkeleton } from "@/components/experience/surface-skeleton";
+import { SchedulingRulesEditor } from "@/components/calendar/scheduling-rules-editor";
 import { SheetScaffold } from "@/components/experience/sheet-scaffold";
+import { NoteMarkdown } from "@/components/notes/note-markdown";
 import { EntityNotesSurface } from "@/components/notes/entity-notes-surface";
 import { TaskDialog } from "@/components/task-dialog";
 import { WorkAdjustmentDialog } from "@/components/work-adjustment-dialog";
@@ -23,8 +25,9 @@ import { EntityBadge } from "@/components/ui/entity-badge";
 import { EntityName } from "@/components/ui/entity-name";
 import { InfoTooltip } from "@/components/ui/info-tooltip";
 import { ErrorState } from "@/components/ui/page-state";
-import { completeTaskRun, createWorkAdjustment, getTaskContext, patchTask, releaseTaskRun, removeActivityLog, uncompleteTask } from "@/lib/api";
+import { completeTaskRun, createWorkAdjustment, getCalendarOverview, getTaskContext, patchTask, releaseTaskRun, removeActivityLog, uncompleteTask } from "@/lib/api";
 import { getReadableActivityDescription, getReadableActivityTitle } from "@/lib/activity-copy";
+import { evaluateSchedulingRulesNow, getTaskSchedulingRules } from "@/lib/calendar-rules";
 import { getActivityEventCtaLabel, getActivityEventHref } from "@/lib/entity-links";
 import { useI18n } from "@/lib/i18n";
 import { useForgeShell } from "@/components/shell/app-shell";
@@ -61,6 +64,17 @@ export function TaskDetailPage() {
   const [workAdjustmentOpen, setWorkAdjustmentOpen] = useState(false);
   const [statusSheetOpen, setStatusSheetOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(() => (typeof window !== "undefined" ? window.matchMedia("(max-width: 1023px)").matches : false));
+  const [calendarWindow] = useState(() => {
+    const now = new Date();
+    const from = new Date(now);
+    from.setHours(0, 0, 0, 0);
+    const to = new Date(now);
+    to.setHours(23, 59, 59, 999);
+    return {
+      from: from.toISOString(),
+      to: to.toISOString()
+    };
+  });
 
   useEffect(() => {
     if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
@@ -80,6 +94,11 @@ export function TaskDetailPage() {
   const taskContextQuery = useQuery({
     queryKey: ["task-context", params.taskId],
     queryFn: () => getTaskContext(params.taskId!),
+    enabled: Boolean(params.taskId)
+  });
+  const calendarOverviewQuery = useQuery({
+    queryKey: ["task-calendar-overview", params.taskId, calendarWindow.from, calendarWindow.to],
+    queryFn: () => getCalendarOverview(calendarWindow),
     enabled: Boolean(params.taskId)
   });
 
@@ -137,6 +156,14 @@ export function TaskDetailPage() {
   const currentRun = payload.activeTaskRun ?? null;
   const currentStatus = STATUS_META.find((entry) => entry.status === payload.task.status) ?? STATUS_META[0];
   const availableStatuses = STATUS_META.filter((entry) => entry.status !== payload.task.status);
+  const effectiveSchedulingRules = getTaskSchedulingRules(
+    payload.task,
+    payload.project?.schedulingRules
+  );
+  const schedulingState = evaluateSchedulingRulesNow({
+    rules: effectiveSchedulingRules,
+    overview: calendarOverviewQuery.data?.calendar
+  });
 
   const describeRunStatus = (status: (typeof payload.taskRuns)[number]["status"]) => {
     switch (status) {
@@ -164,7 +191,16 @@ export function TaskDetailPage() {
         entityKind="task"
         title={<EntityName kind="task" label={payload.task.title} variant="heading" size="lg" lines={3} className="max-w-full" labelClassName="[overflow-wrap:anywhere]" />}
         titleText={payload.task.title}
-        description={payload.task.description || "Edit the task, change its status, start work, and review its history from one page."}
+        description={
+          payload.task.description ? (
+            <NoteMarkdown
+              markdown={payload.task.description}
+              className="[&>p]:text-[13px] [&>p]:leading-6 [&>blockquote]:text-[13px] [&>ul]:text-[13px] [&>ol]:text-[13px]"
+            />
+          ) : (
+            "Edit the task, change its status, start work, and review its history from one page."
+          )
+        }
         badge={`${payload.task.points} xp`}
       />
 
@@ -175,9 +211,16 @@ export function TaskDetailPage() {
             <div className="mt-2">
               <EntityName kind="task" label={payload.task.title} variant="heading" size="xl" lines={3} className="max-w-full" labelClassName="[overflow-wrap:anywhere]" />
             </div>
-            <p className="mt-3 text-sm leading-6 text-white/60">
-              {payload.task.description || "This page shows the task itself, where it belongs, what state it is in, and what has happened on it so far."}
-            </p>
+            <div className="mt-3 text-sm leading-6 text-white/60">
+              {payload.task.description ? (
+                <NoteMarkdown
+                  markdown={payload.task.description}
+                  className="[&>p]:text-sm [&>p]:leading-6 [&>blockquote]:text-sm [&>ul]:text-sm [&>ol]:text-sm"
+                />
+              ) : (
+                "This page shows the task itself, where it belongs, what state it is in, and what has happened on it so far."
+              )}
+            </div>
           </div>
           <div className="flex shrink-0 flex-wrap items-center gap-2">
             <Button
@@ -351,6 +394,83 @@ export function TaskDetailPage() {
             {currentRun
               ? `${currentRun.timerMode === "planned" ? "Planned" : "Unlimited"} timer active with ${Math.floor(currentRun.creditedSeconds / 60)} credited minutes.`
               : "No timer is running on this task right now."}
+          </div>
+        </div>
+
+        <div className="mt-5 grid gap-4 xl:grid-cols-[minmax(0,1fr)_20rem]">
+          <SchedulingRulesEditor
+            title="Task scheduling"
+            subtitle="Set when this task can run. If you leave it empty, the project defaults stay in force."
+            initialRules={payload.task.schedulingRules}
+            initialPlannedDurationSeconds={payload.task.plannedDurationSeconds}
+            allowPlannedDuration
+            saveLabel="Save task scheduling"
+            onSave={async ({ schedulingRules, plannedDurationSeconds }) => {
+              await updateTaskMutation.mutateAsync({
+                taskId: payload.task.id,
+                patch: {
+                  schedulingRules,
+                  plannedDurationSeconds
+                }
+              });
+              await queryClient.invalidateQueries({
+                queryKey: ["task-calendar-overview", params.taskId]
+              });
+            }}
+          />
+
+          <div className="rounded-[20px] bg-white/[0.04] p-4">
+            <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">Calendar status</div>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <Badge
+                className={
+                  schedulingState.tone === "blocked"
+                    ? "bg-rose-500/14 text-rose-100"
+                    : schedulingState.tone === "waiting"
+                      ? "bg-amber-500/14 text-amber-100"
+                      : "bg-emerald-500/14 text-emerald-100"
+                }
+              >
+                {schedulingState.label}
+              </Badge>
+              <Badge className="bg-white/[0.08] text-white/72">
+                {payload.task.schedulingRules ? "Task override" : "Using project defaults"}
+              </Badge>
+              {payload.task.plannedDurationSeconds ? (
+                <Badge className="bg-white/[0.08] text-white/72">
+                  {Math.round(payload.task.plannedDurationSeconds / 60)} min target
+                </Badge>
+              ) : null}
+            </div>
+            <p className="mt-3 text-sm leading-6 text-white/58">
+              Forge checks these rules before a live run starts. If the current calendar context is blocked, you can still override with an explicit reason.
+            </p>
+            {schedulingState.context.length > 0 ? (
+              <div className="mt-4">
+                <div className="text-[11px] uppercase tracking-[0.16em] text-white/40">Current context</div>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {schedulingState.context.map((entry) => (
+                    <Badge key={entry} className="bg-white/[0.08] text-white/72">
+                      {entry}
+                    </Badge>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+            {schedulingState.conflicts.length > 0 ? (
+              <div className="mt-4 grid gap-2">
+                {schedulingState.conflicts.map((entry) => (
+                  <div key={entry} className="rounded-[16px] bg-rose-500/10 px-3 py-2 text-sm text-rose-100">
+                    {entry}
+                  </div>
+                ))}
+              </div>
+            ) : null}
+            <div className="mt-4">
+              <Link to="/calendar">
+                <Button variant="secondary">Open calendar workspace</Button>
+              </Link>
+            </div>
           </div>
         </div>
 

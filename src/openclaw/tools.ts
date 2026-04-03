@@ -243,7 +243,7 @@ export function registerForgePluginTools(api: ForgePluginToolApi, config: ForgeP
   registerWriteTool(api, config, {
     name: "forge_create_entities",
     label: "Create Forge Entities",
-    description: "Create one or more Forge entities through the ordered batch workflow. Pass `operations` as an array. Each operation must include `entityType` and full `data`. Batch several creates together in one call when possible.",
+    description: "Create one or more Forge entities through the ordered batch workflow. Pass `operations` as an array. Each operation must include `entityType` and full `data`. This is the preferred create path for planning, Psyche, and calendar records including calendar_event, work_block_template, and task_timebox.",
     parameters: Type.Object({
       atomic: Type.Optional(Type.Boolean()),
       operations: Type.Array(
@@ -261,7 +261,7 @@ export function registerForgePluginTools(api: ForgePluginToolApi, config: ForgeP
   registerWriteTool(api, config, {
     name: "forge_update_entities",
     label: "Update Forge Entities",
-    description: "Update one or more Forge entities through the ordered batch workflow. Pass `operations` as an array. Each operation must include `entityType`, `id`, and `patch`.",
+    description: "Update one or more Forge entities through the ordered batch workflow. Pass `operations` as an array. Each operation must include `entityType`, `id`, and `patch`. This is the preferred update path for calendar_event, work_block_template, and task_timebox too; Forge runs calendar sync side effects downstream.",
     parameters: Type.Object({
       atomic: Type.Optional(Type.Boolean()),
       operations: Type.Array(
@@ -280,7 +280,7 @@ export function registerForgePluginTools(api: ForgePluginToolApi, config: ForgeP
   registerWriteTool(api, config, {
     name: "forge_delete_entities",
     label: "Delete Forge Entities",
-    description: "Delete Forge entities in one batch request. Pass `operations` as an array with `entityType` and `id`. Delete defaults to soft mode unless hard is requested explicitly.",
+    description: "Delete Forge entities in one batch request. Pass `operations` as an array with `entityType` and `id`. Delete defaults to soft mode unless hard is requested explicitly. Calendar-domain deletes still run their downstream removal logic, including remote calendar projection cleanup for calendar_event.",
     parameters: Type.Object({
       atomic: Type.Optional(Type.Boolean()),
       operations: Type.Array(
@@ -413,6 +413,7 @@ export function registerForgePluginTools(api: ForgePluginToolApi, config: ForgeP
       actor: Type.String({ minLength: 1 }),
       timerMode: Type.Optional(Type.Union([Type.Literal("planned"), Type.Literal("unlimited")])),
       plannedDurationSeconds: Type.Optional(Type.Union([Type.Integer({ minimum: 60, maximum: 86400 }), Type.Null()])),
+      overrideReason: optionalNullableString(),
       isCurrent: Type.Optional(Type.Boolean()),
       leaseTtlSeconds: Type.Optional(Type.Integer({ minimum: 1, maximum: 14400 })),
       note: Type.Optional(Type.String())
@@ -427,6 +428,7 @@ export function registerForgePluginTools(api: ForgePluginToolApi, config: ForgeP
             actor: typed.actor,
             timerMode: typed.timerMode,
             plannedDurationSeconds: typed.plannedDurationSeconds,
+            overrideReason: typed.overrideReason,
             isCurrent: typed.isCurrent,
             leaseTtlSeconds: typed.leaseTtlSeconds,
             note: typed.note
@@ -530,5 +532,136 @@ export function registerForgePluginTools(api: ForgePluginToolApi, config: ForgeP
         })
       );
     }
+  });
+
+  registerReadTool(api, config, {
+    name: "forge_get_calendar_overview",
+    label: "Forge Calendar Overview",
+    description: "Read the calendar domain in one response: provider metadata, connected calendars, Forge-native events, mirrored events, recurring work blocks, and task timeboxes.",
+    parameters: Type.Object({
+      from: optionalString(),
+      to: optionalString()
+    }),
+    path: (params) => {
+      const search = new URLSearchParams();
+      if (typeof params.from === "string" && params.from.trim().length > 0) {
+        search.set("from", params.from);
+      }
+      if (typeof params.to === "string" && params.to.trim().length > 0) {
+        search.set("to", params.to);
+      }
+      const suffix = search.size > 0 ? `?${search.toString()}` : "";
+      return `/api/v1/calendar/overview${suffix}`;
+    }
+  });
+
+  registerWriteTool(api, config, {
+    name: "forge_connect_calendar_provider",
+    label: "Forge Connect Calendar Provider",
+    description:
+      "Create a Google, Apple, Exchange Online, or custom CalDAV calendar connection. Use this only for explicit provider-connection requests after discovery choices are known.",
+    parameters: Type.Object({
+      provider: Type.Union([
+        Type.Literal("google"),
+        Type.Literal("apple"),
+        Type.Literal("caldav"),
+        Type.Literal("microsoft")
+      ]),
+      label: Type.String({ minLength: 1 }),
+      username: optionalString(),
+      clientId: optionalString(),
+      clientSecret: optionalString(),
+      refreshToken: optionalString(),
+      password: optionalString(),
+      serverUrl: optionalString(),
+      authSessionId: optionalString(),
+      selectedCalendarUrls: Type.Optional(Type.Array(Type.String({ minLength: 1 }))),
+      forgeCalendarUrl: optionalString(),
+      createForgeCalendar: Type.Optional(Type.Boolean())
+    }),
+    method: "POST",
+    path: "/api/v1/calendar/connections"
+  });
+
+  api.registerTool({
+    name: "forge_sync_calendar_connection",
+    label: "Forge Sync Calendar Connection",
+    description: "Pull and push changes for one connected calendar provider.",
+    parameters: Type.Object({
+      connectionId: Type.String({ minLength: 1 })
+    }),
+    async execute(_toolCallId, params) {
+      const typed = params as Record<string, unknown>;
+      return jsonResult(
+        await runWrite(config, {
+          method: "POST",
+          path: `/api/v1/calendar/connections/${typed.connectionId as string}/sync`,
+          body: {}
+        })
+      );
+    }
+  });
+
+  registerWriteTool(api, config, {
+    name: "forge_create_work_block_template",
+    label: "Forge Create Work Block",
+    description: "Create a recurring work-block template such as Main Activity, Secondary Activity, Third Activity, Rest, Holiday, or Custom. This is a planning helper; agents can also use forge_create_entities with entityType work_block_template.",
+    parameters: Type.Object({
+      title: Type.String({ minLength: 1 }),
+      kind: Type.Union([
+        Type.Literal("main_activity"),
+        Type.Literal("secondary_activity"),
+        Type.Literal("third_activity"),
+        Type.Literal("rest"),
+        Type.Literal("holiday"),
+        Type.Literal("custom")
+      ]),
+      color: Type.String({ minLength: 1 }),
+      timezone: Type.String({ minLength: 1 }),
+      weekDays: Type.Array(Type.Integer({ minimum: 0, maximum: 6 })),
+      startMinute: Type.Integer({ minimum: 0, maximum: 1440 }),
+      endMinute: Type.Integer({ minimum: 0, maximum: 1440 }),
+      startsOn: Type.Optional(Type.Union([Type.String({ minLength: 1 }), Type.Null()])),
+      endsOn: Type.Optional(Type.Union([Type.String({ minLength: 1 }), Type.Null()])),
+      blockingState: Type.Union([Type.Literal("allowed"), Type.Literal("blocked")])
+    }),
+    method: "POST",
+    path: "/api/v1/calendar/work-block-templates"
+  });
+
+  registerWriteTool(api, config, {
+    name: "forge_recommend_task_timeboxes",
+    label: "Forge Recommend Task Timeboxes",
+    description: "Suggest future task timeboxes that fit the current calendar rules and current schedule.",
+    parameters: Type.Object({
+      taskId: Type.String({ minLength: 1 }),
+      from: optionalString(),
+      to: optionalString(),
+      limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 24 }))
+    }),
+    method: "POST",
+    path: "/api/v1/calendar/timeboxes/recommend"
+  });
+
+  registerWriteTool(api, config, {
+    name: "forge_create_task_timebox",
+    label: "Forge Create Task Timebox",
+    description: "Create a planned task timebox directly in Forge's calendar domain. This is a planning helper; agents can also use forge_create_entities with entityType task_timebox.",
+    parameters: Type.Object({
+      taskId: Type.String({ minLength: 1 }),
+      projectId: optionalNullableString(),
+      title: Type.String({ minLength: 1 }),
+      startsAt: Type.String({ minLength: 1 }),
+      endsAt: Type.String({ minLength: 1 }),
+      source: Type.Optional(
+        Type.Union([
+          Type.Literal("manual"),
+          Type.Literal("suggested"),
+          Type.Literal("live_run")
+        ])
+      )
+    }),
+    method: "POST",
+    path: "/api/v1/calendar/timeboxes"
   });
 }

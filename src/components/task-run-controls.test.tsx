@@ -16,6 +16,8 @@ const task: Task = {
   effort: "deep",
   energy: "high",
   points: 80,
+  plannedDurationSeconds: null,
+  schedulingRules: null,
   sortOrder: 1,
   completedAt: null,
   createdAt: "2026-03-22T09:00:00.000Z",
@@ -54,6 +56,7 @@ const activeTaskRun: TaskRun = {
   completedAt: null,
   releasedAt: null,
   timedOutAt: null,
+  overrideReason: null,
   updatedAt: "2026-03-22T10:10:00.000Z"
 };
 

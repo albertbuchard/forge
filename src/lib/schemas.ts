@@ -2,14 +2,23 @@ import { z } from "zod";
 
 export const appLocaleSchema = z.enum(["en", "fr"]);
 
+export const inlineCreateNoteSchema = z.object({
+  contentMarkdown: z.string().trim().min(1, "Note content is required"),
+  author: z.string().trim()
+});
+
 export const goalMutationSchema = z.object({
   title: z.string().trim().min(1, "Title is required"),
   description: z.string().trim(),
   horizon: z.enum(["quarter", "year", "lifetime"]),
   status: z.enum(["active", "paused", "completed"]),
   targetPoints: z.coerce.number().int().min(25).max(10000),
-  themeColor: z.string().trim().regex(/^#[0-9a-fA-F]{6}$/, "Theme color must be a valid hex value"),
-  tagIds: z.array(z.string())
+  themeColor: z
+    .string()
+    .trim()
+    .regex(/^#[0-9a-fA-F]{6}$/, "Theme color must be a valid hex value"),
+  tagIds: z.array(z.string()),
+  notes: z.array(inlineCreateNoteSchema)
 });
 
 export const projectMutationSchema = z.object({
@@ -18,7 +27,11 @@ export const projectMutationSchema = z.object({
   description: z.string().trim(),
   status: z.enum(["active", "paused", "completed"]),
   targetPoints: z.coerce.number().int().min(25).max(10000),
-  themeColor: z.string().trim().regex(/^#[0-9a-fA-F]{6}$/, "Theme color must be a valid hex value")
+  themeColor: z
+    .string()
+    .trim()
+    .regex(/^#[0-9a-fA-F]{6}$/, "Theme color must be a valid hex value"),
+  notes: z.array(inlineCreateNoteSchema)
 });
 
 export const settingsMutationSchema = z.object({
@@ -78,7 +91,8 @@ export const quickTaskSchema = z.object({
   energy: z.enum(["low", "steady", "high"]),
   dueDate: z.string().trim(),
   points: z.coerce.number().int().min(5).max(500),
-  tagIds: z.array(z.string())
+  tagIds: z.array(z.string()),
+  notes: z.array(inlineCreateNoteSchema)
 });
 
 export const habitMutationSchema = z
@@ -116,14 +130,20 @@ export const habitMutationSchema = z
 export const workAdjustmentMutationSchema = z.object({
   entityType: z.enum(["task", "project"]),
   entityId: z.string().trim().min(1, "A target is required"),
-  deltaMinutes: z.coerce.number().int().refine((value) => value !== 0, "Minutes must not be zero"),
+  deltaMinutes: z.coerce
+    .number()
+    .int()
+    .refine((value) => value !== 0, "Minutes must not be zero"),
   note: z.string().trim()
 });
 
 export const tagMutationSchema = z.object({
   name: z.string().trim().min(1, "Name is required"),
   kind: z.enum(["value", "category", "execution"]),
-  color: z.string().trim().regex(/^#[0-9a-fA-F]{6}$/, "Color must be a valid hex value"),
+  color: z
+    .string()
+    .trim()
+    .regex(/^#[0-9a-fA-F]{6}$/, "Color must be a valid hex value"),
   description: z.string().trim()
 });
 
@@ -133,6 +153,9 @@ export type SettingsMutationInput = z.infer<typeof settingsMutationSchema>;
 export type CreateAgentTokenInput = z.infer<typeof createAgentTokenSchema>;
 export type CreateInsightInput = z.infer<typeof createInsightSchema>;
 export type QuickTaskInput = z.infer<typeof quickTaskSchema>;
+export type InlineCreateNoteInput = z.infer<typeof inlineCreateNoteSchema>;
 export type HabitMutationInput = z.infer<typeof habitMutationSchema>;
-export type WorkAdjustmentMutationInput = z.infer<typeof workAdjustmentMutationSchema>;
+export type WorkAdjustmentMutationInput = z.infer<
+  typeof workAdjustmentMutationSchema
+>;
 export type TagMutationInput = z.infer<typeof tagMutationSchema>;

@@ -36,7 +36,9 @@ with an obvious timer surface, not hidden run controls. Fourth, it must help the
 feel progress through XP, momentum, streaks, quests, and other tasteful reward loops.
 Fifth, it must support the Psyche module, where reflection on values, beliefs,
 behaviors, modes, patterns, and reports can inform action rather than living as an
-isolated notebook.
+isolated notebook. Sixth, it must make execution calendar-aware by syncing provider
+calendars, defining recurring work blocks, enforcing task and project eligibility
+rules, and planning real timeboxes before work begins.
 
 ## Product Concepts That Must Be Explained Clearly
 
@@ -51,7 +53,10 @@ levels of work.
 
 A project is a concrete ongoing body of work that serves one life goal. Projects are
 how a goal becomes actionable. A project should feel like a real initiative with its
-own progress, health, and active tasks.
+own progress, health, and active tasks. Projects also need a real lifecycle: active,
+suspended, finished, and deleted. In the live data model that lifecycle remains
+status-driven with the canonical API values `active`, `paused`, and `completed`, plus
+soft or hard delete through the normal delete flows.
 
 A task is a specific unit of action. Tasks live inside projects, can move through
 states such as backlog, focus, in progress, blocked, and done, and can be started as
@@ -70,6 +75,42 @@ A work adjustment is a signed retrospective minute correction attached to an exi
 task or project. It is not a hidden task run. It exists so the user or a trusted
 agent can truthfully add or remove tracked minutes after the fact, with the clamp and
 XP effects remaining explicit and auditable.
+
+A calendar connection links Forge to an external provider. In the current production
+implementation that means Google Calendar, Apple Calendar, Exchange Online through
+Microsoft Graph, or custom CalDAV.
+Apple setup starts from `https://caldav.icloud.com` and autodiscovers the principal,
+calendar home, and writable calendars instead of asking the user to paste hidden
+calendar collection URLs. Writable providers give Forge a dedicated Forge-owned
+calendar for publishing work blocks and task timeboxes. Exchange Online is currently
+read-only in Forge: it mirrors the selected Microsoft calendars into Forge but does
+not publish Forge-owned work blocks or timeboxes back to Microsoft. In the current
+self-hosted local runtime, Microsoft setup uses a guided MSAL public-client sign-in
+flow with PKCE, so the user does not paste a client secret or refresh token into the
+UI. The default calendar name for the dedicated write surface remains `Forge`, and
+provider credentials must be managed from the Settings area rather than from the
+execution calendar page.
+
+A work block is a compact recurring availability template such as Main Activity,
+Secondary Activity, Third Activity, Rest, Holiday, or a user-defined custom block.
+Work blocks can be marked as generally allowed or blocked, can optionally define
+`startsOn` and `endsOn` date bounds, repeat indefinitely when no end date is set, and
+must remain editable or removable from the calendar surface without exploding into one
+stored event row per day. Holiday blocks are the same work-block system, not a separate
+event type, and they exist so multi-day or open-ended time away can be represented as
+truthful blocked context.
+
+A task timebox is a planned or live calendar slot attached to a task. Timeboxes can be
+created manually, confirmed from recommendations, or created automatically from live
+task runs.
+
+A calendar event is now also a first-class Forge entity. Forge must be able to hold a
+native event even when no external provider is connected, then optionally project that
+event into Google Calendar, Apple Calendar, or another CalDAV provider later. Provider
+identities are therefore not the event itself. Forge keeps the canonical event record,
+keeps provider source mappings separately, and keeps event-to-entity links separately
+so calendar meaning can connect back to goals, projects, tasks, habits, notes, and
+other Forge records without depending on remote provider payloads.
 
 Rewards are the structured XP outcomes attached to meaningful behavior. Starting work,
 sustaining work, completing work, and preserving momentum should all create explainable
@@ -120,6 +161,18 @@ no work is active, the app chrome should clearly show that and offer a strong St
 work action. When work is active, the current task and the live timer should be easy to
 read at a glance, including in the compact collapsed header state.
 
+Calendar-aware execution is also part of the contract. Forge must support connected
+Google Calendar, Apple Calendar, and custom CalDAV providers, mirrored provider
+events, recurring half-day work blocks, editable date-bounded holiday or availability
+blocks, task and project scheduling rules, future task timeboxing, and live task-run
+to timebox synchronization. Blocked calendar context should prevent a normal task
+start, but the user or a trusted agent must still be able to proceed through an
+explicit audited override reason. The Calendar page should prioritize seeing the week
+clearly while also letting the user edit or delete visible work blocks in place, and
+Settings should own provider setup, setup documentation, and durable connection
+management. Calendar events must remain canonical inside Forge first, with provider
+sync acting as an adapter layer rather than the primary identity of the event.
+
 Responsive behavior is part of the product contract. Every web-facing surface must be
 designed for both desktop and mobile at the same time. A mobile screen is not allowed
 to be a broken or compressed version of desktop. If a surface contains dense data, the
@@ -133,7 +186,9 @@ create and update goals, projects, tasks, notes, tags, and Psyche records, contr
 task timers, post signed minute work adjustments on tasks and projects, and write
 structured insights. Notes must be linkable to one or many
 entities, batch-manageable, searchable, and creatable inline when a parent entity is
-created. These capabilities must match the real product. If the UI can do something
+created. The real product should also expose a first-class Notes workspace and render
+core entity descriptions as long-form Markdown where detail matters. These capabilities
+must match the real product. If the UI can do something
 important, the versioned API and the curated agent surface should expose it too unless
 there is a deliberate safety reason not to.
 
@@ -142,7 +197,10 @@ recoverable where appropriate, and visible in the product afterward. Forge shoul
 the user collaborate with agents without giving up provenance or control.
 The live onboarding contract must therefore expose exact tool input shapes, valid enum
 values, per-entity field guides, and relationship rules so an agent can use Forge
-without guessing or inventing fields.
+without guessing or inventing fields. That includes making project lifecycle guidance
+explicit: suspend, finish, and restart are status patches on `project.status`, delete
+is soft by default unless hard mode is explicitly requested, and finishing a project
+auto-completes linked unfinished tasks through the standard task-completion path.
 
 ## Technical Stack And Architecture
 

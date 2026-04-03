@@ -1,8 +1,11 @@
+import { useState } from "react";
 import { Link } from "react-router-dom";
 import { PageHero } from "@/components/shell/page-hero";
 import { EntityNoteCountLink } from "@/components/notes/entity-note-count-link";
 import { GoalStudio } from "@/components/goal-studio";
+import { ProjectCollectionFilters } from "@/components/projects/project-collection-filters";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { EntityBadge } from "@/components/ui/entity-badge";
 import { EntityName } from "@/components/ui/entity-name";
@@ -10,11 +13,25 @@ import { EmptyState } from "@/components/ui/page-state";
 import { ProgressMeter } from "@/components/ui/progress-meter";
 import { useForgeShell } from "@/components/shell/app-shell";
 import { getEntityNotesSummary } from "@/lib/note-helpers";
+import { buildProjectCollectionCounts, filterProjectsByCollectionStatus, type ProjectCollectionStatusFilter } from "@/lib/project-collections";
 
 export function GoalsPage() {
   const shell = useForgeShell();
+  const [projectFilter, setProjectFilter] = useState<ProjectCollectionStatusFilter>("active");
+  const [pendingRestartProjectId, setPendingRestartProjectId] = useState<string | null>(null);
   const hasGoals = shell.snapshot.dashboard.goals.length > 0;
-  const projectsByGoal = new Map(shell.snapshot.dashboard.goals.map((goal) => [goal.id, shell.snapshot.dashboard.projects.filter((project) => project.goalId === goal.id)]));
+  const projectCounts = buildProjectCollectionCounts(shell.snapshot.dashboard.projects);
+  const visibleProjects = filterProjectsByCollectionStatus(shell.snapshot.dashboard.projects, projectFilter);
+  const projectsByGoal = new Map(shell.snapshot.dashboard.goals.map((goal) => [goal.id, visibleProjects.filter((project) => project.goalId === goal.id)]));
+
+  const restartProject = async (projectId: string) => {
+    setPendingRestartProjectId(projectId);
+    try {
+      await shell.patchProject(projectId, { status: "active" });
+    } finally {
+      setPendingRestartProjectId(null);
+    }
+  };
 
   return (
     <div className="grid gap-5">
@@ -39,6 +56,14 @@ export function GoalsPage() {
         onCreate={shell.createGoal}
         onUpdate={shell.patchGoal}
       />
+
+      {hasGoals ? (
+        <ProjectCollectionFilters
+          value={projectFilter}
+          counts={projectCounts}
+          onChange={setProjectFilter}
+        />
+      ) : null}
 
       {!hasGoals ? (
         <EmptyState
@@ -101,7 +126,11 @@ export function GoalsPage() {
                         <div className="text-sm text-white/48">{linkedProjects.length}</div>
                       </div>
                       {linkedProjects.length === 0 ? (
-                        <div className="mt-4 text-sm leading-6 text-white/56">No live project is attached yet. Create one so this direction starts producing visible work.</div>
+                        <div className="mt-4 text-sm leading-6 text-white/56">
+                          {projectFilter === "active"
+                            ? "No active project is attached yet. Create one so this direction starts producing visible work."
+                            : "No projects in this lifecycle view are attached yet. Switch filters or restart one to bring it back into active motion."}
+                        </div>
                       ) : (
                         <div className="mt-4 grid gap-3">
                           {linkedProjects.slice(0, 3).map((project) => (
@@ -117,6 +146,23 @@ export function GoalsPage() {
                               <div className="mt-3 text-sm text-white/42">
                                 Next move: {project.nextTaskTitle ?? "Define the first attached task"}
                               </div>
+                              {projectFilter !== "active" && project.status !== "active" ? (
+                                <div className="mt-4 flex justify-end">
+                                  <Button
+                                    variant="secondary"
+                                    size="sm"
+                                    pending={pendingRestartProjectId === project.id}
+                                    pendingLabel="Restarting…"
+                                    onClick={(event) => {
+                                      event.preventDefault();
+                                      event.stopPropagation();
+                                      void restartProject(project.id);
+                                    }}
+                                  >
+                                    Restart
+                                  </Button>
+                                </div>
+                              ) : null}
                             </div>
                           ))}
                         </div>

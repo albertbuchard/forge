@@ -270,6 +270,12 @@ The curated tool contract is:
 - `forge_focus_task_run`
 - `forge_complete_task_run`
 - `forge_release_task_run`
+- `forge_get_calendar_overview`
+- `forge_connect_calendar_provider`
+- `forge_sync_calendar_connection`
+- `forge_create_work_block_template`
+- `forge_recommend_task_timeboxes`
+- `forge_create_task_timebox`
 - `forge_post_insight`
 
 Live work rule:
@@ -294,6 +300,9 @@ The high-level Forge mutation tools are array-first.
 `forge_update_entities`:
 - pass `operations` as an array
 - each operation must include `entityType`, `id`, and `patch`
+- project lifecycle is status-driven, so suspend with `status: "paused"`, finish with `status: "completed"`, and restart with `status: "active"`
+- finishing a project auto-completes linked unfinished tasks
+- task and project scheduling rules also stay on these generic patches: use `project.schedulingRules`, `task.schedulingRules`, and `task.plannedDurationSeconds`
 
 `forge_delete_entities`:
 - pass `operations` as an array with `entityType` and `id`
@@ -316,8 +325,18 @@ The high-level Forge mutation tools are array-first.
 
 `forge_start_task_run`:
 - required: `taskId`, `actor`
-- optional: `timerMode`, `plannedDurationSeconds`, `isCurrent`, `leaseTtlSeconds`, `note`
+- optional: `timerMode`, `plannedDurationSeconds`, `overrideReason`, `isCurrent`, `leaseTtlSeconds`, `note`
 - if `timerMode` is `planned`, `plannedDurationSeconds` is required
+- if current calendar rules block the task and the user still wants to continue, retry with an explicit `overrideReason`
+
+Calendar tools:
+- `forge_get_calendar_overview` for current provider state, native Forge events, mirrored events, work blocks, and timeboxes
+- `forge_create_entities`, `forge_update_entities`, and `forge_delete_entities` for canonical Forge event management plus work blocks and task timeboxes
+- `forge_connect_calendar_provider` and `forge_sync_calendar_connection` for provider setup and sync, including Exchange Online through Microsoft Graph in read-only mode. Exchange Online setup is normally completed through the interactive Settings sign-in flow rather than fully non-interactive agent input.
+- `forge_create_work_block_template` for recurring half-day, holiday, or custom work blocks
+- work-block templates accept optional `startsOn` / `endsOn` `YYYY-MM-DD` bounds; omitting `endsOn` keeps the block repeating indefinitely
+- holiday blocks should normally use `kind: "holiday"` with `weekDays: [0,1,2,3,4,5,6]` and `startMinute: 0`, `endMinute: 1440`
+- `forge_recommend_task_timeboxes` and `forge_create_task_timebox` for future planning and confirmation
 
 `forge_heartbeat_task_run`:
 - required: `taskRunId`

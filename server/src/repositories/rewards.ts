@@ -173,6 +173,14 @@ const DEFAULT_RULES: Array<{
     config: { fixedXp: 4 }
   },
   {
+    id: "reward_rule_weekly_review_completed",
+    family: "alignment",
+    code: "weekly_review_completed",
+    title: "Weekly review completed",
+    description: "Reward closing the current weekly review cycle and turning it into explicit evidence.",
+    config: { fixedXp: 250 }
+  },
+  {
     id: "reward_rule_session_dwell",
     family: "ambient",
     code: "session_dwell_120",
@@ -422,6 +430,21 @@ export function listRewardLedger(filters: RewardsLedgerQuery = {}): RewardLedger
     .all(...params) as RewardLedgerRow[];
 
   return rows.map(mapLedger);
+}
+
+export function getRewardLedgerEventById(rewardId: string): RewardLedgerEvent | null {
+  ensureDefaultRewardRules();
+  const row = getDatabase()
+    .prepare(
+      `SELECT
+         id, rule_id, event_log_id, entity_type, entity_id, actor, source, delta_xp, reason_title, reason_summary,
+         reversible_group, reversed_by_reward_id, metadata_json, created_at
+       FROM reward_ledger
+       WHERE id = ?`
+    )
+    .get(rewardId) as RewardLedgerRow | undefined;
+
+  return row ? mapLedger(row) : null;
 }
 
 export function getTotalXp(): number {
@@ -1005,6 +1028,48 @@ export function recordHabitCheckInReward(
       status,
       polarity: habit.polarity,
       dateKey
+    }
+  });
+}
+
+export function recordWeeklyReviewCompletionReward(
+  input: {
+    weekKey: string;
+    windowLabel: string;
+    rewardXp: number;
+  },
+  activity: { actor?: string | null; source: ActivitySource }
+): RewardLedgerEvent {
+  ensureDefaultRewardRules();
+  const rule = getRuleByCode("weekly_review_completed");
+  const deltaXp = Math.max(0, Number(rule?.config.fixedXp ?? input.rewardXp));
+  const eventLog = recordEventLog({
+    eventKind: "reward.weekly_review_completed",
+    entityType: "system",
+    entityId: input.weekKey,
+    actor: activity.actor ?? null,
+    source: activity.source,
+    metadata: {
+      weekKey: input.weekKey,
+      windowLabel: input.windowLabel,
+      deltaXp
+    }
+  });
+
+  return insertLedgerEvent({
+    ruleId: rule?.id ?? null,
+    eventLogId: eventLog.id,
+    entityType: "system",
+    entityId: input.weekKey,
+    actor: activity.actor ?? null,
+    source: activity.source,
+    deltaXp,
+    reasonTitle: rule?.title ?? "Weekly review completed",
+    reasonSummary: `Closed the review for ${input.windowLabel}.`,
+    reversibleGroup: `weekly_review_completed:${input.weekKey}`,
+    metadata: {
+      weekKey: input.weekKey,
+      windowLabel: input.windowLabel
     }
   });
 }

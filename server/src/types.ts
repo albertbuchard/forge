@@ -16,6 +16,29 @@ export const habitFrequencySchema = z.enum(["daily", "weekly"]);
 export const habitPolaritySchema = z.enum(["positive", "negative"]);
 export const habitStatusSchema = z.enum(["active", "paused", "archived"]);
 export const habitCheckInStatusSchema = z.enum(["done", "missed"]);
+export const calendarProviderSchema = z.enum(["google", "apple", "caldav", "microsoft"]);
+export const calendarConnectionStatusSchema = z.enum(["connected", "needs_attention", "error"]);
+export const calendarOwnershipSchema = z.enum(["external", "forge"]);
+export const calendarEventOriginSchema = z.enum([
+  "native",
+  "google",
+  "apple",
+  "caldav",
+  "microsoft",
+  "derived"
+]);
+export const calendarAvailabilitySchema = z.enum(["busy", "free"]);
+export const calendarEventStatusSchema = z.enum(["confirmed", "tentative", "cancelled"]);
+export const workBlockKindSchema = z.enum([
+  "main_activity",
+  "secondary_activity",
+  "third_activity",
+  "rest",
+  "holiday",
+  "custom"
+]);
+export const calendarTimeboxStatusSchema = z.enum(["planned", "active", "completed", "cancelled"]);
+export const calendarTimeboxSourceSchema = z.enum(["manual", "suggested", "live_run"]);
 export const workAdjustmentEntityTypeSchema = z.enum(["task", "project"]);
 export const activityEntityTypeSchema = z.enum([
   "task",
@@ -40,7 +63,12 @@ export const activityEntityTypeSchema = z.enum([
   "approval_request",
   "agent_action",
   "reward",
-  "session"
+  "session",
+  "calendar_connection",
+  "calendar",
+  "calendar_event",
+  "work_block",
+  "task_timebox"
 ]);
 export const activitySourceSchema = z.enum(["ui", "openclaw", "agent", "system"]);
 export const agentTrustLevelSchema = z.enum(["standard", "trusted", "autonomous"]);
@@ -61,6 +89,9 @@ export const crudEntityTypeSchema = z.enum([
   "tag",
   "note",
   "insight",
+  "calendar_event",
+  "work_block_template",
+  "task_timebox",
   "psyche_value",
   "behavior_pattern",
   "behavior",
@@ -140,6 +171,30 @@ const uniqueStringArraySchema = z
       seen.add(value);
     });
   });
+
+const integerMinuteSchema = z.number().int().min(0).max(24 * 60);
+
+export const calendarSchedulingRulesSchema = z.object({
+  allowWorkBlockKinds: z.array(workBlockKindSchema).default([]),
+  blockWorkBlockKinds: z.array(workBlockKindSchema).default([]),
+  allowCalendarIds: uniqueStringArraySchema.default([]),
+  blockCalendarIds: uniqueStringArraySchema.default([]),
+  allowEventTypes: uniqueStringArraySchema.default([]),
+  blockEventTypes: uniqueStringArraySchema.default([]),
+  allowEventKeywords: uniqueStringArraySchema.default([]),
+  blockEventKeywords: uniqueStringArraySchema.default([]),
+  allowAvailability: z.array(calendarAvailabilitySchema).default([]),
+  blockAvailability: z.array(calendarAvailabilitySchema).default([])
+});
+
+export const calendarContextConflictSchema = z.object({
+  kind: z.enum(["external_event", "work_block"]),
+  id: z.string(),
+  title: z.string(),
+  reason: z.string(),
+  startsAt: z.string(),
+  endsAt: z.string()
+});
 
 export const tagSchema = z.object({
   id: z.string(),
@@ -234,6 +289,18 @@ export const projectSchema = z.object({
   status: projectStatusSchema,
   targetPoints: z.number().int().nonnegative(),
   themeColor: z.string(),
+  schedulingRules: calendarSchedulingRulesSchema.default({
+    allowWorkBlockKinds: [],
+    blockWorkBlockKinds: [],
+    allowCalendarIds: [],
+    blockCalendarIds: [],
+    allowEventTypes: [],
+    blockEventTypes: [],
+    allowEventKeywords: [],
+    blockEventKeywords: [],
+    allowAvailability: [],
+    blockAvailability: []
+  }),
   createdAt: z.string(),
   updatedAt: z.string()
 });
@@ -252,6 +319,8 @@ export const taskSchema = z.object({
   energy: taskEnergySchema,
   points: z.number().int().nonnegative(),
   sortOrder: z.number().int().nonnegative(),
+  plannedDurationSeconds: z.number().int().min(60).max(86_400).nullable().default(null),
+  schedulingRules: calendarSchedulingRulesSchema.nullable().default(null),
   completedAt: z.string().nullable(),
   createdAt: z.string(),
   updatedAt: z.string(),
@@ -289,7 +358,193 @@ export const taskRunSchema = z.object({
   completedAt: z.string().nullable(),
   releasedAt: z.string().nullable(),
   timedOutAt: z.string().nullable(),
+  overrideReason: trimmedString.nullable().default(null),
   updatedAt: z.string()
+});
+
+export const calendarConnectionSchema = z.object({
+  id: z.string(),
+  provider: calendarProviderSchema,
+  label: nonEmptyTrimmedString,
+  accountLabel: trimmedString,
+  status: calendarConnectionStatusSchema,
+  config: z.record(z.string(), z.union([z.string(), z.number(), z.boolean(), z.null()])),
+  forgeCalendarId: z.string().nullable(),
+  lastSyncedAt: z.string().nullable(),
+  lastSyncError: trimmedString.nullable(),
+  createdAt: z.string(),
+  updatedAt: z.string()
+});
+
+export const calendarDiscoveryCalendarSchema = z.object({
+  url: nonEmptyTrimmedString.url(),
+  displayName: nonEmptyTrimmedString,
+  description: trimmedString,
+  color: z.string(),
+  timezone: trimmedString,
+  isPrimary: z.boolean(),
+  canWrite: z.boolean(),
+  selectedByDefault: z.boolean(),
+  isForgeCandidate: z.boolean()
+});
+
+export const calendarDiscoveryPayloadSchema = z.object({
+  provider: calendarProviderSchema,
+  accountLabel: trimmedString,
+  serverUrl: nonEmptyTrimmedString.url(),
+  principalUrl: z.string().nullable(),
+  homeUrl: z.string().nullable(),
+  calendars: z.array(calendarDiscoveryCalendarSchema)
+});
+
+export const calendarSchema = z.object({
+  id: z.string(),
+  connectionId: z.string(),
+  remoteId: nonEmptyTrimmedString,
+  title: nonEmptyTrimmedString,
+  description: trimmedString,
+  color: z.string(),
+  timezone: nonEmptyTrimmedString,
+  isPrimary: z.boolean(),
+  canWrite: z.boolean(),
+  selectedForSync: z.boolean(),
+  forgeManaged: z.boolean(),
+  lastSyncedAt: z.string().nullable(),
+  createdAt: z.string(),
+  updatedAt: z.string()
+});
+
+export const calendarEventSourceSchema = z.object({
+  id: z.string(),
+  provider: calendarProviderSchema,
+  connectionId: z.string().nullable(),
+  calendarId: z.string().nullable(),
+  remoteCalendarId: trimmedString.nullable(),
+  remoteEventId: nonEmptyTrimmedString,
+  remoteUid: trimmedString.nullable(),
+  recurrenceInstanceId: trimmedString.nullable(),
+  isMasterRecurring: z.boolean(),
+  remoteHref: trimmedString.nullable(),
+  remoteEtag: trimmedString.nullable(),
+  syncState: z.enum(["pending_create", "pending_update", "pending_delete", "synced", "error", "deleted"]),
+  lastSyncedAt: z.string().nullable(),
+  createdAt: z.string(),
+  updatedAt: z.string()
+});
+
+export const calendarEventLinkSchema = z.object({
+  id: z.string(),
+  entityType: crudEntityTypeSchema,
+  entityId: nonEmptyTrimmedString,
+  relationshipType: nonEmptyTrimmedString.default("context"),
+  createdAt: z.string(),
+  updatedAt: z.string()
+});
+
+export const calendarEventSchema = z.object({
+  id: z.string(),
+  connectionId: z.string().nullable(),
+  calendarId: z.string().nullable(),
+  remoteId: trimmedString.nullable(),
+  ownership: calendarOwnershipSchema,
+  originType: calendarEventOriginSchema,
+  status: calendarEventStatusSchema,
+  title: nonEmptyTrimmedString,
+  description: trimmedString,
+  location: trimmedString,
+  startAt: z.string(),
+  endAt: z.string(),
+  timezone: nonEmptyTrimmedString,
+  isAllDay: z.boolean(),
+  availability: calendarAvailabilitySchema,
+  eventType: trimmedString,
+  categories: z.array(z.string()).default([]),
+  sourceMappings: z.array(calendarEventSourceSchema).default([]),
+  links: z.array(calendarEventLinkSchema).default([]),
+  remoteUpdatedAt: z.string().nullable(),
+  deletedAt: z.string().nullable(),
+  createdAt: z.string(),
+  updatedAt: z.string()
+});
+
+export const workBlockTemplateSchema = z.object({
+  id: z.string(),
+  title: nonEmptyTrimmedString,
+  kind: workBlockKindSchema,
+  color: z.string(),
+  timezone: nonEmptyTrimmedString,
+  weekDays: z.array(z.number().int().min(0).max(6)).min(1).max(7),
+  startMinute: integerMinuteSchema,
+  endMinute: integerMinuteSchema,
+  startsOn: dateOnlySchema.nullable().default(null),
+  endsOn: dateOnlySchema.nullable().default(null),
+  blockingState: z.enum(["allowed", "blocked"]),
+  createdAt: z.string(),
+  updatedAt: z.string()
+}).superRefine((value, context) => {
+  if (value.endMinute <= value.startMinute) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["endMinute"],
+      message: "endMinute must be greater than startMinute"
+    });
+  }
+  if (value.startsOn && value.endsOn && value.endsOn < value.startsOn) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["endsOn"],
+      message: "endsOn must be on or after startsOn"
+    });
+  }
+});
+
+export const workBlockInstanceSchema = z.object({
+  id: z.string(),
+  templateId: z.string(),
+  dateKey: dateOnlySchema,
+  startAt: z.string(),
+  endAt: z.string(),
+  title: nonEmptyTrimmedString,
+  kind: workBlockKindSchema,
+  color: z.string(),
+  blockingState: z.enum(["allowed", "blocked"]),
+  calendarEventId: z.string().nullable(),
+  createdAt: z.string(),
+  updatedAt: z.string()
+});
+
+export const taskTimeboxSchema = z.object({
+  id: z.string(),
+  taskId: z.string(),
+  projectId: z.string().nullable(),
+  connectionId: z.string().nullable(),
+  calendarId: z.string().nullable(),
+  remoteEventId: z.string().nullable(),
+  linkedTaskRunId: z.string().nullable(),
+  status: calendarTimeboxStatusSchema,
+  source: calendarTimeboxSourceSchema,
+  title: nonEmptyTrimmedString,
+  startsAt: z.string(),
+  endsAt: z.string(),
+  overrideReason: trimmedString.nullable(),
+  createdAt: z.string(),
+  updatedAt: z.string()
+});
+
+export const calendarOverviewPayloadSchema = z.object({
+  generatedAt: z.string(),
+  providers: z.array(z.object({
+    provider: calendarProviderSchema,
+    label: z.string(),
+    supportsDedicatedForgeCalendar: z.boolean(),
+    connectionHelp: z.string()
+  })),
+  connections: z.array(calendarConnectionSchema),
+  calendars: z.array(calendarSchema),
+  events: z.array(calendarEventSchema),
+  workBlockTemplates: z.array(workBlockTemplateSchema),
+  workBlockInstances: z.array(workBlockInstanceSchema),
+  timeboxes: z.array(taskTimeboxSchema)
 });
 
 export const habitCheckInSchema = z.object({
@@ -626,6 +881,9 @@ export const weeklyReviewCalibrationSchema = z.object({
 export const weeklyReviewPayloadSchema = z.object({
   generatedAt: z.string(),
   windowLabel: z.string(),
+  weekKey: z.string(),
+  weekStartDate: z.string(),
+  weekEndDate: z.string(),
   momentumSummary: z.object({
     totalXp: z.number().int().nonnegative(),
     focusHours: z.number().int().nonnegative(),
@@ -639,7 +897,32 @@ export const weeklyReviewPayloadSchema = z.object({
     title: z.string(),
     summary: z.string(),
     rewardXp: z.number().int().nonnegative()
+  }),
+  completion: z.object({
+    finalized: z.boolean(),
+    finalizedAt: z.string().nullable(),
+    finalizedBy: z.string().nullable()
   })
+});
+
+export const weeklyReviewClosureSchema = z.object({
+  id: z.string(),
+  weekKey: z.string(),
+  weekStartDate: z.string(),
+  weekEndDate: z.string(),
+  windowLabel: z.string(),
+  actor: z.string().nullable(),
+  source: activitySourceSchema,
+  rewardId: z.string(),
+  activityEventId: z.string(),
+  createdAt: z.string()
+});
+
+export const finalizeWeeklyReviewResultSchema = z.object({
+  review: weeklyReviewPayloadSchema,
+  closure: weeklyReviewClosureSchema,
+  reward: z.lazy(() => rewardLedgerEventSchema),
+  metrics: z.lazy(() => xpMetricsPayloadSchema)
 });
 
 export const notificationPreferencesSchema = z.object({
@@ -914,6 +1197,36 @@ export const createNoteLinkSchema = z.object({
   anchorKey: trimmedString.nullable().default(null)
 });
 
+const repeatedTrimmedStringQuerySchema = z.preprocess((value) => {
+  if (value === undefined || value === null || value === "") {
+    return [];
+  }
+  return Array.isArray(value) ? value : [value];
+}, z.array(trimmedString));
+
+const repeatedUnknownQuerySchema = z.preprocess((value) => {
+  if (value === undefined || value === null || value === "") {
+    return [];
+  }
+  return Array.isArray(value) ? value : [value];
+}, z.array(z.unknown()));
+
+const noteLinkedEntityFilterSchema = z.object({
+  entityType: crudEntityTypeSchema,
+  entityId: nonEmptyTrimmedString
+});
+
+function parseLinkedEntityQueryValue(raw: string) {
+  const separatorIndex = raw.indexOf(":");
+  if (separatorIndex <= 0 || separatorIndex >= raw.length - 1) {
+    throw new Error("Expected linked entity filters in entityType:entityId format");
+  }
+  return {
+    entityType: raw.slice(0, separatorIndex),
+    entityId: raw.slice(separatorIndex + 1)
+  };
+}
+
 export const createNoteSchema = z.object({
   contentMarkdown: nonEmptyTrimmedString,
   author: trimmedString.nullable().default(null),
@@ -938,7 +1251,52 @@ export const notesListQuerySchema = z.object({
   anchorKey: trimmedString.nullable().optional(),
   author: trimmedString.optional(),
   query: trimmedString.optional(),
+  linkedTo: repeatedUnknownQuerySchema.transform((values, context) =>
+    values.map((value, index) => {
+      try {
+        if (typeof value === "string") {
+          return noteLinkedEntityFilterSchema.parse(parseLinkedEntityQueryValue(value));
+        }
+        return noteLinkedEntityFilterSchema.parse(value);
+      } catch (error) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["linkedTo", index],
+          message: error instanceof Error ? error.message : "Invalid linkedTo filter"
+        });
+        return {
+          entityType: "goal",
+          entityId: "__invalid__"
+        } as z.infer<typeof noteLinkedEntityFilterSchema>;
+      }
+    })
+  ),
+  textTerms: repeatedTrimmedStringQuerySchema,
+  updatedFrom: dateOnlySchema.optional(),
+  updatedTo: dateOnlySchema.optional(),
   limit: z.coerce.number().int().positive().max(200).optional()
+}).superRefine((value, context) => {
+  if (
+    value.linkedEntityType !== undefined &&
+    value.linkedEntityId === undefined
+  ) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["linkedEntityId"],
+      message: "linkedEntityId is required when linkedEntityType is provided"
+    });
+  }
+  if (
+    value.updatedFrom &&
+    value.updatedTo &&
+    value.updatedTo < value.updatedFrom
+  ) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["updatedTo"],
+      message: "updatedTo must be on or after updatedFrom"
+    });
+  }
 });
 
 export const taskListQuerySchema = z.object({
@@ -970,6 +1328,253 @@ export const projectListQuerySchema = z.object({
   goalId: nonEmptyTrimmedString.optional(),
   status: projectStatusSchema.optional(),
   limit: z.coerce.number().int().positive().max(100).optional()
+});
+
+export const calendarOverviewQuerySchema = z.object({
+  from: z.string().datetime().optional(),
+  to: z.string().datetime().optional()
+});
+
+export const createCalendarConnectionSchema = z.discriminatedUnion("provider", [
+  z.object({
+    provider: z.literal("google"),
+    label: nonEmptyTrimmedString,
+    username: nonEmptyTrimmedString,
+    clientId: nonEmptyTrimmedString,
+    clientSecret: nonEmptyTrimmedString,
+    refreshToken: nonEmptyTrimmedString,
+    selectedCalendarUrls: z.array(nonEmptyTrimmedString.url()).min(1),
+    forgeCalendarUrl: nonEmptyTrimmedString.url().nullable().optional(),
+    createForgeCalendar: z.boolean().optional().default(false)
+  }),
+  z.object({
+    provider: z.literal("apple"),
+    label: nonEmptyTrimmedString,
+    username: nonEmptyTrimmedString,
+    password: nonEmptyTrimmedString,
+    selectedCalendarUrls: z.array(nonEmptyTrimmedString.url()).min(1),
+    forgeCalendarUrl: nonEmptyTrimmedString.url().nullable().optional(),
+    createForgeCalendar: z.boolean().optional().default(false)
+  }),
+  z.object({
+    provider: z.literal("caldav"),
+    label: nonEmptyTrimmedString,
+    serverUrl: nonEmptyTrimmedString.url(),
+    username: nonEmptyTrimmedString,
+    password: nonEmptyTrimmedString,
+    selectedCalendarUrls: z.array(nonEmptyTrimmedString.url()).min(1),
+    forgeCalendarUrl: nonEmptyTrimmedString.url().nullable().optional(),
+    createForgeCalendar: z.boolean().optional().default(false)
+  }),
+  z.object({
+    provider: z.literal("microsoft"),
+    label: nonEmptyTrimmedString,
+    authSessionId: nonEmptyTrimmedString,
+    selectedCalendarUrls: z.array(nonEmptyTrimmedString.url()).min(1)
+  })
+]);
+
+export const discoverCalendarConnectionSchema = z.discriminatedUnion("provider", [
+  z.object({
+    provider: z.literal("google"),
+    username: nonEmptyTrimmedString,
+    clientId: nonEmptyTrimmedString,
+    clientSecret: nonEmptyTrimmedString,
+    refreshToken: nonEmptyTrimmedString
+  }),
+  z.object({
+    provider: z.literal("apple"),
+    username: nonEmptyTrimmedString,
+    password: nonEmptyTrimmedString
+  }),
+  z.object({
+    provider: z.literal("caldav"),
+    serverUrl: nonEmptyTrimmedString.url(),
+    username: nonEmptyTrimmedString,
+    password: nonEmptyTrimmedString
+  })
+]);
+
+export const startMicrosoftCalendarOauthSchema = z.object({
+  label: nonEmptyTrimmedString.optional()
+});
+
+export const microsoftCalendarOauthSessionSchema = z.object({
+  sessionId: nonEmptyTrimmedString,
+  status: z.enum(["pending", "authorized", "error", "consumed", "expired"]),
+  authUrl: z.string().url().nullable(),
+  accountLabel: z.string().nullable(),
+  error: z.string().nullable(),
+  discovery: calendarDiscoveryPayloadSchema.nullable()
+});
+
+export const updateCalendarConnectionSchema = z.object({
+  label: nonEmptyTrimmedString.optional(),
+  selectedCalendarUrls: z.array(nonEmptyTrimmedString.url()).optional()
+});
+
+const workBlockTemplateMutationShape = {
+  title: nonEmptyTrimmedString,
+  kind: workBlockKindSchema.default("custom"),
+  color: z.string().regex(/^#[0-9a-fA-F]{6}$/).default("#60a5fa"),
+  timezone: nonEmptyTrimmedString.default("UTC"),
+  weekDays: z.array(z.number().int().min(0).max(6)).min(1).max(7),
+  startMinute: integerMinuteSchema,
+  endMinute: integerMinuteSchema,
+  startsOn: dateOnlySchema.nullable().optional(),
+  endsOn: dateOnlySchema.nullable().optional(),
+  blockingState: z.enum(["allowed", "blocked"]).default("blocked")
+};
+
+export const createWorkBlockTemplateSchema = z.object(workBlockTemplateMutationShape).superRefine((value, context) => {
+  if (value.endMinute <= value.startMinute) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["endMinute"],
+      message: "endMinute must be greater than startMinute"
+    });
+  }
+  if (value.startsOn && value.endsOn && value.endsOn < value.startsOn) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["endsOn"],
+      message: "endsOn must be on or after startsOn"
+    });
+  }
+});
+
+export const updateWorkBlockTemplateSchema = z.object({
+  title: nonEmptyTrimmedString.optional(),
+  kind: workBlockKindSchema.optional(),
+  color: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
+  timezone: nonEmptyTrimmedString.optional(),
+  weekDays: z.array(z.number().int().min(0).max(6)).min(1).max(7).optional(),
+  startMinute: integerMinuteSchema.optional(),
+  endMinute: integerMinuteSchema.optional(),
+  startsOn: dateOnlySchema.nullable().optional(),
+  endsOn: dateOnlySchema.nullable().optional(),
+  blockingState: z.enum(["allowed", "blocked"]).optional()
+}).superRefine((value, context) => {
+  if (
+    value.startMinute !== undefined &&
+    value.endMinute !== undefined &&
+    value.endMinute <= value.startMinute
+  ) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["endMinute"],
+      message: "endMinute must be greater than startMinute"
+    });
+  }
+  if (
+    value.startsOn !== undefined &&
+    value.endsOn !== undefined &&
+    value.startsOn &&
+    value.endsOn &&
+    value.endsOn < value.startsOn
+  ) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["endsOn"],
+      message: "endsOn must be on or after startsOn"
+    });
+  }
+});
+
+export const createTaskTimeboxSchema = z.object({
+  taskId: nonEmptyTrimmedString,
+  projectId: nonEmptyTrimmedString.nullable().optional(),
+  title: nonEmptyTrimmedString,
+  startsAt: z.string().datetime(),
+  endsAt: z.string().datetime(),
+  source: calendarTimeboxSourceSchema.default("manual"),
+  status: calendarTimeboxStatusSchema.default("planned"),
+  overrideReason: trimmedString.nullable().default(null)
+}).superRefine((value, context) => {
+  if (Date.parse(value.endsAt) <= Date.parse(value.startsAt)) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["endsAt"],
+      message: "endsAt must be after startsAt"
+    });
+  }
+});
+
+export const updateTaskTimeboxSchema = z.object({
+  title: nonEmptyTrimmedString.optional(),
+  startsAt: z.string().datetime().optional(),
+  endsAt: z.string().datetime().optional(),
+  status: calendarTimeboxStatusSchema.optional(),
+  overrideReason: trimmedString.nullable().optional()
+});
+
+export const recommendTaskTimeboxesSchema = z.object({
+  taskId: nonEmptyTrimmedString,
+  from: z.string().datetime().optional(),
+  to: z.string().datetime().optional(),
+  limit: z.coerce.number().int().positive().max(12).optional()
+});
+
+export const updateCalendarEventSchema = z.object({
+  title: nonEmptyTrimmedString.optional(),
+  description: trimmedString.optional(),
+  location: trimmedString.optional(),
+  startAt: z.string().datetime().optional(),
+  endAt: z.string().datetime().optional(),
+  timezone: nonEmptyTrimmedString.optional(),
+  isAllDay: z.boolean().optional(),
+  availability: calendarAvailabilitySchema.optional(),
+  eventType: trimmedString.optional(),
+  categories: z.array(trimmedString).optional(),
+  preferredCalendarId: nonEmptyTrimmedString.nullable().optional(),
+  links: z.array(
+    z.object({
+      entityType: crudEntityTypeSchema,
+      entityId: nonEmptyTrimmedString,
+      relationshipType: nonEmptyTrimmedString.default("context")
+    })
+  ).optional()
+}).superRefine((value, context) => {
+  if (
+    value.startAt !== undefined &&
+    value.endAt !== undefined &&
+    Date.parse(value.endAt) <= Date.parse(value.startAt)
+  ) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["endAt"],
+      message: "endAt must be after startAt"
+    });
+  }
+});
+
+export const createCalendarEventSchema = z.object({
+  title: nonEmptyTrimmedString,
+  description: trimmedString.default(""),
+  location: trimmedString.default(""),
+  startAt: z.string().datetime(),
+  endAt: z.string().datetime(),
+  timezone: nonEmptyTrimmedString.default("UTC"),
+  isAllDay: z.boolean().default(false),
+  availability: calendarAvailabilitySchema.default("busy"),
+  eventType: trimmedString.default(""),
+  categories: z.array(trimmedString).default([]),
+  preferredCalendarId: nonEmptyTrimmedString.nullable().default(null),
+  links: z.array(
+    z.object({
+      entityType: crudEntityTypeSchema,
+      entityId: nonEmptyTrimmedString,
+      relationshipType: nonEmptyTrimmedString.default("context")
+    })
+  ).default([])
+}).superRefine((value, context) => {
+  if (Date.parse(value.endAt) <= Date.parse(value.startAt)) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["endAt"],
+      message: "endAt must be after startAt"
+    });
+  }
 });
 
 export const habitListQuerySchema = z.object({
@@ -1008,6 +1613,18 @@ export const createProjectSchema = z.object({
   status: projectStatusSchema.default("active"),
   targetPoints: z.number().int().min(25).max(10000).default(240),
   themeColor: z.string().regex(/^#[0-9a-fA-F]{6}$/).default("#c0c1ff"),
+  schedulingRules: calendarSchedulingRulesSchema.default({
+    allowWorkBlockKinds: [],
+    blockWorkBlockKinds: [],
+    allowCalendarIds: [],
+    blockCalendarIds: [],
+    allowEventTypes: [],
+    blockEventTypes: [],
+    allowEventKeywords: [],
+    blockEventKeywords: [],
+    allowAvailability: [],
+    blockAvailability: []
+  }),
   notes: z.array(nestedCreateNoteSchema).default([])
 });
 
@@ -1025,6 +1642,8 @@ export const taskMutationShape = {
   effort: taskEffortSchema.default("deep"),
   energy: taskEnergySchema.default("steady"),
   points: z.number().int().min(5).max(500).default(40),
+  plannedDurationSeconds: z.number().int().min(60).max(86_400).nullable().default(null),
+  schedulingRules: calendarSchedulingRulesSchema.nullable().default(null),
   sortOrder: z.number().int().nonnegative().optional(),
   tagIds: uniqueStringArraySchema.default([]),
   notes: z.array(nestedCreateNoteSchema).default([])
@@ -1103,6 +1722,8 @@ export const updateTaskSchema = z.object({
   effort: taskEffortSchema.optional(),
   energy: taskEnergySchema.optional(),
   points: z.number().int().min(5).max(500).optional(),
+  plannedDurationSeconds: z.number().int().min(60).max(86_400).nullable().optional(),
+  schedulingRules: calendarSchedulingRulesSchema.nullable().optional(),
   sortOrder: z.number().int().nonnegative().optional(),
   tagIds: uniqueStringArraySchema.optional(),
   notes: z.array(nestedCreateNoteSchema).optional()
@@ -1121,7 +1742,8 @@ export const taskRunClaimSchema = z.object({
   plannedDurationSeconds: z.coerce.number().int().min(60).max(86_400).nullable().default(null),
   isCurrent: z.coerce.boolean().default(true),
   leaseTtlSeconds: z.coerce.number().int().min(1).max(14400).default(900),
-  note: trimmedString.default("")
+  note: trimmedString.default(""),
+  overrideReason: trimmedString.optional()
 }).superRefine((value, context) => {
   if (value.timerMode === "planned" && value.plannedDurationSeconds === null) {
     context.addIssue({
@@ -1142,7 +1764,8 @@ export const taskRunClaimSchema = z.object({
 export const taskRunHeartbeatSchema = z.object({
   actor: nonEmptyTrimmedString.optional(),
   leaseTtlSeconds: z.coerce.number().int().min(1).max(14400).default(900),
-  note: trimmedString.optional()
+  note: trimmedString.optional(),
+  overrideReason: trimmedString.optional()
 });
 
 export const taskRunFinishSchema = z.object({
@@ -1380,6 +2003,23 @@ export type DashboardGoal = z.infer<typeof dashboardGoalSchema>;
 export type DashboardPayload = z.infer<typeof dashboardPayloadSchema>;
 export type DashboardExecutionBucket = z.infer<typeof dashboardExecutionBucketSchema>;
 export type DashboardStats = z.infer<typeof dashboardStatsSchema>;
+export type CalendarAvailability = z.infer<typeof calendarAvailabilitySchema>;
+export type CalendarConnection = z.infer<typeof calendarConnectionSchema>;
+export type CalendarConnectionStatus = z.infer<typeof calendarConnectionStatusSchema>;
+export type CalendarEvent = z.infer<typeof calendarEventSchema>;
+export type CalendarEventLink = z.infer<typeof calendarEventLinkSchema>;
+export type CalendarEventOrigin = z.infer<typeof calendarEventOriginSchema>;
+export type CalendarEventSource = z.infer<typeof calendarEventSourceSchema>;
+export type CalendarOverviewPayload = z.infer<typeof calendarOverviewPayloadSchema>;
+export type CalendarOwnership = z.infer<typeof calendarOwnershipSchema>;
+export type CalendarProvider = z.infer<typeof calendarProviderSchema>;
+export type CalendarSchedulingRules = z.infer<typeof calendarSchedulingRulesSchema>;
+export type CalendarTimeboxStatus = z.infer<typeof calendarTimeboxStatusSchema>;
+export type CalendarTimeboxSource = z.infer<typeof calendarTimeboxSourceSchema>;
+export type WorkBlockKind = z.infer<typeof workBlockKindSchema>;
+export type WorkBlockInstance = z.infer<typeof workBlockInstanceSchema>;
+export type WorkBlockTemplate = z.infer<typeof workBlockTemplateSchema>;
+export type TaskTimebox = z.infer<typeof taskTimeboxSchema>;
 export type Project = z.infer<typeof projectSchema>;
 export type ProjectSummary = z.infer<typeof projectSummarySchema>;
 export type ProjectBoardPayload = z.infer<typeof projectBoardPayloadSchema>;
@@ -1403,6 +2043,8 @@ export type TodayQuest = z.infer<typeof todayQuestSchema>;
 export type TodayTimelineBucket = z.infer<typeof todayTimelineBucketSchema>;
 export type RiskContext = z.infer<typeof riskContextSchema>;
 export type WeeklyReviewPayload = z.infer<typeof weeklyReviewPayloadSchema>;
+export type WeeklyReviewClosure = z.infer<typeof weeklyReviewClosureSchema>;
+export type FinalizeWeeklyReviewResult = z.infer<typeof finalizeWeeklyReviewResultSchema>;
 export type SettingsPayload = z.infer<typeof settingsPayloadSchema>;
 export type OperatorContextPayload = z.infer<typeof operatorContextPayloadSchema>;
 export type NotificationPreferences = z.infer<typeof notificationPreferencesSchema>;
@@ -1448,6 +2090,7 @@ export type TaskDueFilter = z.infer<typeof taskDueFilterSchema>;
 export type ActivityListQuery = z.infer<typeof activityListQuerySchema>;
 export type EventsListQuery = z.infer<typeof eventsListQuerySchema>;
 export type ProjectListQuery = z.infer<typeof projectListQuerySchema>;
+export type CalendarOverviewQuery = z.infer<typeof calendarOverviewQuerySchema>;
 export type RewardsLedgerQuery = z.infer<typeof rewardsLedgerQuerySchema>;
 export type TaskListQuery = z.infer<typeof taskListQuerySchema>;
 export type TaskRun = z.infer<typeof taskRunSchema>;
@@ -1467,6 +2110,10 @@ export type UpdateInsightInput = z.infer<typeof updateInsightSchema>;
 export type UpdateNoteInput = z.infer<typeof updateNoteSchema>;
 export type UpdateProjectInput = z.infer<typeof updateProjectSchema>;
 export type UpdateTaskInput = z.infer<typeof updateTaskSchema>;
+export type UpdateCalendarConnectionInput = z.infer<typeof updateCalendarConnectionSchema>;
+export type UpdateWorkBlockTemplateInput = z.infer<typeof updateWorkBlockTemplateSchema>;
+export type UpdateTaskTimeboxInput = z.infer<typeof updateTaskTimeboxSchema>;
+export type UpdateCalendarEventInput = z.infer<typeof updateCalendarEventSchema>;
 export type UpdateRewardRuleInput = z.infer<typeof updateRewardRuleSchema>;
 export type UpdateSettingsInput = z.infer<typeof updateSettingsSchema>;
 export type CreateAgentTokenInput = z.infer<typeof createAgentTokenSchema>;
@@ -1478,8 +2125,18 @@ export type NestedCreateNoteInput = z.infer<typeof nestedCreateNoteSchema>;
 export type CreateManualRewardGrantInput = z.infer<typeof createManualRewardGrantSchema>;
 export type CreateWorkAdjustmentInput = z.infer<typeof createWorkAdjustmentSchema>;
 export type CreateSessionEventInput = z.infer<typeof createSessionEventSchema>;
+export type CreateCalendarEventInput = z.infer<typeof createCalendarEventSchema>;
+export type CreateCalendarConnectionInput = z.infer<typeof createCalendarConnectionSchema>;
+export type DiscoverCalendarConnectionInput = z.infer<typeof discoverCalendarConnectionSchema>;
+export type StartMicrosoftCalendarOauthInput = z.infer<typeof startMicrosoftCalendarOauthSchema>;
+export type CreateWorkBlockTemplateInput = z.infer<typeof createWorkBlockTemplateSchema>;
+export type CreateTaskTimeboxInput = z.infer<typeof createTaskTimeboxSchema>;
+export type RecommendTaskTimeboxesInput = z.infer<typeof recommendTaskTimeboxesSchema>;
 export type WorkAdjustment = z.infer<typeof workAdjustmentSchema>;
 export type WorkAdjustmentEntityType = z.infer<typeof workAdjustmentEntityTypeSchema>;
+export type CalendarDiscoveryCalendar = z.infer<typeof calendarDiscoveryCalendarSchema>;
+export type CalendarDiscoveryPayload = z.infer<typeof calendarDiscoveryPayloadSchema>;
+export type MicrosoftCalendarOauthSession = z.infer<typeof microsoftCalendarOauthSessionSchema>;
 export type WorkAdjustmentResult = z.infer<typeof workAdjustmentResultSchema>;
 export type OperatorLogWorkInput = z.infer<typeof operatorLogWorkSchema>;
 export type OperatorLogWorkResult = z.infer<typeof operatorLogWorkResultSchema>;
@@ -1492,4 +2149,4 @@ export type BatchUpdateEntitiesInput = z.infer<typeof batchUpdateEntitiesSchema>
 export type BatchDeleteEntitiesInput = z.infer<typeof batchDeleteEntitiesSchema>;
 export type BatchRestoreEntitiesInput = z.infer<typeof batchRestoreEntitiesSchema>;
 export type BatchSearchEntitiesInput = z.infer<typeof batchSearchEntitiesSchema>;
-export type NotesListQuery = z.infer<typeof notesListQuerySchema>;
+export type NotesListQuery = z.input<typeof notesListQuerySchema>;

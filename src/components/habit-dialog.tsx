@@ -127,7 +127,7 @@ export function HabitDialog({
             <Input value={value.title} onChange={(event) => setValue({ title: event.target.value })} placeholder="Train lower body" />
           </FlowField>
           <FlowField label="Description">
-            <Textarea value={value.description} onChange={(event) => setValue({ description: event.target.value })} placeholder="Explain what counts and what good completion looks like." />
+            <Textarea value={value.description} onChange={(event) => setValue({ description: event.target.value })} placeholder="Write the habit description in Markdown. Define what counts, edge cases, and examples." />
           </FlowField>
         </>
       )

@@ -1,5 +1,19 @@
-import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { useIsFetching, useIsMutating, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode
+} from "react";
+import {
+  useIsFetching,
+  useIsMutating,
+  useMutation,
+  useQuery,
+  useQueryClient
+} from "@tanstack/react-query";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import {
   Activity,
@@ -7,6 +21,7 @@ import {
   BarChart3,
   BrainCircuit,
   BriefcaseBusiness,
+  CalendarDays,
   ChevronsLeft,
   ChevronsRight,
   Clock3,
@@ -21,14 +36,24 @@ import {
   Target,
   Zap
 } from "lucide-react";
-import { Link, NavLink, Outlet, useLocation, useOutletContext } from "react-router-dom";
+import {
+  Link,
+  NavLink,
+  Outlet,
+  useLocation,
+  useOutletContext
+} from "react-router-dom";
 import { AmbientActivityPill } from "@/components/experience/ambient-activity-pill";
 import { CommandPalette } from "@/components/experience/command-palette";
 import { RouteTransitionFrame } from "@/components/experience/route-transition-frame";
 import { SheetScaffold } from "@/components/experience/sheet-scaffold";
 import { CreateMenu } from "@/components/create-menu";
 import { StartWorkComposer } from "@/components/start-work-composer";
-import { TaskTimerRailProvider, TaskTimerRailBar, TaskTimerRailPanel } from "@/components/shell/task-timer-rail";
+import {
+  TaskTimerRailProvider,
+  TaskTimerRailBar,
+  TaskTimerRailPanel
+} from "@/components/shell/task-timer-rail";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ErrorState, LoadingState } from "@/components/ui/page-state";
@@ -50,43 +75,146 @@ import {
   recordSessionEvent,
   releaseTaskRun
 } from "@/lib/api";
+import { ForgeApiError } from "@/lib/api-error";
 import { I18nProvider, useI18n, type TranslationKey } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
-import type { GoalMutationInput, ProjectMutationInput, QuickTaskInput } from "@/lib/schemas";
-import type { ForgeSnapshot, SettingsPayload } from "@/lib/types";
+import type {
+  GoalMutationInput,
+  ProjectMutationInput,
+  QuickTaskInput
+} from "@/lib/schemas";
+import type { CalendarSchedulingRules, ForgeSnapshot, SettingsPayload } from "@/lib/types";
 
 type ShellContextValue = {
   snapshot: ForgeSnapshot;
   refresh: () => Promise<void>;
   createTask: (input: QuickTaskInput) => Promise<void>;
-  startTaskNow: (taskId: string, options?: { timerMode?: "planned" | "unlimited"; plannedDurationSeconds?: number | null }) => Promise<void>;
+  startTaskNow: (
+    taskId: string,
+    options?: {
+      timerMode?: "planned" | "unlimited";
+      plannedDurationSeconds?: number | null;
+    }
+  ) => Promise<void>;
   createGoal: (input: GoalMutationInput) => Promise<void>;
   createProject: (input: ProjectMutationInput) => Promise<void>;
   patchGoal: (goalId: string, patch: GoalMutationInput) => Promise<void>;
-  patchProject: (projectId: string, patch: ProjectMutationInput) => Promise<void>;
-  patchTaskStatus: (taskId: string, status: "backlog" | "focus" | "in_progress" | "blocked" | "done") => Promise<void>;
-  openStartWork: (defaults?: { taskId?: string | null; projectId?: string | null }) => void;
+  patchProject: (
+    projectId: string,
+    patch: Partial<ProjectMutationInput> & {
+      schedulingRules?: CalendarSchedulingRules | null;
+    }
+  ) => Promise<void>;
+  patchTaskStatus: (
+    taskId: string,
+    status: "backlog" | "focus" | "in_progress" | "blocked" | "done"
+  ) => Promise<void>;
+  openStartWork: (defaults?: {
+    taskId?: string | null;
+    projectId?: string | null;
+  }) => void;
 };
 
 const ShellContext = createContext<ShellContextValue | null>(null);
 
 const PRIMARY_ROUTES = [
-  { to: "/overview", labelKey: "common.routeLabels.overview", detailKey: "common.routeDetails.overview", icon: LayoutDashboard },
-  { to: "/goals", labelKey: "common.routeLabels.goals", detailKey: "common.routeDetails.goals", icon: Target },
-  { to: "/habits", labelKey: "common.routeLabels.habits", detailKey: "common.routeDetails.habits", icon: Repeat },
-  { to: "/projects", labelKey: "common.routeLabels.projects", detailKey: "common.routeDetails.projects", icon: BriefcaseBusiness },
-  { to: "/kanban", labelKey: "common.routeLabels.kanban", detailKey: "common.routeDetails.kanban", icon: Zap },
-  { to: "/today", labelKey: "common.routeLabels.today", detailKey: "common.routeDetails.today", icon: Clock3 },
-  { to: "/notes", labelKey: "common.routeLabels.notes", detailKey: "common.routeDetails.notes", icon: NotebookPen },
-  { to: "/psyche", labelKey: "common.routeLabels.psyche", detailKey: "common.routeDetails.psyche", icon: BrainCircuit },
-  { to: "/activity", labelKey: "common.routeLabels.activity", detailKey: "common.routeDetails.activity", icon: ArrowUpRight },
-  { to: "/insights", labelKey: "common.routeLabels.insights", detailKey: "common.routeDetails.insights", icon: Radar },
-  { to: "/review/weekly", labelKey: "common.routeLabels.review", detailKey: "common.routeDetails.review", icon: BarChart3 },
-  { to: "/settings", labelKey: "common.routeLabels.settings", detailKey: "common.routeDetails.settings", icon: Settings }
+  {
+    to: "/overview",
+    labelKey: "common.routeLabels.overview",
+    detailKey: "common.routeDetails.overview",
+    icon: LayoutDashboard
+  },
+  {
+    to: "/goals",
+    labelKey: "common.routeLabels.goals",
+    detailKey: "common.routeDetails.goals",
+    icon: Target
+  },
+  {
+    to: "/habits",
+    labelKey: "common.routeLabels.habits",
+    detailKey: "common.routeDetails.habits",
+    icon: Repeat
+  },
+  {
+    to: "/projects",
+    labelKey: "common.routeLabels.projects",
+    detailKey: "common.routeDetails.projects",
+    icon: BriefcaseBusiness
+  },
+  {
+    to: "/calendar",
+    labelKey: "common.routeLabels.calendar",
+    detailKey: "common.routeDetails.calendar",
+    icon: CalendarDays
+  },
+  {
+    to: "/kanban",
+    labelKey: "common.routeLabels.kanban",
+    detailKey: "common.routeDetails.kanban",
+    icon: Zap
+  },
+  {
+    to: "/today",
+    labelKey: "common.routeLabels.today",
+    detailKey: "common.routeDetails.today",
+    icon: Clock3
+  },
+  {
+    to: "/notes",
+    labelKey: "common.routeLabels.notes",
+    detailKey: "common.routeDetails.notes",
+    icon: NotebookPen
+  },
+  {
+    to: "/psyche",
+    labelKey: "common.routeLabels.psyche",
+    detailKey: "common.routeDetails.psyche",
+    icon: BrainCircuit
+  },
+  {
+    to: "/activity",
+    labelKey: "common.routeLabels.activity",
+    detailKey: "common.routeDetails.activity",
+    icon: ArrowUpRight
+  },
+  {
+    to: "/insights",
+    labelKey: "common.routeLabels.insights",
+    detailKey: "common.routeDetails.insights",
+    icon: Radar
+  },
+  {
+    to: "/review/weekly",
+    labelKey: "common.routeLabels.review",
+    detailKey: "common.routeDetails.review",
+    icon: BarChart3
+  },
+  {
+    to: "/settings",
+    labelKey: "common.routeLabels.settings",
+    detailKey: "common.routeDetails.settings",
+    icon: Settings
+  }
 ] as const;
 
-const MOBILE_CORE_ROUTES = [PRIMARY_ROUTES[0], PRIMARY_ROUTES[5], PRIMARY_ROUTES[4], PRIMARY_ROUTES[7]] as const;
-const MOBILE_MORE_ROUTES = [PRIMARY_ROUTES[1], PRIMARY_ROUTES[2], PRIMARY_ROUTES[3], PRIMARY_ROUTES[6], PRIMARY_ROUTES[8], PRIMARY_ROUTES[9], PRIMARY_ROUTES[10], PRIMARY_ROUTES[11]] as const;
+const MOBILE_CORE_ROUTES = [
+  PRIMARY_ROUTES[0],
+  PRIMARY_ROUTES[6],
+  PRIMARY_ROUTES[5],
+  PRIMARY_ROUTES[8]
+] as const;
+const MOBILE_MORE_ROUTES = [
+  PRIMARY_ROUTES[1],
+  PRIMARY_ROUTES[2],
+  PRIMARY_ROUTES[3],
+  PRIMARY_ROUTES[4],
+  PRIMARY_ROUTES[7],
+  PRIMARY_ROUTES[9],
+  PRIMARY_ROUTES[10],
+  PRIMARY_ROUTES[11],
+  PRIMARY_ROUTES[12]
+] as const;
 
 function formatCompactNumber(value: number) {
   return new Intl.NumberFormat("en", {
@@ -116,7 +244,9 @@ function NavItem({
       aria-label={label}
       className={({ isActive }) =>
         `interactive-tap flex items-center rounded-[18px] text-sm transition ${
-          isActive ? "bg-white/[0.08] text-white shadow-[inset_0_0_0_1px_rgba(192,193,255,0.2)]" : "text-white/60 hover:bg-white/[0.04] hover:text-white"
+          isActive
+            ? "bg-white/[0.08] text-white shadow-[inset_0_0_0_1px_rgba(192,193,255,0.2)]"
+            : "text-white/60 hover:bg-white/[0.04] hover:text-white"
         } ${compact ? "justify-center px-3 py-3.5" : "gap-3 px-4 py-3"}`
       }
     >
@@ -136,8 +266,10 @@ function MobileBottomNav() {
         data-testid="mobile-bottom-nav"
         className="fixed inset-x-0 bottom-0 z-40 border-t border-white/6 bg-[rgba(9,14,28,0.94)] backdrop-blur-xl lg:hidden"
         style={{
-          paddingLeft: "max(0.75rem, calc(var(--forge-safe-area-left) + 0.75rem))",
-          paddingRight: "max(0.75rem, calc(var(--forge-safe-area-right) + 0.75rem))",
+          paddingLeft:
+            "max(0.75rem, calc(var(--forge-safe-area-left) + 0.75rem))",
+          paddingRight:
+            "max(0.75rem, calc(var(--forge-safe-area-right) + 0.75rem))",
           paddingTop: "0.75rem",
           paddingBottom: "calc(var(--forge-safe-area-bottom) + 0.75rem)"
         }}
@@ -149,7 +281,9 @@ function MobileBottomNav() {
               to={route.to}
               className={({ isActive }) =>
                 `flex min-h-11 flex-col items-center justify-center gap-1 rounded-2xl px-2 py-2 text-[12px] ${
-                  isActive ? "bg-white/[0.08] text-[var(--primary)]" : "text-white/55"
+                  isActive
+                    ? "bg-white/[0.08] text-[var(--primary)]"
+                    : "text-white/55"
                 }`
               }
             >
@@ -157,7 +291,11 @@ function MobileBottomNav() {
               <span>{t(route.labelKey)}</span>
             </NavLink>
           ))}
-          <button type="button" className="flex min-h-11 flex-col items-center justify-center gap-1 rounded-2xl px-2 py-2 text-[12px] text-white/55" onClick={() => setMoreOpen(true)}>
+          <button
+            type="button"
+            className="flex min-h-11 flex-col items-center justify-center gap-1 rounded-2xl px-2 py-2 text-[12px] text-white/55"
+            onClick={() => setMoreOpen(true)}
+          >
             <Settings className="size-4" />
             <span>{t("common.shell.more")}</span>
           </button>
@@ -179,15 +317,21 @@ function MobileBottomNav() {
               onClick={() => setMoreOpen(false)}
               className={({ isActive }) =>
                 `interactive-tap flex items-center justify-between rounded-[24px] px-4 py-4 ${
-                  isActive ? "bg-white/[0.08] text-white" : "bg-white/[0.04] text-white/70"
+                  isActive
+                    ? "bg-white/[0.08] text-white"
+                    : "bg-white/[0.04] text-white/70"
                 }`
               }
             >
               <span className="flex items-center gap-3">
                 <route.icon className="size-4 text-[var(--primary)]" />
                 <span>
-                  <span className="block text-base font-medium">{t(route.labelKey)}</span>
-                  <span className="mt-1 block text-sm text-white/54">{t(route.detailKey)}</span>
+                  <span className="block text-base font-medium">
+                    {t(route.labelKey)}
+                  </span>
+                  <span className="mt-1 block text-sm text-white/54">
+                    {t(route.detailKey)}
+                  </span>
                 </span>
               </span>
               <ArrowUpRight className="size-4 text-white/35" />
@@ -203,10 +347,19 @@ function ShellCommandButton({ onClick }: { onClick: () => void }) {
   const { t } = useI18n();
 
   return (
-    <Button variant="secondary" size="sm" className="min-w-[8.25rem] px-3.5" onClick={onClick}>
+    <Button
+      variant="secondary"
+      size="sm"
+      className="min-w-[8.25rem] px-3.5"
+      onClick={onClick}
+    >
       <Search className="size-4" />
       {t("common.shell.command")}
-      <Badge size="sm" tone="meta" className="ml-1 hidden bg-white/[0.06] text-white/52 xl:inline-flex">
+      <Badge
+        size="sm"
+        tone="meta"
+        className="ml-1 hidden bg-white/[0.06] text-white/52 xl:inline-flex"
+      >
         ⌘K
       </Badge>
     </Button>
@@ -236,9 +389,18 @@ function ShellFrame({
   startWorkPending: boolean;
   startWorkError: string | null;
   startWorkDefaults: { taskId?: string | null; projectId?: string | null };
-  onOpenStartWork: (defaults?: { taskId?: string | null; projectId?: string | null }) => void;
+  onOpenStartWork: (defaults?: {
+    taskId?: string | null;
+    projectId?: string | null;
+  }) => void;
   onCloseStartWork: () => void;
-  onStartExistingTask: (taskId: string, input: { timerMode: "planned" | "unlimited"; plannedDurationSeconds: number | null }) => Promise<void>;
+  onStartExistingTask: (
+    taskId: string,
+    input: {
+      timerMode: "planned" | "unlimited";
+      plannedDurationSeconds: number | null;
+    }
+  ) => Promise<void>;
   onCreateAndStartTask: (input: {
     title: string;
     description: string;
@@ -253,7 +415,9 @@ function ShellFrame({
   const location = useLocation();
   const shell = useForgeShell();
   const { t } = useI18n();
-  const active = PRIMARY_ROUTES.find((route) => location.pathname.startsWith(route.to)) ?? PRIMARY_ROUTES[0];
+  const active =
+    PRIMARY_ROUTES.find((route) => location.pathname.startsWith(route.to)) ??
+    PRIMARY_ROUTES[0];
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
   const [navCollapsed, setNavCollapsed] = useState(false);
@@ -267,9 +431,14 @@ function ShellFrame({
       id: "streak",
       label: t("common.shell.momentum.streak"),
       compactValue: String(shell.snapshot.metrics.streakDays),
-      expandedValue: t(shell.snapshot.metrics.streakDays === 1 ? "common.shell.momentum.streakBadgeOne" : "common.shell.momentum.streakBadgeOther", {
-        count: shell.snapshot.metrics.streakDays
-      }),
+      expandedValue: t(
+        shell.snapshot.metrics.streakDays === 1
+          ? "common.shell.momentum.streakBadgeOne"
+          : "common.shell.momentum.streakBadgeOther",
+        {
+          count: shell.snapshot.metrics.streakDays
+        }
+      ),
       icon: Flame
     },
     {
@@ -283,15 +452,27 @@ function ShellFrame({
       id: "momentum",
       label: t("common.shell.momentum.momentum"),
       compactValue: `${shell.snapshot.metrics.momentumScore}%`,
-      expandedValue: t("common.shell.momentum.liveMomentum", { count: shell.snapshot.metrics.momentumScore }),
+      expandedValue: t("common.shell.momentum.liveMomentum", {
+        count: shell.snapshot.metrics.momentumScore
+      }),
       icon: Activity
     }
   ] as const;
   const activityLabel =
     mutating > 0
-      ? t(mutating === 1 ? "common.shell.savingOne" : "common.shell.savingOther", { count: mutating })
+      ? t(
+          mutating === 1
+            ? "common.shell.savingOne"
+            : "common.shell.savingOther",
+          { count: mutating }
+        )
       : fetching > 0
-        ? t(fetching === 1 ? "common.shell.refreshingOne" : "common.shell.refreshingOther", { count: fetching })
+        ? t(
+            fetching === 1
+              ? "common.shell.refreshingOne"
+              : "common.shell.refreshingOther",
+            { count: fetching }
+          )
         : t("common.shell.settled");
 
   const railLinks = useMemo(() => {
@@ -350,7 +531,10 @@ function ShellFrame({
 
   useEffect(() => {
     try {
-      window.localStorage.setItem("forge.desktop-nav-collapsed", String(navCollapsed));
+      window.localStorage.setItem(
+        "forge.desktop-nav-collapsed",
+        String(navCollapsed)
+      );
     } catch {
       return;
     }
@@ -373,12 +557,22 @@ function ShellFrame({
   }, []);
 
   return (
-    <div className={`min-h-screen ${shell.snapshot.meta.mode === "transitional-node" ? "theme-forge-obsidian" : ""}`}>
-      <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} snapshot={shell.snapshot} />
+    <div
+      className={`min-h-screen ${shell.snapshot.meta.mode === "transitional-node" ? "theme-forge-obsidian" : ""}`}
+    >
+      <CommandPalette
+        open={paletteOpen}
+        onOpenChange={setPaletteOpen}
+        snapshot={shell.snapshot}
+      />
 
       <div
         className="hidden lg:grid lg:min-h-screen"
-        style={{ gridTemplateColumns: navCollapsed ? "5.75rem minmax(0,1fr)" : "17.75rem minmax(0,1fr)" }}
+        style={{
+          gridTemplateColumns: navCollapsed
+            ? "5.75rem minmax(0,1fr)"
+            : "17.75rem minmax(0,1fr)"
+        }}
       >
         <aside
           className={cn(
@@ -386,10 +580,31 @@ function ShellFrame({
             navCollapsed ? "px-3" : "px-5"
           )}
         >
-          <div className={cn("flex items-start", navCollapsed ? "flex-col items-center gap-3" : "justify-between gap-3")}>
-            <Link to="/overview" className={cn("block min-w-0", navCollapsed && "text-center")}>
-              <div className={cn("font-display text-[var(--primary)]", navCollapsed ? "text-2xl" : "text-3xl")}>{t("common.shell.appMark")}</div>
-              {!navCollapsed ? <div className="type-meta mt-2 text-white/40">Level {shell.snapshot.metrics.level}</div> : null}
+          <div
+            className={cn(
+              "flex items-start",
+              navCollapsed
+                ? "flex-col items-center gap-3"
+                : "justify-between gap-3"
+            )}
+          >
+            <Link
+              to="/overview"
+              className={cn("block min-w-0", navCollapsed && "text-center")}
+            >
+              <div
+                className={cn(
+                  "font-display text-[var(--primary)]",
+                  navCollapsed ? "text-2xl" : "text-3xl"
+                )}
+              >
+                {t("common.shell.appMark")}
+              </div>
+              {!navCollapsed ? (
+                <div className="type-meta mt-2 text-white/40">
+                  Level {shell.snapshot.metrics.level}
+                </div>
+              ) : null}
             </Link>
             <Button
               type="button"
@@ -397,23 +612,52 @@ function ShellFrame({
               size="sm"
               className="mt-0.5 px-2.5"
               onClick={() => setNavCollapsed((current) => !current)}
-              aria-label={t(navCollapsed ? "common.shell.expandSidebar" : "common.shell.collapseSidebar")}
-              title={t(navCollapsed ? "common.shell.expandSidebar" : "common.shell.collapseSidebar")}
+              aria-label={t(
+                navCollapsed
+                  ? "common.shell.expandSidebar"
+                  : "common.shell.collapseSidebar"
+              )}
+              title={t(
+                navCollapsed
+                  ? "common.shell.expandSidebar"
+                  : "common.shell.collapseSidebar"
+              )}
             >
-              {navCollapsed ? <ChevronsRight className="size-4" /> : <ChevronsLeft className="size-4" />}
+              {navCollapsed ? (
+                <ChevronsRight className="size-4" />
+              ) : (
+                <ChevronsLeft className="size-4" />
+              )}
             </Button>
           </div>
 
           <div className={cn("grid gap-2", navCollapsed ? "mt-6" : "mt-8")}>
             {PRIMARY_ROUTES.map((route) => (
-              <NavItem key={route.to} to={route.to} labelKey={route.labelKey} icon={route.icon} compact={navCollapsed} />
+              <NavItem
+                key={route.to}
+                to={route.to}
+                labelKey={route.labelKey}
+                icon={route.icon}
+                compact={navCollapsed}
+              />
             ))}
           </div>
 
           <div className={cn(navCollapsed ? "mt-4" : "mt-6")}>
-            <div className={cn("rounded-[24px] bg-white/[0.04]", navCollapsed ? "px-2 py-2.5" : "p-4")}>
-              {!navCollapsed ? <div className="type-label text-white/40">{t("common.shell.momentum.title")}</div> : null}
-              <div className={cn("grid", navCollapsed ? "gap-1.5" : "mt-3 gap-3")}>
+            <div
+              className={cn(
+                "rounded-[24px] bg-white/[0.04]",
+                navCollapsed ? "px-2 py-2.5" : "p-4"
+              )}
+            >
+              {!navCollapsed ? (
+                <div className="type-label text-white/40">
+                  {t("common.shell.momentum.title")}
+                </div>
+              ) : null}
+              <div
+                className={cn("grid", navCollapsed ? "gap-1.5" : "mt-3 gap-3")}
+              >
                 {sidebarMetrics.map((metric) => {
                   const Icon = metric.icon;
                   return navCollapsed ? (
@@ -423,110 +667,170 @@ function ShellFrame({
                       className="flex min-w-0 flex-col items-center gap-1 rounded-[16px] bg-white/[0.04] px-1 py-2.5 text-center"
                     >
                       <Icon className="size-3.5 shrink-0 text-white/42" />
-                      <div className="max-w-full text-[12px] font-semibold leading-none text-white">{metric.compactValue}</div>
+                      <div className="max-w-full text-[12px] font-semibold leading-none text-white">
+                        {metric.compactValue}
+                      </div>
                     </div>
                   ) : (
-                    <div key={metric.id} className="rounded-[18px] bg-white/[0.04] px-3 py-3">
-                      <div className="text-[11px] uppercase tracking-[0.14em] text-white/42">{metric.label}</div>
-                      <div className="mt-1 text-lg font-semibold leading-tight text-white">{metric.expandedValue}</div>
+                    <div
+                      key={metric.id}
+                      className="rounded-[18px] bg-white/[0.04] px-3 py-3"
+                    >
+                      <div className="text-[11px] uppercase tracking-[0.14em] text-white/42">
+                        {metric.label}
+                      </div>
+                      <div className="mt-1 text-lg font-semibold leading-tight text-white">
+                        {metric.expandedValue}
+                      </div>
                     </div>
                   );
                 })}
               </div>
             </div>
           </div>
-
         </aside>
 
         <div className="min-h-screen">
           <TaskTimerRailProvider>
-          <motion.header
-            className="sticky top-0 z-30 border-b border-white/5 bg-[rgba(10,16,30,0.82)] px-6 backdrop-blur-xl"
-            animate={reduceMotion ? undefined : { paddingTop: collapsed ? 6 : 10, paddingBottom: collapsed ? 6 : 9 }}
-            transition={{ duration: 0.35, ease: "easeOut" }}
-          >
-            {/* ── Title row: page title + work bar + action buttons — all same height ── */}
-            <div className="flex items-center justify-between gap-4">
-              <div className="flex min-w-0 flex-1 items-center gap-5">
-                <motion.div
-                  className="shrink-0 font-display text-white"
-                  animate={reduceMotion ? undefined : { fontSize: collapsed ? "1rem" : "1.12rem", lineHeight: 1 }}
-                  transition={{ duration: 0.35, ease: "easeOut" }}
-                >
-                  {t(active.labelKey)}
-                </motion.div>
-                <div className="min-w-0 flex-1">
-                  <TaskTimerRailBar
-                    runs={shell.snapshot.activeTaskRuns}
-                    tasks={shell.snapshot.tasks}
-                    generatedAt={shell.snapshot.meta.generatedAt}
-                    timeAccountingMode={settings.execution.timeAccountingMode}
-                    pending={timerPending}
-                    onOpenStartWork={() => onOpenStartWork()}
-                    onPause={onPauseRun}
-                    onFocus={onFocusRun}
+            <motion.header
+              className="sticky top-0 z-30 border-b border-white/5 bg-[rgba(10,16,30,0.82)] px-6 backdrop-blur-xl"
+              animate={
+                reduceMotion
+                  ? undefined
+                  : {
+                      paddingTop: collapsed ? 6 : 10,
+                      paddingBottom: collapsed ? 6 : 9
+                    }
+              }
+              transition={{ duration: 0.35, ease: "easeOut" }}
+            >
+              {/* ── Title row: page title + work bar + action buttons — all same height ── */}
+              <div className="flex items-center justify-between gap-4">
+                <div className="flex min-w-0 flex-1 items-center gap-5">
+                  <motion.div
+                    className="shrink-0 font-display text-white"
+                    animate={
+                      reduceMotion
+                        ? undefined
+                        : {
+                            fontSize: collapsed ? "1rem" : "1.12rem",
+                            lineHeight: 1
+                          }
+                    }
+                    transition={{ duration: 0.35, ease: "easeOut" }}
+                  >
+                    {t(active.labelKey)}
+                  </motion.div>
+                  <div className="min-w-0 flex-1">
+                    <TaskTimerRailBar
+                      runs={shell.snapshot.activeTaskRuns}
+                      tasks={shell.snapshot.tasks}
+                      generatedAt={shell.snapshot.meta.generatedAt}
+                      timeAccountingMode={settings.execution.timeAccountingMode}
+                      pending={timerPending}
+                      onOpenStartWork={() => onOpenStartWork()}
+                      onPause={onPauseRun}
+                      onFocus={onFocusRun}
+                    />
+                  </div>
+                </div>
+                <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+                  <AmbientActivityPill
+                    active={activityCount > 0}
+                    label={activityLabel}
                   />
+                  <ShellCommandButton onClick={() => setPaletteOpen(true)} />
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    className="min-w-[7.25rem] px-3.5"
+                    onClick={() => void shell.refresh()}
+                  >
+                    <RefreshCcw className="size-4" />
+                    {t("common.actions.refresh")}
+                  </Button>
                 </div>
               </div>
-              <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
-                <AmbientActivityPill active={activityCount > 0} label={activityLabel} />
-                <ShellCommandButton onClick={() => setPaletteOpen(true)} />
-                <Button variant="secondary" size="sm" className="min-w-[7.25rem] px-3.5" onClick={() => void shell.refresh()}>
-                  <RefreshCcw className="size-4" />
-                  {t("common.actions.refresh")}
-                </Button>
-              </div>
-            </div>
 
-            {/* ── Expanded work detail — full width below the title row ── */}
-            <TaskTimerRailPanel
-              runs={shell.snapshot.activeTaskRuns}
-              tasks={shell.snapshot.tasks}
-              generatedAt={shell.snapshot.meta.generatedAt}
-              timeAccountingMode={settings.execution.timeAccountingMode}
-              pending={timerPending}
-              onOpenStartWork={() => onOpenStartWork()}
-              onFocus={onFocusRun}
-              onPause={onPauseRun}
-              onComplete={onCompleteRun}
-            />
+              {/* ── Expanded work detail — full width below the title row ── */}
+              <TaskTimerRailPanel
+                runs={shell.snapshot.activeTaskRuns}
+                tasks={shell.snapshot.tasks}
+                generatedAt={shell.snapshot.meta.generatedAt}
+                timeAccountingMode={settings.execution.timeAccountingMode}
+                pending={timerPending}
+                onOpenStartWork={() => onOpenStartWork()}
+                onFocus={onFocusRun}
+                onPause={onPauseRun}
+                onComplete={onCompleteRun}
+              />
 
-            <AnimatePresence initial={false}>
-              {!collapsed ? (
-                <motion.div
-                  key="desktop-shell-secondary-row"
-                  className="mt-3 flex items-center justify-between gap-4 border-t border-white/6 pt-3"
-                  initial={reduceMotion ? undefined : { opacity: 0, height: 0, marginTop: 0, paddingTop: 0 }}
-                  animate={reduceMotion ? undefined : { opacity: 1, height: "auto", marginTop: 12, paddingTop: 12 }}
-                  exit={reduceMotion ? undefined : { opacity: 0, height: 0, marginTop: 0, paddingTop: 0 }}
-                  transition={{ duration: 0.28, ease: "easeOut" }}
-                >
-                  <div className="flex flex-wrap gap-2">
-                    {railLinks.map((link) => (
-                      <Link
-                        key={link.to}
-                        to={link.to}
-                        className="interactive-tap inline-flex min-h-10 min-w-max items-center justify-center rounded-full bg-white/[0.04] px-4 py-2 text-[13px] leading-none whitespace-nowrap text-white/62 transition hover:bg-white/[0.07] hover:text-white"
-                      >
-                        {link.label}
-                      </Link>
-                    ))}
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    <Badge tone="meta">
-                      {t(shell.snapshot.metrics.streakDays === 1 ? "common.shell.momentum.streakBadgeOne" : "common.shell.momentum.streakBadgeOther", {
-                        count: shell.snapshot.metrics.streakDays
-                      })}
-                    </Badge>
-                    <Badge tone="meta">{t("common.shell.momentum.weeklyXp", { count: shell.snapshot.metrics.weeklyXp })}</Badge>
-                    <Badge tone={isPsyche ? "signal" : "meta"}>
-                      {isPsyche ? t("common.shell.momentum.psycheMode") : t("common.shell.momentum.liveMomentum", { count: shell.snapshot.metrics.momentumScore })}
-                    </Badge>
-                  </div>
-                </motion.div>
-              ) : null}
-            </AnimatePresence>
-          </motion.header>
+              <AnimatePresence initial={false}>
+                {!collapsed ? (
+                  <motion.div
+                    key="desktop-shell-secondary-row"
+                    className="mt-3 flex items-center justify-between gap-4 border-t border-white/6 pt-3"
+                    initial={
+                      reduceMotion
+                        ? undefined
+                        : { opacity: 0, height: 0, marginTop: 0, paddingTop: 0 }
+                    }
+                    animate={
+                      reduceMotion
+                        ? undefined
+                        : {
+                            opacity: 1,
+                            height: "auto",
+                            marginTop: 12,
+                            paddingTop: 12
+                          }
+                    }
+                    exit={
+                      reduceMotion
+                        ? undefined
+                        : { opacity: 0, height: 0, marginTop: 0, paddingTop: 0 }
+                    }
+                    transition={{ duration: 0.28, ease: "easeOut" }}
+                  >
+                    <div className="flex flex-wrap gap-2">
+                      {railLinks.map((link) => (
+                        <Link
+                          key={link.to}
+                          to={link.to}
+                          className="interactive-tap inline-flex min-h-10 min-w-max items-center justify-center rounded-full bg-white/[0.04] px-4 py-2 text-[13px] leading-none whitespace-nowrap text-white/62 transition hover:bg-white/[0.07] hover:text-white"
+                        >
+                          {link.label}
+                        </Link>
+                      ))}
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <Badge tone="meta">
+                        {t(
+                          shell.snapshot.metrics.streakDays === 1
+                            ? "common.shell.momentum.streakBadgeOne"
+                            : "common.shell.momentum.streakBadgeOther",
+                          {
+                            count: shell.snapshot.metrics.streakDays
+                          }
+                        )}
+                      </Badge>
+                      <Badge tone="meta">
+                        {t("common.shell.momentum.weeklyXp", {
+                          count: shell.snapshot.metrics.weeklyXp
+                        })}
+                      </Badge>
+                      <Badge tone={isPsyche ? "signal" : "meta"}>
+                        {isPsyche
+                          ? t("common.shell.momentum.psycheMode")
+                          : t("common.shell.momentum.liveMomentum", {
+                              count: shell.snapshot.metrics.momentumScore
+                            })}
+                      </Badge>
+                    </div>
+                  </motion.div>
+                ) : null}
+              </AnimatePresence>
+            </motion.header>
           </TaskTimerRailProvider>
 
           <div className="px-6 pt-3">
@@ -553,7 +857,10 @@ function ShellFrame({
           </div>
 
           <main className="px-6 py-3">
-            <RouteTransitionFrame routeKey={location.pathname} tone={isPsyche ? "psyche" : "core"}>
+            <RouteTransitionFrame
+              routeKey={location.pathname}
+              tone={isPsyche ? "psyche" : "core"}
+            >
               {children}
             </RouteTransitionFrame>
           </main>
@@ -562,71 +869,101 @@ function ShellFrame({
 
       <div className="min-h-[100dvh] overflow-x-clip lg:hidden">
         <TaskTimerRailProvider>
-        <motion.header
-          className="sticky top-0 z-30 border-b border-white/6 bg-[rgba(8,13,28,0.92)] px-4 backdrop-blur-xl"
-          animate={reduceMotion ? undefined : { paddingTop: collapsed ? 6 : 9, paddingBottom: collapsed ? 6 : 8 }}
-          transition={{ duration: 0.35, ease: "easeOut" }}
-        >
-          <div className="flex items-center justify-between gap-2">
-            <div className="flex min-w-0 flex-1 items-center gap-3">
-              <div className={cn("shrink-0 font-display text-white transition", collapsed ? "text-[0.95rem]" : "text-base")}>{t(active.labelKey)}</div>
-              <div className="min-w-0 flex-1">
-                <TaskTimerRailBar
-                  runs={shell.snapshot.activeTaskRuns}
-                  tasks={shell.snapshot.tasks}
-                  generatedAt={shell.snapshot.meta.generatedAt}
-                  timeAccountingMode={settings.execution.timeAccountingMode}
-                  pending={timerPending}
-                  onOpenStartWork={() => onOpenStartWork()}
-                  onPause={onPauseRun}
-                  onFocus={onFocusRun}
-                />
-              </div>
-            </div>
-            <div className="flex shrink-0 items-center gap-1.5">
-              <Button variant="secondary" size="sm" className="min-h-[2.125rem] px-2.5" onClick={() => setPaletteOpen(true)}>
-                <Search className="size-4" />
-              </Button>
-              <div className="inline-flex min-h-[2.125rem] items-center gap-1.5 rounded-full border border-white/8 bg-white/[0.05] px-2.5 text-[12px] font-medium text-[var(--primary)]">
-                <Zap className="size-3.5 shrink-0" />
-                <span>{formatCompactNumber(shell.snapshot.metrics.totalXp)} XP</span>
-              </div>
-            </div>
-          </div>
-
-          {/* ── Expanded work detail — full width below the title row ── */}
-          <TaskTimerRailPanel
-            runs={shell.snapshot.activeTaskRuns}
-            tasks={shell.snapshot.tasks}
-            generatedAt={shell.snapshot.meta.generatedAt}
-            timeAccountingMode={settings.execution.timeAccountingMode}
-            pending={timerPending}
-            onOpenStartWork={() => onOpenStartWork()}
-            onFocus={onFocusRun}
-            onPause={onPauseRun}
-            onComplete={onCompleteRun}
-          />
-
-          {!collapsed ? (
-            <>
-              <AnimatePresence initial={false}>
-                <motion.div
-                  key="mobile-shell-copy"
-                  initial={reduceMotion ? undefined : { opacity: 0, height: 0 }}
-                  animate={reduceMotion ? undefined : { opacity: 1, height: "auto" }}
-                  exit={reduceMotion ? undefined : { opacity: 0, height: 0 }}
-                  transition={{ duration: 0.28, ease: "easeOut" }}
-                  className="overflow-hidden"
+          <motion.header
+            className="sticky top-0 z-30 border-b border-white/6 bg-[rgba(8,13,28,0.92)] px-4 backdrop-blur-xl"
+            animate={
+              reduceMotion
+                ? undefined
+                : {
+                    paddingTop: collapsed ? 6 : 9,
+                    paddingBottom: collapsed ? 6 : 8
+                  }
+            }
+            transition={{ duration: 0.35, ease: "easeOut" }}
+          >
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex min-w-0 flex-1 items-center gap-3">
+                <div
+                  className={cn(
+                    "shrink-0 font-display text-white transition",
+                    collapsed ? "text-[0.95rem]" : "text-base"
+                  )}
                 >
-                  <div className="mt-2 text-[13px] leading-5 text-white/52">{t(active.detailKey)}</div>
-                </motion.div>
-              </AnimatePresence>
-              <div className="mt-2">
-                <AmbientActivityPill active={activityCount > 0} label={activityLabel} />
+                  {t(active.labelKey)}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <TaskTimerRailBar
+                    runs={shell.snapshot.activeTaskRuns}
+                    tasks={shell.snapshot.tasks}
+                    generatedAt={shell.snapshot.meta.generatedAt}
+                    timeAccountingMode={settings.execution.timeAccountingMode}
+                    pending={timerPending}
+                    onOpenStartWork={() => onOpenStartWork()}
+                    onPause={onPauseRun}
+                    onFocus={onFocusRun}
+                  />
+                </div>
               </div>
-            </>
-          ) : null}
-        </motion.header>
+              <div className="flex shrink-0 items-center gap-1.5">
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  className="min-h-[2.125rem] px-2.5"
+                  onClick={() => setPaletteOpen(true)}
+                >
+                  <Search className="size-4" />
+                </Button>
+                <div className="inline-flex min-h-[2.125rem] items-center gap-1.5 rounded-full border border-white/8 bg-white/[0.05] px-2.5 text-[12px] font-medium text-[var(--primary)]">
+                  <Zap className="size-3.5 shrink-0" />
+                  <span>
+                    {formatCompactNumber(shell.snapshot.metrics.totalXp)} XP
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* ── Expanded work detail — full width below the title row ── */}
+            <TaskTimerRailPanel
+              runs={shell.snapshot.activeTaskRuns}
+              tasks={shell.snapshot.tasks}
+              generatedAt={shell.snapshot.meta.generatedAt}
+              timeAccountingMode={settings.execution.timeAccountingMode}
+              pending={timerPending}
+              onOpenStartWork={() => onOpenStartWork()}
+              onFocus={onFocusRun}
+              onPause={onPauseRun}
+              onComplete={onCompleteRun}
+            />
+
+            {!collapsed ? (
+              <>
+                <AnimatePresence initial={false}>
+                  <motion.div
+                    key="mobile-shell-copy"
+                    initial={
+                      reduceMotion ? undefined : { opacity: 0, height: 0 }
+                    }
+                    animate={
+                      reduceMotion ? undefined : { opacity: 1, height: "auto" }
+                    }
+                    exit={reduceMotion ? undefined : { opacity: 0, height: 0 }}
+                    transition={{ duration: 0.28, ease: "easeOut" }}
+                    className="overflow-hidden"
+                  >
+                    <div className="mt-2 text-[13px] leading-5 text-white/52">
+                      {t(active.detailKey)}
+                    </div>
+                  </motion.div>
+                </AnimatePresence>
+                <div className="mt-2">
+                  <AmbientActivityPill
+                    active={activityCount > 0}
+                    label={activityLabel}
+                  />
+                </div>
+              </>
+            ) : null}
+          </motion.header>
         </TaskTimerRailProvider>
 
         <StartWorkComposer
@@ -658,7 +995,10 @@ function ShellFrame({
             paddingRight: "max(1rem, calc(var(--forge-safe-area-right) + 1rem))"
           }}
         >
-          <RouteTransitionFrame routeKey={location.pathname} tone={isPsyche ? "psyche" : "core"}>
+          <RouteTransitionFrame
+            routeKey={location.pathname}
+            tone={isPsyche ? "psyche" : "core"}
+          >
             {children}
           </RouteTransitionFrame>
         </main>
@@ -680,14 +1020,22 @@ function ShellFrame({
 
 export function AppShell() {
   useLiveEvents();
-  const sessionIdRef = useRef(`forge_session_${Math.random().toString(36).slice(2, 10)}`);
+  const sessionIdRef = useRef(
+    `forge_session_${Math.random().toString(36).slice(2, 10)}`
+  );
   const xpTimerRef = useRef<number | null>(null);
   const previousXpRef = useRef<number | null>(null);
   const queryClient = useQueryClient();
   const [startWorkOpen, setStartWorkOpen] = useState(false);
-  const [startWorkDefaults, setStartWorkDefaults] = useState<{ taskId?: string | null; projectId?: string | null }>({});
+  const [startWorkDefaults, setStartWorkDefaults] = useState<{
+    taskId?: string | null;
+    projectId?: string | null;
+  }>({});
   const [startWorkError, setStartWorkError] = useState<string | null>(null);
-  const [xpNotice, setXpNotice] = useState<{ deltaXp: number; totalXp: number } | null>(null);
+  const [xpNotice, setXpNotice] = useState<{
+    deltaXp: number;
+    totalXp: number;
+  } | null>(null);
   const operatorSessionQuery = useQuery({
     queryKey: ["forge-shell-operator-session"],
     queryFn: ensureOperatorSession
@@ -751,7 +1099,10 @@ export function AppShell() {
       interacted = true;
     };
 
-    const sendEvent = (eventType: string, metrics: Record<string, string | number | boolean | null>) =>
+    const sendEvent = (
+      eventType: string,
+      metrics: Record<string, string | number | boolean | null>
+    ) =>
       recordSessionEvent({
         sessionId: sessionIdRef.current,
         eventType,
@@ -774,7 +1125,10 @@ export function AppShell() {
     }, 120_000);
 
     const onScroll = () => {
-      const denominator = Math.max(1, document.documentElement.scrollHeight - window.innerHeight);
+      const denominator = Math.max(
+        1,
+        document.documentElement.scrollHeight - window.innerHeight
+      );
       const progress = Math.round((window.scrollY / denominator) * 100);
       if (progress >= 75 && interacted && !scrollSent) {
         scrollSent = true;
@@ -820,28 +1174,51 @@ export function AppShell() {
   });
 
   const patchGoalMutation = useMutation({
-    mutationFn: ({ goalId, patch }: { goalId: string; patch: GoalMutationInput }) => patchGoal(goalId, patch),
+    mutationFn: ({
+      goalId,
+      patch
+    }: {
+      goalId: string;
+      patch: GoalMutationInput;
+    }) => patchGoal(goalId, patch),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["forge-snapshot"] });
     }
   });
 
   const patchProjectMutation = useMutation({
-    mutationFn: ({ projectId, patch }: { projectId: string; patch: ProjectMutationInput }) => patchProject(projectId, patch),
+    mutationFn: ({
+      projectId,
+      patch
+    }: {
+      projectId: string;
+      patch: Partial<ProjectMutationInput>;
+    }) => patchProject(projectId, patch),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["forge-snapshot"] });
     }
   });
 
   const patchTaskMutation = useMutation({
-    mutationFn: ({ taskId, status }: { taskId: string; status: "backlog" | "focus" | "in_progress" | "blocked" | "done" }) =>
-      patchTask(taskId, { status }),
+    mutationFn: ({
+      taskId,
+      status
+    }: {
+      taskId: string;
+      status: "backlog" | "focus" | "in_progress" | "blocked" | "done";
+    }) => patchTask(taskId, { status }),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["forge-snapshot"] });
     }
   });
   const claimTaskRunMutation = useMutation({
-    mutationFn: ({ taskId, input }: { taskId: string; input: Parameters<typeof claimTaskRun>[1] }) => claimTaskRun(taskId, input),
+    mutationFn: ({
+      taskId,
+      input
+    }: {
+      taskId: string;
+      input: Parameters<typeof claimTaskRun>[1];
+    }) => claimTaskRun(taskId, input),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["forge-snapshot"] });
     }
@@ -853,15 +1230,29 @@ export function AppShell() {
     }
   });
   const releaseTaskRunMutation = useMutation({
-    mutationFn: ({ runId, actor, note }: { runId: string; actor?: string; note?: string }) =>
-      releaseTaskRun(runId, { actor, note: note ?? "" }),
+    mutationFn: ({
+      runId,
+      actor,
+      note
+    }: {
+      runId: string;
+      actor?: string;
+      note?: string;
+    }) => releaseTaskRun(runId, { actor, note: note ?? "" }),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["forge-snapshot"] });
     }
   });
   const completeTaskRunMutation = useMutation({
-    mutationFn: ({ runId, actor, note }: { runId: string; actor?: string; note?: string }) =>
-      completeTaskRun(runId, { actor, note: note ?? "" }),
+    mutationFn: ({
+      runId,
+      actor,
+      note
+    }: {
+      runId: string;
+      actor?: string;
+      note?: string;
+    }) => completeTaskRun(runId, { actor, note: note ?? "" }),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["forge-snapshot"] });
     }
@@ -875,11 +1266,14 @@ export function AppShell() {
       timerMode: "planned" | "unlimited";
       plannedDurationSeconds: number | null;
     }) => {
-      const project = snapshotQuery.data?.dashboard.projects.find((entry) => entry.id === input.projectId);
+      const project = snapshotQuery.data?.dashboard.projects.find(
+        (entry) => entry.id === input.projectId
+      );
       if (!project) {
         throw new Error("Select a project before starting work.");
       }
-      const operatorName = settingsQuery.data?.settings.profile.operatorName ?? "Albert";
+      const operatorName =
+        settingsQuery.data?.settings.profile.operatorName ?? "Albert";
       const created = await createTask({
         title: input.title,
         description: input.description,
@@ -892,9 +1286,10 @@ export function AppShell() {
         energy: "steady",
         dueDate: "",
         points: 60,
-        tagIds: []
+        tagIds: [],
+        notes: []
       });
-      await claimTaskRun(created.task.id, {
+      const started = await startTaskRunWithOverride(created.task.id, {
         actor: operatorName,
         timerMode: input.timerMode,
         plannedDurationSeconds: input.plannedDurationSeconds,
@@ -902,12 +1297,49 @@ export function AppShell() {
         leaseTtlSeconds: 1800,
         note: ""
       });
+      if (!started) {
+        throw new Error(
+          "The task was created, but live work did not start because the calendar override was cancelled."
+        );
+      }
       return created.task;
     },
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["forge-snapshot"] });
     }
   });
+
+  const startTaskRunWithOverride = async (
+    taskId: string,
+    input: Parameters<typeof claimTaskRun>[1]
+  ) => {
+    try {
+      await claimTaskRunMutation.mutateAsync({ taskId, input });
+      return true;
+    } catch (error) {
+      if (
+        error instanceof ForgeApiError &&
+        error.code === "task_run_calendar_blocked" &&
+        typeof window !== "undefined"
+      ) {
+        const overrideReason = window.prompt(
+          "Calendar rules block this task right now. Add a reason to override and start anyway."
+        );
+        if (!overrideReason || overrideReason.trim().length === 0) {
+          return false;
+        }
+        await claimTaskRunMutation.mutateAsync({
+          taskId,
+          input: {
+            ...input,
+            overrideReason: overrideReason.trim()
+          }
+        });
+        return true;
+      }
+      throw error;
+    }
+  };
 
   useEffect(() => {
     const snapshot = snapshotQuery.data;
@@ -932,10 +1364,18 @@ export function AppShell() {
     return () => window.clearInterval(timer);
   }, [queryClient, snapshotQuery.data]);
 
-  if (operatorSessionQuery.isLoading || snapshotQuery.isLoading || settingsQuery.isLoading) {
+  if (
+    operatorSessionQuery.isLoading ||
+    snapshotQuery.isLoading ||
+    settingsQuery.isLoading
+  ) {
     return (
       <div className="grid min-h-screen place-items-center p-6">
-        <LoadingState eyebrow="Forge shell" title="Loading Forge" description="Checking your operator session and loading your latest snapshot." />
+        <LoadingState
+          eyebrow="Forge shell"
+          title="Loading Forge"
+          description="Checking your operator session and loading your latest snapshot."
+        />
       </div>
     );
   }
@@ -946,7 +1386,11 @@ export function AppShell() {
         <ErrorState
           eyebrow="Forge operator session"
           error={operatorSessionQuery.error}
-          onRetry={() => void queryClient.invalidateQueries({ queryKey: ["forge-shell-operator-session"] })}
+          onRetry={() =>
+            void queryClient.invalidateQueries({
+              queryKey: ["forge-shell-operator-session"]
+            })
+          }
         />
       </div>
     );
@@ -955,7 +1399,13 @@ export function AppShell() {
   if (settingsQuery.isError) {
     return (
       <div className="grid min-h-screen place-items-center p-6">
-        <ErrorState eyebrow="Forge settings" error={settingsQuery.error} onRetry={() => void queryClient.invalidateQueries({ queryKey: ["forge-settings"] })} />
+        <ErrorState
+          eyebrow="Forge settings"
+          error={settingsQuery.error}
+          onRetry={() =>
+            void queryClient.invalidateQueries({ queryKey: ["forge-settings"] })
+          }
+        />
       </div>
     );
   }
@@ -963,7 +1413,13 @@ export function AppShell() {
   if (snapshotQuery.isError || !snapshotQuery.data || !settingsQuery.data) {
     return (
       <div className="grid min-h-screen place-items-center p-6">
-        <ErrorState eyebrow="Forge state" error={snapshotQuery.error} onRetry={() => void queryClient.invalidateQueries({ queryKey: ["forge-snapshot"] })} />
+        <ErrorState
+          eyebrow="Forge state"
+          error={snapshotQuery.error}
+          onRetry={() =>
+            void queryClient.invalidateQueries({ queryKey: ["forge-snapshot"] })
+          }
+        />
       </div>
     );
   }
@@ -978,16 +1434,16 @@ export function AppShell() {
     },
     startTaskNow: async (taskId, options = {}) => {
       const operatorName = settingsQuery.data.settings.profile.operatorName;
-      await claimTaskRunMutation.mutateAsync({
-        taskId,
-        input: {
-          actor: operatorName,
-          timerMode: options.timerMode ?? "planned",
-          plannedDurationSeconds: options.plannedDurationSeconds === undefined ? 20 * 60 : options.plannedDurationSeconds,
-          isCurrent: true,
-          leaseTtlSeconds: 1800,
-          note: ""
-        }
+      await startTaskRunWithOverride(taskId, {
+        actor: operatorName,
+        timerMode: options.timerMode ?? "planned",
+        plannedDurationSeconds:
+          options.plannedDurationSeconds === undefined
+            ? 20 * 60
+            : options.plannedDurationSeconds,
+        isCurrent: true,
+        leaseTtlSeconds: 1800,
+        note: ""
       });
     },
     createGoal: async (input) => {
@@ -1018,9 +1474,16 @@ export function AppShell() {
         <>
           <ShellFrame
             settings={settingsQuery.data.settings}
-            timerPending={focusTaskRunMutation.isPending || releaseTaskRunMutation.isPending || completeTaskRunMutation.isPending}
+            timerPending={
+              focusTaskRunMutation.isPending ||
+              releaseTaskRunMutation.isPending ||
+              completeTaskRunMutation.isPending
+            }
             startWorkOpen={startWorkOpen}
-            startWorkPending={claimTaskRunMutation.isPending || createAndStartTaskMutation.isPending}
+            startWorkPending={
+              claimTaskRunMutation.isPending ||
+              createAndStartTaskMutation.isPending
+            }
             startWorkError={startWorkError}
             startWorkDefaults={startWorkDefaults}
             onOpenStartWork={(defaults) => {
@@ -1034,22 +1497,26 @@ export function AppShell() {
             }}
             onStartExistingTask={async (taskId, input) => {
               try {
-                const operatorName = settingsQuery.data.settings.profile.operatorName;
-                await claimTaskRunMutation.mutateAsync({
-                  taskId,
-                  input: {
-                    actor: operatorName,
-                    timerMode: input.timerMode,
-                    plannedDurationSeconds: input.plannedDurationSeconds,
-                    isCurrent: true,
-                    leaseTtlSeconds: 1800,
-                    note: ""
-                  }
+                const operatorName =
+                  settingsQuery.data.settings.profile.operatorName;
+                const started = await startTaskRunWithOverride(taskId, {
+                  actor: operatorName,
+                  timerMode: input.timerMode,
+                  plannedDurationSeconds: input.plannedDurationSeconds,
+                  isCurrent: true,
+                  leaseTtlSeconds: 1800,
+                  note: ""
                 });
-                setStartWorkOpen(false);
-                setStartWorkError(null);
+                if (started) {
+                  setStartWorkOpen(false);
+                  setStartWorkError(null);
+                }
               } catch (error) {
-                setStartWorkError(error instanceof Error ? error.message : "Could not start work.");
+                setStartWorkError(
+                  error instanceof Error
+                    ? error.message
+                    : "Could not start work."
+                );
               }
             }}
             onCreateAndStartTask={async (input) => {
@@ -1058,19 +1525,35 @@ export function AppShell() {
                 setStartWorkOpen(false);
                 setStartWorkError(null);
               } catch (error) {
-                setStartWorkError(error instanceof Error ? error.message : "Could not create and start the task.");
+                setStartWorkError(
+                  error instanceof Error
+                    ? error.message
+                    : "Could not create and start the task."
+                );
               }
             }}
             onFocusRun={async (runId) => {
               await focusTaskRunMutation.mutateAsync(runId);
             }}
             onPauseRun={async (runId) => {
-              const run = snapshotQuery.data.activeTaskRuns.find((entry) => entry.id === runId);
-              await releaseTaskRunMutation.mutateAsync({ runId, actor: run?.actor, note: run?.note });
+              const run = snapshotQuery.data.activeTaskRuns.find(
+                (entry) => entry.id === runId
+              );
+              await releaseTaskRunMutation.mutateAsync({
+                runId,
+                actor: run?.actor,
+                note: run?.note
+              });
             }}
             onCompleteRun={async (runId) => {
-              const run = snapshotQuery.data.activeTaskRuns.find((entry) => entry.id === runId);
-              await completeTaskRunMutation.mutateAsync({ runId, actor: run?.actor, note: run?.note });
+              const run = snapshotQuery.data.activeTaskRuns.find(
+                (entry) => entry.id === runId
+              );
+              await completeTaskRunMutation.mutateAsync({
+                runId,
+                actor: run?.actor,
+                note: run?.note
+              });
             }}
           >
             <Outlet context={contextValue} />
@@ -1087,7 +1570,10 @@ export function AppShell() {
               >
                 <Zap className="size-4 shrink-0" />
                 <span>
-                  {xpNotice.deltaXp > 0 ? `XP +${xpNotice.deltaXp}` : `XP ${xpNotice.deltaXp}`} · {formatCompactNumber(xpNotice.totalXp)} total
+                  {xpNotice.deltaXp > 0
+                    ? `XP +${xpNotice.deltaXp}`
+                    : `XP ${xpNotice.deltaXp}`}{" "}
+                  · {formatCompactNumber(xpNotice.totalXp)} total
                 </span>
               </div>
             </div>

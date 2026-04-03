@@ -1,4 +1,17 @@
-import type { ForgeSnapshot, Habit, ProjectSummary, Task } from "./types";
+import type { CalendarSchedulingRules, ForgeSnapshot, Habit, ProjectSummary, Task } from "./types";
+
+const EMPTY_CALENDAR_RULES: CalendarSchedulingRules = {
+  allowWorkBlockKinds: [],
+  blockWorkBlockKinds: [],
+  allowCalendarIds: [],
+  blockCalendarIds: [],
+  allowEventTypes: [],
+  blockEventTypes: [],
+  allowEventKeywords: [],
+  blockEventKeywords: [],
+  allowAvailability: [],
+  blockAvailability: []
+};
 
 type LegacyProjectLike = Partial<ProjectSummary> & {
   summary?: string;
@@ -31,6 +44,8 @@ function normalizeTask(task: Partial<Task> | undefined): Task {
     effort: task?.effort ?? "deep",
     energy: task?.energy ?? "steady",
     points: task?.points ?? 0,
+    plannedDurationSeconds: task?.plannedDurationSeconds ?? null,
+    schedulingRules: task?.schedulingRules ?? null,
     sortOrder: task?.sortOrder ?? 0,
     completedAt: task?.completedAt ?? null,
     createdAt: task?.createdAt ?? new Date(0).toISOString(),
@@ -58,6 +73,7 @@ function normalizeProject(project: LegacyProjectLike | undefined): ProjectSummar
     status: project?.status === "paused" || project?.status === "completed" ? project.status : "active",
     targetPoints: project?.targetPoints ?? project?.totalPoints ?? 0,
     themeColor: project?.themeColor ?? "#c0c1ff",
+    schedulingRules: project?.schedulingRules ?? EMPTY_CALENDAR_RULES,
     createdAt: project?.createdAt ?? new Date(0).toISOString(),
     updatedAt: project?.updatedAt ?? new Date(0).toISOString(),
     goalTitle: project?.goalTitle ?? "",

@@ -3,6 +3,7 @@ import { getDatabase, runInTransaction } from "../db.js";
 import { HttpError } from "../errors.js";
 import { computeWorkTime } from "../services/work-time.js";
 import { recordActivityEvent } from "./activity-events.js";
+import { bindTaskRunToTimebox, evaluateSchedulingForTask, finalizeTaskRunTimebox, heartbeatTaskRunTimebox } from "./calendar.js";
 import { createLinkedNotes } from "./notes.js";
 import { recordTaskRunCompletionReward, recordTaskRunProgressRewards, recordTaskRunStartReward } from "./rewards.js";
 import { getTaskById, updateTaskInTransaction } from "./tasks.js";
@@ -35,6 +36,7 @@ type TaskRunRow = {
   completed_at: string | null;
   released_at: string | null;
   timed_out_at: string | null;
+  override_reason: string | null;
   updated_at: string;
   task_title: string;
 };
@@ -78,6 +80,7 @@ function selectClause(): string {
     task_runs.completed_at,
     task_runs.released_at,
     task_runs.timed_out_at,
+    task_runs.override_reason,
     task_runs.updated_at,
     tasks.title AS task_title
    FROM task_runs
@@ -128,6 +131,7 @@ function mapTaskRun(row: TaskRunRow, now = new Date(), cached = computeWorkTime(
     completedAt: row.completed_at,
     releasedAt: row.released_at,
     timedOutAt: row.timed_out_at,
+    overrideReason: (row as TaskRunRow & { override_reason?: string | null }).override_reason ?? null,
     updatedAt: row.updated_at
   });
 }
@@ -421,6 +425,20 @@ export function claimTaskRun(
     const parsedInput = taskRunClaimSchema.parse(input);
     markExpiredRunsTimedOutInTransaction(now);
     requireKnownTask(taskId);
+    const task = getTaskById(taskId)!;
+    const scheduling = evaluateSchedulingForTask(task, now);
+    if (scheduling.blocked && (!parsedInput.overrideReason || parsedInput.overrideReason.trim().length === 0)) {
+      throw new HttpError(
+        409,
+        "task_run_calendar_blocked",
+        `Calendar rules block starting ${task.title} right now. Add an override reason to proceed.`,
+        {
+          taskId,
+          conflicts: scheduling.conflicts,
+          effectiveRules: scheduling.effectiveRules
+        }
+      );
+    }
 
     const existing = getActiveTaskRunRow(taskId, now);
     const nowIso = now.toISOString();
@@ -439,7 +457,7 @@ export function claimTaskRun(
       getDatabase()
         .prepare(
           `UPDATE task_runs
-           SET timer_mode = ?, planned_duration_seconds = ?, is_current = ?, heartbeat_at = ?, lease_expires_at = ?, lease_ttl_seconds = ?, note = ?, updated_at = ?
+           SET timer_mode = ?, planned_duration_seconds = ?, is_current = ?, heartbeat_at = ?, lease_expires_at = ?, lease_ttl_seconds = ?, note = ?, override_reason = ?, updated_at = ?
            WHERE id = ?`
         )
         .run(
@@ -450,6 +468,7 @@ export function claimTaskRun(
           nextExpiry,
           parsedInput.leaseTtlSeconds,
           parsedInput.note,
+          parsedInput.overrideReason ?? null,
           nowIso,
           existing.id
         );
@@ -469,8 +488,14 @@ export function claimTaskRun(
           taskId,
           leaseTtlSeconds: parsedInput.leaseTtlSeconds,
           timerMode: parsedInput.timerMode,
-          plannedDurationSeconds: parsedInput.plannedDurationSeconds
+          plannedDurationSeconds: parsedInput.plannedDurationSeconds,
+          overrideReason: parsedInput.overrideReason ?? null
         }
+      });
+      heartbeatTaskRunTimebox(existing.id, {
+        title: task.title,
+        endsAt: nextExpiry,
+        overrideReason: parsedInput.overrideReason ?? null
       });
 
       const cached = computeWorkTime(now);
@@ -487,9 +512,9 @@ export function claimTaskRun(
     getDatabase()
       .prepare(
         `INSERT INTO task_runs (
-          id, task_id, actor, status, timer_mode, planned_duration_seconds, is_current, note, lease_ttl_seconds, claimed_at, heartbeat_at, lease_expires_at, updated_at
+          id, task_id, actor, status, timer_mode, planned_duration_seconds, is_current, note, lease_ttl_seconds, claimed_at, heartbeat_at, lease_expires_at, override_reason, updated_at
          )
-         VALUES (?, ?, ?, 'active', ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+         VALUES (?, ?, ?, 'active', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       )
       .run(
         runId,
@@ -503,6 +528,7 @@ export function claimTaskRun(
         nowIso,
         nowIso,
         expiry,
+        parsedInput.overrideReason ?? null,
         nowIso
       );
 
@@ -510,6 +536,15 @@ export function claimTaskRun(
     touchTaskInProgress(taskId, parsedInput.actor, activity.source);
 
     const run = mapTaskRun(requireRun(runId), now);
+    bindTaskRunToTimebox({
+      taskId,
+      taskRunId: run.id,
+      startedAt: now,
+      title: task.title,
+      projectId: task.projectId,
+      plannedDurationSeconds: parsedInput.plannedDurationSeconds,
+      overrideReason: parsedInput.overrideReason ?? null
+    });
     recordActivityEvent({
       entityType: "task_run",
       entityId: run.id,
@@ -525,7 +560,8 @@ export function claimTaskRun(
         taskId: run.taskId,
         leaseTtlSeconds: run.leaseTtlSeconds,
         timerMode: run.timerMode,
-        plannedDurationSeconds: run.plannedDurationSeconds
+        plannedDurationSeconds: run.plannedDurationSeconds,
+        overrideReason: parsedInput.overrideReason ?? null
       }
     });
     recordTaskRunStartReward(run.id, run.taskId, run.actor, activity.source);
@@ -560,10 +596,10 @@ export function heartbeatTaskRun(
     getDatabase()
       .prepare(
         `UPDATE task_runs
-         SET heartbeat_at = ?, lease_expires_at = ?, lease_ttl_seconds = ?, note = ?, updated_at = ?
+         SET heartbeat_at = ?, lease_expires_at = ?, lease_ttl_seconds = ?, note = ?, override_reason = ?, updated_at = ?
          WHERE id = ?`
       )
-      .run(nowIso, nextExpiry, input.leaseTtlSeconds, note, nowIso, taskRunId);
+      .run(nowIso, nextExpiry, input.leaseTtlSeconds, note, input.overrideReason ?? current.override_reason, nowIso, taskRunId);
 
     const run = mapTaskRun(
       {
@@ -572,6 +608,7 @@ export function heartbeatTaskRun(
         lease_expires_at: nextExpiry,
         lease_ttl_seconds: input.leaseTtlSeconds,
         note,
+        override_reason: input.overrideReason ?? current.override_reason,
         updated_at: nowIso
       },
       now
@@ -586,8 +623,14 @@ export function heartbeatTaskRun(
       source: activity.source,
       metadata: {
         taskId: run.taskId,
-        leaseTtlSeconds: run.leaseTtlSeconds
+        leaseTtlSeconds: run.leaseTtlSeconds,
+        overrideReason: input.overrideReason ?? null
       }
+    });
+    heartbeatTaskRunTimebox(taskRunId, {
+      title: run.taskTitle,
+      endsAt: nextExpiry,
+      overrideReason: input.overrideReason ?? null
     });
     recordTaskRunProgressRewards(run.id, run.taskId, input.actor ?? run.actor, activity.source, run.creditedSeconds);
     return run;
@@ -678,6 +721,7 @@ function finishTaskRun(
       } as TaskRunRow,
       now
     );
+    finalizeTaskRunTimebox(taskRunId, nextStatus === "completed" ? "completed" : "cancelled", nowIso);
     recordActivityEvent({
       entityType: "task_run",
       entityId: run.id,

@@ -9,6 +9,19 @@ export type HabitFrequency = "daily" | "weekly";
 export type HabitPolarity = "positive" | "negative";
 export type HabitStatus = "active" | "paused" | "archived";
 export type HabitCheckInStatus = "done" | "missed";
+export type CalendarProvider = "google" | "apple" | "caldav" | "microsoft";
+export type CalendarConnectionStatus = "connected" | "needs_attention" | "error";
+export type CalendarEventOrigin = "native" | "google" | "apple" | "caldav" | "microsoft" | "derived";
+export type CalendarAvailability = "busy" | "free";
+export type WorkBlockKind =
+  | "main_activity"
+  | "secondary_activity"
+  | "third_activity"
+  | "rest"
+  | "holiday"
+  | "custom";
+export type CalendarTimeboxStatus = "planned" | "active" | "completed" | "cancelled";
+export type CalendarTimeboxSource = "manual" | "suggested" | "live_run";
 export type WorkAdjustmentEntityType = "task" | "project";
 export type CrudEntityType =
   | "goal"
@@ -18,6 +31,9 @@ export type CrudEntityType =
   | "tag"
   | "note"
   | "insight"
+  | "calendar_event"
+  | "work_block_template"
+  | "task_timebox"
   | "psyche_value"
   | "behavior_pattern"
   | "behavior"
@@ -127,6 +143,19 @@ export interface Goal {
   tagIds: string[];
 }
 
+export interface CalendarSchedulingRules {
+  allowWorkBlockKinds: WorkBlockKind[];
+  blockWorkBlockKinds: WorkBlockKind[];
+  allowCalendarIds: string[];
+  blockCalendarIds: string[];
+  allowEventTypes: string[];
+  blockEventTypes: string[];
+  allowEventKeywords: string[];
+  blockEventKeywords: string[];
+  allowAvailability: CalendarAvailability[];
+  blockAvailability: CalendarAvailability[];
+}
+
 export interface Project {
   id: string;
   goalId: string;
@@ -135,6 +164,7 @@ export interface Project {
   status: "active" | "paused" | "completed";
   targetPoints: number;
   themeColor: string;
+  schedulingRules: CalendarSchedulingRules;
   createdAt: string;
   updatedAt: string;
 }
@@ -152,6 +182,8 @@ export interface Task {
   effort: TaskEffort;
   energy: TaskEnergy;
   points: number;
+  plannedDurationSeconds: number | null;
+  schedulingRules: CalendarSchedulingRules | null;
   sortOrder: number;
   completedAt: string | null;
   createdAt: string;
@@ -206,7 +238,187 @@ export interface TaskRun {
   completedAt: string | null;
   releasedAt: string | null;
   timedOutAt: string | null;
+  overrideReason: string | null;
   updatedAt: string;
+}
+
+export interface CalendarConnection {
+  id: string;
+  provider: CalendarProvider;
+  label: string;
+  accountLabel: string;
+  status: CalendarConnectionStatus;
+  config: Record<string, string | number | boolean | null>;
+  forgeCalendarId: string | null;
+  lastSyncedAt: string | null;
+  lastSyncError: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CalendarDiscoveryCalendar {
+  url: string;
+  displayName: string;
+  description: string;
+  color: string;
+  timezone: string;
+  isPrimary: boolean;
+  canWrite: boolean;
+  selectedByDefault: boolean;
+  isForgeCandidate: boolean;
+}
+
+export interface CalendarDiscoveryPayload {
+  provider: CalendarProvider;
+  accountLabel: string;
+  serverUrl: string;
+  principalUrl: string | null;
+  homeUrl: string | null;
+  calendars: CalendarDiscoveryCalendar[];
+}
+
+export interface MicrosoftCalendarOauthSession {
+  sessionId: string;
+  status: "pending" | "authorized" | "error" | "consumed" | "expired";
+  authUrl: string | null;
+  accountLabel: string | null;
+  error: string | null;
+  discovery: CalendarDiscoveryPayload | null;
+}
+
+export interface CalendarResource {
+  id: string;
+  connectionId: string;
+  remoteId: string;
+  title: string;
+  description: string;
+  color: string;
+  timezone: string;
+  isPrimary: boolean;
+  canWrite: boolean;
+  selectedForSync: boolean;
+  forgeManaged: boolean;
+  lastSyncedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CalendarEvent {
+  id: string;
+  connectionId: string | null;
+  calendarId: string | null;
+  remoteId: string | null;
+  ownership: "external" | "forge";
+  originType: CalendarEventOrigin;
+  status: "confirmed" | "tentative" | "cancelled";
+  title: string;
+  description: string;
+  location: string;
+  startAt: string;
+  endAt: string;
+  timezone: string;
+  isAllDay: boolean;
+  availability: CalendarAvailability;
+  eventType: string;
+  categories: string[];
+  sourceMappings: CalendarEventSource[];
+  links: CalendarEventLink[];
+  remoteUpdatedAt: string | null;
+  deletedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CalendarEventSource {
+  id: string;
+  provider: CalendarProvider;
+  connectionId: string | null;
+  calendarId: string | null;
+  remoteCalendarId: string | null;
+  remoteEventId: string;
+  remoteUid: string | null;
+  recurrenceInstanceId: string | null;
+  isMasterRecurring: boolean;
+  remoteHref: string | null;
+  remoteEtag: string | null;
+  syncState: "pending_create" | "pending_update" | "pending_delete" | "synced" | "error" | "deleted";
+  lastSyncedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CalendarEventLink {
+  id: string;
+  entityType: CrudEntityType;
+  entityId: string;
+  relationshipType: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface WorkBlockTemplate {
+  id: string;
+  title: string;
+  kind: WorkBlockKind;
+  color: string;
+  timezone: string;
+  weekDays: number[];
+  startMinute: number;
+  endMinute: number;
+  startsOn: string | null;
+  endsOn: string | null;
+  blockingState: "allowed" | "blocked";
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface WorkBlockInstance {
+  id: string;
+  templateId: string;
+  dateKey: string;
+  startAt: string;
+  endAt: string;
+  title: string;
+  kind: WorkBlockKind;
+  color: string;
+  blockingState: "allowed" | "blocked";
+  calendarEventId: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface TaskTimebox {
+  id: string;
+  taskId: string;
+  projectId: string | null;
+  connectionId: string | null;
+  calendarId: string | null;
+  remoteEventId: string | null;
+  linkedTaskRunId: string | null;
+  status: CalendarTimeboxStatus;
+  source: CalendarTimeboxSource;
+  title: string;
+  startsAt: string;
+  endsAt: string;
+  overrideReason: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CalendarOverviewPayload {
+  generatedAt: string;
+  providers: Array<{
+    provider: CalendarProvider;
+    label: string;
+    supportsDedicatedForgeCalendar: boolean;
+    connectionHelp: string;
+  }>;
+  connections: CalendarConnection[];
+  calendars: CalendarResource[];
+  events: CalendarEvent[];
+  workBlockTemplates: WorkBlockTemplate[];
+  workBlockInstances: WorkBlockInstance[];
+  timeboxes: TaskTimebox[];
 }
 
 export interface HabitCheckIn {
@@ -257,6 +469,7 @@ export interface TaskRunClaimInput {
   actor: string;
   timerMode: TaskTimerMode;
   plannedDurationSeconds: number | null;
+  overrideReason?: string | null;
   isCurrent?: boolean;
   leaseTtlSeconds: number;
   note: string;
@@ -371,6 +584,9 @@ export interface InsightsPayload {
 export interface WeeklyReviewPayload {
   generatedAt: string;
   windowLabel: string;
+  weekKey: string;
+  weekStartDate: string;
+  weekEndDate: string;
   momentumSummary: {
     totalXp: number;
     focusHours: number;
@@ -399,6 +615,31 @@ export interface WeeklyReviewPayload {
     summary: string;
     rewardXp: number;
   };
+  completion: {
+    finalized: boolean;
+    finalizedAt: string | null;
+    finalizedBy: string | null;
+  };
+}
+
+export interface WeeklyReviewClosure {
+  id: string;
+  weekKey: string;
+  weekStartDate: string;
+  weekEndDate: string;
+  windowLabel: string;
+  actor: string | null;
+  source: "ui" | "openclaw" | "agent" | "system";
+  rewardId: string;
+  activityEventId: string;
+  createdAt: string;
+}
+
+export interface FinalizeWeeklyReviewResult {
+  review: WeeklyReviewPayload;
+  closure: WeeklyReviewClosure;
+  reward: RewardLedgerEvent;
+  metrics: XpMetricsPayload;
 }
 
 export interface AgentTokenSummary {

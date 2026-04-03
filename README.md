@@ -13,6 +13,14 @@ Forge gives the user and trusted agents one structured operating record for:
 - Psyche records such as values, beliefs, patterns, modes, and trigger reports
 - saved insights that can be accepted, applied, or dismissed
 
+Project lifecycle is status-driven and shared across UI, API, and agent tools:
+
+- `active` means the project is in play
+- `paused` is the suspended state
+- `completed` is the finished state
+- setting a project to `completed` automatically closes linked unfinished tasks through the normal task-completion path
+- project delete defaults to soft removal, with restore and hard delete available through the normal delete/bin flows
+
 The repo contains three connected runtime surfaces:
 
 - the Forge web app under `/forge/`
@@ -68,6 +76,18 @@ Forge now has three distinct work-accounting paths:
 - completion-style retroactive work uses `/api/v1/operator/log-work`
 - signed minute corrections on existing tasks or projects use `/api/v1/work-adjustments`
 
+Forge also now has a first-class calendar execution layer:
+
+- Google Calendar, Apple Calendar, Exchange Online, and custom CalDAV connections
+- native Forge calendar events that exist even without a provider connection
+- mirrored external events plus a dedicated Forge calendar per connection
+- Exchange Online uses Microsoft Graph and is currently read-only in Forge, with a guided Microsoft sign-in flow in Settings instead of manual user-entered OAuth secrets
+- canonical internal events with separate provider source mappings and Forge links
+- recurring half-day work blocks such as Main Activity, Secondary Activity, Third Activity, Rest, or Custom
+- task and project scheduling rules stored on the normal entity records
+- future task timeboxes and live task-run to timebox synchronization
+- blocked start protection with explicit override reasons when work must still begin
+
 Normal local UI address:
 
 - [http://127.0.0.1:4317/forge/](http://127.0.0.1:4317/forge/)
@@ -113,12 +133,21 @@ The current app surface in this repo includes:
 - `Habits`: recurring commitments and recurring slips with explicit XP consequences, linked to goals, projects, tasks, values, patterns, behaviors, beliefs, modes, and trigger reports
 - `Goals` and goal detail pages
 - `Projects` and project detail pages
+  Projects now default to the active collection, expose suspended/finished/all lifecycle filters, and support a tokenized search bar that mixes free text with goal, task, tag, status, and lightweight project-type chips.
+- `Calendar`
+  The calendar workspace is now display-first: the week view sits at the top, native Forge events and provider events appear beside Forge work blocks and timeboxes, drag-and-drop rescheduling stays available, and guided actions open modals for native events, work blocks, task scheduling rules, and task timeboxing.
+- `Settings -> Calendar`
+  Provider setup and connection management now live in Settings, with a guided connection flow plus a step-by-step setup guide for Google Calendar, Apple Calendar autodiscovery, Exchange Online through Microsoft Graph sign-in, and custom CalDAV.
 - task detail pages with `Adjust work` for signed minute corrections
+  Task detail now also exposes calendar scheduling rules, planned duration, and a live “allowed now / blocked now” calendar status.
+- project detail pages now expose project-level scheduling defaults that tasks can inherit or override
+- goal, project, and task creation flows that can attach linked Markdown creation notes inline
 - `Notes`
 - `Activity`
 - `Insights`
-- `Weekly Review`
+- `Weekly Review` with a real one-click finalize flow that awards the review bonus exactly once per week and records the closure in the activity and reward ledgers
 - `Settings`
+- `Settings -> Calendar`
 - `Settings -> Agents`
 - `Settings -> Rewards`
   The rewards surface now includes an audited manual bonus workflow with validated entity selection across habits, goals, projects, tasks, and durable Psyche records.
@@ -150,6 +179,7 @@ Forge has settings and token management, but the current UI is not the older "Co
 What exists now:
 
 - `Settings` for general runtime/profile preferences
+- `Settings -> Calendar` for provider connections, setup guidance, and connection health
 - `Settings -> Agents` for local agent token issuing, rotation, revocation, and onboarding guidance
 - `Settings -> Rewards` for reward-rule configuration
 - `Settings -> Bin` for restore and hard-delete flows
@@ -163,6 +193,10 @@ For explicit agent auth, Forge also supports managed bearer tokens through the s
 - `POST /api/v1/settings/tokens`
 
 If you need a new token, the current UI path is `Settings -> Agents`, not `Collaboration Settings`.
+
+Calendar provider setup is documented in:
+
+- [`docs/calendar-provider-setup.md`](./docs/calendar-provider-setup.md)
 
 ## Data And Logs
 

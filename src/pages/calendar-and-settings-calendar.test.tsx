@@ -1,0 +1,972 @@
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { CalendarPage } from "@/pages/calendar-page";
+import { SettingsCalendarPage } from "@/pages/settings-calendar-page";
+import { useForgeClipboardStore } from "@/store/use-forge-clipboard";
+import type { ForgeSnapshot } from "@/lib/types";
+
+const {
+  useForgeShellMock,
+  getCalendarOverviewMock,
+  createWorkBlockTemplateMock,
+  patchWorkBlockTemplateMock,
+  deleteWorkBlockTemplateMock,
+  createTaskTimeboxMock,
+  patchTaskTimeboxMock,
+  createCalendarEventMock,
+  patchCalendarEventMock,
+  deleteCalendarEventMock,
+  patchTaskMock,
+  ensureOperatorSessionMock,
+  listCalendarConnectionsMock,
+  listCalendarResourcesMock,
+  discoverCalendarConnectionMock,
+  startMicrosoftCalendarOauthMock,
+  getMicrosoftCalendarOauthSessionMock,
+  discoverExistingCalendarConnectionMock,
+  createCalendarConnectionMock,
+  patchCalendarConnectionMock,
+  syncCalendarConnectionMock,
+  deleteCalendarConnectionMock
+} = vi.hoisted(() => ({
+  useForgeShellMock: vi.fn(),
+  getCalendarOverviewMock: vi.fn(),
+  createWorkBlockTemplateMock: vi.fn(),
+  patchWorkBlockTemplateMock: vi.fn(),
+  deleteWorkBlockTemplateMock: vi.fn(),
+  createTaskTimeboxMock: vi.fn(),
+  patchTaskTimeboxMock: vi.fn(),
+  createCalendarEventMock: vi.fn(),
+  patchCalendarEventMock: vi.fn(),
+  deleteCalendarEventMock: vi.fn(),
+  patchTaskMock: vi.fn(),
+  ensureOperatorSessionMock: vi.fn(),
+  listCalendarConnectionsMock: vi.fn(),
+  listCalendarResourcesMock: vi.fn(),
+  discoverCalendarConnectionMock: vi.fn(),
+  startMicrosoftCalendarOauthMock: vi.fn(),
+  getMicrosoftCalendarOauthSessionMock: vi.fn(),
+  discoverExistingCalendarConnectionMock: vi.fn(),
+  createCalendarConnectionMock: vi.fn(),
+  patchCalendarConnectionMock: vi.fn(),
+  syncCalendarConnectionMock: vi.fn(),
+  deleteCalendarConnectionMock: vi.fn()
+}));
+
+vi.mock("@/components/shell/app-shell", () => ({
+  useForgeShell: useForgeShellMock
+}));
+
+vi.mock("@/components/shell/page-hero", () => ({
+  PageHero: ({
+    title,
+    description,
+    badge
+  }: {
+    title: string;
+    description: string;
+    badge?: string;
+  }) => (
+    <div>
+      <div>{title}</div>
+      <div>{description}</div>
+      {badge ? <div>{badge}</div> : null}
+    </div>
+  )
+}));
+
+vi.mock("@/lib/api", () => ({
+  getCalendarOverview: getCalendarOverviewMock,
+  createWorkBlockTemplate: createWorkBlockTemplateMock,
+  patchWorkBlockTemplate: patchWorkBlockTemplateMock,
+  deleteWorkBlockTemplate: deleteWorkBlockTemplateMock,
+  createTaskTimebox: createTaskTimeboxMock,
+  patchTaskTimebox: patchTaskTimeboxMock,
+  createCalendarEvent: createCalendarEventMock,
+  patchCalendarEvent: patchCalendarEventMock,
+  deleteCalendarEvent: deleteCalendarEventMock,
+  patchTask: patchTaskMock,
+  ensureOperatorSession: ensureOperatorSessionMock,
+  listCalendarConnections: listCalendarConnectionsMock,
+  listCalendarResources: listCalendarResourcesMock,
+  discoverCalendarConnection: discoverCalendarConnectionMock,
+  startMicrosoftCalendarOauth: startMicrosoftCalendarOauthMock,
+  getMicrosoftCalendarOauthSession: getMicrosoftCalendarOauthSessionMock,
+  discoverExistingCalendarConnection: discoverExistingCalendarConnectionMock,
+  createCalendarConnection: createCalendarConnectionMock,
+  patchCalendarConnection: patchCalendarConnectionMock,
+  syncCalendarConnection: syncCalendarConnectionMock,
+  deleteCalendarConnection: deleteCalendarConnectionMock,
+  recommendTaskTimeboxes: vi.fn().mockResolvedValue({ timeboxes: [] })
+}));
+
+function createSnapshot(): ForgeSnapshot {
+  return {
+    meta: {
+      apiVersion: "v1",
+      transport: "rest+sse",
+      generatedAt: "2026-04-03T08:00:00.000Z",
+      backend: "node",
+      mode: "transitional-node"
+    },
+    metrics: {
+      totalXp: 0,
+      level: 1,
+      currentLevelXp: 0,
+      nextLevelXp: 100,
+      weeklyXp: 0,
+      streakDays: 0,
+      comboMultiplier: 1,
+      momentumScore: 0,
+      topGoalId: null,
+      topGoalTitle: null
+    },
+    dashboard: {
+      stats: {
+        totalPoints: 0,
+        completedThisWeek: 0,
+        activeGoals: 0,
+        alignmentScore: 0,
+        focusTasks: 0,
+        overdueTasks: 0,
+        dueThisWeek: 0
+      },
+      goals: [],
+      projects: [],
+      tasks: [],
+      habits: [],
+      tags: [],
+      suggestedTags: [],
+      owners: [],
+      executionBuckets: [],
+      notesSummaryByEntity: {},
+      gamification: {
+        totalXp: 0,
+        level: 1,
+        currentLevelXp: 0,
+        nextLevelXp: 100,
+        weeklyXp: 0,
+        streakDays: 0,
+        comboMultiplier: 1,
+        momentumScore: 0,
+        topGoalId: null,
+        topGoalTitle: null
+      },
+      achievements: [],
+      milestoneRewards: [],
+      recentActivity: []
+    },
+    overview: {
+      generatedAt: "2026-04-03T08:00:00.000Z",
+      strategicHeader: {
+        streakDays: 0,
+        level: 1,
+        totalXp: 0,
+        currentLevelXp: 0,
+        nextLevelXp: 100,
+        momentumScore: 0,
+        focusTasks: 0,
+        overdueTasks: 0
+      },
+      projects: [],
+      activeGoals: [],
+      topTasks: [],
+      dueHabits: [],
+      recentEvidence: [],
+      achievements: [],
+      domainBalance: [],
+      neglectedGoals: []
+    },
+    today: {
+      generatedAt: "2026-04-03T08:00:00.000Z",
+      directive: {
+        task: null,
+        goalTitle: null,
+        rewardXp: 0,
+        sessionLabel: "No directive"
+      },
+      timeline: [],
+      dueHabits: [],
+      dailyQuests: [],
+      milestoneRewards: [],
+      recentHabitRewards: [],
+      momentum: {
+        streakDays: 0,
+        momentumScore: 0,
+        recoveryHint: ""
+      }
+    },
+    risk: {
+      generatedAt: "2026-04-03T08:00:00.000Z",
+      overdueTasks: [],
+      blockedTasks: [],
+      neglectedGoals: [],
+      summary: ""
+    },
+    goals: [],
+    projects: [],
+    tags: [],
+    tasks: [
+      {
+        id: "task_1",
+        title: "Write the creative brief",
+        description: "",
+        status: "focus",
+        priority: "medium",
+        owner: "Albert",
+        goalId: null,
+        projectId: null,
+        dueDate: null,
+        effort: "deep",
+        energy: "steady",
+        points: 40,
+        plannedDurationSeconds: 1800,
+        schedulingRules: null,
+        sortOrder: 1,
+        completedAt: null,
+        createdAt: "2026-04-03T08:00:00.000Z",
+        updatedAt: "2026-04-03T08:00:00.000Z",
+        tagIds: [],
+        time: {
+          totalTrackedSeconds: 0,
+          totalCreditedSeconds: 0,
+          liveTrackedSeconds: 0,
+          liveCreditedSeconds: 0,
+          manualAdjustedSeconds: 0,
+          activeRunCount: 0,
+          hasCurrentRun: false,
+          currentRunId: null
+        }
+      }
+    ],
+    habits: [],
+    activity: [],
+    activeTaskRuns: []
+  };
+}
+
+function renderWithRouter(element: React.ReactNode, initialEntry: string) {
+  const client = new QueryClient({
+    defaultOptions: {
+      queries: {
+        retry: false
+      }
+    }
+  });
+
+  return render(
+    <QueryClientProvider client={client}>
+      <MemoryRouter initialEntries={[initialEntry]}>
+        <Routes>
+          <Route path="/calendar" element={element} />
+          <Route path="/settings/calendar" element={element} />
+        </Routes>
+      </MemoryRouter>
+    </QueryClientProvider>
+  );
+}
+
+beforeEach(() => {
+  window.localStorage.clear();
+  useForgeShellMock.mockReturnValue({
+    snapshot: createSnapshot(),
+    refresh: vi.fn().mockResolvedValue(undefined)
+  });
+  getCalendarOverviewMock.mockResolvedValue({
+    calendar: {
+      generatedAt: "2026-04-03T08:00:00.000Z",
+      providers: [],
+      connections: [],
+      calendars: [],
+      events: [],
+      workBlockTemplates: [],
+      workBlockInstances: [],
+      timeboxes: []
+    }
+  });
+  createWorkBlockTemplateMock.mockResolvedValue({
+    template: { id: "wbtpl_new" }
+  });
+  patchWorkBlockTemplateMock.mockResolvedValue({
+    template: { id: "wbtpl_new" }
+  });
+  deleteWorkBlockTemplateMock.mockResolvedValue({
+    template: { id: "wbtpl_new" }
+  });
+  ensureOperatorSessionMock.mockResolvedValue({
+    session: {
+      id: "operator_session_1",
+      actorLabel: "Albert",
+      expiresAt: "2026-04-03T10:00:00.000Z"
+    }
+  });
+  listCalendarConnectionsMock.mockResolvedValue({
+    providers: [
+      {
+        provider: "google",
+        label: "Google Calendar",
+        supportsDedicatedForgeCalendar: true,
+        connectionHelp: "Use Google OAuth credentials."
+      },
+      {
+        provider: "apple",
+        label: "Apple Calendar",
+        supportsDedicatedForgeCalendar: true,
+        connectionHelp: "Use Apple autodiscovery from caldav.icloud.com."
+      },
+      {
+        provider: "microsoft",
+        label: "Exchange Online",
+        supportsDedicatedForgeCalendar: false,
+        connectionHelp: "Sign in with Microsoft in a guided popup flow. Forge mirrors the selected calendars in read-only mode for now."
+      },
+      {
+        provider: "caldav",
+        label: "Custom CalDAV",
+        supportsDedicatedForgeCalendar: true,
+        connectionHelp: "Use a CalDAV base URL and account credentials."
+      }
+    ],
+    connections: []
+  });
+  listCalendarResourcesMock.mockResolvedValue({
+    calendars: []
+  });
+  createCalendarConnectionMock.mockResolvedValue({
+    connection: { id: "conn_1" }
+  });
+  patchCalendarConnectionMock.mockResolvedValue({
+    connection: { id: "conn_1" }
+  });
+  deleteCalendarConnectionMock.mockResolvedValue({
+    connection: { id: "conn_1" }
+  });
+  discoverExistingCalendarConnectionMock.mockResolvedValue({
+    discovery: {
+      provider: "apple",
+      accountLabel: "Albert",
+      serverUrl: "https://caldav.icloud.com",
+      principalUrl: "https://caldav.icloud.com/principal/",
+      homeUrl: "https://caldav.icloud.com/home/",
+      calendars: [
+        {
+          url: "https://caldav.icloud.com/calendars/forge/",
+          displayName: "Forge",
+          description: "",
+          color: "#7dd3fc",
+          timezone: "Europe/Zurich",
+          isPrimary: false,
+          canWrite: true,
+          selectedByDefault: true,
+          isForgeCandidate: true
+        },
+        {
+          url: "https://caldav.icloud.com/calendars/family/",
+          displayName: "Family",
+          description: "",
+          color: "#f97316",
+          timezone: "Europe/Zurich",
+          isPrimary: true,
+          canWrite: true,
+          selectedByDefault: true,
+          isForgeCandidate: false
+        }
+      ]
+    }
+  });
+  createCalendarEventMock.mockResolvedValue({
+    event: { id: "calevent_1" }
+  });
+  patchCalendarEventMock.mockResolvedValue({
+    event: { id: "calevent_1" }
+  });
+  deleteCalendarEventMock.mockResolvedValue({
+    event: { id: "calevent_1" }
+  });
+  startMicrosoftCalendarOauthMock.mockResolvedValue({
+    session: {
+      sessionId: "ms_session_1",
+      status: "pending",
+      authUrl: "https://login.microsoftonline.com/common/oauth2/v2.0/authorize",
+      accountLabel: null,
+      error: null,
+      discovery: null
+    }
+  });
+  getMicrosoftCalendarOauthSessionMock.mockResolvedValue({
+    session: {
+      sessionId: "ms_session_1",
+      status: "authorized",
+      authUrl: "https://login.microsoftonline.com/common/oauth2/v2.0/authorize",
+      accountLabel: "Albert Buchard",
+      error: null,
+      discovery: {
+        provider: "microsoft",
+        accountLabel: "Albert Buchard",
+        serverUrl: "https://graph.microsoft.com/v1.0",
+        principalUrl: "https://graph.microsoft.com/v1.0/me",
+        homeUrl: null,
+        calendars: [
+          {
+            url: "https://graph.microsoft.com/v1.0/me/calendars/AAMkAGI2TAAA=",
+            displayName: "Work",
+            description: "Owned by Albert",
+            color: "#7dd3fc",
+            timezone: "UTC",
+            isPrimary: true,
+            canWrite: false,
+            selectedByDefault: true,
+            isForgeCandidate: false
+          }
+        ]
+      }
+    }
+  });
+});
+
+afterEach(() => {
+  cleanup();
+  window.localStorage.clear();
+  useForgeClipboardStore.getState().clear();
+  vi.clearAllMocks();
+});
+
+describe("calendar routing surfaces", () => {
+  it("keeps the calendar page display-first and opens guided work-block flows", async () => {
+    renderWithRouter(<CalendarPage />, "/calendar");
+
+    expect(await screen.findByText("Week view")).toBeInTheDocument();
+    expect(screen.getByText("Manage provider settings")).toBeInTheDocument();
+    expect(screen.queryByPlaceholderText("Google client id")).not.toBeInTheDocument();
+    expect(screen.queryByText("Half-day work blocks")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByText("Open work-block guide"));
+
+    expect(
+      await screen.findByText("Create a work block")
+    ).toBeInTheDocument();
+  });
+
+  it("lets the user edit and delete recurring work blocks from the calendar surface", async () => {
+    const calendarFixture = {
+      calendar: {
+        generatedAt: "2026-04-03T08:00:00.000Z",
+        providers: [],
+        connections: [],
+        calendars: [],
+        events: [],
+        workBlockTemplates: [
+          {
+            id: "wbtpl_holiday",
+            title: "Vacation",
+            kind: "holiday",
+            color: "#14b8a6",
+            timezone: "Europe/Zurich",
+            weekDays: [0, 1, 2, 3, 4, 5, 6],
+            startMinute: 0,
+            endMinute: 1440,
+            startsOn: "2026-04-01",
+            endsOn: "2026-04-07",
+            blockingState: "blocked",
+            createdAt: "2026-04-03T08:00:00.000Z",
+            updatedAt: "2026-04-03T08:00:00.000Z"
+          }
+        ],
+        workBlockInstances: [
+          {
+            id: "wbinst_wbtpl_holiday_2026-04-03",
+            templateId: "wbtpl_holiday",
+            dateKey: "2026-04-03",
+            startAt: "2026-04-03T00:00:00.000Z",
+            endAt: "2026-04-04T00:00:00.000Z",
+            title: "Vacation",
+            kind: "holiday",
+            color: "#14b8a6",
+            blockingState: "blocked",
+            calendarEventId: null,
+            createdAt: "2026-04-03T08:00:00.000Z",
+            updatedAt: "2026-04-03T08:00:00.000Z"
+          }
+        ],
+        timeboxes: []
+      }
+    };
+    getCalendarOverviewMock.mockResolvedValue(calendarFixture);
+    patchWorkBlockTemplateMock.mockResolvedValueOnce({
+      template: { id: "wbtpl_holiday" }
+    });
+    deleteWorkBlockTemplateMock.mockResolvedValueOnce({
+      template: { id: "wbtpl_holiday" }
+    });
+
+    renderWithRouter(<CalendarPage />, "/calendar");
+
+    expect((await screen.findAllByText("Vacation")).length).toBeGreaterThan(0);
+    fireEvent.click(screen.getByRole("button", { name: "Open actions for Vacation" }));
+    fireEvent.click((await screen.findAllByText("Edit")).at(-1) as HTMLElement);
+
+    expect(await screen.findByText("Edit work block")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    fireEvent.change(await screen.findByLabelText("Block title"), {
+      target: { value: "Summer holiday" }
+    });
+    fireEvent.change(screen.getByLabelText("End date"), {
+      target: { value: "2026-04-10" }
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+
+    await waitFor(() => {
+      expect(patchWorkBlockTemplateMock).toHaveBeenCalledWith("wbtpl_holiday", {
+        title: "Summer holiday",
+        kind: "holiday",
+        color: "#14b8a6",
+        timezone: "Europe/Zurich",
+        weekDays: [0, 1, 2, 3, 4, 5, 6],
+        startMinute: 0,
+        endMinute: 1440,
+        startsOn: "2026-04-01",
+        endsOn: "2026-04-10",
+        blockingState: "blocked"
+      });
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Open actions for Vacation" }));
+    fireEvent.click((await screen.findAllByText("Delete")).at(-1) as HTMLElement);
+
+    await waitFor(() => {
+      expect(deleteWorkBlockTemplateMock).toHaveBeenCalled();
+      expect(deleteWorkBlockTemplateMock.mock.calls[0]?.[0]).toBe("wbtpl_holiday");
+    });
+  });
+
+  it("shows compact provider badges in the week view and keeps color controls in settings", async () => {
+    getCalendarOverviewMock.mockResolvedValueOnce({
+      calendar: {
+        generatedAt: "2026-04-03T08:00:00.000Z",
+        providers: [],
+        connections: [],
+        calendars: [
+          {
+            id: "calendar_apple",
+            connectionId: "conn_1",
+            remoteId: "https://caldav.icloud.com/calendars/family/",
+            title: "Family",
+            description: "",
+            color: "#7dd3fc",
+            timezone: "Europe/Zurich",
+            isPrimary: true,
+            canWrite: true,
+            selectedForSync: true,
+            forgeManaged: false,
+            lastSyncedAt: null,
+            createdAt: "2026-04-03T08:00:00.000Z",
+            updatedAt: "2026-04-03T08:00:00.000Z"
+          }
+        ],
+        events: [
+          {
+            id: "event_apple",
+            connectionId: "conn_1",
+            calendarId: "calendar_apple",
+            remoteId: "remote_1",
+            ownership: "external",
+            originType: "apple",
+            status: "confirmed",
+            title: "Choeur a coeur",
+            description: "",
+            location: "",
+            startAt: "2026-04-03T18:30:00.000Z",
+            endAt: "2026-04-03T20:00:00.000Z",
+            timezone: "Europe/Zurich",
+            isAllDay: false,
+            availability: "busy",
+            eventType: "personal",
+            categories: [],
+            sourceMappings: [],
+            links: [],
+            remoteUpdatedAt: null,
+            deletedAt: null,
+            createdAt: "2026-04-03T08:00:00.000Z",
+            updatedAt: "2026-04-03T08:00:00.000Z"
+          }
+        ],
+        workBlockTemplates: [],
+        workBlockInstances: [],
+        timeboxes: []
+      }
+    });
+
+    renderWithRouter(<CalendarPage />, "/calendar");
+
+    expect(await screen.findByText("Week view")).toBeInTheDocument();
+    expect(screen.getByText("Apple")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Colors on" })).not.toBeInTheDocument();
+  });
+
+  it("opens the settings calendar guided modal from the deep link intent", async () => {
+    renderWithRouter(
+      <SettingsCalendarPage />,
+      "/settings/calendar?intent=connect&provider=apple"
+    );
+
+    expect(screen.queryByText("Before you connect anything")).not.toBeInTheDocument();
+    expect(
+      await screen.findByText("Connect a calendar provider")
+    ).toBeInTheDocument();
+    expect(await screen.findByText("Before you connect anything")).toBeInTheDocument();
+    expect(screen.getAllByText("Apple Calendar").length).toBeGreaterThan(0);
+  });
+
+  it("supports the Exchange Online guided flow as read only", async () => {
+    const popupStub = {
+      closed: false,
+      focus: vi.fn(),
+      close: vi.fn()
+    } as unknown as Window;
+    vi.spyOn(window, "open").mockReturnValue(popupStub);
+
+    renderWithRouter(<SettingsCalendarPage />, "/settings/calendar?intent=connect&provider=microsoft");
+
+    expect((await screen.findAllByText("Exchange Online")).length).toBeGreaterThan(0);
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    expect(
+      await screen.findByRole("button", { name: "Sign in with Microsoft" })
+    ).toBeInTheDocument();
+    fireEvent.change(screen.getByDisplayValue("Primary Exchange Online"), {
+      target: { value: "Primary Exchange Online" }
+    });
+    expect(screen.queryByPlaceholderText("operator@example.com")).not.toBeInTheDocument();
+    expect(screen.queryByPlaceholderText("00000000-0000-0000-0000-000000000000")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Sign in with Microsoft" }));
+
+    await waitFor(() => {
+      expect(startMicrosoftCalendarOauthMock).toHaveBeenCalledWith({
+        label: "Primary Exchange Online"
+      });
+    });
+
+    window.dispatchEvent(
+      new MessageEvent("message", {
+        origin: window.location.origin,
+        data: {
+          type: "forge:microsoft-calendar-auth",
+          sessionId: "ms_session_1",
+          status: "authorized"
+        }
+      })
+    );
+
+    await waitFor(() => {
+      expect(getMicrosoftCalendarOauthSessionMock).toHaveBeenCalledWith("ms_session_1");
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    expect(await screen.findByText("Read only")).toBeInTheDocument();
+    expect(screen.queryByText("Use for Forge writes")).not.toBeInTheDocument();
+    expect(screen.queryByText("Create a new Forge calendar")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    expect(await screen.findByText("Forge writes:")).toBeInTheDocument();
+    expect(screen.getByText("read only")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Connect provider" }));
+
+    await waitFor(() => {
+      expect(createCalendarConnectionMock).toHaveBeenCalled();
+      expect(createCalendarConnectionMock.mock.calls[0]?.[0]).toEqual({
+        provider: "microsoft",
+        label: "Primary Exchange Online",
+        authSessionId: "ms_session_1",
+        selectedCalendarUrls: ["https://graph.microsoft.com/v1.0/me/calendars/AAMkAGI2TAAA="]
+      });
+    });
+  });
+
+  it("lets connected providers unselect mirrored calendars", async () => {
+    listCalendarConnectionsMock.mockResolvedValueOnce({
+      providers: [
+        {
+          provider: "apple",
+          label: "Apple Calendar",
+          supportsDedicatedForgeCalendar: true,
+          connectionHelp: "Use Apple autodiscovery from caldav.icloud.com."
+        }
+      ],
+      connections: [
+        {
+          id: "conn_1",
+          provider: "apple",
+          label: "Primary Apple",
+          accountLabel: "Albert",
+          status: "connected",
+          config: {
+            serverUrl: "https://caldav.icloud.com",
+            selectedCalendarCount: 1,
+            forgeCalendarUrl: "https://caldav.icloud.com/calendars/forge/"
+          },
+          forgeCalendarId: "calendar_forge",
+          lastSyncedAt: "2026-04-03T08:00:00.000Z",
+          lastSyncError: null,
+          createdAt: "2026-04-03T08:00:00.000Z",
+          updatedAt: "2026-04-03T08:00:00.000Z"
+        }
+      ]
+    });
+    listCalendarResourcesMock.mockResolvedValueOnce({
+      calendars: [
+        {
+          id: "calendar_forge",
+          connectionId: "conn_1",
+          remoteId: "https://caldav.icloud.com/calendars/forge/",
+          title: "Forge",
+          description: "",
+          color: "#7dd3fc",
+          timezone: "Europe/Zurich",
+          isPrimary: false,
+          canWrite: true,
+          selectedForSync: false,
+          forgeManaged: true,
+          lastSyncedAt: null,
+          createdAt: "2026-04-03T08:00:00.000Z",
+          updatedAt: "2026-04-03T08:00:00.000Z"
+        },
+        {
+          id: "calendar_family",
+          connectionId: "conn_1",
+          remoteId: "https://caldav.icloud.com/calendars/family/",
+          title: "Family",
+          description: "",
+          color: "#f97316",
+          timezone: "Europe/Zurich",
+          isPrimary: true,
+          canWrite: true,
+          selectedForSync: true,
+          forgeManaged: false,
+          lastSyncedAt: null,
+          createdAt: "2026-04-03T08:00:00.000Z",
+          updatedAt: "2026-04-03T08:00:00.000Z"
+        }
+      ]
+    });
+
+    renderWithRouter(<SettingsCalendarPage />, "/settings/calendar");
+
+    fireEvent.click((await screen.findAllByText("Manage mirrored calendars"))[0]!);
+    expect(screen.getAllByText("Manage mirrored calendars").length).toBeGreaterThan(1);
+
+    const dialog = await screen.findByTestId("question-flow-dialog");
+    const familyLabel = await within(dialog).findByText("Family");
+    const familyCard = familyLabel.closest(".rounded-\\[24px\\]") ?? familyLabel.parentElement?.parentElement;
+    expect(familyCard).toBeTruthy();
+    fireEvent.click(
+      within(familyCard as HTMLElement).getByRole("button", {
+        name: /Mirrored into Forge|Do not mirror/i
+      })
+    );
+    fireEvent.click(within(dialog).getByRole("button", { name: "Save mirror selection" }));
+
+    await waitFor(() => {
+      expect(patchCalendarConnectionMock).toHaveBeenCalledWith("conn_1", {
+        selectedCalendarUrls: []
+      });
+    });
+  });
+
+  it("shows calendar color controls in settings for connected calendars", async () => {
+    listCalendarConnectionsMock.mockResolvedValueOnce({
+      providers: [
+        {
+          provider: "apple",
+          label: "Apple Calendar",
+          supportsDedicatedForgeCalendar: true,
+          connectionHelp: "Use Apple autodiscovery from caldav.icloud.com."
+        }
+      ],
+      connections: [
+        {
+          id: "conn_1",
+          provider: "apple",
+          label: "Primary Apple",
+          accountLabel: "Albert",
+          status: "connected",
+          config: {
+            serverUrl: "https://caldav.icloud.com",
+            selectedCalendarCount: 1,
+            forgeCalendarUrl: "https://caldav.icloud.com/calendars/forge/"
+          },
+          forgeCalendarId: "calendar_forge",
+          lastSyncedAt: "2026-04-03T08:00:00.000Z",
+          lastSyncError: null,
+          createdAt: "2026-04-03T08:00:00.000Z",
+          updatedAt: "2026-04-03T08:00:00.000Z"
+        }
+      ]
+    });
+    listCalendarResourcesMock.mockResolvedValueOnce({
+      calendars: [
+        {
+          id: "calendar_family",
+          connectionId: "conn_1",
+          remoteId: "https://caldav.icloud.com/calendars/family/",
+          title: "Family",
+          description: "",
+          color: "#f97316",
+          timezone: "Europe/Zurich",
+          isPrimary: true,
+          canWrite: true,
+          selectedForSync: true,
+          forgeManaged: false,
+          lastSyncedAt: null,
+          createdAt: "2026-04-03T08:00:00.000Z",
+          updatedAt: "2026-04-03T08:00:00.000Z"
+        }
+      ]
+    });
+
+    renderWithRouter(<SettingsCalendarPage />, "/settings/calendar");
+
+    expect(await screen.findByText("Calendar colors")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Colors on" })).toBeInTheDocument();
+    expect(screen.getByLabelText("Choose display color for Family")).toBeInTheDocument();
+  });
+
+  it("restores the colors toggle state from persisted settings", async () => {
+    window.localStorage.setItem(
+      "forge.calendar-display-preferences",
+      JSON.stringify({
+        useCalendarColors: false,
+        calendarColors: {}
+      })
+    );
+
+    renderWithRouter(<SettingsCalendarPage />, "/settings/calendar");
+
+    expect(await screen.findByText("Calendar colors")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Colors off" })).toBeInTheDocument();
+  });
+
+  it("persists color-toggle changes from calendar settings", async () => {
+    renderWithRouter(<SettingsCalendarPage />, "/settings/calendar");
+
+    const toggle = await screen.findByRole("button", { name: "Colors on" });
+    fireEvent.click(toggle);
+
+    expect(screen.getByRole("button", { name: "Colors off" })).toBeInTheDocument();
+    expect(
+      JSON.parse(window.localStorage.getItem("forge.calendar-display-preferences") ?? "{}")
+    ).toMatchObject({ useCalendarColors: false });
+  });
+
+  it("removes a connected provider from settings", async () => {
+    listCalendarConnectionsMock.mockResolvedValueOnce({
+      providers: [
+        {
+          provider: "apple",
+          label: "Apple Calendar",
+          supportsDedicatedForgeCalendar: true,
+          connectionHelp: "Use Apple autodiscovery from caldav.icloud.com."
+        }
+      ],
+      connections: [
+        {
+          id: "conn_1",
+          provider: "apple",
+          label: "Primary Apple",
+          accountLabel: "Albert",
+          status: "connected",
+          config: {
+            serverUrl: "https://caldav.icloud.com",
+            selectedCalendarCount: 1,
+            forgeCalendarUrl: "https://caldav.icloud.com/calendars/forge/"
+          },
+          forgeCalendarId: "calendar_forge",
+          lastSyncedAt: "2026-04-03T08:00:00.000Z",
+          lastSyncError: null,
+          createdAt: "2026-04-03T08:00:00.000Z",
+          updatedAt: "2026-04-03T08:00:00.000Z"
+        }
+      ]
+    });
+
+    renderWithRouter(<SettingsCalendarPage />, "/settings/calendar");
+
+    fireEvent.click(await screen.findByRole("button", { name: "Remove" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Remove connection" }));
+
+    await waitFor(() => {
+      expect(deleteCalendarConnectionMock).toHaveBeenCalledWith("conn_1");
+    });
+  });
+
+  it("shows the clipboard badge when a calendar event is copied", async () => {
+    getCalendarOverviewMock.mockResolvedValueOnce({
+      calendar: {
+        generatedAt: "2026-04-03T08:00:00.000Z",
+        providers: [],
+        connections: [],
+        calendars: [],
+        events: [
+          {
+            id: "event_1",
+            connectionId: null,
+            calendarId: null,
+            remoteId: null,
+            ownership: "forge",
+            originType: "native",
+            status: "confirmed",
+            title: "Research block",
+            description: "",
+            location: "",
+            startAt: "2026-03-30T09:00:00.000Z",
+            endAt: "2026-03-30T10:00:00.000Z",
+            timezone: "Europe/Zurich",
+            isAllDay: false,
+            availability: "busy",
+            eventType: "meeting",
+            categories: [],
+            sourceMappings: [],
+            links: [],
+            remoteUpdatedAt: null,
+            deletedAt: null,
+            createdAt: "2026-04-03T08:00:00.000Z",
+            updatedAt: "2026-04-03T08:00:00.000Z"
+          }
+        ],
+        workBlockTemplates: [],
+        workBlockInstances: [],
+        timeboxes: []
+      }
+    });
+
+    renderWithRouter(<CalendarPage />, "/calendar");
+    await screen.findByText("Week view");
+
+    useForgeClipboardStore.getState().setEntry({
+      id: "clipboard_event_1",
+      mode: "copy",
+      source: "calendar",
+      label: "Research block",
+      createdAt: "2026-04-03T08:00:00.000Z",
+      items: [
+        {
+          type: "calendar_event",
+          eventId: "event_1",
+          title: "Research block",
+          description: "",
+          location: "",
+          startAt: "2026-03-30T09:00:00.000Z",
+          endAt: "2026-03-30T10:00:00.000Z",
+          timezone: "Europe/Zurich",
+          availability: "busy",
+          preferredCalendarId: null,
+          categories: [],
+          links: []
+        }
+      ]
+    });
+
+    expect(await screen.findByText("Copied · Research block")).toBeInTheDocument();
+  });
+});

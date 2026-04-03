@@ -72,12 +72,45 @@ let the user move naturally from long-term direction to current execution.
 
 The Projects page should present projects as real initiatives that serve goals. It
 should let the user see project status, active work, progress, and relationships to
-goals without burying the meaning of the project behind jargon.
+goals without burying the meaning of the project behind jargon. The page should default
+to the active project collection, but it must also make suspended and finished work
+easy to bring back with explicit lifecycle filters. It should expose a prominent search
+surface that mixes free text with searchable goal, task, tag, status, and lightweight
+project-type chips so a user can narrow the project list without losing context.
+
+The Calendar page should be a first-class execution surface. It should show mirrored
+provider events, recurring work blocks, and task timeboxes together in one readable
+week or day view. It should make provider connection state obvious, support fast
+creation of half-day presets such as Main Activity, Secondary Activity, Third
+Activity, Rest, Holiday, or Custom, and make future task scheduling feel direct
+rather than administrative. Work blocks must support optional start and end dates,
+repeat indefinitely when no end date is set, and be editable or removable from the
+visible calendar through a small submenu on the rendered block card. Holiday planning
+should use this same work-block system instead of creating fake repeated events. The
+week view should be the priority layout on desktop, while small screens should
+intentionally restack it into one readable day row at a time instead of leaving a
+crushed multi-column grid. The page should not carry raw provider setup forms inline.
+Provider configuration belongs in Settings, while the Calendar page itself should offer
+display-first visibility plus guided action flows for work blocks, task-rule editing,
+timebox planning, and native event creation. A user must be able to create a Forge
+calendar event even without any provider connected, link it to goals, projects, tasks,
+or habits, and later choose whether that event should project out to a writable remote
+calendar. The current provider roster should explicitly cover Google Calendar, Apple
+Calendar, Exchange Online, and custom CalDAV. Apple must rely on autodiscovery from
+`https://caldav.icloud.com` instead of asking for raw collection URLs. Exchange Online
+must use Microsoft Graph and be clearly marked as read-only for now, meaning it
+mirrors selected calendars into Forge but does not receive Forge-owned work blocks,
+timeboxes, or native event projections yet. In the current self-hosted local Forge
+runtime, its setup path should be a guided Microsoft public-client sign-in flow with
+PKCE in Settings rather than a user-facing form for client secrets or refresh
+tokens.
 
 The Project detail page should be board-first and action-first. The main task board for
 the project should dominate the page, because that is the work surface. Project status,
 progress, tracked-time summary, signed work-adjustment controls, and evidence should
-support that execution surface rather than crowd it out.
+support that execution surface rather than crowd it out. Suspend, finish, restart, and
+delete actions should be explicit on this page, with delete defaulting to soft removal
+and finish behaving like a real project close-out rather than a cosmetic status flip.
 
 The Task detail page should present a task plainly. The title, status, project, goal,
 owner, due date, time tracked, active timer state, and clear actions such as Start
@@ -87,6 +120,10 @@ immediately.
 At the bottom of each main detail page, Forge should show a coherent notes surface that
 renders Markdown cleanly, supports quick authoring with preview, and makes linked work
 evidence feel native instead of bolted on.
+Forge should also have a dedicated Notes page that treats notes as first-class entities:
+searchable, editable, deletable, filterable by linked entities, date, and free-text
+chips, and able to create standalone linked notes without forcing the user through some
+other entity flow first.
 
 The Weekly Review page should help the user examine what moved, what stalled, what was
 learned, and where next adjustments are needed. It should turn the operating record into
@@ -106,7 +143,10 @@ Dismiss removes it from the active feed.
 The Settings area should explain the current configuration of the runtime, rewards,
 agents, token flows, multitasking limits, time-accounting mode, recovery tools, and
 operator controls in a calm and explicit way. It should not feel cramped or like a
-developer-only panel. Settings must be legible on mobile and desktop.
+developer-only panel. Calendar provider setup and connection health also belong here
+under a dedicated Calendar section, including a guided connection modal and a step-
+by-step setup guide that names the exact credentials and URLs Forge needs. Settings
+must be legible on mobile and desktop.
 
 The Psyche hub is the entry point into the reflective part of Forge. It should explain
 what the Psyche module contains, how it relates to goals and behavior, and where the
@@ -144,6 +184,26 @@ which is where the user can see active work, start new work, switch focus, pause
 or complete work. The Kanban page and task detail page should also offer direct Start
 work actions. Starting a task should move it into `in_progress`, start a real task run,
 and visibly update the timer state.
+
+Calendar-aware work gating must be explicit. Projects hold default scheduling rules,
+tasks may inherit or override them, and starting blocked work should fail cleanly
+unless the caller provides an override reason that remains attached to the resulting
+task run or timebox.
+
+Calendar events must use Forge identity first. The canonical event record lives inside
+Forge, source mappings to Google, Apple, or custom CalDAV live in a separate sync
+layer, and links from events to goals, projects, tasks, habits, notes, or other Forge
+records live in a separate relationship layer. The product should behave as if Forge is
+the calendar system, with external providers acting as synchronized projections rather
+than the primary source of meaning.
+
+Project lifecycle must stay truthful across UI and API. Suspending a project means
+setting its status to `paused`. Finishing a project means setting its status to
+`completed`, which should automatically close linked unfinished tasks through the same
+task-completion path that rewards and activity logging already use. Restarting a
+project means setting its status back to `active` without reopening the finished tasks.
+Collection views should hide suspended and finished projects by default, but selection
+surfaces and search should still be able to reach them.
 
 Forge should expose three explicit execution-accounting paths and keep them separate in
 both the UI and the API. Live work uses task runs. Completion-style retrospective work
@@ -191,7 +251,13 @@ Kanban interactions, Framer Motion for motion, Recharts for charts, and Lucide R
 for iconography. The API runtime is Fastify 5, started through `tsx`, and served
 locally on port `4317` by default. The web application lives under the `/forge/` base
 path, and the versioned REST contract is documented through OpenAPI 3.1 at
-`/api/v1/openapi.json`.
+`/api/v1/openapi.json`. Calendar provider sync runs inside this live runtime today,
+with Google Calendar, Apple Calendar, and custom CalDAV adapters, encrypted provider
+credentials, migration-backed calendar tables, and a dedicated Forge calendar per
+connection. Apple setup is discovery-first from `https://caldav.icloud.com` rather
+than raw calendar-URL entry. The canonical event layer is local-first: Forge events,
+event-source mappings, and event links all live in the local database and are then
+reconciled outward to connected providers.
 
 Fresh production databases must start empty of fake user goals, projects, and tasks.
 Demo or showcase content is allowed only through explicit bootstrap paths, fixtures, or
@@ -217,6 +283,8 @@ parallel product with different rules.
 Agents should be explicitly guided to use notes for progress explanations, task
 close-out context, and multi-entity evidence capture, including nested `notes` during
 entity creation and explicit close-out notes when work is completed or logged.
+Core entity descriptions should be treated as Markdown documentation fields, not tiny
+plain-text captions, and the main entity surfaces should render them accordingly.
 That means the onboarding and skill surfaces must include exact route-facing field
 names, payload shapes, enums, relationship rules, and examples. High-level guidance is
 not enough if it leaves the agent guessing about what the routes actually accept.

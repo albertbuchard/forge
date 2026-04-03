@@ -174,6 +174,20 @@ function findMatchingNoteIds(query: string): Set<string> {
   return new Set(rows.map((row) => row.note_id));
 }
 
+function findMatchingNoteIdsForTextTerms(terms: string[]): Set<string> | null {
+  const normalizedTerms = terms.map((term) => term.trim()).filter(Boolean);
+  if (normalizedTerms.length === 0) {
+    return null;
+  }
+  const matches = new Set<string>();
+  for (const term of normalizedTerms) {
+    for (const noteId of findMatchingNoteIds(term)) {
+      matches.add(noteId);
+    }
+  }
+  return matches;
+}
+
 function insertLinks(noteId: string, links: CreateNoteInput["links"], createdAt: string) {
   const statement = getDatabase().prepare(
     `INSERT OR IGNORE INTO note_links (note_id, entity_type, entity_id, anchor_key, created_at)
@@ -251,14 +265,24 @@ export function getNoteByIdIncludingDeleted(noteId: string): Note | undefined {
 
 export function listNotes(query: NotesListQuery = {}): Note[] {
   const parsed = notesListQuerySchema.parse(query);
+  const linkedFilters = [
+    ...(parsed.linkedEntityType && parsed.linkedEntityId
+      ? [{ entityType: parsed.linkedEntityType, entityId: parsed.linkedEntityId }]
+      : []),
+    ...parsed.linkedTo
+  ];
+
   if (
-    parsed.linkedEntityType &&
-    parsed.linkedEntityId &&
-    isEntityDeleted(parsed.linkedEntityType, parsed.linkedEntityId)
+    linkedFilters.some((filter) =>
+      isEntityDeleted(filter.entityType, filter.entityId)
+    )
   ) {
     return [];
   }
-  const matchingIds = parsed.query ? findMatchingNoteIds(parsed.query) : null;
+  const matchingIds = findMatchingNoteIdsForTextTerms([
+    ...(parsed.query ? [parsed.query] : []),
+    ...parsed.textTerms
+  ]);
   const rows = listAllNoteRows();
   const linksByNoteId = new Map<string, NoteLinkRow[]>();
   for (const link of listLinkRowsForNotes(rows.map((row) => row.id))) {
@@ -274,15 +298,32 @@ export function listNotes(query: NotesListQuery = {}): Note[] {
       .filter((row) => (parsed.author ? (row.author ?? "").toLowerCase().includes(parsed.author.toLowerCase()) : true))
       .map((row) => mapNote(row, linksByNoteId.get(row.id) ?? []))
       .filter((note) =>
-        parsed.linkedEntityType && parsed.linkedEntityId
-          ? note.links.some(
-              (link) =>
-                link.entityType === parsed.linkedEntityType &&
-                link.entityId === parsed.linkedEntityId &&
-                (parsed.anchorKey === undefined ? true : (link.anchorKey ?? null) === parsed.anchorKey)
+        linkedFilters.length > 0
+          ? note.links.some((link) =>
+              linkedFilters.some(
+                (filter) =>
+                  link.entityType === filter.entityType &&
+                  link.entityId === filter.entityId &&
+                  (parsed.anchorKey === undefined
+                    ? true
+                    : (link.anchorKey ?? null) === parsed.anchorKey)
+              )
             )
           : true
       )
+      .filter((note) => {
+        if (!parsed.updatedFrom && !parsed.updatedTo) {
+          return true;
+        }
+        const updatedDate = note.updatedAt.slice(0, 10);
+        if (parsed.updatedFrom && updatedDate < parsed.updatedFrom) {
+          return false;
+        }
+        if (parsed.updatedTo && updatedDate > parsed.updatedTo) {
+          return false;
+        }
+        return true;
+      })
       .slice(0, parsed.limit ?? 100)
   );
 }

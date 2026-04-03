@@ -101,7 +101,10 @@ export function EntityNotesSurface({
       mode_guide_session: [],
       event_type: [],
       emotion_definition: [],
-      trigger_report: (reportsQuery.data?.reports ?? []).map((report) => ({ id: report.id, label: report.title }))
+      trigger_report: (reportsQuery.data?.reports ?? []).map((report) => ({ id: report.id, label: report.title })),
+      calendar_event: [],
+      work_block_template: [],
+      task_timebox: []
     }),
     [
       behaviorsQuery.data?.behaviors,
@@ -247,7 +250,7 @@ export function EntityNotesSurface({
           value={draft.entityType}
           onChange={(event) => setDraft({ ...draft, entityType: event.target.value as CrudEntityType, entityId: "" })}
         >
-          {(["goal", "project", "task", "habit", "psyche_value", "behavior_pattern", "behavior", "belief_entry", "mode_profile", "mode_guide_session", "event_type", "emotion_definition", "trigger_report"] as const).map((option) => (
+          {(["goal", "project", "task", "habit", "tag", "note", "psyche_value", "behavior_pattern", "behavior", "belief_entry", "mode_profile", "mode_guide_session", "event_type", "emotion_definition", "trigger_report"] as const).map((option) => (
             <option key={option} value={option}>
               {formatEntityTypeLabel(option)}
             </option>

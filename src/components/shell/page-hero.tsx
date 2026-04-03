@@ -57,7 +57,7 @@ export function PageHero({
   entityKind?: EntityKind;
   title: ReactNode;
   titleText?: string;
-  description: string;
+  description: ReactNode;
   badge?: ReactNode;
   actions?: ReactNode;
   copyMode?: HeroCopyMode;
@@ -89,7 +89,7 @@ export function PageHero({
           </div>
         ) : null}
         <div className={cn("max-w-4xl text-[clamp(1.2rem,1.85vw,1.7rem)] leading-[1] text-white", hasHeaderMeta ? "mt-1.5" : "")}>{title}</div>
-        <p className="mt-1 hidden max-w-3xl text-[13px] leading-5 text-white/54 sm:block">{description}</p>
+        <div className="mt-1 hidden max-w-3xl text-[13px] leading-5 text-white/54 sm:block">{description}</div>
       </div>
       {actions ? <div className="flex min-w-0 flex-wrap items-start gap-2 lg:justify-end">{actions}</div> : null}
     </section>

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { CalendarDays, CircleAlert, ShieldBan, Sparkles, Trash2 } from "lucide-react";
 import { EntityNoteCountLink } from "@/components/notes/entity-note-count-link";
+import { NoteMarkdown } from "@/components/notes/note-markdown";
 import { PageHero } from "@/components/shell/page-hero";
 import { HabitDialog } from "@/components/habit-dialog";
 import { useForgeShell } from "@/components/shell/app-shell";
@@ -184,7 +185,16 @@ export function HabitsPage() {
                       {habit.polarity === "positive" ? "Positive" : "Negative"}
                     </Badge>
                   </div>
-                  <p className="mt-3 text-sm leading-6 text-white/60">{habit.description || "No extra notes yet."}</p>
+                  <div className="mt-3 text-sm leading-6 text-white/60">
+                    {habit.description ? (
+                      <NoteMarkdown
+                        markdown={habit.description}
+                        className="[&>p]:text-sm [&>p]:leading-6 [&>blockquote]:text-sm [&>ul]:text-sm [&>ol]:text-sm"
+                      />
+                    ) : (
+                      "No extra notes yet."
+                    )}
+                  </div>
                 </div>
                 <div className="text-right">
                   <div className="text-xs uppercase tracking-[0.16em] text-white/35">Alignment</div>

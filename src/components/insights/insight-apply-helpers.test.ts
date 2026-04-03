@@ -8,7 +8,20 @@ import {
   getInsightSourceLink,
   getRecommendedApplyKind
 } from "@/components/insights/insight-apply-helpers";
-import type { Goal, Insight, ProjectSummary, Task } from "@/lib/types";
+import type { CalendarSchedulingRules, Goal, Insight, ProjectSummary, Task } from "@/lib/types";
+
+const EMPTY_RULES: CalendarSchedulingRules = {
+  allowWorkBlockKinds: [],
+  blockWorkBlockKinds: [],
+  allowCalendarIds: [],
+  blockCalendarIds: [],
+  allowEventTypes: [],
+  blockEventTypes: [],
+  allowEventKeywords: [],
+  blockEventKeywords: [],
+  allowAvailability: [],
+  blockAvailability: []
+};
 
 const goal: Goal = {
   id: "goal_1",
@@ -31,6 +44,7 @@ const project: ProjectSummary = {
   status: "active",
   targetPoints: 240,
   themeColor: "#c0c1ff",
+  schedulingRules: EMPTY_RULES,
   createdAt: new Date(0).toISOString(),
   updatedAt: new Date(0).toISOString(),
   goalTitle: goal.title,
@@ -67,6 +81,8 @@ const task: Task = {
   effort: "deep",
   energy: "steady",
   points: 60,
+  plannedDurationSeconds: null,
+  schedulingRules: null,
   sortOrder: 1,
   completedAt: null,
   createdAt: new Date(0).toISOString(),

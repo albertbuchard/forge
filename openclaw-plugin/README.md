@@ -157,7 +157,8 @@ The main mental model is intentionally small:
 9. `forge_adjust_work_minutes` for signed minute corrections on existing tasks or projects
 10. `forge_log_work` for completion-style retroactive work
 11. `forge_start_task_run`, `forge_heartbeat_task_run`, `forge_focus_task_run`, `forge_complete_task_run`, and `forge_release_task_run` for real live work
-12. `forge_post_insight` for recommendations
+12. `forge_get_calendar_overview`, `forge_connect_calendar_provider`, `forge_sync_calendar_connection`, `forge_create_work_block_template`, `forge_recommend_task_timeboxes`, and `forge_create_task_timebox` for calendar-aware execution
+13. `forge_post_insight` for recommendations
 
 Use the UI entrypoint sparingly.
 Do not open the Forge UI or a browser just to create or update normal records that the tools already cover.
@@ -170,6 +171,20 @@ The batch tools are array-first:
 - goal, project, and task creates can include nested `notes`, which Forge turns into linked note entities automatically
 - `forge_update_entities` takes `operations: []`, and each update operation must include `entityType`, `id`, and `patch`
 - `forge_delete_entities` and `forge_restore_entities` also take `operations: []`
+
+Project lifecycle uses those same generic tools:
+
+- suspend a project by patching `status: "paused"` with `forge_update_entities`
+- finish a project by patching `status: "completed"` with `forge_update_entities`
+- restart a project by patching `status: "active"` with `forge_update_entities`
+- finishing a project auto-completes linked unfinished tasks
+- delete stays soft by default unless `mode: "hard"` is explicit on `forge_delete_entities`
+
+Scheduling rules use those same generic updates:
+
+- patch `project.schedulingRules` through `forge_update_entities` to define project-wide calendar defaults
+- patch `task.schedulingRules` and `task.plannedDurationSeconds` through `forge_update_entities` for task-specific overrides
+- use the calendar-specific tools only for provider connections, work blocks, overview reads, slot recommendations, and explicit timeboxes
 
 Batch several related creates together in one request when the user is asking for multiple goals, projects, or tasks at once.
 
@@ -195,10 +210,23 @@ Live work is not just task status:
 - use `forge_start_task_run` to begin actual work
 - use `forge_release_task_run` to stop without completing
 - use `forge_complete_task_run` to finish and collect the real work reward path
+- if Forge reports a calendar block and the user still wants to start, retry `forge_start_task_run` with an explicit `overrideReason`
 - include `closeoutNote` on `forge_complete_task_run`, `forge_release_task_run`, or `forge_log_work` when the summary should become a durable linked note
 - use `forge_log_work` only for completion-style retroactive work that already happened
 - use `forge_adjust_work_minutes` when the task or project already exists and only tracked minutes need to move up or down
 - do not use `forge_adjust_work_minutes` to fake a live session; it is for truthful retrospective minute corrections only
+
+Calendar-aware execution tools:
+
+- `forge_get_calendar_overview` reads provider state, mirrored events, work blocks, and timeboxes together
+- `forge_create_entities`, `forge_update_entities`, and `forge_delete_entities` are the normal path for `calendar_event`, `work_block_template`, and `task_timebox`
+- `forge_connect_calendar_provider` creates a Google, Apple, Exchange Online, or custom CalDAV connection once the mirrored calendars are chosen. Exchange Online normally relies on the interactive Settings sign-in flow first.
+- `forge_sync_calendar_connection` runs provider pull/push sync for one connection
+- `forge_create_work_block_template` creates recurring half-day, holiday, or custom work blocks
+- work-block templates accept optional `startsOn` / `endsOn` date bounds and stay compact in Forge instead of expanding into one stored event per day
+- omit `endsOn` to keep a block repeating indefinitely; use `kind: "holiday"` with all weekdays plus `0-1440` minutes for vacations or full-day leave
+- `forge_recommend_task_timeboxes` suggests future slots that fit current rules
+- `forge_create_task_timebox` confirms a selected slot into a real Forge timebox
 
 The skill is entity-format-driven. It teaches the agent how to:
 

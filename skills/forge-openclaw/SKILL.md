@@ -23,13 +23,13 @@ Use these exact entity meanings when deciding what the user is describing.
 
 `goal` is a meaningful long-horizon direction or outcome. Use it for “be a great father”, “create meaningfully”, or “build a beautiful family”, not for one-off action items.
 
-`project` is a bounded workstream under a goal. Use it for “launch Forge plugin”, “plan summer move”, or “repair relationship with X”.
+`project` is a bounded workstream under a goal. Use it for “launch Forge plugin”, “plan summer move”, or “repair relationship with X”. Project lifecycle is status-driven: `active` means in play, `paused` means suspended, and `completed` means finished. Setting a project to `completed` auto-completes linked unfinished tasks through Forge's normal task-completion path.
 
 `task` is a concrete action item or deliverable. Use it for “draft the plugin README”, “call the landlord”, or “book therapy session”.
 
 `task_run` is one truthful live work session on a task. It is not the same thing as task status.
 
-`note` is a Markdown evidence record that can link to one or many entities. Use it for work summaries, context, progress logs, handoff explanations, or reflective detail that should stay searchable and attached to the right records.
+`note` is a first-class Markdown entity that can link to one or many other entities. Use it for work summaries, context, progress logs, handoff explanations, wiki-style reference pages, or reflective detail that should stay searchable and attached to the right records.
 
 `insight` is an agent-authored observation, recommendation, or warning grounded in Forge data. It does not replace a requested goal, project, task, pattern, belief, or trigger report.
 
@@ -184,12 +184,14 @@ Use the batch entity tools for stored records:
 `forge_search_entities`, `forge_create_entities`, `forge_update_entities`, `forge_delete_entities`, `forge_restore_entities`
 
 These tools operate on:
-`goal`, `project`, `task`, `note`, `psyche_value`, `behavior_pattern`, `behavior`, `belief_entry`, `mode_profile`, `mode_guide_session`, `trigger_report`, `event_type`, `emotion_definition`
+`goal`, `project`, `task`, `note`, `calendar_event`, `work_block_template`, `task_timebox`, `psyche_value`, `behavior_pattern`, `behavior`, `belief_entry`, `mode_profile`, `mode_guide_session`, `trigger_report`, `event_type`, `emotion_definition`
 
 Use live work tools for `task_run`:
 `forge_log_work`, `forge_start_task_run`, `forge_heartbeat_task_run`, `forge_focus_task_run`, `forge_complete_task_run`, `forge_release_task_run`
 
 Use `forge_post_insight` for `insight`.
+Use the calendar tools for provider sync and planning:
+`forge_get_calendar_overview`, `forge_connect_calendar_provider`, `forge_sync_calendar_connection`, `forge_create_work_block_template`, `forge_recommend_task_timeboxes`, `forge_create_task_timebox`
 
 Do not say you lack a creation path when these tools cover the request. Do not open the Forge UI or a browser for normal creation or updates that the tools already support. Use `forge_get_ui_entrypoint` only when visual review, Kanban movement, graph exploration, or complex multi-record editing would genuinely be easier there.
 
@@ -201,11 +203,37 @@ Use these exact payload expectations.
 
 For create operations, each item must include `entityType` and `data`.
 
+Calendar entity CRUD uses these same batch tools:
+
+- create a native event with `forge_create_entities` and `entityType: "calendar_event"`
+- update or move an event with `forge_update_entities` and `entityType: "calendar_event"`
+- delete an event with `forge_delete_entities` and `entityType: "calendar_event"`
+- create, update, or delete recurring work blocks with `entityType: "work_block_template"`
+- create or update planned task slots with `entityType: "task_timebox"`
+
+Forge still runs the downstream calendar behavior after these generic mutations. For `calendar_event`, that includes provider projection sync on create or update and remote projection deletion on delete.
+
 When creating `goal`, `project`, or `task`, the create payload may also include `notes: [{ contentMarkdown, author?, links? }]`. Forge will create real linked `note` entities automatically and attach them to the new parent record.
+
+To create a standalone note directly, use `forge_create_entities` with `entityType: "note"` and `data: { contentMarkdown, author?, links }`. `links` should point at one or more real Forge entities so the note remains connected and searchable across the graph.
 
 For update operations, each item must include `entityType`, `id`, and `patch`.
 
+For project lifecycle changes, prefer generic updates:
+
+- suspend a project with `forge_update_entities` and `patch: { status: "paused" }`
+- finish a project with `forge_update_entities` and `patch: { status: "completed" }`
+- restart a project with `forge_update_entities` and `patch: { status: "active" }`
+- set project calendar defaults with `forge_update_entities` and `patch: { schedulingRules: ... }`
+- set task-specific scheduling with `forge_update_entities` and `patch: { schedulingRules: ..., plannedDurationSeconds: ... }`
+
 For delete operations, each item must include `entityType` and `id`. Delete is soft by default unless the user explicitly wants hard delete.
+
+For project deletion and recovery, prefer the generic delete and restore tools:
+
+- soft delete with `forge_delete_entities`
+- hard delete only when the user is explicitly asking for permanent removal, using `mode: "hard"`
+- restore with `forge_restore_entities`
 
 For restore operations, each item must include `entityType` and `id`.
 
@@ -217,7 +245,7 @@ Use these live work rules.
 
 A `task_run` is the truthful way to represent live work. Do not pretend that changing task status is the same as starting or stopping a work session.
 
-Use `forge_start_task_run` to begin live work. Required fields: `taskId`, `actor`. If `timerMode` is `planned`, include `plannedDurationSeconds`. If `timerMode` is `unlimited`, omit `plannedDurationSeconds` or set it to null.
+Use `forge_start_task_run` to begin live work. Required fields: `taskId`, `actor`. If `timerMode` is `planned`, include `plannedDurationSeconds`. If `timerMode` is `unlimited`, omit `plannedDurationSeconds` or set it to null. If calendar rules currently block the task and the user still wants to proceed, include `overrideReason`.
 
 Use `forge_heartbeat_task_run` to keep an active run alive.
 
@@ -228,6 +256,47 @@ Use `forge_complete_task_run` to finish live work. When the user or agent wants 
 Use `forge_release_task_run` to stop live work without completing the task. `closeoutNote` is also available there for handoff or pause context.
 
 Use `forge_log_work` only for retroactive work that already happened. If the user explains the work in a way that should be preserved, include `closeoutNote`.
+
+Use the calendar tools when the request is about planning or availability rather than entity storage:
+
+- `forge_get_calendar_overview` to inspect mirrored events, work blocks, provider connections, and existing timeboxes
+- `forge_connect_calendar_provider` only when the operator explicitly wants a new Google, Apple, Exchange Online, or custom CalDAV connection and the discovery choices are already known
+- `forge_sync_calendar_connection` after a provider connection is created or when the calendar needs a fresh pull/push cycle
+- `forge_create_work_block_template` as a convenience helper for Main Activity, Secondary Activity, Third Activity, Rest, Holiday, or Custom recurring blocks
+- `forge_recommend_task_timeboxes` to find future slots that satisfy current rules
+- `forge_create_task_timebox` as a convenience helper to confirm a selected slot into a real planned timebox
+
+Work-block payload guidance:
+
+- `kind` must be one of `main_activity`, `secondary_activity`, `third_activity`, `rest`, `holiday`, or `custom`
+- `weekDays` uses Sunday=`0` through Saturday=`6`
+- `startMinute` and `endMinute` are minutes from midnight in the selected `timezone`
+- `startsOn` and `endsOn` are optional `YYYY-MM-DD` bounds on the recurring template
+- if `endsOn` is omitted or null, the block repeats indefinitely
+- holidays should usually use `kind: "holiday"`, `weekDays: [0,1,2,3,4,5,6]`, `startMinute: 0`, and `endMinute: 1440`
+- work blocks are compact recurring templates inside Forge, not repeated stored events for every day
+
+Provider-specific expectations:
+
+- Google and Apple plus writable custom CalDAV connections can mirror selected calendars and publish Forge-owned work blocks or timeboxes into a dedicated `Forge` calendar.
+- Exchange Online uses Microsoft Graph and is read-only in the current Forge implementation. It mirrors the selected calendars into Forge but does not publish work blocks, timeboxes, or native events back to Microsoft.
+- Exchange Online connection setup is guided and interactive. In normal self-hosted local use, the operator should connect Microsoft from `Settings -> Calendar` with the popup sign-in flow backed by a local MSAL public-client configuration.
+- If an interactive Microsoft auth session has already been completed and the backend gave you an `authSessionId`, then `forge_connect_calendar_provider` accepts `provider: "microsoft"` with `label`, `authSessionId`, and `selectedCalendarUrls`.
+
+Use these exact calendar batch payload shapes when working generically:
+
+- create a native event:
+  `{"operations":[{"entityType":"calendar_event","data":{"title":"Weekly research supervision","startAt":"2026-04-06T08:00:00.000Z","endAt":"2026-04-06T09:00:00.000Z","timezone":"Europe/Zurich","preferredCalendarId":null,"links":[{"entityType":"project","entityId":"project_123","relationshipType":"meeting_for"}]}}]}`
+- update or move an event:
+  `{"operations":[{"entityType":"calendar_event","id":"calevent_123","patch":{"startAt":"2026-04-06T08:30:00.000Z","endAt":"2026-04-06T09:30:00.000Z","preferredCalendarId":"calendar_123"}}]}`
+- delete an event:
+  `{"operations":[{"entityType":"calendar_event","id":"calevent_123"}]}`
+- create a recurring work block:
+  `{"operations":[{"entityType":"work_block_template","data":{"title":"Main Activity","kind":"main_activity","color":"#f97316","timezone":"Europe/Zurich","weekDays":[1,2,3,4,5],"startMinute":480,"endMinute":720,"startsOn":"2026-04-06","endsOn":null,"blockingState":"blocked"}}]}`
+- create a holiday block:
+  `{"operations":[{"entityType":"work_block_template","data":{"title":"Summer holiday","kind":"holiday","color":"#14b8a6","timezone":"Europe/Zurich","weekDays":[0,1,2,3,4,5,6],"startMinute":0,"endMinute":1440,"startsOn":"2026-08-01","endsOn":"2026-08-16","blockingState":"blocked"}}]}`
+- create a planned task slot:
+  `{"operations":[{"entityType":"task_timebox","data":{"taskId":"task_123","projectId":"project_456","title":"Draft the methods section","startsAt":"2026-04-03T08:00:00.000Z","endsAt":"2026-04-03T09:30:00.000Z","source":"suggested"}}]}`
 
 Use these interaction rules.
 
@@ -267,3 +336,9 @@ When the user asks which Forge tools are available, list exactly these tools:
 `forge_complete_task_run`
 `forge_release_task_run`
 `forge_post_insight`
+`forge_get_calendar_overview`
+`forge_connect_calendar_provider`
+`forge_sync_calendar_connection`
+`forge_create_work_block_template`
+`forge_recommend_task_timeboxes`
+`forge_create_task_timebox`

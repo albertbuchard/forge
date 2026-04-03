@@ -1,11 +1,13 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate, useParams } from "react-router-dom";
+import { SchedulingRulesEditor } from "@/components/calendar/scheduling-rules-editor";
 import { SurfaceSkeleton } from "@/components/experience/surface-skeleton";
 import { ProjectDialog } from "@/components/project-dialog";
 import { TaskDialog } from "@/components/task-dialog";
 import { WorkAdjustmentDialog } from "@/components/work-adjustment-dialog";
 import { ExecutionBoard } from "@/components/execution-board";
+import { NoteMarkdown } from "@/components/notes/note-markdown";
 import { EntityNotesSurface } from "@/components/notes/entity-notes-surface";
 import { PageHero } from "@/components/shell/page-hero";
 import { Badge } from "@/components/ui/badge";
@@ -14,11 +16,13 @@ import { Card } from "@/components/ui/card";
 import { EntityBadge } from "@/components/ui/entity-badge";
 import { EntityName } from "@/components/ui/entity-name";
 import { ErrorState } from "@/components/ui/page-state";
-import { createWorkAdjustment, getProjectBoard, patchTask, uncompleteTask } from "@/lib/api";
+import { createWorkAdjustment, deleteProject, getCalendarOverview, getProjectBoard, patchProject, patchTask, uncompleteTask } from "@/lib/api";
 import { getReadableActivityDescription, getReadableActivityTitle } from "@/lib/activity-copy";
+import { evaluateSchedulingRulesNow } from "@/lib/calendar-rules";
 import { getActivityEventHref } from "@/lib/entity-links";
 import { useI18n } from "@/lib/i18n";
 import { useForgeShell } from "@/components/shell/app-shell";
+import type { Project } from "@/lib/types";
 
 function isLegacyProjectId(projectId: string | undefined): boolean {
   return Boolean(projectId && projectId.startsWith("campaign:"));
@@ -33,6 +37,17 @@ export function ProjectDetailPage() {
   const [projectDialogOpen, setProjectDialogOpen] = useState(false);
   const [taskDialogOpen, setTaskDialogOpen] = useState(false);
   const [workAdjustmentOpen, setWorkAdjustmentOpen] = useState(false);
+  const [calendarWindow] = useState(() => {
+    const now = new Date();
+    const from = new Date(now);
+    from.setHours(0, 0, 0, 0);
+    const to = new Date(now);
+    to.setHours(23, 59, 59, 999);
+    return {
+      from: from.toISOString(),
+      to: to.toISOString()
+    };
+  });
   const legacyProject = shell.snapshot.dashboard.projects.find((project) => project.id === params.projectId) ?? null;
   const goal = legacyProject ? shell.snapshot.goals.find((entry) => entry.id === legacyProject.goalId) ?? null : null;
   const fallbackTasks = legacyProject
@@ -55,6 +70,11 @@ export function ProjectDetailPage() {
     queryFn: () => getProjectBoard(params.projectId!),
     enabled: Boolean(params.projectId) && !isLegacyProject
   });
+  const calendarOverviewQuery = useQuery({
+    queryKey: ["project-calendar-overview", params.projectId, calendarWindow.from, calendarWindow.to],
+    queryFn: () => getCalendarOverview(calendarWindow),
+    enabled: Boolean(params.projectId) && !isLegacyProject
+  });
 
   const reopenMutation = useMutation({
     mutationFn: (taskId: string) => uncompleteTask(taskId),
@@ -75,6 +95,28 @@ export function ProjectDetailPage() {
         queryClient.invalidateQueries({ queryKey: ["forge-reward-ledger"] }),
         queryClient.invalidateQueries({ queryKey: ["forge-operator-context"] })
       ]);
+    }
+  });
+  const lifecycleMutation = useMutation({
+    mutationFn: (status: Project["status"]) => patchProject(params.projectId!, { status }),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["forge-snapshot"] }),
+        queryClient.invalidateQueries({ queryKey: ["project-board", params.projectId] }),
+        queryClient.invalidateQueries({ queryKey: ["forge-xp-metrics"] }),
+        queryClient.invalidateQueries({ queryKey: ["forge-reward-ledger"] }),
+        queryClient.invalidateQueries({ queryKey: ["forge-operator-context"] })
+      ]);
+    }
+  });
+  const deleteProjectMutation = useMutation({
+    mutationFn: () => deleteProject(params.projectId!),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["forge-snapshot"] }),
+        queryClient.invalidateQueries({ queryKey: ["project-board", params.projectId] })
+      ]);
+      navigate("/projects");
     }
   });
 
@@ -102,6 +144,23 @@ export function ProjectDetailPage() {
   const driftTask = payload.tasks.find((task) => task.status === "blocked") ?? payload.tasks.find((task) => task.status === "backlog") ?? null;
   const latestEvidence = payload.activity[0] ?? null;
   const notesSummaryByEntity = "notesSummaryByEntity" in payload ? payload.notesSummaryByEntity : shell.snapshot.dashboard.notesSummaryByEntity;
+  const lifecyclePending = lifecycleMutation.isPending || deleteProjectMutation.isPending;
+  const schedulingState = evaluateSchedulingRulesNow({
+    rules: payload.project.schedulingRules,
+    overview: calendarOverviewQuery.data?.calendar
+  });
+
+  const updateProjectStatus = async (status: Project["status"]) => {
+    await lifecycleMutation.mutateAsync(status);
+  };
+
+  const handleDeleteProject = async () => {
+    const confirmed = window.confirm(t("common.projectDetail.deleteProjectConfirm", { title: payload.project.title }));
+    if (!confirmed) {
+      return;
+    }
+    await deleteProjectMutation.mutateAsync();
+  };
 
   return (
     <div className="grid min-w-0 gap-5">
@@ -109,7 +168,16 @@ export function ProjectDetailPage() {
         entityKind="project"
         title={<EntityName kind="project" label={payload.project.title} variant="heading" size="lg" />}
         titleText={payload.project.title}
-        description={payload.project.description}
+        description={
+          payload.project.description ? (
+            <NoteMarkdown
+              markdown={payload.project.description}
+              className="[&>p]:text-[13px] [&>p]:leading-6 [&>blockquote]:text-[13px] [&>ul]:text-[13px] [&>ol]:text-[13px]"
+            />
+          ) : (
+            "No project description yet."
+          )
+        }
         badge={<EntityBadge kind="goal" label={payload.goal.title} compact gradient={false} />}
       />
 
@@ -128,6 +196,45 @@ export function ProjectDetailPage() {
         {!isLegacyProject ? (
           <Button variant="secondary" onClick={() => setProjectDialogOpen(true)}>
             {t("common.projectDetail.editProject")}
+          </Button>
+        ) : null}
+        {!isLegacyProject && payload.project.status === "active" ? (
+          <Button
+            variant="secondary"
+            pending={lifecyclePending && lifecycleMutation.variables === "paused"}
+            pendingLabel={t("common.projectDetail.suspending")}
+            onClick={() => void updateProjectStatus("paused")}
+          >
+            {t("common.projectDetail.suspendProject")}
+          </Button>
+        ) : null}
+        {!isLegacyProject && payload.project.status !== "completed" ? (
+          <Button
+            pending={lifecyclePending && lifecycleMutation.variables === "completed"}
+            pendingLabel={t("common.projectDetail.finishing")}
+            onClick={() => void updateProjectStatus("completed")}
+          >
+            {t("common.projectDetail.finishProject")}
+          </Button>
+        ) : null}
+        {!isLegacyProject && payload.project.status !== "active" ? (
+          <Button
+            variant="secondary"
+            pending={lifecyclePending && lifecycleMutation.variables === "active"}
+            pendingLabel={t("common.projectDetail.restarting")}
+            onClick={() => void updateProjectStatus("active")}
+          >
+            {t("common.projectDetail.restartProject")}
+          </Button>
+        ) : null}
+        {!isLegacyProject ? (
+          <Button
+            variant="ghost"
+            pending={deleteProjectMutation.isPending}
+            pendingLabel={t("common.projectDetail.deleting")}
+            onClick={() => void handleDeleteProject()}
+          >
+            {t("common.projectDetail.deleteProject")}
           </Button>
         ) : null}
         <Link to={`/goals/${payload.goal.id}`}>
@@ -195,6 +302,71 @@ export function ProjectDetailPage() {
           </div>
         </Card>
       </section>
+
+      {!isLegacyProject ? (
+        <section className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_22rem]">
+          <SchedulingRulesEditor
+            title="Project scheduling defaults"
+            subtitle="Define the calendar contexts where work from this project is allowed or blocked. Tasks can inherit these defaults or override them."
+            initialRules={payload.project.schedulingRules}
+            saveLabel="Save project scheduling"
+            onSave={async ({ schedulingRules }) => {
+              await shell.patchProject(payload.project.id, { schedulingRules });
+              await queryClient.invalidateQueries({ queryKey: ["project-board", params.projectId] });
+              await queryClient.invalidateQueries({ queryKey: ["project-calendar-overview", params.projectId] });
+            }}
+          />
+
+          <Card className="h-fit min-w-0">
+            <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">Calendar status</div>
+            <div className="mt-4 flex flex-wrap gap-2">
+              <Badge
+                className={
+                  schedulingState.tone === "blocked"
+                    ? "bg-rose-500/14 text-rose-100"
+                    : schedulingState.tone === "waiting"
+                      ? "bg-amber-500/14 text-amber-100"
+                      : "bg-emerald-500/14 text-emerald-100"
+                }
+              >
+                {schedulingState.label}
+              </Badge>
+              <Badge className="bg-white/[0.08] text-white/72">
+                Project defaults
+              </Badge>
+            </div>
+            <p className="mt-3 text-sm leading-6 text-white/58">
+              These rules act as the default calendar gate for every task in the project unless a task sets its own override.
+            </p>
+            {schedulingState.context.length > 0 ? (
+              <div className="mt-4">
+                <div className="text-[11px] uppercase tracking-[0.16em] text-white/40">Current context</div>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {schedulingState.context.map((entry) => (
+                    <Badge key={entry} className="bg-white/[0.08] text-white/72">
+                      {entry}
+                    </Badge>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+            {schedulingState.conflicts.length > 0 ? (
+              <div className="mt-4 grid gap-2">
+                {schedulingState.conflicts.map((entry) => (
+                  <div key={entry} className="rounded-[16px] bg-rose-500/10 px-3 py-2 text-sm text-rose-100">
+                    {entry}
+                  </div>
+                ))}
+              </div>
+            ) : null}
+            <div className="mt-4">
+              <Link to="/calendar">
+                <Button variant="secondary">Open calendar workspace</Button>
+              </Link>
+            </div>
+          </Card>
+        </section>
+      ) : null}
 
       <ExecutionBoard
         tasks={payload.tasks}

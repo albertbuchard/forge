@@ -98,7 +98,7 @@ export function buildOpenApiDocument() {
   const project = {
     type: "object",
     additionalProperties: false,
-    required: ["id", "goalId", "title", "description", "status", "targetPoints", "themeColor", "createdAt", "updatedAt"],
+    required: ["id", "goalId", "title", "description", "status", "targetPoints", "themeColor", "schedulingRules", "createdAt", "updatedAt"],
     properties: {
       id: { type: "string" },
       goalId: { type: "string" },
@@ -107,6 +107,7 @@ export function buildOpenApiDocument() {
       status: { type: "string", enum: ["active", "paused", "completed"] },
       targetPoints: { type: "integer" },
       themeColor: { type: "string" },
+      schedulingRules: { $ref: "#/components/schemas/CalendarSchedulingRules" },
       createdAt: { type: "string", format: "date-time" },
       updatedAt: { type: "string", format: "date-time" }
     }
@@ -187,6 +188,8 @@ export function buildOpenApiDocument() {
       "effort",
       "energy",
       "points",
+      "plannedDurationSeconds",
+      "schedulingRules",
       "sortOrder",
       "completedAt",
       "createdAt",
@@ -207,6 +210,8 @@ export function buildOpenApiDocument() {
       effort: { type: "string", enum: ["light", "deep", "marathon"] },
       energy: { type: "string", enum: ["low", "steady", "high"] },
       points: { type: "integer" },
+      plannedDurationSeconds: nullable({ type: "integer" }),
+      schedulingRules: nullable({ $ref: "#/components/schemas/CalendarSchedulingRules" }),
       sortOrder: { type: "integer" },
       completedAt: nullable({ type: "string", format: "date-time" }),
       createdAt: { type: "string", format: "date-time" },
@@ -240,7 +245,8 @@ export function buildOpenApiDocument() {
       "creditedSeconds",
       "remainingSeconds",
       "overtimeSeconds",
-      "isCurrent"
+      "isCurrent",
+      "overrideReason"
     ],
     properties: {
       id: { type: "string" },
@@ -263,7 +269,235 @@ export function buildOpenApiDocument() {
       creditedSeconds: { type: "number" },
       remainingSeconds: nullable({ type: "integer" }),
       overtimeSeconds: { type: "integer" },
-      isCurrent: { type: "boolean" }
+      isCurrent: { type: "boolean" },
+      overrideReason: nullable({ type: "string" })
+    }
+  };
+
+  const calendarSchedulingRules = {
+    type: "object",
+    additionalProperties: false,
+    required: [
+      "allowWorkBlockKinds",
+      "blockWorkBlockKinds",
+      "allowCalendarIds",
+      "blockCalendarIds",
+      "allowEventTypes",
+      "blockEventTypes",
+      "allowEventKeywords",
+      "blockEventKeywords",
+      "allowAvailability",
+      "blockAvailability"
+    ],
+    properties: {
+      allowWorkBlockKinds: arrayOf({ type: "string", enum: ["main_activity", "secondary_activity", "third_activity", "rest", "holiday", "custom"] }),
+      blockWorkBlockKinds: arrayOf({ type: "string", enum: ["main_activity", "secondary_activity", "third_activity", "rest", "holiday", "custom"] }),
+      allowCalendarIds: arrayOf({ type: "string" }),
+      blockCalendarIds: arrayOf({ type: "string" }),
+      allowEventTypes: arrayOf({ type: "string" }),
+      blockEventTypes: arrayOf({ type: "string" }),
+      allowEventKeywords: arrayOf({ type: "string" }),
+      blockEventKeywords: arrayOf({ type: "string" }),
+      allowAvailability: arrayOf({ type: "string", enum: ["busy", "free"] }),
+      blockAvailability: arrayOf({ type: "string", enum: ["busy", "free"] })
+    }
+  };
+
+  const calendarConnection = {
+    type: "object",
+    additionalProperties: false,
+    required: ["id", "provider", "label", "accountLabel", "status", "config", "forgeCalendarId", "lastSyncedAt", "lastSyncError", "createdAt", "updatedAt"],
+    properties: {
+      id: { type: "string" },
+      provider: { type: "string", enum: ["google", "apple", "caldav"] },
+      label: { type: "string" },
+      accountLabel: { type: "string" },
+      status: { type: "string", enum: ["connected", "needs_attention", "error"] },
+      config: { type: "object", additionalProperties: true },
+      forgeCalendarId: nullable({ type: "string" }),
+      lastSyncedAt: nullable({ type: "string", format: "date-time" }),
+      lastSyncError: nullable({ type: "string" }),
+      createdAt: { type: "string", format: "date-time" },
+      updatedAt: { type: "string", format: "date-time" }
+    }
+  };
+
+  const calendarResource = {
+    type: "object",
+    additionalProperties: false,
+    required: ["id", "connectionId", "remoteId", "title", "description", "color", "timezone", "isPrimary", "canWrite", "forgeManaged", "lastSyncedAt", "createdAt", "updatedAt"],
+    properties: {
+      id: { type: "string" },
+      connectionId: { type: "string" },
+      remoteId: { type: "string" },
+      title: { type: "string" },
+      description: { type: "string" },
+      color: { type: "string" },
+      timezone: { type: "string" },
+      isPrimary: { type: "boolean" },
+      canWrite: { type: "boolean" },
+      forgeManaged: { type: "boolean" },
+      lastSyncedAt: nullable({ type: "string", format: "date-time" }),
+      createdAt: { type: "string", format: "date-time" },
+      updatedAt: { type: "string", format: "date-time" }
+    }
+  };
+
+  const calendarEventSource = {
+    type: "object",
+    additionalProperties: false,
+    required: ["id", "provider", "connectionId", "calendarId", "remoteCalendarId", "remoteEventId", "remoteUid", "recurrenceInstanceId", "isMasterRecurring", "remoteHref", "remoteEtag", "syncState", "lastSyncedAt", "createdAt", "updatedAt"],
+    properties: {
+      id: { type: "string" },
+      provider: { type: "string", enum: ["google", "apple", "caldav"] },
+      connectionId: nullable({ type: "string" }),
+      calendarId: nullable({ type: "string" }),
+      remoteCalendarId: nullable({ type: "string" }),
+      remoteEventId: { type: "string" },
+      remoteUid: nullable({ type: "string" }),
+      recurrenceInstanceId: nullable({ type: "string" }),
+      isMasterRecurring: { type: "boolean" },
+      remoteHref: nullable({ type: "string" }),
+      remoteEtag: nullable({ type: "string" }),
+      syncState: { type: "string", enum: ["pending_create", "pending_update", "pending_delete", "synced", "error", "deleted"] },
+      lastSyncedAt: nullable({ type: "string", format: "date-time" }),
+      createdAt: { type: "string", format: "date-time" },
+      updatedAt: { type: "string", format: "date-time" }
+    }
+  };
+
+  const calendarEventLink = {
+    type: "object",
+    additionalProperties: false,
+    required: ["id", "entityType", "entityId", "relationshipType", "createdAt", "updatedAt"],
+    properties: {
+      id: { type: "string" },
+      entityType: { $ref: "#/components/schemas/CrudEntityType" },
+      entityId: { type: "string" },
+      relationshipType: { type: "string" },
+      createdAt: { type: "string", format: "date-time" },
+      updatedAt: { type: "string", format: "date-time" }
+    }
+  };
+
+  const calendarEvent = {
+    type: "object",
+    additionalProperties: false,
+    required: ["id", "connectionId", "calendarId", "remoteId", "ownership", "originType", "status", "title", "description", "location", "startAt", "endAt", "timezone", "isAllDay", "availability", "eventType", "categories", "sourceMappings", "links", "remoteUpdatedAt", "deletedAt", "createdAt", "updatedAt"],
+    properties: {
+      id: { type: "string" },
+      connectionId: nullable({ type: "string" }),
+      calendarId: nullable({ type: "string" }),
+      remoteId: nullable({ type: "string" }),
+      ownership: { type: "string", enum: ["external", "forge"] },
+      originType: { type: "string", enum: ["native", "google", "apple", "caldav", "derived"] },
+      status: { type: "string", enum: ["confirmed", "tentative", "cancelled"] },
+      title: { type: "string" },
+      description: { type: "string" },
+      location: { type: "string" },
+      startAt: { type: "string", format: "date-time" },
+      endAt: { type: "string", format: "date-time" },
+      timezone: { type: "string" },
+      isAllDay: { type: "boolean" },
+      availability: { type: "string", enum: ["busy", "free"] },
+      eventType: { type: "string" },
+      categories: arrayOf({ type: "string" }),
+      sourceMappings: arrayOf({ $ref: "#/components/schemas/CalendarEventSource" }),
+      links: arrayOf({ $ref: "#/components/schemas/CalendarEventLink" }),
+      remoteUpdatedAt: nullable({ type: "string", format: "date-time" }),
+      deletedAt: nullable({ type: "string", format: "date-time" }),
+      createdAt: { type: "string", format: "date-time" },
+      updatedAt: { type: "string", format: "date-time" }
+    }
+  };
+
+  const workBlockTemplate = {
+    type: "object",
+    additionalProperties: false,
+    required: ["id", "title", "kind", "color", "timezone", "weekDays", "startMinute", "endMinute", "startsOn", "endsOn", "blockingState", "createdAt", "updatedAt"],
+    properties: {
+      id: { type: "string" },
+      title: { type: "string" },
+      kind: { type: "string", enum: ["main_activity", "secondary_activity", "third_activity", "rest", "holiday", "custom"] },
+      color: { type: "string" },
+      timezone: { type: "string" },
+      weekDays: arrayOf({ type: "integer", minimum: 0, maximum: 6 }),
+      startMinute: { type: "integer" },
+      endMinute: { type: "integer" },
+      startsOn: nullable({ type: "string", format: "date" }),
+      endsOn: nullable({ type: "string", format: "date" }),
+      blockingState: { type: "string", enum: ["allowed", "blocked"] },
+      createdAt: { type: "string", format: "date-time" },
+      updatedAt: { type: "string", format: "date-time" }
+    }
+  };
+
+  const workBlockInstance = {
+    type: "object",
+    additionalProperties: false,
+    required: ["id", "templateId", "dateKey", "startAt", "endAt", "title", "kind", "color", "blockingState", "calendarEventId", "createdAt", "updatedAt"],
+    properties: {
+      id: { type: "string" },
+      templateId: { type: "string" },
+      dateKey: { type: "string", format: "date" },
+      startAt: { type: "string", format: "date-time" },
+      endAt: { type: "string", format: "date-time" },
+      title: { type: "string" },
+      kind: { type: "string", enum: ["main_activity", "secondary_activity", "third_activity", "rest", "holiday", "custom"] },
+      color: { type: "string" },
+      blockingState: { type: "string", enum: ["allowed", "blocked"] },
+      calendarEventId: nullable({ type: "string" }),
+      createdAt: { type: "string", format: "date-time" },
+      updatedAt: { type: "string", format: "date-time" }
+    }
+  };
+
+  const taskTimebox = {
+    type: "object",
+    additionalProperties: false,
+    required: ["id", "taskId", "projectId", "connectionId", "calendarId", "remoteEventId", "linkedTaskRunId", "status", "source", "title", "startsAt", "endsAt", "overrideReason", "createdAt", "updatedAt"],
+    properties: {
+      id: { type: "string" },
+      taskId: { type: "string" },
+      projectId: nullable({ type: "string" }),
+      connectionId: nullable({ type: "string" }),
+      calendarId: nullable({ type: "string" }),
+      remoteEventId: nullable({ type: "string" }),
+      linkedTaskRunId: nullable({ type: "string" }),
+      status: { type: "string", enum: ["planned", "active", "completed", "cancelled"] },
+      source: { type: "string", enum: ["manual", "suggested", "live_run"] },
+      title: { type: "string" },
+      startsAt: { type: "string", format: "date-time" },
+      endsAt: { type: "string", format: "date-time" },
+      overrideReason: nullable({ type: "string" }),
+      createdAt: { type: "string", format: "date-time" },
+      updatedAt: { type: "string", format: "date-time" }
+    }
+  };
+
+  const calendarOverviewPayload = {
+    type: "object",
+    additionalProperties: false,
+    required: ["generatedAt", "providers", "connections", "calendars", "events", "workBlockTemplates", "workBlockInstances", "timeboxes"],
+    properties: {
+      generatedAt: { type: "string", format: "date-time" },
+      providers: arrayOf({
+        type: "object",
+        additionalProperties: false,
+        required: ["provider", "label", "supportsDedicatedForgeCalendar", "connectionHelp"],
+        properties: {
+          provider: { type: "string", enum: ["google", "apple", "caldav"] },
+          label: { type: "string" },
+          supportsDedicatedForgeCalendar: { type: "boolean" },
+          connectionHelp: { type: "string" }
+        }
+      }),
+      connections: arrayOf({ $ref: "#/components/schemas/CalendarConnection" }),
+      calendars: arrayOf({ $ref: "#/components/schemas/CalendarResource" }),
+      events: arrayOf({ $ref: "#/components/schemas/CalendarEvent" }),
+      workBlockTemplates: arrayOf({ $ref: "#/components/schemas/WorkBlockTemplate" }),
+      workBlockInstances: arrayOf({ $ref: "#/components/schemas/WorkBlockInstance" }),
+      timeboxes: arrayOf({ $ref: "#/components/schemas/TaskTimebox" })
     }
   };
 
@@ -803,10 +1037,25 @@ export function buildOpenApiDocument() {
   const weeklyReviewPayload = {
     type: "object",
     additionalProperties: false,
-    required: ["generatedAt", "windowLabel", "momentumSummary", "chart", "wins", "calibration", "reward"],
+    required: [
+      "generatedAt",
+      "windowLabel",
+      "weekKey",
+      "weekStartDate",
+      "weekEndDate",
+      "momentumSummary",
+      "chart",
+      "wins",
+      "calibration",
+      "reward",
+      "completion"
+    ],
     properties: {
       generatedAt: { type: "string", format: "date-time" },
       windowLabel: { type: "string" },
+      weekKey: { type: "string" },
+      weekStartDate: { type: "string" },
+      weekEndDate: { type: "string" },
       momentumSummary: {
         type: "object",
         additionalProperties: false,
@@ -859,6 +1108,16 @@ export function buildOpenApiDocument() {
           summary: { type: "string" },
           rewardXp: { type: "integer" }
         }
+      },
+      completion: {
+        type: "object",
+        additionalProperties: false,
+        required: ["finalized", "finalizedAt", "finalizedBy"],
+        properties: {
+          finalized: { type: "boolean" },
+          finalizedAt: nullable({ type: "string", format: "date-time" }),
+          finalizedBy: nullable({ type: "string" })
+        }
       }
     }
   };
@@ -904,6 +1163,7 @@ export function buildOpenApiDocument() {
       actor: { type: "string" },
       timerMode: { type: "string", enum: ["planned", "unlimited"], default: "unlimited" },
       plannedDurationSeconds: nullable({ type: "integer", minimum: 60, maximum: 86400 }),
+      overrideReason: nullable({ type: "string" }),
       isCurrent: { type: "boolean", default: true },
       leaseTtlSeconds: { type: "integer", minimum: 1, maximum: 14400, default: 900 },
       note: { type: "string", default: "" }
@@ -1478,7 +1738,7 @@ export function buildOpenApiDocument() {
       conceptModel: {
         type: "object",
         additionalProperties: false,
-        required: ["goal", "project", "task", "taskRun", "note", "insight", "psyche"],
+        required: ["goal", "project", "task", "taskRun", "note", "insight", "calendar", "workBlock", "taskTimebox", "psyche"],
         properties: {
           goal: { type: "string" },
           project: { type: "string" },
@@ -1486,6 +1746,9 @@ export function buildOpenApiDocument() {
           taskRun: { type: "string" },
           note: { type: "string" },
           insight: { type: "string" },
+          calendar: { type: "string" },
+          workBlock: { type: "string" },
+          taskTimebox: { type: "string" },
           psyche: { type: "string" }
         }
       },
@@ -1585,11 +1848,12 @@ export function buildOpenApiDocument() {
       verificationPaths: {
         type: "object",
         additionalProperties: false,
-        required: ["context", "xpMetrics", "weeklyReview", "settingsBin", "batchSearch", "psycheSchemaCatalog", "psycheEventTypes", "psycheEmotions"],
+        required: ["context", "xpMetrics", "weeklyReview", "calendarOverview", "settingsBin", "batchSearch", "psycheSchemaCatalog", "psycheEventTypes", "psycheEmotions"],
         properties: {
           context: { type: "string" },
           xpMetrics: { type: "string" },
           weeklyReview: { type: "string" },
+          calendarOverview: { type: "string" },
           settingsBin: { type: "string" },
           batchSearch: { type: "string" },
           psycheSchemaCatalog: { type: "string" },
@@ -1600,13 +1864,14 @@ export function buildOpenApiDocument() {
       recommendedPluginTools: {
         type: "object",
         additionalProperties: false,
-        required: ["bootstrap", "readModels", "uiWorkflow", "entityWorkflow", "workWorkflow", "insightWorkflow"],
+        required: ["bootstrap", "readModels", "uiWorkflow", "entityWorkflow", "workWorkflow", "calendarWorkflow", "insightWorkflow"],
         properties: {
           bootstrap: arrayOf({ type: "string" }),
           readModels: arrayOf({ type: "string" }),
           uiWorkflow: arrayOf({ type: "string" }),
           entityWorkflow: arrayOf({ type: "string" }),
           workWorkflow: arrayOf({ type: "string" }),
+          calendarWorkflow: arrayOf({ type: "string" }),
           insightWorkflow: arrayOf({ type: "string" })
         }
       },
@@ -2214,6 +2479,16 @@ export function buildOpenApiDocument() {
         Goal: goal,
         DashboardGoal: dashboardGoal,
         Project: project,
+        CalendarSchedulingRules: calendarSchedulingRules,
+        CalendarConnection: calendarConnection,
+        CalendarResource: calendarResource,
+        CalendarEventSource: calendarEventSource,
+        CalendarEventLink: calendarEventLink,
+        CalendarEvent: calendarEvent,
+        WorkBlockTemplate: workBlockTemplate,
+        WorkBlockInstance: workBlockInstance,
+        TaskTimebox: taskTimebox,
+        CalendarOverviewPayload: calendarOverviewPayload,
         TaskTimeSummary: taskTimeSummary,
         ProjectSummary: projectSummary,
         Task: task,
@@ -2767,6 +3042,17 @@ export function buildOpenApiDocument() {
       "/api/v1/notes": {
         get: {
           summary: "List notes linked to Forge entities",
+          parameters: [
+            { name: "linkedEntityType", in: "query", schema: { type: "string" } },
+            { name: "linkedEntityId", in: "query", schema: { type: "string" } },
+            { name: "anchorKey", in: "query", schema: { type: "string", nullable: true } },
+            { name: "linkedTo", in: "query", schema: { type: "array", items: { type: "string" } } },
+            { name: "textTerms", in: "query", schema: { type: "array", items: { type: "string" } } },
+            { name: "author", in: "query", schema: { type: "string" } },
+            { name: "updatedFrom", in: "query", schema: { type: "string", format: "date" } },
+            { name: "updatedTo", in: "query", schema: { type: "string", format: "date" } },
+            { name: "limit", in: "query", schema: { type: "integer", minimum: 1, maximum: 200 } }
+          ],
           responses: {
             "200": jsonResponse({ type: "object", required: ["notes"], properties: { notes: arrayOf({ $ref: "#/components/schemas/Note" }) } }, "Note collection"),
             default: { $ref: "#/components/responses/Error" }
@@ -2837,6 +3123,229 @@ export function buildOpenApiDocument() {
           }
         }
       },
+      "/api/v1/calendar/overview": {
+        get: {
+          summary: "Read connected calendars, mirrored events, work blocks, and timeboxes",
+          responses: {
+            "200": jsonResponse(
+              {
+                type: "object",
+                required: ["calendar"],
+                properties: {
+                  calendar: { $ref: "#/components/schemas/CalendarOverviewPayload" }
+                }
+              },
+              "Calendar overview"
+            ),
+            default: { $ref: "#/components/responses/Error" }
+          }
+        }
+      },
+      "/api/v1/calendar/connections": {
+        get: {
+          summary: "List connected calendar providers",
+          responses: {
+            "200": jsonResponse(
+              {
+                type: "object",
+                required: ["providers", "connections"],
+                properties: {
+                  providers: arrayOf({
+                    type: "object",
+                    additionalProperties: false,
+                    required: ["provider", "label", "supportsDedicatedForgeCalendar", "connectionHelp"],
+                    properties: {
+                      provider: { type: "string", enum: ["google", "apple", "caldav"] },
+                      label: { type: "string" },
+                      supportsDedicatedForgeCalendar: { type: "boolean" },
+                      connectionHelp: { type: "string" }
+                    }
+                  }),
+                  connections: arrayOf({ $ref: "#/components/schemas/CalendarConnection" })
+                }
+              },
+              "Calendar connections"
+            ),
+            default: { $ref: "#/components/responses/Error" }
+          }
+        },
+        post: {
+          summary: "Create a Google, Apple, or custom CalDAV calendar connection",
+          description:
+            "Forge first discovers the writable calendars for the account, then stores the chosen mirrored calendars and dedicated Forge write calendar.",
+          responses: {
+            "201": jsonResponse(
+              {
+                type: "object",
+                required: ["connection"],
+                properties: {
+                  connection: { $ref: "#/components/schemas/CalendarConnection" }
+                }
+              },
+              "Created calendar connection"
+            ),
+            default: { $ref: "#/components/responses/Error" }
+          }
+        }
+      },
+      "/api/v1/calendar/connections/{id}/sync": {
+        post: {
+          summary: "Sync one connected calendar provider",
+          responses: {
+            "200": jsonResponse(
+              {
+                type: "object",
+                required: ["connection"],
+                properties: {
+                  connection: { $ref: "#/components/schemas/CalendarConnection" }
+                }
+              },
+              "Synced calendar connection"
+            ),
+            default: { $ref: "#/components/responses/Error" }
+          }
+        }
+      },
+      "/api/v1/calendar/work-block-templates": {
+        get: {
+          summary: "List recurring work-block templates",
+          responses: {
+            "200": jsonResponse(
+              {
+                type: "object",
+                required: ["templates"],
+                properties: {
+                  templates: arrayOf({ $ref: "#/components/schemas/WorkBlockTemplate" })
+                }
+              },
+              "Work-block templates"
+            ),
+            default: { $ref: "#/components/responses/Error" }
+          }
+        },
+        post: {
+          summary: "Create a recurring work-block template",
+          responses: {
+            "201": jsonResponse(
+              {
+                type: "object",
+                required: ["template"],
+                properties: {
+                  template: { $ref: "#/components/schemas/WorkBlockTemplate" }
+                }
+              },
+              "Created work-block template"
+            ),
+            default: { $ref: "#/components/responses/Error" }
+          }
+        }
+      },
+      "/api/v1/calendar/timeboxes": {
+        get: {
+          summary: "List task timeboxes",
+          responses: {
+            "200": jsonResponse(
+              {
+                type: "object",
+                required: ["timeboxes"],
+                properties: {
+                  timeboxes: arrayOf({ $ref: "#/components/schemas/TaskTimebox" })
+                }
+              },
+              "Task timeboxes"
+            ),
+            default: { $ref: "#/components/responses/Error" }
+          }
+        },
+        post: {
+          summary: "Create a planned task timebox",
+          responses: {
+            "201": jsonResponse(
+              {
+                type: "object",
+                required: ["timebox"],
+                properties: {
+                  timebox: { $ref: "#/components/schemas/TaskTimebox" }
+                }
+              },
+              "Created task timebox"
+            ),
+            default: { $ref: "#/components/responses/Error" }
+          }
+        }
+      },
+      "/api/v1/calendar/timeboxes/recommend": {
+        post: {
+          summary: "Suggest future timeboxes for a task",
+          description: "Recommendations consider provider events, work blocks, scheduling rules, and planned duration.",
+          responses: {
+            "200": jsonResponse(
+              {
+                type: "object",
+                required: ["timeboxes"],
+                properties: {
+                  timeboxes: arrayOf({ $ref: "#/components/schemas/TaskTimebox" })
+                }
+              },
+              "Suggested task timeboxes"
+            ),
+            default: { $ref: "#/components/responses/Error" }
+          }
+        }
+      },
+      "/api/v1/calendar/events": {
+        post: {
+          summary: "Create a native Forge calendar event",
+          description: "Forge stores the event canonically first, then projects it to a connected writable calendar when a preferred calendar is selected.",
+          responses: {
+            "201": jsonResponse(
+              {
+                type: "object",
+                required: ["event"],
+                properties: {
+                  event: { $ref: "#/components/schemas/CalendarEvent" }
+                }
+              },
+              "Created calendar event"
+            ),
+            default: { $ref: "#/components/responses/Error" }
+          }
+        }
+      },
+      "/api/v1/calendar/events/{id}": {
+        patch: {
+          summary: "Update a Forge calendar event and sync remote projections",
+          responses: {
+            "200": jsonResponse(
+              {
+                type: "object",
+                required: ["event"],
+                properties: {
+                  event: { $ref: "#/components/schemas/CalendarEvent" }
+                }
+              },
+              "Updated calendar event"
+            ),
+            default: { $ref: "#/components/responses/Error" }
+          }
+        },
+        delete: {
+          summary: "Delete a Forge calendar event and remove projected remote copies",
+          responses: {
+            "200": jsonResponse(
+              {
+                type: "object",
+                required: ["event"],
+                properties: {
+                  event: { $ref: "#/components/schemas/CalendarEvent" }
+                }
+              },
+              "Deleted calendar event"
+            ),
+            default: { $ref: "#/components/responses/Error" }
+          }
+        }
+      },
       "/api/v1/campaigns": {
         get: {
           deprecated: true,
@@ -2875,6 +3384,8 @@ export function buildOpenApiDocument() {
         },
         patch: {
           summary: "Update a project",
+          description:
+            "Project lifecycle is status-driven. Set status to paused to suspend, completed to finish, or active to restart. Updating a project to completed auto-completes linked unfinished tasks through the normal task completion flow.",
           responses: {
             "200": jsonResponse(
               {
@@ -2892,6 +3403,8 @@ export function buildOpenApiDocument() {
         },
         delete: {
           summary: "Delete a project",
+          description:
+            "Project DELETE defaults to soft delete. Pass mode=hard only when permanent removal is intended.",
           responses: {
             "200": jsonResponse(
               {
@@ -3954,6 +4467,91 @@ export function buildOpenApiDocument() {
                 }
               },
               "Weekly review payload"
+            )
+          }
+        }
+      },
+      "/api/v1/reviews/weekly/finalize": {
+        post: {
+          summary: "Finalize the current weekly review cycle",
+          responses: {
+            "200": jsonResponse(
+              {
+                type: "object",
+                required: ["review", "closure", "reward", "metrics"],
+                properties: {
+                  review: { $ref: "#/components/schemas/WeeklyReviewPayload" },
+                  closure: {
+                    type: "object",
+                    required: [
+                      "id",
+                      "weekKey",
+                      "weekStartDate",
+                      "weekEndDate",
+                      "windowLabel",
+                      "actor",
+                      "source",
+                      "rewardId",
+                      "activityEventId",
+                      "createdAt"
+                    ],
+                    properties: {
+                      id: { type: "string" },
+                      weekKey: { type: "string" },
+                      weekStartDate: { type: "string" },
+                      weekEndDate: { type: "string" },
+                      windowLabel: { type: "string" },
+                      actor: nullable({ type: "string" }),
+                      source: { type: "string", enum: ["ui", "openclaw", "agent", "system"] },
+                      rewardId: { type: "string" },
+                      activityEventId: { type: "string" },
+                      createdAt: { type: "string", format: "date-time" }
+                    }
+                  },
+                  reward: { $ref: "#/components/schemas/RewardLedgerEvent" },
+                  metrics: { $ref: "#/components/schemas/XpMetricsPayload" }
+                }
+              },
+              "Existing weekly review closure"
+            ),
+            "201": jsonResponse(
+              {
+                type: "object",
+                required: ["review", "closure", "reward", "metrics"],
+                properties: {
+                  review: { $ref: "#/components/schemas/WeeklyReviewPayload" },
+                  closure: {
+                    type: "object",
+                    required: [
+                      "id",
+                      "weekKey",
+                      "weekStartDate",
+                      "weekEndDate",
+                      "windowLabel",
+                      "actor",
+                      "source",
+                      "rewardId",
+                      "activityEventId",
+                      "createdAt"
+                    ],
+                    properties: {
+                      id: { type: "string" },
+                      weekKey: { type: "string" },
+                      weekStartDate: { type: "string" },
+                      weekEndDate: { type: "string" },
+                      windowLabel: { type: "string" },
+                      actor: nullable({ type: "string" }),
+                      source: { type: "string", enum: ["ui", "openclaw", "agent", "system"] },
+                      rewardId: { type: "string" },
+                      activityEventId: { type: "string" },
+                      createdAt: { type: "string", format: "date-time" }
+                    }
+                  },
+                  reward: { $ref: "#/components/schemas/RewardLedgerEvent" },
+                  metrics: { $ref: "#/components/schemas/XpMetricsPayload" }
+                }
+              },
+              "Created weekly review closure"
             )
           }
         }

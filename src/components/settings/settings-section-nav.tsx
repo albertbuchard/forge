@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { ArchiveRestore, Bot, Settings2, Trophy } from "lucide-react";
+import { ArchiveRestore, Bot, CalendarDays, Settings2, Trophy } from "lucide-react";
 import { NavLink, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils";
 
 export const SETTINGS_SECTIONS = [
   { to: "/settings", label: "General", icon: Settings2 },
+  { to: "/settings/calendar", label: "Calendar", icon: CalendarDays },
   { to: "/settings/agents", label: "Agents", icon: Bot },
   { to: "/settings/rewards", label: "Rewards", icon: Trophy },
   { to: "/settings/bin", label: "Bin", icon: ArchiveRestore }

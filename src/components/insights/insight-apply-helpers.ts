@@ -1,5 +1,16 @@
-import type { GoalMutationInput, ProjectMutationInput, QuickTaskInput } from "@/lib/schemas";
-import type { CrudEntityType, Goal, Insight, NoteLink, ProjectSummary, Task } from "@/lib/types";
+import type {
+  GoalMutationInput,
+  ProjectMutationInput,
+  QuickTaskInput
+} from "@/lib/schemas";
+import type {
+  CrudEntityType,
+  Goal,
+  Insight,
+  NoteLink,
+  ProjectSummary,
+  Task
+} from "@/lib/types";
 
 export type ApplyInsightKind = "task" | "project" | "goal" | "note";
 
@@ -17,7 +28,8 @@ const DEFAULT_TASK_VALUES: QuickTaskInput = {
   energy: "steady",
   dueDate: "",
   points: 60,
-  tagIds: []
+  tagIds: [],
+  notes: []
 };
 
 const DEFAULT_PROJECT_VALUES: ProjectMutationInput = {
@@ -26,7 +38,8 @@ const DEFAULT_PROJECT_VALUES: ProjectMutationInput = {
   description: "",
   status: "active",
   targetPoints: 240,
-  themeColor: "#c0c1ff"
+  themeColor: "#c0c1ff",
+  notes: []
 };
 
 const DEFAULT_GOAL_VALUES: GoalMutationInput = {
@@ -36,7 +49,8 @@ const DEFAULT_GOAL_VALUES: GoalMutationInput = {
   status: "active",
   targetPoints: 400,
   themeColor: "#c8a46b",
-  tagIds: []
+  tagIds: [],
+  notes: []
 };
 
 const SUPPORTED_SOURCE_ENTITY_TYPES: CrudEntityType[] = [
@@ -57,8 +71,13 @@ const SUPPORTED_SOURCE_ENTITY_TYPES: CrudEntityType[] = [
   "trigger_report"
 ];
 
-function isSupportedSourceEntityType(value: string | null): value is CrudEntityType {
-  return value !== null && SUPPORTED_SOURCE_ENTITY_TYPES.includes(value as CrudEntityType);
+function isSupportedSourceEntityType(
+  value: string | null
+): value is CrudEntityType {
+  return (
+    value !== null &&
+    SUPPORTED_SOURCE_ENTITY_TYPES.includes(value as CrudEntityType)
+  );
 }
 
 function compactSentence(value: string, fallback: string, maxLength = 96) {
@@ -70,7 +89,12 @@ function compactSentence(value: string, fallback: string, maxLength = 96) {
 }
 
 function buildStructuredDescription(insight: Insight) {
-  const parts = [insight.summary.trim(), insight.rationale.trim() ? `Why it matters: ${insight.rationale.trim()}` : ""].filter(Boolean);
+  const parts = [
+    insight.summary.trim(),
+    insight.rationale.trim()
+      ? `Why it matters: ${insight.rationale.trim()}`
+      : ""
+  ].filter(Boolean);
   return parts.join("\n\n");
 }
 
@@ -86,13 +110,19 @@ export function getInsightSourceLink(insight: Insight): InsightSourceLink {
   };
 }
 
-export function getInsightSourceGoalId(insight: Insight, projects: ProjectSummary[], tasks: Task[]) {
+export function getInsightSourceGoalId(
+  insight: Insight,
+  projects: ProjectSummary[],
+  tasks: Task[]
+) {
   if (insight.entityType === "goal" && insight.entityId) {
     return insight.entityId;
   }
 
   if (insight.entityType === "project" && insight.entityId) {
-    return projects.find((project) => project.id === insight.entityId)?.goalId ?? "";
+    return (
+      projects.find((project) => project.id === insight.entityId)?.goalId ?? ""
+    );
   }
 
   if (insight.entityType === "task" && insight.entityId) {
@@ -114,7 +144,11 @@ export function getInsightSourceProjectId(insight: Insight, tasks: Task[]) {
   return "";
 }
 
-export function getAvailableApplyKinds(insight: Insight, goals: Goal[], projects: ProjectSummary[]): ApplyInsightKind[] {
+export function getAvailableApplyKinds(
+  insight: Insight,
+  goals: Goal[],
+  projects: ProjectSummary[]
+): ApplyInsightKind[] {
   const kinds: ApplyInsightKind[] = [];
 
   if (projects.length > 0) {
@@ -134,10 +168,17 @@ export function getAvailableApplyKinds(insight: Insight, goals: Goal[], projects
   return kinds;
 }
 
-export function getRecommendedApplyKind(insight: Insight, goals: Goal[], projects: ProjectSummary[]): ApplyInsightKind {
+export function getRecommendedApplyKind(
+  insight: Insight,
+  goals: Goal[],
+  projects: ProjectSummary[]
+): ApplyInsightKind {
   const availableKinds = getAvailableApplyKinds(insight, goals, projects);
 
-  if (availableKinds.includes("task") && (insight.entityType === "task" || insight.entityType === "project")) {
+  if (
+    availableKinds.includes("task") &&
+    (insight.entityType === "task" || insight.entityType === "project")
+  ) {
     return "task";
   }
 
@@ -148,15 +189,24 @@ export function getRecommendedApplyKind(insight: Insight, goals: Goal[], project
   return availableKinds[0] ?? "goal";
 }
 
-export function buildInsightTaskDefaults(insight: Insight, projects: ProjectSummary[], tasks: Task[]): QuickTaskInput {
+export function buildInsightTaskDefaults(
+  insight: Insight,
+  projects: ProjectSummary[],
+  tasks: Task[]
+): QuickTaskInput {
   const sourceGoalId = getInsightSourceGoalId(insight, projects, tasks);
   const sourceProjectId = getInsightSourceProjectId(insight, tasks);
   const resolvedProjectId =
     sourceProjectId ||
-    (sourceGoalId ? projects.find((project) => project.goalId === sourceGoalId)?.id ?? "" : "") ||
+    (sourceGoalId
+      ? (projects.find((project) => project.goalId === sourceGoalId)?.id ?? "")
+      : "") ||
     projects[0]?.id ||
     "";
-  const resolvedGoalId = resolvedProjectId ? projects.find((project) => project.id === resolvedProjectId)?.goalId ?? sourceGoalId : sourceGoalId;
+  const resolvedGoalId = resolvedProjectId
+    ? (projects.find((project) => project.id === resolvedProjectId)?.goalId ??
+      sourceGoalId)
+    : sourceGoalId;
 
   return {
     ...DEFAULT_TASK_VALUES,
@@ -167,7 +217,12 @@ export function buildInsightTaskDefaults(insight: Insight, projects: ProjectSumm
   };
 }
 
-export function buildInsightProjectDefaults(insight: Insight, goals: Goal[], projects: ProjectSummary[], tasks: Task[]): ProjectMutationInput {
+export function buildInsightProjectDefaults(
+  insight: Insight,
+  goals: Goal[],
+  projects: ProjectSummary[],
+  tasks: Task[]
+): ProjectMutationInput {
   const sourceGoalId = getInsightSourceGoalId(insight, projects, tasks);
   const resolvedGoalId = sourceGoalId || goals[0]?.id || "";
 
@@ -175,7 +230,8 @@ export function buildInsightProjectDefaults(insight: Insight, goals: Goal[], pro
     ...DEFAULT_PROJECT_VALUES,
     goalId: resolvedGoalId,
     title: compactSentence(insight.title, insight.recommendation),
-    description: `${insight.summary.trim()}\n\nRecommendation: ${insight.recommendation.trim()}`.trim()
+    description:
+      `${insight.summary.trim()}\n\nRecommendation: ${insight.recommendation.trim()}`.trim()
   };
 }
 
@@ -183,7 +239,8 @@ export function buildInsightGoalDefaults(insight: Insight): GoalMutationInput {
   return {
     ...DEFAULT_GOAL_VALUES,
     title: compactSentence(insight.title, insight.recommendation),
-    description: `${insight.summary.trim()}\n\nRecommendation: ${insight.recommendation.trim()}`.trim()
+    description:
+      `${insight.summary.trim()}\n\nRecommendation: ${insight.recommendation.trim()}`.trim()
   };
 }
 
