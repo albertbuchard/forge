@@ -309,8 +309,14 @@ def _resolve_ui_entrypoint(config: ForgeConfig) -> Dict[str, Any]:
     }
 
 
-def _resolve_current_work(config: ForgeConfig) -> Dict[str, Any]:
-    payload = _request_json(config, "GET", "/api/v1/operator/context")
+def _resolve_current_work(config: ForgeConfig, args: Dict[str, Any]) -> Dict[str, Any]:
+    path = "/api/v1/operator/context"
+    user_ids = args.get("userIds")
+    if isinstance(user_ids, list):
+        scoped_user_ids = [str(entry).strip() for entry in user_ids if str(entry).strip()]
+        if scoped_user_ids:
+            path = f"{path}?{parse.urlencode([('userIds', user_id) for user_id in scoped_user_ids])}"
+    payload = _request_json(config, "GET", path)
     context = payload.get("context") if isinstance(payload, dict) else None
     recent_task_runs = context.get("recentTaskRuns", []) if isinstance(context, dict) else []
     focus_tasks = context.get("focusTasks", []) if isinstance(context, dict) else []
@@ -330,7 +336,7 @@ def _execute_spec(spec: Dict[str, Any], args: Dict[str, Any]) -> Dict[str, Any]:
     if custom_handler == "ui_entrypoint":
         return _resolve_ui_entrypoint(config)
     if custom_handler == "current_work":
-        return _resolve_current_work(config)
+        return _resolve_current_work(config, args)
 
     path = _resolve_path(spec, args)
     method = spec.get("method", "GET")

@@ -131,6 +131,7 @@ import {
   listUserOwnershipSummaries,
   listUsers,
   resolveUserForMutation,
+  updateUserAccessGrant,
   updateUser
 } from "./repositories/users.js";
 import {
@@ -309,6 +310,7 @@ import {
   updateRewardRuleSchema,
   updateTaskTimeboxSchema,
   updateTaskSchema,
+  updateUserAccessGrantSchema,
   updateWorkBlockTemplateSchema,
   workAdjustmentResultSchema,
   finalizeWeeklyReviewResultSchema,
@@ -322,6 +324,19 @@ import { buildOpenApiDocument } from "./openapi.js";
 import { registerWebRoutes } from "./web.js";
 import { createManagerRuntime } from "./managers/runtime.js";
 import { isManagerError } from "./managers/type-guards.js";
+import {
+  createCompanionPairingSession,
+  createCompanionPairingSessionSchema,
+  getCompanionOverview,
+  getFitnessViewData,
+  getSleepViewData,
+  ingestMobileHealthSync,
+  mobileHealthSyncSchema,
+  updateSleepMetadata,
+  updateSleepMetadataSchema,
+  updateWorkoutMetadata,
+  updateWorkoutMetadataSchema
+} from "./health.js";
 
 const COMPATIBILITY_SUNSET = "transitional-node";
 
@@ -395,6 +410,22 @@ function buildEventStreamMeta() {
       lastEventSupport: false
     }
   };
+}
+
+function buildApiBaseUrl(request: {
+  protocol: string;
+  headers: Record<string, unknown>;
+}) {
+  const host =
+    typeof request.headers.host === "string" && request.headers.host.trim().length > 0
+      ? request.headers.host.trim()
+      : "127.0.0.1:4317";
+  const forwardedPrefix =
+    typeof request.headers["x-forwarded-prefix"] === "string"
+      ? request.headers["x-forwarded-prefix"].trim()
+      : "";
+  const basePath = forwardedPrefix.replace(/\/$/, "");
+  return `${request.protocol}://${host}${basePath}/api/v1`;
 }
 
 function readSingleForwardedHeader(value: unknown): string | null {
@@ -2479,6 +2510,19 @@ const AGENT_ONBOARDING_PSYCHE_PLAYBOOKS = [
 
 const AGENT_ONBOARDING_TOOL_INPUT_CATALOG = [
   {
+    toolName: "forge_get_user_directory",
+    summary: "Read the live human/bot directory and directional relationship graph.",
+    whenToUse:
+      "Use before multi-user planning, cross-owner linking, or user-aware search so you know which humans and bots exist and what the current edge rights look like.",
+    inputShape: "{}",
+    requiredFields: [],
+    notes: [
+      "The relationship graph is directional: subject -> target describes what the subject can see or do to the target.",
+      "The current default is permissive, but agents should still inspect the graph before assuming future narrower access."
+    ],
+    example: "{}"
+  },
+  {
     toolName: "forge_search_entities",
     summary: "Search Forge entities before create or update.",
     whenToUse:
@@ -2903,9 +2947,14 @@ function buildAgentOnboardingPayload(request: {
     },
     psycheCoachingPlaybooks: AGENT_ONBOARDING_PSYCHE_PLAYBOOKS,
     relationshipModel: [
+      "Every Forge record belongs to one typed user owner: either human or bot.",
+      "Read routes may scope to one user with userId or to several users with repeated userIds.",
+      "Ownership and linkage are separate: a human-owned project can link to bot-owned tasks, strategies, notes, or insights.",
       "Goals are the top-level strategic layer.",
       "Projects belong to one goal through goalId.",
       "Tasks can belong to a goal, a project, both, or neither.",
+      "Strategies can target one or many goals or projects while sequencing project and task nodes through a directed acyclic graph.",
+      "A strategy remains editable until it is locked. Once locked, the plan becomes a contract and graph-shape edits should stop until the strategy is explicitly unlocked.",
       "Habits are recurring records that can connect directly to goals, projects, tasks, and durable Psyche entities.",
       "Task runs represent live work sessions on tasks and are separate from task status.",
       "Notes can link to one or many entities and are the canonical place for Markdown progress context or close-out evidence.",
@@ -2913,8 +2962,76 @@ function buildAgentOnboardingPayload(request: {
       "Behavior patterns, behaviors, beliefs, modes, and trigger reports cross-link to describe one reflective model rather than isolated records.",
       "Insights can point at one entity, but they exist to capture interpretation or advice rather than raw work items."
     ],
+    multiUserModel: {
+      summary:
+        "Forge is multi-user by default. Humans and bots share one entity graph, with explicit ownership on every record and directional relationship settings between every pair of users.",
+      defaultUserScopeBehavior:
+        "If no user scope is provided, Forge returns all visible users. Use userId or repeated userIds when an agent should focus on one owner namespace or on a specific human/bot slice.",
+      routeScoping: [
+        "List and overview routes accept userId or repeated userIds to narrow the response to one or many owners.",
+        "Entity detail routes remain globally addressable by id because ownership is metadata, not a separate table namespace.",
+        "Mixed-entity search should include userIds whenever duplicate risk depends on owner identity."
+      ],
+      relationshipGraphDefaults: [
+        "The directional user graph starts fully open: all users can discover, read, search, link to, and affect each other.",
+        "Each edge is directional. A -> B defines what A can see or do to B, while B -> A is configured separately.",
+        "The graph is meant to be configurable from the UI later without rewriting the entity model."
+      ]
+    },
+    strategyContractModel: {
+      draftSummary:
+        "Strategies begin as editable drafts. Agents may propose nodes, targets, and links while the plan is still being negotiated.",
+      lockSummary:
+        "Setting isLocked to true turns the strategy into a contract. At that point the sequencing graph, targets, linked entities, and descriptive plan fields should be treated as frozen until explicitly unlocked.",
+      unlockSummary:
+        "Unlocking a strategy reopens normal editing. Use this only when the human wants to renegotiate the plan rather than merely update execution status.",
+      alignmentSummary:
+        "Alignment is about executing the agreed strategy faithfully, not merely finishing isolated work. Forge therefore scores coverage, order, scope discipline, and quality separately before producing one alignment score.",
+      metricBreakdown: [
+        "planCoverageScore: how much of the graph and end targets are genuinely moving or complete",
+        "sequencingScore: whether work is happening in the agreed order instead of jumping ahead",
+        "scopeDisciplineScore: whether off-plan work is happening inside the strategy scope",
+        "qualityScore: whether the plan is landing cleanly without too many blocked nodes or weak target completion"
+      ]
+    },
     entityCatalog: AGENT_ONBOARDING_ENTITY_CATALOG,
     toolInputCatalog: AGENT_ONBOARDING_TOOL_INPUT_CATALOG,
+    connectionGuides: {
+      openclaw: {
+        label: "OpenClaw",
+        installSteps: [
+          "Install the Forge plugin from the repo or published package.",
+          "Restart the OpenClaw gateway so the tool surface and UI proxy routes refresh.",
+          "Open Forge Settings -> Agents to issue or rotate a managed token when remote scoped auth is needed."
+        ],
+        verifyCommands: [
+          `curl -s ${origin}/api/v1/health`,
+          "openclaw plugins install ./projects/forge",
+          "openclaw gateway restart"
+        ],
+        configNotes: [
+          "Localhost and Tailscale targets can usually use the operator-session path without a long-lived token.",
+          "Use userId or userIds in tool inputs whenever the agent should focus on one human, one bot, or a specific collaboration slice."
+        ]
+      },
+      hermes: {
+        label: "Hermes",
+        installSteps: [
+          "Install forge-hermes-plugin into the Python environment Hermes actually runs.",
+          "Let Hermes load the Forge plugin and bundled skill pack on startup.",
+          "Use Forge Settings -> Agents if Hermes needs a managed token for remote or durable access."
+        ],
+        verifyCommands: [
+          "python -m pip show forge-hermes-plugin",
+          "~/.hermes/hermes-agent/venv/bin/python -m pip show forge-hermes-plugin",
+          `curl -s ${origin}/api/v1/health`
+        ],
+        configNotes: [
+          "Hermes keeps its durable Forge config under ~/.hermes/forge/config.json.",
+          "Hermes uses the same multi-user scoping rules and should pass userIds intentionally when working across humans and bots."
+        ]
+      }
+    },
     verificationPaths: {
       context: "/api/v1/context",
       xpMetrics: "/api/v1/metrics/xp",
@@ -2929,6 +3046,7 @@ function buildAgentOnboardingPayload(request: {
     recommendedPluginTools: {
       bootstrap: ["forge_get_operator_overview"],
       readModels: [
+        "forge_get_user_directory",
         "forge_get_operator_context",
         "forge_get_current_work",
         "forge_get_psyche_overview",
@@ -3443,9 +3561,9 @@ function buildUserDirectoryPayload() {
     grants: listUserAccessGrants(),
     ownership: listUserOwnershipSummaries(),
     posture: {
-      accessModel: "permissive" as const,
+      accessModel: "directional_graph" as const,
       summary:
-        "Every Forge user can currently discover every other human or bot user and can read linked records when a route explicitly requests them.",
+        "Forge now exposes a directional relationship graph between humans and bots. The current default stays maximally permissive: every user can discover, search, link to, view, and affect every other visible user until you narrow those edges.",
       futureReady: true
     }
   };
@@ -3953,6 +4071,73 @@ export async function buildServer(
       resolveScopedUserIds(request.query as Record<string, unknown>)
     )
   );
+  app.get("/api/v1/health/overview", async (request) => ({
+    overview: getCompanionOverview(
+      resolveScopedUserIds(request.query as Record<string, unknown>)
+    )
+  }));
+  app.get("/api/v1/health/sleep", async (request) => ({
+    sleep: getSleepViewData(
+      resolveScopedUserIds(request.query as Record<string, unknown>)
+    )
+  }));
+  app.get("/api/v1/health/fitness", async (request) => ({
+    fitness: getFitnessViewData(
+      resolveScopedUserIds(request.query as Record<string, unknown>)
+    )
+  }));
+  app.post("/api/v1/health/pairing-sessions", async (request, reply) => {
+    requireOperatorSession(request.headers as Record<string, unknown>, {
+      route: "/api/v1/health/pairing-sessions"
+    });
+    reply.code(201);
+    return createCompanionPairingSession(
+      buildApiBaseUrl({
+        protocol: request.protocol,
+        headers: request.headers as Record<string, unknown>
+      }),
+      createCompanionPairingSessionSchema.parse(request.body ?? {})
+    );
+  });
+  app.post("/api/v1/mobile/healthkit/sync", async (request) => ({
+    sync: ingestMobileHealthSync(mobileHealthSyncSchema.parse(request.body ?? {}))
+  }));
+  app.patch("/api/v1/health/workouts/:id", async (request, reply) => {
+    const auth = requireScopedAccess(
+      request.headers as Record<string, unknown>,
+      ["write"],
+      { route: "/api/v1/health/workouts/:id" }
+    );
+    const { id } = request.params as { id: string };
+    const workout = updateWorkoutMetadata(
+      id,
+      updateWorkoutMetadataSchema.parse(request.body ?? {}),
+      toActivityContext(auth)
+    );
+    if (!workout) {
+      reply.code(404);
+      return { error: "Workout session not found" };
+    }
+    return { workout };
+  });
+  app.patch("/api/v1/health/sleep/:id", async (request, reply) => {
+    const auth = requireScopedAccess(
+      request.headers as Record<string, unknown>,
+      ["write"],
+      { route: "/api/v1/health/sleep/:id" }
+    );
+    const { id } = request.params as { id: string };
+    const sleep = updateSleepMetadata(
+      id,
+      updateSleepMetadataSchema.parse(request.body ?? {}),
+      toActivityContext(auth)
+    );
+    if (!sleep) {
+      reply.code(404);
+      return { error: "Sleep session not found" };
+    }
+    return { sleep };
+  });
   app.get("/api/v1/operator/context", async (request) => {
     requireOperatorSession(request.headers as Record<string, unknown>, {
       route: "/api/v1/operator/context"
@@ -5188,6 +5373,21 @@ export async function buildServer(
   app.get("/api/v1/users/directory", async () => ({
     directory: buildUserDirectoryPayload()
   }));
+  app.patch("/api/v1/users/access-grants/:id", async (request, reply) => {
+    requireScopedAccess(request.headers, ["write"], {
+      route: "/api/v1/users/access-grants/:id"
+    });
+    const { id } = request.params as { id: string };
+    const grant = updateUserAccessGrant(
+      id,
+      updateUserAccessGrantSchema.parse(request.body ?? {})
+    );
+    if (!grant) {
+      reply.code(404);
+      return { error: "User access grant not found." };
+    }
+    return { grant };
+  });
   app.post("/api/v1/users", async (request, reply) => {
     requireScopedAccess(request.headers as Record<string, unknown>, ["write"], {
       route: "/api/v1/users"

@@ -1,7 +1,9 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
+import { Link } from "react-router-dom";
 import { SettingsSectionNav } from "@/components/settings/settings-section-nav";
 import { PageHero } from "@/components/shell/page-hero";
+import { UserRelationshipGraph } from "@/components/users/user-relationship-graph";
 import { UserBadge } from "@/components/ui/user-badge";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -9,7 +11,12 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { useForgeShell } from "@/components/shell/app-shell";
-import { createUser, getUserDirectory, patchUser } from "@/lib/api";
+import {
+  createUser,
+  getUserDirectory,
+  patchUser,
+  patchUserAccessGrant
+} from "@/lib/api";
 import type { UserKind, UserSummary } from "@/lib/types";
 
 type UserDraft = {
@@ -69,6 +76,20 @@ export function SettingsUsersPage() {
       setEditingUser(null);
       await refreshUsers();
     }
+  });
+
+  const updateGrantMutation = useMutation({
+    mutationFn: async ({
+      grantId,
+      patch
+    }: {
+      grantId: string;
+      patch: Partial<{
+        accessLevel: "view" | "manage";
+        rights: Record<string, boolean>;
+      }>;
+    }) => (await patchUserAccessGrant(grantId, patch)).grant,
+    onSuccess: refreshUsers
   });
 
   const directory = directoryQuery.data?.directory;
@@ -326,38 +347,41 @@ export function SettingsUsersPage() {
           ))}
         </div>
 
-        <Card>
-          <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">
-            Access matrix
-          </div>
-          <div className="mt-4 grid gap-3">
-            {(directory?.users ?? shell.snapshot.users).map((user) => (
-              <div
-                key={`matrix-${user.id}`}
-                className="rounded-[18px] bg-white/[0.04] px-4 py-4"
+        <div className="grid gap-5">
+          <UserRelationshipGraph
+            users={directory?.users ?? shell.snapshot.users}
+            grants={directory?.grants ?? []}
+            pendingGrantId={updateGrantMutation.variables?.grantId ?? null}
+            onUpdateGrant={async (grantId, patch) => {
+              await updateGrantMutation.mutateAsync({ grantId, patch });
+            }}
+          />
+
+          <Card className="grid gap-3">
+            <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">
+              Agent onboarding
+            </div>
+            <div className="text-sm leading-6 text-white/60">
+              OpenClaw, Hermes, and the Forge UI all read this same multi-user
+              graph. Keep the defaults open while you are still wiring
+              collaboration, then narrow specific arrows when one user or agent
+              should stop seeing or changing another user&apos;s work.
+            </div>
+            <div className="text-sm leading-6 text-white/52">
+              Forge now treats every owner as either human or bot, keeps search
+              cross-user by default, and allows cross-owner links between
+              projects, tasks, notes, and strategies.
+            </div>
+            <div>
+              <Link
+                to="/settings/agents"
+                className="inline-flex min-h-10 items-center justify-center rounded-[var(--radius-control)] bg-white/8 px-3 py-2 text-[13px] font-medium text-white transition hover:bg-white/12"
               >
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <UserBadge user={user} />
-                  <Badge className="bg-white/[0.08] text-white/70">
-                    {(readableTargetsByUserId.get(user.id) ?? []).length}{" "}
-                    readable users
-                  </Badge>
-                </div>
-                <div className="mt-3 flex flex-wrap gap-2">
-                  {(readableTargetsByUserId.get(user.id) ?? []).map(
-                    (target) => (
-                      <UserBadge
-                        key={`${user.id}-${target.id}`}
-                        user={target}
-                        compact
-                      />
-                    )
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
-        </Card>
+                Open agent onboarding
+              </Link>
+            </div>
+          </Card>
+        </div>
       </div>
     </div>
   );

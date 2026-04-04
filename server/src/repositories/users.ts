@@ -4,11 +4,16 @@ import {
   createUserSchema,
   updateUserSchema,
   userAccessGrantSchema,
+  userAccessRightsSchema,
   userOwnershipSummarySchema,
+  updateUserAccessGrantSchema,
   userSummarySchema,
   type CreateUserInput,
   type UserAccessGrant,
+  type UserAccessGrantConfig,
+  type UserAccessRights,
   type UpdateUserInput,
+  type UpdateUserAccessGrantInput,
   type UserKind,
   type UserOwnershipSummary,
   type UserSummary
@@ -42,6 +47,138 @@ function normalizeHandle(value: string): string {
     .replace(/[^a-z0-9]+/g, "_")
     .replace(/^_+|_+$/g, "")
     .slice(0, 48);
+}
+
+function buildDefaultRights(
+  self = false
+): UserAccessRights {
+  return userAccessRightsSchema.parse({
+    discoverable: true,
+    canListUsers: true,
+    canReadProfile: true,
+    canReadEntities: true,
+    canSearchEntities: true,
+    canLinkEntities: true,
+    canAffectEntities: true,
+    canManageStrategies: true,
+    canCreateOnBehalf: true,
+    canViewMetrics: true,
+    canViewActivity: true,
+    ...(self ? { discoverable: true } : {})
+  });
+}
+
+function buildGrantConfig(self = false): UserAccessGrantConfig {
+  return {
+    self,
+    mutable: self,
+    linkedEntities: true,
+    rights: buildDefaultRights(self)
+  };
+}
+
+function normalizeGrantConfig(
+  value: unknown,
+  options: { self?: boolean } = {}
+): UserAccessGrantConfig {
+  const current =
+    value && typeof value === "object" && !Array.isArray(value)
+      ? (value as Record<string, unknown>)
+      : {};
+  const defaultConfig = buildGrantConfig(options.self ?? false);
+  return {
+    self:
+      typeof current.self === "boolean" ? current.self : defaultConfig.self,
+    mutable:
+      typeof current.mutable === "boolean"
+        ? current.mutable
+        : defaultConfig.mutable,
+    linkedEntities:
+      typeof current.linkedEntities === "boolean"
+        ? current.linkedEntities
+        : defaultConfig.linkedEntities,
+    rights: userAccessRightsSchema.parse({
+      ...defaultConfig.rights,
+      ...(current.rights &&
+      typeof current.rights === "object" &&
+      !Array.isArray(current.rights)
+        ? current.rights
+        : current)
+    })
+  };
+}
+
+function deriveAccessLevel(config: UserAccessGrantConfig): UserAccessGrant["accessLevel"] {
+  return config.self ||
+    config.mutable ||
+    config.rights.canAffectEntities ||
+    config.rights.canCreateOnBehalf ||
+    config.rights.canManageStrategies
+    ? "manage"
+    : "view";
+}
+
+function upsertRelationshipGrant(
+  subjectUserId: string,
+  targetUserId: string,
+  now: string
+): void {
+  const database = getDatabase();
+  const self = subjectUserId === targetUserId;
+  const config = buildGrantConfig(self);
+  const accessLevel = deriveAccessLevel(config);
+  const existing = database
+    .prepare(
+      `SELECT id
+       FROM user_access_grants
+       WHERE subject_user_id = ?
+         AND target_user_id = ?
+       ORDER BY CASE access_level WHEN 'manage' THEN 0 ELSE 1 END, created_at ASC
+       LIMIT 1`
+    )
+    .get(subjectUserId, targetUserId) as { id: string } | undefined;
+
+  if (existing) {
+    database
+      .prepare(
+        `UPDATE user_access_grants
+         SET access_level = ?, config_json = ?, updated_at = ?
+         WHERE id = ?`
+      )
+      .run(accessLevel, JSON.stringify(config), now, existing.id);
+    database
+      .prepare(
+        `DELETE FROM user_access_grants
+         WHERE subject_user_id = ?
+           AND target_user_id = ?
+           AND id != ?`
+      )
+      .run(subjectUserId, targetUserId, existing.id);
+    return;
+  }
+
+  database
+    .prepare(
+      `INSERT INTO user_access_grants (
+         id,
+         subject_user_id,
+         target_user_id,
+         access_level,
+         config_json,
+         created_at,
+         updated_at
+       )
+       VALUES (?, ?, ?, ?, ?, ?, ?)`
+    )
+    .run(
+      `grant_${randomUUID().replaceAll("-", "").slice(0, 16)}`,
+      subjectUserId,
+      targetUserId,
+      accessLevel,
+      JSON.stringify(config),
+      now,
+      now
+    );
 }
 
 export function ensureSystemUsers(): void {
@@ -87,78 +224,20 @@ export function ensureSystemUsers(): void {
        )`
     )
     .run(now, now);
-
-  database
-    .prepare(
-      `INSERT OR IGNORE INTO user_access_grants (
-         id,
-         subject_user_id,
-         target_user_id,
-         access_level,
-         config_json,
-         created_at,
-         updated_at
-       )
-       SELECT
-         'grant_' || lower(hex(randomblob(8))),
-         subject_users.id,
-         target_users.id,
-         CASE
-           WHEN subject_users.id = target_users.id THEN 'manage'
-           ELSE 'view'
-         END,
-         CASE
-           WHEN subject_users.id = target_users.id THEN '{"self":true,"mutable":true}'
-           ELSE '{"discoverable":true,"linkedEntities":true}'
-         END,
-         ?,
-         ?
-       FROM users AS subject_users
-       CROSS JOIN users AS target_users`
-    )
-    .run(now, now);
+  const users = listUsers();
+  for (const subjectUser of users) {
+    for (const targetUser of users) {
+      upsertRelationshipGrant(subjectUser.id, targetUser.id, now);
+    }
+  }
 }
 
 function ensurePermissiveGrantsForUser(userId: string, now: string): void {
-  const database = getDatabase();
-  const insert = database.prepare(
-    `INSERT OR IGNORE INTO user_access_grants (
-       id,
-       subject_user_id,
-       target_user_id,
-       access_level,
-       config_json,
-       created_at,
-       updated_at
-     )
-     VALUES (?, ?, ?, ?, ?, ?, ?)`
-  );
   const existingUsers = listUsers();
   for (const otherUser of existingUsers) {
-    const accessLevel = otherUser.id === userId ? "manage" : "view";
-    const configJson =
-      otherUser.id === userId
-        ? '{"self":true,"mutable":true}'
-        : '{"discoverable":true,"linkedEntities":true}';
-    insert.run(
-      `grant_${randomUUID().replaceAll("-", "").slice(0, 16)}`,
-      userId,
-      otherUser.id,
-      accessLevel,
-      configJson,
-      now,
-      now
-    );
+    upsertRelationshipGrant(userId, otherUser.id, now);
     if (otherUser.id !== userId) {
-      insert.run(
-        `grant_${randomUUID().replaceAll("-", "").slice(0, 16)}`,
-        otherUser.id,
-        userId,
-        "view",
-        '{"discoverable":true,"linkedEntities":true}',
-        now,
-        now
-      );
+      upsertRelationshipGrant(otherUser.id, userId, now);
     }
   }
 }
@@ -258,7 +337,9 @@ export function listUserAccessGrants(
       subjectUserId: row.subject_user_id,
       targetUserId: row.target_user_id,
       accessLevel: row.access_level,
-      config: JSON.parse(row.config_json) as Record<string, unknown>,
+      config: normalizeGrantConfig(JSON.parse(row.config_json), {
+        self: row.subject_user_id === row.target_user_id
+      }),
       createdAt: row.created_at,
       updatedAt: row.updated_at,
       subjectUser: usersById.get(row.subject_user_id) ?? null,
@@ -406,4 +487,35 @@ export function updateUser(
       userId
     );
   return getUserById(userId);
+}
+
+export function updateUserAccessGrant(
+  grantId: string,
+  patch: UpdateUserAccessGrantInput
+): UserAccessGrant | undefined {
+  const current = listUserAccessGrants().find((grant) => grant.id === grantId);
+  if (!current) {
+    return undefined;
+  }
+  const parsed = updateUserAccessGrantSchema.parse(patch);
+  const nextConfig = normalizeGrantConfig(
+    {
+      ...current.config,
+      rights: {
+        ...current.config.rights,
+        ...(parsed.rights ?? {})
+      }
+    },
+    { self: current.subjectUserId === current.targetUserId }
+  );
+  const nextAccessLevel = parsed.accessLevel ?? deriveAccessLevel(nextConfig);
+  const now = new Date().toISOString();
+  getDatabase()
+    .prepare(
+      `UPDATE user_access_grants
+       SET access_level = ?, config_json = ?, updated_at = ?
+       WHERE id = ?`
+    )
+    .run(nextAccessLevel, JSON.stringify(nextConfig), now, grantId);
+  return listUserAccessGrants().find((grant) => grant.id === grantId);
 }

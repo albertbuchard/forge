@@ -11,7 +11,11 @@ task runs, and agent-authored insights. The Psyche side covers values, patterns,
 behaviors, beliefs, modes, guided mode sessions, trigger reports, event types, and
 reusable emotion definitions. Forge is also multi-user: every entity can belong to a
 typed `human` or `bot` user through `userId`, and Hermes can scope reads with `userId`
-or repeated `userIds`.
+or repeated `userIds`. The user directory exposes a directional relationship graph
+between humans and bots; use `forge_get_user_directory` before assuming cross-owner
+access or ownership defaults. Strategies may also be locked with `isLocked`; once a
+strategy is locked, Hermes should treat the graph, targets, and descriptive plan
+fields as a contract until the user explicitly unlocks it.
 
 Treat `note` as a first-class Markdown entity. Notes can link to one or many Forge
 entities, carry note-owned `tags`, and optionally self-delete when `destroyAt` is set.

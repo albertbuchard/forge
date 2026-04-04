@@ -14,7 +14,9 @@ import type {
   CalendarOverviewPayload,
   CalendarResource,
   CalendarSchedulingRules,
+  CompanionOverviewPayload,
   EventLogEntry,
+  FitnessViewData,
   FinalizeWeeklyReviewResult,
   Goal,
   Habit,
@@ -48,6 +50,7 @@ import type {
   UserDirectoryPayload,
   UserSummary,
   WeeklyReviewPayload,
+  SleepViewData,
   WorkBlockTemplate,
   XpMetricsPayload,
   CrudEntityType,
@@ -1062,6 +1065,15 @@ export function createCalendarEvent(input: {
   title: string;
   description?: string;
   location?: string;
+  place?: {
+    label?: string;
+    address?: string;
+    timezone?: string;
+    latitude?: number | null;
+    longitude?: number | null;
+    source?: string;
+    externalPlaceId?: string;
+  };
   startAt: string;
   endAt: string;
   timezone?: string;
@@ -1089,6 +1101,15 @@ export function patchCalendarEvent(
     title: string;
     description: string;
     location: string;
+    place: {
+      label?: string;
+      address?: string;
+      timezone?: string;
+      latitude?: number | null;
+      longitude?: number | null;
+      source?: string;
+      externalPlaceId?: string;
+    };
     startAt: string;
     endAt: string;
     timezone: string;
@@ -1317,6 +1338,101 @@ export function getSettings() {
   return request<{ settings: SettingsPayload }>("/api/v1/settings");
 }
 
+export function getCompanionOverview(userIds?: string[] | unknown) {
+  const search = new URLSearchParams();
+  appendUserIds(search, coerceUserIds(userIds));
+  const suffix = search.size > 0 ? `?${search.toString()}` : "";
+  return request<{ overview: CompanionOverviewPayload }>(
+    `/api/v1/health/overview${suffix}`
+  );
+}
+
+export function getSleepView(userIds?: string[] | unknown) {
+  const search = new URLSearchParams();
+  appendUserIds(search, coerceUserIds(userIds));
+  const suffix = search.size > 0 ? `?${search.toString()}` : "";
+  return request<{ sleep: SleepViewData }>(`/api/v1/health/sleep${suffix}`);
+}
+
+export function getFitnessView(userIds?: string[] | unknown) {
+  const search = new URLSearchParams();
+  appendUserIds(search, coerceUserIds(userIds));
+  const suffix = search.size > 0 ? `?${search.toString()}` : "";
+  return request<{ fitness: FitnessViewData }>(
+    `/api/v1/health/fitness${suffix}`
+  );
+}
+
+export function createCompanionPairingSession(input?: {
+  label?: string;
+  userId?: string | null;
+  expiresInMinutes?: number;
+  capabilities?: string[];
+}) {
+  return request<{
+    session: CompanionOverviewPayload["pairings"][number];
+    qrPayload: {
+      kind: string;
+      apiBaseUrl: string;
+      sessionId: string;
+      pairingToken: string;
+      expiresAt: string;
+      capabilities: string[];
+    };
+  }>("/api/v1/health/pairing-sessions", {
+    method: "POST",
+    body: JSON.stringify(input ?? {})
+  });
+}
+
+export function patchWorkoutSession(
+  workoutId: string,
+  patch: Partial<{
+    subjectiveEffort: number | null;
+    moodBefore: string;
+    moodAfter: string;
+    meaningText: string;
+    plannedContext: string;
+    socialContext: string;
+    tags: string[];
+    links: Array<{
+      entityType: string;
+      entityId: string;
+      relationshipType: string;
+    }>;
+  }>
+) {
+  return request<{ workout: import("./types").WorkoutSessionRecord }>(
+    `/api/v1/health/workouts/${workoutId}`,
+    {
+      method: "PATCH",
+      body: JSON.stringify(patch)
+    }
+  );
+}
+
+export function patchSleepSession(
+  sleepId: string,
+  patch: Partial<{
+    qualitySummary: string;
+    notes: string;
+    tags: string[];
+    links: Array<{
+      entityType: string;
+      entityId: string;
+      relationshipType: string;
+    }>;
+  }>
+) {
+  return request<{ sleep: import("./types").SleepSessionRecord }>(
+    `/api/v1/health/sleep/${sleepId}`,
+    {
+      method: "PATCH",
+      body: JSON.stringify(patch)
+    }
+  );
+}
+
 export function listUsers() {
   return request<{ users: UserSummary[] }>("/api/v1/users");
 }
@@ -1325,6 +1441,21 @@ export function getUserDirectory() {
   return request<{ directory: UserDirectoryPayload }>(
     "/api/v1/users/directory"
   );
+}
+
+export function patchUserAccessGrant(
+  grantId: string,
+  patch: Partial<{
+    accessLevel: "view" | "manage";
+    rights: Partial<UserDirectoryPayload["grants"][number]["config"]["rights"]>;
+  }>
+) {
+  return request<{
+    grant: UserDirectoryPayload["grants"][number];
+  }>(`/api/v1/users/access-grants/${grantId}`, {
+    method: "PATCH",
+    body: JSON.stringify(patch)
+  });
 }
 
 export function createUser(input: {
@@ -1373,6 +1504,8 @@ export function createStrategy(input: {
   linkedEntities: Array<{ entityType: CrudEntityType; entityId: string }>;
   graph: Strategy["graph"];
   userId?: string | null;
+  isLocked?: boolean;
+  lockedByUserId?: string | null;
 }) {
   return request<{ strategy: Strategy }>("/api/v1/strategies", {
     method: "POST",
@@ -1396,6 +1529,8 @@ export function patchStrategy(
     linkedEntities: Array<{ entityType: CrudEntityType; entityId: string }>;
     graph: Strategy["graph"];
     userId: string | null;
+    isLocked: boolean;
+    lockedByUserId: string | null;
   }>
 ) {
   return request<{ strategy: Strategy }>(`/api/v1/strategies/${strategyId}`, {

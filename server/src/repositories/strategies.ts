@@ -6,6 +6,7 @@ import {
   inferFirstOwnedUserId,
   setEntityOwner
 } from "./entity-ownership.js";
+import { getUserById, resolveUserForMutation } from "./users.js";
 import {
   getBehaviorById,
   getBehaviorPatternById,
@@ -55,6 +56,9 @@ type StrategyRow = {
   target_project_ids_json: string;
   linked_entities_json: string;
   graph_json: string;
+  is_locked: number;
+  locked_at: string | null;
+  locked_by_user_id: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -202,6 +206,26 @@ function buildStrategyMetrics(
   const completedNodeIds = graph.nodes
     .filter((node) => (nodeProgressById.get(node.id) ?? 0) >= 1)
     .map((node) => node.id);
+  const blockedNodeIds = graph.nodes
+    .filter((node) => {
+      if (node.entityType === "project") {
+        return getProjectById(node.entityId)?.status === "paused";
+      }
+      return getTaskById(node.entityId)?.status === "blocked";
+    })
+    .map((node) => node.id);
+  const outOfOrderNodeIds = graph.nodes
+    .filter((node) => {
+      const progress = nodeProgressById.get(node.id) ?? 0;
+      if (progress <= 0) {
+        return false;
+      }
+      const prerequisites = incoming.get(node.id) ?? [];
+      return prerequisites.some(
+        (dependencyId) => (nodeProgressById.get(dependencyId) ?? 0) < 1
+      );
+    })
+    .map((node) => node.id);
   const activeNodeIds = graph.nodes
     .filter((node) => {
       const progress = nodeProgressById.get(node.id) ?? 0;
@@ -232,18 +256,109 @@ function buildStrategyMetrics(
       ? nodeAverage
       : targetScores.reduce((sum, value) => sum + value, 0) /
         targetScores.length;
+  const graphProjectIds = new Set(
+    graph.nodes
+      .filter((node) => node.entityType === "project")
+      .map((node) => node.entityId)
+  );
+  const graphTaskIds = new Set(
+    graph.nodes
+      .filter((node) => node.entityType === "task")
+      .map((node) => node.entityId)
+  );
+  const offPlanEntityKeys = new Set<string>();
+
+  for (const projectId of targetProjectIds) {
+    const project = getProjectById(projectId);
+    if (
+      project &&
+      !graphProjectIds.has(project.id) &&
+      project.status !== "completed"
+    ) {
+      offPlanEntityKeys.add(`project:${project.id}`);
+    }
+    for (const task of listTasks({ projectId })) {
+      if (
+        !graphTaskIds.has(task.id) &&
+        ["focus", "in_progress", "done", "blocked"].includes(task.status)
+      ) {
+        offPlanEntityKeys.add(`task:${task.id}`);
+      }
+    }
+  }
+
+  for (const goalId of targetGoalIds) {
+    for (const task of listTasks({ goalId })) {
+      if (
+        !graphTaskIds.has(task.id) &&
+        ["focus", "in_progress", "done", "blocked"].includes(task.status)
+      ) {
+        offPlanEntityKeys.add(`task:${task.id}`);
+      }
+    }
+  }
+
+  const totalNodes = Math.max(1, graph.nodes.length);
+  const offPlanEntityCount = offPlanEntityKeys.size;
+  const planCoverageScore = Math.max(
+    0,
+    Math.min(100, Math.round(nodeAverage * 100))
+  );
+  const sequencingScore = Math.max(
+    0,
+    Math.min(
+      100,
+      Math.round(100 - (outOfOrderNodeIds.length / totalNodes) * 100)
+    )
+  );
+  const scopeDisciplineScore = Math.max(
+    0,
+    Math.min(
+      100,
+      Math.round(100 - (offPlanEntityCount / totalNodes) * 100)
+    )
+  );
+  const blockedRatio = blockedNodeIds.length / totalNodes;
+  const qualityScore = Math.max(
+    0,
+    Math.min(
+      100,
+      Math.round(
+        Math.max(
+          0,
+          Math.min(1, targetAverage * 0.8 + (1 - blockedRatio) * 0.2)
+        ) * 100
+      )
+    )
+  );
+  const alignmentScore = Math.max(
+    0,
+    Math.min(
+      100,
+      Math.round(
+        planCoverageScore * 0.35 +
+          sequencingScore * 0.3 +
+          scopeDisciplineScore * 0.2 +
+          qualityScore * 0.15
+      )
+    )
+  );
 
   return {
-    alignmentScore: Math.max(
-      0,
-      Math.min(100, Math.round((nodeAverage * 0.7 + targetAverage * 0.3) * 100))
-    ),
+    alignmentScore,
+    planCoverageScore,
+    sequencingScore,
+    scopeDisciplineScore,
+    qualityScore,
     completedNodeCount: completedNodeIds.length,
-    totalNodeCount: Math.max(1, graph.nodes.length),
+    totalNodeCount: totalNodes,
     completedTargetCount: targetScores.filter((score) => score >= 1).length,
     totalTargetCount: targetScores.length,
+    offPlanEntityCount,
     activeNodeIds: activeNodeIds.slice(0, 8),
-    nextNodeIds: activeNodeIds.slice(0, 5)
+    nextNodeIds: activeNodeIds.slice(0, 5),
+    blockedNodeIds,
+    outOfOrderNodeIds
   };
 }
 
@@ -267,6 +382,12 @@ function mapStrategy(row: StrategyRow): Strategy {
         parseJsonArray<string>(row.target_goal_ids_json),
         parseJsonArray<string>(row.target_project_ids_json)
       ),
+      isLocked: row.is_locked === 1,
+      lockedAt: row.locked_at,
+      lockedByUserId: row.locked_by_user_id,
+      lockedByUser: row.locked_by_user_id
+        ? getUserById(row.locked_by_user_id) ?? null
+        : null,
       createdAt: row.created_at,
       updatedAt: row.updated_at
     })
@@ -289,7 +410,7 @@ export function listStrategies(filters: StrategyListQuery = {}): Strategy[] {
   const rows = getDatabase()
     .prepare(
       `SELECT id, title, overview, end_state_description, status, target_goal_ids_json, target_project_ids_json,
-              linked_entities_json, graph_json, created_at, updated_at
+              linked_entities_json, graph_json, is_locked, locked_at, locked_by_user_id, created_at, updated_at
        FROM strategies
        ${whereSql}
        ORDER BY updated_at DESC
@@ -307,7 +428,7 @@ export function getStrategyById(strategyId: string): Strategy | undefined {
   const row = getDatabase()
     .prepare(
       `SELECT id, title, overview, end_state_description, status, target_goal_ids_json, target_project_ids_json,
-              linked_entities_json, graph_json, created_at, updated_at
+              linked_entities_json, graph_json, is_locked, locked_at, locked_by_user_id, created_at, updated_at
        FROM strategies
        WHERE id = ?`
     )
@@ -321,13 +442,37 @@ export function createStrategy(input: CreateStrategyInput): Strategy {
     assertStrategyRelations(parsed);
     const now = new Date().toISOString();
     const id = `strategy_${randomUUID().replaceAll("-", "").slice(0, 10)}`;
+    const inferredOwnerUserId =
+      parsed.userId ??
+      inferFirstOwnedUserId([
+        ...parsed.targetProjectIds.map((entityId) => ({
+          entityType: "project",
+          entityId
+        })),
+        ...parsed.targetGoalIds.map((entityId) => ({
+          entityType: "goal",
+          entityId
+        })),
+        ...parsed.graph.nodes.map((node) => ({
+          entityType: node.entityType,
+          entityId: node.entityId
+        })),
+        ...parsed.linkedEntities.map((entity) => ({
+          entityType: entity.entityType,
+          entityId: entity.entityId
+        }))
+      ]);
+    const ownerUser = resolveUserForMutation(inferredOwnerUserId);
+    const lockedByUserId = parsed.isLocked
+      ? resolveUserForMutation(parsed.lockedByUserId ?? ownerUser.id).id
+      : null;
     getDatabase()
       .prepare(
         `INSERT INTO strategies (
           id, title, overview, end_state_description, status, target_goal_ids_json, target_project_ids_json,
-          linked_entities_json, graph_json, created_at, updated_at
+          linked_entities_json, graph_json, is_locked, locked_at, locked_by_user_id, created_at, updated_at
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       )
       .run(
         id,
@@ -339,32 +484,13 @@ export function createStrategy(input: CreateStrategyInput): Strategy {
         JSON.stringify(parsed.targetProjectIds),
         JSON.stringify(parsed.linkedEntities),
         JSON.stringify(parsed.graph),
+        parsed.isLocked ? 1 : 0,
+        parsed.isLocked ? now : null,
+        lockedByUserId,
         now,
         now
       );
-    setEntityOwner(
-      "strategy",
-      id,
-      parsed.userId ??
-        inferFirstOwnedUserId([
-          ...parsed.targetProjectIds.map((entityId) => ({
-            entityType: "project",
-            entityId
-          })),
-          ...parsed.targetGoalIds.map((entityId) => ({
-            entityType: "goal",
-            entityId
-          })),
-          ...parsed.graph.nodes.map((node) => ({
-            entityType: node.entityType,
-            entityId: node.entityId
-          })),
-          ...parsed.linkedEntities.map((entity) => ({
-            entityType: entity.entityType,
-            entityId: entity.entityId
-          }))
-        ])
-    );
+    setEntityOwner("strategy", id, ownerUser.id);
     return getStrategyById(id)!;
   });
 }
@@ -379,6 +505,20 @@ export function updateStrategy(
   }
   return runInTransaction(() => {
     const parsed = updateStrategySchema.parse(patch);
+    const changesCoreStrategyShape =
+      parsed.title !== undefined ||
+      parsed.overview !== undefined ||
+      parsed.endStateDescription !== undefined ||
+      parsed.targetGoalIds !== undefined ||
+      parsed.targetProjectIds !== undefined ||
+      parsed.linkedEntities !== undefined ||
+      parsed.graph !== undefined ||
+      parsed.userId !== undefined;
+    if (current.isLocked && parsed.isLocked !== false && changesCoreStrategyShape) {
+      throw new Error(
+        "Strategy is locked as a contract. Unlock it before changing the plan, targets, links, or owner."
+      );
+    }
     const next = {
       title: parsed.title ?? current.title,
       overview: parsed.overview ?? current.overview,
@@ -389,6 +529,34 @@ export function updateStrategy(
       targetProjectIds: parsed.targetProjectIds ?? current.targetProjectIds,
       linkedEntities: parsed.linkedEntities ?? current.linkedEntities,
       graph: parsed.graph ?? current.graph,
+      isLocked: parsed.isLocked ?? current.isLocked,
+      lockedAt:
+        parsed.isLocked === false
+          ? null
+          : parsed.isLocked === true && !current.isLocked
+            ? new Date().toISOString()
+            : current.lockedAt,
+      lockedByUserId:
+        parsed.isLocked === false
+          ? null
+          : parsed.isLocked === true
+            ? resolveUserForMutation(
+                parsed.lockedByUserId ??
+                  current.lockedByUserId ??
+                  parsed.userId ??
+                  current.userId ??
+                  inferFirstOwnedUserId([
+                    ...current.targetProjectIds.map((entityId) => ({
+                      entityType: "project",
+                      entityId
+                    })),
+                    ...current.targetGoalIds.map((entityId) => ({
+                      entityType: "goal",
+                      entityId
+                    }))
+                  ])
+              ).id
+            : current.lockedByUserId,
       updatedAt: new Date().toISOString()
     };
     assertStrategyRelations(next);
@@ -396,7 +564,8 @@ export function updateStrategy(
       .prepare(
         `UPDATE strategies
          SET title = ?, overview = ?, end_state_description = ?, status = ?, target_goal_ids_json = ?,
-             target_project_ids_json = ?, linked_entities_json = ?, graph_json = ?, updated_at = ?
+             target_project_ids_json = ?, linked_entities_json = ?, graph_json = ?, is_locked = ?, locked_at = ?,
+             locked_by_user_id = ?, updated_at = ?
          WHERE id = ?`
       )
       .run(
@@ -408,6 +577,9 @@ export function updateStrategy(
         JSON.stringify(next.targetProjectIds),
         JSON.stringify(next.linkedEntities),
         JSON.stringify(next.graph),
+        next.isLocked ? 1 : 0,
+        next.lockedAt,
+        next.lockedByUserId,
         next.updatedAt,
         strategyId
       );

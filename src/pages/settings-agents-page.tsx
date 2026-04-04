@@ -714,6 +714,53 @@ export function SettingsAgentsPage() {
                   <div>{onboarding.requiredHeaders.actor}</div>
                 </div>
               </div>
+
+              <div className="grid gap-3 md:grid-cols-2">
+                {(
+                  [
+                    onboarding.connectionGuides.openclaw,
+                    onboarding.connectionGuides.hermes
+                  ] as const
+                ).map((guide) => (
+                  <div key={guide.label} className="rounded-[18px] bg-white/[0.04] p-4">
+                    <div className="font-medium text-white">{guide.label}</div>
+                    <div className="mt-3 grid gap-2 text-sm leading-6 text-white/60">
+                      {guide.installSteps.map((step) => (
+                        <div key={step}>{step}</div>
+                      ))}
+                    </div>
+                    <pre className="mt-4 overflow-x-auto rounded-[16px] bg-[rgba(8,13,28,0.78)] p-4 text-xs leading-6 text-white/72">
+                      <code>{guide.verifyCommands.join("\n")}</code>
+                    </pre>
+                    <div className="mt-3 grid gap-1 text-sm leading-6 text-white/48">
+                      {guide.configNotes.map((note) => (
+                        <div key={note}>{note}</div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="grid gap-3 md:grid-cols-2">
+                <div className="rounded-[18px] bg-white/[0.04] p-4">
+                  <div className="text-xs uppercase tracking-[0.14em] text-white/40">Multi-user model</div>
+                  <div className="mt-3 text-sm leading-6 text-white/60">{onboarding.multiUserModel.summary}</div>
+                  <div className="mt-3 grid gap-1 text-sm leading-6 text-white/48">
+                    {onboarding.multiUserModel.routeScoping.map((line) => (
+                      <div key={line}>{line}</div>
+                    ))}
+                  </div>
+                </div>
+                <div className="rounded-[18px] bg-white/[0.04] p-4">
+                  <div className="text-xs uppercase tracking-[0.14em] text-white/40">Strategy contracts</div>
+                  <div className="mt-3 text-sm leading-6 text-white/60">{onboarding.strategyContractModel.lockSummary}</div>
+                  <div className="mt-3 grid gap-1 text-sm leading-6 text-white/48">
+                    {onboarding.strategyContractModel.metricBreakdown.map((line) => (
+                      <div key={line}>{line}</div>
+                    ))}
+                  </div>
+                </div>
+              </div>
             </div>
           ) : onboardingExpanded && onboardingQuery.isError ? (
             <div className="mt-4 rounded-[18px] bg-[rgba(120,33,33,0.22)] px-4 py-3 text-sm text-rose-100/80">

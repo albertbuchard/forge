@@ -204,6 +204,15 @@ export function StrategiesPage() {
                   </div>
                   <div className="flex flex-wrap gap-2">
                     <UserBadge user={strategy.user} />
+                    <Badge
+                      className={
+                        strategy.isLocked
+                          ? "bg-amber-500/12 text-amber-200"
+                          : "bg-emerald-500/12 text-emerald-200"
+                      }
+                    >
+                      {strategy.isLocked ? "Contract locked" : "Editable draft"}
+                    </Badge>
                     <Badge className="bg-white/[0.08] text-white/78">
                       {strategy.status}
                     </Badge>
@@ -242,34 +251,48 @@ export function StrategiesPage() {
                   </div>
                   <div className="rounded-[18px] bg-white/[0.04] px-4 py-3">
                     <div className="font-label text-[11px] uppercase tracking-[0.16em] text-white/40">
-                      Branches live
+                      Sequencing
                     </div>
                     <div className="mt-2 text-xl text-white">
-                      {activeNodes.length}
+                      {strategy.metrics.sequencingScore}%
                     </div>
                   </div>
                 </div>
 
                 <div className="grid gap-3 xl:grid-cols-[minmax(0,1.2fr)_minmax(16rem,0.8fr)]">
                   <div className="rounded-[18px] bg-white/[0.04] px-4 py-4">
-                    <div className="font-label text-[11px] uppercase tracking-[0.16em] text-white/42">
-                      Active next nodes
-                    </div>
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      {activeNodes.length === 0 ? (
-                        <div className="text-sm text-white/52">
-                          No currently open branch.
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <div>
+                        <div className="font-label text-[11px] uppercase tracking-[0.16em] text-white/42">
+                          Active next nodes
                         </div>
-                      ) : (
-                        activeNodes.map((node) => (
-                          <Badge
-                            key={node.id}
-                            className="bg-white/[0.08] text-white/80"
-                          >
-                            {node.title}
-                          </Badge>
-                        ))
-                      )}
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          {activeNodes.length === 0 ? (
+                            <div className="text-sm text-white/52">
+                              No currently open branch.
+                            </div>
+                          ) : (
+                            activeNodes.map((node) => (
+                              <Badge
+                                key={node.id}
+                                className="bg-white/[0.08] text-white/80"
+                              >
+                                {node.title}
+                              </Badge>
+                            ))
+                          )}
+                        </div>
+                      </div>
+                      <div>
+                        <div className="font-label text-[11px] uppercase tracking-[0.16em] text-white/42">
+                          Alignment breakdown
+                        </div>
+                        <div className="mt-3 grid gap-2 text-sm text-white/58">
+                          <div>Coverage {strategy.metrics.planCoverageScore}%</div>
+                          <div>Scope discipline {strategy.metrics.scopeDisciplineScore}%</div>
+                          <div>Quality {strategy.metrics.qualityScore}%</div>
+                        </div>
+                      </div>
                     </div>
                   </div>
 

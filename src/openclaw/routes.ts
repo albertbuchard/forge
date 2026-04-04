@@ -192,6 +192,11 @@ export const FORGE_PLUGIN_ROUTE_GROUPS: RouteGroup[] = [
     upstreamPath: "/api/v1/agents/onboarding",
     target: (_match: RegExpMatchArray, url: URL) => passthroughSearch("/api/v1/agents/onboarding", url)
   }),
+  exact("/forge/v1/users/directory", {
+    method: "GET",
+    upstreamPath: "/api/v1/users/directory",
+    target: (_match: RegExpMatchArray, url: URL) => passthroughSearch("/api/v1/users/directory", url)
+  }),
   exact("/forge/v1/psyche/overview", {
     method: "GET",
     upstreamPath: "/api/v1/psyche/overview",

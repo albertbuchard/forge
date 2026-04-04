@@ -92,12 +92,33 @@ export interface UserSummary {
   updatedAt: string;
 }
 
+export interface UserAccessRights {
+  discoverable: boolean;
+  canListUsers: boolean;
+  canReadProfile: boolean;
+  canReadEntities: boolean;
+  canSearchEntities: boolean;
+  canLinkEntities: boolean;
+  canAffectEntities: boolean;
+  canManageStrategies: boolean;
+  canCreateOnBehalf: boolean;
+  canViewMetrics: boolean;
+  canViewActivity: boolean;
+}
+
+export interface UserAccessGrantConfig {
+  self: boolean;
+  mutable: boolean;
+  linkedEntities: boolean;
+  rights: UserAccessRights;
+}
+
 export interface UserAccessGrant {
   id: string;
   subjectUserId: string;
   targetUserId: string;
   accessLevel: "view" | "manage";
-  config: Record<string, unknown>;
+  config: UserAccessGrantConfig;
   createdAt: string;
   updatedAt: string;
   subjectUser: UserSummary | null;
@@ -115,7 +136,7 @@ export interface UserDirectoryPayload {
   grants: UserAccessGrant[];
   ownership: UserOwnershipSummary[];
   posture: {
-    accessModel: "permissive";
+    accessModel: "permissive" | "directional_graph";
     summary: string;
     futureReady: boolean;
   };
@@ -382,6 +403,15 @@ export interface CalendarEvent extends OwnedEntity {
   title: string;
   description: string;
   location: string;
+  place: {
+    label: string;
+    address: string;
+    timezone: string;
+    latitude: number | null;
+    longitude: number | null;
+    source: string;
+    externalPlaceId: string;
+  };
   startAt: string;
   endAt: string;
   timezone: string;
@@ -529,6 +559,20 @@ export interface Habit extends OwnedEntity {
   linkedBehaviorTitles: string[];
   rewardXp: number;
   penaltyXp: number;
+  generatedHealthEventTemplate: {
+    enabled: boolean;
+    workoutType: string;
+    title: string;
+    durationMinutes: number;
+    xpReward: number;
+    tags: string[];
+    links: Array<{
+      entityType: string;
+      entityId: string;
+      relationshipType: string;
+    }>;
+    notesTemplate: string;
+  };
   createdAt: string;
   updatedAt: string;
   lastCheckInAt: string | null;
@@ -537,6 +581,164 @@ export interface Habit extends OwnedEntity {
   completionRate: number;
   dueToday: boolean;
   checkIns: HabitCheckIn[];
+}
+
+export interface CompanionPairingSession {
+  id: string;
+  userId: string;
+  label: string;
+  status:
+    | "pending"
+    | "paired"
+    | "healthy"
+    | "stale"
+    | "permission_denied"
+    | "error"
+    | "revoked";
+  capabilities: string[];
+  deviceName: string | null;
+  platform: string | null;
+  appVersion: string | null;
+  apiBaseUrl: string;
+  lastSeenAt: string | null;
+  lastSyncAt: string | null;
+  lastSyncError: string | null;
+  pairedAt: string | null;
+  expiresAt: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CompanionOverviewPayload {
+  pairings: CompanionPairingSession[];
+  healthState:
+    | "disconnected"
+    | "connected"
+    | "partially_connected"
+    | "stale_sync"
+    | "healthy_sync";
+  lastSyncAt: string | null;
+  counts: {
+    sleepSessions: number;
+    workouts: number;
+  };
+}
+
+export interface HealthLink {
+  entityType: string;
+  entityId: string;
+  relationshipType: string;
+}
+
+export interface SleepSessionRecord {
+  id: string;
+  externalUid: string;
+  pairingSessionId: string | null;
+  userId: string;
+  source: string;
+  sourceType: string;
+  sourceDevice: string;
+  startedAt: string;
+  endedAt: string;
+  timeInBedSeconds: number;
+  asleepSeconds: number;
+  awakeSeconds: number;
+  sleepScore: number | null;
+  regularityScore: number | null;
+  bedtimeConsistencyMinutes: number | null;
+  wakeConsistencyMinutes: number | null;
+  stageBreakdown: Array<{ stage: string; seconds: number }>;
+  recoveryMetrics: Record<string, unknown>;
+  links: HealthLink[];
+  annotations: Record<string, unknown>;
+  provenance: Record<string, unknown>;
+  derived: Record<string, unknown>;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface WorkoutSessionRecord {
+  id: string;
+  externalUid: string;
+  pairingSessionId: string | null;
+  userId: string;
+  source: string;
+  sourceType: string;
+  workoutType: string;
+  sourceDevice: string;
+  startedAt: string;
+  endedAt: string;
+  durationSeconds: number;
+  activeEnergyKcal: number | null;
+  totalEnergyKcal: number | null;
+  distanceMeters: number | null;
+  stepCount: number | null;
+  exerciseMinutes: number | null;
+  averageHeartRate: number | null;
+  maxHeartRate: number | null;
+  subjectiveEffort: number | null;
+  moodBefore: string;
+  moodAfter: string;
+  meaningText: string;
+  plannedContext: string;
+  socialContext: string;
+  links: HealthLink[];
+  tags: string[];
+  annotations: Record<string, unknown>;
+  provenance: Record<string, unknown>;
+  derived: Record<string, unknown>;
+  generatedFromHabitId: string | null;
+  generatedFromCheckInId: string | null;
+  reconciliationStatus: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SleepViewData {
+  summary: {
+    totalSleepSeconds: number;
+    averageSleepSeconds: number;
+    averageTimeInBedSeconds: number;
+    averageSleepScore: number;
+    averageRegularityScore: number;
+    latestBedtime: string | null;
+    latestWakeTime: string | null;
+  };
+  weeklyTrend: Array<{
+    id: string;
+    dateKey: string;
+    sleepHours: number;
+    score: number;
+    regularity: number;
+  }>;
+  monthlyPattern: Array<{
+    id: string;
+    dateKey: string;
+    onsetHour: number;
+    wakeHour: number;
+    sleepHours: number;
+  }>;
+  sessions: SleepSessionRecord[];
+}
+
+export interface FitnessViewData {
+  summary: {
+    workoutCount: number;
+    weeklyVolumeSeconds: number;
+    exerciseMinutes: number;
+    energyBurnedKcal: number;
+    distanceMeters: number;
+    workoutTypes: string[];
+    streakDays: number;
+  };
+  weeklyTrend: Array<{
+    id: string;
+    dateKey: string;
+    workoutType: string;
+    durationMinutes: number;
+    energyKcal: number;
+  }>;
+  sessions: WorkoutSessionRecord[];
 }
 
 export interface TaskRunClaimInput {
@@ -832,12 +1034,19 @@ export interface StrategyGraph {
 
 export interface StrategyMetrics {
   alignmentScore: number;
+  planCoverageScore: number;
+  sequencingScore: number;
+  scopeDisciplineScore: number;
+  qualityScore: number;
   completedNodeCount: number;
   totalNodeCount: number;
   completedTargetCount: number;
   totalTargetCount: number;
+  offPlanEntityCount: number;
   activeNodeIds: string[];
   nextNodeIds: string[];
+  blockedNodeIds: string[];
+  outOfOrderNodeIds: string[];
 }
 
 export interface Strategy extends OwnedEntity {
@@ -851,6 +1060,10 @@ export interface Strategy extends OwnedEntity {
   linkedEntities: StrategyLinkedEntity[];
   graph: StrategyGraph;
   metrics: StrategyMetrics;
+  isLocked: boolean;
+  lockedAt: string | null;
+  lockedByUserId: string | null;
+  lockedByUser: UserSummary | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -1196,8 +1409,35 @@ export interface AgentOnboardingPayload {
   };
   psycheCoachingPlaybooks: AgentOnboardingPsychePlaybook[];
   relationshipModel: string[];
+  multiUserModel: {
+    summary: string;
+    defaultUserScopeBehavior: string;
+    routeScoping: string[];
+    relationshipGraphDefaults: string[];
+  };
+  strategyContractModel: {
+    draftSummary: string;
+    lockSummary: string;
+    unlockSummary: string;
+    alignmentSummary: string;
+    metricBreakdown: string[];
+  };
   entityCatalog: AgentOnboardingEntityGuide[];
   toolInputCatalog: AgentOnboardingToolGuide[];
+  connectionGuides: {
+    openclaw: {
+      label: string;
+      installSteps: string[];
+      verifyCommands: string[];
+      configNotes: string[];
+    };
+    hermes: {
+      label: string;
+      installSteps: string[];
+      verifyCommands: string[];
+      configNotes: string[];
+    };
+  };
   verificationPaths: {
     context: string;
     xpMetrics: string;

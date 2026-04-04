@@ -200,6 +200,14 @@ export function registerForgePluginTools(
     path: () => "/api/v1/agents/onboarding"
   });
 
+  registerReadTool(api, config, {
+    name: "forge_get_user_directory",
+    label: "Forge User Directory",
+    description:
+      "Read the current human and bot user directory, ownership counts, and directional relationship graph before doing multi-user planning or cross-owner edits.",
+    path: () => "/api/v1/users/directory"
+  });
+
   api.registerTool({
     name: "forge_get_ui_entrypoint",
     label: "Forge UI Entrypoint",

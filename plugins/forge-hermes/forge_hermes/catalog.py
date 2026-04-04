@@ -41,6 +41,17 @@ def array_schema(items: JsonSchema, description: Optional[str] = None) -> JsonSc
     return schema
 
 
+def scoped_read_schema() -> JsonSchema:
+    return object_schema(
+        {
+            "userIds": array_schema(
+                {"type": "string"},
+                "Optional Forge user ids to scope the read across one or more human/bot owners.",
+            )
+        }
+    )
+
+
 def with_query(path: str, args: Dict[str, Any], allowed_keys: List[str]) -> str:
     query_parts = []
     for key in allowed_keys:
@@ -57,7 +68,7 @@ def with_query(path: str, args: Dict[str, Any], allowed_keys: List[str]) -> str:
 
 
 def calendar_overview_path(args: Dict[str, Any]) -> str:
-    return with_query("/api/v1/calendar/overview", args, ["from", "to"])
+    return with_query("/api/v1/calendar/overview", args, ["from", "to", "userIds"])
 
 
 def sync_calendar_connection_path(args: Dict[str, Any]) -> str:
@@ -174,6 +185,7 @@ SEARCH_ENTITY = object_schema(
         "query": optional_string("Free-text query."),
         "ids": array_schema({"type": "string"}, "Exact ids to fetch."),
         "status": array_schema({"type": "string"}, "Status filters."),
+        "userIds": array_schema({"type": "string"}, "Optional user ownership scope."),
         "linkedTo": object_schema(
             {
                 "entityType": {"type": "string", "minLength": 1},
@@ -230,16 +242,16 @@ TOOL_CATALOG: List[ToolSpec] = [
     {
         "name": "forge_get_operator_overview",
         "description": "Start here for most Forge work. Read the one-shot operator overview with current priorities, momentum, and onboarding guidance before searching or mutating.",
-        "parameters": object_schema({}),
+        "parameters": scoped_read_schema(),
         "method": "GET",
-        "path": "/api/v1/operator/overview",
+        "path_builder": lambda args: with_query("/api/v1/operator/overview", args, ["userIds"]),
     },
     {
         "name": "forge_get_operator_context",
         "description": "Read the current operational task board, focus queue, recent task runs, and XP state. Use this for current-work questions and work runtime decisions.",
-        "parameters": object_schema({}),
+        "parameters": scoped_read_schema(),
         "method": "GET",
-        "path": "/api/v1/operator/context",
+        "path_builder": lambda args: with_query("/api/v1/operator/context", args, ["userIds"]),
     },
     {
         "name": "forge_get_agent_onboarding",
@@ -247,6 +259,13 @@ TOOL_CATALOG: List[ToolSpec] = [
         "parameters": object_schema({}),
         "method": "GET",
         "path": "/api/v1/agents/onboarding",
+    },
+    {
+        "name": "forge_get_user_directory",
+        "description": "Read the current human and bot user directory, ownership counts, and directional relationship graph before cross-owner planning or mutation.",
+        "parameters": object_schema({}),
+        "method": "GET",
+        "path": "/api/v1/users/directory",
     },
     {
         "name": "forge_get_ui_entrypoint",
@@ -257,9 +276,9 @@ TOOL_CATALOG: List[ToolSpec] = [
     {
         "name": "forge_get_psyche_overview",
         "description": "Read the aggregate Psyche state across values, patterns, behaviors, beliefs, modes, and trigger reports before making Psyche recommendations or updates.",
-        "parameters": object_schema({}),
+        "parameters": scoped_read_schema(),
         "method": "GET",
-        "path": "/api/v1/psyche/overview",
+        "path_builder": lambda args: with_query("/api/v1/psyche/overview", args, ["userIds"]),
     },
     {
         "name": "forge_get_xp_metrics",
@@ -271,14 +290,14 @@ TOOL_CATALOG: List[ToolSpec] = [
     {
         "name": "forge_get_weekly_review",
         "description": "Read the current weekly review payload with wins, trends, and reward framing.",
-        "parameters": object_schema({}),
+        "parameters": scoped_read_schema(),
         "method": "GET",
-        "path": "/api/v1/reviews/weekly",
+        "path_builder": lambda args: with_query("/api/v1/reviews/weekly", args, ["userIds"]),
     },
     {
         "name": "forge_get_current_work",
         "description": "Get the current live-work picture: active task runs, focus tasks, the recommended next task, and current XP state.",
-        "parameters": object_schema({}),
+        "parameters": scoped_read_schema(),
         "custom_handler": "current_work",
     },
     {

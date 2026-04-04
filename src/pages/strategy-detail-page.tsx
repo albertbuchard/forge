@@ -65,6 +65,20 @@ export function StrategyDetailPage() {
     }
   });
 
+  const lockStrategyMutation = useMutation({
+    mutationFn: async (nextLocked: boolean) =>
+      (
+        await patchStrategy(strategyId!, {
+          isLocked: nextLocked,
+          lockedByUserId:
+            nextLocked
+              ? defaultUserId ?? strategy?.userId ?? "user_operator"
+              : null
+        })
+      ).strategy,
+    onSuccess: refreshStrategy
+  });
+
   const goalsById = useMemo(
     () => new Map(shell.snapshot.goals.map((goal) => [goal.id, goal])),
     [shell.snapshot.goals]
@@ -136,8 +150,22 @@ export function StrategyDetailPage() {
         badge={`${strategy.metrics.alignmentScore}% aligned`}
         actions={
           <div className="flex flex-wrap gap-2">
-            <Button variant="secondary" onClick={() => setDialogOpen(true)}>
-              Edit strategy
+            {!strategy.isLocked ? (
+              <Button variant="secondary" onClick={() => setDialogOpen(true)}>
+                Edit strategy
+              </Button>
+            ) : null}
+            <Button
+              variant="secondary"
+              pending={lockStrategyMutation.isPending}
+              pendingLabel={
+                strategy.isLocked ? "Unlocking contract" : "Locking contract"
+              }
+              onClick={() => {
+                void lockStrategyMutation.mutateAsync(!strategy.isLocked);
+              }}
+            >
+              {strategy.isLocked ? "Unlock contract" : "Lock as contract"}
             </Button>
             <Button
               variant="secondary"
@@ -158,6 +186,15 @@ export function StrategyDetailPage() {
 
       <div className="flex flex-wrap gap-2">
         <UserBadge user={strategy.user} />
+        <Badge
+          className={
+            strategy.isLocked
+              ? "bg-amber-500/12 text-amber-200"
+              : "bg-emerald-500/12 text-emerald-200"
+          }
+        >
+          {strategy.isLocked ? "Contract locked" : "Editable draft"}
+        </Badge>
         <Badge className="bg-white/[0.08] text-white/76">
           {strategy.status}
         </Badge>
@@ -202,6 +239,12 @@ export function StrategyDetailPage() {
                 const isActive = strategy.metrics.activeNodeIds.includes(
                   node.id
                 );
+                const isBlocked = strategy.metrics.blockedNodeIds.includes(
+                  node.id
+                );
+                const isOutOfOrder = strategy.metrics.outOfOrderNodeIds.includes(
+                  node.id
+                );
                 return (
                   <div
                     key={node.id}
@@ -219,6 +262,16 @@ export function StrategyDetailPage() {
                           {isActive ? (
                             <Badge className="bg-emerald-500/12 text-emerald-200">
                               Active branch
+                            </Badge>
+                          ) : null}
+                          {isBlocked ? (
+                            <Badge className="bg-rose-500/12 text-rose-200">
+                              Blocked
+                            </Badge>
+                          ) : null}
+                          {isOutOfOrder ? (
+                            <Badge className="bg-amber-500/12 text-amber-200">
+                              Out of order
                             </Badge>
                           ) : null}
                         </div>
@@ -269,6 +322,27 @@ export function StrategyDetailPage() {
         <div className="grid gap-5">
           <Card className="grid gap-3">
             <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">
+              Contract state
+            </div>
+            <div className="rounded-[18px] bg-white/[0.04] px-4 py-4">
+              <div className="text-sm text-white/58">
+                {strategy.isLocked
+                  ? "This strategy is currently locked as a contract. The graph, targets, and descriptive plan stay frozen until you explicitly unlock it."
+                  : "This strategy is still a draft. Agents and users can keep refining the plan until you lock it."}
+              </div>
+              {strategy.isLocked ? (
+                <div className="mt-3 flex flex-wrap gap-2 text-sm text-white/60">
+                  <span>
+                    Locked by {strategy.lockedByUser?.displayName ?? "Unknown user"}
+                  </span>
+                  {strategy.lockedAt ? <span>· {new Date(strategy.lockedAt).toLocaleString()}</span> : null}
+                </div>
+              ) : null}
+            </div>
+          </Card>
+
+          <Card className="grid gap-3">
+            <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">
               Alignment metrics
             </div>
             <div className="rounded-[18px] bg-white/[0.04] px-4 py-3">
@@ -278,17 +352,27 @@ export function StrategyDetailPage() {
               </div>
             </div>
             <div className="rounded-[18px] bg-white/[0.04] px-4 py-3">
-              <div className="text-sm text-white/56">Completed graph nodes</div>
+              <div className="text-sm text-white/56">Plan coverage</div>
               <div className="mt-2 text-white">
-                {strategy.metrics.completedNodeCount}/
-                {strategy.metrics.totalNodeCount}
+                {strategy.metrics.planCoverageScore}%
               </div>
             </div>
             <div className="rounded-[18px] bg-white/[0.04] px-4 py-3">
-              <div className="text-sm text-white/56">Completed end targets</div>
+              <div className="text-sm text-white/56">Sequencing</div>
               <div className="mt-2 text-white">
-                {strategy.metrics.completedTargetCount}/
-                {strategy.metrics.totalTargetCount}
+                {strategy.metrics.sequencingScore}%
+              </div>
+            </div>
+            <div className="rounded-[18px] bg-white/[0.04] px-4 py-3">
+              <div className="text-sm text-white/56">Scope discipline</div>
+              <div className="mt-2 text-white">
+                {strategy.metrics.scopeDisciplineScore}% · {strategy.metrics.offPlanEntityCount} off-plan
+              </div>
+            </div>
+            <div className="rounded-[18px] bg-white/[0.04] px-4 py-3">
+              <div className="text-sm text-white/56">Quality</div>
+              <div className="mt-2 text-white">
+                {strategy.metrics.qualityScore}% · {strategy.metrics.blockedNodeIds.length} blocked
               </div>
             </div>
           </Card>

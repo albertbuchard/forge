@@ -164,6 +164,16 @@ function normalizeHabit(habit: Partial<Habit> | undefined): Habit {
     linkedBehaviorTitles: habit?.linkedBehaviorTitles ?? [],
     rewardXp: habit?.rewardXp ?? 12,
     penaltyXp: habit?.penaltyXp ?? 8,
+    generatedHealthEventTemplate: habit?.generatedHealthEventTemplate ?? {
+      enabled: false,
+      workoutType: "",
+      title: "",
+      durationMinutes: 60,
+      xpReward: 0,
+      tags: [],
+      links: [],
+      notesTemplate: ""
+    },
     createdAt: habit?.createdAt ?? new Date(0).toISOString(),
     updatedAt: habit?.updatedAt ?? new Date(0).toISOString(),
     lastCheckInAt: habit?.lastCheckInAt ?? null,
@@ -206,13 +216,25 @@ function normalizeStrategy(strategy: Partial<Strategy> | undefined): Strategy {
     graph: strategy?.graph ?? { nodes: [], edges: [] },
     metrics: strategy?.metrics ?? {
       alignmentScore: 0,
+      planCoverageScore: 0,
+      sequencingScore: 100,
+      scopeDisciplineScore: 100,
+      qualityScore: 0,
       completedNodeCount: 0,
       totalNodeCount: 1,
       completedTargetCount: 0,
       totalTargetCount: 0,
+      offPlanEntityCount: 0,
       activeNodeIds: [],
-      nextNodeIds: []
+      nextNodeIds: [],
+      blockedNodeIds: [],
+      outOfOrderNodeIds: []
     },
+    isLocked: strategy?.isLocked ?? false,
+    lockedAt: strategy?.lockedAt ?? null,
+    lockedByUserId: strategy?.lockedByUserId ?? null,
+    lockedByUser:
+      (strategy?.lockedByUser as UserSummary | null | undefined) ?? null,
     createdAt: strategy?.createdAt ?? new Date(0).toISOString(),
     updatedAt: strategy?.updatedAt ?? new Date(0).toISOString(),
     userId: strategy?.userId ?? null,

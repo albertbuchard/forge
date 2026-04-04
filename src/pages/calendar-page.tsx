@@ -386,6 +386,18 @@ export function CalendarPage() {
         title: input.title,
         description: input.description ?? "",
         location: input.location ?? "",
+        place: {
+          label: input.location ?? "",
+          address: "",
+          timezone:
+            input.timezone ??
+            Intl.DateTimeFormat().resolvedOptions().timeZone ??
+            "UTC",
+          latitude: null,
+          longitude: null,
+          source: "forge",
+          externalPlaceId: ""
+        },
         startAt: input.startAt,
         endAt: input.endAt,
         timezone:
@@ -486,6 +498,12 @@ export function CalendarPage() {
           const nextEvent: CalendarEvent = {
             ...existingEvent,
             ...patch,
+            place: patch.place
+              ? {
+                  ...existingEvent.place,
+                  ...patch.place
+                }
+              : existingEvent.place,
             calendarId:
               patch.preferredCalendarId === undefined
                 ? existingEvent.calendarId

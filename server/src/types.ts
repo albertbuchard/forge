@@ -321,16 +321,42 @@ export const userSummarySchema = z.object({
   updatedAt: z.string()
 });
 
+export const userAccessRightsSchema = z.object({
+  discoverable: z.boolean().default(true),
+  canListUsers: z.boolean().default(true),
+  canReadProfile: z.boolean().default(true),
+  canReadEntities: z.boolean().default(true),
+  canSearchEntities: z.boolean().default(true),
+  canLinkEntities: z.boolean().default(true),
+  canAffectEntities: z.boolean().default(true),
+  canManageStrategies: z.boolean().default(true),
+  canCreateOnBehalf: z.boolean().default(true),
+  canViewMetrics: z.boolean().default(true),
+  canViewActivity: z.boolean().default(true)
+});
+
+export const userAccessGrantConfigSchema = z.object({
+  self: z.boolean().default(false),
+  mutable: z.boolean().default(false),
+  linkedEntities: z.boolean().default(true),
+  rights: userAccessRightsSchema.default({})
+});
+
 export const userAccessGrantSchema = z.object({
   id: z.string(),
   subjectUserId: z.string(),
   targetUserId: z.string(),
   accessLevel: userAccessLevelSchema,
-  config: z.record(z.string(), z.unknown()),
+  config: userAccessGrantConfigSchema,
   createdAt: z.string(),
   updatedAt: z.string(),
   subjectUser: userSummarySchema.nullable().default(null),
   targetUser: userSummarySchema.nullable().default(null)
+});
+
+export const updateUserAccessGrantSchema = z.object({
+  accessLevel: userAccessLevelSchema.optional(),
+  rights: userAccessRightsSchema.partial().optional()
 });
 
 export const userOwnershipSummarySchema = z.object({
@@ -344,7 +370,7 @@ export const userDirectoryPayloadSchema = z.object({
   grants: z.array(userAccessGrantSchema),
   ownership: z.array(userOwnershipSummarySchema),
   posture: z.object({
-    accessModel: z.literal("permissive"),
+    accessModel: z.enum(["permissive", "directional_graph"]),
     summary: z.string(),
     futureReady: z.boolean()
   })
@@ -662,6 +688,25 @@ export const calendarEventSchema = z.object({
   title: nonEmptyTrimmedString,
   description: trimmedString,
   location: trimmedString,
+  place: z
+    .object({
+      label: trimmedString,
+      address: trimmedString,
+      timezone: trimmedString,
+      latitude: z.number().nullable(),
+      longitude: z.number().nullable(),
+      source: trimmedString,
+      externalPlaceId: trimmedString
+    })
+    .default({
+      label: "",
+      address: "",
+      timezone: "",
+      latitude: null,
+      longitude: null,
+      source: "",
+      externalPlaceId: ""
+    }),
   startAt: z.string(),
   endAt: z.string(),
   timezone: nonEmptyTrimmedString,
@@ -798,6 +843,35 @@ export const habitSchema = z.object({
   linkedBehaviorTitles: z.array(z.string()).default([]),
   rewardXp: z.number().int().positive(),
   penaltyXp: z.number().int().positive(),
+  generatedHealthEventTemplate: z
+    .object({
+      enabled: z.boolean().default(false),
+      workoutType: trimmedString.default("workout"),
+      title: trimmedString.default(""),
+      durationMinutes: z.number().int().positive().max(24 * 60).default(45),
+      xpReward: z.number().int().min(0).max(500).default(0),
+      tags: uniqueStringArraySchema.default([]),
+      links: z
+        .array(
+          z.object({
+            entityType: trimmedString,
+            entityId: nonEmptyTrimmedString,
+            relationshipType: trimmedString.default("context")
+          })
+        )
+        .default([]),
+      notesTemplate: trimmedString.default("")
+    })
+    .default({
+      enabled: false,
+      workoutType: "workout",
+      title: "",
+      durationMinutes: 45,
+      xpReward: 0,
+      tags: [],
+      links: [],
+      notesTemplate: ""
+    }),
   createdAt: z.string(),
   updatedAt: z.string(),
   lastCheckInAt: z.string().nullable(),
@@ -1849,6 +1923,17 @@ export const updateCalendarEventSchema = z
     title: nonEmptyTrimmedString.optional(),
     description: trimmedString.optional(),
     location: trimmedString.optional(),
+    place: z
+      .object({
+        label: trimmedString.optional(),
+        address: trimmedString.optional(),
+        timezone: trimmedString.optional(),
+        latitude: z.number().nullable().optional(),
+        longitude: z.number().nullable().optional(),
+        source: trimmedString.optional(),
+        externalPlaceId: trimmedString.optional()
+      })
+      .optional(),
     startAt: z.string().datetime().optional(),
     endAt: z.string().datetime().optional(),
     timezone: nonEmptyTrimmedString.optional(),
@@ -1887,6 +1972,25 @@ export const createCalendarEventSchema = z
     title: nonEmptyTrimmedString,
     description: trimmedString.default(""),
     location: trimmedString.default(""),
+    place: z
+      .object({
+        label: trimmedString.default(""),
+        address: trimmedString.default(""),
+        timezone: trimmedString.default(""),
+        latitude: z.number().nullable().default(null),
+        longitude: z.number().nullable().default(null),
+        source: trimmedString.default(""),
+        externalPlaceId: trimmedString.default("")
+      })
+      .default({
+        label: "",
+        address: "",
+        timezone: "",
+        latitude: null,
+        longitude: null,
+        source: "",
+        externalPlaceId: ""
+      }),
     startAt: z.string().datetime(),
     endAt: z.string().datetime(),
     timezone: nonEmptyTrimmedString.default("UTC"),
@@ -2029,6 +2133,35 @@ const habitMutationShape = {
   linkedBehaviorId: nonEmptyTrimmedString.nullable().default(null),
   rewardXp: z.number().int().min(1).max(100).default(12),
   penaltyXp: z.number().int().min(1).max(100).default(8),
+  generatedHealthEventTemplate: z
+    .object({
+      enabled: z.boolean().default(false),
+      workoutType: trimmedString.default("workout"),
+      title: trimmedString.default(""),
+      durationMinutes: z.number().int().positive().max(24 * 60).default(45),
+      xpReward: z.number().int().min(0).max(500).default(0),
+      tags: uniqueStringArraySchema.default([]),
+      links: z
+        .array(
+          z.object({
+            entityType: trimmedString,
+            entityId: nonEmptyTrimmedString,
+            relationshipType: trimmedString.default("context")
+          })
+        )
+        .default([]),
+      notesTemplate: trimmedString.default("")
+    })
+    .default({
+      enabled: false,
+      workoutType: "workout",
+      title: "",
+      durationMinutes: 45,
+      xpReward: 0,
+      tags: [],
+      links: [],
+      notesTemplate: ""
+    }),
   userId: nonEmptyTrimmedString.nullable().optional()
 };
 
@@ -2064,6 +2197,26 @@ export const updateHabitSchema = z
     linkedBehaviorId: nonEmptyTrimmedString.nullable().optional(),
     rewardXp: z.number().int().min(1).max(100).optional(),
     penaltyXp: z.number().int().min(1).max(100).optional(),
+    generatedHealthEventTemplate: z
+      .object({
+        enabled: z.boolean().optional(),
+        workoutType: trimmedString.optional(),
+        title: trimmedString.optional(),
+        durationMinutes: z.number().int().positive().max(24 * 60).optional(),
+        xpReward: z.number().int().min(0).max(500).optional(),
+        tags: uniqueStringArraySchema.optional(),
+        links: z
+          .array(
+            z.object({
+              entityType: trimmedString,
+              entityId: nonEmptyTrimmedString,
+              relationshipType: trimmedString.default("context")
+            })
+          )
+          .optional(),
+        notesTemplate: trimmedString.optional()
+      })
+      .optional(),
     userId: nonEmptyTrimmedString.nullable().optional()
   })
   .superRefine((value, context) => {
@@ -2426,12 +2579,19 @@ export const strategyGraphSchema = z
 
 export const strategyMetricSchema = z.object({
   alignmentScore: z.number().int().min(0).max(100),
+  planCoverageScore: z.number().int().min(0).max(100),
+  sequencingScore: z.number().int().min(0).max(100),
+  scopeDisciplineScore: z.number().int().min(0).max(100),
+  qualityScore: z.number().int().min(0).max(100),
   completedNodeCount: z.number().int().nonnegative(),
   totalNodeCount: z.number().int().positive(),
   completedTargetCount: z.number().int().nonnegative(),
   totalTargetCount: z.number().int().nonnegative(),
+  offPlanEntityCount: z.number().int().nonnegative().default(0),
   activeNodeIds: z.array(z.string()).default([]),
-  nextNodeIds: z.array(z.string()).default([])
+  nextNodeIds: z.array(z.string()).default([]),
+  blockedNodeIds: z.array(z.string()).default([]),
+  outOfOrderNodeIds: z.array(z.string()).default([])
 });
 
 export const strategySchema = z.object({
@@ -2445,6 +2605,10 @@ export const strategySchema = z.object({
   linkedEntities: z.array(strategyLinkedEntitySchema).default([]),
   graph: strategyGraphSchema,
   metrics: strategyMetricSchema,
+  isLocked: z.boolean().default(false),
+  lockedAt: z.string().nullable().default(null),
+  lockedByUserId: z.string().nullable().default(null),
+  lockedByUser: userSummarySchema.nullable().default(null),
   createdAt: z.string(),
   updatedAt: z.string(),
   ...ownershipShape
@@ -2478,7 +2642,9 @@ export const createStrategySchema = z.object({
   targetProjectIds: uniqueStringArraySchema.default([]),
   linkedEntities: z.array(strategyLinkedEntitySchema).default([]),
   graph: strategyGraphSchema,
-  userId: nonEmptyTrimmedString.nullable().optional()
+  userId: nonEmptyTrimmedString.nullable().optional(),
+  isLocked: z.boolean().default(false),
+  lockedByUserId: nonEmptyTrimmedString.nullable().optional()
 });
 
 export const updateStrategySchema = z.object({
@@ -2490,7 +2656,9 @@ export const updateStrategySchema = z.object({
   targetProjectIds: uniqueStringArraySchema.optional(),
   linkedEntities: z.array(strategyLinkedEntitySchema).optional(),
   graph: strategyGraphSchema.optional(),
-  userId: nonEmptyTrimmedString.nullable().optional()
+  userId: nonEmptyTrimmedString.nullable().optional(),
+  isLocked: z.boolean().optional(),
+  lockedByUserId: nonEmptyTrimmedString.nullable().optional()
 });
 
 export const batchCreateEntitiesSchema = z.object({
@@ -2839,7 +3007,12 @@ export type BatchSearchEntitiesInput = z.infer<
 export type NotesListQuery = z.input<typeof notesListQuerySchema>;
 export type UserAccessLevel = z.infer<typeof userAccessLevelSchema>;
 export type UserAccessGrant = z.infer<typeof userAccessGrantSchema>;
+export type UserAccessGrantConfig = z.infer<typeof userAccessGrantConfigSchema>;
+export type UserAccessRights = z.infer<typeof userAccessRightsSchema>;
 export type UserDirectoryPayload = z.infer<typeof userDirectoryPayloadSchema>;
 export type UserKind = z.infer<typeof userKindSchema>;
 export type UserOwnershipSummary = z.infer<typeof userOwnershipSummarySchema>;
 export type UserSummary = z.infer<typeof userSummarySchema>;
+export type UpdateUserAccessGrantInput = z.infer<
+  typeof updateUserAccessGrantSchema
+>;
