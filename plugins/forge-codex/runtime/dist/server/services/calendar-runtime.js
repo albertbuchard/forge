@@ -1,0 +1,1301 @@
+import { randomUUID } from "node:crypto";
+import { CryptoProvider, PublicClientApplication } from "@azure/msal-node";
+import ical from "node-ical";
+import { createDAVClient, DAVNamespaceShort } from "tsdav";
+import { getSettings } from "../repositories/settings.js";
+import { createCalendarConnectionRecord, deleteCalendarConnectionRecord, deleteEncryptedSecret, deleteExternalEventsForConnection, detachConnectionFromForgeEvents, getCalendarById, getCalendarConnectionById, getCalendarEventStorageRecord, getCalendarOverview, listCalendarConnections, listCalendarEventSources, listCalendars, listTaskTimeboxes, markCalendarEventSourcesSyncState, readEncryptedSecret, registerCalendarEventSourceProjection, recordCalendarActivity, storeEncryptedSecret, updateCalendarConnectionRecord, updateTaskTimebox, upsertCalendarEventRecord, upsertCalendarRecord } from "../repositories/calendar.js";
+function isWritableCalendarCredentials(credentials) {
+    return credentials.provider !== "microsoft";
+}
+const GOOGLE_CALDAV_URL = "https://apidata.googleusercontent.com/caldav/v2/";
+const GOOGLE_TOKEN_URL = "https://accounts.google.com/o/oauth2/token";
+const APPLE_CALDAV_URL = "https://caldav.icloud.com";
+const MICROSOFT_GRAPH_URL = "https://graph.microsoft.com/v1.0";
+const MICROSOFT_LOGIN_URL = "https://login.microsoftonline.com";
+const MICROSOFT_CALLBACK_PATH = "/api/v1/calendar/oauth/microsoft/callback";
+const MICROSOFT_GRAPH_SCOPES = ["User.Read", "Calendars.Read", "offline_access"];
+const MICROSOFT_CLIENT_ID_PATTERN = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
+const FORGE_CALENDAR_NAME = "Forge";
+const FORGE_CALENDAR_COLOR = "#7dd3fc";
+const microsoftOauthSessions = new Map();
+export class CalendarConnectionConflictError extends Error {
+    connectionId;
+    constructor(message, connectionId) {
+        super(message);
+        this.name = "CalendarConnectionConflictError";
+        this.connectionId = connectionId;
+    }
+}
+function requireSecretRecord(secrets, secretId) {
+    const cipherText = readEncryptedSecret(secretId);
+    if (!cipherText) {
+        throw new Error(`Missing stored secret ${secretId}`);
+    }
+    return secrets.openJson(cipherText);
+}
+function microsoftAuthority(tenantId) {
+    return `${MICROSOFT_LOGIN_URL}/${encodeURIComponent(tenantId || "common")}`;
+}
+function defaultMicrosoftRedirectUri() {
+    const port = process.env.PORT?.trim() || "4317";
+    return `http://127.0.0.1:${port}${MICROSOFT_CALLBACK_PATH}`;
+}
+function validateMicrosoftRedirectUri(value) {
+    let url;
+    try {
+        url = new URL(value);
+    }
+    catch {
+        throw new Error("Microsoft redirect URI must be a full URL.");
+    }
+    if (url.protocol !== "http:" && url.protocol !== "https:") {
+        throw new Error("Microsoft redirect URI must use http or https.");
+    }
+    if (url.pathname !== MICROSOFT_CALLBACK_PATH) {
+        throw new Error(`Microsoft redirect URI must end with ${MICROSOFT_CALLBACK_PATH}.`);
+    }
+    return url.toString();
+}
+function normalizeMicrosoftRedirectUri(value) {
+    const trimmed = value?.trim();
+    return validateMicrosoftRedirectUri(trimmed && trimmed.length > 0 ? trimmed : defaultMicrosoftRedirectUri());
+}
+function normalizeMicrosoftTenantId(value) {
+    const trimmed = value?.trim();
+    return trimmed && trimmed.length > 0 ? trimmed : "common";
+}
+function validateMicrosoftClientId(value) {
+    const trimmed = value.trim();
+    if (!MICROSOFT_CLIENT_ID_PATTERN.test(trimmed)) {
+        throw new Error("Microsoft client IDs must use the standard app registration GUID format.");
+    }
+    return trimmed;
+}
+function resolveStoredMicrosoftOAuthSettings() {
+    return getSettings().calendarProviders.microsoft;
+}
+function resolveMicrosoftOAuthConfig(override) {
+    const fromSettings = resolveStoredMicrosoftOAuthSettings();
+    const rawSettingsClientId = override?.clientId?.trim() ?? fromSettings.clientId.trim();
+    const settingsTenantId = normalizeMicrosoftTenantId(override?.tenantId ?? fromSettings.tenantId);
+    const settingsRedirectUri = normalizeMicrosoftRedirectUri(override?.redirectUri ?? fromSettings.redirectUri);
+    if (rawSettingsClientId.length > 0) {
+        const settingsClientId = validateMicrosoftClientId(rawSettingsClientId);
+        return {
+            clientId: settingsClientId,
+            tenantId: settingsTenantId,
+            redirectUri: settingsRedirectUri,
+            authority: microsoftAuthority(settingsTenantId),
+            source: "settings"
+        };
+    }
+    const envClientId = process.env.FORGE_MICROSOFT_CLIENT_ID?.trim() ?? "";
+    const envTenantId = normalizeMicrosoftTenantId(process.env.FORGE_MICROSOFT_TENANT_ID);
+    const envRedirectUri = normalizeMicrosoftRedirectUri(process.env.FORGE_MICROSOFT_REDIRECT_URI);
+    if (envClientId.length > 0) {
+        const normalizedEnvClientId = validateMicrosoftClientId(envClientId);
+        return {
+            clientId: normalizedEnvClientId,
+            tenantId: envTenantId,
+            redirectUri: envRedirectUri,
+            authority: microsoftAuthority(envTenantId),
+            source: "env"
+        };
+    }
+    throw new Error("Microsoft sign-in is not configured yet. Open Settings -> Calendar, save the Microsoft client ID and redirect URI for this Forge runtime, then try again.");
+}
+function createMicrosoftPublicClient(config) {
+    return new PublicClientApplication({
+        auth: {
+            clientId: config.clientId,
+            authority: config.authority
+        }
+    });
+}
+function pruneMicrosoftOauthSessions() {
+    const now = Date.now();
+    for (const [sessionId, session] of microsoftOauthSessions.entries()) {
+        if (new Date(session.expiresAt).getTime() <= now) {
+            microsoftOauthSessions.set(sessionId, { ...session, status: "expired" });
+        }
+        if (session.status === "expired" ||
+            session.status === "consumed" ||
+            new Date(session.expiresAt).getTime() <= now - 5 * 60 * 1000) {
+            microsoftOauthSessions.delete(sessionId);
+        }
+    }
+}
+function normalizeUrl(value) {
+    const url = new URL(value);
+    if (!url.pathname.endsWith("/")) {
+        url.pathname = `${url.pathname}/`;
+    }
+    return url.toString();
+}
+function normalizeAccountIdentity(value) {
+    return value.trim().toLowerCase();
+}
+function safeDisplayName(value, fallback) {
+    if (typeof value === "string" && value.trim().length > 0) {
+        return value.trim();
+    }
+    return fallback;
+}
+function isForgeName(value) {
+    return value.trim().toLowerCase() === FORGE_CALENDAR_NAME.toLowerCase();
+}
+function normalizeTimezone(value) {
+    const normalized = value?.trim();
+    return normalized && normalized.length > 0 ? normalized : "UTC";
+}
+function buildEventIcs(payload) {
+    const dt = (value) => value.replaceAll(/[-:]/g, "").replace(/\.\d{3}Z$/, "Z");
+    return [
+        "BEGIN:VCALENDAR",
+        "VERSION:2.0",
+        "PRODID:-//Forge//Calendar//EN",
+        "BEGIN:VEVENT",
+        `UID:${payload.uid}`,
+        `DTSTAMP:${dt(new Date().toISOString())}`,
+        `DTSTART:${dt(payload.startsAt)}`,
+        `DTEND:${dt(payload.endsAt)}`,
+        `SUMMARY:${payload.title}`,
+        `DESCRIPTION:${payload.description ?? ""}`,
+        "END:VEVENT",
+        "END:VCALENDAR"
+    ].join("\r\n");
+}
+function microsoftCalendarUrl(calendarId) {
+    return `${MICROSOFT_GRAPH_URL}/me/calendars/${encodeURIComponent(calendarId)}`;
+}
+function microsoftEventUrl(calendarId, eventId) {
+    return `${MICROSOFT_GRAPH_URL}/me/calendars/${encodeURIComponent(calendarId)}/events/${encodeURIComponent(eventId)}`;
+}
+function microsoftColorToHex(color) {
+    switch ((color ?? "").toLowerCase()) {
+        case "lightblue":
+            return "#7dd3fc";
+        case "lightgreen":
+            return "#86efac";
+        case "lightorange":
+            return "#fdba74";
+        case "lightgray":
+            return "#cbd5e1";
+        case "lightyellow":
+            return "#fde68a";
+        case "lightteal":
+            return "#5eead4";
+        case "lightpink":
+            return "#f9a8d4";
+        case "lightbrown":
+            return "#d6a77a";
+        case "lightred":
+            return "#fca5a5";
+        case "maxcolor":
+            return "#60a5fa";
+        case "autocolor":
+        default:
+            return FORGE_CALENDAR_COLOR;
+    }
+}
+function microsoftGraphError(statusCode, payload, fallback) {
+    if (typeof payload === "object" &&
+        payload !== null &&
+        "error" in payload &&
+        typeof payload.error === "object" &&
+        payload.error !== null &&
+        "message" in payload.error &&
+        typeof payload.error.message === "string" &&
+        payload.error.message.trim().length > 0) {
+        return new Error(payload.error.message);
+    }
+    return new Error(`${fallback} (HTTP ${statusCode})`);
+}
+async function fetchMicrosoftCollection(accessToken, initialUrl) {
+    const values = [];
+    let nextUrl = initialUrl;
+    while (nextUrl) {
+        const response = await fetch(nextUrl, {
+            headers: {
+                Authorization: `Bearer ${accessToken}`,
+                Accept: "application/json"
+            }
+        });
+        const payload = (await response.json());
+        if (!response.ok) {
+            throw microsoftGraphError(response.status, payload, "Microsoft Graph request failed");
+        }
+        const pageValues = Array.isArray(payload.value) ? payload.value : [];
+        values.push(...pageValues);
+        nextUrl = typeof payload["@odata.nextLink"] === "string" ? payload["@odata.nextLink"] : null;
+    }
+    return values;
+}
+function parseMicrosoftDateTime(value) {
+    if (!value?.dateTime || value.dateTime.trim().length === 0) {
+        return null;
+    }
+    const candidate = new Date(value.dateTime);
+    if (!Number.isNaN(candidate.getTime())) {
+        return candidate.toISOString();
+    }
+    return null;
+}
+function mapMicrosoftEventToSyncInput(calendarId, event) {
+    const startAt = parseMicrosoftDateTime(event.start);
+    const endAt = parseMicrosoftDateTime(event.end);
+    if (!startAt || !endAt) {
+        return null;
+    }
+    return {
+        calendarRemoteId: microsoftCalendarUrl(calendarId),
+        remoteId: event.id,
+        remoteHref: microsoftEventUrl(calendarId, event.id),
+        remoteEtag: null,
+        ownership: "external",
+        status: event.isCancelled ? "cancelled" : "confirmed",
+        title: typeof event.subject === "string" && event.subject.trim().length > 0
+            ? event.subject
+            : "(untitled event)",
+        description: typeof event.bodyPreview === "string" ? event.bodyPreview : "",
+        location: typeof event.location?.displayName === "string" ? event.location.displayName : "",
+        startAt,
+        endAt,
+        isAllDay: Boolean(event.isAllDay),
+        availability: event.showAs === "free" ? "free" : "busy",
+        eventType: "",
+        categories: Array.isArray(event.categories) ? event.categories.filter((value) => typeof value === "string") : [],
+        rawPayload: event,
+        remoteUpdatedAt: typeof event.lastModifiedDateTime === "string" ? event.lastModifiedDateTime : null,
+        deletedAt: event.isCancelled ? new Date().toISOString() : null
+    };
+}
+async function createProviderClient(credentials) {
+    if (credentials.provider === "microsoft") {
+        const client = createMicrosoftPublicClient({
+            clientId: credentials.clientId,
+            authority: credentials.authority
+        });
+        await client.getTokenCache().deserialize(credentials.tokenCache);
+        const account = (await client.getTokenCache().getAccountByHomeId(credentials.homeAccountId)) ??
+            (await client.getTokenCache().getAllAccounts())[0] ??
+            null;
+        if (!account) {
+            throw new Error("Forge could not restore the Microsoft sign-in session. Reconnect Exchange Online from Settings.");
+        }
+        const token = await client.acquireTokenSilent({
+            account,
+            scopes: MICROSOFT_GRAPH_SCOPES
+        });
+        if (!token?.accessToken) {
+            throw new Error("Forge could not refresh the Microsoft session silently. Reconnect Exchange Online from Settings.");
+        }
+        const [profileResponse, primaryResponse] = await Promise.all([
+            fetch(`${MICROSOFT_GRAPH_URL}/me?$select=mail,userPrincipalName,displayName`, {
+                headers: {
+                    Authorization: `Bearer ${token.accessToken}`,
+                    Accept: "application/json"
+                }
+            }),
+            fetch(`${MICROSOFT_GRAPH_URL}/me/calendar?$select=id`, {
+                headers: {
+                    Authorization: `Bearer ${token.accessToken}`,
+                    Accept: "application/json"
+                }
+            })
+        ]);
+        const profilePayload = (await profileResponse.json());
+        if (!profileResponse.ok) {
+            throw microsoftGraphError(profileResponse.status, profilePayload, "Microsoft Graph profile lookup failed");
+        }
+        const primaryPayload = (await primaryResponse.json());
+        if (!primaryResponse.ok) {
+            throw microsoftGraphError(primaryResponse.status, primaryPayload, "Microsoft Graph primary calendar lookup failed");
+        }
+        const calendars = await fetchMicrosoftCollection(token.accessToken, `${MICROSOFT_GRAPH_URL}/me/calendars?$select=id,name,color,canEdit,owner`);
+        return {
+            mode: "microsoft",
+            accessToken: token.accessToken,
+            accountLabel: safeDisplayName(profilePayload.mail, "") ||
+                safeDisplayName(profilePayload.userPrincipalName, "") ||
+                safeDisplayName(profilePayload.displayName, credentials.username),
+            serverUrl: MICROSOFT_GRAPH_URL,
+            principalUrl: `${MICROSOFT_GRAPH_URL}/me`,
+            homeUrl: null,
+            calendars,
+            primaryCalendarId: typeof primaryPayload.id === "string" && primaryPayload.id.trim().length > 0
+                ? primaryPayload.id
+                : null,
+            credentials: {
+                ...credentials,
+                username: safeDisplayName(profilePayload.mail, "") ||
+                    safeDisplayName(profilePayload.userPrincipalName, "") ||
+                    account.username ||
+                    credentials.username,
+                tokenCache: client.getTokenCache().serialize()
+            }
+        };
+    }
+    const client = credentials.provider === "google"
+        ? await createDAVClient({
+            serverUrl: credentials.serverUrl,
+            credentials: {
+                username: credentials.username,
+                tokenUrl: GOOGLE_TOKEN_URL,
+                refreshToken: credentials.refreshToken,
+                clientId: credentials.clientId,
+                clientSecret: credentials.clientSecret
+            },
+            authMethod: "Oauth",
+            defaultAccountType: "caldav"
+        })
+        : await createDAVClient({
+            serverUrl: credentials.serverUrl,
+            credentials: {
+                username: credentials.username,
+                password: credentials.password
+            },
+            authMethod: "Basic",
+            defaultAccountType: "caldav"
+        });
+    const account = await client.createAccount({
+        account: {
+            accountType: "caldav"
+        }
+    });
+    const calendars = await client.fetchCalendars({ account });
+    return {
+        mode: "dav",
+        client,
+        account,
+        calendars,
+        accountLabel: credentials.username,
+        serverUrl: credentials.serverUrl
+    };
+}
+function mapDiscoveryPayload(provider, state) {
+    if (state.mode === "microsoft") {
+        return {
+            provider,
+            accountLabel: state.accountLabel,
+            serverUrl: state.serverUrl,
+            principalUrl: state.principalUrl ?? null,
+            homeUrl: state.homeUrl ?? null,
+            calendars: state.calendars.map((calendar) => ({
+                url: microsoftCalendarUrl(calendar.id),
+                displayName: safeDisplayName(calendar.name, "Calendar"),
+                description: typeof calendar.owner?.name === "string" && calendar.owner.name.trim().length > 0
+                    ? `Owned by ${calendar.owner.name}`
+                    : "Exchange Online calendar",
+                color: microsoftColorToHex(calendar.color),
+                timezone: "UTC",
+                isPrimary: state.primaryCalendarId === calendar.id,
+                canWrite: false,
+                selectedByDefault: true,
+                isForgeCandidate: false
+            }))
+        };
+    }
+    return {
+        provider,
+        accountLabel: state.accountLabel,
+        serverUrl: state.serverUrl,
+        principalUrl: state.account.principalUrl ?? null,
+        homeUrl: state.account.homeUrl ?? null,
+        calendars: state.calendars.map((calendar, index) => {
+            const displayName = safeDisplayName(calendar.displayName, `Calendar ${index + 1}`);
+            return {
+                url: normalizeUrl(calendar.url),
+                displayName,
+                description: typeof calendar.description === "string" ? calendar.description : "",
+                color: calendar.calendarColor ?? FORGE_CALENDAR_COLOR,
+                timezone: normalizeTimezone(calendar.timezone),
+                isPrimary: false,
+                canWrite: true,
+                selectedByDefault: !isForgeName(displayName),
+                isForgeCandidate: isForgeName(displayName)
+            };
+        })
+    };
+}
+function toMicrosoftOauthSessionPayload(session) {
+    return {
+        sessionId: session.sessionId,
+        status: session.status,
+        authUrl: session.authUrl,
+        accountLabel: session.accountLabel,
+        error: session.error,
+        discovery: session.discovery
+    };
+}
+function explainMicrosoftOauthError(input) {
+    const raw = `${input.error ?? ""} ${input.errorDescription ?? ""}`.toLowerCase();
+    if (raw.includes("aadsts50011") || raw.includes("redirect_uri")) {
+        return "Microsoft rejected the redirect URI. Add the exact Forge callback URI shown in Settings -> Calendar to your app registration, save the settings again, and retry sign-in.";
+    }
+    if (raw.includes("access_denied") || raw.includes("consent")) {
+        return "Microsoft consent was denied or cancelled. Review the requested Graph permissions, then retry the guided sign-in.";
+    }
+    if (raw.includes("aadsts700016") || raw.includes("application") && raw.includes("not found")) {
+        return "Microsoft could not find this client ID in the selected tenant. Check the client ID, supported account type, and tenant setting in Settings -> Calendar.";
+    }
+    if (raw.includes("aadsts50020") || raw.includes("aadsts50194") || raw.includes("tenant")) {
+        return "This account cannot sign in with the current tenant or supported-account setup. Use `common` for a broad self-hosted flow, or change the app registration to match this account type.";
+    }
+    return input.errorDescription?.trim() || input.error?.trim() || "Microsoft sign-in could not be completed.";
+}
+export async function testMicrosoftCalendarOauthConfiguration(input = null) {
+    const config = resolveMicrosoftOAuthConfig(input ?? undefined);
+    const client = createMicrosoftPublicClient(config);
+    const crypto = new CryptoProvider();
+    const pkce = await crypto.generatePkceCodes();
+    await client.getAuthCodeUrl({
+        redirectUri: config.redirectUri,
+        scopes: MICROSOFT_GRAPH_SCOPES,
+        state: `forge-microsoft-test-${randomUUID()}`,
+        codeChallenge: pkce.challenge,
+        codeChallengeMethod: "S256",
+        prompt: "select_account"
+    });
+    return {
+        ok: true,
+        message: "Forge can open a local Microsoft sign-in with this client ID and redirect URI. Final verification happens when you complete the Microsoft popup and consent.",
+        normalizedConfig: {
+            clientId: config.clientId,
+            tenantId: config.tenantId,
+            redirectUri: config.redirectUri,
+            usesClientSecret: false,
+            readOnly: true
+        }
+    };
+}
+export async function startMicrosoftCalendarOauth(input, origin) {
+    pruneMicrosoftOauthSessions();
+    const config = resolveMicrosoftOAuthConfig();
+    const sessionId = randomUUID();
+    const redirectUri = config.redirectUri;
+    const authority = config.authority;
+    const client = createMicrosoftPublicClient(config);
+    const crypto = new CryptoProvider();
+    const pkce = await crypto.generatePkceCodes();
+    const authUrl = await client.getAuthCodeUrl({
+        redirectUri,
+        scopes: MICROSOFT_GRAPH_SCOPES,
+        state: sessionId,
+        codeChallenge: pkce.challenge,
+        codeChallengeMethod: "S256",
+        prompt: "select_account"
+    });
+    const now = new Date();
+    microsoftOauthSessions.set(sessionId, {
+        sessionId,
+        state: sessionId,
+        label: input.label?.trim() || null,
+        origin,
+        redirectUri,
+        clientId: config.clientId,
+        authority,
+        tenantId: config.tenantId,
+        codeVerifier: pkce.verifier,
+        createdAt: now.toISOString(),
+        expiresAt: new Date(now.getTime() + 15 * 60 * 1000).toISOString(),
+        status: "pending",
+        authUrl,
+        accountLabel: null,
+        error: null,
+        discovery: null,
+        credentials: null
+    });
+    return {
+        session: toMicrosoftOauthSessionPayload(microsoftOauthSessions.get(sessionId))
+    };
+}
+export function getMicrosoftCalendarOauthSession(sessionId) {
+    pruneMicrosoftOauthSessions();
+    const session = microsoftOauthSessions.get(sessionId);
+    if (!session) {
+        throw new Error(`Unknown Microsoft calendar auth session ${sessionId}`);
+    }
+    return {
+        session: toMicrosoftOauthSessionPayload(session)
+    };
+}
+export async function completeMicrosoftCalendarOauth(input) {
+    pruneMicrosoftOauthSessions();
+    const sessionId = input.state?.trim() || "";
+    const session = microsoftOauthSessions.get(sessionId);
+    if (!session) {
+        throw new Error("Unknown Microsoft calendar auth session.");
+    }
+    if (new Date(session.expiresAt).getTime() <= Date.now()) {
+        session.status = "expired";
+        session.error = "The Microsoft sign-in session expired. Start the guided sign-in again.";
+        return { session: toMicrosoftOauthSessionPayload(session) };
+    }
+    if (input.error) {
+        session.status = "error";
+        session.error = explainMicrosoftOauthError(input);
+        return { session: toMicrosoftOauthSessionPayload(session) };
+    }
+    if (!input.code) {
+        session.status = "error";
+        session.error = "Microsoft did not return an authorization code.";
+        return { session: toMicrosoftOauthSessionPayload(session) };
+    }
+    try {
+        const client = createMicrosoftPublicClient({
+            clientId: session.clientId,
+            authority: session.authority
+        });
+        if (!session.codeVerifier) {
+            throw new Error("The Microsoft sign-in session is missing its PKCE verifier. Start the sign-in again.");
+        }
+        const result = await client.acquireTokenByCode({
+            code: input.code,
+            redirectUri: session.redirectUri,
+            scopes: MICROSOFT_GRAPH_SCOPES,
+            codeVerifier: session.codeVerifier
+        });
+        const account = result?.account;
+        if (!account) {
+            throw new Error("Microsoft sign-in completed without an account profile.");
+        }
+        const provisionalCredentials = {
+            provider: "microsoft",
+            serverUrl: MICROSOFT_GRAPH_URL,
+            username: account.username || "microsoft-account",
+            clientId: session.clientId,
+            tenantId: session.tenantId,
+            authority: session.authority,
+            homeAccountId: account.homeAccountId,
+            tokenCache: client.getTokenCache().serialize(),
+            selectedCalendarUrls: []
+        };
+        const state = await createProviderClient(provisionalCredentials);
+        if (state.mode !== "microsoft") {
+            throw new Error("Forge resolved a DAV provider state for a Microsoft calendar session.");
+        }
+        const discovery = mapDiscoveryPayload("microsoft", state);
+        session.status = "authorized";
+        session.accountLabel = state.accountLabel;
+        session.discovery = discovery;
+        session.credentials = {
+            ...provisionalCredentials,
+            username: state.credentials.username,
+            tokenCache: state.credentials.tokenCache
+        };
+        session.codeVerifier = null;
+        session.error = null;
+    }
+    catch (error) {
+        session.status = "error";
+        session.error =
+            error instanceof Error ? error.message : "Microsoft sign-in failed.";
+    }
+    return { session: toMicrosoftOauthSessionPayload(session), openerOrigin: session.origin };
+}
+async function ensureForgeCalendar(state) {
+    if (state.mode !== "dav") {
+        throw new Error("This calendar provider is read-only, so Forge cannot create a dedicated write calendar there.");
+    }
+    const existingForge = state.calendars.find((calendar) => isForgeName(safeDisplayName(calendar.displayName, "")));
+    if (existingForge) {
+        return {
+            forgeCalendarUrl: normalizeUrl(existingForge.url),
+            calendars: state.calendars
+        };
+    }
+    if (!state.account.homeUrl) {
+        throw new Error("The provider did not expose a calendar home set, so Forge could not create a dedicated calendar automatically.");
+    }
+    const existingUrls = new Set(state.calendars.map((calendar) => normalizeUrl(calendar.url)));
+    let slug = "forge";
+    let attempt = 2;
+    let nextUrl = normalizeUrl(new URL(`${slug}/`, state.account.homeUrl).toString());
+    while (existingUrls.has(nextUrl)) {
+        slug = `forge-${attempt++}`;
+        nextUrl = normalizeUrl(new URL(`${slug}/`, state.account.homeUrl).toString());
+    }
+    await state.client.makeCalendar({
+        url: nextUrl,
+        props: {
+            [`${DAVNamespaceShort.DAV}:displayname`]: {
+                _cdata: FORGE_CALENDAR_NAME
+            },
+            [`${DAVNamespaceShort.CALDAV}:calendar-description`]: {
+                _cdata: "Forge-owned work blocks and task timeboxes"
+            },
+            [`${DAVNamespaceShort.CALDAV_APPLE}:calendar-color`]: {
+                _cdata: FORGE_CALENDAR_COLOR
+            }
+        }
+    });
+    const calendars = await state.client.fetchCalendars({ account: state.account });
+    return {
+        forgeCalendarUrl: nextUrl,
+        calendars
+    };
+}
+function inferRemoteId(object, parsed) {
+    const uid = typeof parsed.uid === "string" ? parsed.uid : null;
+    if (uid) {
+        return uid;
+    }
+    return object.url;
+}
+function mapDavObjectToEvents(calendarUrl, object, ownership) {
+    const payload = typeof object.data === "string" ? object.data : "";
+    const parsed = ical.sync.parseICS(payload);
+    const events = [];
+    for (const entry of Object.values(parsed)) {
+        if (entry.type !== "VEVENT") {
+            continue;
+        }
+        const start = entry.start instanceof Date ? entry.start.toISOString() : null;
+        const end = entry.end instanceof Date ? entry.end.toISOString() : null;
+        if (!start || !end) {
+            continue;
+        }
+        events.push({
+            calendarRemoteId: calendarUrl,
+            remoteId: inferRemoteId(object, entry),
+            remoteHref: object.url,
+            remoteEtag: object.etag ?? null,
+            ownership,
+            status: entry.status === "CANCELLED"
+                ? "cancelled"
+                : entry.status === "TENTATIVE"
+                    ? "tentative"
+                    : "confirmed",
+            title: typeof entry.summary === "string" ? entry.summary : "(untitled event)",
+            description: typeof entry.description === "string" ? entry.description : "",
+            location: typeof entry.location === "string" ? entry.location : "",
+            startAt: start,
+            endAt: end,
+            isAllDay: false,
+            availability: entry.transparency === "TRANSPARENT" ? "free" : "busy",
+            eventType: "",
+            categories: Array.isArray(entry.categories)
+                ? entry.categories.map((value) => String(value))
+                : typeof entry.categories === "string"
+                    ? [entry.categories]
+                    : [],
+            rawPayload: entry,
+            remoteUpdatedAt: entry.lastmodified instanceof Date
+                ? entry.lastmodified.toISOString()
+                : null,
+            deletedAt: entry.status === "CANCELLED" ? new Date().toISOString() : null
+        });
+    }
+    return events;
+}
+function mapCalendarRecord(calendar, options) {
+    if ("url" in calendar) {
+        const forgeCalendarUrl = options.forgeCalendarUrl ? normalizeUrl(options.forgeCalendarUrl) : null;
+        const title = safeDisplayName(calendar.displayName, "Calendar");
+        const remoteUrl = normalizeUrl(calendar.url);
+        return {
+            remoteId: remoteUrl,
+            title,
+            description: typeof calendar.description === "string" ? calendar.description : "",
+            color: calendar.calendarColor ?? FORGE_CALENDAR_COLOR,
+            timezone: normalizeTimezone(calendar.timezone),
+            isPrimary: false,
+            canWrite: true,
+            selectedForSync: forgeCalendarUrl ? remoteUrl !== forgeCalendarUrl : true,
+            forgeManaged: forgeCalendarUrl ? remoteUrl === forgeCalendarUrl : false
+        };
+    }
+    return {
+        remoteId: microsoftCalendarUrl(calendar.id),
+        title: safeDisplayName(calendar.name, "Calendar"),
+        description: typeof calendar.owner?.name === "string" && calendar.owner.name.trim().length > 0
+            ? `Owned by ${calendar.owner.name}`
+            : "Exchange Online calendar",
+        color: microsoftColorToHex(calendar.color),
+        timezone: "UTC",
+        isPrimary: options.primaryCalendarId === calendar.id,
+        canWrite: false,
+        selectedForSync: true,
+        forgeManaged: false
+    };
+}
+async function publishTaskTimeboxes(state, forgeCalendarUrl, connectionId) {
+    if (state.mode !== "dav" || !forgeCalendarUrl) {
+        return;
+    }
+    const forgeCalendar = state.calendars.find((calendar) => normalizeUrl(calendar.url) === normalizeUrl(forgeCalendarUrl));
+    if (!forgeCalendar) {
+        return;
+    }
+    const horizon = {
+        from: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString(),
+        to: new Date(Date.now() + 180 * 24 * 60 * 60 * 1000).toISOString()
+    };
+    const timeboxes = listTaskTimeboxes(horizon);
+    for (const timebox of timeboxes) {
+        const remoteEventId = timebox.remoteEventId ?? `forge-${timebox.id}`;
+        const iCalString = buildEventIcs({
+            uid: remoteEventId,
+            title: timebox.title,
+            startsAt: timebox.startsAt,
+            endsAt: timebox.endsAt,
+            description: timebox.overrideReason ?? ""
+        });
+        if (timebox.remoteEventId) {
+            await state.client.updateCalendarObject({
+                calendarObject: {
+                    url: new URL(`${remoteEventId}.ics`, forgeCalendar.url).toString(),
+                    data: iCalString
+                }
+            });
+        }
+        else {
+            await state.client.createCalendarObject({
+                calendar: forgeCalendar,
+                iCalString,
+                filename: `${remoteEventId}.ics`
+            });
+        }
+        const localForgeCalendar = listCalendars(connectionId).find((entry) => normalizeUrl(entry.remoteId) === normalizeUrl(forgeCalendar.url));
+        updateTaskTimebox(timebox.id, {
+            connectionId,
+            calendarId: localForgeCalendar?.id ?? null,
+            remoteEventId
+        });
+    }
+}
+async function syncDiscoveredState(connectionId, credentials) {
+    const state = await createProviderClient(credentials);
+    if (!isWritableCalendarCredentials(credentials)) {
+        if (state.mode !== "microsoft") {
+            throw new Error("Forge expected a Microsoft provider state for this calendar connection.");
+        }
+        const selected = new Set(credentials.selectedCalendarUrls.map((value) => normalizeUrl(value)));
+        for (const calendar of state.calendars) {
+            const remoteId = normalizeUrl(microsoftCalendarUrl(calendar.id));
+            upsertCalendarRecord(connectionId, {
+                ...mapCalendarRecord(calendar, { primaryCalendarId: state.primaryCalendarId }),
+                selectedForSync: selected.has(remoteId)
+            });
+        }
+        const now = new Date();
+        const start = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString();
+        const end = new Date(now.getTime() + 180 * 24 * 60 * 60 * 1000).toISOString();
+        const selectedCalendars = state.calendars.filter((calendar) => selected.has(normalizeUrl(microsoftCalendarUrl(calendar.id))));
+        for (const calendar of selectedCalendars) {
+            const events = await fetchMicrosoftCollection(state.accessToken, `${MICROSOFT_GRAPH_URL}/me/calendars/${encodeURIComponent(calendar.id)}/calendarView?startDateTime=${encodeURIComponent(start)}&endDateTime=${encodeURIComponent(end)}`);
+            for (const event of events) {
+                const mapped = mapMicrosoftEventToSyncInput(calendar.id, event);
+                if (!mapped) {
+                    continue;
+                }
+                upsertCalendarEventRecord(connectionId, mapped);
+            }
+        }
+        return {
+            state,
+            forgeCalendarUrl: null
+        };
+    }
+    if (state.mode !== "dav") {
+        throw new Error("Forge expected a DAV provider state for this writable calendar connection.");
+    }
+    const selected = new Set(credentials.selectedCalendarUrls.map((value) => normalizeUrl(value)));
+    const forgeCalendarUrl = normalizeUrl(credentials.forgeCalendarUrl);
+    const calendarsToSync = state.calendars.filter((calendar) => {
+        const normalized = normalizeUrl(calendar.url);
+        return selected.has(normalized) || normalized === forgeCalendarUrl;
+    });
+    for (const calendar of state.calendars) {
+        const normalized = normalizeUrl(calendar.url);
+        upsertCalendarRecord(connectionId, {
+            ...mapCalendarRecord(calendar, { forgeCalendarUrl }),
+            selectedForSync: selected.has(normalized)
+        });
+    }
+    const now = new Date();
+    const start = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString();
+    const end = new Date(now.getTime() + 180 * 24 * 60 * 60 * 1000).toISOString();
+    for (const calendar of calendarsToSync) {
+        const ownership = normalizeUrl(calendar.url) === forgeCalendarUrl ? "forge" : "external";
+        const objects = await state.client.fetchCalendarObjects({
+            calendar,
+            timeRange: {
+                start,
+                end
+            }
+        });
+        for (const object of objects) {
+            const mapped = mapDavObjectToEvents(normalizeUrl(calendar.url), object, ownership);
+            for (const event of mapped) {
+                upsertCalendarEventRecord(connectionId, event);
+            }
+        }
+    }
+    return {
+        state,
+        forgeCalendarUrl
+    };
+}
+function toStoredCredentials(input, forgeCalendarUrl) {
+    if (input.provider === "microsoft") {
+        throw new Error("Exchange Online connections must be created from a completed Microsoft sign-in session.");
+    }
+    if (input.provider === "google") {
+        return {
+            provider: "google",
+            serverUrl: GOOGLE_CALDAV_URL,
+            username: input.username,
+            clientId: input.clientId,
+            clientSecret: input.clientSecret,
+            refreshToken: input.refreshToken,
+            selectedCalendarUrls: input.selectedCalendarUrls.map(normalizeUrl),
+            forgeCalendarUrl: normalizeUrl(forgeCalendarUrl)
+        };
+    }
+    if (input.provider === "apple") {
+        return {
+            provider: "apple",
+            serverUrl: APPLE_CALDAV_URL,
+            username: input.username,
+            password: input.password,
+            selectedCalendarUrls: input.selectedCalendarUrls.map(normalizeUrl),
+            forgeCalendarUrl: normalizeUrl(forgeCalendarUrl)
+        };
+    }
+    return {
+        provider: "caldav",
+        serverUrl: normalizeUrl(input.serverUrl),
+        username: input.username,
+        password: input.password,
+        selectedCalendarUrls: input.selectedCalendarUrls.map(normalizeUrl),
+        forgeCalendarUrl: normalizeUrl(forgeCalendarUrl)
+    };
+}
+function credentialsMatch(existing, incoming) {
+    if (existing.provider !== incoming.provider) {
+        return false;
+    }
+    if (existing.provider === "google" && incoming.provider === "google") {
+        return (normalizeAccountIdentity(existing.username) === normalizeAccountIdentity(incoming.username) &&
+            normalizeUrl(existing.serverUrl) === normalizeUrl(incoming.serverUrl));
+    }
+    if (existing.provider === "apple" && incoming.provider === "apple") {
+        return normalizeAccountIdentity(existing.username) === normalizeAccountIdentity(incoming.username);
+    }
+    if (existing.provider === "caldav" && incoming.provider === "caldav") {
+        return (normalizeAccountIdentity(existing.username) === normalizeAccountIdentity(incoming.username) &&
+            normalizeUrl(existing.serverUrl) === normalizeUrl(incoming.serverUrl));
+    }
+    return false;
+}
+function findExistingCalendarConnection(incoming, secrets) {
+    return listCalendarConnections().find((connection) => {
+        try {
+            const existing = requireSecretRecord(secrets, connection.credentialsSecretId);
+            return credentialsMatch(existing, incoming);
+        }
+        catch {
+            return false;
+        }
+    });
+}
+function toDiscoveryCredentials(input) {
+    if (input.provider === "microsoft") {
+        throw new Error("Exchange Online discovery now uses the guided Microsoft sign-in flow.");
+    }
+    if (input.provider === "google") {
+        return {
+            provider: "google",
+            serverUrl: GOOGLE_CALDAV_URL,
+            username: input.username,
+            clientId: input.clientId,
+            clientSecret: input.clientSecret,
+            refreshToken: input.refreshToken
+        };
+    }
+    if (input.provider === "apple") {
+        return {
+            provider: "apple",
+            serverUrl: APPLE_CALDAV_URL,
+            username: input.username,
+            password: input.password
+        };
+    }
+    return {
+        provider: "caldav",
+        serverUrl: normalizeUrl(input.serverUrl),
+        username: input.username,
+        password: input.password
+    };
+}
+export async function discoverCalendarConnection(input) {
+    const state = await createProviderClient(toDiscoveryCredentials(input));
+    return mapDiscoveryPayload(input.provider, state);
+}
+export async function discoverExistingCalendarConnection(connectionId, secrets) {
+    const connection = getCalendarConnectionById(connectionId);
+    if (!connection) {
+        throw new Error(`Unknown calendar connection ${connectionId}`);
+    }
+    const credentials = requireSecretRecord(secrets, connection.credentialsSecretId);
+    const state = await createProviderClient(credentials);
+    return mapDiscoveryPayload(connection.provider, state);
+}
+export async function createCalendarConnection(input, secrets, activity = { source: "ui" }) {
+    if (input.provider === "microsoft") {
+        pruneMicrosoftOauthSessions();
+        const session = microsoftOauthSessions.get(input.authSessionId);
+        if (!session || session.status !== "authorized" || !session.discovery || !session.credentials) {
+            throw new Error("Complete the Microsoft sign-in flow before saving this Exchange Online connection.");
+        }
+        const existingConnection = listCalendarConnections().find((connection) => {
+            try {
+                const existing = requireSecretRecord(secrets, connection.credentialsSecretId);
+                return (existing.provider === "microsoft" &&
+                    normalizeAccountIdentity(existing.username) ===
+                        normalizeAccountIdentity(session.credentials?.username ?? ""));
+            }
+            catch {
+                return false;
+            }
+        });
+        if (existingConnection) {
+            throw new CalendarConnectionConflictError(`${existingConnection.label} is already connected for ${existingConnection.accountLabel || "this account"}. Remove it first if you want to reconnect with different settings.`, existingConnection.id);
+        }
+        const secretId = `calendar_secret_${randomUUID().replaceAll("-", "").slice(0, 10)}`;
+        const storedCredentials = {
+            ...session.credentials,
+            selectedCalendarUrls: input.selectedCalendarUrls.map(normalizeUrl)
+        };
+        storeEncryptedSecret(secretId, secrets.sealJson(storedCredentials), `${input.label} ${input.provider} calendar credentials`);
+        const connection = createCalendarConnectionRecord({
+            provider: "microsoft",
+            label: input.label,
+            accountLabel: session.accountLabel ?? session.discovery.accountLabel,
+            config: {
+                serverUrl: session.discovery.serverUrl,
+                selectedCalendarCount: storedCredentials.selectedCalendarUrls.length,
+                readOnly: true,
+                writeMode: "read_only"
+            },
+            credentialsSecretId: secretId
+        });
+        await syncCalendarConnection(connection.id, secrets, activity);
+        session.status = "consumed";
+        recordCalendarActivity("calendar_connection_created", "calendar_connection", connection.id, `Calendar connection created: ${connection.label}`, "Exchange Online is now connected to Forge through Microsoft sign-in in read-only mode.", activity, { provider: input.provider });
+        return getCalendarConnectionById(connection.id);
+    }
+    const discoveryCredentials = toDiscoveryCredentials(input);
+    const existingConnection = findExistingCalendarConnection(discoveryCredentials, secrets);
+    if (existingConnection) {
+        throw new CalendarConnectionConflictError(`${existingConnection.label} is already connected for ${existingConnection.accountLabel || "this account"}. Remove it first if you want to reconnect with different settings.`, existingConnection.id);
+    }
+    const state = await createProviderClient(discoveryCredentials);
+    if (state.mode !== "dav") {
+        throw new Error("Forge expected a writable DAV provider state for this calendar connection.");
+    }
+    const discovery = mapDiscoveryPayload(input.provider, state);
+    let forgeCalendarUrl = null;
+    forgeCalendarUrl =
+        input.forgeCalendarUrl?.trim() ||
+            discovery.calendars.find((calendar) => calendar.isForgeCandidate)?.url ||
+            null;
+    if (!forgeCalendarUrl && input.createForgeCalendar) {
+        const created = await ensureForgeCalendar(state);
+        forgeCalendarUrl = created.forgeCalendarUrl;
+    }
+    if (!forgeCalendarUrl) {
+        throw new Error("Select the calendar Forge should write into, or create a new calendar named Forge.");
+    }
+    const secretId = `calendar_secret_${randomUUID().replaceAll("-", "").slice(0, 10)}`;
+    const storedCredentials = toStoredCredentials(input, forgeCalendarUrl);
+    storeEncryptedSecret(secretId, secrets.sealJson(storedCredentials), `${input.label} ${input.provider} calendar credentials`);
+    const connection = createCalendarConnectionRecord({
+        provider: input.provider,
+        label: input.label,
+        accountLabel: discovery.accountLabel,
+        config: {
+            serverUrl: discovery.serverUrl,
+            selectedCalendarCount: storedCredentials.selectedCalendarUrls.length,
+            forgeCalendarUrl: normalizeUrl(storedCredentials.forgeCalendarUrl)
+        },
+        credentialsSecretId: secretId
+    });
+    await syncCalendarConnection(connection.id, secrets, activity);
+    recordCalendarActivity("calendar_connection_created", "calendar_connection", connection.id, `Calendar connection created: ${connection.label}`, `${input.provider === "apple" ? "Apple Calendar" : input.provider === "google" ? "Google Calendar" : "Custom CalDAV"} is now connected to Forge.`, activity, { provider: input.provider });
+    return getCalendarConnectionById(connection.id);
+}
+export async function removeCalendarConnection(connectionId, secrets, activity = { source: "ui" }) {
+    const connection = getCalendarConnectionById(connectionId);
+    if (!connection) {
+        return undefined;
+    }
+    deleteExternalEventsForConnection(connectionId);
+    detachConnectionFromForgeEvents(connectionId);
+    deleteCalendarConnectionRecord(connectionId);
+    deleteEncryptedSecret(connection.credentialsSecretId);
+    recordCalendarActivity("calendar_connection_deleted", "calendar_connection", connectionId, `Calendar connection removed: ${connection.label}`, "The provider connection was removed. Mirrored external events were removed, while Forge-native calendar records stayed local.", activity, { provider: connection.provider });
+    return connection;
+}
+export async function syncCalendarConnection(connectionId, secrets, activity = { source: "system" }) {
+    const connection = getCalendarConnectionById(connectionId);
+    if (!connection) {
+        throw new Error(`Unknown calendar connection ${connectionId}`);
+    }
+    try {
+        const credentials = requireSecretRecord(secrets, connection.credentialsSecretId);
+        const { state, forgeCalendarUrl } = await syncDiscoveredState(connectionId, credentials);
+        if (state.mode === "microsoft") {
+            storeEncryptedSecret(connection.credentialsSecretId, secrets.sealJson(state.credentials), `${connection.label} ${connection.provider} calendar credentials`);
+        }
+        const forgeCalendar = forgeCalendarUrl
+            ? listCalendars(connectionId).find((entry) => normalizeUrl(entry.remoteId) === normalizeUrl(forgeCalendarUrl))
+            : null;
+        updateCalendarConnectionRecord(connectionId, {
+            accountLabel: state.accountLabel,
+            forgeCalendarId: forgeCalendar?.id ?? null,
+            status: "connected",
+            config: {
+                serverUrl: credentials.serverUrl,
+                selectedCalendarCount: credentials.selectedCalendarUrls.length,
+                ...(credentials.provider === "microsoft"
+                    ? {
+                        readOnly: true,
+                        tenantId: credentials.tenantId,
+                        writeMode: "read_only"
+                    }
+                    : {
+                        forgeCalendarUrl: normalizeUrl(credentials.forgeCalendarUrl)
+                    })
+            },
+            lastSyncedAt: new Date().toISOString(),
+            lastSyncError: null
+        });
+        await publishTaskTimeboxes(state, forgeCalendarUrl, connectionId);
+        recordCalendarActivity("calendar_connection_synced", "calendar_connection", connectionId, `Calendar synced: ${connection.label}`, credentials.provider === "microsoft"
+            ? "Exchange Online calendars were mirrored into Forge in read-only mode."
+            : "Provider events and Forge timeboxes were synchronized.", activity);
+        return getCalendarConnectionById(connectionId);
+    }
+    catch (error) {
+        updateCalendarConnectionRecord(connectionId, {
+            status: "error",
+            lastSyncError: error instanceof Error ? error.message : "Calendar sync failed"
+        });
+        throw error;
+    }
+}
+export async function updateCalendarConnectionSelection(connectionId, input, secrets, activity = { source: "ui" }) {
+    const connection = getCalendarConnectionById(connectionId);
+    if (!connection) {
+        throw new Error(`Unknown calendar connection ${connectionId}`);
+    }
+    const credentials = requireSecretRecord(secrets, connection.credentialsSecretId);
+    if (input.selectedCalendarUrls) {
+        const state = await createProviderClient(credentials);
+        const discoveredUrls = new Set(state.mode === "microsoft"
+            ? state.calendars.map((calendar) => normalizeUrl(microsoftCalendarUrl(calendar.id)))
+            : state.calendars.map((calendar) => normalizeUrl(calendar.url)));
+        const nextSelectedCalendarUrls = Array.from(new Set(input.selectedCalendarUrls.map((value) => normalizeUrl(value))));
+        for (const url of nextSelectedCalendarUrls) {
+            if (!discoveredUrls.has(url)) {
+                throw new Error(`Calendar ${url} is not available for this connection.`);
+            }
+        }
+        credentials.selectedCalendarUrls = nextSelectedCalendarUrls;
+        storeEncryptedSecret(connection.credentialsSecretId, secrets.sealJson(credentials), `${input.label ?? connection.label} ${connection.provider} calendar credentials`);
+    }
+    if (input.label) {
+        updateCalendarConnectionRecord(connectionId, { label: input.label });
+    }
+    if (input.selectedCalendarUrls) {
+        await syncCalendarConnection(connectionId, secrets, activity);
+    }
+    recordCalendarActivity("calendar_connection_updated", "calendar_connection", connectionId, `Calendar connection updated: ${input.label ?? connection.label}`, input.selectedCalendarUrls
+        ? "Calendar mirroring preferences were updated."
+        : "Calendar connection details were updated.", activity, {
+        provider: connection.provider,
+        selectedCalendarCount: input.selectedCalendarUrls?.length ?? credentials.selectedCalendarUrls.length
+    });
+    return getCalendarConnectionById(connectionId);
+}
+export function readCalendarOverview(query) {
+    return getCalendarOverview(query);
+}
+async function resolveProviderStateForConnection(connectionId, secrets) {
+    const connection = getCalendarConnectionById(connectionId);
+    if (!connection) {
+        throw new Error(`Unknown calendar connection ${connectionId}`);
+    }
+    const credentials = requireSecretRecord(secrets, connection.credentialsSecretId);
+    const state = await createProviderClient(credentials);
+    return { connection, state };
+}
+function resolveDavCalendarFromLocalId(state, localCalendarId, connectionId) {
+    if (state.mode !== "dav") {
+        return null;
+    }
+    if (!localCalendarId) {
+        return null;
+    }
+    const localCalendar = getCalendarById(localCalendarId);
+    if (!localCalendar || localCalendar.connectionId !== connectionId) {
+        return null;
+    }
+    return (state.calendars.find((entry) => normalizeUrl(entry.url) === normalizeUrl(localCalendar.remoteId)) ?? null);
+}
+export async function syncForgeCalendarEvent(eventId, secrets) {
+    const event = getCalendarEventStorageRecord(eventId);
+    if (!event || event.deleted_at) {
+        throw new Error(`Unknown calendar event ${eventId}`);
+    }
+    const sourceMappings = listCalendarEventSources(eventId).filter((source) => source.connectionId && source.calendarId && source.syncState !== "deleted");
+    if (sourceMappings.length > 0) {
+        for (const source of sourceMappings) {
+            if (!source.calendarId) {
+                continue;
+            }
+            const { connection, state } = await resolveProviderStateForConnection(source.connectionId, secrets);
+            if (state.mode !== "dav") {
+                continue;
+            }
+            const calendar = resolveDavCalendarFromLocalId(state, source.calendarId, connection.id);
+            const localCalendar = getCalendarById(source.calendarId);
+            if (!calendar || localCalendar?.canWrite === false) {
+                continue;
+            }
+            const remoteUrl = source.remoteHref ??
+                new URL(`${source.remoteEventId}.ics`, calendar.url).toString();
+            await state.client.updateCalendarObject({
+                calendarObject: {
+                    url: remoteUrl,
+                    etag: source.remoteEtag ?? undefined,
+                    data: buildEventIcs({
+                        uid: source.remoteUid ?? event.id,
+                        title: event.title,
+                        startsAt: event.start_at,
+                        endsAt: event.end_at,
+                        description: event.description
+                    })
+                }
+            });
+            registerCalendarEventSourceProjection({
+                forgeEventId: eventId,
+                provider: connection.provider,
+                connectionId: connection.id,
+                calendarId: source.calendarId,
+                remoteCalendarId: getCalendarById(source.calendarId)?.remoteId ?? null,
+                remoteEventId: source.remoteEventId,
+                remoteUid: source.remoteUid ?? event.id,
+                recurrenceInstanceId: source.recurrenceInstanceId,
+                isMasterRecurring: source.isMasterRecurring,
+                remoteHref: remoteUrl,
+                remoteEtag: source.remoteEtag,
+                syncState: "synced",
+                rawPayloadJson: JSON.stringify({ uid: source.remoteUid ?? event.id }),
+                lastSyncedAt: new Date().toISOString()
+            });
+        }
+        return;
+    }
+    if (!event.preferred_connection_id || !event.preferred_calendar_id) {
+        return;
+    }
+    const { connection, state } = await resolveProviderStateForConnection(event.preferred_connection_id, secrets);
+    if (state.mode !== "dav") {
+        throw new Error(`Connection ${connection.id} is read-only, so Forge cannot publish this event there.`);
+    }
+    const calendar = resolveDavCalendarFromLocalId(state, event.preferred_calendar_id, connection.id);
+    const localCalendar = getCalendarById(event.preferred_calendar_id);
+    if (!calendar || localCalendar?.canWrite === false) {
+        throw new Error(`Unknown remote calendar for event ${eventId}`);
+    }
+    const filename = `${event.id}.ics`;
+    const remoteUrl = new URL(filename, calendar.url).toString();
+    await state.client.createCalendarObject({
+        calendar,
+        iCalString: buildEventIcs({
+            uid: event.id,
+            title: event.title,
+            startsAt: event.start_at,
+            endsAt: event.end_at,
+            description: event.description
+        }),
+        filename
+    });
+    registerCalendarEventSourceProjection({
+        forgeEventId: eventId,
+        provider: connection.provider,
+        connectionId: connection.id,
+        calendarId: event.preferred_calendar_id,
+        remoteCalendarId: getCalendarById(event.preferred_calendar_id)?.remoteId ?? null,
+        remoteEventId: event.id,
+        remoteUid: event.id,
+        remoteHref: remoteUrl,
+        syncState: "synced",
+        rawPayloadJson: JSON.stringify({ uid: event.id }),
+        lastSyncedAt: new Date().toISOString()
+    });
+}
+export async function pushCalendarEventUpdate(eventId, secrets) {
+    await syncForgeCalendarEvent(eventId, secrets);
+}
+export async function deleteCalendarEventProjection(eventId, secrets) {
+    const sources = listCalendarEventSources(eventId).filter((source) => source.connectionId && source.calendarId && source.syncState !== "deleted");
+    for (const source of sources) {
+        if (!source.calendarId) {
+            continue;
+        }
+        const { connection, state } = await resolveProviderStateForConnection(source.connectionId, secrets);
+        if (state.mode !== "dav") {
+            continue;
+        }
+        const calendar = resolveDavCalendarFromLocalId(state, source.calendarId, connection.id);
+        const localCalendar = source.calendarId ? getCalendarById(source.calendarId) : null;
+        if (!calendar || localCalendar?.canWrite === false) {
+            continue;
+        }
+        const remoteUrl = source.remoteHref ??
+            new URL(`${source.remoteEventId}.ics`, calendar.url).toString();
+        await state.client.deleteCalendarObject({
+            calendarObject: {
+                url: remoteUrl,
+                etag: source.remoteEtag ?? undefined
+            }
+        });
+    }
+    markCalendarEventSourcesSyncState(eventId, "deleted");
+}
+export function listCalendarProviderMetadata() {
+    return [
+        {
+            provider: "google",
+            label: "Google Calendar",
+            supportsDedicatedForgeCalendar: true,
+            connectionHelp: "Use your Google email, client credentials, and refresh token. Forge discovers calendars and can create or reuse a Forge calendar automatically."
+        },
+        {
+            provider: "apple",
+            label: "Apple Calendar",
+            supportsDedicatedForgeCalendar: true,
+            connectionHelp: "Use your Apple ID email and an app-specific password. Forge starts from https://caldav.icloud.com and discovers the calendars for you."
+        },
+        {
+            provider: "microsoft",
+            label: "Exchange Online",
+            supportsDedicatedForgeCalendar: false,
+            connectionHelp: "Configure the Microsoft client ID and redirect URI in Settings first, then use the guided Microsoft sign-in flow. Forge mirrors the selected Exchange calendars in read-only mode for now."
+        },
+        {
+            provider: "caldav",
+            label: "Custom CalDAV",
+            supportsDedicatedForgeCalendar: true,
+            connectionHelp: "Use a CalDAV base server URL plus account credentials. Forge discovers the calendars available under that account before you pick what to sync."
+        }
+    ];
+}
+export function listConnectedCalendarConnections() {
+    return listCalendarConnections().map(({ credentialsSecretId: _secret, ...connection }) => connection);
+}

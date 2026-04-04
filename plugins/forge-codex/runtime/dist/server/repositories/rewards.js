@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { getDatabase } from "../db.js";
 import { recordEventLog } from "./event-log.js";
-import { createManualRewardGrantSchema, rewardLedgerEventSchema, rewardRuleSchema, sessionEventSchema, updateRewardRuleSchema } from "../types.js";
+import { createManualRewardGrantSchema, workAdjustmentEntityTypeSchema, rewardLedgerEventSchema, rewardRuleSchema, sessionEventSchema, updateRewardRuleSchema } from "../types.js";
 const DEFAULT_RULES = [
     {
         id: "reward_rule_task_completion",
@@ -108,6 +108,14 @@ const DEFAULT_RULES = [
         config: { fixedXp: 4 }
     },
     {
+        id: "reward_rule_weekly_review_completed",
+        family: "alignment",
+        code: "weekly_review_completed",
+        title: "Weekly review completed",
+        description: "Reward closing the current weekly review cycle and turning it into explicit evidence.",
+        config: { fixedXp: 250 }
+    },
+    {
         id: "reward_rule_session_dwell",
         family: "ambient",
         code: "session_dwell_120",
@@ -194,6 +202,17 @@ export function getRewardRuleById(ruleId) {
 function getRuleByCode(code) {
     return listRewardRules().find((rule) => rule.code === code);
 }
+export function getTaskRunProgressRewardCadence() {
+    ensureDefaultRewardRules();
+    const rule = getRuleByCode("task_run_progress");
+    const intervalMinutes = Math.max(1, Number(rule?.config.intervalMinutes ?? 10));
+    return {
+        rule,
+        intervalMinutes,
+        intervalSeconds: intervalMinutes * 60,
+        fixedXp: Number(rule?.config.fixedXp ?? 4)
+    };
+}
 export function updateRewardRule(ruleId, input, activity) {
     ensureDefaultRewardRules();
     const current = getRewardRuleById(ruleId);
@@ -278,6 +297,17 @@ export function listRewardLedger(filters = {}) {
        ${limitSql}`)
         .all(...params);
     return rows.map(mapLedger);
+}
+export function getRewardLedgerEventById(rewardId) {
+    ensureDefaultRewardRules();
+    const row = getDatabase()
+        .prepare(`SELECT
+         id, rule_id, event_log_id, entity_type, entity_id, actor, source, delta_xp, reason_title, reason_summary,
+         reversible_group, reversed_by_reward_id, metadata_json, created_at
+       FROM reward_ledger
+       WHERE id = ?`)
+        .get(rewardId);
+    return row ? mapLedger(row) : null;
 }
 export function getTotalXp() {
     ensureDefaultRewardRules();
@@ -537,11 +567,7 @@ export function recordTaskRunStartReward(taskRunId, taskId, actor, source) {
     });
 }
 export function recordTaskRunProgressRewards(taskRunId, taskId, actor, source, creditedSeconds) {
-    ensureDefaultRewardRules();
-    const rule = getRuleByCode("task_run_progress");
-    const intervalMinutes = Math.max(1, Number(rule?.config.intervalMinutes ?? 10));
-    const intervalSeconds = intervalMinutes * 60;
-    const fixedXp = Number(rule?.config.fixedXp ?? 4);
+    const { rule, intervalMinutes, intervalSeconds, fixedXp } = getTaskRunProgressRewardCadence();
     const earnedBuckets = Math.floor(Math.max(0, creditedSeconds) / intervalSeconds);
     if (earnedBuckets <= 0) {
         return [];
@@ -592,6 +618,55 @@ export function recordTaskRunProgressRewards(taskRunId, taskId, actor, source, c
         }));
     }
     return rewards;
+}
+export function recordWorkAdjustmentReward(input) {
+    const { rule, intervalMinutes, intervalSeconds, fixedXp } = getTaskRunProgressRewardCadence();
+    const entityType = workAdjustmentEntityTypeSchema.parse(input.entityType);
+    const previousBuckets = Math.floor(Math.max(0, input.previousCreditedSeconds) / intervalSeconds);
+    const nextBuckets = Math.floor(Math.max(0, input.nextCreditedSeconds) / intervalSeconds);
+    const bucketDelta = nextBuckets - previousBuckets;
+    if (bucketDelta === 0) {
+        return null;
+    }
+    const deltaXp = bucketDelta * fixedXp;
+    const direction = bucketDelta > 0 ? "added" : "removed";
+    const appliedMinutes = Math.abs(input.appliedDeltaMinutes);
+    const eventLog = recordEventLog({
+        eventKind: "reward.work_adjustment",
+        entityType,
+        entityId: input.entityId,
+        actor: input.actor ?? null,
+        source: input.source,
+        metadata: {
+            adjustmentId: input.adjustmentId,
+            requestedDeltaMinutes: input.requestedDeltaMinutes,
+            appliedDeltaMinutes: input.appliedDeltaMinutes,
+            bucketDelta,
+            deltaXp
+        }
+    });
+    return insertLedgerEvent({
+        ruleId: rule?.id ?? null,
+        eventLogId: eventLog.id,
+        entityType,
+        entityId: input.entityId,
+        actor: input.actor ?? null,
+        source: input.source,
+        deltaXp,
+        reasonTitle: bucketDelta > 0 ? "Manual work minutes added" : "Manual work minutes removed",
+        reasonSummary: `${appliedMinutes} manual minute${appliedMinutes === 1 ? "" : "s"} ${direction}, shifting ${Math.abs(bucketDelta)} ${intervalMinutes}-minute reward bucket${Math.abs(bucketDelta) === 1 ? "" : "s"} for ${input.targetTitle}.`,
+        reversibleGroup: `work_adjustment:${entityType}:${input.entityId}:${input.adjustmentId}`,
+        metadata: {
+            adjustmentId: input.adjustmentId,
+            requestedDeltaMinutes: input.requestedDeltaMinutes,
+            appliedDeltaMinutes: input.appliedDeltaMinutes,
+            previousCreditedSeconds: input.previousCreditedSeconds,
+            nextCreditedSeconds: input.nextCreditedSeconds,
+            bucketDelta,
+            intervalMinutes,
+            rewardCategory: "manual_work_adjustment"
+        }
+    });
 }
 export function recordSessionEvent(input, activity, now = new Date()) {
     ensureDefaultRewardRules();
@@ -692,6 +767,39 @@ export function recordHabitCheckInReward(habit, status, dateKey, activity) {
             status,
             polarity: habit.polarity,
             dateKey
+        }
+    });
+}
+export function recordWeeklyReviewCompletionReward(input, activity) {
+    ensureDefaultRewardRules();
+    const rule = getRuleByCode("weekly_review_completed");
+    const deltaXp = Math.max(0, Number(rule?.config.fixedXp ?? input.rewardXp));
+    const eventLog = recordEventLog({
+        eventKind: "reward.weekly_review_completed",
+        entityType: "system",
+        entityId: input.weekKey,
+        actor: activity.actor ?? null,
+        source: activity.source,
+        metadata: {
+            weekKey: input.weekKey,
+            windowLabel: input.windowLabel,
+            deltaXp
+        }
+    });
+    return insertLedgerEvent({
+        ruleId: rule?.id ?? null,
+        eventLogId: eventLog.id,
+        entityType: "system",
+        entityId: input.weekKey,
+        actor: activity.actor ?? null,
+        source: activity.source,
+        deltaXp,
+        reasonTitle: rule?.title ?? "Weekly review completed",
+        reasonSummary: `Closed the review for ${input.windowLabel}.`,
+        reversibleGroup: `weekly_review_completed:${input.weekKey}`,
+        metadata: {
+            weekKey: input.weekKey,
+            windowLabel: input.windowLabel
         }
     });
 }

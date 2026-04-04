@@ -1,4 +1,4 @@
-import{r as j}from"./vendor-5HifrnRK.js";/**
+import{r as j}from"./vendor-BvM2F9Dp.js";/**
    * table-core
    *
    * Copyright (c) TanStack
@@ -20,4 +20,4 @@ import{r as j}from"./vendor-5HifrnRK.js";/**
    *
    * @license MIT
    */function ut(e,o){return e?tt(e)?j.createElement(e,o):e:null}function tt(e){return nt(e)||typeof e=="function"||ot(e)}function nt(e){return typeof e=="function"&&(()=>{const o=Object.getPrototypeOf(e);return o.prototype&&o.prototype.isReactComponent})()}function ot(e){return typeof e=="object"&&typeof e.$$typeof=="symbol"&&["react.memo","react.forward_ref"].includes(e.$$typeof.description)}function st(e){const o={state:{},onStateChange:()=>{},renderFallbackValue:null,...e},[t]=j.useState(()=>({current:et(o)})),[n,i]=j.useState(()=>t.current.initialState);return t.current.setOptions(r=>({...r,...e,state:{...n,...e.state},onStateChange:l=>{i(l),e.onStateChange==null||e.onStateChange(l)}})),t.current}export{rt as c,ut as f,lt as g,st as u};
-//# sourceMappingURL=table-BDMHBY4a.js.map
+//# sourceMappingURL=table-DBGlgRjk.js.map

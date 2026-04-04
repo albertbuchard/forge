@@ -1,5 +1,6 @@
 import { getDatabase, runInTransaction } from "../db.js";
 import { createInsight, deleteInsight, getInsightById, listInsights, updateInsight } from "../repositories/collaboration.js";
+import { createCalendarEvent, createTaskTimebox, createWorkBlockTemplate, deleteCalendarEvent, deleteTaskTimebox, deleteWorkBlockTemplate, getCalendarEventById, getTaskTimeboxById, getWorkBlockTemplateById, listCalendarEvents, listTaskTimeboxes, listWorkBlockTemplates, updateCalendarEvent, updateTaskTimebox, updateWorkBlockTemplate } from "../repositories/calendar.js";
 import { createNote, deleteNote, getNoteById, listNotes, unlinkNotesForEntity, updateNote } from "../repositories/notes.js";
 import { createBehaviorPatternSchema, createBehaviorSchema, createBeliefEntrySchema, createEmotionDefinitionSchema, createEventTypeSchema, createModeGuideSessionSchema, createModeProfileSchema, createPsycheValueSchema, createTriggerReportSchema, updateBehaviorPatternSchema, updateBehaviorSchema, updateBeliefEntrySchema, updateEmotionDefinitionSchema, updateEventTypeSchema, updateModeGuideSessionSchema, updateModeProfileSchema, updatePsycheValueSchema, updateTriggerReportSchema } from "../psyche-types.js";
 import { buildSettingsBinPayload, cascadeSoftDeleteAnchoredCollaboration, clearDeletedEntityRecord, getDeletedEntityRecord, listDeletedEntities, restoreAnchoredCollaboration, restoreDeletedEntityRecord, upsertDeletedEntityRecord } from "../repositories/deleted-entities.js";
@@ -9,7 +10,11 @@ import { createBehavior, createBehaviorPattern, createBeliefEntry, createEmotion
 import { createProject, deleteProject, getProjectById, listProjects, updateProject } from "../repositories/projects.js";
 import { createTag, deleteTag, getTagById, listTags, updateTag } from "../repositories/tags.js";
 import { createTask, deleteTask, getTaskById, listTasks, updateTask } from "../repositories/tasks.js";
-import { createGoalSchema, createHabitSchema, createInsightSchema, createNoteSchema, createProjectSchema, createTagSchema, createTaskSchema, updateGoalSchema, updateHabitSchema, updateInsightSchema, updateNoteSchema, updateProjectSchema, updateTagSchema, updateTaskSchema } from "../types.js";
+import { createCalendarEventSchema, createGoalSchema, createHabitSchema, createInsightSchema, createNoteSchema, createProjectSchema, createTaskTimeboxSchema, createTagSchema, createTaskSchema, createWorkBlockTemplateSchema, updateCalendarEventSchema, updateGoalSchema, updateHabitSchema, updateInsightSchema, updateNoteSchema, updateProjectSchema, updateTaskTimeboxSchema, updateTagSchema, updateTaskSchema, updateWorkBlockTemplateSchema } from "../types.js";
+const ENTITY_CALENDAR_LIST_RANGE = {
+    from: "1970-01-01T00:00:00.000Z",
+    to: "2100-01-01T00:00:00.000Z"
+};
 class AtomicBatchRollback extends Error {
     index;
     code;
@@ -26,6 +31,8 @@ const CRUD_ENTITY_CAPABILITIES = {
     goal: {
         entityType: "goal",
         routeBase: "/api/v1/goals",
+        deleteMode: "soft_default",
+        inBin: true,
         list: () => listGoals(),
         get: (id) => getGoalById(id),
         create: (data, context) => createGoal(data, context),
@@ -35,6 +42,8 @@ const CRUD_ENTITY_CAPABILITIES = {
     project: {
         entityType: "project",
         routeBase: "/api/v1/projects",
+        deleteMode: "soft_default",
+        inBin: true,
         list: () => listProjects(),
         get: (id) => getProjectById(id),
         create: (data, context) => createProject(data, context),
@@ -44,6 +53,8 @@ const CRUD_ENTITY_CAPABILITIES = {
     task: {
         entityType: "task",
         routeBase: "/api/v1/tasks",
+        deleteMode: "soft_default",
+        inBin: true,
         list: () => listTasks(),
         get: (id) => getTaskById(id),
         create: (data, context) => createTask(data, context),
@@ -53,6 +64,8 @@ const CRUD_ENTITY_CAPABILITIES = {
     habit: {
         entityType: "habit",
         routeBase: "/api/v1/habits",
+        deleteMode: "soft_default",
+        inBin: true,
         list: () => listHabits(),
         get: (id) => getHabitById(id),
         create: (data, context) => createHabit(data, context),
@@ -62,6 +75,8 @@ const CRUD_ENTITY_CAPABILITIES = {
     tag: {
         entityType: "tag",
         routeBase: "/api/v1/tags",
+        deleteMode: "soft_default",
+        inBin: true,
         list: () => listTags(),
         get: (id) => getTagById(id),
         create: (data, context) => createTag(data, context),
@@ -71,6 +86,8 @@ const CRUD_ENTITY_CAPABILITIES = {
     note: {
         entityType: "note",
         routeBase: "/api/v1/notes",
+        deleteMode: "soft_default",
+        inBin: true,
         list: () => listNotes(),
         get: (id) => getNoteById(id),
         create: (data, context) => createNote(data, context),
@@ -80,15 +97,52 @@ const CRUD_ENTITY_CAPABILITIES = {
     insight: {
         entityType: "insight",
         routeBase: "/api/v1/insights",
+        deleteMode: "soft_default",
+        inBin: true,
         list: () => listInsights(),
         get: (id) => getInsightById(id),
         create: (data, context) => createInsight(data, context),
         update: (id, patch, context) => updateInsight(id, patch, context),
         hardDelete: (id, context) => deleteInsight(id, context)
     },
+    calendar_event: {
+        entityType: "calendar_event",
+        routeBase: "/api/v1/calendar/events",
+        deleteMode: "immediate",
+        inBin: false,
+        list: () => listCalendarEvents(ENTITY_CALENDAR_LIST_RANGE),
+        get: (id) => getCalendarEventById(id),
+        create: (data) => createCalendarEvent(data),
+        update: (id, patch) => updateCalendarEvent(id, patch),
+        hardDelete: (id) => deleteCalendarEvent(id)
+    },
+    work_block_template: {
+        entityType: "work_block_template",
+        routeBase: "/api/v1/calendar/work-block-templates",
+        deleteMode: "immediate",
+        inBin: false,
+        list: () => listWorkBlockTemplates(),
+        get: (id) => getWorkBlockTemplateById(id),
+        create: (data) => createWorkBlockTemplate(data),
+        update: (id, patch) => updateWorkBlockTemplate(id, patch),
+        hardDelete: (id) => deleteWorkBlockTemplate(id)
+    },
+    task_timebox: {
+        entityType: "task_timebox",
+        routeBase: "/api/v1/calendar/timeboxes",
+        deleteMode: "immediate",
+        inBin: false,
+        list: () => listTaskTimeboxes(ENTITY_CALENDAR_LIST_RANGE),
+        get: (id) => getTaskTimeboxById(id),
+        create: (data) => createTaskTimebox(data),
+        update: (id, patch) => updateTaskTimebox(id, patch),
+        hardDelete: (id) => deleteTaskTimebox(id)
+    },
     psyche_value: {
         entityType: "psyche_value",
         routeBase: "/api/v1/psyche/values",
+        deleteMode: "soft_default",
+        inBin: true,
         list: () => listPsycheValues(),
         get: (id) => getPsycheValueById(id),
         create: (data, context) => createPsycheValue(data, context),
@@ -98,6 +152,8 @@ const CRUD_ENTITY_CAPABILITIES = {
     behavior_pattern: {
         entityType: "behavior_pattern",
         routeBase: "/api/v1/psyche/patterns",
+        deleteMode: "soft_default",
+        inBin: true,
         list: () => listBehaviorPatterns(),
         get: (id) => getBehaviorPatternById(id),
         create: (data, context) => createBehaviorPattern(data, context),
@@ -107,6 +163,8 @@ const CRUD_ENTITY_CAPABILITIES = {
     behavior: {
         entityType: "behavior",
         routeBase: "/api/v1/psyche/behaviors",
+        deleteMode: "soft_default",
+        inBin: true,
         list: () => listBehaviors(),
         get: (id) => getBehaviorById(id),
         create: (data, context) => createBehavior(data, context),
@@ -116,6 +174,8 @@ const CRUD_ENTITY_CAPABILITIES = {
     belief_entry: {
         entityType: "belief_entry",
         routeBase: "/api/v1/psyche/beliefs",
+        deleteMode: "soft_default",
+        inBin: true,
         list: () => listBeliefEntries(),
         get: (id) => getBeliefEntryById(id),
         create: (data, context) => createBeliefEntry(data, context),
@@ -125,6 +185,8 @@ const CRUD_ENTITY_CAPABILITIES = {
     mode_profile: {
         entityType: "mode_profile",
         routeBase: "/api/v1/psyche/modes",
+        deleteMode: "soft_default",
+        inBin: true,
         list: () => listModeProfiles(),
         get: (id) => getModeProfileById(id),
         create: (data, context) => createModeProfile(data, context),
@@ -134,6 +196,8 @@ const CRUD_ENTITY_CAPABILITIES = {
     mode_guide_session: {
         entityType: "mode_guide_session",
         routeBase: "/api/v1/psyche/mode-guides",
+        deleteMode: "soft_default",
+        inBin: true,
         list: () => listModeGuideSessions(200),
         get: (id) => getModeGuideSessionById(id),
         create: (data, context) => createModeGuideSession(data, context),
@@ -143,6 +207,8 @@ const CRUD_ENTITY_CAPABILITIES = {
     event_type: {
         entityType: "event_type",
         routeBase: "/api/v1/psyche/event-types",
+        deleteMode: "soft_default",
+        inBin: true,
         list: () => listEventTypes(),
         get: (id) => getEventTypeById(id),
         create: (data, context) => createEventType(data, context),
@@ -152,6 +218,8 @@ const CRUD_ENTITY_CAPABILITIES = {
     emotion_definition: {
         entityType: "emotion_definition",
         routeBase: "/api/v1/psyche/emotions",
+        deleteMode: "soft_default",
+        inBin: true,
         list: () => listEmotionDefinitions(),
         get: (id) => getEmotionDefinitionById(id),
         create: (data, context) => createEmotionDefinition(data, context),
@@ -161,6 +229,8 @@ const CRUD_ENTITY_CAPABILITIES = {
     trigger_report: {
         entityType: "trigger_report",
         routeBase: "/api/v1/psyche/reports",
+        deleteMode: "soft_default",
+        inBin: true,
         list: () => listTriggerReports(200),
         get: (id) => getTriggerReportById(id),
         create: (data, context) => createTriggerReport(data, context),
@@ -173,8 +243,8 @@ export function getCrudEntityCapabilityMatrix() {
         entityType: capability.entityType,
         routeBase: capability.routeBase,
         pluginExposed: true,
-        deleteMode: "soft_default",
-        inBin: true
+        deleteMode: capability.deleteMode,
+        inBin: capability.inBin
     }));
 }
 function getCapability(entityType) {
@@ -188,6 +258,9 @@ const CREATE_ENTITY_SCHEMAS = {
     tag: createTagSchema,
     note: createNoteSchema,
     insight: createInsightSchema,
+    calendar_event: createCalendarEventSchema,
+    work_block_template: createWorkBlockTemplateSchema,
+    task_timebox: createTaskTimeboxSchema,
     psyche_value: createPsycheValueSchema,
     behavior_pattern: createBehaviorPatternSchema,
     behavior: createBehaviorSchema,
@@ -206,6 +279,9 @@ const UPDATE_ENTITY_SCHEMAS = {
     tag: updateTagSchema,
     note: updateNoteSchema,
     insight: updateInsightSchema,
+    calendar_event: updateCalendarEventSchema,
+    work_block_template: updateWorkBlockTemplateSchema,
+    task_timebox: updateTaskTimeboxSchema,
     psyche_value: updatePsycheValueSchema,
     behavior_pattern: updateBehaviorPatternSchema,
     behavior: updateBehaviorSchema,
@@ -344,6 +420,17 @@ function matchesLinkedTo(entityType, entity, linkedTo) {
                     link.entityId === linkedTo.id));
         case "insight":
             return entity.entityType === linkedTo.entityType && entity.entityId === linkedTo.id;
+        case "calendar_event":
+            return (Array.isArray(entity.links) &&
+                entity.links.some((link) => typeof link === "object" &&
+                    link !== null &&
+                    "entityType" in link &&
+                    "entityId" in link &&
+                    link.entityType === linkedTo.entityType &&
+                    link.entityId === linkedTo.id));
+        case "task_timebox":
+            return ((linkedTo.entityType === "task" && entity.taskId === linkedTo.id) ||
+                (linkedTo.entityType === "project" && entity.projectId === linkedTo.id));
         case "psyche_value":
             return ((linkedTo.entityType === "goal" && Array.isArray(entity.linkedGoalIds) && entity.linkedGoalIds.includes(linkedTo.id)) ||
                 (linkedTo.entityType === "project" && Array.isArray(entity.linkedProjectIds) && entity.linkedProjectIds.includes(linkedTo.id)) ||
@@ -412,6 +499,10 @@ function purgeAnchoredCollaboration(entityType, entityId) {
 export function deleteEntity(entityType, id, options, context) {
     const capability = getCapability(entityType);
     const mode = options.mode ?? "soft";
+    if (capability.deleteMode === "immediate") {
+        clearDeletedEntityRecord(entityType, id);
+        return capability.hardDelete(id, context);
+    }
     const existing = capability.get(id);
     if (!existing) {
         const deleted = getDeletedEntityRecord(entityType, id);

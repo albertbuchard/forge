@@ -12,6 +12,18 @@ function toInt(value) {
 function hashToken(token) {
     return createHash("sha256").update(token).digest("hex");
 }
+function defaultMicrosoftRedirectUri() {
+    const port = process.env.PORT?.trim() || "4317";
+    return `http://127.0.0.1:${port}/api/v1/calendar/oauth/microsoft/callback`;
+}
+function normalizeMicrosoftTenantId(value) {
+    const trimmed = value?.trim();
+    return trimmed && trimmed.length > 0 ? trimmed : "common";
+}
+function normalizeMicrosoftRedirectUri(value) {
+    const trimmed = value?.trim();
+    return trimmed && trimmed.length > 0 ? trimmed : defaultMicrosoftRedirectUri();
+}
 function buildTokenSecret() {
     return `fg_live_${randomBytes(18).toString("hex")}`;
 }
@@ -108,7 +120,7 @@ function readSettingsRow() {
         .prepare(`SELECT
         operator_name, operator_email, operator_title, theme_preference, locale_preference,
         goal_drift_alerts, daily_quest_reminders, achievement_celebrations, max_active_tasks, time_accounting_mode,
-        integrity_score, last_audit_at, psyche_auth_required, created_at, updated_at
+        integrity_score, last_audit_at, psyche_auth_required, microsoft_client_id, microsoft_tenant_id, microsoft_redirect_uri, created_at, updated_at
        FROM app_settings
        WHERE id = 1`)
         .get();
@@ -166,6 +178,9 @@ export function isPsycheAuthRequired() {
 }
 export function getSettings() {
     const row = readSettingsRow();
+    const microsoftClientId = row.microsoft_client_id?.trim() ?? "";
+    const microsoftTenantId = normalizeMicrosoftTenantId(row.microsoft_tenant_id);
+    const microsoftRedirectUri = normalizeMicrosoftRedirectUri(row.microsoft_redirect_uri);
     return settingsPayloadSchema.parse({
         profile: {
             operatorName: row.operator_name,
@@ -190,6 +205,21 @@ export function getSettings() {
             activeSessions: 1,
             tokenCount: listAgentTokens().filter((token) => token.status === "active").length,
             psycheAuthRequired: boolFromInt(row.psyche_auth_required)
+        },
+        calendarProviders: {
+            microsoft: {
+                clientId: microsoftClientId,
+                tenantId: microsoftTenantId,
+                redirectUri: microsoftRedirectUri,
+                usesClientSecret: false,
+                readOnly: true,
+                authMode: "public_client_pkce",
+                isConfigured: microsoftClientId.length > 0,
+                isReadyForSignIn: microsoftClientId.length > 0,
+                setupMessage: microsoftClientId.length > 0
+                    ? "Microsoft local sign-in is configured. Test it if you want, then continue to the guided sign-in flow."
+                    : "Save the Microsoft client ID and the Forge callback redirect URI here before you try to sign in."
+            }
         },
         agents: listAgentIdentities(),
         agentTokens: listAgentTokens()
@@ -217,15 +247,25 @@ export function updateSettings(input, activity) {
             },
             themePreference: parsed.themePreference ?? current.themePreference,
             localePreference: parsed.localePreference ?? current.localePreference,
-            psycheAuthRequired: parsed.security?.psycheAuthRequired ?? current.security.psycheAuthRequired
+            psycheAuthRequired: parsed.security?.psycheAuthRequired ?? current.security.psycheAuthRequired,
+            calendarProviders: {
+                microsoft: {
+                    clientId: parsed.calendarProviders?.microsoft?.clientId?.trim() ??
+                        current.calendarProviders.microsoft.clientId,
+                    tenantId: normalizeMicrosoftTenantId(parsed.calendarProviders?.microsoft?.tenantId ??
+                        current.calendarProviders.microsoft.tenantId),
+                    redirectUri: normalizeMicrosoftRedirectUri(parsed.calendarProviders?.microsoft?.redirectUri ??
+                        current.calendarProviders.microsoft.redirectUri)
+                }
+            }
         };
         getDatabase()
             .prepare(`UPDATE app_settings
          SET operator_name = ?, operator_email = ?, operator_title = ?, theme_preference = ?, locale_preference = ?,
              goal_drift_alerts = ?, daily_quest_reminders = ?, achievement_celebrations = ?, max_active_tasks = ?, time_accounting_mode = ?,
-             psyche_auth_required = ?, updated_at = ?
+             psyche_auth_required = ?, microsoft_client_id = ?, microsoft_tenant_id = ?, microsoft_redirect_uri = ?, updated_at = ?
          WHERE id = 1`)
-            .run(next.profile.operatorName, next.profile.operatorEmail, next.profile.operatorTitle, next.themePreference, next.localePreference, toInt(next.notifications.goalDriftAlerts), toInt(next.notifications.dailyQuestReminders), toInt(next.notifications.achievementCelebrations), next.execution.maxActiveTasks, next.execution.timeAccountingMode, toInt(next.psycheAuthRequired), now);
+            .run(next.profile.operatorName, next.profile.operatorEmail, next.profile.operatorTitle, next.themePreference, next.localePreference, toInt(next.notifications.goalDriftAlerts), toInt(next.notifications.dailyQuestReminders), toInt(next.notifications.achievementCelebrations), next.execution.maxActiveTasks, next.execution.timeAccountingMode, toInt(next.psycheAuthRequired), next.calendarProviders.microsoft.clientId, next.calendarProviders.microsoft.tenantId, next.calendarProviders.microsoft.redirectUri, now);
         if (activity) {
             recordActivityEvent({
                 entityType: "system",
@@ -241,7 +281,9 @@ export function updateSettings(input, activity) {
                     goalDriftAlerts: next.notifications.goalDriftAlerts,
                     dailyQuestReminders: next.notifications.dailyQuestReminders,
                     maxActiveTasks: next.execution.maxActiveTasks,
-                    timeAccountingMode: next.execution.timeAccountingMode
+                    timeAccountingMode: next.execution.timeAccountingMode,
+                    microsoftConfigured: next.calendarProviders.microsoft.clientId.trim().length > 0,
+                    microsoftTenantId: next.calendarProviders.microsoft.tenantId
                 }
             });
         }

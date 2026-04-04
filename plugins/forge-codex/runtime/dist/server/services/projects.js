@@ -3,6 +3,7 @@ import { getGoalById, listGoals } from "../repositories/goals.js";
 import { buildNotesSummaryByEntity } from "../repositories/notes.js";
 import { listProjects } from "../repositories/projects.js";
 import { listTasks } from "../repositories/tasks.js";
+import { listProjectWorkAdjustmentSecondsMap } from "../repositories/work-adjustments.js";
 import { emptyTaskTimeSummary } from "./work-time.js";
 import { projectBoardPayloadSchema, projectSummarySchema } from "../types.js";
 function projectTaskSummary(tasks) {
@@ -33,25 +34,48 @@ function projectTaskSummary(tasks) {
         nextTaskId: nextTask?.id ?? null,
         nextTaskTitle: nextTask?.title ?? null,
         momentumLabel,
-        time: tasks.reduce((summary, task) => ({
-            totalTrackedSeconds: summary.totalTrackedSeconds + task.time.totalTrackedSeconds,
-            totalCreditedSeconds: Math.round((summary.totalCreditedSeconds + task.time.totalCreditedSeconds) * 100) / 100,
-            activeRunCount: summary.activeRunCount + task.time.activeRunCount,
-            hasCurrentRun: summary.hasCurrentRun || task.time.hasCurrentRun,
-            currentRunId: summary.currentRunId ?? task.time.currentRunId
-        }), emptyTaskTimeSummary())
+        time: tasks.reduce((summary, task) => {
+            const liveTrackedSeconds = task.time.liveTrackedSeconds ?? 0;
+            const liveCreditedSeconds = task.time.liveCreditedSeconds ?? 0;
+            const manualAdjustedSeconds = task.time.manualAdjustedSeconds ?? 0;
+            return {
+                totalTrackedSeconds: summary.totalTrackedSeconds + task.time.totalTrackedSeconds,
+                totalCreditedSeconds: Math.round((summary.totalCreditedSeconds + task.time.totalCreditedSeconds) * 100) / 100,
+                liveTrackedSeconds: summary.liveTrackedSeconds + liveTrackedSeconds,
+                liveCreditedSeconds: Math.round((summary.liveCreditedSeconds + liveCreditedSeconds) * 100) / 100,
+                manualAdjustedSeconds: summary.manualAdjustedSeconds + manualAdjustedSeconds,
+                activeRunCount: summary.activeRunCount + task.time.activeRunCount,
+                hasCurrentRun: summary.hasCurrentRun || task.time.hasCurrentRun,
+                currentRunId: summary.currentRunId ?? task.time.currentRunId
+            };
+        }, emptyTaskTimeSummary())
     };
 }
 export function listProjectSummaries(filters = {}) {
     const goals = new Map(listGoals().map((goal) => [goal.id, goal]));
     const tasks = listTasks();
+    const projectAdjustmentSeconds = listProjectWorkAdjustmentSecondsMap();
     return listProjects(filters).map((project) => {
         const goal = goals.get(project.goalId);
         const projectTasks = tasks.filter((task) => task.projectId === project.id);
+        const taskSummary = projectTaskSummary(projectTasks);
+        const projectAdjustmentSecondsTotal = projectAdjustmentSeconds.get(project.id) ?? 0;
+        const manualAdjustedSeconds = (taskSummary.time.manualAdjustedSeconds ?? 0) + projectAdjustmentSecondsTotal;
+        const time = {
+            totalTrackedSeconds: Math.max(0, taskSummary.time.totalTrackedSeconds + projectAdjustmentSecondsTotal),
+            totalCreditedSeconds: Math.round(Math.max(0, taskSummary.time.totalCreditedSeconds + projectAdjustmentSecondsTotal) * 100) / 100,
+            liveTrackedSeconds: taskSummary.time.liveTrackedSeconds ?? 0,
+            liveCreditedSeconds: taskSummary.time.liveCreditedSeconds ?? 0,
+            manualAdjustedSeconds,
+            activeRunCount: taskSummary.time.activeRunCount,
+            hasCurrentRun: taskSummary.time.hasCurrentRun,
+            currentRunId: taskSummary.time.currentRunId
+        };
         return projectSummarySchema.parse({
             ...project,
             goalTitle: goal?.title ?? "Unknown life goal",
-            ...projectTaskSummary(projectTasks)
+            ...taskSummary,
+            time
         });
     });
 }

@@ -17,9 +17,11 @@ import { ExternalServiceManager } from "./platform/external-service-manager.js";
 import { SearchIndexManager } from "./platform/search-index-manager.js";
 export function createManagerRuntime(options = {}) {
     const configuration = new ConfigurationManager();
+    const runtimeConfig = configuration.readRuntimeConfig({ dataRoot: options.dataRoot });
     const database = new DatabaseManager();
-    database.configure(configuration.readRuntimeConfig({ dataRoot: options.dataRoot }).dataRoot);
+    database.configure(runtimeConfig.dataRoot);
     const secrets = new SecretsManager();
+    secrets.configure(runtimeConfig.dataRoot ?? process.cwd());
     const transaction = new TransactionManager();
     const migration = new MigrationManager();
     const storage = new StorageManager();

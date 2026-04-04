@@ -2,9 +2,10 @@ import { listActivityEvents } from "../repositories/activity-events.js";
 import { listGoals } from "../repositories/goals.js";
 import { listHabits } from "../repositories/habits.js";
 import { listTasks } from "../repositories/tasks.js";
+import { getWeeklyReviewClosure } from "../repositories/weekly-reviews.js";
 import { buildGamificationProfile } from "./gamification.js";
 import { weeklyReviewPayloadSchema } from "../types.js";
-function startOfWeek(date) {
+export function startOfWeek(date) {
     const clone = new Date(date);
     const day = clone.getDay();
     const delta = day === 0 ? -6 : 1 - day;
@@ -19,6 +20,9 @@ function addDays(date, days) {
 }
 function formatRange(start, end) {
     return `${start.toLocaleDateString("en-US", { month: "short", day: "numeric" })} - ${end.toLocaleDateString("en-US", { month: "short", day: "numeric" })}`;
+}
+function toDateOnly(date) {
+    return date.toISOString().slice(0, 10);
 }
 function dailyBuckets(tasks, start) {
     return Array.from({ length: 7 }, (_, index) => {
@@ -40,6 +44,8 @@ export function getWeeklyReviewPayload(now = new Date()) {
     const gamification = buildGamificationProfile(goals, tasks, listHabits(), now);
     const weekStart = startOfWeek(now);
     const weekEnd = addDays(weekStart, 6);
+    const weekKey = toDateOnly(weekStart);
+    const closure = getWeeklyReviewClosure(weekKey);
     const weekTasks = tasks.filter((task) => task.updatedAt >= weekStart.toISOString() && task.updatedAt <= addDays(weekEnd, 1).toISOString());
     const completedTasks = weekTasks.filter((task) => task.completedAt !== null);
     const buckets = dailyBuckets(tasks, weekStart);
@@ -62,6 +68,9 @@ export function getWeeklyReviewPayload(now = new Date()) {
     return weeklyReviewPayloadSchema.parse({
         generatedAt: now.toISOString(),
         windowLabel: formatRange(weekStart, weekEnd),
+        weekKey,
+        weekStartDate: weekKey,
+        weekEndDate: toDateOnly(weekEnd),
         momentumSummary: {
             totalXp,
             focusHours: buckets.reduce((sum, bucket) => sum + bucket.focusHours, 0),
@@ -84,6 +93,11 @@ export function getWeeklyReviewPayload(now = new Date()) {
             title: "Review Completion Bonus",
             summary: "Finalizing the review locks the current cycle into evidence.",
             rewardXp: 250
+        },
+        completion: {
+            finalized: closure !== null,
+            finalizedAt: closure?.createdAt ?? null,
+            finalizedBy: closure?.actor ?? null
         }
     });
 }

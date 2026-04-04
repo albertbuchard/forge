@@ -6,7 +6,8 @@ import { createLinkedNotes } from "./notes.js";
 import { assertGoalExists } from "../services/relations.js";
 import { getGoalById } from "./goals.js";
 import { pruneLinkedEntityReferences } from "./psyche.js";
-import { createProjectSchema, projectSchema, updateProjectSchema } from "../types.js";
+import { listTasks, updateTaskInTransaction } from "./tasks.js";
+import { calendarSchedulingRulesSchema, createProjectSchema, projectSchema, updateProjectSchema } from "../types.js";
 function getDefaultProjectTemplate(goal) {
     switch (goal.title) {
         case "Build a durable body and calm energy":
@@ -40,9 +41,17 @@ function mapProject(row) {
         status: row.status,
         themeColor: row.theme_color,
         targetPoints: row.target_points,
+        schedulingRules: calendarSchedulingRulesSchema.parse(JSON.parse(row.scheduling_rules_json || "{}")),
         createdAt: row.created_at,
         updatedAt: row.updated_at
     });
+}
+function completeLinkedProjectTasks(projectId, activity) {
+    const openTasks = listTasks({ projectId }).filter((task) => task.status !== "done");
+    for (const task of openTasks) {
+        updateTaskInTransaction(task.id, { status: "done" }, activity);
+    }
+    return openTasks.length;
 }
 export function listProjects(filters = {}) {
     const whereClauses = [];
@@ -62,6 +71,7 @@ export function listProjects(filters = {}) {
     }
     const rows = getDatabase()
         .prepare(`SELECT id, goal_id, title, description, status, theme_color, target_points, created_at, updated_at
+       , scheduling_rules_json
        FROM projects
        ${whereSql}
        ORDER BY created_at ASC
@@ -75,6 +85,7 @@ export function getProjectById(projectId) {
     }
     const row = getDatabase()
         .prepare(`SELECT id, goal_id, title, description, status, theme_color, target_points, created_at, updated_at
+       , scheduling_rules_json
        FROM projects
        WHERE id = ?`)
         .get(projectId);
@@ -87,9 +98,9 @@ export function createProject(input, activity) {
         const now = new Date().toISOString();
         const id = `project_${randomUUID().replaceAll("-", "").slice(0, 10)}`;
         getDatabase()
-            .prepare(`INSERT INTO projects (id, goal_id, title, description, status, theme_color, target_points, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-            .run(id, parsed.goalId, parsed.title, parsed.description, parsed.status, parsed.themeColor, parsed.targetPoints, now, now);
+            .prepare(`INSERT INTO projects (id, goal_id, title, description, status, theme_color, target_points, scheduling_rules_json, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+            .run(id, parsed.goalId, parsed.title, parsed.description, parsed.status, parsed.themeColor, parsed.targetPoints, JSON.stringify(parsed.schedulingRules), now, now);
         const project = getProjectById(id);
         createLinkedNotes(parsed.notes, { entityType: "project", entityId: project.id, anchorKey: null }, activity ?? { source: "ui", actor: null });
         if (activity) {
@@ -127,32 +138,42 @@ export function updateProject(projectId, input, activity) {
             status: parsed.status ?? current.status,
             themeColor: parsed.themeColor ?? current.themeColor,
             targetPoints: parsed.targetPoints ?? current.targetPoints,
+            schedulingRules: parsed.schedulingRules ?? current.schedulingRules,
             updatedAt: new Date().toISOString()
         };
         getDatabase()
             .prepare(`UPDATE projects
-         SET goal_id = ?, title = ?, description = ?, status = ?, theme_color = ?, target_points = ?, updated_at = ?
+         SET goal_id = ?, title = ?, description = ?, status = ?, theme_color = ?, target_points = ?, scheduling_rules_json = ?, updated_at = ?
          WHERE id = ?`)
-            .run(next.goalId, next.title, next.description, next.status, next.themeColor, next.targetPoints, next.updatedAt, projectId);
+            .run(next.goalId, next.title, next.description, next.status, next.themeColor, next.targetPoints, JSON.stringify(next.schedulingRules), next.updatedAt, projectId);
         // Keep legacy task.goal_id aligned with the project's parent goal.
         getDatabase()
             .prepare(`UPDATE tasks SET goal_id = ?, updated_at = ? WHERE project_id = ?`)
             .run(next.goalId, next.updatedAt, projectId);
+        const completedLinkedTaskCount = current.status !== "completed" && next.status === "completed"
+            ? completeLinkedProjectTasks(projectId, activity)
+            : 0;
         const project = getProjectById(projectId);
         if (project && activity) {
+            const statusChanged = current.status !== project.status;
             recordActivityEvent({
                 entityType: "project",
                 entityId: project.id,
-                eventType: current.status !== project.status ? "project_status_changed" : "project_updated",
-                title: current.status !== project.status ? `Project ${project.status}: ${project.title}` : `Project updated: ${project.title}`,
-                description: "Project details were updated.",
+                eventType: statusChanged ? "project_status_changed" : "project_updated",
+                title: statusChanged ? `Project ${project.status}: ${project.title}` : `Project updated: ${project.title}`,
+                description: statusChanged && project.status === "completed"
+                    ? `Project finished and auto-completed ${completedLinkedTaskCount} linked unfinished task${completedLinkedTaskCount === 1 ? "" : "s"}.`
+                    : statusChanged
+                        ? `Project status changed from ${current.status} to ${project.status}.`
+                        : "Project details were updated.",
                 actor: activity.actor ?? null,
                 source: activity.source,
                 metadata: {
                     goalId: project.goalId,
                     previousGoalId: current.goalId,
                     status: project.status,
-                    previousStatus: current.status
+                    previousStatus: current.status,
+                    completedLinkedTaskCount
                 }
             });
         }
@@ -174,9 +195,20 @@ export function ensureDefaultProjectForGoal(goalId) {
         const now = new Date().toISOString();
         const id = `project_${randomUUID().replaceAll("-", "").slice(0, 10)}`;
         getDatabase()
-            .prepare(`INSERT INTO projects (id, goal_id, title, description, status, theme_color, target_points, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-            .run(id, goalId, template.title, template.description, goal.status === "completed" ? "completed" : goal.status === "paused" ? "paused" : "active", goal.themeColor, Math.max(100, Math.round(goal.targetPoints / 2)), now, now);
+            .prepare(`INSERT INTO projects (id, goal_id, title, description, status, theme_color, target_points, scheduling_rules_json, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+            .run(id, goalId, template.title, template.description, goal.status === "completed" ? "completed" : goal.status === "paused" ? "paused" : "active", goal.themeColor, Math.max(100, Math.round(goal.targetPoints / 2)), JSON.stringify({
+            allowWorkBlockKinds: [],
+            blockWorkBlockKinds: [],
+            allowCalendarIds: [],
+            blockCalendarIds: [],
+            allowEventTypes: [],
+            blockEventTypes: [],
+            allowEventKeywords: [],
+            blockEventKeywords: [],
+            allowAvailability: [],
+            blockAvailability: []
+        }), now, now);
         return getProjectById(id);
     });
 }

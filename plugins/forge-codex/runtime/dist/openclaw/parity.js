@@ -12,6 +12,7 @@ export const FORGE_SUPPORTED_PLUGIN_API_ROUTES = [
     { method: "POST", path: "/api/v1/entities/delete", purpose: "entities" },
     { method: "POST", path: "/api/v1/entities/restore", purpose: "entities" },
     { method: "POST", path: "/api/v1/operator/log-work", purpose: "work" },
+    { method: "POST", path: "/api/v1/work-adjustments", purpose: "work" },
     { method: "POST", path: "/api/v1/tasks/:id/runs", purpose: "work" },
     { method: "GET", path: "/api/v1/task-runs", purpose: "work" },
     { method: "POST", path: "/api/v1/task-runs/:id/heartbeat", purpose: "work" },

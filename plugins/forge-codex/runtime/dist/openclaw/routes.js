@@ -140,6 +140,13 @@ export const FORGE_PLUGIN_ROUTE_GROUPS = [
         requiresToken: true,
         target: (_match, url) => passthroughSearch("/api/v1/operator/log-work", url)
     }),
+    exact("/forge/v1/work-adjustments", {
+        method: "POST",
+        upstreamPath: "/api/v1/work-adjustments",
+        requestBody: "json",
+        requiresToken: true,
+        target: (_match, url) => passthroughSearch("/api/v1/work-adjustments", url)
+    }),
     exact("/forge/v1/insights", {
         method: "POST",
         upstreamPath: "/api/v1/insights",

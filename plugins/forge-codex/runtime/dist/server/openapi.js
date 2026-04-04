@@ -55,7 +55,18 @@ export function buildOpenApiDocument() {
     const goal = {
         type: "object",
         additionalProperties: false,
-        required: ["id", "title", "description", "horizon", "status", "targetPoints", "themeColor", "createdAt", "updatedAt", "tagIds"],
+        required: [
+            "id",
+            "title",
+            "description",
+            "horizon",
+            "status",
+            "targetPoints",
+            "themeColor",
+            "createdAt",
+            "updatedAt",
+            "tagIds"
+        ],
         properties: {
             id: { type: "string" },
             title: { type: "string" },
@@ -75,7 +86,14 @@ export function buildOpenApiDocument() {
             {
                 type: "object",
                 additionalProperties: false,
-                required: ["progress", "totalTasks", "completedTasks", "earnedPoints", "momentumLabel", "tags"],
+                required: [
+                    "progress",
+                    "totalTasks",
+                    "completedTasks",
+                    "earnedPoints",
+                    "momentumLabel",
+                    "tags"
+                ],
                 properties: {
                     progress: { type: "number" },
                     totalTasks: { type: "integer" },
@@ -90,7 +108,18 @@ export function buildOpenApiDocument() {
     const project = {
         type: "object",
         additionalProperties: false,
-        required: ["id", "goalId", "title", "description", "status", "targetPoints", "themeColor", "createdAt", "updatedAt"],
+        required: [
+            "id",
+            "goalId",
+            "title",
+            "description",
+            "status",
+            "targetPoints",
+            "themeColor",
+            "schedulingRules",
+            "createdAt",
+            "updatedAt"
+        ],
         properties: {
             id: { type: "string" },
             goalId: { type: "string" },
@@ -99,6 +128,7 @@ export function buildOpenApiDocument() {
             status: { type: "string", enum: ["active", "paused", "completed"] },
             targetPoints: { type: "integer" },
             themeColor: { type: "string" },
+            schedulingRules: { $ref: "#/components/schemas/CalendarSchedulingRules" },
             createdAt: { type: "string", format: "date-time" },
             updatedAt: { type: "string", format: "date-time" }
         }
@@ -106,10 +136,22 @@ export function buildOpenApiDocument() {
     const taskTimeSummary = {
         type: "object",
         additionalProperties: false,
-        required: ["totalTrackedSeconds", "totalCreditedSeconds", "activeRunCount", "hasCurrentRun", "currentRunId"],
+        required: [
+            "totalTrackedSeconds",
+            "totalCreditedSeconds",
+            "liveTrackedSeconds",
+            "liveCreditedSeconds",
+            "manualAdjustedSeconds",
+            "activeRunCount",
+            "hasCurrentRun",
+            "currentRunId"
+        ],
         properties: {
             totalTrackedSeconds: { type: "integer" },
             totalCreditedSeconds: { type: "number" },
+            liveTrackedSeconds: { type: "integer" },
+            liveCreditedSeconds: { type: "number" },
+            manualAdjustedSeconds: { type: "integer" },
             activeRunCount: { type: "integer" },
             hasCurrentRun: { type: "boolean" },
             currentRunId: nullable({ type: "string" })
@@ -164,6 +206,8 @@ export function buildOpenApiDocument() {
             "effort",
             "energy",
             "points",
+            "plannedDurationSeconds",
+            "schedulingRules",
             "sortOrder",
             "completedAt",
             "createdAt",
@@ -175,7 +219,10 @@ export function buildOpenApiDocument() {
             id: { type: "string" },
             title: { type: "string" },
             description: { type: "string" },
-            status: { type: "string", enum: ["backlog", "focus", "in_progress", "blocked", "done"] },
+            status: {
+                type: "string",
+                enum: ["backlog", "focus", "in_progress", "blocked", "done"]
+            },
             priority: { type: "string", enum: ["low", "medium", "high", "critical"] },
             owner: { type: "string" },
             goalId: nullable({ type: "string" }),
@@ -184,6 +231,10 @@ export function buildOpenApiDocument() {
             effort: { type: "string", enum: ["light", "deep", "marathon"] },
             energy: { type: "string", enum: ["low", "steady", "high"] },
             points: { type: "integer" },
+            plannedDurationSeconds: nullable({ type: "integer" }),
+            schedulingRules: nullable({
+                $ref: "#/components/schemas/CalendarSchedulingRules"
+            }),
             sortOrder: { type: "integer" },
             completedAt: nullable({ type: "string", format: "date-time" }),
             createdAt: { type: "string", format: "date-time" },
@@ -216,14 +267,18 @@ export function buildOpenApiDocument() {
             "creditedSeconds",
             "remainingSeconds",
             "overtimeSeconds",
-            "isCurrent"
+            "isCurrent",
+            "overrideReason"
         ],
         properties: {
             id: { type: "string" },
             taskId: { type: "string" },
             taskTitle: { type: "string" },
             actor: { type: "string" },
-            status: { type: "string", enum: ["active", "completed", "released", "timed_out"] },
+            status: {
+                type: "string",
+                enum: ["active", "completed", "released", "timed_out"]
+            },
             note: { type: "string" },
             leaseTtlSeconds: { type: "integer" },
             claimedAt: { type: "string", format: "date-time" },
@@ -239,13 +294,435 @@ export function buildOpenApiDocument() {
             creditedSeconds: { type: "number" },
             remainingSeconds: nullable({ type: "integer" }),
             overtimeSeconds: { type: "integer" },
-            isCurrent: { type: "boolean" }
+            isCurrent: { type: "boolean" },
+            overrideReason: nullable({ type: "string" })
+        }
+    };
+    const calendarSchedulingRules = {
+        type: "object",
+        additionalProperties: false,
+        required: [
+            "allowWorkBlockKinds",
+            "blockWorkBlockKinds",
+            "allowCalendarIds",
+            "blockCalendarIds",
+            "allowEventTypes",
+            "blockEventTypes",
+            "allowEventKeywords",
+            "blockEventKeywords",
+            "allowAvailability",
+            "blockAvailability"
+        ],
+        properties: {
+            allowWorkBlockKinds: arrayOf({
+                type: "string",
+                enum: [
+                    "main_activity",
+                    "secondary_activity",
+                    "third_activity",
+                    "rest",
+                    "holiday",
+                    "custom"
+                ]
+            }),
+            blockWorkBlockKinds: arrayOf({
+                type: "string",
+                enum: [
+                    "main_activity",
+                    "secondary_activity",
+                    "third_activity",
+                    "rest",
+                    "holiday",
+                    "custom"
+                ]
+            }),
+            allowCalendarIds: arrayOf({ type: "string" }),
+            blockCalendarIds: arrayOf({ type: "string" }),
+            allowEventTypes: arrayOf({ type: "string" }),
+            blockEventTypes: arrayOf({ type: "string" }),
+            allowEventKeywords: arrayOf({ type: "string" }),
+            blockEventKeywords: arrayOf({ type: "string" }),
+            allowAvailability: arrayOf({ type: "string", enum: ["busy", "free"] }),
+            blockAvailability: arrayOf({ type: "string", enum: ["busy", "free"] })
+        }
+    };
+    const calendarConnection = {
+        type: "object",
+        additionalProperties: false,
+        required: [
+            "id",
+            "provider",
+            "label",
+            "accountLabel",
+            "status",
+            "config",
+            "forgeCalendarId",
+            "lastSyncedAt",
+            "lastSyncError",
+            "createdAt",
+            "updatedAt"
+        ],
+        properties: {
+            id: { type: "string" },
+            provider: { type: "string", enum: ["google", "apple", "caldav"] },
+            label: { type: "string" },
+            accountLabel: { type: "string" },
+            status: {
+                type: "string",
+                enum: ["connected", "needs_attention", "error"]
+            },
+            config: { type: "object", additionalProperties: true },
+            forgeCalendarId: nullable({ type: "string" }),
+            lastSyncedAt: nullable({ type: "string", format: "date-time" }),
+            lastSyncError: nullable({ type: "string" }),
+            createdAt: { type: "string", format: "date-time" },
+            updatedAt: { type: "string", format: "date-time" }
+        }
+    };
+    const calendarResource = {
+        type: "object",
+        additionalProperties: false,
+        required: [
+            "id",
+            "connectionId",
+            "remoteId",
+            "title",
+            "description",
+            "color",
+            "timezone",
+            "isPrimary",
+            "canWrite",
+            "forgeManaged",
+            "lastSyncedAt",
+            "createdAt",
+            "updatedAt"
+        ],
+        properties: {
+            id: { type: "string" },
+            connectionId: { type: "string" },
+            remoteId: { type: "string" },
+            title: { type: "string" },
+            description: { type: "string" },
+            color: { type: "string" },
+            timezone: { type: "string" },
+            isPrimary: { type: "boolean" },
+            canWrite: { type: "boolean" },
+            forgeManaged: { type: "boolean" },
+            lastSyncedAt: nullable({ type: "string", format: "date-time" }),
+            createdAt: { type: "string", format: "date-time" },
+            updatedAt: { type: "string", format: "date-time" }
+        }
+    };
+    const calendarEventSource = {
+        type: "object",
+        additionalProperties: false,
+        required: [
+            "id",
+            "provider",
+            "connectionId",
+            "calendarId",
+            "remoteCalendarId",
+            "remoteEventId",
+            "remoteUid",
+            "recurrenceInstanceId",
+            "isMasterRecurring",
+            "remoteHref",
+            "remoteEtag",
+            "syncState",
+            "lastSyncedAt",
+            "createdAt",
+            "updatedAt"
+        ],
+        properties: {
+            id: { type: "string" },
+            provider: { type: "string", enum: ["google", "apple", "caldav"] },
+            connectionId: nullable({ type: "string" }),
+            calendarId: nullable({ type: "string" }),
+            remoteCalendarId: nullable({ type: "string" }),
+            remoteEventId: { type: "string" },
+            remoteUid: nullable({ type: "string" }),
+            recurrenceInstanceId: nullable({ type: "string" }),
+            isMasterRecurring: { type: "boolean" },
+            remoteHref: nullable({ type: "string" }),
+            remoteEtag: nullable({ type: "string" }),
+            syncState: {
+                type: "string",
+                enum: [
+                    "pending_create",
+                    "pending_update",
+                    "pending_delete",
+                    "synced",
+                    "error",
+                    "deleted"
+                ]
+            },
+            lastSyncedAt: nullable({ type: "string", format: "date-time" }),
+            createdAt: { type: "string", format: "date-time" },
+            updatedAt: { type: "string", format: "date-time" }
+        }
+    };
+    const calendarEventLink = {
+        type: "object",
+        additionalProperties: false,
+        required: [
+            "id",
+            "entityType",
+            "entityId",
+            "relationshipType",
+            "createdAt",
+            "updatedAt"
+        ],
+        properties: {
+            id: { type: "string" },
+            entityType: { $ref: "#/components/schemas/CrudEntityType" },
+            entityId: { type: "string" },
+            relationshipType: { type: "string" },
+            createdAt: { type: "string", format: "date-time" },
+            updatedAt: { type: "string", format: "date-time" }
+        }
+    };
+    const calendarEvent = {
+        type: "object",
+        additionalProperties: false,
+        required: [
+            "id",
+            "connectionId",
+            "calendarId",
+            "remoteId",
+            "ownership",
+            "originType",
+            "status",
+            "title",
+            "description",
+            "location",
+            "startAt",
+            "endAt",
+            "timezone",
+            "isAllDay",
+            "availability",
+            "eventType",
+            "categories",
+            "sourceMappings",
+            "links",
+            "remoteUpdatedAt",
+            "deletedAt",
+            "createdAt",
+            "updatedAt"
+        ],
+        properties: {
+            id: { type: "string" },
+            connectionId: nullable({ type: "string" }),
+            calendarId: nullable({ type: "string" }),
+            remoteId: nullable({ type: "string" }),
+            ownership: { type: "string", enum: ["external", "forge"] },
+            originType: {
+                type: "string",
+                enum: ["native", "google", "apple", "caldav", "derived"]
+            },
+            status: { type: "string", enum: ["confirmed", "tentative", "cancelled"] },
+            title: { type: "string" },
+            description: { type: "string" },
+            location: { type: "string" },
+            startAt: { type: "string", format: "date-time" },
+            endAt: { type: "string", format: "date-time" },
+            timezone: { type: "string" },
+            isAllDay: { type: "boolean" },
+            availability: { type: "string", enum: ["busy", "free"] },
+            eventType: { type: "string" },
+            categories: arrayOf({ type: "string" }),
+            sourceMappings: arrayOf({
+                $ref: "#/components/schemas/CalendarEventSource"
+            }),
+            links: arrayOf({ $ref: "#/components/schemas/CalendarEventLink" }),
+            remoteUpdatedAt: nullable({ type: "string", format: "date-time" }),
+            deletedAt: nullable({ type: "string", format: "date-time" }),
+            createdAt: { type: "string", format: "date-time" },
+            updatedAt: { type: "string", format: "date-time" }
+        }
+    };
+    const workBlockTemplate = {
+        type: "object",
+        additionalProperties: false,
+        required: [
+            "id",
+            "title",
+            "kind",
+            "color",
+            "timezone",
+            "weekDays",
+            "startMinute",
+            "endMinute",
+            "startsOn",
+            "endsOn",
+            "blockingState",
+            "createdAt",
+            "updatedAt"
+        ],
+        properties: {
+            id: { type: "string" },
+            title: { type: "string" },
+            kind: {
+                type: "string",
+                enum: [
+                    "main_activity",
+                    "secondary_activity",
+                    "third_activity",
+                    "rest",
+                    "holiday",
+                    "custom"
+                ]
+            },
+            color: { type: "string" },
+            timezone: { type: "string" },
+            weekDays: arrayOf({ type: "integer", minimum: 0, maximum: 6 }),
+            startMinute: { type: "integer" },
+            endMinute: { type: "integer" },
+            startsOn: nullable({ type: "string", format: "date" }),
+            endsOn: nullable({ type: "string", format: "date" }),
+            blockingState: { type: "string", enum: ["allowed", "blocked"] },
+            createdAt: { type: "string", format: "date-time" },
+            updatedAt: { type: "string", format: "date-time" }
+        }
+    };
+    const workBlockInstance = {
+        type: "object",
+        additionalProperties: false,
+        required: [
+            "id",
+            "templateId",
+            "dateKey",
+            "startAt",
+            "endAt",
+            "title",
+            "kind",
+            "color",
+            "blockingState",
+            "calendarEventId",
+            "createdAt",
+            "updatedAt"
+        ],
+        properties: {
+            id: { type: "string" },
+            templateId: { type: "string" },
+            dateKey: { type: "string", format: "date" },
+            startAt: { type: "string", format: "date-time" },
+            endAt: { type: "string", format: "date-time" },
+            title: { type: "string" },
+            kind: {
+                type: "string",
+                enum: [
+                    "main_activity",
+                    "secondary_activity",
+                    "third_activity",
+                    "rest",
+                    "holiday",
+                    "custom"
+                ]
+            },
+            color: { type: "string" },
+            blockingState: { type: "string", enum: ["allowed", "blocked"] },
+            calendarEventId: nullable({ type: "string" }),
+            createdAt: { type: "string", format: "date-time" },
+            updatedAt: { type: "string", format: "date-time" }
+        }
+    };
+    const taskTimebox = {
+        type: "object",
+        additionalProperties: false,
+        required: [
+            "id",
+            "taskId",
+            "projectId",
+            "connectionId",
+            "calendarId",
+            "remoteEventId",
+            "linkedTaskRunId",
+            "status",
+            "source",
+            "title",
+            "startsAt",
+            "endsAt",
+            "overrideReason",
+            "createdAt",
+            "updatedAt"
+        ],
+        properties: {
+            id: { type: "string" },
+            taskId: { type: "string" },
+            projectId: nullable({ type: "string" }),
+            connectionId: nullable({ type: "string" }),
+            calendarId: nullable({ type: "string" }),
+            remoteEventId: nullable({ type: "string" }),
+            linkedTaskRunId: nullable({ type: "string" }),
+            status: {
+                type: "string",
+                enum: ["planned", "active", "completed", "cancelled"]
+            },
+            source: { type: "string", enum: ["manual", "suggested", "live_run"] },
+            title: { type: "string" },
+            startsAt: { type: "string", format: "date-time" },
+            endsAt: { type: "string", format: "date-time" },
+            overrideReason: nullable({ type: "string" }),
+            createdAt: { type: "string", format: "date-time" },
+            updatedAt: { type: "string", format: "date-time" }
+        }
+    };
+    const calendarOverviewPayload = {
+        type: "object",
+        additionalProperties: false,
+        required: [
+            "generatedAt",
+            "providers",
+            "connections",
+            "calendars",
+            "events",
+            "workBlockTemplates",
+            "workBlockInstances",
+            "timeboxes"
+        ],
+        properties: {
+            generatedAt: { type: "string", format: "date-time" },
+            providers: arrayOf({
+                type: "object",
+                additionalProperties: false,
+                required: [
+                    "provider",
+                    "label",
+                    "supportsDedicatedForgeCalendar",
+                    "connectionHelp"
+                ],
+                properties: {
+                    provider: { type: "string", enum: ["google", "apple", "caldav"] },
+                    label: { type: "string" },
+                    supportsDedicatedForgeCalendar: { type: "boolean" },
+                    connectionHelp: { type: "string" }
+                }
+            }),
+            connections: arrayOf({ $ref: "#/components/schemas/CalendarConnection" }),
+            calendars: arrayOf({ $ref: "#/components/schemas/CalendarResource" }),
+            events: arrayOf({ $ref: "#/components/schemas/CalendarEvent" }),
+            workBlockTemplates: arrayOf({
+                $ref: "#/components/schemas/WorkBlockTemplate"
+            }),
+            workBlockInstances: arrayOf({
+                $ref: "#/components/schemas/WorkBlockInstance"
+            }),
+            timeboxes: arrayOf({ $ref: "#/components/schemas/TaskTimebox" })
         }
     };
     const habitCheckIn = {
         type: "object",
         additionalProperties: false,
-        required: ["id", "habitId", "dateKey", "status", "note", "deltaXp", "createdAt", "updatedAt"],
+        required: [
+            "id",
+            "habitId",
+            "dateKey",
+            "status",
+            "note",
+            "deltaXp",
+            "createdAt",
+            "updatedAt"
+        ],
         properties: {
             id: { type: "string" },
             habitId: { type: "string" },
@@ -328,7 +805,18 @@ export function buildOpenApiDocument() {
     const activityEvent = {
         type: "object",
         additionalProperties: false,
-        required: ["id", "entityType", "entityId", "eventType", "title", "description", "actor", "source", "metadata", "createdAt"],
+        required: [
+            "id",
+            "entityType",
+            "entityId",
+            "eventType",
+            "title",
+            "description",
+            "actor",
+            "source",
+            "metadata",
+            "createdAt"
+        ],
         properties: {
             id: { type: "string" },
             entityType: {
@@ -368,7 +856,12 @@ export function buildOpenApiDocument() {
             metadata: {
                 type: "object",
                 additionalProperties: {
-                    anyOf: [{ type: "string" }, { type: "number" }, { type: "boolean" }, { type: "null" }]
+                    anyOf: [
+                        { type: "string" },
+                        { type: "number" },
+                        { type: "boolean" },
+                        { type: "null" }
+                    ]
                 }
             },
             createdAt: { type: "string", format: "date-time" }
@@ -377,7 +870,18 @@ export function buildOpenApiDocument() {
     const gamificationProfile = {
         type: "object",
         additionalProperties: false,
-        required: ["totalXp", "level", "currentLevelXp", "nextLevelXp", "weeklyXp", "streakDays", "comboMultiplier", "momentumScore", "topGoalId", "topGoalTitle"],
+        required: [
+            "totalXp",
+            "level",
+            "currentLevelXp",
+            "nextLevelXp",
+            "weeklyXp",
+            "streakDays",
+            "comboMultiplier",
+            "momentumScore",
+            "topGoalId",
+            "topGoalTitle"
+        ],
         properties: {
             totalXp: { type: "integer" },
             level: { type: "integer" },
@@ -404,7 +908,18 @@ export function buildOpenApiDocument() {
     const note = {
         type: "object",
         additionalProperties: false,
-        required: ["id", "contentMarkdown", "contentPlain", "author", "source", "createdAt", "updatedAt", "links"],
+        required: [
+            "id",
+            "contentMarkdown",
+            "contentPlain",
+            "author",
+            "source",
+            "createdAt",
+            "updatedAt",
+            "links",
+            "tags",
+            "destroyAt"
+        ],
         properties: {
             id: { type: "string" },
             contentMarkdown: { type: "string" },
@@ -413,7 +928,9 @@ export function buildOpenApiDocument() {
             source: { type: "string", enum: ["ui", "openclaw", "agent", "system"] },
             createdAt: { type: "string", format: "date-time" },
             updatedAt: { type: "string", format: "date-time" },
-            links: arrayOf({ $ref: "#/components/schemas/NoteLink" })
+            links: arrayOf({ $ref: "#/components/schemas/NoteLink" }),
+            tags: arrayOf({ type: "string" }),
+            destroyAt: nullable({ type: "string", format: "date-time" })
         }
     };
     const noteSummary = {
@@ -433,7 +950,15 @@ export function buildOpenApiDocument() {
     const achievementSignal = {
         type: "object",
         additionalProperties: false,
-        required: ["id", "title", "summary", "tier", "progressLabel", "unlocked", "unlockedAt"],
+        required: [
+            "id",
+            "title",
+            "summary",
+            "tier",
+            "progressLabel",
+            "unlocked",
+            "unlockedAt"
+        ],
         properties: {
             id: { type: "string" },
             title: { type: "string" },
@@ -447,7 +972,16 @@ export function buildOpenApiDocument() {
     const milestoneReward = {
         type: "object",
         additionalProperties: false,
-        required: ["id", "title", "summary", "rewardLabel", "progressLabel", "current", "target", "completed"],
+        required: [
+            "id",
+            "title",
+            "summary",
+            "rewardLabel",
+            "progressLabel",
+            "current",
+            "target",
+            "completed"
+        ],
         properties: {
             id: { type: "string" },
             title: { type: "string" },
@@ -462,12 +996,35 @@ export function buildOpenApiDocument() {
     const dashboardPayload = {
         type: "object",
         additionalProperties: false,
-        required: ["stats", "goals", "projects", "tasks", "habits", "tags", "suggestedTags", "owners", "executionBuckets", "gamification", "achievements", "milestoneRewards", "recentActivity", "notesSummaryByEntity"],
+        required: [
+            "stats",
+            "goals",
+            "projects",
+            "tasks",
+            "habits",
+            "tags",
+            "suggestedTags",
+            "owners",
+            "executionBuckets",
+            "gamification",
+            "achievements",
+            "milestoneRewards",
+            "recentActivity",
+            "notesSummaryByEntity"
+        ],
         properties: {
             stats: {
                 type: "object",
                 additionalProperties: false,
-                required: ["totalPoints", "completedThisWeek", "activeGoals", "alignmentScore", "focusTasks", "overdueTasks", "dueThisWeek"],
+                required: [
+                    "totalPoints",
+                    "completedThisWeek",
+                    "activeGoals",
+                    "alignmentScore",
+                    "focusTasks",
+                    "overdueTasks",
+                    "dueThisWeek"
+                ],
                 properties: {
                     totalPoints: { type: "integer" },
                     completedThisWeek: { type: "integer" },
@@ -490,30 +1047,60 @@ export function buildOpenApiDocument() {
                 additionalProperties: false,
                 required: ["id", "label", "summary", "tone", "tasks"],
                 properties: {
-                    id: { type: "string", enum: ["overdue", "due_soon", "focus_now", "recently_completed"] },
+                    id: {
+                        type: "string",
+                        enum: ["overdue", "due_soon", "focus_now", "recently_completed"]
+                    },
                     label: { type: "string" },
                     summary: { type: "string" },
-                    tone: { type: "string", enum: ["urgent", "accent", "neutral", "success"] },
+                    tone: {
+                        type: "string",
+                        enum: ["urgent", "accent", "neutral", "success"]
+                    },
                     tasks: arrayOf({ $ref: "#/components/schemas/Task" })
                 }
             }),
             gamification: { $ref: "#/components/schemas/GamificationProfile" },
             achievements: arrayOf({ $ref: "#/components/schemas/AchievementSignal" }),
-            milestoneRewards: arrayOf({ $ref: "#/components/schemas/MilestoneReward" }),
+            milestoneRewards: arrayOf({
+                $ref: "#/components/schemas/MilestoneReward"
+            }),
             recentActivity: arrayOf({ $ref: "#/components/schemas/ActivityEvent" }),
-            notesSummaryByEntity: { $ref: "#/components/schemas/NotesSummaryByEntity" }
+            notesSummaryByEntity: {
+                $ref: "#/components/schemas/NotesSummaryByEntity"
+            }
         }
     };
     const overviewContext = {
         type: "object",
         additionalProperties: false,
-        required: ["generatedAt", "strategicHeader", "projects", "activeGoals", "topTasks", "dueHabits", "recentEvidence", "achievements", "domainBalance", "neglectedGoals"],
+        required: [
+            "generatedAt",
+            "strategicHeader",
+            "projects",
+            "activeGoals",
+            "topTasks",
+            "dueHabits",
+            "recentEvidence",
+            "achievements",
+            "domainBalance",
+            "neglectedGoals"
+        ],
         properties: {
             generatedAt: { type: "string", format: "date-time" },
             strategicHeader: {
                 type: "object",
                 additionalProperties: false,
-                required: ["streakDays", "level", "totalXp", "currentLevelXp", "nextLevelXp", "momentumScore", "focusTasks", "overdueTasks"],
+                required: [
+                    "streakDays",
+                    "level",
+                    "totalXp",
+                    "currentLevelXp",
+                    "nextLevelXp",
+                    "momentumScore",
+                    "focusTasks",
+                    "overdueTasks"
+                ],
                 properties: {
                     streakDays: { type: "integer" },
                     level: { type: "integer" },
@@ -534,7 +1121,15 @@ export function buildOpenApiDocument() {
             domainBalance: arrayOf({
                 type: "object",
                 additionalProperties: false,
-                required: ["tagId", "label", "color", "goalCount", "activeTaskCount", "completedPoints", "momentumLabel"],
+                required: [
+                    "tagId",
+                    "label",
+                    "color",
+                    "goalCount",
+                    "activeTaskCount",
+                    "completedPoints",
+                    "momentumLabel"
+                ],
                 properties: {
                     tagId: { type: "string" },
                     label: { type: "string" },
@@ -561,7 +1156,16 @@ export function buildOpenApiDocument() {
     const todayContext = {
         type: "object",
         additionalProperties: false,
-        required: ["generatedAt", "directive", "timeline", "dueHabits", "dailyQuests", "milestoneRewards", "recentHabitRewards", "momentum"],
+        required: [
+            "generatedAt",
+            "directive",
+            "timeline",
+            "dueHabits",
+            "dailyQuests",
+            "milestoneRewards",
+            "recentHabitRewards",
+            "momentum"
+        ],
         properties: {
             generatedAt: { type: "string", format: "date-time" },
             directive: {
@@ -580,7 +1184,10 @@ export function buildOpenApiDocument() {
                 additionalProperties: false,
                 required: ["id", "label", "tasks"],
                 properties: {
-                    id: { type: "string", enum: ["completed", "active", "upcoming", "deferred"] },
+                    id: {
+                        type: "string",
+                        enum: ["completed", "active", "upcoming", "deferred"]
+                    },
                     label: { type: "string" },
                     tasks: arrayOf({ $ref: "#/components/schemas/Task" })
                 }
@@ -589,7 +1196,14 @@ export function buildOpenApiDocument() {
             dailyQuests: arrayOf({
                 type: "object",
                 additionalProperties: false,
-                required: ["id", "title", "summary", "rewardXp", "progressLabel", "completed"],
+                required: [
+                    "id",
+                    "title",
+                    "summary",
+                    "rewardXp",
+                    "progressLabel",
+                    "completed"
+                ],
                 properties: {
                     id: { type: "string" },
                     title: { type: "string" },
@@ -599,8 +1213,12 @@ export function buildOpenApiDocument() {
                     completed: { type: "boolean" }
                 }
             }),
-            milestoneRewards: arrayOf({ $ref: "#/components/schemas/MilestoneReward" }),
-            recentHabitRewards: arrayOf({ $ref: "#/components/schemas/RewardLedgerEvent" }),
+            milestoneRewards: arrayOf({
+                $ref: "#/components/schemas/MilestoneReward"
+            }),
+            recentHabitRewards: arrayOf({
+                $ref: "#/components/schemas/RewardLedgerEvent"
+            }),
             momentum: {
                 type: "object",
                 additionalProperties: false,
@@ -616,7 +1234,13 @@ export function buildOpenApiDocument() {
     const riskContext = {
         type: "object",
         additionalProperties: false,
-        required: ["generatedAt", "overdueTasks", "blockedTasks", "neglectedGoals", "summary"],
+        required: [
+            "generatedAt",
+            "overdueTasks",
+            "blockedTasks",
+            "neglectedGoals",
+            "summary"
+        ],
         properties: {
             generatedAt: { type: "string", format: "date-time" },
             overdueTasks: arrayOf({ $ref: "#/components/schemas/Task" }),
@@ -638,7 +1262,21 @@ export function buildOpenApiDocument() {
     const forgeSnapshot = {
         type: "object",
         additionalProperties: false,
-        required: ["meta", "metrics", "dashboard", "overview", "today", "risk", "goals", "projects", "tags", "tasks", "habits", "activeTaskRuns", "activity"],
+        required: [
+            "meta",
+            "metrics",
+            "dashboard",
+            "overview",
+            "today",
+            "risk",
+            "goals",
+            "projects",
+            "tags",
+            "tasks",
+            "habits",
+            "activeTaskRuns",
+            "activity"
+        ],
         properties: {
             meta: {
                 type: "object",
@@ -669,7 +1307,15 @@ export function buildOpenApiDocument() {
     const taskContextPayload = {
         type: "object",
         additionalProperties: false,
-        required: ["task", "goal", "project", "activeTaskRun", "taskRuns", "activity", "notesSummaryByEntity"],
+        required: [
+            "task",
+            "goal",
+            "project",
+            "activeTaskRun",
+            "taskRuns",
+            "activity",
+            "notesSummaryByEntity"
+        ],
         properties: {
             task: { $ref: "#/components/schemas/Task" },
             goal: nullable({ $ref: "#/components/schemas/Goal" }),
@@ -677,7 +1323,9 @@ export function buildOpenApiDocument() {
             activeTaskRun: nullable({ $ref: "#/components/schemas/TaskRun" }),
             taskRuns: arrayOf({ $ref: "#/components/schemas/TaskRun" }),
             activity: arrayOf({ $ref: "#/components/schemas/ActivityEvent" }),
-            notesSummaryByEntity: { $ref: "#/components/schemas/NotesSummaryByEntity" }
+            notesSummaryByEntity: {
+                $ref: "#/components/schemas/NotesSummaryByEntity"
+            }
         }
     };
     const projectBoardPayload = {
@@ -689,13 +1337,25 @@ export function buildOpenApiDocument() {
             goal: { $ref: "#/components/schemas/Goal" },
             tasks: arrayOf({ $ref: "#/components/schemas/Task" }),
             activity: arrayOf({ $ref: "#/components/schemas/ActivityEvent" }),
-            notesSummaryByEntity: { $ref: "#/components/schemas/NotesSummaryByEntity" }
+            notesSummaryByEntity: {
+                $ref: "#/components/schemas/NotesSummaryByEntity"
+            }
         }
     };
     const insightsPayload = {
         type: "object",
         additionalProperties: false,
-        required: ["generatedAt", "status", "momentumHeatmap", "executionTrends", "domainBalance", "coaching", "evidenceDigest", "feed", "openCount"],
+        required: [
+            "generatedAt",
+            "status",
+            "momentumHeatmap",
+            "executionTrends",
+            "domainBalance",
+            "coaching",
+            "evidenceDigest",
+            "feed",
+            "openCount"
+        ],
         properties: {
             generatedAt: { type: "string", format: "date-time" },
             status: {
@@ -760,10 +1420,25 @@ export function buildOpenApiDocument() {
     const weeklyReviewPayload = {
         type: "object",
         additionalProperties: false,
-        required: ["generatedAt", "windowLabel", "momentumSummary", "chart", "wins", "calibration", "reward"],
+        required: [
+            "generatedAt",
+            "windowLabel",
+            "weekKey",
+            "weekStartDate",
+            "weekEndDate",
+            "momentumSummary",
+            "chart",
+            "wins",
+            "calibration",
+            "reward",
+            "completion"
+        ],
         properties: {
             generatedAt: { type: "string", format: "date-time" },
             windowLabel: { type: "string" },
+            weekKey: { type: "string" },
+            weekStartDate: { type: "string" },
+            weekEndDate: { type: "string" },
             momentumSummary: {
                 type: "object",
                 additionalProperties: false,
@@ -816,13 +1491,39 @@ export function buildOpenApiDocument() {
                     summary: { type: "string" },
                     rewardXp: { type: "integer" }
                 }
+            },
+            completion: {
+                type: "object",
+                additionalProperties: false,
+                required: ["finalized", "finalizedAt", "finalizedBy"],
+                properties: {
+                    finalized: { type: "boolean" },
+                    finalizedAt: nullable({ type: "string", format: "date-time" }),
+                    finalizedBy: nullable({ type: "string" })
+                }
             }
         }
     };
     const agentTokenSummary = {
         type: "object",
         additionalProperties: false,
-        required: ["id", "label", "tokenPrefix", "scopes", "agentId", "agentLabel", "trustLevel", "autonomyMode", "approvalMode", "description", "lastUsedAt", "revokedAt", "createdAt", "updatedAt", "status"],
+        required: [
+            "id",
+            "label",
+            "tokenPrefix",
+            "scopes",
+            "agentId",
+            "agentLabel",
+            "trustLevel",
+            "autonomyMode",
+            "approvalMode",
+            "description",
+            "lastUsedAt",
+            "revokedAt",
+            "createdAt",
+            "updatedAt",
+            "status"
+        ],
         properties: {
             id: { type: "string" },
             label: { type: "string" },
@@ -830,9 +1531,18 @@ export function buildOpenApiDocument() {
             scopes: arrayOf({ type: "string" }),
             agentId: nullable({ type: "string" }),
             agentLabel: nullable({ type: "string" }),
-            trustLevel: { type: "string", enum: ["standard", "trusted", "autonomous"] },
-            autonomyMode: { type: "string", enum: ["approval_required", "scoped_write", "autonomous"] },
-            approvalMode: { type: "string", enum: ["approval_by_default", "high_impact_only", "none"] },
+            trustLevel: {
+                type: "string",
+                enum: ["standard", "trusted", "autonomous"]
+            },
+            autonomyMode: {
+                type: "string",
+                enum: ["approval_required", "scoped_write", "autonomous"]
+            },
+            approvalMode: {
+                type: "string",
+                enum: ["approval_by_default", "high_impact_only", "none"]
+            },
             description: { type: "string" },
             lastUsedAt: nullable({ type: "string", format: "date-time" }),
             revokedAt: nullable({ type: "string", format: "date-time" }),
@@ -847,7 +1557,10 @@ export function buildOpenApiDocument() {
         required: ["maxActiveTasks", "timeAccountingMode"],
         properties: {
             maxActiveTasks: { type: "integer", minimum: 1, maximum: 8 },
-            timeAccountingMode: { type: "string", enum: ["split", "parallel", "primary_only"] }
+            timeAccountingMode: {
+                type: "string",
+                enum: ["split", "parallel", "primary_only"]
+            }
         }
     };
     const taskRunClaimInput = {
@@ -856,10 +1569,24 @@ export function buildOpenApiDocument() {
         required: ["actor"],
         properties: {
             actor: { type: "string" },
-            timerMode: { type: "string", enum: ["planned", "unlimited"], default: "unlimited" },
-            plannedDurationSeconds: nullable({ type: "integer", minimum: 60, maximum: 86400 }),
+            timerMode: {
+                type: "string",
+                enum: ["planned", "unlimited"],
+                default: "unlimited"
+            },
+            plannedDurationSeconds: nullable({
+                type: "integer",
+                minimum: 60,
+                maximum: 86400
+            }),
+            overrideReason: nullable({ type: "string" }),
             isCurrent: { type: "boolean", default: true },
-            leaseTtlSeconds: { type: "integer", minimum: 1, maximum: 14400, default: 900 },
+            leaseTtlSeconds: {
+                type: "integer",
+                minimum: 1,
+                maximum: 14400,
+                default: 900
+            },
             note: { type: "string", default: "" }
         }
     };
@@ -868,7 +1595,12 @@ export function buildOpenApiDocument() {
         additionalProperties: false,
         properties: {
             actor: { type: "string" },
-            leaseTtlSeconds: { type: "integer", minimum: 1, maximum: 14400, default: 900 },
+            leaseTtlSeconds: {
+                type: "integer",
+                minimum: 1,
+                maximum: 14400,
+                default: 900
+            },
             note: { type: "string" }
         }
     };
@@ -895,6 +1627,65 @@ export function buildOpenApiDocument() {
         additionalProperties: false,
         properties: {
             actor: { type: "string" }
+        }
+    };
+    const workAdjustment = {
+        type: "object",
+        additionalProperties: false,
+        required: [
+            "id",
+            "entityType",
+            "entityId",
+            "requestedDeltaMinutes",
+            "appliedDeltaMinutes",
+            "note",
+            "actor",
+            "source",
+            "createdAt"
+        ],
+        properties: {
+            id: { type: "string" },
+            entityType: { type: "string", enum: ["task", "project"] },
+            entityId: { type: "string" },
+            requestedDeltaMinutes: { type: "integer" },
+            appliedDeltaMinutes: { type: "integer" },
+            note: { type: "string" },
+            actor: nullable({ type: "string" }),
+            source: { type: "string", enum: ["ui", "openclaw", "agent", "system"] },
+            createdAt: { type: "string", format: "date-time" }
+        }
+    };
+    const workAdjustmentTargetSummary = {
+        type: "object",
+        additionalProperties: false,
+        required: ["entityType", "entityId", "title", "time"],
+        properties: {
+            entityType: { type: "string", enum: ["task", "project"] },
+            entityId: { type: "string" },
+            title: { type: "string" },
+            time: { $ref: "#/components/schemas/TaskTimeSummary" }
+        }
+    };
+    const workAdjustmentInput = {
+        type: "object",
+        additionalProperties: false,
+        required: ["entityType", "entityId", "deltaMinutes"],
+        properties: {
+            entityType: { type: "string", enum: ["task", "project"] },
+            entityId: { type: "string" },
+            deltaMinutes: { type: "integer" },
+            note: { type: "string", default: "" }
+        }
+    };
+    const workAdjustmentResult = {
+        type: "object",
+        additionalProperties: false,
+        required: ["adjustment", "target", "reward", "metrics"],
+        properties: {
+            adjustment: { $ref: "#/components/schemas/WorkAdjustment" },
+            target: { $ref: "#/components/schemas/WorkAdjustmentTargetSummary" },
+            reward: nullable({ $ref: "#/components/schemas/RewardLedgerEvent" }),
+            metrics: { $ref: "#/components/schemas/XpMetricsPayload" }
         }
     };
     const settingsUpdateInput = {
@@ -924,24 +1715,51 @@ export function buildOpenApiDocument() {
                 additionalProperties: false,
                 properties: {
                     maxActiveTasks: { type: "integer", minimum: 1, maximum: 8 },
-                    timeAccountingMode: { type: "string", enum: ["split", "parallel", "primary_only"] }
+                    timeAccountingMode: {
+                        type: "string",
+                        enum: ["split", "parallel", "primary_only"]
+                    }
                 }
             },
-            themePreference: { type: "string", enum: ["obsidian", "solar", "system"] },
+            themePreference: {
+                type: "string",
+                enum: ["obsidian", "solar", "system"]
+            },
             localePreference: { type: "string", enum: ["en", "fr"] }
         }
     };
     const agentIdentity = {
         type: "object",
         additionalProperties: false,
-        required: ["id", "label", "agentType", "trustLevel", "autonomyMode", "approvalMode", "description", "tokenCount", "activeTokenCount", "createdAt", "updatedAt"],
+        required: [
+            "id",
+            "label",
+            "agentType",
+            "trustLevel",
+            "autonomyMode",
+            "approvalMode",
+            "description",
+            "tokenCount",
+            "activeTokenCount",
+            "createdAt",
+            "updatedAt"
+        ],
         properties: {
             id: { type: "string" },
             label: { type: "string" },
             agentType: { type: "string" },
-            trustLevel: { type: "string", enum: ["standard", "trusted", "autonomous"] },
-            autonomyMode: { type: "string", enum: ["approval_required", "scoped_write", "autonomous"] },
-            approvalMode: { type: "string", enum: ["approval_by_default", "high_impact_only", "none"] },
+            trustLevel: {
+                type: "string",
+                enum: ["standard", "trusted", "autonomous"]
+            },
+            autonomyMode: {
+                type: "string",
+                enum: ["approval_required", "scoped_write", "autonomous"]
+            },
+            approvalMode: {
+                type: "string",
+                enum: ["approval_by_default", "high_impact_only", "none"]
+            },
             description: { type: "string" },
             tokenCount: { type: "integer" },
             activeTokenCount: { type: "integer" },
@@ -952,14 +1770,39 @@ export function buildOpenApiDocument() {
     const insight = {
         type: "object",
         additionalProperties: false,
-        required: ["id", "originType", "originAgentId", "originLabel", "visibility", "status", "entityType", "entityId", "timeframeLabel", "title", "summary", "recommendation", "rationale", "confidence", "ctaLabel", "evidence", "createdAt", "updatedAt"],
+        required: [
+            "id",
+            "originType",
+            "originAgentId",
+            "originLabel",
+            "visibility",
+            "status",
+            "entityType",
+            "entityId",
+            "timeframeLabel",
+            "title",
+            "summary",
+            "recommendation",
+            "rationale",
+            "confidence",
+            "ctaLabel",
+            "evidence",
+            "createdAt",
+            "updatedAt"
+        ],
         properties: {
             id: { type: "string" },
             originType: { type: "string", enum: ["system", "user", "agent"] },
             originAgentId: nullable({ type: "string" }),
             originLabel: nullable({ type: "string" }),
-            visibility: { type: "string", enum: ["visible", "pending_review", "archived"] },
-            status: { type: "string", enum: ["open", "accepted", "dismissed", "snoozed", "applied", "expired"] },
+            visibility: {
+                type: "string",
+                enum: ["visible", "pending_review", "archived"]
+            },
+            status: {
+                type: "string",
+                enum: ["open", "accepted", "dismissed", "snoozed", "applied", "expired"]
+            },
             entityType: nullable({ type: "string" }),
             entityId: nullable({ type: "string" }),
             timeframeLabel: nullable({ type: "string" }),
@@ -991,7 +1834,10 @@ export function buildOpenApiDocument() {
             id: { type: "string" },
             insightId: { type: "string" },
             actor: nullable({ type: "string" }),
-            feedbackType: { type: "string", enum: ["accepted", "dismissed", "applied", "snoozed"] },
+            feedbackType: {
+                type: "string",
+                enum: ["accepted", "dismissed", "applied", "snoozed"]
+            },
             note: { type: "string" },
             createdAt: { type: "string", format: "date-time" }
         }
@@ -999,11 +1845,32 @@ export function buildOpenApiDocument() {
     const approvalRequest = {
         type: "object",
         additionalProperties: false,
-        required: ["id", "actionType", "status", "title", "summary", "entityType", "entityId", "requestedByAgentId", "requestedByTokenId", "requestedPayload", "approvedBy", "approvedAt", "rejectedBy", "rejectedAt", "resolutionNote", "createdAt", "updatedAt"],
+        required: [
+            "id",
+            "actionType",
+            "status",
+            "title",
+            "summary",
+            "entityType",
+            "entityId",
+            "requestedByAgentId",
+            "requestedByTokenId",
+            "requestedPayload",
+            "approvedBy",
+            "approvedAt",
+            "rejectedBy",
+            "rejectedAt",
+            "resolutionNote",
+            "createdAt",
+            "updatedAt"
+        ],
         properties: {
             id: { type: "string" },
             actionType: { type: "string" },
-            status: { type: "string", enum: ["pending", "approved", "rejected", "cancelled", "executed"] },
+            status: {
+                type: "string",
+                enum: ["pending", "approved", "rejected", "cancelled", "executed"]
+            },
             title: { type: "string" },
             summary: { type: "string" },
             entityType: nullable({ type: "string" }),
@@ -1023,14 +1890,33 @@ export function buildOpenApiDocument() {
     const agentAction = {
         type: "object",
         additionalProperties: false,
-        required: ["id", "agentId", "tokenId", "actionType", "riskLevel", "status", "title", "summary", "payload", "idempotencyKey", "approvalRequestId", "outcome", "createdAt", "updatedAt", "completedAt"],
+        required: [
+            "id",
+            "agentId",
+            "tokenId",
+            "actionType",
+            "riskLevel",
+            "status",
+            "title",
+            "summary",
+            "payload",
+            "idempotencyKey",
+            "approvalRequestId",
+            "outcome",
+            "createdAt",
+            "updatedAt",
+            "completedAt"
+        ],
         properties: {
             id: { type: "string" },
             agentId: nullable({ type: "string" }),
             tokenId: nullable({ type: "string" }),
             actionType: { type: "string" },
             riskLevel: { type: "string", enum: ["low", "medium", "high"] },
-            status: { type: "string", enum: ["pending_approval", "approved", "rejected", "executed"] },
+            status: {
+                type: "string",
+                enum: ["pending_approval", "approved", "rejected", "executed"]
+            },
             title: { type: "string" },
             summary: { type: "string" },
             payload: { type: "object", additionalProperties: true },
@@ -1045,10 +1931,30 @@ export function buildOpenApiDocument() {
     const rewardRule = {
         type: "object",
         additionalProperties: false,
-        required: ["id", "family", "code", "title", "description", "active", "config", "createdAt", "updatedAt"],
+        required: [
+            "id",
+            "family",
+            "code",
+            "title",
+            "description",
+            "active",
+            "config",
+            "createdAt",
+            "updatedAt"
+        ],
         properties: {
             id: { type: "string" },
-            family: { type: "string", enum: ["completion", "consistency", "alignment", "recovery", "collaboration", "ambient"] },
+            family: {
+                type: "string",
+                enum: [
+                    "completion",
+                    "consistency",
+                    "alignment",
+                    "recovery",
+                    "collaboration",
+                    "ambient"
+                ]
+            },
             code: { type: "string" },
             title: { type: "string" },
             description: { type: "string" },
@@ -1061,7 +1967,22 @@ export function buildOpenApiDocument() {
     const rewardLedgerEvent = {
         type: "object",
         additionalProperties: false,
-        required: ["id", "ruleId", "eventLogId", "entityType", "entityId", "actor", "source", "deltaXp", "reasonTitle", "reasonSummary", "reversibleGroup", "reversedByRewardId", "metadata", "createdAt"],
+        required: [
+            "id",
+            "ruleId",
+            "eventLogId",
+            "entityType",
+            "entityId",
+            "actor",
+            "source",
+            "deltaXp",
+            "reasonTitle",
+            "reasonSummary",
+            "reversibleGroup",
+            "reversedByRewardId",
+            "metadata",
+            "createdAt"
+        ],
         properties: {
             id: { type: "string" },
             ruleId: nullable({ type: "string" }),
@@ -1082,7 +2003,17 @@ export function buildOpenApiDocument() {
     const eventLogEntry = {
         type: "object",
         additionalProperties: false,
-        required: ["id", "eventKind", "entityType", "entityId", "actor", "source", "causedByEventId", "metadata", "createdAt"],
+        required: [
+            "id",
+            "eventKind",
+            "entityType",
+            "entityId",
+            "actor",
+            "source",
+            "causedByEventId",
+            "metadata",
+            "createdAt"
+        ],
         properties: {
             id: { type: "string" },
             eventKind: { type: "string" },
@@ -1098,7 +2029,14 @@ export function buildOpenApiDocument() {
     const xpMomentumPulse = {
         type: "object",
         additionalProperties: false,
-        required: ["status", "headline", "detail", "celebrationLabel", "nextMilestoneId", "nextMilestoneLabel"],
+        required: [
+            "status",
+            "headline",
+            "detail",
+            "celebrationLabel",
+            "nextMilestoneId",
+            "nextMilestoneLabel"
+        ],
         properties: {
             status: { type: "string", enum: ["surging", "steady", "recovering"] },
             headline: { type: "string" },
@@ -1111,11 +2049,22 @@ export function buildOpenApiDocument() {
     const xpMetricsPayload = {
         type: "object",
         additionalProperties: false,
-        required: ["profile", "achievements", "milestoneRewards", "momentumPulse", "recentLedger", "rules", "dailyAmbientXp", "dailyAmbientCap"],
+        required: [
+            "profile",
+            "achievements",
+            "milestoneRewards",
+            "momentumPulse",
+            "recentLedger",
+            "rules",
+            "dailyAmbientXp",
+            "dailyAmbientCap"
+        ],
         properties: {
             profile: { $ref: "#/components/schemas/GamificationProfile" },
             achievements: arrayOf({ $ref: "#/components/schemas/AchievementSignal" }),
-            milestoneRewards: arrayOf({ $ref: "#/components/schemas/MilestoneReward" }),
+            milestoneRewards: arrayOf({
+                $ref: "#/components/schemas/MilestoneReward"
+            }),
             momentumPulse: { $ref: "#/components/schemas/XpMomentumPulse" },
             recentLedger: arrayOf({ $ref: "#/components/schemas/RewardLedgerEvent" }),
             rules: arrayOf({ $ref: "#/components/schemas/RewardRule" }),
@@ -1184,7 +2133,14 @@ export function buildOpenApiDocument() {
             capabilities: {
                 type: "object",
                 additionalProperties: false,
-                required: ["tokenPresent", "scopes", "canReadPsyche", "canWritePsyche", "canManageModes", "canManageRewards"],
+                required: [
+                    "tokenPresent",
+                    "scopes",
+                    "canReadPsyche",
+                    "canWritePsyche",
+                    "canManageModes",
+                    "canManageRewards"
+                ],
                 properties: {
                     tokenPresent: { type: "boolean" },
                     scopes: arrayOf({ type: "string" }),
@@ -1219,7 +2175,16 @@ export function buildOpenApiDocument() {
     const settingsPayload = {
         type: "object",
         additionalProperties: false,
-        required: ["profile", "notifications", "execution", "themePreference", "localePreference", "security", "agents", "agentTokens"],
+        required: [
+            "profile",
+            "notifications",
+            "execution",
+            "themePreference",
+            "localePreference",
+            "security",
+            "agents",
+            "agentTokens"
+        ],
         properties: {
             profile: {
                 type: "object",
@@ -1234,7 +2199,11 @@ export function buildOpenApiDocument() {
             notifications: {
                 type: "object",
                 additionalProperties: false,
-                required: ["goalDriftAlerts", "dailyQuestReminders", "achievementCelebrations"],
+                required: [
+                    "goalDriftAlerts",
+                    "dailyQuestReminders",
+                    "achievementCelebrations"
+                ],
                 properties: {
                     goalDriftAlerts: { type: "boolean" },
                     dailyQuestReminders: { type: "boolean" },
@@ -1242,12 +2211,21 @@ export function buildOpenApiDocument() {
                 }
             },
             execution: { $ref: "#/components/schemas/ExecutionSettings" },
-            themePreference: { type: "string", enum: ["obsidian", "solar", "system"] },
+            themePreference: {
+                type: "string",
+                enum: ["obsidian", "solar", "system"]
+            },
             localePreference: { type: "string", enum: ["en", "fr"] },
             security: {
                 type: "object",
                 additionalProperties: false,
-                required: ["integrityScore", "lastAuditAt", "storageMode", "activeSessions", "tokenCount"],
+                required: [
+                    "integrityScore",
+                    "lastAuditAt",
+                    "storageMode",
+                    "activeSessions",
+                    "tokenCount"
+                ],
                 properties: {
                     integrityScore: { type: "integer" },
                     lastAuditAt: { type: "string", format: "date-time" },
@@ -1302,13 +2280,25 @@ export function buildOpenApiDocument() {
             settingsUrl: { type: "string" },
             tokenCreateUrl: { type: "string" },
             pluginBasePath: { type: "string" },
-            defaultConnectionMode: { type: "string", enum: ["operator_session", "managed_token"] },
+            defaultConnectionMode: {
+                type: "string",
+                enum: ["operator_session", "managed_token"]
+            },
             defaultActorLabel: { type: "string" },
             defaultTimeoutMs: { type: "integer" },
             recommendedScopes: arrayOf({ type: "string" }),
-            recommendedTrustLevel: { type: "string", enum: ["standard", "trusted", "autonomous"] },
-            recommendedAutonomyMode: { type: "string", enum: ["approval_required", "scoped_write", "autonomous"] },
-            recommendedApprovalMode: { type: "string", enum: ["approval_by_default", "high_impact_only", "none"] },
+            recommendedTrustLevel: {
+                type: "string",
+                enum: ["standard", "trusted", "autonomous"]
+            },
+            recommendedAutonomyMode: {
+                type: "string",
+                enum: ["approval_required", "scoped_write", "autonomous"]
+            },
+            recommendedApprovalMode: {
+                type: "string",
+                enum: ["approval_by_default", "high_impact_only", "none"]
+            },
             authModes: {
                 type: "object",
                 additionalProperties: false,
@@ -1340,7 +2330,12 @@ export function buildOpenApiDocument() {
             tokenRecovery: {
                 type: "object",
                 additionalProperties: false,
-                required: ["rawTokenStoredByForge", "recoveryAction", "rotationSummary", "settingsSummary"],
+                required: [
+                    "rawTokenStoredByForge",
+                    "recoveryAction",
+                    "rotationSummary",
+                    "settingsSummary"
+                ],
                 properties: {
                     rawTokenStoredByForge: { type: "boolean" },
                     recoveryAction: { type: "string" },
@@ -1361,7 +2356,18 @@ export function buildOpenApiDocument() {
             conceptModel: {
                 type: "object",
                 additionalProperties: false,
-                required: ["goal", "project", "task", "taskRun", "note", "insight", "psyche"],
+                required: [
+                    "goal",
+                    "project",
+                    "task",
+                    "taskRun",
+                    "note",
+                    "insight",
+                    "calendar",
+                    "workBlock",
+                    "taskTimebox",
+                    "psyche"
+                ],
                 properties: {
                     goal: { type: "string" },
                     project: { type: "string" },
@@ -1369,6 +2375,9 @@ export function buildOpenApiDocument() {
                     taskRun: { type: "string" },
                     note: { type: "string" },
                     insight: { type: "string" },
+                    calendar: { type: "string" },
+                    workBlock: { type: "string" },
+                    taskTimebox: { type: "string" },
                     psyche: { type: "string" }
                 }
             },
@@ -1428,7 +2437,14 @@ export function buildOpenApiDocument() {
             entityCatalog: arrayOf({
                 type: "object",
                 additionalProperties: false,
-                required: ["entityType", "purpose", "minimumCreateFields", "relationshipRules", "searchHints", "fieldGuide"],
+                required: [
+                    "entityType",
+                    "purpose",
+                    "minimumCreateFields",
+                    "relationshipRules",
+                    "searchHints",
+                    "fieldGuide"
+                ],
                 properties: {
                     entityType: { type: "string" },
                     purpose: { type: "string" },
@@ -1445,7 +2461,14 @@ export function buildOpenApiDocument() {
                             required: { type: "boolean" },
                             description: { type: "string" },
                             enumValues: arrayOf({ type: "string" }),
-                            defaultValue: { oneOf: [{ type: "string" }, { type: "number" }, { type: "boolean" }, { type: "null" }] },
+                            defaultValue: {
+                                oneOf: [
+                                    { type: "string" },
+                                    { type: "number" },
+                                    { type: "boolean" },
+                                    { type: "null" }
+                                ]
+                            },
                             nullable: { type: "boolean" }
                         }
                     })
@@ -1454,7 +2477,15 @@ export function buildOpenApiDocument() {
             toolInputCatalog: arrayOf({
                 type: "object",
                 additionalProperties: false,
-                required: ["toolName", "summary", "whenToUse", "inputShape", "requiredFields", "notes", "example"],
+                required: [
+                    "toolName",
+                    "summary",
+                    "whenToUse",
+                    "inputShape",
+                    "requiredFields",
+                    "notes",
+                    "example"
+                ],
                 properties: {
                     toolName: { type: "string" },
                     summary: { type: "string" },
@@ -1468,11 +2499,22 @@ export function buildOpenApiDocument() {
             verificationPaths: {
                 type: "object",
                 additionalProperties: false,
-                required: ["context", "xpMetrics", "weeklyReview", "settingsBin", "batchSearch", "psycheSchemaCatalog", "psycheEventTypes", "psycheEmotions"],
+                required: [
+                    "context",
+                    "xpMetrics",
+                    "weeklyReview",
+                    "calendarOverview",
+                    "settingsBin",
+                    "batchSearch",
+                    "psycheSchemaCatalog",
+                    "psycheEventTypes",
+                    "psycheEmotions"
+                ],
                 properties: {
                     context: { type: "string" },
                     xpMetrics: { type: "string" },
                     weeklyReview: { type: "string" },
+                    calendarOverview: { type: "string" },
                     settingsBin: { type: "string" },
                     batchSearch: { type: "string" },
                     psycheSchemaCatalog: { type: "string" },
@@ -1483,13 +2525,22 @@ export function buildOpenApiDocument() {
             recommendedPluginTools: {
                 type: "object",
                 additionalProperties: false,
-                required: ["bootstrap", "readModels", "uiWorkflow", "entityWorkflow", "workWorkflow", "insightWorkflow"],
+                required: [
+                    "bootstrap",
+                    "readModels",
+                    "uiWorkflow",
+                    "entityWorkflow",
+                    "workWorkflow",
+                    "calendarWorkflow",
+                    "insightWorkflow"
+                ],
                 properties: {
                     bootstrap: arrayOf({ type: "string" }),
                     readModels: arrayOf({ type: "string" }),
                     uiWorkflow: arrayOf({ type: "string" }),
                     entityWorkflow: arrayOf({ type: "string" }),
                     workWorkflow: arrayOf({ type: "string" }),
+                    calendarWorkflow: arrayOf({ type: "string" }),
                     insightWorkflow: arrayOf({ type: "string" })
                 }
             },
@@ -1583,7 +2634,10 @@ export function buildOpenApiDocument() {
         properties: {
             generatedAt: { type: "string", format: "date-time" },
             totalCount: { type: "integer" },
-            countsByEntityType: { type: "object", additionalProperties: { type: "integer" } },
+            countsByEntityType: {
+                type: "object",
+                additionalProperties: { type: "integer" }
+            },
             records: arrayOf({ $ref: "#/components/schemas/DeletedEntityRecord" })
         }
     };
@@ -1621,7 +2675,16 @@ export function buildOpenApiDocument() {
     const domain = {
         type: "object",
         additionalProperties: false,
-        required: ["id", "slug", "title", "description", "themeColor", "sensitive", "createdAt", "updatedAt"],
+        required: [
+            "id",
+            "slug",
+            "title",
+            "description",
+            "themeColor",
+            "sensitive",
+            "createdAt",
+            "updatedAt"
+        ],
         properties: {
             id: { type: "string" },
             slug: { type: "string" },
@@ -1704,7 +2767,16 @@ export function buildOpenApiDocument() {
     const schemaCatalogEntry = {
         type: "object",
         additionalProperties: false,
-        required: ["id", "slug", "title", "family", "schemaType", "description", "createdAt", "updatedAt"],
+        required: [
+            "id",
+            "slug",
+            "title",
+            "family",
+            "schemaType",
+            "description",
+            "createdAt",
+            "updatedAt"
+        ],
         properties: {
             id: { type: "string" },
             slug: { type: "string" },
@@ -1719,7 +2791,15 @@ export function buildOpenApiDocument() {
     const eventType = {
         type: "object",
         additionalProperties: false,
-        required: ["id", "domainId", "label", "description", "system", "createdAt", "updatedAt"],
+        required: [
+            "id",
+            "domainId",
+            "label",
+            "description",
+            "system",
+            "createdAt",
+            "updatedAt"
+        ],
         properties: {
             id: { type: "string" },
             domainId: { type: "string" },
@@ -1733,7 +2813,16 @@ export function buildOpenApiDocument() {
     const emotionDefinition = {
         type: "object",
         additionalProperties: false,
-        required: ["id", "domainId", "label", "description", "category", "system", "createdAt", "updatedAt"],
+        required: [
+            "id",
+            "domainId",
+            "label",
+            "description",
+            "category",
+            "system",
+            "createdAt",
+            "updatedAt"
+        ],
         properties: {
             id: { type: "string" },
             domainId: { type: "string" },
@@ -1854,7 +2943,16 @@ export function buildOpenApiDocument() {
         properties: {
             id: { type: "string" },
             domainId: { type: "string" },
-            family: { type: "string", enum: ["coping", "child", "critic_parent", "healthy_adult", "happy_child"] },
+            family: {
+                type: "string",
+                enum: [
+                    "coping",
+                    "child",
+                    "critic_parent",
+                    "healthy_adult",
+                    "happy_child"
+                ]
+            },
             archetype: { type: "string" },
             title: { type: "string" },
             persona: { type: "string" },
@@ -1894,7 +2992,16 @@ export function buildOpenApiDocument() {
                 additionalProperties: false,
                 required: ["family", "archetype", "label", "confidence", "reasoning"],
                 properties: {
-                    family: { type: "string", enum: ["coping", "child", "critic_parent", "healthy_adult", "happy_child"] },
+                    family: {
+                        type: "string",
+                        enum: [
+                            "coping",
+                            "child",
+                            "critic_parent",
+                            "healthy_adult",
+                            "happy_child"
+                        ]
+                    },
                     archetype: { type: "string" },
                     label: { type: "string" },
                     confidence: { type: "number" },
@@ -1983,7 +3090,12 @@ export function buildOpenApiDocument() {
             consequences: {
                 type: "object",
                 additionalProperties: false,
-                required: ["selfShortTerm", "selfLongTerm", "othersShortTerm", "othersLongTerm"],
+                required: [
+                    "selfShortTerm",
+                    "selfLongTerm",
+                    "othersShortTerm",
+                    "othersLongTerm"
+                ],
                 properties: {
                     selfShortTerm: arrayOf({ type: "string" }),
                     selfLongTerm: arrayOf({ type: "string" }),
@@ -2080,6 +3192,16 @@ export function buildOpenApiDocument() {
                 Goal: goal,
                 DashboardGoal: dashboardGoal,
                 Project: project,
+                CalendarSchedulingRules: calendarSchedulingRules,
+                CalendarConnection: calendarConnection,
+                CalendarResource: calendarResource,
+                CalendarEventSource: calendarEventSource,
+                CalendarEventLink: calendarEventLink,
+                CalendarEvent: calendarEvent,
+                WorkBlockTemplate: workBlockTemplate,
+                WorkBlockInstance: workBlockInstance,
+                TaskTimebox: taskTimebox,
+                CalendarOverviewPayload: calendarOverviewPayload,
                 TaskTimeSummary: taskTimeSummary,
                 ProjectSummary: projectSummary,
                 Task: task,
@@ -2106,6 +3228,10 @@ export function buildOpenApiDocument() {
                 TaskRunHeartbeatInput: taskRunHeartbeatInput,
                 TaskRunFinishInput: taskRunFinishInput,
                 TaskRunFocusInput: taskRunFocusInput,
+                WorkAdjustment: workAdjustment,
+                WorkAdjustmentTargetSummary: workAdjustmentTargetSummary,
+                WorkAdjustmentInput: workAdjustmentInput,
+                WorkAdjustmentResult: workAdjustmentResult,
                 SettingsUpdateInput: settingsUpdateInput,
                 AgentOnboardingPayload: agentOnboardingPayload,
                 DeletedEntityRecord: deletedEntityRecord,
@@ -2159,13 +3285,27 @@ export function buildOpenApiDocument() {
                                 now: { type: "string", format: "date-time" },
                                 watchdog: {
                                     type: "object",
-                                    required: ["enabled", "healthy", "state", "reason", "status"],
+                                    required: [
+                                        "enabled",
+                                        "healthy",
+                                        "state",
+                                        "reason",
+                                        "status"
+                                    ],
                                     properties: {
                                         enabled: { type: "boolean" },
                                         healthy: { type: "boolean" },
-                                        state: { type: "string", enum: ["disabled", "idle", "healthy", "degraded"] },
+                                        state: {
+                                            type: "string",
+                                            enum: ["disabled", "idle", "healthy", "degraded"]
+                                        },
                                         reason: { anyOf: [{ type: "string" }, { type: "null" }] },
-                                        status: { anyOf: [{ type: "object", additionalProperties: true }, { type: "null" }] }
+                                        status: {
+                                            anyOf: [
+                                                { type: "object", additionalProperties: true },
+                                                { type: "null" }
+                                            ]
+                                        }
                                     }
                                 }
                             }
@@ -2190,7 +3330,9 @@ export function buildOpenApiDocument() {
                             type: "object",
                             required: ["context"],
                             properties: {
-                                context: { $ref: "#/components/schemas/OperatorContextPayload" }
+                                context: {
+                                    $ref: "#/components/schemas/OperatorContextPayload"
+                                }
                             }
                         }, "Operator context")
                     }
@@ -2204,7 +3346,9 @@ export function buildOpenApiDocument() {
                             type: "object",
                             required: ["overview"],
                             properties: {
-                                overview: { $ref: "#/components/schemas/OperatorOverviewPayload" }
+                                overview: {
+                                    $ref: "#/components/schemas/OperatorOverviewPayload"
+                                }
                             }
                         }, "Operator overview")
                     }
@@ -2233,7 +3377,9 @@ export function buildOpenApiDocument() {
                             type: "object",
                             required: ["overview"],
                             properties: {
-                                overview: { $ref: "#/components/schemas/PsycheOverviewPayload" }
+                                overview: {
+                                    $ref: "#/components/schemas/PsycheOverviewPayload"
+                                }
                             }
                         }, "Psyche overview"),
                         default: { $ref: "#/components/responses/Error" }
@@ -2244,14 +3390,26 @@ export function buildOpenApiDocument() {
                 get: {
                     summary: "List ACT-style values",
                     responses: {
-                        "200": jsonResponse({ type: "object", required: ["values"], properties: { values: arrayOf({ $ref: "#/components/schemas/PsycheValue" }) } }, "Psyche value collection"),
+                        "200": jsonResponse({
+                            type: "object",
+                            required: ["values"],
+                            properties: {
+                                values: arrayOf({ $ref: "#/components/schemas/PsycheValue" })
+                            }
+                        }, "Psyche value collection"),
                         default: { $ref: "#/components/responses/Error" }
                     }
                 },
                 post: {
                     summary: "Create a Psyche value",
                     responses: {
-                        "201": jsonResponse({ type: "object", required: ["value"], properties: { value: { $ref: "#/components/schemas/PsycheValue" } } }, "Created value"),
+                        "201": jsonResponse({
+                            type: "object",
+                            required: ["value"],
+                            properties: {
+                                value: { $ref: "#/components/schemas/PsycheValue" }
+                            }
+                        }, "Created value"),
                         default: { $ref: "#/components/responses/Error" }
                     }
                 }
@@ -2260,21 +3418,39 @@ export function buildOpenApiDocument() {
                 get: {
                     summary: "Get a Psyche value",
                     responses: {
-                        "200": jsonResponse({ type: "object", required: ["value"], properties: { value: { $ref: "#/components/schemas/PsycheValue" } } }, "Psyche value"),
+                        "200": jsonResponse({
+                            type: "object",
+                            required: ["value"],
+                            properties: {
+                                value: { $ref: "#/components/schemas/PsycheValue" }
+                            }
+                        }, "Psyche value"),
                         default: { $ref: "#/components/responses/Error" }
                     }
                 },
                 patch: {
                     summary: "Update a Psyche value",
                     responses: {
-                        "200": jsonResponse({ type: "object", required: ["value"], properties: { value: { $ref: "#/components/schemas/PsycheValue" } } }, "Updated value"),
+                        "200": jsonResponse({
+                            type: "object",
+                            required: ["value"],
+                            properties: {
+                                value: { $ref: "#/components/schemas/PsycheValue" }
+                            }
+                        }, "Updated value"),
                         default: { $ref: "#/components/responses/Error" }
                     }
                 },
                 delete: {
                     summary: "Delete a Psyche value",
                     responses: {
-                        "200": jsonResponse({ type: "object", required: ["value"], properties: { value: { $ref: "#/components/schemas/PsycheValue" } } }, "Deleted value"),
+                        "200": jsonResponse({
+                            type: "object",
+                            required: ["value"],
+                            properties: {
+                                value: { $ref: "#/components/schemas/PsycheValue" }
+                            }
+                        }, "Deleted value"),
                         default: { $ref: "#/components/responses/Error" }
                     }
                 }
@@ -2283,14 +3459,28 @@ export function buildOpenApiDocument() {
                 get: {
                     summary: "List behavior patterns",
                     responses: {
-                        "200": jsonResponse({ type: "object", required: ["patterns"], properties: { patterns: arrayOf({ $ref: "#/components/schemas/BehaviorPattern" }) } }, "Behavior pattern collection"),
+                        "200": jsonResponse({
+                            type: "object",
+                            required: ["patterns"],
+                            properties: {
+                                patterns: arrayOf({
+                                    $ref: "#/components/schemas/BehaviorPattern"
+                                })
+                            }
+                        }, "Behavior pattern collection"),
                         default: { $ref: "#/components/responses/Error" }
                     }
                 },
                 post: {
                     summary: "Create a behavior pattern",
                     responses: {
-                        "201": jsonResponse({ type: "object", required: ["pattern"], properties: { pattern: { $ref: "#/components/schemas/BehaviorPattern" } } }, "Created behavior pattern"),
+                        "201": jsonResponse({
+                            type: "object",
+                            required: ["pattern"],
+                            properties: {
+                                pattern: { $ref: "#/components/schemas/BehaviorPattern" }
+                            }
+                        }, "Created behavior pattern"),
                         default: { $ref: "#/components/responses/Error" }
                     }
                 }
@@ -2299,21 +3489,39 @@ export function buildOpenApiDocument() {
                 get: {
                     summary: "Get a behavior pattern",
                     responses: {
-                        "200": jsonResponse({ type: "object", required: ["pattern"], properties: { pattern: { $ref: "#/components/schemas/BehaviorPattern" } } }, "Behavior pattern"),
+                        "200": jsonResponse({
+                            type: "object",
+                            required: ["pattern"],
+                            properties: {
+                                pattern: { $ref: "#/components/schemas/BehaviorPattern" }
+                            }
+                        }, "Behavior pattern"),
                         default: { $ref: "#/components/responses/Error" }
                     }
                 },
                 patch: {
                     summary: "Update a behavior pattern",
                     responses: {
-                        "200": jsonResponse({ type: "object", required: ["pattern"], properties: { pattern: { $ref: "#/components/schemas/BehaviorPattern" } } }, "Updated behavior pattern"),
+                        "200": jsonResponse({
+                            type: "object",
+                            required: ["pattern"],
+                            properties: {
+                                pattern: { $ref: "#/components/schemas/BehaviorPattern" }
+                            }
+                        }, "Updated behavior pattern"),
                         default: { $ref: "#/components/responses/Error" }
                     }
                 },
                 delete: {
                     summary: "Delete a behavior pattern",
                     responses: {
-                        "200": jsonResponse({ type: "object", required: ["pattern"], properties: { pattern: { $ref: "#/components/schemas/BehaviorPattern" } } }, "Deleted behavior pattern"),
+                        "200": jsonResponse({
+                            type: "object",
+                            required: ["pattern"],
+                            properties: {
+                                pattern: { $ref: "#/components/schemas/BehaviorPattern" }
+                            }
+                        }, "Deleted behavior pattern"),
                         default: { $ref: "#/components/responses/Error" }
                     }
                 }
@@ -2322,14 +3530,26 @@ export function buildOpenApiDocument() {
                 get: {
                     summary: "List tracked Psyche behaviors",
                     responses: {
-                        "200": jsonResponse({ type: "object", required: ["behaviors"], properties: { behaviors: arrayOf({ $ref: "#/components/schemas/Behavior" }) } }, "Behavior collection"),
+                        "200": jsonResponse({
+                            type: "object",
+                            required: ["behaviors"],
+                            properties: {
+                                behaviors: arrayOf({ $ref: "#/components/schemas/Behavior" })
+                            }
+                        }, "Behavior collection"),
                         default: { $ref: "#/components/responses/Error" }
                     }
                 },
                 post: {
                     summary: "Create a Psyche behavior",
                     responses: {
-                        "201": jsonResponse({ type: "object", required: ["behavior"], properties: { behavior: { $ref: "#/components/schemas/Behavior" } } }, "Created behavior"),
+                        "201": jsonResponse({
+                            type: "object",
+                            required: ["behavior"],
+                            properties: {
+                                behavior: { $ref: "#/components/schemas/Behavior" }
+                            }
+                        }, "Created behavior"),
                         default: { $ref: "#/components/responses/Error" }
                     }
                 }
@@ -2338,21 +3558,39 @@ export function buildOpenApiDocument() {
                 get: {
                     summary: "Get a Psyche behavior",
                     responses: {
-                        "200": jsonResponse({ type: "object", required: ["behavior"], properties: { behavior: { $ref: "#/components/schemas/Behavior" } } }, "Behavior detail"),
+                        "200": jsonResponse({
+                            type: "object",
+                            required: ["behavior"],
+                            properties: {
+                                behavior: { $ref: "#/components/schemas/Behavior" }
+                            }
+                        }, "Behavior detail"),
                         default: { $ref: "#/components/responses/Error" }
                     }
                 },
                 patch: {
                     summary: "Update a Psyche behavior",
                     responses: {
-                        "200": jsonResponse({ type: "object", required: ["behavior"], properties: { behavior: { $ref: "#/components/schemas/Behavior" } } }, "Updated behavior"),
+                        "200": jsonResponse({
+                            type: "object",
+                            required: ["behavior"],
+                            properties: {
+                                behavior: { $ref: "#/components/schemas/Behavior" }
+                            }
+                        }, "Updated behavior"),
                         default: { $ref: "#/components/responses/Error" }
                     }
                 },
                 delete: {
                     summary: "Delete a Psyche behavior",
                     responses: {
-                        "200": jsonResponse({ type: "object", required: ["behavior"], properties: { behavior: { $ref: "#/components/schemas/Behavior" } } }, "Deleted behavior"),
+                        "200": jsonResponse({
+                            type: "object",
+                            required: ["behavior"],
+                            properties: {
+                                behavior: { $ref: "#/components/schemas/Behavior" }
+                            }
+                        }, "Deleted behavior"),
                         default: { $ref: "#/components/responses/Error" }
                     }
                 }
@@ -2361,7 +3599,15 @@ export function buildOpenApiDocument() {
                 get: {
                     summary: "List the fixed schema-therapy catalog",
                     responses: {
-                        "200": jsonResponse({ type: "object", required: ["schemas"], properties: { schemas: arrayOf({ $ref: "#/components/schemas/SchemaCatalogEntry" }) } }, "Schema catalog"),
+                        "200": jsonResponse({
+                            type: "object",
+                            required: ["schemas"],
+                            properties: {
+                                schemas: arrayOf({
+                                    $ref: "#/components/schemas/SchemaCatalogEntry"
+                                })
+                            }
+                        }, "Schema catalog"),
                         default: { $ref: "#/components/responses/Error" }
                     }
                 }
@@ -2370,14 +3616,26 @@ export function buildOpenApiDocument() {
                 get: {
                     summary: "List belief entries linked to schemas and reports",
                     responses: {
-                        "200": jsonResponse({ type: "object", required: ["beliefs"], properties: { beliefs: arrayOf({ $ref: "#/components/schemas/BeliefEntry" }) } }, "Belief collection"),
+                        "200": jsonResponse({
+                            type: "object",
+                            required: ["beliefs"],
+                            properties: {
+                                beliefs: arrayOf({ $ref: "#/components/schemas/BeliefEntry" })
+                            }
+                        }, "Belief collection"),
                         default: { $ref: "#/components/responses/Error" }
                     }
                 },
                 post: {
                     summary: "Create a belief entry",
                     responses: {
-                        "201": jsonResponse({ type: "object", required: ["belief"], properties: { belief: { $ref: "#/components/schemas/BeliefEntry" } } }, "Created belief"),
+                        "201": jsonResponse({
+                            type: "object",
+                            required: ["belief"],
+                            properties: {
+                                belief: { $ref: "#/components/schemas/BeliefEntry" }
+                            }
+                        }, "Created belief"),
                         default: { $ref: "#/components/responses/Error" }
                     }
                 }
@@ -2386,21 +3644,39 @@ export function buildOpenApiDocument() {
                 get: {
                     summary: "Get a belief entry",
                     responses: {
-                        "200": jsonResponse({ type: "object", required: ["belief"], properties: { belief: { $ref: "#/components/schemas/BeliefEntry" } } }, "Belief detail"),
+                        "200": jsonResponse({
+                            type: "object",
+                            required: ["belief"],
+                            properties: {
+                                belief: { $ref: "#/components/schemas/BeliefEntry" }
+                            }
+                        }, "Belief detail"),
                         default: { $ref: "#/components/responses/Error" }
                     }
                 },
                 patch: {
                     summary: "Update a belief entry",
                     responses: {
-                        "200": jsonResponse({ type: "object", required: ["belief"], properties: { belief: { $ref: "#/components/schemas/BeliefEntry" } } }, "Updated belief"),
+                        "200": jsonResponse({
+                            type: "object",
+                            required: ["belief"],
+                            properties: {
+                                belief: { $ref: "#/components/schemas/BeliefEntry" }
+                            }
+                        }, "Updated belief"),
                         default: { $ref: "#/components/responses/Error" }
                     }
                 },
                 delete: {
                     summary: "Delete a belief entry",
                     responses: {
-                        "200": jsonResponse({ type: "object", required: ["belief"], properties: { belief: { $ref: "#/components/schemas/BeliefEntry" } } }, "Deleted belief"),
+                        "200": jsonResponse({
+                            type: "object",
+                            required: ["belief"],
+                            properties: {
+                                belief: { $ref: "#/components/schemas/BeliefEntry" }
+                            }
+                        }, "Deleted belief"),
                         default: { $ref: "#/components/responses/Error" }
                     }
                 }
@@ -2409,14 +3685,26 @@ export function buildOpenApiDocument() {
                 get: {
                     summary: "List Psyche mode profiles",
                     responses: {
-                        "200": jsonResponse({ type: "object", required: ["modes"], properties: { modes: arrayOf({ $ref: "#/components/schemas/ModeProfile" }) } }, "Mode collection"),
+                        "200": jsonResponse({
+                            type: "object",
+                            required: ["modes"],
+                            properties: {
+                                modes: arrayOf({ $ref: "#/components/schemas/ModeProfile" })
+                            }
+                        }, "Mode collection"),
                         default: { $ref: "#/components/responses/Error" }
                     }
                 },
                 post: {
                     summary: "Create a Psyche mode profile",
                     responses: {
-                        "201": jsonResponse({ type: "object", required: ["mode"], properties: { mode: { $ref: "#/components/schemas/ModeProfile" } } }, "Created mode"),
+                        "201": jsonResponse({
+                            type: "object",
+                            required: ["mode"],
+                            properties: {
+                                mode: { $ref: "#/components/schemas/ModeProfile" }
+                            }
+                        }, "Created mode"),
                         default: { $ref: "#/components/responses/Error" }
                     }
                 }
@@ -2425,21 +3713,39 @@ export function buildOpenApiDocument() {
                 get: {
                     summary: "Get a Psyche mode profile",
                     responses: {
-                        "200": jsonResponse({ type: "object", required: ["mode"], properties: { mode: { $ref: "#/components/schemas/ModeProfile" } } }, "Mode detail"),
+                        "200": jsonResponse({
+                            type: "object",
+                            required: ["mode"],
+                            properties: {
+                                mode: { $ref: "#/components/schemas/ModeProfile" }
+                            }
+                        }, "Mode detail"),
                         default: { $ref: "#/components/responses/Error" }
                     }
                 },
                 patch: {
                     summary: "Update a Psyche mode profile",
                     responses: {
-                        "200": jsonResponse({ type: "object", required: ["mode"], properties: { mode: { $ref: "#/components/schemas/ModeProfile" } } }, "Updated mode"),
+                        "200": jsonResponse({
+                            type: "object",
+                            required: ["mode"],
+                            properties: {
+                                mode: { $ref: "#/components/schemas/ModeProfile" }
+                            }
+                        }, "Updated mode"),
                         default: { $ref: "#/components/responses/Error" }
                     }
                 },
                 delete: {
                     summary: "Delete a Psyche mode profile",
                     responses: {
-                        "200": jsonResponse({ type: "object", required: ["mode"], properties: { mode: { $ref: "#/components/schemas/ModeProfile" } } }, "Deleted mode"),
+                        "200": jsonResponse({
+                            type: "object",
+                            required: ["mode"],
+                            properties: {
+                                mode: { $ref: "#/components/schemas/ModeProfile" }
+                            }
+                        }, "Deleted mode"),
                         default: { $ref: "#/components/responses/Error" }
                     }
                 }
@@ -2448,14 +3754,28 @@ export function buildOpenApiDocument() {
                 get: {
                     summary: "List guided mode-identification sessions",
                     responses: {
-                        "200": jsonResponse({ type: "object", required: ["sessions"], properties: { sessions: arrayOf({ $ref: "#/components/schemas/ModeGuideSession" }) } }, "Mode guide sessions"),
+                        "200": jsonResponse({
+                            type: "object",
+                            required: ["sessions"],
+                            properties: {
+                                sessions: arrayOf({
+                                    $ref: "#/components/schemas/ModeGuideSession"
+                                })
+                            }
+                        }, "Mode guide sessions"),
                         default: { $ref: "#/components/responses/Error" }
                     }
                 },
                 post: {
                     summary: "Create a guided mode-identification session",
                     responses: {
-                        "201": jsonResponse({ type: "object", required: ["session"], properties: { session: { $ref: "#/components/schemas/ModeGuideSession" } } }, "Created mode guide session"),
+                        "201": jsonResponse({
+                            type: "object",
+                            required: ["session"],
+                            properties: {
+                                session: { $ref: "#/components/schemas/ModeGuideSession" }
+                            }
+                        }, "Created mode guide session"),
                         default: { $ref: "#/components/responses/Error" }
                     }
                 }
@@ -2464,21 +3784,39 @@ export function buildOpenApiDocument() {
                 get: {
                     summary: "Get a guided mode-identification session",
                     responses: {
-                        "200": jsonResponse({ type: "object", required: ["session"], properties: { session: { $ref: "#/components/schemas/ModeGuideSession" } } }, "Mode guide detail"),
+                        "200": jsonResponse({
+                            type: "object",
+                            required: ["session"],
+                            properties: {
+                                session: { $ref: "#/components/schemas/ModeGuideSession" }
+                            }
+                        }, "Mode guide detail"),
                         default: { $ref: "#/components/responses/Error" }
                     }
                 },
                 patch: {
                     summary: "Update a guided mode-identification session",
                     responses: {
-                        "200": jsonResponse({ type: "object", required: ["session"], properties: { session: { $ref: "#/components/schemas/ModeGuideSession" } } }, "Updated mode guide session"),
+                        "200": jsonResponse({
+                            type: "object",
+                            required: ["session"],
+                            properties: {
+                                session: { $ref: "#/components/schemas/ModeGuideSession" }
+                            }
+                        }, "Updated mode guide session"),
                         default: { $ref: "#/components/responses/Error" }
                     }
                 },
                 delete: {
                     summary: "Delete a guided mode-identification session",
                     responses: {
-                        "200": jsonResponse({ type: "object", required: ["session"], properties: { session: { $ref: "#/components/schemas/ModeGuideSession" } } }, "Deleted mode guide session"),
+                        "200": jsonResponse({
+                            type: "object",
+                            required: ["session"],
+                            properties: {
+                                session: { $ref: "#/components/schemas/ModeGuideSession" }
+                            }
+                        }, "Deleted mode guide session"),
                         default: { $ref: "#/components/responses/Error" }
                     }
                 }
@@ -2487,14 +3825,28 @@ export function buildOpenApiDocument() {
                 get: {
                     summary: "List seeded and custom Psyche event types",
                     responses: {
-                        "200": jsonResponse({ type: "object", required: ["eventTypes"], properties: { eventTypes: arrayOf({ $ref: "#/components/schemas/EventType" }) } }, "Event type collection"),
+                        "200": jsonResponse({
+                            type: "object",
+                            required: ["eventTypes"],
+                            properties: {
+                                eventTypes: arrayOf({
+                                    $ref: "#/components/schemas/EventType"
+                                })
+                            }
+                        }, "Event type collection"),
                         default: { $ref: "#/components/responses/Error" }
                     }
                 },
                 post: {
                     summary: "Create a custom Psyche event type",
                     responses: {
-                        "201": jsonResponse({ type: "object", required: ["eventType"], properties: { eventType: { $ref: "#/components/schemas/EventType" } } }, "Created event type"),
+                        "201": jsonResponse({
+                            type: "object",
+                            required: ["eventType"],
+                            properties: {
+                                eventType: { $ref: "#/components/schemas/EventType" }
+                            }
+                        }, "Created event type"),
                         default: { $ref: "#/components/responses/Error" }
                     }
                 }
@@ -2503,21 +3855,39 @@ export function buildOpenApiDocument() {
                 get: {
                     summary: "Get a Psyche event type",
                     responses: {
-                        "200": jsonResponse({ type: "object", required: ["eventType"], properties: { eventType: { $ref: "#/components/schemas/EventType" } } }, "Event type detail"),
+                        "200": jsonResponse({
+                            type: "object",
+                            required: ["eventType"],
+                            properties: {
+                                eventType: { $ref: "#/components/schemas/EventType" }
+                            }
+                        }, "Event type detail"),
                         default: { $ref: "#/components/responses/Error" }
                     }
                 },
                 patch: {
                     summary: "Update a custom Psyche event type",
                     responses: {
-                        "200": jsonResponse({ type: "object", required: ["eventType"], properties: { eventType: { $ref: "#/components/schemas/EventType" } } }, "Updated event type"),
+                        "200": jsonResponse({
+                            type: "object",
+                            required: ["eventType"],
+                            properties: {
+                                eventType: { $ref: "#/components/schemas/EventType" }
+                            }
+                        }, "Updated event type"),
                         default: { $ref: "#/components/responses/Error" }
                     }
                 },
                 delete: {
                     summary: "Delete a custom Psyche event type",
                     responses: {
-                        "200": jsonResponse({ type: "object", required: ["eventType"], properties: { eventType: { $ref: "#/components/schemas/EventType" } } }, "Deleted event type"),
+                        "200": jsonResponse({
+                            type: "object",
+                            required: ["eventType"],
+                            properties: {
+                                eventType: { $ref: "#/components/schemas/EventType" }
+                            }
+                        }, "Deleted event type"),
                         default: { $ref: "#/components/responses/Error" }
                     }
                 }
@@ -2526,14 +3896,28 @@ export function buildOpenApiDocument() {
                 get: {
                     summary: "List seeded and custom Psyche emotions",
                     responses: {
-                        "200": jsonResponse({ type: "object", required: ["emotions"], properties: { emotions: arrayOf({ $ref: "#/components/schemas/EmotionDefinition" }) } }, "Emotion collection"),
+                        "200": jsonResponse({
+                            type: "object",
+                            required: ["emotions"],
+                            properties: {
+                                emotions: arrayOf({
+                                    $ref: "#/components/schemas/EmotionDefinition"
+                                })
+                            }
+                        }, "Emotion collection"),
                         default: { $ref: "#/components/responses/Error" }
                     }
                 },
                 post: {
                     summary: "Create a custom Psyche emotion",
                     responses: {
-                        "201": jsonResponse({ type: "object", required: ["emotion"], properties: { emotion: { $ref: "#/components/schemas/EmotionDefinition" } } }, "Created emotion"),
+                        "201": jsonResponse({
+                            type: "object",
+                            required: ["emotion"],
+                            properties: {
+                                emotion: { $ref: "#/components/schemas/EmotionDefinition" }
+                            }
+                        }, "Created emotion"),
                         default: { $ref: "#/components/responses/Error" }
                     }
                 }
@@ -2542,21 +3926,39 @@ export function buildOpenApiDocument() {
                 get: {
                     summary: "Get a Psyche emotion definition",
                     responses: {
-                        "200": jsonResponse({ type: "object", required: ["emotion"], properties: { emotion: { $ref: "#/components/schemas/EmotionDefinition" } } }, "Emotion detail"),
+                        "200": jsonResponse({
+                            type: "object",
+                            required: ["emotion"],
+                            properties: {
+                                emotion: { $ref: "#/components/schemas/EmotionDefinition" }
+                            }
+                        }, "Emotion detail"),
                         default: { $ref: "#/components/responses/Error" }
                     }
                 },
                 patch: {
                     summary: "Update a custom Psyche emotion definition",
                     responses: {
-                        "200": jsonResponse({ type: "object", required: ["emotion"], properties: { emotion: { $ref: "#/components/schemas/EmotionDefinition" } } }, "Updated emotion"),
+                        "200": jsonResponse({
+                            type: "object",
+                            required: ["emotion"],
+                            properties: {
+                                emotion: { $ref: "#/components/schemas/EmotionDefinition" }
+                            }
+                        }, "Updated emotion"),
                         default: { $ref: "#/components/responses/Error" }
                     }
                 },
                 delete: {
                     summary: "Delete a custom Psyche emotion definition",
                     responses: {
-                        "200": jsonResponse({ type: "object", required: ["emotion"], properties: { emotion: { $ref: "#/components/schemas/EmotionDefinition" } } }, "Deleted emotion"),
+                        "200": jsonResponse({
+                            type: "object",
+                            required: ["emotion"],
+                            properties: {
+                                emotion: { $ref: "#/components/schemas/EmotionDefinition" }
+                            }
+                        }, "Deleted emotion"),
                         default: { $ref: "#/components/responses/Error" }
                     }
                 }
@@ -2565,14 +3967,28 @@ export function buildOpenApiDocument() {
                 get: {
                     summary: "List trigger reports",
                     responses: {
-                        "200": jsonResponse({ type: "object", required: ["reports"], properties: { reports: arrayOf({ $ref: "#/components/schemas/TriggerReport" }) } }, "Trigger report collection"),
+                        "200": jsonResponse({
+                            type: "object",
+                            required: ["reports"],
+                            properties: {
+                                reports: arrayOf({
+                                    $ref: "#/components/schemas/TriggerReport"
+                                })
+                            }
+                        }, "Trigger report collection"),
                         default: { $ref: "#/components/responses/Error" }
                     }
                 },
                 post: {
                     summary: "Create a trigger report",
                     responses: {
-                        "201": jsonResponse({ type: "object", required: ["report"], properties: { report: { $ref: "#/components/schemas/TriggerReport" } } }, "Created trigger report"),
+                        "201": jsonResponse({
+                            type: "object",
+                            required: ["report"],
+                            properties: {
+                                report: { $ref: "#/components/schemas/TriggerReport" }
+                            }
+                        }, "Created trigger report"),
                         default: { $ref: "#/components/responses/Error" }
                     }
                 }
@@ -2596,14 +4012,26 @@ export function buildOpenApiDocument() {
                 patch: {
                     summary: "Update a trigger report",
                     responses: {
-                        "200": jsonResponse({ type: "object", required: ["report"], properties: { report: { $ref: "#/components/schemas/TriggerReport" } } }, "Updated trigger report"),
+                        "200": jsonResponse({
+                            type: "object",
+                            required: ["report"],
+                            properties: {
+                                report: { $ref: "#/components/schemas/TriggerReport" }
+                            }
+                        }, "Updated trigger report"),
                         default: { $ref: "#/components/responses/Error" }
                     }
                 },
                 delete: {
                     summary: "Delete a trigger report",
                     responses: {
-                        "200": jsonResponse({ type: "object", required: ["report"], properties: { report: { $ref: "#/components/schemas/TriggerReport" } } }, "Deleted trigger report"),
+                        "200": jsonResponse({
+                            type: "object",
+                            required: ["report"],
+                            properties: {
+                                report: { $ref: "#/components/schemas/TriggerReport" }
+                            }
+                        }, "Deleted trigger report"),
                         default: { $ref: "#/components/responses/Error" }
                     }
                 }
@@ -2611,15 +4039,69 @@ export function buildOpenApiDocument() {
             "/api/v1/notes": {
                 get: {
                     summary: "List notes linked to Forge entities",
+                    parameters: [
+                        {
+                            name: "linkedEntityType",
+                            in: "query",
+                            schema: { type: "string" }
+                        },
+                        { name: "linkedEntityId", in: "query", schema: { type: "string" } },
+                        {
+                            name: "anchorKey",
+                            in: "query",
+                            schema: { type: "string", nullable: true }
+                        },
+                        {
+                            name: "linkedTo",
+                            in: "query",
+                            schema: { type: "array", items: { type: "string" } }
+                        },
+                        {
+                            name: "tags",
+                            in: "query",
+                            schema: { type: "array", items: { type: "string" } }
+                        },
+                        {
+                            name: "textTerms",
+                            in: "query",
+                            schema: { type: "array", items: { type: "string" } }
+                        },
+                        { name: "author", in: "query", schema: { type: "string" } },
+                        {
+                            name: "updatedFrom",
+                            in: "query",
+                            schema: { type: "string", format: "date" }
+                        },
+                        {
+                            name: "updatedTo",
+                            in: "query",
+                            schema: { type: "string", format: "date" }
+                        },
+                        {
+                            name: "limit",
+                            in: "query",
+                            schema: { type: "integer", minimum: 1, maximum: 200 }
+                        }
+                    ],
                     responses: {
-                        "200": jsonResponse({ type: "object", required: ["notes"], properties: { notes: arrayOf({ $ref: "#/components/schemas/Note" }) } }, "Note collection"),
+                        "200": jsonResponse({
+                            type: "object",
+                            required: ["notes"],
+                            properties: {
+                                notes: arrayOf({ $ref: "#/components/schemas/Note" })
+                            }
+                        }, "Note collection"),
                         default: { $ref: "#/components/responses/Error" }
                     }
                 },
                 post: {
                     summary: "Create a note linked to one or more Forge entities",
                     responses: {
-                        "201": jsonResponse({ type: "object", required: ["note"], properties: { note: { $ref: "#/components/schemas/Note" } } }, "Created note"),
+                        "201": jsonResponse({
+                            type: "object",
+                            required: ["note"],
+                            properties: { note: { $ref: "#/components/schemas/Note" } }
+                        }, "Created note"),
                         default: { $ref: "#/components/responses/Error" }
                     }
                 }
@@ -2628,21 +4110,33 @@ export function buildOpenApiDocument() {
                 get: {
                     summary: "Get a note",
                     responses: {
-                        "200": jsonResponse({ type: "object", required: ["note"], properties: { note: { $ref: "#/components/schemas/Note" } } }, "Note"),
+                        "200": jsonResponse({
+                            type: "object",
+                            required: ["note"],
+                            properties: { note: { $ref: "#/components/schemas/Note" } }
+                        }, "Note"),
                         default: { $ref: "#/components/responses/Error" }
                     }
                 },
                 patch: {
                     summary: "Update a note",
                     responses: {
-                        "200": jsonResponse({ type: "object", required: ["note"], properties: { note: { $ref: "#/components/schemas/Note" } } }, "Updated note"),
+                        "200": jsonResponse({
+                            type: "object",
+                            required: ["note"],
+                            properties: { note: { $ref: "#/components/schemas/Note" } }
+                        }, "Updated note"),
                         default: { $ref: "#/components/responses/Error" }
                     }
                 },
                 delete: {
                     summary: "Delete a note",
                     responses: {
-                        "200": jsonResponse({ type: "object", required: ["note"], properties: { note: { $ref: "#/components/schemas/Note" } } }, "Deleted note"),
+                        "200": jsonResponse({
+                            type: "object",
+                            required: ["note"],
+                            properties: { note: { $ref: "#/components/schemas/Note" } }
+                        }, "Deleted note"),
                         default: { $ref: "#/components/responses/Error" }
                     }
                 }
@@ -2655,7 +4149,9 @@ export function buildOpenApiDocument() {
                             type: "object",
                             required: ["projects"],
                             properties: {
-                                projects: arrayOf({ $ref: "#/components/schemas/ProjectSummary" })
+                                projects: arrayOf({
+                                    $ref: "#/components/schemas/ProjectSummary"
+                                })
                             }
                         }, "Project collection"),
                         default: { $ref: "#/components/responses/Error" }
@@ -2675,6 +4171,214 @@ export function buildOpenApiDocument() {
                     }
                 }
             },
+            "/api/v1/calendar/overview": {
+                get: {
+                    summary: "Read connected calendars, mirrored events, work blocks, and timeboxes",
+                    responses: {
+                        "200": jsonResponse({
+                            type: "object",
+                            required: ["calendar"],
+                            properties: {
+                                calendar: {
+                                    $ref: "#/components/schemas/CalendarOverviewPayload"
+                                }
+                            }
+                        }, "Calendar overview"),
+                        default: { $ref: "#/components/responses/Error" }
+                    }
+                }
+            },
+            "/api/v1/calendar/connections": {
+                get: {
+                    summary: "List connected calendar providers",
+                    responses: {
+                        "200": jsonResponse({
+                            type: "object",
+                            required: ["providers", "connections"],
+                            properties: {
+                                providers: arrayOf({
+                                    type: "object",
+                                    additionalProperties: false,
+                                    required: [
+                                        "provider",
+                                        "label",
+                                        "supportsDedicatedForgeCalendar",
+                                        "connectionHelp"
+                                    ],
+                                    properties: {
+                                        provider: {
+                                            type: "string",
+                                            enum: ["google", "apple", "caldav"]
+                                        },
+                                        label: { type: "string" },
+                                        supportsDedicatedForgeCalendar: { type: "boolean" },
+                                        connectionHelp: { type: "string" }
+                                    }
+                                }),
+                                connections: arrayOf({
+                                    $ref: "#/components/schemas/CalendarConnection"
+                                })
+                            }
+                        }, "Calendar connections"),
+                        default: { $ref: "#/components/responses/Error" }
+                    }
+                },
+                post: {
+                    summary: "Create a Google, Apple, or custom CalDAV calendar connection",
+                    description: "Forge first discovers the writable calendars for the account, then stores the chosen mirrored calendars and dedicated Forge write calendar.",
+                    responses: {
+                        "201": jsonResponse({
+                            type: "object",
+                            required: ["connection"],
+                            properties: {
+                                connection: {
+                                    $ref: "#/components/schemas/CalendarConnection"
+                                }
+                            }
+                        }, "Created calendar connection"),
+                        default: { $ref: "#/components/responses/Error" }
+                    }
+                }
+            },
+            "/api/v1/calendar/connections/{id}/sync": {
+                post: {
+                    summary: "Sync one connected calendar provider",
+                    responses: {
+                        "200": jsonResponse({
+                            type: "object",
+                            required: ["connection"],
+                            properties: {
+                                connection: {
+                                    $ref: "#/components/schemas/CalendarConnection"
+                                }
+                            }
+                        }, "Synced calendar connection"),
+                        default: { $ref: "#/components/responses/Error" }
+                    }
+                }
+            },
+            "/api/v1/calendar/work-block-templates": {
+                get: {
+                    summary: "List recurring work-block templates",
+                    responses: {
+                        "200": jsonResponse({
+                            type: "object",
+                            required: ["templates"],
+                            properties: {
+                                templates: arrayOf({
+                                    $ref: "#/components/schemas/WorkBlockTemplate"
+                                })
+                            }
+                        }, "Work-block templates"),
+                        default: { $ref: "#/components/responses/Error" }
+                    }
+                },
+                post: {
+                    summary: "Create a recurring work-block template",
+                    responses: {
+                        "201": jsonResponse({
+                            type: "object",
+                            required: ["template"],
+                            properties: {
+                                template: { $ref: "#/components/schemas/WorkBlockTemplate" }
+                            }
+                        }, "Created work-block template"),
+                        default: { $ref: "#/components/responses/Error" }
+                    }
+                }
+            },
+            "/api/v1/calendar/timeboxes": {
+                get: {
+                    summary: "List task timeboxes",
+                    responses: {
+                        "200": jsonResponse({
+                            type: "object",
+                            required: ["timeboxes"],
+                            properties: {
+                                timeboxes: arrayOf({
+                                    $ref: "#/components/schemas/TaskTimebox"
+                                })
+                            }
+                        }, "Task timeboxes"),
+                        default: { $ref: "#/components/responses/Error" }
+                    }
+                },
+                post: {
+                    summary: "Create a planned task timebox",
+                    responses: {
+                        "201": jsonResponse({
+                            type: "object",
+                            required: ["timebox"],
+                            properties: {
+                                timebox: { $ref: "#/components/schemas/TaskTimebox" }
+                            }
+                        }, "Created task timebox"),
+                        default: { $ref: "#/components/responses/Error" }
+                    }
+                }
+            },
+            "/api/v1/calendar/timeboxes/recommend": {
+                post: {
+                    summary: "Suggest future timeboxes for a task",
+                    description: "Recommendations consider provider events, work blocks, scheduling rules, and planned duration.",
+                    responses: {
+                        "200": jsonResponse({
+                            type: "object",
+                            required: ["timeboxes"],
+                            properties: {
+                                timeboxes: arrayOf({
+                                    $ref: "#/components/schemas/TaskTimebox"
+                                })
+                            }
+                        }, "Suggested task timeboxes"),
+                        default: { $ref: "#/components/responses/Error" }
+                    }
+                }
+            },
+            "/api/v1/calendar/events": {
+                post: {
+                    summary: "Create a native Forge calendar event",
+                    description: "Forge stores the event canonically first, then projects it to a connected writable calendar when a preferred calendar is selected.",
+                    responses: {
+                        "201": jsonResponse({
+                            type: "object",
+                            required: ["event"],
+                            properties: {
+                                event: { $ref: "#/components/schemas/CalendarEvent" }
+                            }
+                        }, "Created calendar event"),
+                        default: { $ref: "#/components/responses/Error" }
+                    }
+                }
+            },
+            "/api/v1/calendar/events/{id}": {
+                patch: {
+                    summary: "Update a Forge calendar event and sync remote projections",
+                    responses: {
+                        "200": jsonResponse({
+                            type: "object",
+                            required: ["event"],
+                            properties: {
+                                event: { $ref: "#/components/schemas/CalendarEvent" }
+                            }
+                        }, "Updated calendar event"),
+                        default: { $ref: "#/components/responses/Error" }
+                    }
+                },
+                delete: {
+                    summary: "Delete a Forge calendar event and remove projected remote copies",
+                    responses: {
+                        "200": jsonResponse({
+                            type: "object",
+                            required: ["event"],
+                            properties: {
+                                event: { $ref: "#/components/schemas/CalendarEvent" }
+                            }
+                        }, "Deleted calendar event"),
+                        default: { $ref: "#/components/responses/Error" }
+                    }
+                }
+            },
             "/api/v1/campaigns": {
                 get: {
                     deprecated: true,
@@ -2684,7 +4388,9 @@ export function buildOpenApiDocument() {
                             type: "object",
                             required: ["projects"],
                             properties: {
-                                projects: arrayOf({ $ref: "#/components/schemas/ProjectSummary" })
+                                projects: arrayOf({
+                                    $ref: "#/components/schemas/ProjectSummary"
+                                })
                             }
                         }, "Project collection"),
                         default: { $ref: "#/components/responses/Error" }
@@ -2707,6 +4413,7 @@ export function buildOpenApiDocument() {
                 },
                 patch: {
                     summary: "Update a project",
+                    description: "Project lifecycle is status-driven. Set status to paused to suspend, completed to finish, or active to restart. Updating a project to completed auto-completes linked unfinished tasks through the normal task completion flow.",
                     responses: {
                         "200": jsonResponse({
                             type: "object",
@@ -2721,6 +4428,7 @@ export function buildOpenApiDocument() {
                 },
                 delete: {
                     summary: "Delete a project",
+                    description: "Project DELETE defaults to soft delete. Pass mode=hard only when permanent removal is intended.",
                     responses: {
                         "200": jsonResponse({
                             type: "object",
@@ -3016,6 +4724,23 @@ export function buildOpenApiDocument() {
                     }
                 }
             },
+            "/api/v1/work-adjustments": {
+                post: {
+                    summary: "Add or remove tracked work minutes on an existing task or project and return fresh XP state",
+                    requestBody: {
+                        required: true,
+                        content: {
+                            "application/json": {
+                                schema: { $ref: "#/components/schemas/WorkAdjustmentInput" }
+                            }
+                        }
+                    },
+                    responses: {
+                        "201": jsonResponse({ $ref: "#/components/schemas/WorkAdjustmentResult" }, "Created work adjustment and refreshed XP state"),
+                        "404": { $ref: "#/components/responses/Error" }
+                    }
+                }
+            },
             "/api/v1/tasks/{id}": {
                 get: {
                     summary: "Get a task",
@@ -3116,9 +4841,20 @@ export function buildOpenApiDocument() {
                     summary: "List task timers with optional task and active-state filters",
                     parameters: [
                         { name: "taskId", in: "query", schema: { type: "string" } },
-                        { name: "status", in: "query", schema: { type: "string", enum: ["active", "completed", "released", "timed_out"] } },
+                        {
+                            name: "status",
+                            in: "query",
+                            schema: {
+                                type: "string",
+                                enum: ["active", "completed", "released", "timed_out"]
+                            }
+                        },
                         { name: "active", in: "query", schema: { type: "boolean" } },
-                        { name: "limit", in: "query", schema: { type: "integer", minimum: 1, maximum: 100 } }
+                        {
+                            name: "limit",
+                            in: "query",
+                            schema: { type: "integer", minimum: 1, maximum: 100 }
+                        }
                     ],
                     responses: {
                         "200": jsonResponse({
@@ -3231,7 +4967,9 @@ export function buildOpenApiDocument() {
                             type: "object",
                             required: ["activity"],
                             properties: {
-                                activity: arrayOf({ $ref: "#/components/schemas/ActivityEvent" })
+                                activity: arrayOf({
+                                    $ref: "#/components/schemas/ActivityEvent"
+                                })
                             }
                         }, "Activity archive")
                     }
@@ -3265,9 +5003,15 @@ export function buildOpenApiDocument() {
                                     additionalProperties: false,
                                     required: ["profile", "achievements", "milestoneRewards"],
                                     properties: {
-                                        profile: { $ref: "#/components/schemas/GamificationProfile" },
-                                        achievements: arrayOf({ $ref: "#/components/schemas/AchievementSignal" }),
-                                        milestoneRewards: arrayOf({ $ref: "#/components/schemas/MilestoneReward" })
+                                        profile: {
+                                            $ref: "#/components/schemas/GamificationProfile"
+                                        },
+                                        achievements: arrayOf({
+                                            $ref: "#/components/schemas/AchievementSignal"
+                                        }),
+                                        milestoneRewards: arrayOf({
+                                            $ref: "#/components/schemas/MilestoneReward"
+                                        })
                                     }
                                 }
                             }
@@ -3343,7 +5087,11 @@ export function buildOpenApiDocument() {
                 delete: {
                     summary: "Soft delete or permanently delete a stored insight",
                     parameters: [
-                        { name: "mode", in: "query", schema: { type: "string", enum: ["soft", "hard"] } },
+                        {
+                            name: "mode",
+                            in: "query",
+                            schema: { type: "string", enum: ["soft", "hard"] }
+                        },
                         { name: "reason", in: "query", schema: { type: "string" } }
                     ],
                     responses: {
@@ -3380,7 +5128,9 @@ export function buildOpenApiDocument() {
                             type: "object",
                             required: ["approvalRequests"],
                             properties: {
-                                approvalRequests: arrayOf({ $ref: "#/components/schemas/ApprovalRequest" })
+                                approvalRequests: arrayOf({
+                                    $ref: "#/components/schemas/ApprovalRequest"
+                                })
                             }
                         }, "Approval requests")
                     }
@@ -3394,7 +5144,9 @@ export function buildOpenApiDocument() {
                             type: "object",
                             required: ["approvalRequest"],
                             properties: {
-                                approvalRequest: { $ref: "#/components/schemas/ApprovalRequest" }
+                                approvalRequest: {
+                                    $ref: "#/components/schemas/ApprovalRequest"
+                                }
                             }
                         }, "Approved request")
                     }
@@ -3408,7 +5160,9 @@ export function buildOpenApiDocument() {
                             type: "object",
                             required: ["approvalRequest"],
                             properties: {
-                                approvalRequest: { $ref: "#/components/schemas/ApprovalRequest" }
+                                approvalRequest: {
+                                    $ref: "#/components/schemas/ApprovalRequest"
+                                }
                             }
                         }, "Rejected request")
                     }
@@ -3422,7 +5176,9 @@ export function buildOpenApiDocument() {
                             type: "object",
                             required: ["agents"],
                             properties: {
-                                agents: arrayOf({ $ref: "#/components/schemas/AgentIdentity" })
+                                agents: arrayOf({
+                                    $ref: "#/components/schemas/AgentIdentity"
+                                })
                             }
                         }, "Agent identities")
                     }
@@ -3436,7 +5192,9 @@ export function buildOpenApiDocument() {
                             type: "object",
                             required: ["onboarding"],
                             properties: {
-                                onboarding: { $ref: "#/components/schemas/AgentOnboardingPayload" }
+                                onboarding: {
+                                    $ref: "#/components/schemas/AgentOnboardingPayload"
+                                }
                             }
                         }, "Agent onboarding payload")
                     }
@@ -3465,7 +5223,9 @@ export function buildOpenApiDocument() {
                             required: ["action", "approvalRequest"],
                             properties: {
                                 action: { $ref: "#/components/schemas/AgentAction" },
-                                approvalRequest: nullable({ $ref: "#/components/schemas/ApprovalRequest" })
+                                approvalRequest: nullable({
+                                    $ref: "#/components/schemas/ApprovalRequest"
+                                })
                             }
                         }, "Executed agent action"),
                         "202": jsonResponse({
@@ -3473,7 +5233,9 @@ export function buildOpenApiDocument() {
                             required: ["action", "approvalRequest"],
                             properties: {
                                 action: { $ref: "#/components/schemas/AgentAction" },
-                                approvalRequest: nullable({ $ref: "#/components/schemas/ApprovalRequest" })
+                                approvalRequest: nullable({
+                                    $ref: "#/components/schemas/ApprovalRequest"
+                                })
                             }
                         }, "Pending approval agent action")
                     }
@@ -3529,7 +5291,9 @@ export function buildOpenApiDocument() {
                             type: "object",
                             required: ["ledger"],
                             properties: {
-                                ledger: arrayOf({ $ref: "#/components/schemas/RewardLedgerEvent" })
+                                ledger: arrayOf({
+                                    $ref: "#/components/schemas/RewardLedgerEvent"
+                                })
                             }
                         }, "Reward ledger")
                     }
@@ -3558,7 +5322,9 @@ export function buildOpenApiDocument() {
                             type: "object",
                             required: ["events"],
                             properties: {
-                                events: arrayOf({ $ref: "#/components/schemas/EventLogEntry" })
+                                events: arrayOf({
+                                    $ref: "#/components/schemas/EventLogEntry"
+                                })
                             }
                         }, "Event log")
                     }
@@ -3573,7 +5339,9 @@ export function buildOpenApiDocument() {
                             required: ["sessionEvent", "rewardEvent"],
                             properties: {
                                 sessionEvent: { type: "object", additionalProperties: true },
-                                rewardEvent: nullable({ $ref: "#/components/schemas/RewardLedgerEvent" })
+                                rewardEvent: nullable({
+                                    $ref: "#/components/schemas/RewardLedgerEvent"
+                                })
                             }
                         }, "Recorded session event")
                     }
@@ -3590,6 +5358,91 @@ export function buildOpenApiDocument() {
                                 review: { $ref: "#/components/schemas/WeeklyReviewPayload" }
                             }
                         }, "Weekly review payload")
+                    }
+                }
+            },
+            "/api/v1/reviews/weekly/finalize": {
+                post: {
+                    summary: "Finalize the current weekly review cycle",
+                    responses: {
+                        "200": jsonResponse({
+                            type: "object",
+                            required: ["review", "closure", "reward", "metrics"],
+                            properties: {
+                                review: { $ref: "#/components/schemas/WeeklyReviewPayload" },
+                                closure: {
+                                    type: "object",
+                                    required: [
+                                        "id",
+                                        "weekKey",
+                                        "weekStartDate",
+                                        "weekEndDate",
+                                        "windowLabel",
+                                        "actor",
+                                        "source",
+                                        "rewardId",
+                                        "activityEventId",
+                                        "createdAt"
+                                    ],
+                                    properties: {
+                                        id: { type: "string" },
+                                        weekKey: { type: "string" },
+                                        weekStartDate: { type: "string" },
+                                        weekEndDate: { type: "string" },
+                                        windowLabel: { type: "string" },
+                                        actor: nullable({ type: "string" }),
+                                        source: {
+                                            type: "string",
+                                            enum: ["ui", "openclaw", "agent", "system"]
+                                        },
+                                        rewardId: { type: "string" },
+                                        activityEventId: { type: "string" },
+                                        createdAt: { type: "string", format: "date-time" }
+                                    }
+                                },
+                                reward: { $ref: "#/components/schemas/RewardLedgerEvent" },
+                                metrics: { $ref: "#/components/schemas/XpMetricsPayload" }
+                            }
+                        }, "Existing weekly review closure"),
+                        "201": jsonResponse({
+                            type: "object",
+                            required: ["review", "closure", "reward", "metrics"],
+                            properties: {
+                                review: { $ref: "#/components/schemas/WeeklyReviewPayload" },
+                                closure: {
+                                    type: "object",
+                                    required: [
+                                        "id",
+                                        "weekKey",
+                                        "weekStartDate",
+                                        "weekEndDate",
+                                        "windowLabel",
+                                        "actor",
+                                        "source",
+                                        "rewardId",
+                                        "activityEventId",
+                                        "createdAt"
+                                    ],
+                                    properties: {
+                                        id: { type: "string" },
+                                        weekKey: { type: "string" },
+                                        weekStartDate: { type: "string" },
+                                        weekEndDate: { type: "string" },
+                                        windowLabel: { type: "string" },
+                                        actor: nullable({ type: "string" }),
+                                        source: {
+                                            type: "string",
+                                            enum: ["ui", "openclaw", "agent", "system"]
+                                        },
+                                        rewardId: { type: "string" },
+                                        activityEventId: { type: "string" },
+                                        createdAt: { type: "string", format: "date-time" }
+                                    }
+                                },
+                                reward: { $ref: "#/components/schemas/RewardLedgerEvent" },
+                                metrics: { $ref: "#/components/schemas/XpMetricsPayload" }
+                            }
+                        }, "Created weekly review closure")
                     }
                 }
             },
@@ -3649,7 +5502,9 @@ export function buildOpenApiDocument() {
                             type: "object",
                             required: ["results"],
                             properties: {
-                                results: arrayOf({ $ref: "#/components/schemas/BatchEntityResult" })
+                                results: arrayOf({
+                                    $ref: "#/components/schemas/BatchEntityResult"
+                                })
                             }
                         }, "Batch create results")
                     }
@@ -3663,7 +5518,9 @@ export function buildOpenApiDocument() {
                             type: "object",
                             required: ["results"],
                             properties: {
-                                results: arrayOf({ $ref: "#/components/schemas/BatchEntityResult" })
+                                results: arrayOf({
+                                    $ref: "#/components/schemas/BatchEntityResult"
+                                })
                             }
                         }, "Batch update results")
                     }
@@ -3677,7 +5534,9 @@ export function buildOpenApiDocument() {
                             type: "object",
                             required: ["results"],
                             properties: {
-                                results: arrayOf({ $ref: "#/components/schemas/BatchEntityResult" })
+                                results: arrayOf({
+                                    $ref: "#/components/schemas/BatchEntityResult"
+                                })
                             }
                         }, "Batch delete results")
                     }
@@ -3691,7 +5550,9 @@ export function buildOpenApiDocument() {
                             type: "object",
                             required: ["results"],
                             properties: {
-                                results: arrayOf({ $ref: "#/components/schemas/BatchEntityResult" })
+                                results: arrayOf({
+                                    $ref: "#/components/schemas/BatchEntityResult"
+                                })
                             }
                         }, "Batch restore results")
                     }
@@ -3705,7 +5566,9 @@ export function buildOpenApiDocument() {
                             type: "object",
                             required: ["results"],
                             properties: {
-                                results: arrayOf({ $ref: "#/components/schemas/BatchEntityResult" })
+                                results: arrayOf({
+                                    $ref: "#/components/schemas/BatchEntityResult"
+                                })
                             }
                         }, "Batch search results")
                     }
@@ -3719,7 +5582,9 @@ export function buildOpenApiDocument() {
                             type: "object",
                             required: ["token"],
                             properties: {
-                                token: { $ref: "#/components/schemas/AgentTokenMutationResult" }
+                                token: {
+                                    $ref: "#/components/schemas/AgentTokenMutationResult"
+                                }
                             }
                         }, "Created agent token")
                     }

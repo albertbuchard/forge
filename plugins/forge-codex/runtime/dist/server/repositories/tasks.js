@@ -11,7 +11,7 @@ import { pruneLinkedEntityReferences } from "./psyche.js";
 import { awardTaskCompletionReward, reverseLatestTaskCompletionReward } from "./rewards.js";
 import { assertTaskRelations } from "../services/relations.js";
 import { computeWorkTime, emptyTaskTimeSummary } from "../services/work-time.js";
-import { taskSchema } from "../types.js";
+import { calendarSchedulingRulesSchema, taskSchema } from "../types.js";
 function readTaskTagIds(taskId) {
     const rows = getDatabase()
         .prepare(`SELECT tag_id FROM task_tags WHERE task_id = ? ORDER BY tag_id`)
@@ -32,6 +32,10 @@ function mapTask(row, time = emptyTaskTimeSummary()) {
         effort: row.effort,
         energy: row.energy,
         points: row.points,
+        plannedDurationSeconds: row.planned_duration_seconds,
+        schedulingRules: row.scheduling_rules_json === null
+            ? null
+            : calendarSchedulingRulesSchema.parse(JSON.parse(row.scheduling_rules_json)),
         sortOrder: row.sort_order,
         completedAt: row.completed_at,
         createdAt: row.created_at,
@@ -129,9 +133,17 @@ function updateTaskRecord(current, input, activity) {
     getDatabase()
         .prepare(`UPDATE tasks
        SET title = ?, description = ?, status = ?, priority = ?, owner = ?, goal_id = ?, due_date = ?, effort = ?,
-           energy = ?, points = ?, sort_order = ?, completed_at = ?, updated_at = ?, project_id = ?
+           energy = ?, points = ?, planned_duration_seconds = ?, scheduling_rules_json = ?, sort_order = ?, completed_at = ?, updated_at = ?, project_id = ?
        WHERE id = ?`)
-        .run(input.title ?? current.title, input.description ?? current.description, nextStatus, input.priority ?? current.priority, input.owner ?? current.owner, nextGoalId, input.dueDate === undefined ? current.dueDate : input.dueDate, input.effort ?? current.effort, input.energy ?? current.energy, input.points ?? current.points, nextSort, completedAt, updatedAt, nextProjectId, current.id);
+        .run(input.title ?? current.title, input.description ?? current.description, nextStatus, input.priority ?? current.priority, input.owner ?? current.owner, nextGoalId, input.dueDate === undefined ? current.dueDate : input.dueDate, input.effort ?? current.effort, input.energy ?? current.energy, input.points ?? current.points, input.plannedDurationSeconds === undefined
+        ? current.plannedDurationSeconds
+        : input.plannedDurationSeconds, input.schedulingRules === undefined
+        ? current.schedulingRules === null
+            ? null
+            : JSON.stringify(current.schedulingRules)
+        : input.schedulingRules === null
+            ? null
+            : JSON.stringify(input.schedulingRules), nextSort, completedAt, updatedAt, nextProjectId, current.id);
     replaceTaskTags(current.id, nextTagIds);
     const updated = getTaskById(current.id);
     if (updated && activity) {
@@ -210,6 +222,8 @@ function fingerprintTaskCreate(input) {
         effort: input.effort,
         energy: input.energy,
         points: input.points,
+        plannedDurationSeconds: input.plannedDurationSeconds,
+        schedulingRules: input.schedulingRules,
         sortOrder: input.sortOrder ?? null,
         tagIds: input.tagIds,
         notes: input.notes.map((note) => ({
@@ -232,11 +246,11 @@ function insertTaskRecord(input, activity) {
     const completedAt = normalizeCompletedAt(input.status, null);
     getDatabase()
         .prepare(`INSERT INTO tasks (
-        id, title, description, status, priority, owner, goal_id, project_id, due_date, effort, energy, points, sort_order,
-        completed_at, created_at, updated_at
+        id, title, description, status, priority, owner, goal_id, project_id, due_date, effort, energy, points,
+        planned_duration_seconds, scheduling_rules_json, sort_order, completed_at, created_at, updated_at
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-        .run(id, input.title, input.description, input.status, input.priority, input.owner, relationState.goalId, relationState.projectId, input.dueDate, input.effort, input.energy, input.points, sortOrder, completedAt, now, now);
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+        .run(id, input.title, input.description, input.status, input.priority, input.owner, relationState.goalId, relationState.projectId, input.dueDate, input.effort, input.energy, input.points, input.plannedDurationSeconds, input.schedulingRules === null ? null : JSON.stringify(input.schedulingRules), sortOrder, completedAt, now, now);
     replaceTaskTags(id, input.tagIds);
     const task = getTaskById(id);
     if (activity) {
@@ -306,7 +320,8 @@ export function listTasks(filters = {}) {
         params.push(filters.limit);
     }
     const rows = getDatabase()
-        .prepare(`SELECT id, title, description, status, priority, owner, goal_id, project_id, due_date, effort, energy, points, sort_order,
+        .prepare(`SELECT id, title, description, status, priority, owner, goal_id, project_id, due_date, effort, energy, points,
+              planned_duration_seconds, scheduling_rules_json, sort_order,
               completed_at, created_at, updated_at
        FROM tasks
        ${whereSql}
@@ -330,7 +345,8 @@ export function getTaskById(taskId) {
         return undefined;
     }
     const row = getDatabase()
-        .prepare(`SELECT id, title, description, status, priority, owner, goal_id, project_id, due_date, effort, energy, points, sort_order,
+        .prepare(`SELECT id, title, description, status, priority, owner, goal_id, project_id, due_date, effort, energy, points,
+              planned_duration_seconds, scheduling_rules_json, sort_order,
               completed_at, created_at, updated_at
        FROM tasks
        WHERE id = ?`)

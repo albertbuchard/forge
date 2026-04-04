@@ -114,6 +114,8 @@ export function cascadeSoftDeleteAnchoredCollaboration(parentEntityType, parentE
          notes.content_plain AS content_plain,
          notes.author AS author,
          notes.source AS source,
+         notes.tags_json AS tags_json,
+         notes.destroy_at AS destroy_at,
          notes.created_at AS created_at,
          notes.updated_at AS updated_at
        FROM notes
@@ -145,18 +147,24 @@ export function cascadeSoftDeleteAnchoredCollaboration(parentEntityType, parentE
             linksByNoteId.set(link.note_id, current);
         }
         for (const row of noteRows) {
-            const compact = (row.content_plain || row.content_markdown).replace(/\s+/g, " ").trim();
+            const compact = (row.content_plain || row.content_markdown)
+                .replace(/\s+/g, " ")
+                .trim();
             upsertDeletedEntityRecord({
                 entityType: "note",
                 entityId: row.id,
                 title: compact.slice(0, 72) || "Note",
-                subtitle: compact.length > 72 ? compact.slice(72, 168).trim() : `Linked to ${parentEntityType.replaceAll("_", " ")}`,
+                subtitle: compact.length > 72
+                    ? compact.slice(72, 168).trim()
+                    : `Linked to ${parentEntityType.replaceAll("_", " ")}`,
                 snapshot: {
                     id: row.id,
                     contentMarkdown: row.content_markdown,
                     contentPlain: row.content_plain,
                     author: row.author,
                     source: row.source,
+                    tags: JSON.parse(row.tags_json),
+                    destroyAt: row.destroy_at,
                     createdAt: row.created_at,
                     updatedAt: row.updated_at,
                     links: linksByNoteId.get(row.id) ?? []
