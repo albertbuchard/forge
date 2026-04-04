@@ -106,6 +106,30 @@ calls the packaged Forge local-runtime bootstrap helper built from the same runt
 OpenClaw ships. That means Hermes gets the same local port relocation, health checks,
 and storage-root mismatch protection without depending on repo-only imports at runtime.
 
+## Shared Multi-user Setup
+
+Hermes works well as one participant in a shared Forge system, but the shared
+runtime needs to be intentional.
+
+If Hermes and OpenClaw are meant to see the same users, strategies, tasks, and
+notes:
+
+- point both at the same `origin`
+- point both at the same `port`
+- point both at the same `dataRoot` when using a local runtime
+- give Hermes a clear `actorLabel`
+
+Forge's multi-user model is explicit:
+
+- every user is `human` or `bot`
+- writes should set `userId` intentionally
+- reads can scope with `userId` or repeated `userIds`
+- cross-user links are valid
+
+If Hermes is meant to operate as its own bot user inside that shared runtime,
+create that bot in `Settings -> Users` and write records with that bot's
+`userId` instead of defaulting to the human operator.
+
 ## Notes
 
 - the plugin installs its bundled Forge skill pack to `~/.hermes/skills/forge-hermes/` on first load if the user does not already have those files there

@@ -72,6 +72,73 @@ Examples:
 - “Map this as a behavior pattern.”
 - “Open the Forge UI.”
 
+## Multi-user And Multi-agent Setup
+
+Forge is built to support several humans and bots in one shared planning
+system. The key distinction is:
+
+- ownership answers "whose record is this"
+- linking answers "what does this record connect to"
+
+That means this plugin should not flatten all work into the default operator.
+When a task belongs to a bot, the write should set that bot `userId`. When a
+read should compare several owners, it should pass repeated `userIds`.
+
+Recommended shared setup:
+
+1. Run one shared Forge runtime.
+2. Point OpenClaw, Hermes, and the browser UI at that same runtime.
+3. Use one explicit `dataRoot` if several local adapters are meant to share one
+   Forge database.
+4. Create the human and bot users in `Settings -> Users`.
+5. Use `userId` on writes and `userIds` on reads.
+
+Current sharing behavior is intentionally clear:
+
+- users are typed as `human` or `bot`
+- the runtime can list users directly
+- reads are permissive when a route explicitly scopes to another user
+- cross-user links are valid, so a human-owned project can reference bot-owned
+  tasks, notes, or strategy nodes
+
+If OpenClaw and Hermes are supposed to collaborate inside one Forge system, the
+important thing is not only matching `origin` and `port`. They should also
+share the same `dataRoot` when they are meant to use the same local database.
+
+## Strategies And Alignment Metrics
+
+Forge strategies are first-class planning records for work that unfolds through
+an ordered graph instead of a flat checklist.
+
+A strategy includes:
+
+- target goals and projects
+- free-text overview and end-state description
+- optional linked entities
+- a directed acyclic graph of task and project nodes
+
+The graph can branch, but it should not loop.
+
+Current metrics are explicit:
+
+- project nodes use project progress directly
+- task nodes map status to progress:
+  `done`/`completed`/`reviewed`/`integrated` = `100%`
+  `in_progress`/`active` = `66%`
+  `focus` = `50%`
+  `blocked`/`paused` = `25%`
+  everything else = `0%`
+- active or next nodes are the incomplete nodes whose dependencies are already
+  complete
+- target progress comes from the linked goals or projects
+- `alignmentScore` is
+  `round((average node progress * 0.7 + average target progress * 0.3) * 100)`
+
+This lets the user and the agent answer two concrete questions:
+
+- What work is truly next in the plan?
+- How aligned is current execution with the intended end state?
+
 ## Install
 
 Current OpenClaw builds should use package discovery:

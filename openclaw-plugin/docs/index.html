@@ -6,7 +6,7 @@
     <title>Forge Agent Integrations</title>
     <meta
       name="description"
-      content="Forge is a structured memory plugin for project management and mental health tracking, with OpenClaw and Hermes integrations, standalone local runtime setup, calendar planning, live work sessions, linked notes, XP, and a Psyche module influenced by third-wave CBT, ACT, and schema therapy."
+      content="Forge is a multi-user structured planning, execution, and reflection system with OpenClaw and Hermes integrations, human and bot ownership, directed strategies, explicit alignment metrics, calendar planning, linked notes, and a Psyche module influenced by third-wave CBT, ACT, and schema therapy."
     />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -32,6 +32,8 @@
         </a>
         <nav class="topnav">
           <a href="#what-is-forge">What It Is</a>
+          <a href="#multi-user">Multi-user</a>
+          <a href="#strategies">Strategies</a>
           <a href="#getting-started">Getting Started</a>
           <a href="#plugins">Plugins</a>
           <a href="#calendar">Calendar</a>
@@ -50,25 +52,30 @@
         <section class="hero">
           <div class="hero-copy">
             <p class="eyebrow">Forge For Agents</p>
-            <h1>Structured memory plugin for project management and mental health tracking.</h1>
+            <h1>
+              Structured multi-user planning, execution, and reflection for
+              humans and bots.
+            </h1>
             <p class="lede">
               Forge gives the user and their agent one structured memory layer
-              for goals, projects, tasks, live work sessions, linked notes, XP,
-              weekly review, and calendar planning. The agent integrations let
-              OpenClaw or Hermes read that data, update it safely, and open the
-              right Forge page when planning or review is easier in the UI.
+              for goals, projects, tasks, strategies, live work sessions, linked
+              notes, XP, weekly review, and calendar planning. The agent
+              integrations let OpenClaw or Hermes read that data, update it
+              safely, and open the right Forge page when planning or review is
+              easier in the UI.
             </p>
             <p class="lede">
-              The mental health module, Psyche, is explicitly influenced by
-              third-wave CBT, ACT, and schema therapy. That gives the agent a
-              durable place to save values, beliefs, modes, patterns, and
-              trigger reports instead of leaving psychologically important
-              material buried in chat.
+              Forge is explicitly multi-user. Every important record can belong
+              to a typed <code>human</code> or <code>bot</code> user, and
+              cross-user links are allowed, so a human-owned project can still
+              depend on bot-owned tasks or strategy branches without losing
+              ownership clarity.
             </p>
             <p class="lede">
-              Chat keeps narrative context. Forge keeps the structured parts
-              that need review and reuse over time, such as task state,
-              calendar plans, linked notes, and reflection records.
+              The Psyche module is explicitly influenced by third-wave CBT, ACT,
+              and schema therapy. That gives the agent a durable place to save
+              values, beliefs, modes, patterns, and trigger reports instead of
+              leaving psychologically important material buried in chat.
             </p>
             <div class="hero-actions">
               <a class="button primary" href="#getting-started">Get Started</a>
@@ -80,8 +87,15 @@
             </div>
             <ul class="hero-list">
               <li>Turn a goal into projects and tasks.</li>
+              <li>Separate work clearly between human and bot owners.</li>
+              <li>
+                Plan complex work with directed strategies and next-node
+                visibility.
+              </li>
               <li>Run tasks on a real Kanban board.</li>
-              <li>Schedule work with calendar events, work blocks, and timeboxes.</li>
+              <li>
+                Schedule work with calendar events, work blocks, and timeboxes.
+              </li>
               <li>Start, stop, and complete live work sessions.</li>
               <li>
                 Save notes, insights, XP, and Psyche records in the same place.
@@ -97,8 +111,8 @@
                 <strong>plugins/forge-hermes</strong>
               </div>
               <div class="stat-pill">
-                <span class="stat-label">Default Local Port</span>
-                <strong>4317</strong>
+                <span class="stat-label">Ownership Model</span>
+                <strong>Human + bot users</strong>
               </div>
             </div>
           </div>
@@ -119,13 +133,16 @@
         <section class="section plugin-section" id="plugins">
           <div class="section-heading">
             <p class="eyebrow">Plugin Surfaces</p>
-            <h2>Forge ships two agent adapters plus a standalone local app path.</h2>
+            <h2>
+              Forge ships two agent adapters plus a standalone local app path.
+            </h2>
             <p class="section-copy">
-              OpenClaw is the published install path today. Hermes is packaged as
-              a native Python plugin for Hermes with entry-point discovery. Both adapters
-              let the agent work with the same Forge records, timer controls,
-              calendar planning tools, and UI handoff points. Standalone mode
-              runs Forge directly when you want the app and API without an agent layer.
+              OpenClaw is the published install path today. Hermes is packaged
+              as a native Python plugin for Hermes with entry-point discovery.
+              Both adapters let the agent work with the same Forge records,
+              timer controls, calendar planning tools, and UI handoff points.
+              Standalone mode runs Forge directly when you want the app and API
+              without an agent layer.
             </p>
           </div>
           <div class="intro-grid plugin-grid">
@@ -142,7 +159,8 @@
               <p>
                 Native Hermes plugin layout with Python package entry-point
                 discovery, bundled skill install, and local runtime bootstrap
-                through the same tested Forge startup helper and data-root safeguards.
+                through the same tested Forge startup helper and data-root
+                safeguards.
               </p>
             </article>
             <article class="card">
@@ -195,9 +213,9 @@
               planning, execution, and review.
             </h2>
             <p class="section-copy">
-              Forge keeps goals, projects, tasks, work sessions, notes,
-              calendar commitments, and psychologically relevant records in one
-              place that stays inspectable and editable over time.
+              Forge keeps goals, projects, tasks, work sessions, notes, calendar
+              commitments, and psychologically relevant records in one place
+              that stays inspectable and editable over time.
             </p>
           </div>
           <div class="intro-grid">
@@ -228,6 +246,22 @@
               </p>
             </article>
             <article class="card">
+              <h3>Separate humans and bots clearly</h3>
+              <p>
+                Forge makes ownership explicit. A record can belong to a human
+                or a bot, and the UI, search surfaces, and agent tools can all
+                show or scope that ownership directly.
+              </p>
+            </article>
+            <article class="card">
+              <h3>Use strategies for real plans</h3>
+              <p>
+                When work needs sequence and branching, Forge gives it a real
+                strategy graph instead of forcing everything into flat project
+                prose or disconnected task lists.
+              </p>
+            </article>
+            <article class="card">
               <h3>Keep notes and Psyche records together</h3>
               <p>
                 Notes, insights, values, beliefs, patterns, and trigger reports
@@ -237,16 +271,158 @@
             </article>
           </div>
         </section>
+        <section class="section" id="multi-user">
+          <div class="section-heading">
+            <p class="eyebrow">Multi-user Forge</p>
+            <h2>
+              One Forge runtime can coordinate several humans and bots clearly.
+            </h2>
+            <p class="section-copy">
+              Forge does not treat all records as if they belong to one hidden
+              operator. Ownership is explicit, but collaboration still works
+              across owners. That makes the system easier to inspect, easier to
+              trust, and easier to automate.
+            </p>
+          </div>
+          <div class="intro-grid">
+            <article class="card">
+              <h3>Ownership is first-class</h3>
+              <p>
+                Goals, projects, tasks, strategies, notes, habits, calendar
+                records, and Psyche records can all carry a
+                <code>userId</code>. Every Forge user is typed as
+                <code>human</code> or <code>bot</code>.
+              </p>
+            </article>
+            <article class="card">
+              <h3>Reads can scope intentionally</h3>
+              <p>
+                Read routes can focus on one owner, several owners, or all
+                visible users with <code>userId</code> and repeated
+                <code>userIds</code>. That keeps comparison and handoff views
+                explicit instead of accidental.
+              </p>
+            </article>
+            <article class="card">
+              <h3>Cross-user links stay valid</h3>
+              <p>
+                A human-owned project can point at bot-owned tasks. A bot-owned
+                strategy can target a human-owned goal. Forge keeps ownership
+                and linkage separate on purpose.
+              </p>
+            </article>
+            <article class="card">
+              <h3>Current sharing posture is simple</h3>
+              <p>
+                The current model is permissive when a route explicitly asks for
+                another user. That keeps the product collaborative today while
+                leaving room for stricter future policy controls.
+              </p>
+            </article>
+          </div>
+          <div class="step-grid install-step-grid">
+            <article class="card step-card">
+              <span class="step-number">1</span>
+              <h3>Choose one shared runtime</h3>
+              <p>
+                If OpenClaw, Hermes, and the browser are meant to see the same
+                Forge system, point them at the same Forge server.
+              </p>
+            </article>
+            <article class="card step-card">
+              <span class="step-number">2</span>
+              <h3>Choose one shared data root</h3>
+              <p>
+                For local shared installs, give the adapters the same
+                <code>dataRoot</code> so they use the same database instead of
+                drifting into separate sandboxes.
+              </p>
+            </article>
+            <article class="card step-card">
+              <span class="step-number">3</span>
+              <h3>Create the users in Forge</h3>
+              <p>
+                Use <code>Settings -&gt; Users</code> to create the human and
+                bot users that should own records in the shared runtime.
+              </p>
+            </article>
+            <article class="card step-card">
+              <span class="step-number">4</span>
+              <h3>Write ownership deliberately</h3>
+              <p>
+                Agent writes should set <code>userId</code> deliberately, and
+                agent reads should use <code>userIds</code> when a scoped view
+                matters.
+              </p>
+            </article>
+          </div>
+        </section>
+        <section class="section" id="strategies">
+          <div class="section-heading">
+            <p class="eyebrow">Strategies</p>
+            <h2>
+              Strategies give Forge a real planning layer above normal project
+              execution.
+            </h2>
+            <p class="section-copy">
+              Use a strategy when the work has sequence, branching, or a clear
+              end state that is bigger than one task list. Forge models that as
+              a directed acyclic graph of projects and tasks, not as a vague
+              note.
+            </p>
+          </div>
+          <div class="record-grid">
+            <article class="card record-card">
+              <strong>What a strategy contains</strong>
+              <p>
+                Title, overview, end-state description, target goals, target
+                projects, linked entities, and a directed non-looping graph of
+                project and task nodes.
+              </p>
+            </article>
+            <article class="card record-card">
+              <strong>What the graph means</strong>
+              <p>
+                The graph can branch and converge, but it should not loop. That
+                lets Forge show what is complete, what is blocked, and what is
+                truly next.
+              </p>
+            </article>
+            <article class="card record-card">
+              <strong>How node progress works</strong>
+              <p>
+                Project nodes use project progress directly. Task nodes map
+                status to progress: done is 100%, in progress is 66%, focus is
+                50%, blocked or paused is 25%, and untouched work is 0%.
+              </p>
+            </article>
+            <article class="card record-card">
+              <strong>How alignment score works</strong>
+              <p>
+                Forge computes <code>alignmentScore</code> as
+                <code
+                  >round((average node progress * 0.7 + average target progress
+                  * 0.3) * 100)</code
+                >. That keeps most weight on the actual plan sequence while
+                still checking whether the end targets are landing.
+              </p>
+            </article>
+          </div>
+        </section>
         <section class="section getting-started" id="getting-started">
           <div class="section-heading">
             <p class="eyebrow">Getting Started</p>
-            <h2 id="getting-started-title">Choose OpenClaw, Hermes, or standalone Forge.</h2>
+            <h2 id="getting-started-title">
+              Choose OpenClaw, Hermes, or standalone Forge.
+            </h2>
             <p class="section-copy" id="getting-started-copy">
               The install block below switches between the published OpenClaw
               path, the Hermes Python plugin package, and the plain standalone
               repo runtime. OpenClaw still needs the allow-list repair step.
-              Hermes installs through pip into Hermes' own runtime
-              environment while keeping the same tested Forge runtime bootstrap.
+              Hermes installs through pip into Hermes' own runtime environment
+              while keeping the same tested Forge runtime bootstrap. If you want
+              a shared multi-user Forge, keep the adapters on the same runtime
+              and the same storage root.
             </p>
           </div>
           <div class="install-card">
@@ -257,16 +433,36 @@
               <span id="install-heading">Install Forge in OpenClaw</span>
             </div>
             <div class="install-tabs" role="tablist" aria-label="Install modes">
-              <button class="install-tab active" type="button" data-install-mode="openclaw">OpenClaw</button>
-              <button class="install-tab" type="button" data-install-mode="hermes">Hermes</button>
-              <button class="install-tab" type="button" data-install-mode="standalone">Standalone</button>
+              <button
+                class="install-tab active"
+                type="button"
+                data-install-mode="openclaw"
+              >
+                OpenClaw
+              </button>
+              <button
+                class="install-tab"
+                type="button"
+                data-install-mode="hermes"
+              >
+                Hermes
+              </button>
+              <button
+                class="install-tab"
+                type="button"
+                data-install-mode="standalone"
+              >
+                Standalone
+              </button>
             </div>
             <p class="install-summary" id="install-summary">
-              Published plugin with a managed local runtime and CLI health checks.
+              Published plugin with a managed local runtime and CLI health
+              checks.
             </p>
             <p class="install-context" id="install-context">
-              OpenClaw is the fastest path if you want the published package and the
-              Forge runtime commands to appear directly inside the OpenClaw CLI.
+              OpenClaw is the fastest path if you want the published package and
+              the Forge runtime commands to appear directly inside the OpenClaw
+              CLI.
             </p>
             <div class="command-shell">
               <button
@@ -335,8 +531,10 @@
               <h3 id="install-info-title-2">Where the data lives</h3>
               <p id="install-info-copy-2a">
                 OpenClaw installs normally use
-                <code>~/.openclaw/extensions/forge-openclaw-plugin/data/forge.sqlite</code>.
-                Hermes defaults to <code>~/.hermes/forge/data/forge.sqlite</code>.
+                <code
+                  >~/.openclaw/extensions/forge-openclaw-plugin/data/forge.sqlite</code
+                >. Hermes defaults to
+                <code>~/.hermes/forge/data/forge.sqlite</code>.
               </p>
               <p id="install-info-copy-2b">
                 If you want a specific storage folder, set
@@ -349,13 +547,15 @@
               <h3 id="install-info-title-3">If startup fails</h3>
               <p id="install-info-copy-3a">
                 OpenClaw runtime logs live under
-                <code>~/.openclaw/logs/forge-openclaw-plugin/&lt;host&gt;-&lt;port&gt;.log</code>.
+                <code
+                  >~/.openclaw/logs/forge-openclaw-plugin/&lt;host&gt;-&lt;port&gt;.log</code
+                >.
               </p>
               <p id="install-info-copy-3b">
                 Hermes reuses the same Forge local-runtime helper, so local
-                startup issues usually come from a missing Python package install,
-                repo runtime dependencies, or a port collision rather than from a
-                second plugin-specific server.
+                startup issues usually come from a missing Python package
+                install, repo runtime dependencies, or a port collision rather
+                than from a second plugin-specific server.
               </p>
             </article>
           </div>
@@ -395,10 +595,10 @@
             <p class="eyebrow">Calendar Surface</p>
             <h2>The calendar is now a first-class execution layer.</h2>
             <p class="section-copy">
-              Forge does not treat scheduling as an afterthought anymore. The week
-              view keeps provider events, native Forge events, recurring work
-              blocks, and task timeboxes visible together so the user and the
-              agent can plan against the same calendar reality.
+              Forge does not treat scheduling as an afterthought anymore. The
+              week view keeps provider events, native Forge events, recurring
+              work blocks, and task timeboxes visible together so the user and
+              the agent can plan against the same calendar reality.
             </p>
           </div>
           <div class="calendar-layout">
@@ -408,27 +608,27 @@
                 alt="Forge calendar week view showing recurring work blocks, provider events, and native Forge events across the week"
               />
               <figcaption>
-                The week view is the planning surface now: color-coded calendars,
-                recurring work blocks, provider events, and native Forge events
-                all sit in one compact weekly map.
+                The week view is the planning surface now: color-coded
+                calendars, recurring work blocks, provider events, and native
+                Forge events all sit in one compact weekly map.
               </figcaption>
             </figure>
             <div class="calendar-stack">
               <article class="card calendar-card">
                 <h3>Week-first scheduling</h3>
                 <p>
-                  The calendar opens directly on a responsive week view so the user
-                  can see commitments, work blocks, timeboxes, and gaps before
-                  deciding what to do next.
+                  The calendar opens directly on a responsive week view so the
+                  user can see commitments, work blocks, timeboxes, and gaps
+                  before deciding what to do next.
                 </p>
               </article>
               <article class="card calendar-card">
                 <h3>Work blocks and holidays</h3>
                 <p>
                   Forge work blocks are compact recurring templates, not fake
-                  exploded events. They support start and end dates, holiday blocks,
-                  edit/delete actions, and indefinite repetition when no end date is
-                  set.
+                  exploded events. They support start and end dates, holiday
+                  blocks, edit/delete actions, and indefinite repetition when no
+                  end date is set.
                 </p>
               </article>
               <article class="card calendar-card">
@@ -436,8 +636,8 @@
                 <p>
                   Google Calendar, Apple Calendar, Exchange Online, and custom
                   CalDAV connections can live beside Forge-owned events and
-                  timeboxes. Calendar colors can stay on for source clarity or turn
-                  off while keeping clean neutral event cards.
+                  timeboxes. Calendar colors can stay on for source clarity or
+                  turn off while keeping clean neutral event cards.
                 </p>
               </article>
             </div>
@@ -446,9 +646,7 @@
         <section class="section surfaces-section">
           <div class="section-heading">
             <p class="eyebrow">More Product Surfaces</p>
-            <h2>
-              Forge is a workspace, not just a data store.
-            </h2>
+            <h2>Forge is a workspace, not just a data store.</h2>
             <p class="section-copy">
               These two screens show that more directly: one on the execution
               side with a real project board and linked notes, and one on the
@@ -501,6 +699,20 @@
             <article class="card record-card">
               <strong>Projects</strong>
               <p>Concrete bodies of work that move one goal forward.</p>
+            </article>
+            <article class="card record-card">
+              <strong>Users</strong>
+              <p>
+                Explicit human and bot owners that make shared work readable
+                instead of hiding everything under one generic operator.
+              </p>
+            </article>
+            <article class="card record-card">
+              <strong>Strategies</strong>
+              <p>
+                Directed non-looping plans that sequence projects and tasks
+                toward one or more target goals or projects.
+              </p>
             </article>
             <article class="card record-card">
               <strong>Tasks</strong>
@@ -644,9 +856,7 @@
                 <code>Write plugin install guide</code> so the board reflects
                 the actual work.
               </p>
-              <p>
-                The board stays visible as a direct execution surface.
-              </p>
+              <p>The board stays visible as a direct execution surface.</p>
             </article>
             <article class="card example-card">
               <span class="example-kicker">Live work</span>
@@ -667,7 +877,8 @@
               <h3>“What did I actually get done this week?”</h3>
               <p>
                 Forge tracks the work sessions and completions, then shows the
-                XP and review trail. The agent can point to actual work that happened.
+                XP and review trail. The agent can point to actual work that
+                happened.
               </p>
             </article>
             <article class="card example-card">
@@ -705,9 +916,7 @@
                 Forge lets your agent save that as a pattern, link it to a
                 belief, and attach a trigger report when a real episode happens.
               </p>
-              <p>
-                The pattern stays linked to the work it affects.
-              </p>
+              <p>The pattern stays linked to the work it affects.</p>
             </article>
           </div>
         </section>
@@ -717,7 +926,8 @@
             <h2>These are the commands a normal user actually needs.</h2>
             <p class="section-copy" id="commands-copy">
               The command set below follows the selected install mode so you do
-              not have to translate OpenClaw instructions into Hermes or standalone repo commands.
+              not have to translate OpenClaw instructions into Hermes or
+              standalone repo commands.
             </p>
           </div>
           <div class="command-grid">
@@ -799,7 +1009,9 @@ openclaw forge status</code></pre>
               </p>
             </article>
             <article class="card faq-card">
-              <h3 id="faq-title-2">My agent refuses to tell me about Forge information</h3>
+              <h3 id="faq-title-2">
+                My agent refuses to tell me about Forge information
+              </h3>
               <p id="faq-body-2">
                 Check <strong>OpenClaw -&gt; Agents</strong> first. The Forge
                 plugin can be installed, enabled, and healthy while the agent
@@ -852,9 +1064,7 @@ openclaw forge status</code></pre>
           <div class="publish-panel">
             <div class="publish-copy">
               <p class="eyebrow">Source</p>
-              <h2>
-                Source and packages
-              </h2>
+              <h2>Source and packages</h2>
               <p>
                 OpenClaw is published on npm. Hermes is published on PyPI. The
                 standalone app and both plugin codebases live in the same repo.
@@ -907,23 +1117,19 @@ openclaw forge status`,
           steps: [
             {
               title: "Pick the published adapter",
-              body:
-                "Use OpenClaw when you want the released npm package, built-in Forge CLI commands, and the shortest path from install to a healthy local runtime."
+              body: "Use OpenClaw when you want the released npm package, built-in Forge CLI commands, and the shortest path from install to a healthy local runtime."
             },
             {
               title: "Install and repair the allow list",
-              body:
-                "Install the package, enable it, then append <code>forge-openclaw-plugin</code> into <code>plugins.allow</code> so the entrypoint really loads on restart."
+              body: "Install the package, enable it, then append <code>forge-openclaw-plugin</code> into <code>plugins.allow</code> so the entrypoint really loads on restart."
             },
             {
               title: "Let the plugin bootstrap Forge",
-              body:
-                "OpenClaw can start Forge locally on <code>127.0.0.1:4317</code>, relocate to the next free localhost port if that one is occupied, and remember the preferred free port afterward."
+              body: "OpenClaw can start Forge locally on <code>127.0.0.1:4317</code>, relocate to the next free localhost port if that one is occupied, and remember the preferred free port afterward."
             },
             {
               title: "Allow the Forge tools on the agent",
-              body:
-                "Open <code>OpenClaw -&gt; Agents</code>, select the agent you actually use, and turn on every tool card under <code>forge-openclaw-plugin</code>."
+              body: "Open <code>OpenClaw -&gt; Agents</code>, select the agent you actually use, and turn on every tool card under <code>forge-openclaw-plugin</code>."
             }
           ],
           info: [
@@ -939,7 +1145,7 @@ openclaw forge status`,
               bodyA:
                 "OpenClaw installs normally store Forge at <code>~/.openclaw/extensions/forge-openclaw-plugin/data/forge.sqlite</code> unless you set a custom data root in plugin config.",
               bodyB:
-                "If you want a different storage folder, set <code>plugins.entries[\"forge-openclaw-plugin\"].config.dataRoot</code> and restart the gateway."
+                'If you want a different storage folder, set <code>plugins.entries["forge-openclaw-plugin"].config.dataRoot</code> and restart the gateway.'
             },
             {
               title: "If startup fails",
@@ -978,28 +1184,23 @@ openclaw forge status`
           faqs: [
             {
               title: "Forge installed, but nothing starts",
-              body:
-                "The most common cause is that the plugin was installed and enabled, but not added to <code>plugins.allow</code>. Run the full install flow above, especially the allow-list repair command, then restart the gateway."
+              body: "The most common cause is that the plugin was installed and enabled, but not added to <code>plugins.allow</code>. Run the full install flow above, especially the allow-list repair command, then restart the gateway."
             },
             {
               title: "My agent refuses to tell me about Forge information",
-              body:
-                "Check <strong>OpenClaw -&gt; Agents</strong> first. The Forge plugin can be installed, enabled, and healthy while the agent still has the <code>forge-openclaw-plugin</code> tools turned off on the tool page. Turn on the Forge cards for the agent you are actually using, then try again."
+              body: "Check <strong>OpenClaw -&gt; Agents</strong> first. The Forge plugin can be installed, enabled, and healthy while the agent still has the <code>forge-openclaw-plugin</code> tools turned off on the tool page. Turn on the Forge cards for the agent you are actually using, then try again."
             },
             {
               title: "Why is Forge not on port 4317?",
-              body:
-                "If something else already uses <code>4317</code>, Forge can move to the next free local port. Use <code>openclaw forge status</code> to see the actual base URL it chose."
+              body: "If something else already uses <code>4317</code>, Forge can move to the next free local port. Use <code>openclaw forge status</code> to see the actual base URL it chose."
             },
             {
               title: "Can I store the data somewhere else?",
-              body:
-                "Yes. Set <code>plugins.entries[\"forge-openclaw-plugin\"].config.dataRoot</code> in OpenClaw, then restart the gateway so Forge picks up the new storage root."
+              body: 'Yes. Set <code>plugins.entries["forge-openclaw-plugin"].config.dataRoot</code> in OpenClaw, then restart the gateway so Forge picks up the new storage root.'
             },
             {
               title: "Where do I go if the runtime crashes?",
-              body:
-                "Read the runtime log at <code>~/.openclaw/logs/forge-openclaw-plugin/&lt;host&gt;-&lt;port&gt;.log</code>. It captures the child process output from the actual Forge server."
+              body: "Read the runtime log at <code>~/.openclaw/logs/forge-openclaw-plugin/&lt;host&gt;-&lt;port&gt;.log</code>. It captures the child process output from the actual Forge server."
             }
           ]
         },
@@ -1008,8 +1209,7 @@ openclaw forge status`
           gettingStartedCopy:
             "Hermes is a Python plugin with a hermes_agent.plugins entry point. Install it from PyPI into Hermes' own runtime environment, then let Hermes load Forge through the normal plugin registry.",
           heading: "Install Forge in Hermes",
-          summary:
-            "Install the Forge Hermes plugin from PyPI.",
+          summary: "Install the Forge Hermes plugin from PyPI.",
           context:
             "Install `forge-hermes-plugin` into the same Python environment Hermes runs from, then restart Hermes. If `python` already points to that environment, use it directly. Otherwise, call Hermes' local venv Python explicitly.",
           command: `python -m pip install --upgrade forge-hermes-plugin
@@ -1018,23 +1218,19 @@ hermes`,
           steps: [
             {
               title: "Install the Hermes package",
-              body:
-                "Install <code>forge-hermes-plugin</code> from PyPI into the same Python environment Hermes uses so Hermes can discover Forge through its normal plugin registry. You can use <code>python -m pip</code> if that already targets Hermes, or call <code>~/.hermes/hermes-agent/venv/bin/python</code> explicitly."
+              body: "Install <code>forge-hermes-plugin</code> from PyPI into the same Python environment Hermes uses so Hermes can discover Forge through its normal plugin registry. You can use <code>python -m pip</code> if that already targets Hermes, or call <code>~/.hermes/hermes-agent/venv/bin/python</code> explicitly."
             },
             {
               title: "Create the durable Hermes config",
-              body:
-                "Forge creates <code>~/.hermes/forge/config.json</code> automatically on first plugin load so the Hermes runtime has a durable place for the origin, port, actor label, timeout, and custom data root."
+              body: "Forge creates <code>~/.hermes/forge/config.json</code> automatically on first plugin load so the Hermes runtime has a durable place for the origin, port, actor label, timeout, and custom data root."
             },
             {
               title: "Let Hermes reuse the packaged Forge bootstrap",
-              body:
-                "When Forge is local and not already healthy, the Hermes plugin calls the same tested runtime helper as OpenClaw from its packaged runtime assets. It can relocate off <code>4317</code> and refuses to silently attach to the wrong storage root."
+              body: "When Forge is local and not already healthy, the Hermes plugin calls the same tested runtime helper as OpenClaw from its packaged runtime assets. It can relocate off <code>4317</code> and refuses to silently attach to the wrong storage root."
             },
             {
               title: "Start Hermes and confirm the plugin loaded",
-              body:
-                "Open Hermes, check the plugin registry, and let the bundled Forge skill install on first load so the agent gets the curated operating instructions with the tools."
+              body: "Open Hermes, check the plugin registry, and let the bundled Forge skill install on first load so the agent gets the curated operating instructions with the tools."
             }
           ],
           info: [
@@ -1087,28 +1283,23 @@ hermes`,
           faqs: [
             {
               title: "Hermes starts, but Forge does not answer",
-              body:
-                "First make sure <code>forge-hermes-plugin</code> is installed in the same Python environment Hermes uses. If you are unsure, check with <code>~/.hermes/hermes-agent/venv/bin/python -m pip show forge-hermes-plugin</code>, then inspect <code>~/.hermes/forge/config.json</code> and read the managed runtime log. That will tell you which port Forge picked and whether startup failed on config, storage root, or connectivity."
+              body: "First make sure <code>forge-hermes-plugin</code> is installed in the same Python environment Hermes uses. If you are unsure, check with <code>~/.hermes/hermes-agent/venv/bin/python -m pip show forge-hermes-plugin</code>, then inspect <code>~/.hermes/forge/config.json</code> and read the managed runtime log. That will tell you which port Forge picked and whether startup failed on config, storage root, or connectivity."
             },
             {
               title: "The Hermes agent still does not seem to know Forge",
-              body:
-                "Make sure the package is installed in the same Python environment Hermes uses, then restart Hermes so it rescans entry points and reloads the bundled Forge skill."
+              body: "Make sure the package is installed in the same Python environment Hermes uses, then restart Hermes so it rescans entry points and reloads the bundled Forge skill."
             },
             {
               title: "Why is Forge not on port 4317?",
-              body:
-                "Hermes inherits the same local-port relocation behavior as OpenClaw. If <code>4317</code> is occupied and not explicitly pinned, Forge moves to the next free localhost port and remembers that preferred port."
+              body: "Hermes inherits the same local-port relocation behavior as OpenClaw. If <code>4317</code> is occupied and not explicitly pinned, Forge moves to the next free localhost port and remembers that preferred port."
             },
             {
               title: "Can I store the data somewhere else?",
-              body:
-                "Yes. Edit <code>~/.hermes/forge/config.json</code>, set <code>dataRoot</code> to the absolute path you want, then restart Hermes."
+              body: "Yes. Edit <code>~/.hermes/forge/config.json</code>, set <code>dataRoot</code> to the absolute path you want, then restart Hermes."
             },
             {
               title: "Where do I go if the runtime crashes?",
-              body:
-                "Check the managed runtime log at <code>~/.openclaw/logs/forge-openclaw-plugin/&lt;host&gt;-&lt;port&gt;.log</code>. Even under Hermes, the local child Forge server still comes through the shared runtime helper."
+              body: "Check the managed runtime log at <code>~/.openclaw/logs/forge-openclaw-plugin/&lt;host&gt;-&lt;port&gt;.log</code>. Even under Hermes, the local child Forge server still comes through the shared runtime helper."
             }
           ]
         },
@@ -1117,8 +1308,7 @@ hermes`,
           gettingStartedCopy:
             "Standalone mode is the direct repo path: clone Forge, enter the project folder, install dependencies, optionally choose a data folder, and start the app without an agent wrapper.",
           heading: "Run Forge Standalone",
-          summary:
-            "Clone the repo and run Forge directly.",
+          summary: "Clone the repo and run Forge directly.",
           context:
             "Use standalone when you want the Forge app and API directly, without OpenClaw or Hermes managing startup.",
           command: `git clone https://github.com/albertbuchard/forge.git
@@ -1129,23 +1319,19 @@ FORGE_DATA_ROOT=/absolute/path/to/forge-data FORGE_BASE_PATH=/forge/ npm run dev
           steps: [
             {
               title: "Clone the repo and enter the project",
-              body:
-                "Clone <code>albertbuchard/forge</code>, then change into <code>forge/projects/forge</code>, which is the actual Forge app folder inside the monorepo."
+              body: "Clone <code>albertbuchard/forge</code>, then change into <code>forge/projects/forge</code>, which is the actual Forge app folder inside the monorepo."
             },
             {
               title: "Install dependencies",
-              body:
-                "Run <code>npm install</code> from <code>forge/projects/forge</code> to install the web app, API, and shared runtime dependencies."
+              body: "Run <code>npm install</code> from <code>forge/projects/forge</code> to install the web app, API, and shared runtime dependencies."
             },
             {
               title: "Optionally choose a data folder",
-              body:
-                "Set <code>FORGE_DATA_ROOT</code> before startup if you want Forge to store its SQLite file in a specific folder instead of the default runtime location."
+              body: "Set <code>FORGE_DATA_ROOT</code> before startup if you want Forge to store its SQLite file in a specific folder instead of the default runtime location."
             },
             {
               title: "Start Forge",
-              body:
-                "Run <code>FORGE_BASE_PATH=/forge/ npm run dev</code> from <code>forge/projects/forge</code> to start the local app and API."
+              body: "Run <code>FORGE_BASE_PATH=/forge/ npm run dev</code> from <code>forge/projects/forge</code> to start the local app and API."
             }
           ],
           info: [
@@ -1199,28 +1385,23 @@ curl -I -fsS http://127.0.0.1:3027/forge/`
           faqs: [
             {
               title: "Forge installed, but nothing starts",
-              body:
-                "In standalone mode the usual cause is just that the repo dependencies are missing or the dev command was not launched from the Forge project root. Run <code>npm install</code>, then start Forge again from the repo."
+              body: "In standalone mode the usual cause is just that the repo dependencies are missing or the dev command was not launched from the Forge project root. Run <code>npm install</code>, then start Forge again from the repo."
             },
             {
               title: "Why would I use standalone if I still want agents later?",
-              body:
-                "Standalone is the cleanest way to learn the Forge product itself first. Once the workspace and data are where you want them, you can still add OpenClaw or Hermes on top without changing the underlying model."
+              body: "Standalone is the cleanest way to learn the Forge product itself first. Once the workspace and data are where you want them, you can still add OpenClaw or Hermes on top without changing the underlying model."
             },
             {
               title: "Why is Forge not on port 4317?",
-              body:
-                "If another local process already owns that port, the server you started may be using a different one or may have failed outright. Check the terminal output and the live health URL you actually launched."
+              body: "If another local process already owns that port, the server you started may be using a different one or may have failed outright. Check the terminal output and the live health URL you actually launched."
             },
             {
               title: "Can I store the data somewhere else?",
-              body:
-                "Yes. Set <code>FORGE_DATA_ROOT</code> before startup or bake it into your shell script or launcher so the repo never writes into an unwanted default location."
+              body: "Yes. Set <code>FORGE_DATA_ROOT</code> before startup or bake it into your shell script or launcher so the repo never writes into an unwanted default location."
             },
             {
               title: "Where do I go if the runtime crashes?",
-              body:
-                "Read the terminal output from the process you started and then run the standalone verification commands above. In standalone mode there is no plugin-owned wrapper log to inspect first."
+              body: "Read the terminal output from the process you started and then run the standalone verification commands above. In standalone mode there is no plugin-owned wrapper log to inspect first."
             }
           ]
         }
@@ -1232,22 +1413,62 @@ curl -I -fsS http://127.0.0.1:3027/forge/`
       const installHeading = document.getElementById("install-heading");
       const installSummary = document.getElementById("install-summary");
       const installContext = document.getElementById("install-context");
-      const gettingStartedTitle = document.getElementById("getting-started-title");
-      const gettingStartedCopy = document.getElementById("getting-started-copy");
+      const gettingStartedTitle = document.getElementById(
+        "getting-started-title"
+      );
+      const gettingStartedCopy = document.getElementById(
+        "getting-started-copy"
+      );
       const commandsCopy = document.getElementById("commands-copy");
       const faqCopy = document.getElementById("faq-copy");
-      const stepTitleIds = ["install-step-title-1", "install-step-title-2", "install-step-title-3", "install-step-title-4"];
-      const stepCopyIds = ["install-step-copy-1", "install-step-copy-2", "install-step-copy-3", "install-step-copy-4"];
-      const infoTitleIds = ["install-info-title-1", "install-info-title-2", "install-info-title-3"];
+      const stepTitleIds = [
+        "install-step-title-1",
+        "install-step-title-2",
+        "install-step-title-3",
+        "install-step-title-4"
+      ];
+      const stepCopyIds = [
+        "install-step-copy-1",
+        "install-step-copy-2",
+        "install-step-copy-3",
+        "install-step-copy-4"
+      ];
+      const infoTitleIds = [
+        "install-info-title-1",
+        "install-info-title-2",
+        "install-info-title-3"
+      ];
       const infoBodyIds = [
         ["install-info-copy-1a", "install-info-copy-1b"],
         ["install-info-copy-2a", "install-info-copy-2b"],
         ["install-info-copy-3a", "install-info-copy-3b"]
       ];
-      const commandTitleIds = ["commands-title-1", "commands-title-2", "commands-title-3", "commands-title-4"];
-      const commandCodeIds = ["cmd-health", "cmd-runtime", "cmd-allow", "cmd-log"];
-      const faqTitleIds = ["faq-title-1", "faq-title-2", "faq-title-4", "faq-title-5", "faq-title-6"];
-      const faqBodyIds = ["faq-body-1", "faq-body-2", "faq-body-4", "faq-body-5", "faq-body-6"];
+      const commandTitleIds = [
+        "commands-title-1",
+        "commands-title-2",
+        "commands-title-3",
+        "commands-title-4"
+      ];
+      const commandCodeIds = [
+        "cmd-health",
+        "cmd-runtime",
+        "cmd-allow",
+        "cmd-log"
+      ];
+      const faqTitleIds = [
+        "faq-title-1",
+        "faq-title-2",
+        "faq-title-4",
+        "faq-title-5",
+        "faq-title-6"
+      ];
+      const faqBodyIds = [
+        "faq-body-1",
+        "faq-body-2",
+        "faq-body-4",
+        "faq-body-5",
+        "faq-body-6"
+      ];
 
       function setText(id, value) {
         const element = document.getElementById(id);
@@ -1302,7 +1523,10 @@ curl -I -fsS http://127.0.0.1:3027/forge/`
           setHtml(faqBodyIds[index], faq.body);
         });
         installButtons.forEach((button) => {
-          button.classList.toggle("active", button.dataset.installMode === mode);
+          button.classList.toggle(
+            "active",
+            button.dataset.installMode === mode
+          );
           button.setAttribute(
             "aria-selected",
             button.dataset.installMode === mode ? "true" : "false"

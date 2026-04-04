@@ -68,6 +68,72 @@ The execution rule is:
 - only use the UI entrypoint when visual review, multi-record editing, Kanban movement, or Psyche exploration is genuinely the better workflow
 - if an entity is only implied in the discussion, do not write immediately; help first, then offer Forge lightly near the end, and only write after explicit save intent
 
+## Multi-user And Multi-agent Setup
+
+Forge now assumes that one runtime can serve several humans and bots.
+
+The important model is:
+
+- `userId` controls ownership
+- `userId` or repeated `userIds` control read scope
+- cross-user links are valid and expected
+
+Recommended setup when OpenClaw and another adapter such as Hermes are meant to
+share one Forge system:
+
+1. choose one shared Forge runtime
+2. choose one explicit `dataRoot`
+3. point every adapter at that same `origin`, `port`, and storage root
+4. create the human and bot users in Forge itself
+5. write with explicit `userId`
+6. read with `userIds` when comparing owners
+
+Current access posture is intentionally permissive while the policy layer stays
+modular:
+
+- users can be listed directly
+- explicit scoped reads can include another user
+- ownership still stays visible in cards, detail views, searches, and strategy
+  graphs
+
+This is what lets a human-owned project point at bot-owned tasks or a bot-owned
+strategy point at human-owned goals without losing clarity.
+
+## Strategies And Metrics
+
+Strategies are the planning surface for work that has sequence and branching.
+
+A strategy contains:
+
+- `targetGoalIds`
+- `targetProjectIds`
+- `linkedEntities`
+- `graph`
+- `overview`
+- `endStateDescription`
+
+The graph is a directed acyclic graph of `project` and `task` nodes. That means
+it can branch, but it cannot loop back on itself.
+
+Current strategy metrics are deliberately concrete:
+
+- project nodes use project progress percentage
+- task nodes map status to progress:
+  `done`/`completed`/`reviewed`/`integrated` = `1.0`
+  `in_progress`/`active` = `0.66`
+  `focus` = `0.5`
+  `blocked`/`paused` = `0.25`
+  anything else = `0`
+- completed nodes are nodes at `1.0`
+- active and next nodes are incomplete nodes whose dependencies are already
+  complete
+- target progress comes from linked goals and projects
+- `alignmentScore` is
+  `round((average node progress * 0.7 + average target progress * 0.3) * 100)`
+
+That is enough for a user or agent to inspect the current plan honestly instead
+of treating strategy as only a narrative note.
+
 The plugin no longer mirrors every Forge route. Forge itself still has the full `/api/v1` surface for the web app and internal runtime.
 Instead, the plugin exposes the parts the agent actually needs: overview, current context, Psyche and XP reads, batch entity mutations, signed minute corrections, completion-style retroactive work logging, real task-run control, insight posting, and UI entry.
 When the configured origin is `localhost` or `127.0.0.1`, the plugin auto-starts the bundled Forge runtime. Default localhost installs prefer `4317`, but if that port is already occupied the plugin now moves to the next free local port and remembers it for future runs unless the user explicitly pinned a different port.
@@ -280,6 +346,7 @@ The curated tool contract is:
 - `forge_post_insight`
 
 Live work rule:
+
 - do not fake start or stop work by only moving task status
 - use the real task-run tools for active work
 - use `forge_adjust_work_minutes` when a task or project already exists and only the tracked minutes need correction
@@ -290,15 +357,18 @@ Live work rule:
 The high-level Forge mutation tools are array-first.
 
 `forge_search_entities`:
+
 - pass `searches` as an array
 
 `forge_create_entities`:
+
 - pass `operations` as an array
 - each operation must include `entityType` and full `data`
 - `entityType` alone is not enough
 - batch multiple creates together in one request when they belong to the same user ask
 
 `forge_update_entities`:
+
 - pass `operations` as an array
 - each operation must include `entityType`, `id`, and `patch`
 - project lifecycle is status-driven, so suspend with `status: "paused"`, finish with `status: "completed"`, and restart with `status: "active"`
@@ -306,31 +376,37 @@ The high-level Forge mutation tools are array-first.
 - task and project scheduling rules also stay on these generic patches: use `project.schedulingRules`, `task.schedulingRules`, and `task.plannedDurationSeconds`
 
 `forge_delete_entities`:
+
 - pass `operations` as an array with `entityType` and `id`
 - delete defaults to soft unless hard is explicit
 
 `forge_restore_entities`:
+
 - pass `operations` as an array with `entityType` and `id`
 
 ## Exact operational payload rules
 
 `forge_log_work`:
+
 - use for work that already happened
 - pass either `taskId` or `title`
 
 `forge_adjust_work_minutes`:
+
 - use for signed minute changes on an existing `task` or `project`
 - required: `entityType`, `entityId`, `deltaMinutes`
 - optional: `note`
 - `deltaMinutes` must be non-zero and Forge clamps negative removals so credited time never goes below zero
 
 `forge_start_task_run`:
+
 - required: `taskId`, `actor`
 - optional: `timerMode`, `plannedDurationSeconds`, `overrideReason`, `isCurrent`, `leaseTtlSeconds`, `note`
 - if `timerMode` is `planned`, `plannedDurationSeconds` is required
 - if current calendar rules block the task and the user still wants to continue, retry with an explicit `overrideReason`
 
 Calendar tools:
+
 - `forge_get_calendar_overview` for current provider state, native Forge events, mirrored events, work blocks, and timeboxes
 - `forge_create_entities`, `forge_update_entities`, and `forge_delete_entities` for canonical Forge event management plus work blocks and task timeboxes
 - `forge_connect_calendar_provider` and `forge_sync_calendar_connection` for provider setup and sync, including Exchange Online through Microsoft Graph in read-only mode. Exchange Online setup is normally completed through the interactive Settings flow after the local Microsoft client ID, tenant, and redirect URI have been saved in Forge, rather than through fully non-interactive agent input.
@@ -340,17 +416,21 @@ Calendar tools:
 - `forge_recommend_task_timeboxes` and `forge_create_task_timebox` for future planning and confirmation
 
 `forge_heartbeat_task_run`:
+
 - required: `taskRunId`
 - optional: `actor`, `leaseTtlSeconds`, `note`
 
 `forge_focus_task_run`:
+
 - required: `taskRunId`
 
 `forge_complete_task_run`:
+
 - required: `taskRunId`
 - optional: `actor`, `note`
 
 `forge_release_task_run`:
+
 - required: `taskRunId`
 - optional: `actor`, `note`
 

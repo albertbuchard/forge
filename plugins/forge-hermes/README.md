@@ -48,6 +48,28 @@ If you want editable package mode while developing from this repo:
 - when port `4317` is busy and not explicitly pinned, the shared runtime helper can move Forge to the next free localhost port and remember that preferred port
 - if another Forge runtime is already serving the wrong storage root, startup fails loudly instead of attaching to the wrong database
 
+## Shared Multi-user Forge
+
+This plugin can participate in one shared Forge system with OpenClaw, Codex,
+and the browser UI, but the runtime target needs to be aligned deliberately.
+
+If you want Hermes to share the same Forge users and records:
+
+- use the same `FORGE_ORIGIN`
+- use the same `FORGE_PORT`
+- use the same `FORGE_DATA_ROOT` for local shared storage
+- give Hermes its own `FORGE_ACTOR_LABEL`
+
+Forge's ownership model is explicit:
+
+- users are typed as `human` or `bot`
+- entity writes should set `userId` intentionally
+- reads can use one `userId` or several `userIds`
+- cross-user links are allowed
+
+That is what lets a Hermes bot own its own tasks or strategies while still
+supporting human-owned goals and projects in the same Forge runtime.
+
 ## Environment variables
 
 - `FORGE_ORIGIN`

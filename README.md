@@ -40,6 +40,100 @@ Multi-user model:
 - read routes accept `userId` or repeated `userIds` query parameters for scoped views
 - cross-user linking is allowed, so a human-owned project can still point at bot-owned tasks, notes, or strategy nodes
 
+Detailed guides:
+
+- [Multi-user, multi-agent, and strategy guide](./docs/multi-user-and-strategies.md)
+- [OpenClaw plugin guide](./docs/openclaw-plugin.md)
+- [Hermes plugin guide](./docs/hermes-plugin.md)
+
+## Multi-user And Multi-agent Setup
+
+Forge is designed to let one human operator work with one or many bot users in
+the same planning system without flattening them into one invisible owner.
+That matters because ownership and linkage are different things in Forge:
+ownership answers "whose record is this", while links answer "what work depends
+on what".
+
+The most reliable shared setup is:
+
+1. Choose one Forge runtime and one Forge database.
+2. Point OpenClaw, Hermes, Codex, and the browser UI at that same runtime.
+3. Create the human and bot users in `Settings -> Users`.
+4. Save new goals, projects, tasks, habits, notes, and strategies with the
+   correct `userId`.
+5. Use scoped reads with `userId` or repeated `userIds` when a view should
+   focus on one owner or compare several owners.
+
+Recommended runtime patterns:
+
+- Shared local runtime: use one explicit `dataRoot` and the same local
+  `origin` + `port` for every adapter.
+- Shared remote runtime: use one shared Forge server URL and the same API token
+  posture across the adapters that need remote writes.
+- Separate sandboxes: use different `dataRoot` values only when you explicitly
+  want separate Forge databases.
+
+Current access behavior is intentionally simple and explicit:
+
+- the runtime can list users directly
+- the current default posture is permissive
+- all users can read other users when the route explicitly asks for them
+- the access layer is already structured so stricter future policy can be added
+  later without rewriting ownership itself
+
+Practical ownership rules:
+
+- every important entity can carry `userId`
+- OpenClaw and Hermes writes should set `userId` deliberately instead of
+  assuming the default owner
+- read routes can scope to one user, many users, or all visible users
+- cross-user links are valid, so a human-owned project can reference bot-owned
+  tasks, notes, habits, strategies, or Psyche records
+
+## Strategies And Metrics
+
+Strategies are first-class Forge entities for long-running plans that need more
+structure than a flat project description.
+
+A strategy includes:
+
+- a title
+- a free-text overview
+- a free-text end-state description
+- one or more target goals
+- one or more target projects
+- optional linked entities for surrounding context
+- a directed acyclic graph of project and task nodes
+
+The graph is intentionally non-looping. A strategy can branch, but it should
+still move from earlier work toward later work without cycles. That makes the
+plan inspectable by both humans and agents.
+
+The current strategy metrics are explicit, not decorative:
+
+- project nodes use the project progress percentage
+- task nodes map status to progress:
+  `done`/`completed`/`reviewed`/`integrated` = `100%`
+  `in_progress`/`active` = `66%`
+  `focus` = `50%`
+  `blocked`/`paused` = `25%`
+  everything else = `0%`
+- completed nodes are the graph nodes at `100%`
+- active or next nodes are incomplete nodes whose dependencies are all already
+  complete
+- target progress comes from linked goal or project progress
+- `alignmentScore` is the weighted strategy score:
+  `round((average node progress * 0.7 + average target progress * 0.3) * 100)`
+
+This gives the user a clear answer to two different questions:
+
+- "How far through the actual sequence are we?"
+- "How aligned is current execution with the end state this strategy is meant to land?"
+
+Forge is especially strong when planning, execution, evidence, and reflective
+records need to stay in one inspectable system. Other tools may be good at one
+piece of that stack. Forge is built to keep the whole path connected.
+
 ## Install Forge In OpenClaw
 
 For most people, this is the important path.
