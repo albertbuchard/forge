@@ -253,7 +253,7 @@
               The install block below switches between the published OpenClaw
               path, the Hermes Python plugin package, and the plain standalone
               repo runtime. OpenClaw still needs the allow-list repair step.
-              Hermes now installs through pip into Hermes' own runtime
+              Hermes installs through pip into Hermes' own runtime
               environment while keeping the same tested Forge runtime bootstrap.
             </p>
           </div>
@@ -1024,20 +1024,20 @@ openclaw forge status`
         hermes: {
           gettingStartedTitle: "Choose OpenClaw, Hermes, or standalone Forge.",
           gettingStartedCopy:
-            "Hermes now uses the docs-recommended Python package path with a hermes_agent.plugins entry point, while still reusing the same tested Forge runtime bootstrap path as OpenClaw. The selected tab rewrites the setup text below around that Hermes-specific flow.",
+            "Hermes is a Python plugin with a hermes_agent.plugins entry point. Install it from PyPI into Hermes' own runtime environment, then let Hermes load Forge through the normal plugin registry.",
           heading: "Install Forge in Hermes",
           summary:
-            "Hermes Python plugin with entry-point discovery, packaged runtime bootstrap, and a persisted config at ~/.hermes/forge/config.json.",
+            "Hermes Python plugin on PyPI with entry-point discovery, runtime bootstrap, and a persisted config at ~/.hermes/forge/config.json.",
           context:
-            "Hermes is the right fit when you want Forge in the Hermes plugin registry with the same curated tool contract and a dedicated persisted config at ~/.hermes/forge/config.json.",
+            "Hermes is the right fit when you want Forge in the Hermes plugin registry with the same curated tool contract, installed the normal pip way, and backed by a dedicated config at ~/.hermes/forge/config.json.",
           command: `~/.hermes/hermes-agent/venv/bin/python -m ensurepip --upgrade
-~/.hermes/hermes-agent/venv/bin/python -m pip install --upgrade ./plugins/forge-hermes
+~/.hermes/hermes-agent/venv/bin/python -m pip install --upgrade forge-hermes-plugin
 hermes`,
           steps: [
             {
               title: "Install the Hermes package",
               body:
-                "Install <code>plugins/forge-hermes</code> into Hermes' own Python environment through <code>pip</code> so Hermes discovers Forge through its normal plugin registry."
+                "Install <code>forge-hermes-plugin</code> from PyPI into Hermes' own Python environment through <code>pip</code> so Hermes discovers Forge through its normal plugin registry."
             },
             {
               title: "Create the durable Hermes config",
@@ -1075,20 +1075,20 @@ hermes`,
               bodyA:
                 "Hermes reuses the OpenClaw-tested Forge runtime helper, so the managed child-process log still lands under <code>~/.openclaw/logs/forge-openclaw-plugin/&lt;host&gt;-&lt;port&gt;.log</code>.",
               bodyB:
-                "Most Hermes startup issues come from missing repo dependencies, a conflicting pinned port, or a config/data-root mismatch rather than from the Python handler layer itself."
+                "Most Hermes startup issues come from a missing package install, a conflicting pinned port, or a config/data-root mismatch rather than from the Python handler layer itself."
             }
           ],
           commandsCopy:
             "These are the practical Hermes-side commands and files you will actually touch while installing, checking, and debugging the local Forge runtime.",
           commands: [
             {
-              title: "Check whether Forge is up",
-              code: `node ./plugins/forge-hermes/scripts/ensure-runtime.mjs`
+              title: "Show the installed Hermes package",
+              code: `~/.hermes/hermes-agent/venv/bin/python -m pip show forge-hermes-plugin`
             },
             {
               title: "Reinstall the Hermes package",
               code: `~/.hermes/hermes-agent/venv/bin/python -m ensurepip --upgrade
-~/.hermes/hermes-agent/venv/bin/python -m pip install --upgrade ./plugins/forge-hermes`
+~/.hermes/hermes-agent/venv/bin/python -m pip install --upgrade forge-hermes-plugin`
             },
             {
               title: "Inspect the Hermes config",
@@ -1105,7 +1105,7 @@ hermes`,
             {
               title: "Hermes starts, but Forge does not answer",
               body:
-                "First make sure the package is installed into Hermes' runtime Python, then run <code>node ./plugins/forge-hermes/scripts/ensure-runtime.mjs</code> from the repo. That uses the same health checks and local bootstrap path as the tool layer and will surface config or dependency problems directly."
+                "First make sure <code>forge-hermes-plugin</code> is installed into Hermes' runtime Python, then inspect <code>~/.hermes/forge/config.json</code> and read the managed runtime log. That will tell you which port Forge picked and whether startup failed on config, storage root, or connectivity."
             },
             {
               title: "The Hermes agent still does not seem to know Forge",
@@ -1120,7 +1120,7 @@ hermes`,
             {
               title: "Can I store the data somewhere else?",
               body:
-                "Yes. Edit <code>~/.hermes/forge/config.json</code>, set <code>dataRoot</code> to the absolute path you want, then restart Hermes or rerun the runtime helper."
+                "Yes. Edit <code>~/.hermes/forge/config.json</code>, set <code>dataRoot</code> to the absolute path you want, then restart Hermes."
             },
             {
               title: "Where do I go if the runtime crashes?",
