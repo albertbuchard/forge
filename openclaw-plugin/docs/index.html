@@ -53,10 +53,10 @@
             <h1>Give OpenClaw or Hermes a calendar-aware operating system for work.</h1>
             <p class="lede">
               Forge gives the user and their agent one structured operating
-              system for serious long-term project management. It handles life
+              system for long-term project management. It handles life
               goals, projects, tasks, live work sessions, linked notes, XP,
               weekly review, and a calendar-aware execution layer with provider
-              sync, work blocks, task timeboxes, and clean week planning. The
+              sync, work blocks, task timeboxes, and week planning. The
               agent integrations let OpenClaw or Hermes read that workspace,
               update it safely, and open the right Forge surface when visual
               planning or review is the better tool.
@@ -69,11 +69,9 @@
               material buried in chat.
             </p>
             <p class="lede">
-              Forge works well alongside broader natural-language memory. Chat
-              keeps the nuance and narrative context; Forge keeps the parts that
-              benefit from structure, review, and reuse over time, such as task
-              state, calendar plans, linked notes, and stable reflection
-              records.
+              Chat keeps narrative context. Forge keeps the structured parts
+              that need review and reuse over time, such as task state,
+              calendar plans, linked notes, and reflection records.
             </p>
             <div class="hero-actions">
               <a class="button primary" href="#getting-started">Get Started</a>
@@ -130,7 +128,7 @@
               a native Python plugin for Hermes with entry-point discovery. Both adapters
               let the agent work with the same Forge records, timer controls,
               calendar planning tools, and UI handoff points. Standalone mode
-              runs Forge directly when you want the app and API on their own.
+              runs Forge directly when you want the app and API without an agent layer.
             </p>
           </div>
           <div class="intro-grid plugin-grid">
@@ -372,7 +370,7 @@
           <div class="section-heading">
             <p class="eyebrow">What It Looks Like</p>
             <h2>
-              The product has both an execution side and a reflection side.
+              Forge covers execution and reflection in the same workspace.
             </h2>
           </div>
           <div class="gallery-grid">
@@ -455,8 +453,7 @@
           <div class="section-heading">
             <p class="eyebrow">More Product Surfaces</p>
             <h2>
-              Forge is meant to be used as an actual workspace, not just a
-              storage layer.
+              Forge is a workspace, not just a data store.
             </h2>
             <p class="section-copy">
               These two screens show that more directly: one on the execution
@@ -586,12 +583,11 @@
           </div>
           <div class="psyche-grid">
             <article class="card psyche-card">
-              <h3>Works alongside broader memory</h3>
+              <h3>Works with chat memory</h3>
               <p>
-                Conversational memory is great for nuance and unfolding context.
-                Forge gives recurring beliefs, behavior patterns, values, and
-                trigger reports a place where they can stay visible,
-                reviewable, and linked to real work over time.
+                Chat is useful for ongoing conversation. Forge keeps values,
+                beliefs, patterns, and trigger reports in structured records
+                that stay visible and linked to work over time.
               </p>
             </article>
             <article class="card psyche-card">
@@ -604,12 +600,11 @@
               </p>
             </article>
             <article class="card psyche-card">
-              <h3>Built for modern therapeutic thinking</h3>
+              <h3>Structured therapeutic records</h3>
               <p>
-                Forge gives you a clean place to save the kind of structured
-                material that shows up in CBT, ACT, and schema work: values,
-                thoughts, beliefs, coping modes, patterns, and trigger
-                episodes.
+                Forge can store the structured material that shows up in CBT,
+                ACT, and schema work: values, thoughts, beliefs, coping modes,
+                patterns, and trigger episodes.
               </p>
             </article>
           </div>
@@ -656,9 +651,7 @@
                 the actual work.
               </p>
               <p>
-                The Kanban board is one of the main reasons Forge exists, so it
-                should be named directly and shown early, not buried behind
-                abstract product talk.
+                The board stays visible as a direct execution surface.
               </p>
             </article>
             <article class="card example-card">
@@ -680,8 +673,7 @@
               <h3>“What did I actually get done this week?”</h3>
               <p>
                 Forge tracks the work sessions and completions, then shows the
-                XP and review trail. That lets your agent answer with more than
-                vibes. It can point to actual work that happened.
+                XP and review trail. The agent can point to actual work that happened.
               </p>
             </article>
             <article class="card example-card">
@@ -720,8 +712,7 @@
                 belief, and attach a trigger report when a real episode happens.
               </p>
               <p>
-                That way the reflection side of Forge is still tied to the real
-                work side.
+                The pattern stays linked to the work it affects.
               </p>
             </article>
           </div>
@@ -732,8 +723,7 @@
             <h2>These are the commands a normal user actually needs.</h2>
             <p class="section-copy" id="commands-copy">
               The command set below follows the selected install mode so you do
-              not have to mentally translate OpenClaw instructions into Hermes
-              or standalone repo commands.
+              not have to translate OpenClaw instructions into Hermes or standalone repo commands.
             </p>
           </div>
           <div class="command-grid">
@@ -869,13 +859,11 @@ openclaw forge status</code></pre>
             <div class="publish-copy">
               <p class="eyebrow">Source</p>
               <h2>
-                Forge has one published npm path and one pip-style Hermes path.
+                Source and packages
               </h2>
               <p>
-                OpenClaw is the published npm package. Hermes is packaged as a
-                Python plugin that can be installed into Hermes' own runtime
-                environment from this repository or from a built distribution.
-                The standalone app path lives in that same repo.
+                OpenClaw is published on npm. Hermes is published on PyPI. The
+                standalone app and both plugin codebases live in the same repo.
               </p>
             </div>
             <div class="publish-links">
