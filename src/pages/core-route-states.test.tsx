@@ -330,6 +330,11 @@ describe("core route states", () => {
   });
 
   it("shows a compact today calendar card when the day has events", async () => {
+    const eventStart = new Date();
+    eventStart.setHours(9, 0, 0, 0);
+    const eventEnd = new Date(eventStart);
+    eventEnd.setHours(10, 0, 0, 0);
+
     useForgeShellMock.mockReturnValue({
       snapshot: createSnapshot(),
       patchTaskStatus: vi.fn()
@@ -337,7 +342,7 @@ describe("core route states", () => {
     useQueryMock.mockReturnValue({
       data: {
         calendar: {
-          generatedAt: "2026-03-24T08:00:00.000Z",
+          generatedAt: new Date().toISOString(),
           providers: [],
           connections: [],
           calendars: [],
@@ -353,8 +358,8 @@ describe("core route states", () => {
               title: "Creative sync",
               description: "Sharpen the brief before writing.",
               location: "",
-              startAt: "2026-04-03T09:00:00.000Z",
-              endAt: "2026-04-03T10:00:00.000Z",
+              startAt: eventStart.toISOString(),
+              endAt: eventEnd.toISOString(),
               timezone: "UTC",
               isAllDay: false,
               availability: "busy",
@@ -364,8 +369,8 @@ describe("core route states", () => {
               links: [],
               remoteUpdatedAt: null,
               deletedAt: null,
-              createdAt: "2026-04-03T08:00:00.000Z",
-              updatedAt: "2026-04-03T08:00:00.000Z"
+              createdAt: eventStart.toISOString(),
+              updatedAt: eventStart.toISOString()
             }
           ],
           workBlockTemplates: [],
