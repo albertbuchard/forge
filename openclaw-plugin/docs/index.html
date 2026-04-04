@@ -1017,14 +1017,15 @@ openclaw forge status`
           summary:
             "Install the Forge Hermes plugin from PyPI.",
           context:
-            "Install `forge-hermes-plugin` into the same Python environment Hermes runs from, then restart Hermes.",
+            "Install `forge-hermes-plugin` into the same Python environment Hermes runs from, then restart Hermes. If `python` already points to that environment, use it directly. Otherwise, call Hermes' local venv Python explicitly.",
           command: `python -m pip install --upgrade forge-hermes-plugin
+~/.hermes/hermes-agent/venv/bin/python -m pip install --upgrade forge-hermes-plugin
 hermes`,
           steps: [
             {
               title: "Install the Hermes package",
               body:
-                "Install <code>forge-hermes-plugin</code> from PyPI into the same Python environment Hermes uses so Hermes can discover Forge through its normal plugin registry."
+                "Install <code>forge-hermes-plugin</code> from PyPI into the same Python environment Hermes uses so Hermes can discover Forge through its normal plugin registry. You can use <code>python -m pip</code> if that already targets Hermes, or call <code>~/.hermes/hermes-agent/venv/bin/python</code> explicitly."
             },
             {
               title: "Create the durable Hermes config",
@@ -1070,11 +1071,13 @@ hermes`,
           commands: [
             {
               title: "Show the installed Hermes package",
-              code: `python -m pip show forge-hermes-plugin`
+              code: `python -m pip show forge-hermes-plugin
+~/.hermes/hermes-agent/venv/bin/python -m pip show forge-hermes-plugin`
             },
             {
               title: "Reinstall the Hermes package",
-              code: `python -m pip install --upgrade forge-hermes-plugin`
+              code: `python -m pip install --upgrade forge-hermes-plugin
+~/.hermes/hermes-agent/venv/bin/python -m pip install --upgrade forge-hermes-plugin`
             },
             {
               title: "Inspect the Hermes config",
@@ -1091,7 +1094,7 @@ hermes`,
             {
               title: "Hermes starts, but Forge does not answer",
               body:
-                "First make sure <code>forge-hermes-plugin</code> is installed in the same Python environment Hermes uses, then inspect <code>~/.hermes/forge/config.json</code> and read the managed runtime log. That will tell you which port Forge picked and whether startup failed on config, storage root, or connectivity."
+                "First make sure <code>forge-hermes-plugin</code> is installed in the same Python environment Hermes uses. If you are unsure, check with <code>~/.hermes/hermes-agent/venv/bin/python -m pip show forge-hermes-plugin</code>, then inspect <code>~/.hermes/forge/config.json</code> and read the managed runtime log. That will tell you which port Forge picked and whether startup failed on config, storage root, or connectivity."
             },
             {
               title: "The Hermes agent still does not seem to know Forge",
