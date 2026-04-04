@@ -1121,79 +1121,83 @@ hermes`,
         standalone: {
           gettingStartedTitle: "Choose OpenClaw, Hermes, or standalone Forge.",
           gettingStartedCopy:
-            "Standalone mode is the plain repo path: no agent shell, no plugin registry, just the Forge app and API running directly from the workspace. The tab still updates the surrounding setup notes so the page stays coherent if you only want the product.",
+            "Standalone mode is the direct repo path: clone Forge, enter the project folder, install dependencies, optionally choose a data folder, and start the app without an agent wrapper.",
           heading: "Run Forge Standalone",
           summary:
-            "Run the Forge web app and API directly from the repo without an agent wrapper.",
+            "Clone the repo and run Forge directly.",
           context:
-            "Standalone is the cleanest path when you want the Forge product itself first and do not need an agent plugin to own startup, permissions, or runtime commands.",
-          command: `npm install
-FORGE_BASE_PATH=/forge/ npm run dev`,
+            "Use standalone when you want the Forge app and API directly, without OpenClaw or Hermes managing startup.",
+          command: `git clone https://github.com/albertbuchard/forge.git
+cd forge/projects/forge
+npm install
+# optional: choose where Forge stores its data
+FORGE_DATA_ROOT=/absolute/path/to/forge-data FORGE_BASE_PATH=/forge/ npm run dev`,
           steps: [
             {
-              title: "Install the repo dependencies",
+              title: "Clone the repo and enter the project",
               body:
-                "Standalone mode is just the Forge repo itself, so the first step is the normal <code>npm install</code> for the web app, API, and shared runtime code."
+                "Clone <code>albertbuchard/forge</code>, then change into <code>forge/projects/forge</code>, which is the actual Forge app folder inside the monorepo."
             },
             {
-              title: "Start the app directly",
+              title: "Install dependencies",
               body:
-                "Run <code>FORGE_BASE_PATH=/forge/ npm run dev</code> from the Forge repo to bring up the local app and API without any OpenClaw or Hermes wrapper."
+                "Run <code>npm install</code> from <code>forge/projects/forge</code> to install the web app, API, and shared runtime dependencies."
             },
             {
-              title: "Choose your storage root explicitly if needed",
+              title: "Optionally choose a data folder",
               body:
-                "Standalone shells can point Forge anywhere by setting <code>FORGE_DATA_ROOT</code>. That keeps local development, demos, and personal usage from overwriting each other."
+                "Set <code>FORGE_DATA_ROOT</code> before startup if you want Forge to store its SQLite file in a specific folder instead of the default runtime location."
             },
             {
-              title: "Use the app as the primary surface",
+              title: "Start Forge",
               body:
-                "In standalone mode the web UI is the main operator surface. You still get goals, projects, notes, Psyche, and the full calendar execution layer, just without an agent host on top."
+                "Run <code>FORGE_BASE_PATH=/forge/ npm run dev</code> from <code>forge/projects/forge</code> to start the local app and API."
             }
           ],
           info: [
             {
               title: "Open the UI",
               bodyA:
-                "The repo dev server exposes Forge at <code>http://127.0.0.1:3027/forge/</code> when you run the normal standalone dev command.",
+                "The standalone dev server exposes Forge at <code>http://127.0.0.1:3027/forge/</code> when you run the normal standalone command.",
               bodyB:
                 "If you run the backend separately on another port, just keep the web app pointed at the matching local API and base path."
             },
             {
               title: "Where the data lives",
               bodyA:
-                "Standalone Forge uses its configured local data root instead of an agent-owned plugin folder. That makes it the safest path if you want to fully control where the SQLite file lives.",
+                "Standalone Forge uses its configured local data root instead of an agent-owned plugin folder.",
               bodyB:
-                "Set <code>FORGE_DATA_ROOT</code> before startup to pin the storage folder for a given shell or launch script."
+                "Set <code>FORGE_DATA_ROOT</code> before startup if you want to pin the storage folder for a given shell or launch script."
             },
             {
               title: "If startup fails",
               bodyA:
                 "Standalone failures are usually normal repo issues: missing dependencies, a port collision, or another local process already serving the same base path.",
               bodyB:
-                "Re-run <code>npm install</code>, check the terminal output, and verify that the app shell and backend health route are both reachable."
+                "Check that you are in <code>forge/projects/forge</code>, rerun <code>npm install</code>, and verify that the app shell and backend health route are both reachable."
             }
           ],
           commandsCopy:
             "These are the standalone commands that matter when you are running Forge directly from the repo without an agent wrapper.",
           commands: [
             {
-              title: "Start the local app",
-              code: `FORGE_BASE_PATH=/forge/ npm run dev`
+              title: "Clone and enter the project",
+              code: `git clone https://github.com/albertbuchard/forge.git
+cd forge/projects/forge`
             },
             {
-              title: "Check backend health",
-              code: `curl -fsS http://127.0.0.1:4317/api/v1/health`
+              title: "Install and start Forge",
+              code: `npm install
+FORGE_BASE_PATH=/forge/ npm run dev`
             },
             {
-              title: "Pin a custom data root",
+              title: "Optionally pin a custom data root",
               code: `FORGE_DATA_ROOT=/absolute/path/to/forge-data FORGE_BASE_PATH=/forge/ npm run dev`
             },
             {
-              title: "Run the main verification pass",
-              code: `npx tsc --noEmit
-npm run test
-npm run test:server`
+              title: "Check that Forge is up",
+              code: `curl -fsS http://127.0.0.1:4317/api/v1/health
+curl -I -fsS http://127.0.0.1:3027/forge/`
             }
           ],
           faqCopy:
