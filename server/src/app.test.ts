@@ -252,6 +252,41 @@ test("goal detail, operator context, and retroactive work logging are available 
   }
 });
 
+test("calendar overview accepts timezone offsets and plain dates", async () => {
+  const rootDir = await mkdtemp(
+    path.join(os.tmpdir(), "forge-calendar-query-flexibility-")
+  );
+  const app = await buildServer({ dataRoot: rootDir, seedDemoData: false });
+
+  try {
+    const offsetResponse = await app.inject({
+      method: "GET",
+      url: "/api/v1/calendar/overview?from=2026-04-05T00:00:00%2B02:00&to=2026-04-06T00:00:00%2B02:00"
+    });
+    assert.equal(offsetResponse.statusCode, 200);
+    const offsetBody = offsetResponse.json() as {
+      calendar: { generatedAt: string; events: unknown[] };
+    };
+    assert.equal(typeof offsetBody.calendar.generatedAt, "string");
+    assert.ok(Array.isArray(offsetBody.calendar.events));
+
+    const dateOnlyResponse = await app.inject({
+      method: "GET",
+      url: "/api/v1/calendar/overview?from=2026-04-05&to=2026-04-06"
+    });
+    assert.equal(dateOnlyResponse.statusCode, 200);
+    const dateOnlyBody = dateOnlyResponse.json() as {
+      calendar: { generatedAt: string; events: unknown[] };
+    };
+    assert.equal(typeof dateOnlyBody.calendar.generatedAt, "string");
+    assert.ok(Array.isArray(dateOnlyBody.calendar.events));
+  } finally {
+    await app.close();
+    closeDatabase();
+    await rm(rootDir, { recursive: true, force: true });
+  }
+});
+
 test("native Forge calendar events can be created, linked, updated, and removed without a provider connection", async () => {
   const rootDir = await mkdtemp(
     path.join(os.tmpdir(), "forge-native-calendar-events-")

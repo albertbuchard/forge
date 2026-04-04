@@ -250,6 +250,16 @@ const dateTimeSchema = trimmedString.refine(isValidDateTime, {
   message: "Expected a valid ISO date-time string"
 });
 
+const flexibleCalendarQueryDateSchema = trimmedString
+  .refine((value) => isValidDateOnly(value) || isValidDateTime(value), {
+    message: "Expected a valid ISO date-time string or YYYY-MM-DD date"
+  })
+  .transform((value) =>
+    isValidDateOnly(value)
+      ? `${value}T00:00:00.000Z`
+      : new Date(value).toISOString()
+  );
+
 const uniqueStringArraySchema = z
   .array(nonEmptyTrimmedString)
   .superRefine((values, context) => {
@@ -1544,8 +1554,8 @@ export const projectListQuerySchema = z.object({
 });
 
 export const calendarOverviewQuerySchema = z.object({
-  from: z.string().datetime().optional(),
-  to: z.string().datetime().optional()
+  from: flexibleCalendarQueryDateSchema.optional(),
+  to: flexibleCalendarQueryDateSchema.optional()
 });
 
 export const createCalendarConnectionSchema = z.discriminatedUnion("provider", [
@@ -1747,8 +1757,8 @@ export const updateTaskTimeboxSchema = z.object({
 
 export const recommendTaskTimeboxesSchema = z.object({
   taskId: nonEmptyTrimmedString,
-  from: z.string().datetime().optional(),
-  to: z.string().datetime().optional(),
+  from: flexibleCalendarQueryDateSchema.optional(),
+  to: flexibleCalendarQueryDateSchema.optional(),
   limit: z.coerce.number().int().positive().max(12).optional()
 });
 
