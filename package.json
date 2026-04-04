@@ -17,7 +17,6 @@
     "dev:server:openclaw-data": "node ./scripts/with-openclaw-plugin-data-root.mjs npm run dev:server",
     "demo:seed": "node --import tsx server/src/seed-demo.ts",
     "demo:seed:openclaw-data": "node ./scripts/with-openclaw-plugin-data-root.mjs npm run demo:seed",
-    "install:local-hermes-plugin": "bash ./scripts/install-local-hermes-plugin.sh",
     "smoke:published-openclaw-plugin": "bash ./scripts/smoke-test-published-openclaw-plugin.sh",
     "start": "npm run build && npm run start:web",
     "start:openclaw-data": "node ./scripts/with-openclaw-plugin-data-root.mjs npm run start",

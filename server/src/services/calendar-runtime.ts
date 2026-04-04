@@ -102,6 +102,11 @@ type StoredCalendarCredentials =
   | CustomCaldavCredentials
   | MicrosoftCredentials;
 
+type WritableCalendarCredentials =
+  | GoogleCredentials
+  | AppleCredentials
+  | CustomCaldavCredentials;
+
 type DiscoverableCredentials =
   | Omit<GoogleCredentials, "selectedCalendarUrls" | "forgeCalendarUrl">
   | Omit<AppleCredentials, "selectedCalendarUrls" | "forgeCalendarUrl">
@@ -159,14 +164,20 @@ type MicrosoftProviderState = {
   accessToken: string;
   accountLabel: string;
   serverUrl: string;
-  principalUrl?: string;
-  homeUrl?: string;
+  principalUrl?: string | null;
+  homeUrl?: string | null;
   calendars: MicrosoftGraphCalendar[];
   primaryCalendarId: string | null;
   credentials: MicrosoftCredentials;
 };
 
 type ProviderState = DavProviderState | MicrosoftProviderState;
+
+function isWritableCalendarCredentials(
+  credentials: StoredCalendarCredentials
+): credentials is WritableCalendarCredentials {
+  return credentials.provider !== "microsoft";
+}
 
 const GOOGLE_CALDAV_URL = "https://apidata.googleusercontent.com/caldav/v2/";
 const GOOGLE_TOKEN_URL = "https://accounts.google.com/o/oauth2/token";
@@ -897,6 +908,9 @@ export async function completeMicrosoftCalendarOauth(input: {
       selectedCalendarUrls: []
     };
     const state = await createProviderClient(provisionalCredentials);
+    if (state.mode !== "microsoft") {
+      throw new Error("Forge resolved a DAV provider state for a Microsoft calendar session.");
+    }
     const discovery = mapDiscoveryPayload("microsoft", state);
     session.status = "authorized";
     session.accountLabel = state.accountLabel;
@@ -1135,7 +1149,10 @@ async function syncDiscoveredState(
   credentials: StoredCalendarCredentials
 ) {
   const state = await createProviderClient(credentials);
-  if (state.mode === "microsoft") {
+  if (!isWritableCalendarCredentials(credentials)) {
+    if (state.mode !== "microsoft") {
+      throw new Error("Forge expected a Microsoft provider state for this calendar connection.");
+    }
     const selected = new Set(
       credentials.selectedCalendarUrls.map((value) => normalizeUrl(value))
     );
@@ -1178,6 +1195,10 @@ async function syncDiscoveredState(
       state,
       forgeCalendarUrl: null
     };
+  }
+
+  if (state.mode !== "dav") {
+    throw new Error("Forge expected a DAV provider state for this writable calendar connection.");
   }
 
   const selected = new Set(
@@ -1232,7 +1253,7 @@ async function syncDiscoveredState(
 function toStoredCredentials(
   input: CreateCalendarConnectionInput,
   forgeCalendarUrl: string | null
-): StoredCalendarCredentials {
+): WritableCalendarCredentials {
   if (input.provider === "microsoft") {
     throw new Error(
       "Exchange Online connections must be created from a completed Microsoft sign-in session."
@@ -1464,25 +1485,26 @@ export async function createCalendarConnection(
     );
   }
   const state = await createProviderClient(discoveryCredentials);
+  if (state.mode !== "dav") {
+    throw new Error("Forge expected a writable DAV provider state for this calendar connection.");
+  }
   const discovery = mapDiscoveryPayload(input.provider, state);
 
   let forgeCalendarUrl: string | null = null;
-  if (input.provider !== "microsoft") {
-    forgeCalendarUrl =
-      input.forgeCalendarUrl?.trim() ||
-      discovery.calendars.find((calendar) => calendar.isForgeCandidate)?.url ||
-      null;
+  forgeCalendarUrl =
+    input.forgeCalendarUrl?.trim() ||
+    discovery.calendars.find((calendar) => calendar.isForgeCandidate)?.url ||
+    null;
 
-    if (!forgeCalendarUrl && input.createForgeCalendar) {
-      const created = await ensureForgeCalendar(state);
-      forgeCalendarUrl = created.forgeCalendarUrl;
-    }
+  if (!forgeCalendarUrl && input.createForgeCalendar) {
+    const created = await ensureForgeCalendar(state);
+    forgeCalendarUrl = created.forgeCalendarUrl;
+  }
 
-    if (!forgeCalendarUrl) {
-      throw new Error(
-        "Select the calendar Forge should write into, or create a new calendar named Forge."
-      );
-    }
+  if (!forgeCalendarUrl) {
+    throw new Error(
+      "Select the calendar Forge should write into, or create a new calendar named Forge."
+    );
   }
 
   const secretId = `calendar_secret_${randomUUID().replaceAll("-", "").slice(0, 10)}`;
@@ -1501,15 +1523,7 @@ export async function createCalendarConnection(
     config: {
       serverUrl: discovery.serverUrl,
       selectedCalendarCount: storedCredentials.selectedCalendarUrls.length,
-      ...(input.provider === "microsoft"
-        ? {
-            readOnly: true,
-            tenantId: storedCredentials.tenantId,
-            writeMode: "read_only"
-          }
-        : {
-            forgeCalendarUrl: normalizeUrl(storedCredentials.forgeCalendarUrl)
-          })
+      forgeCalendarUrl: normalizeUrl(storedCredentials.forgeCalendarUrl)
     },
     credentialsSecretId: secretId
   });
@@ -1521,9 +1535,7 @@ export async function createCalendarConnection(
     "calendar_connection",
     connection.id,
     `Calendar connection created: ${connection.label}`,
-    input.provider === "microsoft"
-      ? "Exchange Online is now connected to Forge in read-only mode through Microsoft Graph."
-      : `${input.provider === "apple" ? "Apple Calendar" : input.provider === "google" ? "Google Calendar" : "Custom CalDAV"} is now connected to Forge.`,
+    `${input.provider === "apple" ? "Apple Calendar" : input.provider === "google" ? "Google Calendar" : "Custom CalDAV"} is now connected to Forge.`,
     activity,
     { provider: input.provider }
   );
@@ -1765,10 +1777,16 @@ export async function syncForgeCalendarEvent(
 
   if (sourceMappings.length > 0) {
     for (const source of sourceMappings) {
+      if (!source.calendarId) {
+        continue;
+      }
       const { connection, state } = await resolveProviderStateForConnection(
         source.connectionId!,
         secrets
       );
+      if (state.mode !== "dav") {
+        continue;
+      }
       const calendar = resolveDavCalendarFromLocalId(
         state,
         source.calendarId,
@@ -1822,6 +1840,9 @@ export async function syncForgeCalendarEvent(
     event.preferred_connection_id,
     secrets
   );
+  if (state.mode !== "dav") {
+    throw new Error(`Connection ${connection.id} is read-only, so Forge cannot publish this event there.`);
+  }
   const calendar = resolveDavCalendarFromLocalId(
     state,
     event.preferred_calendar_id,
@@ -1875,10 +1896,16 @@ export async function deleteCalendarEventProjection(
     (source) => source.connectionId && source.calendarId && source.syncState !== "deleted"
   );
   for (const source of sources) {
+    if (!source.calendarId) {
+      continue;
+    }
     const { connection, state } = await resolveProviderStateForConnection(
       source.connectionId!,
       secrets
     );
+    if (state.mode !== "dav") {
+      continue;
+    }
     const calendar = resolveDavCalendarFromLocalId(
       state,
       source.calendarId,

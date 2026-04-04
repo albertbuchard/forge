@@ -26,9 +26,11 @@ import {
   type CalendarTimeboxStatus,
   type CalendarTimeboxSource,
   type CreateCalendarEventInput,
+  type CreateWorkBlockTemplateInput,
   type Task,
   type TaskTimebox,
   type UpdateCalendarEventInput,
+  type UpdateWorkBlockTemplateInput,
   type WorkBlockInstance,
   type WorkBlockTemplate
 } from "../types.js";
@@ -1206,7 +1208,7 @@ export function deleteCalendarEvent(eventId: string) {
 }
 
 export function createWorkBlockTemplate(
-  input: Omit<WorkBlockTemplate, "id" | "createdAt" | "updatedAt">
+  input: CreateWorkBlockTemplateInput
 ) {
   return runInTransaction(() => {
     const now = nowIso();
@@ -1261,7 +1263,7 @@ export function getWorkBlockTemplateById(templateId: string) {
 
 export function updateWorkBlockTemplate(
   templateId: string,
-  patch: Partial<Omit<WorkBlockTemplate, "id" | "createdAt" | "updatedAt">>
+  patch: UpdateWorkBlockTemplateInput
 ) {
   const current = getWorkBlockTemplateById(templateId);
   if (!current) {

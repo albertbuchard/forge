@@ -29,10 +29,21 @@ def get_config_path() -> Path:
     return get_default_data_root() / "config.json"
 
 
-def read_plugin_config() -> Dict[str, Any]:
+def ensure_plugin_config() -> Path:
     config_path = get_config_path()
-    if not config_path.exists():
-        return {}
+    if config_path.exists():
+        return config_path
+
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+    payload = {
+        "dataRoot": str(get_default_data_root()),
+    }
+    config_path.write_text(f"{json.dumps(payload, indent=2)}\n", encoding="utf-8")
+    return config_path
+
+
+def read_plugin_config() -> Dict[str, Any]:
+    config_path = ensure_plugin_config()
 
     try:
         payload = json.loads(config_path.read_text(encoding="utf-8"))

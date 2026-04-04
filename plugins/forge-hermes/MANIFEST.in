@@ -1,0 +1,4 @@
+include README.md
+recursive-include forge_hermes *.md
+recursive-include forge_hermes/scripts *.mjs
+recursive-include forge_hermes/runtime *

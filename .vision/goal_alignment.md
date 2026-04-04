@@ -222,8 +222,9 @@ entity iconography. The server runtime is a Fastify 5 API served from `server/sr
 started with `tsx`, and exposed locally on port `4317` by default with the web app
 mounted under `/forge/`. The public contract is a versioned REST API with an OpenAPI
 3.1 document at `/api/v1/openapi.json`. Agent adapters currently span the published
-OpenClaw plugin, a repo-local Hermes Agent plugin built with Hermes' Python plugin
-format, and a repo-local Codex MCP plugin.
+OpenClaw plugin, a Hermes Agent plugin packaged as a Python distribution with a
+`hermes_agent.plugins` entry point plus bundled runtime assets, and a repo-local Codex
+MCP plugin.
 
 Forge also has a long-term canonical desktop architecture that remains binding even
 while the current Node bridge is in place. That canonical architecture is Tauri 2 with

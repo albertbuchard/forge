@@ -1,0 +1,49 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "forge-hermes-plugin"
+dynamic = ["version"]
+description = "Curated Hermes plugin for the Forge life operating system"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.9"
+authors = [
+  { name = "Forge" }
+]
+keywords = ["forge", "hermes", "agent", "plugin", "productivity"]
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3 :: Only",
+  "Programming Language :: Python :: 3.9",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Topic :: Scientific/Engineering :: Artificial Intelligence"
+]
+
+[project.urls]
+Homepage = "https://github.com/albertbuchard/forge/tree/main/plugins/forge-hermes"
+Repository = "https://github.com/albertbuchard/forge"
+Issues = "https://github.com/albertbuchard/forge/issues"
+
+[project.entry-points."hermes_agent.plugins"]
+forge = "forge_hermes"
+
+[tool.setuptools.dynamic]
+version = { attr = "forge_hermes.version.__version__" }
+
+[tool.setuptools]
+include-package-data = true
+
+[tool.setuptools.packages.find]
+include = ["forge_hermes*"]
+
+[tool.setuptools.package-data]
+"forge_hermes" = [
+  "skill.md",
+  "scripts/*.mjs",
+  "runtime/dist/**/*",
+  "runtime/server/migrations/*.sql"
+]

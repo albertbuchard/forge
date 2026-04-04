@@ -105,6 +105,7 @@ export const activityEntityTypeSchema = z.enum([
   "calendar",
   "calendar_event",
   "work_block",
+  "work_block_template",
   "task_timebox"
 ]);
 export const activitySourceSchema = z.enum([

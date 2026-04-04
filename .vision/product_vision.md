@@ -260,8 +260,8 @@ for iconography. The API runtime is Fastify 5, started through `tsx`, and served
 locally on port `4317` by default. The web application lives under the `/forge/` base
 path, and the versioned REST contract is documented through OpenAPI 3.1 at
 `/api/v1/openapi.json`. The current agent-integration stack spans the published
-OpenClaw adapter, a repo-local Hermes plugin built with Hermes' Python plugin format,
-and a repo-local Codex MCP adapter. Calendar provider sync runs inside this live runtime today,
+OpenClaw adapter, a Hermes plugin packaged as a Python distribution with Hermes
+entry-point discovery, and a repo-local Codex MCP adapter. Calendar provider sync runs inside this live runtime today,
 with Google Calendar, Apple Calendar, and custom CalDAV adapters, encrypted provider
 credentials, migration-backed calendar tables, and a dedicated Forge calendar per
 connection. Apple setup is discovery-first from `https://caldav.icloud.com` rather
@@ -286,7 +286,8 @@ license to become architecturally vague.
 Forge should be a product that trusted agents can use competently. The API and the
 curated agent adapters should expose the real entity model, timer controls, settings
 controls, insight flows, and Psyche operations in a curated but complete way. Today
-that includes the published OpenClaw plugin plus repo-local Hermes and Codex adapters.
+that includes the published OpenClaw plugin plus a pip-installable Hermes adapter and a
+repo-local Codex adapter.
 Each of those integrations should help an agent understand the app itself, the meaning
 of each entity, the expected workflow, and when to use the UI instead of mutating data
 directly. The user should feel that agent help is natural language on top of a real

@@ -135,6 +135,11 @@ import {
   updateWorkBlockTemplateSchema
 } from "../types.js";
 
+const ENTITY_CALENDAR_LIST_RANGE = {
+  from: "1970-01-01T00:00:00.000Z",
+  to: "2100-01-01T00:00:00.000Z"
+} as const;
+
 type CrudContext = {
   source: ActivitySource;
   actor?: string | null;
@@ -259,7 +264,8 @@ const CRUD_ENTITY_CAPABILITIES: Record<CrudEntityType, CrudEntityCapability> = {
     routeBase: "/api/v1/calendar/events",
     deleteMode: "immediate",
     inBin: false,
-    list: () => listCalendarEvents({}) as Array<Record<string, unknown>>,
+    list: () =>
+      listCalendarEvents(ENTITY_CALENDAR_LIST_RANGE) as Array<Record<string, unknown>>,
     get: (id) => getCalendarEventById(id) as Record<string, unknown> | undefined,
     create: (data) => createCalendarEvent(data as never) as Record<string, unknown>,
     update: (id, patch) => updateCalendarEvent(id, patch as never) as Record<string, unknown> | undefined,
@@ -281,7 +287,8 @@ const CRUD_ENTITY_CAPABILITIES: Record<CrudEntityType, CrudEntityCapability> = {
     routeBase: "/api/v1/calendar/timeboxes",
     deleteMode: "immediate",
     inBin: false,
-    list: () => listTaskTimeboxes({}) as Array<Record<string, unknown>>,
+    list: () =>
+      listTaskTimeboxes(ENTITY_CALENDAR_LIST_RANGE) as Array<Record<string, unknown>>,
     get: (id) => getTaskTimeboxById(id) as Record<string, unknown> | undefined,
     create: (data) => createTaskTimebox(data as never) as Record<string, unknown>,
     update: (id, patch) => updateTaskTimebox(id, patch as never) as Record<string, unknown> | undefined,

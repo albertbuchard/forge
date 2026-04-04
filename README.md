@@ -26,10 +26,10 @@ The repo contains the Forge app and API plus three agent-facing adapter surfaces
 - the Forge web app under `/forge/`
 - the local Fastify API at `/api/v1/*`
 - the published OpenClaw plugin under [`openclaw-plugin/`](./openclaw-plugin)
-- the repo-local Hermes plugin under [`plugins/forge-hermes/`](./plugins/forge-hermes)
+- the Hermes plugin package under [`plugins/forge-hermes/`](./plugins/forge-hermes)
 - the repo-local Codex plugin under [`plugins/forge-codex/`](./plugins/forge-codex)
 
-The agent plugins complement the core product. They are not the whole product.
+The agent plugins connect Forge to OpenClaw and Hermes while the web app and API remain the main workspace.
 
 ## Install Forge In OpenClaw
 
@@ -74,22 +74,29 @@ The same tool-permission step still applies for repo-local installs: open
 
 ## Install Forge In Hermes
 
-Forge also ships a repo-local Hermes plugin that follows Hermes' native plugin layout.
+Forge also ships a Hermes plugin that follows Hermes' native plugin layout and the
+docs-recommended Python entry-point distribution model.
 
 From this repo:
 
 ```bash
-npm install
-./plugins/forge-hermes/scripts/install.sh
+~/.hermes/hermes-agent/venv/bin/python -m ensurepip --upgrade
+~/.hermes/hermes-agent/venv/bin/python -m pip install --upgrade ./plugins/forge-hermes
 ```
 
-That links the plugin into `~/.hermes/plugins/forge` and creates a persisted config at
-`~/.hermes/forge/config.json`.
+That installs the packaged Hermes plugin into Hermes' own runtime environment through
+`pip` and creates a persisted config at
+`~/.hermes/forge/config.json` automatically on first plugin load if it is missing.
 
 The Hermes plugin uses the same curated Forge tool contract as the OpenClaw adapter and
 installs a bundled Forge skill on first load. By default it stores its runtime data in
 `~/.hermes/forge`, so local Hermes usage does not fall back to the repo root or
 overwrite another Forge runtime accidentally.
+
+The recommended target is Hermes' own runtime Python at
+`~/.hermes/hermes-agent/venv/bin/python`. That keeps the plugin inside Hermes'
+managed environment and lets Hermes discover Forge through the standard pip
+entry-point path.
 
 Default config behavior:
 
@@ -99,24 +106,20 @@ Default config behavior:
 - data root defaults to `~/.hermes/forge`
 
 You can change the data folder or pin a different port by editing
-`~/.hermes/forge/config.json` or by re-running the installer with environment overrides:
+`~/.hermes/forge/config.json`:
 
-```bash
-./plugins/forge-hermes/scripts/install.sh --data-root /absolute/path/to/forge-data
+```json
+{
+  "dataRoot": "/absolute/path/to/forge-data"
+}
 ```
 
-If you want a repo-level helper similar to the OpenClaw smoke/push flow, use:
+If you want editable package mode while working on the Hermes adapter from this repo,
+use:
 
 ```bash
-npm run install:local-hermes-plugin
-```
-
-That links the local Hermes plugin, writes a reversible config snapshot, points Forge at
-a temporary Hermes data root, chooses a free localhost port for that temp runtime, and
-runs a runtime smoke check. Restore the previous Hermes plugin/config snapshot with:
-
-```bash
-bash ./scripts/install-local-hermes-plugin.sh restore
+~/.hermes/hermes-agent/venv/bin/python -m ensurepip --upgrade
+~/.hermes/hermes-agent/venv/bin/python -m pip install --upgrade --editable ./plugins/forge-hermes
 ```
 
 For an actual Hermes release from the monorepo root, use:
@@ -141,9 +144,9 @@ Supported overrides:
 - `FORGE_ACTOR_LABEL`
 
 When the target is local and Forge is not already running, the Hermes plugin reuses the
-repo's tested Forge local-runtime bootstrap path before making the request. That means
-it gets the same health checks, preferred-port memory, conflict detection, and
-data-root mismatch protection as the OpenClaw adapter.
+same packaged Forge local-runtime bootstrap path that OpenClaw ships. That means it
+gets the same health checks, preferred-port memory, conflict detection, and data-root
+mismatch protection without depending on repo-only imports once installed.
 
 Forge now has three distinct work-accounting paths:
 

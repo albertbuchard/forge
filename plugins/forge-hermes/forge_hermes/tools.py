@@ -13,11 +13,10 @@ from urllib import error, parse, request
 
 from .catalog import TOOL_CATALOG
 from .config import get_default_data_root, read_plugin_config
+from .version import __version__
 
-
-PLUGIN_VERSION = "0.2.18"
-PLUGIN_DIR = Path(__file__).resolve().parent
-NODE_RUNTIME_HELPER = PLUGIN_DIR / "scripts" / "ensure-runtime.mjs"
+PACKAGE_DIR = Path(__file__).resolve().parent
+NODE_RUNTIME_HELPER = PACKAGE_DIR / "scripts" / "ensure-runtime.mjs"
 SESSION_COOKIES: Dict[str, str] = {}
 
 
@@ -142,7 +141,7 @@ def _request_json(
     headers = {
         "accept": "application/json",
         "x-forge-source": "agent",
-        "x-forge-plugin-version": PLUGIN_VERSION,
+        "x-forge-plugin-version": __version__,
         "x-forge-actor": config.actor_label,
     }
     if config.api_token:
@@ -250,8 +249,8 @@ def _ensure_runtime(config: ForgeConfig) -> ForgeConfig:
         env["FORGE_API_TOKEN"] = config.api_token
 
     completed = subprocess.run(
-        [node, "--import", "tsx", str(NODE_RUNTIME_HELPER)],
-        cwd=str(PLUGIN_DIR),
+        [node, str(NODE_RUNTIME_HELPER)],
+        cwd=str(PACKAGE_DIR),
         env=env,
         capture_output=True,
         text=True,

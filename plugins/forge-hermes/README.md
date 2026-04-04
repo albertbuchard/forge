@@ -1,8 +1,12 @@
 # Forge Hermes Plugin
 
-Repo-local Hermes plugin for Forge.
+Hermes plugin for Forge.
 
-This plugin follows the Hermes plugin layout directly: `plugin.yaml`, `__init__.py`, `schemas.py`, `tools.py`, and a bundled `skill.md`.
+This plugin follows the Hermes plugin guide directly:
+
+- a Python package with a `hermes_agent.plugins` entry point for pip discovery
+- a Hermes plugin manifest and registration module that expose Forge to Hermes
+- bundled Forge runtime assets so Hermes can start Forge safely without repo-only runtime imports
 
 It exposes the same curated Forge contract as the OpenClaw adapter, but through Hermes' Python plugin system.
 
@@ -11,13 +15,24 @@ It exposes the same curated Forge contract as the OpenClaw adapter, but through 
 From the Forge repo:
 
 ```bash
-npm install
-./plugins/forge-hermes/scripts/install.sh
+~/.hermes/hermes-agent/venv/bin/python -m ensurepip --upgrade
+~/.hermes/hermes-agent/venv/bin/python -m pip install --upgrade ./plugins/forge-hermes
 ```
 
-That creates a symlink at `~/.hermes/plugins/forge` pointing to this repo-local plugin folder.
-It also creates `~/.hermes/forge/config.json` and defaults the Forge runtime data root
-to `~/.hermes/forge` so local Hermes usage does not write into the repo root.
+That installs the package into Hermes' own Python environment through `pip`, creates
+`~/.hermes/forge/config.json` automatically on first plugin load if it is missing, and defaults the Forge runtime data root to
+`~/.hermes/forge` so local Hermes usage does not write into the repo root.
+
+Use `~/.hermes/hermes-agent/venv/bin/python` so the package lands in the Python
+environment Hermes actually runs and Hermes can discover Forge through the package
+entry point on the next startup.
+
+If you want editable package mode while developing from this repo:
+
+```bash
+~/.hermes/hermes-agent/venv/bin/python -m ensurepip --upgrade
+~/.hermes/hermes-agent/venv/bin/python -m pip install --upgrade --editable ./plugins/forge-hermes
+```
 
 ## Runtime behavior
 
@@ -41,7 +56,6 @@ to `~/.hermes/forge` so local Hermes usage does not write into the repo root.
 
 ## Notes
 
-- the plugin is intentionally repo-local today, so the recommended install path is a symlink, not a detached copy
+- the recommended install path is now pip-based Hermes entry-point discovery, not the old folder-plugin symlink
 - edit `~/.hermes/forge/config.json` if you want to move the data root or pin a different local port
-- the installer also supports `--data-root`, `--port`, `--origin`, `--actor-label`, `--api-token`, and `--timeout-ms`
 - the bundled skill is installed automatically on first plugin load if `~/.hermes/skills/forge-hermes/SKILL.md` does not already exist

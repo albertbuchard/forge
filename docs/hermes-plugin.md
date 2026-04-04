@@ -1,14 +1,15 @@
 # Forge Hermes Plugin
 
-Forge ships a repo-local Hermes plugin alongside the published OpenClaw plugin.
+Forge ships a Hermes plugin alongside the published OpenClaw plugin.
 
-The Hermes adapter follows the native Hermes plugin guide structure:
+The Hermes adapter now follows the native Hermes plugin guide structure end to end:
 
 - `plugin.yaml`
 - `__init__.py`
 - `schemas.py`
 - `tools.py`
 - bundled `skill.md`
+- `pyproject.toml` with a `hermes_agent.plugins` entry point
 
 Its job is to expose the same curated Forge operating surface as the OpenClaw plugin:
 
@@ -25,18 +26,25 @@ Its job is to expose the same curated Forge operating surface as the OpenClaw pl
 From the Forge repo:
 
 ```bash
-npm install
-./plugins/forge-hermes/scripts/install.sh
+~/.hermes/hermes-agent/venv/bin/python -m ensurepip --upgrade
+~/.hermes/hermes-agent/venv/bin/python -m pip install --upgrade ./plugins/forge-hermes
 ```
 
-That creates:
+That does three things:
 
-- `~/.hermes/plugins/forge -> <repo>/plugins/forge-hermes`
-- `~/.hermes/forge/config.json`
+- installs the plugin into Hermes' own Python environment through `pip`
+- creates `~/.hermes/forge/config.json` automatically on first plugin load if it is missing
+- loads Forge through the standard `hermes_agent.plugins` entry point on the next Hermes startup
 
-The symlinked install is the recommended path because the Hermes plugin currently reuses
-the repo's tested Forge local-runtime helper instead of carrying a second bundled
-runtime copy.
+Use Hermes' own runtime Python at `~/.hermes/hermes-agent/venv/bin/python` so the
+plugin lives in the same environment Hermes actually runs.
+
+If you want editable package mode while developing from this repo, use:
+
+```bash
+~/.hermes/hermes-agent/venv/bin/python -m ensurepip --upgrade
+~/.hermes/hermes-agent/venv/bin/python -m pip install --upgrade --editable ./plugins/forge-hermes
+```
 
 The generated config file is also the durable user-editable settings surface for the
 Hermes plugin. By default it gives Forge its own runtime storage root at
@@ -63,27 +71,12 @@ Defaults:
 - timeout: `15000`
 - data root: `~/.hermes/forge`
 
-If you want to move the data elsewhere, either edit `~/.hermes/forge/config.json` or
-rerun the installer with:
+If you want to move the data elsewhere, edit `~/.hermes/forge/config.json`:
 
-```bash
-./plugins/forge-hermes/scripts/install.sh --data-root /absolute/path/to/forge-data
-```
-
-If you want a repo-level helper that behaves more like the OpenClaw smoke/push script,
-run:
-
-```bash
-npm run install:local-hermes-plugin
-```
-
-That links the local plugin into `~/.hermes/plugins/forge`, saves the previous Hermes
-plugin/config snapshot, rewrites the active Forge data root to a temporary directory,
-chooses a free localhost port for that pushed runtime, and runs the Hermes runtime
-smoke path. Restore the previous snapshot with:
-
-```bash
-bash ./scripts/install-local-hermes-plugin.sh restore
+```json
+{
+  "dataRoot": "/absolute/path/to/forge-data"
+}
 ```
 
 For a real release, run the monorepo helper:
@@ -92,9 +85,11 @@ For a real release, run the monorepo helper:
 ../scripts/release-forge-hermes-plugin.sh patch
 ```
 
-That script bumps the Hermes plugin version in `plugin.yaml` and `tools.py`, runs the
-Forge + Hermes verification suite, commits the nested Forge repo, and pushes a
-Hermes-specific git tag such as `hermes-v0.2.19`.
+That script bumps the Hermes plugin version in `plugin.yaml` and
+`forge_hermes/version.py`, bundles the runtime payload, builds a wheel and sdist, runs
+the Forge + Hermes verification suite, smoke-installs the wheel into a temporary
+virtualenv, commits the nested Forge repo, and pushes a Hermes-specific git tag such as
+`hermes-v0.2.19`.
 
 If you want Hermes and OpenClaw to ship on the exact same version in one pass, use the
 shared monorepo wrapper instead:
@@ -106,11 +101,9 @@ shared monorepo wrapper instead:
 ## Local runtime behavior
 
 When the Forge target is local and the server is not already healthy, the Hermes plugin
-calls the repo's existing Forge local-runtime bootstrap helper. That means Hermes gets
-the same local port relocation and health-check behavior that the OpenClaw adapter
-already uses, instead of maintaining a second custom startup path. The Hermes adapter
-also inherits the same protection against silently attaching to a Forge runtime that is
-using the wrong storage root.
+calls the packaged Forge local-runtime bootstrap helper built from the same runtime code
+OpenClaw ships. That means Hermes gets the same local port relocation, health checks,
+and storage-root mismatch protection without depending on repo-only imports at runtime.
 
 ## Notes
 
