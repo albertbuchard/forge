@@ -1,4 +1,4 @@
-import type { Insight, Note } from "./types";
+import type { Insight, Note, OwnedEntity } from "./types";
 
 export interface Domain {
   id: string;
@@ -22,7 +22,7 @@ export interface SchemaCatalogEntry {
   updatedAt: string;
 }
 
-export interface EventType {
+export interface EventType extends OwnedEntity {
   id: string;
   domainId: string;
   label: string;
@@ -32,7 +32,7 @@ export interface EventType {
   updatedAt: string;
 }
 
-export interface EmotionDefinition {
+export interface EmotionDefinition extends OwnedEntity {
   id: string;
   domainId: string;
   label: string;
@@ -43,7 +43,7 @@ export interface EmotionDefinition {
   updatedAt: string;
 }
 
-export interface PsycheValue {
+export interface PsycheValue extends OwnedEntity {
   id: string;
   domainId: string;
   title: string;
@@ -58,7 +58,7 @@ export interface PsycheValue {
   updatedAt: string;
 }
 
-export interface BehaviorPattern {
+export interface BehaviorPattern extends OwnedEntity {
   id: string;
   domainId: string;
   title: string;
@@ -77,7 +77,7 @@ export interface BehaviorPattern {
   updatedAt: string;
 }
 
-export interface Behavior {
+export interface Behavior extends OwnedEntity {
   id: string;
   domainId: string;
   kind: "away" | "committed" | "recovery";
@@ -97,7 +97,7 @@ export interface Behavior {
   updatedAt: string;
 }
 
-export interface BeliefEntry {
+export interface BeliefEntry extends OwnedEntity {
   id: string;
   domainId: string;
   schemaId: string | null;
@@ -116,7 +116,7 @@ export interface BeliefEntry {
   updatedAt: string;
 }
 
-export interface ModeProfile {
+export interface ModeProfile extends OwnedEntity {
   id: string;
   domainId: string;
   family: "coping" | "child" | "critic_parent" | "healthy_adult" | "happy_child";
@@ -159,7 +159,7 @@ export interface ModeGuideResult {
   reasoning: string;
 }
 
-export interface ModeGuideSession {
+export interface ModeGuideSession extends OwnedEntity {
   id: string;
   summary: string;
   answers: ModeGuideAnswer[];
@@ -198,7 +198,7 @@ export interface TriggerConsequences {
   othersLongTerm: string[];
 }
 
-export interface TriggerReport {
+export interface TriggerReport extends OwnedEntity {
   id: string;
   domainId: string;
   title: string;
@@ -263,6 +263,7 @@ export interface PsycheValueInput {
   linkedProjectIds: string[];
   linkedTaskIds: string[];
   committedActions: string[];
+  userId?: string | null;
 }
 
 export interface BehaviorPatternInput {
@@ -277,6 +278,7 @@ export interface BehaviorPatternInput {
   linkedSchemaLabels: string[];
   linkedModeIds: string[];
   linkedBeliefIds: string[];
+  userId?: string | null;
 }
 
 export interface BehaviorInput {
@@ -293,6 +295,7 @@ export interface BehaviorInput {
   linkedValueIds: string[];
   linkedSchemaIds: string[];
   linkedModeIds: string[];
+  userId?: string | null;
 }
 
 export interface BeliefEntryInput {
@@ -308,6 +311,7 @@ export interface BeliefEntryInput {
   linkedBehaviorIds: string[];
   linkedModeIds: string[];
   linkedReportIds: string[];
+  userId?: string | null;
 }
 
 export interface ModeProfileInput {
@@ -326,22 +330,26 @@ export interface ModeProfileInput {
   linkedPatternIds: string[];
   linkedBehaviorIds: string[];
   linkedValueIds: string[];
+  userId?: string | null;
 }
 
 export interface ModeGuideSessionInput {
   summary: string;
   answers: ModeGuideAnswer[];
+  userId?: string | null;
 }
 
 export interface EventTypeInput {
   label: string;
   description: string;
+  userId?: string | null;
 }
 
 export interface EmotionDefinitionInput {
   label: string;
   description: string;
   category: string;
+  userId?: string | null;
 }
 
 export interface TriggerReportInput {
@@ -367,4 +375,5 @@ export interface TriggerReportInput {
   schemaLinks: string[];
   modeTimeline: ModeTimelineEntry[];
   nextMoves: string[];
+  userId?: string | null;
 }

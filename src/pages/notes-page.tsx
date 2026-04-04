@@ -54,11 +54,16 @@ import {
   getPrimaryNavigableLink
 } from "@/lib/note-helpers";
 import type { CrudEntityType, Note, NoteLink } from "@/lib/types";
+import {
+  buildOwnedEntitySearchText,
+  formatOwnedEntityDescription
+} from "@/lib/user-ownership";
 
 const FILTERABLE_ENTITY_TYPES = new Set<CrudEntityType>([
   "goal",
   "project",
   "task",
+  "strategy",
   "habit",
   "tag",
   "psyche_value",
@@ -73,6 +78,7 @@ const ENTITY_KIND_BY_TYPE: Partial<Record<CrudEntityType, EntityKind>> = {
   goal: "goal",
   project: "project",
   task: "task",
+  strategy: "strategy",
   habit: "habit",
   psyche_value: "value",
   behavior_pattern: "pattern",
@@ -280,77 +286,160 @@ export function NotesPage() {
       ...shell.snapshot.goals.map((goal) => ({
         value: encodeLinkedValue("goal", goal.id),
         label: goal.title,
-        description: goal.description,
-        searchText: `${goal.title} ${goal.description}`,
+        description: formatOwnedEntityDescription(
+          goal.description,
+          goal.user,
+          "Goal"
+        ),
+        searchText: buildOwnedEntitySearchText(
+          [goal.title, goal.description],
+          goal
+        ),
         kind: ENTITY_KIND_BY_TYPE.goal
       })),
       ...shell.snapshot.dashboard.projects.map((project) => ({
         value: encodeLinkedValue("project", project.id),
         label: project.title,
-        description: project.description,
-        searchText: `${project.title} ${project.description} ${project.goalTitle}`,
+        description: formatOwnedEntityDescription(
+          `${project.description}${project.description ? " · " : ""}${project.goalTitle}`,
+          project.user,
+          project.goalTitle
+        ),
+        searchText: buildOwnedEntitySearchText(
+          [project.title, project.description, project.goalTitle],
+          project
+        ),
         kind: ENTITY_KIND_BY_TYPE.project
       })),
       ...shell.snapshot.tasks.map((task) => ({
         value: encodeLinkedValue("task", task.id),
         label: task.title,
-        description: task.description,
-        searchText: `${task.title} ${task.description} ${task.owner}`,
+        description: formatOwnedEntityDescription(
+          `${task.description}${task.description ? " · " : ""}${task.owner}`,
+          task.user,
+          task.owner
+        ),
+        searchText: buildOwnedEntitySearchText(
+          [task.title, task.description, task.owner],
+          task
+        ),
         kind: ENTITY_KIND_BY_TYPE.task
+      })),
+      ...shell.snapshot.strategies.map((strategy) => ({
+        value: encodeLinkedValue("strategy", strategy.id),
+        label: strategy.title,
+        description: formatOwnedEntityDescription(
+          strategy.overview,
+          strategy.user,
+          "Strategy"
+        ),
+        searchText: buildOwnedEntitySearchText(
+          [strategy.title, strategy.overview, strategy.endStateDescription],
+          strategy
+        ),
+        kind: ENTITY_KIND_BY_TYPE.strategy
       })),
       ...shell.snapshot.habits.map((habit) => ({
         value: encodeLinkedValue("habit", habit.id),
         label: habit.title,
-        description: habit.description,
-        searchText: `${habit.title} ${habit.description}`,
+        description: formatOwnedEntityDescription(
+          habit.description,
+          habit.user,
+          "Habit"
+        ),
+        searchText: buildOwnedEntitySearchText(
+          [habit.title, habit.description],
+          habit
+        ),
         kind: ENTITY_KIND_BY_TYPE.habit
       })),
       ...shell.snapshot.tags.map((tag) => ({
         value: encodeLinkedValue("tag", tag.id),
         label: tag.name,
-        description: tag.description,
-        searchText: `${tag.name} ${tag.kind} ${tag.description}`
+        description: formatOwnedEntityDescription(tag.description, tag.user, tag.kind),
+        searchText: buildOwnedEntitySearchText(
+          [tag.name, tag.kind, tag.description],
+          tag
+        )
       })),
       ...((valuesQuery.data?.values ?? []).map((value) => ({
         value: encodeLinkedValue("psyche_value", value.id),
         label: value.title,
-        description: value.description,
-        searchText: `${value.title} ${value.description} ${value.valuedDirection}`,
+        description: formatOwnedEntityDescription(value.description, value.user, "Psyche value"),
+        searchText: buildOwnedEntitySearchText(
+          [value.title, value.description, value.valuedDirection],
+          value
+        ),
         kind: ENTITY_KIND_BY_TYPE.psyche_value
       })) satisfies EntityLinkOption[]),
       ...((patternsQuery.data?.patterns ?? []).map((pattern) => ({
         value: encodeLinkedValue("behavior_pattern", pattern.id),
         label: pattern.title,
-        description: pattern.description,
-        searchText: `${pattern.title} ${pattern.description} ${pattern.targetBehavior}`,
+        description: formatOwnedEntityDescription(
+          pattern.description,
+          pattern.user,
+          "Behavior pattern"
+        ),
+        searchText: buildOwnedEntitySearchText(
+          [pattern.title, pattern.description, pattern.targetBehavior],
+          pattern
+        ),
         kind: ENTITY_KIND_BY_TYPE.behavior_pattern
       })) satisfies EntityLinkOption[]),
       ...((behaviorsQuery.data?.behaviors ?? []).map((behavior) => ({
         value: encodeLinkedValue("behavior", behavior.id),
         label: behavior.title,
-        description: behavior.description,
-        searchText: `${behavior.title} ${behavior.description} ${behavior.kind}`,
+        description: formatOwnedEntityDescription(
+          behavior.description,
+          behavior.user,
+          "Behavior"
+        ),
+        searchText: buildOwnedEntitySearchText(
+          [behavior.title, behavior.description, behavior.kind],
+          behavior
+        ),
         kind: ENTITY_KIND_BY_TYPE.behavior
       })) satisfies EntityLinkOption[]),
       ...((beliefsQuery.data?.beliefs ?? []).map((belief) => ({
         value: encodeLinkedValue("belief_entry", belief.id),
         label: belief.statement,
-        description: belief.flexibleAlternative || belief.originNote,
-        searchText: `${belief.statement} ${belief.flexibleAlternative} ${belief.originNote}`,
+        description: formatOwnedEntityDescription(
+          belief.flexibleAlternative || belief.originNote,
+          belief.user,
+          "Belief"
+        ),
+        searchText: buildOwnedEntitySearchText(
+          [belief.statement, belief.flexibleAlternative, belief.originNote],
+          belief
+        ),
         kind: ENTITY_KIND_BY_TYPE.belief_entry
       })) satisfies EntityLinkOption[]),
       ...((modesQuery.data?.modes ?? []).map((mode) => ({
         value: encodeLinkedValue("mode_profile", mode.id),
         label: mode.title,
-        description: mode.archetype || mode.family,
-        searchText: `${mode.title} ${mode.archetype} ${mode.family} ${mode.persona}`,
+        description: formatOwnedEntityDescription(
+          mode.archetype || mode.family,
+          mode.user,
+          "Mode"
+        ),
+        searchText: buildOwnedEntitySearchText(
+          [mode.title, mode.archetype, mode.family, mode.persona],
+          mode
+        ),
         kind: ENTITY_KIND_BY_TYPE.mode_profile
       })) satisfies EntityLinkOption[]),
       ...((reportsQuery.data?.reports ?? []).map((report) => ({
         value: encodeLinkedValue("trigger_report", report.id),
         label: report.title,
-        description: report.eventSituation,
-        searchText: `${report.title} ${report.eventSituation} ${report.customEventType ?? ""}`,
+        description: formatOwnedEntityDescription(
+          report.eventSituation,
+          report.user,
+          "Trigger report"
+        ),
+        searchText: buildOwnedEntitySearchText(
+          [report.title, report.eventSituation, report.customEventType ?? ""],
+          report
+        ),
         kind: ENTITY_KIND_BY_TYPE.trigger_report
       })) satisfies EntityLinkOption[])
     ];
@@ -365,6 +454,7 @@ export function NotesPage() {
     shell.snapshot.dashboard.projects,
     shell.snapshot.goals,
     shell.snapshot.habits,
+    shell.snapshot.strategies,
     shell.snapshot.tags,
     shell.snapshot.tasks,
     valuesQuery.data?.values
@@ -664,7 +754,7 @@ export function NotesPage() {
                   linkedValues: values
                 }))
               }
-              placeholder="Link this note to goals, tasks, habits, tags, or Psyche records"
+              placeholder="Link this note to strategies, goals, projects, tasks, habits, or human/bot-owned records"
               emptyMessage="No matching entities found yet."
             />
           </div>

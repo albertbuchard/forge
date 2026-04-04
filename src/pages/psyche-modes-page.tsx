@@ -17,11 +17,19 @@ import { EntityName } from "@/components/ui/entity-name";
 import { ErrorState, LoadingState } from "@/components/ui/page-state";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { UserSelectField } from "@/components/ui/user-select-field";
 import { prependEntityToCollection } from "@/lib/query-cache";
 import { getEntityNotesSummary } from "@/lib/note-helpers";
 import { modeProfileSchema, type ModeProfileInput } from "@/lib/psyche-schemas";
 import type { Behavior, BehaviorPattern, ModeProfile, PsycheValue } from "@/lib/psyche-types";
 import { createBehavior, createBehaviorPattern, createMode, createPsycheValue, listBehaviors, listBehaviorPatterns, listModes, listPsycheValues, patchMode } from "@/lib/api";
+import {
+  buildOwnedEntitySearchText,
+  formatOwnedEntityDescription,
+  formatOwnerSelectDefaultLabel,
+  formatOwnedEntityOptionLabel,
+  getSingleSelectedUserId
+} from "@/lib/user-ownership";
 
 const DEFAULT_MODE_INPUT: ModeProfileInput = {
   family: "coping",
@@ -38,7 +46,8 @@ const DEFAULT_MODE_INPUT: ModeProfileInput = {
   firstAppearanceAt: null,
   linkedPatternIds: [],
   linkedBehaviorIds: [],
-  linkedValueIds: []
+  linkedValueIds: [],
+  userId: null
 };
 
 function modeToInput(mode: ModeProfile): ModeProfileInput {
@@ -57,7 +66,8 @@ function modeToInput(mode: ModeProfile): ModeProfileInput {
     firstAppearanceAt: mode.firstAppearanceAt,
     linkedPatternIds: mode.linkedPatternIds,
     linkedBehaviorIds: mode.linkedBehaviorIds,
-    linkedValueIds: mode.linkedValueIds
+    linkedValueIds: mode.linkedValueIds,
+    userId: mode.userId ?? null
   };
 }
 
@@ -86,6 +96,7 @@ export function PsycheModesPage() {
   const patterns = patternsQuery.data?.patterns ?? [];
   const behaviors = behaviorsQuery.data?.behaviors ?? [];
   const values = valuesQuery.data?.values ?? [];
+  const defaultUserId = getSingleSelectedUserId(shell.selectedUserIds);
   const focusedModeId = searchParams.get("focus");
   const notesSummaryByEntity = shell.snapshot.dashboard.notesSummaryByEntity;
 
@@ -95,12 +106,12 @@ export function PsycheModesPage() {
     if (searchParams.get("create") === "1") {
       setDialogOpen(true);
       setEditingMode(null);
-      setDraft(DEFAULT_MODE_INPUT);
+      setDraft({ ...DEFAULT_MODE_INPUT, userId: defaultUserId });
       const next = new URLSearchParams(searchParams);
       next.delete("create");
       setSearchParams(next, { replace: true });
     }
-  }, [searchParams, setSearchParams]);
+  }, [defaultUserId, searchParams, setSearchParams]);
 
   const saveMutation = useMutation({
     mutationFn: async (input: ModeProfileInput) => {
@@ -113,7 +124,7 @@ export function PsycheModesPage() {
     onSuccess: async () => {
       setDialogOpen(false);
       setEditingMode(null);
-      setDraft(DEFAULT_MODE_INPUT);
+      setDraft({ ...DEFAULT_MODE_INPUT, userId: defaultUserId });
       setSubmitError(null);
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["forge-psyche-modes"] }),
@@ -124,20 +135,40 @@ export function PsycheModesPage() {
 
   const patternOptions: EntityLinkOption[] = patterns.map((pattern: BehaviorPattern) => ({
     value: pattern.id,
-    label: pattern.title,
-    description: pattern.preferredResponse || pattern.targetBehavior,
+    label: formatOwnedEntityOptionLabel(pattern.title, pattern.user),
+    description: formatOwnedEntityDescription(
+      pattern.preferredResponse || pattern.targetBehavior,
+      pattern.user
+    ),
+    searchText: buildOwnedEntitySearchText(
+      [
+        pattern.title,
+        pattern.preferredResponse,
+        pattern.targetBehavior,
+        pattern.description
+      ],
+      pattern
+    ),
     kind: "pattern"
   }));
   const behaviorOptions: EntityLinkOption[] = behaviors.map((behavior: Behavior) => ({
     value: behavior.id,
-    label: behavior.title,
-    description: behavior.kind,
+    label: formatOwnedEntityOptionLabel(behavior.title, behavior.user),
+    description: formatOwnedEntityDescription(behavior.kind, behavior.user),
+    searchText: buildOwnedEntitySearchText(
+      [behavior.title, behavior.kind, behavior.description],
+      behavior
+    ),
     kind: "behavior"
   }));
   const valueOptions: EntityLinkOption[] = values.map((entry: PsycheValue) => ({
     value: entry.id,
-    label: entry.title,
-    description: entry.valuedDirection,
+    label: formatOwnedEntityOptionLabel(entry.title, entry.user),
+    description: formatOwnedEntityDescription(entry.valuedDirection, entry.user),
+    searchText: buildOwnedEntitySearchText(
+      [entry.title, entry.valuedDirection, entry.description],
+      entry
+    ),
     kind: "value"
   }));
 
@@ -153,7 +184,8 @@ export function PsycheModesPage() {
       linkedValueIds: [],
       linkedSchemaLabels: [],
       linkedModeIds: [],
-      linkedBeliefIds: []
+      linkedBeliefIds: [],
+      userId: draft.userId
     });
     prependEntityToCollection(queryClient, ["forge-psyche-patterns"], "patterns", pattern);
     await queryClient.invalidateQueries({ queryKey: ["forge-psyche-overview"] });
@@ -179,7 +211,8 @@ export function PsycheModesPage() {
       linkedPatternIds: [],
       linkedValueIds: [],
       linkedSchemaIds: [],
-      linkedModeIds: []
+      linkedModeIds: [],
+      userId: draft.userId
     });
     prependEntityToCollection(queryClient, ["forge-psyche-behaviors"], "behaviors", behavior);
     await queryClient.invalidateQueries({ queryKey: ["forge-psyche-overview"] });
@@ -200,7 +233,8 @@ export function PsycheModesPage() {
       linkedGoalIds: [],
       linkedProjectIds: [],
       linkedTaskIds: [],
-      committedActions: []
+      committedActions: [],
+      userId: draft.userId
     });
     prependEntityToCollection(queryClient, ["forge-psyche-values"], "values", value);
     await queryClient.invalidateQueries({ queryKey: ["forge-psyche-overview"] });
@@ -220,6 +254,17 @@ export function PsycheModesPage() {
       description: "Start with the mode itself: who it feels like, what family it belongs to, and the recognizable role it plays.",
       render: (value, setValue) => (
         <>
+          <UserSelectField
+            value={value.userId ?? null}
+            users={shell.snapshot.users}
+            onChange={(userId) => setValue({ userId })}
+            defaultLabel={formatOwnerSelectDefaultLabel(
+              shell.snapshot.users.find((user) => user.id === defaultUserId) ??
+                null,
+              "Choose mode owner"
+            )}
+            help="Modes can belong to a human or bot user while still linking across shared patterns, behaviors, and values."
+          />
           <FlowField
             label="Mode family"
             description="Choose the broader inner family this mode belongs to."
@@ -414,7 +459,7 @@ export function PsycheModesPage() {
           <Button
             onClick={() => {
               setEditingMode(null);
-              setDraft(DEFAULT_MODE_INPUT);
+              setDraft({ ...DEFAULT_MODE_INPUT, userId: defaultUserId });
               setDialogOpen(true);
             }}
           >
@@ -432,7 +477,15 @@ export function PsycheModesPage() {
       >
         {modes.length === 0 ? (
           <div className="flex justify-start">
-            <Button onClick={() => setDialogOpen(true)}>Add mode</Button>
+            <Button
+              onClick={() => {
+                setEditingMode(null);
+                setDraft({ ...DEFAULT_MODE_INPUT, userId: defaultUserId });
+                setDialogOpen(true);
+              }}
+            >
+              Add mode
+            </Button>
           </div>
         ) : (
           <div className="grid gap-4 xl:grid-cols-2">
@@ -444,7 +497,14 @@ export function PsycheModesPage() {
                 </div>
                 {groupedModes[family].length === 0 ? (
                   <div className="flex">
-                    <Button variant="secondary" onClick={() => setDialogOpen(true)}>
+                    <Button
+                      variant="secondary"
+                      onClick={() => {
+                        setEditingMode(null);
+                        setDraft({ ...DEFAULT_MODE_INPUT, userId: defaultUserId });
+                        setDialogOpen(true);
+                      }}
+                    >
                       Add {familyLabelMap[family].toLowerCase()}
                     </Button>
                   </div>

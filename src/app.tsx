@@ -11,6 +11,8 @@ import { NotesPage } from "@/pages/notes-page";
 import { OverviewPage } from "@/pages/overview-page";
 import { ProjectDetailPage } from "@/pages/project-detail-page";
 import { ProjectsPage } from "@/pages/projects-page";
+import { StrategiesPage } from "@/pages/strategies-page";
+import { StrategyDetailPage } from "@/pages/strategy-detail-page";
 import { PsychePage } from "@/pages/psyche-page";
 import { PsycheBehaviorsPage } from "@/pages/psyche-behaviors-page";
 import { PsycheGoalMapPage } from "@/pages/psyche-goal-map-page";
@@ -26,6 +28,7 @@ import { SettingsAgentsPage } from "@/pages/settings-agents-page";
 import { SettingsBinPage } from "@/pages/settings-bin-page";
 import { SettingsCalendarPage } from "@/pages/settings-calendar-page";
 import { SettingsRewardsPage } from "@/pages/settings-rewards-page";
+import { SettingsUsersPage } from "@/pages/settings-users-page";
 import { TaskDetailPage } from "@/pages/task-detail-page";
 import { TodayPage } from "@/pages/today-page";
 import { WeeklyReviewPage } from "@/pages/weekly-review-page";
@@ -41,6 +44,8 @@ export function App() {
         <Route path="goals/:goalId" element={<GoalDetailPage />} />
         <Route path="projects" element={<ProjectsPage />} />
         <Route path="projects/:projectId" element={<ProjectDetailPage />} />
+        <Route path="strategies" element={<StrategiesPage />} />
+        <Route path="strategies/:strategyId" element={<StrategyDetailPage />} />
         <Route path="campaigns" element={<Navigate to="/projects" replace />} />
         <Route path="calendar" element={<CalendarPage />} />
         <Route path="psyche" element={<PsychePage />} />
@@ -60,6 +65,7 @@ export function App() {
         <Route path="insights" element={<InsightsPage />} />
         <Route path="review/weekly" element={<WeeklyReviewPage />} />
         <Route path="settings" element={<SettingsPage />} />
+        <Route path="settings/users" element={<SettingsUsersPage />} />
         <Route path="settings/calendar" element={<SettingsCalendarPage />} />
         <Route path="settings/agents" element={<SettingsAgentsPage />} />
         <Route path="settings/rewards" element={<SettingsRewardsPage />} />

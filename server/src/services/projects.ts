@@ -1,4 +1,5 @@
 import { listActivityEvents } from "../repositories/activity-events.js";
+import { filterOwnedEntities } from "../repositories/entity-ownership.js";
 import { getGoalById, listGoals } from "../repositories/goals.js";
 import { buildNotesSummaryByEntity } from "../repositories/notes.js";
 import { getProjectById, listProjects } from "../repositories/projects.js";
@@ -65,7 +66,7 @@ export function listProjectSummaries(filters: ProjectListQuery = {}): ProjectSum
   const tasks = listTasks();
   const projectAdjustmentSeconds = listProjectWorkAdjustmentSecondsMap();
 
-  return listProjects(filters).map((project) => {
+  return filterOwnedEntities("project", listProjects(filters), filters.userIds).map((project) => {
     const goal = goals.get(project.goalId);
     const projectTasks = tasks.filter((task) => task.projectId === project.id);
     const taskSummary = projectTaskSummary(projectTasks);

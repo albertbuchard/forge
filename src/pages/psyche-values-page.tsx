@@ -15,11 +15,17 @@ import { EntityName } from "@/components/ui/entity-name";
 import { ErrorState, LoadingState } from "@/components/ui/page-state";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { UserBadge } from "@/components/ui/user-badge";
+import { UserSelectField } from "@/components/ui/user-select-field";
 import { createPsycheValue, listPsycheValues, patchPsycheValue } from "@/lib/api";
 import { getEntityButtonClassName } from "@/lib/entity-visuals";
 import { getEntityNotesSummary } from "@/lib/note-helpers";
 import { psycheValueSchema, type PsycheValueInput } from "@/lib/psyche-schemas";
 import type { PsycheValue } from "@/lib/psyche-types";
+import {
+  formatOwnerSelectDefaultLabel,
+  getSingleSelectedUserId
+} from "@/lib/user-ownership";
 
 const DEFAULT_VALUE_INPUT: PsycheValueInput = {
   title: "",
@@ -29,7 +35,8 @@ const DEFAULT_VALUE_INPUT: PsycheValueInput = {
   linkedGoalIds: [],
   linkedProjectIds: [],
   linkedTaskIds: [],
-  committedActions: []
+  committedActions: [],
+  userId: null
 };
 
 function toggleId(current: string[], id: string) {
@@ -45,7 +52,8 @@ function valueToInput(value: PsycheValue): PsycheValueInput {
     linkedGoalIds: value.linkedGoalIds,
     linkedProjectIds: value.linkedProjectIds,
     linkedTaskIds: value.linkedTaskIds,
-    committedActions: value.committedActions
+    committedActions: value.committedActions,
+    userId: value.userId ?? null
   };
 }
 
@@ -63,6 +71,7 @@ export function PsycheValuesPage() {
   });
 
   const values = valuesQuery.data?.values ?? [];
+  const defaultUserId = getSingleSelectedUserId(shell.selectedUserIds);
   const focusedValueId = searchParams.get("focus");
   const notesSummaryByEntity = shell.snapshot.dashboard.notesSummaryByEntity;
 
@@ -72,12 +81,12 @@ export function PsycheValuesPage() {
     if (searchParams.get("create") === "1") {
       setDialogOpen(true);
       setEditingValue(null);
-      setDraft(DEFAULT_VALUE_INPUT);
+      setDraft({ ...DEFAULT_VALUE_INPUT, userId: defaultUserId });
       const next = new URLSearchParams(searchParams);
       next.delete("create");
       setSearchParams(next, { replace: true });
     }
-  }, [searchParams, setSearchParams]);
+  }, [defaultUserId, searchParams, setSearchParams]);
 
   const saveMutation = useMutation({
     mutationFn: async (input: PsycheValueInput) => {
@@ -90,7 +99,7 @@ export function PsycheValuesPage() {
     onSuccess: async () => {
       setDialogOpen(false);
       setEditingValue(null);
-      setDraft(DEFAULT_VALUE_INPUT);
+      setDraft({ ...DEFAULT_VALUE_INPUT, userId: defaultUserId });
       setSubmitError(null);
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["forge-psyche-values"] }),
@@ -122,6 +131,17 @@ export function PsycheValuesPage() {
       description: "Start with the value itself and the life-direction it points toward.",
       render: (value, setValue) => (
         <>
+          <UserSelectField
+            value={value.userId ?? null}
+            users={shell.snapshot.users}
+            onChange={(userId) => setValue({ userId })}
+            defaultLabel={formatOwnerSelectDefaultLabel(
+              shell.snapshot.users.find((user) => user.id === defaultUserId) ??
+                null,
+              "Choose value owner"
+            )}
+            help="Values can belong to a human or bot user while still linking to goals, projects, and tasks across Forge."
+          />
           <FlowField label="Value name">
             <Input value={value.title} onChange={(event) => setValue({ title: event.target.value })} placeholder="Repair with steadiness" />
           </FlowField>
@@ -243,7 +263,7 @@ export function PsycheValuesPage() {
           <Button
             onClick={() => {
               setEditingValue(null);
-              setDraft(DEFAULT_VALUE_INPUT);
+              setDraft({ ...DEFAULT_VALUE_INPUT, userId: defaultUserId });
               setDialogOpen(true);
             }}
           >
@@ -259,7 +279,17 @@ export function PsycheValuesPage() {
         centerLabel="Value field"
         centerValue={`${values.length} mapped`}
         nodes={orbitNodes}
-        action={<Button onClick={() => setDialogOpen(true)}>Add value</Button>}
+        action={
+          <Button
+            onClick={() => {
+              setEditingValue(null);
+              setDraft({ ...DEFAULT_VALUE_INPUT, userId: defaultUserId });
+              setDialogOpen(true);
+            }}
+          >
+            Add value
+          </Button>
+        }
       />
 
       <AtlasPanel
@@ -272,7 +302,15 @@ export function PsycheValuesPage() {
         <div id="values-atlas" className="grid gap-4">
           {values.length === 0 ? (
             <div className="flex justify-start">
-              <Button onClick={() => setDialogOpen(true)}>Add value</Button>
+              <Button
+                onClick={() => {
+                  setEditingValue(null);
+                  setDraft({ ...DEFAULT_VALUE_INPUT, userId: defaultUserId });
+                  setDialogOpen(true);
+                }}
+              >
+                Add value
+              </Button>
             </div>
           ) : (
             values.map((value) => {
@@ -289,6 +327,7 @@ export function PsycheValuesPage() {
                       <div className="mt-2 text-sm text-[var(--tertiary)]">{value.valuedDirection}</div>
                     </div>
                     <div className="flex flex-wrap items-center gap-2">
+                      {value.user ? <UserBadge user={value.user} compact /> : null}
                       <EntityNoteCountLink entityType="psyche_value" entityId={value.id} count={noteCount} />
                       <Button
                         variant="secondary"

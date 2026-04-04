@@ -200,6 +200,12 @@ function createSnapshot(overrides: Partial<ForgeSnapshot> = {}): ForgeSnapshot {
       neglectedGoals: [],
       summary: ""
     },
+    users: [],
+    strategies: [],
+    userScope: {
+      selectedUserIds: [],
+      selectedUsers: []
+    },
     goals: [],
     projects: [],
     tags: [],
@@ -525,12 +531,12 @@ describe("core route states", () => {
     expect(screen.queryByText("Body Rebuild Sprint")).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: /Active/i }));
-    fireEvent.change(screen.getByPlaceholderText("Type a project name, a goal, a task, or a tag"), {
+    fireEvent.change(screen.getByPlaceholderText("Type a project, goal, task, human, bot, user, or tag"), {
       target: { value: "health" }
     });
     fireEvent.click(screen.getByRole("button", { name: /Deep Health Goal/i }));
     expect(screen.getAllByText("Deep Health Goal").length).toBeGreaterThan(1);
-    fireEvent.change(screen.getByPlaceholderText("Type a project name, a goal, a task, or a tag"), {
+    fireEvent.change(screen.getByPlaceholderText("Type a project, goal, task, human, bot, user, or tag"), {
       target: { value: "rebuild" }
     });
     expect(screen.getByText("Body Rebuild Sprint")).toBeInTheDocument();

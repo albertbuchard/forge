@@ -1,5 +1,6 @@
 import { listGoals } from "../repositories/goals.js";
 import { listActivityEvents } from "../repositories/activity-events.js";
+import { filterOwnedEntities } from "../repositories/entity-ownership.js";
 import { listHabits } from "../repositories/habits.js";
 import { buildNotesSummaryByEntity } from "../repositories/notes.js";
 import { listTagsByIds, listTags } from "../repositories/tags.js";
@@ -133,10 +134,10 @@ function buildGoalSummary(tasks: Task[], goalId: string): Pick<DashboardGoal, "p
   return { progress, totalTasks, completedTasks, earnedPoints, momentumLabel };
 }
 
-export function getDashboard(): DashboardPayload {
-  const goals = listGoals();
-  const tasks = listTasks();
-  const habits = listHabits();
+export function getDashboard(options: { userIds?: string[] } = {}): DashboardPayload {
+  const goals = filterOwnedEntities("goal", listGoals(), options.userIds);
+  const tasks = filterOwnedEntities("task", listTasks(), options.userIds);
+  const habits = filterOwnedEntities("habit", listHabits(), options.userIds);
   const tags = listTags();
   const now = new Date();
   const weekStart = startOfWeek(now).toISOString();
@@ -174,7 +175,7 @@ export function getDashboard(): DashboardPayload {
       tags: listTagsByIds(goal.tagIds)
     };
   });
-  const projects = listProjectSummaries();
+  const projects = listProjectSummaries({ userIds: options.userIds });
 
   const suggestedTags = tags.filter((tag) => ["value", "execution"].includes(tag.kind)).slice(0, 6);
   const owners = [...new Set(tasks.map((task) => task.owner).filter(Boolean))].sort((left, right) =>
@@ -184,7 +185,29 @@ export function getDashboard(): DashboardPayload {
   const gamification = buildGamificationProfile(goals, tasks, habits, now);
   const achievements = buildAchievementSignals(goals, tasks, habits, now);
   const milestoneRewards = buildMilestoneRewards(goals, tasks, habits, now);
-  const recentActivity = listActivityEvents({ limit: 12 });
+  const visibleIds = {
+    goal: new Set(goals.map((goal) => goal.id)),
+    project: new Set(projects.map((project) => project.id)),
+    task: new Set(tasks.map((task) => task.id)),
+    habit: new Set(habits.map((habit) => habit.id))
+  };
+  const recentActivity = listActivityEvents({ limit: 36, userIds: options.userIds })
+    .filter((event) => {
+      if (event.entityType === "goal") {
+        return visibleIds.goal.has(event.entityId);
+      }
+      if (event.entityType === "project") {
+        return visibleIds.project.has(event.entityId);
+      }
+      if (event.entityType === "task") {
+        return visibleIds.task.has(event.entityId);
+      }
+      if (event.entityType === "habit") {
+        return visibleIds.habit.has(event.entityId);
+      }
+      return true;
+    })
+    .slice(0, 12);
   const notesSummaryByEntity = buildNotesSummaryByEntity();
   return dashboardPayloadSchema.parse({
     stats,

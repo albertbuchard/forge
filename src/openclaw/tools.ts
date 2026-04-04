@@ -49,6 +49,9 @@ async function runWrite(
 }
 
 const emptyObjectSchema = Type.Object({});
+const scopedReadSchema = Type.Object({
+  userIds: Type.Optional(Type.Array(Type.String()))
+});
 const optionalString = () => Type.Optional(Type.String());
 const optionalNullableString = () =>
   Type.Optional(Type.Union([Type.String(), Type.Null()]));
@@ -99,41 +102,17 @@ async function resolveUiEntrypoint(config: ForgePluginConfig) {
   };
 }
 
-async function resolveCurrentWork(config: ForgePluginConfig) {
-  const payload = await runRead(config, "/api/v1/operator/context");
-  const context =
-    typeof payload === "object" &&
-    payload !== null &&
-    "context" in payload &&
-    typeof payload.context === "object" &&
-    payload.context !== null
-      ? (payload.context as Record<string, unknown>)
-      : null;
-
-  const recentTaskRuns = Array.isArray(context?.recentTaskRuns)
-    ? context.recentTaskRuns
-    : [];
-  const activeTaskRuns = recentTaskRuns.filter(
-    (run) =>
-      typeof run === "object" &&
-      run !== null &&
-      "status" in run &&
-      run.status === "active"
-  );
-  const focusTasks = Array.isArray(context?.focusTasks)
-    ? context.focusTasks
-    : [];
-
-  return {
-    generatedAt:
-      typeof context?.generatedAt === "string"
-        ? context.generatedAt
-        : new Date().toISOString(),
-    activeTaskRuns,
-    focusTasks,
-    recommendedNextTask: context?.recommendedNextTask ?? null,
-    xp: context?.xp ?? null
-  };
+function withUserIds(path: string, userIds: string[] | undefined) {
+  if (!userIds || userIds.length === 0) {
+    return path;
+  }
+  const search = new URLSearchParams();
+  for (const userId of userIds) {
+    if (userId.trim()) {
+      search.append("userIds", userId.trim());
+    }
+  }
+  return search.size > 0 ? `${path}?${search.toString()}` : path;
 }
 
 function registerReadTool<T extends TObject<TProperties>>(
@@ -200,7 +179,8 @@ export function registerForgePluginTools(
     label: "Forge Operator Overview",
     description:
       "Start here for most Forge work. Read the one-shot operator overview with current priorities, momentum, and onboarding guidance before searching or mutating.",
-    path: () => "/api/v1/operator/overview"
+    parameters: scopedReadSchema,
+    path: (params) => withUserIds("/api/v1/operator/overview", params.userIds as string[] | undefined)
   });
 
   registerReadTool(api, config, {
@@ -208,7 +188,8 @@ export function registerForgePluginTools(
     label: "Forge Operator Context",
     description:
       "Read the current operational task board, focus queue, recent task runs, and XP state. Use this for current-work questions and work runtime decisions.",
-    path: () => "/api/v1/operator/context"
+    parameters: scopedReadSchema,
+    path: (params) => withUserIds("/api/v1/operator/context", params.userIds as string[] | undefined)
   });
 
   registerReadTool(api, config, {
@@ -235,7 +216,8 @@ export function registerForgePluginTools(
     label: "Forge Psyche Overview",
     description:
       "Read the aggregate Psyche state across values, patterns, behaviors, beliefs, modes, and trigger reports before making Psyche recommendations or updates.",
-    path: () => "/api/v1/psyche/overview"
+    parameters: scopedReadSchema,
+    path: (params) => withUserIds("/api/v1/psyche/overview", params.userIds as string[] | undefined)
   });
 
   registerReadTool(api, config, {
@@ -251,7 +233,8 @@ export function registerForgePluginTools(
     label: "Forge Weekly Review",
     description:
       "Read the current weekly review payload with wins, trends, and reward framing.",
-    path: () => "/api/v1/reviews/weekly"
+    parameters: scopedReadSchema,
+    path: (params) => withUserIds("/api/v1/reviews/weekly", params.userIds as string[] | undefined)
   });
 
   api.registerTool({
@@ -259,9 +242,48 @@ export function registerForgePluginTools(
     label: "Forge Current Work",
     description:
       "Get the current live-work picture: active task runs, focus tasks, the recommended next task, and current XP state.",
-    parameters: emptyObjectSchema,
-    async execute() {
-      return jsonResult(await resolveCurrentWork(config));
+    parameters: scopedReadSchema,
+    async execute(_toolCallId, params) {
+      const path = withUserIds(
+        "/api/v1/operator/context",
+        ((params ?? {}) as Record<string, unknown>).userIds as
+          | string[]
+          | undefined
+      );
+      const payload = await runRead(config, path);
+      const context =
+        typeof payload === "object" &&
+        payload !== null &&
+        "context" in payload &&
+        typeof payload.context === "object" &&
+        payload.context !== null
+          ? (payload.context as Record<string, unknown>)
+          : null;
+
+      const recentTaskRuns = Array.isArray(context?.recentTaskRuns)
+        ? context.recentTaskRuns
+        : [];
+      const activeTaskRuns = recentTaskRuns.filter(
+        (run) =>
+          typeof run === "object" &&
+          run !== null &&
+          "status" in run &&
+          run.status === "active"
+      );
+      const focusTasks = Array.isArray(context?.focusTasks)
+        ? context.focusTasks
+        : [];
+
+      return jsonResult({
+        generatedAt:
+          typeof context?.generatedAt === "string"
+            ? context.generatedAt
+            : new Date().toISOString(),
+        activeTaskRuns,
+        focusTasks,
+        recommendedNextTask: context?.recommendedNextTask ?? null,
+        xp: context?.xp ?? null
+      });
     }
   });
 
@@ -276,6 +298,7 @@ export function registerForgePluginTools(
           entityTypes: Type.Optional(Type.Array(Type.String())),
           query: optionalString(),
           ids: Type.Optional(Type.Array(Type.String())),
+          userIds: Type.Optional(Type.Array(Type.String())),
           status: Type.Optional(Type.Array(Type.String())),
           linkedTo: Type.Optional(
             Type.Object({

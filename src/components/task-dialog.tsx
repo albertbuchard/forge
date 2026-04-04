@@ -10,14 +10,18 @@ import { EntityBadge } from "@/components/ui/entity-badge";
 import { EntityName } from "@/components/ui/entity-name";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { UserBadge } from "@/components/ui/user-badge";
+import { UserSelectField } from "@/components/ui/user-select-field";
 import { useI18n } from "@/lib/i18n";
 import { quickTaskSchema, type QuickTaskInput } from "@/lib/schemas";
-import type { Goal, ProjectSummary, Tag, Task } from "@/lib/types";
+import type { Goal, ProjectSummary, Tag, Task, UserSummary } from "@/lib/types";
+import { formatOwnerSelectDefaultLabel } from "@/lib/user-ownership";
 
 export const defaultTaskValues: QuickTaskInput = {
   title: "",
   description: "",
   owner: "Albert",
+  userId: null,
   goalId: "",
   projectId: "",
   priority: "medium",
@@ -35,6 +39,7 @@ function taskToFormValues(task: Task): QuickTaskInput {
     title: task.title,
     description: task.description,
     owner: task.owner,
+    userId: task.userId ?? null,
     goalId: task.goalId ?? "",
     projectId: task.projectId ?? "",
     priority: task.priority,
@@ -53,8 +58,10 @@ export function TaskDialog({
   goals,
   projects,
   tags,
+  users,
   editingTask,
   initialProjectId,
+  defaultUserId = null,
   onOpenChange,
   onSubmit
 }: {
@@ -62,8 +69,10 @@ export function TaskDialog({
   goals: Goal[];
   projects: ProjectSummary[];
   tags: Tag[];
+  users?: UserSummary[];
   editingTask: Task | null;
   initialProjectId?: string | null;
+  defaultUserId?: string | null;
   onOpenChange: (open: boolean) => void;
   onSubmit: (input: QuickTaskInput, taskId?: string) => Promise<void>;
 }) {
@@ -71,6 +80,7 @@ export function TaskDialog({
   const safeGoals = goals ?? [];
   const safeProjects = projects ?? [];
   const safeTags = tags ?? [];
+  const safeUsers = users ?? [];
   const [draft, setDraft] = useState<QuickTaskInput>(defaultTaskValues);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<
@@ -98,19 +108,41 @@ export function TaskDialog({
         ? taskToFormValues(editingTask)
         : {
             ...defaultTaskValues,
+            owner:
+              safeUsers.find(
+                (user) =>
+                  user.id ===
+                  (safeProjects.find(
+                    (project) => project.id === initialProjectId
+                  )?.userId ?? defaultUserId)
+              )?.displayName ?? defaultTaskValues.owner,
+            userId:
+              safeProjects.find((project) => project.id === initialProjectId)
+                ?.userId ?? defaultUserId,
             projectId: initialProjectId ?? "",
             goalId:
               safeProjects.find((project) => project.id === initialProjectId)
                 ?.goalId ?? ""
           }
     );
-  }, [editingTask, initialProjectId, open, safeProjects]);
+  }, [
+    defaultUserId,
+    editingTask,
+    initialProjectId,
+    open,
+    safeProjects,
+    safeUsers
+  ]);
 
   const selectedProject = useMemo(
     () =>
       safeProjects.find((project) => project.id === draft.projectId) ?? null,
     [draft.projectId, safeProjects]
   );
+  const suggestedUser =
+    safeUsers.find(
+      (user) => user.id === (selectedProject?.userId ?? defaultUserId)
+    ) ?? null;
 
   useEffect(() => {
     if (!selectedProject) {
@@ -161,12 +193,15 @@ export function TaskDialog({
                         className="min-w-0"
                         showIcon={false}
                       />
-                      <EntityBadge
-                        kind="goal"
-                        label={project.goalTitle}
-                        compact
-                        gradient={false}
-                      />
+                      <div className="flex flex-wrap items-center justify-end gap-2">
+                        <EntityBadge
+                          kind="goal"
+                          label={project.goalTitle}
+                          compact
+                          gradient={false}
+                        />
+                        <UserBadge user={project.user} compact />
+                      </div>
                     </div>
                     <div className="mt-2 text-sm leading-6 text-white/54">
                       {project.description}
@@ -233,6 +268,21 @@ export function TaskDialog({
               placeholder="Albert"
             />
           </FlowField>
+          <UserSelectField
+            value={value.userId}
+            users={safeUsers}
+            onChange={(userId) =>
+              setValue({
+                userId,
+                owner:
+                  safeUsers.find((user) => user.id === userId)?.displayName ??
+                  value.owner
+              })
+            }
+            label="Owner user"
+            defaultLabel={formatOwnerSelectDefaultLabel(suggestedUser)}
+            help="Tasks can belong to a human or bot user. The linked project owner is suggested first so cross-user task routing stays explicit."
+          />
         </>
       )
     },

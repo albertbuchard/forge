@@ -2,6 +2,7 @@ import { Link } from "react-router-dom";
 import { createColumnHelper, flexRender, getCoreRowModel, useReactTable } from "@tanstack/react-table";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { UserBadge } from "@/components/ui/user-badge";
 import { getActivityEventHref } from "@/lib/entity-links";
 import { formatDateTime } from "@/lib/utils";
 import type { ActivityEvent } from "@/lib/types";
@@ -25,6 +26,18 @@ const columns = [
   columnHelper.accessor("source", {
     header: "Source",
     cell: (info) => <div className="font-label text-[11px] uppercase tracking-[0.16em] text-white/50">{info.getValue()}</div>
+  }),
+  columnHelper.display({
+    id: "owner",
+    header: "Owner",
+    cell: (info) =>
+      info.row.original.user ? (
+        <UserBadge user={info.row.original.user} compact />
+      ) : (
+        <div className="text-[11px] uppercase tracking-[0.16em] text-white/32">
+          Unowned
+        </div>
+      )
   }),
   columnHelper.accessor("createdAt", {
     header: "When",

@@ -42,8 +42,10 @@ Psyche graph:
 
 Forge is a personal system for:
 
+- human and bot users with explicit ownership
 - long-term goals
 - active projects
+- directed strategies across projects and tasks
 - concrete tasks
 - recurring habits
 - truthful live work sessions
@@ -64,6 +66,7 @@ Notes support includes:
 Examples:
 
 - “Save this as a project in Forge.”
+- “Show me the bot-owned strategies.”
 - “Show me my current work in Forge.”
 - “Start a real work session on this task.”
 - “Map this as a behavior pattern.”
@@ -169,6 +172,8 @@ The batch tools are array-first:
 - `forge_search_entities` takes `searches: []`
 - `forge_create_entities` takes `operations: []`, and each create operation must include `entityType` and full `data`
 - goal, project, and task creates can include nested `notes`, which Forge turns into linked note entities automatically
+- goal, project, task, strategy, habit, tag, and note writes can include `userId` to assign ownership to a human or bot user
+- scoped reads can use `userId` or repeated `userIds` query parameters when the agent needs to focus on specific humans or bots
 - `forge_update_entities` takes `operations: []`, and each update operation must include `entityType`, `id`, and `patch`
 - `forge_delete_entities` and `forge_restore_entities` also take `operations: []`
 
@@ -192,16 +197,17 @@ The live onboarding payload is the deep contract for agents. It now includes:
 
 - `conceptModel`: what the main Forge concepts mean
 - `psycheSubmoduleModel`: what the Psyche records and reference taxonomies are for
-- `psycheCoachingPlaybooks`: how to guide users through pattern, belief/schema, mode, and trigger-report intake
+- `psycheCoachingPlaybooks`: how to guide users through values work, functional analysis, behavior mapping, belief/schema intake, mode work, mode-guide sessions, and trigger reports with active listening instead of raw form prompts
 - `relationshipModel`: how goals, projects, tasks, task runs, Psyche entities, and insights connect
 - `entityCatalog`: exact field-level definitions for real Forge entity payloads
 - `toolInputCatalog`: exact mutation and live-work input shapes with examples
 
 That means the agent should use the real route-facing fields, for example:
 
+- `strategy` uses `targetGoalIds`, `targetProjectIds`, `linkedEntities`, and a directed acyclic `graph`
 - `belief_entry` uses `statement` and `beliefType`
 - `behavior_pattern` uses `cueContexts`, `shortTermPayoff`, `longTermCost`, and `preferredResponse`
-- `mode_guide_session` uses `summary`, `answers`, and `results`
+- `mode_guide_session` creates require `summary` and `answers`; `results` is optional candidate interpretation output
 - `event_type` and `emotion_definition` are reusable report vocabularies
 - `trigger_report` uses nested `emotions`, `thoughts`, `behaviors`, and `consequences`
 

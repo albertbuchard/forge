@@ -36,6 +36,7 @@ import {
   parseDateTimeLocalToIso,
   type NoteDestroyDelayUnit
 } from "@/lib/note-memory-tags";
+import { formatOwnedEntityOptionLabel } from "@/lib/user-ownership";
 
 type LinkDraft = {
   entityType: CrudEntityType;
@@ -177,21 +178,28 @@ export function EntityNotesSurface({
     () => ({
       goal: shell.snapshot.goals.map((goal) => ({
         id: goal.id,
-        label: goal.title
+        label: formatOwnedEntityOptionLabel(goal.title, goal.user)
       })),
       project: shell.snapshot.dashboard.projects.map((project) => ({
         id: project.id,
-        label: project.title
+        label: formatOwnedEntityOptionLabel(project.title, project.user)
       })),
       task: shell.snapshot.tasks.map((task) => ({
         id: task.id,
-        label: task.title
+        label: formatOwnedEntityOptionLabel(task.title, task.user)
+      })),
+      strategy: shell.snapshot.strategies.map((strategy) => ({
+        id: strategy.id,
+        label: formatOwnedEntityOptionLabel(strategy.title, strategy.user)
       })),
       habit: shell.snapshot.habits.map((habit) => ({
         id: habit.id,
-        label: habit.title
+        label: formatOwnedEntityOptionLabel(habit.title, habit.user)
       })),
-      tag: shell.snapshot.tags.map((tag) => ({ id: tag.id, label: tag.name })),
+      tag: shell.snapshot.tags.map((tag) => ({
+        id: tag.id,
+        label: formatOwnedEntityOptionLabel(tag.name, tag.user)
+      })),
       note: (notesQuery.data?.notes ?? []).map((note) => ({
         id: note.id,
         label: note.contentPlain || note.contentMarkdown
@@ -199,30 +207,30 @@ export function EntityNotesSurface({
       insight: [],
       psyche_value: (valuesQuery.data?.values ?? []).map((value) => ({
         id: value.id,
-        label: value.title
+        label: formatOwnedEntityOptionLabel(value.title, value.user)
       })),
       behavior_pattern: (patternsQuery.data?.patterns ?? []).map((pattern) => ({
         id: pattern.id,
-        label: pattern.title
+        label: formatOwnedEntityOptionLabel(pattern.title, pattern.user)
       })),
       behavior: (behaviorsQuery.data?.behaviors ?? []).map((behavior) => ({
         id: behavior.id,
-        label: behavior.title
+        label: formatOwnedEntityOptionLabel(behavior.title, behavior.user)
       })),
       belief_entry: (beliefsQuery.data?.beliefs ?? []).map((belief) => ({
         id: belief.id,
-        label: belief.statement
+        label: formatOwnedEntityOptionLabel(belief.statement, belief.user)
       })),
       mode_profile: (modesQuery.data?.modes ?? []).map((mode) => ({
         id: mode.id,
-        label: mode.title
+        label: formatOwnedEntityOptionLabel(mode.title, mode.user)
       })),
       mode_guide_session: [],
       event_type: [],
       emotion_definition: [],
       trigger_report: (reportsQuery.data?.reports ?? []).map((report) => ({
         id: report.id,
-        label: report.title
+        label: formatOwnedEntityOptionLabel(report.title, report.user)
       })),
       calendar_event: [],
       work_block_template: [],
@@ -238,6 +246,7 @@ export function EntityNotesSurface({
       shell.snapshot.dashboard.projects,
       shell.snapshot.goals,
       shell.snapshot.habits,
+      shell.snapshot.strategies,
       shell.snapshot.tags,
       shell.snapshot.tasks,
       valuesQuery.data?.values
@@ -449,6 +458,7 @@ export function EntityNotesSurface({
               "goal",
               "project",
               "task",
+              "strategy",
               "habit",
               "tag",
               "note",

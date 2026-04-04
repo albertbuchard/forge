@@ -1,6 +1,11 @@
 import { randomUUID } from "node:crypto";
 import { getDatabase, runInTransaction } from "../db.js";
 import { recordActivityEvent } from "./activity-events.js";
+import {
+  decorateOwnedEntity,
+  inferFirstOwnedUserId,
+  setEntityOwner
+} from "./entity-ownership.js";
 import { filterDeletedEntities, isEntityDeleted } from "./deleted-entities.js";
 import { createLinkedNotes } from "./notes.js";
 import { assertGoalExists } from "../services/relations.js";
@@ -37,48 +42,67 @@ type ActivityContext = {
   actor?: string | null;
 };
 
-function getDefaultProjectTemplate(goal: { title: string; description: string; status: string; themeColor: string; targetPoints: number }) {
+function getDefaultProjectTemplate(goal: {
+  title: string;
+  description: string;
+  status: string;
+  themeColor: string;
+  targetPoints: number;
+}) {
   switch (goal.title) {
     case "Build a durable body and calm energy":
       return {
         title: "Energy Foundation Sprint",
-        description: "Build the routines, scheduling, and recovery rhythm that make consistent physical energy possible."
+        description:
+          "Build the routines, scheduling, and recovery rhythm that make consistent physical energy possible."
       };
     case "Ship meaningful creative work every week":
       return {
         title: "Weekly Creative Shipping System",
-        description: "Create a repeatable system for deep work, reviews, and visible weekly output."
+        description:
+          "Create a repeatable system for deep work, reviews, and visible weekly output."
       };
     case "Strengthen shared life systems":
       return {
         title: "Shared Life Admin Reset",
-        description: "Reduce friction in logistics, planning, and recurring obligations that support shared life."
+        description:
+          "Reduce friction in logistics, planning, and recurring obligations that support shared life."
       };
     default:
       return {
         title: `${goal.title}: Active Project`,
-        description: "Concrete workstream under this life goal so tasks, evidence, and progress have a clear home."
+        description:
+          "Concrete workstream under this life goal so tasks, evidence, and progress have a clear home."
       };
   }
 }
 
 function mapProject(row: ProjectRow): Project {
-  return projectSchema.parse({
-    id: row.id,
-    goalId: row.goal_id,
-    title: row.title,
-    description: row.description,
-    status: row.status,
-    themeColor: row.theme_color,
-    targetPoints: row.target_points,
-    schedulingRules: calendarSchedulingRulesSchema.parse(JSON.parse(row.scheduling_rules_json || "{}")),
-    createdAt: row.created_at,
-    updatedAt: row.updated_at
-  });
+  return projectSchema.parse(
+    decorateOwnedEntity("project", {
+      id: row.id,
+      goalId: row.goal_id,
+      title: row.title,
+      description: row.description,
+      status: row.status,
+      themeColor: row.theme_color,
+      targetPoints: row.target_points,
+      schedulingRules: calendarSchedulingRulesSchema.parse(
+        JSON.parse(row.scheduling_rules_json || "{}")
+      ),
+      createdAt: row.created_at,
+      updatedAt: row.updated_at
+    })
+  );
 }
 
-function completeLinkedProjectTasks(projectId: string, activity?: ActivityContext) {
-  const openTasks = listTasks({ projectId }).filter((task) => task.status !== "done");
+function completeLinkedProjectTasks(
+  projectId: string,
+  activity?: ActivityContext
+) {
+  const openTasks = listTasks({ projectId }).filter(
+    (task) => task.status !== "done"
+  );
   for (const task of openTasks) {
     updateTaskInTransaction(task.id, { status: "done" }, activity);
   }
@@ -98,7 +122,8 @@ export function listProjects(filters: ProjectListQuery = {}): Project[] {
     params.push(filters.status);
   }
 
-  const whereSql = whereClauses.length > 0 ? `WHERE ${whereClauses.join(" AND ")}` : "";
+  const whereSql =
+    whereClauses.length > 0 ? `WHERE ${whereClauses.join(" AND ")}` : "";
   const limitSql = filters.limit ? "LIMIT ?" : "";
   if (filters.limit) {
     params.push(filters.limit);
@@ -132,7 +157,10 @@ export function getProjectById(projectId: string): Project | undefined {
   return row ? mapProject(row) : undefined;
 }
 
-export function createProject(input: CreateProjectInput, activity?: ActivityContext): Project {
+export function createProject(
+  input: CreateProjectInput,
+  activity?: ActivityContext
+): Project {
   return runInTransaction(() => {
     const parsed = createProjectSchema.parse(input);
     assertGoalExists(parsed.goalId);
@@ -155,6 +183,12 @@ export function createProject(input: CreateProjectInput, activity?: ActivityCont
         now,
         now
       );
+    setEntityOwner(
+      "project",
+      id,
+      parsed.userId ??
+        inferFirstOwnedUserId([{ entityType: "goal", entityId: parsed.goalId }])
+    );
 
     const project = getProjectById(id)!;
     createLinkedNotes(
@@ -182,7 +216,11 @@ export function createProject(input: CreateProjectInput, activity?: ActivityCont
   });
 }
 
-export function updateProject(projectId: string, input: UpdateProjectInput, activity?: ActivityContext): Project | undefined {
+export function updateProject(
+  projectId: string,
+  input: UpdateProjectInput,
+  activity?: ActivityContext
+): Project | undefined {
   const current = getProjectById(projectId);
   if (!current) {
     return undefined;
@@ -223,8 +261,13 @@ export function updateProject(projectId: string, input: UpdateProjectInput, acti
 
     // Keep legacy task.goal_id aligned with the project's parent goal.
     getDatabase()
-      .prepare(`UPDATE tasks SET goal_id = ?, updated_at = ? WHERE project_id = ?`)
+      .prepare(
+        `UPDATE tasks SET goal_id = ?, updated_at = ? WHERE project_id = ?`
+      )
       .run(next.goalId, next.updatedAt, projectId);
+    if (parsed.userId !== undefined) {
+      setEntityOwner("project", projectId, parsed.userId);
+    }
 
     const completedLinkedTaskCount =
       current.status !== "completed" && next.status === "completed"
@@ -238,7 +281,9 @@ export function updateProject(projectId: string, input: UpdateProjectInput, acti
         entityType: "project",
         entityId: project.id,
         eventType: statusChanged ? "project_status_changed" : "project_updated",
-        title: statusChanged ? `Project ${project.status}: ${project.title}` : `Project updated: ${project.title}`,
+        title: statusChanged
+          ? `Project ${project.status}: ${project.title}`
+          : `Project updated: ${project.title}`,
         description:
           statusChanged && project.status === "completed"
             ? `Project finished and auto-completed ${completedLinkedTaskCount} linked unfinished task${completedLinkedTaskCount === 1 ? "" : "s"}.`
@@ -285,7 +330,11 @@ export function ensureDefaultProjectForGoal(goalId: string): Project {
         goalId,
         template.title,
         template.description,
-        goal.status === "completed" ? "completed" : goal.status === "paused" ? "paused" : "active",
+        goal.status === "completed"
+          ? "completed"
+          : goal.status === "paused"
+            ? "paused"
+            : "active",
         goal.themeColor,
         Math.max(100, Math.round(goal.targetPoints / 2)),
         JSON.stringify({
@@ -303,11 +352,15 @@ export function ensureDefaultProjectForGoal(goalId: string): Project {
         now,
         now
       );
+    setEntityOwner("project", id, goal.userId);
     return getProjectById(id)!;
   });
 }
 
-export function deleteProject(projectId: string, activity?: ActivityContext): Project | undefined {
+export function deleteProject(
+  projectId: string,
+  activity?: ActivityContext
+): Project | undefined {
   const current = getProjectById(projectId);
   if (!current) {
     return undefined;
@@ -315,9 +368,7 @@ export function deleteProject(projectId: string, activity?: ActivityContext): Pr
 
   return runInTransaction(() => {
     pruneLinkedEntityReferences("project", projectId);
-    getDatabase()
-      .prepare(`DELETE FROM projects WHERE id = ?`)
-      .run(projectId);
+    getDatabase().prepare(`DELETE FROM projects WHERE id = ?`).run(projectId);
 
     if (activity) {
       recordActivityEvent({

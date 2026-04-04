@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "forge-hermes-plugin"
 dynamic = ["version"]
-description = "Curated Hermes plugin for the Forge life operating system"
+description = "Structured memory plugin for project management and mental health tracking in Hermes"
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.9"

@@ -2,7 +2,8 @@
 
 ## Executive Summary
 
-Forge is a local-first life and execution operating system for people who are trying
+Forge is a local-first structured memory system for life direction and execution, built
+for people who are trying
 to run serious personal and professional lives with more structure than a normal task
 app can provide. The product exists to connect long-term direction, current projects,
 concrete tasks, daily execution, earned rewards, and reflective self-understanding in
@@ -15,6 +16,9 @@ or a decorative habit tracker. It is supposed to help the user turn life goals i
 projects, projects into tasks, tasks into active work sessions, and work sessions into
 visible evidence, momentum, and reflection. It should support high-agency users who
 want clarity and accountability without losing nuance, emotion, or long-term meaning.
+Forge is also no longer allowed to assume that one human is the only actor in the
+system. The production model must support multiple Forge users, and each Forge user
+must be explicitly typed as either `human` or `bot`.
 
 The app is successful when a user can use it to decide what to do, do it, track the
 time spent doing it, understand how that work supports a larger goal, and later review
@@ -39,6 +43,10 @@ behaviors, modes, patterns, and reports can inform action rather than living as 
 isolated notebook. Sixth, it must make execution calendar-aware by syncing provider
 calendars, defining recurring work blocks, enforcing task and project eligibility
 rules, and planning real timeboxes before work begins.
+Seventh, it must support collaborative multi-user work between humans and bots. A
+human-owned project may legitimately link to bot-owned tasks, a bot may hold its own
+goals and strategies, and the user must be able to intentionally widen search or list
+views to other users instead of being trapped inside one invisible owner namespace.
 
 ## Product Concepts That Must Be Explained Clearly
 
@@ -51,6 +59,14 @@ durable body, shipping meaningful creative work, or strengthening shared life sy
 A goal is not a task. It is the strategic destination that gives meaning to lower
 levels of work.
 
+A user is the first-class owner identity for Forge records. Every user must be either
+`human` or `bot`. A user has a stable id, a display label, a type, and descriptive
+metadata that helps the UI and agents explain who owns a record. The runtime must be
+able to list users directly. The access model must be prepared for future per-user
+policy or sharing controls, but the current production default is permissive: every
+authenticated Forge user can list all other users and can read other users' records
+when the route or query explicitly asks for them.
+
 A project is a concrete ongoing body of work that serves one life goal. Projects are
 how a goal becomes actionable. A project should feel like a real initiative with its
 own progress, health, and active tasks. Projects also need a real lifecycle: active,
@@ -61,6 +77,14 @@ soft or hard delete through the normal delete flows.
 A task is a specific unit of action. Tasks live inside projects, can move through
 states such as backlog, focus, in progress, blocked, and done, and can be started as
 real timed work sessions.
+
+A strategy is a durable planning record that sits above day-to-day execution but below
+wishful abstraction. A strategy has one or more linked goals or projects as its target
+outcome, a free-text overview, a free-text end-state description, optional links to
+other Forge entities, and a structured non-cyclic directed graph of task or project
+steps. The graph can branch, but it must remain a DAG with a sensible initial side and
+an end-state side. Strategies are how Forge represents “how this unfolds over time,”
+not just “what exists right now.”
 
 A habit is a recurring commitment tracked separately from tasks. Habits need their own
 management surface, recurrence rules, and clear XP consequences so they do not become
@@ -145,11 +169,20 @@ cards behind in the main feed.
 
 ## Required Product Behavior
 
-Forge must feel like one operating system, not a bundle of disconnected modules. A
+Forge must feel like one coherent structured memory system, not a bundle of disconnected modules. A
 task should always remain legible in context: which project it belongs to, which life
 goal that project serves, whether it is active right now, how much time has been spent
 on it, and what changed recently. The user should not have to open multiple surfaces
 just to reconstruct why a task matters.
+That same legibility now includes ownership. The product must show which Forge user owns
+the current goal, project, task, note, strategy, or Psyche record, and search or link
+controls must make it clear when the user is reaching across to another human or bot.
+
+Cross-user linkage is part of the product contract. Forge must not block a human-owned
+project from linking to a bot-owned task, a bot-owned strategy from pointing at a
+human-owned goal, or a note from referencing entities across user boundaries. Ownership
+and relationship are separate ideas: ownership answers “whose record is this,” while
+links answer “what does this record connect to.”
 
 The execution experience is a flagship responsibility. The Kanban board must be
 stable, readable, responsive, and physically trustworthy. Columns must not overlap,
@@ -185,6 +218,12 @@ designed for both desktop and mobile at the same time. A mobile screen is not al
 to be a broken or compressed version of desktop. If a surface contains dense data, the
 mobile version must intentionally reorganize it rather than letting it overflow.
 
+Multi-user behavior is also part of the contract. The main list routes, snapshot
+payloads, entity detail routes, and search routes must all understand explicit user
+scope. Forge needs a first-class user list route plus user-aware query parameters or
+payload fields so a caller can ask for one specific user, multiple users, the current
+active user only, or all visible users when a shared or comparative view is intended.
+
 ## API And Agent Contract
 
 Forge is also an agent-facing product. The API and the curated agent integrations must
@@ -205,12 +244,24 @@ deliberate safety reason not to.
 The agent contract must stay explicit and auditable. Mutations should be scoped,
 recoverable where appropriate, and visible in the product afterward. Forge should help
 the user collaborate with agents without giving up provenance or control.
+That now includes owner provenance. The API and every curated skill surface must expose
+the owning `userId` and enough user metadata to let an agent understand whether it is
+reading or mutating a human-owned or bot-owned record. Search and create flows must be
+able to target another user intentionally rather than relying on ambient assumptions.
 The live onboarding contract must therefore expose exact tool input shapes, valid enum
 values, per-entity field guides, and relationship rules so an agent can use Forge
 without guessing or inventing fields. That includes making project lifecycle guidance
 explicit: suspend, finish, and restart are status patches on `project.status`, delete
 is soft by default unless hard mode is explicitly requested, and finishing a project
 auto-completes linked unfinished tasks through the standard task-completion path.
+For Psyche work, the agent contract must go further than raw schema help. It must tell
+the agent to explore values, behaviors, beliefs, patterns, modes, guided mode sessions,
+and trigger reports through active listening and gradual evidence gathering before
+storing them. Pattern work should follow a CBT-style functional analysis, value work
+should separate directions from goals, and belief or mode work should emerge naturally
+from the conversation rather than being demanded as a form fill. When one Psyche entity
+reveals an adjacent one, the agent should notice that and help the user decide whether
+to map the linked belief, mode, value, or pattern too.
 
 ## Technical Stack And Architecture
 
@@ -232,6 +283,13 @@ Rust services built on Axum, Tokio, SQLx, and SQLite. The data layer is expected
 local-first, migration-backed, and auditable. SQLite features such as WAL mode, JSON1,
 FTS5, and append-oriented history are part of the intended foundation. GraphQL and
 Electron are not aligned with this product direction.
+
+The live SQLite schema must now become multi-user-aware. Core user-owned records must
+carry a first-class `userId` or equivalent owner foreign key instead of relying on raw
+display strings such as `owner` or `actor` alone. Legacy display labels may still
+exist for UX or audit readability, but they are not allowed to be the sole source of
+identity anymore. Search, snapshot assembly, and entity CRUD must all flow from the
+real user model.
 
 Architecturally, Forge is manager-first. The contract layer defines shapes and versioned
 behavior. The manager layer owns orchestration and policy. Adapters isolate infrastructure

@@ -59,6 +59,8 @@ export function getEntityRoute(entityType: CrudEntityType, entityId: string) {
       return `/projects/${entityId}`;
     case "task":
       return `/tasks/${entityId}`;
+    case "strategy":
+      return `/strategies/${entityId}`;
     case "psyche_value":
       return `/psyche/values?focus=${entityId}#values-atlas`;
     case "behavior_pattern":
@@ -81,6 +83,7 @@ export function getEntityNotesHref(entityType: CrudEntityType, entityId: string)
     case "goal":
     case "project":
     case "task":
+    case "strategy":
     case "trigger_report": {
       const route = getEntityRoute(entityType, entityId);
       return route ? `${route}#notes` : null;

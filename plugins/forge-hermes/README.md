@@ -9,6 +9,9 @@ This plugin follows the Hermes plugin guide directly:
 - bundled Forge runtime assets so Hermes can start Forge safely without repo-only runtime imports
 
 It exposes the same curated Forge contract as the OpenClaw adapter, but through Hermes' Python plugin system.
+It also bundles a Psyche interview playbook pack so Hermes can explore values,
+patterns, behaviors, beliefs, modes, and trigger reports with active listening before
+persisting them.
 
 ## Install
 
@@ -58,4 +61,4 @@ If you want editable package mode while developing from this repo:
 
 - the recommended install path is now pip-based Hermes entry-point discovery, not the old folder-plugin symlink
 - edit `~/.hermes/forge/config.json` if you want to move the data root or pin a different local port
-- the bundled skill is installed automatically on first plugin load if `~/.hermes/skills/forge-hermes/SKILL.md` does not already exist
+- the bundled skill pack is installed automatically on first plugin load under `~/.hermes/skills/forge-hermes/` if those files do not already exist

@@ -26,6 +26,7 @@ import {
   ChevronsRight,
   Clock3,
   Flame,
+  GitBranch,
   LayoutDashboard,
   NotebookPen,
   Radar,
@@ -83,10 +84,17 @@ import type {
   ProjectMutationInput,
   QuickTaskInput
 } from "@/lib/schemas";
-import type { CalendarSchedulingRules, ForgeSnapshot, SettingsPayload } from "@/lib/types";
+import type {
+  CalendarSchedulingRules,
+  ForgeSnapshot,
+  SettingsPayload,
+  UserSummary
+} from "@/lib/types";
 
 type ShellContextValue = {
   snapshot: ForgeSnapshot;
+  selectedUserIds: string[];
+  setSelectedUserIds: (userIds: string[]) => void;
   refresh: () => Promise<void>;
   createTask: (input: QuickTaskInput) => Promise<void>;
   startTaskNow: (
@@ -141,6 +149,12 @@ const PRIMARY_ROUTES = [
     labelKey: "common.routeLabels.projects",
     detailKey: "common.routeDetails.projects",
     icon: BriefcaseBusiness
+  },
+  {
+    to: "/strategies",
+    labelKey: "common.routeLabels.strategies",
+    detailKey: "common.routeDetails.strategies",
+    icon: GitBranch
   },
   {
     to: "/calendar",
@@ -200,27 +214,148 @@ const PRIMARY_ROUTES = [
 
 const MOBILE_CORE_ROUTES = [
   PRIMARY_ROUTES[0],
+  PRIMARY_ROUTES[7],
   PRIMARY_ROUTES[6],
-  PRIMARY_ROUTES[5],
-  PRIMARY_ROUTES[8]
+  PRIMARY_ROUTES[9]
 ] as const;
 const MOBILE_MORE_ROUTES = [
   PRIMARY_ROUTES[1],
   PRIMARY_ROUTES[2],
   PRIMARY_ROUTES[3],
   PRIMARY_ROUTES[4],
-  PRIMARY_ROUTES[7],
-  PRIMARY_ROUTES[9],
+  PRIMARY_ROUTES[5],
+  PRIMARY_ROUTES[8],
   PRIMARY_ROUTES[10],
   PRIMARY_ROUTES[11],
-  PRIMARY_ROUTES[12]
+  PRIMARY_ROUTES[12],
+  PRIMARY_ROUTES[13]
 ] as const;
+
+const USER_SCOPE_STORAGE_KEY = "forge.selected-user-ids";
 
 function formatCompactNumber(value: number) {
   return new Intl.NumberFormat("en", {
     notation: "compact",
     maximumFractionDigits: value >= 1000 ? 1 : 0
   }).format(value);
+}
+
+function readStoredSelectedUserIds() {
+  if (typeof window === "undefined") {
+    return [];
+  }
+  try {
+    const raw = window.localStorage.getItem(USER_SCOPE_STORAGE_KEY);
+    if (!raw) {
+      return [];
+    }
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed)) {
+      return [];
+    }
+    return parsed
+      .filter((entry): entry is string => typeof entry === "string")
+      .map((entry) => entry.trim())
+      .filter(Boolean);
+  } catch {
+    return [];
+  }
+}
+
+function writeStoredSelectedUserIds(userIds: string[]) {
+  if (typeof window === "undefined") {
+    return;
+  }
+  try {
+    window.localStorage.setItem(
+      USER_SCOPE_STORAGE_KEY,
+      JSON.stringify(Array.from(new Set(userIds)))
+    );
+  } catch {
+    return;
+  }
+}
+
+function sameUserScope(left: string[], right: string[]) {
+  if (left.length !== right.length) {
+    return false;
+  }
+  const leftKey = [...left].sort().join("|");
+  const rightKey = [...right].sort().join("|");
+  return leftKey === rightKey;
+}
+
+function UserScopePicker({
+  users,
+  selectedUserIds,
+  onChange,
+  compact = false
+}: {
+  users: UserSummary[];
+  selectedUserIds: string[];
+  onChange: (userIds: string[]) => void;
+  compact?: boolean;
+}) {
+  const humans = users.filter((user) => user.kind === "human");
+  const bots = users.filter((user) => user.kind === "bot");
+  const options = [
+    {
+      id: "all",
+      label: "All",
+      description: "Show every human and bot together.",
+      userIds: []
+    },
+    {
+      id: "humans",
+      label: "Humans",
+      description: "Focus only on human-owned work.",
+      userIds: humans.map((user) => user.id)
+    },
+    {
+      id: "bots",
+      label: "Bots",
+      description: "Focus only on bot-owned work.",
+      userIds: bots.map((user) => user.id)
+    },
+    ...users.map((user) => ({
+      id: user.id,
+      label: user.displayName,
+      description: `${user.kind === "human" ? "Human" : "Bot"} · ${user.handle}`,
+      userIds: [user.id]
+    }))
+  ];
+
+  return (
+    <div className="grid gap-2">
+      {!compact ? (
+        <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/40">
+          User scope
+        </div>
+      ) : null}
+      <div className="flex flex-wrap gap-2">
+        {options.map((option) => {
+          const selected = sameUserScope(selectedUserIds, option.userIds);
+          return (
+            <button
+              key={option.id}
+              type="button"
+              title={option.description}
+              className={cn(
+                "rounded-full border px-3 py-2 text-sm transition",
+                compact ? "text-[12px]" : "text-sm",
+                selected
+                  ? "border-[rgba(192,193,255,0.28)] bg-[rgba(192,193,255,0.16)] text-white"
+                  : "border-white/8 bg-white/[0.04] text-white/62 hover:bg-white/[0.08] hover:text-white"
+              )}
+              onClick={() => onChange(option.userIds)}
+            >
+              {option.label}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
 }
 
 function NavItem({
@@ -492,6 +627,12 @@ function ShellFrame({
       return [
         { to: "/goals", label: t("common.shell.rail.goalAll") },
         { to: "/projects", label: t("common.shell.rail.goalProjects") }
+      ];
+    }
+    if (location.pathname.startsWith("/strategies")) {
+      return [
+        { to: "/strategies", label: t("common.routeLabels.strategies") },
+        { to: "/projects", label: t("common.shell.rail.projectAll") }
       ];
     }
     if (location.pathname.startsWith("/psyche")) {
@@ -792,16 +933,23 @@ function ShellFrame({
                     }
                     transition={{ duration: 0.28, ease: "easeOut" }}
                   >
-                    <div className="flex flex-wrap gap-2">
-                      {railLinks.map((link) => (
-                        <Link
-                          key={link.to}
-                          to={link.to}
-                          className="interactive-tap inline-flex min-h-10 min-w-max items-center justify-center rounded-full bg-white/[0.04] px-4 py-2 text-[13px] leading-none whitespace-nowrap text-white/62 transition hover:bg-white/[0.07] hover:text-white"
-                        >
-                          {link.label}
-                        </Link>
-                      ))}
+                    <div className="grid min-w-0 gap-3">
+                      <div className="flex flex-wrap gap-2">
+                        {railLinks.map((link) => (
+                          <Link
+                            key={link.to}
+                            to={link.to}
+                            className="interactive-tap inline-flex min-h-10 min-w-max items-center justify-center rounded-full bg-white/[0.04] px-4 py-2 text-[13px] leading-none whitespace-nowrap text-white/62 transition hover:bg-white/[0.07] hover:text-white"
+                          >
+                            {link.label}
+                          </Link>
+                        ))}
+                      </div>
+                      <UserScopePicker
+                        users={shell.snapshot.users}
+                        selectedUserIds={shell.selectedUserIds}
+                        onChange={shell.setSelectedUserIds}
+                      />
                     </div>
                     <div className="flex flex-wrap gap-2">
                       <Badge tone="meta">
@@ -961,6 +1109,14 @@ function ShellFrame({
                     label={activityLabel}
                   />
                 </div>
+                <div className="mt-3 overflow-x-auto pb-1">
+                  <UserScopePicker
+                    users={shell.snapshot.users}
+                    selectedUserIds={shell.selectedUserIds}
+                    onChange={shell.setSelectedUserIds}
+                    compact
+                  />
+                </div>
               </>
             ) : null}
           </motion.header>
@@ -1010,6 +1166,10 @@ function ShellFrame({
         goals={shell.snapshot.dashboard.goals}
         projects={shell.snapshot.dashboard.projects}
         tags={shell.snapshot.tags}
+        users={shell.snapshot.users}
+        defaultUserId={
+          shell.selectedUserIds.length === 1 ? shell.selectedUserIds[0] : null
+        }
         onCreateGoal={shell.createGoal}
         onCreateProject={shell.createProject}
         onCreateTask={shell.createTask}
@@ -1026,6 +1186,9 @@ export function AppShell() {
   const xpTimerRef = useRef<number | null>(null);
   const previousXpRef = useRef<number | null>(null);
   const queryClient = useQueryClient();
+  const [selectedUserIds, setSelectedUserIds] = useState<string[]>(
+    readStoredSelectedUserIds
+  );
   const [startWorkOpen, setStartWorkOpen] = useState(false);
   const [startWorkDefaults, setStartWorkDefaults] = useState<{
     taskId?: string | null;
@@ -1041,8 +1204,8 @@ export function AppShell() {
     queryFn: ensureOperatorSession
   });
   const snapshotQuery = useQuery({
-    queryKey: ["forge-snapshot"],
-    queryFn: getForgeSnapshot,
+    queryKey: ["forge-snapshot", ...selectedUserIds],
+    queryFn: () => getForgeSnapshot(selectedUserIds),
     enabled: operatorSessionQuery.isSuccess
   });
   const settingsQuery = useQuery({
@@ -1050,6 +1213,27 @@ export function AppShell() {
     queryFn: getSettings,
     enabled: operatorSessionQuery.isSuccess
   });
+
+  useEffect(() => {
+    writeStoredSelectedUserIds(selectedUserIds);
+  }, [selectedUserIds]);
+
+  useEffect(() => {
+    if (!operatorSessionQuery.isSuccess) {
+      return;
+    }
+    void queryClient.invalidateQueries({
+      predicate: (query) => {
+        const [root] = query.queryKey;
+        return (
+          root === "notes-index" ||
+          root === "project-board" ||
+          root === "task-context" ||
+          (typeof root === "string" && root.startsWith("forge-"))
+        );
+      }
+    });
+  }, [operatorSessionQuery.isSuccess, queryClient, selectedUserIds]);
 
   useEffect(() => {
     const totalXp = snapshotQuery.data?.metrics.totalXp;
@@ -1278,6 +1462,9 @@ export function AppShell() {
         title: input.title,
         description: input.description,
         owner: operatorName,
+        userId:
+          project.userId ??
+          (selectedUserIds.length === 1 ? selectedUserIds[0] : null),
         goalId: project.goalId,
         projectId: project.id,
         priority: "medium",
@@ -1426,6 +1613,8 @@ export function AppShell() {
 
   const contextValue: ShellContextValue = {
     snapshot: snapshotQuery.data,
+    selectedUserIds,
+    setSelectedUserIds,
     refresh: async () => {
       await queryClient.invalidateQueries({ queryKey: ["forge-snapshot"] });
     },

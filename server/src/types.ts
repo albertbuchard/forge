@@ -15,6 +15,9 @@ export const goalHorizonSchema = z.enum(["quarter", "year", "lifetime"]);
 export const projectStatusSchema = z.enum(["active", "paused", "completed"]);
 export const tagKindSchema = z.enum(["value", "category", "execution"]);
 export const taskDueFilterSchema = z.enum(["overdue", "today", "week"]);
+export const userKindSchema = z.enum(["human", "bot"]);
+export const userAccessLevelSchema = z.enum(["view", "manage"]);
+export const strategyStatusSchema = z.enum(["active", "paused", "completed"]);
 export const taskRunStatusSchema = z.enum([
   "active",
   "completed",
@@ -82,6 +85,7 @@ export const activityEntityTypeSchema = z.enum([
   "habit",
   "goal",
   "project",
+  "strategy",
   "domain",
   "psyche_value",
   "behavior_pattern",
@@ -167,6 +171,7 @@ export const crudEntityTypeSchema = z.enum([
   "goal",
   "project",
   "task",
+  "strategy",
   "habit",
   "tag",
   "note",
@@ -305,12 +310,58 @@ export const calendarContextConflictSchema = z.object({
   endsAt: z.string()
 });
 
+export const userSummarySchema = z.object({
+  id: z.string(),
+  kind: userKindSchema,
+  handle: nonEmptyTrimmedString,
+  displayName: nonEmptyTrimmedString,
+  description: trimmedString,
+  accentColor: z.string(),
+  createdAt: z.string(),
+  updatedAt: z.string()
+});
+
+export const userAccessGrantSchema = z.object({
+  id: z.string(),
+  subjectUserId: z.string(),
+  targetUserId: z.string(),
+  accessLevel: userAccessLevelSchema,
+  config: z.record(z.string(), z.unknown()),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+  subjectUser: userSummarySchema.nullable().default(null),
+  targetUser: userSummarySchema.nullable().default(null)
+});
+
+export const userOwnershipSummarySchema = z.object({
+  userId: z.string(),
+  totalOwnedEntities: z.number().int().nonnegative(),
+  entityCounts: z.record(z.string(), z.number().int().nonnegative())
+});
+
+export const userDirectoryPayloadSchema = z.object({
+  users: z.array(userSummarySchema),
+  grants: z.array(userAccessGrantSchema),
+  ownership: z.array(userOwnershipSummarySchema),
+  posture: z.object({
+    accessModel: z.literal("permissive"),
+    summary: z.string(),
+    futureReady: z.boolean()
+  })
+});
+
+const ownershipShape = {
+  userId: z.string().nullable().default(null),
+  user: userSummarySchema.nullable().default(null)
+};
+
 export const tagSchema = z.object({
   id: z.string(),
   name: nonEmptyTrimmedString,
   kind: tagKindSchema,
   color: z.string(),
-  description: z.string()
+  description: z.string(),
+  ...ownershipShape
 });
 
 export const taskTimeSummarySchema = z.object({
@@ -392,7 +443,8 @@ export const noteSchema = z.object({
   updatedAt: z.string(),
   links: z.array(noteLinkSchema).min(1),
   tags: uniqueNoteTagArraySchema.default([]),
-  destroyAt: dateTimeSchema.nullable().default(null)
+  destroyAt: dateTimeSchema.nullable().default(null),
+  ...ownershipShape
 });
 
 export const noteSummarySchema = z.object({
@@ -416,7 +468,8 @@ export const goalSchema = z.object({
   themeColor: z.string(),
   createdAt: z.string(),
   updatedAt: z.string(),
-  tagIds: uniqueStringArraySchema.default([])
+  tagIds: uniqueStringArraySchema.default([]),
+  ...ownershipShape
 });
 
 export const projectSchema = z.object({
@@ -440,7 +493,8 @@ export const projectSchema = z.object({
     blockAvailability: []
   }),
   createdAt: z.string(),
-  updatedAt: z.string()
+  updatedAt: z.string(),
+  ...ownershipShape
 });
 
 export const taskSchema = z.object({
@@ -469,6 +523,7 @@ export const taskSchema = z.object({
   createdAt: z.string(),
   updatedAt: z.string(),
   tagIds: z.array(z.string()).default([]),
+  ...ownershipShape,
   time: taskTimeSummarySchema.default({
     totalTrackedSeconds: 0,
     totalCreditedSeconds: 0,
@@ -503,7 +558,8 @@ export const taskRunSchema = z.object({
   releasedAt: z.string().nullable(),
   timedOutAt: z.string().nullable(),
   overrideReason: trimmedString.nullable().default(null),
-  updatedAt: z.string()
+  updatedAt: z.string(),
+  ...ownershipShape
 });
 
 export const calendarConnectionSchema = z.object({
@@ -618,7 +674,8 @@ export const calendarEventSchema = z.object({
   remoteUpdatedAt: z.string().nullable(),
   deletedAt: z.string().nullable(),
   createdAt: z.string(),
-  updatedAt: z.string()
+  updatedAt: z.string(),
+  ...ownershipShape
 });
 
 export const workBlockTemplateSchema = z
@@ -635,7 +692,8 @@ export const workBlockTemplateSchema = z
     endsOn: dateOnlySchema.nullable().default(null),
     blockingState: z.enum(["allowed", "blocked"]),
     createdAt: z.string(),
-    updatedAt: z.string()
+    updatedAt: z.string(),
+    ...ownershipShape
   })
   .superRefine((value, context) => {
     if (value.endMinute <= value.startMinute) {
@@ -684,7 +742,8 @@ export const taskTimeboxSchema = z.object({
   endsAt: z.string(),
   overrideReason: trimmedString.nullable(),
   createdAt: z.string(),
-  updatedAt: z.string()
+  updatedAt: z.string(),
+  ...ownershipShape
 });
 
 export const calendarOverviewPayloadSchema = z.object({
@@ -746,7 +805,8 @@ export const habitSchema = z.object({
   streakCount: z.number().int().nonnegative(),
   completionRate: z.number().min(0).max(100),
   dueToday: z.boolean(),
-  checkIns: z.array(habitCheckInSchema).default([])
+  checkIns: z.array(habitCheckInSchema).default([]),
+  ...ownershipShape
 });
 
 export const activityEventSchema = z.object({
@@ -762,7 +822,8 @@ export const activityEventSchema = z.object({
     z.string(),
     z.union([z.string(), z.number(), z.boolean(), z.null()])
   ),
-  createdAt: z.string()
+  createdAt: z.string(),
+  ...ownershipShape
 });
 
 export const dashboardGoalSchema = goalSchema.extend({
@@ -1202,7 +1263,8 @@ export const insightSchema = z.object({
   ctaLabel: z.string(),
   evidence: z.array(insightEvidenceSchema),
   createdAt: z.string(),
-  updatedAt: z.string()
+  updatedAt: z.string(),
+  ...ownershipShape
 });
 
 export const insightFeedbackSchema = z.object({
@@ -1443,7 +1505,8 @@ export const createNoteSchema = z.object({
   author: trimmedString.nullable().default(null),
   links: z.array(createNoteLinkSchema).min(1),
   tags: uniqueNoteTagArraySchema.default([]),
-  destroyAt: dateTimeSchema.nullable().default(null)
+  destroyAt: dateTimeSchema.nullable().default(null),
+  userId: nonEmptyTrimmedString.nullable().optional()
 });
 
 export const nestedCreateNoteSchema = z.object({
@@ -1459,7 +1522,8 @@ export const updateNoteSchema = z.object({
   author: trimmedString.nullable().optional(),
   links: z.array(createNoteLinkSchema).min(1).optional(),
   tags: uniqueNoteTagArraySchema.optional(),
-  destroyAt: dateTimeSchema.nullable().optional()
+  destroyAt: dateTimeSchema.nullable().optional(),
+  userId: nonEmptyTrimmedString.nullable().optional()
 });
 
 export const notesListQuerySchema = z
@@ -1494,6 +1558,7 @@ export const notesListQuerySchema = z
     ),
     tags: repeatedTrimmedStringQuerySchema,
     textTerms: repeatedTrimmedStringQuerySchema,
+    userIds: repeatedTrimmedStringQuerySchema,
     updatedFrom: dateOnlySchema.optional(),
     updatedTo: dateOnlySchema.optional(),
     limit: z.coerce.number().int().positive().max(200).optional()
@@ -1529,6 +1594,7 @@ export const taskListQuerySchema = z.object({
   projectId: nonEmptyTrimmedString.optional(),
   tagId: nonEmptyTrimmedString.optional(),
   due: taskDueFilterSchema.optional(),
+  userIds: repeatedTrimmedStringQuerySchema.optional(),
   limit: z.coerce.number().int().positive().max(100).optional()
 });
 
@@ -1536,6 +1602,7 @@ export const taskRunListQuerySchema = z.object({
   taskId: nonEmptyTrimmedString.optional(),
   status: taskRunStatusSchema.optional(),
   active: z.coerce.boolean().optional(),
+  userIds: repeatedTrimmedStringQuerySchema.optional(),
   limit: z.coerce.number().int().positive().max(100).optional()
 });
 
@@ -1544,18 +1611,29 @@ export const activityListQuerySchema = z.object({
   entityId: nonEmptyTrimmedString.optional(),
   source: activitySourceSchema.optional(),
   includeCorrected: z.coerce.boolean().optional(),
+  userIds: repeatedTrimmedStringQuerySchema.optional(),
+  limit: z.coerce.number().int().positive().max(100).optional()
+});
+
+export const goalListQuerySchema = z.object({
+  status: goalStatusSchema.optional(),
+  horizon: goalHorizonSchema.optional(),
+  tagId: nonEmptyTrimmedString.optional(),
+  userIds: repeatedTrimmedStringQuerySchema.optional(),
   limit: z.coerce.number().int().positive().max(100).optional()
 });
 
 export const projectListQuerySchema = z.object({
   goalId: nonEmptyTrimmedString.optional(),
   status: projectStatusSchema.optional(),
+  userIds: repeatedTrimmedStringQuerySchema.optional(),
   limit: z.coerce.number().int().positive().max(100).optional()
 });
 
 export const calendarOverviewQuerySchema = z.object({
   from: flexibleCalendarQueryDateSchema.optional(),
-  to: flexibleCalendarQueryDateSchema.optional()
+  to: flexibleCalendarQueryDateSchema.optional(),
+  userIds: repeatedTrimmedStringQuerySchema.optional()
 });
 
 export const createCalendarConnectionSchema = z.discriminatedUnion("provider", [
@@ -1661,7 +1739,8 @@ const workBlockTemplateMutationShape = {
   endMinute: integerMinuteSchema,
   startsOn: dateOnlySchema.nullable().optional(),
   endsOn: dateOnlySchema.nullable().optional(),
-  blockingState: z.enum(["allowed", "blocked"]).default("blocked")
+  blockingState: z.enum(["allowed", "blocked"]).default("blocked"),
+  userId: nonEmptyTrimmedString.nullable().optional()
 };
 
 export const createWorkBlockTemplateSchema = z
@@ -1697,7 +1776,8 @@ export const updateWorkBlockTemplateSchema = z
     endMinute: integerMinuteSchema.optional(),
     startsOn: dateOnlySchema.nullable().optional(),
     endsOn: dateOnlySchema.nullable().optional(),
-    blockingState: z.enum(["allowed", "blocked"]).optional()
+    blockingState: z.enum(["allowed", "blocked"]).optional(),
+    userId: nonEmptyTrimmedString.nullable().optional()
   })
   .superRefine((value, context) => {
     if (
@@ -1735,7 +1815,8 @@ export const createTaskTimeboxSchema = z
     endsAt: z.string().datetime(),
     source: calendarTimeboxSourceSchema.default("manual"),
     status: calendarTimeboxStatusSchema.default("planned"),
-    overrideReason: trimmedString.nullable().default(null)
+    overrideReason: trimmedString.nullable().default(null),
+    userId: nonEmptyTrimmedString.nullable().optional()
   })
   .superRefine((value, context) => {
     if (Date.parse(value.endsAt) <= Date.parse(value.startsAt)) {
@@ -1752,7 +1833,8 @@ export const updateTaskTimeboxSchema = z.object({
   startsAt: z.string().datetime().optional(),
   endsAt: z.string().datetime().optional(),
   status: calendarTimeboxStatusSchema.optional(),
-  overrideReason: trimmedString.nullable().optional()
+  overrideReason: trimmedString.nullable().optional(),
+  userId: nonEmptyTrimmedString.nullable().optional()
 });
 
 export const recommendTaskTimeboxesSchema = z.object({
@@ -1775,6 +1857,7 @@ export const updateCalendarEventSchema = z
     eventType: trimmedString.optional(),
     categories: z.array(trimmedString).optional(),
     preferredCalendarId: nonEmptyTrimmedString.nullable().optional(),
+    userId: nonEmptyTrimmedString.nullable().optional(),
     links: z
       .array(
         z.object({
@@ -1812,6 +1895,7 @@ export const createCalendarEventSchema = z
     eventType: trimmedString.default(""),
     categories: z.array(trimmedString).default([]),
     preferredCalendarId: nonEmptyTrimmedString.nullable().optional(),
+    userId: nonEmptyTrimmedString.nullable().optional(),
     links: z
       .array(
         z.object({
@@ -1836,6 +1920,7 @@ export const habitListQuerySchema = z.object({
   status: habitStatusSchema.optional(),
   polarity: habitPolaritySchema.optional(),
   dueToday: z.coerce.boolean().optional(),
+  userIds: repeatedTrimmedStringQuerySchema.optional(),
   limit: z.coerce.number().int().positive().max(100).optional()
 });
 
@@ -1850,7 +1935,8 @@ export const createGoalSchema = z.object({
     .regex(/^#[0-9a-fA-F]{6}$/)
     .default("#c8a46b"),
   tagIds: uniqueStringArraySchema.default([]),
-  notes: z.array(nestedCreateNoteSchema).default([])
+  notes: z.array(nestedCreateNoteSchema).default([]),
+  userId: nonEmptyTrimmedString.nullable().optional()
 });
 
 export const updateGoalSchema = createGoalSchema.partial();
@@ -1862,7 +1948,8 @@ export const createTagSchema = z.object({
     .string()
     .regex(/^#[0-9a-fA-F]{6}$/)
     .default("#71717a"),
-  description: trimmedString.default("")
+  description: trimmedString.default(""),
+  userId: nonEmptyTrimmedString.nullable().optional()
 });
 
 export const updateTagSchema = createTagSchema.partial();
@@ -1889,7 +1976,8 @@ export const createProjectSchema = z.object({
     allowAvailability: [],
     blockAvailability: []
   }),
-  notes: z.array(nestedCreateNoteSchema).default([])
+  notes: z.array(nestedCreateNoteSchema).default([]),
+  userId: nonEmptyTrimmedString.nullable().optional()
 });
 
 export const updateProjectSchema = createProjectSchema.partial();
@@ -1900,6 +1988,7 @@ export const taskMutationShape = {
   status: taskStatusSchema.default("backlog"),
   priority: taskPrioritySchema.default("medium"),
   owner: nonEmptyTrimmedString.default("Albert"),
+  userId: nonEmptyTrimmedString.nullable().optional(),
   goalId: nonEmptyTrimmedString.nullable().default(null),
   projectId: nonEmptyTrimmedString.nullable().default(null),
   dueDate: dateOnlySchema.nullable().default(null),
@@ -1939,7 +2028,8 @@ const habitMutationShape = {
   linkedReportIds: uniqueStringArraySchema.default([]),
   linkedBehaviorId: nonEmptyTrimmedString.nullable().default(null),
   rewardXp: z.number().int().min(1).max(100).default(12),
-  penaltyXp: z.number().int().min(1).max(100).default(8)
+  penaltyXp: z.number().int().min(1).max(100).default(8),
+  userId: nonEmptyTrimmedString.nullable().optional()
 };
 
 export const createHabitSchema = z
@@ -1973,7 +2063,8 @@ export const updateHabitSchema = z
     linkedReportIds: uniqueStringArraySchema.optional(),
     linkedBehaviorId: nonEmptyTrimmedString.nullable().optional(),
     rewardXp: z.number().int().min(1).max(100).optional(),
-    penaltyXp: z.number().int().min(1).max(100).optional()
+    penaltyXp: z.number().int().min(1).max(100).optional(),
+    userId: nonEmptyTrimmedString.nullable().optional()
   })
   .superRefine((value, context) => {
     if (
@@ -1994,6 +2085,7 @@ export const updateTaskSchema = z.object({
   status: taskStatusSchema.optional(),
   priority: taskPrioritySchema.optional(),
   owner: nonEmptyTrimmedString.optional(),
+  userId: nonEmptyTrimmedString.nullable().optional(),
   goalId: nonEmptyTrimmedString.nullable().optional(),
   projectId: nonEmptyTrimmedString.nullable().optional(),
   dueDate: dateOnlySchema.nullable().optional(),
@@ -2208,6 +2300,199 @@ const crudEntityLinkSchema = z.object({
   id: nonEmptyTrimmedString
 });
 
+const strategyGraphNodeEntityTypeSchema = z.enum(["project", "task"]);
+
+function validateStrategyGraph(
+  graph: {
+    nodes: Array<{ id: string }>;
+    edges: Array<{ from: string; to: string }>;
+  },
+  context: z.RefinementCtx
+) {
+  const nodeIds = new Set<string>();
+  for (const node of graph.nodes) {
+    if (nodeIds.has(node.id)) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["nodes"],
+        message: `Strategy graph node ${node.id} is duplicated`
+      });
+      return;
+    }
+    nodeIds.add(node.id);
+  }
+
+  const outgoing = new Map<string, string[]>();
+  const incomingCount = new Map<string, number>();
+  for (const nodeId of nodeIds) {
+    outgoing.set(nodeId, []);
+    incomingCount.set(nodeId, 0);
+  }
+
+  for (const edge of graph.edges) {
+    if (!nodeIds.has(edge.from) || !nodeIds.has(edge.to)) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["edges"],
+        message: `Strategy graph edge ${edge.from} -> ${edge.to} references a missing node`
+      });
+      return;
+    }
+    if (edge.from === edge.to) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["edges"],
+        message: "Strategy graph edges cannot point back to the same node"
+      });
+      return;
+    }
+    outgoing.get(edge.from)!.push(edge.to);
+    incomingCount.set(edge.to, (incomingCount.get(edge.to) ?? 0) + 1);
+  }
+
+  const queue = Array.from(nodeIds).filter(
+    (nodeId) => (incomingCount.get(nodeId) ?? 0) === 0
+  );
+  if (queue.length === 0) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["edges"],
+      message: "Strategy graph needs at least one starting node"
+    });
+    return;
+  }
+
+  let visited = 0;
+  while (queue.length > 0) {
+    const nodeId = queue.shift()!;
+    visited += 1;
+    for (const nextId of outgoing.get(nodeId) ?? []) {
+      const nextIncoming = (incomingCount.get(nextId) ?? 0) - 1;
+      incomingCount.set(nextId, nextIncoming);
+      if (nextIncoming === 0) {
+        queue.push(nextId);
+      }
+    }
+  }
+
+  if (visited !== nodeIds.size) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["edges"],
+      message: "Strategy graph must stay directed and acyclic"
+    });
+    return;
+  }
+
+  const terminalCount = Array.from(nodeIds).filter(
+    (nodeId) => (outgoing.get(nodeId) ?? []).length === 0
+  ).length;
+  if (terminalCount === 0) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["edges"],
+      message: "Strategy graph needs at least one terminal end-state node"
+    });
+  }
+}
+
+export const strategyLinkedEntitySchema = z.object({
+  entityType: crudEntityTypeSchema,
+  entityId: nonEmptyTrimmedString
+});
+
+export const strategyGraphNodeSchema = z.object({
+  id: nonEmptyTrimmedString,
+  entityType: strategyGraphNodeEntityTypeSchema,
+  entityId: nonEmptyTrimmedString,
+  title: trimmedString.default(""),
+  branchLabel: trimmedString.default(""),
+  notes: trimmedString.default("")
+});
+
+export const strategyGraphEdgeSchema = z.object({
+  from: nonEmptyTrimmedString,
+  to: nonEmptyTrimmedString,
+  label: trimmedString.default(""),
+  condition: trimmedString.default("")
+});
+
+export const strategyGraphSchema = z
+  .object({
+    nodes: z.array(strategyGraphNodeSchema).min(1),
+    edges: z.array(strategyGraphEdgeSchema).default([])
+  })
+  .superRefine((graph, context) => validateStrategyGraph(graph, context));
+
+export const strategyMetricSchema = z.object({
+  alignmentScore: z.number().int().min(0).max(100),
+  completedNodeCount: z.number().int().nonnegative(),
+  totalNodeCount: z.number().int().positive(),
+  completedTargetCount: z.number().int().nonnegative(),
+  totalTargetCount: z.number().int().nonnegative(),
+  activeNodeIds: z.array(z.string()).default([]),
+  nextNodeIds: z.array(z.string()).default([])
+});
+
+export const strategySchema = z.object({
+  id: z.string(),
+  title: nonEmptyTrimmedString,
+  overview: trimmedString,
+  endStateDescription: trimmedString,
+  status: strategyStatusSchema,
+  targetGoalIds: uniqueStringArraySchema.default([]),
+  targetProjectIds: uniqueStringArraySchema.default([]),
+  linkedEntities: z.array(strategyLinkedEntitySchema).default([]),
+  graph: strategyGraphSchema,
+  metrics: strategyMetricSchema,
+  createdAt: z.string(),
+  updatedAt: z.string(),
+  ...ownershipShape
+});
+
+export const strategyListQuerySchema = z.object({
+  status: strategyStatusSchema.optional(),
+  userIds: repeatedTrimmedStringQuerySchema.optional(),
+  limit: z.coerce.number().int().positive().max(100).optional()
+});
+
+export const createUserSchema = z.object({
+  kind: userKindSchema,
+  handle: nonEmptyTrimmedString,
+  displayName: nonEmptyTrimmedString,
+  description: trimmedString.default(""),
+  accentColor: z
+    .string()
+    .regex(/^#[0-9a-fA-F]{6}$/)
+    .default("#c0c1ff")
+});
+
+export const updateUserSchema = createUserSchema.partial();
+
+export const createStrategySchema = z.object({
+  title: nonEmptyTrimmedString,
+  overview: trimmedString.default(""),
+  endStateDescription: trimmedString.default(""),
+  status: strategyStatusSchema.default("active"),
+  targetGoalIds: uniqueStringArraySchema.default([]),
+  targetProjectIds: uniqueStringArraySchema.default([]),
+  linkedEntities: z.array(strategyLinkedEntitySchema).default([]),
+  graph: strategyGraphSchema,
+  userId: nonEmptyTrimmedString.nullable().optional()
+});
+
+export const updateStrategySchema = z.object({
+  title: nonEmptyTrimmedString.optional(),
+  overview: trimmedString.optional(),
+  endStateDescription: trimmedString.optional(),
+  status: strategyStatusSchema.optional(),
+  targetGoalIds: uniqueStringArraySchema.optional(),
+  targetProjectIds: uniqueStringArraySchema.optional(),
+  linkedEntities: z.array(strategyLinkedEntitySchema).optional(),
+  graph: strategyGraphSchema.optional(),
+  userId: nonEmptyTrimmedString.nullable().optional()
+});
+
 export const batchCreateEntitiesSchema = z.object({
   atomic: z.boolean().default(false),
   operations: z
@@ -2272,6 +2557,7 @@ export const batchSearchEntitiesSchema = z.object({
         ids: uniqueStringArraySchema.optional(),
         status: uniqueStringArraySchema.optional(),
         linkedTo: crudEntityLinkSchema.optional(),
+        userIds: uniqueStringArraySchema.optional(),
         includeDeleted: z.boolean().default(false),
         limit: z.number().int().positive().max(200).default(25),
         clientRef: trimmedString.optional()
@@ -2293,6 +2579,7 @@ export const operatorLogWorkSchema = z
     goalId: nonEmptyTrimmedString.nullable().optional(),
     projectId: nonEmptyTrimmedString.nullable().optional(),
     owner: nonEmptyTrimmedString.optional(),
+    userId: nonEmptyTrimmedString.nullable().optional(),
     status: taskStatusSchema.optional(),
     priority: taskPrioritySchema.optional(),
     dueDate: dateOnlySchema.nullable().optional(),
@@ -2321,8 +2608,10 @@ export type CreateGoalInput = z.infer<typeof createGoalSchema>;
 export type CreateHabitCheckInInput = z.infer<typeof createHabitCheckInSchema>;
 export type CreateHabitInput = z.infer<typeof createHabitSchema>;
 export type CreateProjectInput = z.infer<typeof createProjectSchema>;
+export type CreateStrategyInput = z.infer<typeof createStrategySchema>;
 export type CreateTagInput = z.infer<typeof createTagSchema>;
 export type CreateTaskInput = z.infer<typeof createTaskSchema>;
+export type CreateUserInput = z.infer<typeof createUserSchema>;
 export type CoachingInsight = z.infer<typeof coachingInsightSchema>;
 export type DashboardGoal = z.infer<typeof dashboardGoalSchema>;
 export type DashboardPayload = z.infer<typeof dashboardPayloadSchema>;
@@ -2420,6 +2709,7 @@ export type ActivityEvent = z.infer<typeof activityEventSchema>;
 export type ActivityEntityType = z.infer<typeof activityEntityTypeSchema>;
 export type ActivitySource = z.infer<typeof activitySourceSchema>;
 export type Goal = z.infer<typeof goalSchema>;
+export type GoalListQuery = z.infer<typeof goalListQuerySchema>;
 export type GoalStatus = z.infer<typeof goalStatusSchema>;
 export type Habit = z.infer<typeof habitSchema>;
 export type HabitCheckIn = z.infer<typeof habitCheckInSchema>;
@@ -2432,6 +2722,10 @@ export type TaskDueFilter = z.infer<typeof taskDueFilterSchema>;
 export type ActivityListQuery = z.infer<typeof activityListQuerySchema>;
 export type EventsListQuery = z.infer<typeof eventsListQuerySchema>;
 export type ProjectListQuery = z.infer<typeof projectListQuerySchema>;
+export type Strategy = z.infer<typeof strategySchema>;
+export type StrategyGraph = z.infer<typeof strategyGraphSchema>;
+export type StrategyListQuery = z.infer<typeof strategyListQuerySchema>;
+export type StrategyStatus = z.infer<typeof strategyStatusSchema>;
 export type CalendarOverviewQuery = z.infer<typeof calendarOverviewQuerySchema>;
 export type RewardsLedgerQuery = z.infer<typeof rewardsLedgerQuerySchema>;
 export type TaskListQuery = z.infer<typeof taskListQuerySchema>;
@@ -2451,7 +2745,9 @@ export type UpdateHabitInput = z.infer<typeof updateHabitSchema>;
 export type UpdateInsightInput = z.infer<typeof updateInsightSchema>;
 export type UpdateNoteInput = z.infer<typeof updateNoteSchema>;
 export type UpdateProjectInput = z.infer<typeof updateProjectSchema>;
+export type UpdateStrategyInput = z.infer<typeof updateStrategySchema>;
 export type UpdateTaskInput = z.infer<typeof updateTaskSchema>;
+export type UpdateUserInput = z.infer<typeof updateUserSchema>;
 export type UpdateCalendarConnectionInput = z.infer<
   typeof updateCalendarConnectionSchema
 >;
@@ -2541,3 +2837,9 @@ export type BatchSearchEntitiesInput = z.infer<
   typeof batchSearchEntitiesSchema
 >;
 export type NotesListQuery = z.input<typeof notesListQuerySchema>;
+export type UserAccessLevel = z.infer<typeof userAccessLevelSchema>;
+export type UserAccessGrant = z.infer<typeof userAccessGrantSchema>;
+export type UserDirectoryPayload = z.infer<typeof userDirectoryPayloadSchema>;
+export type UserKind = z.infer<typeof userKindSchema>;
+export type UserOwnershipSummary = z.infer<typeof userOwnershipSummarySchema>;
+export type UserSummary = z.infer<typeof userSummarySchema>;

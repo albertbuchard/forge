@@ -47,11 +47,24 @@ function formatTodayEventWindow(event: CalendarEvent) {
 export function TodayPage() {
   const { t } = useI18n();
   const shell = useForgeShell();
+  const selectedUserIds = Array.isArray(shell.selectedUserIds)
+    ? shell.selectedUserIds
+    : [];
   const navigate = useNavigate();
   const todayRange = useMemo(() => buildTodayRange(), []);
   const calendarQuery = useQuery({
-    queryKey: ["forge-calendar-overview", todayRange.from, todayRange.to],
-    queryFn: () => getCalendarOverview({ from: todayRange.from, to: todayRange.to })
+    queryKey: [
+      "forge-calendar-overview",
+      todayRange.from,
+      todayRange.to,
+      ...selectedUserIds
+    ],
+    queryFn: () =>
+      getCalendarOverview({
+        from: todayRange.from,
+        to: todayRange.to,
+        userIds: selectedUserIds
+      })
   });
   const directive = shell.snapshot.today.directive.task;
   const nextMilestone = shell.snapshot.today.milestoneRewards.find((reward) => !reward.completed) ?? shell.snapshot.today.milestoneRewards[0] ?? null;

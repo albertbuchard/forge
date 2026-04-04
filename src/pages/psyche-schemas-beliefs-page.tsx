@@ -17,12 +17,21 @@ import { FieldHint, InfoTooltip } from "@/components/ui/info-tooltip";
 import { ErrorState, LoadingState } from "@/components/ui/page-state";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { UserBadge } from "@/components/ui/user-badge";
+import { UserSelectField } from "@/components/ui/user-select-field";
 import { prependEntityToCollection } from "@/lib/query-cache";
 import { getEntityNotesSummary } from "@/lib/note-helpers";
 import { beliefEntrySchema, type BeliefEntryInput } from "@/lib/psyche-schemas";
 import type { Behavior, BeliefEntry, ModeProfile, PsycheValue, SchemaCatalogEntry, TriggerReport } from "@/lib/psyche-types";
 import { findSchemaForLink, getSchemaFamilyLabel, getSchemaTypeHelpText, getSchemaTypeLabel, getSchemaVisual } from "@/lib/schema-visuals";
 import { createBehavior, createBelief, createMode, createPsycheValue, createTriggerReport, listBehaviors, listBeliefs, listModes, listPsycheValues, listSchemaCatalog, listTriggerReports, patchBelief } from "@/lib/api";
+import {
+  buildOwnedEntitySearchText,
+  formatOwnedEntityDescription,
+  formatOwnerSelectDefaultLabel,
+  formatOwnedEntityOptionLabel,
+  getSingleSelectedUserId
+} from "@/lib/user-ownership";
 
 const DEFAULT_BELIEF_INPUT: BeliefEntryInput = {
   schemaId: null,
@@ -36,7 +45,8 @@ const DEFAULT_BELIEF_INPUT: BeliefEntryInput = {
   linkedValueIds: [],
   linkedBehaviorIds: [],
   linkedModeIds: [],
-  linkedReportIds: []
+  linkedReportIds: [],
+  userId: null
 };
 
 function beliefToInput(belief: BeliefEntry): BeliefEntryInput {
@@ -52,7 +62,8 @@ function beliefToInput(belief: BeliefEntry): BeliefEntryInput {
     linkedValueIds: belief.linkedValueIds,
     linkedBehaviorIds: belief.linkedBehaviorIds,
     linkedModeIds: belief.linkedModeIds,
-    linkedReportIds: belief.linkedReportIds
+    linkedReportIds: belief.linkedReportIds,
+    userId: belief.userId ?? null
   };
 }
 
@@ -189,6 +200,7 @@ export function PsycheSchemasBeliefsPage() {
   const modes = modesQuery.data?.modes ?? [];
   const values = valuesQuery.data?.values ?? [];
   const reports = reportsQuery.data?.reports ?? [];
+  const defaultUserId = getSingleSelectedUserId(shell.selectedUserIds);
   const focusedBeliefId = searchParams.get("focus");
   const notesSummaryByEntity = shell.snapshot.dashboard.notesSummaryByEntity;
 
@@ -198,12 +210,12 @@ export function PsycheSchemasBeliefsPage() {
     if (searchParams.get("create") === "1") {
       setDialogOpen(true);
       setEditingBelief(null);
-      setDraft(DEFAULT_BELIEF_INPUT);
+      setDraft({ ...DEFAULT_BELIEF_INPUT, userId: defaultUserId });
       const next = new URLSearchParams(searchParams);
       next.delete("create");
       setSearchParams(next, { replace: true });
     }
-  }, [searchParams, setSearchParams]);
+  }, [defaultUserId, searchParams, setSearchParams]);
 
   const saveMutation = useMutation({
     mutationFn: async (input: BeliefEntryInput) => {
@@ -216,7 +228,7 @@ export function PsycheSchemasBeliefsPage() {
     onSuccess: async () => {
       setDialogOpen(false);
       setEditingBelief(null);
-      setDraft(DEFAULT_BELIEF_INPUT);
+      setDraft({ ...DEFAULT_BELIEF_INPUT, userId: defaultUserId });
       setSubmitError(null);
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["forge-psyche-beliefs"] }),
@@ -227,26 +239,48 @@ export function PsycheSchemasBeliefsPage() {
 
   const valueOptions: EntityLinkOption[] = values.map((entry: PsycheValue) => ({
     value: entry.id,
-    label: entry.title,
-    description: entry.valuedDirection,
+    label: formatOwnedEntityOptionLabel(entry.title, entry.user),
+    description: formatOwnedEntityDescription(entry.valuedDirection, entry.user),
+    searchText: buildOwnedEntitySearchText(
+      [entry.title, entry.valuedDirection, entry.description],
+      entry
+    ),
     kind: "value"
   }));
   const behaviorOptions: EntityLinkOption[] = behaviors.map((behavior: Behavior) => ({
     value: behavior.id,
-    label: behavior.title,
-    description: behavior.kind,
+    label: formatOwnedEntityOptionLabel(behavior.title, behavior.user),
+    description: formatOwnedEntityDescription(behavior.kind, behavior.user),
+    searchText: buildOwnedEntitySearchText(
+      [behavior.title, behavior.kind, behavior.description],
+      behavior
+    ),
     kind: "behavior"
   }));
   const modeOptions: EntityLinkOption[] = modes.map((mode: ModeProfile) => ({
     value: mode.id,
-    label: mode.title,
-    description: mode.archetype || mode.family,
+    label: formatOwnedEntityOptionLabel(mode.title, mode.user),
+    description: formatOwnedEntityDescription(
+      mode.archetype || mode.family,
+      mode.user
+    ),
+    searchText: buildOwnedEntitySearchText(
+      [mode.title, mode.archetype, mode.family, mode.persona],
+      mode
+    ),
     kind: "mode"
   }));
   const reportOptions: EntityLinkOption[] = reports.map((report: TriggerReport) => ({
     value: report.id,
-    label: report.title,
-    description: report.customEventType || report.eventSituation,
+    label: formatOwnedEntityOptionLabel(report.title, report.user),
+    description: formatOwnedEntityDescription(
+      report.customEventType || report.eventSituation,
+      report.user
+    ),
+    searchText: buildOwnedEntitySearchText(
+      [report.title, report.customEventType, report.eventSituation],
+      report
+    ),
     kind: "report"
   }));
   const schemaMap = useMemo(() => new Map(schemas.map((schema) => [schema.id, schema])), [schemas]);
@@ -262,7 +296,8 @@ export function PsycheSchemasBeliefsPage() {
       linkedGoalIds: [],
       linkedProjectIds: [],
       linkedTaskIds: [],
-      committedActions: []
+      committedActions: [],
+      userId: draft.userId
     });
     prependEntityToCollection(queryClient, ["forge-psyche-values"], "values", value);
     await queryClient.invalidateQueries({ queryKey: ["forge-psyche-overview"] });
@@ -283,7 +318,8 @@ export function PsycheSchemasBeliefsPage() {
       linkedPatternIds: [],
       linkedValueIds: [],
       linkedSchemaIds: [],
-      linkedModeIds: []
+      linkedModeIds: [],
+      userId: draft.userId
     });
     prependEntityToCollection(queryClient, ["forge-psyche-behaviors"], "behaviors", behavior);
     await queryClient.invalidateQueries({ queryKey: ["forge-psyche-overview"] });
@@ -306,7 +342,8 @@ export function PsycheSchemasBeliefsPage() {
       firstAppearanceAt: null,
       linkedPatternIds: [],
       linkedBehaviorIds: [],
-      linkedValueIds: []
+      linkedValueIds: [],
+      userId: draft.userId
     });
     prependEntityToCollection(queryClient, ["forge-psyche-modes"], "modes", mode);
     await queryClient.invalidateQueries({ queryKey: ["forge-psyche-overview"] });
@@ -341,7 +378,8 @@ export function PsycheSchemasBeliefsPage() {
       modeOverlays: [],
       schemaLinks: [],
       modeTimeline: [],
-      nextMoves: []
+      nextMoves: [],
+      userId: draft.userId
     });
     prependEntityToCollection(queryClient, ["forge-psyche-reports"], "reports", report);
     await queryClient.invalidateQueries({ queryKey: ["forge-psyche-overview"] });
@@ -363,6 +401,17 @@ export function PsycheSchemasBeliefsPage() {
       description: "Place the belief inside the right schema system, then write the actual inner line that tends to fire there.",
       render: (value, setValue) => (
         <>
+          <UserSelectField
+            value={value.userId ?? null}
+            users={shell.snapshot.users}
+            onChange={(userId) => setValue({ userId })}
+            defaultLabel={formatOwnerSelectDefaultLabel(
+              shell.snapshot.users.find((user) => user.id === defaultUserId) ??
+                null,
+              "Choose belief owner"
+            )}
+            help="Beliefs can belong to a human or bot user even when they connect to shared behaviors, modes, and reports."
+          />
           <FlowField
             label="Schema"
             description="Choose the schema this belief belongs to, whether it is a recurring old pattern or a healthier pattern you want to strengthen."
@@ -574,7 +623,7 @@ export function PsycheSchemasBeliefsPage() {
           <Button
             onClick={() => {
               setEditingBelief(null);
-              setDraft(DEFAULT_BELIEF_INPUT);
+              setDraft({ ...DEFAULT_BELIEF_INPUT, userId: defaultUserId });
               setDialogOpen(true);
             }}
           >
@@ -639,7 +688,7 @@ export function PsycheSchemasBeliefsPage() {
             <Button
               onClick={() => {
                 setEditingBelief(null);
-                setDraft(DEFAULT_BELIEF_INPUT);
+                setDraft({ ...DEFAULT_BELIEF_INPUT, userId: defaultUserId });
                 setDialogOpen(true);
               }}
             >
@@ -660,6 +709,7 @@ export function PsycheSchemasBeliefsPage() {
                     <div className="flex items-start justify-between gap-3">
                       <div className="font-medium text-white">{belief.statement}</div>
                       <div className="flex flex-wrap items-center justify-end gap-2">
+                        {belief.user ? <UserBadge user={belief.user} compact /> : null}
                         <EntityNoteCountLink entityType="belief_entry" entityId={belief.id} count={getEntityNotesSummary(notesSummaryByEntity, "belief_entry", belief.id).count} />
                         <Badge>{belief.confidence}% grip</Badge>
                         <Button

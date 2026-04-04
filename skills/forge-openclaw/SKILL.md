@@ -1,11 +1,11 @@
 ---
 name: forge-openclaw
-description: use when the user wants to save, search, update, review, start, stop, reward, or explain work or psyche records inside forge, or when the conversation is clearly about a forge entity such as a goal, project, task, habit, note, calendar_event, work_block_template, task_timebox, task_run, insight, psyche_value, behavior_pattern, behavior, belief_entry, mode_profile, mode_guide_session, trigger_report, event_type, or emotion_definition. identify the exact forge entity, keep the main conversation natural, offer saving once when helpful, ask only for missing fields, and use the correct forge tool and payload shape.
+description: use when the user wants to save, search, update, review, start, stop, reward, or explain work or psyche records inside forge, or when the conversation is clearly about a forge entity such as a goal, project, task, habit, note, calendar_event, work_block_template, task_timebox, task_run, insight, psyche_value, behavior_pattern, behavior, belief_entry, mode_profile, mode_guide_session, trigger_report, event_type, or emotion_definition. identify the exact forge entity, keep the main conversation natural, guide psyche intake with active listening before storing it, and for psyche issues that need understanding first usually begin with one exploratory question before any formulation or save suggestion.
 ---
 
 Forge is the user's structured system for planning work, doing work, reflecting on patterns, and keeping a truthful record of what is happening. Use it when the user is clearly working inside that system, or when they are describing something that naturally belongs there and would benefit from being stored, updated, reviewed, or acted on in Forge. Keep the conversation natural first. Do not turn every message into intake. When a real Forge entity is clearly present, name the exact entity type plainly, help with the substance of the conversation, and then offer Forge once, lightly, if storing it would genuinely help.
 
-Forge has two major domains. The planning side covers goals, projects, tasks, habits, notes, calendar events, recurring work blocks, task timeboxes, live work sessions, and agent-authored insights. The Psyche side covers values, patterns, behaviors, beliefs, modes, guided mode sessions, trigger reports, event types, and reusable emotion definitions. The model should use the real entity names, not vague substitutes. Say `project`, not “initiative”. Say `behavior_pattern`, not “theme”. Say `trigger_report`, not “incident note”.
+Forge has two major domains. The planning side covers goals, projects, strategies, tasks, habits, notes, calendar events, recurring work blocks, task timeboxes, live work sessions, and agent-authored insights. The Psyche side covers values, patterns, behaviors, beliefs, modes, guided mode sessions, trigger reports, event types, and reusable emotion definitions. Forge is also multi-user: every entity can belong to a typed `human` or `bot` user through `userId`, and read routes can scope to one or many users with `userId` or repeated `userIds`. The current access posture is permissive: Forge can list users directly, and a user can read another user's linked records when the route explicitly asks for them. The model should use the real entity names, not vague substitutes. Say `project`, not “initiative”. Say `behavior_pattern`, not “theme”. Say `trigger_report`, not “incident note”.
 Habits are a first-class recurring entity in the planning side.
 NEGATIVE HABIT CHECK-IN RULE: for a `negative` habit, the correct aligned/resisted outcome is `missed`. `missed` means the bad habit was resisted, the user stayed aligned, and the habit should award its XP bonus.
 
@@ -18,6 +18,23 @@ Forge data location rule:
 - on a linked repo-local install, this usually means `<repo>/openclaw-plugin/data/forge.sqlite`
 - if the user wants the data somewhere else for persistence, backup, or manual control, tell them to set `plugins.entries["forge-openclaw-plugin"].config.dataRoot` and restart the OpenClaw gateway
 - if the user asks where the data is stored or how to move it, explain the current default plainly and show the exact config field
+
+Psyche interview rule:
+
+- For `psyche_value`, `behavior_pattern`, `behavior`, `belief_entry`, `mode_profile`, `mode_guide_session`, and `trigger_report`, do not jump straight to raw field collection.
+- First use the active-listening playbooks in [`psyche_entity_playbooks.md`](./psyche_entity_playbooks.md).
+- Ask permission before going deeper, ask one or two focused questions at a time, reflect back what you heard, and summarize before moving on.
+- Start from a recent concrete example before naming an abstract pattern, belief, or mode.
+- If the user says they want help understanding a Psyche issue before saving it, ask one orienting question first instead of jumping straight into a full interpretation, diagnosis-like label, save suggestion, replacement belief, or suggested title.
+- In that first exploratory turn, keep the reflection to one or two short sentences, avoid numbered lists or schema dumps, and wait for the user's answer before offering a fuller formulation.
+- In that first exploratory turn, stay in plain prose, end with one question, and do not mention Forge fields or save formatting yet unless the user interrupts to save immediately.
+- In that first exploratory turn, keep the whole reply short, usually under 90 words, and anchor it in one concrete-example question rather than a conceptual lecture.
+- In that first exploratory turn, ask only one question, do not search Forge or mention whether a matching entity exists, and avoid openings like "This sounds like" or "What you're describing is".
+- In that first exploratory turn, prefer exactly two sentences: one brief empathic reflection and one concrete question. Avoid colons because they tend to trigger list-like answers.
+- Follow the preferred opening-question patterns in [`psyche_entity_playbooks.md`](./psyche_entity_playbooks.md) when they fit the entity the user is exploring.
+- When the conversation reveals an adjacent entity such as a linked belief, mode, value, pattern, or note, name that gently and ask whether the user wants to map it too.
+- If nuance matters, preserve it in a linked Markdown `note` instead of forcing every detail into normalized fields.
+- If the user shows imminent risk of self-harm, suicide, violence, inability to stay safe, or severe disorientation, stop normal intake and prioritize urgent human support or emergency help instead.
 
 Use these exact entity meanings when deciding what the user is describing.
 
@@ -79,10 +96,20 @@ Ask:
 2. Which goal does it support?
 3. What outcome should it produce?
 
+`strategy`
+Use for a directed, non-loopy plan that sequences projects or tasks toward a target end state.
+Minimum field: `title`
+Usually useful: `targetGoalIds`, `targetProjectIds`, `linkedEntities`, `graph`, `userId`
+Ask:
+
+1. What should this strategy be called and what end state is it trying to land?
+2. Which goals or projects are the real targets?
+3. What projects or tasks belong in the directed sequence, and in what order should they flow?
+
 `task`
 Use for one concrete action or deliverable.
 Minimum field: `title`
-Usually useful: `projectId`, `goalId`, `priority`, `dueDate`, `status`, `owner`
+Usually useful: `projectId`, `goalId`, `priority`, `dueDate`, `status`, `owner`, `userId`
 Ask:
 
 1. What is the task in one concrete sentence?
@@ -115,9 +142,9 @@ Minimum field: `title`
 Usually useful: `description`, `valuedDirection`, `whyItMatters`, links to goals, projects, or tasks
 Ask:
 
-1. What value or direction is this?
-2. How would you describe it in your own words?
-3. Why does it matter now?
+1. What feels deeply important here, and what would you call that value or direction?
+2. If you were living it a little more this week, what would someone actually see?
+3. Why does it matter now, and what one action would move toward it?
 
 `behavior_pattern`
 Use for a recurring loop across situations.
@@ -125,9 +152,9 @@ Minimum field: `title`
 Usually useful: `description`, `targetBehavior`, `cueContexts`, `shortTermPayoff`, `longTermCost`, `preferredResponse`
 Ask:
 
-1. What would you call this pattern?
-2. What usually sets it off, and what tends to happen next?
-3. What does it give you in the short term, what does it cost later, and what response would you rather make?
+1. Can we slow this down using one recent example first?
+2. What usually sets the loop off, and what tends to happen in thoughts, feelings, body, and actions next?
+3. What does it do for you immediately, what does it cost later, and what belief, mode, or value seems bound up in it?
 
 `behavior`
 Use for one recurring move or action tendency.
@@ -135,9 +162,9 @@ Minimum fields: `kind`, `title`
 Usually useful: `commonCues`, `urgeStory`, `shortTermPayoff`, `longTermCost`, `replacementMove`, `repairPlan`
 Ask:
 
-1. What happened, in plain language?
-2. Is it an `away`, `committed`, or `recovery` behavior?
-3. What cues show up, and what move would you want available instead?
+1. What does this behavior actually look like in plain language?
+2. What cues or urges usually pull you toward it, and what does it do for you in the moment?
+3. Is it an `away`, `committed`, or `recovery` behavior, and what move would you want available instead?
 
 `belief_entry`
 Use for one explicit belief sentence.
@@ -145,9 +172,9 @@ Minimum fields: `statement`, `beliefType`
 Usually useful: `confidence`, `evidenceFor`, `evidenceAgainst`, `flexibleAlternative`, `originNote`
 Ask:
 
-1. What is the belief in one sentence?
+1. If we turn that reaction into one sentence, what does the belief sound like in your own words?
 2. Is it `absolute` or `conditional`, and how true does it feel from 0 to 100?
-3. What supports it, what weakens it, and what would be a more flexible alternative?
+3. What seems to support it, what weakens it, where did you learn it, and what would be a more flexible alternative?
 
 `mode_profile`
 Use for a recurring part-state or inner role.
@@ -155,14 +182,18 @@ Minimum fields: `family`, `title`
 Usually useful: `fear`, `burden`, `protectiveJob`, `originContext`, links to patterns, behaviors, and values
 Ask:
 
-1. What kind of mode is this: `coping`, `child`, `critic_parent`, `healthy_adult`, or `happy_child`?
-2. What should this mode be called?
-3. What does it fear, carry, or try to protect?
+1. When this part shows up, what is it like from the inside and what should it be called?
+2. What kind of mode is this: `coping`, `child`, `critic_parent`, `healthy_adult`, or `happy_child`?
+3. What does it fear, carry, or try to protect, and when did you first need it?
 
 `mode_guide_session`
 Use for guided exploration before or alongside a durable mode profile.
-Minimum fields: `summary`, `answers`, `results`
-Ask only what is needed to capture the guided exploration and the candidate interpretations.
+Minimum fields: `summary`, `answers`
+Ask:
+
+1. What just happened that brought this part online right now?
+2. If it had a voice, what would it say, fear, or need?
+3. Would it help if we suggested one or two candidate mode labels, with reasons, before deciding whether to store a durable profile?
 
 `trigger_report`
 Use for one specific emotionally important episode.
@@ -170,9 +201,9 @@ Minimum field: `title`
 Usually useful: `eventSituation`, `occurredAt`, `emotions`, `thoughts`, `behaviors`, `consequences`, `nextMoves`, links to values, beliefs, patterns, modes, goals, projects, or tasks
 Ask:
 
-1. What happened?
-2. What emotions were present, and how intense were they?
-3. What thoughts showed up, what did you do next, and what would be the useful next move now?
+1. What happened, as concretely as you can say it?
+2. What emotions were present, how intense were they, and what thoughts or meanings showed up?
+3. What did you do next, what did that do short term and long term, and what pattern, belief, or mode seems most active here?
 
 `event_type`
 Use for a reusable trigger category.

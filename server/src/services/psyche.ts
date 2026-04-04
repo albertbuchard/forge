@@ -1,6 +1,7 @@
 import { getDomainBySlug } from "../repositories/domains.js";
 import { listInsights } from "../repositories/collaboration.js";
 import { listNotes } from "../repositories/notes.js";
+import { filterOwnedEntities } from "../repositories/entity-ownership.js";
 import {
   listBehaviorPatterns,
   listBehaviors,
@@ -21,21 +22,23 @@ const PSYCHE_ENTITY_TYPE_SET = new Set([
   "trigger_report"
 ]);
 
-export function getPsycheOverview(): PsycheOverviewPayload {
+export function getPsycheOverview(userIds?: string[]): PsycheOverviewPayload {
   const domain = getDomainBySlug("psyche");
   if (!domain) {
     throw new Error("Psyche domain is not available");
   }
 
-  const values = listPsycheValues();
-  const patterns = listBehaviorPatterns();
-  const behaviors = listBehaviors();
-  const beliefs = listBeliefEntries();
-  const modes = listModeProfiles();
-  const reports = listTriggerReports(5);
+  const values = filterOwnedEntities("psyche_value", listPsycheValues(), userIds);
+  const patterns = filterOwnedEntities("behavior_pattern", listBehaviorPatterns(), userIds);
+  const behaviors = filterOwnedEntities("behavior", listBehaviors(), userIds);
+  const beliefs = filterOwnedEntities("belief_entry", listBeliefEntries(), userIds);
+  const modes = filterOwnedEntities("mode_profile", listModeProfiles(), userIds);
+  const reports = filterOwnedEntities("trigger_report", listTriggerReports(5), userIds);
   const schemaCatalog = listSchemaCatalog();
-  const notes = listNotes({ limit: 200 });
-  const openInsights = listInsights({ limit: 100 }).filter((insight) => insight.entityType && PSYCHE_ENTITY_TYPE_SET.has(insight.entityType)).length;
+  const notes = filterOwnedEntities("note", listNotes({ limit: 200 }), userIds);
+  const openInsights = filterOwnedEntities("insight", listInsights({ limit: 100 }), userIds).filter(
+    (insight) => insight.entityType && PSYCHE_ENTITY_TYPE_SET.has(insight.entityType)
+  ).length;
   const openNotes = notes.filter((note) => note.links.some((link) => PSYCHE_ENTITY_TYPE_SET.has(link.entityType))).length;
   const committedActions = [
     ...values.flatMap((value) => value.committedActions),

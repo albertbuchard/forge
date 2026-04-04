@@ -54,6 +54,10 @@ import { addDays, formatWeekday, startOfWeek } from "@/lib/calendar-ui";
 import type { EntityKind } from "@/lib/entity-visuals";
 import type { CalendarEvent, CalendarEventLink, TaskTimebox, WorkBlockKind, WorkBlockTemplate } from "@/lib/types";
 import {
+  formatUserSummaryLine,
+  getSingleSelectedUserId
+} from "@/lib/user-ownership";
+import {
   useForgeClipboardStore,
   type ForgeClipboardCalendarEventItem
 } from "@/store/use-forge-clipboard";
@@ -200,6 +204,10 @@ function formatTemplateDateRange(template: WorkBlockTemplate) {
 export function CalendarPage() {
   const navigate = useNavigate();
   const shell = useForgeShell();
+  const selectedUserIds = Array.isArray(shell.selectedUserIds)
+    ? shell.selectedUserIds
+    : [];
+  const defaultUserId = getSingleSelectedUserId(selectedUserIds);
   const queryClient = useQueryClient();
   const clipboardEntry = useForgeClipboardStore((state) => state.entry);
   const setClipboardEntry = useForgeClipboardStore((state) => state.setEntry);
@@ -243,10 +251,19 @@ export function CalendarPage() {
   }, [weekStart]);
 
   const calendarQuery = useQuery({
-    queryKey: ["forge-calendar-overview", range.from, range.to],
-    queryFn: () => getCalendarOverview(range)
+    queryKey: ["forge-calendar-overview", range.from, range.to, ...selectedUserIds],
+    queryFn: () =>
+      getCalendarOverview({
+        ...range,
+        userIds: selectedUserIds
+      })
   });
-  const calendarOverviewQueryKey = ["forge-calendar-overview", range.from, range.to] as const;
+  const calendarOverviewQueryKey = [
+    "forge-calendar-overview",
+    range.from,
+    range.to,
+    ...selectedUserIds
+  ] as const;
 
   const isEventInVisibleRange = (event: Pick<CalendarEvent, "startAt" | "deletedAt">) => {
     if (event.deletedAt) {
@@ -283,7 +300,11 @@ export function CalendarPage() {
   };
 
   const createWorkBlockMutation = useMutation({
-    mutationFn: createWorkBlockTemplate,
+    mutationFn: (input: Parameters<typeof createWorkBlockTemplate>[0]) =>
+      createWorkBlockTemplate({
+        ...input,
+        userId: input.userId ?? defaultUserId
+      }),
     onSuccess: invalidateCalendar
   });
 
@@ -311,7 +332,11 @@ export function CalendarPage() {
       startsAt: string;
       endsAt: string;
       source?: TaskTimebox["source"];
-    }) => createTaskTimebox(timebox),
+    }) =>
+      createTaskTimebox({
+        ...timebox,
+        userId: defaultUserId
+      }),
     onSuccess: invalidateCalendar
   });
 
@@ -329,7 +354,11 @@ export function CalendarPage() {
   });
 
   const createEventMutation = useMutation({
-    mutationFn: createCalendarEvent,
+    mutationFn: (input: Parameters<typeof createCalendarEvent>[0]) =>
+      createCalendarEvent({
+        ...input,
+        userId: input.userId ?? defaultUserId
+      }),
     onMutate: async (input) => {
       setEventSyncStatus({ tone: "saving", message: "Saving event changes in the background…" });
       await queryClient.cancelQueries({ queryKey: calendarOverviewQueryKey });
@@ -582,30 +611,41 @@ export function CalendarPage() {
     deleteEventMutation.isPending;
   const plannedTimeboxes = overview.timeboxes.filter((timebox) => timebox.status === "planned");
   const writableCalendars = overview.calendars.filter((calendar) => calendar.canWrite);
+  const describeLinkOwner = (label: string, ownerSummary: string) =>
+    ownerSummary ? `${label} · ${ownerSummary}` : label;
   const linkOptions = [
     ...shell.snapshot.goals.map((goal) => ({
       entityType: "goal" as const,
       entityId: goal.id,
       label: goal.title,
-      subtitle: "Goal"
+      subtitle: describeLinkOwner("Goal", formatUserSummaryLine(goal.user))
     })),
     ...shell.snapshot.projects.map((project) => ({
       entityType: "project" as const,
       entityId: project.id,
       label: project.title,
-      subtitle: "Project"
+      subtitle: describeLinkOwner("Project", formatUserSummaryLine(project.user))
     })),
     ...shell.snapshot.tasks.map((task) => ({
       entityType: "task" as const,
       entityId: task.id,
       label: task.title,
-      subtitle: "Task"
+      subtitle: describeLinkOwner("Task", formatUserSummaryLine(task.user))
+    })),
+    ...shell.snapshot.strategies.map((strategy) => ({
+      entityType: "strategy" as const,
+      entityId: strategy.id,
+      label: strategy.title,
+      subtitle: describeLinkOwner(
+        "Strategy",
+        formatUserSummaryLine(strategy.user)
+      )
     })),
     ...shell.snapshot.habits.map((habit) => ({
       entityType: "habit" as const,
       entityId: habit.id,
       label: habit.title,
-      subtitle: "Habit"
+      subtitle: describeLinkOwner("Habit", formatUserSummaryLine(habit.user))
     }))
   ];
   const linkLabelByKey = useMemo(

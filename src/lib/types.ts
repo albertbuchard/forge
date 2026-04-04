@@ -45,6 +45,7 @@ export type CrudEntityType =
   | "goal"
   | "project"
   | "task"
+  | "strategy"
   | "habit"
   | "tag"
   | "note"
@@ -77,6 +78,53 @@ export type RewardableEntityType =
   | "mode_profile"
   | "trigger_report";
 export type DeleteMode = "soft" | "hard";
+
+export type UserKind = "human" | "bot";
+
+export interface UserSummary {
+  id: string;
+  kind: UserKind;
+  handle: string;
+  displayName: string;
+  description: string;
+  accentColor: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface UserAccessGrant {
+  id: string;
+  subjectUserId: string;
+  targetUserId: string;
+  accessLevel: "view" | "manage";
+  config: Record<string, unknown>;
+  createdAt: string;
+  updatedAt: string;
+  subjectUser: UserSummary | null;
+  targetUser: UserSummary | null;
+}
+
+export interface UserOwnershipSummary {
+  userId: string;
+  totalOwnedEntities: number;
+  entityCounts: Record<string, number>;
+}
+
+export interface UserDirectoryPayload {
+  users: UserSummary[];
+  grants: UserAccessGrant[];
+  ownership: UserOwnershipSummary[];
+  posture: {
+    accessModel: "permissive";
+    summary: string;
+    futureReady: boolean;
+  };
+}
+
+export interface OwnedEntity {
+  userId?: string | null;
+  user?: UserSummary | null;
+}
 
 export interface TaskTimeSummary {
   totalTrackedSeconds: number;
@@ -121,7 +169,7 @@ export interface NoteLink {
   anchorKey: string | null;
 }
 
-export interface Note {
+export interface Note extends OwnedEntity {
   id: string;
   contentMarkdown: string;
   contentPlain: string;
@@ -142,7 +190,7 @@ export interface NoteSummary {
 
 export type NotesSummaryByEntity = Record<string, NoteSummary>;
 
-export interface Tag {
+export interface Tag extends OwnedEntity {
   id: string;
   name: string;
   kind: "value" | "category" | "execution";
@@ -150,7 +198,7 @@ export interface Tag {
   description: string;
 }
 
-export interface Goal {
+export interface Goal extends OwnedEntity {
   id: string;
   title: string;
   description: string;
@@ -176,7 +224,7 @@ export interface CalendarSchedulingRules {
   blockAvailability: CalendarAvailability[];
 }
 
-export interface Project {
+export interface Project extends OwnedEntity {
   id: string;
   goalId: string;
   title: string;
@@ -189,7 +237,7 @@ export interface Project {
   updatedAt: string;
 }
 
-export interface Task {
+export interface Task extends OwnedEntity {
   id: string;
   title: string;
   description: string;
@@ -212,7 +260,7 @@ export interface Task {
   time: TaskTimeSummary;
 }
 
-export interface ActivityEvent {
+export interface ActivityEvent extends OwnedEntity {
   id: string;
   entityType: string;
   entityId: string;
@@ -237,7 +285,7 @@ export interface EventLogEntry {
   createdAt: string;
 }
 
-export interface TaskRun {
+export interface TaskRun extends OwnedEntity {
   id: string;
   taskId: string;
   taskTitle: string;
@@ -323,7 +371,7 @@ export interface CalendarResource {
   updatedAt: string;
 }
 
-export interface CalendarEvent {
+export interface CalendarEvent extends OwnedEntity {
   id: string;
   connectionId: string | null;
   calendarId: string | null;
@@ -382,7 +430,7 @@ export interface CalendarEventLink {
   updatedAt: string;
 }
 
-export interface WorkBlockTemplate {
+export interface WorkBlockTemplate extends OwnedEntity {
   id: string;
   title: string;
   kind: WorkBlockKind;
@@ -413,7 +461,7 @@ export interface WorkBlockInstance {
   updatedAt: string;
 }
 
-export interface TaskTimebox {
+export interface TaskTimebox extends OwnedEntity {
   id: string;
   taskId: string;
   projectId: string | null;
@@ -458,7 +506,7 @@ export interface HabitCheckIn {
   updatedAt: string;
 }
 
-export interface Habit {
+export interface Habit extends OwnedEntity {
   id: string;
   title: string;
   description: string;
@@ -706,7 +754,7 @@ export interface InsightEvidence {
   label: string;
 }
 
-export interface Insight {
+export interface Insight extends OwnedEntity {
   id: string;
   originType: "system" | "user" | "agent";
   originAgentId: string | null;
@@ -752,6 +800,57 @@ export interface ApprovalRequest {
   rejectedBy: string | null;
   rejectedAt: string | null;
   resolutionNote: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface StrategyLinkedEntity {
+  entityType: CrudEntityType;
+  entityId: string;
+}
+
+export interface StrategyGraphNode {
+  id: string;
+  entityType: "project" | "task";
+  entityId: string;
+  title: string;
+  branchLabel: string;
+  notes: string;
+}
+
+export interface StrategyGraphEdge {
+  from: string;
+  to: string;
+  label: string;
+  condition: string;
+}
+
+export interface StrategyGraph {
+  nodes: StrategyGraphNode[];
+  edges: StrategyGraphEdge[];
+}
+
+export interface StrategyMetrics {
+  alignmentScore: number;
+  completedNodeCount: number;
+  totalNodeCount: number;
+  completedTargetCount: number;
+  totalTargetCount: number;
+  activeNodeIds: string[];
+  nextNodeIds: string[];
+}
+
+export interface Strategy extends OwnedEntity {
+  id: string;
+  title: string;
+  overview: string;
+  endStateDescription: string;
+  status: "active" | "paused" | "completed";
+  targetGoalIds: string[];
+  targetProjectIds: string[];
+  linkedEntities: StrategyLinkedEntity[];
+  graph: StrategyGraph;
+  metrics: StrategyMetrics;
   createdAt: string;
   updatedAt: string;
 }
@@ -1186,6 +1285,12 @@ export interface ForgeSnapshot {
     generatedAt: string;
     backend: string;
     mode: "transitional-node" | "rust-target";
+  };
+  users: UserSummary[];
+  strategies: Strategy[];
+  userScope: {
+    selectedUserIds: string[];
+    selectedUsers: UserSummary[];
   };
   metrics: {
     totalXp: number;

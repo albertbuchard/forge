@@ -16,23 +16,21 @@ logger = logging.getLogger(__name__)
 PACKAGE_DIR = Path(__file__).resolve().parent
 
 
-def _install_skill() -> None:
+def _install_skill_bundle() -> None:
     try:
         from hermes_cli.config import get_hermes_home  # type: ignore
 
-        destination = get_hermes_home() / "skills" / "forge-hermes" / "SKILL.md"
+        destination_dir = get_hermes_home() / "skills" / "forge-hermes"
     except Exception:
-        destination = Path.home() / ".hermes" / "skills" / "forge-hermes" / "SKILL.md"
+        destination_dir = Path.home() / ".hermes" / "skills" / "forge-hermes"
 
-    if destination.exists():
-        return
-
-    source = PACKAGE_DIR / "skill.md"
-    if not source.exists():
-        return
-
-    destination.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(source, destination)
+    for source in sorted(PACKAGE_DIR.glob("*.md")):
+        destination_name = "SKILL.md" if source.name == "skill.md" else source.name
+        destination = destination_dir / destination_name
+        if destination.exists():
+            continue
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(source, destination)
 
 
 def register(ctx) -> None:
@@ -46,5 +44,5 @@ def register(ctx) -> None:
             handler=build_handler(spec["name"]),
         )
 
-    _install_skill()
+    _install_skill_bundle()
     logger.info("Registered Forge Hermes plugin with %s tools", len(TOOL_CATALOG))

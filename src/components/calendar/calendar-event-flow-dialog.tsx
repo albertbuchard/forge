@@ -53,6 +53,7 @@ const ENTITY_KIND_BY_TYPE: Partial<Record<CrudEntityType, EntityKind>> = {
   goal: "goal",
   project: "project",
   task: "task",
+  strategy: "strategy",
   habit: "habit"
 };
 
@@ -285,12 +286,12 @@ export function CalendarEventFlowDialog({
         eyebrow: "Meaning",
         title: "Connect the event to Forge entities",
         description:
-          "Attach this event to goals, projects, tasks, or habits so the calendar carries operating context instead of staying isolated.",
+          "Attach this event to strategies, goals, projects, tasks, or habits so the calendar carries multi-user operating context instead of staying isolated.",
         render: (value, setValue) => (
           <div className="grid gap-4">
             <FlowField
               label="Search Forge entities"
-              description="The linked entities use the same icon and color system as the rest of Forge."
+              description="Search across human and bot-owned entities; the linked records use the same icon, color, and owner system as the rest of Forge."
             >
               <EntityLinkMultiSelect
                 options={linkSelectOptions}
@@ -319,7 +320,7 @@ export function CalendarEventFlowDialog({
                       .filter((entry): entry is EventLinkDraft => entry !== null)
                   });
                 }}
-                placeholder="Search goals, projects, tasks, habits"
+                placeholder="Search strategies, goals, projects, tasks, habits, human, or bot owners"
                 emptyMessage="No matching Forge entities found."
               />
             </FlowField>

@@ -50,6 +50,10 @@ import {
   updateNote
 } from "./repositories/notes.js";
 import {
+  filterOwnedEntities,
+  setEntityOwner
+} from "./repositories/entity-ownership.js";
+import {
   createBehavior,
   createBehaviorPattern,
   createBeliefEntry,
@@ -90,6 +94,13 @@ import {
 } from "./repositories/psyche.js";
 import { createProject, updateProject } from "./repositories/projects.js";
 import {
+  createStrategy,
+  deleteStrategy,
+  getStrategyById,
+  listStrategies,
+  updateStrategy
+} from "./repositories/strategies.js";
+import {
   createManualRewardGrant,
   getDailyAmbientXp,
   getRewardRuleById,
@@ -112,6 +123,16 @@ import {
   listTags,
   updateTag
 } from "./repositories/tags.js";
+import {
+  createUser,
+  ensureSystemUsers,
+  getUserById,
+  listUserAccessGrants,
+  listUserOwnershipSummaries,
+  listUsers,
+  resolveUserForMutation,
+  updateUser
+} from "./repositories/users.js";
 import {
   claimTaskRun,
   completeTaskRun,
@@ -236,6 +257,8 @@ import {
   createGoalSchema,
   createInsightFeedbackSchema,
   createInsightSchema,
+  createStrategySchema,
+  createUserSchema,
   createNoteSchema,
   createProjectSchema,
   createManualRewardGrantSchema,
@@ -277,6 +300,8 @@ import {
   updateGoalSchema,
   updateHabitSchema,
   updateInsightSchema,
+  updateStrategySchema,
+  updateUserSchema,
   updateCalendarConnectionSchema,
   updateCalendarEventSchema,
   updateNoteSchema,
@@ -287,7 +312,9 @@ import {
   updateWorkBlockTemplateSchema,
   workAdjustmentResultSchema,
   finalizeWeeklyReviewResultSchema,
+  goalListQuerySchema,
   recommendTaskTimeboxesSchema,
+  strategyListQuerySchema,
   type TaskTimeSummary,
   type WorkAdjustmentEntityType
 } from "./types.js";
@@ -448,6 +475,15 @@ const AGENT_ONBOARDING_ENTITY_CATALOG = [
         defaultValue: "active"
       },
       {
+        name: "userId",
+        type: "string|null",
+        required: false,
+        description:
+          "Owning human or bot user id. Omit it to use Forge's default owner.",
+        defaultValue: null,
+        nullable: true
+      },
+      {
         name: "targetPoints",
         type: "integer",
         required: false,
@@ -522,6 +558,15 @@ const AGENT_ONBOARDING_ENTITY_CATALOG = [
         defaultValue: "active"
       },
       {
+        name: "userId",
+        type: "string|null",
+        required: false,
+        description:
+          "Owning human or bot user id. Omit it to use Forge's default owner.",
+        defaultValue: null,
+        nullable: true
+      },
+      {
         name: "targetPoints",
         type: "integer",
         required: false,
@@ -542,6 +587,93 @@ const AGENT_ONBOARDING_ENTITY_CATALOG = [
         description:
           "Optional nested notes that will auto-link to the new project.",
         defaultValue: []
+      }
+    ]
+  },
+  {
+    entityType: "strategy",
+    purpose:
+      "A directed, non-loopy execution plan that connects current work to target goals or projects.",
+    minimumCreateFields: ["title", "graph"],
+    relationshipRules: [
+      "Strategies can target one or many goals or projects.",
+      "Graph nodes must reference existing projects or tasks.",
+      "Graph edges must remain directed and acyclic.",
+      "linkedEntities is for related context that should stay visible without becoming part of the main sequence."
+    ],
+    searchHints: [
+      "Search by title or linked target before creating a duplicate strategy.",
+      "Use userIds when you want strategies owned by specific humans or bots."
+    ],
+    examples: [
+      '{"title":"Ship multi-user Forge","overview":"Separate humans and bots, then connect the systems with shared strategies.","endStateDescription":"Forge supports human and bot users across all routes and views.","targetGoalIds":["goal_123"],"targetProjectIds":["project_123"],"graph":{"nodes":[{"id":"node_a","entityType":"project","entityId":"project_123","title":"Multi-user backend","branchLabel":"Core","notes":"Land ownership and route scope first."},{"id":"node_b","entityType":"task","entityId":"task_123","title":"Strategy UI polish","branchLabel":"UI","notes":"Surface alignment and graph editing in the app."}],"edges":[{"from":"node_a","to":"node_b","label":"after backend lands","condition":""}]}}'
+    ],
+    fieldGuide: [
+      {
+        name: "title",
+        type: "string",
+        required: true,
+        description: "Strategy name."
+      },
+      {
+        name: "overview",
+        type: "string",
+        required: false,
+        description: "What this strategy is for and why it matters.",
+        defaultValue: ""
+      },
+      {
+        name: "endStateDescription",
+        type: "string",
+        required: false,
+        description: "What done looks like when the strategy lands.",
+        defaultValue: ""
+      },
+      {
+        name: "status",
+        type: "active|paused|completed",
+        required: false,
+        description: "Lifecycle state.",
+        enumValues: ["active", "paused", "completed"],
+        defaultValue: "active"
+      },
+      {
+        name: "userId",
+        type: "string|null",
+        required: false,
+        description:
+          "Owning human or bot user id. Omit it to use Forge's default owner.",
+        defaultValue: null,
+        nullable: true
+      },
+      {
+        name: "targetGoalIds",
+        type: "string[]",
+        required: false,
+        description: "Goal ids this strategy is meant to land.",
+        defaultValue: []
+      },
+      {
+        name: "targetProjectIds",
+        type: "string[]",
+        required: false,
+        description: "Project ids this strategy is meant to land.",
+        defaultValue: []
+      },
+      {
+        name: "linkedEntities",
+        type: "Array<{ entityType, entityId }>",
+        required: false,
+        description:
+          "Related entities that should stay visible in the strategy context.",
+        defaultValue: []
+      },
+      {
+        name: "graph",
+        type: "StrategyGraph",
+        required: true,
+        description:
+          "Directed acyclic graph with nodes referencing projects/tasks and edges defining the flow order."
       }
     ]
   },
@@ -598,6 +730,15 @@ const AGENT_ONBOARDING_ENTITY_CATALOG = [
         required: false,
         description: "Human-facing owner label.",
         defaultValue: "Albert"
+      },
+      {
+        name: "userId",
+        type: "string|null",
+        required: false,
+        description:
+          "Owning human or bot user id. Omit it to use Forge's default owner.",
+        defaultValue: null,
+        nullable: true
       },
       {
         name: "goalId",
@@ -760,7 +901,8 @@ const AGENT_ONBOARDING_ENTITY_CATALOG = [
         name: "preferredCalendarId",
         type: "string|null",
         required: false,
-        description: "Writable connected calendar to project into. Omit it to use the default writable connected calendar. Set null only to force Forge-only storage.",
+        description:
+          "Writable connected calendar to project into. Omit it to use the default writable connected calendar. Set null only to force Forge-only storage.",
         defaultValue: "default writable connected calendar when available",
         nullable: true
       },
@@ -1835,7 +1977,7 @@ const AGENT_ONBOARDING_ENTITY_CATALOG = [
     entityType: "mode_guide_session",
     purpose:
       "A guided mode-mapping session that stores structured answers and candidate mode interpretations.",
-    minimumCreateFields: ["summary", "answers", "results"],
+    minimumCreateFields: ["summary", "answers"],
     relationshipRules: [
       "Mode guide sessions help the user reason toward likely modes before or alongside mode profiles.",
       "Use mode guide sessions for guided interpretation, not as a replacement for durable mode profiles."
@@ -1863,7 +2005,7 @@ const AGENT_ONBOARDING_ENTITY_CATALOG = [
       {
         name: "results",
         type: "array",
-        required: true,
+        required: false,
         description:
           "List of { family, archetype, label, confidence 0-1, reasoning } candidate mode interpretations."
       }
@@ -2052,18 +2194,55 @@ const AGENT_ONBOARDING_ENTITY_CATALOG = [
 
 const AGENT_ONBOARDING_PSYCHE_PLAYBOOKS = [
   {
+    focus: "psyche_value",
+    useWhen:
+      "Use for a lived direction, quality of being, or way of showing up that matters to the user and should guide actions rather than just describe an outcome.",
+    coachingGoal:
+      "Clarify the value as a chosen direction, distinguish it from a goal, and gather one concrete way the user wants to embody it now.",
+    askSequence: [
+      "Start with what matters and why it matters now.",
+      "Ask for one concrete example of what living this value would look like in ordinary life.",
+      "Separate the value direction from any specific outcome or achievement goal.",
+      "Notice tensions, barriers, or situations where the value gets lost.",
+      "Name one small committed action that would move toward the value."
+    ],
+    requiredForCreate: ["title"],
+    highValueOptionalFields: [
+      "description",
+      "valuedDirection",
+      "whyItMatters",
+      "committedActions",
+      "linkedGoalIds",
+      "linkedProjectIds",
+      "linkedTaskIds"
+    ],
+    exampleQuestions: [
+      "What feels deeply important about this to you?",
+      "If you were living this value a little more this week, what would someone be able to see?",
+      "What goal or area of life does this value belong to most clearly?",
+      "When this value is hard to live, what tends to get in the way?",
+      "What is one small action that would express it in practice?"
+    ],
+    notes: [
+      "Use an ACT-style values clarification stance: values are directions to live toward, not boxes to complete.",
+      "Ask one or two questions at a time, reflect back the user's language, and only then move toward naming committed actions or linked work items.",
+      "If the user says they want to understand it first, start with one orienting question before offering a formulation or save suggestion."
+    ]
+  },
+  {
     focus: "behavior_pattern",
     useWhen:
       "Use for a recurring loop that shows up across multiple situations and can be described as cue -> response -> payoff -> cost -> preferred response.",
     coachingGoal:
-      "Help the user build a CBT-style functional analysis instead of just naming the problem vaguely.",
+      "Help the user build a CBT-style functional analysis with active listening instead of just naming the problem vaguely.",
     askSequence: [
-      "Name the loop in plain language.",
-      "Identify the typical cue or context.",
-      "Describe the visible behavior or sequence once it starts.",
-      "Clarify the short-term payoff or protection.",
-      "Clarify the long-term cost.",
-      "Name the preferred alternative response."
+      "Start from one recent concrete example before generalizing the loop.",
+      "Identify the typical cue, vulnerability, or context that makes the loop more likely.",
+      "Reflect back the sequence of thoughts, feelings, body state, and visible behavior once it starts.",
+      "Clarify the short-term payoff, protection, or escape function.",
+      "Clarify the long-term cost to the self, relationships, work, or values.",
+      "Ask what a slightly more workable response would look like.",
+      "Notice adjacent beliefs, schema themes, modes, or values that should be linked or saved separately."
     ],
     requiredForCreate: ["title"],
     highValueOptionalFields: [
@@ -2078,15 +2257,62 @@ const AGENT_ONBOARDING_PSYCHE_PLAYBOOKS = [
       "linkedValueIds"
     ],
     exampleQuestions: [
-      "What usually sets this loop off?",
-      "What do you tend to do next, outwardly or inwardly?",
+      "Can we slow this down using one recent example first?",
+      "What usually sets this loop off, and what was going on just before it started?",
+      "What do you notice in your thoughts, body, and actions once it gets going?",
       "What does that move do for you immediately?",
       "What does it cost you later?",
+      "What belief, rule, or vulnerable part seems to get activated inside this loop?",
       "If this loop loosened a little, what response would you want to make instead?"
     ],
     notes: [
       "A pattern is usually the best Psyche container for functional analysis.",
-      "If the user is describing one specific episode rather than a repeated loop, prefer a trigger report."
+      "If the user is describing one specific episode rather than a repeated loop, prefer a trigger report.",
+      "Reflect before the next question, and avoid interrogating through the schema fields in order.",
+      "If the user asks to understand the loop first, do not lead with a finished working diagnosis or title before asking at least one clarifying question."
+    ]
+  },
+  {
+    focus: "behavior",
+    useWhen:
+      "Use for one recurring move, coping action, or regulating action that the user wants to understand more clearly and possibly link to a broader pattern.",
+    coachingGoal:
+      "Describe the behavior in plain language, understand its function, classify whether it moves away, toward, or back into repair, and identify a more workable move when relevant.",
+    askSequence: [
+      "Start with a recent example of the behavior in context.",
+      "Name what the user actually does or tends to do.",
+      "Clarify what cues, urges, or situations pull the behavior online.",
+      "Clarify the short-term payoff or relief.",
+      "Clarify the long-term cost or price.",
+      "Decide whether the behavior is away, committed, or recovery.",
+      "Identify a replacement move or repair plan if the user wants one."
+    ],
+    requiredForCreate: ["kind", "title"],
+    highValueOptionalFields: [
+      "description",
+      "commonCues",
+      "urgeStory",
+      "shortTermPayoff",
+      "longTermCost",
+      "replacementMove",
+      "repairPlan",
+      "linkedPatternIds",
+      "linkedValueIds",
+      "linkedSchemaIds",
+      "linkedModeIds"
+    ],
+    exampleQuestions: [
+      "What does this behavior actually look like when it happens?",
+      "What usually pulls you toward it?",
+      "What does it do for you in the moment?",
+      "What cost shows up later?",
+      "Would you call this an away move, a committed move, or a recovery move?",
+      "If you wanted another option available, what would it be?"
+    ],
+    notes: [
+      "Keep the user close to observable behavior rather than jumping straight to labels.",
+      "When the behavior clearly belongs inside a larger loop, suggest linking or also mapping the related behavior_pattern.",
+      "If the user asks for understanding before storage, ask about the recent example and function of the move before classifying it."
     ]
   },
   {
@@ -2094,12 +2320,13 @@ const AGENT_ONBOARDING_PSYCHE_PLAYBOOKS = [
     useWhen:
       "Use for a belief, rule, or self-statement that keeps showing up in reactions, especially when the user can phrase it as a sentence.",
     coachingGoal:
-      "Turn implicit self-talk or a likely schema theme into one explicit belief statement that can be tested and linked to patterns, reports, and modes.",
+      "Turn implicit self-talk or a likely schema theme into one explicit belief statement that can be tested and linked to patterns, reports, and modes without forcing the user into a debate too early.",
     askSequence: [
-      "Capture the belief in the user's own words.",
+      "Reflect the likely belief in the user's own words and ask for confirmation or correction.",
       "Decide whether it is absolute or conditional.",
       "Estimate how true it feels from 0 to 100.",
       "Collect evidence for and evidence against.",
+      "Notice where the belief may have been learned or reinforced.",
       "Offer a more flexible alternative belief.",
       "Link a schemaId only when a real schema catalog match is known."
     ],
@@ -2116,15 +2343,17 @@ const AGENT_ONBOARDING_PSYCHE_PLAYBOOKS = [
       "linkedModeIds"
     ],
     exampleQuestions: [
-      "What is the sentence your mind seems to be pushing here?",
+      "If we turned that reaction into one sentence, what would it sound like?",
       "Is it more of an always/never belief, or an if-then rule?",
       "How true does it feel right now from 0 to 100?",
       "What seems to support it, and what weakens it?",
+      "Where do you think you learned or rehearsed that rule?",
       "What would a more flexible alternative sound like?"
     ],
     notes: [
       "Schema catalog entries are reference concepts; belief_entry is the user-owned record.",
-      "If no schema catalog match is known, omit schemaId rather than inventing one."
+      "If no schema catalog match is known, omit schemaId rather than inventing one.",
+      "Do not argue the user out of the belief. Reflect it, understand its function, and then collaboratively test for flexibility."
     ]
   },
   {
@@ -2132,18 +2361,23 @@ const AGENT_ONBOARDING_PSYCHE_PLAYBOOKS = [
     useWhen:
       "Use when the user is describing a recurring part-state, protector, critic, vulnerable child state, or healthy adult stance.",
     coachingGoal:
-      "Help the user describe what the mode is trying to do, what it fears, and how it presents, rather than reducing it to a label only.",
+      "Help the user describe how the mode shows up, what it is trying to do, what it fears, and what burden it carries, rather than reducing it to a label only.",
     askSequence: [
-      "Choose the mode family first.",
-      "Name the mode.",
-      "Describe the felt persona or imagery.",
+      "Start with a recent moment when this part-state took over.",
+      "Choose the mode family once the lived description is clearer.",
+      "Name the mode in the user's language.",
+      "Describe the felt persona, body posture, imagery, or symbolic form.",
       "Clarify its fear, burden, and protective job.",
-      "Optionally note origin context and linked patterns or behaviors."
+      "Explore when it first became necessary or familiar.",
+      "Notice linked patterns, behaviors, values, and what a healthy-adult response would need to do."
     ],
     requiredForCreate: ["family", "title"],
     highValueOptionalFields: [
+      "archetype",
       "persona",
       "imagery",
+      "symbolicForm",
+      "facialExpression",
       "fear",
       "burden",
       "protectiveJob",
@@ -2153,14 +2387,45 @@ const AGENT_ONBOARDING_PSYCHE_PLAYBOOKS = [
       "linkedValueIds"
     ],
     exampleQuestions: [
+      "When this part shows up, what is it like from the inside?",
       "What kind of part does this feel like: coping, child, critic-parent, healthy-adult, or happy-child?",
       "If you gave this mode a name, what would it be?",
       "What is it afraid would happen if it stopped doing its job?",
-      "What burden or pain does it seem to carry?"
+      "What burden or pain does it seem to carry?",
+      "When do you remember needing this way of coping or surviving?"
     ],
     notes: [
       "Mode profiles are durable parts descriptions.",
-      "Mode guide sessions are the guided reasoning process that can lead toward a mode profile."
+      "Mode guide sessions are the guided reasoning process that can lead toward a mode profile.",
+      "Do not overpathologize. The point is to understand the part's job and cost, then increase choice.",
+      "If the user asks to understand the mode first, start from a recent moment and ask what the part is trying to do before you name it."
+    ]
+  },
+  {
+    focus: "mode_guide_session",
+    useWhen:
+      "Use when the user is in a live reaction or is unsure which mode is active and needs a gentle structured exploration before committing to a durable mode profile.",
+    coachingGoal:
+      "Guide a present-moment inquiry that names the likely active mode, gathers the user's answers cleanly, and leaves a traceable bridge toward later mode work.",
+    askSequence: [
+      "Anchor the exploration in one current or recent situation.",
+      "Ask what the part is feeling, saying, trying to stop, or trying to make happen.",
+      "Ask what the part fears and what it seems to need.",
+      "Reflect the answers back in plain language before suggesting any candidate mode labels.",
+      "Offer one or two candidate interpretations only after enough evidence is present."
+    ],
+    requiredForCreate: ["summary", "answers"],
+    highValueOptionalFields: [],
+    exampleQuestions: [
+      "What just happened that brought this up right now?",
+      "If this part had a voice, what would it be saying?",
+      "What is it trying to protect you from?",
+      "What does it seem to need from you or from someone else?",
+      "Would it be helpful if I suggest one or two possible mode labels, with reasons?"
+    ],
+    notes: [
+      "A mode_guide_session is the exploration worksheet, not the final identity claim.",
+      "Store the user's answers faithfully and keep interpretations tentative unless the user wants a durable mode_profile."
     ]
   },
   {
@@ -2168,12 +2433,12 @@ const AGENT_ONBOARDING_PSYCHE_PLAYBOOKS = [
     useWhen:
       "Use for one specific emotionally meaningful incident that should be mapped from situation through emotions, thoughts, behaviors, consequences, and next moves.",
     coachingGoal:
-      "Help the user build a clear incident chain with enough structure to learn from one episode.",
+      "Help the user build a clear incident chain with enough structure to learn from one episode while staying grounded and not rushing past the user's felt experience.",
     askSequence: [
-      "Name the incident briefly.",
+      "Name the incident briefly and anchor it in one concrete sequence.",
       "Describe what happened in the situation.",
       "Capture emotions and intensity.",
-      "Capture thoughts or belief-linked interpretations.",
+      "Capture thoughts, meanings, or belief-linked interpretations.",
       "Capture behaviors and immediate coping moves.",
       "Capture short-term and long-term consequences.",
       "Identify next moves and linked patterns, beliefs, modes, values, or tasks."
@@ -2201,11 +2466,13 @@ const AGENT_ONBOARDING_PSYCHE_PLAYBOOKS = [
       "What thoughts or meanings showed up?",
       "What did you do next?",
       "What did that do for you short term, and what did it cost later?",
+      "What pattern, belief, or part do you think was most active here?",
       "What would be the next good move now?"
     ],
     notes: [
       "Use eventTypeId only when a known event taxonomy item fits; otherwise use customEventType.",
-      "Use emotionDefinitionId only when a known emotion definition fits; otherwise keep the raw label."
+      "Use emotionDefinitionId only when a known emotion definition fits; otherwise keep the raw label.",
+      "If the user becomes overwhelmed, slow down, summarize, and return to one segment of the chain at a time instead of pushing for the full report in one turn."
     ]
   }
 ] as const;
@@ -2700,7 +2967,11 @@ function buildAgentOnboardingPayload(request: {
       conversationMode: "continue_main_discussion_first",
       saveSuggestionPlacement: "end_of_message",
       saveSuggestionTone: "gentle_optional",
-      maxQuestionsPerTurn: 3,
+      maxQuestionsPerTurn: 1,
+      psycheExplorationRule:
+        "When a Psyche entity needs understanding first, begin with one exploratory question before any working formulation, replacement belief, suggested title, or save pitch. Keep the opening reflection to one or two short sentences, stay in plain prose instead of bullets or numbered lists, keep that first reply short, do not mention Forge search or save structure yet, avoid colons or list-shaped phrasing, and wait for the user's answer before offering a fuller formulation.",
+      psycheOpeningQuestionRule:
+        "Prefer a concrete opening question tied to the entity: ask when the value mattered, what happened the last time the pattern appeared, what felt threatened before the behavior, what the feared outcome is inside the belief, what the mode is protecting, what the part says to do, or where the shift began in the incident.",
       duplicateCheckRoute: "/api/v1/entities/search",
       uiSuggestionRule:
         "offer_visual_ui_when_review_or_editing_would_be_easier",
@@ -2931,10 +3202,77 @@ function shouldIncludeRuntimeProbe(headers: Record<string, unknown>) {
   return typeof probeHeader === "string" && probeHeader.trim() === "1";
 }
 
-function buildV1Context() {
-  const goals = listGoals();
-  const tasks = listTasks();
-  const habits = listHabits();
+function resolveScopedUserIds(
+  query: Record<string, unknown> | undefined
+): string[] | undefined {
+  if (!query) {
+    return undefined;
+  }
+  const values = [];
+  const rawUserId = query.userId;
+  const rawUserIds = query.userIds;
+  if (typeof rawUserId === "string" && rawUserId.trim().length > 0) {
+    values.push(rawUserId.trim());
+  }
+  const pushedRawUserIds = Array.isArray(rawUserIds)
+    ? rawUserIds
+    : rawUserIds === undefined
+      ? []
+      : [rawUserIds];
+  for (const value of pushedRawUserIds) {
+    if (typeof value !== "string") {
+      continue;
+    }
+    for (const item of value.split(",")) {
+      const trimmed = item.trim();
+      if (trimmed) {
+        values.push(trimmed);
+      }
+    }
+  }
+  const unique = Array.from(new Set(values));
+  return unique.length > 0 ? unique : undefined;
+}
+
+function readRequestedUserIdFromBody(body: unknown): string | null | undefined {
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    return undefined;
+  }
+  const value = (body as Record<string, unknown>).userId;
+  if (value === null) {
+    return null;
+  }
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : null;
+  }
+  return undefined;
+}
+
+function syncEntityOwnerFromBody(options: {
+  entityType: Parameters<typeof setEntityOwner>[0];
+  entityId: string;
+  body: unknown;
+  fallbackLabel?: string | null;
+  assignDefaultWhenMissing?: boolean;
+}) {
+  const requestedUserId = readRequestedUserIdFromBody(options.body);
+  if (requestedUserId === undefined && !options.assignDefaultWhenMissing) {
+    return;
+  }
+  const owner = resolveUserForMutation(requestedUserId, options.fallbackLabel);
+  setEntityOwner(options.entityType, options.entityId, owner.id);
+}
+
+function buildV1Context(userIds?: string[]) {
+  const goals = filterOwnedEntities("goal", listGoals(), userIds);
+  const tasks = filterOwnedEntities("task", listTasks(), userIds);
+  const habits = filterOwnedEntities("habit", listHabits(), userIds);
+  const users = listUsers();
+  const selectedUsers =
+    userIds && userIds.length > 0
+      ? users.filter((user) => userIds.includes(user.id))
+      : users;
   return {
     meta: {
       apiVersion: "v1" as const,
@@ -2944,17 +3282,23 @@ function buildV1Context() {
       mode: "transitional-node" as const
     },
     metrics: buildGamificationProfile(goals, tasks, habits),
-    dashboard: getDashboard(),
-    overview: getOverviewContext(),
-    today: getTodayContext(),
-    risk: getRiskContext(),
+    dashboard: getDashboard({ userIds }),
+    overview: getOverviewContext(new Date(), { userIds }),
+    today: getTodayContext(new Date(), { userIds }),
+    risk: getRiskContext(new Date(), { userIds }),
     goals,
-    projects: listProjectSummaries(),
+    projects: listProjectSummaries({ userIds }),
     tags: listTags(),
     tasks,
     habits,
+    users,
+    strategies: listStrategies({ userIds }),
+    userScope: {
+      selectedUserIds: userIds ?? [],
+      selectedUsers
+    },
     activeTaskRuns: listTaskRuns({ active: true, limit: 25 }),
-    activity: listActivityEvents({ limit: 25 })
+    activity: getDashboard({ userIds }).recentActivity
   };
 }
 
@@ -3050,10 +3394,17 @@ function describeWorkAdjustment(input: {
   };
 }
 
-function buildOperatorContext() {
-  const tasks = listTasks();
-  const dueHabits = listHabits({ dueToday: true }).slice(0, 12);
-  const activeProjects = listProjectSummaries({ status: "active" }).filter(
+function buildOperatorContext(userIds?: string[]) {
+  const tasks = filterOwnedEntities("task", listTasks(), userIds);
+  const dueHabits = filterOwnedEntities(
+    "habit",
+    listHabits({ dueToday: true }),
+    userIds
+  ).slice(0, 12);
+  const activeProjects = listProjectSummaries({
+    status: "active",
+    userIds
+  }).filter(
     (project) => project.activeTaskCount > 0 || project.completedTaskCount > 0
   );
   const focusTasks = tasks.filter(
@@ -3079,10 +3430,24 @@ function buildOperatorContext() {
       blocked: tasks.filter((task) => task.status === "blocked").slice(0, 20),
       done: tasks.filter((task) => task.status === "done").slice(0, 20)
     },
-    recentActivity: listActivityEvents({ limit: 20 }),
-    recentTaskRuns: listTaskRuns({ limit: 12 }),
+    recentActivity: listActivityEvents({ limit: 20, userIds }),
+    recentTaskRuns: listTaskRuns({ limit: 12, userIds }),
     recommendedNextTask,
     xp: buildXpMetricsPayload()
+  };
+}
+
+function buildUserDirectoryPayload() {
+  return {
+    users: listUsers(),
+    grants: listUserAccessGrants(),
+    ownership: listUserOwnershipSummaries(),
+    posture: {
+      accessModel: "permissive" as const,
+      summary:
+        "Every Forge user can currently discover every other human or bot user and can read linked records when a route explicitly requests them.",
+      futureReady: true
+    }
   };
 }
 
@@ -3090,6 +3455,13 @@ function buildOperatorOverviewRouteGuide() {
   return {
     preferredStart: "/api/v1/operator/overview",
     mainRoutes: [
+      {
+        id: "users_directory",
+        path: "/api/v1/users + /api/v1/users/directory",
+        summary:
+          "User directory, ownership counts, and current human/bot sharing posture for multi-user routing and UI search.",
+        requiredScope: null
+      },
       {
         id: "context",
         path: "/api/v1/context",
@@ -3188,8 +3560,10 @@ function buildOperatorOverview(request: {
   protocol: string;
   hostname: string;
   headers: Record<string, unknown>;
+  query?: Record<string, unknown>;
 }) {
   const auth = parseRequestAuth(request.headers);
+  const userIds = resolveScopedUserIds(request.query);
   const canReadPsyche = auth.token
     ? hasTokenScope(auth.token, "psyche.read")
     : true;
@@ -3201,10 +3575,10 @@ function buildOperatorOverview(request: {
 
   return {
     generatedAt: new Date().toISOString(),
-    snapshot: buildV1Context(),
-    operator: buildOperatorContext(),
+    snapshot: buildV1Context(userIds),
+    operator: buildOperatorContext(userIds),
     domains: listDomains(),
-    psyche: canReadPsyche ? getPsycheOverview() : null,
+    psyche: canReadPsyche ? getPsycheOverview(userIds) : null,
     onboarding: buildAgentOnboardingPayload(request),
     capabilities: {
       tokenPresent: Boolean(auth.token),
@@ -3251,6 +3625,7 @@ export async function buildServer(
   configureDatabase({ dataRoot: runtimeConfig.dataRoot ?? undefined });
   configureDatabaseSeeding(options.seedDemoData ?? false);
   await managers.migration.initialize();
+  ensureSystemUsers();
   const app = Fastify({
     logger: false,
     rewriteUrl: (request) => rewriteMountPath(request.url ?? "/")
@@ -3573,13 +3948,20 @@ export async function buildServer(
     )
   }));
   app.get("/api/v1/openapi.json", async () => buildOpenApiDocument());
-  app.get("/api/v1/context", async () => buildV1Context());
+  app.get("/api/v1/context", async (request) =>
+    buildV1Context(
+      resolveScopedUserIds(request.query as Record<string, unknown>)
+    )
+  );
   app.get("/api/v1/operator/context", async (request) => {
     requireOperatorSession(request.headers as Record<string, unknown>, {
       route: "/api/v1/operator/context"
     });
+    const userIds = resolveScopedUserIds(
+      request.query as Record<string, unknown>
+    );
     return {
-      context: buildOperatorContext()
+      context: buildOperatorContext(userIds)
     };
   });
   app.get("/api/v1/operator/overview", async (request) => {
@@ -3587,7 +3969,12 @@ export async function buildServer(
       route: "/api/v1/operator/overview"
     });
     return {
-      overview: buildOperatorOverview(request)
+      overview: buildOperatorOverview({
+        protocol: request.protocol,
+        hostname: request.hostname,
+        headers: request.headers as Record<string, unknown>,
+        query: request.query as Record<string, unknown>
+      })
     };
   });
   app.get("/api/v1/domains", async () => ({
@@ -3599,7 +3986,10 @@ export async function buildServer(
       ["psyche.read"],
       { route: "/api/v1/psyche/overview" }
     );
-    return { overview: getPsycheOverview() };
+    const userIds = resolveScopedUserIds(
+      request.query as Record<string, unknown>
+    );
+    return { overview: getPsycheOverview(userIds) };
   });
   app.get("/api/v1/psyche/values", async (request) => {
     requirePsycheScopedAccess(
@@ -3607,7 +3997,12 @@ export async function buildServer(
       ["psyche.read"],
       { route: "/api/v1/psyche/values" }
     );
-    return { values: listPsycheValues() };
+    const userIds = resolveScopedUserIds(
+      request.query as Record<string, unknown>
+    );
+    return {
+      values: filterOwnedEntities("psyche_value", listPsycheValues(), userIds)
+    };
   });
   app.post("/api/v1/psyche/values", async (request, reply) => {
     const auth = requirePsycheScopedAccess(
@@ -3619,6 +4014,13 @@ export async function buildServer(
       createPsycheValueSchema.parse(request.body ?? {}),
       toActivityContext(auth)
     );
+    syncEntityOwnerFromBody({
+      entityType: "psyche_value",
+      entityId: value.id,
+      body: request.body,
+      fallbackLabel: auth.actor,
+      assignDefaultWhenMissing: true
+    });
     reply.code(201);
     return { value };
   });
@@ -3652,6 +4054,11 @@ export async function buildServer(
       reply.code(404);
       return { error: "Psyche value not found" };
     }
+    syncEntityOwnerFromBody({
+      entityType: "psyche_value",
+      entityId: value.id,
+      body: request.body
+    });
     return { value };
   });
   app.delete("/api/v1/psyche/values/:id", async (request, reply) => {
@@ -3679,7 +4086,16 @@ export async function buildServer(
       ["psyche.read"],
       { route: "/api/v1/psyche/patterns" }
     );
-    return { patterns: listBehaviorPatterns() };
+    const userIds = resolveScopedUserIds(
+      request.query as Record<string, unknown>
+    );
+    return {
+      patterns: filterOwnedEntities(
+        "behavior_pattern",
+        listBehaviorPatterns(),
+        userIds
+      )
+    };
   });
   app.post("/api/v1/psyche/patterns", async (request, reply) => {
     const auth = requirePsycheScopedAccess(
@@ -3691,6 +4107,13 @@ export async function buildServer(
       createBehaviorPatternSchema.parse(request.body ?? {}),
       toActivityContext(auth)
     );
+    syncEntityOwnerFromBody({
+      entityType: "behavior_pattern",
+      entityId: pattern.id,
+      body: request.body,
+      fallbackLabel: auth.actor,
+      assignDefaultWhenMissing: true
+    });
     reply.code(201);
     return { pattern };
   });
@@ -3706,6 +4129,11 @@ export async function buildServer(
       reply.code(404);
       return { error: "Behavior pattern not found" };
     }
+    syncEntityOwnerFromBody({
+      entityType: "behavior_pattern",
+      entityId: pattern.id,
+      body: request.body
+    });
     return { pattern };
   });
   app.patch("/api/v1/psyche/patterns/:id", async (request, reply) => {
@@ -3751,7 +4179,12 @@ export async function buildServer(
       ["psyche.read"],
       { route: "/api/v1/psyche/behaviors" }
     );
-    return { behaviors: listBehaviors() };
+    const userIds = resolveScopedUserIds(
+      request.query as Record<string, unknown>
+    );
+    return {
+      behaviors: filterOwnedEntities("behavior", listBehaviors(), userIds)
+    };
   });
   app.post("/api/v1/psyche/behaviors", async (request, reply) => {
     const auth = requirePsycheScopedAccess(
@@ -3763,6 +4196,13 @@ export async function buildServer(
       createBehaviorSchema.parse(request.body ?? {}),
       toActivityContext(auth)
     );
+    syncEntityOwnerFromBody({
+      entityType: "behavior",
+      entityId: behavior.id,
+      body: request.body,
+      fallbackLabel: auth.actor,
+      assignDefaultWhenMissing: true
+    });
     reply.code(201);
     return { behavior };
   });
@@ -3778,6 +4218,11 @@ export async function buildServer(
       reply.code(404);
       return { error: "Behavior not found" };
     }
+    syncEntityOwnerFromBody({
+      entityType: "behavior",
+      entityId: behavior.id,
+      body: request.body
+    });
     return { behavior };
   });
   app.patch("/api/v1/psyche/behaviors/:id", async (request, reply) => {
@@ -3831,7 +4276,12 @@ export async function buildServer(
       ["psyche.read"],
       { route: "/api/v1/psyche/beliefs" }
     );
-    return { beliefs: listBeliefEntries() };
+    const userIds = resolveScopedUserIds(
+      request.query as Record<string, unknown>
+    );
+    return {
+      beliefs: filterOwnedEntities("belief_entry", listBeliefEntries(), userIds)
+    };
   });
   app.post("/api/v1/psyche/beliefs", async (request, reply) => {
     const auth = requirePsycheScopedAccess(
@@ -3843,6 +4293,13 @@ export async function buildServer(
       createBeliefEntrySchema.parse(request.body ?? {}),
       toActivityContext(auth)
     );
+    syncEntityOwnerFromBody({
+      entityType: "belief_entry",
+      entityId: belief.id,
+      body: request.body,
+      fallbackLabel: auth.actor,
+      assignDefaultWhenMissing: true
+    });
     reply.code(201);
     return { belief };
   });
@@ -3858,6 +4315,11 @@ export async function buildServer(
       reply.code(404);
       return { error: "Belief not found" };
     }
+    syncEntityOwnerFromBody({
+      entityType: "belief_entry",
+      entityId: belief.id,
+      body: request.body
+    });
     return { belief };
   });
   app.patch("/api/v1/psyche/beliefs/:id", async (request, reply) => {
@@ -3903,7 +4365,12 @@ export async function buildServer(
       ["psyche.read"],
       { route: "/api/v1/psyche/modes" }
     );
-    return { modes: listModeProfiles() };
+    const userIds = resolveScopedUserIds(
+      request.query as Record<string, unknown>
+    );
+    return {
+      modes: filterOwnedEntities("mode_profile", listModeProfiles(), userIds)
+    };
   });
   app.post("/api/v1/psyche/modes", async (request, reply) => {
     const auth = requirePsycheScopedAccess(
@@ -3915,6 +4382,13 @@ export async function buildServer(
       createModeProfileSchema.parse(request.body ?? {}),
       toActivityContext(auth)
     );
+    syncEntityOwnerFromBody({
+      entityType: "mode_profile",
+      entityId: mode.id,
+      body: request.body,
+      fallbackLabel: auth.actor,
+      assignDefaultWhenMissing: true
+    });
     reply.code(201);
     return { mode };
   });
@@ -3930,6 +4404,11 @@ export async function buildServer(
       reply.code(404);
       return { error: "Mode not found" };
     }
+    syncEntityOwnerFromBody({
+      entityType: "mode_profile",
+      entityId: mode.id,
+      body: request.body
+    });
     return { mode };
   });
   app.patch("/api/v1/psyche/modes/:id", async (request, reply) => {
@@ -3975,7 +4454,16 @@ export async function buildServer(
       ["psyche.mode"],
       { route: "/api/v1/psyche/mode-guides" }
     );
-    return { sessions: listModeGuideSessions() };
+    const userIds = resolveScopedUserIds(
+      request.query as Record<string, unknown>
+    );
+    return {
+      sessions: filterOwnedEntities(
+        "mode_guide_session",
+        listModeGuideSessions(),
+        userIds
+      )
+    };
   });
   app.post("/api/v1/psyche/mode-guides", async (request, reply) => {
     const auth = requirePsycheScopedAccess(
@@ -3987,6 +4475,13 @@ export async function buildServer(
       createModeGuideSessionSchema.parse(request.body ?? {}),
       toActivityContext(auth)
     );
+    syncEntityOwnerFromBody({
+      entityType: "mode_guide_session",
+      entityId: session.id,
+      body: request.body,
+      fallbackLabel: auth.actor,
+      assignDefaultWhenMissing: true
+    });
     reply.code(201);
     return { session };
   });
@@ -4002,6 +4497,11 @@ export async function buildServer(
       reply.code(404);
       return { error: "Mode guide session not found" };
     }
+    syncEntityOwnerFromBody({
+      entityType: "mode_guide_session",
+      entityId: session.id,
+      body: request.body
+    });
     return { session };
   });
   app.patch("/api/v1/psyche/mode-guides/:id", async (request, reply) => {
@@ -4047,7 +4547,12 @@ export async function buildServer(
       ["psyche.read"],
       { route: "/api/v1/psyche/event-types" }
     );
-    return { eventTypes: listEventTypes() };
+    const userIds = resolveScopedUserIds(
+      request.query as Record<string, unknown>
+    );
+    return {
+      eventTypes: filterOwnedEntities("event_type", listEventTypes(), userIds)
+    };
   });
   app.post("/api/v1/psyche/event-types", async (request, reply) => {
     const auth = requirePsycheScopedAccess(
@@ -4059,6 +4564,13 @@ export async function buildServer(
       createEventTypeSchema.parse(request.body ?? {}),
       toActivityContext(auth)
     );
+    syncEntityOwnerFromBody({
+      entityType: "event_type",
+      entityId: eventType.id,
+      body: request.body,
+      fallbackLabel: auth.actor,
+      assignDefaultWhenMissing: true
+    });
     reply.code(201);
     return { eventType };
   });
@@ -4074,6 +4586,11 @@ export async function buildServer(
       reply.code(404);
       return { error: "Event type not found" };
     }
+    syncEntityOwnerFromBody({
+      entityType: "event_type",
+      entityId: eventType.id,
+      body: request.body
+    });
     return { eventType };
   });
   app.patch("/api/v1/psyche/event-types/:id", async (request, reply) => {
@@ -4119,7 +4636,16 @@ export async function buildServer(
       ["psyche.read"],
       { route: "/api/v1/psyche/emotions" }
     );
-    return { emotions: listEmotionDefinitions() };
+    const userIds = resolveScopedUserIds(
+      request.query as Record<string, unknown>
+    );
+    return {
+      emotions: filterOwnedEntities(
+        "emotion_definition",
+        listEmotionDefinitions(),
+        userIds
+      )
+    };
   });
   app.post("/api/v1/psyche/emotions", async (request, reply) => {
     const auth = requirePsycheScopedAccess(
@@ -4131,6 +4657,13 @@ export async function buildServer(
       createEmotionDefinitionSchema.parse(request.body ?? {}),
       toActivityContext(auth)
     );
+    syncEntityOwnerFromBody({
+      entityType: "emotion_definition",
+      entityId: emotion.id,
+      body: request.body,
+      fallbackLabel: auth.actor,
+      assignDefaultWhenMissing: true
+    });
     reply.code(201);
     return { emotion };
   });
@@ -4146,6 +4679,11 @@ export async function buildServer(
       reply.code(404);
       return { error: "Emotion definition not found" };
     }
+    syncEntityOwnerFromBody({
+      entityType: "emotion_definition",
+      entityId: emotion.id,
+      body: request.body
+    });
     return { emotion };
   });
   app.patch("/api/v1/psyche/emotions/:id", async (request, reply) => {
@@ -4191,7 +4729,16 @@ export async function buildServer(
       ["psyche.read"],
       { route: "/api/v1/psyche/reports" }
     );
-    return { reports: listTriggerReports() };
+    const userIds = resolveScopedUserIds(
+      request.query as Record<string, unknown>
+    );
+    return {
+      reports: filterOwnedEntities(
+        "trigger_report",
+        listTriggerReports(),
+        userIds
+      )
+    };
   });
   app.post("/api/v1/psyche/reports", async (request, reply) => {
     const auth = requirePsycheScopedAccess(
@@ -4203,6 +4750,13 @@ export async function buildServer(
       createTriggerReportSchema.parse(request.body ?? {}),
       toActivityContext(auth)
     );
+    syncEntityOwnerFromBody({
+      entityType: "trigger_report",
+      entityId: report.id,
+      body: request.body,
+      fallbackLabel: auth.actor,
+      assignDefaultWhenMissing: true
+    });
     reply.code(201);
     return { report };
   });
@@ -4248,6 +4802,11 @@ export async function buildServer(
       reply.code(404);
       return { error: "Trigger report not found" };
     }
+    syncEntityOwnerFromBody({
+      entityType: "trigger_report",
+      entityId: report.id,
+      body: request.body
+    });
     return { report };
   });
   app.delete("/api/v1/psyche/reports/:id", async (request, reply) => {
@@ -4281,7 +4840,9 @@ export async function buildServer(
         }
       );
     }
-    return { notes: listNotes(query) };
+    return {
+      notes: filterOwnedEntities("note", listNotes(query), query.userIds)
+    };
   });
   app.post("/api/v1/notes", async (request, reply) => {
     const input = createNoteSchema.parse(request.body ?? {});
@@ -4378,7 +4939,17 @@ export async function buildServer(
     const query = projectListQuerySchema.parse(request.query ?? {});
     return { projects: listProjectSummaries(query) };
   });
-  app.get("/api/v1/goals", async () => ({ goals: listGoals() }));
+  app.get("/api/v1/goals", async (request) => {
+    const query = goalListQuerySchema.parse(request.query ?? {});
+    const goals = filterOwnedEntities("goal", listGoals(), query.userIds)
+      .filter((goal) => (query.status ? goal.status === query.status : true))
+      .filter((goal) => (query.horizon ? goal.horizon === query.horizon : true))
+      .filter((goal) =>
+        query.tagId ? goal.tagIds.includes(query.tagId) : true
+      )
+      .slice(0, query.limit ?? 100);
+    return { goals };
+  });
   app.get("/api/v1/goals/:id", async (request, reply) => {
     const { id } = request.params as { id: string };
     const goal = getGoalById(id);
@@ -4390,7 +4961,9 @@ export async function buildServer(
   });
   app.get("/api/v1/tasks", async (request) => {
     const query = taskListQuerySchema.parse(request.query ?? {});
-    return { tasks: listTasks(query) };
+    return {
+      tasks: filterOwnedEntities("task", listTasks(query), query.userIds)
+    };
   });
   app.get("/api/v1/calendar/overview", async (request) => {
     const query = calendarOverviewQuerySchema.parse(request.query ?? {});
@@ -4401,7 +4974,7 @@ export async function buildServer(
     const to =
       query.to ??
       new Date(now.getTime() + 21 * 24 * 60 * 60 * 1000).toISOString();
-    return { calendar: readCalendarOverview({ from, to }) };
+    return { calendar: readCalendarOverview({ from, to, userIds: query.userIds }) };
   });
   app.get("/api/v1/calendar/agenda", async (request) => {
     const query = calendarOverviewQuerySchema.parse(request.query ?? {});
@@ -4415,9 +4988,9 @@ export async function buildServer(
     return {
       providers: listCalendarProviderMetadata(),
       calendars: listCalendars(),
-      events: listCalendarEvents({ from, to }),
-      workBlocks: listWorkBlockInstances({ from, to }),
-      timeboxes: listTaskTimeboxes({ from, to })
+      events: listCalendarEvents({ from, to, userIds: query.userIds }),
+      workBlocks: listWorkBlockInstances({ from, to, userIds: query.userIds }),
+      timeboxes: listTaskTimeboxes({ from, to, userIds: query.userIds })
     };
   });
   app.get("/api/v1/calendar/connections", async () => ({
@@ -4580,7 +5153,9 @@ export async function buildServer(
   );
   app.get("/api/v1/habits", async (request) => {
     const query = habitListQuerySchema.parse(request.query ?? {});
-    return { habits: listHabits(query) };
+    return {
+      habits: filterOwnedEntities("habit", listHabits(query), query.userIds)
+    };
   });
   app.get("/api/v1/habits/:id", async (request, reply) => {
     const { id } = request.params as { id: string };
@@ -4609,7 +5184,58 @@ export async function buildServer(
     }
     return projectBoardPayloadSchema.parse(payload);
   });
-  app.get("/api/v1/tags", async () => ({ tags: listTags() }));
+  app.get("/api/v1/users", async () => ({ users: listUsers() }));
+  app.get("/api/v1/users/directory", async () => ({
+    directory: buildUserDirectoryPayload()
+  }));
+  app.post("/api/v1/users", async (request, reply) => {
+    requireScopedAccess(request.headers as Record<string, unknown>, ["write"], {
+      route: "/api/v1/users"
+    });
+    const user = createUser(createUserSchema.parse(request.body ?? {}));
+    reply.code(201);
+    return { user };
+  });
+  app.patch("/api/v1/users/:id", async (request, reply) => {
+    requireScopedAccess(request.headers as Record<string, unknown>, ["write"], {
+      route: "/api/v1/users/:id"
+    });
+    const { id } = request.params as { id: string };
+    const user = updateUser(id, updateUserSchema.parse(request.body ?? {}));
+    if (!user) {
+      reply.code(404);
+      return { error: "User not found" };
+    }
+    return { user };
+  });
+  app.get("/api/v1/users/:id", async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const user = getUserById(id);
+    if (!user) {
+      reply.code(404);
+      return { error: "User not found" };
+    }
+    return { user };
+  });
+  app.get("/api/v1/strategies", async (request) => {
+    const query = strategyListQuerySchema.parse(request.query ?? {});
+    return { strategies: listStrategies(query) };
+  });
+  app.get("/api/v1/strategies/:id", async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const strategy = getStrategyById(id);
+    if (!strategy) {
+      reply.code(404);
+      return { error: "Strategy not found" };
+    }
+    return { strategy };
+  });
+  app.get("/api/v1/tags", async (request) => {
+    const userIds = resolveScopedUserIds(
+      request.query as Record<string, unknown>
+    );
+    return { tags: filterOwnedEntities("tag", listTags(), userIds) };
+  });
   app.get("/api/v1/tags/:id", async (request, reply) => {
     const { id } = request.params as { id: string };
     const tag = getTagById(id);
@@ -4645,8 +5271,10 @@ export async function buildServer(
   app.get("/api/v1/metrics/xp", async () => ({
     metrics: buildXpMetricsPayload()
   }));
-  app.get("/api/v1/insights", async () => ({
-    insights: getInsightsPayload()
+  app.get("/api/v1/insights", async (request) => ({
+    insights: getInsightsPayload(new Date(), {
+      userIds: resolveScopedUserIds(request.query as Record<string, unknown>)
+    })
   }));
   app.post("/api/v1/insights", async (request, reply) => {
     const input = createInsightSchema.parse(request.body ?? {});
@@ -4951,6 +5579,16 @@ export async function buildServer(
     reply.code(201);
     return { project };
   });
+  app.post("/api/v1/strategies", async (request, reply) => {
+    requireScopedAccess(request.headers as Record<string, unknown>, ["write"], {
+      route: "/api/v1/strategies"
+    });
+    const strategy = createStrategy(
+      createStrategySchema.parse(request.body ?? {})
+    );
+    reply.code(201);
+    return { strategy };
+  });
   app.post("/api/v1/calendar/connections", async (request, reply) => {
     const auth = requireScopedAccess(
       request.headers as Record<string, unknown>,
@@ -5058,8 +5696,10 @@ export async function buildServer(
     }
     return { connection };
   });
-  app.get("/api/v1/calendar/work-block-templates", async () => ({
-    templates: listWorkBlockTemplates()
+  app.get("/api/v1/calendar/work-block-templates", async (request) => ({
+    templates: listWorkBlockTemplates({
+      userIds: resolveScopedUserIds(request.query as Record<string, unknown>)
+    })
   }));
   app.post("/api/v1/calendar/work-block-templates", async (request, reply) => {
     const auth = requireScopedAccess(
@@ -5157,7 +5797,7 @@ export async function buildServer(
     const to =
       query.to ??
       new Date(now.getTime() + 21 * 24 * 60 * 60 * 1000).toISOString();
-    return { timeboxes: listTaskTimeboxes({ from, to }) };
+    return { timeboxes: listTaskTimeboxes({ from, to, userIds: query.userIds }) };
   });
   app.post("/api/v1/calendar/timeboxes", async (request, reply) => {
     const auth = requireScopedAccess(
@@ -5388,6 +6028,40 @@ export async function buildServer(
       return { error: "Project not found" };
     }
     return { project };
+  });
+  app.patch("/api/v1/strategies/:id", async (request, reply) => {
+    requireScopedAccess(request.headers as Record<string, unknown>, ["write"], {
+      route: "/api/v1/strategies/:id"
+    });
+    const { id } = request.params as { id: string };
+    const strategy = updateStrategy(
+      id,
+      updateStrategySchema.parse(request.body ?? {})
+    );
+    if (!strategy) {
+      reply.code(404);
+      return { error: "Strategy not found" };
+    }
+    return { strategy };
+  });
+  app.delete("/api/v1/strategies/:id", async (request, reply) => {
+    const auth = requireScopedAccess(
+      request.headers as Record<string, unknown>,
+      ["write"],
+      { route: "/api/v1/strategies/:id" }
+    );
+    const { id } = request.params as { id: string };
+    const strategy = deleteEntity(
+      "strategy",
+      id,
+      entityDeleteQuerySchema.parse(request.query ?? {}),
+      toActivityContext(auth)
+    );
+    if (!strategy) {
+      reply.code(404);
+      return { error: "Strategy not found" };
+    }
+    return { strategy };
   });
   app.patch("/api/v1/habits/:id", async (request, reply) => {
     const auth = requireScopedAccess(

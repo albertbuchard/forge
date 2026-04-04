@@ -1,4 +1,4 @@
-import type { CalendarSchedulingRules, ForgeSnapshot, Habit, ProjectSummary, Task } from "./types";
+import type { CalendarSchedulingRules, ForgeSnapshot, Goal, Habit, ProjectSummary, Strategy, Tag, Task, UserSummary } from "./types";
 
 const EMPTY_CALENDAR_RULES: CalendarSchedulingRules = {
   allowWorkBlockKinds: [],
@@ -51,6 +51,8 @@ function normalizeTask(task: Partial<Task> | undefined): Task {
     createdAt: task?.createdAt ?? new Date(0).toISOString(),
     updatedAt: task?.updatedAt ?? new Date(0).toISOString(),
     tagIds: task?.tagIds ?? [],
+    userId: task?.userId ?? null,
+    user: (task?.user as UserSummary | null | undefined) ?? null,
     time: task?.time ?? {
       totalTrackedSeconds: 0,
       totalCreditedSeconds: 0,
@@ -61,6 +63,44 @@ function normalizeTask(task: Partial<Task> | undefined): Task {
       hasCurrentRun: false,
       currentRunId: null
     }
+  };
+}
+
+function normalizeGoal(goal: Partial<Goal> | undefined): Goal {
+  return {
+    id: goal?.id ?? "",
+    title: goal?.title ?? "",
+    description: goal?.description ?? "",
+    horizon:
+      goal?.horizon === "quarter" || goal?.horizon === "lifetime"
+        ? goal.horizon
+        : "year",
+    status:
+      goal?.status === "paused" || goal?.status === "completed"
+        ? goal.status
+        : "active",
+    targetPoints: goal?.targetPoints ?? 0,
+    themeColor: goal?.themeColor ?? "#c8a46b",
+    createdAt: goal?.createdAt ?? new Date(0).toISOString(),
+    updatedAt: goal?.updatedAt ?? new Date(0).toISOString(),
+    tagIds: goal?.tagIds ?? [],
+    userId: goal?.userId ?? null,
+    user: (goal?.user as UserSummary | null | undefined) ?? null
+  };
+}
+
+function normalizeTag(tag: Partial<Tag> | undefined): Tag {
+  return {
+    id: tag?.id ?? "",
+    name: tag?.name ?? "",
+    kind:
+      tag?.kind === "value" || tag?.kind === "execution"
+        ? tag.kind
+        : "category",
+    color: tag?.color ?? "#71717a",
+    description: tag?.description ?? "",
+    userId: tag?.userId ?? null,
+    user: (tag?.user as UserSummary | null | undefined) ?? null
   };
 }
 
@@ -85,6 +125,8 @@ function normalizeProject(project: LegacyProjectLike | undefined): ProjectSummar
     nextTaskId: project?.nextTaskId ?? null,
     nextTaskTitle: project?.nextTaskTitle ?? null,
     momentumLabel: project?.momentumLabel ?? "No momentum yet",
+    userId: (project as Partial<ProjectSummary> | undefined)?.userId ?? null,
+    user: ((project as Partial<ProjectSummary> | undefined)?.user as UserSummary | null | undefined) ?? null,
     time: project?.time ?? {
       totalTrackedSeconds: 0,
       totalCreditedSeconds: 0,
@@ -129,7 +171,52 @@ function normalizeHabit(habit: Partial<Habit> | undefined): Habit {
     streakCount: habit?.streakCount ?? 0,
     completionRate: habit?.completionRate ?? 0,
     dueToday: habit?.dueToday ?? false,
+    userId: habit?.userId ?? null,
+    user: (habit?.user as UserSummary | null | undefined) ?? null,
     checkIns: habit?.checkIns ?? []
+  };
+}
+
+function normalizeUser(user: Partial<UserSummary> | undefined): UserSummary {
+  return {
+    id: user?.id ?? "",
+    kind: user?.kind ?? "human",
+    handle: user?.handle ?? "",
+    displayName: user?.displayName ?? "",
+    description: user?.description ?? "",
+    accentColor: user?.accentColor ?? "#c0c1ff",
+    createdAt: user?.createdAt ?? new Date(0).toISOString(),
+    updatedAt: user?.updatedAt ?? new Date(0).toISOString()
+  };
+}
+
+function normalizeStrategy(strategy: Partial<Strategy> | undefined): Strategy {
+  return {
+    id: strategy?.id ?? "",
+    title: strategy?.title ?? "",
+    overview: strategy?.overview ?? "",
+    endStateDescription: strategy?.endStateDescription ?? "",
+    status:
+      strategy?.status === "paused" || strategy?.status === "completed"
+        ? strategy.status
+        : "active",
+    targetGoalIds: strategy?.targetGoalIds ?? [],
+    targetProjectIds: strategy?.targetProjectIds ?? [],
+    linkedEntities: strategy?.linkedEntities ?? [],
+    graph: strategy?.graph ?? { nodes: [], edges: [] },
+    metrics: strategy?.metrics ?? {
+      alignmentScore: 0,
+      completedNodeCount: 0,
+      totalNodeCount: 1,
+      completedTargetCount: 0,
+      totalTargetCount: 0,
+      activeNodeIds: [],
+      nextNodeIds: []
+    },
+    createdAt: strategy?.createdAt ?? new Date(0).toISOString(),
+    updatedAt: strategy?.updatedAt ?? new Date(0).toISOString(),
+    userId: strategy?.userId ?? null,
+    user: (strategy?.user as UserSummary | null | undefined) ?? null
   };
 }
 
@@ -160,6 +247,12 @@ export function normalizeForgeSnapshot(raw: ForgeSnapshot | LegacySnapshot): For
       topGoalId: raw.metrics?.topGoalId ?? null,
       topGoalTitle: raw.metrics?.topGoalTitle ?? null
     },
+    users: (raw.users ?? []).map(normalizeUser),
+    strategies: (raw.strategies ?? []).map(normalizeStrategy),
+    userScope: {
+      selectedUserIds: raw.userScope?.selectedUserIds ?? [],
+      selectedUsers: (raw.userScope?.selectedUsers ?? []).map(normalizeUser)
+    },
     dashboard: {
       stats: {
         totalPoints: raw.dashboard?.stats?.totalPoints ?? 0,
@@ -170,12 +263,15 @@ export function normalizeForgeSnapshot(raw: ForgeSnapshot | LegacySnapshot): For
         overdueTasks: raw.dashboard?.stats?.overdueTasks ?? 0,
         dueThisWeek: raw.dashboard?.stats?.dueThisWeek ?? 0
       },
-      goals: raw.dashboard?.goals ?? [],
+      goals: (raw.dashboard?.goals ?? []).map((goal) => ({
+        ...goal,
+        ...normalizeGoal(goal)
+      })),
       projects: dashboardProjects,
       tasks: (raw.dashboard?.tasks ?? []).map(normalizeTask),
       habits: (raw.dashboard?.habits ?? raw.habits ?? []).map(normalizeHabit),
-      tags: raw.dashboard?.tags ?? [],
-      suggestedTags: raw.dashboard?.suggestedTags ?? [],
+      tags: (raw.dashboard?.tags ?? []).map(normalizeTag),
+      suggestedTags: (raw.dashboard?.suggestedTags ?? []).map(normalizeTag),
       owners: raw.dashboard?.owners ?? [],
       executionBuckets: (raw.dashboard?.executionBuckets ?? []).map((bucket) => ({
         ...bucket,
@@ -211,7 +307,10 @@ export function normalizeForgeSnapshot(raw: ForgeSnapshot | LegacySnapshot): For
         overdueTasks: raw.overview?.strategicHeader?.overdueTasks ?? 0
       },
       projects: overviewProjects,
-      activeGoals: raw.overview?.activeGoals ?? [],
+      activeGoals: (raw.overview?.activeGoals ?? []).map((goal) => ({
+        ...goal,
+        ...normalizeGoal(goal)
+      })),
       topTasks: (raw.overview?.topTasks ?? []).map(normalizeTask),
       dueHabits: (raw.overview?.dueHabits ?? raw.today?.dueHabits ?? raw.dashboard?.habits ?? []).map(normalizeHabit),
       recentEvidence: raw.overview?.recentEvidence ?? [],
@@ -248,9 +347,9 @@ export function normalizeForgeSnapshot(raw: ForgeSnapshot | LegacySnapshot): For
       neglectedGoals: raw.risk?.neglectedGoals ?? [],
       summary: raw.risk?.summary ?? ""
     },
-    goals: raw.goals ?? [],
+    goals: (raw.goals ?? []).map(normalizeGoal),
     projects: rootProjects,
-    tags: raw.tags ?? [],
+    tags: (raw.tags ?? []).map(normalizeTag),
     tasks: (raw.tasks ?? []).map(normalizeTask),
     habits: (raw.habits ?? raw.dashboard?.habits ?? []).map(normalizeHabit),
     activity: raw.activity ?? [],

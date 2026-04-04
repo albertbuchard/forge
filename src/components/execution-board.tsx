@@ -20,6 +20,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { EntityBadge } from "@/components/ui/entity-badge";
 import { EntityName } from "@/components/ui/entity-name";
+import { UserBadge } from "@/components/ui/user-badge";
 import { cn } from "@/lib/utils";
 import { useI18n } from "@/lib/i18n";
 import { getEntityNotesSummary } from "@/lib/note-helpers";
@@ -230,6 +231,7 @@ function TaskCardShell({
       <p className="mt-1.5 line-clamp-3 [overflow-wrap:anywhere] text-[12px] leading-5 text-white/62">{task.description || t("common.executionBoard.noExecutionNote")}</p>
       <div className="mt-2.5 flex min-w-0 flex-wrap gap-1.5">
         {goal ? <EntityBadge kind="goal" label={goal.title} compact wrap className="min-w-0 max-w-full" /> : null}
+        <UserBadge user={task.user} compact />
         <EntityNoteCountLink entityType="task" entityId={task.id} count={noteCount} />
         {task.time.totalCreditedSeconds > 0 ? <Badge className="bg-white/8 text-white/72">{Math.floor(task.time.totalCreditedSeconds / 60)} min</Badge> : null}
         {task.time.activeRunCount > 0 ? <Badge className="bg-emerald-500/12 text-emerald-200">{task.time.activeRunCount} live</Badge> : null}

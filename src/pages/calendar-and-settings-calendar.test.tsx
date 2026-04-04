@@ -214,6 +214,12 @@ function createSnapshot(): ForgeSnapshot {
       neglectedGoals: [],
       summary: ""
     },
+    users: [],
+    strategies: [],
+    userScope: {
+      selectedUserIds: [],
+      selectedUsers: []
+    },
     goals: [],
     projects: [],
     tags: [],

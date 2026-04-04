@@ -252,6 +252,222 @@ test("goal detail, operator context, and retroactive work logging are available 
   }
 });
 
+test("scoped context returns bot-owned goals and strategies when userIds are requested", async () => {
+  const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-multi-user-"));
+  const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
+
+  try {
+    const operatorCookie = await issueOperatorSessionCookie(app);
+
+    const createdGoalResponse = await app.inject({
+      method: "POST",
+      url: "/api/v1/goals",
+      headers: {
+        cookie: operatorCookie
+      },
+      payload: {
+        title: "Bot-owned roadmap",
+        description: "A bot-specific execution arc.",
+        horizon: "year",
+        status: "active",
+        userId: "user_forge_bot",
+        targetPoints: 400,
+        themeColor: "#22d3ee",
+        tagIds: [],
+        notes: []
+      }
+    });
+    assert.equal(createdGoalResponse.statusCode, 201);
+    const createdGoal = (
+      createdGoalResponse.json() as {
+        goal: { id: string; userId: string | null };
+      }
+    ).goal;
+    assert.equal(createdGoal.userId, "user_forge_bot");
+
+    const createdProjectResponse = await app.inject({
+      method: "POST",
+      url: "/api/v1/projects",
+      headers: {
+        cookie: operatorCookie
+      },
+      payload: {
+        goalId: createdGoal.id,
+        title: "Bot execution lane",
+        description: "Project owned by the bot user.",
+        status: "active",
+        userId: "user_forge_bot",
+        targetPoints: 240,
+        themeColor: "#22d3ee",
+        notes: []
+      }
+    });
+    assert.equal(createdProjectResponse.statusCode, 201);
+    const createdProject = (
+      createdProjectResponse.json() as {
+        project: { id: string; userId: string | null };
+      }
+    ).project;
+    assert.equal(createdProject.userId, "user_forge_bot");
+
+    const createdStrategyResponse = await app.inject({
+      method: "POST",
+      url: "/api/v1/strategies",
+      headers: {
+        cookie: operatorCookie
+      },
+      payload: {
+        title: "Bot orchestration strategy",
+        overview: "Keep the bot workstream aligned.",
+        endStateDescription: "Bot-owned work is sequenced cleanly.",
+        status: "active",
+        userId: "user_forge_bot",
+        targetGoalIds: [createdGoal.id],
+        targetProjectIds: [createdProject.id],
+        linkedEntities: [
+          {
+            entityType: "goal",
+            entityId: createdGoal.id
+          }
+        ],
+        graph: {
+          nodes: [
+            {
+              id: "node_backend",
+              entityType: "project",
+              entityId: createdProject.id,
+              title: "Bot execution lane",
+              branchLabel: "core",
+              notes: "Ship the owner-aware project first."
+            }
+          ],
+          edges: []
+        }
+      }
+    });
+    assert.equal(createdStrategyResponse.statusCode, 201);
+    const createdStrategy = (
+      createdStrategyResponse.json() as {
+        strategy: { id: string; userId: string | null };
+      }
+    ).strategy;
+    assert.equal(createdStrategy.userId, "user_forge_bot");
+
+    const scopedContextResponse = await app.inject({
+      method: "GET",
+      url: "/api/v1/context?userIds=user_forge_bot"
+    });
+    assert.equal(scopedContextResponse.statusCode, 200);
+    const scopedContext = scopedContextResponse.json() as {
+      goals: Array<{ id: string; userId: string | null }>;
+      strategies: Array<{ id: string; userId: string | null }>;
+      userScope: { selectedUserIds: string[] };
+    };
+
+    assert.ok(
+      scopedContext.goals.some(
+        (goal) => goal.id === createdGoal.id && goal.userId === "user_forge_bot"
+      )
+    );
+    assert.ok(
+      scopedContext.strategies.some(
+        (strategy) =>
+          strategy.id === createdStrategy.id &&
+          strategy.userId === "user_forge_bot"
+      )
+    );
+    assert.deepEqual(scopedContext.userScope.selectedUserIds, [
+      "user_forge_bot"
+    ]);
+  } finally {
+    await app.close();
+    closeDatabase();
+    await rm(rootDir, { recursive: true, force: true });
+  }
+});
+
+test("user directory exposes permissive grants and ownership summaries for new users", async () => {
+  const rootDir = await mkdtemp(
+    path.join(os.tmpdir(), "forge-user-directory-")
+  );
+  const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
+
+  try {
+    const operatorCookie = await issueOperatorSessionCookie(app);
+
+    const createUserResponse = await app.inject({
+      method: "POST",
+      url: "/api/v1/users",
+      headers: {
+        cookie: operatorCookie
+      },
+      payload: {
+        kind: "bot",
+        handle: "planner_bot",
+        displayName: "Planner Bot",
+        description: "Cross-user planning bot",
+        accentColor: "#22d3ee"
+      }
+    });
+    assert.equal(createUserResponse.statusCode, 201);
+    const createdUser = (
+      createUserResponse.json() as {
+        user: { id: string };
+      }
+    ).user;
+
+    const directoryResponse = await app.inject({
+      method: "GET",
+      url: "/api/v1/users/directory"
+    });
+    assert.equal(directoryResponse.statusCode, 200);
+    const directory = (
+      directoryResponse.json() as {
+        directory: {
+          users: Array<{ id: string }>;
+          grants: Array<{
+            subjectUserId: string;
+            targetUserId: string;
+            accessLevel: string;
+          }>;
+          ownership: Array<{ userId: string; totalOwnedEntities: number }>;
+          posture: { accessModel: string; futureReady: boolean };
+        };
+      }
+    ).directory;
+
+    assert.ok(directory.users.some((user) => user.id === createdUser.id));
+    assert.ok(
+      directory.grants.some(
+        (grant) =>
+          grant.subjectUserId === createdUser.id &&
+          grant.accessLevel === "manage" &&
+          grant.targetUserId === createdUser.id
+      )
+    );
+    assert.ok(
+      directory.grants.some(
+        (grant) =>
+          grant.subjectUserId === "user_operator" &&
+          grant.targetUserId === createdUser.id &&
+          grant.accessLevel === "view"
+      )
+    );
+    assert.ok(
+      directory.ownership.some(
+        (entry) =>
+          entry.userId === createdUser.id && entry.totalOwnedEntities === 0
+      )
+    );
+    assert.equal(directory.posture.accessModel, "permissive");
+    assert.equal(directory.posture.futureReady, true);
+  } finally {
+    await app.close();
+    closeDatabase();
+    await rm(rootDir, { recursive: true, force: true });
+  }
+});
+
 test("calendar overview accepts timezone offsets and plain dates", async () => {
   const rootDir = await mkdtemp(
     path.join(os.tmpdir(), "forge-calendar-query-flexibility-")
@@ -5646,6 +5862,7 @@ test("CRUD capability matrix keeps user-facing delete/bin entities explicit", ()
     "note",
     "project",
     "psyche_value",
+    "strategy",
     "tag",
     "task",
     "task_timebox",
@@ -5875,6 +6092,7 @@ test("settings and local agent token management persist through the versioned AP
           askSequence: string[];
           requiredForCreate: string[];
           exampleQuestions: string[];
+          notes: string[];
         }>;
         relationshipModel: string[];
         entityCatalog: Array<{
@@ -5907,6 +6125,7 @@ test("settings and local agent token management persist through the versioned AP
         interactionGuidance: {
           saveSuggestionPlacement: string;
           maxQuestionsPerTurn: number;
+          psycheExplorationRule: string;
           duplicateCheckRoute: string;
           uiSuggestionRule: string;
           browserFallbackRule: string;
@@ -6002,6 +6221,19 @@ test("settings and local agent token management persist through the versioned AP
       onboardingBody.onboarding.psycheSubmoduleModel.triggerReport,
       /incident chain/
     );
+    const valuePlaybook =
+      onboardingBody.onboarding.psycheCoachingPlaybooks.find(
+        (playbook) => playbook.focus === "psyche_value"
+      );
+    assert.ok(valuePlaybook);
+    assert.ok(
+      valuePlaybook.askSequence.some((step) => /committed action/i.test(step))
+    );
+    assert.ok(
+      valuePlaybook.notes.some((note) =>
+        /ACT-style values clarification/i.test(note)
+      )
+    );
     const patternPlaybook =
       onboardingBody.onboarding.psycheCoachingPlaybooks.find(
         (playbook) => playbook.focus === "behavior_pattern"
@@ -6017,6 +6249,11 @@ test("settings and local agent token management persist through the versioned AP
         /What usually sets this loop off/i.test(question)
       )
     );
+    assert.ok(
+      patternPlaybook.askSequence.some((step) =>
+        /beliefs, schema themes, modes, or values/i.test(step)
+      )
+    );
     const beliefPlaybook =
       onboardingBody.onboarding.psycheCoachingPlaybooks.find(
         (playbook) => playbook.focus === "belief_entry"
@@ -6024,6 +6261,13 @@ test("settings and local agent token management persist through the versioned AP
     assert.ok(beliefPlaybook);
     assert.ok(beliefPlaybook.requiredForCreate.includes("statement"));
     assert.ok(beliefPlaybook.requiredForCreate.includes("beliefType"));
+    const modeGuidePlaybook =
+      onboardingBody.onboarding.psycheCoachingPlaybooks.find(
+        (playbook) => playbook.focus === "mode_guide_session"
+      );
+    assert.ok(modeGuidePlaybook);
+    assert.ok(modeGuidePlaybook.requiredForCreate.includes("summary"));
+    assert.ok(modeGuidePlaybook.requiredForCreate.includes("answers"));
     assert.ok(
       onboardingBody.onboarding.relationshipModel.some((rule) =>
         /Projects belong to one goal/.test(rule)
@@ -6090,7 +6334,12 @@ test("settings and local agent token management persist through the versioned AP
     );
     assert.ok(modeGuideEntity);
     assert.ok(modeGuideEntity.minimumCreateFields.includes("answers"));
-    assert.ok(modeGuideEntity.minimumCreateFields.includes("results"));
+    assert.ok(modeGuideEntity.minimumCreateFields.includes("summary"));
+    assert.ok(
+      modeGuideEntity.fieldGuide.some(
+        (field) => field.name === "results" && !field.required
+      )
+    );
     const triggerReportEntity = onboardingBody.onboarding.entityCatalog.find(
       (entity) => entity.entityType === "trigger_report"
     );
@@ -6215,7 +6464,11 @@ test("settings and local agent token management persist through the versioned AP
     );
     assert.equal(
       onboardingBody.onboarding.interactionGuidance.maxQuestionsPerTurn,
-      3
+      1
+    );
+    assert.match(
+      onboardingBody.onboarding.interactionGuidance.psycheExplorationRule,
+      /one exploratory question/i
     );
     assert.equal(
       onboardingBody.onboarding.interactionGuidance.duplicateCheckRoute,

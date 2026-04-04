@@ -6,7 +6,9 @@ Forge is a local-first life direction, execution, and reflection system with a f
 
 Forge gives the user and trusted agents one structured operating record for:
 
+- human and bot users, each with an explicit owner identity
 - life goals, projects, and Kanban tasks
+- directed strategies that sequence projects and tasks toward target goals or projects
 - real timed work sessions and signed retrospective minute corrections
 - linked Markdown notes
 - XP, momentum, and weekly review
@@ -30,6 +32,13 @@ The repo contains the Forge app and API plus three agent-facing adapter surfaces
 - the repo-local Codex plugin under [`plugins/forge-codex/`](./plugins/forge-codex)
 
 The agent plugins connect Forge to OpenClaw and Hermes while the web app and API remain the main workspace.
+
+Multi-user model:
+
+- every Forge-owned entity can carry a `userId`
+- users are explicitly typed as `human` or `bot`
+- read routes accept `userId` or repeated `userIds` query parameters for scoped views
+- cross-user linking is allowed, so a human-owned project can still point at bot-owned tasks, notes, or strategy nodes
 
 ## Install Forge In OpenClaw
 

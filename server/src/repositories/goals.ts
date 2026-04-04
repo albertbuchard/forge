@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { getDatabase, runInTransaction } from "../db.js";
 import { recordActivityEvent } from "./activity-events.js";
+import { decorateOwnedEntity, setEntityOwner } from "./entity-ownership.js";
 import { filterDeletedEntities, filterDeletedIds, isEntityDeleted } from "./deleted-entities.js";
 import { createLinkedNotes } from "./notes.js";
 import { assertGoalRelations } from "../services/relations.js";
@@ -32,7 +33,7 @@ function readGoalTagIds(goalId: string): string[] {
 }
 
 function mapGoal(row: GoalRow): Goal {
-  return goalSchema.parse({
+  return goalSchema.parse(decorateOwnedEntity("goal", {
     id: row.id,
     title: row.title,
     description: row.description,
@@ -43,7 +44,7 @@ function mapGoal(row: GoalRow): Goal {
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     tagIds: readGoalTagIds(row.id)
-  });
+  }));
 }
 
 function replaceGoalTags(goalId: string, tagIds: string[]): void {
@@ -86,7 +87,8 @@ export function createGoal(input: CreateGoalInput, activity?: ActivityContext): 
         input.themeColor,
         now,
         now
-    );
+      );
+    setEntityOwner("goal", id, input.userId);
     replaceGoalTags(id, input.tagIds);
     const goal = getGoalById(id)!;
     createLinkedNotes(input.notes, { entityType: "goal", entityId: goal.id, anchorKey: null }, activity ?? { source: "ui", actor: null });
@@ -144,6 +146,9 @@ export function updateGoal(goalId: string, input: UpdateGoalInput, activity?: Ac
       );
 
     replaceGoalTags(goalId, next.tagIds);
+    if (input.userId !== undefined) {
+      setEntityOwner("goal", goalId, input.userId);
+    }
     const goal = getGoalById(goalId);
     if (goal && activity) {
       const statusChanged = current.status !== goal.status;

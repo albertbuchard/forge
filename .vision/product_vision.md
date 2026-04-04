@@ -28,8 +28,20 @@ and work. Insights help synthesize what the system is learning.
 All of these layers must work together. A task should not feel detached from its
 project. A project should not feel detached from its goal. A Psyche observation should
 be able to connect back to a project or task when relevant. A reward should be
-traceable to actual behavior. This is what makes Forge an operating system rather than
-just a set of pages.
+traceable to actual behavior. This is what makes Forge one coherent structured memory
+product rather than just a set of pages.
+
+That operating model must now be explicitly multi-user. Forge should support multiple
+Forge users in one runtime, and every Forge user must be marked as either `human` or
+`bot`. Ownership has to be visible across the product: a project card, task detail, or
+search result should make it clear who owns the record without turning the interface
+into a permissions dashboard.
+
+Forge also needs one new planning layer above projects: Strategy. A strategy is a real
+entity, not a note convention. It exists to describe how one or more goals or projects
+will be reached over time through a directed, non-cyclic graph of project and task
+steps. Strategies should give the user a truthful plan view instead of forcing all
+long-range sequencing into flat project descriptions.
 
 Notes are part of that operating model. A note is not a decorative comment field
 inside another record. It is a first-class Markdown entity that can attach to one or
@@ -68,7 +80,8 @@ data and actions over decorative prose.
 The Goals page should explain what each life goal is, how much progress it has made,
 which projects are carrying it forward, and whether the direction is active or drifting.
 The page should help the user understand strategic direction in a way that is still tied
-to concrete work.
+to concrete work. It should also make ownership visible and let the user intentionally
+filter or widen the view to other humans or bots.
 
 The Goal detail page should focus on one life goal. It should explain the goal itself,
 show the projects attached to it, summarize progress and health in a compact way, and
@@ -81,6 +94,17 @@ to the active project collection, but it must also make suspended and finished w
 easy to bring back with explicit lifecycle filters. It should expose a prominent search
 surface that mixes free text with searchable goal, task, tag, status, and lightweight
 project-type chips so a user can narrow the project list without losing context.
+That search surface must now be user-aware. The user should be able to tell whether a
+matching project belongs to a human or a bot, and should be able to search or filter by
+owner explicitly instead of assuming the current operator is the only namespace.
+
+The Strategies page should be the plan-and-sequencing surface for Forge. It should list
+strategies, show which goals or projects each strategy is trying to reach, surface
+alignment metrics based on the completion state of linked task and project nodes, and
+let the user inspect the graph structure in a way that remains understandable on both
+desktop and mobile. The detail view should show the overview, end-state description,
+linked entities, graph branches, available next nodes, and current alignment with the
+strategy.
 
 The Calendar page should be a first-class execution surface. It should show mirrored
 provider events, recurring work blocks, and task timeboxes together in one readable
@@ -123,6 +147,9 @@ owner, due date, time tracked, active timer state, and clear actions such as Sta
 work, Pause, Complete, Adjust work, Edit, and Delete should appear before filler text.
 If a user wants to understand or act on a task, this page should make that obvious
 immediately.
+Task detail also needs to show the Forge user owner clearly and make cross-user links
+legible when the task belongs to one user but supports a project, goal, or strategy
+owned by another.
 At the bottom of each main detail page, Forge should show a coherent notes surface that
 renders Markdown cleanly, supports quick authoring with preview, and makes linked work
 evidence feel native instead of bolted on.
@@ -132,6 +159,9 @@ free-text chips, and able to create standalone linked notes without forcing the 
 through some other entity flow first. The Notes page and the inline note surfaces on
 detail pages should both expose memory-tag presets, custom tag entry, and ephemeral
 destroy-time controls instead of reserving that metadata for a hidden advanced editor.
+The Notes page search and link pickers must make cross-user linking explicit so the user
+can intentionally attach a note to another user's project, task, strategy, or Psyche
+record.
 
 The Weekly Review page should help the user examine what moved, what stalled, what was
 learned, and where next adjustments are needed. It should turn the operating record into
@@ -155,6 +185,9 @@ developer-only panel. Calendar provider setup and connection health also belong 
 under a dedicated Calendar section, including a guided connection modal and a step-
 by-step setup guide that names the exact credentials and URLs Forge needs. Settings
 must be legible on mobile and desktop.
+Settings also needs a user-management surface. The product should be able to list human
+and bot users, create or edit them, show their labels and types clearly, and expose the
+current permissive sharing posture while leaving room for future policy controls.
 
 The Psyche hub is the entry point into the reflective part of Forge. It should explain
 what the Psyche module contains, how it relates to goals and behavior, and where the
@@ -170,6 +203,15 @@ into repeatable loops. The Reports page should capture observed events, incident
 reflections. The Psyche Report detail page should let the user inspect one report in
 full. The Goal Map page should visualize how goals connect to related entities through a
 graph that uses the same identity system as the rest of the app.
+These Psyche surfaces and the matching agent tools should guide the user through
+active-listening exploration rather than dumping raw fields. Value work should clarify
+direction and committed action. Pattern work should slow down into a functional
+analysis. Behavior work should map cues, payoffs, and replacement moves. Belief work
+should surface the exact sentence and test flexibility gently. Mode work should name
+the part's job, fear, and burden. Trigger reports should capture one episode clearly
+enough to learn from it. When a conversation reveals linked beliefs, modes, patterns,
+or values, Forge should help the user map those adjacent entities without losing the
+natural flow of the session.
 
 Forge must not introduce alternate product names for existing entities. Projects are
 projects. Goals are goals. Values, beliefs, behaviors, modes, patterns, reports,
@@ -186,6 +228,10 @@ help them think rather than dump raw schema fields at them. Linked-entity fields
 use searchable multi-select controls with creation on the fly when that relationship
 makes sense. The user should be able to create a missing belief, pattern, mode, or
 other related entity without abandoning the current form.
+Those forms now also need to make ownership explicit. Creating a goal, project, task,
+habit, note, calendar event, or strategy must let the user choose which human or bot
+owns the new record, while linked-entity controls must remain capable of reaching
+across user boundaries when that is intentional.
 
 Starting work must feel frictionless. The app bar should contain the global timer rail,
 which is where the user can see active work, start new work, switch focus, pause work,
@@ -212,6 +258,12 @@ task-completion path that rewards and activity logging already use. Restarting a
 project means setting its status back to `active` without reopening the finished tasks.
 Collection views should hide suspended and finished projects by default, but selection
 surfaces and search should still be able to reach them.
+
+Strategy lifecycle and metrics must also stay truthful. A strategy is aligned when the
+real state of its linked projects and tasks matches the path the graph describes. The
+product should compute alignment from real completion and in-flight status, not from a
+manual “aligned” toggle. Available next nodes should come from graph predecessors that
+are already complete, and the strategy graph must reject cycles.
 
 Forge should expose three explicit execution-accounting paths and keep them separate in
 both the UI and the API. Live work uses task runs. Completion-style retrospective work
@@ -269,6 +321,12 @@ than raw calendar-URL entry. The canonical event layer is local-first: Forge eve
 event-source mappings, and event links all live in the local database and are then
 reconciled outward to connected providers.
 
+That live runtime must now carry a first-class `users` table plus user-aware ownership
+columns on the core user-authored entities. Search, snapshot assembly, detail views,
+and batch CRUD need explicit user-scope fields. Strategy also needs its own
+migration-backed storage and validation layer, including DAG validation for the graph
+payload.
+
 Fresh production databases must start empty of fake user goals, projects, and tasks.
 Demo or showcase content is allowed only through explicit bootstrap paths, fixtures, or
 test-only seeding. The live runtime is expected to show truthful empty states until the
@@ -291,7 +349,12 @@ repo-local Codex adapter.
 Each of those integrations should help an agent understand the app itself, the meaning
 of each entity, the expected workflow, and when to use the UI instead of mutating data
 directly. The user should feel that agent help is natural language on top of a real
-operating system, not a parallel product with different rules.
+structured memory system, not a parallel product with different rules.
+That now includes multi-user behavior. OpenClaw, Hermes, and Codex should all be able
+to list Forge users, understand whether a record belongs to a human or a bot, search
+across explicit user scopes, and create or update records for the intended owner
+without guessing. The curated skills must explain when cross-user linking is legitimate
+and how Strategy records should be created, searched, updated, and interpreted.
 Agents should be explicitly guided to use notes for progress explanations, task
 close-out context, and multi-entity evidence capture, including nested `notes` during
 entity creation and explicit close-out notes when work is completed or logged.
@@ -300,6 +363,9 @@ plain-text captions, and the main entity surfaces should render them accordingly
 That means the onboarding and skill surfaces must include exact route-facing field
 names, payload shapes, enums, relationship rules, and examples. High-level guidance is
 not enough if it leaves the agent guessing about what the routes actually accept.
+For Psyche entities specifically, the onboarding and skill surfaces should also ship
+step-by-step interview playbooks so OpenClaw, Hermes, and Codex ask like a careful
+collaborative interviewer rather than like a form wizard.
 
 ## Quality Standard
 

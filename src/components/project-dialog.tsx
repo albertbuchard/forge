@@ -9,18 +9,22 @@ import { InlineNoteFields } from "@/components/notes/inline-note-fields";
 import { EntityName } from "@/components/ui/entity-name";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { UserSelectField } from "@/components/ui/user-select-field";
+import { UserBadge } from "@/components/ui/user-badge";
 import { useI18n } from "@/lib/i18n";
 import {
   projectMutationSchema,
   type ProjectMutationInput
 } from "@/lib/schemas";
-import type { Goal, ProjectSummary } from "@/lib/types";
+import type { Goal, ProjectSummary, UserSummary } from "@/lib/types";
+import { formatOwnerSelectDefaultLabel } from "@/lib/user-ownership";
 
 export const defaultProjectValues: ProjectMutationInput = {
   goalId: "",
   title: "",
   description: "",
   status: "active",
+  userId: null,
   targetPoints: 240,
   themeColor: "#c0c1ff",
   notes: []
@@ -32,6 +36,7 @@ function projectToFormValues(project: ProjectSummary): ProjectMutationInput {
     title: project.title,
     description: project.description,
     status: project.status,
+    userId: project.userId ?? null,
     targetPoints: project.targetPoints,
     themeColor: project.themeColor,
     notes: []
@@ -41,25 +46,35 @@ function projectToFormValues(project: ProjectSummary): ProjectMutationInput {
 export function ProjectDialog({
   open,
   goals,
+  users,
   editingProject,
   initialGoalId,
+  defaultUserId = null,
   onOpenChange,
   onSubmit
 }: {
   open: boolean;
   goals: Goal[];
+  users?: UserSummary[];
   editingProject: ProjectSummary | null;
   initialGoalId?: string | null;
+  defaultUserId?: string | null;
   onOpenChange: (open: boolean) => void;
   onSubmit: (input: ProjectMutationInput, projectId?: string) => Promise<void>;
 }) {
   const { t } = useI18n();
+  const safeUsers = users ?? [];
   const [draft, setDraft] =
     useState<ProjectMutationInput>(defaultProjectValues);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<
     Record<string, string | undefined>
   >({});
+  const selectedGoal = goals.find((goal) => goal.id === draft.goalId) ?? null;
+  const suggestedUser =
+    safeUsers.find(
+      (user) => user.id === (selectedGoal?.userId ?? defaultUserId)
+    ) ?? null;
 
   const updateFieldErrors = (errors: Record<string, string[] | undefined>) => {
     setFieldErrors(
@@ -80,10 +95,13 @@ export function ProjectDialog({
         ? projectToFormValues(editingProject)
         : {
             ...defaultProjectValues,
-            goalId: initialGoalId ?? ""
+            goalId: initialGoalId ?? "",
+            userId:
+              goals.find((goal) => goal.id === initialGoalId)?.userId ??
+              defaultUserId
           }
     );
-  }, [editingProject, initialGoalId, open]);
+  }, [defaultUserId, editingProject, goals, initialGoalId, open]);
 
   const steps: Array<QuestionFlowStep<ProjectMutationInput>> = [
     {
@@ -111,11 +129,14 @@ export function ProjectDialog({
                   }`}
                   onClick={() => setValue({ goalId: goal.id })}
                 >
-                  <EntityName
-                    kind="goal"
-                    label={goal.title}
-                    className="max-w-full"
-                  />
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <EntityName
+                      kind="goal"
+                      label={goal.title}
+                      className="max-w-full"
+                    />
+                    <UserBadge user={goal.user} compact />
+                  </div>
                   <div className="mt-2 text-sm leading-6 text-white/54">
                     {goal.description || "No strategic note attached yet."}
                   </div>
@@ -153,6 +174,14 @@ export function ProjectDialog({
               placeholder="Write the project description in Markdown. Use as much detail as the workstream needs."
             />
           </FlowField>
+          <UserSelectField
+            value={value.userId}
+            users={safeUsers}
+            onChange={(userId) => setValue({ userId })}
+            label="Owner user"
+            defaultLabel={formatOwnerSelectDefaultLabel(suggestedUser)}
+            help="Projects can intentionally cross user boundaries, but the linked goal owner is suggested by default."
+          />
         </>
       )
     },

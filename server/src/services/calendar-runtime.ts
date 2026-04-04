@@ -1720,6 +1720,7 @@ export async function updateCalendarConnectionSelection(
 export function readCalendarOverview(query: {
   from: string;
   to: string;
+  userIds?: string[];
 }): CalendarOverviewPayload {
   return getCalendarOverview(query);
 }

@@ -3,6 +3,7 @@ import { listInsights } from "../repositories/collaboration.js";
 import { listGoals } from "../repositories/goals.js";
 import { listHabits } from "../repositories/habits.js";
 import { listTasks } from "../repositories/tasks.js";
+import { filterOwnedEntities } from "../repositories/entity-ownership.js";
 import { getOverviewContext } from "./context.js";
 import { buildGamificationProfile } from "./gamification.js";
 import { insightsPayloadSchema, type InsightsHeatmapCell, type InsightsPayload, type Task } from "../types.js";
@@ -35,12 +36,16 @@ function buildHeatmap(tasks: Task[], now: Date): InsightsHeatmapCell[] {
   return cells;
 }
 
-export function getInsightsPayload(now = new Date()): InsightsPayload {
-  const goals = listGoals();
-  const tasks = listTasks();
-  const gamification = buildGamificationProfile(goals, tasks, listHabits(), now);
-  const overview = getOverviewContext(now);
-  const activity = listActivityEvents({ limit: 60 });
+export function getInsightsPayload(
+  now = new Date(),
+  options: { userIds?: string[] } = {}
+): InsightsPayload {
+  const goals = filterOwnedEntities("goal", listGoals(), options.userIds);
+  const tasks = filterOwnedEntities("task", listTasks(), options.userIds);
+  const habits = filterOwnedEntities("habit", listHabits(), options.userIds);
+  const gamification = buildGamificationProfile(goals, tasks, habits, now);
+  const overview = getOverviewContext(now, { userIds: options.userIds });
+  const activity = listActivityEvents({ limit: 60, userIds: options.userIds });
   const trends = Array.from({ length: 6 }, (_, offset) => {
     const bucketStart = addDays(now, -(5 - offset) * 5);
     const bucketEnd = addDays(bucketStart, 4);
@@ -66,7 +71,7 @@ export function getInsightsPayload(now = new Date()): InsightsPayload {
   const hottestGoal = overview.activeGoals[0] ?? null;
   const blockedTasks = tasks.filter((task) => task.status === "blocked").length;
   const overdueTasks = tasks.filter((task) => task.status !== "done" && task.dueDate !== null && task.dueDate < dayKey(now)).length;
-  const feed = listInsights({ limit: 8 });
+  const feed = listInsights({ limit: 8, userIds: options.userIds });
 
   return insightsPayloadSchema.parse({
     generatedAt: now.toISOString(),

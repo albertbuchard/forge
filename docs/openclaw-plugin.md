@@ -81,7 +81,7 @@ The live onboarding route now returns:
 - `conceptModel`: what goals, projects, tasks, task runs, insights, and Psyche records actually mean
 - habits are part of that concept model and are first-class in batch entity workflows, note links, search, and delete/restore
 - `psycheSubmoduleModel`: what values, patterns, behaviors, beliefs, schema catalog entries, modes, mode guides, event types, emotion definitions, and trigger reports are for
-- `psycheCoachingPlaybooks`: how the agent should guide pattern analysis, belief/schema intake, mode work, and trigger reports
+- `psycheCoachingPlaybooks`: how the agent should guide values work, functional analysis, behavior mapping, belief/schema intake, mode work, mode-guide sessions, and trigger reports with active listening instead of raw form prompts
 - `relationshipModel`: how those records relate to each other
 - `entityCatalog`: exact per-entity field guides with real route-facing field names, required fields, enums, defaults, and relationship rules
 - `toolInputCatalog`: exact input contracts and examples for the mutation and live-work tools
@@ -96,11 +96,12 @@ Important examples:
 
 - `belief_entry` uses `statement` and `beliefType`, not ad-hoc fields like `title` or `belief`
 - `behavior_pattern` uses `cueContexts`, `shortTermPayoff`, `longTermCost`, and `preferredResponse`
-- `mode_guide_session` stores `summary`, `answers`, and `results`, not a free-form note
+- `mode_guide_session` creates require `summary` and `answers`; `results` stays optional candidate interpretation output rather than a free-form note
 - `event_type` and `emotion_definition` are reusable Psyche taxonomies that support reports
 - `trigger_report` uses nested arrays for `emotions`, `thoughts`, and `behaviors`, plus a structured `consequences` object
 - live work is handled through task runs, not just task status
 - minute corrections on existing tasks or projects go through `/api/v1/work-adjustments`, not `/api/v1/operator/log-work`
+- bundled OpenClaw skill docs now include a dedicated Psyche interview playbook so the agent can explore values, patterns, beliefs, behaviors, modes, and reports naturally before saving them
 
 ## Which manifest does what
 

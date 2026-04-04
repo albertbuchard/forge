@@ -25,13 +25,33 @@ import { EntityBadge } from "@/components/ui/entity-badge";
 import { EntityName } from "@/components/ui/entity-name";
 import { InfoTooltip } from "@/components/ui/info-tooltip";
 import { ErrorState } from "@/components/ui/page-state";
-import { completeTaskRun, createWorkAdjustment, getCalendarOverview, getTaskContext, patchTask, releaseTaskRun, removeActivityLog, uncompleteTask } from "@/lib/api";
-import { getReadableActivityDescription, getReadableActivityTitle } from "@/lib/activity-copy";
-import { evaluateSchedulingRulesNow, getTaskSchedulingRules } from "@/lib/calendar-rules";
-import { getActivityEventCtaLabel, getActivityEventHref } from "@/lib/entity-links";
+import { UserBadge } from "@/components/ui/user-badge";
+import {
+  completeTaskRun,
+  createWorkAdjustment,
+  getCalendarOverview,
+  getTaskContext,
+  patchTask,
+  releaseTaskRun,
+  removeActivityLog,
+  uncompleteTask
+} from "@/lib/api";
+import {
+  getReadableActivityDescription,
+  getReadableActivityTitle
+} from "@/lib/activity-copy";
+import {
+  evaluateSchedulingRulesNow,
+  getTaskSchedulingRules
+} from "@/lib/calendar-rules";
+import {
+  getActivityEventCtaLabel,
+  getActivityEventHref
+} from "@/lib/entity-links";
 import { useI18n } from "@/lib/i18n";
 import { useForgeShell } from "@/components/shell/app-shell";
 import type { TaskStatus } from "@/lib/types";
+import { getSingleSelectedUserId } from "@/lib/user-ownership";
 
 function DetailLabel({ label, help }: { label: string; help?: string }) {
   return (
@@ -48,22 +68,54 @@ const STATUS_META: Array<{
   description: string;
   icon: typeof Clock3;
 }> = [
-  { status: "backlog", label: "Backlog", description: "Not started yet.", icon: Clock3 },
-  { status: "focus", label: "Focus", description: "Ready to start soon.", icon: Target },
-  { status: "in_progress", label: "In progress", description: "Work is active now.", icon: Play },
-  { status: "blocked", label: "Blocked", description: "Something is stopping progress.", icon: CircleAlert },
-  { status: "done", label: "Done", description: "The task is completed.", icon: CheckCheck }
+  {
+    status: "backlog",
+    label: "Backlog",
+    description: "Not started yet.",
+    icon: Clock3
+  },
+  {
+    status: "focus",
+    label: "Focus",
+    description: "Ready to start soon.",
+    icon: Target
+  },
+  {
+    status: "in_progress",
+    label: "In progress",
+    description: "Work is active now.",
+    icon: Play
+  },
+  {
+    status: "blocked",
+    label: "Blocked",
+    description: "Something is stopping progress.",
+    icon: CircleAlert
+  },
+  {
+    status: "done",
+    label: "Done",
+    description: "The task is completed.",
+    icon: CheckCheck
+  }
 ];
 
 export function TaskDetailPage() {
   const { t, formatDate, formatDateTime } = useI18n();
   const shell = useForgeShell();
+  const selectedUserIds = Array.isArray(shell.selectedUserIds)
+    ? shell.selectedUserIds
+    : [];
   const params = useParams();
   const queryClient = useQueryClient();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [workAdjustmentOpen, setWorkAdjustmentOpen] = useState(false);
   const [statusSheetOpen, setStatusSheetOpen] = useState(false);
-  const [isMobile, setIsMobile] = useState(() => (typeof window !== "undefined" ? window.matchMedia("(max-width: 1023px)").matches : false));
+  const [isMobile, setIsMobile] = useState(() =>
+    typeof window !== "undefined"
+      ? window.matchMedia("(max-width: 1023px)").matches
+      : false
+  );
   const [calendarWindow] = useState(() => {
     const now = new Date();
     const from = new Date(now);
@@ -75,13 +127,18 @@ export function TaskDetailPage() {
       to: to.toISOString()
     };
   });
+  const defaultUserId = getSingleSelectedUserId(selectedUserIds);
 
   useEffect(() => {
-    if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
+    if (
+      typeof window === "undefined" ||
+      typeof window.matchMedia !== "function"
+    ) {
       return;
     }
     const mediaQuery = window.matchMedia("(max-width: 1023px)");
-    const sync = (event?: MediaQueryListEvent) => setIsMobile(event ? event.matches : mediaQuery.matches);
+    const sync = (event?: MediaQueryListEvent) =>
+      setIsMobile(event ? event.matches : mediaQuery.matches);
     sync();
     if (typeof mediaQuery.addEventListener === "function") {
       mediaQuery.addEventListener("change", sync);
@@ -97,15 +154,27 @@ export function TaskDetailPage() {
     enabled: Boolean(params.taskId)
   });
   const calendarOverviewQuery = useQuery({
-    queryKey: ["task-calendar-overview", params.taskId, calendarWindow.from, calendarWindow.to],
-    queryFn: () => getCalendarOverview(calendarWindow),
+    queryKey: [
+      "task-calendar-overview",
+      params.taskId,
+      calendarWindow.from,
+      calendarWindow.to,
+      ...selectedUserIds
+    ],
+    queryFn: () =>
+      getCalendarOverview({
+        ...calendarWindow,
+        userIds: selectedUserIds
+      }),
     enabled: Boolean(params.taskId)
   });
 
   const invalidateAll = async () => {
     await Promise.all([
       queryClient.invalidateQueries({ queryKey: ["forge-snapshot"] }),
-      queryClient.invalidateQueries({ queryKey: ["task-context", params.taskId] }),
+      queryClient.invalidateQueries({
+        queryKey: ["task-context", params.taskId]
+      }),
       queryClient.invalidateQueries({ queryKey: ["activity-archive"] }),
       queryClient.invalidateQueries({ queryKey: ["project-board"] }),
       queryClient.invalidateQueries({ queryKey: ["forge-xp-metrics"] }),
@@ -115,7 +184,13 @@ export function TaskDetailPage() {
   };
 
   const updateTaskMutation = useMutation({
-    mutationFn: ({ taskId, patch }: { taskId: string; patch: Parameters<typeof patchTask>[1] }) => patchTask(taskId, patch),
+    mutationFn: ({
+      taskId,
+      patch
+    }: {
+      taskId: string;
+      patch: Parameters<typeof patchTask>[1];
+    }) => patchTask(taskId, patch),
     onSuccess: invalidateAll
   });
   const uncompleteMutation = useMutation({
@@ -127,11 +202,27 @@ export function TaskDetailPage() {
     onSuccess: invalidateAll
   });
   const releaseRunMutation = useMutation({
-    mutationFn: ({ runId, actor, note }: { runId: string; actor?: string; note?: string }) => releaseTaskRun(runId, { actor, note: note ?? "" }),
+    mutationFn: ({
+      runId,
+      actor,
+      note
+    }: {
+      runId: string;
+      actor?: string;
+      note?: string;
+    }) => releaseTaskRun(runId, { actor, note: note ?? "" }),
     onSuccess: invalidateAll
   });
   const completeRunMutation = useMutation({
-    mutationFn: ({ runId, actor, note }: { runId: string; actor?: string; note?: string }) => completeTaskRun(runId, { actor, note: note ?? "" }),
+    mutationFn: ({
+      runId,
+      actor,
+      note
+    }: {
+      runId: string;
+      actor?: string;
+      note?: string;
+    }) => completeTaskRun(runId, { actor, note: note ?? "" }),
     onSuccess: invalidateAll
   });
   const workAdjustmentMutation = useMutation({
@@ -146,16 +237,32 @@ export function TaskDetailPage() {
   }
 
   if (taskContextQuery.isError) {
-    return <ErrorState eyebrow={t("common.taskDetail.errorEyebrow")} error={taskContextQuery.error} onRetry={() => void taskContextQuery.refetch()} />;
+    return (
+      <ErrorState
+        eyebrow={t("common.taskDetail.errorEyebrow")}
+        error={taskContextQuery.error}
+        onRetry={() => void taskContextQuery.refetch()}
+      />
+    );
   }
 
   if (!payload) {
-    return <ErrorState eyebrow={t("common.taskDetail.errorEyebrow")} error={new Error(t("common.taskDetail.emptyPayload"))} onRetry={() => void taskContextQuery.refetch()} />;
+    return (
+      <ErrorState
+        eyebrow={t("common.taskDetail.errorEyebrow")}
+        error={new Error(t("common.taskDetail.emptyPayload"))}
+        onRetry={() => void taskContextQuery.refetch()}
+      />
+    );
   }
 
   const currentRun = payload.activeTaskRun ?? null;
-  const currentStatus = STATUS_META.find((entry) => entry.status === payload.task.status) ?? STATUS_META[0];
-  const availableStatuses = STATUS_META.filter((entry) => entry.status !== payload.task.status);
+  const currentStatus =
+    STATUS_META.find((entry) => entry.status === payload.task.status) ??
+    STATUS_META[0];
+  const availableStatuses = STATUS_META.filter(
+    (entry) => entry.status !== payload.task.status
+  );
   const effectiveSchedulingRules = getTaskSchedulingRules(
     payload.task,
     payload.project?.schedulingRules
@@ -165,7 +272,9 @@ export function TaskDetailPage() {
     overview: calendarOverviewQuery.data?.calendar
   });
 
-  const describeRunStatus = (status: (typeof payload.taskRuns)[number]["status"]) => {
+  const describeRunStatus = (
+    status: (typeof payload.taskRuns)[number]["status"]
+  ) => {
     switch (status) {
       case "active":
         return "Active";
@@ -181,7 +290,10 @@ export function TaskDetailPage() {
   };
 
   const handleStatusChange = async (status: TaskStatus) => {
-    await updateTaskMutation.mutateAsync({ taskId: payload.task.id, patch: { status } });
+    await updateTaskMutation.mutateAsync({
+      taskId: payload.task.id,
+      patch: { status }
+    });
     setStatusSheetOpen(false);
   };
 
@@ -189,7 +301,17 @@ export function TaskDetailPage() {
     <div className="grid gap-5">
       <PageHero
         entityKind="task"
-        title={<EntityName kind="task" label={payload.task.title} variant="heading" size="lg" lines={3} className="max-w-full" labelClassName="[overflow-wrap:anywhere]" />}
+        title={
+          <EntityName
+            kind="task"
+            label={payload.task.title}
+            variant="heading"
+            size="lg"
+            lines={3}
+            className="max-w-full"
+            labelClassName="[overflow-wrap:anywhere]"
+          />
+        }
         titleText={payload.task.title}
         description={
           payload.task.description ? (
@@ -204,12 +326,29 @@ export function TaskDetailPage() {
         badge={`${payload.task.points} xp`}
       />
 
+      {payload.task.user ? (
+        <div className="flex flex-wrap items-center gap-2 text-sm text-white/62">
+          <span className="text-white/42">Owned by</span>
+          <UserBadge user={payload.task.user} />
+        </div>
+      ) : null}
+
       <Card className="min-w-0 overflow-hidden">
         <div className="flex min-w-0 flex-wrap items-start justify-between gap-4">
           <div className="min-w-0 flex-1">
-            <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">Task</div>
+            <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">
+              Task
+            </div>
             <div className="mt-2">
-              <EntityName kind="task" label={payload.task.title} variant="heading" size="xl" lines={3} className="max-w-full" labelClassName="[overflow-wrap:anywhere]" />
+              <EntityName
+                kind="task"
+                label={payload.task.title}
+                variant="heading"
+                size="xl"
+                lines={3}
+                className="max-w-full"
+                labelClassName="[overflow-wrap:anywhere]"
+              />
             </div>
             <div className="mt-3 text-sm leading-6 text-white/60">
               {payload.task.description ? (
@@ -241,7 +380,11 @@ export function TaskDetailPage() {
                   pending={releaseRunMutation.isPending}
                   pendingLabel="Pausing"
                   onClick={async () => {
-                    await releaseRunMutation.mutateAsync({ runId: currentRun.id, actor: currentRun.actor, note: currentRun.note });
+                    await releaseRunMutation.mutateAsync({
+                      runId: currentRun.id,
+                      actor: currentRun.actor,
+                      note: currentRun.note
+                    });
                   }}
                 >
                   Pause
@@ -251,23 +394,40 @@ export function TaskDetailPage() {
                   pending={completeRunMutation.isPending}
                   pendingLabel="Completing"
                   onClick={async () => {
-                    await completeRunMutation.mutateAsync({ runId: currentRun.id, actor: currentRun.actor, note: currentRun.note });
+                    await completeRunMutation.mutateAsync({
+                      runId: currentRun.id,
+                      actor: currentRun.actor,
+                      note: currentRun.note
+                    });
                   }}
                 >
                   Complete
                 </Button>
               </>
             ) : null}
-            <Button variant="secondary" onClick={() => setWorkAdjustmentOpen(true)}>
+            <Button
+              variant="secondary"
+              onClick={() => setWorkAdjustmentOpen(true)}
+            >
               <Clock3 className="size-4" />
               Adjust work
             </Button>
             {isMobile ? (
               <>
-                <Button variant="secondary" size="sm" aria-label="Change task status" onClick={() => setStatusSheetOpen(true)}>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  aria-label="Change task status"
+                  onClick={() => setStatusSheetOpen(true)}
+                >
                   <currentStatus.icon className="size-4" />
                 </Button>
-                <Button variant="secondary" size="sm" aria-label="Edit task" onClick={() => setDialogOpen(true)}>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  aria-label="Edit task"
+                  onClick={() => setDialogOpen(true)}
+                >
                   <Pencil className="size-4" />
                 </Button>
               </>
@@ -291,18 +451,39 @@ export function TaskDetailPage() {
         </div>
 
         <div className="mt-5 flex flex-wrap gap-2">
-          <Badge className="bg-white/[0.08] text-white/72">{currentStatus.label}</Badge>
-          <Badge className="bg-white/[0.08] text-white/72">{t(`common.enums.priority.${payload.task.priority}`)}</Badge>
-          <Badge className="bg-white/[0.08] text-white/72">{t(`common.enums.effort.${payload.task.effort}`)}</Badge>
-          <Badge className="bg-white/[0.08] text-white/72">{t(`common.enums.energy.${payload.task.energy}`)}</Badge>
-          <Badge className="bg-white/[0.08] text-white/72">{payload.task.points} xp</Badge>
-          {payload.task.time.totalCreditedSeconds > 0 ? <Badge className="bg-white/[0.08] text-white/72">{Math.floor(payload.task.time.totalCreditedSeconds / 60)} min tracked</Badge> : null}
-          {currentRun ? <Badge className="bg-emerald-500/12 text-emerald-200">Timer active</Badge> : null}
+          <Badge className="bg-white/[0.08] text-white/72">
+            {currentStatus.label}
+          </Badge>
+          <Badge className="bg-white/[0.08] text-white/72">
+            {t(`common.enums.priority.${payload.task.priority}`)}
+          </Badge>
+          <Badge className="bg-white/[0.08] text-white/72">
+            {t(`common.enums.effort.${payload.task.effort}`)}
+          </Badge>
+          <Badge className="bg-white/[0.08] text-white/72">
+            {t(`common.enums.energy.${payload.task.energy}`)}
+          </Badge>
+          <Badge className="bg-white/[0.08] text-white/72">
+            {payload.task.points} xp
+          </Badge>
+          {payload.task.time.totalCreditedSeconds > 0 ? (
+            <Badge className="bg-white/[0.08] text-white/72">
+              {Math.floor(payload.task.time.totalCreditedSeconds / 60)} min
+              tracked
+            </Badge>
+          ) : null}
+          {currentRun ? (
+            <Badge className="bg-emerald-500/12 text-emerald-200">
+              Timer active
+            </Badge>
+          ) : null}
         </div>
 
         {!isMobile ? (
           <div className="mt-5">
-            <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">Status</div>
+            <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">
+              Status
+            </div>
             <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-5">
               {STATUS_META.map((entry) => {
                 const Icon = entry.icon;
@@ -323,7 +504,9 @@ export function TaskDetailPage() {
                       <Icon className="size-4 shrink-0 text-[var(--primary)]" />
                       <span className="font-medium">{entry.label}</span>
                     </div>
-                    <div className="mt-2 text-xs leading-5 text-white/54">{entry.description}</div>
+                    <div className="mt-2 text-xs leading-5 text-white/54">
+                      {entry.description}
+                    </div>
                   </button>
                 );
               })}
@@ -333,29 +516,61 @@ export function TaskDetailPage() {
 
         <div className="mt-5 grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
           <div className="rounded-[20px] bg-white/[0.04] p-4">
-            <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">Linked items</div>
+            <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">
+              Linked items
+            </div>
             <div className="mt-4 grid gap-3">
               <div>
-                <DetailLabel label="Project" help="The project is the main work stream this task belongs to." />
+                <DetailLabel
+                  label="Project"
+                  help="The project is the main work stream this task belongs to."
+                />
                 <div className="mt-2">
                   {payload.project ? (
-                    <Link to={`/projects/${payload.project.id}`} className="inline-flex max-w-full">
-                      <EntityBadge kind="project" label={payload.project.title} compact gradient={false} wrap className="max-w-full" />
+                    <Link
+                      to={`/projects/${payload.project.id}`}
+                      className="inline-flex max-w-full"
+                    >
+                      <EntityBadge
+                        kind="project"
+                        label={payload.project.title}
+                        compact
+                        gradient={false}
+                        wrap
+                        className="max-w-full"
+                      />
                     </Link>
                   ) : (
-                    <Badge className="bg-white/[0.08] text-white/65">No project linked</Badge>
+                    <Badge className="bg-white/[0.08] text-white/65">
+                      No project linked
+                    </Badge>
                   )}
                 </div>
               </div>
               <div>
-                <DetailLabel label="Goal" help="The goal shows the longer-term result this task supports." />
+                <DetailLabel
+                  label="Goal"
+                  help="The goal shows the longer-term result this task supports."
+                />
                 <div className="mt-2">
                   {payload.goal ? (
-                    <Link to={`/goals/${payload.goal.id}`} className="inline-flex max-w-full">
-                      <EntityBadge kind="goal" label={payload.goal.title} compact gradient={false} wrap className="max-w-full" />
+                    <Link
+                      to={`/goals/${payload.goal.id}`}
+                      className="inline-flex max-w-full"
+                    >
+                      <EntityBadge
+                        kind="goal"
+                        label={payload.goal.title}
+                        compact
+                        gradient={false}
+                        wrap
+                        className="max-w-full"
+                      />
                     </Link>
                   ) : (
-                    <Badge className="bg-white/[0.08] text-white/65">No goal linked</Badge>
+                    <Badge className="bg-white/[0.08] text-white/65">
+                      No goal linked
+                    </Badge>
                   )}
                 </div>
               </div>
@@ -363,23 +578,42 @@ export function TaskDetailPage() {
           </div>
 
           <div className="rounded-[20px] bg-white/[0.04] p-4">
-            <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">Task details</div>
+            <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">
+              Task details
+            </div>
             <div className="mt-4 grid gap-3 sm:grid-cols-2">
               <div className="rounded-[16px] bg-white/[0.03] px-3.5 py-3">
-                <DetailLabel label="Due date" help="Use a due date only when timing actually matters for this task." />
-                <div className="mt-2 text-white">{formatDate(payload.task.dueDate)}</div>
+                <DetailLabel
+                  label="Due date"
+                  help="Use a due date only when timing actually matters for this task."
+                />
+                <div className="mt-2 text-white">
+                  {formatDate(payload.task.dueDate)}
+                </div>
               </div>
               <div className="rounded-[16px] bg-white/[0.03] px-3.5 py-3">
-                <DetailLabel label="Owner" help="The owner is the person or role expected to carry this task." />
-                <div className="mt-2 text-white">{payload.task.owner}</div>
+                <DetailLabel
+                  label="Owner"
+                  help="The owner is the person or role expected to carry this task."
+                />
+                <div className="mt-2 flex flex-wrap items-center gap-2 text-white">
+                  {payload.task.user ? (
+                    <UserBadge user={payload.task.user} compact />
+                  ) : null}
+                  <span>{payload.task.owner}</span>
+                </div>
               </div>
               <div className="rounded-[16px] bg-white/[0.03] px-3.5 py-3">
                 <DetailLabel label="Created" />
-                <div className="mt-2 text-white">{formatDateTime(payload.task.createdAt)}</div>
+                <div className="mt-2 text-white">
+                  {formatDateTime(payload.task.createdAt)}
+                </div>
               </div>
               <div className="rounded-[16px] bg-white/[0.03] px-3.5 py-3">
                 <DetailLabel label="Updated" />
-                <div className="mt-2 text-white">{formatDateTime(payload.task.updatedAt)}</div>
+                <div className="mt-2 text-white">
+                  {formatDateTime(payload.task.updatedAt)}
+                </div>
               </div>
             </div>
           </div>
@@ -388,7 +622,10 @@ export function TaskDetailPage() {
         <div className="mt-5 rounded-[20px] bg-white/[0.04] p-4">
           <div className="flex items-center gap-2 text-sm text-white/58">
             <span>Current timer</span>
-            <InfoTooltip content="This shows whether work is running on the task right now and how much time has been credited." label="Explain current timer" />
+            <InfoTooltip
+              content="This shows whether work is running on the task right now and how much time has been credited."
+              label="Explain current timer"
+            />
           </div>
           <div className="mt-3 text-white">
             {currentRun
@@ -420,7 +657,9 @@ export function TaskDetailPage() {
           />
 
           <div className="rounded-[20px] bg-white/[0.04] p-4">
-            <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">Calendar status</div>
+            <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">
+              Calendar status
+            </div>
             <div className="mt-3 flex flex-wrap gap-2">
               <Badge
                 className={
@@ -434,23 +673,33 @@ export function TaskDetailPage() {
                 {schedulingState.label}
               </Badge>
               <Badge className="bg-white/[0.08] text-white/72">
-                {payload.task.schedulingRules ? "Task override" : "Using project defaults"}
+                {payload.task.schedulingRules
+                  ? "Task override"
+                  : "Using project defaults"}
               </Badge>
               {payload.task.plannedDurationSeconds ? (
                 <Badge className="bg-white/[0.08] text-white/72">
-                  {Math.round(payload.task.plannedDurationSeconds / 60)} min target
+                  {Math.round(payload.task.plannedDurationSeconds / 60)} min
+                  target
                 </Badge>
               ) : null}
             </div>
             <p className="mt-3 text-sm leading-6 text-white/58">
-              Forge checks these rules before a live run starts. If the current calendar context is blocked, you can still override with an explicit reason.
+              Forge checks these rules before a live run starts. If the current
+              calendar context is blocked, you can still override with an
+              explicit reason.
             </p>
             {schedulingState.context.length > 0 ? (
               <div className="mt-4">
-                <div className="text-[11px] uppercase tracking-[0.16em] text-white/40">Current context</div>
+                <div className="text-[11px] uppercase tracking-[0.16em] text-white/40">
+                  Current context
+                </div>
                 <div className="mt-2 flex flex-wrap gap-2">
                   {schedulingState.context.map((entry) => (
-                    <Badge key={entry} className="bg-white/[0.08] text-white/72">
+                    <Badge
+                      key={entry}
+                      className="bg-white/[0.08] text-white/72"
+                    >
                       {entry}
                     </Badge>
                   ))}
@@ -460,7 +709,10 @@ export function TaskDetailPage() {
             {schedulingState.conflicts.length > 0 ? (
               <div className="mt-4 grid gap-2">
                 {schedulingState.conflicts.map((entry) => (
-                  <div key={entry} className="rounded-[16px] bg-rose-500/10 px-3 py-2 text-sm text-rose-100">
+                  <div
+                    key={entry}
+                    className="rounded-[16px] bg-rose-500/10 px-3 py-2 text-sm text-rose-100"
+                  >
                     {entry}
                   </div>
                 ))}
@@ -482,24 +734,39 @@ export function TaskDetailPage() {
             description="Capture real progress, blockers, and context in Markdown so the task keeps a durable work log."
             invalidateQueryKeys={[
               ["task-context", params.taskId],
-              ...(payload.task.projectId ? ([["project-board", payload.task.projectId]] as const) : [])
+              ...(payload.task.projectId
+                ? ([["project-board", payload.task.projectId]] as const)
+                : [])
             ]}
           />
         </div>
 
         <div className="mt-5">
-          <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">Activity</div>
+          <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">
+            Activity
+          </div>
           <div className="mt-4 grid gap-3">
             {payload.activity.length === 0 ? (
-              <div className="rounded-[18px] bg-white/[0.04] p-4 text-sm text-white/55">No activity has been recorded for this task yet.</div>
+              <div className="rounded-[18px] bg-white/[0.04] p-4 text-sm text-white/55">
+                No activity has been recorded for this task yet.
+              </div>
             ) : null}
             {payload.activity.map((event) => (
-              <div key={event.id} className="rounded-[18px] bg-white/[0.04] p-4">
+              <div
+                key={event.id}
+                className="rounded-[18px] bg-white/[0.04] p-4"
+              >
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
-                    <div className="font-medium text-white">{getReadableActivityTitle(event)}</div>
-                    <div className="mt-2 text-sm leading-6 text-white/58">{getReadableActivityDescription(event)}</div>
-                    <div className="mt-3 text-[11px] uppercase tracking-[0.16em] text-white/35">{formatDateTime(event.createdAt)}</div>
+                    <div className="font-medium text-white">
+                      {getReadableActivityTitle(event)}
+                    </div>
+                    <div className="mt-2 text-sm leading-6 text-white/58">
+                      {getReadableActivityDescription(event)}
+                    </div>
+                    <div className="mt-3 text-[11px] uppercase tracking-[0.16em] text-white/35">
+                      {formatDateTime(event.createdAt)}
+                    </div>
                   </div>
                   <Button
                     variant="ghost"
@@ -511,8 +778,12 @@ export function TaskDetailPage() {
                     Remove
                   </Button>
                 </div>
-                {getActivityEventHref(event) && getActivityEventCtaLabel(event) ? (
-                  <Link to={getActivityEventHref(event)!} className="mt-3 inline-flex text-[11px] uppercase tracking-[0.16em] text-[var(--primary)]">
+                {getActivityEventHref(event) &&
+                getActivityEventCtaLabel(event) ? (
+                  <Link
+                    to={getActivityEventHref(event)!}
+                    className="mt-3 inline-flex text-[11px] uppercase tracking-[0.16em] text-[var(--primary)]"
+                  >
                     {getActivityEventCtaLabel(event)}
                   </Link>
                 ) : null}
@@ -522,10 +793,14 @@ export function TaskDetailPage() {
         </div>
 
         <div className="mt-5">
-          <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">Timer sessions</div>
+          <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">
+            Timer sessions
+          </div>
           <div className="mt-4 grid gap-3">
             {payload.taskRuns.length === 0 ? (
-              <div className="rounded-[18px] bg-white/[0.04] p-4 text-sm text-white/55">No timer sessions have been recorded for this task yet.</div>
+              <div className="rounded-[18px] bg-white/[0.04] p-4 text-sm text-white/55">
+                No timer sessions have been recorded for this task yet.
+              </div>
             ) : null}
             {payload.taskRuns.map((run) => (
               <div key={run.id} className="rounded-[18px] bg-white/[0.04] p-4">
@@ -533,8 +808,12 @@ export function TaskDetailPage() {
                   <div className="font-medium text-white">{run.actor}</div>
                   <Badge>{describeRunStatus(run.status)}</Badge>
                 </div>
-                <div className="mt-2 text-sm text-white/58">{run.note || t("common.labels.noRunNote")}</div>
-                <div className="mt-3 text-[11px] uppercase tracking-[0.16em] text-white/35">{formatDateTime(run.updatedAt)}</div>
+                <div className="mt-2 text-sm text-white/58">
+                  {run.note || t("common.labels.noRunNote")}
+                </div>
+                <div className="mt-3 text-[11px] uppercase tracking-[0.16em] text-white/35">
+                  {formatDateTime(run.updatedAt)}
+                </div>
               </div>
             ))}
           </div>
@@ -546,7 +825,9 @@ export function TaskDetailPage() {
         goals={shell.snapshot.goals}
         projects={shell.snapshot.dashboard.projects}
         tags={shell.snapshot.tags}
+        users={shell.snapshot.users}
         editingTask={payload.task}
+        defaultUserId={payload.task.userId ?? defaultUserId}
         onOpenChange={setDialogOpen}
         onSubmit={async (input, taskId) => {
           if (!taskId) {
@@ -586,7 +867,9 @@ export function TaskDetailPage() {
                 type="button"
                 disabled={selected || updateTaskMutation.isPending}
                 className={`rounded-[22px] border px-4 py-4 text-left transition ${
-                  selected ? "border-[rgba(192,193,255,0.28)] bg-[rgba(192,193,255,0.14)] text-white" : "border-white/8 bg-white/[0.04] text-white/72 hover:bg-white/[0.08]"
+                  selected
+                    ? "border-[rgba(192,193,255,0.28)] bg-[rgba(192,193,255,0.14)] text-white"
+                    : "border-white/8 bg-white/[0.04] text-white/72 hover:bg-white/[0.08]"
                 }`}
                 onClick={() => void handleStatusChange(entry.status)}
               >
@@ -594,7 +877,9 @@ export function TaskDetailPage() {
                   <Icon className="size-4 shrink-0 text-[var(--primary)]" />
                   <div>
                     <div className="font-medium">{entry.label}</div>
-                    <div className="mt-1 text-sm text-white/54">{entry.description}</div>
+                    <div className="mt-1 text-sm text-white/54">
+                      {entry.description}
+                    </div>
                   </div>
                 </div>
               </button>

@@ -20,6 +20,7 @@ const DEFAULT_TASK_VALUES: QuickTaskInput = {
   title: "",
   description: "",
   owner: "Albert",
+  userId: null,
   goalId: "",
   projectId: "",
   priority: "medium",
@@ -37,6 +38,7 @@ const DEFAULT_PROJECT_VALUES: ProjectMutationInput = {
   title: "",
   description: "",
   status: "active",
+  userId: null,
   targetPoints: 240,
   themeColor: "#c0c1ff",
   notes: []
@@ -47,6 +49,7 @@ const DEFAULT_GOAL_VALUES: GoalMutationInput = {
   description: "",
   horizon: "year",
   status: "active",
+  userId: null,
   targetPoints: 400,
   themeColor: "#c8a46b",
   tagIds: [],

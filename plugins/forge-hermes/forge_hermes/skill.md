@@ -5,17 +5,24 @@ tool surface.
 
 ## Core model
 
-Forge has two major domains. The planning side covers goals, projects, tasks, habits,
-notes, calendar events, recurring work blocks, task timeboxes, live task runs, and
-agent-authored insights. The Psyche side covers values, patterns, behaviors, beliefs,
-modes, guided mode sessions, trigger reports, event types, and reusable emotion
-definitions.
+Forge has two major domains. The planning side covers goals, projects, strategies,
+tasks, habits, notes, calendar events, recurring work blocks, task timeboxes, live
+task runs, and agent-authored insights. The Psyche side covers values, patterns,
+behaviors, beliefs, modes, guided mode sessions, trigger reports, event types, and
+reusable emotion definitions. Forge is also multi-user: every entity can belong to a
+typed `human` or `bot` user through `userId`, and Hermes can scope reads with `userId`
+or repeated `userIds`.
 
 Treat `note` as a first-class Markdown entity. Notes can link to one or many Forge
 entities, carry note-owned `tags`, and optionally self-delete when `destroyAt` is set.
 Use note tags both for custom labels and for memory-system labels such as `Working
 memory`, `Short-term memory`, `Episodic memory`, `Semantic memory`, and `Procedural
 memory`.
+
+For Psyche entities, do not treat Forge like a raw schema form. Use the active-listening
+playbooks in [`psyche_entity_playbooks.md`](./psyche_entity_playbooks.md) before
+persisting `psyche_value`, `behavior_pattern`, `behavior`, `belief_entry`,
+`mode_profile`, `mode_guide_session`, or `trigger_report`.
 
 ## Preferred workflow
 
@@ -34,7 +41,7 @@ memory`.
 
 ## Entity guidance
 
-- `goal`, `project`, `task`, `habit`, `note`, `calendar_event`, `work_block_template`, `task_timebox`, `psyche_value`, `behavior_pattern`, `behavior`, `belief_entry`, `mode_profile`, `mode_guide_session`, `trigger_report`, `event_type`, and `emotion_definition` should normally flow through the batch entity routes.
+- `goal`, `project`, `strategy`, `task`, `habit`, `note`, `calendar_event`, `work_block_template`, `task_timebox`, `psyche_value`, `behavior_pattern`, `behavior`, `belief_entry`, `mode_profile`, `mode_guide_session`, `trigger_report`, `event_type`, and `emotion_definition` should normally flow through the batch entity routes.
 - `task_run` is not a batch entity. Use the live task-run tools instead.
 - `insight` is not a batch entity. Use `forge_post_insight`.
 - For `goal`, `project`, or `task`, nested `notes` on create can include `contentMarkdown`, `author`, `tags`, `destroyAt`, and extra `links`.
@@ -47,8 +54,19 @@ memory`.
 - Prefer the high-level batch entity routes over proliferating one-off CRUD routes.
 - Delete defaults to soft delete unless hard delete is explicit.
 - Project lifecycle changes are status patches on `project.status`, not separate suspend or finish routes.
+- User-aware writes should set `userId` when ownership matters explicitly, especially when Hermes is working across human and bot accounts.
 - Notes are searchable and editable records, not comment strings. If the user cares about durable context, preserve it as a note.
 - Ephemeral notes are appropriate for scratch memory, temporary handoffs, or “what just happened” captures that should disappear automatically later.
+- For Psyche work, ask permission to explore, ask one or two focused questions at a time, reflect before the next question, and start from a recent concrete example rather than a diagnostic label.
+- If the user asks to understand a Psyche issue before saving it, start with one orienting question rather than a full interpretation, save pitch, replacement belief, or suggested title.
+- In that first exploratory turn, keep the reflection to one or two short sentences, avoid numbered lists or worksheet-style dumps, and wait for the user's answer before offering a fuller formulation.
+- In that first exploratory turn, stay in plain prose, end with one question, and do not mention Forge fields or save formatting yet unless the user interrupts to save immediately.
+- In that first exploratory turn, keep the whole reply short, usually under 90 words, and anchor it in one concrete-example question rather than a conceptual lecture.
+- In that first exploratory turn, ask only one question, do not search Forge or mention whether a matching entity exists, and avoid openings like "This sounds like" or "What you're describing is".
+- In that first exploratory turn, prefer exactly two sentences: one brief empathic reflection and one concrete question. Avoid colons because they tend to trigger list-like answers.
+- Follow the preferred opening-question patterns in [`psyche_entity_playbooks.md`](./psyche_entity_playbooks.md) when they fit the entity the user is exploring.
+- When one Psyche conversation reveals an adjacent belief, mode, value, pattern, or note, name that gently and ask whether the user wants to map it too.
+- If the user shows imminent risk of self-harm, suicide, violence, inability to stay safe, or severe disorientation, stop normal intake and prioritize urgent human support or emergency help instead.
 - Use the Forge UI handoff sparingly and intentionally.
 - When Forge is local on `127.0.0.1` or `localhost`, the Hermes plugin can reuse Forge's tested local-runtime bootstrap path to start the runtime before the request.
 - The Hermes install keeps its durable plugin config at `~/.hermes/forge/config.json`; the default local data root is `~/.hermes/forge`, and that file is the right place to move the data folder or pin a different local port.

@@ -23,6 +23,8 @@ import { EntityName } from "@/components/ui/entity-name";
 import { EmptyState, ErrorState, LoadingState } from "@/components/ui/page-state";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { UserBadge } from "@/components/ui/user-badge";
+import { UserSelectField } from "@/components/ui/user-select-field";
 import { prependEntityToCollection } from "@/lib/query-cache";
 import { getEntityNotesSummary } from "@/lib/note-helpers";
 import {
@@ -43,6 +45,13 @@ import {
 import { triggerReportSchema, type TriggerReportInput } from "@/lib/psyche-schemas";
 import type { Behavior, BeliefEntry, ModeProfile, ModeTimelineEntry, PsycheValue, SchemaCatalogEntry, TriggerBehavior, TriggerEmotion, TriggerThought } from "@/lib/psyche-types";
 import { findSchemaForLink, getSchemaTypeHelpText, getSchemaTypeLabel, getSchemaVisual, toggleSchemaSelection } from "@/lib/schema-visuals";
+import {
+  buildOwnedEntitySearchText,
+  formatOwnedEntityDescription,
+  formatOwnerSelectDefaultLabel,
+  formatOwnedEntityOptionLabel,
+  getSingleSelectedUserId
+} from "@/lib/user-ownership";
 
 type ReportDraft = {
   title: string;
@@ -68,6 +77,7 @@ type ReportDraft = {
   schemaLinks: string[];
   modeTimeline: ModeTimelineEntry[];
   nextMoves: string[];
+  userId: string | null;
 };
 
 const DEFAULT_REPORT_DRAFT: ReportDraft = {
@@ -93,7 +103,8 @@ const DEFAULT_REPORT_DRAFT: ReportDraft = {
   linkedTaskIds: [],
   schemaLinks: [],
   modeTimeline: [],
-  nextMoves: []
+  nextMoves: [],
+  userId: null
 };
 
 export function PsycheReportsPage() {
@@ -120,6 +131,7 @@ export function PsycheReportsPage() {
   const schemas = schemasQuery.data?.schemas ?? [];
   const eventTypes = eventTypesQuery.data?.eventTypes ?? [];
   const emotions = emotionsQuery.data?.emotions ?? [];
+  const defaultUserId = getSingleSelectedUserId(shell.selectedUserIds);
   const notesSummaryByEntity = shell.snapshot.dashboard.notesSummaryByEntity;
 
   useEffect(() => {
@@ -127,6 +139,7 @@ export function PsycheReportsPage() {
       setDialogOpen(true);
       setDraft({
         ...DEFAULT_REPORT_DRAFT,
+        userId: defaultUserId,
         customEventType:
           searchParams.get("intent") === "execution_tension"
             ? "Execution tension"
@@ -188,14 +201,15 @@ export function PsycheReportsPage() {
         modeOverlays: [],
         schemaLinks: value.schemaLinks.filter(Boolean),
         modeTimeline: value.modeTimeline.filter((entry) => entry.stage.trim().length > 0 && entry.label.trim().length > 0),
-        nextMoves: value.nextMoves.filter(Boolean)
+        nextMoves: value.nextMoves.filter(Boolean),
+        userId: value.userId
       } satisfies TriggerReportInput);
 
       return createTriggerReport(parsed);
     },
     onSuccess: async () => {
       setDialogOpen(false);
-      setDraft(DEFAULT_REPORT_DRAFT);
+      setDraft({ ...DEFAULT_REPORT_DRAFT, userId: defaultUserId });
       setSubmitError(null);
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["forge-psyche-reports"] }),
@@ -207,26 +221,53 @@ export function PsycheReportsPage() {
 
   const valueOptions: EntityLinkOption[] = values.map((entry: PsycheValue) => ({
     value: entry.id,
-    label: entry.title,
-    description: entry.valuedDirection,
+    label: formatOwnedEntityOptionLabel(entry.title, entry.user),
+    description: formatOwnedEntityDescription(entry.valuedDirection, entry.user),
+    searchText: buildOwnedEntitySearchText(
+      [entry.title, entry.valuedDirection, entry.description],
+      entry
+    ),
     kind: "value"
   }));
   const behaviorOptions: EntityLinkOption[] = behaviors.map((behavior: Behavior) => ({
     value: behavior.id,
-    label: behavior.title,
-    description: behavior.kind,
+    label: formatOwnedEntityOptionLabel(behavior.title, behavior.user),
+    description: formatOwnedEntityDescription(behavior.kind, behavior.user),
+    searchText: buildOwnedEntitySearchText(
+      [behavior.title, behavior.kind, behavior.description],
+      behavior
+    ),
     kind: "behavior"
   }));
   const beliefOptions: EntityLinkOption[] = beliefs.map((belief: BeliefEntry) => ({
     value: belief.id,
-    label: belief.statement,
-    description: belief.flexibleAlternative || belief.originNote,
+    label: formatOwnedEntityOptionLabel(belief.statement, belief.user),
+    description: formatOwnedEntityDescription(
+      belief.flexibleAlternative || belief.originNote,
+      belief.user
+    ),
+    searchText: buildOwnedEntitySearchText(
+      [
+        belief.statement,
+        belief.flexibleAlternative,
+        belief.originNote,
+        belief.beliefType
+      ],
+      belief
+    ),
     kind: "belief"
   }));
   const modeOptions: EntityLinkOption[] = modes.map((mode: ModeProfile) => ({
     value: mode.id,
-    label: mode.title,
-    description: mode.archetype || mode.family,
+    label: formatOwnedEntityOptionLabel(mode.title, mode.user),
+    description: formatOwnedEntityDescription(
+      mode.archetype || mode.family,
+      mode.user
+    ),
+    searchText: buildOwnedEntitySearchText(
+      [mode.title, mode.archetype, mode.family, mode.persona],
+      mode
+    ),
     kind: "mode"
   }));
 
@@ -239,7 +280,8 @@ export function PsycheReportsPage() {
       linkedGoalIds: [],
       linkedProjectIds: [],
       linkedTaskIds: [],
-      committedActions: []
+      committedActions: [],
+      userId: draft.userId
     });
     prependEntityToCollection(queryClient, ["forge-psyche-values"], "values", value);
     await queryClient.invalidateQueries({ queryKey: ["forge-psyche-overview"] });
@@ -260,7 +302,8 @@ export function PsycheReportsPage() {
       linkedPatternIds: [],
       linkedValueIds: [],
       linkedSchemaIds: [],
-      linkedModeIds: []
+      linkedModeIds: [],
+      userId: draft.userId
     });
     prependEntityToCollection(queryClient, ["forge-psyche-behaviors"], "behaviors", behavior);
     await queryClient.invalidateQueries({ queryKey: ["forge-psyche-overview"] });
@@ -280,7 +323,8 @@ export function PsycheReportsPage() {
       linkedValueIds: [],
       linkedBehaviorIds: [],
       linkedModeIds: [],
-      linkedReportIds: []
+      linkedReportIds: [],
+      userId: draft.userId
     });
     prependEntityToCollection(queryClient, ["forge-psyche-beliefs"], "beliefs", belief);
     await queryClient.invalidateQueries({ queryKey: ["forge-psyche-overview"] });
@@ -303,7 +347,8 @@ export function PsycheReportsPage() {
       firstAppearanceAt: null,
       linkedPatternIds: [],
       linkedBehaviorIds: [],
-      linkedValueIds: []
+      linkedValueIds: [],
+      userId: draft.userId
     });
     prependEntityToCollection(queryClient, ["forge-psyche-modes"], "modes", mode);
     await queryClient.invalidateQueries({ queryKey: ["forge-psyche-overview"] });
@@ -318,6 +363,17 @@ export function PsycheReportsPage() {
       description: "Start with what happened concretely before interpretation takes over.",
       render: (value, setValue) => (
         <>
+          <UserSelectField
+            value={value.userId}
+            users={shell.snapshot.users}
+            onChange={(userId) => setValue({ userId })}
+            defaultLabel={formatOwnerSelectDefaultLabel(
+              shell.snapshot.users.find((user) => user.id === defaultUserId) ??
+                null,
+              "Choose report owner"
+            )}
+            help="Trigger reports can belong to a human or bot user while still linking to shared values, behaviors, beliefs, and modes."
+          />
           <FlowField label="Report title">
             <Input value={value.title} onChange={(event) => setValue({ title: event.target.value })} placeholder="Friday silence spiral" />
           </FlowField>
@@ -513,7 +569,7 @@ export function PsycheReportsPage() {
         actions={
           <Button
             onClick={() => {
-              setDraft(DEFAULT_REPORT_DRAFT);
+              setDraft({ ...DEFAULT_REPORT_DRAFT, userId: defaultUserId });
               setDialogOpen(true);
             }}
           >
@@ -545,6 +601,7 @@ export function PsycheReportsPage() {
                     <div className="mt-2 text-sm text-white/54">{report.customEventType || report.eventSituation}</div>
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
+                    {report.user ? <UserBadge user={report.user} compact /> : null}
                     <EntityNoteCountLink entityType="trigger_report" entityId={report.id} count={getEntityNotesSummary(notesSummaryByEntity, "trigger_report", report.id).count} />
                     <Badge>{report.status}</Badge>
                     <Link to={`/psyche/reports/${report.id}`} className="inline-flex min-h-10 items-center rounded-full bg-white/[0.08] px-3 py-2 text-sm text-white transition hover:bg-white/[0.12]">

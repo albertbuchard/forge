@@ -24,9 +24,12 @@ Use this plugin when you want Codex to work directly with Forge through the cura
 
 ## Behavioral rules
 
+- Forge is explicitly multi-user. Every stored entity can belong to a typed `human` or `bot` user through `userId`, read routes can scope to one or many users with `userId` or repeated `userIds`, and cross-user links are valid when the request is explicit.
+- Strategies are first-class Forge entities. Use `strategy` through the batch entity tools when the user is planning a directed sequence of projects or tasks toward one or more target goals or projects.
 - Prefer the operator overview before mutating Forge.
 - Prefer batch entity tools for multi-entity work.
 - Search before create.
+- When ownership matters, set `userId` deliberately instead of assuming the current operator is the only namespace.
 - Use `note` as the only collaboration record terminology. Notes are the durable Markdown entity for progress evidence, handoff context, and multi-entity linkage.
 - Delete defaults to soft-delete unless hard delete is explicit.
 - Use the UI handoff when the user should inspect or edit visually.

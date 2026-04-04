@@ -24,6 +24,7 @@ describe("create entity payload normalization", () => {
       description: "",
       horizon: "year",
       status: "active",
+      userId: null,
       targetPoints: 400,
       themeColor: "#c8a46b",
       tagIds: [],
@@ -59,6 +60,7 @@ describe("create entity payload normalization", () => {
       title: "Ship Forge polish pass",
       description: "",
       status: "active",
+      userId: null,
       targetPoints: 240,
       themeColor: "#c0c1ff",
       notes: [{ contentMarkdown: "Capture release assumptions.", author: "" }]
@@ -68,6 +70,7 @@ describe("create entity payload normalization", () => {
       title: "Write the closeout checklist",
       description: "",
       owner: "Albert",
+      userId: null,
       goalId: "goal_1",
       projectId: "project_1",
       priority: "medium",

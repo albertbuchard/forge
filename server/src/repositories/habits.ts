@@ -1,6 +1,11 @@
 import { randomUUID } from "node:crypto";
 import { getDatabase, runInTransaction } from "../db.js";
 import { HttpError } from "../errors.js";
+import {
+  decorateOwnedEntity,
+  inferFirstOwnedUserId,
+  setEntityOwner
+} from "./entity-ownership.js";
 import { getGoalById } from "./goals.js";
 import { getProjectById } from "./projects.js";
 import {
@@ -76,27 +81,51 @@ function todayKey(now = new Date()) {
 
 function parseWeekDays(raw: string): number[] {
   const parsed = JSON.parse(raw) as unknown;
-  return Array.isArray(parsed) ? parsed.filter((value): value is number => Number.isInteger(value) && value >= 0 && value <= 6) : [];
+  return Array.isArray(parsed)
+    ? parsed.filter(
+        (value): value is number =>
+          Number.isInteger(value) && value >= 0 && value <= 6
+      )
+    : [];
 }
 
 function parseIdList(raw: string): string[] {
   const parsed = JSON.parse(raw) as unknown;
-  return Array.isArray(parsed) ? parsed.filter((value): value is string => typeof value === "string" && value.trim().length > 0) : [];
+  return Array.isArray(parsed)
+    ? parsed.filter(
+        (value): value is string =>
+          typeof value === "string" && value.trim().length > 0
+      )
+    : [];
 }
 
 function uniqueIds(values: Array<string | null | undefined>) {
-  return [...new Set(values.filter((value): value is string => typeof value === "string" && value.trim().length > 0))];
+  return [
+    ...new Set(
+      values.filter(
+        (value): value is string =>
+          typeof value === "string" && value.trim().length > 0
+      )
+    )
+  ];
 }
 
 function normalizeLinkedBehaviorIds(input: {
   linkedBehaviorIds?: string[] | null;
   linkedBehaviorId?: string | null;
 }) {
-  const fromArray = Array.isArray(input.linkedBehaviorIds) ? input.linkedBehaviorIds : [];
+  const fromArray = Array.isArray(input.linkedBehaviorIds)
+    ? input.linkedBehaviorIds
+    : [];
   return uniqueIds([...fromArray, input.linkedBehaviorId ?? null]);
 }
 
-function validateExistingIds(ids: string[], getById: (id: string) => unknown, code: string, label: string) {
+function validateExistingIds(
+  ids: string[],
+  getById: (id: string) => unknown,
+  code: string,
+  label: string
+) {
   for (const id of ids) {
     if (!getById(id)) {
       throw new HttpError(404, code, `${label} ${id} does not exist`);
@@ -130,19 +159,33 @@ function listCheckInsForHabit(habitId: string, limit = 14): HabitCheckIn[] {
   return rows.map(mapCheckIn);
 }
 
-function isAligned(habit: Pick<Habit, "polarity">, checkIn: Pick<HabitCheckIn, "status">) {
-  return (habit.polarity === "positive" && checkIn.status === "done") || (habit.polarity === "negative" && checkIn.status === "missed");
+function isAligned(
+  habit: Pick<Habit, "polarity">,
+  checkIn: Pick<HabitCheckIn, "status">
+) {
+  return (
+    (habit.polarity === "positive" && checkIn.status === "done") ||
+    (habit.polarity === "negative" && checkIn.status === "missed")
+  );
 }
 
-function calculateCompletionRate(habit: Pick<Habit, "polarity">, checkIns: HabitCheckIn[]) {
+function calculateCompletionRate(
+  habit: Pick<Habit, "polarity">,
+  checkIns: HabitCheckIn[]
+) {
   if (checkIns.length === 0) {
     return 0;
   }
-  const aligned = checkIns.filter((checkIn) => isAligned(habit, checkIn)).length;
+  const aligned = checkIns.filter((checkIn) =>
+    isAligned(habit, checkIn)
+  ).length;
   return Math.round((aligned / checkIns.length) * 100);
 }
 
-function calculateStreak(habit: Pick<Habit, "polarity">, checkIns: HabitCheckIn[]) {
+function calculateStreak(
+  habit: Pick<Habit, "polarity">,
+  checkIns: HabitCheckIn[]
+) {
   let streak = 0;
   for (const checkIn of checkIns) {
     if (!isAligned(habit, checkIn)) {
@@ -153,7 +196,11 @@ function calculateStreak(habit: Pick<Habit, "polarity">, checkIns: HabitCheckIn[
   return streak;
 }
 
-function isHabitDueToday(habit: Pick<Habit, "status" | "frequency" | "weekDays">, latestCheckIn: HabitCheckIn | null, now = new Date()) {
+function isHabitDueToday(
+  habit: Pick<Habit, "status" | "frequency" | "weekDays">,
+  latestCheckIn: HabitCheckIn | null,
+  now = new Date()
+) {
   if (habit.status !== "active") {
     return false;
   }
@@ -167,7 +214,10 @@ function isHabitDueToday(habit: Pick<Habit, "status" | "frequency" | "weekDays">
   return habit.weekDays.includes(now.getUTCDay());
 }
 
-function mapHabit(row: HabitRow, checkIns = listCheckInsForHabit(row.id)): Habit {
+function mapHabit(
+  row: HabitRow,
+  checkIns = listCheckInsForHabit(row.id)
+): Habit {
   const latestCheckIn = checkIns[0] ?? null;
   const linkedBehaviorIds = normalizeLinkedBehaviorIds({
     linkedBehaviorIds: parseIdList(row.linked_behavior_ids_json),
@@ -175,7 +225,10 @@ function mapHabit(row: HabitRow, checkIns = listCheckInsForHabit(row.id)): Habit
   });
   const linkedBehaviors = linkedBehaviorIds
     .map((behaviorId) => getBehaviorById(behaviorId))
-    .filter((behavior): behavior is NonNullable<typeof behavior> => behavior !== undefined);
+    .filter(
+      (behavior): behavior is NonNullable<typeof behavior> =>
+        behavior !== undefined
+    );
   const draft = {
     id: row.id,
     title: row.title,
@@ -204,16 +257,23 @@ function mapHabit(row: HabitRow, checkIns = listCheckInsForHabit(row.id)): Habit
     lastCheckInAt: latestCheckIn?.createdAt ?? null,
     lastCheckInStatus: latestCheckIn?.status ?? null,
     streakCount: calculateStreak({ polarity: row.polarity }, checkIns),
-    completionRate: calculateCompletionRate({ polarity: row.polarity }, checkIns),
+    completionRate: calculateCompletionRate(
+      { polarity: row.polarity },
+      checkIns
+    ),
     dueToday: false,
     checkIns
   };
 
   draft.dueToday = isHabitDueToday(
-    { status: draft.status, frequency: draft.frequency, weekDays: draft.weekDays },
+    {
+      status: draft.status,
+      frequency: draft.frequency,
+      weekDays: draft.weekDays
+    },
     latestCheckIn
   );
-  return habitSchema.parse(draft);
+  return habitSchema.parse(decorateOwnedEntity("habit", draft));
 }
 
 function getHabitRow(habitId: string): HabitRow | undefined {
@@ -247,7 +307,8 @@ export function listHabits(filters: HabitListQuery = {}): Habit[] {
   if (parsed.limit) {
     params.push(parsed.limit);
   }
-  const whereSql = whereClauses.length > 0 ? `WHERE ${whereClauses.join(" AND ")}` : "";
+  const whereSql =
+    whereClauses.length > 0 ? `WHERE ${whereClauses.join(" AND ")}` : "";
   const rows = getDatabase()
     .prepare(
       `SELECT
@@ -273,18 +334,66 @@ export function getHabitById(habitId: string): Habit | undefined {
   return row ? mapHabit(row) : undefined;
 }
 
-export function createHabit(input: CreateHabitInput, activity?: ActivityContext): Habit {
+export function createHabit(
+  input: CreateHabitInput,
+  activity?: ActivityContext
+): Habit {
   const parsed = createHabitSchema.parse(input);
   const linkedBehaviorIds = normalizeLinkedBehaviorIds(parsed);
-  validateExistingIds(parsed.linkedGoalIds, getGoalById, "goal_not_found", "Goal");
-  validateExistingIds(parsed.linkedProjectIds, getProjectById, "project_not_found", "Project");
-  validateExistingIds(parsed.linkedTaskIds, getTaskById, "task_not_found", "Task");
-  validateExistingIds(parsed.linkedValueIds, getPsycheValueById, "value_not_found", "Value");
-  validateExistingIds(parsed.linkedPatternIds, getBehaviorPatternById, "pattern_not_found", "Pattern");
-  validateExistingIds(linkedBehaviorIds, getBehaviorById, "behavior_not_found", "Behavior");
-  validateExistingIds(parsed.linkedBeliefIds, getBeliefEntryById, "belief_not_found", "Belief");
-  validateExistingIds(parsed.linkedModeIds, getModeProfileById, "mode_not_found", "Mode");
-  validateExistingIds(parsed.linkedReportIds, getTriggerReportById, "report_not_found", "Report");
+  validateExistingIds(
+    parsed.linkedGoalIds,
+    getGoalById,
+    "goal_not_found",
+    "Goal"
+  );
+  validateExistingIds(
+    parsed.linkedProjectIds,
+    getProjectById,
+    "project_not_found",
+    "Project"
+  );
+  validateExistingIds(
+    parsed.linkedTaskIds,
+    getTaskById,
+    "task_not_found",
+    "Task"
+  );
+  validateExistingIds(
+    parsed.linkedValueIds,
+    getPsycheValueById,
+    "value_not_found",
+    "Value"
+  );
+  validateExistingIds(
+    parsed.linkedPatternIds,
+    getBehaviorPatternById,
+    "pattern_not_found",
+    "Pattern"
+  );
+  validateExistingIds(
+    linkedBehaviorIds,
+    getBehaviorById,
+    "behavior_not_found",
+    "Behavior"
+  );
+  validateExistingIds(
+    parsed.linkedBeliefIds,
+    getBeliefEntryById,
+    "belief_not_found",
+    "Belief"
+  );
+  validateExistingIds(
+    parsed.linkedModeIds,
+    getModeProfileById,
+    "mode_not_found",
+    "Mode"
+  );
+  validateExistingIds(
+    parsed.linkedReportIds,
+    getTriggerReportById,
+    "report_not_found",
+    "Report"
+  );
   return runInTransaction(() => {
     const now = new Date().toISOString();
     const id = `habit_${randomUUID().replaceAll("-", "").slice(0, 10)}`;
@@ -322,6 +431,25 @@ export function createHabit(input: CreateHabitInput, activity?: ActivityContext)
         now,
         now
       );
+    setEntityOwner(
+      "habit",
+      id,
+      parsed.userId ??
+        inferFirstOwnedUserId([
+          ...parsed.linkedProjectIds.map((entityId) => ({
+            entityType: "project",
+            entityId
+          })),
+          ...parsed.linkedGoalIds.map((entityId) => ({
+            entityType: "goal",
+            entityId
+          })),
+          ...parsed.linkedTaskIds.map((entityId) => ({
+            entityType: "task",
+            entityId
+          }))
+        ])
+    );
     const habit = getHabitById(id)!;
     if (activity) {
       recordActivityEvent({
@@ -343,31 +471,82 @@ export function createHabit(input: CreateHabitInput, activity?: ActivityContext)
   });
 }
 
-export function updateHabit(habitId: string, input: UpdateHabitInput, activity?: ActivityContext): Habit | undefined {
+export function updateHabit(
+  habitId: string,
+  input: UpdateHabitInput,
+  activity?: ActivityContext
+): Habit | undefined {
   const current = getHabitById(habitId);
   if (!current) {
     return undefined;
   }
   const parsed = updateHabitSchema.parse(input);
   const nextLinkedBehaviorIds =
-    parsed.linkedBehaviorIds !== undefined || parsed.linkedBehaviorId !== undefined
+    parsed.linkedBehaviorIds !== undefined ||
+    parsed.linkedBehaviorId !== undefined
       ? normalizeLinkedBehaviorIds({
-          linkedBehaviorIds: parsed.linkedBehaviorIds ?? current.linkedBehaviorIds,
+          linkedBehaviorIds:
+            parsed.linkedBehaviorIds ?? current.linkedBehaviorIds,
           linkedBehaviorId:
             parsed.linkedBehaviorId === undefined
               ? current.linkedBehaviorId
               : parsed.linkedBehaviorId
         })
       : current.linkedBehaviorIds;
-  validateExistingIds(parsed.linkedGoalIds ?? current.linkedGoalIds, getGoalById, "goal_not_found", "Goal");
-  validateExistingIds(parsed.linkedProjectIds ?? current.linkedProjectIds, getProjectById, "project_not_found", "Project");
-  validateExistingIds(parsed.linkedTaskIds ?? current.linkedTaskIds, getTaskById, "task_not_found", "Task");
-  validateExistingIds(parsed.linkedValueIds ?? current.linkedValueIds, getPsycheValueById, "value_not_found", "Value");
-  validateExistingIds(parsed.linkedPatternIds ?? current.linkedPatternIds, getBehaviorPatternById, "pattern_not_found", "Pattern");
-  validateExistingIds(nextLinkedBehaviorIds, getBehaviorById, "behavior_not_found", "Behavior");
-  validateExistingIds(parsed.linkedBeliefIds ?? current.linkedBeliefIds, getBeliefEntryById, "belief_not_found", "Belief");
-  validateExistingIds(parsed.linkedModeIds ?? current.linkedModeIds, getModeProfileById, "mode_not_found", "Mode");
-  validateExistingIds(parsed.linkedReportIds ?? current.linkedReportIds, getTriggerReportById, "report_not_found", "Report");
+  validateExistingIds(
+    parsed.linkedGoalIds ?? current.linkedGoalIds,
+    getGoalById,
+    "goal_not_found",
+    "Goal"
+  );
+  validateExistingIds(
+    parsed.linkedProjectIds ?? current.linkedProjectIds,
+    getProjectById,
+    "project_not_found",
+    "Project"
+  );
+  validateExistingIds(
+    parsed.linkedTaskIds ?? current.linkedTaskIds,
+    getTaskById,
+    "task_not_found",
+    "Task"
+  );
+  validateExistingIds(
+    parsed.linkedValueIds ?? current.linkedValueIds,
+    getPsycheValueById,
+    "value_not_found",
+    "Value"
+  );
+  validateExistingIds(
+    parsed.linkedPatternIds ?? current.linkedPatternIds,
+    getBehaviorPatternById,
+    "pattern_not_found",
+    "Pattern"
+  );
+  validateExistingIds(
+    nextLinkedBehaviorIds,
+    getBehaviorById,
+    "behavior_not_found",
+    "Behavior"
+  );
+  validateExistingIds(
+    parsed.linkedBeliefIds ?? current.linkedBeliefIds,
+    getBeliefEntryById,
+    "belief_not_found",
+    "Belief"
+  );
+  validateExistingIds(
+    parsed.linkedModeIds ?? current.linkedModeIds,
+    getModeProfileById,
+    "mode_not_found",
+    "Mode"
+  );
+  validateExistingIds(
+    parsed.linkedReportIds ?? current.linkedReportIds,
+    getTriggerReportById,
+    "report_not_found",
+    "Report"
+  );
   return runInTransaction(() => {
     const updatedAt = new Date().toISOString();
     getDatabase()
@@ -403,6 +582,9 @@ export function updateHabit(habitId: string, input: UpdateHabitInput, activity?:
         updatedAt,
         habitId
       );
+    if (parsed.userId !== undefined) {
+      setEntityOwner("habit", habitId, parsed.userId);
+    }
     const habit = getHabitById(habitId)!;
     if (activity) {
       recordActivityEvent({
@@ -424,7 +606,10 @@ export function updateHabit(habitId: string, input: UpdateHabitInput, activity?:
   });
 }
 
-export function deleteHabit(habitId: string, activity?: ActivityContext): Habit | undefined {
+export function deleteHabit(
+  habitId: string,
+  activity?: ActivityContext
+): Habit | undefined {
   const current = getHabitById(habitId);
   if (!current) {
     return undefined;
@@ -450,7 +635,11 @@ export function deleteHabit(habitId: string, activity?: ActivityContext): Habit 
   });
 }
 
-export function createHabitCheckIn(habitId: string, input: CreateHabitCheckInInput, activity?: ActivityContext): Habit | undefined {
+export function createHabitCheckIn(
+  habitId: string,
+  input: CreateHabitCheckInInput,
+  activity?: ActivityContext
+): Habit | undefined {
   const habit = getHabitById(habitId);
   if (!habit) {
     return undefined;
@@ -464,7 +653,12 @@ export function createHabitCheckIn(habitId: string, input: CreateHabitCheckInInp
          WHERE habit_id = ? AND date_key = ?`
       )
       .get(habitId, parsed.dateKey) as HabitCheckInRow | undefined;
-    const reward = recordHabitCheckInReward(habit, parsed.status, parsed.dateKey, activity ?? { source: "ui", actor: null });
+    const reward = recordHabitCheckInReward(
+      habit,
+      parsed.status,
+      parsed.dateKey,
+      activity ?? { source: "ui", actor: null }
+    );
     const now = new Date().toISOString();
 
     if (existing) {
@@ -481,7 +675,16 @@ export function createHabitCheckIn(habitId: string, input: CreateHabitCheckInInp
           `INSERT INTO habit_check_ins (id, habit_id, date_key, status, note, delta_xp, created_at, updated_at)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
         )
-        .run(`hci_${randomUUID().replaceAll("-", "").slice(0, 10)}`, habitId, parsed.dateKey, parsed.status, parsed.note, reward.deltaXp, now, now);
+        .run(
+          `hci_${randomUUID().replaceAll("-", "").slice(0, 10)}`,
+          habitId,
+          parsed.dateKey,
+          parsed.status,
+          parsed.note,
+          reward.deltaXp,
+          now,
+          now
+        );
     }
 
     recordActivityEvent({

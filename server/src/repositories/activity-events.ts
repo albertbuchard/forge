@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { getDatabase, runInTransaction } from "../db.js";
+import { getEntityOwner } from "./entity-ownership.js";
 import { recordEventLog } from "./event-log.js";
 import {
   activityEventSchema,
@@ -36,7 +37,54 @@ export type ActivityEventInput = {
   metadata?: Record<string, ActivityMetadataValue>;
 };
 
+function resolveActivityOwner(
+  row: ActivityEventRow
+): Pick<ActivityEvent, "userId" | "user"> {
+  if (row.entity_type === "task_run") {
+    const taskRunRow = getDatabase()
+      .prepare(`SELECT task_id FROM task_runs WHERE id = ?`)
+      .get(row.entity_id) as { task_id: string } | undefined;
+    if (taskRunRow) {
+      const user = getEntityOwner("task", taskRunRow.task_id);
+      return { userId: user?.id ?? null, user };
+    }
+  }
+
+  if (row.entity_type === "work_block") {
+    const user = getEntityOwner("work_block_template", row.entity_id);
+    return { userId: user?.id ?? null, user };
+  }
+
+  if (row.entity_type === "system") {
+    const metadata = JSON.parse(row.metadata_json) as Record<string, unknown>;
+    const correctedEntityType =
+      typeof metadata.correctedEntityType === "string"
+        ? metadata.correctedEntityType
+        : null;
+    const correctedEntityId =
+      typeof metadata.correctedEntityId === "string"
+        ? metadata.correctedEntityId
+        : null;
+    if (correctedEntityType && correctedEntityId) {
+      const mappedEntityType =
+        correctedEntityType === "work_block"
+          ? "work_block_template"
+          : correctedEntityType;
+      const user = getEntityOwner(mappedEntityType, correctedEntityId);
+      return { userId: user?.id ?? null, user };
+    }
+  }
+
+  const mappedEntityType =
+    row.entity_type === "work_block"
+      ? "work_block_template"
+      : row.entity_type;
+  const user = getEntityOwner(mappedEntityType, row.entity_id);
+  return { userId: user?.id ?? null, user };
+}
+
 function mapActivityEvent(row: ActivityEventRow): ActivityEvent {
+  const owner = resolveActivityOwner(row);
   return activityEventSchema.parse({
     id: row.id,
     entityType: row.entity_type,
@@ -47,7 +95,9 @@ function mapActivityEvent(row: ActivityEventRow): ActivityEvent {
     actor: row.actor,
     source: row.source,
     metadata: JSON.parse(row.metadata_json) as Record<string, ActivityMetadataValue>,
-    createdAt: row.created_at
+    createdAt: row.created_at,
+    userId: owner.userId,
+    user: owner.user
   });
 }
 
@@ -143,10 +193,21 @@ export function listActivityEvents(filters: ActivityListQuery = {}): ActivityEve
     )
     .all(...params) as ActivityEventRow[];
 
-  return rows.map(mapActivityEvent);
+  const events = rows.map(mapActivityEvent);
+  if (!filters.userIds || filters.userIds.length === 0) {
+    return events;
+  }
+  const allowed = new Set(filters.userIds);
+  return events.filter(
+    (event) => event.userId !== null && allowed.has(event.userId)
+  );
 }
 
-export function listActivityEventsForTask(taskId: string, limit = 25): ActivityEvent[] {
+export function listActivityEventsForTask(
+  taskId: string,
+  limit = 25,
+  userIds?: string[]
+): ActivityEvent[] {
   const rows = getDatabase()
     .prepare(
       `SELECT
@@ -179,7 +240,14 @@ export function listActivityEventsForTask(taskId: string, limit = 25): ActivityE
     )
     .all(taskId, taskId, limit) as ActivityEventRow[];
 
-  return rows.map(mapActivityEvent);
+  const events = rows.map(mapActivityEvent);
+  if (!userIds || userIds.length === 0) {
+    return events;
+  }
+  const allowed = new Set(userIds);
+  return events.filter(
+    (event) => event.userId !== null && allowed.has(event.userId)
+  );
 }
 
 export function getActivityEventById(eventId: string): ActivityEvent | undefined {

@@ -12,6 +12,7 @@ export const goalMutationSchema = z.object({
   description: z.string().trim(),
   horizon: z.enum(["quarter", "year", "lifetime"]),
   status: z.enum(["active", "paused", "completed"]),
+  userId: z.string().trim().nullable().optional(),
   targetPoints: z.coerce.number().int().min(25).max(10000),
   themeColor: z
     .string()
@@ -26,6 +27,7 @@ export const projectMutationSchema = z.object({
   title: z.string().trim().min(1, "Title is required"),
   description: z.string().trim(),
   status: z.enum(["active", "paused", "completed"]),
+  userId: z.string().trim().nullable().optional(),
   targetPoints: z.coerce.number().int().min(25).max(10000),
   themeColor: z
     .string()
@@ -94,6 +96,7 @@ export const quickTaskSchema = z.object({
   title: z.string().trim().min(1, "Title is required"),
   description: z.string().trim(),
   owner: z.string().trim().min(1, "Owner is required"),
+  userId: z.string().trim().nullable().optional(),
   goalId: z.string().trim(),
   projectId: z.string().trim().min(1, "Project is required"),
   priority: z.enum(["low", "medium", "high", "critical"]),
@@ -111,6 +114,7 @@ export const habitMutationSchema = z
     title: z.string().trim().min(1, "Title is required"),
     description: z.string().trim(),
     status: z.enum(["active", "paused", "archived"]),
+    userId: z.string().trim().nullable().optional(),
     polarity: z.enum(["positive", "negative"]),
     frequency: z.enum(["daily", "weekly"]),
     targetCount: z.coerce.number().int().min(1).max(14),
@@ -151,6 +155,7 @@ export const workAdjustmentMutationSchema = z.object({
 export const tagMutationSchema = z.object({
   name: z.string().trim().min(1, "Name is required"),
   kind: z.enum(["value", "category", "execution"]),
+  userId: z.string().trim().nullable().optional(),
   color: z
     .string()
     .trim()

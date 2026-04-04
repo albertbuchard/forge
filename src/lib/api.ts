@@ -35,6 +35,7 @@ import type {
   RewardRule,
   SettingsPayload,
   SettingsBinPayload,
+  Strategy,
   Tag,
   Task,
   TaskTimebox,
@@ -44,6 +45,8 @@ import type {
   TaskRunFinishInput,
   TaskRunHeartbeatInput,
   UpdateRewardRuleInput,
+  UserDirectoryPayload,
+  UserSummary,
   WeeklyReviewPayload,
   WorkBlockTemplate,
   XpMetricsPayload,
@@ -160,6 +163,48 @@ function normalizeNestedNotes(
     .filter((note) => note.contentMarkdown.length > 0);
 }
 
+const USER_SCOPE_STORAGE_KEY = "forge.selected-user-ids";
+
+function readStoredUserIds(): string[] {
+  if (typeof window === "undefined") {
+    return [];
+  }
+  try {
+    const raw = window.localStorage.getItem(USER_SCOPE_STORAGE_KEY);
+    if (!raw) {
+      return [];
+    }
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed)) {
+      return [];
+    }
+    return parsed
+      .filter((entry): entry is string => typeof entry === "string")
+      .map((entry) => entry.trim())
+      .filter(Boolean);
+  } catch {
+    return [];
+  }
+}
+
+function resolveScopedUserIds(userIds?: string[]) {
+  return userIds ?? readStoredUserIds();
+}
+
+function coerceUserIds(value: unknown): string[] | undefined {
+  return Array.isArray(value)
+    ? value.filter((entry): entry is string => typeof entry === "string")
+    : undefined;
+}
+
+function appendUserIds(search: URLSearchParams, userIds?: string[]) {
+  for (const userId of resolveScopedUserIds(userIds)) {
+    if (userId.trim()) {
+      search.append("userIds", userId.trim());
+    }
+  }
+}
+
 export function ensureOperatorSession() {
   return request<{ session: OperatorSession }>("/api/v1/auth/operator-session");
 }
@@ -170,26 +215,40 @@ export function revokeOperatorSession() {
   });
 }
 
-export function getForgeSnapshot() {
-  return request<ForgeSnapshot>("/api/v1/context").then(normalizeForgeSnapshot);
+export function getForgeSnapshot(userIds?: string[] | unknown) {
+  const search = new URLSearchParams();
+  appendUserIds(search, coerceUserIds(userIds));
+  const suffix = search.size > 0 ? `?${search.toString()}` : "";
+  return request<ForgeSnapshot>(`/api/v1/context${suffix}`).then(
+    normalizeForgeSnapshot
+  );
 }
 
-export function getInsights() {
-  return request<{ insights: InsightsPayload }>("/api/v1/insights");
+export function getInsights(userIds?: string[] | unknown) {
+  const search = new URLSearchParams();
+  appendUserIds(search, coerceUserIds(userIds));
+  const suffix = search.size > 0 ? `?${search.toString()}` : "";
+  return request<{ insights: InsightsPayload }>(`/api/v1/insights${suffix}`);
 }
 
 export function listDomains() {
   return request<{ domains: Domain[] }>("/api/v1/domains");
 }
 
-export function getPsycheOverview() {
+export function getPsycheOverview(userIds?: string[] | unknown) {
+  const search = new URLSearchParams();
+  appendUserIds(search, coerceUserIds(userIds));
+  const suffix = search.size > 0 ? `?${search.toString()}` : "";
   return request<{ overview: PsycheOverviewPayload }>(
-    "/api/v1/psyche/overview"
+    `/api/v1/psyche/overview${suffix}`
   );
 }
 
-export function listPsycheValues() {
-  return request<{ values: PsycheValue[] }>("/api/v1/psyche/values");
+export function listPsycheValues(userIds?: string[] | unknown) {
+  const search = new URLSearchParams();
+  appendUserIds(search, coerceUserIds(userIds));
+  const suffix = search.size > 0 ? `?${search.toString()}` : "";
+  return request<{ values: PsycheValue[] }>(`/api/v1/psyche/values${suffix}`);
 }
 
 export function getPsycheValue(valueId: string) {
@@ -219,8 +278,13 @@ export function deletePsycheValue(valueId: string) {
   });
 }
 
-export function listBehaviorPatterns() {
-  return request<{ patterns: BehaviorPattern[] }>("/api/v1/psyche/patterns");
+export function listBehaviorPatterns(userIds?: string[] | unknown) {
+  const search = new URLSearchParams();
+  appendUserIds(search, coerceUserIds(userIds));
+  const suffix = search.size > 0 ? `?${search.toString()}` : "";
+  return request<{ patterns: BehaviorPattern[] }>(
+    `/api/v1/psyche/patterns${suffix}`
+  );
 }
 
 export function getBehaviorPattern(patternId: string) {
@@ -258,8 +322,13 @@ export function deleteBehaviorPattern(patternId: string) {
   );
 }
 
-export function listBehaviors() {
-  return request<{ behaviors: Behavior[] }>("/api/v1/psyche/behaviors");
+export function listBehaviors(userIds?: string[] | unknown) {
+  const search = new URLSearchParams();
+  appendUserIds(search, coerceUserIds(userIds));
+  const suffix = search.size > 0 ? `?${search.toString()}` : "";
+  return request<{ behaviors: Behavior[] }>(
+    `/api/v1/psyche/behaviors${suffix}`
+  );
 }
 
 export function getBehavior(behaviorId: string) {
@@ -303,8 +372,11 @@ export function listSchemaCatalog() {
   );
 }
 
-export function listBeliefs() {
-  return request<{ beliefs: BeliefEntry[] }>("/api/v1/psyche/beliefs");
+export function listBeliefs(userIds?: string[] | unknown) {
+  const search = new URLSearchParams();
+  appendUserIds(search, coerceUserIds(userIds));
+  const suffix = search.size > 0 ? `?${search.toString()}` : "";
+  return request<{ beliefs: BeliefEntry[] }>(`/api/v1/psyche/beliefs${suffix}`);
 }
 
 export function getBelief(beliefId: string) {
@@ -340,8 +412,11 @@ export function deleteBelief(beliefId: string) {
   );
 }
 
-export function listModes() {
-  return request<{ modes: ModeProfile[] }>("/api/v1/psyche/modes");
+export function listModes(userIds?: string[] | unknown) {
+  const search = new URLSearchParams();
+  appendUserIds(search, coerceUserIds(userIds));
+  const suffix = search.size > 0 ? `?${search.toString()}` : "";
+  return request<{ modes: ModeProfile[] }>(`/api/v1/psyche/modes${suffix}`);
 }
 
 export function getMode(modeId: string) {
@@ -487,8 +562,13 @@ export function deleteEmotionDefinition(emotionId: string) {
   );
 }
 
-export function listTriggerReports() {
-  return request<{ reports: TriggerReport[] }>("/api/v1/psyche/reports");
+export function listTriggerReports(userIds?: string[] | unknown) {
+  const search = new URLSearchParams();
+  appendUserIds(search, coerceUserIds(userIds));
+  const suffix = search.size > 0 ? `?${search.toString()}` : "";
+  return request<{ reports: TriggerReport[] }>(
+    `/api/v1/psyche/reports${suffix}`
+  );
 }
 
 export function createTriggerReport(input: TriggerReportInput) {
@@ -539,6 +619,7 @@ export function listNotes(
     textTerms?: string[];
     author?: string;
     query?: string;
+    userIds?: string[];
     updatedFrom?: string;
     updatedTo?: string;
     limit?: number;
@@ -573,6 +654,7 @@ export function listNotes(
   if (input.query) {
     search.set("query", input.query);
   }
+  appendUserIds(search, input.userIds);
   if (input.updatedFrom) {
     search.set("updatedFrom", input.updatedFrom);
   }
@@ -706,6 +788,7 @@ export function getCalendarOverview(
   input: {
     from?: string;
     to?: string;
+    userIds?: string[] | unknown;
   } = {}
 ) {
   const search = new URLSearchParams();
@@ -715,6 +798,7 @@ export function getCalendarOverview(
   if (input.to) {
     search.set("to", input.to);
   }
+  appendUserIds(search, coerceUserIds(input.userIds));
   const suffix = search.size > 0 ? `?${search.toString()}` : "";
   return request<{ calendar: CalendarOverviewPayload }>(
     `/api/v1/calendar/overview${suffix}`
@@ -908,6 +992,7 @@ export function createWorkBlockTemplate(input: {
   startsOn?: string | null;
   endsOn?: string | null;
   blockingState: WorkBlockTemplate["blockingState"];
+  userId?: string | null;
 }) {
   return request<{ template: WorkBlockTemplate }>(
     "/api/v1/calendar/work-block-templates",
@@ -931,6 +1016,7 @@ export function patchWorkBlockTemplate(
     startsOn: string | null;
     endsOn: string | null;
     blockingState: WorkBlockTemplate["blockingState"];
+    userId: string | null;
   }>
 ) {
   return request<{ template: WorkBlockTemplate }>(
@@ -955,6 +1041,7 @@ export function listTaskTimeboxes(
   input: {
     from?: string;
     to?: string;
+    userIds?: string[] | unknown;
   } = {}
 ) {
   const search = new URLSearchParams();
@@ -964,6 +1051,7 @@ export function listTaskTimeboxes(
   if (input.to) {
     search.set("to", input.to);
   }
+  appendUserIds(search, coerceUserIds(input.userIds));
   const suffix = search.size > 0 ? `?${search.toString()}` : "";
   return request<{ timeboxes: TaskTimebox[] }>(
     `/api/v1/calendar/timeboxes${suffix}`
@@ -982,6 +1070,7 @@ export function createCalendarEvent(input: {
   eventType?: string;
   categories?: string[];
   preferredCalendarId?: string | null;
+  userId?: string | null;
   links?: Array<{
     entityType: CrudEntityType;
     entityId: string;
@@ -1008,6 +1097,7 @@ export function patchCalendarEvent(
     eventType: string;
     categories: string[];
     preferredCalendarId: string | null;
+    userId: string | null;
     links: Array<{
       entityType: CrudEntityType;
       entityId: string;
@@ -1042,6 +1132,7 @@ export function createTaskTimebox(input: {
   source?: TaskTimebox["source"];
   status?: TaskTimebox["status"];
   overrideReason?: string | null;
+  userId?: string | null;
 }) {
   return request<{ timebox: TaskTimebox }>("/api/v1/calendar/timeboxes", {
     method: "POST",
@@ -1057,6 +1148,7 @@ export function patchTaskTimebox(
     endsAt: string;
     status: TaskTimebox["status"];
     overrideReason: string | null;
+    userId: string | null;
   }>
 ) {
   return request<{ timebox: TaskTimebox }>(
@@ -1092,8 +1184,11 @@ export function recommendTaskTimeboxes(input: {
   );
 }
 
-export function listProjects() {
-  return request<{ projects: ProjectSummary[] }>("/api/v1/projects");
+export function listProjects(userIds?: string[]) {
+  const search = new URLSearchParams();
+  appendUserIds(search, userIds);
+  const suffix = search.size > 0 ? `?${search.toString()}` : "";
+  return request<{ projects: ProjectSummary[] }>(`/api/v1/projects${suffix}`);
 }
 
 export function listHabits(
@@ -1102,9 +1197,11 @@ export function listHabits(
     polarity?: Habit["polarity"];
     dueToday?: boolean;
     limit?: number;
+    userIds?: string[];
   } = {}
 ) {
   const search = new URLSearchParams();
+  appendUserIds(search, input.userIds);
   if (input.status) {
     search.set("status", input.status);
   }
@@ -1218,6 +1315,99 @@ export function getOperatorOverview() {
 
 export function getSettings() {
   return request<{ settings: SettingsPayload }>("/api/v1/settings");
+}
+
+export function listUsers() {
+  return request<{ users: UserSummary[] }>("/api/v1/users");
+}
+
+export function getUserDirectory() {
+  return request<{ directory: UserDirectoryPayload }>(
+    "/api/v1/users/directory"
+  );
+}
+
+export function createUser(input: {
+  kind: "human" | "bot";
+  handle: string;
+  displayName: string;
+  description?: string;
+  accentColor?: string;
+}) {
+  return request<{ user: UserSummary }>("/api/v1/users", {
+    method: "POST",
+    body: JSON.stringify(input)
+  });
+}
+
+export function patchUser(
+  userId: string,
+  patch: Partial<{
+    kind: "human" | "bot";
+    handle: string;
+    displayName: string;
+    description: string;
+    accentColor: string;
+  }>
+) {
+  return request<{ user: UserSummary }>(`/api/v1/users/${userId}`, {
+    method: "PATCH",
+    body: JSON.stringify(patch)
+  });
+}
+
+export function listStrategies(userIds?: string[] | unknown) {
+  const search = new URLSearchParams();
+  appendUserIds(search, coerceUserIds(userIds));
+  const suffix = search.size > 0 ? `?${search.toString()}` : "";
+  return request<{ strategies: Strategy[] }>(`/api/v1/strategies${suffix}`);
+}
+
+export function createStrategy(input: {
+  title: string;
+  overview: string;
+  endStateDescription: string;
+  status: "active" | "paused" | "completed";
+  targetGoalIds: string[];
+  targetProjectIds: string[];
+  linkedEntities: Array<{ entityType: CrudEntityType; entityId: string }>;
+  graph: Strategy["graph"];
+  userId?: string | null;
+}) {
+  return request<{ strategy: Strategy }>("/api/v1/strategies", {
+    method: "POST",
+    body: JSON.stringify(input)
+  });
+}
+
+export function getStrategy(strategyId: string) {
+  return request<{ strategy: Strategy }>(`/api/v1/strategies/${strategyId}`);
+}
+
+export function patchStrategy(
+  strategyId: string,
+  patch: Partial<{
+    title: string;
+    overview: string;
+    endStateDescription: string;
+    status: "active" | "paused" | "completed";
+    targetGoalIds: string[];
+    targetProjectIds: string[];
+    linkedEntities: Array<{ entityType: CrudEntityType; entityId: string }>;
+    graph: Strategy["graph"];
+    userId: string | null;
+  }>
+) {
+  return request<{ strategy: Strategy }>(`/api/v1/strategies/${strategyId}`, {
+    method: "PATCH",
+    body: JSON.stringify(patch)
+  });
+}
+
+export function deleteStrategy(strategyId: string) {
+  return request<{ strategy: Strategy }>(`/api/v1/strategies/${strategyId}`, {
+    method: "DELETE"
+  });
 }
 
 export function getSettingsBin() {
@@ -1456,6 +1646,7 @@ export function listActivity(
     entityType?: string;
     entityId?: string;
     includeCorrected?: boolean;
+    userIds?: string[] | unknown;
   } = {}
 ) {
   const search = new URLSearchParams();
@@ -1469,6 +1660,7 @@ export function listActivity(
   if (input.includeCorrected) {
     search.set("includeCorrected", "true");
   }
+  appendUserIds(search, coerceUserIds(input.userIds));
   return request<{ activity: ForgeSnapshot["activity"] }>(
     `/api/v1/activity?${search.toString()}`
   );

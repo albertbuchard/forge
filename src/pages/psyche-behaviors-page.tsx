@@ -17,12 +17,21 @@ import { EntityName } from "@/components/ui/entity-name";
 import { ErrorState, LoadingState } from "@/components/ui/page-state";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { UserBadge } from "@/components/ui/user-badge";
+import { UserSelectField } from "@/components/ui/user-select-field";
 import { prependEntityToCollection } from "@/lib/query-cache";
 import { getEntityNotesSummary } from "@/lib/note-helpers";
 import { behaviorSchema, type BehaviorInput } from "@/lib/psyche-schemas";
 import type { Behavior, BehaviorPattern, ModeProfile, PsycheValue, SchemaCatalogEntry } from "@/lib/psyche-types";
 import { getSchemaFamilyLabel } from "@/lib/schema-visuals";
 import { createBehavior, createBehaviorPattern, createMode, createPsycheValue, listBehaviorPatterns, listBehaviors, listModes, listPsycheValues, listSchemaCatalog, patchBehavior } from "@/lib/api";
+import {
+  buildOwnedEntitySearchText,
+  formatOwnedEntityDescription,
+  formatOwnerSelectDefaultLabel,
+  formatOwnedEntityOptionLabel,
+  getSingleSelectedUserId
+} from "@/lib/user-ownership";
 
 const DEFAULT_BEHAVIOR_INPUT: BehaviorInput = {
   kind: "away",
@@ -37,7 +46,8 @@ const DEFAULT_BEHAVIOR_INPUT: BehaviorInput = {
   linkedPatternIds: [],
   linkedValueIds: [],
   linkedSchemaIds: [],
-  linkedModeIds: []
+  linkedModeIds: [],
+  userId: null
 };
 
 function behaviorToInput(behavior: Behavior): BehaviorInput {
@@ -54,7 +64,8 @@ function behaviorToInput(behavior: Behavior): BehaviorInput {
     linkedPatternIds: behavior.linkedPatternIds,
     linkedValueIds: behavior.linkedValueIds,
     linkedSchemaIds: behavior.linkedSchemaIds,
-    linkedModeIds: behavior.linkedModeIds
+    linkedModeIds: behavior.linkedModeIds,
+    userId: behavior.userId ?? null
   };
 }
 
@@ -83,6 +94,7 @@ export function PsycheBehaviorsPage() {
   const values = valuesQuery.data?.values ?? [];
   const schemas = schemasQuery.data?.schemas ?? [];
   const modes = modesQuery.data?.modes ?? [];
+  const defaultUserId = getSingleSelectedUserId(shell.selectedUserIds);
   const focusedBehaviorId = searchParams.get("focus");
   const notesSummaryByEntity = shell.snapshot.dashboard.notesSummaryByEntity;
 
@@ -92,12 +104,12 @@ export function PsycheBehaviorsPage() {
     if (searchParams.get("create") === "1") {
       setDialogOpen(true);
       setEditingBehavior(null);
-      setDraft(DEFAULT_BEHAVIOR_INPUT);
+      setDraft({ ...DEFAULT_BEHAVIOR_INPUT, userId: defaultUserId });
       const next = new URLSearchParams(searchParams);
       next.delete("create");
       setSearchParams(next, { replace: true });
     }
-  }, [searchParams, setSearchParams]);
+  }, [defaultUserId, searchParams, setSearchParams]);
 
   const saveMutation = useMutation({
     mutationFn: async (input: BehaviorInput) => {
@@ -110,7 +122,7 @@ export function PsycheBehaviorsPage() {
     onSuccess: async () => {
       setDialogOpen(false);
       setEditingBehavior(null);
-      setDraft(DEFAULT_BEHAVIOR_INPUT);
+      setDraft({ ...DEFAULT_BEHAVIOR_INPUT, userId: defaultUserId });
       setSubmitError(null);
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["forge-psyche-behaviors"] }),
@@ -121,14 +133,30 @@ export function PsycheBehaviorsPage() {
 
   const patternOptions: EntityLinkOption[] = patterns.map((pattern: BehaviorPattern) => ({
     value: pattern.id,
-    label: pattern.title,
-    description: pattern.preferredResponse || pattern.targetBehavior,
+    label: formatOwnedEntityOptionLabel(pattern.title, pattern.user),
+    description: formatOwnedEntityDescription(
+      pattern.preferredResponse || pattern.targetBehavior,
+      pattern.user
+    ),
+    searchText: buildOwnedEntitySearchText(
+      [
+        pattern.title,
+        pattern.preferredResponse,
+        pattern.targetBehavior,
+        pattern.description
+      ],
+      pattern
+    ),
     kind: "pattern"
   }));
   const valueOptions: EntityLinkOption[] = values.map((entry: PsycheValue) => ({
     value: entry.id,
-    label: entry.title,
-    description: entry.valuedDirection,
+    label: formatOwnedEntityOptionLabel(entry.title, entry.user),
+    description: formatOwnedEntityDescription(entry.valuedDirection, entry.user),
+    searchText: buildOwnedEntitySearchText(
+      [entry.title, entry.valuedDirection, entry.description],
+      entry
+    ),
     kind: "value"
   }));
   const schemaOptions: EntityLinkOption[] = schemas.map((schema: SchemaCatalogEntry) => ({
@@ -141,8 +169,15 @@ export function PsycheBehaviorsPage() {
   }));
   const modeOptions: EntityLinkOption[] = modes.map((mode: ModeProfile) => ({
     value: mode.id,
-    label: mode.title,
-    description: mode.archetype || mode.family,
+    label: formatOwnedEntityOptionLabel(mode.title, mode.user),
+    description: formatOwnedEntityDescription(
+      mode.archetype || mode.family,
+      mode.user
+    ),
+    searchText: buildOwnedEntitySearchText(
+      [mode.title, mode.archetype, mode.family, mode.persona],
+      mode
+    ),
     kind: "mode"
   }));
 
@@ -158,7 +193,8 @@ export function PsycheBehaviorsPage() {
       linkedValueIds: [],
       linkedSchemaLabels: [],
       linkedModeIds: [],
-      linkedBeliefIds: []
+      linkedBeliefIds: [],
+      userId: draft.userId
     });
     prependEntityToCollection(queryClient, ["forge-psyche-patterns"], "patterns", pattern);
     await queryClient.invalidateQueries({ queryKey: ["forge-psyche-overview"] });
@@ -179,7 +215,8 @@ export function PsycheBehaviorsPage() {
       linkedGoalIds: [],
       linkedProjectIds: [],
       linkedTaskIds: [],
-      committedActions: []
+      committedActions: [],
+      userId: draft.userId
     });
     prependEntityToCollection(queryClient, ["forge-psyche-values"], "values", value);
     await queryClient.invalidateQueries({ queryKey: ["forge-psyche-overview"] });
@@ -207,7 +244,8 @@ export function PsycheBehaviorsPage() {
       firstAppearanceAt: null,
       linkedPatternIds: [],
       linkedBehaviorIds: [],
-      linkedValueIds: []
+      linkedValueIds: [],
+      userId: draft.userId
     });
     prependEntityToCollection(queryClient, ["forge-psyche-modes"], "modes", mode);
     await queryClient.invalidateQueries({ queryKey: ["forge-psyche-overview"] });
@@ -227,6 +265,17 @@ export function PsycheBehaviorsPage() {
       description: "Start with the behavior itself so the map reads like something you can instantly recognize in real life.",
       render: (value, setValue) => (
         <>
+          <UserSelectField
+            value={value.userId ?? null}
+            users={shell.snapshot.users}
+            onChange={(userId) => setValue({ userId })}
+            defaultLabel={formatOwnerSelectDefaultLabel(
+              shell.snapshot.users.find((user) => user.id === defaultUserId) ??
+                null,
+              "Choose behavior owner"
+            )}
+            help="Behaviors can belong to a human or bot user while still linking across shared patterns, schemas, and modes."
+          />
           <FlowField label="Behavior title">
             <Input value={value.title} onChange={(event) => setValue({ title: event.target.value })} placeholder="Scroll to numb the impact" />
           </FlowField>
@@ -383,7 +432,7 @@ export function PsycheBehaviorsPage() {
           <Button
             onClick={() => {
               setEditingBehavior(null);
-              setDraft(DEFAULT_BEHAVIOR_INPUT);
+              setDraft({ ...DEFAULT_BEHAVIOR_INPUT, userId: defaultUserId });
               setDialogOpen(true);
             }}
           >
@@ -441,7 +490,14 @@ export function PsycheBehaviorsPage() {
               </div>
               {grouped[kind].length === 0 ? (
                 <div className="flex">
-                  <Button variant="secondary" onClick={() => setDialogOpen(true)}>
+                  <Button
+                    variant="secondary"
+                    onClick={() => {
+                      setEditingBehavior(null);
+                      setDraft({ ...DEFAULT_BEHAVIOR_INPUT, userId: defaultUserId });
+                      setDialogOpen(true);
+                    }}
+                  >
                     Add {kind === "away" ? "away move" : kind === "committed" ? "committed action" : "recovery move"}
                   </Button>
                 </div>
@@ -453,7 +509,10 @@ export function PsycheBehaviorsPage() {
                     className={`rounded-[22px] border border-white/8 bg-white/[0.04] p-4 text-left transition hover:bg-white/[0.08] ${psycheFocusClass(focusedBehaviorId === behavior.id)}`}
                   >
                     <div className="flex flex-wrap items-start justify-between gap-3">
-                      <div className="font-medium text-white">{behavior.title}</div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <div className="font-medium text-white">{behavior.title}</div>
+                        {behavior.user ? <UserBadge user={behavior.user} compact /> : null}
+                      </div>
                       <div className="flex flex-wrap items-center gap-2">
                         <EntityNoteCountLink entityType="behavior" entityId={behavior.id} count={getEntityNotesSummary(notesSummaryByEntity, "behavior", behavior.id).count} />
                         <Button

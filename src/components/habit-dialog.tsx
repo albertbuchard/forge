@@ -1,16 +1,37 @@
 import { useEffect, useMemo, useState } from "react";
-import { FlowChoiceGrid, FlowField, QuestionFlowDialog, type QuestionFlowStep } from "@/components/flows/question-flow-dialog";
+import {
+  FlowChoiceGrid,
+  FlowField,
+  QuestionFlowDialog,
+  type QuestionFlowStep
+} from "@/components/flows/question-flow-dialog";
 import { EntityBadge } from "@/components/ui/entity-badge";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { UserSelectField } from "@/components/ui/user-select-field";
+import { formatOwnerSelectDefaultLabel } from "@/lib/user-ownership";
 import { habitMutationSchema, type HabitMutationInput } from "@/lib/schemas";
-import type { Behavior, BehaviorPattern, BeliefEntry, ModeProfile, PsycheValue, TriggerReport } from "@/lib/psyche-types";
-import type { DashboardGoal, Habit, ProjectSummary, Task } from "@/lib/types";
+import type {
+  Behavior,
+  BehaviorPattern,
+  BeliefEntry,
+  ModeProfile,
+  PsycheValue,
+  TriggerReport
+} from "@/lib/psyche-types";
+import type {
+  DashboardGoal,
+  Habit,
+  ProjectSummary,
+  Task,
+  UserSummary
+} from "@/lib/types";
 
 export const defaultHabitValues: HabitMutationInput = {
   title: "",
   description: "",
   status: "active",
+  userId: null,
   polarity: "positive",
   frequency: "daily",
   targetCount: 1,
@@ -44,6 +65,7 @@ function habitToFormValues(habit: Habit): HabitMutationInput {
     title: habit.title,
     description: habit.description,
     status: habit.status,
+    userId: habit.userId ?? null,
     polarity: habit.polarity,
     frequency: habit.frequency,
     targetCount: habit.targetCount,
@@ -76,6 +98,8 @@ export function HabitDialog({
   goals,
   projects,
   tasks,
+  users,
+  defaultUserId = null,
   onOpenChange,
   onSubmit
 }: {
@@ -91,44 +115,82 @@ export function HabitDialog({
   goals: DashboardGoal[];
   projects: ProjectSummary[];
   tasks: Task[];
+  users: UserSummary[];
+  defaultUserId?: string | null;
   onOpenChange: (open: boolean) => void;
   onSubmit: (input: HabitMutationInput, habitId?: string) => Promise<void>;
 }) {
   const [draft, setDraft] = useState<HabitMutationInput>(defaultHabitValues);
   const [submitError, setSubmitError] = useState<string | null>(null);
-  const [fieldErrors, setFieldErrors] = useState<Record<string, string | undefined>>({});
+  const [fieldErrors, setFieldErrors] = useState<
+    Record<string, string | undefined>
+  >({});
 
   useEffect(() => {
     if (!open) {
       return;
     }
-    setDraft(editingHabit ? habitToFormValues(editingHabit) : defaultHabitValues);
+    setDraft(
+      editingHabit
+        ? habitToFormValues(editingHabit)
+        : { ...defaultHabitValues, userId: defaultUserId }
+    );
     setSubmitError(null);
     setFieldErrors({});
-  }, [editingHabit, open]);
+  }, [defaultUserId, editingHabit, open]);
 
-  const behaviorOptions = useMemo(() => behaviors.slice().sort((left, right) => left.title.localeCompare(right.title)), [behaviors]);
+  const suggestedUser = users.find((user) => user.id === defaultUserId) ?? null;
+
+  const behaviorOptions = useMemo(
+    () =>
+      behaviors
+        .slice()
+        .sort((left, right) => left.title.localeCompare(right.title)),
+    [behaviors]
+  );
   const syncLinkedBehaviorAlias = (nextBehaviorIds: string[]) => ({
     linkedBehaviorIds: nextBehaviorIds,
     linkedBehaviorId: nextBehaviorIds[0] ?? ""
   });
 
-  const toggleId = (values: string[], id: string) => (values.includes(id) ? values.filter((entry) => entry !== id) : [...values, id]);
+  const toggleId = (values: string[], id: string) =>
+    values.includes(id)
+      ? values.filter((entry) => entry !== id)
+      : [...values, id];
 
   const steps: Array<QuestionFlowStep<HabitMutationInput>> = [
     {
       id: "intent",
       eyebrow: "Habit",
       title: "Name the recurring move",
-      description: "Use habits for recurring commitments and recurring slips. Keep the title concrete so the daily check-in never needs interpretation.",
+      description:
+        "Use habits for recurring commitments and recurring slips. Keep the title concrete so the daily check-in never needs interpretation.",
       render: (value, setValue) => (
         <>
           <FlowField label="Title" error={fieldErrors.title ?? null}>
-            <Input value={value.title} onChange={(event) => setValue({ title: event.target.value })} placeholder="Train lower body" />
+            <Input
+              value={value.title}
+              onChange={(event) => setValue({ title: event.target.value })}
+              placeholder="Train lower body"
+            />
           </FlowField>
           <FlowField label="Description">
-            <Textarea value={value.description} onChange={(event) => setValue({ description: event.target.value })} placeholder="Write the habit description in Markdown. Define what counts, edge cases, and examples." />
+            <Textarea
+              value={value.description}
+              onChange={(event) =>
+                setValue({ description: event.target.value })
+              }
+              placeholder="Write the habit description in Markdown. Define what counts, edge cases, and examples."
+            />
           </FlowField>
+          <UserSelectField
+            value={value.userId}
+            users={users}
+            onChange={(userId) => setValue({ userId })}
+            label="Owner user"
+            defaultLabel={formatOwnerSelectDefaultLabel(suggestedUser)}
+            help="Habits can be owned by humans or bots. When one scoped user is active, Forge uses that as the default."
+          />
         </>
       )
     },
@@ -136,16 +198,27 @@ export function HabitDialog({
       id: "shape",
       eyebrow: "Shape",
       title: "Set direction and cadence",
-      description: "Forge uses polarity to decide whether doing the habit is good or bad, and cadence to know when it should show up.",
+      description:
+        "Forge uses polarity to decide whether doing the habit is good or bad, and cadence to know when it should show up.",
       render: (value, setValue) => (
         <>
           <FlowField label="Polarity">
             <FlowChoiceGrid
               value={value.polarity}
-              onChange={(next) => setValue({ polarity: next as HabitMutationInput["polarity"] })}
+              onChange={(next) =>
+                setValue({ polarity: next as HabitMutationInput["polarity"] })
+              }
               options={[
-                { value: "positive", label: "Positive", description: "Doing it is aligned and should award XP." },
-                { value: "negative", label: "Negative", description: "Doing it is a slip and should cost XP." }
+                {
+                  value: "positive",
+                  label: "Positive",
+                  description: "Doing it is aligned and should award XP."
+                },
+                {
+                  value: "negative",
+                  label: "Negative",
+                  description: "Doing it is a slip and should cost XP."
+                }
               ]}
               columns={2}
             />
@@ -153,10 +226,20 @@ export function HabitDialog({
           <FlowField label="Frequency">
             <FlowChoiceGrid
               value={value.frequency}
-              onChange={(next) => setValue({ frequency: next as HabitMutationInput["frequency"] })}
+              onChange={(next) =>
+                setValue({ frequency: next as HabitMutationInput["frequency"] })
+              }
               options={[
-                { value: "daily", label: "Daily", description: "Track against each day." },
-                { value: "weekly", label: "Weekly", description: "Track only on the selected weekdays." }
+                {
+                  value: "daily",
+                  label: "Daily",
+                  description: "Track against each day."
+                },
+                {
+                  value: "weekly",
+                  label: "Weekly",
+                  description: "Track only on the selected weekdays."
+                }
               ]}
               columns={2}
             />
@@ -173,7 +256,11 @@ export function HabitDialog({
                       className={`rounded-full px-3 py-2 text-sm transition ${selected ? "bg-white/16 text-white" : "bg-white/6 text-white/58 hover:bg-white/10 hover:text-white"}`}
                       onClick={() =>
                         setValue({
-                          weekDays: selected ? value.weekDays.filter((entry) => entry !== day.value) : [...value.weekDays, day.value].sort()
+                          weekDays: selected
+                            ? value.weekDays.filter(
+                                (entry) => entry !== day.value
+                              )
+                            : [...value.weekDays, day.value].sort()
                         })
                       }
                     >
@@ -187,11 +274,25 @@ export function HabitDialog({
           <FlowField label="Status">
             <FlowChoiceGrid
               value={value.status}
-              onChange={(next) => setValue({ status: next as HabitMutationInput["status"] })}
+              onChange={(next) =>
+                setValue({ status: next as HabitMutationInput["status"] })
+              }
               options={[
-                { value: "active", label: "Active", description: "Show it in the daily operating flow." },
-                { value: "paused", label: "Paused", description: "Keep it visible but not currently due." },
-                { value: "archived", label: "Archived", description: "Keep the record but retire it from active work." }
+                {
+                  value: "active",
+                  label: "Active",
+                  description: "Show it in the daily operating flow."
+                },
+                {
+                  value: "paused",
+                  label: "Paused",
+                  description: "Keep it visible but not currently due."
+                },
+                {
+                  value: "archived",
+                  label: "Archived",
+                  description: "Keep the record but retire it from active work."
+                }
               ]}
             />
           </FlowField>
@@ -202,7 +303,8 @@ export function HabitDialog({
       id: "links",
       eyebrow: "Links",
       title: "Connect the habit to real Forge work",
-      description: "Link habits to the goals, projects, and tasks they support so they stay anchored in the same operating graph as everything else.",
+      description:
+        "Link habits to the goals, projects, and tasks they support so they stay anchored in the same operating graph as everything else.",
       render: (value, setValue) => (
         <>
           <FlowField label="Goals">
@@ -210,8 +312,21 @@ export function HabitDialog({
               {goals.map((goal) => {
                 const selected = value.linkedGoalIds.includes(goal.id);
                 return (
-                  <button key={goal.id} type="button" onClick={() => setValue({ linkedGoalIds: toggleId(value.linkedGoalIds, goal.id) })}>
-                    <EntityBadge kind="goal" label={goal.title} gradient={selected} className={selected ? "" : "opacity-75"} />
+                  <button
+                    key={goal.id}
+                    type="button"
+                    onClick={() =>
+                      setValue({
+                        linkedGoalIds: toggleId(value.linkedGoalIds, goal.id)
+                      })
+                    }
+                  >
+                    <EntityBadge
+                      kind="goal"
+                      label={goal.title}
+                      gradient={selected}
+                      className={selected ? "" : "opacity-75"}
+                    />
                   </button>
                 );
               })}
@@ -222,8 +337,24 @@ export function HabitDialog({
               {projects.map((project) => {
                 const selected = value.linkedProjectIds.includes(project.id);
                 return (
-                  <button key={project.id} type="button" onClick={() => setValue({ linkedProjectIds: toggleId(value.linkedProjectIds, project.id) })}>
-                    <EntityBadge kind="project" label={project.title} gradient={selected} className={selected ? "" : "opacity-75"} />
+                  <button
+                    key={project.id}
+                    type="button"
+                    onClick={() =>
+                      setValue({
+                        linkedProjectIds: toggleId(
+                          value.linkedProjectIds,
+                          project.id
+                        )
+                      })
+                    }
+                  >
+                    <EntityBadge
+                      kind="project"
+                      label={project.title}
+                      gradient={selected}
+                      className={selected ? "" : "opacity-75"}
+                    />
                   </button>
                 );
               })}
@@ -234,8 +365,22 @@ export function HabitDialog({
               {tasks.map((task) => {
                 const selected = value.linkedTaskIds.includes(task.id);
                 return (
-                  <button key={task.id} type="button" onClick={() => setValue({ linkedTaskIds: toggleId(value.linkedTaskIds, task.id) })}>
-                    <EntityBadge kind="task" label={task.title} gradient={selected} className={selected ? "" : "opacity-75"} wrap />
+                  <button
+                    key={task.id}
+                    type="button"
+                    onClick={() =>
+                      setValue({
+                        linkedTaskIds: toggleId(value.linkedTaskIds, task.id)
+                      })
+                    }
+                  >
+                    <EntityBadge
+                      kind="task"
+                      label={task.title}
+                      gradient={selected}
+                      className={selected ? "" : "opacity-75"}
+                      wrap
+                    />
                   </button>
                 );
               })}
@@ -246,8 +391,24 @@ export function HabitDialog({
               {values.map((valueEntry) => {
                 const selected = value.linkedValueIds.includes(valueEntry.id);
                 return (
-                  <button key={valueEntry.id} type="button" onClick={() => setValue({ linkedValueIds: toggleId(value.linkedValueIds, valueEntry.id) })}>
-                    <EntityBadge kind="value" label={valueEntry.title} gradient={selected} className={selected ? "" : "opacity-75"} />
+                  <button
+                    key={valueEntry.id}
+                    type="button"
+                    onClick={() =>
+                      setValue({
+                        linkedValueIds: toggleId(
+                          value.linkedValueIds,
+                          valueEntry.id
+                        )
+                      })
+                    }
+                  >
+                    <EntityBadge
+                      kind="value"
+                      label={valueEntry.title}
+                      gradient={selected}
+                      className={selected ? "" : "opacity-75"}
+                    />
                   </button>
                 );
               })}
@@ -258,8 +419,25 @@ export function HabitDialog({
               {patterns.map((pattern) => {
                 const selected = value.linkedPatternIds.includes(pattern.id);
                 return (
-                  <button key={pattern.id} type="button" onClick={() => setValue({ linkedPatternIds: toggleId(value.linkedPatternIds, pattern.id) })}>
-                    <EntityBadge kind="pattern" label={pattern.title} gradient={selected} className={selected ? "" : "opacity-75"} wrap />
+                  <button
+                    key={pattern.id}
+                    type="button"
+                    onClick={() =>
+                      setValue({
+                        linkedPatternIds: toggleId(
+                          value.linkedPatternIds,
+                          pattern.id
+                        )
+                      })
+                    }
+                  >
+                    <EntityBadge
+                      kind="pattern"
+                      label={pattern.title}
+                      gradient={selected}
+                      className={selected ? "" : "opacity-75"}
+                      wrap
+                    />
                   </button>
                 );
               })}
@@ -272,7 +450,8 @@ export function HabitDialog({
       id: "reward",
       eyebrow: "Reward",
       title: "Link the behavior and XP logic",
-      description: "Habits can point back to a Psyche behavior. Reward XP is granted for aligned outcomes; penalty XP is applied for misaligned ones.",
+      description:
+        "Habits can point back to a Psyche behavior. Reward XP is granted for aligned outcomes; penalty XP is applied for misaligned ones.",
       render: (value, setValue) => (
         <>
           <FlowField label="Linked behavior">
@@ -283,9 +462,21 @@ export function HabitDialog({
                   <button
                     key={behavior.id}
                     type="button"
-                    onClick={() => setValue(syncLinkedBehaviorAlias(toggleId(value.linkedBehaviorIds, behavior.id)))}
+                    onClick={() =>
+                      setValue(
+                        syncLinkedBehaviorAlias(
+                          toggleId(value.linkedBehaviorIds, behavior.id)
+                        )
+                      )
+                    }
                   >
-                    <EntityBadge kind="behavior" label={behavior.title} gradient={selected} className={selected ? "" : "opacity-75"} wrap />
+                    <EntityBadge
+                      kind="behavior"
+                      label={behavior.title}
+                      gradient={selected}
+                      className={selected ? "" : "opacity-75"}
+                      wrap
+                    />
                   </button>
                 );
               })}
@@ -296,8 +487,25 @@ export function HabitDialog({
               {beliefs.map((belief) => {
                 const selected = value.linkedBeliefIds.includes(belief.id);
                 return (
-                  <button key={belief.id} type="button" onClick={() => setValue({ linkedBeliefIds: toggleId(value.linkedBeliefIds, belief.id) })}>
-                    <EntityBadge kind="belief" label={belief.statement} gradient={selected} className={selected ? "" : "opacity-75"} wrap />
+                  <button
+                    key={belief.id}
+                    type="button"
+                    onClick={() =>
+                      setValue({
+                        linkedBeliefIds: toggleId(
+                          value.linkedBeliefIds,
+                          belief.id
+                        )
+                      })
+                    }
+                  >
+                    <EntityBadge
+                      kind="belief"
+                      label={belief.statement}
+                      gradient={selected}
+                      className={selected ? "" : "opacity-75"}
+                      wrap
+                    />
                   </button>
                 );
               })}
@@ -308,8 +516,22 @@ export function HabitDialog({
               {modes.map((mode) => {
                 const selected = value.linkedModeIds.includes(mode.id);
                 return (
-                  <button key={mode.id} type="button" onClick={() => setValue({ linkedModeIds: toggleId(value.linkedModeIds, mode.id) })}>
-                    <EntityBadge kind="mode" label={mode.title} gradient={selected} className={selected ? "" : "opacity-75"} wrap />
+                  <button
+                    key={mode.id}
+                    type="button"
+                    onClick={() =>
+                      setValue({
+                        linkedModeIds: toggleId(value.linkedModeIds, mode.id)
+                      })
+                    }
+                  >
+                    <EntityBadge
+                      kind="mode"
+                      label={mode.title}
+                      gradient={selected}
+                      className={selected ? "" : "opacity-75"}
+                      wrap
+                    />
                   </button>
                 );
               })}
@@ -320,22 +542,60 @@ export function HabitDialog({
               {reports.map((report) => {
                 const selected = value.linkedReportIds.includes(report.id);
                 return (
-                  <button key={report.id} type="button" onClick={() => setValue({ linkedReportIds: toggleId(value.linkedReportIds, report.id) })}>
-                    <EntityBadge kind="report" label={report.title} gradient={selected} className={selected ? "" : "opacity-75"} wrap />
+                  <button
+                    key={report.id}
+                    type="button"
+                    onClick={() =>
+                      setValue({
+                        linkedReportIds: toggleId(
+                          value.linkedReportIds,
+                          report.id
+                        )
+                      })
+                    }
+                  >
+                    <EntityBadge
+                      kind="report"
+                      label={report.title}
+                      gradient={selected}
+                      className={selected ? "" : "opacity-75"}
+                      wrap
+                    />
                   </button>
                 );
               })}
             </div>
           </FlowField>
           <div className="grid gap-4 sm:grid-cols-3">
-            <FlowField label="Target count" error={fieldErrors.targetCount ?? null}>
-              <Input type="number" value={value.targetCount} onChange={(event) => setValue({ targetCount: Number(event.target.value) || 1 })} />
+            <FlowField
+              label="Target count"
+              error={fieldErrors.targetCount ?? null}
+            >
+              <Input
+                type="number"
+                value={value.targetCount}
+                onChange={(event) =>
+                  setValue({ targetCount: Number(event.target.value) || 1 })
+                }
+              />
             </FlowField>
             <FlowField label="Reward XP" error={fieldErrors.rewardXp ?? null}>
-              <Input type="number" value={value.rewardXp} onChange={(event) => setValue({ rewardXp: Number(event.target.value) || 1 })} />
+              <Input
+                type="number"
+                value={value.rewardXp}
+                onChange={(event) =>
+                  setValue({ rewardXp: Number(event.target.value) || 1 })
+                }
+              />
             </FlowField>
             <FlowField label="Penalty XP" error={fieldErrors.penaltyXp ?? null}>
-              <Input type="number" value={value.penaltyXp} onChange={(event) => setValue({ penaltyXp: Number(event.target.value) || 1 })} />
+              <Input
+                type="number"
+                value={value.penaltyXp}
+                onChange={(event) =>
+                  setValue({ penaltyXp: Number(event.target.value) || 1 })
+                }
+              />
             </FlowField>
           </div>
         </>
@@ -361,7 +621,13 @@ export function HabitDialog({
         setSubmitError(null);
         const parsed = habitMutationSchema.safeParse(draft);
         if (!parsed.success) {
-          setFieldErrors(Object.fromEntries(Object.entries(parsed.error.flatten().fieldErrors).map(([key, value]) => [key, value?.[0]])));
+          setFieldErrors(
+            Object.fromEntries(
+              Object.entries(parsed.error.flatten().fieldErrors).map(
+                ([key, value]) => [key, value?.[0]]
+              )
+            )
+          );
           setSubmitError("Some habit fields still need attention.");
           return;
         }
@@ -371,7 +637,9 @@ export function HabitDialog({
           setDraft(defaultHabitValues);
           onOpenChange(false);
         } catch (error) {
-          setSubmitError(error instanceof Error ? error.message : "Habit update failed.");
+          setSubmitError(
+            error instanceof Error ? error.message : "Habit update failed."
+          );
         }
       }}
     />

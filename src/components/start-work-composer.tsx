@@ -103,7 +103,18 @@ function StartWorkComposerBody({
     }
     return sortedTasks.filter((task) => {
       const project = projects.find((entry) => entry.id === task.projectId);
-      return [task.title, task.description, project?.title ?? ""].some((value) => value.toLowerCase().includes(query));
+      return [
+        task.title,
+        task.description,
+        task.owner,
+        task.user?.displayName ?? "",
+        task.user?.handle ?? "",
+        task.user?.kind ?? "",
+        project?.title ?? "",
+        project?.user?.displayName ?? "",
+        project?.user?.handle ?? "",
+        project?.user?.kind ?? ""
+      ].some((value) => value.toLowerCase().includes(query));
     });
   }, [projects, sortedTasks, taskQuery]);
 
@@ -164,7 +175,7 @@ function StartWorkComposerBody({
             <span className="type-label text-white/45">Search tasks</span>
             <div className="relative">
               <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-white/32" />
-              <Input value={taskQuery} onChange={(event) => setTaskQuery(event.target.value)} placeholder="Search task title or project" className="pl-10" />
+              <Input value={taskQuery} onChange={(event) => setTaskQuery(event.target.value)} placeholder="Search task, project, human, bot, or owner" className="pl-10" />
             </div>
           </label>
 
@@ -224,14 +235,20 @@ function StartWorkComposerBody({
               <option value="">Select project</option>
               {projects.map((project) => (
                 <option key={project.id} value={project.id}>
-                  {project.title}
+                  {project.user
+                    ? `${project.title} · ${project.user.displayName} (${project.user.kind})`
+                    : project.title}
                 </option>
               ))}
             </select>
           </label>
           {selectedProject ? (
             <div className="rounded-[16px] bg-white/[0.04] px-4 py-3 text-sm text-white/62">
-              This task will be created inside <span className="font-medium text-white">{selectedProject.title}</span> and started immediately.
+              This task will be created inside <span className="font-medium text-white">{selectedProject.title}</span>
+              {selectedProject.user
+                ? ` for ${selectedProject.user.displayName} (${selectedProject.user.kind})`
+                : ""}
+              {" "}and started immediately.
             </div>
           ) : null}
         </div>

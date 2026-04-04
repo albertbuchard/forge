@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { getDatabase } from "../db.js";
 import { HttpError } from "../errors.js";
+import { decorateOwnedEntity, setEntityOwner } from "./entity-ownership.js";
 import { filterDeletedEntities, isEntityDeleted } from "./deleted-entities.js";
 import { recordActivityEvent } from "./activity-events.js";
 import { tagSchema, updateTagSchema, type ActivitySource, type CreateTagInput, type Tag, type UpdateTagInput } from "../types.js";
@@ -11,13 +12,13 @@ type ActivityContext = {
 };
 
 function mapTag(row: Record<string, unknown>): Tag {
-  return tagSchema.parse({
-    id: row.id,
-    name: row.name,
+  return tagSchema.parse(decorateOwnedEntity("tag", {
+    id: String(row.id ?? ""),
+    name: String(row.name ?? ""),
     kind: row.kind,
-    color: row.color,
-    description: row.description
-  });
+    color: String(row.color ?? ""),
+    description: String(row.description ?? "")
+  }));
 }
 
 export function listTags(): Tag[] {
@@ -76,6 +77,7 @@ export function createTag(input: CreateTagInput, activity?: ActivityContext): Ta
        VALUES (?, ?, ?, ?, ?, ?)`
     )
     .run(tag.id, tag.name, tag.kind, tag.color, tag.description, now);
+  setEntityOwner("tag", tag.id, input.userId);
 
   if (activity) {
     recordActivityEvent({
@@ -131,6 +133,9 @@ export function updateTag(tagId: string, input: UpdateTagInput, activity?: Activ
        WHERE id = ?`
     )
     .run(tag.name, tag.kind, tag.color, tag.description, tagId);
+  if (parsed.userId !== undefined) {
+    setEntityOwner("tag", tagId, parsed.userId);
+  }
 
   if (activity) {
     recordActivityEvent({

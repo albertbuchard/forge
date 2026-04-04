@@ -20,6 +20,7 @@ Its job is to expose the same curated Forge operating surface as the OpenClaw pl
 - explicit work adjustments, retroactive work logging, and task-run controls
 - calendar overview, work-block creation, and task timeboxing helpers
 - visual handoff to the Forge UI when the UI is genuinely the better surface
+- bundled Psyche interview playbooks so Hermes explores values, patterns, behaviors, beliefs, modes, and trigger reports with active listening before storing them
 
 ## Install
 
@@ -107,6 +108,6 @@ and storage-root mismatch protection without depending on repo-only imports at r
 
 ## Notes
 
-- the plugin installs its bundled Forge skill to `~/.hermes/skills/forge-hermes/SKILL.md` on first load if the user does not already have one there
+- the plugin installs its bundled Forge skill pack to `~/.hermes/skills/forge-hermes/` on first load if the user does not already have those files there
 - remote write calls still need `FORGE_API_TOKEN` unless the target supports trusted local or Tailscale operator-session bootstrap
 - the curated Forge tool names stay identical to the OpenClaw adapter so the operating model does not drift between agent platforms

@@ -10,13 +10,32 @@ import { Button } from "@/components/ui/button";
 import { EntityBadge } from "@/components/ui/entity-badge";
 import { useI18n } from "@/lib/i18n";
 import type { EntityKind } from "@/lib/entity-visuals";
-import type { GoalMutationInput, ProjectMutationInput, QuickTaskInput } from "@/lib/schemas";
-import type { DashboardGoal, Goal, ProjectSummary, Tag } from "@/lib/types";
+import type {
+  GoalMutationInput,
+  ProjectMutationInput,
+  QuickTaskInput
+} from "@/lib/schemas";
+import type {
+  DashboardGoal,
+  Goal,
+  ProjectSummary,
+  Tag,
+  UserSummary
+} from "@/lib/types";
 
 const MOBILE_BREAKPOINT_QUERY = "(max-width: 1023px)";
 
 type CreateAction = {
-  id: "goal" | "project" | "task" | "habit" | "value" | "pattern" | "behavior" | "report";
+  id:
+    | "goal"
+    | "project"
+    | "task"
+    | "strategy"
+    | "habit"
+    | "value"
+    | "pattern"
+    | "behavior"
+    | "report";
   kind: EntityKind;
   group: "Execution" | "Psyche";
   title: string;
@@ -26,14 +45,20 @@ type CreateAction = {
 
 function useIsMobileCreateSheet() {
   const [isMobile, setIsMobile] = useState(() => {
-    if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
+    if (
+      typeof window === "undefined" ||
+      typeof window.matchMedia !== "function"
+    ) {
       return false;
     }
     return window.matchMedia(MOBILE_BREAKPOINT_QUERY).matches;
   });
 
   useEffect(() => {
-    if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
+    if (
+      typeof window === "undefined" ||
+      typeof window.matchMedia !== "function"
+    ) {
       return;
     }
 
@@ -73,7 +98,13 @@ function CreateActionButton({
       className="w-full min-w-0 rounded-[22px] border border-white/8 bg-white/[0.04] px-4 py-4 text-left transition hover:bg-white/[0.08]"
       onClick={onClick}
     >
-      <EntityBadge kind={kind} label={title} compact gradient={false} className="max-w-full" />
+      <EntityBadge
+        kind={kind}
+        label={title}
+        compact
+        gradient={false}
+        className="max-w-full"
+      />
       <div className="mt-1 text-sm text-white/55">{description}</div>
     </button>
   );
@@ -83,6 +114,8 @@ export function CreateMenu({
   goals,
   projects,
   tags,
+  users,
+  defaultUserId = null,
   onCreateGoal,
   onCreateProject,
   onCreateTask,
@@ -91,6 +124,8 @@ export function CreateMenu({
   goals: DashboardGoal[];
   projects: ProjectSummary[];
   tags: Tag[];
+  users?: UserSummary[];
+  defaultUserId?: string | null;
   onCreateGoal: (input: GoalMutationInput) => Promise<void>;
   onCreateProject: (input: ProjectMutationInput) => Promise<void>;
   onCreateTask: (input: QuickTaskInput) => Promise<void>;
@@ -101,11 +136,15 @@ export function CreateMenu({
   const safeGoals = goals ?? [];
   const safeProjects = projects ?? [];
   const safeTags = tags ?? [];
+  const safeUsers = users ?? [];
   const [menuOpen, setMenuOpen] = useState(false);
   const [goalOpen, setGoalOpen] = useState(false);
   const [projectOpen, setProjectOpen] = useState(false);
   const [taskOpen, setTaskOpen] = useState(false);
-  const [desktopMenuPosition, setDesktopMenuPosition] = useState<{ top: number; right: number } | null>(null);
+  const [desktopMenuPosition, setDesktopMenuPosition] = useState<{
+    top: number;
+    right: number;
+  } | null>(null);
   const isMobile = useIsMobileCreateSheet();
   const menuRef = useRef<HTMLDivElement | null>(null);
   const desktopMenuRef = useRef<HTMLDivElement | null>(null);
@@ -192,11 +231,24 @@ export function CreateMenu({
       }
     },
     {
+      id: "strategy",
+      kind: "strategy",
+      group: "Execution",
+      title: "Strategy",
+      description:
+        "Plan a directed path across projects and tasks toward a real end state.",
+      onSelect: () => {
+        setMenuOpen(false);
+        navigate("/strategies?create=1");
+      }
+    },
+    {
       id: "habit",
       kind: "habit",
       group: "Execution",
       title: "Habit",
-      description: "Track a recurring commitment or recurring slip with explicit XP logic.",
+      description:
+        "Track a recurring commitment or recurring slip with explicit XP logic.",
       onSelect: () => {
         setMenuOpen(false);
         navigate("/habits?create=1");
@@ -207,7 +259,8 @@ export function CreateMenu({
       kind: "value",
       group: "Psyche",
       title: "Value",
-      description: "Place one value into the goal, project, and task constellation.",
+      description:
+        "Place one value into the goal, project, and task constellation.",
       onSelect: () => {
         setMenuOpen(false);
         navigate("/psyche/values?create=1");
@@ -218,7 +271,8 @@ export function CreateMenu({
       kind: "pattern",
       group: "Psyche",
       title: "Pattern",
-      description: "Map a loop, its payoff, its cost, and the response you want.",
+      description:
+        "Map a loop, its payoff, its cost, and the response you want.",
       onSelect: () => {
         setMenuOpen(false);
         navigate("/psyche/patterns?create=1");
@@ -270,12 +324,17 @@ export function CreateMenu({
           onClick={() => setMenuOpen((current) => (isMobile ? true : !current))}
           className={`min-w-max max-w-[calc(100vw-2rem)] shrink-0 rounded-full px-3.5 py-2 text-[12px] shadow-[0_20px_60px_rgba(4,8,18,0.34)] ${menuOpen ? "bg-[linear-gradient(135deg,rgba(192,193,255,0.52),rgba(125,211,252,0.24))] text-white" : ""}`}
         >
-          <Sparkles className={`size-4 transition ${menuOpen ? "text-white" : "text-white/72"}`} />
+          <Sparkles
+            className={`size-4 transition ${menuOpen ? "text-white" : "text-white/72"}`}
+          />
           {t("common.navigation.create")}
         </Button>
       </div>
 
-      {menuOpen && !isMobile && typeof document !== "undefined" && desktopMenuPosition
+      {menuOpen &&
+      !isMobile &&
+      typeof document !== "undefined" &&
+      desktopMenuPosition
         ? createPortal(
             <div
               ref={desktopMenuRef}
@@ -287,12 +346,21 @@ export function CreateMenu({
                 transform: "translateY(-100%)"
               }}
             >
-              <div className="text-[11px] uppercase tracking-[0.18em] text-white/42">Create</div>
-              <div className="mt-2 text-lg font-medium text-white">Start the next move</div>
-              <div className="mt-1 text-sm leading-6 text-white/56">Pick one thing to create. The flow keeps the first step light and visible.</div>
+              <div className="text-[11px] uppercase tracking-[0.18em] text-white/42">
+                Create
+              </div>
+              <div className="mt-2 text-lg font-medium text-white">
+                Start the next move
+              </div>
+              <div className="mt-1 text-sm leading-6 text-white/56">
+                Pick one thing to create. The flow keeps the first step light
+                and visible.
+              </div>
               {(["Execution", "Psyche"] as const).map((group) => (
                 <div key={group} className="mt-4">
-                  <div className="text-[11px] uppercase tracking-[0.18em] text-white/38">{group}</div>
+                  <div className="text-[11px] uppercase tracking-[0.18em] text-white/38">
+                    {group}
+                  </div>
                   <div className="mt-2 grid gap-2">
                     {createActions
                       .filter((action) => action.group === group)
@@ -327,8 +395,12 @@ export function CreateMenu({
           >
             <div className="flex items-start justify-between gap-4 border-b border-white/8 px-5 py-5">
               <div>
-                <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">{t("common.navigation.create")}</div>
-                <Dialog.Title className="mt-2 font-display text-2xl text-white">{t("common.navigation.createTitle")}</Dialog.Title>
+                <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">
+                  {t("common.navigation.create")}
+                </div>
+                <Dialog.Title className="mt-2 font-display text-2xl text-white">
+                  {t("common.navigation.createTitle")}
+                </Dialog.Title>
                 <Dialog.Description className="mt-2 text-sm leading-6 text-white/60">
                   {t("common.navigation.createDescription")}
                 </Dialog.Description>
@@ -346,7 +418,9 @@ export function CreateMenu({
             <div className="overflow-y-auto p-4 overscroll-contain">
               {(["Execution", "Psyche"] as const).map((group) => (
                 <div key={group} className="mt-1 grid gap-2 first:mt-0">
-                  <div className="px-1 text-[11px] uppercase tracking-[0.18em] text-white/38">{group}</div>
+                  <div className="px-1 text-[11px] uppercase tracking-[0.18em] text-white/38">
+                    {group}
+                  </div>
                   {createActions
                     .filter((action) => action.group === group)
                     .map((action) => (
@@ -369,6 +443,8 @@ export function CreateMenu({
         open={goalOpen}
         editingGoal={null}
         tags={safeTags}
+        users={safeUsers}
+        defaultUserId={defaultUserId}
         onOpenChange={setGoalOpen}
         onSubmit={async (input) => {
           await onCreateGoal(input);
@@ -378,7 +454,9 @@ export function CreateMenu({
       <ProjectDialog
         open={projectOpen}
         goals={safeGoals as Goal[]}
+        users={safeUsers}
         editingProject={null}
+        defaultUserId={defaultUserId}
         onOpenChange={setProjectOpen}
         onSubmit={async (input) => {
           await onCreateProject(input);
@@ -390,7 +468,9 @@ export function CreateMenu({
         goals={safeGoals as Goal[]}
         projects={safeProjects}
         tags={safeTags}
+        users={safeUsers}
         editingTask={null}
+        defaultUserId={defaultUserId}
         onOpenChange={setTaskOpen}
         onSubmit={async (input) => {
           await onCreateTask(input);

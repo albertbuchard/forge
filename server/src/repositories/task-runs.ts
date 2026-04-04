@@ -110,6 +110,7 @@ function readExecutionConfig(): ExecutionConfig {
 
 function mapTaskRun(row: TaskRunRow, now = new Date(), cached = computeWorkTime(now)): TaskRun {
   const metric = cached.runMetrics.get(row.id);
+  const task = getTaskById(row.task_id);
   return taskRunSchema.parse({
     id: row.id,
     taskId: row.task_id,
@@ -132,7 +133,9 @@ function mapTaskRun(row: TaskRunRow, now = new Date(), cached = computeWorkTime(
     releasedAt: row.released_at,
     timedOutAt: row.timed_out_at,
     overrideReason: (row as TaskRunRow & { override_reason?: string | null }).override_reason ?? null,
-    updatedAt: row.updated_at
+    updatedAt: row.updated_at,
+    userId: task?.userId ?? null,
+    user: task?.user ?? null
   });
 }
 
@@ -411,7 +414,12 @@ export function listTaskRuns(filters: TaskRunListQuery = {}, now = new Date()): 
       )
       .all(...params) as TaskRunRow[];
     const cached = computeWorkTime(now);
-    return rows.map((row) => mapTaskRun(row, now, cached));
+    const runs = rows.map((row) => mapTaskRun(row, now, cached));
+    if (!filters.userIds || filters.userIds.length === 0) {
+      return runs;
+    }
+    const allowed = new Set(filters.userIds);
+    return runs.filter((run) => run.userId !== null && allowed.has(run.userId));
   });
 }
 

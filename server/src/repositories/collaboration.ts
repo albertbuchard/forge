@@ -1,5 +1,11 @@
 import { randomUUID } from "node:crypto";
 import { getDatabase } from "../db.js";
+import {
+  decorateOwnedEntity,
+  filterOwnedEntities,
+  inferFirstOwnedUserId,
+  setEntityOwner
+} from "./entity-ownership.js";
 import { filterDeletedEntities, isEntityDeleted } from "./deleted-entities.js";
 import { recordActivityEvent } from "./activity-events.js";
 import { recordEventLog } from "./event-log.js";
@@ -104,7 +110,7 @@ export type CollaborationContext = {
 };
 
 function mapInsight(row: InsightRow): Insight {
-  return insightSchema.parse({
+  return insightSchema.parse(decorateOwnedEntity("insight", {
     id: row.id,
     originType: row.origin_type,
     originAgentId: row.origin_agent_id,
@@ -123,7 +129,7 @@ function mapInsight(row: InsightRow): Insight {
     evidence: JSON.parse(row.evidence_json) as Insight["evidence"],
     createdAt: row.created_at,
     updatedAt: row.updated_at
-  });
+  }));
 }
 
 function mapFeedback(row: InsightFeedbackRow): InsightFeedback {
@@ -207,7 +213,15 @@ function getInsightRowById(insightId: string): InsightRow | undefined {
     .get(insightId) as InsightRow | undefined;
 }
 
-export function listInsights(filters: { entityType?: string; entityId?: string; status?: Insight["status"]; limit?: number } = {}): Insight[] {
+export function listInsights(
+  filters: {
+    entityType?: string;
+    entityId?: string;
+    status?: Insight["status"];
+    limit?: number;
+    userIds?: string[];
+  } = {}
+): Insight[] {
   const whereClauses: string[] = [];
   const params: Array<string | number> = [];
   if (filters.entityType) {
@@ -238,7 +252,10 @@ export function listInsights(filters: { entityType?: string; entityId?: string; 
        ${limitSql}`
     )
     .all(...params) as InsightRow[];
-  return filterDeletedEntities("insight", rows.map(mapInsight));
+  return filterDeletedEntities(
+    "insight",
+    filterOwnedEntities("insight", rows.map(mapInsight), filters.userIds)
+  );
 }
 
 export function getInsightById(insightId: string): Insight | undefined {
@@ -281,6 +298,16 @@ export function createInsight(input: CreateInsightInput, context: CollaborationC
       now,
       now
     );
+  setEntityOwner(
+    "insight",
+    insightId,
+    inferFirstOwnedUserId(
+      parsed.entityType && parsed.entityId
+        ? [{ entityType: parsed.entityType, entityId: parsed.entityId }]
+        : []
+    ),
+    context.actor ?? parsed.originLabel ?? null
+  );
 
   recordActivityEvent({
     entityType: "insight",
@@ -341,6 +368,7 @@ export function updateInsight(insightId: string, input: UpdateInsightInput, cont
       updatedAt,
       insightId
     );
+  setEntityOwner("insight", insightId, current.userId, context.actor ?? current.originLabel ?? null);
 
   recordEventLog({
     eventKind: "insight.updated",

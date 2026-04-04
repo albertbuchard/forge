@@ -18,12 +18,21 @@ import { EntityName } from "@/components/ui/entity-name";
 import { ErrorState, LoadingState } from "@/components/ui/page-state";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { UserBadge } from "@/components/ui/user-badge";
+import { UserSelectField } from "@/components/ui/user-select-field";
 import { prependEntityToCollection } from "@/lib/query-cache";
 import { getEntityNotesSummary } from "@/lib/note-helpers";
 import { behaviorPatternSchema, type BehaviorPatternInput } from "@/lib/psyche-schemas";
 import type { BehaviorPattern, BeliefEntry, ModeProfile, SchemaCatalogEntry } from "@/lib/psyche-types";
 import { findSchemaForLink, getSchemaFamilyLabel } from "@/lib/schema-visuals";
 import { createBehaviorPattern, createBelief, createMode, createPsycheValue, listBehaviorPatterns, listBehaviors, listBeliefs, listModes, listPsycheValues, listSchemaCatalog, patchBehaviorPattern } from "@/lib/api";
+import {
+  buildOwnedEntitySearchText,
+  formatOwnedEntityDescription,
+  formatOwnerSelectDefaultLabel,
+  formatOwnedEntityOptionLabel,
+  getSingleSelectedUserId
+} from "@/lib/user-ownership";
 
 const DEFAULT_PATTERN_INPUT: BehaviorPatternInput = {
   title: "",
@@ -36,7 +45,8 @@ const DEFAULT_PATTERN_INPUT: BehaviorPatternInput = {
   linkedValueIds: [],
   linkedSchemaLabels: [],
   linkedModeIds: [],
-  linkedBeliefIds: []
+  linkedBeliefIds: [],
+  userId: null
 };
 
 function patternToInput(pattern: BehaviorPattern): BehaviorPatternInput {
@@ -51,7 +61,8 @@ function patternToInput(pattern: BehaviorPattern): BehaviorPatternInput {
     linkedValueIds: pattern.linkedValueIds,
     linkedSchemaLabels: pattern.linkedSchemaLabels,
     linkedModeIds: pattern.linkedModeIds,
-    linkedBeliefIds: pattern.linkedBeliefIds
+    linkedBeliefIds: pattern.linkedBeliefIds,
+    userId: pattern.userId ?? null
   };
 }
 
@@ -94,6 +105,7 @@ export function PsychePatternsPage() {
   const modes = modesQuery.data?.modes ?? [];
   const beliefs = beliefsQuery.data?.beliefs ?? [];
   const behaviors = behaviorsQuery.data?.behaviors ?? [];
+  const defaultUserId = getSingleSelectedUserId(shell.selectedUserIds);
   const focusedPatternId = searchParams.get("focus");
   const notesSummaryByEntity = shell.snapshot.dashboard.notesSummaryByEntity;
 
@@ -103,12 +115,12 @@ export function PsychePatternsPage() {
     if (searchParams.get("create") === "1") {
       setDialogOpen(true);
       setEditingPattern(null);
-      setDraft(DEFAULT_PATTERN_INPUT);
+      setDraft({ ...DEFAULT_PATTERN_INPUT, userId: defaultUserId });
       const next = new URLSearchParams(searchParams);
       next.delete("create");
       setSearchParams(next, { replace: true });
     }
-  }, [searchParams, setSearchParams]);
+  }, [defaultUserId, searchParams, setSearchParams]);
 
   const saveMutation = useMutation({
     mutationFn: async (input: BehaviorPatternInput) => {
@@ -121,7 +133,7 @@ export function PsychePatternsPage() {
     onSuccess: async () => {
       setDialogOpen(false);
       setEditingPattern(null);
-      setDraft(DEFAULT_PATTERN_INPUT);
+      setDraft({ ...DEFAULT_PATTERN_INPUT, userId: defaultUserId });
       setSubmitError(null);
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["forge-psyche-patterns"] }),
@@ -132,8 +144,12 @@ export function PsychePatternsPage() {
 
   const valueOptions: EntityLinkOption[] = values.map((entry) => ({
     value: entry.id,
-    label: entry.title,
-    description: entry.valuedDirection,
+    label: formatOwnedEntityOptionLabel(entry.title, entry.user),
+    description: formatOwnedEntityDescription(entry.valuedDirection, entry.user),
+    searchText: buildOwnedEntitySearchText(
+      [entry.title, entry.valuedDirection, entry.description],
+      entry
+    ),
     kind: "value"
   }));
   const schemaOptions: EntityLinkOption[] = schemas.map((schema: SchemaCatalogEntry) => ({
@@ -146,14 +162,33 @@ export function PsychePatternsPage() {
   }));
   const modeOptions: EntityLinkOption[] = modes.map((mode: ModeProfile) => ({
     value: mode.id,
-    label: mode.title,
-    description: mode.archetype || mode.family,
+    label: formatOwnedEntityOptionLabel(mode.title, mode.user),
+    description: formatOwnedEntityDescription(
+      mode.archetype || mode.family,
+      mode.user
+    ),
+    searchText: buildOwnedEntitySearchText(
+      [mode.title, mode.archetype, mode.family, mode.persona],
+      mode
+    ),
     kind: "mode"
   }));
   const beliefOptions: EntityLinkOption[] = beliefs.map((belief: BeliefEntry) => ({
     value: belief.id,
-    label: belief.statement,
-    description: belief.flexibleAlternative || belief.originNote,
+    label: formatOwnedEntityOptionLabel(belief.statement, belief.user),
+    description: formatOwnedEntityDescription(
+      belief.flexibleAlternative || belief.originNote,
+      belief.user
+    ),
+    searchText: buildOwnedEntitySearchText(
+      [
+        belief.statement,
+        belief.flexibleAlternative,
+        belief.originNote,
+        belief.beliefType
+      ],
+      belief
+    ),
     kind: "belief"
   }));
 
@@ -173,7 +208,8 @@ export function PsychePatternsPage() {
       firstAppearanceAt: null,
       linkedPatternIds: [],
       linkedBehaviorIds: [],
-      linkedValueIds: []
+      linkedValueIds: [],
+      userId: draft.userId
     });
     prependEntityToCollection(queryClient, ["forge-psyche-modes"], "modes", mode);
     await queryClient.invalidateQueries({ queryKey: ["forge-psyche-overview"] });
@@ -194,7 +230,8 @@ export function PsychePatternsPage() {
       linkedGoalIds: [],
       linkedProjectIds: [],
       linkedTaskIds: [],
-      committedActions: []
+      committedActions: [],
+      userId: draft.userId
     });
     prependEntityToCollection(queryClient, ["forge-psyche-values"], "values", value);
     await queryClient.invalidateQueries({ queryKey: ["forge-psyche-overview"] });
@@ -219,7 +256,8 @@ export function PsychePatternsPage() {
       linkedValueIds: [],
       linkedBehaviorIds: [],
       linkedModeIds: [],
-      linkedReportIds: []
+      linkedReportIds: [],
+      userId: draft.userId
     });
     prependEntityToCollection(queryClient, ["forge-psyche-beliefs"], "beliefs", belief);
     await queryClient.invalidateQueries({ queryKey: ["forge-psyche-overview"] });
@@ -255,6 +293,17 @@ export function PsychePatternsPage() {
       description: "This should feel like a recognizable loop, not a diagnostic label.",
       render: (value, setValue) => (
         <>
+          <UserSelectField
+            value={value.userId ?? null}
+            users={shell.snapshot.users}
+            onChange={(userId) => setValue({ userId })}
+            defaultLabel={formatOwnerSelectDefaultLabel(
+              shell.snapshot.users.find((user) => user.id === defaultUserId) ??
+                null,
+              "Choose pattern owner"
+            )}
+            help="Patterns can belong to a human or bot user even when linked values, modes, or beliefs cross owners."
+          />
           <FlowField label="Pattern name" description="Give the loop a name you will recognize quickly later.">
             <Input value={value.title} onChange={(event) => setValue({ title: event.target.value })} placeholder="Anxious reassurance loop" />
           </FlowField>
@@ -378,7 +427,7 @@ export function PsychePatternsPage() {
           <Button
             onClick={() => {
               setEditingPattern(null);
-              setDraft(DEFAULT_PATTERN_INPUT);
+              setDraft({ ...DEFAULT_PATTERN_INPUT, userId: defaultUserId });
               setDialogOpen(true);
             }}
           >
@@ -394,7 +443,17 @@ export function PsychePatternsPage() {
         centerLabel="Pattern field"
         centerValue={`${patterns.length} tracked`}
         nodes={orbitNodes}
-        action={<Button onClick={() => setDialogOpen(true)}>Add pattern</Button>}
+        action={
+          <Button
+            onClick={() => {
+              setEditingPattern(null);
+              setDraft({ ...DEFAULT_PATTERN_INPUT, userId: defaultUserId });
+              setDialogOpen(true);
+            }}
+          >
+            Add pattern
+          </Button>
+        }
       />
 
       {seedablePatterns.length > 0 ? (
@@ -422,7 +481,15 @@ export function PsychePatternsPage() {
         <div id="pattern-lanes" className="grid gap-4">
           {patterns.length === 0 ? (
             <div className="flex justify-start">
-              <Button onClick={() => setDialogOpen(true)}>Add pattern</Button>
+              <Button
+                onClick={() => {
+                  setEditingPattern(null);
+                  setDraft({ ...DEFAULT_PATTERN_INPUT, userId: defaultUserId });
+                  setDialogOpen(true);
+                }}
+              >
+                Add pattern
+              </Button>
             </div>
           ) : (
             patterns.map((pattern) => {
@@ -439,6 +506,7 @@ export function PsychePatternsPage() {
                       <div className="mt-2 text-sm leading-7 text-white/58">{pattern.description}</div>
                     </div>
                     <div className="flex flex-wrap items-center gap-2">
+                      {pattern.user ? <UserBadge user={pattern.user} compact /> : null}
                       <EntityNoteCountLink entityType="behavior_pattern" entityId={pattern.id} count={noteCount} />
                       <Button
                         variant="secondary"

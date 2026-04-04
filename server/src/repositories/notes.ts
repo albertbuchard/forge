@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { getDatabase } from "../db.js";
 import { recordActivityEvent } from "./activity-events.js";
+import { decorateOwnedEntity, setEntityOwner } from "./entity-ownership.js";
 import {
   filterDeletedEntities,
   getDeletedEntityRecord,
@@ -199,7 +200,7 @@ function mapLinks(rows: NoteLinkRow[]): NoteLink[] {
 }
 
 function mapNote(row: NoteRow, linkRows: NoteLinkRow[]): Note {
-  return noteSchema.parse({
+  return noteSchema.parse(decorateOwnedEntity("note", {
     id: row.id,
     contentMarkdown: row.content_markdown,
     contentPlain: row.content_plain,
@@ -210,7 +211,7 @@ function mapNote(row: NoteRow, linkRows: NoteLinkRow[]): Note {
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     links: mapLinks(linkRows)
-  });
+  }));
 }
 
 function upsertSearchRow(
@@ -494,6 +495,7 @@ export function createNote(input: CreateNoteInput, context: NoteContext): Note {
       now
     );
   insertLinks(id, parsed.links, now);
+  setEntityOwner("note", id, parsed.userId, parsed.author ?? context.actor ?? null);
   clearDeletedEntityRecord("note", id);
   upsertSearchRow(id, contentPlain, parsed.author ?? context.actor ?? null);
 
@@ -567,6 +569,9 @@ export function updateNote(
 
   if (patch.links) {
     replaceLinks(noteId, patch.links, updatedAt);
+  }
+  if (patch.userId !== undefined) {
+    setEntityOwner("note", noteId, patch.userId, nextAuthor ?? context.actor ?? null);
   }
 
   const note = getNoteByIdIncludingDeleted(noteId, { skipCleanup: true })!;

@@ -18,6 +18,7 @@ import {
   updateWorkBlockTemplate
 } from "../repositories/calendar.js";
 import { createNote, deleteNote, getNoteById, listNotes, unlinkNotesForEntity, updateNote } from "../repositories/notes.js";
+import { clearEntityOwner, filterOwnedEntities } from "../repositories/entity-ownership.js";
 import {
   createBehaviorPatternSchema,
   createBehaviorSchema,
@@ -98,6 +99,7 @@ import {
   updateTriggerReport
 } from "../repositories/psyche.js";
 import { createProject, deleteProject, getProjectById, listProjects, updateProject } from "../repositories/projects.js";
+import { createStrategy, deleteStrategy, getStrategyById, listStrategies, updateStrategy } from "../repositories/strategies.js";
 import { createTag, deleteTag, getTagById, listTags, updateTag } from "../repositories/tags.js";
 import { createTask, deleteTask, getTaskById, listTasks, updateTask } from "../repositories/tasks.js";
 import type {
@@ -119,6 +121,7 @@ import {
   createInsightSchema,
   createNoteSchema,
   createProjectSchema,
+  createStrategySchema,
   createTaskTimeboxSchema,
   createTagSchema,
   createTaskSchema,
@@ -129,6 +132,7 @@ import {
   updateInsightSchema,
   updateNoteSchema,
   updateProjectSchema,
+  updateStrategySchema,
   updateTaskTimeboxSchema,
   updateTagSchema,
   updateTaskSchema,
@@ -214,6 +218,17 @@ const CRUD_ENTITY_CAPABILITIES: Record<CrudEntityType, CrudEntityCapability> = {
     create: (data, context) => createTask(data as never, context) as Record<string, unknown>,
     update: (id, patch, context) => updateTask(id, patch as never, context) as Record<string, unknown> | undefined,
     hardDelete: (id, context) => deleteTask(id, context) as Record<string, unknown> | undefined
+  },
+  strategy: {
+    entityType: "strategy",
+    routeBase: "/api/v1/strategies",
+    deleteMode: "soft_default",
+    inBin: true,
+    list: () => listStrategies() as Array<Record<string, unknown>>,
+    get: (id) => getStrategyById(id) as Record<string, unknown> | undefined,
+    create: (data) => createStrategy(data as never) as Record<string, unknown>,
+    update: (id, patch) => updateStrategy(id, patch as never) as Record<string, unknown> | undefined,
+    hardDelete: (id) => deleteStrategy(id) as Record<string, unknown> | undefined
   },
   habit: {
     entityType: "habit",
@@ -413,6 +428,7 @@ const CREATE_ENTITY_SCHEMAS: Record<CrudEntityType, { parse: (value: unknown) =>
   goal: createGoalSchema,
   project: createProjectSchema,
   task: createTaskSchema,
+  strategy: createStrategySchema,
   habit: createHabitSchema,
   tag: createTagSchema,
   note: createNoteSchema,
@@ -435,6 +451,7 @@ const UPDATE_ENTITY_SCHEMAS: Record<CrudEntityType, { parse: (value: unknown) =>
   goal: updateGoalSchema,
   project: updateProjectSchema,
   task: updateTaskSchema,
+  strategy: updateStrategySchema,
   habit: updateHabitSchema,
   tag: updateTagSchema,
   note: updateNoteSchema,
@@ -769,6 +786,7 @@ export function deleteEntity(entityType: CrudEntityType, id: string, options: { 
       purgeAnchoredCollaboration(entityType, id);
     }
     const deleted = capability.hardDelete(id, context);
+    clearEntityOwner(entityType, id);
     clearDeletedEntityRecord(entityType, id);
     return deleted;
   });
@@ -888,8 +906,11 @@ export function searchEntities(input: BatchSearchEntitiesInput): { results: Enti
     results: input.searches.map((search) => {
       const entityTypes = search.entityTypes && search.entityTypes.length > 0 ? search.entityTypes : defaultEntityTypes;
       const liveMatches = entityTypes.flatMap((entityType) =>
-        getCapability(entityType)
-          .list()
+        filterOwnedEntities(
+          entityType,
+          getCapability(entityType).list() as Array<Record<string, unknown> & { id: string }>,
+          search.userIds
+        )
           .filter((entity) => (search.ids && search.ids.length > 0 ? search.ids.includes(String(entity.id ?? "")) : true))
           .filter((entity) => matchesQuery(entity, search.query))
           .filter((entity) => matchesStatus(entity, search.status))
@@ -902,6 +923,11 @@ export function searchEntities(input: BatchSearchEntitiesInput): { results: Enti
         ? deleted
             .filter((item) => entityTypes.includes(item.entityType))
             .filter((item) => (search.ids && search.ids.length > 0 ? search.ids.includes(item.entityId) : true))
+            .filter((item) =>
+              !search.userIds || search.userIds.length === 0
+                ? true
+                : search.userIds.includes(String((item.snapshot as Record<string, unknown>).userId ?? ""))
+            )
             .filter((item) => matchesQuery(item.snapshot, search.query) || matchesQuery(item, search.query))
             .filter((item) => matchesStatus(item.snapshot, search.status))
             .filter((item) => (search.linkedTo ? matchesLinkedTo(item.entityType, item.snapshot, search.linkedTo) : true))

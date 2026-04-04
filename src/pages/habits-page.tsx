@@ -1,6 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { CalendarDays, CircleAlert, ShieldBan, Sparkles, Trash2 } from "lucide-react";
+import {
+  CalendarDays,
+  CircleAlert,
+  ShieldBan,
+  Sparkles,
+  Trash2
+} from "lucide-react";
 import { EntityNoteCountLink } from "@/components/notes/entity-note-count-link";
 import { NoteMarkdown } from "@/components/notes/note-markdown";
 import { PageHero } from "@/components/shell/page-hero";
@@ -11,15 +17,35 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/page-state";
 import { EntityName } from "@/components/ui/entity-name";
-import { createHabit, createHabitCheckIn, deleteHabit, getPsycheOverview, listHabits, patchHabit } from "@/lib/api";
+import { UserBadge } from "@/components/ui/user-badge";
+import {
+  createHabit,
+  createHabitCheckIn,
+  deleteHabit,
+  getPsycheOverview,
+  listHabits,
+  patchHabit
+} from "@/lib/api";
 import type { HabitMutationInput } from "@/lib/schemas";
 import type { Habit } from "@/lib/types";
 import { ForgeApiError } from "@/lib/api-error";
 import { getEntityNotesSummary } from "@/lib/note-helpers";
+import {
+  coerceSelectedUserIds,
+  getSingleSelectedUserId
+} from "@/lib/user-ownership";
 import { cn } from "@/lib/utils";
 import { useSearchParams } from "react-router-dom";
 
-const WEEKDAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] as const;
+const WEEKDAY_LABELS = [
+  "Sun",
+  "Mon",
+  "Tue",
+  "Wed",
+  "Thu",
+  "Fri",
+  "Sat"
+] as const;
 
 function formatHabitCadence(habit: Habit) {
   if (habit.frequency === "daily") {
@@ -35,25 +61,36 @@ export function HabitsPage() {
   const [editingHabit, setEditingHabit] = useState<Habit | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const selectedUserIds = coerceSelectedUserIds(shell.selectedUserIds);
+  const defaultUserId = getSingleSelectedUserId(selectedUserIds);
 
   const habitsQuery = useQuery({
-    queryKey: ["forge-habits"],
-    queryFn: async () => (await listHabits()).habits
+    queryKey: ["forge-habits", ...selectedUserIds],
+    queryFn: async () =>
+      (
+        await listHabits({
+          userIds: selectedUserIds
+        })
+      ).habits
   });
   const psycheOverviewQuery = useQuery({
-    queryKey: ["forge-psyche-overview"],
-    queryFn: async () => (await getPsycheOverview()).overview
+    queryKey: ["forge-psyche-overview", ...selectedUserIds],
+    queryFn: async () =>
+      (await getPsycheOverview(selectedUserIds)).overview
   });
 
   useEffect(() => {
     if (searchParams.get("create") === "1") {
       setEditingHabit(null);
       setDialogOpen(true);
-      setSearchParams((current) => {
-        const next = new URLSearchParams(current);
-        next.delete("create");
-        return next;
-      }, { replace: true });
+      setSearchParams(
+        (current) => {
+          const next = new URLSearchParams(current);
+          next.delete("create");
+          return next;
+        },
+        { replace: true }
+      );
     }
   }, [searchParams, setSearchParams]);
 
@@ -63,26 +100,43 @@ export function HabitsPage() {
   };
 
   const saveHabitMutation = useMutation({
-    mutationFn: async ({ input, habitId }: { input: HabitMutationInput; habitId?: string }) =>
-      habitId ? (await patchHabit(habitId, input)).habit : (await createHabit(input)).habit,
+    mutationFn: async ({
+      input,
+      habitId
+    }: {
+      input: HabitMutationInput;
+      habitId?: string;
+    }) =>
+      habitId
+        ? (await patchHabit(habitId, input)).habit
+        : (await createHabit(input)).habit,
     onSuccess: async () => {
       setErrorMessage(null);
       await refreshHabits();
     },
     onError: (error) => {
-      setErrorMessage(error instanceof Error ? error.message : "Habit save failed.");
+      setErrorMessage(
+        error instanceof Error ? error.message : "Habit save failed."
+      );
     }
   });
 
   const checkInMutation = useMutation({
-    mutationFn: async ({ habitId, status }: { habitId: string; status: "done" | "missed" }) =>
-      createHabitCheckIn(habitId, { status }),
+    mutationFn: async ({
+      habitId,
+      status
+    }: {
+      habitId: string;
+      status: "done" | "missed";
+    }) => createHabitCheckIn(habitId, { status }),
     onSuccess: async () => {
       setErrorMessage(null);
       await refreshHabits();
     },
     onError: (error) => {
-      setErrorMessage(error instanceof Error ? error.message : "Habit check-in failed.");
+      setErrorMessage(
+        error instanceof Error ? error.message : "Habit check-in failed."
+      );
     }
   });
 
@@ -93,12 +147,21 @@ export function HabitsPage() {
       await refreshHabits();
     },
     onError: (error) => {
-      setErrorMessage(error instanceof Error ? error.message : "Habit delete failed.");
+      setErrorMessage(
+        error instanceof Error ? error.message : "Habit delete failed."
+      );
     }
   });
 
-  const activeHabits = useMemo(() => (habitsQuery.data ?? []).filter((habit) => habit.status !== "archived"), [habitsQuery.data]);
-  const dueHabits = useMemo(() => activeHabits.filter((habit) => habit.dueToday), [activeHabits]);
+  const activeHabits = useMemo(
+    () =>
+      (habitsQuery.data ?? []).filter((habit) => habit.status !== "archived"),
+    [habitsQuery.data]
+  );
+  const dueHabits = useMemo(
+    () => activeHabits.filter((habit) => habit.dueToday),
+    [activeHabits]
+  );
 
   if (habitsQuery.error) {
     throw habitsQuery.error;
@@ -108,7 +171,9 @@ export function HabitsPage() {
     <div className="grid gap-5">
       <PageHero
         entityKind="habit"
-        title={<EntityName kind="habit" label="Habits" variant="heading" size="lg" />}
+        title={
+          <EntityName kind="habit" label="Habits" variant="heading" size="lg" />
+        }
         titleText="Habits"
         description="Habits track recurring commitments and recurring slips with explicit daily consequences, linked behaviors, and real XP movement."
         badge={`${activeHabits.length} habits`}
@@ -136,21 +201,45 @@ export function HabitsPage() {
 
       <section className="grid gap-4 lg:grid-cols-3">
         <Card>
-          <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">Due today</div>
-          <div className="mt-3 font-display text-4xl text-[var(--primary)]">{dueHabits.length}</div>
-          <div className="mt-2 text-sm text-white/58">Habits that still need a check-in today.</div>
-        </Card>
-        <Card>
-          <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">Best streak</div>
-          <div className="mt-3 font-display text-4xl text-white">{Math.max(0, ...activeHabits.map((habit) => habit.streakCount))}</div>
-          <div className="mt-2 text-sm text-white/58">Longest current aligned streak across active habits.</div>
-        </Card>
-        <Card>
-          <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">Average alignment</div>
-          <div className="mt-3 font-display text-4xl text-white">
-            {activeHabits.length > 0 ? Math.round(activeHabits.reduce((total, habit) => total + habit.completionRate, 0) / activeHabits.length) : 0}%
+          <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">
+            Due today
           </div>
-          <div className="mt-2 text-sm text-white/58">Share of recent habit check-ins that matched the intended direction.</div>
+          <div className="mt-3 font-display text-4xl text-[var(--primary)]">
+            {dueHabits.length}
+          </div>
+          <div className="mt-2 text-sm text-white/58">
+            Habits that still need a check-in today.
+          </div>
+        </Card>
+        <Card>
+          <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">
+            Best streak
+          </div>
+          <div className="mt-3 font-display text-4xl text-white">
+            {Math.max(0, ...activeHabits.map((habit) => habit.streakCount))}
+          </div>
+          <div className="mt-2 text-sm text-white/58">
+            Longest current aligned streak across active habits.
+          </div>
+        </Card>
+        <Card>
+          <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">
+            Average alignment
+          </div>
+          <div className="mt-3 font-display text-4xl text-white">
+            {activeHabits.length > 0
+              ? Math.round(
+                  activeHabits.reduce(
+                    (total, habit) => total + habit.completionRate,
+                    0
+                  ) / activeHabits.length
+                )
+              : 0}
+            %
+          </div>
+          <div className="mt-2 text-sm text-white/58">
+            Share of recent habit check-ins that matched the intended direction.
+          </div>
         </Card>
       </section>
 
@@ -175,13 +264,34 @@ export function HabitsPage() {
       ) : (
         <div className="grid gap-4 xl:grid-cols-2">
           {activeHabits.map((habit) => (
-            <Card key={habit.id} className={cn("overflow-hidden", habit.dueToday && "border-teal-300/20 shadow-[0_0_0_1px_rgba(45,212,191,0.12)]")}>
+            <Card
+              key={habit.id}
+              className={cn(
+                "overflow-hidden",
+                habit.dueToday &&
+                  "border-teal-300/20 shadow-[0_0_0_1px_rgba(45,212,191,0.12)]"
+              )}
+            >
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
-                    <EntityName kind="habit" label={habit.title} variant="heading" size="sm" />
-                    <Badge className="bg-white/[0.08] text-white/72">{habit.status}</Badge>
-                    <Badge className={habit.polarity === "positive" ? "bg-emerald-400/12 text-emerald-200" : "bg-rose-400/12 text-rose-200"}>
+                    <EntityName
+                      kind="habit"
+                      label={habit.title}
+                      variant="heading"
+                      size="sm"
+                    />
+                    <UserBadge user={habit.user} compact />
+                    <Badge className="bg-white/[0.08] text-white/72">
+                      {habit.status}
+                    </Badge>
+                    <Badge
+                      className={
+                        habit.polarity === "positive"
+                          ? "bg-emerald-400/12 text-emerald-200"
+                          : "bg-rose-400/12 text-rose-200"
+                      }
+                    >
                       {habit.polarity === "positive" ? "Positive" : "Negative"}
                     </Badge>
                   </div>
@@ -197,8 +307,12 @@ export function HabitsPage() {
                   </div>
                 </div>
                 <div className="text-right">
-                  <div className="text-xs uppercase tracking-[0.16em] text-white/35">Alignment</div>
-                  <div className="mt-1 text-lg font-semibold text-white">{habit.completionRate}%</div>
+                  <div className="text-xs uppercase tracking-[0.16em] text-white/35">
+                    Alignment
+                  </div>
+                  <div className="mt-1 text-lg font-semibold text-white">
+                    {habit.completionRate}%
+                  </div>
                 </div>
               </div>
 
@@ -207,79 +321,128 @@ export function HabitsPage() {
                   <CalendarDays className="mr-1 size-3.5" />
                   {formatHabitCadence(habit)}
                 </Badge>
-                <Badge className="bg-white/[0.08] text-white/72">Streak {habit.streakCount}</Badge>
                 <Badge className="bg-white/[0.08] text-white/72">
-                  {habit.polarity === "positive" ? `+${habit.rewardXp} XP done` : `+${habit.rewardXp} XP resisted`}
+                  Streak {habit.streakCount}
                 </Badge>
                 <Badge className="bg-white/[0.08] text-white/72">
-                  {habit.polarity === "positive" ? `-${habit.penaltyXp} XP missed` : `-${habit.penaltyXp} XP performed`}
+                  {habit.polarity === "positive"
+                    ? `+${habit.rewardXp} XP done`
+                    : `+${habit.rewardXp} XP resisted`}
+                </Badge>
+                <Badge className="bg-white/[0.08] text-white/72">
+                  {habit.polarity === "positive"
+                    ? `-${habit.penaltyXp} XP missed`
+                    : `-${habit.penaltyXp} XP performed`}
                 </Badge>
                 {habit.linkedBehaviorTitles.slice(0, 2).map((behaviorTitle) => (
-                  <Badge key={behaviorTitle} className="bg-orange-400/12 text-orange-100">
+                  <Badge
+                    key={behaviorTitle}
+                    className="bg-orange-400/12 text-orange-100"
+                  >
                     <ShieldBan className="mr-1 size-3.5" />
                     {behaviorTitle}
                   </Badge>
                 ))}
                 {habit.linkedGoalIds.slice(0, 2).map((goalId) => {
-                  const goal = shell.snapshot.goals.find((entry) => entry.id === goalId);
+                  const goal = shell.snapshot.goals.find(
+                    (entry) => entry.id === goalId
+                  );
                   return goal ? (
-                    <Badge key={goal.id} className="bg-amber-400/12 text-amber-100">
+                    <Badge
+                      key={goal.id}
+                      className="bg-amber-400/12 text-amber-100"
+                    >
                       Goal · {goal.title}
                     </Badge>
                   ) : null;
                 })}
                 {habit.linkedProjectIds.slice(0, 2).map((projectId) => {
-                  const project = shell.snapshot.dashboard.projects.find((entry) => entry.id === projectId);
+                  const project = shell.snapshot.dashboard.projects.find(
+                    (entry) => entry.id === projectId
+                  );
                   return project ? (
-                    <Badge key={project.id} className="bg-sky-400/12 text-sky-100">
+                    <Badge
+                      key={project.id}
+                      className="bg-sky-400/12 text-sky-100"
+                    >
                       Project · {project.title}
                     </Badge>
                   ) : null;
                 })}
                 {habit.linkedTaskIds.slice(0, 2).map((taskId) => {
-                  const task = shell.snapshot.tasks.find((entry) => entry.id === taskId);
+                  const task = shell.snapshot.tasks.find(
+                    (entry) => entry.id === taskId
+                  );
                   return task ? (
-                    <Badge key={task.id} className="bg-indigo-400/12 text-indigo-100">
+                    <Badge
+                      key={task.id}
+                      className="bg-indigo-400/12 text-indigo-100"
+                    >
                       Task · {task.title}
                     </Badge>
                   ) : null;
                 })}
                 {habit.linkedValueIds.slice(0, 2).map((valueId) => {
-                  const valueEntry = psycheOverviewQuery.data?.values.find((entry) => entry.id === valueId);
+                  const valueEntry = psycheOverviewQuery.data?.values.find(
+                    (entry) => entry.id === valueId
+                  );
                   return valueEntry ? (
-                    <Badge key={valueEntry.id} className="bg-emerald-400/12 text-emerald-100">
+                    <Badge
+                      key={valueEntry.id}
+                      className="bg-emerald-400/12 text-emerald-100"
+                    >
                       Value · {valueEntry.title}
                     </Badge>
                   ) : null;
                 })}
                 {habit.linkedPatternIds.slice(0, 2).map((patternId) => {
-                  const pattern = psycheOverviewQuery.data?.patterns.find((entry) => entry.id === patternId);
+                  const pattern = psycheOverviewQuery.data?.patterns.find(
+                    (entry) => entry.id === patternId
+                  );
                   return pattern ? (
-                    <Badge key={pattern.id} className="bg-cyan-400/12 text-cyan-100">
+                    <Badge
+                      key={pattern.id}
+                      className="bg-cyan-400/12 text-cyan-100"
+                    >
                       Pattern · {pattern.title}
                     </Badge>
                   ) : null;
                 })}
                 {habit.linkedBeliefIds.slice(0, 2).map((beliefId) => {
-                  const belief = psycheOverviewQuery.data?.beliefs.find((entry) => entry.id === beliefId);
+                  const belief = psycheOverviewQuery.data?.beliefs.find(
+                    (entry) => entry.id === beliefId
+                  );
                   return belief ? (
-                    <Badge key={belief.id} className="bg-rose-400/12 text-rose-100">
+                    <Badge
+                      key={belief.id}
+                      className="bg-rose-400/12 text-rose-100"
+                    >
                       Belief · {belief.statement}
                     </Badge>
                   ) : null;
                 })}
                 {habit.linkedModeIds.slice(0, 2).map((modeId) => {
-                  const mode = psycheOverviewQuery.data?.modes.find((entry) => entry.id === modeId);
+                  const mode = psycheOverviewQuery.data?.modes.find(
+                    (entry) => entry.id === modeId
+                  );
                   return mode ? (
-                    <Badge key={mode.id} className="bg-violet-400/12 text-violet-100">
+                    <Badge
+                      key={mode.id}
+                      className="bg-violet-400/12 text-violet-100"
+                    >
                       Mode · {mode.title}
                     </Badge>
                   ) : null;
                 })}
                 {habit.linkedReportIds.slice(0, 2).map((reportId) => {
-                  const report = psycheOverviewQuery.data?.reports.find((entry) => entry.id === reportId);
+                  const report = psycheOverviewQuery.data?.reports.find(
+                    (entry) => entry.id === reportId
+                  );
                   return report ? (
-                    <Badge key={report.id} className="bg-fuchsia-400/12 text-fuchsia-100">
+                    <Badge
+                      key={report.id}
+                      className="bg-fuchsia-400/12 text-fuchsia-100"
+                    >
                       Report · {report.title}
                     </Badge>
                   ) : null;
@@ -295,21 +458,41 @@ export function HabitsPage() {
                     <EntityNoteCountLink
                       entityType="habit"
                       entityId={habit.id}
-                      count={getEntityNotesSummary(shell.snapshot.dashboard.notesSummaryByEntity, "habit", habit.id).count}
+                      count={
+                        getEntityNotesSummary(
+                          shell.snapshot.dashboard.notesSummaryByEntity,
+                          "habit",
+                          habit.id
+                        ).count
+                      }
                     />
                   </div>
                 </div>
                 <Button
-                  variant={habit.polarity === "positive" ? "primary" : "secondary"}
+                  variant={
+                    habit.polarity === "positive" ? "primary" : "secondary"
+                  }
                   disabled={checkInMutation.isPending}
-                  onClick={() => void checkInMutation.mutateAsync({ habitId: habit.id, status: "done" })}
+                  onClick={() =>
+                    void checkInMutation.mutateAsync({
+                      habitId: habit.id,
+                      status: "done"
+                    })
+                  }
                 >
                   {habit.polarity === "positive" ? "Done" : "Performed"}
                 </Button>
                 <Button
-                  variant={habit.polarity === "negative" ? "primary" : "secondary"}
+                  variant={
+                    habit.polarity === "negative" ? "primary" : "secondary"
+                  }
                   disabled={checkInMutation.isPending}
-                  onClick={() => void checkInMutation.mutateAsync({ habitId: habit.id, status: "missed" })}
+                  onClick={() =>
+                    void checkInMutation.mutateAsync({
+                      habitId: habit.id,
+                      status: "missed"
+                    })
+                  }
                 >
                   {habit.polarity === "positive" ? "Missed" : "Resisted"}
                 </Button>
@@ -356,6 +539,8 @@ export function HabitsPage() {
         goals={shell.snapshot.dashboard.goals}
         projects={shell.snapshot.dashboard.projects}
         tasks={shell.snapshot.tasks}
+        users={shell.snapshot.users}
+        defaultUserId={editingHabit?.userId ?? defaultUserId}
         onOpenChange={setDialogOpen}
         onSubmit={async (input, habitId) => {
           try {

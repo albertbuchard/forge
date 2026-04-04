@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useSearchParams } from "react-router-dom";
+import { useForgeShell } from "@/components/shell/app-shell";
 import { PageHero } from "@/components/shell/page-hero";
 import { ActivityTable } from "@/components/activity-table";
 import { Card } from "@/components/ui/card";
@@ -9,14 +10,24 @@ import { getActivityEventCtaLabel, getActivityEventHref } from "@/lib/entity-lin
 import { formatDateTime } from "@/lib/utils";
 
 export function ActivityPage() {
+  const shell = useForgeShell();
+  const selectedUserIds = Array.isArray(shell.selectedUserIds)
+    ? shell.selectedUserIds
+    : [];
   const [searchParams] = useSearchParams();
   const queryClient = useQueryClient();
   const entityId = searchParams.get("entityId") ?? undefined;
   const entityType = searchParams.get("entityType") ?? undefined;
   const highlightedEventId = searchParams.get("eventId");
   const activityQuery = useQuery({
-    queryKey: ["activity-archive", entityType, entityId],
-    queryFn: () => listActivity({ limit: 100, entityType, entityId })
+    queryKey: ["activity-archive", entityType, entityId, ...selectedUserIds],
+    queryFn: () =>
+      listActivity({
+        limit: 100,
+        entityType,
+        entityId,
+        userIds: selectedUserIds
+      })
   });
   const removeEventMutation = useMutation({
     mutationFn: (eventId: string) => removeActivityLog(eventId),

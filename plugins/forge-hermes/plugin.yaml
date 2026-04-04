@@ -1,6 +1,6 @@
 name: forge
 version: 0.2.19
-description: Curated Hermes plugin for the Forge life operating system
+description: Structured memory plugin for project management and mental health tracking in Hermes
 author: Forge
 provides_tools:
   - forge_get_operator_overview

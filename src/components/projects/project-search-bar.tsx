@@ -4,7 +4,13 @@ import { EntityBadge } from "@/components/ui/entity-badge";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 
-export type ProjectSearchTokenKind = "goal" | "task" | "tag" | "status" | "type";
+export type ProjectSearchTokenKind =
+  | "goal"
+  | "task"
+  | "tag"
+  | "status"
+  | "type"
+  | "user";
 
 export type ProjectSearchTokenOption = {
   id: string;
@@ -31,6 +37,8 @@ function renderTokenBadge(option: ProjectSearchTokenOption, compact = false): Re
       return <Badge className="bg-[rgba(192,193,255,0.12)] text-white/84">{option.label}</Badge>;
     case "type":
       return <Badge className="bg-[rgba(86,170,255,0.12)] text-white/84">{option.label}</Badge>;
+    case "user":
+      return <Badge className="bg-[rgba(110,231,183,0.12)] text-white/84">{option.label}</Badge>;
     default:
       return option.label;
   }
@@ -101,7 +109,7 @@ export function ProjectSearchBar({
           <div>
             <div className="font-label text-[11px] uppercase tracking-[0.2em] text-white/42">Project search</div>
             <div className="mt-2 max-w-2xl text-sm leading-6 text-white/62">
-              Search with free text, then pin matching goals, tasks, tags, statuses, or lightweight project-type chips as you narrow the list.
+              Search with free text, then pin matching goals, tasks, tags, human users, bot users, statuses, or project-type chips as you narrow the list.
             </div>
           </div>
           {(query.trim().length > 0 || selectedOptionIds.length > 0) ? (
@@ -177,7 +185,7 @@ export function ProjectSearchBar({
                     addOption(filteredOptions[highlightedIndex]!.id);
                   }
                 }}
-                placeholder="Type a project name, a goal, a task, or a tag"
+                placeholder="Type a project, goal, task, human, bot, user, or tag"
                 className="min-w-0 flex-1 bg-transparent text-sm text-white placeholder:text-white/34 focus:outline-none"
               />
             </div>
@@ -205,7 +213,7 @@ export function ProjectSearchBar({
                   ))
                 ) : (
                   <div className="px-3 py-2.5 text-sm text-white/42">
-                    Keep typing to search by free text, or select a suggested goal, task, tag, status, or type chip when it appears.
+                    Keep typing to search by free text, or select a suggested goal, task, human or bot owner, tag, status, or type chip when it appears.
                   </div>
                 )}
               </div>

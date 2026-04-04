@@ -1,9 +1,10 @@
 import * as Dialog from "@radix-ui/react-dialog";
 import { useEffect, useMemo, useState } from "react";
-import { ArrowRight, BrainCircuit, BriefcaseBusiness, CalendarDays, Clock3, LayoutDashboard, NotebookPen, Repeat, Search, Settings, Target, Zap } from "lucide-react";
+import { ArrowRight, BrainCircuit, BriefcaseBusiness, CalendarDays, Clock3, GitBranch, LayoutDashboard, NotebookPen, Repeat, Search, Settings, Target, Zap } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { EntityName } from "@/components/ui/entity-name";
 import { Input } from "@/components/ui/input";
+import { formatUserSummaryLine } from "@/lib/user-ownership";
 import { useI18n } from "@/lib/i18n";
 import type { EntityKind } from "@/lib/entity-visuals";
 import type { ForgeSnapshot } from "@/lib/types";
@@ -44,6 +45,7 @@ export function CommandPalette({ open, onOpenChange, snapshot }: CommandPaletteP
       { id: "route-goals", title: t("common.routeLabels.goals"), detail: t("common.commandPalette.routeGoals"), href: "/goals", category: t("common.commandPalette.categoryRoute") },
       { id: "route-habits", title: t("common.routeLabels.habits"), detail: t("common.commandPalette.routeHabits"), href: "/habits", category: t("common.commandPalette.categoryRoute") },
       { id: "route-projects", title: t("common.routeLabels.projects"), detail: t("common.commandPalette.routeProjects"), href: "/projects", category: t("common.commandPalette.categoryRoute") },
+      { id: "route-strategies", title: t("common.routeLabels.strategies"), detail: t("common.commandPalette.routeStrategies"), href: "/strategies", category: t("common.commandPalette.categoryRoute") },
       { id: "route-calendar", title: t("common.routeLabels.calendar"), detail: t("common.commandPalette.routeCalendar"), href: "/calendar", category: t("common.commandPalette.categoryRoute") },
       { id: "route-review", title: t("common.routeLabels.review"), detail: t("common.commandPalette.routeReview"), href: "/review/weekly", category: t("common.commandPalette.categoryRoute") },
       { id: "route-settings", title: t("common.routeLabels.settings"), detail: t("common.commandPalette.routeSettings"), href: "/settings", category: t("common.commandPalette.categoryRoute") }
@@ -54,7 +56,8 @@ export function CommandPalette({ open, onOpenChange, snapshot }: CommandPaletteP
       ...snapshot.dashboard.goals.slice(0, 6).map((goal) => ({
         id: `goal-${goal.id}`,
         title: goal.title,
-        detail: t("common.commandPalette.openLifeGoal"),
+        detail:
+          formatUserSummaryLine(goal.user) || t("common.commandPalette.openLifeGoal"),
         href: `/goals/${goal.id}`,
         category: t("common.commandPalette.categoryGoal"),
         kind: "goal" as const
@@ -62,15 +65,31 @@ export function CommandPalette({ open, onOpenChange, snapshot }: CommandPaletteP
       ...snapshot.dashboard.projects.slice(0, 6).map((project) => ({
         id: `project-${project.id}`,
         title: project.title,
-        detail: project.goalTitle,
+        detail: [project.goalTitle, formatUserSummaryLine(project.user)]
+          .filter(Boolean)
+          .join(" · "),
         href: `/projects/${project.id}`,
         category: t("common.commandPalette.categoryProject"),
         kind: "project" as const
       })),
+      ...snapshot.strategies.slice(0, 6).map((strategy) => ({
+        id: `strategy-${strategy.id}`,
+        title: strategy.title,
+        detail: [
+          `Alignment ${strategy.metrics.alignmentScore}%`,
+          formatUserSummaryLine(strategy.user)
+        ]
+          .filter(Boolean)
+          .join(" · "),
+        href: `/strategies/${strategy.id}`,
+        category: "Strategy",
+        kind: "strategy" as const
+      })),
       ...snapshot.overview.topTasks.slice(0, 8).map((task) => ({
         id: `task-${task.id}`,
         title: task.title,
-        detail: t("common.commandPalette.openFocusTask"),
+        detail:
+          formatUserSummaryLine(task.user) || t("common.commandPalette.openFocusTask"),
         href: `/tasks/${task.id}`,
         category: t("common.commandPalette.categoryTask"),
         kind: "task" as const
@@ -112,6 +131,7 @@ export function CommandPalette({ open, onOpenChange, snapshot }: CommandPaletteP
                 { label: t("common.routeLabels.goals"), icon: Target },
                 { label: t("common.routeLabels.habits"), icon: Repeat },
                 { label: t("common.routeLabels.projects"), icon: BriefcaseBusiness },
+                { label: t("common.routeLabels.strategies"), icon: GitBranch },
                 { label: t("common.routeLabels.calendar"), icon: CalendarDays },
                 { label: t("common.routeLabels.settings"), icon: Settings }
               ].map((entry) => (

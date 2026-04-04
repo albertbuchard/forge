@@ -8,15 +8,18 @@ import {
 import { InlineNoteFields } from "@/components/notes/inline-note-fields";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { UserSelectField } from "@/components/ui/user-select-field";
 import { useI18n } from "@/lib/i18n";
 import { goalMutationSchema, type GoalMutationInput } from "@/lib/schemas";
-import type { DashboardGoal, Tag } from "@/lib/types";
+import type { DashboardGoal, Tag, UserSummary } from "@/lib/types";
+import { formatOwnerSelectDefaultLabel } from "@/lib/user-ownership";
 
 export const defaultGoalValues: GoalMutationInput = {
   title: "",
   description: "",
   horizon: "year",
   status: "active",
+  userId: null,
   targetPoints: 400,
   themeColor: "#c8a46b",
   tagIds: [],
@@ -29,6 +32,7 @@ export function goalToFormValues(goal: DashboardGoal): GoalMutationInput {
     description: goal.description,
     horizon: goal.horizon,
     status: goal.status,
+    userId: goal.userId ?? null,
     targetPoints: goal.targetPoints,
     themeColor: goal.themeColor,
     tagIds: goal.tagIds,
@@ -41,6 +45,8 @@ export function GoalDialog({
   pending = false,
   editingGoal,
   tags,
+  users,
+  defaultUserId = null,
   onOpenChange,
   onSubmit
 }: {
@@ -48,10 +54,15 @@ export function GoalDialog({
   pending?: boolean;
   editingGoal: DashboardGoal | null;
   tags: Tag[];
+  users?: UserSummary[];
+  defaultUserId?: string | null;
   onOpenChange: (open: boolean) => void;
   onSubmit: (input: GoalMutationInput, goalId?: string) => Promise<void>;
 }) {
   const { t } = useI18n();
+  const safeUsers = users ?? [];
+  const defaultUser =
+    safeUsers.find((user) => user.id === defaultUserId) ?? null;
   const [draft, setDraft] = useState<GoalMutationInput>(defaultGoalValues);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<
@@ -72,8 +83,12 @@ export function GoalDialog({
     }
     setSubmitError(null);
     setFieldErrors({});
-    setDraft(editingGoal ? goalToFormValues(editingGoal) : defaultGoalValues);
-  }, [editingGoal, open]);
+    setDraft(
+      editingGoal
+        ? goalToFormValues(editingGoal)
+        : { ...defaultGoalValues, userId: defaultUserId }
+    );
+  }, [defaultUserId, editingGoal, open]);
 
   const steps: Array<QuestionFlowStep<GoalMutationInput>> = [
     {
@@ -103,6 +118,14 @@ export function GoalDialog({
               placeholder="Write the goal description in Markdown. This can stay short or grow into a long strategic page."
             />
           </FlowField>
+          <UserSelectField
+            value={value.userId}
+            users={safeUsers}
+            onChange={(userId) => setValue({ userId })}
+            label="Owner user"
+            defaultLabel={formatOwnerSelectDefaultLabel(defaultUser)}
+            help="Goals can belong to a human or bot user. The current single-user scope becomes the default when one user is selected."
+          />
         </>
       )
     },

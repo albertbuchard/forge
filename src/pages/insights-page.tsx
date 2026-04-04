@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { InfoTooltip } from "@/components/ui/info-tooltip";
 import { ErrorState, LoadingState } from "@/components/ui/page-state";
+import { UserBadge } from "@/components/ui/user-badge";
 import { createGoal, createInsight, createNote, createProject, createTask, deleteInsight, getInsights, submitInsightFeedback } from "@/lib/api";
 import { getEntityNotesHref } from "@/lib/note-helpers";
 import type { Insight, InsightsPayload } from "@/lib/types";
@@ -19,12 +20,16 @@ import type { Insight, InsightsPayload } from "@/lib/types";
 export function InsightsPage() {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
-  const { snapshot } = useForgeShell();
+  const shell = useForgeShell();
+  const selectedUserIds = Array.isArray(shell.selectedUserIds)
+    ? shell.selectedUserIds
+    : [];
+  const { snapshot } = shell;
   const [flowOpen, setFlowOpen] = useState(false);
   const [applyingInsight, setApplyingInsight] = useState<Insight | null>(null);
   const insightsQuery = useQuery({
-    queryKey: ["forge-insights"],
-    queryFn: getInsights
+    queryKey: ["forge-insights", ...selectedUserIds],
+    queryFn: () => getInsights(selectedUserIds)
   });
 
   const createMutation = useMutation({
@@ -308,6 +313,11 @@ export function InsightsPage() {
                       <div>
                         <div className="font-medium text-white">{insight.title}</div>
                         <div className="mt-1 text-sm text-white/56">{insight.summary}</div>
+                        {insight.user ? (
+                          <div className="mt-3">
+                            <UserBadge user={insight.user} compact />
+                          </div>
+                        ) : null}
                       </div>
                       <Badge className="text-white/70">{insight.status}</Badge>
                     </div>

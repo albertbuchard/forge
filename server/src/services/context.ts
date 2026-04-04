@@ -133,11 +133,14 @@ function buildDomainBalance(goals: Goal[], tasks: Task[]): ContextDomainBalance[
   return [...domainRows.values()].sort((left, right) => right.completedPoints - left.completedPoints);
 }
 
-export function getOverviewContext(now = new Date()): OverviewContext {
-  const dashboard = getDashboard();
+export function getOverviewContext(now = new Date(), options: { userIds?: string[] } = {}): OverviewContext {
+  const dashboard = getDashboard(options);
   const focusTasks = dashboard.tasks.filter((task) => task.status === "focus" || task.status === "in_progress").length;
   const overdueTasks = dashboard.tasks.filter((task) => task.status !== "done" && task.dueDate !== null && task.dueDate < now.toISOString().slice(0, 10)).length;
   const dueHabits = dashboard.habits.filter((habit) => habit.dueToday).slice(0, 6);
+  const goals = dashboard.goals;
+  const tasks = dashboard.tasks;
+  const habits = dashboard.habits;
   return overviewContextSchema.parse({
     generatedAt: now.toISOString(),
     strategicHeader: {
@@ -151,20 +154,21 @@ export function getOverviewContext(now = new Date()): OverviewContext {
       overdueTasks
     },
     projects: dashboard.projects.slice(0, 5),
-    activeGoals: dashboard.goals.filter((goal) => goal.status === "active").slice(0, 6),
-    topTasks: sortStrategicTasks(dashboard.tasks.filter((task) => task.status !== "done")).slice(0, 6),
+    activeGoals: goals.filter((goal) => goal.status === "active").slice(0, 6),
+    topTasks: sortStrategicTasks(tasks.filter((task) => task.status !== "done")).slice(0, 6),
     dueHabits,
-    recentEvidence: listActivityEvents({ limit: 12 }),
-    achievements: buildAchievementSignals(listGoals(), listTasks(), listHabits(), now),
-    domainBalance: buildDomainBalance(listGoals(), listTasks()),
-    neglectedGoals: buildNeglectedGoals(listGoals(), listTasks(), now)
+    recentEvidence: listActivityEvents({ limit: 12, userIds: options.userIds }),
+    achievements: buildAchievementSignals(goals, tasks, habits, now),
+    domainBalance: buildDomainBalance(goals, tasks),
+    neglectedGoals: buildNeglectedGoals(goals, tasks, now)
   });
 }
 
-export function getTodayContext(now = new Date()): TodayContext {
-  const goals = listGoals();
-  const tasks = listTasks();
-  const habits = listHabits();
+export function getTodayContext(now = new Date(), options: { userIds?: string[] } = {}): TodayContext {
+  const dashboard = getDashboard(options);
+  const goals = dashboard.goals;
+  const tasks = dashboard.tasks;
+  const habits = dashboard.habits;
   const gamification = buildGamificationProfile(goals, tasks, habits, now);
   const inProgressTasks = sortStrategicTasks(tasks.filter((task) => task.status === "in_progress")).slice(0, 4);
   const readyTasks = sortStrategicTasks(tasks.filter((task) => task.status === "focus" || task.status === "backlog")).slice(0, 4);
@@ -235,9 +239,10 @@ export function getTodayContext(now = new Date()): TodayContext {
   });
 }
 
-export function getRiskContext(now = new Date()): RiskContext {
-  const tasks = listTasks();
-  const goals = listGoals();
+export function getRiskContext(now = new Date(), options: { userIds?: string[] } = {}): RiskContext {
+  const dashboard = getDashboard(options);
+  const tasks = dashboard.tasks;
+  const goals = dashboard.goals;
   const overdueTasks = sortStrategicTasks(
     tasks.filter((task) => task.status !== "done" && task.dueDate !== null && task.dueDate < now.toISOString().slice(0, 10))
   ).slice(0, 8);

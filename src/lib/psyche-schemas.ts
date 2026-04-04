@@ -3,6 +3,7 @@ import { z } from "zod";
 const trimmed = z.string().trim();
 const nonEmpty = trimmed.min(1);
 const uniqueStrings = z.array(nonEmpty).transform((values) => Array.from(new Set(values)));
+const ownedUserId = z.string().trim().min(1).nullable().optional();
 
 export const psycheValueSchema = z.object({
   title: nonEmpty,
@@ -12,7 +13,8 @@ export const psycheValueSchema = z.object({
   linkedGoalIds: z.array(z.string()).default([]),
   linkedProjectIds: z.array(z.string()).default([]),
   linkedTaskIds: z.array(z.string()).default([]),
-  committedActions: z.array(trimmed).default([])
+  committedActions: z.array(trimmed).default([]),
+  userId: ownedUserId
 });
 
 export const behaviorPatternSchema = z.object({
@@ -26,7 +28,8 @@ export const behaviorPatternSchema = z.object({
   linkedValueIds: z.array(z.string()).default([]),
   linkedSchemaLabels: uniqueStrings.default([]),
   linkedModeIds: z.array(z.string()).default([]),
-  linkedBeliefIds: z.array(z.string()).default([])
+  linkedBeliefIds: z.array(z.string()).default([]),
+  userId: ownedUserId
 });
 
 export const behaviorSchema = z.object({
@@ -42,7 +45,8 @@ export const behaviorSchema = z.object({
   linkedPatternIds: z.array(z.string()).default([]),
   linkedValueIds: z.array(z.string()).default([]),
   linkedSchemaIds: z.array(z.string()).default([]),
-  linkedModeIds: z.array(z.string()).default([])
+  linkedModeIds: z.array(z.string()).default([]),
+  userId: ownedUserId
 });
 
 export const beliefEntrySchema = z.object({
@@ -57,7 +61,8 @@ export const beliefEntrySchema = z.object({
   linkedValueIds: z.array(z.string()).default([]),
   linkedBehaviorIds: z.array(z.string()).default([]),
   linkedModeIds: z.array(z.string()).default([]),
-  linkedReportIds: z.array(z.string()).default([])
+  linkedReportIds: z.array(z.string()).default([]),
+  userId: ownedUserId
 });
 
 export const modeProfileSchema = z.object({
@@ -75,7 +80,8 @@ export const modeProfileSchema = z.object({
   firstAppearanceAt: z.string().trim().nullable(),
   linkedPatternIds: z.array(z.string()).default([]),
   linkedBehaviorIds: z.array(z.string()).default([]),
-  linkedValueIds: z.array(z.string()).default([])
+  linkedValueIds: z.array(z.string()).default([]),
+  userId: ownedUserId
 });
 
 export const modeGuideSessionSchema = z.object({
@@ -85,18 +91,21 @@ export const modeGuideSessionSchema = z.object({
       questionKey: nonEmpty,
       value: nonEmpty
     })
-  ).min(1)
+  ).min(1),
+  userId: ownedUserId
 });
 
 export const eventTypeSchema = z.object({
   label: nonEmpty,
-  description: trimmed
+  description: trimmed,
+  userId: ownedUserId
 });
 
 export const emotionDefinitionSchema = z.object({
   label: nonEmpty,
   description: trimmed,
-  category: trimmed
+  category: trimmed,
+  userId: ownedUserId
 });
 
 export const triggerEmotionSchema = z.object({
@@ -157,7 +166,8 @@ export const triggerReportSchema = z.object({
   modeOverlays: z.array(trimmed).default([]),
   schemaLinks: z.array(trimmed).default([]),
   modeTimeline: z.array(modeTimelineEntrySchema).default([]),
-  nextMoves: z.array(trimmed).default([])
+  nextMoves: z.array(trimmed).default([]),
+  userId: ownedUserId
 });
 
 export type PsycheValueInput = z.infer<typeof psycheValueSchema>;

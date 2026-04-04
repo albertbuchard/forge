@@ -1,6 +1,12 @@
 import { randomUUID } from "node:crypto";
 import { getDatabase, runInTransaction } from "../db.js";
 import { recordActivityEvent } from "./activity-events.js";
+import {
+  decorateOwnedEntity,
+  filterOwnedEntities,
+  inferFirstOwnedUserId,
+  setEntityOwner
+} from "./entity-ownership.js";
 import { getProjectById } from "./projects.js";
 import { getTaskById } from "./tasks.js";
 import {
@@ -416,6 +422,38 @@ function mapTimebox(row: TaskTimeboxRow) {
   });
 }
 
+function inferCalendarEventOwnerId(input: {
+  userId?: string | null;
+  links?: Array<{
+    entityType: CalendarEventLink["entityType"];
+    entityId: string;
+  }>;
+}) {
+  return (
+    input.userId ??
+    inferFirstOwnedUserId(
+      (input.links ?? []).map((link) => ({
+        entityType: link.entityType,
+        entityId: link.entityId
+      }))
+    )
+  );
+}
+
+function inferTaskTimeboxOwnerId(input: {
+  userId?: string | null;
+  taskId: string;
+  projectId?: string | null;
+}) {
+  return (
+    input.userId ??
+    inferFirstOwnedUserId([
+      { entityType: "task", entityId: input.taskId },
+      { entityType: "project", entityId: input.projectId ?? null }
+    ])
+  );
+}
+
 function addMinutes(date: Date, minutes: number) {
   return new Date(date.getTime() + minutes * 60 * 1000);
 }
@@ -716,7 +754,13 @@ export function upsertCalendarRecord(connectionId: string, input: CalendarSyncCa
   return getCalendarById(id)!;
 }
 
-export function listCalendarEvents(query: CalendarAgendaQuery & { connectionId?: string; calendarId?: string }) {
+export function listCalendarEvents(
+  query: CalendarAgendaQuery & {
+    connectionId?: string;
+    calendarId?: string;
+    userIds?: string[];
+  }
+) {
   const clauses = [
     "deleted_at IS NULL",
     `(ownership != 'external' OR preferred_calendar_id IS NULL OR EXISTS (
@@ -755,7 +799,7 @@ export function listCalendarEvents(query: CalendarAgendaQuery & { connectionId?:
        ORDER BY start_at ASC, title ASC`
     )
     .all(...params) as CalendarEventRow[];
-  return rows.map(mapEvent);
+  return filterOwnedEntities("calendar_event", rows.map(mapEvent), query.userIds);
 }
 
 export function getCalendarEventById(eventId: string) {
@@ -767,7 +811,7 @@ export function getCalendarEventById(eventId: string) {
        WHERE id = ?`
     )
     .get(eventId) as CalendarEventRow | undefined;
-  return row ? mapEvent(row) : undefined;
+  return row ? decorateOwnedEntity("calendar_event", mapEvent(row)) : undefined;
 }
 
 export function getCalendarEventStorageRecord(eventId: string) {
@@ -1100,6 +1144,11 @@ export function createCalendarEvent(input: CreateCalendarEventInput) {
     );
 
   replaceEventLinks(id, input.links);
+  setEntityOwner(
+    "calendar_event",
+    id,
+    inferCalendarEventOwnerId(input)
+  );
   return getCalendarEventById(id)!;
 }
 
@@ -1166,6 +1215,19 @@ export function updateCalendarEvent(
 
   if (patch.links) {
     replaceEventLinks(eventId, patch.links);
+  }
+
+  if (patch.userId !== undefined || patch.links !== undefined) {
+    setEntityOwner(
+      "calendar_event",
+      eventId,
+      patch.userId === undefined
+        ? inferCalendarEventOwnerId({
+            userId: current.userId ?? null,
+            links: patch.links ?? current.links
+          })
+        : patch.userId
+    );
   }
 
   if (current.sourceMappings.length > 0) {
@@ -1235,11 +1297,12 @@ export function createWorkBlockTemplate(
         now,
         now
       );
+    setEntityOwner("work_block_template", id, input.userId);
     return getWorkBlockTemplateById(id)!;
   });
 }
 
-export function listWorkBlockTemplates() {
+export function listWorkBlockTemplates(filters: { userIds?: string[] } = {}) {
   const rows = getDatabase()
     .prepare(
       `SELECT id, title, kind, color, timezone, weekdays_json, start_minute, end_minute, starts_on, ends_on, blocking_state, created_at, updated_at
@@ -1247,7 +1310,11 @@ export function listWorkBlockTemplates() {
        ORDER BY COALESCE(starts_on, ''), start_minute ASC, title ASC`
     )
     .all() as WorkBlockTemplateRow[];
-  return rows.map(mapWorkBlockTemplate);
+  return filterOwnedEntities(
+    "work_block_template",
+    rows.map(mapWorkBlockTemplate),
+    filters.userIds
+  );
 }
 
 export function getWorkBlockTemplateById(templateId: string) {
@@ -1258,7 +1325,9 @@ export function getWorkBlockTemplateById(templateId: string) {
        WHERE id = ?`
     )
     .get(templateId) as WorkBlockTemplateRow | undefined;
-  return row ? mapWorkBlockTemplate(row) : undefined;
+  return row
+    ? decorateOwnedEntity("work_block_template", mapWorkBlockTemplate(row))
+    : undefined;
 }
 
 export function updateWorkBlockTemplate(
@@ -1303,6 +1372,9 @@ export function updateWorkBlockTemplate(
       next.updatedAt,
       templateId
     );
+  if (patch.userId !== undefined) {
+    setEntityOwner("work_block_template", templateId, patch.userId);
+  }
   return getWorkBlockTemplateById(templateId);
 }
 
@@ -1368,13 +1440,21 @@ export function ensureWorkBlockInstancesInRange(_query: CalendarAgendaQuery) {
   return [];
 }
 
-export function listWorkBlockInstances(query: CalendarAgendaQuery) {
-  return listWorkBlockTemplates()
+export function listWorkBlockInstances(
+  query: CalendarAgendaQuery & { userIds?: string[] }
+) {
+  return listWorkBlockTemplates({ userIds: query.userIds })
     .flatMap((template) => deriveWorkBlockInstances(template, query))
     .sort((left, right) => left.startAt.localeCompare(right.startAt) || left.title.localeCompare(right.title));
 }
 
-export function listTaskTimeboxes(query: CalendarAgendaQuery & { taskId?: string; projectId?: string }) {
+export function listTaskTimeboxes(
+  query: CalendarAgendaQuery & {
+    taskId?: string;
+    projectId?: string;
+    userIds?: string[];
+  }
+) {
   const clauses = ["ends_at > ?", "starts_at < ?"];
   const params: Array<string> = [query.from, query.to];
   if (query.taskId) {
@@ -1394,7 +1474,7 @@ export function listTaskTimeboxes(query: CalendarAgendaQuery & { taskId?: string
        ORDER BY starts_at ASC`
     )
     .all(...params) as TaskTimeboxRow[];
-  return rows.map(mapTimebox);
+  return filterOwnedEntities("task_timebox", rows.map(mapTimebox), query.userIds);
 }
 
 export function getTaskTimeboxById(timeboxId: string) {
@@ -1406,7 +1486,7 @@ export function getTaskTimeboxById(timeboxId: string) {
        WHERE id = ?`
     )
     .get(timeboxId) as TaskTimeboxRow | undefined;
-  return row ? mapTimebox(row) : undefined;
+  return row ? decorateOwnedEntity("task_timebox", mapTimebox(row)) : undefined;
 }
 
 export function createTaskTimebox(input: {
@@ -1421,6 +1501,7 @@ export function createTaskTimebox(input: {
   endsAt: string;
   overrideReason?: string | null;
   linkedTaskRunId?: string | null;
+  userId?: string | null;
 }) {
   const now = nowIso();
   const id = `timebox_${randomUUID().replaceAll("-", "").slice(0, 10)}`;
@@ -1447,6 +1528,7 @@ export function createTaskTimebox(input: {
       now,
       now
     );
+  setEntityOwner("task_timebox", id, inferTaskTimeboxOwnerId(input));
   return getTaskTimeboxById(id)!;
 }
 
@@ -1463,6 +1545,7 @@ export function updateTaskTimebox(
     startsAt: string;
     endsAt: string;
     overrideReason: string | null;
+    userId: string | null;
   }>
 ) {
   const current = getTaskTimeboxById(timeboxId);
@@ -1506,6 +1589,9 @@ export function updateTaskTimebox(
       next.updatedAt,
       timeboxId
     );
+  if (patch.userId !== undefined) {
+    setEntityOwner("task_timebox", timeboxId, patch.userId);
+  }
   return getTaskTimeboxById(timeboxId);
 }
 
@@ -1838,7 +1924,9 @@ export function suggestTaskTimeboxes(
   return suggestions;
 }
 
-export function getCalendarOverview(query: CalendarAgendaQuery): CalendarOverviewPayload {
+export function getCalendarOverview(
+  query: CalendarAgendaQuery & { userIds?: string[] }
+): CalendarOverviewPayload {
   ensureWorkBlockInstancesInRange(query);
   return calendarOverviewPayloadSchema.parse({
     generatedAt: nowIso(),
@@ -1871,7 +1959,7 @@ export function getCalendarOverview(query: CalendarAgendaQuery): CalendarOvervie
     connections: listCalendarConnections().map(({ credentialsSecretId: _secret, ...connection }) => connection),
     calendars: listCalendars(),
     events: listCalendarEvents(query),
-    workBlockTemplates: listWorkBlockTemplates(),
+    workBlockTemplates: listWorkBlockTemplates({ userIds: query.userIds }),
     workBlockInstances: listWorkBlockInstances(query),
     timeboxes: listTaskTimeboxes(query)
   });
