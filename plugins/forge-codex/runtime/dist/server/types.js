@@ -205,6 +205,14 @@ export const rewardableEntityTypeSchema = z.enum([
     "trigger_report"
 ]);
 export const deleteModeSchema = z.enum(["soft", "hard"]);
+export const noteKindSchema = z.enum(["evidence", "wiki"]);
+export const wikiSpaceVisibilitySchema = z.enum(["personal", "shared"]);
+export const wikiSearchModeSchema = z.enum([
+    "text",
+    "semantic",
+    "entity",
+    "hybrid"
+]);
 export const rewardRuleFamilySchema = z.enum([
     "completion",
     "consistency",
@@ -436,13 +444,26 @@ const uniqueNoteTagArraySchema = z
 });
 export const noteSchema = z.object({
     id: z.string(),
+    kind: noteKindSchema.default("evidence"),
+    title: nonEmptyTrimmedString,
+    slug: nonEmptyTrimmedString,
+    spaceId: nonEmptyTrimmedString,
+    parentSlug: trimmedString.nullable().default(null),
+    indexOrder: z.number().int().default(0),
+    showInIndex: z.boolean().default(true),
+    aliases: uniqueStringArraySchema.default([]),
+    summary: trimmedString.default(""),
     contentMarkdown: nonEmptyTrimmedString,
     contentPlain: trimmedString,
     author: z.string().nullable(),
     source: activitySourceSchema,
+    sourcePath: trimmedString.default(""),
+    frontmatter: z.record(z.string(), z.unknown()).default({}),
+    revisionHash: trimmedString.default(""),
+    lastSyncedAt: dateTimeSchema.nullable().default(null),
     createdAt: z.string(),
     updatedAt: z.string(),
-    links: z.array(noteLinkSchema).min(1),
+    links: z.array(noteLinkSchema).default([]),
     tags: uniqueNoteTagArraySchema.default([]),
     destroyAt: dateTimeSchema.nullable().default(null),
     ...ownershipShape
@@ -1454,30 +1475,70 @@ function parseLinkedEntityQueryValue(raw) {
     };
 }
 export const createNoteSchema = z.object({
-    contentMarkdown: nonEmptyTrimmedString,
-    author: trimmedString.nullable().default(null),
-    links: z.array(createNoteLinkSchema).min(1),
-    tags: uniqueNoteTagArraySchema.default([]),
-    destroyAt: dateTimeSchema.nullable().default(null),
-    userId: nonEmptyTrimmedString.nullable().optional()
-});
-export const nestedCreateNoteSchema = z.object({
+    kind: noteKindSchema.default("evidence"),
+    title: trimmedString.optional(),
+    slug: trimmedString.optional(),
+    spaceId: trimmedString.optional(),
+    parentSlug: trimmedString.nullable().optional(),
+    indexOrder: z.number().int().default(0),
+    showInIndex: z.boolean().optional(),
+    aliases: uniqueStringArraySchema.default([]),
+    summary: trimmedString.default(""),
     contentMarkdown: nonEmptyTrimmedString,
     author: trimmedString.nullable().default(null),
     links: z.array(createNoteLinkSchema).default([]),
     tags: uniqueNoteTagArraySchema.default([]),
-    destroyAt: dateTimeSchema.nullable().default(null)
+    destroyAt: dateTimeSchema.nullable().default(null),
+    sourcePath: trimmedString.default(""),
+    frontmatter: z.record(z.string(), z.unknown()).default({}),
+    revisionHash: trimmedString.default(""),
+    lastSyncedAt: dateTimeSchema.nullable().optional(),
+    userId: nonEmptyTrimmedString.nullable().optional()
+});
+export const nestedCreateNoteSchema = z.object({
+    kind: noteKindSchema.default("evidence"),
+    title: trimmedString.optional(),
+    slug: trimmedString.optional(),
+    spaceId: trimmedString.optional(),
+    parentSlug: trimmedString.nullable().optional(),
+    indexOrder: z.number().int().default(0),
+    showInIndex: z.boolean().optional(),
+    aliases: uniqueStringArraySchema.default([]),
+    summary: trimmedString.default(""),
+    contentMarkdown: nonEmptyTrimmedString,
+    author: trimmedString.nullable().default(null),
+    links: z.array(createNoteLinkSchema).default([]),
+    tags: uniqueNoteTagArraySchema.default([]),
+    destroyAt: dateTimeSchema.nullable().default(null),
+    sourcePath: trimmedString.default(""),
+    frontmatter: z.record(z.string(), z.unknown()).default({})
 });
 export const updateNoteSchema = z.object({
+    kind: noteKindSchema.optional(),
+    title: trimmedString.optional(),
+    slug: trimmedString.optional(),
+    spaceId: trimmedString.optional(),
+    parentSlug: trimmedString.nullable().optional(),
+    indexOrder: z.number().int().optional(),
+    showInIndex: z.boolean().optional(),
+    aliases: uniqueStringArraySchema.optional(),
+    summary: trimmedString.optional(),
     contentMarkdown: nonEmptyTrimmedString.optional(),
     author: trimmedString.nullable().optional(),
-    links: z.array(createNoteLinkSchema).min(1).optional(),
+    links: z.array(createNoteLinkSchema).optional(),
     tags: uniqueNoteTagArraySchema.optional(),
     destroyAt: dateTimeSchema.nullable().optional(),
+    sourcePath: trimmedString.optional(),
+    frontmatter: z.record(z.string(), z.unknown()).optional(),
+    revisionHash: trimmedString.optional(),
+    lastSyncedAt: dateTimeSchema.nullable().optional(),
     userId: nonEmptyTrimmedString.nullable().optional()
 });
 export const notesListQuerySchema = z
     .object({
+    kind: noteKindSchema.optional(),
+    spaceId: trimmedString.optional(),
+    slug: trimmedString.optional(),
     linkedEntityType: crudEntityTypeSchema.optional(),
     linkedEntityId: nonEmptyTrimmedString.optional(),
     anchorKey: trimmedString.nullable().optional(),

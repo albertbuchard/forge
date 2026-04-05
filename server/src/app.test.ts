@@ -4872,7 +4872,7 @@ test("wiki pages are file-backed, searchable, backlink-aware, and ingestable", a
     } | null = null;
 
     for (let attempt = 0; attempt < 40; attempt += 1) {
-      const poll = await app.inject({
+      const poll: Awaited<ReturnType<typeof app.inject>> = await app.inject({
         method: "GET",
         url: `/api/v1/wiki/ingest-jobs/${ingestBody.job?.job.id}`,
         headers: {

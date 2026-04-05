@@ -5956,6 +5956,18 @@ export async function buildServer(
               "themeColor",
               "#c0c1ff"
             ),
+            schedulingRules: {
+              allowWorkBlockKinds: [],
+              blockWorkBlockKinds: [],
+              allowCalendarIds: [],
+              blockCalendarIds: [],
+              allowEventTypes: [],
+              blockEventTypes: [],
+              allowEventKeywords: [],
+              blockEventKeywords: [],
+              allowAvailability: [],
+              blockAvailability: []
+            },
             notes: [],
             userId:
               typeof suggestedFields.userId === "string"
@@ -5978,8 +5990,7 @@ export async function buildServer(
               typeof suggestedFields.userId === "string"
                 ? (suggestedFields.userId as string)
                 : null,
-            goalId:
-              readStringField(suggestedFields, "goalId").trim() || null,
+            goalId: readStringField(suggestedFields, "goalId").trim() || null,
             projectId:
               readStringField(suggestedFields, "projectId").trim() || null,
             dueDate: null,
@@ -6081,8 +6092,8 @@ export async function buildServer(
             ?.entityId ||
           "";
         const firstTaskId =
-          linkedEntities.find((entry) => entry.entityType === "task")?.entityId ||
-          "";
+          linkedEntities.find((entry) => entry.entityType === "task")
+            ?.entityId || "";
         const graphNodeId = firstProjectId || firstTaskId;
         if (!graphNodeId) {
           throw new Error(
@@ -6155,7 +6166,9 @@ export async function buildServer(
         return { entityType: "note", entityId: note.id };
       }
       default:
-        throw new Error(`Unsupported ingest proposal entity type: ${entityType}`);
+        throw new Error(
+          `Unsupported ingest proposal entity type: ${entityType}`
+        );
     }
   };
   app.get("/api/v1/wiki/ingest-jobs", async (request) => {

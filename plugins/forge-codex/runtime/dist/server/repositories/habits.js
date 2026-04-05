@@ -8,7 +8,7 @@ import { getProjectById } from "./projects.js";
 import { getBehaviorById, getBehaviorPatternById, getBeliefEntryById, getModeProfileById, getPsycheValueById, getTriggerReportById } from "./psyche.js";
 import { getTaskById } from "./tasks.js";
 import { recordActivityEvent } from "./activity-events.js";
-import { recordHabitCheckInReward } from "./rewards.js";
+import { recordHabitCheckInReward, reverseLatestHabitCheckInReward } from "./rewards.js";
 import { createHabitCheckInSchema, createHabitSchema, habitCheckInSchema, habitSchema, updateHabitSchema } from "../types.js";
 function todayKey(now = new Date()) {
     return now.toISOString().slice(0, 10);
@@ -291,7 +291,8 @@ export function updateHabit(habitId, input, activity) {
              linked_belief_ids_json = ?, linked_mode_ids_json = ?, linked_report_ids_json = ?,
              linked_behavior_id = ?, reward_xp = ?, penalty_xp = ?, generated_health_event_template_json = ?, updated_at = ?
          WHERE id = ?`)
-            .run(parsed.title ?? current.title, parsed.description ?? current.description, parsed.status ?? current.status, parsed.polarity ?? current.polarity, parsed.frequency ?? current.frequency, parsed.targetCount ?? current.targetCount, JSON.stringify(parsed.weekDays ?? current.weekDays), JSON.stringify(parsed.linkedGoalIds ?? current.linkedGoalIds), JSON.stringify(parsed.linkedProjectIds ?? current.linkedProjectIds), JSON.stringify(parsed.linkedTaskIds ?? current.linkedTaskIds), JSON.stringify(parsed.linkedValueIds ?? current.linkedValueIds), JSON.stringify(parsed.linkedPatternIds ?? current.linkedPatternIds), JSON.stringify(nextLinkedBehaviorIds), JSON.stringify(parsed.linkedBeliefIds ?? current.linkedBeliefIds), JSON.stringify(parsed.linkedModeIds ?? current.linkedModeIds), JSON.stringify(parsed.linkedReportIds ?? current.linkedReportIds), nextLinkedBehaviorIds[0] ?? null, parsed.rewardXp ?? current.rewardXp, parsed.penaltyXp ?? current.penaltyXp, JSON.stringify(parsed.generatedHealthEventTemplate ?? current.generatedHealthEventTemplate), updatedAt, habitId);
+            .run(parsed.title ?? current.title, parsed.description ?? current.description, parsed.status ?? current.status, parsed.polarity ?? current.polarity, parsed.frequency ?? current.frequency, parsed.targetCount ?? current.targetCount, JSON.stringify(parsed.weekDays ?? current.weekDays), JSON.stringify(parsed.linkedGoalIds ?? current.linkedGoalIds), JSON.stringify(parsed.linkedProjectIds ?? current.linkedProjectIds), JSON.stringify(parsed.linkedTaskIds ?? current.linkedTaskIds), JSON.stringify(parsed.linkedValueIds ?? current.linkedValueIds), JSON.stringify(parsed.linkedPatternIds ?? current.linkedPatternIds), JSON.stringify(nextLinkedBehaviorIds), JSON.stringify(parsed.linkedBeliefIds ?? current.linkedBeliefIds), JSON.stringify(parsed.linkedModeIds ?? current.linkedModeIds), JSON.stringify(parsed.linkedReportIds ?? current.linkedReportIds), nextLinkedBehaviorIds[0] ?? null, parsed.rewardXp ?? current.rewardXp, parsed.penaltyXp ?? current.penaltyXp, JSON.stringify(parsed.generatedHealthEventTemplate ??
+            current.generatedHealthEventTemplate), updatedAt, habitId);
         if (parsed.userId !== undefined) {
             setEntityOwner("habit", habitId, parsed.userId);
         }
@@ -422,6 +423,42 @@ export function createHabitCheckIn(habitId, input, activity) {
                 });
             }
         }
+        return getHabitById(habitId);
+    });
+}
+export function deleteHabitCheckIn(habitId, dateKey, activity) {
+    const habit = getHabitById(habitId);
+    if (!habit) {
+        return undefined;
+    }
+    return runInTransaction(() => {
+        const existing = getDatabase()
+            .prepare(`SELECT id, habit_id, date_key, status, note, delta_xp, created_at, updated_at
+         FROM habit_check_ins
+         WHERE habit_id = ? AND date_key = ?`)
+            .get(habitId, dateKey);
+        if (!existing) {
+            return getHabitById(habitId);
+        }
+        getDatabase()
+            .prepare(`DELETE FROM habit_check_ins WHERE id = ?`)
+            .run(existing.id);
+        reverseLatestHabitCheckInReward(habit, dateKey, activity ?? { source: "ui", actor: null });
+        recordActivityEvent({
+            entityType: "habit",
+            entityId: habit.id,
+            eventType: "habit_check_in_deleted",
+            title: `Habit entry removed: ${habit.title}`,
+            description: "Habit check-in removed from the timeline.",
+            actor: activity?.actor ?? null,
+            source: activity?.source ?? "ui",
+            metadata: {
+                dateKey,
+                status: existing.status,
+                polarity: habit.polarity,
+                deltaXp: existing.delta_xp
+            }
+        });
         return getHabitById(habitId);
     });
 }

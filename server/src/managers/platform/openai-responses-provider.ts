@@ -4,6 +4,18 @@ import type {
   WikiLlmProvider
 } from "./llm-manager.js";
 
+function isOutputTextPart(
+  part: unknown
+): part is { type: "output_text"; text: string } {
+  return (
+    part !== null &&
+    typeof part === "object" &&
+    "type" in part &&
+    (part as { type?: unknown }).type === "output_text" &&
+    typeof (part as { text?: unknown }).text === "string"
+  );
+}
+
 function parseJsonFromOutput(payload: Record<string, unknown>) {
   const output = Array.isArray(payload.output) ? payload.output : [];
   for (const item of output) {
@@ -14,15 +26,8 @@ function parseJsonFromOutput(payload: Record<string, unknown>) {
       ? ((item as { content?: unknown }).content as Array<unknown>)
       : [];
     for (const part of content) {
-      if (!part || typeof part !== "object") {
-        continue;
-      }
-      if (
-        "type" in part &&
-        (part as { type?: unknown }).type === "output_text" &&
-        typeof (part as { text?: unknown }).text === "string"
-      ) {
-        return (part as { text: string }).text;
+      if (isOutputTextPart(part)) {
+        return part.text;
       }
     }
   }

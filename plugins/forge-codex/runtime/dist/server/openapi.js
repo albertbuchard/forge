@@ -3171,6 +3171,187 @@ export function buildOpenApiDocument() {
             committedActions: arrayOf({ type: "string" })
         }
     };
+    const healthLink = {
+        type: "object",
+        additionalProperties: false,
+        required: ["entityType", "entityId", "relationshipType"],
+        properties: {
+            entityType: { type: "string" },
+            entityId: { type: "string" },
+            relationshipType: { type: "string" }
+        }
+    };
+    const sleepSession = {
+        type: "object",
+        additionalProperties: false,
+        required: [
+            "id",
+            "externalUid",
+            "pairingSessionId",
+            "userId",
+            "source",
+            "sourceType",
+            "sourceDevice",
+            "startedAt",
+            "endedAt",
+            "timeInBedSeconds",
+            "asleepSeconds",
+            "awakeSeconds",
+            "sleepScore",
+            "regularityScore",
+            "bedtimeConsistencyMinutes",
+            "wakeConsistencyMinutes",
+            "stageBreakdown",
+            "recoveryMetrics",
+            "links",
+            "annotations",
+            "provenance",
+            "derived",
+            "createdAt",
+            "updatedAt"
+        ],
+        properties: {
+            id: { type: "string" },
+            externalUid: { type: "string" },
+            pairingSessionId: nullable({ type: "string" }),
+            userId: { type: "string" },
+            source: { type: "string" },
+            sourceType: { type: "string" },
+            sourceDevice: { type: "string" },
+            startedAt: { type: "string", format: "date-time" },
+            endedAt: { type: "string", format: "date-time" },
+            timeInBedSeconds: { type: "integer" },
+            asleepSeconds: { type: "integer" },
+            awakeSeconds: { type: "integer" },
+            sleepScore: nullable({ type: "number" }),
+            regularityScore: nullable({ type: "number" }),
+            bedtimeConsistencyMinutes: nullable({ type: "number" }),
+            wakeConsistencyMinutes: nullable({ type: "number" }),
+            stageBreakdown: arrayOf({
+                type: "object",
+                additionalProperties: false,
+                required: ["stage", "seconds"],
+                properties: {
+                    stage: { type: "string" },
+                    seconds: { type: "integer" }
+                }
+            }),
+            recoveryMetrics: { type: "object", additionalProperties: true },
+            links: arrayOf({ $ref: "#/components/schemas/HealthLink" }),
+            annotations: { type: "object", additionalProperties: true },
+            provenance: { type: "object", additionalProperties: true },
+            derived: { type: "object", additionalProperties: true },
+            createdAt: { type: "string", format: "date-time" },
+            updatedAt: { type: "string", format: "date-time" }
+        }
+    };
+    const workoutSession = {
+        type: "object",
+        additionalProperties: false,
+        required: [
+            "id",
+            "externalUid",
+            "pairingSessionId",
+            "userId",
+            "source",
+            "sourceType",
+            "workoutType",
+            "sourceDevice",
+            "startedAt",
+            "endedAt",
+            "durationSeconds",
+            "activeEnergyKcal",
+            "totalEnergyKcal",
+            "distanceMeters",
+            "stepCount",
+            "exerciseMinutes",
+            "averageHeartRate",
+            "maxHeartRate",
+            "subjectiveEffort",
+            "moodBefore",
+            "moodAfter",
+            "meaningText",
+            "plannedContext",
+            "socialContext",
+            "links",
+            "tags",
+            "annotations",
+            "provenance",
+            "derived",
+            "generatedFromHabitId",
+            "generatedFromCheckInId",
+            "reconciliationStatus",
+            "createdAt",
+            "updatedAt"
+        ],
+        properties: {
+            id: { type: "string" },
+            externalUid: { type: "string" },
+            pairingSessionId: nullable({ type: "string" }),
+            userId: { type: "string" },
+            source: { type: "string" },
+            sourceType: { type: "string" },
+            workoutType: { type: "string" },
+            sourceDevice: { type: "string" },
+            startedAt: { type: "string", format: "date-time" },
+            endedAt: { type: "string", format: "date-time" },
+            durationSeconds: { type: "integer" },
+            activeEnergyKcal: nullable({ type: "number" }),
+            totalEnergyKcal: nullable({ type: "number" }),
+            distanceMeters: nullable({ type: "number" }),
+            stepCount: nullable({ type: "integer" }),
+            exerciseMinutes: nullable({ type: "integer" }),
+            averageHeartRate: nullable({ type: "number" }),
+            maxHeartRate: nullable({ type: "number" }),
+            subjectiveEffort: nullable({ type: "integer" }),
+            moodBefore: { type: "string" },
+            moodAfter: { type: "string" },
+            meaningText: { type: "string" },
+            plannedContext: { type: "string" },
+            socialContext: { type: "string" },
+            links: arrayOf({ $ref: "#/components/schemas/HealthLink" }),
+            tags: arrayOf({ type: "string" }),
+            annotations: { type: "object", additionalProperties: true },
+            provenance: { type: "object", additionalProperties: true },
+            derived: { type: "object", additionalProperties: true },
+            generatedFromHabitId: nullable({ type: "string" }),
+            generatedFromCheckInId: nullable({ type: "string" }),
+            reconciliationStatus: { type: "string" },
+            createdAt: { type: "string", format: "date-time" },
+            updatedAt: { type: "string", format: "date-time" }
+        }
+    };
+    const sleepViewData = {
+        type: "object",
+        additionalProperties: false,
+        required: [
+            "summary",
+            "weeklyTrend",
+            "monthlyPattern",
+            "stageAverages",
+            "linkBreakdown",
+            "sessions"
+        ],
+        properties: {
+            summary: { type: "object", additionalProperties: true },
+            weeklyTrend: arrayOf({ type: "object", additionalProperties: true }),
+            monthlyPattern: arrayOf({ type: "object", additionalProperties: true }),
+            stageAverages: arrayOf({ type: "object", additionalProperties: true }),
+            linkBreakdown: arrayOf({ type: "object", additionalProperties: true }),
+            sessions: arrayOf({ $ref: "#/components/schemas/SleepSession" })
+        }
+    };
+    const fitnessViewData = {
+        type: "object",
+        additionalProperties: false,
+        required: ["summary", "weeklyTrend", "typeBreakdown", "sessions"],
+        properties: {
+            summary: { type: "object", additionalProperties: true },
+            weeklyTrend: arrayOf({ type: "object", additionalProperties: true }),
+            typeBreakdown: arrayOf({ type: "object", additionalProperties: true }),
+            sessions: arrayOf({ $ref: "#/components/schemas/WorkoutSession" })
+        }
+    };
     return {
         openapi: "3.1.0",
         info: {
@@ -3255,6 +3436,11 @@ export function buildOpenApiDocument() {
                 Note: note,
                 NoteSummary: noteSummary,
                 NotesSummaryByEntity: notesSummaryByEntity,
+                HealthLink: healthLink,
+                SleepSession: sleepSession,
+                WorkoutSession: workoutSession,
+                SleepViewData: sleepViewData,
+                FitnessViewData: fitnessViewData,
                 PsycheOverviewPayload: psycheOverviewPayload,
                 Insight: insight,
                 InsightFeedback: insightFeedback,
@@ -3310,6 +3496,203 @@ export function buildOpenApiDocument() {
                                 }
                             }
                         }, "Forge health payload")
+                    }
+                }
+            },
+            "/api/v1/health/sleep": {
+                get: {
+                    summary: "Read the Forge sleep overview surface",
+                    responses: {
+                        "200": jsonResponse({
+                            type: "object",
+                            required: ["sleep"],
+                            properties: {
+                                sleep: { $ref: "#/components/schemas/SleepViewData" }
+                            }
+                        }, "Sleep overview")
+                    }
+                }
+            },
+            "/api/v1/health/fitness": {
+                get: {
+                    summary: "Read the Forge sports and workout overview surface",
+                    responses: {
+                        "200": jsonResponse({
+                            type: "object",
+                            required: ["fitness"],
+                            properties: {
+                                fitness: { $ref: "#/components/schemas/FitnessViewData" }
+                            }
+                        }, "Fitness overview")
+                    }
+                }
+            },
+            "/api/v1/health/workouts/{id}": {
+                patch: {
+                    summary: "Update one workout session's reflective metadata",
+                    responses: {
+                        "200": jsonResponse({
+                            type: "object",
+                            required: ["workout"],
+                            properties: {
+                                workout: { $ref: "#/components/schemas/WorkoutSession" }
+                            }
+                        }, "Updated workout session"),
+                        "404": { $ref: "#/components/responses/Error" }
+                    }
+                }
+            },
+            "/api/v1/health/sleep/{id}": {
+                patch: {
+                    summary: "Update one sleep session's reflective metadata",
+                    responses: {
+                        "200": jsonResponse({
+                            type: "object",
+                            required: ["sleep"],
+                            properties: {
+                                sleep: { $ref: "#/components/schemas/SleepSession" }
+                            }
+                        }, "Updated sleep session"),
+                        "404": { $ref: "#/components/responses/Error" }
+                    }
+                }
+            },
+            "/api/v1/wiki/settings": {
+                get: {
+                    summary: "Read wiki spaces plus enabled LLM and embedding profiles",
+                    responses: {
+                        "200": jsonResponse({
+                            type: "object",
+                            required: ["settings"],
+                            properties: {
+                                settings: {
+                                    type: "object",
+                                    additionalProperties: true
+                                }
+                            }
+                        }, "Wiki settings")
+                    }
+                }
+            },
+            "/api/v1/wiki/pages": {
+                get: {
+                    summary: "List wiki or evidence pages inside one space",
+                    responses: {
+                        "200": jsonResponse({
+                            type: "object",
+                            required: ["pages"],
+                            properties: {
+                                pages: arrayOf({
+                                    type: "object",
+                                    additionalProperties: true
+                                })
+                            }
+                        }, "Wiki page list")
+                    }
+                },
+                post: {
+                    summary: "Create a wiki page through the file-backed wiki surface",
+                    responses: {
+                        "200": jsonResponse({
+                            type: "object",
+                            required: ["page"],
+                            properties: {
+                                page: { type: "object", additionalProperties: true }
+                            }
+                        }, "Created wiki page"),
+                        "404": { $ref: "#/components/responses/Error" }
+                    }
+                }
+            },
+            "/api/v1/wiki/pages/{id}": {
+                get: {
+                    summary: "Read one wiki page with backlinks and attached metadata",
+                    responses: {
+                        "200": jsonResponse({
+                            type: "object",
+                            required: ["page"],
+                            properties: {
+                                page: { type: "object", additionalProperties: true }
+                            }
+                        }, "Wiki page detail"),
+                        "404": { $ref: "#/components/responses/Error" }
+                    }
+                },
+                patch: {
+                    summary: "Update an existing wiki page through the file-backed surface",
+                    responses: {
+                        "200": jsonResponse({
+                            type: "object",
+                            required: ["page"],
+                            properties: {
+                                page: { type: "object", additionalProperties: true }
+                            }
+                        }, "Updated wiki page"),
+                        "404": { $ref: "#/components/responses/Error" }
+                    }
+                }
+            },
+            "/api/v1/wiki/search": {
+                post: {
+                    summary: "Search the wiki with text, semantic, entity, or hybrid retrieval",
+                    responses: {
+                        "200": jsonResponse({
+                            type: "object",
+                            required: ["results"],
+                            properties: {
+                                results: arrayOf({
+                                    type: "object",
+                                    additionalProperties: true
+                                })
+                            }
+                        }, "Wiki search results")
+                    }
+                }
+            },
+            "/api/v1/wiki/health": {
+                get: {
+                    summary: "Read wiki health signals for one space",
+                    responses: {
+                        "200": jsonResponse({
+                            type: "object",
+                            required: ["health"],
+                            properties: {
+                                health: { type: "object", additionalProperties: true }
+                            }
+                        }, "Wiki health")
+                    }
+                }
+            },
+            "/api/v1/wiki/sync": {
+                post: {
+                    summary: "Resync markdown files from the local wiki vault into Forge metadata",
+                    responses: {
+                        "200": jsonResponse({
+                            type: "object",
+                            additionalProperties: true
+                        }, "Wiki sync result")
+                    }
+                }
+            },
+            "/api/v1/wiki/reindex": {
+                post: {
+                    summary: "Recompute wiki embedding chunks for one space and optional profile",
+                    responses: {
+                        "200": jsonResponse({
+                            type: "object",
+                            additionalProperties: true
+                        }, "Wiki reindex result")
+                    }
+                }
+            },
+            "/api/v1/wiki/ingest-jobs": {
+                post: {
+                    summary: "Queue a wiki ingest job from raw text, local files, or a URL",
+                    responses: {
+                        "200": jsonResponse({
+                            type: "object",
+                            additionalProperties: true
+                        }, "Queued wiki ingest job")
                     }
                 }
             },
@@ -4918,6 +5301,22 @@ export function buildOpenApiDocument() {
                                 metrics: { $ref: "#/components/schemas/XpMetricsPayload" }
                             }
                         }, "Habit check-in result"),
+                        "404": { $ref: "#/components/responses/Error" }
+                    }
+                }
+            },
+            "/api/v1/habits/{id}/check-ins/{dateKey}": {
+                delete: {
+                    summary: "Delete a habit check-in for one day",
+                    responses: {
+                        "200": jsonResponse({
+                            type: "object",
+                            required: ["habit", "metrics"],
+                            properties: {
+                                habit: { $ref: "#/components/schemas/Habit" },
+                                metrics: { $ref: "#/components/schemas/XpMetricsPayload" }
+                            }
+                        }, "Habit check-in deletion result"),
                         "404": { $ref: "#/components/responses/Error" }
                     }
                 }

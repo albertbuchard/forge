@@ -1,5 +1,6 @@
 import Fastify from "fastify";
 import cors from "@fastify/cors";
+import multipart from "@fastify/multipart";
 import { ZodError } from "zod";
 import { configureDatabase, configureDatabaseSeeding, runInTransaction } from "./db.js";
 import { HttpError, isHttpError } from "./errors.js";
@@ -7,9 +8,10 @@ import { listActivityEvents, listActivityEventsForTask, recordActivityEvent, rem
 import { approveApprovalRequest, createAgentAction, createInsight, createInsightFeedback, deleteInsight, getInsightById, listAgentActions, listApprovalRequests, listInsights, rejectApprovalRequest, updateInsight } from "./repositories/collaboration.js";
 import { listEventLog } from "./repositories/event-log.js";
 import { createGoal, getGoalById, listGoals, updateGoal } from "./repositories/goals.js";
-import { createHabit, createHabitCheckIn, getHabitById, listHabits, updateHabit } from "./repositories/habits.js";
+import { createHabit, createHabitCheckIn, deleteHabitCheckIn, getHabitById, listHabits, updateHabit } from "./repositories/habits.js";
 import { listDomains } from "./repositories/domains.js";
 import { buildNotesSummaryByEntity, createNote, getNoteById, listNotes, updateNote } from "./repositories/notes.js";
+import { createWikiIngestJobSchema, createUploadedWikiIngestJob, createWikiSpace, createWikiSpaceSchema, deleteWikiProfile, getWikiHealth, getWikiIngestJob, getWikiHomePageDetail, getWikiPageDetail, getWikiPageDetailBySlug, getWikiSettingsPayload, ingestWikiSource, listWikiIngestJobs, listWikiPageTree, listWikiPages, listWikiSpaces, processWikiIngestJob, reindexWikiEmbeddings, reindexWikiEmbeddingsSchema, reviewWikiIngestJob, reviewWikiIngestJobSchema, searchWikiPages, syncWikiVaultFromDisk, syncWikiVaultSchema, upsertWikiEmbeddingProfile, upsertWikiEmbeddingProfileSchema, upsertWikiLlmProfile, upsertWikiLlmProfileSchema, wikiSearchQuerySchema } from "./repositories/wiki-memory.js";
 import { filterOwnedEntities, setEntityOwner } from "./repositories/entity-ownership.js";
 import { createBehavior, createBehaviorPattern, createBeliefEntry, createEmotionDefinition, createEventType, createModeGuideSession, createModeProfile, createPsycheValue, createTriggerReport, getBehaviorById, getBehaviorPatternById, getBeliefEntryById, getEmotionDefinitionById, getEventTypeById, getModeGuideSessionById, getModeProfileById, getPsycheValueById, getTriggerReportById, listBehaviors, listBehaviorPatterns, listBeliefEntries, listEmotionDefinitions, listEventTypes, listModeGuideSessions, listModeProfiles, listPsycheValues, listSchemaCatalog, listTriggerReports, updateBehavior, updateBehaviorPattern, updateBeliefEntry, updateEmotionDefinition, updateEventType, updateModeGuideSession, updateModeProfile, updatePsycheValue, updateTriggerReport } from "./repositories/psyche.js";
 import { createProject, updateProject } from "./repositories/projects.js";
@@ -2375,6 +2377,161 @@ const AGENT_ONBOARDING_TOOL_INPUT_CATALOG = [
         example: '{"operations":[{"entityType":"goal","id":"goal_123","clientRef":"goal-restore-1"}]}'
     },
     {
+        toolName: "forge_get_wiki_settings",
+        summary: "Read the current wiki spaces plus enabled LLM and embedding profiles.",
+        whenToUse: "Use before semantic wiki search, ingest, or wiki writes so the agent knows which spaces and profiles exist.",
+        inputShape: "{}",
+        requiredFields: [],
+        notes: [
+            "Semantic search is optional and profile-driven.",
+            "The wiki is file-first, so spaces map to local vault directories."
+        ],
+        example: "{}"
+    },
+    {
+        toolName: "forge_list_wiki_pages",
+        summary: "List wiki and evidence pages inside one space.",
+        whenToUse: "Use when browsing a space catalog, choosing a page to open, or building a crawl plan without ranking search results yet.",
+        inputShape: '{ spaceId?: string, kind?: "wiki"|"evidence", limit?: integer }',
+        requiredFields: [],
+        notes: [
+            "This returns the explicit page catalog, not a search-ranked result list.",
+            "Use forge_search_wiki when recall or ranking matters."
+        ],
+        example: '{"spaceId":"wiki_space_shared","kind":"wiki","limit":100}'
+    },
+    {
+        toolName: "forge_get_wiki_page",
+        summary: "Read one wiki page with backlinks, source notes, and attached assets.",
+        whenToUse: "Use after page discovery when an agent needs the full wiki context for one page.",
+        inputShape: "{ pageId: string }",
+        requiredFields: ["pageId"],
+        notes: [
+            "The detail payload includes backlinks and linked media assets.",
+            "Forge entity links remain on the page.links field."
+        ],
+        example: '{"pageId":"note_123"}'
+    },
+    {
+        toolName: "forge_search_wiki",
+        summary: "Search the wiki with text, entity, semantic, or hybrid retrieval.",
+        whenToUse: "Use when the agent needs recall across the explicit wiki memory surface instead of only structured entities.",
+        inputShape: '{ spaceId?: string, kind?: "wiki"|"evidence", mode?: "text"|"semantic"|"entity"|"hybrid", query?: string, profileId?: string, linkedEntity?: { entityType, entityId }, limit?: integer }',
+        requiredFields: [],
+        notes: [
+            "Hybrid search combines exact slug or title matches, FTS, entity links, and optional embeddings.",
+            "If no embedding profile is configured, semantic and hybrid fall back to non-vector signals."
+        ],
+        example: '{"spaceId":"wiki_space_shared","mode":"hybrid","query":"landing page inspiration","limit":12}'
+    },
+    {
+        toolName: "forge_upsert_wiki_page",
+        summary: "Create a new wiki page or update an existing one through the file-backed wiki surface.",
+        whenToUse: "Use when the user explicitly wants wiki memory persisted or reorganized.",
+        inputShape: '{ pageId?: string, kind?: "wiki"|"evidence", title: string, slug?: string, summary?: string, aliases?: string[], contentMarkdown: string, author?: string|null, tags?: string[], spaceId?: string, frontmatter?: object, links?: Array<{ entityType, entityId, anchorKey? }> }',
+        requiredFields: ["title", "contentMarkdown"],
+        notes: [
+            "When pageId is omitted, Forge creates a new page.",
+            "When pageId is present, Forge patches the existing page and rewrites the canonical file."
+        ],
+        example: '{"title":"Taste map","contentMarkdown":"# Taste map\\n\\n[[forge:goal:goal_123|Core goal]] influences this page.","spaceId":"wiki_space_shared"}'
+    },
+    {
+        toolName: "forge_get_wiki_health",
+        summary: "Read wiki maintenance signals such as unresolved links, orphan pages, missing summaries, raw-source counts, and the generated index path.",
+        whenToUse: "Use for memory quality checks, cleanup passes, or before asking an LLM to lint the wiki.",
+        inputShape: "{ spaceId?: string }",
+        requiredFields: [],
+        notes: [
+            "This is the explicit health surface for the file-first wiki vault.",
+            "Use it before proposing cleanup work or auto-maintenance."
+        ],
+        example: '{"spaceId":"wiki_space_shared"}'
+    },
+    {
+        toolName: "forge_sync_wiki_vault",
+        summary: "Resync Markdown files from the local wiki vault into Forge metadata.",
+        whenToUse: "Use after out-of-band file edits or imported file changes that should be reflected back in Forge.",
+        inputShape: "{ spaceId?: string }",
+        requiredFields: [],
+        notes: [
+            "Forge treats the vault as a first-class local artifact, so this route is the bridge back into app metadata."
+        ],
+        example: '{"spaceId":"wiki_space_shared"}'
+    },
+    {
+        toolName: "forge_reindex_wiki_embeddings",
+        summary: "Recompute wiki embedding chunks for one space and optional profile.",
+        whenToUse: "Use after large wiki edits or when a new embedding profile is enabled.",
+        inputShape: "{ spaceId?: string, profileId?: string }",
+        requiredFields: [],
+        notes: [
+            "Only enabled embedding profiles are indexed.",
+            "Reindexing does not modify the markdown files themselves."
+        ],
+        example: '{"spaceId":"wiki_space_shared","profileId":"wiki_embed_123"}'
+    },
+    {
+        toolName: "forge_ingest_wiki_source",
+        summary: "Ingest raw text, local files, or URLs into the wiki, preserving a raw source artifact and returning page plus proposal outputs.",
+        whenToUse: "Use when the operator wants source material compiled into file-first wiki memory and optional Forge-entity proposals.",
+        inputShape: '{ spaceId?: string, titleHint?: string, sourceKind: "raw_text"|"local_path"|"url", sourceText?: string, sourcePath?: string, sourceUrl?: string, mimeType?: string, llmProfileId?: string, parseStrategy?: "auto"|"text_only"|"multimodal", entityProposalMode?: "none"|"suggest", createAsKind?: "wiki"|"evidence", linkedEntityHints?: Array<{ entityType, entityId, anchorKey? }> }',
+        requiredFields: ["sourceKind", "sourceText/sourcePath/sourceUrl"],
+        notes: [
+            "Forge preserves a raw artifact under the wiki space's raw directory.",
+            "Entity proposals are suggestions only; they are not auto-applied."
+        ],
+        example: '{"sourceKind":"url","sourceUrl":"https://example.com/article","titleHint":"Research import","parseStrategy":"auto","entityProposalMode":"suggest"}'
+    },
+    {
+        toolName: "forge_get_sleep_overview",
+        summary: "Read the sleep surface with recent nights, scores, regularity, stage averages, and linked reflective context.",
+        whenToUse: "Use when the operator wants to review sleep patterns or when an agent needs sleep context before planning or coaching.",
+        inputShape: "{ userIds?: string[] }",
+        requiredFields: [],
+        notes: [
+            "Sleep sessions are first-class Forge health records and can link back to goals, projects, tasks, habits, notes, and Psyche entities.",
+            "This read model is multi-user aware through userIds."
+        ],
+        example: '{"userIds":["user_operator","user_hermes"]}'
+    },
+    {
+        toolName: "forge_get_sports_overview",
+        summary: "Read the sports surface with workout volume, workout types, effort signals, and linked session context.",
+        whenToUse: "Use when the operator wants training context, habit-generated workout visibility, or workout review before planning.",
+        inputShape: "{ userIds?: string[] }",
+        requiredFields: [],
+        notes: [
+            "The API path stays /api/v1/health/fitness even though the UI route is /sports.",
+            "Habit-generated and imported workouts reconcile into the same workout record model."
+        ],
+        example: '{"userIds":["user_operator"]}'
+    },
+    {
+        toolName: "forge_update_sleep_session",
+        summary: "Patch one sleep session with reflective notes, tags, or linked Forge context.",
+        whenToUse: "Use after reviewing a specific night when the operator wants richer context stored on that sleep record.",
+        inputShape: "{ sleepId: string, qualitySummary?: string, notes?: string, tags?: string[], links?: Array<{ entityType, entityId, relationshipType? }> }",
+        requiredFields: ["sleepId"],
+        notes: [
+            "Use this to attach the night to goals, projects, habits, notes, or Psyche context without editing the raw imported timestamps.",
+            "Links keep sleep review connected to the broader Forge graph."
+        ],
+        example: '{"sleepId":"sleep_123","qualitySummary":"Fell asleep late after travel but recovered well.","tags":["travel","recovery"],"links":[{"entityType":"habit","entityId":"habit_sleep_hygiene","relationshipType":"supports"}]}'
+    },
+    {
+        toolName: "forge_update_workout_session",
+        summary: "Patch one workout session with subjective effort, mood, meaning, tags, or linked Forge context.",
+        whenToUse: "Use after reviewing one sports session when the operator wants the workout record to carry narrative or planning context.",
+        inputShape: "{ workoutId: string, subjectiveEffort?: integer|null, moodBefore?: string, moodAfter?: string, meaningText?: string, plannedContext?: string, socialContext?: string, tags?: string[], links?: Array<{ entityType, entityId, relationshipType? }> }",
+        requiredFields: ["workoutId"],
+        notes: [
+            "Use this for subjective or linked-context metadata, not for rewriting the raw imported workout duration or calories.",
+            "This is the correct path for both imported HealthKit workouts and habit-generated sports sessions."
+        ],
+        example: '{"workoutId":"workout_123","subjectiveEffort":7,"meaningText":"Protected recovery and sleep rhythm after a heavy workday.","tags":["recovery","sleep-support"],"links":[{"entityType":"project","entityId":"project_endurance_reset","relationshipType":"supports"}]}'
+    },
+    {
         toolName: "forge_get_calendar_overview",
         summary: "Read connected calendars, Forge-native events, mirrored events, recurring work blocks, and task timeboxes together.",
         whenToUse: "Use before calendar-aware planning, slot selection, or scheduling diagnostics.",
@@ -2616,6 +2773,9 @@ function buildAgentOnboardingPayload(request) {
             task: "A concrete actionable work item. Task status is board state, not proof of live work.",
             taskRun: "A live work session attached to a task. Start, heartbeat, focus, complete, and release runs instead of faking work with status alone.",
             note: "A Markdown work note that can link to one or many entities. Use notes for progress evidence, context, and close-out summaries.",
+            wiki: "Forge Wiki is the file-first memory layer: local Markdown pages plus media, backlinks, optional embeddings, explicit spaces, and structured links back to Forge entities.",
+            sleepSession: "A sleep session is a first-class health record with timing, sleep and bed duration, stage breakdown, recovery metrics, annotations, and Forge links back to planning or Psyche context.",
+            workoutSession: "A workout session is a first-class sports record imported from HealthKit or generated from a habit. It holds workout type, timing, energy or distance when available, subjective effort, narrative context, and Forge links.",
             insight: "An agent-authored observation or recommendation grounded in Forge data.",
             calendar: "A connected calendar source mirrored into Forge. Calendar state combines provider events, recurring work blocks, and task timeboxes.",
             workBlock: "A recurring half-day or custom time window such as Main Activity, Secondary Activity, Third Activity, Rest, Holiday, or Custom. Work blocks can allow or block work by default, can define active date bounds, and remain editable through the calendar surface.",
@@ -2723,6 +2883,11 @@ function buildAgentOnboardingPayload(request) {
             context: "/api/v1/context",
             xpMetrics: "/api/v1/metrics/xp",
             weeklyReview: "/api/v1/reviews/weekly",
+            sleepOverview: "/api/v1/health/sleep",
+            sportsOverview: "/api/v1/health/fitness",
+            wikiSettings: "/api/v1/wiki/settings",
+            wikiSearch: "/api/v1/wiki/search",
+            wikiHealth: "/api/v1/wiki/health",
             calendarOverview: "/api/v1/calendar/overview",
             settingsBin: "/api/v1/settings/bin",
             batchSearch: "/api/v1/entities/search",
@@ -2737,6 +2902,8 @@ function buildAgentOnboardingPayload(request) {
                 "forge_get_operator_context",
                 "forge_get_current_work",
                 "forge_get_psyche_overview",
+                "forge_get_sleep_overview",
+                "forge_get_sports_overview",
                 "forge_get_xp_metrics",
                 "forge_get_weekly_review"
             ],
@@ -2747,6 +2914,23 @@ function buildAgentOnboardingPayload(request) {
                 "forge_update_entities",
                 "forge_delete_entities",
                 "forge_restore_entities"
+            ],
+            wikiWorkflow: [
+                "forge_get_wiki_settings",
+                "forge_list_wiki_pages",
+                "forge_get_wiki_page",
+                "forge_search_wiki",
+                "forge_upsert_wiki_page",
+                "forge_get_wiki_health",
+                "forge_sync_wiki_vault",
+                "forge_reindex_wiki_embeddings",
+                "forge_ingest_wiki_source"
+            ],
+            healthWorkflow: [
+                "forge_get_sleep_overview",
+                "forge_get_sports_overview",
+                "forge_update_sleep_session",
+                "forge_update_workout_session"
             ],
             rewardWorkflow: ["forge_grant_reward_bonus"],
             workWorkflow: [
@@ -3332,8 +3516,10 @@ export async function buildServer(options = {}) {
         },
         credentials: true
     });
+    await app.register(multipart);
     app.addHook("onClose", async () => {
         taskRunWatchdog?.stop();
+        await managers.backgroundJobs.stop();
     });
     app.setErrorHandler((error, _request, reply) => {
         const validationIssues = error instanceof ZodError ? formatValidationIssues(error) : undefined;
@@ -4221,6 +4407,482 @@ export async function buildServer(options = {}) {
             return { error: "Note not found" };
         }
         return { note };
+    });
+    app.get("/api/v1/wiki/settings", async (request) => {
+        requireScopedAccess(request.headers, ["read", "write"], { route: "/api/v1/wiki/settings" });
+        return { settings: getWikiSettingsPayload() };
+    });
+    app.post("/api/v1/wiki/settings/llm-profiles", async (request, reply) => {
+        requireScopedAccess(request.headers, ["write"], {
+            route: "/api/v1/wiki/settings/llm-profiles"
+        });
+        const profile = upsertWikiLlmProfile(upsertWikiLlmProfileSchema.parse(request.body ?? {}), managers.secrets);
+        reply.code(201);
+        return { profile };
+    });
+    app.post("/api/v1/wiki/settings/embedding-profiles", async (request, reply) => {
+        requireScopedAccess(request.headers, ["write"], { route: "/api/v1/wiki/settings/embedding-profiles" });
+        const profile = upsertWikiEmbeddingProfile(upsertWikiEmbeddingProfileSchema.parse(request.body ?? {}), managers.secrets);
+        reply.code(201);
+        return { profile };
+    });
+    app.delete("/api/v1/wiki/settings/:kind(llm|embedding)-profiles/:id", async (request, reply) => {
+        requireScopedAccess(request.headers, ["write"], { route: "/api/v1/wiki/settings/:kind-profiles/:id" });
+        const params = request.params;
+        deleteWikiProfile(params.kind, params.id);
+        reply.code(204);
+        return null;
+    });
+    app.get("/api/v1/wiki/spaces", async (request) => {
+        requireScopedAccess(request.headers, ["read", "write"], { route: "/api/v1/wiki/spaces" });
+        return { spaces: listWikiSpaces() };
+    });
+    app.post("/api/v1/wiki/spaces", async (request, reply) => {
+        requireScopedAccess(request.headers, ["write"], {
+            route: "/api/v1/wiki/spaces"
+        });
+        const space = createWikiSpace(createWikiSpaceSchema.parse(request.body ?? {}));
+        reply.code(201);
+        return { space };
+    });
+    app.get("/api/v1/wiki/pages", async (request) => {
+        requireScopedAccess(request.headers, ["read", "write"], { route: "/api/v1/wiki/pages" });
+        const query = request.query;
+        return {
+            pages: listWikiPages({
+                spaceId: query.spaceId,
+                kind: query.kind,
+                limit: query.limit ? Number(query.limit) : undefined
+            })
+        };
+    });
+    app.get("/api/v1/wiki/home", async (request, reply) => {
+        requireScopedAccess(request.headers, ["read", "write"], { route: "/api/v1/wiki/home" });
+        const query = request.query;
+        const payload = getWikiHomePageDetail({ spaceId: query.spaceId });
+        if (!payload) {
+            reply.code(404);
+            return { error: "Wiki home page not found" };
+        }
+        return payload;
+    });
+    app.get("/api/v1/wiki/tree", async (request) => {
+        requireScopedAccess(request.headers, ["read", "write"], { route: "/api/v1/wiki/tree" });
+        const query = request.query;
+        return {
+            tree: listWikiPageTree({
+                spaceId: query.spaceId,
+                kind: query.kind ?? "wiki"
+            })
+        };
+    });
+    app.post("/api/v1/wiki/pages", async (request, reply) => {
+        const input = createNoteSchema.parse({
+            kind: "wiki",
+            ...(request.body ?? {})
+        });
+        const linkedEntityType = input.links[0]?.entityType ?? null;
+        const auth = requireNoteAccess(request.headers, linkedEntityType, {
+            route: "/api/v1/wiki/pages",
+            entityType: linkedEntityType
+        });
+        const note = createNote(input, toActivityContext(auth));
+        reply.code(201);
+        return getWikiPageDetail(note.id);
+    });
+    app.get("/api/v1/wiki/pages/:id", async (request, reply) => {
+        requireScopedAccess(request.headers, ["read", "write"], { route: "/api/v1/wiki/pages/:id" });
+        const { id } = request.params;
+        const payload = getWikiPageDetail(id);
+        if (!payload) {
+            reply.code(404);
+            return { error: "Wiki page not found" };
+        }
+        return payload;
+    });
+    app.get("/api/v1/wiki/by-slug/:slug", async (request, reply) => {
+        requireScopedAccess(request.headers, ["read", "write"], { route: "/api/v1/wiki/by-slug/:slug" });
+        const { slug } = request.params;
+        const query = request.query;
+        const payload = getWikiPageDetailBySlug({ spaceId: query.spaceId, slug });
+        if (!payload) {
+            reply.code(404);
+            return { error: "Wiki page not found" };
+        }
+        return payload;
+    });
+    app.patch("/api/v1/wiki/pages/:id", async (request, reply) => {
+        const { id } = request.params;
+        const patch = updateNoteSchema.parse(request.body ?? {});
+        const current = getNoteById(id);
+        const linkedEntityType = current?.links[0]?.entityType ?? patch.links?.[0]?.entityType ?? null;
+        const auth = requireNoteAccess(request.headers, linkedEntityType, {
+            route: "/api/v1/wiki/pages/:id",
+            entityType: linkedEntityType
+        });
+        const note = updateNote(id, patch, toActivityContext(auth));
+        if (!note) {
+            reply.code(404);
+            return { error: "Wiki page not found" };
+        }
+        return getWikiPageDetail(note.id);
+    });
+    app.post("/api/v1/wiki/search", async (request) => {
+        requireScopedAccess(request.headers, ["read", "write"], { route: "/api/v1/wiki/search" });
+        return searchWikiPages(wikiSearchQuerySchema.parse(request.body ?? {}), managers.secrets);
+    });
+    app.get("/api/v1/wiki/health", async (request) => {
+        requireScopedAccess(request.headers, ["read", "write"], { route: "/api/v1/wiki/health" });
+        return {
+            health: getWikiHealth(syncWikiVaultSchema.parse(request.query ?? {}))
+        };
+    });
+    app.post("/api/v1/wiki/sync", async (request) => {
+        requireScopedAccess(request.headers, ["write"], {
+            route: "/api/v1/wiki/sync"
+        });
+        return syncWikiVaultFromDisk(syncWikiVaultSchema.parse(request.body ?? {}));
+    });
+    app.post("/api/v1/wiki/reindex", async (request) => {
+        requireScopedAccess(request.headers, ["write"], {
+            route: "/api/v1/wiki/reindex"
+        });
+        return reindexWikiEmbeddings(reindexWikiEmbeddingsSchema.parse(request.body ?? {}), managers.secrets);
+    });
+    const readStringField = (record, key, fallback = "") => (typeof record[key] === "string" ? record[key] : fallback);
+    const readStringArrayField = (record, key) => Array.isArray(record[key])
+        ? record[key].filter((entry) => typeof entry === "string" && entry.trim().length > 0)
+        : [];
+    const publishIngestProposalEntity = (proposal, auth) => {
+        const suggestedFields = proposal.suggestedFields &&
+            typeof proposal.suggestedFields === "object" &&
+            !Array.isArray(proposal.suggestedFields)
+            ? proposal.suggestedFields
+            : {};
+        const entityType = readStringField(proposal, "entityType").trim();
+        const title = readStringField(proposal, "title").trim() || "Imported candidate";
+        const summary = readStringField(proposal, "summary").trim();
+        switch (entityType) {
+            case "goal": {
+                const goal = createGoal({
+                    title,
+                    description: summary,
+                    horizon: readStringField(suggestedFields, "horizon", "year") === "quarter"
+                        ? "quarter"
+                        : readStringField(suggestedFields, "horizon", "year") ===
+                            "lifetime"
+                            ? "lifetime"
+                            : "year",
+                    status: readStringField(suggestedFields, "status", "active") === "paused"
+                        ? "paused"
+                        : readStringField(suggestedFields, "status", "active") ===
+                            "completed"
+                            ? "completed"
+                            : "active",
+                    targetPoints: Number(suggestedFields.targetPoints ?? 400) || 400,
+                    themeColor: readStringField(suggestedFields, "themeColor", "#c8a46b"),
+                    tagIds: readStringArrayField(suggestedFields, "tagIds"),
+                    notes: [],
+                    userId: typeof suggestedFields.userId === "string"
+                        ? suggestedFields.userId
+                        : null
+                }, toActivityContext(auth));
+                return { entityType: "goal", entityId: goal.id };
+            }
+            case "project": {
+                const goalId = readStringField(suggestedFields, "goalId").trim() ||
+                    readStringArrayField(suggestedFields, "targetGoalIds")[0] ||
+                    readStringArrayField(suggestedFields, "linkedGoalIds")[0] ||
+                    "";
+                if (!goalId) {
+                    throw new Error("Project proposals need a goalId to publish.");
+                }
+                const project = createProject({
+                    goalId,
+                    title,
+                    description: summary,
+                    status: readStringField(suggestedFields, "status", "active") === "paused"
+                        ? "paused"
+                        : readStringField(suggestedFields, "status", "active") ===
+                            "completed"
+                            ? "completed"
+                            : "active",
+                    targetPoints: Number(suggestedFields.targetPoints ?? 240) || 240,
+                    themeColor: readStringField(suggestedFields, "themeColor", "#c0c1ff"),
+                    schedulingRules: {
+                        allowWorkBlockKinds: [],
+                        blockWorkBlockKinds: [],
+                        allowCalendarIds: [],
+                        blockCalendarIds: [],
+                        allowEventTypes: [],
+                        blockEventTypes: [],
+                        allowEventKeywords: [],
+                        blockEventKeywords: [],
+                        allowAvailability: [],
+                        blockAvailability: []
+                    },
+                    notes: [],
+                    userId: typeof suggestedFields.userId === "string"
+                        ? suggestedFields.userId
+                        : null
+                }, toActivityContext(auth));
+                return { entityType: "project", entityId: project.id };
+            }
+            case "task": {
+                const task = createTask({
+                    title,
+                    description: summary,
+                    status: "backlog",
+                    priority: "medium",
+                    owner: auth.actor ?? "Forge",
+                    userId: typeof suggestedFields.userId === "string"
+                        ? suggestedFields.userId
+                        : null,
+                    goalId: readStringField(suggestedFields, "goalId").trim() || null,
+                    projectId: readStringField(suggestedFields, "projectId").trim() || null,
+                    dueDate: null,
+                    effort: "deep",
+                    energy: "steady",
+                    points: Number(suggestedFields.points ?? 40) || 40,
+                    plannedDurationSeconds: null,
+                    schedulingRules: null,
+                    tagIds: readStringArrayField(suggestedFields, "tagIds"),
+                    notes: []
+                }, toActivityContext(auth));
+                return { entityType: "task", entityId: task.id };
+            }
+            case "habit": {
+                const habit = createHabit({
+                    title,
+                    description: summary,
+                    status: "active",
+                    polarity: readStringField(suggestedFields, "polarity", "positive") ===
+                        "negative"
+                        ? "negative"
+                        : "positive",
+                    frequency: readStringField(suggestedFields, "frequency", "daily") ===
+                        "weekly"
+                        ? "weekly"
+                        : "daily",
+                    targetCount: Number(suggestedFields.targetCount ?? 1) || 1,
+                    weekDays: Array.isArray(suggestedFields.weekDays)
+                        ? suggestedFields.weekDays
+                        : [],
+                    linkedGoalIds: readStringArrayField(suggestedFields, "linkedGoalIds"),
+                    linkedProjectIds: readStringArrayField(suggestedFields, "linkedProjectIds"),
+                    linkedTaskIds: readStringArrayField(suggestedFields, "linkedTaskIds"),
+                    linkedValueIds: [],
+                    linkedPatternIds: [],
+                    linkedBehaviorIds: [],
+                    linkedBeliefIds: [],
+                    linkedModeIds: [],
+                    linkedReportIds: [],
+                    linkedBehaviorId: null,
+                    rewardXp: Number(suggestedFields.rewardXp ?? 12) || 12,
+                    penaltyXp: Number(suggestedFields.penaltyXp ?? 8) || 8,
+                    generatedHealthEventTemplate: {
+                        enabled: false,
+                        workoutType: "workout",
+                        title: "",
+                        durationMinutes: 45,
+                        xpReward: 0,
+                        tags: [],
+                        links: [],
+                        notesTemplate: ""
+                    },
+                    userId: typeof suggestedFields.userId === "string"
+                        ? suggestedFields.userId
+                        : null
+                }, toActivityContext(auth));
+                return { entityType: "habit", entityId: habit.id };
+            }
+            case "strategy": {
+                const targetProjectIds = readStringArrayField(suggestedFields, "targetProjectIds");
+                const linkedEntities = Array.isArray(suggestedFields.linkedEntities) &&
+                    suggestedFields.linkedEntities.every((entry) => entry &&
+                        typeof entry === "object" &&
+                        typeof entry.entityType ===
+                            "string" &&
+                        typeof entry.entityId === "string")
+                    ? suggestedFields.linkedEntities
+                    : [];
+                const firstProjectId = targetProjectIds[0] ||
+                    linkedEntities.find((entry) => entry.entityType === "project")
+                        ?.entityId ||
+                    "";
+                const firstTaskId = linkedEntities.find((entry) => entry.entityType === "task")
+                    ?.entityId || "";
+                const graphNodeId = firstProjectId || firstTaskId;
+                if (!graphNodeId) {
+                    throw new Error("Strategy proposals need at least one linked project or task to publish.");
+                }
+                const strategy = createStrategy({
+                    title,
+                    overview: summary,
+                    endStateDescription: readStringField(suggestedFields, "endStateDescription", summary),
+                    status: "active",
+                    targetGoalIds: readStringArrayField(suggestedFields, "targetGoalIds"),
+                    targetProjectIds,
+                    linkedEntities: linkedEntities.filter((entry) => entry.entityType !== "goal" &&
+                        entry.entityType !== "note" &&
+                        typeof entry.entityId === "string"),
+                    graph: {
+                        nodes: [
+                            {
+                                id: `seed_${graphNodeId}`,
+                                entityType: firstProjectId ? "project" : "task",
+                                entityId: graphNodeId,
+                                title,
+                                branchLabel: "",
+                                notes: summary
+                            }
+                        ],
+                        edges: []
+                    },
+                    userId: typeof suggestedFields.userId === "string"
+                        ? suggestedFields.userId
+                        : null,
+                    isLocked: false,
+                    lockedByUserId: null
+                });
+                return { entityType: "strategy", entityId: strategy.id };
+            }
+            case "note": {
+                const note = createNote({
+                    kind: "evidence",
+                    title,
+                    slug: "",
+                    spaceId: "",
+                    parentSlug: null,
+                    indexOrder: 0,
+                    showInIndex: false,
+                    aliases: [],
+                    summary,
+                    contentMarkdown: `# ${title}\n\n${summary}\n`,
+                    author: auth.actor ?? null,
+                    tags: [],
+                    destroyAt: null,
+                    links: [],
+                    sourcePath: "",
+                    frontmatter: {},
+                    revisionHash: "",
+                    userId: null
+                }, toActivityContext(auth));
+                return { entityType: "note", entityId: note.id };
+            }
+            default:
+                throw new Error(`Unsupported ingest proposal entity type: ${entityType}`);
+        }
+    };
+    app.get("/api/v1/wiki/ingest-jobs", async (request) => {
+        requireScopedAccess(request.headers, ["read", "write"], { route: "/api/v1/wiki/ingest-jobs" });
+        return {
+            jobs: listWikiIngestJobs(request.query ?? {})
+        };
+    });
+    app.post("/api/v1/wiki/ingest-jobs/uploads", async (request, reply) => {
+        const parts = request.parts();
+        const fields = new Map();
+        const files = [];
+        for await (const part of parts) {
+            if (part.type === "file") {
+                files.push({
+                    fileName: part.filename || "upload.bin",
+                    mimeType: part.mimetype || "application/octet-stream",
+                    payload: await part.toBuffer()
+                });
+            }
+            else {
+                fields.set(part.fieldname, String(part.value ?? ""));
+            }
+        }
+        const linkedEntityHints = (() => {
+            try {
+                return JSON.parse(fields.get("linkedEntityHints") || "[]");
+            }
+            catch {
+                return [];
+            }
+        })();
+        const linkedEntityType = linkedEntityHints[0]?.entityType ?? null;
+        const auth = requireNoteAccess(request.headers, linkedEntityType, {
+            route: "/api/v1/wiki/ingest-jobs/uploads",
+            entityType: linkedEntityType
+        });
+        const result = await createUploadedWikiIngestJob({
+            spaceId: fields.get("spaceId") || undefined,
+            titleHint: fields.get("titleHint") || undefined,
+            llmProfileId: fields.get("llmProfileId") || undefined,
+            parseStrategy: fields.get("parseStrategy") === "text_only" ||
+                fields.get("parseStrategy") === "multimodal"
+                ? fields.get("parseStrategy")
+                : "auto",
+            entityProposalMode: fields.get("entityProposalMode") === "none" ? "none" : "suggest",
+            userId: null,
+            createAsKind: fields.get("createAsKind") === "evidence" ? "evidence" : "wiki",
+            linkedEntityHints
+        }, files, {
+            actor: auth.actor ?? null
+        });
+        const jobId = result.job?.job.id;
+        if (jobId) {
+            managers.backgroundJobs.enqueue({
+                id: jobId,
+                label: `Wiki ingest ${jobId}`,
+                handler: async () => {
+                    await processWikiIngestJob(jobId, { llm: managers.llm });
+                }
+            });
+        }
+        reply.code(201);
+        return result;
+    });
+    app.post("/api/v1/wiki/ingest-jobs", async (request, reply) => {
+        const payload = createWikiIngestJobSchema.parse(request.body ?? {});
+        const linkedEntityType = payload.linkedEntityHints[0]?.entityType ?? null;
+        const auth = requireNoteAccess(request.headers, linkedEntityType, {
+            route: "/api/v1/wiki/ingest-jobs",
+            entityType: linkedEntityType
+        });
+        const result = await ingestWikiSource(payload, {
+            actor: auth.actor ?? null
+        });
+        const jobId = result.job?.job.id;
+        if (jobId) {
+            managers.backgroundJobs.enqueue({
+                id: jobId,
+                label: `Wiki ingest ${jobId}`,
+                handler: async () => {
+                    await processWikiIngestJob(jobId, { llm: managers.llm });
+                }
+            });
+        }
+        reply.code(201);
+        return result;
+    });
+    app.get("/api/v1/wiki/ingest-jobs/:id", async (request, reply) => {
+        requireScopedAccess(request.headers, ["read", "write"], { route: "/api/v1/wiki/ingest-jobs/:id" });
+        const { id } = request.params;
+        const job = getWikiIngestJob(id);
+        if (!job) {
+            reply.code(404);
+            return { error: "Wiki ingest job not found" };
+        }
+        return job;
+    });
+    app.post("/api/v1/wiki/ingest-jobs/:id/review", async (request, reply) => {
+        const auth = requireScopedAccess(request.headers, ["write"], { route: "/api/v1/wiki/ingest-jobs/:id/review" });
+        const { id } = request.params;
+        const reviewed = await reviewWikiIngestJob(id, reviewWikiIngestJobSchema.parse(request.body ?? {}), {
+            createNote: (note) => createNote(note, toActivityContext(auth)),
+            updateNote: (noteId, patch) => updateNote(noteId, patch, toActivityContext(auth)),
+            publishEntity: (proposal) => publishIngestProposalEntity(proposal, auth)
+        });
+        if (!reviewed) {
+            reply.code(404);
+            return { error: "Wiki ingest job not found" };
+        }
+        return { job: reviewed };
     });
     app.get("/api/v1/projects", async (request) => {
         const query = projectListQuerySchema.parse(request.query ?? {});
@@ -5257,6 +5919,16 @@ export async function buildServer(options = {}) {
         const auth = requireScopedAccess(request.headers, ["write"], { route: "/api/v1/habits/:id/check-ins" });
         const { id } = request.params;
         const habit = createHabitCheckIn(id, parseRequestBody(createHabitCheckInSchema, request.body), toActivityContext(auth));
+        if (!habit) {
+            reply.code(404);
+            return { error: "Habit not found" };
+        }
+        return { habit, metrics: buildXpMetricsPayload() };
+    });
+    app.delete("/api/v1/habits/:id/check-ins/:dateKey", async (request, reply) => {
+        const auth = requireScopedAccess(request.headers, ["write"], { route: "/api/v1/habits/:id/check-ins/:dateKey" });
+        const { id, dateKey } = request.params;
+        const habit = deleteHabitCheckIn(id, dateKey, toActivityContext(auth));
         if (!habit) {
             reply.code(404);
             return { error: "Habit not found" };

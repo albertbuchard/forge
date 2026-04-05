@@ -20,6 +20,9 @@ let savepointCounter = 0;
 function getDataDir() {
     return path.join(dataRoot, "data");
 }
+export function resolveDataDir() {
+    return getDataDir();
+}
 function getDatabasePath() {
     return path.join(getDataDir(), "forge.sqlite");
 }

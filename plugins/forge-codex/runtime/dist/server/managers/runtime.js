@@ -15,6 +15,8 @@ import { BackgroundJobManager } from "./platform/background-job-manager.js";
 import { ApiGatewayManager } from "./platform/api-gateway-manager.js";
 import { ExternalServiceManager } from "./platform/external-service-manager.js";
 import { SearchIndexManager } from "./platform/search-index-manager.js";
+import { LlmManager } from "./platform/llm-manager.js";
+import { OpenAiResponsesProvider } from "./platform/openai-responses-provider.js";
 export function createManagerRuntime(options = {}) {
     const configuration = new ConfigurationManager();
     const runtimeConfig = configuration.readRuntimeConfig({ dataRoot: options.dataRoot });
@@ -36,6 +38,8 @@ export function createManagerRuntime(options = {}) {
     const apiGateway = new ApiGatewayManager();
     const externalServices = new ExternalServiceManager();
     const searchIndex = new SearchIndexManager();
+    const llm = new LlmManager(secrets);
+    llm.register(new OpenAiResponsesProvider());
     return {
         configuration,
         secrets,
@@ -53,6 +57,7 @@ export function createManagerRuntime(options = {}) {
         backgroundJobs,
         apiGateway,
         externalServices,
-        searchIndex
+        searchIndex,
+        llm
     };
 }

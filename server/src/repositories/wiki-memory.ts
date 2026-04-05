@@ -8,7 +8,14 @@ import {
   rmSync,
   writeFileSync
 } from "node:fs";
-import { access, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import {
+  access,
+  mkdir,
+  readFile,
+  readdir,
+  rm,
+  writeFile
+} from "node:fs/promises";
 import path from "node:path";
 import { z } from "zod";
 import { resolveDataDir, getDatabase } from "../db.js";
@@ -157,10 +164,16 @@ const wikiSettingsPayloadSchema = z.object({
   embeddingProfiles: z.array(wikiEmbeddingProfileSchema)
 });
 
-const wikiPageTreeNodeSchema: z.ZodType<{
-  page: Note;
-  children: Array<{ page: Note; children: unknown[] }>;
-}> = z.lazy(() =>
+type WikiPageTreeNode = {
+  page: z.infer<typeof persistedNoteSchema>;
+  children: WikiPageTreeNode[];
+};
+
+const wikiPageTreeNodeSchema: z.ZodType<
+  WikiPageTreeNode,
+  z.ZodTypeDef,
+  unknown
+> = z.lazy((): z.ZodType<WikiPageTreeNode, z.ZodTypeDef, unknown> =>
   z.object({
     page: persistedNoteSchema,
     children: z.array(wikiPageTreeNodeSchema)
@@ -608,7 +621,11 @@ function getNoteByIdRaw(noteId: string) {
     .get(noteId) as NoteRow | undefined;
 }
 
-function getNoteBySlugRaw(spaceId: string, slug: string, exceptNoteId?: string) {
+function getNoteBySlugRaw(
+  spaceId: string,
+  slug: string,
+  exceptNoteId?: string
+) {
   const row = getDatabase()
     .prepare(
       `SELECT id, kind, title, slug, space_id, aliases_json, summary, content_markdown, content_plain, author, source,
@@ -619,9 +636,9 @@ function getNoteBySlugRaw(spaceId: string, slug: string, exceptNoteId?: string) 
          ${exceptNoteId ? "AND id != ?" : ""}
        LIMIT 1`
     )
-    .get(...(exceptNoteId ? [spaceId, slug, exceptNoteId] : [spaceId, slug])) as
-    | NoteRow
-    | undefined;
+    .get(
+      ...(exceptNoteId ? [spaceId, slug, exceptNoteId] : [spaceId, slug])
+    ) as NoteRow | undefined;
   return row;
 }
 
@@ -631,8 +648,9 @@ function buildContentPlain(markdown: string) {
     .replace(/```[\s\S]*?```/g, (block) => block.replace(/```/g, "").trim())
     .replace(/!\[([^\]]*)\]\([^)]+\)/g, "$1")
     .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
-    .replace(/\[\[([^\]|]+)\|?([^\]]*)\]\]/g, (_match, left: string, right: string) =>
-      (right || left).trim()
+    .replace(
+      /\[\[([^\]|]+)\|?([^\]]*)\]\]/g,
+      (_match, left: string, right: string) => (right || left).trim()
     )
     .replace(/`([^`]+)`/g, "$1")
     .replace(/\*\*([^*]+)\*\*/g, "$1")
@@ -673,7 +691,11 @@ function slugify(value: string) {
   return normalized || `page-${randomUUID().replaceAll("-", "").slice(0, 8)}`;
 }
 
-function buildUniqueSlug(spaceId: string, requestedSlug: string, noteId: string) {
+function buildUniqueSlug(
+  spaceId: string,
+  requestedSlug: string,
+  noteId: string
+) {
   const base = slugify(requestedSlug);
   let candidate = base;
   let suffix = 2;
@@ -789,11 +811,19 @@ function buildWikiFtsQuery(query: string) {
 }
 
 function deleteWikiSearchRow(noteId: string) {
-  getDatabase().prepare(`DELETE FROM wiki_pages_fts WHERE note_id = ?`).run(noteId);
+  getDatabase()
+    .prepare(`DELETE FROM wiki_pages_fts WHERE note_id = ?`)
+    .run(noteId);
 }
 
-function chunkHeadingAware(markdown: string, chunkSize: number, chunkOverlap: number) {
-  const stripped = markdown.replace(/^---[\s\S]*?---\s*/m, "").replace(/\r/g, "");
+function chunkHeadingAware(
+  markdown: string,
+  chunkSize: number,
+  chunkOverlap: number
+) {
+  const stripped = markdown
+    .replace(/^---[\s\S]*?---\s*/m, "")
+    .replace(/\r/g, "");
   const sections: Array<{ headingPath: string; text: string }> = [];
   const lines = stripped.split("\n");
   let currentHeading = "Document";
@@ -817,8 +847,11 @@ function chunkHeadingAware(markdown: string, chunkSize: number, chunkOverlap: nu
   }
   flush();
 
-  const chunks: Array<{ key: string; headingPath: string; contentText: string }> =
-    [];
+  const chunks: Array<{
+    key: string;
+    headingPath: string;
+    contentText: string;
+  }> = [];
   sections.forEach((section, sectionIndex) => {
     const content = section.text.replace(/\s+/g, " ").trim();
     if (!content) {
@@ -897,7 +930,8 @@ async function getFetchedContent(
     }
     const payload = await readFile(filePath);
     const fileName = path.basename(filePath);
-    const mimeType = options.mimeType?.trim() || inferMimeTypeFromPath(fileName);
+    const mimeType =
+      options.mimeType?.trim() || inferMimeTypeFromPath(fileName);
     return {
       locator: filePath,
       contentText:
@@ -1020,7 +1054,10 @@ function sanitizeFileName(value: string) {
   return value.replace(/[^a-zA-Z0-9._-]+/g, "-");
 }
 
-async function readSecretApiKey(secretId: string | null | undefined, secrets: SecretsManager) {
+async function readSecretApiKey(
+  secretId: string | null | undefined,
+  secrets: SecretsManager
+) {
   if (!secretId) {
     return null;
   }
@@ -1054,28 +1091,31 @@ async function compileTextWithLlm(
     .filter(Boolean)
     .join("\n");
 
-  const response = await fetch(`${profile.baseUrl.replace(/\/$/, "")}/chat/completions`, {
-    method: "POST",
-    headers: {
-      "content-type": "application/json",
-      authorization: `Bearer ${apiKey}`
-    },
-    body: JSON.stringify({
-      model: profile.model,
-      temperature: 0.2,
-      response_format: { type: "json_object" },
-      messages: [
-        {
-          role: "system",
-          content: prompt
-        },
-        {
-          role: "user",
-          content: `Title hint: ${input.titleHint || "none"}\nMime type: ${input.mimeType}\n\nSource:\n${input.rawText.slice(0, 24_000)}`
-        }
-      ]
-    })
-  });
+  const response = await fetch(
+    `${profile.baseUrl.replace(/\/$/, "")}/chat/completions`,
+    {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${apiKey}`
+      },
+      body: JSON.stringify({
+        model: profile.model,
+        temperature: 0.2,
+        response_format: { type: "json_object" },
+        messages: [
+          {
+            role: "system",
+            content: prompt
+          },
+          {
+            role: "user",
+            content: `Title hint: ${input.titleHint || "none"}\nMime type: ${input.mimeType}\n\nSource:\n${input.rawText.slice(0, 24_000)}`
+          }
+        ]
+      })
+    }
+  );
   if (!response.ok) {
     throw new Error(`LLM compilation failed: ${response.status}`);
   }
@@ -1494,7 +1534,9 @@ function ensureWikiSpaceSeedPages(spaceId: string) {
     return;
   }
   const existingSlugs = new Set(
-    getNoteRows("WHERE space_id = ?", [spaceId]).map((row) => row.slug.toLowerCase())
+    getNoteRows("WHERE space_id = ?", [spaceId]).map((row) =>
+      row.slug.toLowerCase()
+    )
   );
   let inserted = false;
   const insertedNotes: Note[] = [];
@@ -1561,7 +1603,10 @@ export function prepareNoteWikiFields(input: {
   const title =
     input.title?.trim() ||
     input.existing?.title?.trim() ||
-    inferTitle(input.contentMarkdown, kind === "wiki" ? "Untitled wiki page" : "Untitled note");
+    inferTitle(
+      input.contentMarkdown,
+      kind === "wiki" ? "Untitled wiki page" : "Untitled note"
+    );
   const slug = buildUniqueSlug(
     spaceId,
     input.slug?.trim() || input.existing?.slug || title,
@@ -1578,9 +1623,7 @@ export function prepareNoteWikiFields(input: {
         : input.parentSlug?.trim() || null,
     indexOrder: input.indexOrder ?? input.existing?.indexOrder ?? 0,
     showInIndex:
-      input.showInIndex ??
-      input.existing?.showInIndex ??
-      kind === "wiki",
+      input.showInIndex ?? input.existing?.showInIndex ?? kind === "wiki",
     aliases: normalizeAliases(input.aliases ?? input.existing?.aliases),
     summary:
       input.summary?.trim() ||
@@ -1635,9 +1678,17 @@ export function deleteNoteWikiArtifacts(note: Note) {
     rmSync(note.sourcePath, { force: true });
   }
   deleteWikiSearchRow(note.id);
-  getDatabase().prepare(`DELETE FROM wiki_link_edges WHERE source_note_id = ?`).run(note.id);
-  getDatabase().prepare(`DELETE FROM wiki_embedding_chunks WHERE note_id = ?`).run(note.id);
-  getDatabase().prepare(`DELETE FROM wiki_media_assets WHERE note_id = ? OR transcript_note_id = ?`).run(note.id, note.id);
+  getDatabase()
+    .prepare(`DELETE FROM wiki_link_edges WHERE source_note_id = ?`)
+    .run(note.id);
+  getDatabase()
+    .prepare(`DELETE FROM wiki_embedding_chunks WHERE note_id = ?`)
+    .run(note.id);
+  getDatabase()
+    .prepare(
+      `DELETE FROM wiki_media_assets WHERE note_id = ? OR transcript_note_id = ?`
+    )
+    .run(note.id, note.id);
   syncWikiSpaceIndex(note.spaceId);
 }
 
@@ -1646,7 +1697,8 @@ function buildWikiIndexMarkdown(space: WikiSpace, pages: Note[]) {
     .filter((page) => page.kind === "wiki")
     .sort((left, right) =>
       left.parentSlug === right.parentSlug
-        ? left.indexOrder - right.indexOrder || left.title.localeCompare(right.title)
+        ? left.indexOrder - right.indexOrder ||
+          left.title.localeCompare(right.title)
         : (left.parentSlug ?? "").localeCompare(right.parentSlug ?? "")
     );
   const evidencePages = [...pages]
@@ -1689,7 +1741,9 @@ function buildWikiIndexMarkdown(space: WikiSpace, pages: Note[]) {
     lines.push("_No evidence pages yet._", "");
   } else {
     for (const page of evidencePages.slice(0, 200)) {
-      lines.push(`- [[${page.slug}]]${page.summary ? ` - ${page.summary}` : ""}`);
+      lines.push(
+        `- [[${page.slug}]]${page.summary ? ` - ${page.summary}` : ""}`
+      );
     }
     lines.push("");
   }
@@ -1731,7 +1785,9 @@ function upsertWikiSearchRow(note: Note) {
 
 function rebuildWikiLinkEdges(note: Note) {
   const now = nowIso();
-  getDatabase().prepare(`DELETE FROM wiki_link_edges WHERE source_note_id = ?`).run(note.id);
+  getDatabase()
+    .prepare(`DELETE FROM wiki_link_edges WHERE source_note_id = ?`)
+    .run(note.id);
 
   const matches = [...note.contentMarkdown.matchAll(/(!)?\[\[([^[\]]+)\]\]/g)];
   const insert = getDatabase().prepare(
@@ -1902,10 +1958,7 @@ export function listWikiPages(query: {
     .slice(0, query.limit ?? 100);
 }
 
-export function listWikiPageTree(query: {
-  spaceId?: string;
-  kind?: NoteKind;
-}) {
+export function listWikiPageTree(query: { spaceId?: string; kind?: NoteKind }) {
   const pages = listWikiPages({ ...query, limit: 10_000 }).filter(
     (page) => page.kind === "wiki" && page.showInIndex
   );
@@ -1916,7 +1969,9 @@ export function listWikiPageTree(query: {
     current.push(page);
     childrenByParent.set(key, current);
   }
-  const build = (parentSlug: string | null): Array<{ page: Note; children: unknown[] }> =>
+  const build = (
+    parentSlug: string | null
+  ): Array<{ page: Note; children: unknown[] }> =>
     (childrenByParent.get(parentSlug) ?? [])
       .sort(compareWikiPageOrder)
       .map((page) => ({
@@ -1964,17 +2019,17 @@ export function getWikiPageDetail(noteId: string) {
        ORDER BY updated_at DESC`
     )
     .all(noteId) as Array<{
-      source_note_id: string;
-      target_type: "page" | "entity" | "unresolved";
-      target_note_id: string | null;
-      target_entity_type: CrudEntityType | null;
-      target_entity_id: string | null;
-      label: string;
-      raw_target: string;
-      is_embed: number;
-      created_at: string;
-      updated_at: string;
-    }>;
+    source_note_id: string;
+    target_type: "page" | "entity" | "unresolved";
+    target_note_id: string | null;
+    target_entity_type: CrudEntityType | null;
+    target_entity_id: string | null;
+    label: string;
+    raw_target: string;
+    is_embed: number;
+    created_at: string;
+    updated_at: string;
+  }>;
   const assets = getDatabase()
     .prepare(
       `SELECT id, space_id, note_id, label, mime_type, file_name, file_path, size_bytes, checksum, transcript_note_id, metadata_json, created_at, updated_at
@@ -2040,12 +2095,17 @@ export function getWikiPageDetail(noteId: string) {
       })
     ),
     backlinksBySourceId: Object.fromEntries(
-      backlinkRows.map((row) => [row.source_note_id, backlinkSourceById.get(row.source_note_id) ?? null])
+      backlinkRows.map((row) => [
+        row.source_note_id,
+        backlinkSourceById.get(row.source_note_id) ?? null
+      ])
     )
   };
 }
 
-export async function syncWikiVaultFromDisk(input: z.input<typeof syncWikiVaultSchema>) {
+export async function syncWikiVaultFromDisk(
+  input: z.input<typeof syncWikiVaultSchema>
+) {
   const parsed = syncWikiVaultSchema.parse(input);
   const spaces = parsed.spaceId
     ? [getWikiSpaceById(parsed.spaceId)].filter(
@@ -2130,7 +2190,10 @@ export async function syncWikiVaultFromDisk(input: z.input<typeof syncWikiVaultS
               now,
               noteId
             );
-          const note = mapNoteRow(getNoteByIdRaw(noteId)!, listLinkRowsForNotes([noteId]));
+          const note = mapNoteRow(
+            getNoteByIdRaw(noteId)!,
+            listLinkRowsForNotes([noteId])
+          );
           upsertWikiSearchRow(note);
           rebuildWikiLinkEdges(note);
           updated += 1;
@@ -2283,7 +2346,8 @@ export async function searchWikiPages(
       return scores.has(page.id);
     })
     .sort((left, right) => {
-      const scoreDelta = (scores.get(right.id) ?? 0) - (scores.get(left.id) ?? 0);
+      const scoreDelta =
+        (scores.get(right.id) ?? 0) - (scores.get(left.id) ?? 0);
       if (scoreDelta !== 0) {
         return scoreDelta;
       }
@@ -2520,8 +2584,10 @@ async function persistWikiRawSource(options: {
     inferExtensionFromMimeType(options.fetched.mimeType) ||
     (options.fetched.contentText ? ".txt" : ".bin");
   const baseName = sanitizeFileName(
-    path.basename(options.fetched.fileName, path.extname(options.fetched.fileName)) ||
-      options.jobId
+    path.basename(
+      options.fetched.fileName,
+      path.extname(options.fetched.fileName)
+    ) || options.jobId
   );
   const rawPath = path.join(rawDir, `${options.jobId}-${baseName}${extension}`);
   const payload =
@@ -2540,11 +2606,15 @@ export function upsertWikiLlmProfile(
 ) {
   const parsed = upsertWikiLlmProfileSchema.parse(input);
   const now = nowIso();
-  const id = parsed.id?.trim() || `wiki_llm_${randomUUID().replaceAll("-", "").slice(0, 10)}`;
+  const id =
+    parsed.id?.trim() ||
+    `wiki_llm_${randomUUID().replaceAll("-", "").slice(0, 10)}`;
   let secretId: string | null =
     listWikiLlmProfiles().find((entry) => entry.id === id)?.secretId ?? null;
   if (parsed.apiKey?.trim()) {
-    secretId = secretId ?? `wiki_llm_secret_${randomUUID().replaceAll("-", "").slice(0, 10)}`;
+    secretId =
+      secretId ??
+      `wiki_llm_secret_${randomUUID().replaceAll("-", "").slice(0, 10)}`;
     storeEncryptedSecret(
       secretId,
       secrets.sealJson({ apiKey: parsed.apiKey.trim() }),
@@ -2645,11 +2715,15 @@ export function deleteWikiProfile(
   profileId: string
 ) {
   if (kind === "llm") {
-    const profile = listWikiLlmProfiles().find((entry) => entry.id === profileId);
+    const profile = listWikiLlmProfiles().find(
+      (entry) => entry.id === profileId
+    );
     if (profile?.secretId) {
       deleteEncryptedSecret(profile.secretId);
     }
-    getDatabase().prepare(`DELETE FROM wiki_llm_profiles WHERE id = ?`).run(profileId);
+    getDatabase()
+      .prepare(`DELETE FROM wiki_llm_profiles WHERE id = ?`)
+      .run(profileId);
     return;
   }
   const profile = listWikiEmbeddingProfiles().find(
@@ -2658,8 +2732,12 @@ export function deleteWikiProfile(
   if (profile?.secretId) {
     deleteEncryptedSecret(profile.secretId);
   }
-  getDatabase().prepare(`DELETE FROM wiki_embedding_profiles WHERE id = ?`).run(profileId);
-  getDatabase().prepare(`DELETE FROM wiki_embedding_chunks WHERE profile_id = ?`).run(profileId);
+  getDatabase()
+    .prepare(`DELETE FROM wiki_embedding_profiles WHERE id = ?`)
+    .run(profileId);
+  getDatabase()
+    .prepare(`DELETE FROM wiki_embedding_chunks WHERE profile_id = ?`)
+    .run(profileId);
 }
 
 export async function reindexWikiEmbeddings(
@@ -2677,7 +2755,9 @@ export async function reindexWikiEmbeddings(
   for (const profile of profiles) {
     for (const page of pages) {
       getDatabase()
-        .prepare(`DELETE FROM wiki_embedding_chunks WHERE note_id = ? AND profile_id = ?`)
+        .prepare(
+          `DELETE FROM wiki_embedding_chunks WHERE note_id = ? AND profile_id = ?`
+        )
         .run(page.id, profile.id);
       const chunks = chunkHeadingAware(
         page.contentMarkdown,
@@ -2922,7 +3002,9 @@ function updateWikiIngestJob(
       patch.pageNoteId === undefined ? current.page_note_id : patch.pageNoteId,
     errorMessage: patch.errorMessage ?? current.error_message,
     completedAt:
-      patch.completedAt === undefined ? current.completed_at : patch.completedAt,
+      patch.completedAt === undefined
+        ? current.completed_at
+        : patch.completedAt,
     updatedAt: nowIso()
   };
 
@@ -3194,19 +3276,28 @@ function readWikiIngestInput(jobId: string) {
   return createWikiIngestJobSchema.parse({
     spaceId: row.space_id,
     titleHint:
-      typeof payload.titleHint === "string" ? payload.titleHint : row.title_hint,
+      typeof payload.titleHint === "string"
+        ? payload.titleHint
+        : row.title_hint,
     sourceKind:
       payload.sourceKind === "local_path" || payload.sourceKind === "url"
         ? payload.sourceKind
         : "raw_text",
-    sourceText: typeof payload.sourceText === "string" ? payload.sourceText : "",
-    sourcePath: typeof payload.sourcePath === "string" ? payload.sourcePath : undefined,
-    sourceUrl: typeof payload.sourceUrl === "string" ? payload.sourceUrl : undefined,
-    mimeType: typeof payload.mimeType === "string" ? payload.mimeType : row.mime_type,
+    sourceText:
+      typeof payload.sourceText === "string" ? payload.sourceText : "",
+    sourcePath:
+      typeof payload.sourcePath === "string" ? payload.sourcePath : undefined,
+    sourceUrl:
+      typeof payload.sourceUrl === "string" ? payload.sourceUrl : undefined,
+    mimeType:
+      typeof payload.mimeType === "string" ? payload.mimeType : row.mime_type,
     llmProfileId:
-      typeof payload.llmProfileId === "string" ? payload.llmProfileId : row.llm_profile_id ?? undefined,
+      typeof payload.llmProfileId === "string"
+        ? payload.llmProfileId
+        : (row.llm_profile_id ?? undefined),
     parseStrategy:
-      payload.parseStrategy === "text_only" || payload.parseStrategy === "multimodal"
+      payload.parseStrategy === "text_only" ||
+      payload.parseStrategy === "multimodal"
         ? payload.parseStrategy
         : "auto",
     entityProposalMode:
@@ -3217,8 +3308,7 @@ function readWikiIngestInput(jobId: string) {
         : payload.userId === null
           ? null
           : row.created_by_actor,
-    createAsKind:
-      payload.createAsKind === "evidence" ? "evidence" : "wiki",
+    createAsKind: payload.createAsKind === "evidence" ? "evidence" : "wiki",
     linkedEntityHints: Array.isArray(payload.linkedEntityHints)
       ? payload.linkedEntityHints
       : []
@@ -3280,7 +3370,9 @@ export async function createUploadedWikiIngestJob(
       0,
       0,
       0,
-      files.length === 1 ? "Waiting to ingest 1 uploaded file" : `Waiting to ingest ${files.length} uploaded files`,
+      files.length === 1
+        ? "Waiting to ingest 1 uploaded file"
+        : `Waiting to ingest ${files.length} uploaded files`,
       "upload",
       "",
       "",
@@ -3380,7 +3472,8 @@ export async function ingestWikiSource(
   } else {
     sourceLocator = parsed.sourceUrl?.trim() || "";
     fileName =
-      sourceLocator.split("/").pop()?.split("?")[0]?.trim() || "remote-source.bin";
+      sourceLocator.split("/").pop()?.split("?")[0]?.trim() ||
+      "remote-source.bin";
     mimeType = parsed.mimeType || "application/octet-stream";
   }
 
@@ -3475,8 +3568,9 @@ export async function processWikiIngestJob(
     return null;
   }
   const llmProfile = parsed.llmProfileId
-    ? listWikiLlmProfiles().find((entry) => entry.id === parsed.llmProfileId) ??
-      null
+    ? (listWikiLlmProfiles().find(
+        (entry) => entry.id === parsed.llmProfileId
+      ) ?? null)
     : null;
   const space = getWikiSpaceById(job.space_id) ?? ensureSharedWikiSpace();
 
@@ -3658,11 +3752,15 @@ export async function processWikiIngestJob(
             sourceAssetId: nextAsset.id,
             candidateType: "entity",
             title:
-              typeof proposal.title === "string" ? proposal.title : "Entity proposal",
+              typeof proposal.title === "string"
+                ? proposal.title
+                : "Entity proposal",
             summary:
               typeof proposal.summary === "string" ? proposal.summary : "",
             targetKey:
-              typeof proposal.entityType === "string" ? proposal.entityType : "",
+              typeof proposal.entityType === "string"
+                ? proposal.entityType
+                : "",
             payload: proposal
           });
         }
@@ -3698,7 +3796,8 @@ export async function processWikiIngestJob(
 
       for (const candidate of compiled?.articleCandidates ?? []) {
         const articleTitle =
-          typeof candidate.title === "string" && candidate.title.trim().length > 0
+          typeof candidate.title === "string" &&
+          candidate.title.trim().length > 0
             ? candidate.title.trim()
             : "Suggested article";
         const articleSummary =
@@ -3716,7 +3815,9 @@ export async function processWikiIngestJob(
             title: articleTitle,
             summary: articleSummary,
             markdown: `# ${articleTitle}\n\n${articleSummary}\n\n${
-              articleRationale ? `## Why this page\n\n${articleRationale}\n` : ""
+              articleRationale
+                ? `## Why this page\n\n${articleRationale}\n`
+                : ""
             }`,
             sourceLocator: fetched.locator,
             createAsKind: "wiki",
@@ -3814,7 +3915,11 @@ export function listWikiIngestJobs(
        ORDER BY created_at DESC
        LIMIT ?`
     )
-    .all(parsed.spaceId ?? null, parsed.spaceId ?? null, parsed.limit) as Array<{
+    .all(
+      parsed.spaceId ?? null,
+      parsed.spaceId ?? null,
+      parsed.limit
+    ) as Array<{
     id: string;
   }>;
   return rows
@@ -3827,10 +3932,11 @@ export async function reviewWikiIngestJob(
   input: z.input<typeof reviewWikiIngestJobSchema>,
   options: {
     createNote: (note: CreateNoteInput) => Note;
-    updateNote: (noteId: string, patch: Record<string, unknown>) => Note | undefined;
-    publishEntity: (
-      proposal: Record<string, unknown>
-    ) => {
+    updateNote: (
+      noteId: string,
+      patch: Record<string, unknown>
+    ) => Note | undefined;
+    publishEntity: (proposal: Record<string, unknown>) => {
       entityType: string;
       entityId: string;
     };
@@ -3851,7 +3957,9 @@ export async function reviewWikiIngestJob(
   let firstPublishedPageId: string | null = null;
 
   for (const decision of parsed.decisions) {
-    const candidate = candidates.find((entry) => entry.id === decision.candidateId);
+    const candidate = candidates.find(
+      (entry) => entry.id === decision.candidateId
+    );
     if (!candidate) {
       continue;
     }
@@ -3866,11 +3974,15 @@ export async function reviewWikiIngestJob(
       if (candidate.candidate_type === "page") {
         const note = options.createNote({
           kind: payload.kind === "evidence" ? "evidence" : "wiki",
-          title: typeof payload.title === "string" ? payload.title : candidate.title,
+          title:
+            typeof payload.title === "string" ? payload.title : candidate.title,
           slug: "",
+          indexOrder: 0,
           aliases: [],
           summary:
-            typeof payload.summary === "string" ? payload.summary : candidate.summary,
+            typeof payload.summary === "string"
+              ? payload.summary
+              : candidate.summary,
           sourcePath: "",
           frontmatter: {},
           revisionHash: "",
@@ -3895,17 +4007,21 @@ export async function reviewWikiIngestJob(
         });
       } else if (candidate.candidate_type === "page_update") {
         const targetSlug =
-          typeof payload.targetSlug === "string" ? payload.targetSlug : candidate.target_key;
+          typeof payload.targetSlug === "string"
+            ? payload.targetSlug
+            : candidate.target_key;
         const target =
           targetSlug.trim().length > 0
-            ? getWikiPageDetailBySlug({
+            ? (getWikiPageDetailBySlug({
                 slug: targetSlug,
                 spaceId: job.space_id
-              })?.page ?? null
+              })?.page ?? null)
             : null;
         if (target) {
           const patchSummary =
-            typeof payload.patchSummary === "string" ? payload.patchSummary : "";
+            typeof payload.patchSummary === "string"
+              ? payload.patchSummary
+              : "";
           const rationale =
             typeof payload.rationale === "string" ? payload.rationale : "";
           options.updateNote(target.id, {

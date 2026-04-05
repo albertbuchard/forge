@@ -311,7 +311,9 @@ export function getRewardLedgerEventById(rewardId) {
 }
 export function getTotalXp() {
     ensureDefaultRewardRules();
-    const row = getDatabase().prepare(`SELECT COALESCE(SUM(delta_xp), 0) AS total FROM reward_ledger`).get();
+    const row = getDatabase()
+        .prepare(`SELECT COALESCE(SUM(delta_xp), 0) AS total FROM reward_ledger`)
+        .get();
     return row.total;
 }
 export function getWeeklyXp(weekStartIso) {
@@ -410,7 +412,59 @@ export function reverseLatestTaskCompletionReward(task, activity) {
             taskId: task.id
         }
     });
-    getDatabase().prepare(`UPDATE reward_ledger SET reversed_by_reward_id = ? WHERE id = ?`).run(reversal.id, latest.id);
+    getDatabase()
+        .prepare(`UPDATE reward_ledger SET reversed_by_reward_id = ? WHERE id = ?`)
+        .run(reversal.id, latest.id);
+    return reversal;
+}
+export function reverseLatestHabitCheckInReward(habit, dateKey, activity) {
+    ensureDefaultRewardRules();
+    const reversibleGroup = `habit:${habit.id}:${dateKey}`;
+    const latest = getDatabase()
+        .prepare(`SELECT
+         id, rule_id, event_log_id, entity_type, entity_id, actor, source, delta_xp, reason_title, reason_summary,
+         reversible_group, reversed_by_reward_id, metadata_json, created_at
+       FROM reward_ledger
+       WHERE reversible_group = ?
+         AND reversed_by_reward_id IS NULL
+       ORDER BY created_at DESC
+       LIMIT 1`)
+        .get(reversibleGroup);
+    if (!latest) {
+        return null;
+    }
+    const reversalEventLog = recordEventLog({
+        eventKind: "reward.habit_check_in_reversed",
+        entityType: "habit",
+        entityId: habit.id,
+        actor: activity.actor ?? null,
+        source: activity.source,
+        metadata: {
+            rewardId: latest.id,
+            habitId: habit.id,
+            dateKey
+        }
+    });
+    const reversal = insertLedgerEvent({
+        ruleId: latest.rule_id,
+        eventLogId: reversalEventLog.id,
+        entityType: latest.entity_type,
+        entityId: latest.entity_id,
+        actor: activity.actor ?? null,
+        source: activity.source,
+        deltaXp: -latest.delta_xp,
+        reasonTitle: `Habit entry removed: ${habit.title}`,
+        reasonSummary: `Habit check-in removed for ${dateKey}.`,
+        reversibleGroup: latest.reversible_group,
+        metadata: {
+            reversedRewardId: latest.id,
+            habitId: habit.id,
+            dateKey
+        }
+    });
+    getDatabase()
+        .prepare(`UPDATE reward_ledger SET reversed_by_reward_id = ? WHERE id = ?`)
+        .run(reversal.id, latest.id);
     return reversal;
 }
 export function recordInsightAppliedReward(insightId, entityType, entityId, activity) {
@@ -653,7 +707,9 @@ export function recordWorkAdjustmentReward(input) {
         actor: input.actor ?? null,
         source: input.source,
         deltaXp,
-        reasonTitle: bucketDelta > 0 ? "Manual work minutes added" : "Manual work minutes removed",
+        reasonTitle: bucketDelta > 0
+            ? "Manual work minutes added"
+            : "Manual work minutes removed",
         reasonSummary: `${appliedMinutes} manual minute${appliedMinutes === 1 ? "" : "s"} ${direction}, shifting ${Math.abs(bucketDelta)} ${intervalMinutes}-minute reward bucket${Math.abs(bucketDelta) === 1 ? "" : "s"} for ${input.targetTitle}.`,
         reversibleGroup: `work_adjustment:${entityType}:${input.entityId}:${input.adjustmentId}`,
         metadata: {
@@ -695,7 +751,8 @@ export function recordSessionEvent(input, activity, now = new Date()) {
     }, now);
     const day = sessionEvent.createdAt.slice(0, 10);
     const currentAmbientXp = getDailyAmbientXp(day);
-    const active = sessionEvent.metrics.visible === true && sessionEvent.metrics.interacted === true;
+    const active = sessionEvent.metrics.visible === true &&
+        sessionEvent.metrics.interacted === true;
     const ruleCode = sessionEvent.eventType === "dwell_120_seconds"
         ? "session_dwell_120"
         : sessionEvent.eventType === "scroll_depth_75"

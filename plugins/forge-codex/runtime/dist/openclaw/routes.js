@@ -54,7 +54,9 @@ async function forwardOperation(request, response, config, operation, match, url
     if (operation.requiresToken) {
         requireApiToken(config);
     }
-    const body = operation.requestBody === "json" ? await readJsonRequestBody(request, { emptyObject: true }) : undefined;
+    const body = operation.requestBody === "json"
+        ? await readJsonRequestBody(request, { emptyObject: true })
+        : undefined;
     const result = await callConfiguredForgeApi(config, {
         method: operation.method,
         path: operation.target(match, url),
@@ -83,7 +85,9 @@ async function handleGroup(request, response, config, group) {
         }
         const matchedOperation = matchingOperations.find((entry) => entry.operation.method === method);
         if (!matchedOperation) {
-            methodNotAllowed(response, [...new Set(matchingOperations.map((entry) => entry.operation.method))]);
+            methodNotAllowed(response, [
+                ...new Set(matchingOperations.map((entry) => entry.operation.method))
+            ]);
             return;
         }
         await forwardOperation(request, response, config, matchedOperation.operation, matchedOperation.match, url);
@@ -95,7 +99,9 @@ async function handleGroup(request, response, config, group) {
 const exact = (path, operation) => ({
     path,
     match: "exact",
-    operations: [{ ...operation, pattern: new RegExp(`^${path.replaceAll("/", "\\/")}$`) }]
+    operations: [
+        { ...operation, pattern: new RegExp(`^${path.replaceAll("/", "\\/")}$`) }
+    ]
 });
 export const FORGE_PLUGIN_ROUTE_GROUPS = [
     exact("/forge/v1/health", {
@@ -138,6 +144,26 @@ export const FORGE_PLUGIN_ROUTE_GROUPS = [
         upstreamPath: "/api/v1/reviews/weekly",
         target: (_match, url) => passthroughSearch("/api/v1/reviews/weekly", url)
     }),
+    exact("/forge/v1/wiki/settings", {
+        method: "GET",
+        upstreamPath: "/api/v1/wiki/settings",
+        target: (_match, url) => passthroughSearch("/api/v1/wiki/settings", url)
+    }),
+    exact("/forge/v1/wiki/health", {
+        method: "GET",
+        upstreamPath: "/api/v1/wiki/health",
+        target: (_match, url) => passthroughSearch("/api/v1/wiki/health", url)
+    }),
+    exact("/forge/v1/health/sleep", {
+        method: "GET",
+        upstreamPath: "/api/v1/health/sleep",
+        target: (_match, url) => passthroughSearch("/api/v1/health/sleep", url)
+    }),
+    exact("/forge/v1/health/fitness", {
+        method: "GET",
+        upstreamPath: "/api/v1/health/fitness",
+        target: (_match, url) => passthroughSearch("/api/v1/health/fitness", url)
+    }),
     exact("/forge/v1/operator/log-work", {
         method: "POST",
         upstreamPath: "/api/v1/operator/log-work",
@@ -159,6 +185,100 @@ export const FORGE_PLUGIN_ROUTE_GROUPS = [
         requiresToken: true,
         target: (_match, url) => passthroughSearch("/api/v1/insights", url)
     }),
+    {
+        path: "/forge/v1/wiki/pages",
+        match: "prefix",
+        operations: [
+            {
+                method: "GET",
+                pattern: /^\/forge\/v1\/wiki\/pages$/,
+                upstreamPath: "/api/v1/wiki/pages",
+                target: (_match, url) => passthroughSearch("/api/v1/wiki/pages", url)
+            },
+            {
+                method: "POST",
+                pattern: /^\/forge\/v1\/wiki\/pages$/,
+                upstreamPath: "/api/v1/wiki/pages",
+                requestBody: "json",
+                requiresToken: true,
+                target: (_match, url) => passthroughSearch("/api/v1/wiki/pages", url)
+            },
+            {
+                method: "GET",
+                pattern: /^\/forge\/v1\/wiki\/pages\/([^/]+)$/,
+                upstreamPath: "/api/v1/wiki/pages/:id",
+                target: (match, url) => passthroughSearch(`/api/v1/wiki/pages/${match[1]}`, url)
+            },
+            {
+                method: "PATCH",
+                pattern: /^\/forge\/v1\/wiki\/pages\/([^/]+)$/,
+                upstreamPath: "/api/v1/wiki/pages/:id",
+                requestBody: "json",
+                requiresToken: true,
+                target: (match, url) => passthroughSearch(`/api/v1/wiki/pages/${match[1]}`, url)
+            }
+        ]
+    },
+    {
+        path: "/forge/v1/wiki",
+        match: "prefix",
+        operations: [
+            {
+                method: "POST",
+                pattern: /^\/forge\/v1\/wiki\/search$/,
+                upstreamPath: "/api/v1/wiki/search",
+                requestBody: "json",
+                requiresToken: true,
+                target: (_match, url) => passthroughSearch("/api/v1/wiki/search", url)
+            },
+            {
+                method: "POST",
+                pattern: /^\/forge\/v1\/wiki\/sync$/,
+                upstreamPath: "/api/v1/wiki/sync",
+                requestBody: "json",
+                requiresToken: true,
+                target: (_match, url) => passthroughSearch("/api/v1/wiki/sync", url)
+            },
+            {
+                method: "POST",
+                pattern: /^\/forge\/v1\/wiki\/reindex$/,
+                upstreamPath: "/api/v1/wiki/reindex",
+                requestBody: "json",
+                requiresToken: true,
+                target: (_match, url) => passthroughSearch("/api/v1/wiki/reindex", url)
+            },
+            {
+                method: "POST",
+                pattern: /^\/forge\/v1\/wiki\/ingest-jobs$/,
+                upstreamPath: "/api/v1/wiki/ingest-jobs",
+                requestBody: "json",
+                requiresToken: true,
+                target: (_match, url) => passthroughSearch("/api/v1/wiki/ingest-jobs", url)
+            }
+        ]
+    },
+    {
+        path: "/forge/v1/health",
+        match: "prefix",
+        operations: [
+            {
+                method: "PATCH",
+                pattern: /^\/forge\/v1\/health\/sleep\/([^/]+)$/,
+                upstreamPath: "/api/v1/health/sleep/:id",
+                requestBody: "json",
+                requiresToken: true,
+                target: (match, url) => passthroughSearch(`/api/v1/health/sleep/${match[1]}`, url)
+            },
+            {
+                method: "PATCH",
+                pattern: /^\/forge\/v1\/health\/workouts\/([^/]+)$/,
+                upstreamPath: "/api/v1/health/workouts/:id",
+                requestBody: "json",
+                requiresToken: true,
+                target: (match, url) => passthroughSearch(`/api/v1/health/workouts/${match[1]}`, url)
+            }
+        ]
+    },
     {
         path: "/forge/v1/entities",
         match: "prefix",
@@ -269,17 +389,28 @@ export const FORGE_PLUGIN_ROUTE_GROUPS = [
     })
 ];
 export function collectMirroredApiRouteKeys() {
-    return new Set(FORGE_PLUGIN_ROUTE_GROUPS.flatMap((group) => group.operations.flatMap((operation) => ("upstreamPath" in operation ? [makeApiRouteKey(operation.method, operation.upstreamPath)] : []))));
+    return new Set(FORGE_PLUGIN_ROUTE_GROUPS.flatMap((group) => group.operations.flatMap((operation) => "upstreamPath" in operation
+        ? [makeApiRouteKey(operation.method, operation.upstreamPath)]
+        : [])));
 }
 export function buildRouteParityReport(pathMap) {
     const mirrored = collectMirroredApiRouteKeys();
     const supported = collectSupportedPluginApiRouteKeys();
     const openApiRoutes = new Set(Object.entries(pathMap)
         .flatMap(([path, methods]) => Object.keys(methods).map((method) => makeApiRouteKey(method, path)))
-        .filter((key) => key.startsWith("GET /api/v1") || key.startsWith("POST /api/v1") || key.startsWith("PATCH /api/v1") || key.startsWith("DELETE /api/v1")));
-    const missingFromPlugin = [...supported].filter((key) => !mirrored.has(key)).sort();
-    const missingFromOpenApi = [...supported].filter((key) => !openApiRoutes.has(key)).sort();
-    const unexpectedMirrors = [...mirrored].filter((key) => !supported.has(key)).sort();
+        .filter((key) => key.startsWith("GET /api/v1") ||
+        key.startsWith("POST /api/v1") ||
+        key.startsWith("PATCH /api/v1") ||
+        key.startsWith("DELETE /api/v1")));
+    const missingFromPlugin = [...supported]
+        .filter((key) => !mirrored.has(key))
+        .sort();
+    const missingFromOpenApi = [...supported]
+        .filter((key) => !openApiRoutes.has(key))
+        .sort();
+    const unexpectedMirrors = [...mirrored]
+        .filter((key) => !supported.has(key))
+        .sort();
     return {
         supported: [...supported].sort(),
         mirrored: [...mirrored].sort(),
@@ -316,7 +447,11 @@ async function runReadOnly(config, path) {
 }
 async function runRouteCheck(config) {
     const openapi = await runReadOnly(config, "/api/v1/openapi.json");
-    const pathMap = typeof openapi === "object" && openapi !== null && "paths" in openapi && typeof openapi.paths === "object" && openapi.paths !== null
+    const pathMap = typeof openapi === "object" &&
+        openapi !== null &&
+        "paths" in openapi &&
+        typeof openapi.paths === "object" &&
+        openapi.paths !== null
         ? openapi.paths
         : {};
     return buildRouteParityReport(pathMap);
@@ -329,13 +464,21 @@ async function runDoctor(config) {
         runRouteCheck(config),
         resolveForgeUiUrl(config)
     ]);
-    const overviewBody = typeof overview === "object" && overview !== null && "overview" in overview && typeof overview.overview === "object" && overview.overview !== null
+    const overviewBody = typeof overview === "object" &&
+        overview !== null &&
+        "overview" in overview &&
+        typeof overview.overview === "object" &&
+        overview.overview !== null
         ? overview.overview
         : null;
-    const capabilities = overviewBody && typeof overviewBody.capabilities === "object" && overviewBody.capabilities !== null
+    const capabilities = overviewBody &&
+        typeof overviewBody.capabilities === "object" &&
+        overviewBody.capabilities !== null
         ? overviewBody.capabilities
         : null;
-    const overviewWarnings = Array.isArray(overviewBody?.warnings) ? overviewBody.warnings.filter((entry) => typeof entry === "string") : [];
+    const overviewWarnings = Array.isArray(overviewBody?.warnings)
+        ? overviewBody.warnings.filter((entry) => typeof entry === "string")
+        : [];
     const warnings = [];
     const canBootstrap = canBootstrapOperatorSession(config.baseUrl);
     if (config.apiToken.trim().length === 0 && canBootstrap) {
@@ -380,29 +523,64 @@ async function runDoctor(config) {
 }
 export function registerForgePluginCli(api, config) {
     api.registerCli?.(({ program }) => {
-        const command = program.command("forge").description("Inspect and operate Forge through the OpenClaw plugin");
-        command.command("health").description("Check Forge health").action(createCliAction(config, "/api/v1/health"));
-        command.command("overview").description("Fetch the one-shot Forge operator overview").action(createCliAction(config, "/api/v1/operator/overview"));
-        command.command("onboarding").description("Print the Forge agent onboarding contract").action(createCliAction(config, "/api/v1/agents/onboarding"));
-        command.command("ui").description("Print the Forge UI entrypoint").action(async () => {
-            console.log(JSON.stringify({ webAppUrl: await resolveForgeUiUrl(config), pluginUiRoute: "/forge/v1/ui" }, null, 2));
+        const command = program
+            .command("forge")
+            .description("Inspect and operate Forge through the OpenClaw plugin");
+        command
+            .command("health")
+            .description("Check Forge health")
+            .action(createCliAction(config, "/api/v1/health"));
+        command
+            .command("overview")
+            .description("Fetch the one-shot Forge operator overview")
+            .action(createCliAction(config, "/api/v1/operator/overview"));
+        command
+            .command("onboarding")
+            .description("Print the Forge agent onboarding contract")
+            .action(createCliAction(config, "/api/v1/agents/onboarding"));
+        command
+            .command("ui")
+            .description("Print the Forge UI entrypoint")
+            .action(async () => {
+            console.log(JSON.stringify({
+                webAppUrl: await resolveForgeUiUrl(config),
+                pluginUiRoute: "/forge/v1/ui"
+            }, null, 2));
         });
-        command.command("start").description("Start the local Forge runtime when it is managed by the OpenClaw plugin").action(async () => {
+        command
+            .command("start")
+            .description("Start the local Forge runtime when it is managed by the OpenClaw plugin")
+            .action(async () => {
             console.log(JSON.stringify(await startForgeRuntime(config), null, 2));
         });
-        command.command("stop").description("Stop the local Forge runtime when it was auto-started by the OpenClaw plugin").action(async () => {
+        command
+            .command("stop")
+            .description("Stop the local Forge runtime when it was auto-started by the OpenClaw plugin")
+            .action(async () => {
             console.log(JSON.stringify(await stopForgeRuntime(config), null, 2));
         });
-        command.command("restart").description("Restart the local Forge runtime when it is managed by the OpenClaw plugin").action(async () => {
+        command
+            .command("restart")
+            .description("Restart the local Forge runtime when it is managed by the OpenClaw plugin")
+            .action(async () => {
             console.log(JSON.stringify(await restartForgeRuntime(config), null, 2));
         });
-        command.command("status").description("Report whether the local Forge runtime is running and whether it is plugin-managed").action(async () => {
+        command
+            .command("status")
+            .description("Report whether the local Forge runtime is running and whether it is plugin-managed")
+            .action(async () => {
             console.log(JSON.stringify(await getForgeRuntimeStatus(config), null, 2));
         });
-        command.command("doctor").description("Run plugin connectivity and curated route diagnostics").action(async () => {
+        command
+            .command("doctor")
+            .description("Run plugin connectivity and curated route diagnostics")
+            .action(async () => {
             console.log(JSON.stringify(await runDoctor(config), null, 2));
         });
-        command.command("route-check").description("Compare curated plugin route coverage against the live Forge OpenAPI paths").action(async () => {
+        command
+            .command("route-check")
+            .description("Compare curated plugin route coverage against the live Forge OpenAPI paths")
+            .action(async () => {
             console.log(JSON.stringify(await runRouteCheck(config), null, 2));
         });
     }, { commands: ["forge"] });
