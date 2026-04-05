@@ -41,12 +41,13 @@
         <section class="hero hero-home">
           <div class="hero-copy">
             <p class="eyebrow">Forge</p>
-            <h1>One workspace for work, memory, and review.</h1>
+            <h1>One system for planning, execution, memory, and review.</h1>
             <p class="lede">
-              Forge keeps goals, projects, tasks, live work, wiki pages, notes,
-              sleep, sports, preferences, and Psyche records in one system.
-              OpenClaw and Hermes can read it, update it, and hand off to the UI
-              when needed.
+              Forge keeps goals, projects, tasks, habits, task runs, notes, wiki
+              pages, sleep records, workout records, preferences, and Psyche
+              records in one local system. OpenClaw and Hermes can read that
+              data, update it, and hand off to the Forge UI when the UI is the
+              better surface.
             </p>
             <div class="hero-actions">
               <a class="button primary" href="#getting-started">Start setup</a>
@@ -55,11 +56,17 @@
               >
             </div>
             <div class="hero-points">
-              <div class="point">Clear ownership for humans and bots.</div>
-              <div class="point">Real task runs, not fake timer logs.</div>
-              <div class="point">File-first wiki with search and ingest.</div>
               <div class="point">
-                Sleep and workout review with linked Forge context.
+                Explicit ownership for human and bot users.
+              </div>
+              <div class="point">
+                Real task runs and signed work corrections.
+              </div>
+              <div class="point">
+                File-first wiki with search, health, and ingest.
+              </div>
+              <div class="point">
+                Sleep and sports records linked to Forge context.
               </div>
             </div>
           </div>
@@ -80,9 +87,10 @@
         <section class="section">
           <div class="section-heading">
             <p class="eyebrow">What You Get</p>
-            <h2>Short feature map.</h2>
+            <h2>What Forge includes.</h2>
             <p class="section-copy">
-              Start here if you need a fast picture of the product.
+              This is the short product map. Use the features page for the
+              longer reference.
             </p>
           </div>
           <div class="card-grid card-grid-3">
@@ -90,42 +98,42 @@
               <h3>Planning</h3>
               <p>
                 Goals, projects, tasks, habits, strategies, notes, and calendar
-                records stay linked.
+                records stay linked in one graph.
               </p>
             </article>
             <article class="card">
               <h3>Execution</h3>
               <p>
-                Task runs track real work. Work adjustments correct minutes
-                without pretending a run happened.
+                Task runs track real work. Work adjustments fix logged minutes
+                without inventing a fake run.
               </p>
             </article>
             <article class="card">
               <h3>Wiki memory</h3>
               <p>
-                The wiki keeps durable pages, backlinks, search, health checks,
-                and background ingest.
+                The wiki stores durable pages with backlinks, search, health
+                checks, and background ingest jobs.
               </p>
             </article>
             <article class="card">
               <h3>Health</h3>
               <p>
-                Sleep and sports are first-class review surfaces with notes,
-                tags, and Forge links.
+                Sleep and sports are first-class record types with notes, tags,
+                and Forge links.
               </p>
             </article>
             <article class="card">
               <h3>Preferences</h3>
               <p>
-                The app includes a dedicated preferences surface with comparison
-                flows and concept libraries.
+                Preferences includes comparison rounds, direct signals, and
+                editable concept libraries.
               </p>
             </article>
             <article class="card">
               <h3>Psyche</h3>
               <p>
                 Values, beliefs, patterns, modes, and trigger reports stay in
-                the same system as the work.
+                the same system as work and review.
               </p>
             </article>
           </div>
@@ -134,9 +142,9 @@
         <section class="section">
           <div class="section-heading">
             <p class="eyebrow">Choose A Surface</p>
-            <h2>OpenClaw, Hermes, or standalone.</h2>
+            <h2>Choose how you want to run Forge.</h2>
             <p class="section-copy">
-              Use the adapter that matches how you want to run Forge.
+              Pick the adapter that matches your runtime.
             </p>
           </div>
           <div class="card-grid card-grid-3">
@@ -144,7 +152,7 @@
               <h3>OpenClaw</h3>
               <p>
                 Published plugin. Best if you want the standard install path and
-                the Forge runtime commands in OpenClaw.
+                built-in Forge runtime commands.
               </p>
             </article>
             <article class="card">
@@ -157,7 +165,7 @@
               <h3>Standalone</h3>
               <p>
                 Run Forge directly from the repo if you only need the app and
-                the API.
+                API without an agent host.
               </p>
             </article>
           </div>
@@ -168,7 +176,7 @@
             <p class="eyebrow">Getting Started</p>
             <h2 id="install-title">Install Forge in OpenClaw.</h2>
             <p class="section-copy" id="install-copy">
-              This is the fastest path for a normal local install.
+              This page shows the normal local install path.
             </p>
           </div>
 
@@ -220,15 +228,36 @@
               </p>
             </article>
             <article class="card">
-              <h3>2. Start</h3>
+              <h3>2. Allow</h3>
               <p id="step-2">
-                Restart the gateway and run the Forge health check.
+                Add the plugin to <code>plugins.allow</code> if it is not
+                already present.
               </p>
             </article>
             <article class="card">
-              <h3>3. Open</h3>
+              <h3>3. Restart and check</h3>
               <p id="step-3">
-                Open the Forge UI or ask the agent to use the tools directly.
+                Restart the gateway, run the health check, then open the UI.
+              </p>
+            </article>
+          </div>
+
+          <div class="card-grid card-grid-2">
+            <article class="card">
+              <h3>Important for OpenClaw</h3>
+              <p>
+                <code>openclaw plugins enable forge-openclaw-plugin</code> is
+                not always enough by itself. If
+                <code>forge-openclaw-plugin</code> is missing from
+                <code>plugins.allow</code>, OpenClaw can still refuse to load
+                it.
+              </p>
+            </article>
+            <article class="card">
+              <h3>What the check confirms</h3>
+              <p>
+                <code>openclaw forge health</code> confirms the plugin loaded,
+                the Forge runtime is reachable, and the local API is answering.
               </p>
             </article>
           </div>
@@ -257,10 +286,10 @@
         <section class="section">
           <div class="section-heading">
             <p class="eyebrow">Next</p>
-            <h2>Go deeper only when you need it.</h2>
+            <h2>Use the longer reference only when you need it.</h2>
             <p class="section-copy">
-              The features page keeps the longer explanations, examples, and
-              screenshots in one place.
+              The features page has the longer product reference and
+              screenshots.
             </p>
           </div>
           <div class="card-grid card-grid-2">
@@ -287,21 +316,23 @@
       const installModes = {
         openclaw: {
           title: "Install Forge in OpenClaw.",
-          copy: "This is the fastest path for a normal local install.",
+          copy: "This is the standard local install path.",
           command: `openclaw plugins install forge-openclaw-plugin
 openclaw plugins enable forge-openclaw-plugin
+node -e 'const fs=require("fs"); const p=process.env.HOME+"/.openclaw/openclaw.json"; const j=JSON.parse(fs.readFileSync(p,"utf8")); j.plugins ??= {}; j.plugins.allow = Array.from(new Set([...(j.plugins.allow || []), "forge-openclaw-plugin"])); fs.writeFileSync(p, JSON.stringify(j, null, 2)+"\\n");'
 openclaw gateway restart
 openclaw forge health`,
           step1: "Install the published OpenClaw plugin and enable it.",
           step2:
-            "Restart the gateway, then run the built-in Forge health check.",
-          step3: "Open the Forge UI or ask the agent to call Forge tools.",
+            "Repair <code>plugins.allow</code> so <code>forge-openclaw-plugin</code> is explicitly allowed.",
+          step3:
+            "Restart the gateway, run the health check, then open the Forge UI or use the tools.",
           ui: "The common local UI address is <code>http://127.0.0.1:4317/forge/</code>.",
           data: "OpenClaw stores Forge under <code>~/.openclaw/extensions/forge-openclaw-plugin/data/forge.sqlite</code> unless you set a custom <code>dataRoot</code>."
         },
         hermes: {
           title: "Install Forge in Hermes.",
-          copy: "Use this when Hermes is your main runtime.",
+          copy: "Use this when Hermes is your main agent runtime.",
           command: `~/.hermes/hermes-agent/venv/bin/python -m ensurepip --upgrade
 ~/.hermes/hermes-agent/venv/bin/python -m pip install --upgrade ./plugins/forge-hermes`,
           step1:

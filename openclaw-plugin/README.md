@@ -3,6 +3,12 @@
 `forge-openclaw-plugin` is the publishable OpenClaw package for Forge.
 When the plugin targets `localhost` or `127.0.0.1`, it auto-starts the bundled Forge runtime so the local install path stays one-step.
 
+OpenClaw install note:
+
+- `openclaw plugins enable forge-openclaw-plugin` is not always enough by itself.
+- If `forge-openclaw-plugin` is missing from `plugins.allow`, OpenClaw can still refuse to load it.
+- The install section below includes the `node -e ...` step that repairs `plugins.allow` safely.
+
 ## Open the UI
 
 If you want the actual Forge app, not just the plugin tools, ask your OpenClaw agent:
