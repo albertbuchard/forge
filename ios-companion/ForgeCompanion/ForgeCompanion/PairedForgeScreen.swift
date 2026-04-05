@@ -12,7 +12,10 @@ struct PairedForgeScreen: View {
 
     var body: some View {
         GeometryReader { proxy in
-            ZStack(alignment: .topLeading) {
+            let topControlsPadding = max(6, proxy.safeAreaInsets.top + 4)
+            let menuSheetTopPadding = topControlsPadding + 56
+
+            ZStack(alignment: .topTrailing) {
                 CompanionStyle.background
 
                 if let url = appModel.forgeWebURL {
@@ -51,33 +54,31 @@ struct PairedForgeScreen: View {
                     .allowsHitTesting(false)
                 }
 
-                HStack {
-                    Button {
-                        companionDebugLog(
-                            "PairedForgeScreen",
-                            "menu button tap old=\(menuVisible)"
-                        )
-                        menuVisible.toggle()
-                    } label: {
-                        Image(systemName: menuVisible ? "xmark" : "line.3.horizontal")
-                            .font(.system(size: 13, weight: .bold))
-                            .foregroundStyle(.white)
-                            .frame(width: 34, height: 34)
-                            .background(Color.black.opacity(0.22), in: Circle())
-                            .overlay(Circle().stroke(Color.white.opacity(0.14), lineWidth: 1))
-                    }
-                    .buttonStyle(.plain)
-
-                    Spacer()
-
-                    if appModel.needsNativeAttention {
-                        Circle()
-                            .fill(Color(red: 1, green: 0.67, blue: 0.29))
-                            .frame(width: 8, height: 8)
-                    }
+                Button {
+                    companionDebugLog(
+                        "PairedForgeScreen",
+                        "menu button tap old=\(menuVisible)"
+                    )
+                    menuVisible.toggle()
+                } label: {
+                    Image(systemName: menuVisible ? "xmark" : "line.3.horizontal")
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundStyle(.white)
+                        .frame(width: 34, height: 34)
+                        .background(Color.black.opacity(0.22), in: Circle())
+                        .overlay(Circle().stroke(Color.white.opacity(0.14), lineWidth: 1))
+                        .overlay(alignment: .topTrailing) {
+                            if appModel.needsNativeAttention {
+                                Circle()
+                                    .fill(Color(red: 1, green: 0.67, blue: 0.29))
+                                    .frame(width: 8, height: 8)
+                                    .offset(x: 1, y: -1)
+                            }
+                        }
                 }
-                .padding(.horizontal, 16)
-                .padding(.top, proxy.safeAreaInsets.top + 28)
+                .buttonStyle(.plain)
+                .padding(.trailing, 16)
+                .padding(.top, topControlsPadding)
                 .zIndex(3)
 
                 if menuVisible {
@@ -95,17 +96,17 @@ struct PairedForgeScreen: View {
                         closeMenu: { menuVisible = false }
                     )
                     .environmentObject(appModel)
-                    .padding(.top, proxy.safeAreaInsets.top + 68)
-                    .padding(.leading, 16)
+                    .padding(.top, menuSheetTopPadding)
+                    .padding(.trailing, 16)
                     .zIndex(2)
-                    .transition(.move(edge: .leading).combined(with: .opacity))
+                    .transition(.move(edge: .trailing).combined(with: .opacity))
                 }
             }
             .frame(width: proxy.size.width, height: proxy.size.height)
             .clipped()
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .ignoresSafeArea()
+        .ignoresSafeArea(edges: .bottom)
         .onAppear {
             companionDebugLog(
                 "PairedForgeScreen",

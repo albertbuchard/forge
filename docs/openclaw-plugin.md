@@ -87,6 +87,11 @@ Forge now exposes three newer agent-facing surfaces that matter for OpenClaw:
 - Sleep is a first-class reflective surface. Use `forge_get_sleep_overview` for review and `forge_update_sleep_session` to attach tags, notes, or Forge links to one night.
 - Sports is the workout review surface. Use `forge_get_sports_overview` for read access and `forge_update_workout_session` to add subjective effort, narrative meaning, tags, or links to one workout.
 
+The curated plugin route surface now mirrors those capabilities directly:
+
+- Wiki: `/api/v1/wiki/settings`, `/api/v1/wiki/pages`, `/api/v1/wiki/pages/:id`, `/api/v1/wiki/search`, `/api/v1/wiki/health`, `/api/v1/wiki/sync`, `/api/v1/wiki/reindex`, `/api/v1/wiki/ingest-jobs`
+- Health: `/api/v1/health/sleep`, `/api/v1/health/sleep/:id`, `/api/v1/health/fitness`, `/api/v1/health/workouts/:id`
+
 The Forge UI routes are `/forge/wiki`, `/forge/sleep`, and `/forge/sports`.
 The backend overview routes are `/api/v1/health/sleep` and
 `/api/v1/health/fitness` for sleep and sports respectively.

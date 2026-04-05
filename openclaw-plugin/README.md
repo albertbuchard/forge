@@ -60,6 +60,7 @@ It can also grant an explicit audited XP bonus or penalty through the dedicated 
 It can also add or remove tracked minutes on existing tasks or projects through a dedicated signed work-adjustment route without pretending that a live task run happened.
 It also understands Forge `note` records, which are Markdown-based, searchable, and linkable across one or many entities.
 It also exposes Forge's file-first wiki memory surface plus the first-class sleep and sports read models, so an agent can review recent nights, inspect workout context, update reflective metadata on health sessions, and work with wiki pages without dropping to raw files.
+The curated plugin route surface now includes the dedicated wiki and health APIs directly, including wiki settings, page reads and writes, search, health, sync, reindex, background ingest, sleep review, sports review, and reflective updates on individual sleep or workout sessions.
 Notes support includes:
 
 - `note` as the durable collaboration entity

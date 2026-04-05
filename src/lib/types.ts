@@ -378,12 +378,60 @@ export interface WikiIngestJobItem {
   updatedAt: string;
 }
 
+export interface WikiIngestJobLogEntry {
+  id: string;
+  level: string;
+  message: string;
+  metadata: Record<string, unknown>;
+  createdAt: string;
+}
+
+export interface WikiIngestJobAsset {
+  id: string;
+  status: string;
+  sourceKind: string;
+  sourceLocator: string;
+  fileName: string;
+  mimeType: string;
+  filePath: string;
+  sizeBytes: number;
+  checksum: string;
+  metadata: Record<string, unknown>;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface WikiIngestJobCandidate {
+  id: string;
+  sourceAssetId: string | null;
+  candidateType: string;
+  status: string;
+  title: string;
+  summary: string;
+  targetKey: string;
+  payload: Record<string, unknown>;
+  publishedNoteId: string | null;
+  publishedEntityType: string | null;
+  publishedEntityId: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface WikiIngestJobPayload {
   job: {
     id: string;
     spaceId: string;
     llmProfileId: string | null;
     status: string;
+    phase: string;
+    progressPercent: number;
+    totalFiles: number;
+    processedFiles: number;
+    createdPageCount: number;
+    createdEntityCount: number;
+    acceptedCount: number;
+    rejectedCount: number;
+    latestMessage: string;
     sourceKind: string;
     sourceLocator: string;
     mimeType: string;
@@ -397,6 +445,9 @@ export interface WikiIngestJobPayload {
     completedAt: string | null;
   };
   items: WikiIngestJobItem[];
+  logs: WikiIngestJobLogEntry[];
+  assets: WikiIngestJobAsset[];
+  candidates: WikiIngestJobCandidate[];
 }
 
 export interface NoteSummary {

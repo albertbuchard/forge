@@ -176,7 +176,11 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const headers = new Headers(init?.headers);
   headers.set("x-forge-source", "ui");
 
-  if (init?.body !== undefined && !headers.has("content-type")) {
+  if (
+    init?.body !== undefined &&
+    !(typeof FormData !== "undefined" && init.body instanceof FormData) &&
+    !headers.has("content-type")
+  ) {
     headers.set("content-type", "application/json");
   }
 
@@ -1243,15 +1247,89 @@ export function createWikiIngestJob(input: {
 }) {
   return request<{
     job: WikiIngestJobPayload | null;
-    page: Note;
+    page: Note | null;
   }>("/api/v1/wiki/ingest-jobs", {
     method: "POST",
     body: JSON.stringify(input)
   });
 }
 
+export function createWikiIngestUploadJob(input: {
+  spaceId?: string;
+  titleHint?: string;
+  llmProfileId?: string;
+  parseStrategy?: "auto" | "text_only" | "multimodal";
+  entityProposalMode?: "none" | "suggest";
+  createAsKind?: Note["kind"];
+  linkedEntityHints?: Array<{
+    entityType: CrudEntityType;
+    entityId: string;
+    anchorKey?: string | null;
+  }>;
+  files: File[];
+}) {
+  const formData = new FormData();
+  if (input.spaceId?.trim()) {
+    formData.set("spaceId", input.spaceId.trim());
+  }
+  if (input.titleHint?.trim()) {
+    formData.set("titleHint", input.titleHint.trim());
+  }
+  if (input.llmProfileId?.trim()) {
+    formData.set("llmProfileId", input.llmProfileId.trim());
+  }
+  formData.set("parseStrategy", input.parseStrategy ?? "auto");
+  formData.set("entityProposalMode", input.entityProposalMode ?? "suggest");
+  formData.set("createAsKind", input.createAsKind ?? "wiki");
+  formData.set(
+    "linkedEntityHints",
+    JSON.stringify(input.linkedEntityHints ?? [])
+  );
+  input.files.forEach((file) => {
+    formData.append("files", file);
+  });
+  return request<{
+    job: WikiIngestJobPayload | null;
+    page: Note | null;
+  }>("/api/v1/wiki/ingest-jobs/uploads", {
+    method: "POST",
+    body: formData
+  });
+}
+
+export function listWikiIngestJobs(input: {
+  spaceId?: string;
+  limit?: number;
+} = {}) {
+  const search = new URLSearchParams();
+  if (input.spaceId?.trim()) {
+    search.set("spaceId", input.spaceId.trim());
+  }
+  if (typeof input.limit === "number") {
+    search.set("limit", String(input.limit));
+  }
+  return request<{ jobs: WikiIngestJobPayload[] }>(
+    `/api/v1/wiki/ingest-jobs${search.size > 0 ? `?${search.toString()}` : ""}`
+  );
+}
+
 export function getWikiIngestJob(jobId: string) {
   return request<WikiIngestJobPayload>(`/api/v1/wiki/ingest-jobs/${jobId}`);
+}
+
+export function reviewWikiIngestJob(input: {
+  jobId: string;
+  decisions: Array<{ candidateId: string; keep: boolean }>;
+}) {
+  return request<{ job: WikiIngestJobPayload }>(
+    `/api/v1/wiki/ingest-jobs/${input.jobId}/review`,
+    {
+      method: "POST",
+      body: JSON.stringify({
+        decisions: input.decisions
+      })
+    }
+  );
 }
 
 export function createInsight(input: CreateInsightInput) {

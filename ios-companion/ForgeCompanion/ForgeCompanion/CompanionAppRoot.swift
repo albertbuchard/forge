@@ -20,7 +20,6 @@ struct CompanionAppRoot: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .ignoresSafeArea()
         .fullScreenCover(isPresented: $setupVisible) {
             CompanionSetupFlow {
                 setupVisible = false

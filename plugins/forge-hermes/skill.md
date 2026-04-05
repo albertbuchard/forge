@@ -45,6 +45,7 @@ fall back to field-by-field intake.
    `forge_create_entities`, `forge_update_entities`, `forge_delete_entities`, `forge_restore_entities`.
 5. Use the wiki tools for file-first knowledge work:
    `forge_get_wiki_settings`, `forge_list_wiki_pages`, `forge_get_wiki_page`, `forge_search_wiki`, `forge_upsert_wiki_page`, `forge_get_wiki_health`, `forge_sync_wiki_vault`, `forge_reindex_wiki_embeddings`, `forge_ingest_wiki_source`.
+   `forge_ingest_wiki_source` queues background ingest work; when the user wants to review candidate pages or entities before publishing, hand off to the Forge UI instead of pretending Hermes already has an inline review tool.
 6. Use the health tools for sleep and sports review:
    `forge_get_sleep_overview`, `forge_get_sports_overview`, `forge_update_sleep_session`, `forge_update_workout_session`.
 7. Treat narrow calendar helpers as convenience helpers, not the default architecture:

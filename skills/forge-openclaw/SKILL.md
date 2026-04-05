@@ -21,6 +21,7 @@ Wiki rule:
 
 - Treat the Wiki as the canonical long-form memory surface, not as a loose note dump.
 - Use the wiki tools when the user wants file-first reference pages, backlink-aware recall, ingest from a URL or local file, or wiki maintenance work such as unresolved-link cleanup.
+- `forge_ingest_wiki_source` now queues the ingest as background work; use the Forge UI handoff when the user wants to review or keep only selected wiki/entity candidates after the ingest finishes.
 - Keep evidence notes and wiki pages conceptually distinct: evidence notes are linked operating records, while wiki pages are the curated memory vault.
 
 Health rule:

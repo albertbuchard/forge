@@ -4853,17 +4853,68 @@ test("wiki pages are file-backed, searchable, backlink-aware, and ingestable", a
     assert.equal(ingest.statusCode, 201);
     const ingestBody = ingest.json() as {
       job: {
-        job: { status: string; pageNoteId: string | null };
+        job: { id: string; status: string; pageNoteId: string | null };
+        items: Array<{ itemType: string }>;
       } | null;
-      page: { id: string; title: string; kind: string };
+      page: { id: string; title: string; kind: string } | null;
     };
-    assert.equal(ingestBody.job?.job.status, "completed");
-    assert.equal(ingestBody.page.kind, "wiki");
-    assert.equal(ingestBody.page.title, "Imported field notes");
-    assert.equal(ingestBody.job?.job.pageNoteId, ingestBody.page.id);
+    assert.equal(ingestBody.job?.job.status, "queued");
+    assert.equal(ingestBody.page, null);
     assert.ok(
       ingestBody.job?.items.some((item) => item.itemType === "raw_source")
     );
+
+    let reviewedJob: {
+      job: {
+        job: { status: string; pageNoteId: string | null };
+        candidates: Array<{ id: string; candidateType: string }>;
+      };
+    } | null = null;
+
+    for (let attempt = 0; attempt < 40; attempt += 1) {
+      const poll = await app.inject({
+        method: "GET",
+        url: `/api/v1/wiki/ingest-jobs/${ingestBody.job?.job.id}`,
+        headers: {
+          cookie: operatorCookie
+        }
+      });
+      assert.equal(poll.statusCode, 200);
+      const pollBody = poll.json() as {
+        job: {
+          job: { status: string; pageNoteId: string | null };
+          candidates: Array<{ id: string; candidateType: string }>;
+        };
+      };
+      if (pollBody.job.job.status === "completed") {
+        const review = await app.inject({
+          method: "POST",
+          url: `/api/v1/wiki/ingest-jobs/${ingestBody.job?.job.id}/review`,
+          headers: {
+            cookie: operatorCookie
+          },
+          payload: {
+            decisions: pollBody.job.candidates.map((candidate) => ({
+              candidateId: candidate.id,
+              keep: candidate.candidateType === "page"
+            }))
+          }
+        });
+        assert.equal(review.statusCode, 200);
+        reviewedJob = review.json() as {
+          job: {
+            job: { status: string; pageNoteId: string | null };
+            candidates: Array<{ id: string; candidateType: string }>;
+          };
+        };
+        break;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 25));
+    }
+
+    assert.ok(reviewedJob);
+    assert.equal(reviewedJob.job.job.status, "reviewed");
+    assert.ok(reviewedJob.job.job.pageNoteId);
 
     const health = await app.inject({
       method: "GET",

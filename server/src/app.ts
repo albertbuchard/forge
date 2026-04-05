@@ -1,5 +1,6 @@
 import Fastify from "fastify";
 import cors from "@fastify/cors";
+import multipart from "@fastify/multipart";
 import { ZodError } from "zod";
 import {
   configureDatabase,
@@ -52,6 +53,7 @@ import {
 } from "./repositories/notes.js";
 import {
   createWikiIngestJobSchema,
+  createUploadedWikiIngestJob,
   createWikiSpace,
   createWikiSpaceSchema,
   deleteWikiProfile,
@@ -62,11 +64,15 @@ import {
   getWikiPageDetailBySlug,
   getWikiSettingsPayload,
   ingestWikiSource,
+  listWikiIngestJobs,
   listWikiPageTree,
   listWikiPages,
   listWikiSpaces,
+  processWikiIngestJob,
   reindexWikiEmbeddings,
   reindexWikiEmbeddingsSchema,
+  reviewWikiIngestJob,
+  reviewWikiIngestJobSchema,
   searchWikiPages,
   syncWikiVaultFromDisk,
   syncWikiVaultSchema,
@@ -4256,8 +4262,10 @@ export async function buildServer(
     },
     credentials: true
   });
+  await app.register(multipart);
   app.addHook("onClose", async () => {
     taskRunWatchdog?.stop();
+    await managers.backgroundJobs.stop();
   });
 
   app.setErrorHandler((error, _request, reply) => {
@@ -5854,6 +5862,386 @@ export async function buildServer(
       managers.secrets
     );
   });
+  const readStringField = (
+    record: Record<string, unknown>,
+    key: string,
+    fallback = ""
+  ) => (typeof record[key] === "string" ? (record[key] as string) : fallback);
+  const readStringArrayField = (
+    record: Record<string, unknown>,
+    key: string
+  ) =>
+    Array.isArray(record[key])
+      ? (record[key] as unknown[]).filter(
+          (entry): entry is string =>
+            typeof entry === "string" && entry.trim().length > 0
+        )
+      : [];
+  const publishIngestProposalEntity = (
+    proposal: Record<string, unknown>,
+    auth: ReturnType<typeof authenticateRequest>
+  ) => {
+    const suggestedFields =
+      proposal.suggestedFields &&
+      typeof proposal.suggestedFields === "object" &&
+      !Array.isArray(proposal.suggestedFields)
+        ? (proposal.suggestedFields as Record<string, unknown>)
+        : {};
+    const entityType = readStringField(proposal, "entityType").trim();
+    const title =
+      readStringField(proposal, "title").trim() || "Imported candidate";
+    const summary = readStringField(proposal, "summary").trim();
+
+    switch (entityType) {
+      case "goal": {
+        const goal = createGoal(
+          {
+            title,
+            description: summary,
+            horizon:
+              readStringField(suggestedFields, "horizon", "year") === "quarter"
+                ? "quarter"
+                : readStringField(suggestedFields, "horizon", "year") ===
+                    "lifetime"
+                  ? "lifetime"
+                  : "year",
+            status:
+              readStringField(suggestedFields, "status", "active") === "paused"
+                ? "paused"
+                : readStringField(suggestedFields, "status", "active") ===
+                    "completed"
+                  ? "completed"
+                  : "active",
+            targetPoints: Number(suggestedFields.targetPoints ?? 400) || 400,
+            themeColor: readStringField(
+              suggestedFields,
+              "themeColor",
+              "#c8a46b"
+            ),
+            tagIds: readStringArrayField(suggestedFields, "tagIds"),
+            notes: [],
+            userId:
+              typeof suggestedFields.userId === "string"
+                ? (suggestedFields.userId as string)
+                : null
+          },
+          toActivityContext(auth)
+        );
+        return { entityType: "goal", entityId: goal.id };
+      }
+      case "project": {
+        const goalId =
+          readStringField(suggestedFields, "goalId").trim() ||
+          readStringArrayField(suggestedFields, "targetGoalIds")[0] ||
+          readStringArrayField(suggestedFields, "linkedGoalIds")[0] ||
+          "";
+        if (!goalId) {
+          throw new Error("Project proposals need a goalId to publish.");
+        }
+        const project = createProject(
+          {
+            goalId,
+            title,
+            description: summary,
+            status:
+              readStringField(suggestedFields, "status", "active") === "paused"
+                ? "paused"
+                : readStringField(suggestedFields, "status", "active") ===
+                    "completed"
+                  ? "completed"
+                  : "active",
+            targetPoints: Number(suggestedFields.targetPoints ?? 240) || 240,
+            themeColor: readStringField(
+              suggestedFields,
+              "themeColor",
+              "#c0c1ff"
+            ),
+            notes: [],
+            userId:
+              typeof suggestedFields.userId === "string"
+                ? (suggestedFields.userId as string)
+                : null
+          },
+          toActivityContext(auth)
+        );
+        return { entityType: "project", entityId: project.id };
+      }
+      case "task": {
+        const task = createTask(
+          {
+            title,
+            description: summary,
+            status: "backlog",
+            priority: "medium",
+            owner: auth.actor ?? "Forge",
+            userId:
+              typeof suggestedFields.userId === "string"
+                ? (suggestedFields.userId as string)
+                : null,
+            goalId:
+              readStringField(suggestedFields, "goalId").trim() || null,
+            projectId:
+              readStringField(suggestedFields, "projectId").trim() || null,
+            dueDate: null,
+            effort: "deep",
+            energy: "steady",
+            points: Number(suggestedFields.points ?? 40) || 40,
+            plannedDurationSeconds: null,
+            schedulingRules: null,
+            tagIds: readStringArrayField(suggestedFields, "tagIds"),
+            notes: []
+          },
+          toActivityContext(auth)
+        );
+        return { entityType: "task", entityId: task.id };
+      }
+      case "habit": {
+        const habit = createHabit(
+          {
+            title,
+            description: summary,
+            status: "active",
+            polarity:
+              readStringField(suggestedFields, "polarity", "positive") ===
+              "negative"
+                ? "negative"
+                : "positive",
+            frequency:
+              readStringField(suggestedFields, "frequency", "daily") ===
+              "weekly"
+                ? "weekly"
+                : "daily",
+            targetCount: Number(suggestedFields.targetCount ?? 1) || 1,
+            weekDays: Array.isArray(suggestedFields.weekDays)
+              ? (suggestedFields.weekDays as number[])
+              : [],
+            linkedGoalIds: readStringArrayField(
+              suggestedFields,
+              "linkedGoalIds"
+            ),
+            linkedProjectIds: readStringArrayField(
+              suggestedFields,
+              "linkedProjectIds"
+            ),
+            linkedTaskIds: readStringArrayField(
+              suggestedFields,
+              "linkedTaskIds"
+            ),
+            linkedValueIds: [],
+            linkedPatternIds: [],
+            linkedBehaviorIds: [],
+            linkedBeliefIds: [],
+            linkedModeIds: [],
+            linkedReportIds: [],
+            linkedBehaviorId: null,
+            rewardXp: Number(suggestedFields.rewardXp ?? 12) || 12,
+            penaltyXp: Number(suggestedFields.penaltyXp ?? 8) || 8,
+            generatedHealthEventTemplate: {
+              enabled: false,
+              workoutType: "workout",
+              title: "",
+              durationMinutes: 45,
+              xpReward: 0,
+              tags: [],
+              links: [],
+              notesTemplate: ""
+            },
+            userId:
+              typeof suggestedFields.userId === "string"
+                ? (suggestedFields.userId as string)
+                : null
+          },
+          toActivityContext(auth)
+        );
+        return { entityType: "habit", entityId: habit.id };
+      }
+      case "strategy": {
+        const targetProjectIds = readStringArrayField(
+          suggestedFields,
+          "targetProjectIds"
+        );
+        const linkedEntities =
+          Array.isArray(suggestedFields.linkedEntities) &&
+          suggestedFields.linkedEntities.every(
+            (entry) =>
+              entry &&
+              typeof entry === "object" &&
+              typeof (entry as { entityType?: unknown }).entityType ===
+                "string" &&
+              typeof (entry as { entityId?: unknown }).entityId === "string"
+          )
+            ? (suggestedFields.linkedEntities as Array<{
+                entityType: string;
+                entityId: string;
+              }>)
+            : [];
+        const firstProjectId =
+          targetProjectIds[0] ||
+          linkedEntities.find((entry) => entry.entityType === "project")
+            ?.entityId ||
+          "";
+        const firstTaskId =
+          linkedEntities.find((entry) => entry.entityType === "task")?.entityId ||
+          "";
+        const graphNodeId = firstProjectId || firstTaskId;
+        if (!graphNodeId) {
+          throw new Error(
+            "Strategy proposals need at least one linked project or task to publish."
+          );
+        }
+        const strategy = createStrategy({
+          title,
+          overview: summary,
+          endStateDescription: readStringField(
+            suggestedFields,
+            "endStateDescription",
+            summary
+          ),
+          status: "active",
+          targetGoalIds: readStringArrayField(suggestedFields, "targetGoalIds"),
+          targetProjectIds,
+          linkedEntities: linkedEntities.filter(
+            (entry): entry is { entityType: any; entityId: string } =>
+              entry.entityType !== "goal" &&
+              entry.entityType !== "note" &&
+              typeof entry.entityId === "string"
+          ) as Array<{ entityType: "task" | "project"; entityId: string }>,
+          graph: {
+            nodes: [
+              {
+                id: `seed_${graphNodeId}`,
+                entityType: firstProjectId ? "project" : "task",
+                entityId: graphNodeId,
+                title,
+                branchLabel: "",
+                notes: summary
+              }
+            ],
+            edges: []
+          },
+          userId:
+            typeof suggestedFields.userId === "string"
+              ? (suggestedFields.userId as string)
+              : null,
+          isLocked: false,
+          lockedByUserId: null
+        });
+        return { entityType: "strategy", entityId: strategy.id };
+      }
+      case "note": {
+        const note = createNote(
+          {
+            kind: "evidence",
+            title,
+            slug: "",
+            spaceId: "",
+            parentSlug: null,
+            indexOrder: 0,
+            showInIndex: false,
+            aliases: [],
+            summary,
+            contentMarkdown: `# ${title}\n\n${summary}\n`,
+            author: auth.actor ?? null,
+            tags: [],
+            destroyAt: null,
+            links: [],
+            sourcePath: "",
+            frontmatter: {},
+            revisionHash: "",
+            userId: null
+          },
+          toActivityContext(auth)
+        );
+        return { entityType: "note", entityId: note.id };
+      }
+      default:
+        throw new Error(`Unsupported ingest proposal entity type: ${entityType}`);
+    }
+  };
+  app.get("/api/v1/wiki/ingest-jobs", async (request) => {
+    requireScopedAccess(
+      request.headers as Record<string, unknown>,
+      ["read", "write"],
+      { route: "/api/v1/wiki/ingest-jobs" }
+    );
+    return {
+      jobs: listWikiIngestJobs(request.query ?? {})
+    };
+  });
+  app.post("/api/v1/wiki/ingest-jobs/uploads", async (request, reply) => {
+    const parts = request.parts();
+    const fields = new Map<string, string>();
+    const files: Array<{
+      fileName: string;
+      mimeType: string;
+      payload: Buffer;
+    }> = [];
+
+    for await (const part of parts) {
+      if (part.type === "file") {
+        files.push({
+          fileName: part.filename || "upload.bin",
+          mimeType: part.mimetype || "application/octet-stream",
+          payload: await part.toBuffer()
+        });
+      } else {
+        fields.set(part.fieldname, String(part.value ?? ""));
+      }
+    }
+
+    const linkedEntityHints = (() => {
+      try {
+        return JSON.parse(fields.get("linkedEntityHints") || "[]");
+      } catch {
+        return [];
+      }
+    })();
+    const linkedEntityType = linkedEntityHints[0]?.entityType ?? null;
+    const auth = requireNoteAccess(
+      request.headers as Record<string, unknown>,
+      linkedEntityType,
+      {
+        route: "/api/v1/wiki/ingest-jobs/uploads",
+        entityType: linkedEntityType
+      }
+    );
+
+    const result = await createUploadedWikiIngestJob(
+      {
+        spaceId: fields.get("spaceId") || undefined,
+        titleHint: fields.get("titleHint") || undefined,
+        llmProfileId: fields.get("llmProfileId") || undefined,
+        parseStrategy:
+          fields.get("parseStrategy") === "text_only" ||
+          fields.get("parseStrategy") === "multimodal"
+            ? (fields.get("parseStrategy") as "text_only" | "multimodal")
+            : "auto",
+        entityProposalMode:
+          fields.get("entityProposalMode") === "none" ? "none" : "suggest",
+        userId: null,
+        createAsKind:
+          fields.get("createAsKind") === "evidence" ? "evidence" : "wiki",
+        linkedEntityHints
+      },
+      files,
+      {
+        actor: auth.actor ?? null
+      }
+    );
+
+    const jobId = result.job?.job.id;
+    if (jobId) {
+      managers.backgroundJobs.enqueue({
+        id: jobId,
+        label: `Wiki ingest ${jobId}`,
+        handler: async () => {
+          await processWikiIngestJob(jobId, { llm: managers.llm });
+        }
+      });
+    }
+    reply.code(201);
+    return result;
+  });
   app.post("/api/v1/wiki/ingest-jobs", async (request, reply) => {
     const payload = createWikiIngestJobSchema.parse(request.body ?? {});
     const linkedEntityType = payload.linkedEntityHints[0]?.entityType ?? null;
@@ -5866,9 +6254,18 @@ export async function buildServer(
       }
     );
     const result = await ingestWikiSource(payload, {
-      secrets: managers.secrets,
-      createNote: (note) => createNote(note, toActivityContext(auth))
+      actor: auth.actor ?? null
     });
+    const jobId = result.job?.job.id;
+    if (jobId) {
+      managers.backgroundJobs.enqueue({
+        id: jobId,
+        label: `Wiki ingest ${jobId}`,
+        handler: async () => {
+          await processWikiIngestJob(jobId, { llm: managers.llm });
+        }
+      });
+    }
     reply.code(201);
     return result;
   });
@@ -5885,6 +6282,29 @@ export async function buildServer(
       return { error: "Wiki ingest job not found" };
     }
     return job;
+  });
+  app.post("/api/v1/wiki/ingest-jobs/:id/review", async (request, reply) => {
+    const auth = requireScopedAccess(
+      request.headers as Record<string, unknown>,
+      ["write"],
+      { route: "/api/v1/wiki/ingest-jobs/:id/review" }
+    );
+    const { id } = request.params as { id: string };
+    const reviewed = await reviewWikiIngestJob(
+      id,
+      reviewWikiIngestJobSchema.parse(request.body ?? {}),
+      {
+        createNote: (note) => createNote(note, toActivityContext(auth)),
+        updateNote: (noteId, patch) =>
+          updateNote(noteId, patch as any, toActivityContext(auth)),
+        publishEntity: (proposal) => publishIngestProposalEntity(proposal, auth)
+      }
+    );
+    if (!reviewed) {
+      reply.code(404);
+      return { error: "Wiki ingest job not found" };
+    }
+    return { job: reviewed };
   });
   app.get("/api/v1/projects", async (request) => {
     const query = projectListQuerySchema.parse(request.query ?? {});

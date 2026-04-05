@@ -15,6 +15,7 @@ import {
   X
 } from "lucide-react";
 import { Link, useSearchParams } from "react-router-dom";
+import { PsycheSectionNav } from "@/components/psyche/psyche-section-nav";
 import { PageHero } from "@/components/shell/page-hero";
 import { useForgeShell } from "@/components/shell/app-shell";
 import { Badge } from "@/components/ui/badge";
@@ -274,13 +275,7 @@ function buildCandidateEntities(snapshot: ForgeSnapshot): CandidateEntity[] {
       user: task.user,
       href: `/tasks/${task.id}`,
       searchText: buildOwnedEntitySearchText(
-        [
-          task.title,
-          task.description,
-          task.status,
-          task.priority,
-          task.owner
-        ],
+        [task.title, task.description, task.status, task.priority, task.owner],
         task
       )
     })),
@@ -587,7 +582,9 @@ export function PreferencesPage() {
 
   const workspace = workspaceQuery.data ?? null;
   const activeGameWorkspace =
-    gameState.domain === selectedDomain ? workspace : gameWorkspaceQuery.data ?? null;
+    gameState.domain === selectedDomain
+      ? workspace
+      : (gameWorkspaceQuery.data ?? null);
 
   useEffect(() => {
     if (!workspace) {
@@ -597,7 +594,7 @@ export function PreferencesPage() {
       focusedItemIdFromQuery &&
       workspace.scores.some((score) => score.itemId === focusedItemIdFromQuery)
         ? focusedItemIdFromQuery
-        : workspace.scores[0]?.itemId ?? null;
+        : (workspace.scores[0]?.itemId ?? null);
     setSelectedItemId((current) =>
       current && workspace.scores.some((score) => score.itemId === current)
         ? current
@@ -663,7 +660,9 @@ export function PreferencesPage() {
         aesthetics: String(selectedScore.item?.featureWeights.aesthetics ?? 0),
         depth: String(selectedScore.item?.featureWeights.depth ?? 0),
         structure: String(selectedScore.item?.featureWeights.structure ?? 0),
-        familiarity: String(selectedScore.item?.featureWeights.familiarity ?? 0),
+        familiarity: String(
+          selectedScore.item?.featureWeights.familiarity ?? 0
+        ),
         surprise: String(selectedScore.item?.featureWeights.surprise ?? 0)
       }
     });
@@ -681,7 +680,9 @@ export function PreferencesPage() {
 
   const filteredCatalogs = useMemo(() => {
     const sourceWorkspace =
-      selectedTab === "concepts" ? workspace : activeGameWorkspace ?? workspace;
+      selectedTab === "concepts"
+        ? workspace
+        : (activeGameWorkspace ?? workspace);
     const catalogs = sourceWorkspace?.catalogs ?? [];
     const normalized = normalizeText(conceptSearchQuery);
     if (!normalized) {
@@ -706,7 +707,9 @@ export function PreferencesPage() {
 
   const refreshWorkspace = async () => {
     await queryClient.invalidateQueries({ queryKey: ["forge-preferences"] });
-    await queryClient.invalidateQueries({ queryKey: ["forge-preferences-game"] });
+    await queryClient.invalidateQueries({
+      queryKey: ["forge-preferences-game"]
+    });
   };
 
   const enqueueMutation = useMutation({
@@ -812,12 +815,12 @@ export function PreferencesPage() {
           .map((entry) => entry.trim())
           .filter(Boolean),
         featureWeights: Object.fromEntries(
-          (
-            Object.keys(DEFAULT_DIMENSIONS) as PreferenceDimensionId[]
-          ).map((dimensionId) => [
-            dimensionId,
-            Number(itemEditor.featureWeights[dimensionId] || 0)
-          ])
+          (Object.keys(DEFAULT_DIMENSIONS) as PreferenceDimensionId[]).map(
+            (dimensionId) => [
+              dimensionId,
+              Number(itemEditor.featureWeights[dimensionId] || 0)
+            ]
+          )
         )
       });
       await patchPreferenceScore(selectedScore.item.id, {
@@ -912,7 +915,9 @@ export function PreferencesPage() {
     const ownItems = candidateEntities.filter(
       (entry) => entry.domain === domain && entry.user?.id === selectedUserId
     );
-    const fallbackItems = candidateEntities.filter((entry) => entry.domain === domain);
+    const fallbackItems = candidateEntities.filter(
+      (entry) => entry.domain === domain
+    );
     const pool = (ownItems.length > 0 ? ownItems : fallbackItems).slice(0, 12);
     if (pool.length < 2) {
       setGameError(
@@ -950,7 +955,9 @@ export function PreferencesPage() {
       });
     } catch (error) {
       setGameError(
-        error instanceof Error ? error.message : "Forge could not start the game."
+        error instanceof Error
+          ? error.message
+          : "Forge could not start the game."
       );
       setGameState((current) => ({ ...current, phase: "domain" }));
     } finally {
@@ -958,7 +965,10 @@ export function PreferencesPage() {
     }
   };
 
-  const startCatalogGame = async (domain: PreferenceDomain, catalogId: string) => {
+  const startCatalogGame = async (
+    domain: PreferenceDomain,
+    catalogId: string
+  ) => {
     if (!selectedUserId) {
       return;
     }
@@ -983,7 +993,9 @@ export function PreferencesPage() {
       });
     } catch (error) {
       setGameError(
-        error instanceof Error ? error.message : "Forge could not start the game."
+        error instanceof Error
+          ? error.message
+          : "Forge could not start the game."
       );
     }
   };
@@ -1020,7 +1032,10 @@ export function PreferencesPage() {
     });
   };
 
-  const handleGameSignal = async (itemId: string, signalType: PreferenceSignalType) => {
+  const handleGameSignal = async (
+    itemId: string,
+    signalType: PreferenceSignalType
+  ) => {
     if (!selectedUserId || !activeGameWorkspace) {
       return;
     }
@@ -1072,7 +1087,11 @@ export function PreferencesPage() {
     .sort((left, right) => right.confidence - left.confidence)
     .slice(0, 6);
   const topLikes = workspace.scores
-    .filter((score) => getScoreStatus(score) === "liked" || getScoreStatus(score) === "favorite")
+    .filter(
+      (score) =>
+        getScoreStatus(score) === "liked" ||
+        getScoreStatus(score) === "favorite"
+    )
     .slice(0, 4);
   const biggestUnknowns = workspace.scores
     .filter((score) => score.uncertainty >= 0.5)
@@ -1094,18 +1113,20 @@ export function PreferencesPage() {
           badge={`${workspace.summary.totalItems} items · ${formatPercent(workspace.summary.averageConfidence)} confidence`}
           actions={
             <div className="flex flex-wrap gap-2">
-              <Button
-                className="min-w-[10rem]"
-                onClick={() => openGame()}
-              >
+              <Button className="min-w-[10rem]" onClick={() => openGame()}>
                 Start the game
               </Button>
-              <Button variant="secondary" onClick={() => void refreshWorkspace()}>
+              <Button
+                variant="secondary"
+                onClick={() => void refreshWorkspace()}
+              >
                 Refresh model
               </Button>
             </div>
           }
         />
+
+        <PsycheSectionNav />
 
         <Card className="grid gap-4">
           <div className="grid gap-3 xl:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)]">
@@ -1181,7 +1202,9 @@ export function PreferencesPage() {
             <span>·</span>
             <span>{workspace.compare.pendingCount} queued comparisons</span>
             <span>·</span>
-            <span>{workspace.libraries.totalCatalogItems} concept items ready</span>
+            <span>
+              {workspace.libraries.totalCatalogItems} concept items ready
+            </span>
           </div>
         </Card>
 
@@ -1275,14 +1298,11 @@ export function PreferencesPage() {
                   Start the game
                 </div>
                 <div className="text-sm leading-6 text-white/58">
-                  Forge will ask a small number of pairwise questions. You choose a
-                  domain, Forge supplies the candidates, and the model tightens from
-                  there.
+                  Forge will ask a small number of pairwise questions. You
+                  choose a domain, Forge supplies the candidates, and the model
+                  tightens from there.
                 </div>
-                <Button
-                  className="w-full"
-                  onClick={() => openGame()}
-                >
+                <Button className="w-full" onClick={() => openGame()}>
                   Start the game
                 </Button>
                 <div className="grid gap-3 rounded-[22px] bg-white/[0.04] px-4 py-4 text-sm text-white/58">
@@ -1290,12 +1310,11 @@ export function PreferencesPage() {
                     Current queue: {workspace.compare.pendingCount} comparison
                     {workspace.compare.pendingCount === 1 ? "" : "s"}
                   </div>
+                  <div>Active context: {workspace.selectedContext.name}</div>
                   <div>
-                    Active context: {workspace.selectedContext.name}
-                  </div>
-                  <div>
-                    Library coverage: {workspace.libraries.seededCatalogCount} seeded
-                    lists and {workspace.libraries.customCatalogCount} custom lists
+                    Library coverage: {workspace.libraries.seededCatalogCount}{" "}
+                    seeded lists and {workspace.libraries.customCatalogCount}{" "}
+                    custom lists
                   </div>
                 </div>
               </Card>
@@ -1309,8 +1328,8 @@ export function PreferencesPage() {
                       Preference map
                     </div>
                     <div className="mt-1 text-sm text-white/54">
-                      Green drifts positive, red drifts negative, and low opacity
-                      still means uncertainty.
+                      Green drifts positive, red drifts negative, and low
+                      opacity still means uncertainty.
                     </div>
                   </div>
                   <Link to="?tab=map" className="text-sm text-[var(--primary)]">
@@ -1365,13 +1384,15 @@ export function PreferencesPage() {
                           {score.item?.label ?? score.itemId}
                         </div>
                         <div className="mt-1 text-sm text-white/54">
-                          {score.explanation[0] || "Forge has positive evidence here."}
+                          {score.explanation[0] ||
+                            "Forge has positive evidence here."}
                         </div>
                       </button>
                     ))
                   ) : (
                     <div className="rounded-[18px] bg-white/[0.04] px-3 py-3 text-sm text-white/58">
-                      No clear positives yet. A few comparison rounds will change that.
+                      No clear positives yet. A few comparison rounds will
+                      change that.
                     </div>
                   )}
                 </div>
@@ -1411,8 +1432,9 @@ export function PreferencesPage() {
                     Bring in Forge records
                   </div>
                   <div className="mt-1 text-sm text-white/54">
-                    Search goals, projects, tasks, strategies, or habits across human
-                    and bot users, then send them straight into this model.
+                    Search goals, projects, tasks, strategies, or habits across
+                    human and bot users, then send them straight into this
+                    model.
                   </div>
                 </div>
                 <Badge className="bg-white/[0.08] text-white/70">
@@ -1435,11 +1457,15 @@ export function PreferencesPage() {
                   >
                     <div className="min-w-0">
                       <div className="flex flex-wrap items-center gap-2">
-                        <span className="font-medium text-white">{entry.label}</span>
+                        <span className="font-medium text-white">
+                          {entry.label}
+                        </span>
                         <Badge className="bg-white/[0.08] text-white/70">
                           {entry.entityType}
                         </Badge>
-                        {entry.user ? <UserBadge user={entry.user} compact /> : null}
+                        {entry.user ? (
+                          <UserBadge user={entry.user} compact />
+                        ) : null}
                       </div>
                       <div className="mt-1 text-sm text-white/52">
                         {entry.description || "No description yet."}
@@ -1579,7 +1605,9 @@ export function PreferencesPage() {
                           {formatPercent(score.confidence)}
                         </td>
                         <td className="px-3 py-3">
-                          <Badge className={STATUS_CLASSES[getScoreStatus(score)]}>
+                          <Badge
+                            className={STATUS_CLASSES[getScoreStatus(score)]}
+                          >
                             {getScoreStatus(score)}
                           </Badge>
                         </td>
@@ -1636,8 +1664,9 @@ export function PreferencesPage() {
                       onChange={(event) =>
                         setItemEditor((current) => ({
                           ...current,
-                          manualStatus:
-                            event.target.value as PreferenceItemStatus | ""
+                          manualStatus: event.target.value as
+                            | PreferenceItemStatus
+                            | ""
                         }))
                       }
                       className="min-h-10 rounded-[18px] border border-white/8 bg-white/[0.05] px-3 text-sm text-white outline-none"
@@ -1671,30 +1700,30 @@ export function PreferencesPage() {
                     />
                   </div>
                   <div className="grid gap-2">
-                    {(Object.keys(DEFAULT_DIMENSIONS) as PreferenceDimensionId[]).map(
-                      (dimensionId) => (
-                        <div
-                          key={dimensionId}
-                          className="grid grid-cols-[110px_minmax(0,1fr)] items-center gap-3"
-                        >
-                          <div className="text-sm text-white/56">
-                            {DIMENSION_LABELS[dimensionId]}
-                          </div>
-                          <Input
-                            value={itemEditor.featureWeights[dimensionId]}
-                            onChange={(event) =>
-                              setItemEditor((current) => ({
-                                ...current,
-                                featureWeights: {
-                                  ...current.featureWeights,
-                                  [dimensionId]: event.target.value
-                                }
-                              }))
-                            }
-                          />
+                    {(
+                      Object.keys(DEFAULT_DIMENSIONS) as PreferenceDimensionId[]
+                    ).map((dimensionId) => (
+                      <div
+                        key={dimensionId}
+                        className="grid grid-cols-[110px_minmax(0,1fr)] items-center gap-3"
+                      >
+                        <div className="text-sm text-white/56">
+                          {DIMENSION_LABELS[dimensionId]}
                         </div>
-                      )
-                    )}
+                        <Input
+                          value={itemEditor.featureWeights[dimensionId]}
+                          onChange={(event) =>
+                            setItemEditor((current) => ({
+                              ...current,
+                              featureWeights: {
+                                ...current.featureWeights,
+                                [dimensionId]: event.target.value
+                              }
+                            }))
+                          }
+                        />
+                      </div>
+                    ))}
                   </div>
                   <div className="grid gap-2 text-sm text-white/58">
                     {[
@@ -1729,7 +1758,10 @@ export function PreferencesPage() {
                     Save item model
                   </Button>
                   {selectedItemHref ? (
-                    <Link className="text-sm text-[var(--primary)]" to={selectedItemHref}>
+                    <Link
+                      className="text-sm text-[var(--primary)]"
+                      to={selectedItemHref}
+                    >
                       Open linked entity
                     </Link>
                   ) : null}
@@ -1828,7 +1860,8 @@ export function PreferencesPage() {
                         {left} vs {right}
                       </div>
                       <div className="mt-1">
-                        Outcome {judgment.outcome} · strength {judgment.strength} ·{" "}
+                        Outcome {judgment.outcome} · strength{" "}
+                        {judgment.strength} ·{" "}
                         {new Date(judgment.createdAt).toLocaleString()}
                       </div>
                     </div>
@@ -1843,8 +1876,9 @@ export function PreferencesPage() {
               <div className="grid gap-2">
                 {workspace.history.signals.slice(0, 8).map((signal) => {
                   const item =
-                    workspace.scores.find((score) => score.itemId === signal.itemId)
-                      ?.item?.label ?? signal.itemId;
+                    workspace.scores.find(
+                      (score) => score.itemId === signal.itemId
+                    )?.item?.label ?? signal.itemId;
                   return (
                     <div
                       key={signal.id}
@@ -1921,8 +1955,8 @@ export function PreferencesPage() {
                         void updateContextMutation.mutateAsync({
                           contextId: context.id,
                           patch: {
-                            shareMode:
-                              event.target.value as PreferenceContext["shareMode"]
+                            shareMode: event.target
+                              .value as PreferenceContext["shareMode"]
                           }
                         })
                       }
@@ -2025,8 +2059,8 @@ export function PreferencesPage() {
                   onChange={(event) =>
                     setNewContextForm((current) => ({
                       ...current,
-                      shareMode:
-                        event.target.value as PreferenceContext["shareMode"]
+                      shareMode: event.target
+                        .value as PreferenceContext["shareMode"]
                     }))
                   }
                   className="min-h-10 rounded-[18px] border border-white/8 bg-white/[0.05] px-3 text-sm text-white outline-none"
@@ -2072,7 +2106,9 @@ export function PreferencesPage() {
                 </div>
                 <select
                   value={mergeSourceContextId}
-                  onChange={(event) => setMergeSourceContextId(event.target.value)}
+                  onChange={(event) =>
+                    setMergeSourceContextId(event.target.value)
+                  }
                   className="min-h-10 rounded-[18px] border border-white/8 bg-white/[0.05] px-3 text-sm text-white outline-none"
                 >
                   <option value="">Source context</option>
@@ -2084,7 +2120,9 @@ export function PreferencesPage() {
                 </select>
                 <select
                   value={mergeTargetContextId}
-                  onChange={(event) => setMergeTargetContextId(event.target.value)}
+                  onChange={(event) =>
+                    setMergeTargetContextId(event.target.value)
+                  }
                   className="min-h-10 rounded-[18px] border border-white/8 bg-white/[0.05] px-3 text-sm text-white outline-none"
                 >
                   <option value="">Target context</option>
@@ -2125,9 +2163,9 @@ export function PreferencesPage() {
                     Concept libraries
                   </div>
                   <div className="mt-1 text-sm text-white/54">
-                    These are the lists Forge can use when you start the game in a
-                    concept domain. Seeded lists are editable, and custom lists are
-                    fully yours.
+                    These are the lists Forge can use when you start the game in
+                    a concept domain. Seeded lists are editable, and custom
+                    lists are fully yours.
                   </div>
                 </div>
                 <div className="grid gap-3 md:grid-cols-4">
@@ -2154,7 +2192,9 @@ export function PreferencesPage() {
                   <Search className="size-4 text-white/38" />
                   <Input
                     value={conceptSearchQuery}
-                    onChange={(event) => setConceptSearchQuery(event.target.value)}
+                    onChange={(event) =>
+                      setConceptSearchQuery(event.target.value)
+                    }
                     placeholder="Search lists, concepts, tags, and seeded domains"
                   />
                 </div>
@@ -2212,11 +2252,7 @@ export function PreferencesPage() {
                 };
                 const visibleItems = catalog.items.filter((item) =>
                   conceptSearchQuery.trim()
-                    ? [
-                        item.label,
-                        item.description,
-                        item.tags.join(" ")
-                      ]
+                    ? [item.label, item.description, item.tags.join(" ")]
                         .join(" ")
                         .toLowerCase()
                         .includes(normalizeText(conceptSearchQuery))
@@ -2271,7 +2307,9 @@ export function PreferencesPage() {
                         <Button
                           variant="secondary"
                           size="sm"
-                          onClick={() => void startCatalogGame(selectedDomain, catalog.id)}
+                          onClick={() =>
+                            void startCatalogGame(selectedDomain, catalog.id)
+                          }
                         >
                           Start from this list
                         </Button>
@@ -2439,7 +2477,9 @@ export function PreferencesPage() {
                                   pending={deleteCatalogItemMutation.isPending}
                                   pendingLabel="Deleting"
                                   onClick={() =>
-                                    void deleteCatalogItemMutation.mutateAsync(item.id)
+                                    void deleteCatalogItemMutation.mutateAsync(
+                                      item.id
+                                    )
                                   }
                                 >
                                   <Trash2 className="mr-1 size-4" />
@@ -2594,10 +2634,14 @@ export function PreferencesPage() {
                       key={option.value}
                       type="button"
                       className="rounded-[24px] border border-white/8 bg-white/[0.04] px-5 py-5 text-left transition hover:border-[var(--primary)]/30 hover:bg-[var(--primary)]/10"
-                      onClick={() => void handleGameDomainSelection(option.value)}
+                      onClick={() =>
+                        void handleGameDomainSelection(option.value)
+                      }
                     >
                       <div className="flex items-center justify-between gap-3">
-                        <div className="font-medium text-white">{option.label}</div>
+                        <div className="font-medium text-white">
+                          {option.label}
+                        </div>
                         <Badge className="bg-white/[0.08] text-white/70">
                           {option.mode === "forge" ? "Forge" : "Concept"}
                         </Badge>
@@ -2613,14 +2657,16 @@ export function PreferencesPage() {
               {gameState.phase === "catalog" ? (
                 <div className="grid gap-4">
                   <div className="text-sm text-white/58">
-                    Pick the concept list Forge should draw from. You do not need
-                    to assemble the items yourself.
+                    Pick the concept list Forge should draw from. You do not
+                    need to assemble the items yourself.
                   </div>
                   <div className="flex items-center gap-3">
                     <Search className="size-4 text-white/38" />
                     <Input
                       value={conceptSearchQuery}
-                      onChange={(event) => setConceptSearchQuery(event.target.value)}
+                      onChange={(event) =>
+                        setConceptSearchQuery(event.target.value)
+                      }
                       placeholder="Search concept lists"
                     />
                   </div>
@@ -2669,14 +2715,15 @@ export function PreferencesPage() {
                     <>
                       <div className="flex flex-wrap items-center gap-2 text-sm text-white/52">
                         <Badge className="bg-white/[0.08] text-white/70">
-                          {DOMAIN_OPTIONS.find((entry) => entry.value === gameState.domain)
-                            ?.label ?? gameState.domain}
+                          {DOMAIN_OPTIONS.find(
+                            (entry) => entry.value === gameState.domain
+                          )?.label ?? gameState.domain}
                         </Badge>
                         <span>{activeGameWorkspace?.selectedContext.name}</span>
                         <span>·</span>
                         <span>
-                          {activeGameWorkspace?.compare.pendingCount ?? 0} queued
-                          comparisons
+                          {activeGameWorkspace?.compare.pendingCount ?? 0}{" "}
+                          queued comparisons
                         </span>
                       </div>
 
@@ -2696,10 +2743,14 @@ export function PreferencesPage() {
                       </div>
 
                       <div className="flex flex-wrap gap-2">
-                        <Button onClick={() => void handleGameJudgment("left", 1)}>
+                        <Button
+                          onClick={() => void handleGameJudgment("left", 1)}
+                        >
                           Left
                         </Button>
-                        <Button onClick={() => void handleGameJudgment("right", 1)}>
+                        <Button
+                          onClick={() => void handleGameJudgment("right", 1)}
+                        >
                           Right
                         </Button>
                         <Button
@@ -2731,7 +2782,9 @@ export function PreferencesPage() {
                       <div className="grid gap-4 rounded-[24px] border border-white/8 bg-white/[0.03] px-4 py-4 lg:grid-cols-2">
                         {[nextPair.left, nextPair.right].map((item) => (
                           <div key={item.id} className="grid gap-3">
-                            <div className="font-medium text-white">{item.label}</div>
+                            <div className="font-medium text-white">
+                              {item.label}
+                            </div>
                             <div className="text-sm text-white/56">
                               Quick signals
                             </div>
@@ -2742,7 +2795,10 @@ export function PreferencesPage() {
                                   variant="secondary"
                                   size="sm"
                                   onClick={() =>
-                                    void handleGameSignal(item.id, signal.signalType)
+                                    void handleGameSignal(
+                                      item.id,
+                                      signal.signalType
+                                    )
                                   }
                                 >
                                   {signal.label}

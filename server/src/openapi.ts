@@ -3664,6 +3664,180 @@ export function buildOpenApiDocument() {
           }
         }
       },
+      "/api/v1/wiki/settings": {
+        get: {
+          summary: "Read wiki spaces plus enabled LLM and embedding profiles",
+          responses: {
+            "200": jsonResponse(
+              {
+                type: "object",
+                required: ["settings"],
+                properties: {
+                  settings: {
+                    type: "object",
+                    additionalProperties: true
+                  }
+                }
+              },
+              "Wiki settings"
+            )
+          }
+        }
+      },
+      "/api/v1/wiki/pages": {
+        get: {
+          summary: "List wiki or evidence pages inside one space",
+          responses: {
+            "200": jsonResponse(
+              {
+                type: "object",
+                required: ["pages"],
+                properties: {
+                  pages: arrayOf({
+                    type: "object",
+                    additionalProperties: true
+                  })
+                }
+              },
+              "Wiki page list"
+            )
+          }
+        },
+        post: {
+          summary: "Create a wiki page through the file-backed wiki surface",
+          responses: {
+            "200": jsonResponse(
+              {
+                type: "object",
+                required: ["page"],
+                properties: {
+                  page: { type: "object", additionalProperties: true }
+                }
+              },
+              "Created wiki page"
+            ),
+            "404": { $ref: "#/components/responses/Error" }
+          }
+        }
+      },
+      "/api/v1/wiki/pages/{id}": {
+        get: {
+          summary: "Read one wiki page with backlinks and attached metadata",
+          responses: {
+            "200": jsonResponse(
+              {
+                type: "object",
+                required: ["page"],
+                properties: {
+                  page: { type: "object", additionalProperties: true }
+                }
+              },
+              "Wiki page detail"
+            ),
+            "404": { $ref: "#/components/responses/Error" }
+          }
+        },
+        patch: {
+          summary:
+            "Update an existing wiki page through the file-backed surface",
+          responses: {
+            "200": jsonResponse(
+              {
+                type: "object",
+                required: ["page"],
+                properties: {
+                  page: { type: "object", additionalProperties: true }
+                }
+              },
+              "Updated wiki page"
+            ),
+            "404": { $ref: "#/components/responses/Error" }
+          }
+        }
+      },
+      "/api/v1/wiki/search": {
+        post: {
+          summary:
+            "Search the wiki with text, semantic, entity, or hybrid retrieval",
+          responses: {
+            "200": jsonResponse(
+              {
+                type: "object",
+                required: ["results"],
+                properties: {
+                  results: arrayOf({
+                    type: "object",
+                    additionalProperties: true
+                  })
+                }
+              },
+              "Wiki search results"
+            )
+          }
+        }
+      },
+      "/api/v1/wiki/health": {
+        get: {
+          summary: "Read wiki health signals for one space",
+          responses: {
+            "200": jsonResponse(
+              {
+                type: "object",
+                required: ["health"],
+                properties: {
+                  health: { type: "object", additionalProperties: true }
+                }
+              },
+              "Wiki health"
+            )
+          }
+        }
+      },
+      "/api/v1/wiki/sync": {
+        post: {
+          summary:
+            "Resync markdown files from the local wiki vault into Forge metadata",
+          responses: {
+            "200": jsonResponse(
+              {
+                type: "object",
+                additionalProperties: true
+              },
+              "Wiki sync result"
+            )
+          }
+        }
+      },
+      "/api/v1/wiki/reindex": {
+        post: {
+          summary:
+            "Recompute wiki embedding chunks for one space and optional profile",
+          responses: {
+            "200": jsonResponse(
+              {
+                type: "object",
+                additionalProperties: true
+              },
+              "Wiki reindex result"
+            )
+          }
+        }
+      },
+      "/api/v1/wiki/ingest-jobs": {
+        post: {
+          summary:
+            "Queue a wiki ingest job from raw text, local files, or a URL",
+          responses: {
+            "200": jsonResponse(
+              {
+                type: "object",
+                additionalProperties: true
+              },
+              "Queued wiki ingest job"
+            )
+          }
+        }
+      },
       "/api/v1/context": {
         get: {
           summary: "Get the full Forge snapshot for the routed app shell",

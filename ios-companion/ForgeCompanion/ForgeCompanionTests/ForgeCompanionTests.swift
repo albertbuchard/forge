@@ -8,7 +8,36 @@
 import XCTest
 @testable import ForgeCompanion
 
+@MainActor
 final class ForgeCompanionTests: XCTestCase {
+    func testNormalizedPayloadPreservesPreferredUiBaseUrl() {
+        let payload = PairingPayload(
+            kind: "pairing",
+            apiBaseUrl: "http://127.0.0.1:4317",
+            uiBaseUrl: nil,
+            sessionId: "pair_test",
+            pairingToken: "token",
+            expiresAt: "2099-01-01T00:00:00Z",
+            capabilities: []
+        )
+
+        let normalized = CompanionPairingURLResolver.normalizedPayload(
+            payload,
+            preferredUiBaseUrl: "http://127.0.0.1:3027/forge"
+        )
+
+        XCTAssertEqual(normalized.apiBaseUrl, "http://127.0.0.1:4317/api/v1")
+        XCTAssertEqual(normalized.uiBaseUrl, "http://127.0.0.1:3027/forge/")
+    }
+
+    func testNormalizeUiBaseUrlRemovesApiSuffix() {
+        XCTAssertEqual(
+            CompanionPairingURLResolver.normalizeUiBaseUrl(
+                "http://127.0.0.1:3027/forge/api/v1"
+            ),
+            "http://127.0.0.1:3027/forge/"
+        )
+    }
 
     override func setUpWithError() throws {
         // Put setup code here. This method is called before the invocation of each test method in the class.

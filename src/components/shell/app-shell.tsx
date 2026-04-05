@@ -78,6 +78,7 @@ import {
   getForgeSnapshot,
   getSettings,
   heartbeatTaskRun,
+  listWikiIngestJobs,
   patchGoal,
   patchProject,
   patchTask,
@@ -97,7 +98,8 @@ import type {
   CalendarSchedulingRules,
   ForgeSnapshot,
   SettingsPayload,
-  UserSummary
+  UserSummary,
+  WikiIngestJobPayload
 } from "@/lib/types";
 
 type ShellContextValue = {
@@ -245,6 +247,10 @@ const PRIMARY_ROUTES = [
   }
 ] as const;
 
+const SHELL_NAV_ROUTES = PRIMARY_ROUTES.filter(
+  (route) => route.to !== "/preferences" && route.to !== "/sleep"
+);
+
 const MOBILE_CORE_ROUTES = [
   PRIMARY_ROUTES[0],
   PRIMARY_ROUTES[10],
@@ -256,9 +262,7 @@ const MOBILE_MORE_ROUTES = [
   PRIMARY_ROUTES[2],
   PRIMARY_ROUTES[3],
   PRIMARY_ROUTES[4],
-  PRIMARY_ROUTES[5],
   PRIMARY_ROUTES[6],
-  PRIMARY_ROUTES[7],
   PRIMARY_ROUTES[8],
   PRIMARY_ROUTES[11],
   PRIMARY_ROUTES[12],
@@ -307,6 +311,47 @@ function getRouteTransitionKey(pathname: string) {
   }
 
   return pathname;
+}
+
+function isWikiRoute(pathname: string) {
+  return (
+    pathname === "/wiki" ||
+    pathname.startsWith("/wiki/page/") ||
+    pathname === "/wiki/new" ||
+    pathname.startsWith("/wiki/edit/")
+  );
+}
+
+function isPsycheRoute(pathname: string) {
+  return (
+    pathname.startsWith("/psyche") ||
+    pathname === "/preferences" ||
+    pathname.startsWith("/preferences/") ||
+    pathname === "/sleep" ||
+    pathname.startsWith("/sleep/")
+  );
+}
+
+function getWikiIngestRoute(job: WikiIngestJobPayload) {
+  const search = new URLSearchParams();
+  if (job.job.spaceId) {
+    search.set("spaceId", job.job.spaceId);
+  }
+  search.set("ingest", "1");
+  search.set("ingestJobId", job.job.id);
+  return {
+    pathname: "/wiki",
+    search: `?${search.toString()}`
+  };
+}
+
+function formatActivityTimestamp(value: string) {
+  return new Intl.DateTimeFormat(undefined, {
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit"
+  }).format(new Date(value));
 }
 
 function readStoredSelectedUserIds() {
@@ -555,7 +600,9 @@ function NavItem({
   compact?: boolean;
 }) {
   const { t } = useI18n();
+  const location = useLocation();
   const label = t(labelKey);
+  const forceActive = to === "/psyche" && isPsycheRoute(location.pathname);
 
   return (
     <NavLink
@@ -564,7 +611,7 @@ function NavItem({
       aria-label={label}
       className={({ isActive }) =>
         `interactive-tap flex items-center rounded-[18px] text-sm transition ${
-          isActive
+          isActive || forceActive
             ? "bg-white/[0.08] text-white shadow-[inset_0_0_0_1px_rgba(192,193,255,0.2)]"
             : "text-white/60 hover:bg-white/[0.04] hover:text-white"
         } ${compact ? "justify-center px-3 py-3.5" : "gap-3 px-4 py-3"}`
@@ -740,14 +787,32 @@ function ShellFrame({
     PRIMARY_ROUTES[0];
   const transitionKey = getRouteTransitionKey(location.pathname);
   const [paletteOpen, setPaletteOpen] = useState(false);
+  const [backgroundActivityOpen, setBackgroundActivityOpen] = useState(false);
   const [collapseProgress, setCollapseProgress] = useState(0);
   const [navCollapsed, setNavCollapsed] = useState(false);
-  const isPsyche = location.pathname.startsWith("/psyche");
+  const autoCollapseAppliedRef = useRef(false);
+  const preAutoCollapseRef = useRef(false);
+  const skipNavPersistenceRef = useRef(false);
+  const isPsyche = isPsycheRoute(location.pathname);
+  const wikiSurface = isWikiRoute(location.pathname);
+  const psycheSurface = isPsycheRoute(location.pathname);
+  const autoCollapseSurface = wikiSurface || psycheSurface;
   const fetching = useIsFetching();
   const mutating = useIsMutating();
   const reduceMotion = useReducedMotion();
   const collapsed = collapseProgress >= 0.96;
   const activityCount = fetching + mutating;
+  const ingestJobsQuery = useQuery({
+    queryKey: ["forge-background-wiki-ingest-jobs"],
+    queryFn: () => listWikiIngestJobs({ limit: 12 }),
+    refetchInterval: (query) => {
+      const jobs = query.state.data?.jobs ?? [];
+      return backgroundActivityOpen ||
+        jobs.some((job) => ["queued", "processing"].includes(job.job.status))
+        ? 2000
+        : false;
+    }
+  });
   const sidebarMetrics = [
     {
       id: "streak",
@@ -780,8 +845,23 @@ function ShellFrame({
       icon: Activity
     }
   ] as const;
-  const activityLabel =
-    mutating > 0
+  const activityLabel = (ingestJobsQuery.data?.jobs ?? []).some((job) =>
+    ["queued", "processing"].includes(job.job.status)
+  )
+    ? (() => {
+        const activeJobs = (ingestJobsQuery.data?.jobs ?? []).filter((job) =>
+          ["queued", "processing"].includes(job.job.status)
+        );
+        if (activeJobs.length === 1) {
+          return (
+            activeJobs[0]?.job.latestMessage ||
+            activeJobs[0]?.job.titleHint ||
+            "1 ingest running"
+          );
+        }
+        return `${activeJobs.length} ingest jobs running`;
+      })()
+    : mutating > 0
       ? t(
           mutating === 1
             ? "common.shell.savingOne"
@@ -796,6 +876,10 @@ function ShellFrame({
             { count: fetching }
           )
         : t("common.shell.settled");
+  const recentIngestJobs = ingestJobsQuery.data?.jobs ?? [];
+  const hasActiveIngestJobs = recentIngestJobs.some((job) =>
+    ["queued", "processing"].includes(job.job.status)
+  );
 
   const railLinks = useMemo(() => {
     if (location.pathname.startsWith("/tasks/")) {
@@ -822,7 +906,7 @@ function ShellFrame({
         { to: "/projects", label: t("common.shell.rail.projectAll") }
       ];
     }
-    if (location.pathname.startsWith("/psyche")) {
+    if (isPsycheRoute(location.pathname)) {
       return [
         { to: "/psyche", label: t("common.shell.rail.psycheHub") },
         { to: "/psyche/reports", label: t("common.shell.rail.psycheReports") }
@@ -858,6 +942,10 @@ function ShellFrame({
   }, []);
 
   useEffect(() => {
+    if (skipNavPersistenceRef.current) {
+      skipNavPersistenceRef.current = false;
+      return;
+    }
     try {
       window.localStorage.setItem(
         "forge.desktop-nav-collapsed",
@@ -867,6 +955,29 @@ function ShellFrame({
       return;
     }
   }, [navCollapsed]);
+
+  useEffect(() => {
+    if (autoCollapseSurface) {
+      if (!autoCollapseAppliedRef.current) {
+        preAutoCollapseRef.current = navCollapsed;
+        autoCollapseAppliedRef.current = true;
+        if (!navCollapsed) {
+          skipNavPersistenceRef.current = true;
+          setNavCollapsed(true);
+        }
+      }
+      return;
+    }
+
+    if (!autoCollapseAppliedRef.current) {
+      return;
+    }
+    autoCollapseAppliedRef.current = false;
+    if (navCollapsed !== preAutoCollapseRef.current) {
+      skipNavPersistenceRef.current = true;
+      setNavCollapsed(preAutoCollapseRef.current);
+    }
+  }, [autoCollapseSurface, navCollapsed]);
 
   useEffect(() => {
     const syncCollapsed = () => {
@@ -985,7 +1096,7 @@ function ShellFrame({
           </div>
 
           <div className={cn("grid gap-2", navCollapsed ? "mt-6" : "mt-8")}>
-            {PRIMARY_ROUTES.map((route) => (
+            {SHELL_NAV_ROUTES.map((route) => (
               <NavItem
                 key={route.to}
                 to={route.to}
@@ -1083,8 +1194,9 @@ function ShellFrame({
                 </div>
                 <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
                   <AmbientActivityPill
-                    active={activityCount > 0}
+                    active={activityCount > 0 || hasActiveIngestJobs}
                     label={activityLabel}
+                    onClick={() => setBackgroundActivityOpen(true)}
                   />
                   <ShellCommandButton onClick={() => setPaletteOpen(true)} />
                   <Button
@@ -1289,8 +1401,9 @@ function ShellFrame({
               <>
                 <div className="mt-2">
                   <AmbientActivityPill
-                    active={activityCount > 0}
+                    active={activityCount > 0 || hasActiveIngestJobs}
                     label={activityLabel}
+                    onClick={() => setBackgroundActivityOpen(true)}
                   />
                 </div>
                 <div className="mt-3 overflow-x-auto pb-1">
@@ -1344,6 +1457,106 @@ function ShellFrame({
         </main>
         <MobileBottomNav />
       </div>
+
+      <Dialog.Root
+        open={backgroundActivityOpen}
+        onOpenChange={setBackgroundActivityOpen}
+      >
+        <Dialog.Portal>
+          <Dialog.Overlay className="fixed inset-0 z-50 bg-[rgba(3,7,18,0.72)] backdrop-blur-sm" />
+          <Dialog.Content className="fixed left-1/2 top-[10vh] z-50 w-[min(42rem,calc(100vw-1.5rem))] -translate-x-1/2 rounded-[30px] border border-white/10 bg-[rgba(10,15,28,0.97)] p-4 shadow-[0_32px_90px_rgba(0,0,0,0.45)] sm:p-5">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <Dialog.Title className="font-display text-[1.25rem] tracking-[-0.04em] text-white">
+                  Background activity
+                </Dialog.Title>
+                <Dialog.Description className="mt-1 text-[13px] leading-6 text-white/56">
+                  Follow active wiki ingest jobs and reopen completed reviews
+                  without leaving your current context.
+                </Dialog.Description>
+              </div>
+              <Dialog.Close asChild>
+                <button
+                  type="button"
+                  className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-2 text-[12px] font-medium text-white/70 transition hover:bg-white/[0.08] hover:text-white"
+                >
+                  Close
+                </button>
+              </Dialog.Close>
+            </div>
+
+            <div className="mt-4 max-h-[65vh] overflow-y-auto">
+              {ingestJobsQuery.isLoading ? (
+                <LoadingState
+                  eyebrow="Background"
+                  title="Loading activity"
+                  description="Checking the latest queued and completed ingest jobs."
+                />
+              ) : ingestJobsQuery.isError ? (
+                <ErrorState
+                  eyebrow="Background"
+                  error={ingestJobsQuery.error}
+                  onRetry={() => void ingestJobsQuery.refetch()}
+                />
+              ) : recentIngestJobs.length === 0 ? (
+                <div className="rounded-[24px] border border-dashed border-white/10 px-4 py-10 text-center text-[13px] leading-6 text-white/42">
+                  No background ingest jobs yet.
+                </div>
+              ) : (
+                <div className="grid gap-3">
+                  {recentIngestJobs.map((job) => {
+                    const activeJob = ["queued", "processing"].includes(
+                      job.job.status
+                    );
+                    return (
+                      <Link
+                        key={job.job.id}
+                        to={getWikiIngestRoute(job)}
+                        onClick={() => setBackgroundActivityOpen(false)}
+                        className="rounded-[24px] border border-white/8 bg-white/[0.03] px-4 py-4 transition hover:bg-white/[0.06]"
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <div className="text-[11px] uppercase tracking-[0.16em] text-white/42">
+                              Wiki ingest
+                            </div>
+                            <div className="mt-2 text-[14px] font-semibold text-white">
+                              {job.job.titleHint ||
+                                job.job.latestMessage ||
+                                "Background ingest"}
+                            </div>
+                            <div className="mt-1 text-[12px] leading-5 text-white/56">
+                              {job.job.status} · {job.job.phase} ·{" "}
+                              {job.job.progressPercent}% ·{" "}
+                              {formatActivityTimestamp(job.job.updatedAt)}
+                            </div>
+                            <div className="mt-2 text-[12px] leading-5 text-white/46">
+                              {job.job.createdPageCount} pages ·{" "}
+                              {job.job.createdEntityCount} entities ·{" "}
+                              {job.job.acceptedCount} accepted ·{" "}
+                              {job.job.rejectedCount} rejected
+                            </div>
+                          </div>
+                          <div className="shrink-0">
+                            {activeJob ? (
+                              <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3 py-2 text-xs text-white/58">
+                                <RefreshCcw className="size-3.5 animate-spin" />
+                                Running
+                              </div>
+                            ) : (
+                              <Badge tone="meta">{job.job.phase}</Badge>
+                            )}
+                          </div>
+                        </div>
+                      </Link>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </Dialog.Content>
+        </Dialog.Portal>
+      </Dialog.Root>
 
       <CreateMenu
         className="fixed z-40 lg:bottom-6 lg:right-6"

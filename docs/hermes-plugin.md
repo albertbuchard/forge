@@ -133,6 +133,7 @@ Forge's newer wiki and health surfaces follow the same rule:
 - wiki pages live in the same shared Forge memory system and should use the dedicated wiki tools, not the generic entity batch routes
 - sleep and sports sessions stay linkable across human and bot-owned goals, projects, habits, notes, and Psyche records
 - the sports UI route is `/sports`, but the backend overview route remains `/api/v1/health/fitness`
+- Hermes' curated route surface now mirrors the dedicated wiki and health APIs directly: `/api/v1/wiki/settings`, `/api/v1/wiki/pages`, `/api/v1/wiki/pages/:id`, `/api/v1/wiki/search`, `/api/v1/wiki/health`, `/api/v1/wiki/sync`, `/api/v1/wiki/reindex`, `/api/v1/wiki/ingest-jobs`, `/api/v1/health/sleep`, `/api/v1/health/sleep/:id`, `/api/v1/health/fitness`, and `/api/v1/health/workouts/:id`
 
 If Hermes is meant to operate as its own bot user inside that shared runtime,
 create that bot in `Settings -> Users` and write records with that bot's

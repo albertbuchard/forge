@@ -1,7 +1,15 @@
 import { useEffect, useMemo, useState } from "react";
 import * as Dialog from "@radix-ui/react-dialog";
 import { useQuery } from "@tanstack/react-query";
-import { Check, PenSquare, Plus, Search, X } from "lucide-react";
+import {
+  Check,
+  LoaderCircle,
+  PenSquare,
+  Plus,
+  Search,
+  Sparkles,
+  X
+} from "lucide-react";
 import {
   Link,
   useNavigate,
@@ -9,6 +17,7 @@ import {
   useSearchParams
 } from "react-router-dom";
 import { WikiArticleMarkdown } from "@/components/wiki/wiki-article-markdown";
+import { WikiIngestModal } from "@/components/wiki/wiki-ingest-modal";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -22,6 +31,7 @@ import {
   getWikiPageBySlug,
   getWikiSettings,
   getWikiTree,
+  listWikiIngestJobs,
   searchWiki
 } from "@/lib/api";
 import { getEntityRoute } from "@/lib/note-helpers";
@@ -179,6 +189,8 @@ export function WikiPage() {
     useState("");
 
   const selectedSpaceId = searchParams.get("spaceId") ?? "";
+  const ingestOpen = searchParams.get("ingest") === "1";
+  const selectedIngestJobId = searchParams.get("ingestJobId");
 
   const settingsQuery = useQuery({
     queryKey: ["forge-wiki-settings"],
@@ -252,6 +264,21 @@ export function WikiPage() {
       searchOpen && Boolean(activeSpaceId) && searchQuery.trim().length > 0
   });
 
+  const ingestJobsQuery = useQuery({
+    queryKey: ["forge-wiki-ingest-jobs", activeSpaceId],
+    queryFn: () =>
+      listWikiIngestJobs({ spaceId: activeSpaceId || undefined, limit: 8 }),
+    enabled: Boolean(activeSpaceId),
+    refetchInterval: (query) => {
+      const jobs = query.state.data?.jobs ?? [];
+      return jobs.some((job) =>
+        ["queued", "processing"].includes(job.job.status)
+      )
+        ? 2000
+        : false;
+    }
+  });
+
   const requestedDetail = slug
     ? (pageQuery.data ?? null)
     : (homeQuery.data ?? null);
@@ -282,6 +309,49 @@ export function WikiPage() {
       })),
     [selectedPage?.links]
   );
+
+  const recentIngestJobs = ingestJobsQuery.data?.jobs ?? [];
+
+  const updateModalParams = (
+    updater: (params: URLSearchParams) => void,
+    replace = false
+  ) => {
+    const next = new URLSearchParams(searchParams);
+    updater(next);
+    setSearchParams(next, { replace });
+  };
+
+  const openIngestModal = (jobId?: string | null) => {
+    updateModalParams((next) => {
+      next.set("ingest", "1");
+      if (jobId) {
+        next.set("ingestJobId", jobId);
+      } else {
+        next.delete("ingestJobId");
+      }
+      if (activeSpaceId) {
+        next.set("spaceId", activeSpaceId);
+      }
+    });
+  };
+
+  const closeIngestModal = () => {
+    updateModalParams((next) => {
+      next.delete("ingest");
+      next.delete("ingestJobId");
+    });
+  };
+
+  const selectIngestJob = (jobId: string | null) => {
+    updateModalParams((next) => {
+      next.set("ingest", "1");
+      if (jobId) {
+        next.set("ingestJobId", jobId);
+      } else {
+        next.delete("ingestJobId");
+      }
+    });
+  };
 
   if (
     !selectedPage &&
@@ -370,6 +440,15 @@ export function WikiPage() {
                   variant="secondary"
                   size="sm"
                   className="min-h-[2.9rem]"
+                  onClick={() => openIngestModal()}
+                >
+                  <Sparkles className="size-3.5" />
+                  Ingest
+                </Button>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  className="min-h-[2.9rem]"
                   onClick={() =>
                     navigate(
                       `/wiki/edit/${encodeURIComponent(selectedPage.id)}?spaceId=${encodeURIComponent(activeSpaceId)}`,
@@ -398,6 +477,49 @@ export function WikiPage() {
                 </Button>
               </div>
             </div>
+
+            {recentIngestJobs.length > 0 ? (
+              <div className="mt-4 grid gap-2 lg:grid-cols-3">
+                {recentIngestJobs.slice(0, 3).map((job) => {
+                  const jobActive = ["queued", "processing"].includes(
+                    job.job.status
+                  );
+                  return (
+                    <button
+                      key={job.job.id}
+                      type="button"
+                      className="rounded-[20px] border border-white/8 bg-white/[0.04] px-4 py-3 text-left transition hover:bg-white/[0.07]"
+                      onClick={() => openIngestModal(job.job.id)}
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="text-[11px] uppercase tracking-[0.16em] text-white/42">
+                            Wiki ingest
+                          </div>
+                          <div className="mt-2 truncate text-[14px] font-semibold text-white">
+                            {job.job.titleHint ||
+                              job.job.latestMessage ||
+                              "Background ingest"}
+                          </div>
+                          <div className="mt-1 text-[12px] leading-5 text-white/54">
+                            {job.job.status} · {job.job.progressPercent}% ·{" "}
+                            {job.job.createdPageCount} pages ·{" "}
+                            {job.job.createdEntityCount} entities
+                          </div>
+                        </div>
+                        {jobActive ? (
+                          <LoaderCircle className="mt-0.5 size-4 shrink-0 animate-spin text-[var(--secondary)]" />
+                        ) : (
+                          <Badge size="sm" tone="meta">
+                            {job.job.phase}
+                          </Badge>
+                        )}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            ) : null}
           </section>
 
           <section className="grid gap-4 lg:grid-cols-[15rem_minmax(0,1fr)] xl:grid-cols-[16rem_minmax(0,1fr)]">
@@ -633,6 +755,29 @@ export function WikiPage() {
           setSearchParams(next, { replace: true });
           navigate("/wiki", { replace: true });
         }}
+      />
+
+      <WikiIngestModal
+        open={ingestOpen}
+        onOpenChange={(nextOpen) => {
+          if (nextOpen) {
+            openIngestModal(selectedIngestJobId);
+            return;
+          }
+          closeIngestModal();
+        }}
+        spaces={settingsQuery.data?.settings.spaces ?? []}
+        llmProfiles={settingsQuery.data?.settings.llmProfiles ?? []}
+        initialSpaceId={activeSpaceId}
+        selectedJobId={selectedIngestJobId}
+        onJobSelected={selectIngestJob}
+        linkedEntityHints={
+          selectedPage.links.map((link) => ({
+            entityType: link.entityType,
+            entityId: link.entityId,
+            anchorKey: null
+          })) ?? []
+        }
       />
     </>
   );

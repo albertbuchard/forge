@@ -149,10 +149,10 @@ struct ForgeWebView: UIViewRepresentable {
             let width = Int(bounds.width.rounded(.down))
             let height = Int(bounds.height.rounded(.down))
             let top = Int(safeAreaInsets.top.rounded(.down))
-            let bottom = Int(safeAreaInsets.bottom.rounded(.down))
+            let bottom = 0
             companionDebugLog(
                 "ForgeWebView",
-                "applyNativeBounds width=\(width) height=\(height) top=\(top) bottom=\(bottom)"
+                "applyNativeBounds width=\(width) height=\(height) top=\(top) bottom=\(bottom) rawBottom=\(Int(safeAreaInsets.bottom.rounded(.down)))"
             )
             webView.evaluateJavaScript(
                 "window.__forgeCompanionApplyLayout && window.__forgeCompanionApplyLayout(\(width), \(height), \(top), \(bottom));",

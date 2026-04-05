@@ -23,6 +23,9 @@ openclaw-plugin/data/
 plugins/forge-codex/runtime/data/
 ios-companion/ForgeCompanion/**/*.xcuserstate
 ios-companion/ForgeCompanion/**/xcuserdata/
+forge-companion-post-fix.png
+forge-companion-post-fix-2.png
+forge-companion-post-fix-3.png
 # Keep publishable plugin manifests and bundled runtime assets trackable.
 !openclaw-plugin/package.json
 !openclaw-plugin/openclaw.plugin.json

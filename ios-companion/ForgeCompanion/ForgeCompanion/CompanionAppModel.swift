@@ -2,6 +2,88 @@ import Foundation
 import SwiftUI
 import Combine
 
+enum CompanionPairingURLResolver {
+    static func normalizeApiBaseUrl(_ rawValue: String) -> String {
+        guard let url = URL(string: rawValue) else {
+            return rawValue
+        }
+        let trimmedPath = url.path.replacingOccurrences(of: "/+$", with: "", options: .regularExpression)
+        let normalizedPath: String
+        if trimmedPath.hasSuffix("/api/v1") {
+            normalizedPath = trimmedPath
+        } else {
+            normalizedPath = "\(trimmedPath)/api/v1"
+        }
+        var components = URLComponents(url: url, resolvingAgainstBaseURL: false)
+        components?.path = normalizedPath
+        return components?.url?.absoluteString ?? rawValue
+    }
+
+    static func normalizeUiBaseUrl(_ rawValue: String) -> String {
+        guard let url = URL(string: rawValue) else {
+            return rawValue
+        }
+        let trimmedPath = url.path.replacingOccurrences(of: "/+$", with: "", options: .regularExpression)
+        let withoutApiPath = trimmedPath.replacingOccurrences(
+            of: "/api/v1$",
+            with: "",
+            options: .regularExpression
+        )
+        let normalizedPath: String
+        if withoutApiPath.isEmpty || withoutApiPath == "/" {
+            normalizedPath = "/"
+        } else {
+            normalizedPath = "\(withoutApiPath)/"
+        }
+        var components = URLComponents(url: url, resolvingAgainstBaseURL: false)
+        components?.path = normalizedPath
+        components?.query = nil
+        components?.fragment = nil
+        return components?.url?.absoluteString ?? rawValue
+    }
+
+    static func deriveUiBaseUrl(from apiBaseUrl: String) -> String {
+        guard let url = URL(string: normalizeApiBaseUrl(apiBaseUrl)) else {
+            return apiBaseUrl
+        }
+        var components = URLComponents(url: url, resolvingAgainstBaseURL: false)
+        let uiPath = url.path.replacingOccurrences(
+            of: "/api/v1$",
+            with: "",
+            options: .regularExpression
+        )
+        let normalizedUiPath: String
+        if uiPath.isEmpty || uiPath == "/" {
+            normalizedUiPath = "/"
+        } else if uiPath.hasSuffix("/") {
+            normalizedUiPath = uiPath
+        } else {
+            normalizedUiPath = "\(uiPath)/"
+        }
+        components?.path = normalizedUiPath
+        components?.query = nil
+        components?.fragment = nil
+        return components?.url?.absoluteString ?? apiBaseUrl
+    }
+
+    static func normalizedPayload(
+        _ payload: PairingPayload,
+        preferredUiBaseUrl: String? = nil
+    ) -> PairingPayload {
+        let normalizedApiBaseUrl = normalizeApiBaseUrl(payload.apiBaseUrl)
+        let resolvedUiBaseUrl = preferredUiBaseUrl ?? payload.uiBaseUrl
+        return PairingPayload(
+            kind: payload.kind,
+            apiBaseUrl: normalizedApiBaseUrl,
+            uiBaseUrl: resolvedUiBaseUrl.map(normalizeUiBaseUrl) ?? deriveUiBaseUrl(from: normalizedApiBaseUrl),
+            sessionId: payload.sessionId,
+            pairingToken: payload.pairingToken,
+            expiresAt: payload.expiresAt,
+            capabilities: payload.capabilities
+        )
+    }
+}
+
 @MainActor
 final class CompanionAppModel: ObservableObject {
     private struct SimulatorPairingResponse: Decodable {
@@ -33,7 +115,7 @@ final class CompanionAppModel: ObservableObject {
         didSet {
             companionDebugLog(
                 "CompanionAppModel",
-                "pairing -> session=\(pairing?.sessionId ?? "nil") apiBaseUrl=\(pairing?.apiBaseUrl ?? "nil")"
+                "pairing -> session=\(pairing?.sessionId ?? "nil") apiBaseUrl=\(pairing?.apiBaseUrl ?? "nil") uiBaseUrl=\(pairing?.uiBaseUrl ?? "nil")"
             )
         }
     }
@@ -113,20 +195,30 @@ final class CompanionAppModel: ObservableObject {
         }
     }
 
-    func connect(with payload: PairingPayload) {
+    func connect(with payload: PairingPayload, preferredUiBaseUrl: String? = nil) {
         companionDebugLog(
             "CompanionAppModel",
             "connect called session=\(payload.sessionId) apiBaseUrl=\(payload.apiBaseUrl)"
         )
-        completeConnection(with: payload, message: "Pairing ready")
+        completeConnection(
+            with: payload,
+            preferredUiBaseUrl: preferredUiBaseUrl,
+            message: "Pairing ready"
+        )
     }
 
-    func verifyAndConnect(with payload: PairingPayload) async throws {
+    func verifyAndConnect(
+        with payload: PairingPayload,
+        preferredUiBaseUrl: String? = nil
+    ) async throws {
         companionDebugLog(
             "CompanionAppModel",
             "verifyAndConnect start session=\(payload.sessionId) apiBaseUrl=\(payload.apiBaseUrl)"
         )
-        let normalizedPayload = normalizedPairingPayload(payload)
+        let normalizedPayload = normalizedPairingPayload(
+            payload,
+            preferredUiBaseUrl: preferredUiBaseUrl
+        )
         try await syncClient.verifyPairing(
             payload: normalizedPayload,
             apiBaseUrl: normalizedPayload.apiBaseUrl
@@ -215,7 +307,7 @@ final class CompanionAppModel: ObservableObject {
             "CompanionAppModel",
             "bootstrapPairing bootstrap success session=\(payload.sessionId)"
         )
-        try await verifyAndConnect(with: payload)
+        try await verifyAndConnect(with: payload, preferredUiBaseUrl: server.uiBaseUrl)
         lastSyncMessage = "Connected to \(server.name)"
         companionDebugLog("CompanionAppModel", "bootstrapPairing complete")
     }
@@ -345,12 +437,16 @@ final class CompanionAppModel: ObservableObject {
         return await performSync(trigger: "background")
     }
 
-    private func completeConnection(with payload: PairingPayload, message: String) {
+    private func completeConnection(
+        with payload: PairingPayload,
+        preferredUiBaseUrl: String? = nil,
+        message: String
+    ) {
         companionDebugLog(
             "CompanionAppModel",
             "completeConnection start session=\(payload.sessionId) apiBaseUrl=\(payload.apiBaseUrl)"
         )
-        pairing = normalizedPairingPayload(payload)
+        pairing = normalizedPairingPayload(payload, preferredUiBaseUrl: preferredUiBaseUrl)
         healthPermissionPromptDeferred = false
         UserDefaults.standard.set(false, forKey: StorageKeys.deferredHealthPrompt)
         lastSyncMessage = message
@@ -364,33 +460,18 @@ final class CompanionAppModel: ObservableObject {
         companionDebugLog("CompanionAppModel", "completeConnection scheduled follow-up refresh")
     }
 
-    private func normalizedPairingPayload(_ payload: PairingPayload) -> PairingPayload {
-        PairingPayload(
-            kind: payload.kind,
-            apiBaseUrl: normalizeApiBaseUrl(payload.apiBaseUrl),
-            sessionId: payload.sessionId,
-            pairingToken: payload.pairingToken,
-            expiresAt: payload.expiresAt,
-            capabilities: payload.capabilities
+    private func normalizedPairingPayload(
+        _ payload: PairingPayload,
+        preferredUiBaseUrl: String? = nil
+    ) -> PairingPayload {
+        CompanionPairingURLResolver.normalizedPayload(
+            payload,
+            preferredUiBaseUrl: preferredUiBaseUrl
         )
     }
 
     private func normalizeApiBaseUrl(_ rawValue: String) -> String {
-        guard let url = URL(string: rawValue) else {
-            return rawValue
-        }
-        let trimmedPath = url.path.replacingOccurrences(of: "/+$", with: "", options: .regularExpression)
-        let normalizedPath: String
-        if trimmedPath.hasSuffix("/api/v1") {
-            normalizedPath = trimmedPath
-        } else if trimmedPath.hasSuffix("/forge") {
-            normalizedPath = "\(trimmedPath)/api/v1"
-        } else {
-            normalizedPath = "\(trimmedPath)/api/v1"
-        }
-        var components = URLComponents(url: url, resolvingAgainstBaseURL: false)
-        components?.path = normalizedPath
-        return components?.url?.absoluteString ?? rawValue
+        CompanionPairingURLResolver.normalizeApiBaseUrl(rawValue)
     }
 
     private func makeLocalOperatorRequest(path: String, method: String) -> URLRequest? {
@@ -451,7 +532,7 @@ final class CompanionAppModel: ObservableObject {
         }
         do {
             let payload = try await createLocalSimulatorPairing()
-            connect(with: payload)
+            connect(with: payload, preferredUiBaseUrl: SimulatorLocalForge.uiBaseUrl)
             lastSyncMessage = "Connected to local Forge"
             latestError = nil
             companionDebugLog("CompanionAppModel", "attemptLocalSimulatorBootstrapIfNeeded success session=\(payload.sessionId)")
@@ -592,7 +673,9 @@ final class CompanionAppModel: ObservableObject {
         guard let pairing else {
             return nil
         }
-        return URL(string: uiBaseUrl(from: pairing.apiBaseUrl))
+        return URL(
+            string: pairing.uiBaseUrl ?? CompanionPairingURLResolver.deriveUiBaseUrl(from: pairing.apiBaseUrl)
+        )
     }
 
     var forgeHostLabel: String {
@@ -614,30 +697,6 @@ final class CompanionAppModel: ObservableObject {
             return "No sync yet"
         }
         return "\(report.sleepSessions) sleep, \(report.workouts) workouts"
-    }
-
-    private func uiBaseUrl(from apiBaseUrl: String) -> String {
-        guard let url = URL(string: normalizeApiBaseUrl(apiBaseUrl)) else {
-            return apiBaseUrl
-        }
-        var components = URLComponents(url: url, resolvingAgainstBaseURL: false)
-        let uiPath = url.path.replacingOccurrences(
-            of: "/api/v1$",
-            with: "",
-            options: .regularExpression
-        )
-        let normalizedUiPath: String
-        if uiPath.isEmpty || uiPath == "/" {
-            normalizedUiPath = "/"
-        } else if uiPath.hasSuffix("/") {
-            normalizedUiPath = uiPath
-        } else {
-            normalizedUiPath = "\(uiPath)/"
-        }
-        components?.path = normalizedUiPath
-        components?.query = nil
-        components?.fragment = nil
-        return components?.url?.absoluteString ?? apiBaseUrl
     }
 }
 

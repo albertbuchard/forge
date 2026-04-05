@@ -1,5 +1,16 @@
 import { useMemo, useState } from "react";
-import { BrainCircuit, GitBranchPlus, HeartHandshake, Orbit, Sparkles, UnfoldVertical, Waves, Waypoints } from "lucide-react";
+import {
+  BrainCircuit,
+  GitBranchPlus,
+  HeartHandshake,
+  Moon,
+  Orbit,
+  SlidersHorizontal,
+  Sparkles,
+  UnfoldVertical,
+  Waves,
+  Waypoints
+} from "lucide-react";
 import { Link, NavLink, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -12,8 +23,14 @@ export const PSYCHE_SECTIONS = [
   { to: "/psyche/behaviors", label: "Behaviors", icon: GitBranchPlus },
   { to: "/psyche/reports", label: "Reports", icon: Sparkles },
   { to: "/psyche/goal-map", label: "Goal Map", icon: Waypoints },
-  { to: "/psyche/schemas-beliefs", label: "Schemas & Beliefs", icon: UnfoldVertical },
-  { to: "/psyche/modes", label: "Modes", icon: HeartHandshake }
+  {
+    to: "/psyche/schemas-beliefs",
+    label: "Schemas & Beliefs",
+    icon: UnfoldVertical
+  },
+  { to: "/psyche/modes", label: "Modes", icon: HeartHandshake },
+  { to: "/preferences", label: "Preferences", icon: SlidersHorizontal },
+  { to: "/sleep", label: "Sleep", icon: Moon }
 ] as const;
 
 function sectionMatches(pathname: string, to: string) {
@@ -27,13 +44,19 @@ export function PsycheSectionNav({ className }: { className?: string }) {
     return (
       [...PSYCHE_SECTIONS]
         .sort((left, right) => right.to.length - left.to.length)
-        .find((section) => sectionMatches(location.pathname, section.to)) ?? PSYCHE_SECTIONS[0]
+        .find((section) => sectionMatches(location.pathname, section.to)) ??
+      PSYCHE_SECTIONS[0]
     );
   }, [location.pathname]);
 
   return (
     <>
-      <Card className={cn("overflow-hidden bg-[linear-gradient(180deg,rgba(15,24,31,0.94),rgba(10,18,25,0.92))] p-2", className)}>
+      <Card
+        className={cn(
+          "overflow-hidden bg-[linear-gradient(180deg,rgba(15,24,31,0.94),rgba(10,18,25,0.92))] p-2",
+          className
+        )}
+      >
         <div className="hidden items-center gap-3 lg:flex">
           <div className="flex flex-wrap gap-2">
             {PSYCHE_SECTIONS.map((section) => (
@@ -48,11 +71,11 @@ export function PsycheSectionNav({ className }: { className?: string }) {
                       : "bg-white/[0.04] text-white/58 hover:bg-white/[0.08] hover:text-white"
                   )
                 }
-                >
-                  <section.icon className="size-3.5" />
-                  <span>{section.label}</span>
-                </NavLink>
-              ))}
+              >
+                <section.icon className="size-3.5" />
+                <span>{section.label}</span>
+              </NavLink>
+            ))}
           </div>
         </div>
 
@@ -64,9 +87,13 @@ export function PsycheSectionNav({ className }: { className?: string }) {
           >
             <span className="flex min-w-0 items-center gap-2">
               <activeSection.icon className="size-4 shrink-0 text-[var(--tertiary)]" />
-              <span className="truncate text-sm font-medium text-white">{activeSection.label}</span>
+              <span className="truncate text-sm font-medium text-white">
+                {activeSection.label}
+              </span>
             </span>
-            <span className="text-[10px] uppercase tracking-[0.16em] text-white/42">Switch</span>
+            <span className="text-[10px] uppercase tracking-[0.16em] text-white/42">
+              Switch
+            </span>
           </button>
         </div>
       </Card>
@@ -76,8 +103,12 @@ export function PsycheSectionNav({ className }: { className?: string }) {
           <div className="mx-auto flex h-full max-w-xl flex-col rounded-[32px] bg-[linear-gradient(180deg,rgba(16,25,33,0.98),rgba(11,18,25,0.98))] p-5 shadow-[0_30px_80px_rgba(0,0,0,0.35)]">
             <div className="flex items-center justify-between gap-4">
               <div>
-                <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/38">Psyche sections</div>
-                <div className="mt-2 font-display text-3xl text-white">Move through the inner map</div>
+                <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/38">
+                  Psyche sections
+                </div>
+                <div className="mt-2 font-display text-3xl text-white">
+                  Move through the inner map
+                </div>
               </div>
               <Button variant="secondary" onClick={() => setMobileOpen(false)}>
                 Close
@@ -99,16 +130,19 @@ export function PsycheSectionNav({ className }: { className?: string }) {
                 >
                   <span className="flex items-center gap-3">
                     <section.icon className="size-4 text-[var(--tertiary)]" />
-                    <span className="text-base font-medium">{section.label}</span>
+                    <span className="text-base font-medium">
+                      {section.label}
+                    </span>
                   </span>
-                  <span className="text-[10px] uppercase tracking-[0.16em] text-white/36">Open</span>
+                  <span className="text-[10px] uppercase tracking-[0.16em] text-white/36">
+                    Open
+                  </span>
                 </NavLink>
               ))}
             </div>
           </div>
         </div>
       ) : null}
-
     </>
   );
 }

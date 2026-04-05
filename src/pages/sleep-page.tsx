@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { MoonStar, Save } from "lucide-react";
 import { EntityLinkMultiSelect } from "@/components/psyche/entity-link-multiselect";
+import { PsycheSectionNav } from "@/components/psyche/psyche-section-nav";
 import { useForgeShell } from "@/components/shell/app-shell";
 import { PageHero } from "@/components/shell/page-hero";
 import { Button } from "@/components/ui/button";
@@ -34,7 +35,12 @@ function percentLabel(value: number) {
 }
 
 function formatClock(value: string | null) {
-  return value ? new Date(value).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "n/a";
+  return value
+    ? new Date(value).toLocaleTimeString([], {
+        hour: "2-digit",
+        minute: "2-digit"
+      })
+    : "n/a";
 }
 
 export function SleepPage() {
@@ -43,7 +49,12 @@ export function SleepPage() {
   const [drafts, setDrafts] = useState<
     Record<
       string,
-      { qualitySummary: string; notes: string; tagsText: string; linkValues: string[] }
+      {
+        qualitySummary: string;
+        notes: string;
+        tagsText: string;
+        linkValues: string[];
+      }
     >
   >({});
   const selectedUserIds = Array.isArray(shell.selectedUserIds)
@@ -148,8 +159,14 @@ export function SleepPage() {
     );
   }
 
-  const { summary, weeklyTrend, monthlyPattern, stageAverages, linkBreakdown, sessions } =
-    sleepQuery.data;
+  const {
+    summary,
+    weeklyTrend,
+    monthlyPattern,
+    stageAverages,
+    linkBreakdown,
+    sessions
+  } = sleepQuery.data;
   const linkOptions = buildHealthEntityLinkOptions({
     goals: shell.snapshot.dashboard.goals,
     projects: shell.snapshot.dashboard.projects,
@@ -170,6 +187,8 @@ export function SleepPage() {
         description="A reflective sleep surface linking rest, timing, and Psyche-aware context instead of treating nights as disposable telemetry."
         badge={`${sessions.length} nights`}
       />
+
+      <PsycheSectionNav />
 
       <section className="grid gap-4 lg:grid-cols-4">
         <Card>
@@ -254,7 +273,8 @@ export function SleepPage() {
             Bed and wake window
           </div>
           <div className="mt-3 text-xl text-white">
-            {summary.averageBedtimeConsistencyMinutes}m / {summary.averageWakeConsistencyMinutes}m
+            {summary.averageBedtimeConsistencyMinutes}m /{" "}
+            {summary.averageWakeConsistencyMinutes}m
           </div>
           <div className="mt-2 text-sm text-white/58">
             Mean bedtime and wake-time drift against your recent baseline.
@@ -269,7 +289,9 @@ export function SleepPage() {
               <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">
                 Trend
               </div>
-              <div className="mt-2 text-lg text-white">Recent sleep pattern</div>
+              <div className="mt-2 text-lg text-white">
+                Recent sleep pattern
+              </div>
             </div>
             <Badge className="bg-[var(--primary)]/14 text-[var(--primary)]">
               7 nights
@@ -286,13 +308,19 @@ export function SleepPage() {
                   <div className="h-2 flex-1 overflow-hidden rounded-full bg-white/[0.08]">
                     <div
                       className="h-full rounded-full bg-[var(--primary)]"
-                      style={{ width: `${Math.min(100, (night.sleepHours / 10) * 100)}%` }}
+                      style={{
+                        width: `${Math.min(100, (night.sleepHours / 10) * 100)}%`
+                      }}
                     />
                   </div>
-                  <div className="text-sm text-white">{night.sleepHours.toFixed(1)}h</div>
+                  <div className="text-sm text-white">
+                    {night.sleepHours.toFixed(1)}h
+                  </div>
                 </div>
                 <div className="text-sm text-white/62">Score {night.score}</div>
-                <div className="text-sm text-white/62">Reg {night.regularity}</div>
+                <div className="text-sm text-white/62">
+                  Reg {night.regularity}
+                </div>
               </div>
             ))}
           </div>
@@ -355,7 +383,8 @@ export function SleepPage() {
                   ))
                 ) : (
                   <div className="text-sm text-white/48">
-                    Linked habits, beliefs, projects, and reports will accumulate here.
+                    Linked habits, beliefs, projects, and reports will
+                    accumulate here.
                   </div>
                 )}
               </div>
@@ -409,7 +438,8 @@ export function SleepPage() {
                       Score {session.sleepScore ?? "n/a"}
                     </Badge>
                     <Badge tone="meta">
-                      Eff {percentLabel(
+                      Eff{" "}
+                      {percentLabel(
                         typeof session.derived.efficiency === "number"
                           ? session.derived.efficiency
                           : session.timeInBedSeconds > 0
@@ -418,7 +448,8 @@ export function SleepPage() {
                       )}
                     </Badge>
                     <Badge tone="meta">
-                      Restorative {percentLabel(
+                      Restorative{" "}
+                      {percentLabel(
                         typeof session.derived.restorativeShare === "number"
                           ? session.derived.restorativeShare
                           : 0
@@ -453,16 +484,16 @@ export function SleepPage() {
                   <div className="rounded-[18px] bg-white/[0.04] p-4">
                     <div className="text-sm text-white/58">Stage breakdown</div>
                     <div className="mt-3 flex flex-wrap gap-2">
-                      {session.stageBreakdown.length > 0
-                        ? session.stageBreakdown.map((stage) => (
-                            <Badge key={stage.stage} tone="meta">
-                              {stage.stage} {hoursLabel(stage.seconds)}
-                            </Badge>
-                          ))
-                        : (
-                          <div className="text-sm text-white/48">
-                            No stage data synced for this night.
-                          </div>
+                      {session.stageBreakdown.length > 0 ? (
+                        session.stageBreakdown.map((stage) => (
+                          <Badge key={stage.stage} tone="meta">
+                            {stage.stage} {hoursLabel(stage.seconds)}
+                          </Badge>
+                        ))
+                      ) : (
+                        <div className="text-sm text-white/48">
+                          No stage data synced for this night.
+                        </div>
                       )}
                     </div>
                   </div>
@@ -480,7 +511,9 @@ export function SleepPage() {
                       </div>
                     </div>
                     <div className="rounded-[18px] bg-white/[0.04] p-4">
-                      <div className="text-sm text-white/58">Recovery state</div>
+                      <div className="text-sm text-white/58">
+                        Recovery state
+                      </div>
                       <div className="mt-2 text-lg text-white capitalize">
                         {typeof session.derived.recoveryState === "string"
                           ? session.derived.recoveryState
@@ -489,7 +522,9 @@ export function SleepPage() {
                     </div>
                   </div>
                   <label className="grid gap-2">
-                    <span className="text-sm text-white/58">Quality summary</span>
+                    <span className="text-sm text-white/58">
+                      Quality summary
+                    </span>
                     <Input
                       value={draft.qualitySummary}
                       onChange={(event) =>

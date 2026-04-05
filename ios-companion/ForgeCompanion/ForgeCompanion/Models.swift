@@ -21,6 +21,7 @@ struct DiscoveredForgeServer: Identifiable, Hashable {
 struct PairingPayload: Codable {
     let kind: String
     let apiBaseUrl: String
+    let uiBaseUrl: String?
     let sessionId: String
     let pairingToken: String
     let expiresAt: String
