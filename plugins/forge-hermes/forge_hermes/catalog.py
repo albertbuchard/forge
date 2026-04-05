@@ -71,6 +71,14 @@ def calendar_overview_path(args: Dict[str, Any]) -> str:
     return with_query("/api/v1/calendar/overview", args, ["from", "to", "userIds"])
 
 
+def sleep_overview_path(args: Dict[str, Any]) -> str:
+    return with_query("/api/v1/health/sleep", args, ["userIds"])
+
+
+def sports_overview_path(args: Dict[str, Any]) -> str:
+    return with_query("/api/v1/health/fitness", args, ["userIds"])
+
+
 def sync_calendar_connection_path(args: Dict[str, Any]) -> str:
     return f"/api/v1/calendar/connections/{args['connectionId']}/sync"
 
@@ -341,6 +349,26 @@ def wiki_upsert_page_body(args: Dict[str, Any], _config: Any) -> Dict[str, Any]:
     }
 
 
+def sleep_session_path(args: Dict[str, Any]) -> str:
+    return f"/api/v1/health/sleep/{args['sleepId']}"
+
+
+def sleep_session_body(args: Dict[str, Any], _config: Any) -> Dict[str, Any]:
+    return {
+        key: value for key, value in args.items() if key != "sleepId"
+    }
+
+
+def workout_session_path(args: Dict[str, Any]) -> str:
+    return f"/api/v1/health/workouts/{args['workoutId']}"
+
+
+def workout_session_body(args: Dict[str, Any], _config: Any) -> Dict[str, Any]:
+    return {
+        key: value for key, value in args.items() if key != "workoutId"
+    }
+
+
 PREFERENCE_FEATURE_WEIGHTS = {
     "type": "object",
     "description": "Optional weights keyed by novelty, simplicity, rigor, aesthetics, depth, structure, familiarity, and surprise.",
@@ -535,6 +563,85 @@ TOOL_CATALOG: List[ToolSpec] = [
         ),
         "method": "POST",
         "path": "/api/v1/wiki/ingest-jobs",
+        "write": True,
+    },
+    {
+        "name": "forge_get_sleep_overview",
+        "description": "Read the reflective sleep surface with recent nights, scores, regularity, stage averages, and linked-context counts.",
+        "parameters": scoped_read_schema(),
+        "method": "GET",
+        "path_builder": sleep_overview_path,
+    },
+    {
+        "name": "forge_get_sports_overview",
+        "description": "Read the sports surface with workout volume, workout types, effort signals, and linked workout sessions.",
+        "parameters": scoped_read_schema(),
+        "method": "GET",
+        "path_builder": sports_overview_path,
+    },
+    {
+        "name": "forge_update_sleep_session",
+        "description": "Patch one sleep session with reflective notes, tags, or linked Forge context after review.",
+        "parameters": object_schema(
+            {
+                "sleepId": {"type": "string", "minLength": 1},
+                "qualitySummary": optional_string("Optional short quality summary."),
+                "notes": optional_string("Optional reflective notes."),
+                "tags": array_schema({"type": "string"}, "Optional sleep tags."),
+                "links": array_schema(
+                    object_schema(
+                        {
+                            "entityType": {"type": "string", "minLength": 1},
+                            "entityId": {"type": "string", "minLength": 1},
+                            "relationshipType": optional_string("Optional link relationship type."),
+                        },
+                        required=["entityType", "entityId"],
+                    ),
+                    "Optional Forge links.",
+                ),
+            },
+            required=["sleepId"],
+        ),
+        "method": "PATCH",
+        "path_builder": sleep_session_path,
+        "body_builder": sleep_session_body,
+        "write": True,
+    },
+    {
+        "name": "forge_update_workout_session",
+        "description": "Patch one workout session with effort, mood, meaning, tags, or linked Forge context.",
+        "parameters": object_schema(
+            {
+                "workoutId": {"type": "string", "minLength": 1},
+                "subjectiveEffort": {
+                    "anyOf": [
+                        {"type": "integer", "minimum": 1, "maximum": 10},
+                        {"type": "null"},
+                    ]
+                },
+                "moodBefore": optional_string("Optional mood before the session."),
+                "moodAfter": optional_string("Optional mood after the session."),
+                "meaningText": optional_string("Optional meaning or narrative context."),
+                "plannedContext": optional_string("Optional planned context."),
+                "socialContext": optional_string("Optional social context."),
+                "tags": array_schema({"type": "string"}, "Optional workout tags."),
+                "links": array_schema(
+                    object_schema(
+                        {
+                            "entityType": {"type": "string", "minLength": 1},
+                            "entityId": {"type": "string", "minLength": 1},
+                            "relationshipType": optional_string("Optional link relationship type."),
+                        },
+                        required=["entityType", "entityId"],
+                    ),
+                    "Optional Forge links.",
+                ),
+            },
+            required=["workoutId"],
+        ),
+        "method": "PATCH",
+        "path_builder": workout_session_path,
+        "body_builder": workout_session_body,
         "write": True,
     },
     {

@@ -19,6 +19,8 @@ Its job is to expose the same curated Forge operating surface as the OpenClaw pl
 - batch search, create, update, delete, and restore
 - explicit work adjustments, retroactive work logging, and task-run controls
 - calendar overview, work-block creation, and task timeboxing helpers
+- wiki memory reads, search, ingest, health checks, and page upserts
+- sleep and sports overview reads plus reflective metadata updates on individual sessions
 - visual handoff to the Forge UI when the UI is genuinely the better surface
 - bundled Psyche interview playbooks so Hermes explores values, patterns, behaviors, beliefs, modes, and trigger reports with active listening before storing them
 
@@ -125,6 +127,12 @@ Forge's multi-user model is explicit:
 - writes should set `userId` intentionally
 - reads can scope with `userId` or repeated `userIds`
 - cross-user links are valid
+
+Forge's newer wiki and health surfaces follow the same rule:
+
+- wiki pages live in the same shared Forge memory system and should use the dedicated wiki tools, not the generic entity batch routes
+- sleep and sports sessions stay linkable across human and bot-owned goals, projects, habits, notes, and Psyche records
+- the sports UI route is `/sports`, but the backend overview route remains `/api/v1/health/fitness`
 
 If Hermes is meant to operate as its own bot user inside that shared runtime,
 create that bot in `Settings -> Users` and write records with that bot's

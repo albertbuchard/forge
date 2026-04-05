@@ -89,7 +89,8 @@ const DEFAULT_RULES: Array<{
     family: "consistency",
     code: "task_run_progress",
     title: "Work time bounty",
-    description: "Award a small XP bounty for each ten credited minutes of active work.",
+    description:
+      "Award a small XP bounty for each ten credited minutes of active work.",
     config: { fixedXp: 4, intervalMinutes: 10 }
   },
   {
@@ -97,7 +98,8 @@ const DEFAULT_RULES: Array<{
     family: "completion",
     code: "task_run_completion",
     title: "Focused run completion",
-    description: "Award a small bonus when a claimed execution run is completed cleanly.",
+    description:
+      "Award a small bonus when a claimed execution run is completed cleanly.",
     config: { fixedXp: 20 }
   },
   {
@@ -113,7 +115,8 @@ const DEFAULT_RULES: Array<{
     family: "consistency",
     code: "habit_aligned",
     title: "Habit alignment",
-    description: "Award XP when a habit outcome matches the intended direction.",
+    description:
+      "Award XP when a habit outcome matches the intended direction.",
     config: { award: "habit.rewardXp" }
   },
   {
@@ -121,7 +124,8 @@ const DEFAULT_RULES: Array<{
     family: "recovery",
     code: "habit_misaligned",
     title: "Habit miss",
-    description: "Apply a small XP penalty when a habit outcome moves against the intended direction.",
+    description:
+      "Apply a small XP penalty when a habit outcome moves against the intended direction.",
     config: { penalty: "habit.penaltyXp" }
   },
   {
@@ -129,7 +133,8 @@ const DEFAULT_RULES: Array<{
     family: "alignment",
     code: "psyche_reflection_capture",
     title: "Functional analysis captured",
-    description: "Reward a completed therapeutic reflection capture in a bounded, explainable way.",
+    description:
+      "Reward a completed therapeutic reflection capture in a bounded, explainable way.",
     config: { fixedXp: 8 }
   },
   {
@@ -137,7 +142,8 @@ const DEFAULT_RULES: Array<{
     family: "alignment",
     code: "psyche_value_defined",
     title: "Value clarified",
-    description: "Reward the user for naming a value in concrete life language.",
+    description:
+      "Reward the user for naming a value in concrete life language.",
     config: { fixedXp: 5 }
   },
   {
@@ -153,7 +159,8 @@ const DEFAULT_RULES: Array<{
     family: "recovery",
     code: "psyche_behavior_defined",
     title: "Behavior mapped",
-    description: "Reward mapping an away, committed, or recovery move clearly enough to work with it later.",
+    description:
+      "Reward mapping an away, committed, or recovery move clearly enough to work with it later.",
     config: { fixedXp: 6 }
   },
   {
@@ -169,7 +176,8 @@ const DEFAULT_RULES: Array<{
     family: "consistency",
     code: "psyche_mode_named",
     title: "Mode mapped",
-    description: "Reward giving a recurring mode enough shape to recognize it later.",
+    description:
+      "Reward giving a recurring mode enough shape to recognize it later.",
     config: { fixedXp: 4 }
   },
   {
@@ -177,7 +185,8 @@ const DEFAULT_RULES: Array<{
     family: "alignment",
     code: "weekly_review_completed",
     title: "Weekly review completed",
-    description: "Reward closing the current weekly review cycle and turning it into explicit evidence.",
+    description:
+      "Reward closing the current weekly review cycle and turning it into explicit evidence.",
     config: { fixedXp: 250 }
   },
   {
@@ -185,7 +194,8 @@ const DEFAULT_RULES: Array<{
     family: "ambient",
     code: "session_dwell_120",
     title: "Active dwell milestone",
-    description: "Award a small amount of XP for sustained focused presence in the app.",
+    description:
+      "Award a small amount of XP for sustained focused presence in the app.",
     config: { fixedXp: 2, dailyCap: 12 }
   },
   {
@@ -193,7 +203,8 @@ const DEFAULT_RULES: Array<{
     family: "ambient",
     code: "scroll_depth_75",
     title: "Review depth milestone",
-    description: "Award a bounded ambient nudge when the user actively explores the product deeply.",
+    description:
+      "Award a bounded ambient nudge when the user actively explores the product deeply.",
     config: { fixedXp: 3, dailyCap: 12 }
   }
 ];
@@ -249,7 +260,16 @@ export function ensureDefaultRewardRules(now = new Date().toISOString()): void {
      VALUES (?, ?, ?, ?, ?, 1, ?, ?, ?)`
   );
   for (const rule of DEFAULT_RULES) {
-    insert.run(rule.id, rule.family, rule.code, rule.title, rule.description, JSON.stringify(rule.config), now, now);
+    insert.run(
+      rule.id,
+      rule.family,
+      rule.code,
+      rule.title,
+      rule.description,
+      JSON.stringify(rule.config),
+      now,
+      now
+    );
   }
 }
 
@@ -289,7 +309,10 @@ export function getTaskRunProgressRewardCadence(): {
 } {
   ensureDefaultRewardRules();
   const rule = getRuleByCode("task_run_progress");
-  const intervalMinutes = Math.max(1, Number(rule?.config.intervalMinutes ?? 10));
+  const intervalMinutes = Math.max(
+    1,
+    Number(rule?.config.intervalMinutes ?? 10)
+  );
   return {
     rule,
     intervalMinutes,
@@ -323,7 +346,14 @@ export function updateRewardRule(
        SET title = ?, description = ?, active = ?, config_json = ?, updated_at = ?
        WHERE id = ?`
     )
-    .run(next.title, next.description, next.active ? 1 : 0, JSON.stringify(next.config), next.updatedAt, ruleId);
+    .run(
+      next.title,
+      next.description,
+      next.active ? 1 : 0,
+      JSON.stringify(next.config),
+      next.updatedAt,
+      ruleId
+    );
 
   recordEventLog({
     eventKind: "reward.rule_updated",
@@ -341,19 +371,22 @@ export function updateRewardRule(
   return getRewardRuleById(ruleId);
 }
 
-function insertLedgerEvent(input: {
-  ruleId?: string | null;
-  eventLogId?: string | null;
-  entityType: string;
-  entityId: string;
-  actor?: string | null;
-  source: ActivitySource;
-  deltaXp: number;
-  reasonTitle: string;
-  reasonSummary?: string;
-  reversibleGroup?: string | null;
-  metadata?: Record<string, MetadataValue>;
-}, now = new Date()): RewardLedgerEvent {
+function insertLedgerEvent(
+  input: {
+    ruleId?: string | null;
+    eventLogId?: string | null;
+    entityType: string;
+    entityId: string;
+    actor?: string | null;
+    source: ActivitySource;
+    deltaXp: number;
+    reasonTitle: string;
+    reasonSummary?: string;
+    reversibleGroup?: string | null;
+    metadata?: Record<string, MetadataValue>;
+  },
+  now = new Date()
+): RewardLedgerEvent {
   const event = rewardLedgerEventSchema.parse({
     id: `rwd_${randomUUID().replaceAll("-", "").slice(0, 10)}`,
     ruleId: input.ruleId ?? null,
@@ -397,7 +430,9 @@ function insertLedgerEvent(input: {
   return event;
 }
 
-export function listRewardLedger(filters: RewardsLedgerQuery = {}): RewardLedgerEvent[] {
+export function listRewardLedger(
+  filters: RewardsLedgerQuery = {}
+): RewardLedgerEvent[] {
   ensureDefaultRewardRules();
   const whereClauses: string[] = [];
   const params: Array<string | number> = [];
@@ -411,7 +446,8 @@ export function listRewardLedger(filters: RewardsLedgerQuery = {}): RewardLedger
     params.push(filters.entityId);
   }
 
-  const whereSql = whereClauses.length > 0 ? `WHERE ${whereClauses.join(" AND ")}` : "";
+  const whereSql =
+    whereClauses.length > 0 ? `WHERE ${whereClauses.join(" AND ")}` : "";
   const limitSql = filters.limit ? "LIMIT ?" : "";
   if (filters.limit) {
     params.push(filters.limit);
@@ -432,7 +468,9 @@ export function listRewardLedger(filters: RewardsLedgerQuery = {}): RewardLedger
   return rows.map(mapLedger);
 }
 
-export function getRewardLedgerEventById(rewardId: string): RewardLedgerEvent | null {
+export function getRewardLedgerEventById(
+  rewardId: string
+): RewardLedgerEvent | null {
   ensureDefaultRewardRules();
   const row = getDatabase()
     .prepare(
@@ -449,14 +487,18 @@ export function getRewardLedgerEventById(rewardId: string): RewardLedgerEvent | 
 
 export function getTotalXp(): number {
   ensureDefaultRewardRules();
-  const row = getDatabase().prepare(`SELECT COALESCE(SUM(delta_xp), 0) AS total FROM reward_ledger`).get() as { total: number };
+  const row = getDatabase()
+    .prepare(`SELECT COALESCE(SUM(delta_xp), 0) AS total FROM reward_ledger`)
+    .get() as { total: number };
   return row.total;
 }
 
 export function getWeeklyXp(weekStartIso: string): number {
   ensureDefaultRewardRules();
   const row = getDatabase()
-    .prepare(`SELECT COALESCE(SUM(delta_xp), 0) AS total FROM reward_ledger WHERE created_at >= ?`)
+    .prepare(
+      `SELECT COALESCE(SUM(delta_xp), 0) AS total FROM reward_ledger WHERE created_at >= ?`
+    )
     .get(weekStartIso) as { total: number };
   return row.total;
 }
@@ -472,11 +514,16 @@ export function getDailyAmbientXp(dayKey: string): number {
          AND reward_ledger.created_at >= ?
          AND reward_ledger.created_at < ?`
     )
-    .get(`${dayKey}T00:00:00.000Z`, `${dayKey}T23:59:59.999Z`) as { total: number };
+    .get(`${dayKey}T00:00:00.000Z`, `${dayKey}T23:59:59.999Z`) as {
+    total: number;
+  };
   return row.total;
 }
 
-export function awardTaskCompletionReward(task: Task, activity: { actor?: string | null; source: ActivitySource }): RewardLedgerEvent {
+export function awardTaskCompletionReward(
+  task: Task,
+  activity: { actor?: string | null; source: ActivitySource }
+): RewardLedgerEvent {
   ensureDefaultRewardRules();
   const rule = getRuleByCode("task_completion");
   const eventLog = recordEventLog({
@@ -510,7 +557,10 @@ export function awardTaskCompletionReward(task: Task, activity: { actor?: string
   });
 }
 
-export function reverseLatestTaskCompletionReward(task: Task, activity: { actor?: string | null; source: ActivitySource }): RewardLedgerEvent | null {
+export function reverseLatestTaskCompletionReward(
+  task: Task,
+  activity: { actor?: string | null; source: ActivitySource }
+): RewardLedgerEvent | null {
   ensureDefaultRewardRules();
   const latest = getDatabase()
     .prepare(
@@ -561,7 +611,70 @@ export function reverseLatestTaskCompletionReward(task: Task, activity: { actor?
     }
   });
 
-  getDatabase().prepare(`UPDATE reward_ledger SET reversed_by_reward_id = ? WHERE id = ?`).run(reversal.id, latest.id);
+  getDatabase()
+    .prepare(`UPDATE reward_ledger SET reversed_by_reward_id = ? WHERE id = ?`)
+    .run(reversal.id, latest.id);
+  return reversal;
+}
+
+export function reverseLatestHabitCheckInReward(
+  habit: Habit,
+  dateKey: string,
+  activity: { actor?: string | null; source: ActivitySource }
+): RewardLedgerEvent | null {
+  ensureDefaultRewardRules();
+  const reversibleGroup = `habit:${habit.id}:${dateKey}`;
+  const latest = getDatabase()
+    .prepare(
+      `SELECT
+         id, rule_id, event_log_id, entity_type, entity_id, actor, source, delta_xp, reason_title, reason_summary,
+         reversible_group, reversed_by_reward_id, metadata_json, created_at
+       FROM reward_ledger
+       WHERE reversible_group = ?
+         AND reversed_by_reward_id IS NULL
+       ORDER BY created_at DESC
+       LIMIT 1`
+    )
+    .get(reversibleGroup) as RewardLedgerRow | undefined;
+
+  if (!latest) {
+    return null;
+  }
+
+  const reversalEventLog = recordEventLog({
+    eventKind: "reward.habit_check_in_reversed",
+    entityType: "habit",
+    entityId: habit.id,
+    actor: activity.actor ?? null,
+    source: activity.source,
+    metadata: {
+      rewardId: latest.id,
+      habitId: habit.id,
+      dateKey
+    }
+  });
+
+  const reversal = insertLedgerEvent({
+    ruleId: latest.rule_id,
+    eventLogId: reversalEventLog.id,
+    entityType: latest.entity_type,
+    entityId: latest.entity_id,
+    actor: activity.actor ?? null,
+    source: activity.source,
+    deltaXp: -latest.delta_xp,
+    reasonTitle: `Habit entry removed: ${habit.title}`,
+    reasonSummary: `Habit check-in removed for ${dateKey}.`,
+    reversibleGroup: latest.reversible_group,
+    metadata: {
+      reversedRewardId: latest.id,
+      habitId: habit.id,
+      dateKey
+    }
+  });
+
+  getDatabase()
+    .prepare(`UPDATE reward_ledger SET reversed_by_reward_id = ? WHERE id = ?`)
+    .run(reversal.id, latest.id);
   return reversal;
 }
 
@@ -629,7 +742,8 @@ export function recordPsycheReflectionReward(
     source: activity.source,
     deltaXp: Number(rule?.config.fixedXp ?? 8),
     reasonTitle: `Psyche reflection captured: ${title}`,
-    reasonSummary: "A structured trigger report was stored and the reflection ledger was updated.",
+    reasonSummary:
+      "A structured trigger report was stored and the reflection ledger was updated.",
     reversibleGroup: `psyche_reflection_capture:${reportId}`,
     metadata: {
       triggerReportId: reportId
@@ -638,7 +752,12 @@ export function recordPsycheReflectionReward(
 }
 
 export function recordPsycheClarityReward(
-  entityType: "psyche_value" | "behavior_pattern" | "behavior" | "belief_entry" | "mode_profile",
+  entityType:
+    | "psyche_value"
+    | "behavior_pattern"
+    | "behavior"
+    | "belief_entry"
+    | "mode_profile",
   entityId: string,
   title: string,
   ruleCode:
@@ -673,7 +792,8 @@ export function recordPsycheClarityReward(
     source: activity.source,
     deltaXp: Number(rule?.config.fixedXp ?? 4),
     reasonTitle: rule?.title ?? "Psyche clarity gained",
-    reasonSummary: rule?.description ?? "A Psyche entity was clarified and stored.",
+    reasonSummary:
+      rule?.description ?? "A Psyche entity was clarified and stored.",
     reversibleGroup: `${ruleCode}:${entityId}`,
     metadata: {
       entityType,
@@ -711,7 +831,8 @@ export function recordTaskRunCompletionReward(
     source,
     deltaXp: Number(rule?.config.fixedXp ?? 20),
     reasonTitle: rule?.title ?? "Focused run completion",
-    reasonSummary: rule?.description ?? "A claimed execution run was completed.",
+    reasonSummary:
+      rule?.description ?? "A claimed execution run was completed.",
     reversibleGroup: `task_run_completion:${taskRunId}`,
     metadata: {
       taskId,
@@ -749,7 +870,8 @@ export function recordTaskRunStartReward(
     source,
     deltaXp: Number(rule?.config.fixedXp ?? 8),
     reasonTitle: rule?.title ?? "Task started",
-    reasonSummary: rule?.description ?? "A live work timer was started for a task.",
+    reasonSummary:
+      rule?.description ?? "A live work timer was started for a task.",
     reversibleGroup: `task_run_started:${taskRunId}`,
     metadata: {
       taskId,
@@ -765,8 +887,11 @@ export function recordTaskRunProgressRewards(
   source: ActivitySource,
   creditedSeconds: number
 ): RewardLedgerEvent[] {
-  const { rule, intervalMinutes, intervalSeconds, fixedXp } = getTaskRunProgressRewardCadence();
-  const earnedBuckets = Math.floor(Math.max(0, creditedSeconds) / intervalSeconds);
+  const { rule, intervalMinutes, intervalSeconds, fixedXp } =
+    getTaskRunProgressRewardCadence();
+  const earnedBuckets = Math.floor(
+    Math.max(0, creditedSeconds) / intervalSeconds
+  );
   if (earnedBuckets <= 0) {
     return [];
   }
@@ -788,7 +913,11 @@ export function recordTaskRunProgressRewards(
   }
 
   const rewards: RewardLedgerEvent[] = [];
-  for (let bucketIndex = existingCount + 1; bucketIndex <= earnedBuckets; bucketIndex += 1) {
+  for (
+    let bucketIndex = existingCount + 1;
+    bucketIndex <= earnedBuckets;
+    bucketIndex += 1
+  ) {
     const creditedMinutes = bucketIndex * intervalMinutes;
     const eventLog = recordEventLog({
       eventKind: "reward.task_run_progress",
@@ -841,10 +970,15 @@ export function recordWorkAdjustmentReward(input: {
   nextCreditedSeconds: number;
   adjustmentId: string;
 }): RewardLedgerEvent | null {
-  const { rule, intervalMinutes, intervalSeconds, fixedXp } = getTaskRunProgressRewardCadence();
+  const { rule, intervalMinutes, intervalSeconds, fixedXp } =
+    getTaskRunProgressRewardCadence();
   const entityType = workAdjustmentEntityTypeSchema.parse(input.entityType);
-  const previousBuckets = Math.floor(Math.max(0, input.previousCreditedSeconds) / intervalSeconds);
-  const nextBuckets = Math.floor(Math.max(0, input.nextCreditedSeconds) / intervalSeconds);
+  const previousBuckets = Math.floor(
+    Math.max(0, input.previousCreditedSeconds) / intervalSeconds
+  );
+  const nextBuckets = Math.floor(
+    Math.max(0, input.nextCreditedSeconds) / intervalSeconds
+  );
   const bucketDelta = nextBuckets - previousBuckets;
 
   if (bucketDelta === 0) {
@@ -877,7 +1011,10 @@ export function recordWorkAdjustmentReward(input: {
     actor: input.actor ?? null,
     source: input.source,
     deltaXp,
-    reasonTitle: bucketDelta > 0 ? "Manual work minutes added" : "Manual work minutes removed",
+    reasonTitle:
+      bucketDelta > 0
+        ? "Manual work minutes added"
+        : "Manual work minutes removed",
     reasonSummary: `${appliedMinutes} manual minute${appliedMinutes === 1 ? "" : "s"} ${direction}, shifting ${Math.abs(bucketDelta)} ${intervalMinutes}-minute reward bucket${Math.abs(bucketDelta) === 1 ? "" : "s"} for ${input.targetTitle}.`,
     reversibleGroup: `work_adjustment:${entityType}:${input.entityId}:${input.adjustmentId}`,
     metadata: {
@@ -894,7 +1031,11 @@ export function recordWorkAdjustmentReward(input: {
 }
 
 export function recordSessionEvent(
-  input: { sessionId: string; eventType: string; metrics: Record<string, MetadataValue> },
+  input: {
+    sessionId: string;
+    eventType: string;
+    metrics: Record<string, MetadataValue>;
+  },
   activity: { actor?: string | null; source: ActivitySource },
   now = new Date()
 ): { sessionEvent: SessionEvent; rewardEvent: RewardLedgerEvent | null } {
@@ -940,7 +1081,9 @@ export function recordSessionEvent(
 
   const day = sessionEvent.createdAt.slice(0, 10);
   const currentAmbientXp = getDailyAmbientXp(day);
-  const active = sessionEvent.metrics.visible === true && sessionEvent.metrics.interacted === true;
+  const active =
+    sessionEvent.metrics.visible === true &&
+    sessionEvent.metrics.interacted === true;
   const ruleCode =
     sessionEvent.eventType === "dwell_120_seconds"
       ? "session_dwell_120"

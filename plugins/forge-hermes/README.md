@@ -15,6 +15,9 @@ persisting them.
 It now also exposes the first-class Preferences surface, including the
 summary-first workspace read, the comparison-game starter, editable concept
 lists, contextual profile slices, direct signals, and exact score overrides.
+It also exposes Forge's wiki memory surface plus the sleep and sports review
+models, so Hermes can inspect recent nights, review workout context, enrich
+health sessions with reflective links, and work with file-first wiki pages.
 
 ## Install
 
@@ -93,6 +96,18 @@ This matches the current Forge UI:
 - Forge-native domains can auto-seed from real Forge entities
 - broader taste domains can seed from editable concept libraries such as food,
   activities, places, countries, fashion, people, media, and tools
+
+## Wiki, Sleep, And Sports
+
+Hermes now ships the same explicit coverage for these newer Forge surfaces:
+
+- Wiki: `forge_get_wiki_settings`, `forge_list_wiki_pages`, `forge_get_wiki_page`, `forge_search_wiki`, `forge_upsert_wiki_page`, `forge_get_wiki_health`, `forge_sync_wiki_vault`, `forge_reindex_wiki_embeddings`, `forge_ingest_wiki_source`
+- Sleep: `forge_get_sleep_overview`, `forge_update_sleep_session`
+- Sports: `forge_get_sports_overview`, `forge_update_workout_session`
+
+This matters because sleep and sports are not generic notes or tasks, and wiki
+pages are not normal batch entities. Hermes uses the dedicated routes so the
+health surfaces, markdown vault, backlinks, and metadata index stay aligned.
 
 ## Environment variables
 

@@ -57,6 +57,12 @@ const optionalNullableString = () =>
   Type.Optional(Type.Union([Type.String(), Type.Null()]));
 const optionalDeleteMode = () =>
   Type.Optional(Type.Union([Type.Literal("soft"), Type.Literal("hard")]));
+const healthLinkInputSchema = () =>
+  Type.Object({
+    entityType: Type.String({ minLength: 1 }),
+    entityId: Type.String({ minLength: 1 }),
+    relationshipType: Type.Optional(Type.String({ minLength: 1 }))
+  });
 const noteInputSchema = () =>
   Type.Object({
     contentMarkdown: Type.String({ minLength: 1 }),
@@ -229,7 +235,11 @@ export function registerForgePluginTools(
     description:
       "Start here for most Forge work. Read the one-shot operator overview with current priorities, momentum, and onboarding guidance before searching or mutating.",
     parameters: scopedReadSchema,
-    path: (params) => withUserIds("/api/v1/operator/overview", params.userIds as string[] | undefined)
+    path: (params) =>
+      withUserIds(
+        "/api/v1/operator/overview",
+        params.userIds as string[] | undefined
+      )
   });
 
   registerReadTool(api, config, {
@@ -238,7 +248,11 @@ export function registerForgePluginTools(
     description:
       "Read the current operational task board, focus queue, recent task runs, and XP state. Use this for current-work questions and work runtime decisions.",
     parameters: scopedReadSchema,
-    path: (params) => withUserIds("/api/v1/operator/context", params.userIds as string[] | undefined)
+    path: (params) =>
+      withUserIds(
+        "/api/v1/operator/context",
+        params.userIds as string[] | undefined
+      )
   });
 
   registerReadTool(api, config, {
@@ -274,7 +288,11 @@ export function registerForgePluginTools(
     description:
       "Read the aggregate Psyche state across values, patterns, behaviors, beliefs, modes, and trigger reports before making Psyche recommendations or updates.",
     parameters: scopedReadSchema,
-    path: (params) => withUserIds("/api/v1/psyche/overview", params.userIds as string[] | undefined)
+    path: (params) =>
+      withUserIds(
+        "/api/v1/psyche/overview",
+        params.userIds as string[] | undefined
+      )
   });
 
   registerReadTool(api, config, {
@@ -291,7 +309,11 @@ export function registerForgePluginTools(
     description:
       "Read the current weekly review payload with wins, trends, and reward framing.",
     parameters: scopedReadSchema,
-    path: (params) => withUserIds("/api/v1/reviews/weekly", params.userIds as string[] | undefined)
+    path: (params) =>
+      withUserIds(
+        "/api/v1/reviews/weekly",
+        params.userIds as string[] | undefined
+      )
   });
 
   registerReadTool(api, config, {
@@ -345,9 +367,11 @@ export function registerForgePluginTools(
       spaceId: optionalString()
     }),
     path: (params) =>
-      withQueryParams("/api/v1/wiki/health", params as Record<string, unknown>, [
-        "spaceId"
-      ])
+      withQueryParams(
+        "/api/v1/wiki/health",
+        params as Record<string, unknown>,
+        ["spaceId"]
+      )
   });
 
   registerWriteTool(api, config, {
@@ -537,6 +561,100 @@ export function registerForgePluginTools(
         recommendedNextTask: context?.recommendedNextTask ?? null,
         xp: context?.xp ?? null
       });
+    }
+  });
+
+  registerReadTool(api, config, {
+    name: "forge_get_sleep_overview",
+    label: "Forge Sleep Overview",
+    description:
+      "Read the reflective sleep surface with recent nights, sleep scores, regularity, stage averages, and linked-context counts.",
+    parameters: scopedReadSchema,
+    path: (params) =>
+      withUserIds(
+        "/api/v1/health/sleep",
+        params.userIds as string[] | undefined
+      )
+  });
+
+  registerReadTool(api, config, {
+    name: "forge_get_sports_overview",
+    label: "Forge Sports Overview",
+    description:
+      "Read the sports and workout surface with training volume, workout types, effort signals, and linked workout sessions.",
+    parameters: scopedReadSchema,
+    path: (params) =>
+      withUserIds(
+        "/api/v1/health/fitness",
+        params.userIds as string[] | undefined
+      )
+  });
+
+  api.registerTool({
+    name: "forge_update_sleep_session",
+    label: "Forge Update Sleep Session",
+    description:
+      "Patch one sleep session with reflective notes, tags, or linked Forge context after review.",
+    parameters: Type.Object({
+      sleepId: Type.String({ minLength: 1 }),
+      qualitySummary: optionalString(),
+      notes: optionalString(),
+      tags: Type.Optional(Type.Array(Type.String())),
+      links: Type.Optional(Type.Array(healthLinkInputSchema()))
+    }),
+    async execute(_toolCallId, params) {
+      const typed = params as Record<string, unknown>;
+      return jsonResult(
+        await runWrite(config, {
+          method: "PATCH",
+          path: `/api/v1/health/sleep/${typed.sleepId as string}`,
+          body: {
+            qualitySummary: typed.qualitySummary,
+            notes: typed.notes,
+            tags: typed.tags,
+            links: typed.links
+          }
+        })
+      );
+    }
+  });
+
+  api.registerTool({
+    name: "forge_update_workout_session",
+    label: "Forge Update Workout Session",
+    description:
+      "Patch one workout session with effort, mood, meaning, tags, or linked Forge context.",
+    parameters: Type.Object({
+      workoutId: Type.String({ minLength: 1 }),
+      subjectiveEffort: Type.Optional(
+        Type.Union([Type.Integer({ minimum: 1, maximum: 10 }), Type.Null()])
+      ),
+      moodBefore: optionalString(),
+      moodAfter: optionalString(),
+      meaningText: optionalString(),
+      plannedContext: optionalString(),
+      socialContext: optionalString(),
+      tags: Type.Optional(Type.Array(Type.String())),
+      links: Type.Optional(Type.Array(healthLinkInputSchema()))
+    }),
+    async execute(_toolCallId, params) {
+      const typed = params as Record<string, unknown>;
+      return jsonResult(
+        await runWrite(config, {
+          method: "PATCH",
+          path: `/api/v1/health/workouts/${typed.workoutId as string}`,
+          body: {
+            subjectiveEffort: typed.subjectiveEffort,
+            moodBefore: typed.moodBefore,
+            moodAfter: typed.moodAfter,
+            meaningText: typed.meaningText,
+            plannedContext: typed.plannedContext,
+            socialContext: typed.socialContext,
+            tags: typed.tags,
+            links: typed.links
+          }
+        })
+      );
     }
   });
 

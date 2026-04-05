@@ -125,7 +125,8 @@ import { resolveForgePath } from "./runtime-paths";
 import { normalizeForgeSnapshot } from "./snapshot-normalizer";
 
 function normalizeCalendarEventPlace(event: CalendarEvent): CalendarEvent {
-  const fallbackLocation = typeof event.location === "string" ? event.location : "";
+  const fallbackLocation =
+    typeof event.location === "string" ? event.location : "";
   const place = event.place ?? {
     label: fallbackLocation,
     address: "",
@@ -319,10 +320,13 @@ export function startPreferenceGame(input: PreferenceGameStartInput) {
 }
 
 export function createPreferenceCatalog(input: PreferenceCatalogMutationInput) {
-  return request<{ catalog: PreferenceCatalog }>("/api/v1/preferences/catalogs", {
-    method: "POST",
-    body: JSON.stringify(input)
-  });
+  return request<{ catalog: PreferenceCatalog }>(
+    "/api/v1/preferences/catalogs",
+    {
+      method: "POST",
+      body: JSON.stringify(input)
+    }
+  );
 }
 
 export function patchPreferenceCatalog(
@@ -382,10 +386,13 @@ export function deletePreferenceCatalogItem(catalogItemId: string) {
 }
 
 export function createPreferenceContext(input: PreferenceContextMutationInput) {
-  return request<{ context: PreferenceContext }>("/api/v1/preferences/contexts", {
-    method: "POST",
-    body: JSON.stringify(input)
-  });
+  return request<{ context: PreferenceContext }>(
+    "/api/v1/preferences/contexts",
+    {
+      method: "POST",
+      body: JSON.stringify(input)
+    }
+  );
 }
 
 export function patchPreferenceContext(
@@ -421,26 +428,35 @@ export function patchPreferenceItem(
   itemId: string,
   patch: PreferenceItemPatchInput
 ) {
-  return request<{ item: PreferenceItem }>(`/api/v1/preferences/items/${itemId}`, {
-    method: "PATCH",
-    body: JSON.stringify(patch)
-  });
+  return request<{ item: PreferenceItem }>(
+    `/api/v1/preferences/items/${itemId}`,
+    {
+      method: "PATCH",
+      body: JSON.stringify(patch)
+    }
+  );
 }
 
 export function enqueuePreferenceEntity(input: EnqueuePreferenceEntityInput) {
-  return request<{ item: PreferenceItem }>("/api/v1/preferences/items/from-entity", {
-    method: "POST",
-    body: JSON.stringify(input)
-  });
+  return request<{ item: PreferenceItem }>(
+    "/api/v1/preferences/items/from-entity",
+    {
+      method: "POST",
+      body: JSON.stringify(input)
+    }
+  );
 }
 
 export function submitPairwisePreferenceJudgment(
   input: PreferenceJudgmentInput
 ) {
-  return request<{ judgment: PairwiseJudgment }>("/api/v1/preferences/judgments", {
-    method: "POST",
-    body: JSON.stringify(input)
-  });
+  return request<{ judgment: PairwiseJudgment }>(
+    "/api/v1/preferences/judgments",
+    {
+      method: "POST",
+      body: JSON.stringify(input)
+    }
+  );
 }
 
 export function submitPreferenceSignal(input: PreferenceSignalInput) {
@@ -972,11 +988,13 @@ export function listWikiSpaces() {
   return request<{ spaces: WikiSpace[] }>("/api/v1/wiki/spaces");
 }
 
-export function listWikiPages(input: {
-  spaceId?: string;
-  kind?: Note["kind"];
-  limit?: number;
-} = {}) {
+export function listWikiPages(
+  input: {
+    spaceId?: string;
+    kind?: Note["kind"];
+    limit?: number;
+  } = {}
+) {
   const search = new URLSearchParams();
   if (input.spaceId) {
     search.set("spaceId", input.spaceId);
@@ -1017,10 +1035,12 @@ export function getWikiPageBySlug(input: { slug: string; spaceId?: string }) {
   );
 }
 
-export function getWikiTree(input: {
-  spaceId?: string;
-  kind?: Note["kind"];
-} = {}) {
+export function getWikiTree(
+  input: {
+    spaceId?: string;
+    kind?: Note["kind"];
+  } = {}
+) {
   const search = new URLSearchParams();
   if (input.spaceId?.trim()) {
     search.set("spaceId", input.spaceId.trim());
@@ -1138,7 +1158,9 @@ export function syncWikiVault(input: { spaceId?: string } = {}) {
   });
 }
 
-export function reindexWiki(input: { spaceId?: string; profileId?: string } = {}) {
+export function reindexWiki(
+  input: { spaceId?: string; profileId?: string } = {}
+) {
   return request<{
     profilesIndexed: number;
     pagesIndexed: number;
@@ -1191,13 +1213,13 @@ export function createWikiEmbeddingProfile(input: {
   );
 }
 
-export function deleteWikiProfile(kind: "llm" | "embedding", profileId: string) {
-  return request<null>(
-    `/api/v1/wiki/settings/${kind}-profiles/${profileId}`,
-    {
-      method: "DELETE"
-    }
-  );
+export function deleteWikiProfile(
+  kind: "llm" | "embedding",
+  profileId: string
+) {
+  return request<null>(`/api/v1/wiki/settings/${kind}-profiles/${profileId}`, {
+    method: "DELETE"
+  });
 }
 
 export function createWikiIngestJob(input: {
@@ -1804,6 +1826,15 @@ export function createHabitCheckIn(
     {
       method: "POST",
       body: JSON.stringify(input)
+    }
+  );
+}
+
+export function deleteHabitCheckIn(habitId: string, dateKey: string) {
+  return request<{ habit: Habit; metrics: XpMetricsPayload }>(
+    `/api/v1/habits/${habitId}/check-ins/${encodeURIComponent(dateKey)}`,
+    {
+      method: "DELETE"
     }
   );
 }

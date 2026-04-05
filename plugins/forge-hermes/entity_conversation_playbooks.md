@@ -8,21 +8,64 @@ intentional while still gathering enough structure to store the right record.
 
 - Ask only for what is missing or still unclear.
 - Lead the user somewhere. Know whether you are trying to clarify the name, the role,
-  the outcome, the placement, the timing, or the links.
+  the outcome, the placement, the timing, the success condition, or the links.
+- Let each question have one job. If you cannot say what the question is trying to
+  clarify, ask a different question.
 - Ask one to three focused questions at a time. One is usually best when the user is
   unsure or emotionally loaded.
 - Reflect briefly before the next question when the user gives nuance that matters.
+- For emotionally meaningful planning records such as goals, habits, and notes, reflect
+  the meaning first and then ask for the structure.
 - Do not read schema fields out loud unless the user explicitly wants a mechanical
   checklist.
 - Prefer a progression of:
   recent intent or concrete example -> working name -> purpose or outcome -> placement
   in Forge -> operational details -> linked context.
+- If the user already gave a usable title, timing, or parent context, do not ask for it
+  again just because the schema has that field.
+- When the user says "save something about..." and the record is still fuzzy, help them
+  sharpen what they are trying to preserve before you ask for the final Forge shape.
+- When the meaning is clearer than the wording, offer a tentative title or summary
+  yourself and ask whether it fits. Do not make the user do all the naming work alone.
 - Before saving, offer a short working summary in the user's own language when that
   would reduce ambiguity.
 - When updating, start with:
   what is changing,
   what should stay true,
   and what prompted the update now.
+
+## Question design rules
+
+- Prefer one clean question over a stacked sentence with multiple asks.
+- For straightforward logistical entities such as tasks, calendar events, work blocks,
+  timeboxes, and task runs, use the fast path: confirm what is already clear and ask
+  for only the one missing operational detail.
+- When you need two details, ask for the more meaning-bearing one first.
+- If the user sounds uncertain, ask for an example before an abstraction.
+- If the user sounds clear and decisive, confirm the working formulation and move to the
+  one missing structural detail.
+- A good next question usually clarifies one of these:
+  what this is,
+  why it matters,
+  where it belongs,
+  what success looks like,
+  when it should happen,
+  or what should stay linked.
+- Before the final save question, it is often better to offer a tentative formulation
+  than to ask for a raw title. Example shape:
+  "This sounds like a project about repairing trust with Lea, not just a loose note.
+  Does that fit, and if so what outcome would tell you it is moving?"
+- Avoid dead-form prompts like "What should this be called?" when the user is still
+  figuring out what the thing is. Name first, then ask for correction.
+
+## Update loop
+
+Use this when the user is updating an existing record rather than creating a new one.
+
+1. Ask what feels newly true, newly urgent, or newly clear.
+2. Ask what should stay intact so the record does not lose its core meaning.
+3. Ask for the concrete trigger for the update if it matters.
+4. Then ask only for the missing structural detail required by the change.
 
 ## Goal
 
@@ -43,7 +86,7 @@ Ready to save when:
 
 Preferred opening question:
 
-- "What direction are you trying to hold onto here?"
+- "What direction are you trying to hold onto here, in a way you would want future-you to keep seeing?"
 
 ## Project
 
@@ -64,7 +107,7 @@ Ready to save when:
 
 Preferred opening question:
 
-- "If this becomes a project, what would you want it to be called and what should it accomplish?"
+- "If this becomes a real project in Forge, what outcome would make it feel genuinely underway or complete?"
 
 ## Strategy
 
@@ -148,7 +191,7 @@ Ready to save when:
 
 Preferred opening question:
 
-- "What do you want this note to preserve, and what should it stay attached to?"
+- "What feels important to preserve from this?"
 
 ## Insight
 
@@ -168,7 +211,7 @@ Ready to save when:
 
 Preferred opening question:
 
-- "What observation or recommendation do you want Forge to remember?"
+- "What is the clearest thing you want future-you or the agent to remember from this?"
 
 ## Calendar Event
 
@@ -232,6 +275,28 @@ Ready to save when:
 Preferred opening question:
 
 - "Which task are you trying to make time for, and when should the slot be?"
+
+## Task Run
+
+Aim: start truthful live work with as little friction as possible while still knowing
+what is being worked on and by whom.
+
+Arc:
+
+1. Confirm the task.
+2. Confirm the actor only if it is not already obvious.
+3. Ask whether the run should be planned or unlimited only if that changes the action.
+4. Start the run instead of turning it into intake.
+
+Ready to start when:
+
+- the task is identified clearly enough
+- the actor is clear enough
+- any timer mode choice that matters is explicit
+
+Preferred opening question:
+
+- "Which task should I start?"
 
 ## Event Type
 

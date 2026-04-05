@@ -297,6 +297,18 @@ function formatCompactNumber(value: number) {
   }).format(value);
 }
 
+function getRouteTransitionKey(pathname: string) {
+  if (pathname === "/wiki" || pathname.startsWith("/wiki/page/")) {
+    return "/wiki";
+  }
+
+  if (pathname === "/wiki/new" || pathname.startsWith("/wiki/edit/")) {
+    return "/wiki/editor";
+  }
+
+  return pathname;
+}
+
 function readStoredSelectedUserIds() {
   if (typeof window === "undefined") {
     return [];
@@ -399,16 +411,23 @@ function buildUserScopeOptions(users: UserSummary[]) {
   ];
 }
 
-function resolveUserScopeOption(users: UserSummary[], selectedUserIds: string[]) {
+function resolveUserScopeOption(
+  users: UserSummary[],
+  selectedUserIds: string[]
+) {
   return (
     buildUserScopeOptions(users).find((option) =>
       sameUserScope(selectedUserIds, option.userIds)
     ) ?? {
       id: "custom",
       label:
-        selectedUserIds.length > 1 ? `${selectedUserIds.length} selected` : "Custom",
+        selectedUserIds.length > 1
+          ? `${selectedUserIds.length} selected`
+          : "Custom",
       shortLabel:
-        selectedUserIds.length > 1 ? `${selectedUserIds.length} selected` : "Custom",
+        selectedUserIds.length > 1
+          ? `${selectedUserIds.length} selected`
+          : "Custom",
       description: "Using a custom combination of users.",
       userIds: selectedUserIds,
       token: selectedUserIds.length > 1 ? String(selectedUserIds.length) : "C",
@@ -719,6 +738,7 @@ function ShellFrame({
   const active =
     PRIMARY_ROUTES.find((route) => location.pathname.startsWith(route.to)) ??
     PRIMARY_ROUTES[0];
+  const transitionKey = getRouteTransitionKey(location.pathname);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [collapseProgress, setCollapseProgress] = useState(0);
   const [navCollapsed, setNavCollapsed] = useState(false);
@@ -876,7 +896,11 @@ function ShellFrame({
   const desktopSecondaryOpacity = 1 - collapseProgress;
   const desktopSecondaryMaxHeight = interpolateNumber(collapseProgress, 160, 0);
   const desktopSecondarySpacing = interpolateNumber(collapseProgress, 12, 0);
-  const desktopSecondaryTranslateY = interpolateNumber(collapseProgress, 0, -10);
+  const desktopSecondaryTranslateY = interpolateNumber(
+    collapseProgress,
+    0,
+    -10
+  );
 
   const mobileHeaderPaddingTop = interpolateNumber(collapseProgress, 9, 6);
   const mobileHeaderPaddingBottom = interpolateNumber(collapseProgress, 8, 6);
@@ -1102,15 +1126,15 @@ function ShellFrame({
                 transition={{ duration: 0.28, ease: "easeOut" }}
               >
                 <div className="flex min-w-0 flex-wrap items-center gap-2">
-                    {railLinks.map((link) => (
-                      <Link
-                        key={link.to}
-                        to={link.to}
-                        className="interactive-tap inline-flex min-h-10 min-w-max items-center justify-center rounded-full bg-white/[0.04] px-4 py-2 text-[13px] leading-none whitespace-nowrap text-white/62 transition hover:bg-white/[0.07] hover:text-white"
-                      >
-                        {link.label}
-                      </Link>
-                    ))}
+                  {railLinks.map((link) => (
+                    <Link
+                      key={link.to}
+                      to={link.to}
+                      className="interactive-tap inline-flex min-h-10 min-w-max items-center justify-center rounded-full bg-white/[0.04] px-4 py-2 text-[13px] leading-none whitespace-nowrap text-white/62 transition hover:bg-white/[0.07] hover:text-white"
+                    >
+                      {link.label}
+                    </Link>
+                  ))}
                   <UserScopeSelector
                     users={shell.snapshot.users}
                     selectedUserIds={shell.selectedUserIds}
@@ -1171,7 +1195,7 @@ function ShellFrame({
 
           <main className="px-6 py-3">
             <RouteTransitionFrame
-              routeKey={location.pathname}
+              routeKey={transitionKey}
               tone={isPsyche ? "psyche" : "core"}
             >
               {children}
@@ -1312,7 +1336,7 @@ function ShellFrame({
           }}
         >
           <RouteTransitionFrame
-            routeKey={location.pathname}
+            routeKey={transitionKey}
             tone={isPsyche ? "psyche" : "core"}
           >
             {children}

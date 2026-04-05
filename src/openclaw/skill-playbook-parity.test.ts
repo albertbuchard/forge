@@ -58,5 +58,23 @@ describe("forge skill playbook parity", () => {
     expect(codexSkill).toMatch(/psyche_entity_playbooks\.md/);
     expect(codexSkill).toMatch(/missing or unclear/i);
     expect(codexSkill).toMatch(/one orienting question/i);
+    expect(codexSkill).toMatch(/each question have one job/i);
+    expect(codexSkill).toMatch(/follow-up lane/i);
+  });
+
+  it("keeps the canonical playbooks focused on guided, one-lane questioning", () => {
+    const entityPlaybook = readRepoFile("skills/forge-openclaw/entity_conversation_playbooks.md");
+    const psychePlaybook = readRepoFile("skills/forge-openclaw/psyche_entity_playbooks.md");
+
+    expect(entityPlaybook).toMatch(/Let each question have one job/i);
+    expect(entityPlaybook).toMatch(/Question design rules/i);
+    expect(entityPlaybook).toMatch(/Update loop/i);
+    expect(entityPlaybook).toMatch(/Task Run/i);
+    expect(entityPlaybook).toMatch(/offer a tentative title or summary/i);
+
+    expect(psychePlaybook).toMatch(/Ask only one lane at a time/i);
+    expect(psychePlaybook).toMatch(/Follow-up rhythm/i);
+    expect(psychePlaybook).toMatch(/Before the next question, reflect back what you just heard/i);
+    expect(psychePlaybook).toMatch(/formulation work/i);
   });
 });

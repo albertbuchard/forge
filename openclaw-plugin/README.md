@@ -51,12 +51,15 @@ Forge is a personal system for:
 - recurring habits
 - truthful live work sessions
 - weekly review and XP feedback
+- file-first wiki memory with spaces, backlinks, ingest, and explicit Forge links
+- first-class sleep and sports records imported from the iPhone companion or generated from habits
 - structured Psyche records such as values, patterns, beliefs, modes, and trigger reports
 
 This plugin gives OpenClaw the tools it needs to work with that system. It can read current state, search records, create and update records, control live work sessions, post insights, and hand the user off to the Forge UI when the visual workflow is easier.
 It can also grant an explicit audited XP bonus or penalty through the dedicated reward-bonus route when the normal automatic task or habit reward flows are not the right fit.
 It can also add or remove tracked minutes on existing tasks or projects through a dedicated signed work-adjustment route without pretending that a live task run happened.
 It also understands Forge `note` records, which are Markdown-based, searchable, and linkable across one or many entities.
+It also exposes Forge's file-first wiki memory surface plus the first-class sleep and sports read models, so an agent can review recent nights, inspect workout context, update reflective metadata on health sessions, and work with wiki pages without dropping to raw files.
 Notes support includes:
 
 - `note` as the durable collaboration entity
@@ -169,6 +172,23 @@ The runtime API for this surface lives under `/api/v1/preferences/*`.
 OpenClaw should still use `forge_get_agent_onboarding` as the live contract
 source when route-facing field names are uncertain, and it should prefer the UI
 handoff when the user wants to play the comparison game visually.
+
+## Wiki, Sleep, And Sports
+
+Forge now exposes three more agent-relevant surfaces directly:
+
+- the Wiki: file-first markdown memory with explicit spaces, backlinks, search, ingest, and maintenance health checks
+- Sleep: recent nights, sleep score and regularity metrics, stage averages, and linked reflective context
+- Sports: workout volume, effort, types, habit-generated sessions, and linked Forge context
+
+OpenClaw tool coverage for those areas is explicit:
+
+- wiki reads and writes use the `forge_get_wiki_*`, `forge_search_wiki`, `forge_upsert_wiki_page`, `forge_sync_wiki_vault`, `forge_reindex_wiki_embeddings`, and `forge_ingest_wiki_source` tools
+- sleep review uses `forge_get_sleep_overview` and record enrichment uses `forge_update_sleep_session`
+- sports review uses `forge_get_sports_overview` and record enrichment uses `forge_update_workout_session`
+
+The sports UI route is `/forge/sports`, while the backend overview route remains
+`/api/v1/health/fitness`. Sleep lives at `/forge/sleep` and `/api/v1/health/sleep`.
 
 ## Install
 

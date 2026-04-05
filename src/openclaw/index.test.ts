@@ -1,9 +1,22 @@
-import { mkdtempSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  mkdtempSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync
+} from "node:fs";
 import { join } from "node:path";
 import { Readable } from "node:stream";
 import { tmpdir } from "node:os";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { getForgeRuntimeStatus, primeForgeRuntime, restartForgeRuntime, startForgeRuntime, stopForgeRuntime } from "./local-runtime";
+import {
+  getForgeRuntimeStatus,
+  primeForgeRuntime,
+  restartForgeRuntime,
+  startForgeRuntime,
+  stopForgeRuntime
+} from "./local-runtime";
 
 vi.mock("./local-runtime", () => ({
   ensureForgeRuntimeReady: vi.fn().mockResolvedValue(undefined),
@@ -12,7 +25,8 @@ vi.mock("./local-runtime", () => ({
     ok: true,
     started: true,
     managed: true,
-    message: "Started the plugin-managed Forge runtime on http://127.0.0.1:4317.",
+    message:
+      "Started the plugin-managed Forge runtime on http://127.0.0.1:4317.",
     pid: 12345,
     baseUrl: "http://127.0.0.1:4317"
   }),
@@ -20,14 +34,16 @@ vi.mock("./local-runtime", () => ({
     ok: true,
     stopped: true,
     managed: true,
-    message: "Stopped the plugin-managed Forge runtime on http://127.0.0.1:4317.",
+    message:
+      "Stopped the plugin-managed Forge runtime on http://127.0.0.1:4317.",
     pid: 12345
   }),
   restartForgeRuntime: vi.fn().mockResolvedValue({
     ok: true,
     restarted: true,
     managed: true,
-    message: "Restarted the plugin-managed Forge runtime on http://127.0.0.1:4317.",
+    message:
+      "Restarted the plugin-managed Forge runtime on http://127.0.0.1:4317.",
     pid: 12345,
     baseUrl: "http://127.0.0.1:4317"
   }),
@@ -45,7 +61,11 @@ vi.mock("./local-runtime", () => ({
 import rootPackageJson from "../../package.json";
 import packageManifest from "../../openclaw-plugin/openclaw.plugin.json";
 import publicPackageJson from "../../openclaw-plugin/package.json";
-import pluginEntry, { forgePluginConfigSchema, registerForgePlugin, resolveForgePluginConfig } from "./index";
+import pluginEntry, {
+  forgePluginConfigSchema,
+  registerForgePlugin,
+  resolveForgePluginConfig
+} from "./index";
 import legacyPluginEntry from "./index.legacy";
 import { FORGE_PLUGIN_ROUTE_GROUPS } from "./routes";
 
@@ -53,7 +73,10 @@ type RouteCall = {
   path: string;
   match?: "exact" | "prefix";
   auth: "plugin" | "gateway";
-  handler: (request: never, response: never) => Promise<boolean | void> | boolean | void;
+  handler: (
+    request: never,
+    response: never
+  ) => Promise<boolean | void> | boolean | void;
 };
 
 type ToolCall = {
@@ -146,9 +169,21 @@ describe("forge openclaw plugin", () => {
   it("reuses a saved preferred local port when the user did not configure one explicitly", () => {
     const tempHome = mkdtempSync(join(tmpdir(), "forge-openclaw-pref-"));
     vi.stubEnv("HOME", tempHome);
-    const preferredPortPath = join(tempHome, ".openclaw", "run", "forge-openclaw-plugin", "127.0.0.1-preferred-port.json");
-    mkdirSync(join(tempHome, ".openclaw", "run", "forge-openclaw-plugin"), { recursive: true });
-    writeFileSync(preferredPortPath, `${JSON.stringify({ origin: "http://127.0.0.1", port: 4318 }, null, 2)}\n`, "utf8");
+    const preferredPortPath = join(
+      tempHome,
+      ".openclaw",
+      "run",
+      "forge-openclaw-plugin",
+      "127.0.0.1-preferred-port.json"
+    );
+    mkdirSync(join(tempHome, ".openclaw", "run", "forge-openclaw-plugin"), {
+      recursive: true
+    });
+    writeFileSync(
+      preferredPortPath,
+      `${JSON.stringify({ origin: "http://127.0.0.1", port: 4318 }, null, 2)}\n`,
+      "utf8"
+    );
 
     expect(resolveForgePluginConfig(undefined)).toEqual({
       origin: "http://127.0.0.1",
@@ -182,7 +217,9 @@ describe("forge openclaw plugin", () => {
         routes.push(route);
       },
       registerTool(tool) {
-        tools.push(typeof tool === "function" ? { name: "factory" } : { name: tool.name });
+        tools.push(
+          typeof tool === "function" ? { name: "factory" } : { name: tool.name }
+        );
       },
       registerCli(registrar) {
         registrar({
@@ -216,9 +253,15 @@ describe("forge openclaw plugin", () => {
       "/forge/v1/task-runs",
       "/forge/v1/ui"
     ]);
-    expect(routes.find((route) => route.path === "/forge/v1/entities")?.match).toBe("prefix");
-    expect(routes.find((route) => route.path === "/forge/v1/tasks")?.match).toBe("prefix");
-    expect(routes.find((route) => route.path === "/forge/v1/task-runs")?.match).toBe("prefix");
+    expect(
+      routes.find((route) => route.path === "/forge/v1/entities")?.match
+    ).toBe("prefix");
+    expect(
+      routes.find((route) => route.path === "/forge/v1/tasks")?.match
+    ).toBe("prefix");
+    expect(
+      routes.find((route) => route.path === "/forge/v1/task-runs")?.match
+    ).toBe("prefix");
 
     const toolNames = tools.map((tool) => tool.name).sort();
     expect(toolNames).toEqual([
@@ -236,6 +279,8 @@ describe("forge openclaw plugin", () => {
       "forge_get_operator_context",
       "forge_get_operator_overview",
       "forge_get_psyche_overview",
+      "forge_get_sleep_overview",
+      "forge_get_sports_overview",
       "forge_get_ui_entrypoint",
       "forge_get_user_directory",
       "forge_get_weekly_review",
@@ -259,11 +304,15 @@ describe("forge openclaw plugin", () => {
       "forge_sync_calendar_connection",
       "forge_sync_wiki_vault",
       "forge_update_entities",
+      "forge_update_sleep_session",
+      "forge_update_workout_session",
       "forge_upsert_wiki_page"
     ]);
 
     expect(program.children[0]?.name).toBe("forge");
-    expect(program.children[0]?.children.map((child: MockCommand) => child.name)).toEqual([
+    expect(
+      program.children[0]?.children.map((child: MockCommand) => child.name)
+    ).toEqual([
       "health",
       "overview",
       "onboarding",
@@ -304,10 +353,18 @@ describe("forge openclaw plugin", () => {
     });
 
     const forgeCommand = program.children[0];
-    const startCommand = forgeCommand?.children.find((child) => child.name === "start");
-    const stopCommand = forgeCommand?.children.find((child) => child.name === "stop");
-    const restartCommand = forgeCommand?.children.find((child) => child.name === "restart");
-    const statusCommand = forgeCommand?.children.find((child) => child.name === "status");
+    const startCommand = forgeCommand?.children.find(
+      (child) => child.name === "start"
+    );
+    const stopCommand = forgeCommand?.children.find(
+      (child) => child.name === "stop"
+    );
+    const restartCommand = forgeCommand?.children.find(
+      (child) => child.name === "restart"
+    );
+    const statusCommand = forgeCommand?.children.find(
+      (child) => child.name === "status"
+    );
     expect(startCommand).toBeDefined();
     expect(stopCommand).toBeDefined();
     expect(restartCommand).toBeDefined();
@@ -362,10 +419,14 @@ describe("forge openclaw plugin", () => {
       registerTool() {}
     });
 
-    const entitiesRoute = routes.find((route) => route.path === "/forge/v1/entities");
+    const entitiesRoute = routes.find(
+      (route) => route.path === "/forge/v1/entities"
+    );
     expect(entitiesRoute).toBeDefined();
 
-    const request = Readable.from([JSON.stringify({ searches: [] })]) as Readable & {
+    const request = Readable.from([
+      JSON.stringify({ searches: [] })
+    ]) as Readable & {
       headers: Record<string, string>;
       method: string;
       url: string;
@@ -382,7 +443,8 @@ describe("forge openclaw plugin", () => {
       ok: false,
       error: {
         code: "forge_plugin_token_required",
-        message: "Forge apiToken is required for remote plugin mutations when this target cannot use local or Tailscale operator-session bootstrap"
+        message:
+          "Forge apiToken is required for remote plugin mutations when this target cannot use local or Tailscale operator-session bootstrap"
       }
     });
   });
@@ -395,7 +457,8 @@ describe("forge openclaw plugin", () => {
           status: 200,
           headers: {
             "content-type": "application/json",
-            "set-cookie": "forge_operator_session=fg_session_cookie; Path=/; HttpOnly"
+            "set-cookie":
+              "forge_operator_session=fg_session_cookie; Path=/; HttpOnly"
           }
         })
       )
@@ -420,8 +483,12 @@ describe("forge openclaw plugin", () => {
       registerTool() {}
     });
 
-    const entitiesRoute = routes.find((route) => route.path === "/forge/v1/entities");
-    const request = Readable.from([JSON.stringify({ searches: [] })]) as Readable & {
+    const entitiesRoute = routes.find(
+      (route) => route.path === "/forge/v1/entities"
+    );
+    const request = Readable.from([
+      JSON.stringify({ searches: [] })
+    ]) as Readable & {
       headers: Record<string, string>;
       method: string;
       url: string;
@@ -435,9 +502,13 @@ describe("forge openclaw plugin", () => {
 
     expect(fetchMock).toHaveBeenCalledTimes(2);
     const [bootstrapUrl] = fetchMock.mock.calls[0] as [URL];
-    expect(bootstrapUrl.toString()).toBe("http://127.0.0.1:4317/api/v1/auth/operator-session");
+    expect(bootstrapUrl.toString()).toBe(
+      "http://127.0.0.1:4317/api/v1/auth/operator-session"
+    );
     const [writeUrl] = fetchMock.mock.calls[1] as [URL];
-    expect(writeUrl.toString()).toBe("http://127.0.0.1:4317/api/v1/entities/search");
+    expect(writeUrl.toString()).toBe(
+      "http://127.0.0.1:4317/api/v1/entities/search"
+    );
     expect(response.statusCode).toBe(200);
   });
 
@@ -522,8 +593,12 @@ describe("forge openclaw plugin", () => {
     expect(publicPackageJson.private).not.toBe(true);
     expect(publicPackageJson.version).toBe(packageManifest.version);
     expect(publicPackageJson.description).toBe(packageManifest.description);
-    expect(publicPackageJson.openclaw.extensions).toEqual(["./dist/openclaw/index.js"]);
+    expect(publicPackageJson.openclaw.extensions).toEqual([
+      "./dist/openclaw/index.js"
+    ]);
     expect(publicPackageJson.files).toContain("server");
-    expect(rootPackageJson.openclaw.extensions).toEqual(["./src/openclaw/index.legacy.ts"]);
+    expect(rootPackageJson.openclaw.extensions).toEqual([
+      "./src/openclaw/index.legacy.ts"
+    ]);
   });
 });

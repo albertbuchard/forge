@@ -396,9 +396,8 @@ test("mobile health sync builds richer summaries and reconciles habit-generated 
       method: "GET",
       url: "/api/v1/goals"
     });
-    const goalId = (
-      goalsResponse.json() as { goals: Array<{ id: string }> }
-    ).goals[0]!.id;
+    const goalId = (goalsResponse.json() as { goals: Array<{ id: string }> })
+      .goals[0]!.id;
 
     const habitResponse = await app.inject({
       method: "POST",
@@ -439,7 +438,8 @@ test("mobile health sync builds richer summaries and reconciles habit-generated 
       }
     });
     assert.equal(habitResponse.statusCode, 201);
-    const habitId = (habitResponse.json() as { habit: { id: string } }).habit.id;
+    const habitId = (habitResponse.json() as { habit: { id: string } }).habit
+      .id;
 
     const checkInResponse = await app.inject({
       method: "POST",
@@ -548,7 +548,8 @@ test("mobile health sync builds richer summaries and reconciles habit-generated 
             annotations: {
               moodBefore: "flat",
               moodAfter: "steady",
-              meaningText: "Used this walk to protect recovery and sleep rhythm.",
+              meaningText:
+                "Used this walk to protect recovery and sleep rhythm.",
               tags: ["sleep-support"]
             }
           }
@@ -2209,9 +2210,14 @@ test("openapi document exposes schema-backed versioned contracts", async () => {
     assert.ok(body.paths?.["/api/v1/psyche/reports/{id}"]);
     assert.ok(body.paths?.["/api/v1/notes"]);
     assert.ok(body.paths?.["/api/v1/notes/{id}"]);
+    assert.ok(body.paths?.["/api/v1/health/sleep"]);
+    assert.ok(body.paths?.["/api/v1/health/sleep/{id}"]);
+    assert.ok(body.paths?.["/api/v1/health/fitness"]);
+    assert.ok(body.paths?.["/api/v1/health/workouts/{id}"]);
     assert.ok(body.paths?.["/api/v1/habits"]);
     assert.ok(body.paths?.["/api/v1/habits/{id}"]);
     assert.ok(body.paths?.["/api/v1/habits/{id}/check-ins"]);
+    assert.ok(body.paths?.["/api/v1/habits/{id}/check-ins/{dateKey}"]);
     assert.ok(body.paths?.["/api/v1/tags"]);
     assert.ok(body.paths?.["/api/v1/tags/{id}"]);
     assert.ok(body.paths?.["/api/v1/projects"]);
@@ -3126,6 +3132,34 @@ test("habits persist with check-ins and XP updates through the versioned API", a
           entry.entityType === "habit" &&
           entry.entityId === createdHabit.id &&
           entry.deltaXp === 11
+      )
+    );
+
+    const deletedCheckIn = await app.inject({
+      method: "DELETE",
+      url: `/api/v1/habits/${createdHabit.id}/check-ins/2026-03-30`,
+      headers: { cookie: operatorCookie }
+    });
+    assert.equal(deletedCheckIn.statusCode, 200);
+    const deletedCheckInBody = deletedCheckIn.json() as {
+      habit: {
+        checkIns: Array<{ dateKey: string }>;
+      };
+      metrics: {
+        recentLedger: Array<{
+          entityType: string;
+          entityId: string;
+          deltaXp: number;
+        }>;
+      };
+    };
+    assert.equal(deletedCheckInBody.habit.checkIns.length, 0);
+    assert.ok(
+      deletedCheckInBody.metrics.recentLedger.some(
+        (entry) =>
+          entry.entityType === "habit" &&
+          entry.entityId === createdHabit.id &&
+          entry.deltaXp < 0
       )
     );
 
@@ -4701,7 +4735,9 @@ test("wiki pages are file-backed, searchable, backlink-aware, and ingestable", a
       }
     });
     assert.equal(launchLog.statusCode, 201);
-    const launchBody = launchLog.json() as { page: { id: string; slug: string } };
+    const launchBody = launchLog.json() as {
+      page: { id: string; slug: string };
+    };
 
     const detail = await app.inject({
       method: "GET",
@@ -4757,7 +4793,9 @@ test("wiki pages are file-backed, searchable, backlink-aware, and ingestable", a
       results: Array<{ page: { id: string } }>;
     };
     assert.ok(
-      textSearchBody.results.some((entry) => entry.page.id === launchBody.page.id)
+      textSearchBody.results.some(
+        (entry) => entry.page.id === launchBody.page.id
+      )
     );
 
     const entitySearch = await app.inject({
@@ -4779,7 +4817,9 @@ test("wiki pages are file-backed, searchable, backlink-aware, and ingestable", a
       results: Array<{ page: { id: string } }>;
     };
     assert.ok(
-      entitySearchBody.results.some((entry) => entry.page.id === launchBody.page.id)
+      entitySearchBody.results.some(
+        (entry) => entry.page.id === launchBody.page.id
+      )
     );
 
     const compatibilityList = await app.inject({
@@ -4812,11 +4852,9 @@ test("wiki pages are file-backed, searchable, backlink-aware, and ingestable", a
     });
     assert.equal(ingest.statusCode, 201);
     const ingestBody = ingest.json() as {
-      job:
-        | {
-            job: { status: string; pageNoteId: string | null };
-          }
-        | null;
+      job: {
+        job: { status: string; pageNoteId: string | null };
+      } | null;
       page: { id: string; title: string; kind: string };
     };
     assert.equal(ingestBody.job?.job.status, "completed");
@@ -6463,9 +6501,8 @@ test("preferences workspace supports items, entity enqueue, judgments, signals, 
       method: "GET",
       url: "/api/v1/goals"
     });
-    const goalId = (
-      goalsResponse.json() as { goals: Array<{ id: string }> }
-    ).goals[0]?.id;
+    const goalId = (goalsResponse.json() as { goals: Array<{ id: string }> })
+      .goals[0]?.id;
     assert.ok(goalId);
 
     const enqueueEntityResponse = await app.inject({
@@ -6564,7 +6601,10 @@ test("preferences workspace supports items, entity enqueue, judgments, signals, 
       scoreResponse.json() as {
         workspace: {
           contexts: Array<{ id: string; name: string }>;
-          history: { judgments: Array<{ id: string }>; signals: Array<{ id: string }> };
+          history: {
+            judgments: Array<{ id: string }>;
+            signals: Array<{ id: string }>;
+          };
           scores: Array<{
             itemId: string;
             manualStatus: string | null;
@@ -7400,6 +7440,8 @@ test("settings and local agent token management persist through the versioned AP
         "forge_get_operator_context",
         "forge_get_current_work",
         "forge_get_psyche_overview",
+        "forge_get_sleep_overview",
+        "forge_get_sports_overview",
         "forge_get_xp_metrics",
         "forge_get_weekly_review"
       ]

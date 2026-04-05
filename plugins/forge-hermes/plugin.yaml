@@ -7,6 +7,19 @@ provides_tools:
   - forge_get_operator_context
   - forge_get_agent_onboarding
   - forge_get_user_directory
+  - forge_get_wiki_settings
+  - forge_list_wiki_pages
+  - forge_get_wiki_page
+  - forge_get_wiki_health
+  - forge_search_wiki
+  - forge_upsert_wiki_page
+  - forge_sync_wiki_vault
+  - forge_reindex_wiki_embeddings
+  - forge_ingest_wiki_source
+  - forge_get_sleep_overview
+  - forge_get_sports_overview
+  - forge_update_sleep_session
+  - forge_update_workout_session
   - forge_get_preferences_workspace
   - forge_start_preferences_game
   - forge_create_preferences_catalog

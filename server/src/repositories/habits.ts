@@ -22,7 +22,10 @@ import {
 } from "./psyche.js";
 import { getTaskById } from "./tasks.js";
 import { recordActivityEvent } from "./activity-events.js";
-import { recordHabitCheckInReward } from "./rewards.js";
+import {
+  recordHabitCheckInReward,
+  reverseLatestHabitCheckInReward
+} from "./rewards.js";
 import {
   createHabitCheckInSchema,
   createHabitSchema,
@@ -589,7 +592,8 @@ export function updateHabit(
         parsed.rewardXp ?? current.rewardXp,
         parsed.penaltyXp ?? current.penaltyXp,
         JSON.stringify(
-          parsed.generatedHealthEventTemplate ?? current.generatedHealthEventTemplate
+          parsed.generatedHealthEventTemplate ??
+            current.generatedHealthEventTemplate
         ),
         updatedAt,
         habitId
@@ -725,11 +729,13 @@ export function createHabitCheckIn(
     if (parsed.status === "done") {
       const checkInId = existing?.id
         ? existing.id
-        : (getDatabase()
-            .prepare(
-              `SELECT id FROM habit_check_ins WHERE habit_id = ? AND date_key = ?`
-            )
-            .get(habitId, parsed.dateKey) as { id: string } | undefined)?.id;
+        : (
+            getDatabase()
+              .prepare(
+                `SELECT id FROM habit_check_ins WHERE habit_id = ? AND date_key = ?`
+              )
+              .get(habitId, parsed.dateKey) as { id: string } | undefined
+          )?.id;
       if (checkInId) {
         createGeneratedWorkoutFromHabit({
           habitId: habit.id,
@@ -758,6 +764,59 @@ export function createHabitCheckIn(
         });
       }
     }
+
+    return getHabitById(habitId);
+  });
+}
+
+export function deleteHabitCheckIn(
+  habitId: string,
+  dateKey: string,
+  activity?: ActivityContext
+): Habit | undefined {
+  const habit = getHabitById(habitId);
+  if (!habit) {
+    return undefined;
+  }
+
+  return runInTransaction(() => {
+    const existing = getDatabase()
+      .prepare(
+        `SELECT id, habit_id, date_key, status, note, delta_xp, created_at, updated_at
+         FROM habit_check_ins
+         WHERE habit_id = ? AND date_key = ?`
+      )
+      .get(habitId, dateKey) as HabitCheckInRow | undefined;
+
+    if (!existing) {
+      return getHabitById(habitId);
+    }
+
+    getDatabase()
+      .prepare(`DELETE FROM habit_check_ins WHERE id = ?`)
+      .run(existing.id);
+
+    reverseLatestHabitCheckInReward(
+      habit,
+      dateKey,
+      activity ?? { source: "ui", actor: null }
+    );
+
+    recordActivityEvent({
+      entityType: "habit",
+      entityId: habit.id,
+      eventType: "habit_check_in_deleted",
+      title: `Habit entry removed: ${habit.title}`,
+      description: "Habit check-in removed from the timeline.",
+      actor: activity?.actor ?? null,
+      source: activity?.source ?? "ui",
+      metadata: {
+        dateKey,
+        status: existing.status,
+        polarity: habit.polarity,
+        deltaXp: existing.delta_xp
+      }
+    });
 
     return getHabitById(habitId);
   });

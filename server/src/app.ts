@@ -36,6 +36,7 @@ import {
 import {
   createHabit,
   createHabitCheckIn,
+  deleteHabitCheckIn,
   deleteHabit,
   getHabitById,
   listHabits,
@@ -2878,7 +2879,8 @@ const AGENT_ONBOARDING_TOOL_INPUT_CATALOG = [
     summary: "List wiki and evidence pages inside one space.",
     whenToUse:
       "Use when browsing a space catalog, choosing a page to open, or building a crawl plan without ranking search results yet.",
-    inputShape: '{ spaceId?: string, kind?: "wiki"|"evidence", limit?: integer }',
+    inputShape:
+      '{ spaceId?: string, kind?: "wiki"|"evidence", limit?: integer }',
     requiredFields: [],
     notes: [
       "This returns the explicit page catalog, not a search-ranked result list.",
@@ -2988,6 +2990,66 @@ const AGENT_ONBOARDING_TOOL_INPUT_CATALOG = [
     ],
     example:
       '{"sourceKind":"url","sourceUrl":"https://example.com/article","titleHint":"Research import","parseStrategy":"auto","entityProposalMode":"suggest"}'
+  },
+  {
+    toolName: "forge_get_sleep_overview",
+    summary:
+      "Read the sleep surface with recent nights, scores, regularity, stage averages, and linked reflective context.",
+    whenToUse:
+      "Use when the operator wants to review sleep patterns or when an agent needs sleep context before planning or coaching.",
+    inputShape: "{ userIds?: string[] }",
+    requiredFields: [],
+    notes: [
+      "Sleep sessions are first-class Forge health records and can link back to goals, projects, tasks, habits, notes, and Psyche entities.",
+      "This read model is multi-user aware through userIds."
+    ],
+    example: '{"userIds":["user_operator","user_hermes"]}'
+  },
+  {
+    toolName: "forge_get_sports_overview",
+    summary:
+      "Read the sports surface with workout volume, workout types, effort signals, and linked session context.",
+    whenToUse:
+      "Use when the operator wants training context, habit-generated workout visibility, or workout review before planning.",
+    inputShape: "{ userIds?: string[] }",
+    requiredFields: [],
+    notes: [
+      "The API path stays /api/v1/health/fitness even though the UI route is /sports.",
+      "Habit-generated and imported workouts reconcile into the same workout record model."
+    ],
+    example: '{"userIds":["user_operator"]}'
+  },
+  {
+    toolName: "forge_update_sleep_session",
+    summary:
+      "Patch one sleep session with reflective notes, tags, or linked Forge context.",
+    whenToUse:
+      "Use after reviewing a specific night when the operator wants richer context stored on that sleep record.",
+    inputShape:
+      "{ sleepId: string, qualitySummary?: string, notes?: string, tags?: string[], links?: Array<{ entityType, entityId, relationshipType? }> }",
+    requiredFields: ["sleepId"],
+    notes: [
+      "Use this to attach the night to goals, projects, habits, notes, or Psyche context without editing the raw imported timestamps.",
+      "Links keep sleep review connected to the broader Forge graph."
+    ],
+    example:
+      '{"sleepId":"sleep_123","qualitySummary":"Fell asleep late after travel but recovered well.","tags":["travel","recovery"],"links":[{"entityType":"habit","entityId":"habit_sleep_hygiene","relationshipType":"supports"}]}'
+  },
+  {
+    toolName: "forge_update_workout_session",
+    summary:
+      "Patch one workout session with subjective effort, mood, meaning, tags, or linked Forge context.",
+    whenToUse:
+      "Use after reviewing one sports session when the operator wants the workout record to carry narrative or planning context.",
+    inputShape:
+      "{ workoutId: string, subjectiveEffort?: integer|null, moodBefore?: string, moodAfter?: string, meaningText?: string, plannedContext?: string, socialContext?: string, tags?: string[], links?: Array<{ entityType, entityId, relationshipType? }> }",
+    requiredFields: ["workoutId"],
+    notes: [
+      "Use this for subjective or linked-context metadata, not for rewriting the raw imported workout duration or calories.",
+      "This is the correct path for both imported HealthKit workouts and habit-generated sports sessions."
+    ],
+    example:
+      '{"workoutId":"workout_123","subjectiveEffort":7,"meaningText":"Protected recovery and sleep rhythm after a heavy workday.","tags":["recovery","sleep-support"],"links":[{"entityType":"project","entityId":"project_endurance_reset","relationshipType":"supports"}]}'
   },
   {
     toolName: "forge_get_calendar_overview",
@@ -3284,8 +3346,11 @@ function buildAgentOnboardingPayload(request: {
       taskRun:
         "A live work session attached to a task. Start, heartbeat, focus, complete, and release runs instead of faking work with status alone.",
       note: "A Markdown work note that can link to one or many entities. Use notes for progress evidence, context, and close-out summaries.",
-      wiki:
-        "Forge Wiki is the file-first memory layer: local Markdown pages plus media, backlinks, optional embeddings, explicit spaces, and structured links back to Forge entities.",
+      wiki: "Forge Wiki is the file-first memory layer: local Markdown pages plus media, backlinks, optional embeddings, explicit spaces, and structured links back to Forge entities.",
+      sleepSession:
+        "A sleep session is a first-class health record with timing, sleep and bed duration, stage breakdown, recovery metrics, annotations, and Forge links back to planning or Psyche context.",
+      workoutSession:
+        "A workout session is a first-class sports record imported from HealthKit or generated from a habit. It holds workout type, timing, energy or distance when available, subjective effort, narrative context, and Forge links.",
       insight:
         "An agent-authored observation or recommendation grounded in Forge data.",
       calendar:
@@ -3414,6 +3479,8 @@ function buildAgentOnboardingPayload(request: {
       context: "/api/v1/context",
       xpMetrics: "/api/v1/metrics/xp",
       weeklyReview: "/api/v1/reviews/weekly",
+      sleepOverview: "/api/v1/health/sleep",
+      sportsOverview: "/api/v1/health/fitness",
       wikiSettings: "/api/v1/wiki/settings",
       wikiSearch: "/api/v1/wiki/search",
       wikiHealth: "/api/v1/wiki/health",
@@ -3431,6 +3498,8 @@ function buildAgentOnboardingPayload(request: {
         "forge_get_operator_context",
         "forge_get_current_work",
         "forge_get_psyche_overview",
+        "forge_get_sleep_overview",
+        "forge_get_sports_overview",
         "forge_get_xp_metrics",
         "forge_get_weekly_review"
       ],
@@ -3452,6 +3521,12 @@ function buildAgentOnboardingPayload(request: {
         "forge_sync_wiki_vault",
         "forge_reindex_wiki_embeddings",
         "forge_ingest_wiki_source"
+      ],
+      healthWorkflow: [
+        "forge_get_sleep_overview",
+        "forge_get_sports_overview",
+        "forge_update_sleep_session",
+        "forge_update_workout_session"
       ],
       rewardWorkflow: ["forge_grant_reward_bonus"],
       workWorkflow: [
@@ -5564,11 +5639,9 @@ export async function buildServer(
     return { settings: getWikiSettingsPayload() };
   });
   app.post("/api/v1/wiki/settings/llm-profiles", async (request, reply) => {
-    requireScopedAccess(
-      request.headers as Record<string, unknown>,
-      ["write"],
-      { route: "/api/v1/wiki/settings/llm-profiles" }
-    );
+    requireScopedAccess(request.headers as Record<string, unknown>, ["write"], {
+      route: "/api/v1/wiki/settings/llm-profiles"
+    });
     const profile = upsertWikiLlmProfile(
       upsertWikiLlmProfileSchema.parse(request.body ?? {}),
       managers.secrets
@@ -5600,7 +5673,10 @@ export async function buildServer(
         ["write"],
         { route: "/api/v1/wiki/settings/:kind-profiles/:id" }
       );
-      const params = request.params as { kind: "llm" | "embedding"; id: string };
+      const params = request.params as {
+        kind: "llm" | "embedding";
+        id: string;
+      };
       deleteWikiProfile(params.kind, params.id);
       reply.code(204);
       return null;
@@ -5615,12 +5691,12 @@ export async function buildServer(
     return { spaces: listWikiSpaces() };
   });
   app.post("/api/v1/wiki/spaces", async (request, reply) => {
-    requireScopedAccess(
-      request.headers as Record<string, unknown>,
-      ["write"],
-      { route: "/api/v1/wiki/spaces" }
+    requireScopedAccess(request.headers as Record<string, unknown>, ["write"], {
+      route: "/api/v1/wiki/spaces"
+    });
+    const space = createWikiSpace(
+      createWikiSpaceSchema.parse(request.body ?? {})
     );
-    const space = createWikiSpace(createWikiSpaceSchema.parse(request.body ?? {}));
     reply.code(201);
     return { space };
   });
@@ -5764,19 +5840,15 @@ export async function buildServer(
     };
   });
   app.post("/api/v1/wiki/sync", async (request) => {
-    requireScopedAccess(
-      request.headers as Record<string, unknown>,
-      ["write"],
-      { route: "/api/v1/wiki/sync" }
-    );
+    requireScopedAccess(request.headers as Record<string, unknown>, ["write"], {
+      route: "/api/v1/wiki/sync"
+    });
     return syncWikiVaultFromDisk(syncWikiVaultSchema.parse(request.body ?? {}));
   });
   app.post("/api/v1/wiki/reindex", async (request) => {
-    requireScopedAccess(
-      request.headers as Record<string, unknown>,
-      ["write"],
-      { route: "/api/v1/wiki/reindex" }
-    );
+    requireScopedAccess(request.headers as Record<string, unknown>, ["write"], {
+      route: "/api/v1/wiki/reindex"
+    });
     return reindexWikiEmbeddings(
       reindexWikiEmbeddingsSchema.parse(request.body ?? {}),
       managers.secrets
@@ -7197,6 +7269,23 @@ export async function buildServer(
     }
     return { habit, metrics: buildXpMetricsPayload() };
   });
+  app.delete(
+    "/api/v1/habits/:id/check-ins/:dateKey",
+    async (request, reply) => {
+      const auth = requireScopedAccess(
+        request.headers as Record<string, unknown>,
+        ["write"],
+        { route: "/api/v1/habits/:id/check-ins/:dateKey" }
+      );
+      const { id, dateKey } = request.params as { id: string; dateKey: string };
+      const habit = deleteHabitCheckIn(id, dateKey, toActivityContext(auth));
+      if (!habit) {
+        reply.code(404);
+        return { error: "Habit not found" };
+      }
+      return { habit, metrics: buildXpMetricsPayload() };
+    }
+  );
   app.patch("/api/v1/settings", async (request) => {
     const auth = requireScopedAccess(
       request.headers as Record<string, unknown>,

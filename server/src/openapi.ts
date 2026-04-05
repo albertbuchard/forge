@@ -3254,6 +3254,192 @@ export function buildOpenApiDocument() {
     }
   };
 
+  const healthLink = {
+    type: "object",
+    additionalProperties: false,
+    required: ["entityType", "entityId", "relationshipType"],
+    properties: {
+      entityType: { type: "string" },
+      entityId: { type: "string" },
+      relationshipType: { type: "string" }
+    }
+  };
+
+  const sleepSession = {
+    type: "object",
+    additionalProperties: false,
+    required: [
+      "id",
+      "externalUid",
+      "pairingSessionId",
+      "userId",
+      "source",
+      "sourceType",
+      "sourceDevice",
+      "startedAt",
+      "endedAt",
+      "timeInBedSeconds",
+      "asleepSeconds",
+      "awakeSeconds",
+      "sleepScore",
+      "regularityScore",
+      "bedtimeConsistencyMinutes",
+      "wakeConsistencyMinutes",
+      "stageBreakdown",
+      "recoveryMetrics",
+      "links",
+      "annotations",
+      "provenance",
+      "derived",
+      "createdAt",
+      "updatedAt"
+    ],
+    properties: {
+      id: { type: "string" },
+      externalUid: { type: "string" },
+      pairingSessionId: nullable({ type: "string" }),
+      userId: { type: "string" },
+      source: { type: "string" },
+      sourceType: { type: "string" },
+      sourceDevice: { type: "string" },
+      startedAt: { type: "string", format: "date-time" },
+      endedAt: { type: "string", format: "date-time" },
+      timeInBedSeconds: { type: "integer" },
+      asleepSeconds: { type: "integer" },
+      awakeSeconds: { type: "integer" },
+      sleepScore: nullable({ type: "number" }),
+      regularityScore: nullable({ type: "number" }),
+      bedtimeConsistencyMinutes: nullable({ type: "number" }),
+      wakeConsistencyMinutes: nullable({ type: "number" }),
+      stageBreakdown: arrayOf({
+        type: "object",
+        additionalProperties: false,
+        required: ["stage", "seconds"],
+        properties: {
+          stage: { type: "string" },
+          seconds: { type: "integer" }
+        }
+      }),
+      recoveryMetrics: { type: "object", additionalProperties: true },
+      links: arrayOf({ $ref: "#/components/schemas/HealthLink" }),
+      annotations: { type: "object", additionalProperties: true },
+      provenance: { type: "object", additionalProperties: true },
+      derived: { type: "object", additionalProperties: true },
+      createdAt: { type: "string", format: "date-time" },
+      updatedAt: { type: "string", format: "date-time" }
+    }
+  };
+
+  const workoutSession = {
+    type: "object",
+    additionalProperties: false,
+    required: [
+      "id",
+      "externalUid",
+      "pairingSessionId",
+      "userId",
+      "source",
+      "sourceType",
+      "workoutType",
+      "sourceDevice",
+      "startedAt",
+      "endedAt",
+      "durationSeconds",
+      "activeEnergyKcal",
+      "totalEnergyKcal",
+      "distanceMeters",
+      "stepCount",
+      "exerciseMinutes",
+      "averageHeartRate",
+      "maxHeartRate",
+      "subjectiveEffort",
+      "moodBefore",
+      "moodAfter",
+      "meaningText",
+      "plannedContext",
+      "socialContext",
+      "links",
+      "tags",
+      "annotations",
+      "provenance",
+      "derived",
+      "generatedFromHabitId",
+      "generatedFromCheckInId",
+      "reconciliationStatus",
+      "createdAt",
+      "updatedAt"
+    ],
+    properties: {
+      id: { type: "string" },
+      externalUid: { type: "string" },
+      pairingSessionId: nullable({ type: "string" }),
+      userId: { type: "string" },
+      source: { type: "string" },
+      sourceType: { type: "string" },
+      workoutType: { type: "string" },
+      sourceDevice: { type: "string" },
+      startedAt: { type: "string", format: "date-time" },
+      endedAt: { type: "string", format: "date-time" },
+      durationSeconds: { type: "integer" },
+      activeEnergyKcal: nullable({ type: "number" }),
+      totalEnergyKcal: nullable({ type: "number" }),
+      distanceMeters: nullable({ type: "number" }),
+      stepCount: nullable({ type: "integer" }),
+      exerciseMinutes: nullable({ type: "integer" }),
+      averageHeartRate: nullable({ type: "number" }),
+      maxHeartRate: nullable({ type: "number" }),
+      subjectiveEffort: nullable({ type: "integer" }),
+      moodBefore: { type: "string" },
+      moodAfter: { type: "string" },
+      meaningText: { type: "string" },
+      plannedContext: { type: "string" },
+      socialContext: { type: "string" },
+      links: arrayOf({ $ref: "#/components/schemas/HealthLink" }),
+      tags: arrayOf({ type: "string" }),
+      annotations: { type: "object", additionalProperties: true },
+      provenance: { type: "object", additionalProperties: true },
+      derived: { type: "object", additionalProperties: true },
+      generatedFromHabitId: nullable({ type: "string" }),
+      generatedFromCheckInId: nullable({ type: "string" }),
+      reconciliationStatus: { type: "string" },
+      createdAt: { type: "string", format: "date-time" },
+      updatedAt: { type: "string", format: "date-time" }
+    }
+  };
+
+  const sleepViewData = {
+    type: "object",
+    additionalProperties: false,
+    required: [
+      "summary",
+      "weeklyTrend",
+      "monthlyPattern",
+      "stageAverages",
+      "linkBreakdown",
+      "sessions"
+    ],
+    properties: {
+      summary: { type: "object", additionalProperties: true },
+      weeklyTrend: arrayOf({ type: "object", additionalProperties: true }),
+      monthlyPattern: arrayOf({ type: "object", additionalProperties: true }),
+      stageAverages: arrayOf({ type: "object", additionalProperties: true }),
+      linkBreakdown: arrayOf({ type: "object", additionalProperties: true }),
+      sessions: arrayOf({ $ref: "#/components/schemas/SleepSession" })
+    }
+  };
+
+  const fitnessViewData = {
+    type: "object",
+    additionalProperties: false,
+    required: ["summary", "weeklyTrend", "typeBreakdown", "sessions"],
+    properties: {
+      summary: { type: "object", additionalProperties: true },
+      weeklyTrend: arrayOf({ type: "object", additionalProperties: true }),
+      typeBreakdown: arrayOf({ type: "object", additionalProperties: true }),
+      sessions: arrayOf({ $ref: "#/components/schemas/WorkoutSession" })
+    }
+  };
+
   return {
     openapi: "3.1.0",
     info: {
@@ -3339,6 +3525,11 @@ export function buildOpenApiDocument() {
         Note: note,
         NoteSummary: noteSummary,
         NotesSummaryByEntity: notesSummaryByEntity,
+        HealthLink: healthLink,
+        SleepSession: sleepSession,
+        WorkoutSession: workoutSession,
+        SleepViewData: sleepViewData,
+        FitnessViewData: fitnessViewData,
         PsycheOverviewPayload: psycheOverviewPayload,
         Insight: insight,
         InsightFeedback: insightFeedback,
@@ -3400,6 +3591,76 @@ export function buildOpenApiDocument() {
               },
               "Forge health payload"
             )
+          }
+        }
+      },
+      "/api/v1/health/sleep": {
+        get: {
+          summary: "Read the Forge sleep overview surface",
+          responses: {
+            "200": jsonResponse(
+              {
+                type: "object",
+                required: ["sleep"],
+                properties: {
+                  sleep: { $ref: "#/components/schemas/SleepViewData" }
+                }
+              },
+              "Sleep overview"
+            )
+          }
+        }
+      },
+      "/api/v1/health/fitness": {
+        get: {
+          summary: "Read the Forge sports and workout overview surface",
+          responses: {
+            "200": jsonResponse(
+              {
+                type: "object",
+                required: ["fitness"],
+                properties: {
+                  fitness: { $ref: "#/components/schemas/FitnessViewData" }
+                }
+              },
+              "Fitness overview"
+            )
+          }
+        }
+      },
+      "/api/v1/health/workouts/{id}": {
+        patch: {
+          summary: "Update one workout session's reflective metadata",
+          responses: {
+            "200": jsonResponse(
+              {
+                type: "object",
+                required: ["workout"],
+                properties: {
+                  workout: { $ref: "#/components/schemas/WorkoutSession" }
+                }
+              },
+              "Updated workout session"
+            ),
+            "404": { $ref: "#/components/responses/Error" }
+          }
+        }
+      },
+      "/api/v1/health/sleep/{id}": {
+        patch: {
+          summary: "Update one sleep session's reflective metadata",
+          responses: {
+            "200": jsonResponse(
+              {
+                type: "object",
+                required: ["sleep"],
+                properties: {
+                  sleep: { $ref: "#/components/schemas/SleepSession" }
+                }
+              },
+              "Updated sleep session"
+            ),
+            "404": { $ref: "#/components/responses/Error" }
           }
         }
       },
@@ -3729,7 +3990,8 @@ export function buildOpenApiDocument() {
       },
       "/api/v1/preferences/items/from-entity": {
         post: {
-          summary: "Create or queue a Preferences item from an existing Forge entity",
+          summary:
+            "Create or queue a Preferences item from an existing Forge entity",
           responses: {
             "201": jsonResponse(
               {
@@ -5333,6 +5595,25 @@ export function buildOpenApiDocument() {
                 }
               },
               "Habit check-in result"
+            ),
+            "404": { $ref: "#/components/responses/Error" }
+          }
+        }
+      },
+      "/api/v1/habits/{id}/check-ins/{dateKey}": {
+        delete: {
+          summary: "Delete a habit check-in for one day",
+          responses: {
+            "200": jsonResponse(
+              {
+                type: "object",
+                required: ["habit", "metrics"],
+                properties: {
+                  habit: { $ref: "#/components/schemas/Habit" },
+                  metrics: { $ref: "#/components/schemas/XpMetricsPayload" }
+                }
+              },
+              "Habit check-in deletion result"
             ),
             "404": { $ref: "#/components/responses/Error" }
           }

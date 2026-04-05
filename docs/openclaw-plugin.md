@@ -46,6 +46,8 @@ The intended workflow is:
 - use the task-run tools for real live work: `forge_start_task_run`, `forge_heartbeat_task_run`, `forge_focus_task_run`, `forge_complete_task_run`, `forge_release_task_run`
 - use `forge_grant_reward_bonus` only when a manual XP bonus or penalty should be explicit and auditable
 - use first-class `note` entities for Markdown progress evidence, handoff context, and multi-entity work summaries
+- use the dedicated wiki tools for file-first knowledge work, not the batch entity routes
+- use `forge_get_sleep_overview`, `forge_get_sports_overview`, `forge_update_sleep_session`, and `forge_update_workout_session` for the first-class sleep and sports surfaces
 - store agent-authored recommendations with `forge_post_insight`
 - use `forge_get_ui_entrypoint` when the user should continue in the visual Forge UI
 
@@ -76,6 +78,18 @@ The runtime surface lives under `/api/v1/preferences/*`.
 Hermes exposes dedicated Preferences tools directly, while OpenClaw should use
 the live onboarding contract for exact route-facing fields and prefer a UI
 handoff when the user wants to play the comparison game visually.
+
+## Wiki, Sleep, And Sports
+
+Forge now exposes three newer agent-facing surfaces that matter for OpenClaw:
+
+- Wiki is the file-first memory layer. Use the dedicated wiki tools so page files, backlinks, search, and ingest metadata stay aligned.
+- Sleep is a first-class reflective surface. Use `forge_get_sleep_overview` for review and `forge_update_sleep_session` to attach tags, notes, or Forge links to one night.
+- Sports is the workout review surface. Use `forge_get_sports_overview` for read access and `forge_update_workout_session` to add subjective effort, narrative meaning, tags, or links to one workout.
+
+The Forge UI routes are `/forge/wiki`, `/forge/sleep`, and `/forge/sports`.
+The backend overview routes are `/api/v1/health/sleep` and
+`/api/v1/health/fitness` for sleep and sports respectively.
 
 ## Notes contract
 

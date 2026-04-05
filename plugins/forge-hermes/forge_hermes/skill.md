@@ -5,11 +5,16 @@ tool surface.
 
 ## Core model
 
-Forge has two major domains. The planning side covers goals, projects, strategies,
+Forge has four major surfaces. The planning side covers goals, projects, strategies,
 tasks, habits, notes, calendar events, recurring work blocks, task timeboxes, live
-task runs, and agent-authored insights. The Psyche side covers values, patterns,
-behaviors, beliefs, modes, guided mode sessions, trigger reports, event types, and
-reusable emotion definitions. Forge is also multi-user: every entity can belong to a
+task runs, and agent-authored insights. The Health side covers sleep sessions,
+sports and workout sessions, companion pairing, and habit-generated workout records.
+The Preferences side covers contextual taste modeling, pairwise comparisons, direct
+signals, editable concept libraries, and preference items. The Psyche side covers
+values, patterns, behaviors, beliefs, modes, guided mode sessions, trigger reports,
+event types, and reusable emotion definitions. Forge also has a file-first Wiki
+memory layer with explicit spaces, local markdown pages, backlinks, optional
+embeddings, and structured Forge links. Forge is also multi-user: every entity can belong to a
 typed `human` or `bot` user through `userId`, and Hermes can scope reads with `userId`
 or repeated `userIds`. The user directory exposes a directional relationship graph
 between humans and bots; use `forge_get_user_directory` before assuming cross-owner
@@ -34,23 +39,29 @@ fall back to field-by-field intake.
 ## Preferred workflow
 
 1. Start with `forge_get_operator_overview`.
-2. Use `forge_get_operator_context`, `forge_get_current_work`, `forge_get_psyche_overview`, or `forge_get_calendar_overview` when the request needs a more specific read model.
+2. Use `forge_get_operator_context`, `forge_get_current_work`, `forge_get_psyche_overview`, `forge_get_sleep_overview`, `forge_get_sports_overview`, `forge_get_wiki_settings`, `forge_search_wiki`, or `forge_get_calendar_overview` when the request needs a more specific read model.
 3. Search before creating duplicates with `forge_search_entities`.
 4. Prefer the batch entity tools for normal stored-entity work:
    `forge_create_entities`, `forge_update_entities`, `forge_delete_entities`, `forge_restore_entities`.
-5. Treat narrow calendar helpers as convenience helpers, not the default architecture:
+5. Use the wiki tools for file-first knowledge work:
+   `forge_get_wiki_settings`, `forge_list_wiki_pages`, `forge_get_wiki_page`, `forge_search_wiki`, `forge_upsert_wiki_page`, `forge_get_wiki_health`, `forge_sync_wiki_vault`, `forge_reindex_wiki_embeddings`, `forge_ingest_wiki_source`.
+6. Use the health tools for sleep and sports review:
+   `forge_get_sleep_overview`, `forge_get_sports_overview`, `forge_update_sleep_session`, `forge_update_workout_session`.
+7. Treat narrow calendar helpers as convenience helpers, not the default architecture:
    `forge_create_work_block_template` and `forge_create_task_timebox` are fine, but Hermes should still prefer the generic batch entity routes when practical.
-6. Use the task-run tools for truthful live work:
+8. Use the task-run tools for truthful live work:
    `forge_start_task_run`, `forge_heartbeat_task_run`, `forge_focus_task_run`, `forge_complete_task_run`, `forge_release_task_run`.
-7. Use `forge_adjust_work_minutes` for signed minute corrections on existing tasks or projects, not to fake a live session.
-8. Use `forge_post_insight` only for agent-authored interpretation or recommendation, not as a substitute for creating a real goal, project, task, note, or Psyche record.
-9. Use `forge_get_ui_entrypoint` only when the Forge UI is genuinely the better surface for Kanban, review, graph exploration, or complex multi-record editing.
+9. Use `forge_adjust_work_minutes` for signed minute corrections on existing tasks or projects, not to fake a live session.
+10. Use `forge_post_insight` only for agent-authored interpretation or recommendation, not as a substitute for creating a real goal, project, task, note, or Psyche record.
+11. Use `forge_get_ui_entrypoint` only when the Forge UI is genuinely the better surface for Kanban, review, graph exploration, or complex multi-record editing.
 
 ## Entity guidance
 
 - `goal`, `project`, `strategy`, `task`, `habit`, `note`, `calendar_event`, `work_block_template`, `task_timebox`, `psyche_value`, `behavior_pattern`, `behavior`, `belief_entry`, `mode_profile`, `mode_guide_session`, `trigger_report`, `event_type`, and `emotion_definition` should normally flow through the batch entity routes.
 - `task_run` is not a batch entity. Use the live task-run tools instead.
 - `insight` is not a batch entity. Use `forge_post_insight`.
+- Sleep and workout sessions are not batch entities. Use the dedicated health tools for those records.
+- Wiki pages are not batch entities. Use the dedicated wiki tools so the markdown vault, backlinks, and metadata index stay aligned.
 - For `goal`, `project`, or `task`, nested `notes` on create can include `contentMarkdown`, `author`, `tags`, `destroyAt`, and extra `links`.
 - Standalone `note` creates can include `contentMarkdown`, `author`, `tags`, `destroyAt`, and `links`.
 - When preserving a work summary from `forge_log_work`, `forge_complete_task_run`, or `forge_release_task_run`, prefer `closeoutNote` so the summary becomes a real linked note rather than transient run metadata.
@@ -63,6 +74,9 @@ fall back to field-by-field intake.
 - Project lifecycle changes are status patches on `project.status`, not separate suspend or finish routes.
 - User-aware writes should set `userId` when ownership matters explicitly, especially when Hermes is working across human and bot accounts.
 - Notes are searchable and editable records, not comment strings. If the user cares about durable context, preserve it as a note.
+- The wiki is the durable long-form memory surface. Use it for canonical reference pages, ingest, and backlink-aware recall rather than overloading normal notes.
+- The UI route is `/sports`, but the backend overview route is `/api/v1/health/fitness`. Treat both as the same sports surface.
+- Use `forge_update_sleep_session` and `forge_update_workout_session` only to enrich those records with reflective context, tags, and links. Do not pretend they are generic task or note mutations.
 - Ephemeral notes are appropriate for scratch memory, temporary handoffs, or “what just happened” captures that should disappear automatically later.
 - For every entity flow, ask only for what is missing or unclear instead of walking through the whole schema.
 - Use a natural progression of intent or example -> working name -> purpose -> placement -> operational detail -> links.

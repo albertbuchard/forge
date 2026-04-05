@@ -2,11 +2,20 @@ import { useEffect, useMemo, useState } from "react";
 import * as Dialog from "@radix-ui/react-dialog";
 import { useQuery } from "@tanstack/react-query";
 import { Check, PenSquare, Plus, Search, X } from "lucide-react";
-import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
+import {
+  Link,
+  useNavigate,
+  useParams,
+  useSearchParams
+} from "react-router-dom";
 import { WikiArticleMarkdown } from "@/components/wiki/wiki-article-markdown";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { EmptyState, ErrorState, LoadingState } from "@/components/ui/page-state";
+import {
+  EmptyState,
+  ErrorState,
+  LoadingState
+} from "@/components/ui/page-state";
 import { Input } from "@/components/ui/input";
 import {
   getWikiHome,
@@ -21,6 +30,7 @@ import type { WikiSpace, WikiTreeNode } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 type WikiSearchMode = "text" | "semantic" | "entity" | "hybrid";
+type WikiDetail = Awaited<ReturnType<typeof getWikiHome>>;
 
 function formatUpdatedAt(value: string) {
   return new Intl.DateTimeFormat(undefined, {
@@ -144,7 +154,9 @@ function WikiSpacePickerDialog({
                       {space.description || `/${space.slug}`}
                     </span>
                   </span>
-                  {active ? <Check className="size-4 shrink-0 text-[var(--primary)]" /> : null}
+                  {active ? (
+                    <Check className="size-4 shrink-0 text-[var(--primary)]" />
+                  ) : null}
                 </button>
               );
             })}
@@ -163,7 +175,8 @@ export function WikiPage() {
   const [spacePickerOpen, setSpacePickerOpen] = useState(false);
   const [searchMode, setSearchMode] = useState<WikiSearchMode>("hybrid");
   const [searchQuery, setSearchQuery] = useState("");
-  const [selectedEmbeddingProfileId, setSelectedEmbeddingProfileId] = useState("");
+  const [selectedEmbeddingProfileId, setSelectedEmbeddingProfileId] =
+    useState("");
 
   const selectedSpaceId = searchParams.get("spaceId") ?? "";
 
@@ -175,7 +188,9 @@ export function WikiPage() {
   const activeSpaceId =
     selectedSpaceId || settingsQuery.data?.settings.spaces[0]?.id || "";
   const embeddingProfiles =
-    settingsQuery.data?.settings.embeddingProfiles.filter((profile) => profile.enabled) ?? [];
+    settingsQuery.data?.settings.embeddingProfiles.filter(
+      (profile) => profile.enabled
+    ) ?? [];
 
   useEffect(() => {
     if (!selectedEmbeddingProfileId && embeddingProfiles[0]?.id) {
@@ -233,14 +248,30 @@ export function WikiPage() {
             : undefined,
         limit: 30
       }),
-    enabled: searchOpen && Boolean(activeSpaceId) && searchQuery.trim().length > 0
+    enabled:
+      searchOpen && Boolean(activeSpaceId) && searchQuery.trim().length > 0
   });
 
-  const detail = slug ? pageQuery.data ?? null : homeQuery.data ?? null;
+  const requestedDetail = slug
+    ? (pageQuery.data ?? null)
+    : (homeQuery.data ?? null);
+  const [visibleDetail, setVisibleDetail] = useState<WikiDetail | null>(null);
+
+  useEffect(() => {
+    if (requestedDetail) {
+      setVisibleDetail(requestedDetail);
+    }
+  }, [requestedDetail]);
+
+  const contentPending =
+    Boolean(activeSpaceId) &&
+    (slug ? pageQuery.isFetching : homeQuery.isFetching);
+  const detail = requestedDetail ?? (contentPending ? visibleDetail : null);
   const selectedPage = detail?.page ?? null;
   const activeSpace =
-    settingsQuery.data?.settings.spaces.find((space) => space.id === activeSpaceId) ??
-    null;
+    settingsQuery.data?.settings.spaces.find(
+      (space) => space.id === activeSpaceId
+    ) ?? null;
 
   const linkedEntityItems = useMemo(
     () =>
@@ -252,7 +283,13 @@ export function WikiPage() {
     [selectedPage?.links]
   );
 
-  if (settingsQuery.isLoading || (!slug && homeQuery.isLoading) || (slug && pageQuery.isLoading)) {
+  if (
+    !selectedPage &&
+    (settingsQuery.isLoading ||
+      treeQuery.isLoading ||
+      (!slug && homeQuery.isLoading) ||
+      (slug && pageQuery.isLoading))
+  ) {
     return (
       <LoadingState
         eyebrow="Wiki"
@@ -262,7 +299,13 @@ export function WikiPage() {
     );
   }
 
-  if (settingsQuery.isError || homeQuery.isError || pageQuery.isError || treeQuery.isError) {
+  if (
+    !selectedPage &&
+    (settingsQuery.isError ||
+      homeQuery.isError ||
+      pageQuery.isError ||
+      treeQuery.isError)
+  ) {
     return (
       <ErrorState
         eyebrow="Wiki"
@@ -296,134 +339,156 @@ export function WikiPage() {
     <>
       <div className="px-3 py-4 sm:px-5 lg:px-6">
         <div className="mx-auto flex w-full max-w-[1680px] flex-col gap-4">
-        <section className="wiki-frame px-3 py-3 sm:px-4">
-          <div className="flex flex-wrap items-center gap-2 text-[11px] uppercase tracking-[0.16em] text-white/42">
+          <section className="wiki-frame px-3 py-3 sm:px-4">
+            <div className="flex flex-wrap items-center gap-2 text-[11px] uppercase tracking-[0.16em] text-white/42">
               <span>Wiki</span>
               {activeSpace ? <span>{activeSpace.label}</span> : null}
               <span>{formatUpdatedAt(selectedPage.updatedAt)}</span>
-          </div>
+            </div>
 
-          <div className="mt-3 flex flex-col gap-2 lg:flex-row lg:items-center">
-            <button
-              type="button"
-              className="wiki-search-launch flex min-h-[2.9rem] w-full items-center gap-3 rounded-[18px] border border-white/8 bg-white/[0.04] px-4 text-left text-[14px] text-white/56 transition hover:bg-white/[0.06] hover:text-white lg:flex-1"
-              onClick={() => setSearchOpen(true)}
-            >
-              <Search className="size-4 shrink-0 text-white/44" />
-              <span>Search this wiki</span>
-            </button>
-
-            <div className="flex flex-wrap items-center gap-2 lg:shrink-0">
+            <div className="mt-3 flex flex-col gap-2 lg:flex-row lg:items-center">
               <button
                 type="button"
-                className="wiki-space-trigger inline-flex min-h-[2.9rem] items-center gap-2 rounded-[18px] border border-white/8 bg-white/[0.04] px-4 text-[13px] font-medium text-white/78 transition hover:bg-white/[0.07] hover:text-white"
-                onClick={() => setSpacePickerOpen(true)}
+                className="wiki-search-launch flex min-h-[2.9rem] w-full items-center gap-3 rounded-[18px] border border-white/8 bg-white/[0.04] px-4 text-left text-[14px] text-white/56 transition hover:bg-white/[0.06] hover:text-white lg:flex-1"
+                onClick={() => setSearchOpen(true)}
               >
-                <span className="max-w-[16rem] truncate">
-                  {activeSpace?.label ?? "Wiki space"}
-                </span>
+                <Search className="size-4 shrink-0 text-white/44" />
+                <span>Search this wiki</span>
               </button>
-              <Button
-                variant="secondary"
-                size="sm"
-                className="min-h-[2.9rem]"
-                onClick={() =>
-                  navigate(`/wiki/edit/${encodeURIComponent(selectedPage.id)}?spaceId=${encodeURIComponent(activeSpaceId)}`)
-                }
-              >
-                <PenSquare className="size-3.5" />
-                Edit
-              </Button>
-              <Button
-                size="sm"
-                className="min-h-[2.9rem]"
-                onClick={() =>
-                  navigate(`/wiki/new?spaceId=${encodeURIComponent(activeSpaceId)}`)
-                }
-              >
-                <Plus className="size-3.5" />
-                New page
-              </Button>
-            </div>
-          </div>
-        </section>
 
-        <section className="grid gap-4 lg:grid-cols-[15rem_minmax(0,1fr)] xl:grid-cols-[16rem_minmax(0,1fr)]">
-          <aside className="wiki-frame h-fit px-2 py-3 sm:px-3 lg:sticky lg:top-[5.75rem]">
-            <div className="px-2 pb-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-white/42">
-              Index
+              <div className="flex flex-wrap items-center gap-2 lg:shrink-0">
+                <button
+                  type="button"
+                  className="wiki-space-trigger inline-flex min-h-[2.9rem] items-center gap-2 rounded-[18px] border border-white/8 bg-white/[0.04] px-4 text-[13px] font-medium text-white/78 transition hover:bg-white/[0.07] hover:text-white"
+                  onClick={() => setSpacePickerOpen(true)}
+                >
+                  <span className="max-w-[16rem] truncate">
+                    {activeSpace?.label ?? "Wiki space"}
+                  </span>
+                </button>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  className="min-h-[2.9rem]"
+                  onClick={() =>
+                    navigate(
+                      `/wiki/edit/${encodeURIComponent(selectedPage.id)}?spaceId=${encodeURIComponent(activeSpaceId)}`,
+                      {
+                        state: {
+                          initialPage: selectedPage
+                        }
+                      }
+                    )
+                  }
+                >
+                  <PenSquare className="size-3.5" />
+                  Edit
+                </Button>
+                <Button
+                  size="sm"
+                  className="min-h-[2.9rem]"
+                  onClick={() =>
+                    navigate(
+                      `/wiki/new?spaceId=${encodeURIComponent(activeSpaceId)}`
+                    )
+                  }
+                >
+                  <Plus className="size-3.5" />
+                  New page
+                </Button>
+              </div>
             </div>
-            <WikiIndexTree
-              nodes={treeQuery.data?.tree ?? []}
-              activeSlug={selectedPage.slug}
-              spaceId={activeSpaceId}
-            />
-          </aside>
+          </section>
 
-          <article className="wiki-frame px-4 py-5 sm:px-6 sm:py-6">
-            <div className="wiki-reading-copy wiki-reading-flow mx-auto max-w-[76rem]">
-              <WikiArticleMarkdown
-                markdown={selectedPage.contentMarkdown}
+          <section className="grid gap-4 lg:grid-cols-[15rem_minmax(0,1fr)] xl:grid-cols-[16rem_minmax(0,1fr)]">
+            <aside className="wiki-frame h-fit px-2 py-3 sm:px-3 lg:sticky lg:top-[5.75rem]">
+              <div className="px-2 pb-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-white/42">
+                Index
+              </div>
+              <WikiIndexTree
+                nodes={treeQuery.data?.tree ?? []}
+                activeSlug={selectedPage.slug}
                 spaceId={activeSpaceId}
               />
+            </aside>
 
-              {selectedPage.summary.trim() ? (
-                <p className="mt-5 border-t border-white/8 pt-4 text-[13px] leading-6 text-white/56">
-                  {selectedPage.summary}
-                </p>
+            <article
+              aria-busy={contentPending}
+              className={cn(
+                "wiki-frame relative overflow-hidden px-4 py-5 transition-[opacity,transform] duration-200 sm:px-6 sm:py-6",
+                contentPending && "opacity-[0.985]"
+              )}
+            >
+              {contentPending ? (
+                <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-[linear-gradient(90deg,transparent,rgba(192,193,255,0.8),transparent)] opacity-90" />
               ) : null}
+              <div className="wiki-reading-copy wiki-reading-flow mx-auto max-w-[76rem]">
+                <WikiArticleMarkdown
+                  markdown={selectedPage.contentMarkdown}
+                  spaceId={activeSpaceId}
+                />
 
-              {linkedEntityItems.length > 0 ? (
-                <section className="mt-8 border-t border-white/8 pt-4">
-                  <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-white/42">
-                    Forge links
-                  </div>
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    {linkedEntityItems.map((item) => (
-                      <a
-                        key={item.id}
-                        href={item.href ? resolveForgePath(item.href) : undefined}
-                        className="rounded-full bg-white/[0.05] px-3 py-1.5 text-[12px] text-white/76 transition hover:bg-white/[0.1] hover:text-white"
-                      >
-                        {item.label}
-                      </a>
-                    ))}
-                  </div>
-                </section>
-              ) : null}
+                {selectedPage.summary.trim() ? (
+                  <p className="mt-5 border-t border-white/8 pt-4 text-[13px] leading-6 text-white/56">
+                    {selectedPage.summary}
+                  </p>
+                ) : null}
 
-              {detail?.backlinkSourceNotes.length ? (
-                <section className="mt-8 border-t border-white/8 pt-4">
-                  <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-white/42">
-                    Linked here
-                  </div>
-                  <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                    {detail.backlinkSourceNotes.map((page) => (
-                      <Link
-                        key={page.id}
-                        to={{
-                          pathname:
-                            page.slug === "index"
-                              ? "/wiki"
-                              : `/wiki/page/${encodeURIComponent(page.slug)}`,
-                          search: `?spaceId=${encodeURIComponent(page.spaceId)}`
-                        }}
-                        className="rounded-xl border border-white/8 bg-white/[0.03] px-4 py-3 transition hover:bg-white/[0.06]"
-                      >
-                        <div className="text-[13px] font-semibold text-white">{page.title}</div>
-                        {page.summary ? (
-                          <div className="mt-1 text-[12px] leading-5 text-white/56">
-                            {page.summary}
+                {linkedEntityItems.length > 0 ? (
+                  <section className="mt-8 border-t border-white/8 pt-4">
+                    <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-white/42">
+                      Forge links
+                    </div>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {linkedEntityItems.map((item) => (
+                        <a
+                          key={item.id}
+                          href={
+                            item.href ? resolveForgePath(item.href) : undefined
+                          }
+                          className="rounded-full bg-white/[0.05] px-3 py-1.5 text-[12px] text-white/76 transition hover:bg-white/[0.1] hover:text-white"
+                        >
+                          {item.label}
+                        </a>
+                      ))}
+                    </div>
+                  </section>
+                ) : null}
+
+                {detail?.backlinkSourceNotes.length ? (
+                  <section className="mt-8 border-t border-white/8 pt-4">
+                    <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-white/42">
+                      Linked here
+                    </div>
+                    <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                      {detail.backlinkSourceNotes.map((page) => (
+                        <Link
+                          key={page.id}
+                          to={{
+                            pathname:
+                              page.slug === "index"
+                                ? "/wiki"
+                                : `/wiki/page/${encodeURIComponent(page.slug)}`,
+                            search: `?spaceId=${encodeURIComponent(page.spaceId)}`
+                          }}
+                          className="rounded-xl border border-white/8 bg-white/[0.03] px-4 py-3 transition hover:bg-white/[0.06]"
+                        >
+                          <div className="text-[13px] font-semibold text-white">
+                            {page.title}
                           </div>
-                        ) : null}
-                      </Link>
-                    ))}
-                  </div>
-                </section>
-              ) : null}
-            </div>
-          </article>
-        </section>
+                          {page.summary ? (
+                            <div className="mt-1 text-[12px] leading-5 text-white/56">
+                              {page.summary}
+                            </div>
+                          ) : null}
+                        </Link>
+                      ))}
+                    </div>
+                  </section>
+                ) : null}
+              </div>
+            </article>
+          </section>
         </div>
       </div>
 
@@ -458,29 +523,31 @@ export function WikiPage() {
               />
 
               <div className="flex flex-wrap items-center gap-2">
-                {(["text", "hybrid", "semantic", "entity"] as WikiSearchMode[]).map(
-                  (mode) => (
-                    <button
-                      key={mode}
-                      type="button"
-                      className={cn(
-                        "rounded-full px-3 py-1.5 text-[12px] font-medium uppercase tracking-[0.14em] transition",
-                        searchMode === mode
-                          ? "bg-white/[0.12] text-white"
-                          : "bg-white/[0.04] text-white/54 hover:bg-white/[0.08] hover:text-white"
-                      )}
-                      onClick={() => setSearchMode(mode)}
-                    >
-                      {mode}
-                    </button>
-                  )
-                )}
+                {(
+                  ["text", "hybrid", "semantic", "entity"] as WikiSearchMode[]
+                ).map((mode) => (
+                  <button
+                    key={mode}
+                    type="button"
+                    className={cn(
+                      "rounded-full px-3 py-1.5 text-[12px] font-medium uppercase tracking-[0.14em] transition",
+                      searchMode === mode
+                        ? "bg-white/[0.12] text-white"
+                        : "bg-white/[0.04] text-white/54 hover:bg-white/[0.08] hover:text-white"
+                    )}
+                    onClick={() => setSearchMode(mode)}
+                  >
+                    {mode}
+                  </button>
+                ))}
                 {(searchMode === "semantic" || searchMode === "hybrid") &&
                 embeddingProfiles.length > 0 ? (
                   <select
                     className="ml-auto rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-[12px] text-white"
                     value={selectedEmbeddingProfileId}
-                    onChange={(event) => setSelectedEmbeddingProfileId(event.target.value)}
+                    onChange={(event) =>
+                      setSelectedEmbeddingProfileId(event.target.value)
+                    }
                   >
                     {embeddingProfiles.map((profile) => (
                       <option key={profile.id} value={profile.id}>

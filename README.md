@@ -12,6 +12,8 @@ Forge gives the user and trusted agents one structured operating record for:
 - a first-class Preferences workspace with pairwise comparisons, contextual profiles, map inspection, and exact overrides
 - real timed work sessions and signed retrospective minute corrections
 - linked Markdown notes
+- a file-first Wiki workspace with spaces, backlinks, ingest, and explicit Forge links
+- first-class Sleep and Sports surfaces backed by imported health records and habit-generated workouts
 - XP, momentum, and weekly review
 - Psyche records such as values, beliefs, patterns, modes, and trigger reports
 - saved insights that can be accepted, applied, or dismissed
