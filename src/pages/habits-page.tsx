@@ -987,7 +987,14 @@ export function HabitsPage() {
                   </div>
 
                   <div className="mt-5 grid gap-4">
-                    <HabitHistoryStrip habit={habit} noteCount={noteCount} />
+                    <HabitHistoryStrip
+                      habit={habit}
+                      noteCount={noteCount}
+                      onSelectCell={(selectedHabit, cell) => {
+                        setHistoryEditor({ habit: selectedHabit, cell });
+                        setErrorMessage(null);
+                      }}
+                    />
                     <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto_auto]">
                       <Button
                         variant="secondary"
@@ -1091,6 +1098,133 @@ export function HabitsPage() {
           }
         }}
       />
+      <SheetScaffold
+        open={historyEditor !== null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setHistoryEditor(null);
+          }
+        }}
+        eyebrow="Habit history"
+        title={
+          historyEditor
+            ? `${historyEditor.habit.title} · ${historyEditor.cell.actionLabel}`
+            : "Habit history"
+        }
+        description={
+          historyEditor
+            ? historyEditor.habit.frequency === "daily"
+              ? "Log or revise the check-in for this specific day."
+              : "Log or revise the representative check-in for this week."
+            : undefined
+        }
+      >
+        {historyEditor && historyCopy ? (
+          <div className="grid gap-4">
+            <div className="rounded-[22px] border border-white/8 bg-white/[0.04] p-4">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <div className="font-label text-[11px] uppercase tracking-[0.16em] text-white/40">
+                    Target
+                  </div>
+                  <div className="mt-1 text-sm text-white/76">
+                    {historyEditor.cell.actionLabel}
+                  </div>
+                </div>
+                {selectedHistoryCheckIn ? (
+                  <Badge className="bg-white/[0.08] text-white/72">
+                    Current:{" "}
+                    {getCheckInLabel(
+                      historyEditor.habit,
+                      selectedHistoryCheckIn.status
+                    )}
+                  </Badge>
+                ) : (
+                  <Badge className="bg-white/[0.08] text-white/58">
+                    No logged value yet
+                  </Badge>
+                )}
+              </div>
+            </div>
+
+            <div className="grid gap-3 md:grid-cols-2">
+              <button
+                type="button"
+                className={cn(
+                  "rounded-[22px] border px-4 py-4 text-left transition",
+                  historyStatus === "done"
+                    ? "border-emerald-300/24 bg-emerald-300/14 text-white shadow-[0_16px_36px_rgba(52,211,153,0.14)]"
+                    : "border-white/8 bg-white/[0.04] text-white/72 hover:bg-white/[0.07]"
+                )}
+                onClick={() => setHistoryStatus("done")}
+              >
+                <div className="flex items-center gap-2 text-base font-medium">
+                  <CheckCheck className="size-4" />
+                  {historyCopy.alignedLabel}
+                </div>
+                <div className="mt-2 text-sm leading-6 text-white/56">
+                  {historyCopy.alignedDescription}
+                </div>
+              </button>
+              <button
+                type="button"
+                className={cn(
+                  "rounded-[22px] border px-4 py-4 text-left transition",
+                  historyStatus === "missed"
+                    ? "border-rose-300/24 bg-rose-300/14 text-white shadow-[0_16px_36px_rgba(251,113,133,0.14)]"
+                    : "border-white/8 bg-white/[0.04] text-white/72 hover:bg-white/[0.07]"
+                )}
+                onClick={() => setHistoryStatus("missed")}
+              >
+                <div className="flex items-center gap-2 text-base font-medium">
+                  <CircleX className="size-4" />
+                  {historyCopy.unalignedLabel}
+                </div>
+                <div className="mt-2 text-sm leading-6 text-white/56">
+                  {historyCopy.unalignedDescription}
+                </div>
+              </button>
+            </div>
+
+            <label className="grid gap-2">
+              <span className="text-sm font-medium text-white">
+                Optional note
+              </span>
+              <Textarea
+                value={historyNote}
+                onChange={(event) => setHistoryNote(event.target.value)}
+                placeholder="Add context for what happened on this day or week."
+                className="min-h-24"
+              />
+            </label>
+
+            <div className="flex flex-wrap items-center justify-end gap-3">
+              <Button
+                variant="secondary"
+                onClick={() => setHistoryEditor(null)}
+                disabled={checkInMutation.isPending}
+              >
+                Cancel
+              </Button>
+              <Button
+                pending={checkInMutation.isPending}
+                pendingLabel="Saving"
+                onClick={async () => {
+                  await checkInMutation.mutateAsync({
+                    habitId: historyEditor.habit.id,
+                    status: historyStatus,
+                    dateKey: historyEditor.cell.actionDateKey,
+                    note: historyNote.trim() || undefined
+                  });
+                  setHistoryEditor(null);
+                }}
+              >
+                Save check-in
+              </Button>
+            </div>
+          </div>
+        ) : null}
+      </SheetScaffold>
     </div>
   );
 }
