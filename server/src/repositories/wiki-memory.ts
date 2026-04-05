@@ -4092,18 +4092,41 @@ export function getWikiIngestJob(jobId: string) {
     created_at: string;
     updated_at: string;
   }>;
+  const assets = listWikiIngestJobAssetsInternal(jobId);
+  const normalizedItems =
+    items.length > 0
+      ? items.map((item) => ({
+          id: item.id,
+          itemType: item.item_type,
+          status: item.status,
+          noteId: item.note_id,
+          mediaAssetId: item.media_asset_id,
+          payload: parseJsonRecord(item.payload_json),
+          createdAt: item.created_at,
+          updatedAt: item.updated_at
+        }))
+      : assets.map((asset) => ({
+          id: asset.id,
+          itemType: "raw_source",
+          status: asset.status,
+          noteId: null,
+          mediaAssetId: null,
+          payload: {
+            sourceKind: asset.source_kind,
+            sourceLocator: asset.source_locator,
+            fileName: asset.file_name,
+            mimeType: asset.mime_type,
+            filePath: asset.file_path,
+            sizeBytes: asset.size_bytes,
+            checksum: asset.checksum,
+            ...(parseJsonRecord(asset.metadata_json) ?? {})
+          },
+          createdAt: asset.created_at,
+          updatedAt: asset.updated_at
+        }));
   return wikiIngestJobPayloadSchema.parse({
     job: mapWikiIngestJobRow(job),
-    items: items.map((item) => ({
-      id: item.id,
-      itemType: item.item_type,
-      status: item.status,
-      noteId: item.note_id,
-      mediaAssetId: item.media_asset_id,
-      payload: parseJsonRecord(item.payload_json),
-      createdAt: item.created_at,
-      updatedAt: item.updated_at
-    })),
+    items: normalizedItems,
     logs: listWikiIngestJobLogsInternal(jobId).map((log) => ({
       id: log.id,
       level: log.level,
@@ -4111,7 +4134,7 @@ export function getWikiIngestJob(jobId: string) {
       metadata: parseJsonRecord(log.metadata_json),
       createdAt: log.created_at
     })),
-    assets: listWikiIngestJobAssetsInternal(jobId).map((asset) => ({
+    assets: assets.map((asset) => ({
       id: asset.id,
       status: asset.status,
       sourceKind: asset.source_kind,

@@ -2759,9 +2759,9 @@ export function getWikiIngestJob(jobId) {
        WHERE job_id = ?
        ORDER BY created_at ASC`)
         .all(jobId);
-    return wikiIngestJobPayloadSchema.parse({
-        job: mapWikiIngestJobRow(job),
-        items: items.map((item) => ({
+    const assets = listWikiIngestJobAssetsInternal(jobId);
+    const normalizedItems = items.length > 0
+        ? items.map((item) => ({
             id: item.id,
             itemType: item.item_type,
             status: item.status,
@@ -2770,7 +2770,29 @@ export function getWikiIngestJob(jobId) {
             payload: parseJsonRecord(item.payload_json),
             createdAt: item.created_at,
             updatedAt: item.updated_at
-        })),
+        }))
+        : assets.map((asset) => ({
+            id: asset.id,
+            itemType: "raw_source",
+            status: asset.status,
+            noteId: null,
+            mediaAssetId: null,
+            payload: {
+                sourceKind: asset.source_kind,
+                sourceLocator: asset.source_locator,
+                fileName: asset.file_name,
+                mimeType: asset.mime_type,
+                filePath: asset.file_path,
+                sizeBytes: asset.size_bytes,
+                checksum: asset.checksum,
+                ...(parseJsonRecord(asset.metadata_json) ?? {})
+            },
+            createdAt: asset.created_at,
+            updatedAt: asset.updated_at
+        }));
+    return wikiIngestJobPayloadSchema.parse({
+        job: mapWikiIngestJobRow(job),
+        items: normalizedItems,
         logs: listWikiIngestJobLogsInternal(jobId).map((log) => ({
             id: log.id,
             level: log.level,
@@ -2778,7 +2800,7 @@ export function getWikiIngestJob(jobId) {
             metadata: parseJsonRecord(log.metadata_json),
             createdAt: log.created_at
         })),
-        assets: listWikiIngestJobAssetsInternal(jobId).map((asset) => ({
+        assets: assets.map((asset) => ({
             id: asset.id,
             status: asset.status,
             sourceKind: asset.source_kind,

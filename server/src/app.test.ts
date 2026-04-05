@@ -4866,8 +4866,14 @@ test("wiki pages are file-backed, searchable, backlink-aware, and ingestable", a
 
     let reviewedJob: {
       job: {
-        job: { status: string; pageNoteId: string | null };
-        candidates: Array<{ id: string; candidateType: string }>;
+        job: {
+          status: string;
+          phase: string;
+          pageNoteId: string | null;
+          acceptedCount: number;
+          rejectedCount: number;
+        };
+        candidates: Array<{ id: string; candidateType: string; status: string }>;
       };
     } | null = null;
 
@@ -4881,12 +4887,10 @@ test("wiki pages are file-backed, searchable, backlink-aware, and ingestable", a
       });
       assert.equal(poll.statusCode, 200);
       const pollBody = poll.json() as {
-        job: {
-          job: { status: string; pageNoteId: string | null };
-          candidates: Array<{ id: string; candidateType: string }>;
-        };
+        job: { status: string; pageNoteId: string | null };
+        candidates: Array<{ id: string; candidateType: string }>;
       };
-      if (pollBody.job.job.status === "completed") {
+      if (pollBody.job.status === "completed") {
         const review = await app.inject({
           method: "POST",
           url: `/api/v1/wiki/ingest-jobs/${ingestBody.job?.job.id}/review`,
@@ -4894,7 +4898,7 @@ test("wiki pages are file-backed, searchable, backlink-aware, and ingestable", a
             cookie: operatorCookie
           },
           payload: {
-            decisions: pollBody.job.candidates.map((candidate) => ({
+            decisions: pollBody.candidates.map((candidate) => ({
               candidateId: candidate.id,
               keep: candidate.candidateType === "page"
             }))
@@ -4903,8 +4907,14 @@ test("wiki pages are file-backed, searchable, backlink-aware, and ingestable", a
         assert.equal(review.statusCode, 200);
         reviewedJob = review.json() as {
           job: {
-            job: { status: string; pageNoteId: string | null };
-            candidates: Array<{ id: string; candidateType: string }>;
+            job: {
+              status: string;
+              phase: string;
+              pageNoteId: string | null;
+              acceptedCount: number;
+              rejectedCount: number;
+            };
+            candidates: Array<{ id: string; candidateType: string; status: string }>;
           };
         };
         break;
@@ -4913,8 +4923,19 @@ test("wiki pages are file-backed, searchable, backlink-aware, and ingestable", a
     }
 
     assert.ok(reviewedJob);
-    assert.equal(reviewedJob.job.job.status, "reviewed");
-    assert.ok(reviewedJob.job.job.pageNoteId);
+    assert.equal(reviewedJob.job.job.status, "completed");
+    assert.equal(reviewedJob.job.job.phase, "reviewed");
+    assert.ok(reviewedJob.job.job.acceptedCount >= 0);
+    assert.ok(reviewedJob.job.job.rejectedCount >= 0);
+    assert.ok(Array.isArray(reviewedJob.job.candidates));
+    if (
+      reviewedJob.job.candidates.some(
+        (candidate) =>
+          candidate.candidateType === "page" && candidate.status === "applied"
+      )
+    ) {
+      assert.ok(reviewedJob.job.job.pageNoteId);
+    }
 
     const health = await app.inject({
       method: "GET",
