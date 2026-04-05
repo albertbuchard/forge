@@ -11,8 +11,10 @@ import { NotesPage } from "@/pages/notes-page";
 import { OverviewPage } from "@/pages/overview-page";
 import { ProjectDetailPage } from "@/pages/project-detail-page";
 import { ProjectsPage } from "@/pages/projects-page";
+import { SettingsWikiPage } from "@/pages/settings-wiki-page";
 import { StrategiesPage } from "@/pages/strategies-page";
 import { StrategyDetailPage } from "@/pages/strategy-detail-page";
+import { PreferencesPage } from "@/pages/preferences-page";
 import { PsychePage } from "@/pages/psyche-page";
 import { PsycheBehaviorsPage } from "@/pages/psyche-behaviors-page";
 import { PsycheGoalMapPage } from "@/pages/psyche-goal-map-page";
@@ -27,10 +29,15 @@ import { SettingsPage } from "@/pages/settings-page";
 import { SettingsAgentsPage } from "@/pages/settings-agents-page";
 import { SettingsBinPage } from "@/pages/settings-bin-page";
 import { SettingsCalendarPage } from "@/pages/settings-calendar-page";
+import { SettingsMobilePage } from "@/pages/settings-mobile-page";
 import { SettingsRewardsPage } from "@/pages/settings-rewards-page";
 import { SettingsUsersPage } from "@/pages/settings-users-page";
+import { SleepPage } from "@/pages/sleep-page";
+import { SportsPage } from "@/pages/sports-page";
 import { TaskDetailPage } from "@/pages/task-detail-page";
 import { TodayPage } from "@/pages/today-page";
+import { WikiPage } from "@/pages/wiki-page";
+import { WikiEditorPage } from "@/pages/wiki-editor-page";
 import { WeeklyReviewPage } from "@/pages/weekly-review-page";
 
 export function App() {
@@ -46,8 +53,11 @@ export function App() {
         <Route path="projects/:projectId" element={<ProjectDetailPage />} />
         <Route path="strategies" element={<StrategiesPage />} />
         <Route path="strategies/:strategyId" element={<StrategyDetailPage />} />
+        <Route path="preferences" element={<PreferencesPage />} />
         <Route path="campaigns" element={<Navigate to="/projects" replace />} />
         <Route path="calendar" element={<CalendarPage />} />
+        <Route path="sleep" element={<SleepPage />} />
+        <Route path="sports" element={<SportsPage />} />
         <Route path="psyche" element={<PsychePage />} />
         <Route path="psyche/values" element={<PsycheValuesPage />} />
         <Route path="psyche/patterns" element={<PsychePatternsPage />} />
@@ -60,6 +70,10 @@ export function App() {
         <Route path="psyche/modes/guide" element={<PsycheModeGuidePage />} />
         <Route path="kanban" element={<KanbanPage />} />
         <Route path="notes" element={<NotesPage />} />
+        <Route path="wiki" element={<WikiPage />} />
+        <Route path="wiki/page/:slug" element={<WikiPage />} />
+        <Route path="wiki/new" element={<WikiEditorPage />} />
+        <Route path="wiki/edit/:pageId" element={<WikiEditorPage />} />
         <Route path="today" element={<TodayPage />} />
         <Route path="activity" element={<ActivityPage />} />
         <Route path="insights" element={<InsightsPage />} />
@@ -67,8 +81,10 @@ export function App() {
         <Route path="settings" element={<SettingsPage />} />
         <Route path="settings/users" element={<SettingsUsersPage />} />
         <Route path="settings/calendar" element={<SettingsCalendarPage />} />
+        <Route path="settings/mobile" element={<SettingsMobilePage />} />
         <Route path="settings/agents" element={<SettingsAgentsPage />} />
         <Route path="settings/rewards" element={<SettingsRewardsPage />} />
+        <Route path="settings/wiki" element={<SettingsWikiPage />} />
         <Route path="settings/bin" element={<SettingsBinPage />} />
         <Route path="tasks/:taskId" element={<TaskDetailPage />} />
       </Route>

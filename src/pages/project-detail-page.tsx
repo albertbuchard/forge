@@ -9,6 +9,7 @@ import { WorkAdjustmentDialog } from "@/components/work-adjustment-dialog";
 import { ExecutionBoard } from "@/components/execution-board";
 import { NoteMarkdown } from "@/components/notes/note-markdown";
 import { EntityNotesSurface } from "@/components/notes/entity-notes-surface";
+import { PreferenceEntityHandoffButton } from "@/components/preferences/preference-entity-handoff-button";
 import { PageHero } from "@/components/shell/page-hero";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -20,6 +21,7 @@ import { UserBadge } from "@/components/ui/user-badge";
 import {
   createWorkAdjustment,
   deleteProject,
+  deleteTask,
   getCalendarOverview,
   getProjectBoard,
   patchProject,
@@ -168,6 +170,18 @@ export function ProjectDetailPage() {
       navigate("/projects");
     }
   });
+  const deleteTaskMutation = useMutation({
+    mutationFn: (taskId: string) => deleteTask(taskId),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["forge-snapshot"] }),
+        queryClient.invalidateQueries({
+          queryKey: ["project-board", params.projectId]
+        }),
+        queryClient.invalidateQueries({ queryKey: ["task-context"] })
+      ]);
+    }
+  });
 
   const payload =
     projectBoardQuery.data ??
@@ -265,6 +279,16 @@ export function ProjectDetailPage() {
             label={payload.goal.title}
             compact
             gradient={false}
+          />
+        }
+        actions={
+          <PreferenceEntityHandoffButton
+            userId={defaultUserId}
+            domain="projects"
+            entityType="project"
+            entityId={payload.project.id}
+            label={payload.project.title}
+            description={payload.project.description}
           />
         }
       />
@@ -586,6 +610,9 @@ export function ProjectDetailPage() {
         onSelectTask={(taskId) => navigate(`/tasks/${taskId}`)}
         onQuickReopenTask={async (taskId) => {
           await reopenMutation.mutateAsync(taskId);
+        }}
+        onDeleteTask={async (taskId) => {
+          await deleteTaskMutation.mutateAsync(taskId);
         }}
       />
 

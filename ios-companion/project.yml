@@ -1,0 +1,42 @@
+name: ForgeCompanion
+options:
+  bundleIdPrefix: com.aurel
+targets:
+  ForgeCompanion:
+    type: application
+    platform: iOS
+    deploymentTarget: "17.0"
+    sources:
+      - ForgeCompanion
+    resources:
+      - ForgeCompanion/Resources
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.aurel.forgecompanion
+        CODE_SIGN_ENTITLEMENTS: ForgeCompanion/ForgeCompanion.entitlements
+        INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
+        INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone:
+          - UIInterfaceOrientationPortrait
+        CODE_SIGN_STYLE: Automatic
+    info:
+      path: ForgeCompanion/Info.plist
+      properties:
+        CFBundleDisplayName: Forge Companion
+        BGTaskSchedulerPermittedIdentifiers:
+          - com.aurel.forgecompanion.health-sync
+        NSCameraUsageDescription: Forge Companion uses the camera to scan the pairing QR code from Forge Settings.
+        NSHealthShareUsageDescription: Forge Companion reads Health data to sync sleep, workouts, and recovery into Forge.
+        NSHealthUpdateUsageDescription: Forge Companion may write reconciliation metadata in future milestones.
+        NSLocalNetworkUsageDescription: Forge Companion scans your local network to find Forge runtimes during setup.
+        NSLocationWhenInUseUsageDescription: Forge Companion will use location in a later milestone for context-aware planning and place linking.
+        NSBonjourServices:
+          - _forge._tcp
+        LSApplicationQueriesSchemes:
+          - tailscale
+        UIBackgroundModes:
+          - fetch
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+        UIApplicationSceneManifest:
+          UIApplicationSupportsMultipleScenes: false
+    dependencies: []

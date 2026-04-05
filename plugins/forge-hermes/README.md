@@ -12,6 +12,9 @@ It exposes the same curated Forge contract as the OpenClaw adapter, but through 
 It also bundles a Psyche interview playbook pack so Hermes can explore values,
 patterns, behaviors, beliefs, modes, and trigger reports with active listening before
 persisting them.
+It now also exposes the first-class Preferences surface, including the
+summary-first workspace read, the comparison-game starter, editable concept
+lists, contextual profile slices, direct signals, and exact score overrides.
 
 ## Install
 
@@ -69,6 +72,27 @@ Forge's ownership model is explicit:
 
 That is what lets a Hermes bot own its own tasks or strategies while still
 supporting human-owned goals and projects in the same Forge runtime.
+
+## Preferences Workspace
+
+Forge Preferences is a first-class domain, not a hidden recommendation layer.
+Hermes can now:
+
+- read the full workspace with `forge_get_preferences_workspace`
+- start the comparison flow with `forge_start_preferences_game`
+- manage concept lists with the catalog and catalog-item tools
+- create and merge contextual profiles with the context tools
+- enqueue Forge entities directly into a preference domain
+- submit pairwise judgments and direct signals
+- override inferred scores when the user wants an explicit correction
+
+This matches the current Forge UI:
+
+- the `/preferences` landing page leads with what Forge already knows
+- the comparison flow is a modal "Start the game" experience
+- Forge-native domains can auto-seed from real Forge entities
+- broader taste domains can seed from editable concept libraries such as food,
+  activities, places, countries, fashion, people, media, and tools
 
 ## Environment variables
 

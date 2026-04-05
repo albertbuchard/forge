@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { getDatabase } from "../db.js";
+import { decorateOwnedEntity, filterOwnedEntities, inferFirstOwnedUserId, setEntityOwner } from "./entity-ownership.js";
 import { filterDeletedEntities, isEntityDeleted } from "./deleted-entities.js";
 import { recordActivityEvent } from "./activity-events.js";
 import { recordEventLog } from "./event-log.js";
@@ -8,7 +9,7 @@ import { createTask } from "./tasks.js";
 import { recordInsightAppliedReward } from "./rewards.js";
 import { agentActionSchema, approvalRequestSchema, createAgentActionSchema, createInsightFeedbackSchema, createInsightSchema, insightFeedbackSchema, insightSchema, updateInsightSchema } from "../types.js";
 function mapInsight(row) {
-    return insightSchema.parse({
+    return insightSchema.parse(decorateOwnedEntity("insight", {
         id: row.id,
         originType: row.origin_type,
         originAgentId: row.origin_agent_id,
@@ -27,7 +28,7 @@ function mapInsight(row) {
         evidence: JSON.parse(row.evidence_json),
         createdAt: row.created_at,
         updatedAt: row.updated_at
-    });
+    }));
 }
 function mapFeedback(row) {
     return insightFeedbackSchema.parse({
@@ -132,7 +133,7 @@ export function listInsights(filters = {}) {
        ORDER BY created_at DESC
        ${limitSql}`)
         .all(...params);
-    return filterDeletedEntities("insight", rows.map(mapInsight));
+    return filterDeletedEntities("insight", filterOwnedEntities("insight", rows.map(mapInsight), filters.userIds));
 }
 export function getInsightById(insightId) {
     if (isEntityDeleted("insight", insightId)) {
@@ -151,6 +152,9 @@ export function createInsight(input, context) {
         title, summary, recommendation, rationale, confidence, cta_label, evidence_json, created_at, updated_at
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
         .run(insightId, parsed.originType, parsed.originAgentId, parsed.originLabel, parsed.visibility, parsed.status, parsed.entityType, parsed.entityId, parsed.timeframeLabel, parsed.title, parsed.summary, parsed.recommendation, parsed.rationale, parsed.confidence, parsed.ctaLabel, JSON.stringify(parsed.evidence), now, now);
+    setEntityOwner("insight", insightId, inferFirstOwnedUserId(parsed.entityType && parsed.entityId
+        ? [{ entityType: parsed.entityType, entityId: parsed.entityId }]
+        : []), context.actor ?? parsed.originLabel ?? null);
     recordActivityEvent({
         entityType: "insight",
         entityId: insightId,
@@ -191,6 +195,7 @@ export function updateInsight(insightId, input, context) {
            recommendation = ?, rationale = ?, confidence = ?, cta_label = ?, evidence_json = ?, updated_at = ?
        WHERE id = ?`)
         .run(parsed.visibility ?? current.visibility, parsed.status ?? current.status, parsed.entityType === undefined ? current.entityType : parsed.entityType, parsed.entityId === undefined ? current.entityId : parsed.entityId, parsed.timeframeLabel === undefined ? current.timeframeLabel : parsed.timeframeLabel, parsed.title ?? current.title, parsed.summary ?? current.summary, parsed.recommendation ?? current.recommendation, parsed.rationale ?? current.rationale, parsed.confidence ?? current.confidence, parsed.ctaLabel ?? current.ctaLabel, JSON.stringify(parsed.evidence ?? current.evidence), updatedAt, insightId);
+    setEntityOwner("insight", insightId, current.userId, context.actor ?? current.originLabel ?? null);
     recordEventLog({
         eventKind: "insight.updated",
         entityType: "insight",

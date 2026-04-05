@@ -204,6 +204,7 @@ describe("forge openclaw plugin", () => {
       "/forge/v1/operator/overview",
       "/forge/v1/operator/context",
       "/forge/v1/agents/onboarding",
+      "/forge/v1/users/directory",
       "/forge/v1/psyche/overview",
       "/forge/v1/metrics/xp",
       "/forge/v1/reviews/weekly",
@@ -236,19 +237,29 @@ describe("forge openclaw plugin", () => {
       "forge_get_operator_overview",
       "forge_get_psyche_overview",
       "forge_get_ui_entrypoint",
+      "forge_get_user_directory",
       "forge_get_weekly_review",
+      "forge_get_wiki_health",
+      "forge_get_wiki_page",
+      "forge_get_wiki_settings",
       "forge_get_xp_metrics",
       "forge_grant_reward_bonus",
       "forge_heartbeat_task_run",
+      "forge_ingest_wiki_source",
+      "forge_list_wiki_pages",
       "forge_log_work",
       "forge_post_insight",
       "forge_recommend_task_timeboxes",
+      "forge_reindex_wiki_embeddings",
       "forge_release_task_run",
       "forge_restore_entities",
       "forge_search_entities",
+      "forge_search_wiki",
       "forge_start_task_run",
       "forge_sync_calendar_connection",
-      "forge_update_entities"
+      "forge_sync_wiki_vault",
+      "forge_update_entities",
+      "forge_upsert_wiki_page"
     ]);
 
     expect(program.children[0]?.name).toBe("forge");

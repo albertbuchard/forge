@@ -50,6 +50,32 @@ import {
   updateNote
 } from "./repositories/notes.js";
 import {
+  createWikiIngestJobSchema,
+  createWikiSpace,
+  createWikiSpaceSchema,
+  deleteWikiProfile,
+  getWikiHealth,
+  getWikiIngestJob,
+  getWikiHomePageDetail,
+  getWikiPageDetail,
+  getWikiPageDetailBySlug,
+  getWikiSettingsPayload,
+  ingestWikiSource,
+  listWikiPageTree,
+  listWikiPages,
+  listWikiSpaces,
+  reindexWikiEmbeddings,
+  reindexWikiEmbeddingsSchema,
+  searchWikiPages,
+  syncWikiVaultFromDisk,
+  syncWikiVaultSchema,
+  upsertWikiEmbeddingProfile,
+  upsertWikiEmbeddingProfileSchema,
+  upsertWikiLlmProfile,
+  upsertWikiLlmProfileSchema,
+  wikiSearchQuerySchema
+} from "./repositories/wiki-memory.js";
+import {
   filterOwnedEntities,
   setEntityOwner
 } from "./repositories/entity-ownership.js";
@@ -94,6 +120,25 @@ import {
 } from "./repositories/psyche.js";
 import { createProject, updateProject } from "./repositories/projects.js";
 import {
+  createPreferenceCatalog,
+  createPreferenceCatalogItem,
+  createPreferenceContext,
+  createPreferenceItem,
+  createPreferenceItemFromEntity,
+  deletePreferenceCatalog,
+  deletePreferenceCatalogItem,
+  getPreferenceWorkspace,
+  mergePreferenceContexts,
+  startPreferenceGame,
+  submitAbsoluteSignal,
+  submitPairwiseJudgment,
+  updatePreferenceCatalog,
+  updatePreferenceCatalogItem,
+  updatePreferenceContext,
+  updatePreferenceItem,
+  updatePreferenceScore
+} from "./repositories/preferences.js";
+import {
   createStrategy,
   deleteStrategy,
   getStrategyById,
@@ -129,6 +174,7 @@ import {
   getUserById,
   listUserAccessGrants,
   listUserOwnershipSummaries,
+  listUserXpSummaries,
   listUsers,
   resolveUserForMutation,
   updateUserAccessGrant,
@@ -246,6 +292,23 @@ import {
   updateTriggerReportSchema
 } from "./psyche-types.js";
 import {
+  createPreferenceCatalogItemSchema,
+  createPreferenceCatalogSchema,
+  createPreferenceContextSchema,
+  createPreferenceItemSchema,
+  enqueueEntityPreferenceItemSchema,
+  mergePreferenceContextsSchema,
+  preferenceWorkspaceQuerySchema,
+  startPreferenceGameSchema,
+  submitAbsoluteSignalSchema,
+  submitPairwiseJudgmentSchema,
+  updatePreferenceCatalogItemSchema,
+  updatePreferenceCatalogSchema,
+  updatePreferenceContextSchema,
+  updatePreferenceItemSchema,
+  updatePreferenceScoreSchema
+} from "./preferences-types.js";
+import {
   activityListQuerySchema,
   activitySourceSchema,
   createAgentActionSchema,
@@ -317,6 +380,7 @@ import {
   goalListQuerySchema,
   recommendTaskTimeboxesSchema,
   strategyListQuerySchema,
+  type Note,
   type TaskTimeSummary,
   type WorkAdjustmentEntityType
 } from "./types.js";
@@ -332,6 +396,9 @@ import {
   getSleepViewData,
   ingestMobileHealthSync,
   mobileHealthSyncSchema,
+  revokeCompanionPairingSession,
+  verifyCompanionPairing,
+  verifyCompanionPairingSchema,
   updateSleepMetadata,
   updateSleepMetadataSchema,
   updateWorkoutMetadata,
@@ -416,8 +483,22 @@ function buildApiBaseUrl(request: {
   protocol: string;
   headers: Record<string, unknown>;
 }) {
+  const referer =
+    typeof request.headers.referer === "string"
+      ? request.headers.referer.trim()
+      : "";
+  if (referer) {
+    try {
+      const url = new URL(referer);
+      const forgeMounted = url.pathname.startsWith("/forge/");
+      return `${url.origin}${forgeMounted ? "/forge" : ""}/api/v1`;
+    } catch {
+      // Fall through to host-based resolution.
+    }
+  }
   const host =
-    typeof request.headers.host === "string" && request.headers.host.trim().length > 0
+    typeof request.headers.host === "string" &&
+    request.headers.host.trim().length > 0
       ? request.headers.host.trim()
       : "127.0.0.1:4317";
   const forwardedPrefix =
@@ -2223,6 +2304,166 @@ const AGENT_ONBOARDING_ENTITY_CATALOG = [
   }
 ] as const;
 
+const AGENT_ONBOARDING_CONVERSATION_RULES = [
+  "Ask only for what is missing or unclear instead of walking the user through every optional field.",
+  "Use a progression of concrete example or intent, working name, purpose or meaning, placement in Forge, operational details, and linked context.",
+  "Ask one to three focused questions at a time. One is usually best when the user is uncertain or emotionally loaded.",
+  "Before saving, briefly summarize the working formulation in the user's own language when that would reduce ambiguity.",
+  "When updating an entity, start with what is changing, what should stay true, and what prompted the update now."
+] as const;
+
+const AGENT_ONBOARDING_ENTITY_CONVERSATION_PLAYBOOKS = [
+  {
+    focus: "goal",
+    openingQuestion: "What direction are you trying to hold onto here?",
+    coachingGoal:
+      "Clarify the direction and why it matters, not just produce a title.",
+    askSequence: [
+      "Ask what direction or outcome the user wants to keep in view.",
+      "Ask why it matters now.",
+      "Distinguish the goal from a project or task.",
+      "Clarify horizon and status only after the meaning is clear."
+    ]
+  },
+  {
+    focus: "project",
+    openingQuestion:
+      "If this becomes a project, what would you want it to be called and what should it accomplish?",
+    coachingGoal:
+      "Turn an intention into a bounded workstream with a clear outcome.",
+    askSequence: [
+      "Ask what this piece of work should be called.",
+      "Ask what outcome would make the project feel real or complete for now.",
+      "Ask which goal it belongs under.",
+      "Clarify status, owner, and notes only after the scope is clear."
+    ]
+  },
+  {
+    focus: "strategy",
+    openingQuestion:
+      "What future state is this strategy supposed to make real?",
+    coachingGoal:
+      "Turn a vague plan into a deliberate sequence toward a real end state.",
+    askSequence: [
+      "Ask what end state the strategy is trying to land.",
+      "Ask which goals or projects are the true targets.",
+      "Ask what the major steps or nodes are.",
+      "Ask about order, dependencies, and anything that must not be skipped."
+    ]
+  },
+  {
+    focus: "task",
+    openingQuestion:
+      "What is the next concrete move you want to remember or do?",
+    coachingGoal:
+      "Identify the next concrete move, not just capture a vague obligation.",
+    askSequence: [
+      "Ask what the next concrete action is.",
+      "Ask where it belongs: project, goal, both, or standalone.",
+      "Ask what would make it easier to do: due date, priority, owner, or brief context."
+    ]
+  },
+  {
+    focus: "habit",
+    openingQuestion:
+      "What is the recurring behavior you want Forge to keep track of?",
+    coachingGoal:
+      "Define the recurring behavior and cadence clearly enough for honest later check-ins.",
+    askSequence: [
+      "Ask what the recurring behavior is in plain language.",
+      "Ask whether doing it is aligned or a slip.",
+      "Ask about cadence and what counts as success in practice.",
+      "Ask about links only if they will help later review."
+    ]
+  },
+  {
+    focus: "note",
+    openingQuestion:
+      "What do you want this note to preserve, and what should it stay attached to?",
+    coachingGoal:
+      "Preserve the useful context and link it to the right places without turning the note into a dump.",
+    askSequence: [
+      "Ask what the note needs to preserve.",
+      "Ask what entities it should stay attached to.",
+      "Ask whether it should be durable or temporary.",
+      "Ask about tags or author only if they help retrieval or handoff."
+    ]
+  },
+  {
+    focus: "insight",
+    openingQuestion:
+      "What observation or recommendation do you want Forge to remember?",
+    coachingGoal:
+      "Capture one grounded observation or recommendation clearly enough that it remains useful later.",
+    askSequence: [
+      "Ask what pattern, tension, or observation should be remembered.",
+      "Ask what entity or timeframe it belongs to, if any.",
+      "Ask what recommendation, caution, or invitation should remain explicit."
+    ]
+  },
+  {
+    focus: "calendar_event",
+    openingQuestion:
+      "What is the event, and when should it happen in your local time?",
+    coachingGoal:
+      "Make the event legible as a real commitment in time, with the right timezone and links.",
+    askSequence: [
+      "Ask what the event is.",
+      "Ask when it starts and ends in local time.",
+      "Ask where it belongs or what it supports.",
+      "Ask whether it should stay Forge-only only if that choice matters."
+    ]
+  },
+  {
+    focus: "work_block_template",
+    openingQuestion:
+      "What recurring block do you want to set up, and when should it repeat?",
+    coachingGoal:
+      "Define a reusable availability rule rather than a one-off event.",
+    askSequence: [
+      "Ask what kind of block it is and what it should be called.",
+      "Ask on which days and at what local times it should repeat.",
+      "Ask whether it allows or blocks work.",
+      "Ask whether it has a start or end date."
+    ]
+  },
+  {
+    focus: "task_timebox",
+    openingQuestion:
+      "Which task are you trying to make time for, and when should the slot be?",
+    coachingGoal:
+      "Reserve real time for one task without confusing planned work with completed work.",
+    askSequence: [
+      "Ask which task the slot belongs to.",
+      "Ask when the slot should start and end.",
+      "Ask about source or override reason only when that context matters."
+    ]
+  },
+  {
+    focus: "event_type",
+    openingQuestion: "What kind of incident should this category stand for?",
+    coachingGoal:
+      "Create a reusable incident category that will actually help future reports stay consistent.",
+    askSequence: [
+      "Ask what category the label should capture.",
+      "Ask how narrow or broad it should be.",
+      "Ask for a short description only if the label could be ambiguous later."
+    ]
+  },
+  {
+    focus: "emotion_definition",
+    openingQuestion:
+      "What emotion label do you want to keep reusable in Forge?",
+    coachingGoal:
+      "Create a reusable emotion label with enough clarity to use consistently later.",
+    askSequence: [
+      "Ask what emotion label the user wants to preserve.",
+      "Ask what distinguishes it from nearby emotions.",
+      "Ask for a broader category only if it will help later browsing or reporting."
+    ]
+  }
+] as const;
+
 const AGENT_ONBOARDING_PSYCHE_PLAYBOOKS = [
   {
     focus: "psyche_value",
@@ -2511,7 +2752,8 @@ const AGENT_ONBOARDING_PSYCHE_PLAYBOOKS = [
 const AGENT_ONBOARDING_TOOL_INPUT_CATALOG = [
   {
     toolName: "forge_get_user_directory",
-    summary: "Read the live human/bot directory and directional relationship graph.",
+    summary:
+      "Read the live human/bot directory and directional relationship graph.",
     whenToUse:
       "Use before multi-user planning, cross-owner linking, or user-aware search so you know which humans and bots exist and what the current edge rights look like.",
     inputShape: "{}",
@@ -2616,6 +2858,136 @@ const AGENT_ONBOARDING_TOOL_INPUT_CATALOG = [
     notes: ["Restore only works for soft-deleted entities."],
     example:
       '{"operations":[{"entityType":"goal","id":"goal_123","clientRef":"goal-restore-1"}]}'
+  },
+  {
+    toolName: "forge_get_wiki_settings",
+    summary:
+      "Read the current wiki spaces plus enabled LLM and embedding profiles.",
+    whenToUse:
+      "Use before semantic wiki search, ingest, or wiki writes so the agent knows which spaces and profiles exist.",
+    inputShape: "{}",
+    requiredFields: [],
+    notes: [
+      "Semantic search is optional and profile-driven.",
+      "The wiki is file-first, so spaces map to local vault directories."
+    ],
+    example: "{}"
+  },
+  {
+    toolName: "forge_list_wiki_pages",
+    summary: "List wiki and evidence pages inside one space.",
+    whenToUse:
+      "Use when browsing a space catalog, choosing a page to open, or building a crawl plan without ranking search results yet.",
+    inputShape: '{ spaceId?: string, kind?: "wiki"|"evidence", limit?: integer }',
+    requiredFields: [],
+    notes: [
+      "This returns the explicit page catalog, not a search-ranked result list.",
+      "Use forge_search_wiki when recall or ranking matters."
+    ],
+    example: '{"spaceId":"wiki_space_shared","kind":"wiki","limit":100}'
+  },
+  {
+    toolName: "forge_get_wiki_page",
+    summary:
+      "Read one wiki page with backlinks, source notes, and attached assets.",
+    whenToUse:
+      "Use after page discovery when an agent needs the full wiki context for one page.",
+    inputShape: "{ pageId: string }",
+    requiredFields: ["pageId"],
+    notes: [
+      "The detail payload includes backlinks and linked media assets.",
+      "Forge entity links remain on the page.links field."
+    ],
+    example: '{"pageId":"note_123"}'
+  },
+  {
+    toolName: "forge_search_wiki",
+    summary:
+      "Search the wiki with text, entity, semantic, or hybrid retrieval.",
+    whenToUse:
+      "Use when the agent needs recall across the explicit wiki memory surface instead of only structured entities.",
+    inputShape:
+      '{ spaceId?: string, kind?: "wiki"|"evidence", mode?: "text"|"semantic"|"entity"|"hybrid", query?: string, profileId?: string, linkedEntity?: { entityType, entityId }, limit?: integer }',
+    requiredFields: [],
+    notes: [
+      "Hybrid search combines exact slug or title matches, FTS, entity links, and optional embeddings.",
+      "If no embedding profile is configured, semantic and hybrid fall back to non-vector signals."
+    ],
+    example:
+      '{"spaceId":"wiki_space_shared","mode":"hybrid","query":"landing page inspiration","limit":12}'
+  },
+  {
+    toolName: "forge_upsert_wiki_page",
+    summary:
+      "Create a new wiki page or update an existing one through the file-backed wiki surface.",
+    whenToUse:
+      "Use when the user explicitly wants wiki memory persisted or reorganized.",
+    inputShape:
+      '{ pageId?: string, kind?: "wiki"|"evidence", title: string, slug?: string, summary?: string, aliases?: string[], contentMarkdown: string, author?: string|null, tags?: string[], spaceId?: string, frontmatter?: object, links?: Array<{ entityType, entityId, anchorKey? }> }',
+    requiredFields: ["title", "contentMarkdown"],
+    notes: [
+      "When pageId is omitted, Forge creates a new page.",
+      "When pageId is present, Forge patches the existing page and rewrites the canonical file."
+    ],
+    example:
+      '{"title":"Taste map","contentMarkdown":"# Taste map\\n\\n[[forge:goal:goal_123|Core goal]] influences this page.","spaceId":"wiki_space_shared"}'
+  },
+  {
+    toolName: "forge_get_wiki_health",
+    summary:
+      "Read wiki maintenance signals such as unresolved links, orphan pages, missing summaries, raw-source counts, and the generated index path.",
+    whenToUse:
+      "Use for memory quality checks, cleanup passes, or before asking an LLM to lint the wiki.",
+    inputShape: "{ spaceId?: string }",
+    requiredFields: [],
+    notes: [
+      "This is the explicit health surface for the file-first wiki vault.",
+      "Use it before proposing cleanup work or auto-maintenance."
+    ],
+    example: '{"spaceId":"wiki_space_shared"}'
+  },
+  {
+    toolName: "forge_sync_wiki_vault",
+    summary:
+      "Resync Markdown files from the local wiki vault into Forge metadata.",
+    whenToUse:
+      "Use after out-of-band file edits or imported file changes that should be reflected back in Forge.",
+    inputShape: "{ spaceId?: string }",
+    requiredFields: [],
+    notes: [
+      "Forge treats the vault as a first-class local artifact, so this route is the bridge back into app metadata."
+    ],
+    example: '{"spaceId":"wiki_space_shared"}'
+  },
+  {
+    toolName: "forge_reindex_wiki_embeddings",
+    summary:
+      "Recompute wiki embedding chunks for one space and optional profile.",
+    whenToUse:
+      "Use after large wiki edits or when a new embedding profile is enabled.",
+    inputShape: "{ spaceId?: string, profileId?: string }",
+    requiredFields: [],
+    notes: [
+      "Only enabled embedding profiles are indexed.",
+      "Reindexing does not modify the markdown files themselves."
+    ],
+    example: '{"spaceId":"wiki_space_shared","profileId":"wiki_embed_123"}'
+  },
+  {
+    toolName: "forge_ingest_wiki_source",
+    summary:
+      "Ingest raw text, local files, or URLs into the wiki, preserving a raw source artifact and returning page plus proposal outputs.",
+    whenToUse:
+      "Use when the operator wants source material compiled into file-first wiki memory and optional Forge-entity proposals.",
+    inputShape:
+      '{ spaceId?: string, titleHint?: string, sourceKind: "raw_text"|"local_path"|"url", sourceText?: string, sourcePath?: string, sourceUrl?: string, mimeType?: string, llmProfileId?: string, parseStrategy?: "auto"|"text_only"|"multimodal", entityProposalMode?: "none"|"suggest", createAsKind?: "wiki"|"evidence", linkedEntityHints?: Array<{ entityType, entityId, anchorKey? }> }',
+    requiredFields: ["sourceKind", "sourceText/sourcePath/sourceUrl"],
+    notes: [
+      "Forge preserves a raw artifact under the wiki space's raw directory.",
+      "Entity proposals are suggestions only; they are not auto-applied."
+    ],
+    example:
+      '{"sourceKind":"url","sourceUrl":"https://example.com/article","titleHint":"Research import","parseStrategy":"auto","entityProposalMode":"suggest"}'
   },
   {
     toolName: "forge_get_calendar_overview",
@@ -2912,6 +3284,8 @@ function buildAgentOnboardingPayload(request: {
       taskRun:
         "A live work session attached to a task. Start, heartbeat, focus, complete, and release runs instead of faking work with status alone.",
       note: "A Markdown work note that can link to one or many entities. Use notes for progress evidence, context, and close-out summaries.",
+      wiki:
+        "Forge Wiki is the file-first memory layer: local Markdown pages plus media, backlinks, optional embeddings, explicit spaces, and structured links back to Forge entities.",
       insight:
         "An agent-authored observation or recommendation grounded in Forge data.",
       calendar:
@@ -2946,6 +3320,8 @@ function buildAgentOnboardingPayload(request: {
         "A trigger report is the one-episode incident chain: situation, emotions, thoughts, behaviors, consequences, extra mode labels, schema themes, and next moves."
     },
     psycheCoachingPlaybooks: AGENT_ONBOARDING_PSYCHE_PLAYBOOKS,
+    conversationRules: AGENT_ONBOARDING_CONVERSATION_RULES,
+    entityConversationPlaybooks: AGENT_ONBOARDING_ENTITY_CONVERSATION_PLAYBOOKS,
     relationshipModel: [
       "Every Forge record belongs to one typed user owner: either human or bot.",
       "Read routes may scope to one user with userId or to several users with repeated userIds.",
@@ -2973,25 +3349,26 @@ function buildAgentOnboardingPayload(request: {
         "Mixed-entity search should include userIds whenever duplicate risk depends on owner identity."
       ],
       relationshipGraphDefaults: [
-        "The directional user graph starts fully open: all users can discover, read, search, link to, and affect each other.",
+        "The directional user graph starts fully open: all users can discover, read, search, coordinate with, link to, and affect each other.",
         "Each edge is directional. A -> B defines what A can see or do to B, while B -> A is configured separately.",
-        "The graph is meant to be configurable from the UI later without rewriting the entity model."
+        "Each directional edge now explicitly carries see, message, share-context, plan, and affect rights so the UI can tighten one lane without rewriting the entity model."
       ]
     },
     strategyContractModel: {
       draftSummary:
-        "Strategies begin as editable drafts. Agents may propose nodes, targets, and links while the plan is still being negotiated.",
+        "Strategies begin as editable drafts. Agents may save and refine incomplete drafts while the plan is still being negotiated.",
       lockSummary:
-        "Setting isLocked to true turns the strategy into a contract. At that point the sequencing graph, targets, linked entities, and descriptive plan fields should be treated as frozen until explicitly unlocked.",
+        "Setting isLocked to true turns the strategy into a contract. Locking now requires a real target plus an overview or end-state description, and then the sequencing graph, targets, linked entities, and descriptive plan fields should be treated as frozen until explicitly unlocked.",
       unlockSummary:
         "Unlocking a strategy reopens normal editing. Use this only when the human wants to renegotiate the plan rather than merely update execution status.",
       alignmentSummary:
         "Alignment is about executing the agreed strategy faithfully, not merely finishing isolated work. Forge therefore scores coverage, order, scope discipline, and quality separately before producing one alignment score.",
       metricBreakdown: [
-        "planCoverageScore: how much of the graph and end targets are genuinely moving or complete",
-        "sequencingScore: whether work is happening in the agreed order instead of jumping ahead",
-        "scopeDisciplineScore: whether off-plan work is happening inside the strategy scope",
-        "qualityScore: whether the plan is landing cleanly without too many blocked nodes or weak target completion"
+        "Agreed work moving: are the planned steps being done at all, regardless of order",
+        "Order respected: are steps happening in the agreed sequence instead of jumping ahead",
+        "Scope held: is other unagreed work leaking into the strategy scope",
+        "End-state satisfaction: are the targets landing cleanly without too many blocked nodes",
+        "Target progress plus off-plan counts: is the contract actually reaching the intended end state"
       ]
     },
     entityCatalog: AGENT_ONBOARDING_ENTITY_CATALOG,
@@ -3011,7 +3388,7 @@ function buildAgentOnboardingPayload(request: {
         ],
         configNotes: [
           "Localhost and Tailscale targets can usually use the operator-session path without a long-lived token.",
-          "Use userId or userIds in tool inputs whenever the agent should focus on one human, one bot, or a specific collaboration slice."
+          "Create each agent as a Forge bot user, then use userId or userIds in tool inputs whenever the agent should focus on one human, one bot, or a specific collaboration slice."
         ]
       },
       hermes: {
@@ -3028,7 +3405,8 @@ function buildAgentOnboardingPayload(request: {
         ],
         configNotes: [
           "Hermes keeps its durable Forge config under ~/.hermes/forge/config.json.",
-          "Hermes uses the same multi-user scoping rules and should pass userIds intentionally when working across humans and bots."
+          "Hermes uses the same multi-user scoping rules and should pass userIds intentionally when working across humans and bots.",
+          "The Forge relationship graph still decides whether Hermes may see, message, plan for, or affect another owner."
         ]
       }
     },
@@ -3036,6 +3414,9 @@ function buildAgentOnboardingPayload(request: {
       context: "/api/v1/context",
       xpMetrics: "/api/v1/metrics/xp",
       weeklyReview: "/api/v1/reviews/weekly",
+      wikiSettings: "/api/v1/wiki/settings",
+      wikiSearch: "/api/v1/wiki/search",
+      wikiHealth: "/api/v1/wiki/health",
       calendarOverview: "/api/v1/calendar/overview",
       settingsBin: "/api/v1/settings/bin",
       batchSearch: "/api/v1/entities/search",
@@ -3060,6 +3441,17 @@ function buildAgentOnboardingPayload(request: {
         "forge_update_entities",
         "forge_delete_entities",
         "forge_restore_entities"
+      ],
+      wikiWorkflow: [
+        "forge_get_wiki_settings",
+        "forge_list_wiki_pages",
+        "forge_get_wiki_page",
+        "forge_search_wiki",
+        "forge_upsert_wiki_page",
+        "forge_get_wiki_health",
+        "forge_sync_wiki_vault",
+        "forge_reindex_wiki_embeddings",
+        "forge_ingest_wiki_source"
       ],
       rewardWorkflow: ["forge_grant_reward_bonus"],
       workWorkflow: [
@@ -3560,6 +3952,7 @@ function buildUserDirectoryPayload() {
     users: listUsers(),
     grants: listUserAccessGrants(),
     ownership: listUserOwnershipSummaries(),
+    xp: listUserXpSummaries(),
     posture: {
       accessModel: "directional_graph" as const,
       summary:
@@ -3567,6 +3960,28 @@ function buildUserDirectoryPayload() {
       futureReady: true
     }
   };
+}
+
+function parseRequestBody<T>(
+  parser: { parse: (value: unknown) => T },
+  body: unknown
+): T {
+  let current = body;
+  for (let depth = 0; depth < 2; depth += 1) {
+    if (typeof current !== "string") {
+      break;
+    }
+    const trimmed = current.trim();
+    if (trimmed.length === 0) {
+      return parser.parse({});
+    }
+    try {
+      current = JSON.parse(trimmed) as unknown;
+    } catch {
+      break;
+    }
+  }
+  return parser.parse(current ?? {});
 }
 
 function buildOperatorOverviewRouteGuide() {
@@ -4099,8 +4514,33 @@ export async function buildServer(
       createCompanionPairingSessionSchema.parse(request.body ?? {})
     );
   });
+  app.delete("/api/v1/health/pairing-sessions/:id", async (request, reply) => {
+    const auth = requireOperatorSession(
+      request.headers as Record<string, unknown>,
+      {
+        route: "/api/v1/health/pairing-sessions/:id"
+      }
+    );
+    const { id } = request.params as { id: string };
+    const session = revokeCompanionPairingSession(id, {
+      actor: auth.actor ?? null,
+      source: "ui"
+    });
+    if (!session) {
+      reply.code(404);
+      return { error: "Companion pairing session not found" };
+    }
+    return { session };
+  });
+  app.post("/api/v1/mobile/pairing/verify", async (request) => ({
+    pairing: verifyCompanionPairing(
+      verifyCompanionPairingSchema.parse(request.body ?? {})
+    )
+  }));
   app.post("/api/v1/mobile/healthkit/sync", async (request) => ({
-    sync: ingestMobileHealthSync(mobileHealthSyncSchema.parse(request.body ?? {}))
+    sync: ingestMobileHealthSync(
+      mobileHealthSyncSchema.parse(request.body ?? {})
+    )
   }));
   app.patch("/api/v1/health/workouts/:id", async (request, reply) => {
     const auth = requireScopedAccess(
@@ -5115,6 +5555,265 @@ export async function buildServer(
     }
     return { note };
   });
+  app.get("/api/v1/wiki/settings", async (request) => {
+    requireScopedAccess(
+      request.headers as Record<string, unknown>,
+      ["read", "write"],
+      { route: "/api/v1/wiki/settings" }
+    );
+    return { settings: getWikiSettingsPayload() };
+  });
+  app.post("/api/v1/wiki/settings/llm-profiles", async (request, reply) => {
+    requireScopedAccess(
+      request.headers as Record<string, unknown>,
+      ["write"],
+      { route: "/api/v1/wiki/settings/llm-profiles" }
+    );
+    const profile = upsertWikiLlmProfile(
+      upsertWikiLlmProfileSchema.parse(request.body ?? {}),
+      managers.secrets
+    );
+    reply.code(201);
+    return { profile };
+  });
+  app.post(
+    "/api/v1/wiki/settings/embedding-profiles",
+    async (request, reply) => {
+      requireScopedAccess(
+        request.headers as Record<string, unknown>,
+        ["write"],
+        { route: "/api/v1/wiki/settings/embedding-profiles" }
+      );
+      const profile = upsertWikiEmbeddingProfile(
+        upsertWikiEmbeddingProfileSchema.parse(request.body ?? {}),
+        managers.secrets
+      );
+      reply.code(201);
+      return { profile };
+    }
+  );
+  app.delete(
+    "/api/v1/wiki/settings/:kind(llm|embedding)-profiles/:id",
+    async (request, reply) => {
+      requireScopedAccess(
+        request.headers as Record<string, unknown>,
+        ["write"],
+        { route: "/api/v1/wiki/settings/:kind-profiles/:id" }
+      );
+      const params = request.params as { kind: "llm" | "embedding"; id: string };
+      deleteWikiProfile(params.kind, params.id);
+      reply.code(204);
+      return null;
+    }
+  );
+  app.get("/api/v1/wiki/spaces", async (request) => {
+    requireScopedAccess(
+      request.headers as Record<string, unknown>,
+      ["read", "write"],
+      { route: "/api/v1/wiki/spaces" }
+    );
+    return { spaces: listWikiSpaces() };
+  });
+  app.post("/api/v1/wiki/spaces", async (request, reply) => {
+    requireScopedAccess(
+      request.headers as Record<string, unknown>,
+      ["write"],
+      { route: "/api/v1/wiki/spaces" }
+    );
+    const space = createWikiSpace(createWikiSpaceSchema.parse(request.body ?? {}));
+    reply.code(201);
+    return { space };
+  });
+  app.get("/api/v1/wiki/pages", async (request) => {
+    requireScopedAccess(
+      request.headers as Record<string, unknown>,
+      ["read", "write"],
+      { route: "/api/v1/wiki/pages" }
+    );
+    const query = request.query as {
+      spaceId?: string;
+      kind?: Note["kind"];
+      limit?: string;
+    };
+    return {
+      pages: listWikiPages({
+        spaceId: query.spaceId,
+        kind: query.kind,
+        limit: query.limit ? Number(query.limit) : undefined
+      })
+    };
+  });
+  app.get("/api/v1/wiki/home", async (request, reply) => {
+    requireScopedAccess(
+      request.headers as Record<string, unknown>,
+      ["read", "write"],
+      { route: "/api/v1/wiki/home" }
+    );
+    const query = request.query as { spaceId?: string };
+    const payload = getWikiHomePageDetail({ spaceId: query.spaceId });
+    if (!payload) {
+      reply.code(404);
+      return { error: "Wiki home page not found" };
+    }
+    return payload;
+  });
+  app.get("/api/v1/wiki/tree", async (request) => {
+    requireScopedAccess(
+      request.headers as Record<string, unknown>,
+      ["read", "write"],
+      { route: "/api/v1/wiki/tree" }
+    );
+    const query = request.query as {
+      spaceId?: string;
+      kind?: Note["kind"];
+    };
+    return {
+      tree: listWikiPageTree({
+        spaceId: query.spaceId,
+        kind: query.kind ?? "wiki"
+      })
+    };
+  });
+  app.post("/api/v1/wiki/pages", async (request, reply) => {
+    const input = createNoteSchema.parse({
+      kind: "wiki",
+      ...(request.body ?? {})
+    });
+    const linkedEntityType = input.links[0]?.entityType ?? null;
+    const auth = requireNoteAccess(
+      request.headers as Record<string, unknown>,
+      linkedEntityType,
+      {
+        route: "/api/v1/wiki/pages",
+        entityType: linkedEntityType
+      }
+    );
+    const note = createNote(input, toActivityContext(auth));
+    reply.code(201);
+    return getWikiPageDetail(note.id);
+  });
+  app.get("/api/v1/wiki/pages/:id", async (request, reply) => {
+    requireScopedAccess(
+      request.headers as Record<string, unknown>,
+      ["read", "write"],
+      { route: "/api/v1/wiki/pages/:id" }
+    );
+    const { id } = request.params as { id: string };
+    const payload = getWikiPageDetail(id);
+    if (!payload) {
+      reply.code(404);
+      return { error: "Wiki page not found" };
+    }
+    return payload;
+  });
+  app.get("/api/v1/wiki/by-slug/:slug", async (request, reply) => {
+    requireScopedAccess(
+      request.headers as Record<string, unknown>,
+      ["read", "write"],
+      { route: "/api/v1/wiki/by-slug/:slug" }
+    );
+    const { slug } = request.params as { slug: string };
+    const query = request.query as { spaceId?: string };
+    const payload = getWikiPageDetailBySlug({ spaceId: query.spaceId, slug });
+    if (!payload) {
+      reply.code(404);
+      return { error: "Wiki page not found" };
+    }
+    return payload;
+  });
+  app.patch("/api/v1/wiki/pages/:id", async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const patch = updateNoteSchema.parse(request.body ?? {});
+    const current = getNoteById(id);
+    const linkedEntityType =
+      current?.links[0]?.entityType ?? patch.links?.[0]?.entityType ?? null;
+    const auth = requireNoteAccess(
+      request.headers as Record<string, unknown>,
+      linkedEntityType,
+      {
+        route: "/api/v1/wiki/pages/:id",
+        entityType: linkedEntityType
+      }
+    );
+    const note = updateNote(id, patch, toActivityContext(auth));
+    if (!note) {
+      reply.code(404);
+      return { error: "Wiki page not found" };
+    }
+    return getWikiPageDetail(note.id);
+  });
+  app.post("/api/v1/wiki/search", async (request) => {
+    requireScopedAccess(
+      request.headers as Record<string, unknown>,
+      ["read", "write"],
+      { route: "/api/v1/wiki/search" }
+    );
+    return searchWikiPages(
+      wikiSearchQuerySchema.parse(request.body ?? {}),
+      managers.secrets
+    );
+  });
+  app.get("/api/v1/wiki/health", async (request) => {
+    requireScopedAccess(
+      request.headers as Record<string, unknown>,
+      ["read", "write"],
+      { route: "/api/v1/wiki/health" }
+    );
+    return {
+      health: getWikiHealth(syncWikiVaultSchema.parse(request.query ?? {}))
+    };
+  });
+  app.post("/api/v1/wiki/sync", async (request) => {
+    requireScopedAccess(
+      request.headers as Record<string, unknown>,
+      ["write"],
+      { route: "/api/v1/wiki/sync" }
+    );
+    return syncWikiVaultFromDisk(syncWikiVaultSchema.parse(request.body ?? {}));
+  });
+  app.post("/api/v1/wiki/reindex", async (request) => {
+    requireScopedAccess(
+      request.headers as Record<string, unknown>,
+      ["write"],
+      { route: "/api/v1/wiki/reindex" }
+    );
+    return reindexWikiEmbeddings(
+      reindexWikiEmbeddingsSchema.parse(request.body ?? {}),
+      managers.secrets
+    );
+  });
+  app.post("/api/v1/wiki/ingest-jobs", async (request, reply) => {
+    const payload = createWikiIngestJobSchema.parse(request.body ?? {});
+    const linkedEntityType = payload.linkedEntityHints[0]?.entityType ?? null;
+    const auth = requireNoteAccess(
+      request.headers as Record<string, unknown>,
+      linkedEntityType,
+      {
+        route: "/api/v1/wiki/ingest-jobs",
+        entityType: linkedEntityType
+      }
+    );
+    const result = await ingestWikiSource(payload, {
+      secrets: managers.secrets,
+      createNote: (note) => createNote(note, toActivityContext(auth))
+    });
+    reply.code(201);
+    return result;
+  });
+  app.get("/api/v1/wiki/ingest-jobs/:id", async (request, reply) => {
+    requireScopedAccess(
+      request.headers as Record<string, unknown>,
+      ["read", "write"],
+      { route: "/api/v1/wiki/ingest-jobs/:id" }
+    );
+    const { id } = request.params as { id: string };
+    const job = getWikiIngestJob(id);
+    if (!job) {
+      reply.code(404);
+      return { error: "Wiki ingest job not found" };
+    }
+    return job;
+  });
   app.get("/api/v1/projects", async (request) => {
     const query = projectListQuerySchema.parse(request.query ?? {});
     return { projects: listProjectSummaries(query) };
@@ -5159,7 +5858,9 @@ export async function buildServer(
     const to =
       query.to ??
       new Date(now.getTime() + 21 * 24 * 60 * 60 * 1000).toISOString();
-    return { calendar: readCalendarOverview({ from, to, userIds: query.userIds }) };
+    return {
+      calendar: readCalendarOverview({ from, to, userIds: query.userIds })
+    };
   });
   app.get("/api/v1/calendar/agenda", async (request) => {
     const query = calendarOverviewQuerySchema.parse(request.query ?? {});
@@ -5416,6 +6117,182 @@ export async function buildServer(
       return { error: "User not found" };
     }
     return { user };
+  });
+  app.get("/api/v1/preferences/workspace", async (request) => {
+    requireScopedAccess(
+      request.headers as Record<string, unknown>,
+      ["read", "write"],
+      { route: "/api/v1/preferences/workspace" }
+    );
+    return {
+      workspace: getPreferenceWorkspace(
+        preferenceWorkspaceQuerySchema.parse(request.query ?? {})
+      )
+    };
+  });
+  app.post("/api/v1/preferences/game/start", async (request) => {
+    requireScopedAccess(request.headers as Record<string, unknown>, ["write"], {
+      route: "/api/v1/preferences/game/start"
+    });
+    return {
+      workspace: startPreferenceGame(
+        startPreferenceGameSchema.parse(request.body ?? {})
+      )
+    };
+  });
+  app.post("/api/v1/preferences/catalogs", async (request, reply) => {
+    requireScopedAccess(request.headers as Record<string, unknown>, ["write"], {
+      route: "/api/v1/preferences/catalogs"
+    });
+    const catalog = createPreferenceCatalog(
+      createPreferenceCatalogSchema.parse(request.body ?? {})
+    );
+    reply.code(201);
+    return { catalog };
+  });
+  app.patch("/api/v1/preferences/catalogs/:id", async (request) => {
+    requireScopedAccess(request.headers as Record<string, unknown>, ["write"], {
+      route: "/api/v1/preferences/catalogs/:id"
+    });
+    const { id } = request.params as { id: string };
+    return {
+      catalog: updatePreferenceCatalog(
+        id,
+        updatePreferenceCatalogSchema.parse(request.body ?? {})
+      )
+    };
+  });
+  app.delete("/api/v1/preferences/catalogs/:id", async (request) => {
+    requireScopedAccess(request.headers as Record<string, unknown>, ["write"], {
+      route: "/api/v1/preferences/catalogs/:id"
+    });
+    const { id } = request.params as { id: string };
+    return { catalog: deletePreferenceCatalog(id) };
+  });
+  app.post("/api/v1/preferences/catalog-items", async (request, reply) => {
+    requireScopedAccess(request.headers as Record<string, unknown>, ["write"], {
+      route: "/api/v1/preferences/catalog-items"
+    });
+    const item = createPreferenceCatalogItem(
+      createPreferenceCatalogItemSchema.parse(request.body ?? {})
+    );
+    reply.code(201);
+    return { item };
+  });
+  app.patch("/api/v1/preferences/catalog-items/:id", async (request) => {
+    requireScopedAccess(request.headers as Record<string, unknown>, ["write"], {
+      route: "/api/v1/preferences/catalog-items/:id"
+    });
+    const { id } = request.params as { id: string };
+    return {
+      item: updatePreferenceCatalogItem(
+        id,
+        updatePreferenceCatalogItemSchema.parse(request.body ?? {})
+      )
+    };
+  });
+  app.delete("/api/v1/preferences/catalog-items/:id", async (request) => {
+    requireScopedAccess(request.headers as Record<string, unknown>, ["write"], {
+      route: "/api/v1/preferences/catalog-items/:id"
+    });
+    const { id } = request.params as { id: string };
+    return { item: deletePreferenceCatalogItem(id) };
+  });
+  app.post("/api/v1/preferences/contexts", async (request, reply) => {
+    requireScopedAccess(request.headers as Record<string, unknown>, ["write"], {
+      route: "/api/v1/preferences/contexts"
+    });
+    const context = createPreferenceContext(
+      createPreferenceContextSchema.parse(request.body ?? {})
+    );
+    reply.code(201);
+    return { context };
+  });
+  app.patch("/api/v1/preferences/contexts/:id", async (request) => {
+    requireScopedAccess(request.headers as Record<string, unknown>, ["write"], {
+      route: "/api/v1/preferences/contexts/:id"
+    });
+    const { id } = request.params as { id: string };
+    return {
+      context: updatePreferenceContext(
+        id,
+        updatePreferenceContextSchema.parse(request.body ?? {})
+      )
+    };
+  });
+  app.post("/api/v1/preferences/contexts/merge", async (request) => {
+    requireScopedAccess(request.headers as Record<string, unknown>, ["write"], {
+      route: "/api/v1/preferences/contexts/merge"
+    });
+    return {
+      merge: mergePreferenceContexts(
+        mergePreferenceContextsSchema.parse(request.body ?? {})
+      )
+    };
+  });
+  app.post("/api/v1/preferences/items", async (request, reply) => {
+    requireScopedAccess(request.headers as Record<string, unknown>, ["write"], {
+      route: "/api/v1/preferences/items"
+    });
+    const item = createPreferenceItem(
+      createPreferenceItemSchema.parse(request.body ?? {})
+    );
+    reply.code(201);
+    return { item };
+  });
+  app.patch("/api/v1/preferences/items/:id", async (request) => {
+    requireScopedAccess(request.headers as Record<string, unknown>, ["write"], {
+      route: "/api/v1/preferences/items/:id"
+    });
+    const { id } = request.params as { id: string };
+    return {
+      item: updatePreferenceItem(
+        id,
+        updatePreferenceItemSchema.parse(request.body ?? {})
+      )
+    };
+  });
+  app.post("/api/v1/preferences/items/from-entity", async (request, reply) => {
+    requireScopedAccess(request.headers as Record<string, unknown>, ["write"], {
+      route: "/api/v1/preferences/items/from-entity"
+    });
+    const item = createPreferenceItemFromEntity(
+      enqueueEntityPreferenceItemSchema.parse(request.body ?? {})
+    );
+    reply.code(201);
+    return { item };
+  });
+  app.post("/api/v1/preferences/judgments", async (request, reply) => {
+    requireScopedAccess(request.headers as Record<string, unknown>, ["write"], {
+      route: "/api/v1/preferences/judgments"
+    });
+    const judgment = submitPairwiseJudgment(
+      submitPairwiseJudgmentSchema.parse(request.body ?? {})
+    );
+    reply.code(201);
+    return { judgment };
+  });
+  app.post("/api/v1/preferences/signals", async (request, reply) => {
+    requireScopedAccess(request.headers as Record<string, unknown>, ["write"], {
+      route: "/api/v1/preferences/signals"
+    });
+    const signal = submitAbsoluteSignal(
+      submitAbsoluteSignalSchema.parse(request.body ?? {})
+    );
+    reply.code(201);
+    return { signal };
+  });
+  app.patch("/api/v1/preferences/items/:id/score", async (request) => {
+    requireScopedAccess(request.headers as Record<string, unknown>, ["write"], {
+      route: "/api/v1/preferences/items/:id/score"
+    });
+    const { id } = request.params as { id: string };
+    return {
+      workspace: updatePreferenceScore(
+        id,
+        updatePreferenceScoreSchema.parse(request.body ?? {})
+      )
+    };
   });
   app.get("/api/v1/strategies", async (request) => {
     const query = strategyListQuerySchema.parse(request.query ?? {});
@@ -5997,7 +6874,9 @@ export async function buildServer(
     const to =
       query.to ??
       new Date(now.getTime() + 21 * 24 * 60 * 60 * 1000).toISOString();
-    return { timeboxes: listTaskTimeboxes({ from, to, userIds: query.userIds }) };
+    return {
+      timeboxes: listTaskTimeboxes({ from, to, userIds: query.userIds })
+    };
   });
   app.post("/api/v1/calendar/timeboxes", async (request, reply) => {
     const auth = requireScopedAccess(
@@ -6186,7 +7065,7 @@ export async function buildServer(
       { route: "/api/v1/habits" }
     );
     const habit = createHabit(
-      createHabitSchema.parse(request.body ?? {}),
+      parseRequestBody(createHabitSchema, request.body),
       toActivityContext(auth)
     );
     reply.code(201);
@@ -6272,7 +7151,7 @@ export async function buildServer(
     const { id } = request.params as { id: string };
     const habit = updateHabit(
       id,
-      updateHabitSchema.parse(request.body ?? {}),
+      parseRequestBody(updateHabitSchema, request.body),
       toActivityContext(auth)
     );
     if (!habit) {
@@ -6309,7 +7188,7 @@ export async function buildServer(
     const { id } = request.params as { id: string };
     const habit = createHabitCheckIn(
       id,
-      createHabitCheckInSchema.parse(request.body ?? {}),
+      parseRequestBody(createHabitCheckInSchema, request.body),
       toActivityContext(auth)
     );
     if (!habit) {

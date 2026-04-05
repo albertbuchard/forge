@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { getDatabase } from "../db.js";
 import { recordActivityEvent } from "./activity-events.js";
+import { decorateOwnedEntity, setEntityOwner } from "./entity-ownership.js";
 import { filterDeletedEntities, getDeletedEntityRecord, clearDeletedEntityRecord, isEntityDeleted, upsertDeletedEntityRecord } from "./deleted-entities.js";
 import { recordEventLog } from "./event-log.js";
 import { noteSchema, notesListQuerySchema, createNoteSchema, updateNoteSchema } from "../types.js";
@@ -127,7 +128,7 @@ function mapLinks(rows) {
     }));
 }
 function mapNote(row, linkRows) {
-    return noteSchema.parse({
+    return noteSchema.parse(decorateOwnedEntity("note", {
         id: row.id,
         contentMarkdown: row.content_markdown,
         contentPlain: row.content_plain,
@@ -138,7 +139,7 @@ function mapNote(row, linkRows) {
         createdAt: row.created_at,
         updatedAt: row.updated_at,
         links: mapLinks(linkRows)
-    });
+    }));
 }
 function upsertSearchRow(noteId, contentPlain, author) {
     getDatabase().prepare(`DELETE FROM notes_fts WHERE note_id = ?`).run(noteId);
@@ -333,6 +334,7 @@ export function createNote(input, context) {
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`)
         .run(id, parsed.contentMarkdown, contentPlain, parsed.author ?? context.actor ?? null, context.source, JSON.stringify(parsed.tags), parsed.destroyAt, now, now);
     insertLinks(id, parsed.links, now);
+    setEntityOwner("note", id, parsed.userId, parsed.author ?? context.actor ?? null);
     clearDeletedEntityRecord("note", id);
     upsertSearchRow(id, contentPlain, parsed.author ?? context.actor ?? null);
     const note = getNoteById(id, { skipCleanup: true });
@@ -375,6 +377,9 @@ export function updateNote(noteId, input, context) {
         .run(nextMarkdown, nextPlain, nextAuthor, JSON.stringify(nextTags), nextDestroyAt, updatedAt, noteId);
     if (patch.links) {
         replaceLinks(noteId, patch.links, updatedAt);
+    }
+    if (patch.userId !== undefined) {
+        setEntityOwner("note", noteId, patch.userId, nextAuthor ?? context.actor ?? null);
     }
     const note = getNoteByIdIncludingDeleted(noteId, { skipCleanup: true });
     if (note.links.length > 0) {

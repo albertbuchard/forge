@@ -6,6 +6,24 @@ provides_tools:
   - forge_get_operator_overview
   - forge_get_operator_context
   - forge_get_agent_onboarding
+  - forge_get_user_directory
+  - forge_get_preferences_workspace
+  - forge_start_preferences_game
+  - forge_create_preferences_catalog
+  - forge_update_preferences_catalog
+  - forge_delete_preferences_catalog
+  - forge_create_preferences_catalog_item
+  - forge_update_preferences_catalog_item
+  - forge_delete_preferences_catalog_item
+  - forge_create_preferences_context
+  - forge_update_preferences_context
+  - forge_merge_preferences_contexts
+  - forge_create_preferences_item
+  - forge_update_preferences_item
+  - forge_enqueue_preferences_item_from_entity
+  - forge_submit_preferences_judgment
+  - forge_submit_preferences_signal
+  - forge_update_preferences_score
   - forge_get_ui_entrypoint
   - forge_get_psyche_overview
   - forge_get_xp_metrics

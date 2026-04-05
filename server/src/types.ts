@@ -206,6 +206,14 @@ export const rewardableEntityTypeSchema = z.enum([
   "trigger_report"
 ]);
 export const deleteModeSchema = z.enum(["soft", "hard"]);
+export const noteKindSchema = z.enum(["evidence", "wiki"]);
+export const wikiSpaceVisibilitySchema = z.enum(["personal", "shared"]);
+export const wikiSearchModeSchema = z.enum([
+  "text",
+  "semantic",
+  "entity",
+  "hybrid"
+]);
 export const rewardRuleFamilySchema = z.enum([
   "completion",
   "consistency",
@@ -328,6 +336,7 @@ export const userAccessRightsSchema = z.object({
   canReadEntities: z.boolean().default(true),
   canSearchEntities: z.boolean().default(true),
   canLinkEntities: z.boolean().default(true),
+  canCoordinate: z.boolean().default(true),
   canAffectEntities: z.boolean().default(true),
   canManageStrategies: z.boolean().default(true),
   canCreateOnBehalf: z.boolean().default(true),
@@ -365,10 +374,19 @@ export const userOwnershipSummarySchema = z.object({
   entityCounts: z.record(z.string(), z.number().int().nonnegative())
 });
 
+export const userXpSummarySchema = z.object({
+  userId: z.string(),
+  totalXp: z.number().int(),
+  weeklyXp: z.number().int(),
+  rewardEventCount: z.number().int().nonnegative(),
+  lastRewardAt: z.string().nullable()
+});
+
 export const userDirectoryPayloadSchema = z.object({
   users: z.array(userSummarySchema),
   grants: z.array(userAccessGrantSchema),
   ownership: z.array(userOwnershipSummarySchema),
+  xp: z.array(userXpSummarySchema),
   posture: z.object({
     accessModel: z.enum(["permissive", "directional_graph"]),
     summary: z.string(),
@@ -461,13 +479,26 @@ const uniqueNoteTagArraySchema = z
 
 export const noteSchema = z.object({
   id: z.string(),
+  kind: noteKindSchema.default("evidence"),
+  title: nonEmptyTrimmedString,
+  slug: nonEmptyTrimmedString,
+  spaceId: nonEmptyTrimmedString,
+  parentSlug: trimmedString.nullable().default(null),
+  indexOrder: z.number().int().default(0),
+  showInIndex: z.boolean().default(true),
+  aliases: uniqueStringArraySchema.default([]),
+  summary: trimmedString.default(""),
   contentMarkdown: nonEmptyTrimmedString,
   contentPlain: trimmedString,
   author: z.string().nullable(),
   source: activitySourceSchema,
+  sourcePath: trimmedString.default(""),
+  frontmatter: z.record(z.string(), z.unknown()).default({}),
+  revisionHash: trimmedString.default(""),
+  lastSyncedAt: dateTimeSchema.nullable().default(null),
   createdAt: z.string(),
   updatedAt: z.string(),
-  links: z.array(noteLinkSchema).min(1),
+  links: z.array(noteLinkSchema).default([]),
   tags: uniqueNoteTagArraySchema.default([]),
   destroyAt: dateTimeSchema.nullable().default(null),
   ...ownershipShape
@@ -848,7 +879,12 @@ export const habitSchema = z.object({
       enabled: z.boolean().default(false),
       workoutType: trimmedString.default("workout"),
       title: trimmedString.default(""),
-      durationMinutes: z.number().int().positive().max(24 * 60).default(45),
+      durationMinutes: z
+        .number()
+        .int()
+        .positive()
+        .max(24 * 60)
+        .default(45),
       xpReward: z.number().int().min(0).max(500).default(0),
       tags: uniqueStringArraySchema.default([]),
       links: z
@@ -1575,33 +1611,73 @@ function parseLinkedEntityQueryValue(raw: string) {
 }
 
 export const createNoteSchema = z.object({
-  contentMarkdown: nonEmptyTrimmedString,
-  author: trimmedString.nullable().default(null),
-  links: z.array(createNoteLinkSchema).min(1),
-  tags: uniqueNoteTagArraySchema.default([]),
-  destroyAt: dateTimeSchema.nullable().default(null),
-  userId: nonEmptyTrimmedString.nullable().optional()
-});
-
-export const nestedCreateNoteSchema = z.object({
+  kind: noteKindSchema.default("evidence"),
+  title: trimmedString.optional(),
+  slug: trimmedString.optional(),
+  spaceId: trimmedString.optional(),
+  parentSlug: trimmedString.nullable().optional(),
+  indexOrder: z.number().int().default(0),
+  showInIndex: z.boolean().optional(),
+  aliases: uniqueStringArraySchema.default([]),
+  summary: trimmedString.default(""),
   contentMarkdown: nonEmptyTrimmedString,
   author: trimmedString.nullable().default(null),
   links: z.array(createNoteLinkSchema).default([]),
   tags: uniqueNoteTagArraySchema.default([]),
-  destroyAt: dateTimeSchema.nullable().default(null)
+  destroyAt: dateTimeSchema.nullable().default(null),
+  sourcePath: trimmedString.default(""),
+  frontmatter: z.record(z.string(), z.unknown()).default({}),
+  revisionHash: trimmedString.default(""),
+  lastSyncedAt: dateTimeSchema.nullable().optional(),
+  userId: nonEmptyTrimmedString.nullable().optional()
+});
+
+export const nestedCreateNoteSchema = z.object({
+  kind: noteKindSchema.default("evidence"),
+  title: trimmedString.optional(),
+  slug: trimmedString.optional(),
+  spaceId: trimmedString.optional(),
+  parentSlug: trimmedString.nullable().optional(),
+  indexOrder: z.number().int().default(0),
+  showInIndex: z.boolean().optional(),
+  aliases: uniqueStringArraySchema.default([]),
+  summary: trimmedString.default(""),
+  contentMarkdown: nonEmptyTrimmedString,
+  author: trimmedString.nullable().default(null),
+  links: z.array(createNoteLinkSchema).default([]),
+  tags: uniqueNoteTagArraySchema.default([]),
+  destroyAt: dateTimeSchema.nullable().default(null),
+  sourcePath: trimmedString.default(""),
+  frontmatter: z.record(z.string(), z.unknown()).default({})
 });
 
 export const updateNoteSchema = z.object({
+  kind: noteKindSchema.optional(),
+  title: trimmedString.optional(),
+  slug: trimmedString.optional(),
+  spaceId: trimmedString.optional(),
+  parentSlug: trimmedString.nullable().optional(),
+  indexOrder: z.number().int().optional(),
+  showInIndex: z.boolean().optional(),
+  aliases: uniqueStringArraySchema.optional(),
+  summary: trimmedString.optional(),
   contentMarkdown: nonEmptyTrimmedString.optional(),
   author: trimmedString.nullable().optional(),
-  links: z.array(createNoteLinkSchema).min(1).optional(),
+  links: z.array(createNoteLinkSchema).optional(),
   tags: uniqueNoteTagArraySchema.optional(),
   destroyAt: dateTimeSchema.nullable().optional(),
+  sourcePath: trimmedString.optional(),
+  frontmatter: z.record(z.string(), z.unknown()).optional(),
+  revisionHash: trimmedString.optional(),
+  lastSyncedAt: dateTimeSchema.nullable().optional(),
   userId: nonEmptyTrimmedString.nullable().optional()
 });
 
 export const notesListQuerySchema = z
   .object({
+    kind: noteKindSchema.optional(),
+    spaceId: trimmedString.optional(),
+    slug: trimmedString.optional(),
     linkedEntityType: crudEntityTypeSchema.optional(),
     linkedEntityId: nonEmptyTrimmedString.optional(),
     anchorKey: trimmedString.nullable().optional(),
@@ -2138,7 +2214,12 @@ const habitMutationShape = {
       enabled: z.boolean().default(false),
       workoutType: trimmedString.default("workout"),
       title: trimmedString.default(""),
-      durationMinutes: z.number().int().positive().max(24 * 60).default(45),
+      durationMinutes: z
+        .number()
+        .int()
+        .positive()
+        .max(24 * 60)
+        .default(45),
       xpReward: z.number().int().min(0).max(500).default(0),
       tags: uniqueStringArraySchema.default([]),
       links: z
@@ -2202,7 +2283,12 @@ export const updateHabitSchema = z
         enabled: z.boolean().optional(),
         workoutType: trimmedString.optional(),
         title: trimmedString.optional(),
-        durationMinutes: z.number().int().positive().max(24 * 60).optional(),
+        durationMinutes: z
+          .number()
+          .int()
+          .positive()
+          .max(24 * 60)
+          .optional(),
         xpReward: z.number().int().min(0).max(500).optional(),
         tags: uniqueStringArraySchema.optional(),
         links: z
@@ -2583,11 +2669,16 @@ export const strategyMetricSchema = z.object({
   sequencingScore: z.number().int().min(0).max(100),
   scopeDisciplineScore: z.number().int().min(0).max(100),
   qualityScore: z.number().int().min(0).max(100),
+  targetProgressScore: z.number().int().min(0).max(100),
   completedNodeCount: z.number().int().nonnegative(),
+  startedNodeCount: z.number().int().nonnegative(),
+  readyNodeCount: z.number().int().nonnegative(),
   totalNodeCount: z.number().int().positive(),
   completedTargetCount: z.number().int().nonnegative(),
   totalTargetCount: z.number().int().nonnegative(),
   offPlanEntityCount: z.number().int().nonnegative().default(0),
+  offPlanActiveEntityCount: z.number().int().nonnegative().default(0),
+  offPlanCompletedEntityCount: z.number().int().nonnegative().default(0),
   activeNodeIds: z.array(z.string()).default([]),
   nextNodeIds: z.array(z.string()).default([]),
   blockedNodeIds: z.array(z.string()).default([]),
@@ -2817,6 +2908,7 @@ export type Note = z.infer<typeof noteSchema>;
 export type NoteLink = z.infer<typeof noteLinkSchema>;
 export type NoteSummary = z.infer<typeof noteSummarySchema>;
 export type NotesSummaryByEntity = z.infer<typeof notesSummaryByEntitySchema>;
+export type NoteKind = z.infer<typeof noteKindSchema>;
 export type AchievementSignal = z.infer<typeof achievementSignalSchema>;
 export type GamificationProfile = z.infer<typeof gamificationProfileSchema>;
 export type GamificationOverview = z.infer<typeof gamificationOverviewSchema>;
@@ -3012,6 +3104,7 @@ export type UserAccessRights = z.infer<typeof userAccessRightsSchema>;
 export type UserDirectoryPayload = z.infer<typeof userDirectoryPayloadSchema>;
 export type UserKind = z.infer<typeof userKindSchema>;
 export type UserOwnershipSummary = z.infer<typeof userOwnershipSummarySchema>;
+export type UserXpSummary = z.infer<typeof userXpSummarySchema>;
 export type UserSummary = z.infer<typeof userSummarySchema>;
 export type UpdateUserAccessGrantInput = z.infer<
   typeof updateUserAccessGrantSchema

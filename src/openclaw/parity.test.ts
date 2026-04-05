@@ -12,6 +12,7 @@ describe("forge plugin route parity", () => {
     expect(report.missingFromOpenApi).toEqual([]);
     expect(report.unexpectedMirrors).toEqual([]);
     expect(report.mirrored).toContain("GET /api/v1/health");
+    expect(report.mirrored).toContain("GET /api/v1/users/directory");
     expect(report.mirrored).toContain("GET /api/v1/operator/overview");
     expect(report.mirrored).toContain("GET /api/v1/agents/onboarding");
     expect(report.mirrored).toContain("POST /api/v1/entities/search");
@@ -26,6 +27,7 @@ describe("forge plugin route parity", () => {
   it("publishes supported route keys for governance and diagnostics", () => {
     const supported = collectSupportedPluginApiRouteKeys();
     expect(supported.has("GET /api/v1/health")).toBe(true);
+    expect(supported.has("GET /api/v1/users/directory")).toBe(true);
     expect(supported.has("GET /api/v1/operator/overview")).toBe(true);
     expect(supported.has("GET /api/v1/agents/onboarding")).toBe(true);
     expect(supported.has("POST /api/v1/entities/search")).toBe(true);

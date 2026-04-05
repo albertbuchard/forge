@@ -281,6 +281,12 @@ def _resolve_path(spec: Dict[str, Any], args: Dict[str, Any]) -> str:
     return spec["path"]
 
 
+def _resolve_method(spec: Dict[str, Any], args: Dict[str, Any]) -> str:
+    if "method_builder" in spec:
+        return spec["method_builder"](args)
+    return spec.get("method", "GET")
+
+
 def _resolve_body(spec: Dict[str, Any], args: Dict[str, Any], config: ForgeConfig) -> Any:
     if "body_builder" in spec:
         return spec["body_builder"](args, config)
@@ -339,7 +345,7 @@ def _execute_spec(spec: Dict[str, Any], args: Dict[str, Any]) -> Dict[str, Any]:
         return _resolve_current_work(config, args)
 
     path = _resolve_path(spec, args)
-    method = spec.get("method", "GET")
+    method = _resolve_method(spec, args)
     body = None if method == "GET" else _resolve_body(spec, args, config)
     return _request_json(config, method, path, body=body)
 

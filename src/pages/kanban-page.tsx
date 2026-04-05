@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { EntityName } from "@/components/ui/entity-name";
 import { EmptyState } from "@/components/ui/page-state";
-import { patchTask, uncompleteTask } from "@/lib/api";
+import { deleteTask, patchTask, uncompleteTask } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
 import { useCommandCenterStore } from "@/store/use-command-center";
 import { useForgeShell } from "@/components/shell/app-shell";
@@ -85,6 +85,10 @@ export function KanbanPage() {
       taskId: string;
       patch: Parameters<typeof patchTask>[1];
     }) => patchTask(taskId, patch),
+    onSuccess: invalidateBoard
+  });
+  const deleteTaskMutation = useMutation({
+    mutationFn: (taskId: string) => deleteTask(taskId),
     onSuccess: invalidateBoard
   });
 
@@ -261,6 +265,16 @@ export function KanbanPage() {
           onQuickReopenTask={async (taskId) => {
             await uncompleteTask(taskId);
             await invalidateBoard();
+          }}
+          onDeleteTask={async (taskId) => {
+            await deleteTaskMutation.mutateAsync(taskId);
+            setSelectedTaskId((current) => {
+              if (current !== taskId) {
+                return current;
+              }
+              return filteredTasks.find((task) => task.id !== taskId)?.id ?? null;
+            });
+            setEditingTaskId((current) => (current === taskId ? null : current));
           }}
           onStartTask={async (taskId) => {
             await shell.startTaskNow(taskId);

@@ -1,9 +1,13 @@
 import { Fragment, type ReactNode } from "react";
+import { getEntityRoute } from "@/lib/note-helpers";
+import { resolveForgePath } from "@/lib/runtime-paths";
+import type { CrudEntityType } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 function renderInline(text: string, keyPrefix: string): ReactNode[] {
   const nodes: ReactNode[] = [];
-  const pattern = /(\[([^\]]+)\]\(([^)]+)\)|`([^`]+)`|\*\*([^*]+)\*\*|\*([^*]+)\*)/g;
+  const pattern =
+    /(!?\[\[([^\]]+)\]\]|\[([^\]]+)\]\(([^)]+)\)|`([^`]+)`|\*\*([^*]+)\*\*|\*([^*]+)\*)/g;
   let lastIndex = 0;
   let match: RegExpExecArray | null = null;
   let index = 0;
@@ -14,8 +18,69 @@ function renderInline(text: string, keyPrefix: string): ReactNode[] {
       index += 1;
     }
 
-    if (match[2] && match[3]) {
-      const href = match[3].trim();
+    if (match[1] && match[2]) {
+      const wikiTarget = match[2].trim();
+      const isEmbed = match[1].startsWith("!");
+      const separatorIndex = wikiTarget.indexOf("|");
+      const rawTarget =
+        separatorIndex >= 0 ? wikiTarget.slice(0, separatorIndex).trim() : wikiTarget;
+      const label =
+        separatorIndex >= 0 ? wikiTarget.slice(separatorIndex + 1).trim() : rawTarget;
+
+      if (rawTarget.toLowerCase().startsWith("forge:")) {
+        const [, entityType, entityId] = rawTarget.split(":");
+        const route =
+          entityType && entityId
+            ? getEntityRoute(entityType as CrudEntityType, entityId)
+            : null;
+        const href = route ? resolveForgePath(route) : null;
+        nodes.push(
+          href ? (
+            <a
+              key={`${keyPrefix}-forge-${index}`}
+              href={href}
+              className="inline-flex items-center gap-1 rounded-full bg-amber-400/10 px-2 py-0.5 text-[0.9em] text-amber-100 transition hover:bg-amber-400/18"
+            >
+              <span className="text-[0.72em] uppercase tracking-[0.14em] text-amber-200/72">
+                Forge
+              </span>
+              <span>{label}</span>
+            </a>
+          ) : (
+            <span
+              key={`${keyPrefix}-forge-${index}`}
+              className="inline-flex items-center gap-1 rounded-full bg-white/[0.06] px-2 py-0.5 text-[0.9em] text-white/66"
+            >
+              {label}
+            </span>
+          )
+        );
+      } else {
+        const href = resolveForgePath(
+          `/wiki/page/${encodeURIComponent(rawTarget)}`
+        );
+        nodes.push(
+          <a
+            key={`${keyPrefix}-wiki-${index}`}
+            href={href}
+            className={cn(
+              "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[0.9em] transition",
+              isEmbed
+                ? "bg-cyan-400/14 text-cyan-50 hover:bg-cyan-400/22"
+                : "bg-white/[0.06] text-[var(--secondary)] hover:bg-white/[0.1]"
+            )}
+          >
+            {isEmbed ? (
+              <span className="text-[0.72em] uppercase tracking-[0.14em] text-cyan-100/68">
+                Embed
+              </span>
+            ) : null}
+            <span>{label}</span>
+          </a>
+        );
+      }
+    } else if (match[3] && match[4]) {
+      const href = match[4].trim();
       const external = /^https?:\/\//i.test(href);
       nodes.push(
         <a
@@ -25,25 +90,25 @@ function renderInline(text: string, keyPrefix: string): ReactNode[] {
           target={external ? "_blank" : undefined}
           rel={external ? "noreferrer" : undefined}
         >
-          {match[2]}
+          {match[3]}
         </a>
-      );
-    } else if (match[4]) {
-      nodes.push(
-        <code key={`${keyPrefix}-code-${index}`} className="rounded bg-white/[0.08] px-1.5 py-0.5 text-[0.92em] text-white/90">
-          {match[4]}
-        </code>
       );
     } else if (match[5]) {
       nodes.push(
-        <strong key={`${keyPrefix}-strong-${index}`} className="font-semibold text-white">
+        <code key={`${keyPrefix}-code-${index}`} className="rounded bg-white/[0.08] px-1.5 py-0.5 text-[0.92em] text-white/90">
           {match[5]}
-        </strong>
+        </code>
       );
     } else if (match[6]) {
       nodes.push(
-        <em key={`${keyPrefix}-em-${index}`} className="italic text-white/88">
+        <strong key={`${keyPrefix}-strong-${index}`} className="font-semibold text-white">
           {match[6]}
+        </strong>
+      );
+    } else if (match[7]) {
+      nodes.push(
+        <em key={`${keyPrefix}-em-${index}`} className="italic text-white/88">
+          {match[7]}
         </em>
       );
     }

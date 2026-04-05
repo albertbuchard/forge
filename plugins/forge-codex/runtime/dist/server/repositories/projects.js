@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { getDatabase, runInTransaction } from "../db.js";
 import { recordActivityEvent } from "./activity-events.js";
+import { decorateOwnedEntity, inferFirstOwnedUserId, setEntityOwner } from "./entity-ownership.js";
 import { filterDeletedEntities, isEntityDeleted } from "./deleted-entities.js";
 import { createLinkedNotes } from "./notes.js";
 import { assertGoalExists } from "../services/relations.js";
@@ -33,7 +34,7 @@ function getDefaultProjectTemplate(goal) {
     }
 }
 function mapProject(row) {
-    return projectSchema.parse({
+    return projectSchema.parse(decorateOwnedEntity("project", {
         id: row.id,
         goalId: row.goal_id,
         title: row.title,
@@ -44,7 +45,7 @@ function mapProject(row) {
         schedulingRules: calendarSchedulingRulesSchema.parse(JSON.parse(row.scheduling_rules_json || "{}")),
         createdAt: row.created_at,
         updatedAt: row.updated_at
-    });
+    }));
 }
 function completeLinkedProjectTasks(projectId, activity) {
     const openTasks = listTasks({ projectId }).filter((task) => task.status !== "done");
@@ -101,6 +102,8 @@ export function createProject(input, activity) {
             .prepare(`INSERT INTO projects (id, goal_id, title, description, status, theme_color, target_points, scheduling_rules_json, created_at, updated_at)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
             .run(id, parsed.goalId, parsed.title, parsed.description, parsed.status, parsed.themeColor, parsed.targetPoints, JSON.stringify(parsed.schedulingRules), now, now);
+        setEntityOwner("project", id, parsed.userId ??
+            inferFirstOwnedUserId([{ entityType: "goal", entityId: parsed.goalId }]));
         const project = getProjectById(id);
         createLinkedNotes(parsed.notes, { entityType: "project", entityId: project.id, anchorKey: null }, activity ?? { source: "ui", actor: null });
         if (activity) {
@@ -150,6 +153,9 @@ export function updateProject(projectId, input, activity) {
         getDatabase()
             .prepare(`UPDATE tasks SET goal_id = ?, updated_at = ? WHERE project_id = ?`)
             .run(next.goalId, next.updatedAt, projectId);
+        if (parsed.userId !== undefined) {
+            setEntityOwner("project", projectId, parsed.userId);
+        }
         const completedLinkedTaskCount = current.status !== "completed" && next.status === "completed"
             ? completeLinkedProjectTasks(projectId, activity)
             : 0;
@@ -160,7 +166,9 @@ export function updateProject(projectId, input, activity) {
                 entityType: "project",
                 entityId: project.id,
                 eventType: statusChanged ? "project_status_changed" : "project_updated",
-                title: statusChanged ? `Project ${project.status}: ${project.title}` : `Project updated: ${project.title}`,
+                title: statusChanged
+                    ? `Project ${project.status}: ${project.title}`
+                    : `Project updated: ${project.title}`,
                 description: statusChanged && project.status === "completed"
                     ? `Project finished and auto-completed ${completedLinkedTaskCount} linked unfinished task${completedLinkedTaskCount === 1 ? "" : "s"}.`
                     : statusChanged
@@ -197,7 +205,11 @@ export function ensureDefaultProjectForGoal(goalId) {
         getDatabase()
             .prepare(`INSERT INTO projects (id, goal_id, title, description, status, theme_color, target_points, scheduling_rules_json, created_at, updated_at)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-            .run(id, goalId, template.title, template.description, goal.status === "completed" ? "completed" : goal.status === "paused" ? "paused" : "active", goal.themeColor, Math.max(100, Math.round(goal.targetPoints / 2)), JSON.stringify({
+            .run(id, goalId, template.title, template.description, goal.status === "completed"
+            ? "completed"
+            : goal.status === "paused"
+                ? "paused"
+                : "active", goal.themeColor, Math.max(100, Math.round(goal.targetPoints / 2)), JSON.stringify({
             allowWorkBlockKinds: [],
             blockWorkBlockKinds: [],
             allowCalendarIds: [],
@@ -209,6 +221,7 @@ export function ensureDefaultProjectForGoal(goalId) {
             allowAvailability: [],
             blockAvailability: []
         }), now, now);
+        setEntityOwner("project", id, goal.userId);
         return getProjectById(id);
     });
 }
@@ -219,9 +232,7 @@ export function deleteProject(projectId, activity) {
     }
     return runInTransaction(() => {
         pruneLinkedEntityReferences("project", projectId);
-        getDatabase()
-            .prepare(`DELETE FROM projects WHERE id = ?`)
-            .run(projectId);
+        getDatabase().prepare(`DELETE FROM projects WHERE id = ?`).run(projectId);
         if (activity) {
             recordActivityEvent({
                 entityType: "project",

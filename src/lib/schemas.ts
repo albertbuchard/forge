@@ -130,7 +130,23 @@ export const habitMutationSchema = z
     linkedReportIds: z.array(z.string().trim().min(1)),
     linkedBehaviorId: z.string().trim(),
     rewardXp: z.coerce.number().int().min(1).max(100),
-    penaltyXp: z.coerce.number().int().min(1).max(100)
+    penaltyXp: z.coerce.number().int().min(1).max(100),
+    generatedHealthEventTemplate: z.object({
+      enabled: z.boolean(),
+      workoutType: z.string().trim(),
+      title: z.string().trim(),
+      durationMinutes: z.coerce.number().int().min(1).max(24 * 60),
+      xpReward: z.coerce.number().int().min(0).max(500),
+      tags: z.array(z.string().trim()),
+      links: z.array(
+        z.object({
+          entityType: z.string().trim().min(1),
+          entityId: z.string().trim().min(1),
+          relationshipType: z.string().trim().default("context")
+        })
+      ),
+      notesTemplate: z.string().trim()
+    })
   })
   .superRefine((value, context) => {
     if (value.frequency === "weekly" && value.weekDays.length === 0) {

@@ -104,6 +104,31 @@ function buildDefaultEventSeed(day: Date) {
   };
 }
 
+function normalizeCalendarEventPlace(event: CalendarEvent): CalendarEvent {
+  const fallbackLocation = typeof event.location === "string" ? event.location : "";
+  const place = event.place ?? {
+    label: fallbackLocation,
+    address: "",
+    timezone: "",
+    latitude: null,
+    longitude: null,
+    source: "",
+    externalPlaceId: ""
+  };
+  return {
+    ...event,
+    place: {
+      label: place.label || fallbackLocation,
+      address: place.address ?? "",
+      timezone: place.timezone ?? "",
+      latitude: place.latitude ?? null,
+      longitude: place.longitude ?? null,
+      source: place.source ?? "",
+      externalPlaceId: place.externalPlaceId ?? ""
+    }
+  };
+}
+
 function moveCalendarItemToDay(
   item: Pick<ForgeClipboardCalendarEventItem, "startAt" | "endAt">,
   day: Date
@@ -387,16 +412,17 @@ export function CalendarPage() {
         description: input.description ?? "",
         location: input.location ?? "",
         place: {
-          label: input.location ?? "",
-          address: "",
+          label: input.place?.label ?? input.location ?? "",
+          address: input.place?.address ?? "",
           timezone:
+            input.place?.timezone ??
             input.timezone ??
             Intl.DateTimeFormat().resolvedOptions().timeZone ??
             "UTC",
-          latitude: null,
-          longitude: null,
-          source: "forge",
-          externalPlaceId: ""
+          latitude: input.place?.latitude ?? null,
+          longitude: input.place?.longitude ?? null,
+          source: input.place?.source ?? "forge",
+          externalPlaceId: input.place?.externalPlaceId ?? ""
         },
         startAt: input.startAt,
         endAt: input.endAt,
@@ -495,30 +521,33 @@ export function CalendarPage() {
           if (!existingEvent) {
             return current;
           }
+          const normalizedExistingEvent = normalizeCalendarEventPlace(existingEvent);
           const nextEvent: CalendarEvent = {
-            ...existingEvent,
+            ...normalizedExistingEvent,
             ...patch,
             place: patch.place
               ? {
-                  ...existingEvent.place,
+                  ...normalizedExistingEvent.place,
                   ...patch.place
                 }
-              : existingEvent.place,
+              : normalizedExistingEvent.place,
             calendarId:
               patch.preferredCalendarId === undefined
-                ? existingEvent.calendarId
+                ? normalizedExistingEvent.calendarId
                 : patch.preferredCalendarId,
             links:
               patch.links?.map((link, index) => ({
                 id:
-                  existingEvent.links[index]?.id ??
+                  normalizedExistingEvent.links[index]?.id ??
                   `calendar_event_link_optimistic_${Date.now()}_${index}`,
                 entityType: link.entityType,
                 entityId: link.entityId,
                 relationshipType: link.relationshipType ?? "context",
-                createdAt: existingEvent.links[index]?.createdAt ?? existingEvent.createdAt,
+                createdAt:
+                  normalizedExistingEvent.links[index]?.createdAt ??
+                  normalizedExistingEvent.createdAt,
                 updatedAt: new Date().toISOString()
-              })) ?? existingEvent.links,
+              })) ?? normalizedExistingEvent.links,
             updatedAt: new Date().toISOString()
           };
           return {
@@ -605,16 +634,25 @@ export function CalendarPage() {
     () => Array.from({ length: 7 }, (_, index) => addDays(weekStart, index)),
     [weekStart]
   );
-  const overview = calendarData ?? {
-    generatedAt: "",
-    providers: [],
-    connections: [],
-    calendars: [],
-    events: [],
-    workBlockTemplates: [],
-    workBlockInstances: [],
-    timeboxes: []
-  };
+  const overview = useMemo(
+    () =>
+      calendarData
+        ? {
+            ...calendarData,
+            events: calendarData.events.map(normalizeCalendarEventPlace)
+          }
+        : {
+            generatedAt: "",
+            providers: [],
+            connections: [],
+            calendars: [],
+            events: [],
+            workBlockTemplates: [],
+            workBlockInstances: [],
+            timeboxes: []
+          },
+    [calendarData]
+  );
   const calendarTitleById = useMemo(
     () => new Map(overview.calendars.map((calendar) => [calendar.id, calendar.title])),
     [overview.calendars]
@@ -1192,6 +1230,15 @@ export function CalendarPage() {
                           />
                         ) : null}
                       </div>
+                      {event.place.address || event.place.timezone ? (
+                        <div className="mt-2 text-xs leading-5 text-white/50">
+                          {event.place.address || event.location}
+                          {event.place.address && event.place.timezone
+                            ? " · "
+                            : ""}
+                          {event.place.timezone}
+                        </div>
+                      ) : null}
                       {event.links.length > 0 ? (
                         <div className="mt-2 flex min-w-0 flex-wrap gap-1.5">
                           {event.links.slice(0, 3).map((link) => {

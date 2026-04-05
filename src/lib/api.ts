@@ -33,6 +33,28 @@ import type {
   Project,
   ProjectBoardPayload,
   ProjectSummary,
+  PreferenceContext,
+  PreferenceCatalog,
+  PreferenceCatalogItem,
+  PreferenceCatalogItemMutationInput,
+  PreferenceCatalogItemPatchInput,
+  PreferenceCatalogMutationInput,
+  PreferenceCatalogPatchInput,
+  PreferenceContextMergeInput,
+  PreferenceContextMutationInput,
+  PreferenceContextPatchInput,
+  PreferenceGameStartInput,
+  PreferenceItem,
+  PreferenceItemMutationInput,
+  PreferenceItemPatchInput,
+  PreferenceScorePatchInput,
+  PreferenceSignalInput,
+  PreferenceWorkspacePayload,
+  PreferenceWorkspaceQuery,
+  PairwiseJudgment,
+  AbsoluteSignal,
+  EnqueuePreferenceEntityInput,
+  PreferenceJudgmentInput,
   RewardLedgerEvent,
   RewardRule,
   SettingsPayload,
@@ -50,6 +72,14 @@ import type {
   UserDirectoryPayload,
   UserSummary,
   WeeklyReviewPayload,
+  WikiEmbeddingProfile,
+  WikiHealthPayload,
+  WikiIngestJobPayload,
+  WikiPageDetailPayload,
+  WikiSearchResponse,
+  WikiSettingsPayload,
+  WikiSpace,
+  WikiTreeNode,
   SleepViewData,
   WorkBlockTemplate,
   XpMetricsPayload,
@@ -93,6 +123,40 @@ import type {
 import { ForgeApiError, type ForgeValidationIssue } from "./api-error";
 import { resolveForgePath } from "./runtime-paths";
 import { normalizeForgeSnapshot } from "./snapshot-normalizer";
+
+function normalizeCalendarEventPlace(event: CalendarEvent): CalendarEvent {
+  const fallbackLocation = typeof event.location === "string" ? event.location : "";
+  const place = event.place ?? {
+    label: fallbackLocation,
+    address: "",
+    timezone: "",
+    latitude: null,
+    longitude: null,
+    source: "",
+    externalPlaceId: ""
+  };
+  return {
+    ...event,
+    place: {
+      label: place.label || fallbackLocation,
+      address: place.address ?? "",
+      timezone: place.timezone ?? "",
+      latitude: place.latitude ?? null,
+      longitude: place.longitude ?? null,
+      source: place.source ?? "",
+      externalPlaceId: place.externalPlaceId ?? ""
+    }
+  };
+}
+
+function normalizeCalendarOverviewPayload(
+  payload: CalendarOverviewPayload
+): CalendarOverviewPayload {
+  return {
+    ...payload,
+    events: payload.events.map(normalizeCalendarEventPlace)
+  };
+}
 
 async function parseResponseBody(response: Response) {
   const text = await response.text();
@@ -224,6 +288,178 @@ export function getForgeSnapshot(userIds?: string[] | unknown) {
   const suffix = search.size > 0 ? `?${search.toString()}` : "";
   return request<ForgeSnapshot>(`/api/v1/context${suffix}`).then(
     normalizeForgeSnapshot
+  );
+}
+
+export function getPreferenceWorkspace(query: PreferenceWorkspaceQuery) {
+  const search = new URLSearchParams();
+  if (query.userId) {
+    search.set("userId", query.userId);
+  }
+  if (query.domain) {
+    search.set("domain", query.domain);
+  }
+  if (query.contextId) {
+    search.set("contextId", query.contextId);
+  }
+  const suffix = search.size > 0 ? `?${search.toString()}` : "";
+  return request<{ workspace: PreferenceWorkspacePayload }>(
+    `/api/v1/preferences/workspace${suffix}`
+  );
+}
+
+export function startPreferenceGame(input: PreferenceGameStartInput) {
+  return request<{ workspace: PreferenceWorkspacePayload }>(
+    "/api/v1/preferences/game/start",
+    {
+      method: "POST",
+      body: JSON.stringify(input)
+    }
+  );
+}
+
+export function createPreferenceCatalog(input: PreferenceCatalogMutationInput) {
+  return request<{ catalog: PreferenceCatalog }>("/api/v1/preferences/catalogs", {
+    method: "POST",
+    body: JSON.stringify(input)
+  });
+}
+
+export function patchPreferenceCatalog(
+  catalogId: string,
+  patch: PreferenceCatalogPatchInput
+) {
+  return request<{ catalog: PreferenceCatalog }>(
+    `/api/v1/preferences/catalogs/${catalogId}`,
+    {
+      method: "PATCH",
+      body: JSON.stringify(patch)
+    }
+  );
+}
+
+export function deletePreferenceCatalog(catalogId: string) {
+  return request<{ catalog: PreferenceCatalog }>(
+    `/api/v1/preferences/catalogs/${catalogId}`,
+    {
+      method: "DELETE"
+    }
+  );
+}
+
+export function createPreferenceCatalogItem(
+  input: PreferenceCatalogItemMutationInput
+) {
+  return request<{ item: PreferenceCatalogItem }>(
+    "/api/v1/preferences/catalog-items",
+    {
+      method: "POST",
+      body: JSON.stringify(input)
+    }
+  );
+}
+
+export function patchPreferenceCatalogItem(
+  catalogItemId: string,
+  patch: PreferenceCatalogItemPatchInput
+) {
+  return request<{ item: PreferenceCatalogItem }>(
+    `/api/v1/preferences/catalog-items/${catalogItemId}`,
+    {
+      method: "PATCH",
+      body: JSON.stringify(patch)
+    }
+  );
+}
+
+export function deletePreferenceCatalogItem(catalogItemId: string) {
+  return request<{ item: PreferenceCatalogItem }>(
+    `/api/v1/preferences/catalog-items/${catalogItemId}`,
+    {
+      method: "DELETE"
+    }
+  );
+}
+
+export function createPreferenceContext(input: PreferenceContextMutationInput) {
+  return request<{ context: PreferenceContext }>("/api/v1/preferences/contexts", {
+    method: "POST",
+    body: JSON.stringify(input)
+  });
+}
+
+export function patchPreferenceContext(
+  contextId: string,
+  patch: PreferenceContextPatchInput
+) {
+  return request<{ context: PreferenceContext }>(
+    `/api/v1/preferences/contexts/${contextId}`,
+    {
+      method: "PATCH",
+      body: JSON.stringify(patch)
+    }
+  );
+}
+
+export function mergePreferenceContexts(input: PreferenceContextMergeInput) {
+  return request<{
+    merge: { source: PreferenceContext; target: PreferenceContext };
+  }>("/api/v1/preferences/contexts/merge", {
+    method: "POST",
+    body: JSON.stringify(input)
+  });
+}
+
+export function createPreferenceItem(input: PreferenceItemMutationInput) {
+  return request<{ item: PreferenceItem }>("/api/v1/preferences/items", {
+    method: "POST",
+    body: JSON.stringify(input)
+  });
+}
+
+export function patchPreferenceItem(
+  itemId: string,
+  patch: PreferenceItemPatchInput
+) {
+  return request<{ item: PreferenceItem }>(`/api/v1/preferences/items/${itemId}`, {
+    method: "PATCH",
+    body: JSON.stringify(patch)
+  });
+}
+
+export function enqueuePreferenceEntity(input: EnqueuePreferenceEntityInput) {
+  return request<{ item: PreferenceItem }>("/api/v1/preferences/items/from-entity", {
+    method: "POST",
+    body: JSON.stringify(input)
+  });
+}
+
+export function submitPairwisePreferenceJudgment(
+  input: PreferenceJudgmentInput
+) {
+  return request<{ judgment: PairwiseJudgment }>("/api/v1/preferences/judgments", {
+    method: "POST",
+    body: JSON.stringify(input)
+  });
+}
+
+export function submitPreferenceSignal(input: PreferenceSignalInput) {
+  return request<{ signal: AbsoluteSignal }>("/api/v1/preferences/signals", {
+    method: "POST",
+    body: JSON.stringify(input)
+  });
+}
+
+export function patchPreferenceScore(
+  itemId: string,
+  patch: PreferenceScorePatchInput
+) {
+  return request<{ workspace: PreferenceWorkspacePayload }>(
+    `/api/v1/preferences/items/${itemId}/score`,
+    {
+      method: "PATCH",
+      body: JSON.stringify(patch)
+    }
   );
 }
 
@@ -715,6 +951,287 @@ export function deleteNote(noteId: string, mode: DeleteMode = "soft") {
   });
 }
 
+export function getWikiSettings() {
+  return request<{ settings: WikiSettingsPayload }>("/api/v1/wiki/settings");
+}
+
+export function createWikiSpace(input: {
+  label: string;
+  slug?: string;
+  description?: string;
+  ownerUserId?: string | null;
+  visibility?: "personal" | "shared";
+}) {
+  return request<{ space: WikiSpace }>("/api/v1/wiki/spaces", {
+    method: "POST",
+    body: JSON.stringify(input)
+  });
+}
+
+export function listWikiSpaces() {
+  return request<{ spaces: WikiSpace[] }>("/api/v1/wiki/spaces");
+}
+
+export function listWikiPages(input: {
+  spaceId?: string;
+  kind?: Note["kind"];
+  limit?: number;
+} = {}) {
+  const search = new URLSearchParams();
+  if (input.spaceId) {
+    search.set("spaceId", input.spaceId);
+  }
+  if (input.kind) {
+    search.set("kind", input.kind);
+  }
+  if (input.limit) {
+    search.set("limit", String(input.limit));
+  }
+  const suffix = search.size > 0 ? `?${search.toString()}` : "";
+  return request<{ pages: Note[] }>(`/api/v1/wiki/pages${suffix}`);
+}
+
+export function getWikiPage(pageId: string) {
+  return request<WikiPageDetailPayload>(`/api/v1/wiki/pages/${pageId}`);
+}
+
+export function getWikiHome(input: { spaceId?: string } = {}) {
+  const search = new URLSearchParams();
+  if (input.spaceId?.trim()) {
+    search.set("spaceId", input.spaceId.trim());
+  }
+  return request<WikiPageDetailPayload>(
+    `/api/v1/wiki/home${search.size > 0 ? `?${search.toString()}` : ""}`
+  );
+}
+
+export function getWikiPageBySlug(input: { slug: string; spaceId?: string }) {
+  const search = new URLSearchParams();
+  if (input.spaceId?.trim()) {
+    search.set("spaceId", input.spaceId.trim());
+  }
+  return request<WikiPageDetailPayload>(
+    `/api/v1/wiki/by-slug/${encodeURIComponent(input.slug)}${
+      search.size > 0 ? `?${search.toString()}` : ""
+    }`
+  );
+}
+
+export function getWikiTree(input: {
+  spaceId?: string;
+  kind?: Note["kind"];
+} = {}) {
+  const search = new URLSearchParams();
+  if (input.spaceId?.trim()) {
+    search.set("spaceId", input.spaceId.trim());
+  }
+  if (input.kind) {
+    search.set("kind", input.kind);
+  }
+  return request<{ tree: WikiTreeNode[] }>(
+    `/api/v1/wiki/tree${search.size > 0 ? `?${search.toString()}` : ""}`
+  );
+}
+
+export function createWikiPage(input: {
+  kind?: Note["kind"];
+  title: string;
+  slug?: string;
+  parentSlug?: string | null;
+  indexOrder?: number;
+  showInIndex?: boolean;
+  aliases?: string[];
+  summary?: string;
+  contentMarkdown: string;
+  author?: string | null;
+  tags?: string[];
+  spaceId?: string;
+  frontmatter?: Record<string, unknown>;
+  links?: Array<{
+    entityType: CrudEntityType;
+    entityId: string;
+    anchorKey?: string | null;
+  }>;
+}) {
+  return request<WikiPageDetailPayload>("/api/v1/wiki/pages", {
+    method: "POST",
+    body: JSON.stringify({
+      kind: input.kind ?? "wiki",
+      title: input.title,
+      slug: input.slug ?? "",
+      parentSlug: input.parentSlug ?? null,
+      indexOrder: input.indexOrder ?? 0,
+      showInIndex: input.showInIndex ?? true,
+      aliases: input.aliases ?? [],
+      summary: input.summary ?? "",
+      contentMarkdown: input.contentMarkdown,
+      author: input.author ?? null,
+      tags: input.tags ?? [],
+      spaceId: input.spaceId ?? "",
+      frontmatter: input.frontmatter ?? {},
+      links: input.links ?? []
+    })
+  });
+}
+
+export function patchWikiPage(
+  pageId: string,
+  patch: {
+    kind?: Note["kind"];
+    title?: string;
+    slug?: string;
+    parentSlug?: string | null;
+    indexOrder?: number;
+    showInIndex?: boolean;
+    aliases?: string[];
+    summary?: string;
+    contentMarkdown?: string;
+    author?: string | null;
+    tags?: string[];
+    spaceId?: string;
+    frontmatter?: Record<string, unknown>;
+    links?: Array<{
+      entityType: CrudEntityType;
+      entityId: string;
+      anchorKey?: string | null;
+    }>;
+  }
+) {
+  return request<WikiPageDetailPayload>(`/api/v1/wiki/pages/${pageId}`, {
+    method: "PATCH",
+    body: JSON.stringify(patch)
+  });
+}
+
+export function searchWiki(input: {
+  spaceId?: string;
+  kind?: Note["kind"];
+  mode?: "text" | "semantic" | "entity" | "hybrid";
+  query?: string;
+  profileId?: string;
+  linkedEntity?: {
+    entityType: CrudEntityType;
+    entityId: string;
+  };
+  limit?: number;
+}) {
+  return request<WikiSearchResponse>("/api/v1/wiki/search", {
+    method: "POST",
+    body: JSON.stringify(input)
+  });
+}
+
+export function getWikiHealth(input: { spaceId?: string } = {}) {
+  const search = new URLSearchParams();
+  if (input.spaceId?.trim()) {
+    search.set("spaceId", input.spaceId.trim());
+  }
+  return request<{ health: WikiHealthPayload }>(
+    `/api/v1/wiki/health${search.size > 0 ? `?${search.toString()}` : ""}`
+  );
+}
+
+export function syncWikiVault(input: { spaceId?: string } = {}) {
+  return request<{ updated: number }>("/api/v1/wiki/sync", {
+    method: "POST",
+    body: JSON.stringify(input)
+  });
+}
+
+export function reindexWiki(input: { spaceId?: string; profileId?: string } = {}) {
+  return request<{
+    profilesIndexed: number;
+    pagesIndexed: number;
+    chunkCount: number;
+  }>("/api/v1/wiki/reindex", {
+    method: "POST",
+    body: JSON.stringify(input)
+  });
+}
+
+export function createWikiLlmProfile(input: {
+  id?: string;
+  label: string;
+  provider?: string;
+  baseUrl?: string;
+  model: string;
+  apiKey?: string;
+  systemPrompt?: string;
+  enabled?: boolean;
+  metadata?: Record<string, unknown>;
+}) {
+  return request<{ profile: import("./types").WikiLlmProfile }>(
+    "/api/v1/wiki/settings/llm-profiles",
+    {
+      method: "POST",
+      body: JSON.stringify(input)
+    }
+  );
+}
+
+export function createWikiEmbeddingProfile(input: {
+  id?: string;
+  label: string;
+  provider?: string;
+  baseUrl?: string;
+  model?: string;
+  dimensions?: number | null;
+  chunkSize?: number;
+  chunkOverlap?: number;
+  apiKey?: string;
+  enabled?: boolean;
+  metadata?: Record<string, unknown>;
+}) {
+  return request<{ profile: WikiEmbeddingProfile }>(
+    "/api/v1/wiki/settings/embedding-profiles",
+    {
+      method: "POST",
+      body: JSON.stringify(input)
+    }
+  );
+}
+
+export function deleteWikiProfile(kind: "llm" | "embedding", profileId: string) {
+  return request<null>(
+    `/api/v1/wiki/settings/${kind}-profiles/${profileId}`,
+    {
+      method: "DELETE"
+    }
+  );
+}
+
+export function createWikiIngestJob(input: {
+  spaceId?: string;
+  titleHint?: string;
+  sourceKind: "raw_text" | "local_path" | "url";
+  sourceText?: string;
+  sourcePath?: string;
+  sourceUrl?: string;
+  mimeType?: string;
+  llmProfileId?: string;
+  parseStrategy?: "auto" | "text_only" | "multimodal";
+  entityProposalMode?: "none" | "suggest";
+  userId?: string | null;
+  createAsKind?: Note["kind"];
+  linkedEntityHints?: Array<{
+    entityType: CrudEntityType;
+    entityId: string;
+    anchorKey?: string | null;
+  }>;
+}) {
+  return request<{
+    job: WikiIngestJobPayload | null;
+    page: Note;
+  }>("/api/v1/wiki/ingest-jobs", {
+    method: "POST",
+    body: JSON.stringify(input)
+  });
+}
+
+export function getWikiIngestJob(jobId: string) {
+  return request<WikiIngestJobPayload>(`/api/v1/wiki/ingest-jobs/${jobId}`);
+}
+
 export function createInsight(input: CreateInsightInput) {
   return request<{ insight: Insight }>("/api/v1/insights", {
     method: "POST",
@@ -805,7 +1322,10 @@ export function getCalendarOverview(
   const suffix = search.size > 0 ? `?${search.toString()}` : "";
   return request<{ calendar: CalendarOverviewPayload }>(
     `/api/v1/calendar/overview${suffix}`
-  );
+  ).then((response) => ({
+    ...response,
+    calendar: normalizeCalendarOverviewPayload(response.calendar)
+  }));
 }
 
 export function listCalendarConnections() {
@@ -1092,7 +1612,10 @@ export function createCalendarEvent(input: {
   return request<{ event: CalendarEvent }>("/api/v1/calendar/events", {
     method: "POST",
     body: JSON.stringify(input)
-  });
+  }).then((response) => ({
+    ...response,
+    event: normalizeCalendarEventPlace(response.event)
+  }));
 }
 
 export function patchCalendarEvent(
@@ -1132,7 +1655,10 @@ export function patchCalendarEvent(
       method: "PATCH",
       body: JSON.stringify(patch)
     }
-  );
+  ).then((response) => ({
+    ...response,
+    event: normalizeCalendarEventPlace(response.event)
+  }));
 }
 
 export function deleteCalendarEvent(eventId: string) {
@@ -1382,6 +1908,14 @@ export function createCompanionPairingSession(input?: {
   }>("/api/v1/health/pairing-sessions", {
     method: "POST",
     body: JSON.stringify(input ?? {})
+  });
+}
+
+export function revokeCompanionPairingSession(pairingSessionId: string) {
+  return request<{
+    session: CompanionOverviewPayload["pairings"][number];
+  }>(`/api/v1/health/pairing-sessions/${pairingSessionId}`, {
+    method: "DELETE"
   });
 }
 

@@ -3,12 +3,14 @@ import { getDatabase } from "../db.js";
 import { runInTransaction } from "../db.js";
 import { HttpError } from "../errors.js";
 import { recordActivityEvent } from "./activity-events.js";
+import { decorateOwnedEntity, inferFirstOwnedUserId, setEntityOwner } from "./entity-ownership.js";
 import { filterDeletedEntities, filterDeletedIds, isEntityDeleted } from "./deleted-entities.js";
 import { getGoalById } from "./goals.js";
 import { createLinkedNotes } from "./notes.js";
 import { ensureDefaultProjectForGoal, getProjectById } from "./projects.js";
 import { pruneLinkedEntityReferences } from "./psyche.js";
 import { awardTaskCompletionReward, reverseLatestTaskCompletionReward } from "./rewards.js";
+import { findUserByLabel, getDefaultUser, getUserById, resolveUserForMutation } from "./users.js";
 import { assertTaskRelations } from "../services/relations.js";
 import { computeWorkTime, emptyTaskTimeSummary } from "../services/work-time.js";
 import { calendarSchedulingRulesSchema, taskSchema } from "../types.js";
@@ -19,7 +21,7 @@ function readTaskTagIds(taskId) {
     return filterDeletedIds("tag", rows.map((row) => row.tag_id));
 }
 function mapTask(row, time = emptyTaskTimeSummary()) {
-    return taskSchema.parse({
+    return taskSchema.parse(decorateOwnedEntity("task", {
         id: row.id,
         title: row.title,
         description: row.description,
@@ -42,7 +44,7 @@ function mapTask(row, time = emptyTaskTimeSummary()) {
         updatedAt: row.updated_at,
         tagIds: readTaskTagIds(row.id),
         time
-    });
+    }));
 }
 function replaceTaskTags(taskId, tagIds) {
     const database = getDatabase();
@@ -64,21 +66,76 @@ function normalizeCompletedAt(status, existingCompletedAt) {
     }
     return null;
 }
+function resolveTaskAssignment(input) {
+    if (input.userId !== undefined) {
+        const user = resolveUserForMutation(input.userId, input.owner ?? undefined);
+        return {
+            userId: user.id,
+            ownerLabel: input.owner?.trim() || user.displayName
+        };
+    }
+    if (input.owner && input.owner.trim().length > 0) {
+        const matchedUser = findUserByLabel(input.owner);
+        return {
+            userId: matchedUser?.id ??
+                input.currentUserId ??
+                input.inheritedUserId ??
+                getDefaultUser().id,
+            ownerLabel: matchedUser?.displayName ?? input.owner.trim()
+        };
+    }
+    if (input.currentUserId) {
+        const currentUser = getUserById(input.currentUserId);
+        if (currentUser) {
+            return {
+                userId: currentUser.id,
+                ownerLabel: currentUser.displayName
+            };
+        }
+    }
+    if (input.inheritedUserId) {
+        const inheritedUser = getUserById(input.inheritedUserId);
+        if (inheritedUser) {
+            return {
+                userId: inheritedUser.id,
+                ownerLabel: inheritedUser.displayName
+            };
+        }
+    }
+    const fallbackUser = getDefaultUser();
+    return {
+        userId: fallbackUser.id,
+        ownerLabel: fallbackUser.displayName
+    };
+}
 function resolveProjectAndGoalIds(input, current) {
     const currentGoalId = current?.goalId && getGoalById(current.goalId) ? current.goalId : null;
-    const currentProject = current?.projectId ? getProjectById(current.projectId) ?? null : null;
-    const currentProjectGoalId = currentProject?.goalId && getGoalById(currentProject.goalId) ? currentProject.goalId : null;
+    const currentProject = current?.projectId
+        ? (getProjectById(current.projectId) ?? null)
+        : null;
+    const currentProjectGoalId = currentProject?.goalId && getGoalById(currentProject.goalId)
+        ? currentProject.goalId
+        : null;
     const currentProjectId = currentProject?.id ?? null;
     const requestedGoalId = input.goalId === undefined ? currentGoalId : input.goalId;
-    const goalChangedWithoutProjectOverride = current !== undefined && input.goalId !== undefined && input.goalId !== current.goalId && input.projectId === undefined;
-    const requestedProjectId = input.projectId === undefined ? (goalChangedWithoutProjectOverride ? null : currentProjectId) : input.projectId;
+    const goalChangedWithoutProjectOverride = current !== undefined &&
+        input.goalId !== undefined &&
+        input.goalId !== current.goalId &&
+        input.projectId === undefined;
+    const requestedProjectId = input.projectId === undefined
+        ? goalChangedWithoutProjectOverride
+            ? null
+            : currentProjectId
+        : input.projectId;
     if (requestedProjectId) {
         const project = getProjectById(requestedProjectId);
         if (!project) {
             throw new HttpError(404, "project_not_found", `Project ${requestedProjectId} does not exist`);
         }
         const projectGoalId = getGoalById(project.goalId) ? project.goalId : null;
-        if (requestedGoalId && projectGoalId && project.goalId !== requestedGoalId) {
+        if (requestedGoalId &&
+            projectGoalId &&
+            project.goalId !== requestedGoalId) {
             throw new HttpError(409, "project_goal_mismatch", `Project ${requestedProjectId} does not belong to goal ${requestedGoalId}`);
         }
         return {
@@ -117,17 +174,25 @@ function inferReopenStatus(taskId) {
         return "focus";
     }
     const metadata = JSON.parse(row.metadata_json);
-    return metadata.previousStatus && metadata.previousStatus !== "done" ? metadata.previousStatus : "focus";
+    return metadata.previousStatus && metadata.previousStatus !== "done"
+        ? metadata.previousStatus
+        : "focus";
 }
 function updateTaskRecord(current, input, activity) {
     const relationState = resolveProjectAndGoalIds(input, current);
     const nextGoalId = relationState.goalId;
     const nextProjectId = relationState.projectId;
     const nextTagIds = input.tagIds ?? current.tagIds;
+    const assignment = resolveTaskAssignment({
+        userId: input.userId,
+        owner: input.owner,
+        currentUserId: current.userId
+    });
     assertTaskRelations({ goalId: nextGoalId, tagIds: nextTagIds });
     const nextStatus = input.status ?? current.status;
     const movedColumns = nextStatus !== current.status;
-    const nextSort = input.sortOrder ?? (movedColumns ? nextSortOrder(nextStatus) : current.sortOrder);
+    const nextSort = input.sortOrder ??
+        (movedColumns ? nextSortOrder(nextStatus) : current.sortOrder);
     const completedAt = normalizeCompletedAt(nextStatus, current.completedAt);
     const updatedAt = new Date().toISOString();
     getDatabase()
@@ -135,7 +200,7 @@ function updateTaskRecord(current, input, activity) {
        SET title = ?, description = ?, status = ?, priority = ?, owner = ?, goal_id = ?, due_date = ?, effort = ?,
            energy = ?, points = ?, planned_duration_seconds = ?, scheduling_rules_json = ?, sort_order = ?, completed_at = ?, updated_at = ?, project_id = ?
        WHERE id = ?`)
-        .run(input.title ?? current.title, input.description ?? current.description, nextStatus, input.priority ?? current.priority, input.owner ?? current.owner, nextGoalId, input.dueDate === undefined ? current.dueDate : input.dueDate, input.effort ?? current.effort, input.energy ?? current.energy, input.points ?? current.points, input.plannedDurationSeconds === undefined
+        .run(input.title ?? current.title, input.description ?? current.description, nextStatus, input.priority ?? current.priority, assignment.ownerLabel, nextGoalId, input.dueDate === undefined ? current.dueDate : input.dueDate, input.effort ?? current.effort, input.energy ?? current.energy, input.points ?? current.points, input.plannedDurationSeconds === undefined
         ? current.plannedDurationSeconds
         : input.plannedDurationSeconds, input.schedulingRules === undefined
         ? current.schedulingRules === null
@@ -145,6 +210,7 @@ function updateTaskRecord(current, input, activity) {
             ? null
             : JSON.stringify(input.schedulingRules), nextSort, completedAt, updatedAt, nextProjectId, current.id);
     replaceTaskTags(current.id, nextTagIds);
+    setEntityOwner("task", current.id, assignment.userId);
     const updated = getTaskById(current.id);
     if (updated && activity) {
         const statusChanged = current.status !== updated.status;
@@ -236,6 +302,15 @@ function fingerprintTaskCreate(input) {
 }
 function insertTaskRecord(input, activity) {
     const relationState = resolveProjectAndGoalIds(input);
+    const inheritedUserId = inferFirstOwnedUserId([
+        { entityType: "project", entityId: relationState.projectId },
+        { entityType: "goal", entityId: relationState.goalId }
+    ]);
+    const assignment = resolveTaskAssignment({
+        userId: input.userId,
+        owner: input.owner,
+        inheritedUserId
+    });
     assertTaskRelations({ goalId: relationState.goalId, tagIds: input.tagIds });
     if (!relationState.projectId) {
         throw new HttpError(400, "project_required", "Tasks must belong to a project");
@@ -250,7 +325,10 @@ function insertTaskRecord(input, activity) {
         planned_duration_seconds, scheduling_rules_json, sort_order, completed_at, created_at, updated_at
       )
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-        .run(id, input.title, input.description, input.status, input.priority, input.owner, relationState.goalId, relationState.projectId, input.dueDate, input.effort, input.energy, input.points, input.plannedDurationSeconds, input.schedulingRules === null ? null : JSON.stringify(input.schedulingRules), sortOrder, completedAt, now, now);
+        .run(id, input.title, input.description, input.status, input.priority, assignment.ownerLabel, relationState.goalId, relationState.projectId, input.dueDate, input.effort, input.energy, input.points, input.plannedDurationSeconds, input.schedulingRules === null
+        ? null
+        : JSON.stringify(input.schedulingRules), sortOrder, completedAt, now, now);
+    setEntityOwner("task", id, assignment.userId);
     replaceTaskTags(id, input.tagIds);
     const task = getTaskById(id);
     if (activity) {
@@ -259,7 +337,9 @@ function insertTaskRecord(input, activity) {
             entityId: task.id,
             eventType: "task_created",
             title: `Task created: ${task.title}`,
-            description: task.goalId ? `Linked to ${task.goalId} and assigned to ${task.owner}.` : `Assigned to ${task.owner}.`,
+            description: task.goalId
+                ? `Linked to ${task.goalId} and assigned to ${task.owner}.`
+                : `Assigned to ${task.owner}.`,
             actor: activity.actor ?? null,
             source: activity.source,
             metadata: {
@@ -281,7 +361,9 @@ export function listTasks(filters = {}) {
     const whereClauses = [];
     const params = [];
     const todayIso = new Date().toISOString().slice(0, 10);
-    const weekIso = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    const weekIso = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
+        .toISOString()
+        .slice(0, 10);
     if (filters.status) {
         whereClauses.push("status = ?");
         params.push(filters.status);
@@ -352,7 +434,9 @@ export function getTaskById(taskId) {
        WHERE id = ?`)
         .get(taskId);
     const workTime = computeWorkTime();
-    return row ? mapTask(row, workTime.taskSummaries.get(row.id) ?? emptyTaskTimeSummary()) : undefined;
+    return row
+        ? mapTask(row, workTime.taskSummaries.get(row.id) ?? emptyTaskTimeSummary())
+        : undefined;
 }
 export function createTask(input, activity) {
     return runInTransaction(() => insertTaskRecord(input, activity));
@@ -414,9 +498,7 @@ export function deleteTask(taskId, activity) {
     }
     return runInTransaction(() => {
         pruneLinkedEntityReferences("task", taskId);
-        getDatabase()
-            .prepare(`DELETE FROM tasks WHERE id = ?`)
-            .run(taskId);
+        getDatabase().prepare(`DELETE FROM tasks WHERE id = ?`).run(taskId);
         if (activity) {
             recordActivityEvent({
                 entityType: "task",

@@ -27,6 +27,9 @@ For Psyche entities, do not treat Forge like a raw schema form. Use the active-l
 playbooks in [`psyche_entity_playbooks.md`](./psyche_entity_playbooks.md) before
 persisting `psyche_value`, `behavior_pattern`, `behavior`, `belief_entry`,
 `mode_profile`, `mode_guide_session`, or `trigger_report`.
+For all other entity creation and update flows, use
+[`entity_conversation_playbooks.md`](./entity_conversation_playbooks.md) before you
+fall back to field-by-field intake.
 
 ## Preferred workflow
 
@@ -61,6 +64,10 @@ persisting `psyche_value`, `behavior_pattern`, `behavior`, `belief_entry`,
 - User-aware writes should set `userId` when ownership matters explicitly, especially when Hermes is working across human and bot accounts.
 - Notes are searchable and editable records, not comment strings. If the user cares about durable context, preserve it as a note.
 - Ephemeral notes are appropriate for scratch memory, temporary handoffs, or “what just happened” captures that should disappear automatically later.
+- For every entity flow, ask only for what is missing or unclear instead of walking through the whole schema.
+- Use a natural progression of intent or example -> working name -> purpose -> placement -> operational detail -> links.
+- When updating, start with what is changing, what should stay true, and what prompted the update now.
+- Before saving, briefly summarize the working formulation in the user's own language when that would reduce ambiguity.
 - For Psyche work, ask permission to explore, ask one or two focused questions at a time, reflect before the next question, and start from a recent concrete example rather than a diagnostic label.
 - If the user asks to understand a Psyche issue before saving it, start with one orienting question rather than a full interpretation, save pitch, replacement belief, or suggested title.
 - In that first exploratory turn, keep the reflection to one or two short sentences, avoid numbered lists or worksheet-style dumps, and wait for the user's answer before offering a fuller formulation.

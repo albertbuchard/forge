@@ -1,9 +1,11 @@
 import { useMemo, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { GoalDialog } from "@/components/goal-dialog";
 import { NoteMarkdown } from "@/components/notes/note-markdown";
 import { ProjectDialog } from "@/components/project-dialog";
 import { EntityNotesSurface } from "@/components/notes/entity-notes-surface";
+import { PreferenceEntityHandoffButton } from "@/components/preferences/preference-entity-handoff-button";
 import { ProjectCollectionFilters } from "@/components/projects/project-collection-filters";
 import { PageHero } from "@/components/shell/page-hero";
 import { Badge } from "@/components/ui/badge";
@@ -14,6 +16,7 @@ import { EntityName } from "@/components/ui/entity-name";
 import { EmptyState } from "@/components/ui/page-state";
 import { ProgressMeter } from "@/components/ui/progress-meter";
 import { UserBadge } from "@/components/ui/user-badge";
+import { deleteGoal } from "@/lib/api";
 import {
   getReadableActivityDescription,
   getReadableActivityTitle
@@ -32,6 +35,8 @@ export function GoalDetailPage() {
   const { t } = useI18n();
   const shell = useForgeShell();
   const params = useParams();
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const [goalDialogOpen, setGoalDialogOpen] = useState(false);
   const [projectDialogOpen, setProjectDialogOpen] = useState(false);
   const [projectFilter, setProjectFilter] =
@@ -40,6 +45,17 @@ export function GoalDetailPage() {
   const [pendingRestartProjectId, setPendingRestartProjectId] = useState<
     string | null
   >(null);
+  const deleteGoalMutation = useMutation({
+    mutationFn: () => deleteGoal(params.goalId!),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["forge-snapshot"] }),
+        queryClient.invalidateQueries({ queryKey: ["project-board"] }),
+        queryClient.invalidateQueries({ queryKey: ["task-context"] })
+      ]);
+      navigate("/goals");
+    }
+  });
 
   const goal =
     shell.snapshot.dashboard.goals.find(
@@ -113,6 +129,18 @@ export function GoalDetailPage() {
     }
   };
 
+  const handleDeleteGoal = async () => {
+    const confirmed = window.confirm(
+      t("common.goalDetail.deleteGoalConfirm", {
+        title: goal.title
+      })
+    );
+    if (!confirmed) {
+      return;
+    }
+    await deleteGoalMutation.mutateAsync();
+  };
+
   return (
     <div className="grid min-w-0 gap-5">
       <PageHero
@@ -142,6 +170,16 @@ export function GoalDetailPage() {
             : "common.goalDetail.heroBadgeOther",
           { count: projects.length }
         )}
+        actions={
+          <PreferenceEntityHandoffButton
+            userId={defaultUserId}
+            domain="projects"
+            entityType="goal"
+            entityId={goal.id}
+            label={goal.title}
+            description={goal.description}
+          />
+        }
       />
 
       {goal.user ? (
@@ -157,6 +195,15 @@ export function GoalDetailPage() {
         </Button>
         <Button variant="secondary" onClick={() => setProjectDialogOpen(true)}>
           {t("common.goalDetail.addProject")}
+        </Button>
+        <Button
+          variant="ghost"
+          className="text-rose-200 hover:bg-rose-500/10"
+          pending={deleteGoalMutation.isPending}
+          pendingLabel={t("common.goalDetail.deleting")}
+          onClick={() => void handleDeleteGoal()}
+        >
+          {t("common.goalDetail.deleteGoal")}
         </Button>
       </div>
 

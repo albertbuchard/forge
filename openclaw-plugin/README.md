@@ -46,6 +46,7 @@ Forge is a personal system for:
 - long-term goals
 - active projects
 - directed strategies across projects and tasks
+- first-class preferences with a comparison game and editable concept libraries
 - concrete tasks
 - recurring habits
 - truthful live work sessions
@@ -67,6 +68,8 @@ Examples:
 
 - “Save this as a project in Forge.”
 - “Show me the bot-owned strategies.”
+- “Open Preferences and let me start the game.”
+- “What does Forge already know about my food preferences?”
 - “Show me my current work in Forge.”
 - “Start a real work session on this task.”
 - “Map this as a behavior pattern.”
@@ -138,6 +141,34 @@ This lets the user and the agent answer two concrete questions:
 
 - What work is truly next in the plan?
 - How aligned is current execution with the intended end state?
+
+## Preferences And Concept Libraries
+
+Forge now has a dedicated Preferences workspace at `/forge/preferences`.
+
+The main UX is intentionally simple:
+
+- the landing view starts with what Forge already knows
+- if the model is thin, the UI says that plainly and offers one visible `Start the game` action
+- comparison happens in a modal with two simple cards instead of a crowded page
+- Forge-native domains can pull from real Forge entities automatically
+- broader taste domains can start from seeded concept libraries that the user can edit
+
+The current seeded concept-library domains include:
+
+- `food`
+- `activities`
+- `places`
+- `countries`
+- `fashion`
+- `people`
+- `media`
+- `tools`
+
+The runtime API for this surface lives under `/api/v1/preferences/*`.
+OpenClaw should still use `forge_get_agent_onboarding` as the live contract
+source when route-facing field names are uncertain, and it should prefer the UI
+handoff when the user wants to play the comparison game visually.
 
 ## Install
 

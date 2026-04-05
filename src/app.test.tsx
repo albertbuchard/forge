@@ -32,6 +32,10 @@ vi.mock("@/pages/projects-page", () => ({
   ProjectsPage: () => <div>Projects route</div>
 }));
 
+vi.mock("@/pages/preferences-page", () => ({
+  PreferencesPage: () => <div>Preferences route</div>
+}));
+
 vi.mock("@/pages/kanban-page", () => ({
   KanbanPage: () => <div>Kanban route</div>
 }));
@@ -108,6 +112,14 @@ vi.mock("@/pages/task-detail-page", () => ({
   TaskDetailPage: () => <div>Task detail route</div>
 }));
 
+vi.mock("@/pages/wiki-page", () => ({
+  WikiPage: () => <div>Wiki route</div>
+}));
+
+vi.mock("@/pages/wiki-editor-page", () => ({
+  WikiEditorPage: () => <div>Wiki editor route</div>
+}));
+
 describe("App routing", () => {
   it("redirects the index route to overview", async () => {
     render(
@@ -129,6 +141,17 @@ describe("App routing", () => {
 
     expect(await screen.findByText("Forge shell")).toBeInTheDocument();
     expect(await screen.findByText("Settings route")).toBeInTheDocument();
+  });
+
+  it("renders the preferences route inside the shell", async () => {
+    render(
+      <MemoryRouter initialEntries={["/preferences"]}>
+        <App />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText("Forge shell")).toBeInTheDocument();
+    expect(await screen.findByText("Preferences route")).toBeInTheDocument();
   });
 
   it("renders psyche hub and detail routes inside the shell", async () => {
@@ -191,6 +214,30 @@ describe("App routing", () => {
 
     expect(await screen.findByText("Forge shell")).toBeInTheDocument();
     expect(await screen.findByText("Habits route")).toBeInTheDocument();
+  });
+
+  it("renders wiki reading and writing routes inside the shell", async () => {
+    render(
+      <MemoryRouter initialEntries={["/wiki"]}>
+        <App />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText("Wiki route")).toBeInTheDocument();
+
+    render(
+      <MemoryRouter initialEntries={["/wiki/page/index"]}>
+        <App />
+      </MemoryRouter>
+    );
+    expect(await screen.findAllByText("Wiki route")).not.toHaveLength(0);
+
+    render(
+      <MemoryRouter initialEntries={["/wiki/new"]}>
+        <App />
+      </MemoryRouter>
+    );
+    expect(await screen.findByText("Wiki editor route")).toBeInTheDocument();
   });
 
   it("renders goal, project, and task detail routes inside the shell", async () => {

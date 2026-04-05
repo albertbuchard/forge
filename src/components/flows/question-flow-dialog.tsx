@@ -1,6 +1,6 @@
 import * as Dialog from "@radix-ui/react-dialog";
 import { AnimatePresence, motion } from "framer-motion";
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { ArrowLeft, ArrowRight, Check, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { FieldHint, InfoTooltip } from "@/components/ui/info-tooltip";
@@ -14,19 +14,28 @@ export type QuestionFlowStep<TValue> = {
   eyebrow?: string;
   title: string;
   description?: string;
-  render: (value: TValue, setValue: (patch: Partial<TValue>) => void) => ReactNode;
+  render: (
+    value: TValue,
+    setValue: (patch: Partial<TValue>) => void
+  ) => ReactNode;
 };
 
 function useIsMobileFlow() {
   const [isMobile, setIsMobile] = useState(() => {
-    if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
+    if (
+      typeof window === "undefined" ||
+      typeof window.matchMedia !== "function"
+    ) {
       return false;
     }
     return window.matchMedia(MOBILE_BREAKPOINT_QUERY).matches;
   });
 
   useEffect(() => {
-    if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
+    if (
+      typeof window === "undefined" ||
+      typeof window.matchMedia !== "function"
+    ) {
       return;
     }
 
@@ -68,9 +77,13 @@ export function FlowField({
     <label className="grid gap-2">
       <span className="flex items-center gap-2 text-sm font-medium text-white">
         <span>{label}</span>
-        {labelHelp ? <InfoTooltip content={labelHelp} label={`Explain ${label}`} /> : null}
+        {labelHelp ? (
+          <InfoTooltip content={labelHelp} label={`Explain ${label}`} />
+        ) : null}
       </span>
-      {description ? <span className="text-sm leading-6 text-white/54">{description}</span> : null}
+      {description ? (
+        <span className="text-sm leading-6 text-white/54">{description}</span>
+      ) : null}
       {children}
       {hint ? <FieldHint>{hint}</FieldHint> : null}
       {error ? <span className="text-sm text-rose-300">{error}</span> : null}
@@ -90,7 +103,12 @@ export function FlowChoiceGrid({
   columns?: 2 | 3;
 }) {
   return (
-    <div className={cn("grid gap-3", columns === 3 ? "md:grid-cols-3" : "md:grid-cols-2")}>
+    <div
+      className={cn(
+        "grid gap-3",
+        columns === 3 ? "md:grid-cols-3" : "md:grid-cols-2"
+      )}
+    >
       {options.map((option) => {
         const selected = option.value === value;
         return (
@@ -106,7 +124,11 @@ export function FlowChoiceGrid({
             onClick={() => onChange(option.value)}
           >
             <div className="font-medium">{option.label}</div>
-            {option.description ? <div className="mt-2 text-sm leading-6 text-white/54">{option.description}</div> : null}
+            {option.description ? (
+              <div className="mt-2 text-sm leading-6 text-white/54">
+                {option.description}
+              </div>
+            ) : null}
           </button>
         );
       })}
@@ -128,7 +150,9 @@ export function QuestionFlowDialog<TValue>({
   pending = false,
   pendingLabel,
   error,
-  initialStepId
+  resolveError,
+  initialStepId,
+  contentClassName
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -143,26 +167,54 @@ export function QuestionFlowDialog<TValue>({
   pending?: boolean;
   pendingLabel?: string;
   error?: string | null;
+  resolveError?: (stepId: string) => string | null | undefined;
   initialStepId?: string;
+  contentClassName?: string;
 }) {
   const { t } = useI18n();
   const isMobile = useIsMobileFlow();
   const [stepIndex, setStepIndex] = useState(0);
+  const previousOpenRef = useRef(open);
+  const previousInitialStepIdRef = useRef(initialStepId);
   const step = steps[stepIndex];
 
   useEffect(() => {
+    const wasOpen = previousOpenRef.current;
+    const initialStepChanged =
+      previousInitialStepIdRef.current !== initialStepId;
+
+    previousOpenRef.current = open;
+    previousInitialStepIdRef.current = initialStepId;
+
     if (!open) {
       setStepIndex(0);
       return;
     }
 
-    if (initialStepId) {
-      const nextIndex = steps.findIndex((candidate) => candidate.id === initialStepId);
-      setStepIndex(nextIndex >= 0 ? nextIndex : 0);
+    if (!wasOpen || initialStepChanged) {
+      if (initialStepId) {
+        const nextIndex = steps.findIndex(
+          (candidate) => candidate.id === initialStepId
+        );
+        setStepIndex(nextIndex >= 0 ? nextIndex : 0);
+        return;
+      }
+      setStepIndex(0);
       return;
     }
-    setStepIndex(0);
-  }, [initialStepId, open, steps]);
+
+    if (stepIndex >= steps.length) {
+      setStepIndex(Math.max(0, steps.length - 1));
+      return;
+    }
+
+    if (!step && initialStepId) {
+      const nextIndex = steps.findIndex(
+        (candidate) => candidate.id === initialStepId
+      );
+      setStepIndex(nextIndex >= 0 ? nextIndex : 0);
+    }
+  }, [initialStepId, open, step, stepIndex, steps]);
 
   const setValue = (patch: Partial<TValue>) => {
     onChange({ ...value, ...patch });
@@ -170,6 +222,8 @@ export function QuestionFlowDialog<TValue>({
 
   const totalSteps = steps.length;
   const progress = totalSteps === 0 ? 0 : ((stepIndex + 1) / totalSteps) * 100;
+  const resolvedError = step ? resolveError?.(step.id) : undefined;
+  const visibleError = resolvedError === undefined ? error : resolvedError;
 
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
@@ -178,14 +232,17 @@ export function QuestionFlowDialog<TValue>({
         <Dialog.Content
           data-testid="question-flow-dialog"
           className={cn(
-            "fixed z-50 flex flex-col overflow-y-auto border border-white/8 bg-[linear-gradient(180deg,rgba(21,28,44,0.985),rgba(12,17,30,0.985))] shadow-[0_30px_90px_rgba(3,8,18,0.45)]",
+            "fixed z-50 flex flex-col overflow-hidden border border-white/8 bg-[linear-gradient(180deg,rgba(21,28,44,0.985),rgba(12,17,30,0.985))] shadow-[0_30px_90px_rgba(3,8,18,0.45)]",
             isMobile
               ? "inset-x-3 bottom-3 top-4 rounded-[30px]"
-              : "left-1/2 top-1/2 h-[min(52rem,calc(100vh-1rem))] w-[min(56rem,calc(100vw-1.5rem))] -translate-x-1/2 -translate-y-1/2 rounded-[34px]"
+              : "left-1/2 top-1/2 h-[min(52rem,calc(100vh-1rem))] w-[min(56rem,calc(100vw-1.5rem))] -translate-x-1/2 -translate-y-1/2 rounded-[34px]",
+            contentClassName
           )}
         >
           <Dialog.Title className="sr-only">{title}</Dialog.Title>
-          <Dialog.Description className="sr-only">{description}</Dialog.Description>
+          <Dialog.Description className="sr-only">
+            {description}
+          </Dialog.Description>
 
           <div className="sticky top-0 z-10 border-b border-white/8 bg-[rgba(12,17,30,0.9)] px-4 py-2.5 backdrop-blur-xl md:px-6">
             <div className="flex items-center justify-between gap-4">
@@ -216,7 +273,10 @@ export function QuestionFlowDialog<TValue>({
             </div>
           </div>
 
-          <div data-testid="question-flow-canvas" className="flex-1 px-4 py-4 md:px-6 md:py-5">
+          <div
+            data-testid="question-flow-canvas"
+            className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4 md:px-6 md:py-5"
+          >
             <AnimatePresence mode="wait">
               <motion.div
                 key={step.id}
@@ -224,46 +284,87 @@ export function QuestionFlowDialog<TValue>({
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -18 }}
                 transition={{ duration: 0.28, ease: "easeOut" }}
-                className="flex min-h-full flex-col gap-5"
+                className="flex min-h-full min-w-0 flex-col gap-5"
               >
-                <div className="flex min-h-full flex-col justify-start">
-                  {step.eyebrow ? <div className="font-label text-[11px] uppercase tracking-[0.18em] text-[var(--secondary)]">{step.eyebrow}</div> : null}
-                  <h3 className="mt-1.5 font-display text-[clamp(1.45rem,2.15vw,2rem)] leading-tight text-white">{step.title}</h3>
-                  {step.description ? <p className="mt-1.5 max-w-3xl text-sm leading-6 text-white/58">{step.description}</p> : null}
-                  <div className="mt-5 grid flex-1 content-start gap-5">{step.render(value, setValue)}</div>
+                <div className="flex min-h-full min-w-0 flex-col justify-start">
+                  {step.eyebrow ? (
+                    <div className="font-label text-[11px] uppercase tracking-[0.18em] text-[var(--secondary)]">
+                      {step.eyebrow}
+                    </div>
+                  ) : null}
+                  <h3 className="mt-1.5 font-display text-[clamp(1.45rem,2.15vw,2rem)] leading-tight text-white">
+                    {step.title}
+                  </h3>
+                  {step.description ? (
+                    <p className="mt-1.5 max-w-3xl text-sm leading-6 text-white/58">
+                      {step.description}
+                    </p>
+                  ) : null}
+                  <div className="mt-5 grid flex-1 content-start gap-5">
+                    {step.render(value, setValue)}
+                  </div>
                 </div>
-                {error ? <div className="rounded-[20px] border border-rose-400/20 bg-rose-400/10 px-4 py-3 text-sm text-rose-200">{error}</div> : null}
+                {visibleError ? (
+                  <div className="rounded-[20px] border border-rose-400/20 bg-rose-400/10 px-4 py-3 text-sm text-rose-200">
+                    {visibleError}
+                  </div>
+                ) : null}
               </motion.div>
             </AnimatePresence>
           </div>
 
-          <div className="sticky bottom-0 border-t border-white/8 bg-[rgba(12,17,30,0.92)] px-4 py-2.5 backdrop-blur-xl md:px-6">
-            <div className="flex items-center justify-end gap-2 sm:justify-between">
+          <div className="sticky bottom-0 border-t border-white/8 bg-[rgba(12,17,30,0.92)] px-4 pt-2.5 pb-[calc(env(safe-area-inset-bottom)+0.75rem)] backdrop-blur-xl md:px-6 md:pb-3">
+            <div className="flex flex-wrap items-center justify-end gap-2 sm:justify-between">
               <div className="hidden min-w-0 shrink text-[12px] text-white/45 sm:block">
                 <span className="truncate whitespace-nowrap">
                   Step {stepIndex + 1}/{totalSteps}
                 </span>
               </div>
-              <div className="flex shrink-0 flex-nowrap items-center gap-1.5 overflow-x-auto sm:gap-2">
+              <div className="flex min-w-0 shrink-0 flex-wrap items-center justify-end gap-1.5 sm:gap-2">
                 {stepIndex > 0 ? (
-                  <Button type="button" variant="secondary" className="min-w-max px-3 text-[12px]" onClick={() => setStepIndex((current) => Math.max(0, current - 1))}>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    className="min-w-max px-3 text-[12px]"
+                    onClick={() =>
+                      setStepIndex((current) => Math.max(0, current - 1))
+                    }
+                  >
                     <ArrowLeft className="size-4" />
                     Back
                   </Button>
                 ) : (
                   <Dialog.Close asChild>
-                    <Button type="button" variant="secondary" className="min-w-max px-3 text-[12px]">
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      className="min-w-max px-3 text-[12px]"
+                    >
                       {t("common.actions.cancel")}
                     </Button>
                   </Dialog.Close>
                 )}
                 {stepIndex < totalSteps - 1 ? (
-                  <Button type="button" className="min-w-max px-3 text-[12px]" onClick={() => setStepIndex((current) => Math.min(totalSteps - 1, current + 1))}>
+                  <Button
+                    type="button"
+                    className="min-w-max px-3 text-[12px]"
+                    onClick={() =>
+                      setStepIndex((current) =>
+                        Math.min(totalSteps - 1, current + 1)
+                      )
+                    }
+                  >
                     Continue
                     <ArrowRight className="size-4" />
                   </Button>
                 ) : (
-                  <Button type="button" className="min-w-max px-3 text-[12px]" pending={pending} pendingLabel={pendingLabel} onClick={() => void onSubmit()}>
+                  <Button
+                    type="button"
+                    className="min-w-max px-3 text-[12px]"
+                    pending={pending}
+                    pendingLabel={pendingLabel}
+                    onClick={() => void onSubmit()}
+                  >
                     <Check className="size-4" />
                     {submitLabel}
                   </Button>

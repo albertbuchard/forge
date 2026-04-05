@@ -1,4 +1,14 @@
-import type { CalendarSchedulingRules, ForgeSnapshot, Goal, Habit, ProjectSummary, Strategy, Tag, Task, UserSummary } from "./types";
+import type {
+  CalendarSchedulingRules,
+  ForgeSnapshot,
+  Goal,
+  Habit,
+  ProjectSummary,
+  Strategy,
+  Tag,
+  Task,
+  UserSummary
+} from "./types";
 
 const EMPTY_CALENDAR_RULES: CalendarSchedulingRules = {
   allowWorkBlockKinds: [],
@@ -104,13 +114,18 @@ function normalizeTag(tag: Partial<Tag> | undefined): Tag {
   };
 }
 
-function normalizeProject(project: LegacyProjectLike | undefined): ProjectSummary {
+function normalizeProject(
+  project: LegacyProjectLike | undefined
+): ProjectSummary {
   return {
     id: project?.id ?? "",
     goalId: project?.goalId ?? "",
     title: project?.title ?? "",
     description: project?.description ?? project?.summary ?? "",
-    status: project?.status === "paused" || project?.status === "completed" ? project.status : "active",
+    status:
+      project?.status === "paused" || project?.status === "completed"
+        ? project.status
+        : "active",
     targetPoints: project?.targetPoints ?? project?.totalPoints ?? 0,
     themeColor: project?.themeColor ?? "#c0c1ff",
     schedulingRules: project?.schedulingRules ?? EMPTY_CALENDAR_RULES,
@@ -126,7 +141,11 @@ function normalizeProject(project: LegacyProjectLike | undefined): ProjectSummar
     nextTaskTitle: project?.nextTaskTitle ?? null,
     momentumLabel: project?.momentumLabel ?? "No momentum yet",
     userId: (project as Partial<ProjectSummary> | undefined)?.userId ?? null,
-    user: ((project as Partial<ProjectSummary> | undefined)?.user as UserSummary | null | undefined) ?? null,
+    user:
+      ((project as Partial<ProjectSummary> | undefined)?.user as
+        | UserSummary
+        | null
+        | undefined) ?? null,
     time: project?.time ?? {
       totalTrackedSeconds: 0,
       totalCreditedSeconds: 0,
@@ -220,11 +239,16 @@ function normalizeStrategy(strategy: Partial<Strategy> | undefined): Strategy {
       sequencingScore: 100,
       scopeDisciplineScore: 100,
       qualityScore: 0,
+      targetProgressScore: 0,
       completedNodeCount: 0,
+      startedNodeCount: 0,
+      readyNodeCount: 0,
       totalNodeCount: 1,
       completedTargetCount: 0,
       totalTargetCount: 0,
       offPlanEntityCount: 0,
+      offPlanActiveEntityCount: 0,
+      offPlanCompletedEntityCount: 0,
       activeNodeIds: [],
       nextNodeIds: [],
       blockedNodeIds: [],
@@ -242,11 +266,23 @@ function normalizeStrategy(strategy: Partial<Strategy> | undefined): Strategy {
   };
 }
 
-export function normalizeForgeSnapshot(raw: ForgeSnapshot | LegacySnapshot): ForgeSnapshot {
+export function normalizeForgeSnapshot(
+  raw: ForgeSnapshot | LegacySnapshot
+): ForgeSnapshot {
   const legacy = raw as LegacySnapshot;
-  const rootProjects = (legacy.projects ?? legacy.campaigns ?? []).map(normalizeProject);
-  const dashboardProjects = (legacy.dashboard?.projects ?? legacy.dashboard?.campaigns ?? rootProjects).map(normalizeProject);
-  const overviewProjects = (legacy.overview?.projects ?? legacy.overview?.campaigns ?? dashboardProjects).map(normalizeProject);
+  const rootProjects = (legacy.projects ?? legacy.campaigns ?? []).map(
+    normalizeProject
+  );
+  const dashboardProjects = (
+    legacy.dashboard?.projects ??
+    legacy.dashboard?.campaigns ??
+    rootProjects
+  ).map(normalizeProject);
+  const overviewProjects = (
+    legacy.overview?.projects ??
+    legacy.overview?.campaigns ??
+    dashboardProjects
+  ).map(normalizeProject);
 
   return {
     ...raw,
@@ -295,10 +331,12 @@ export function normalizeForgeSnapshot(raw: ForgeSnapshot | LegacySnapshot): For
       tags: (raw.dashboard?.tags ?? []).map(normalizeTag),
       suggestedTags: (raw.dashboard?.suggestedTags ?? []).map(normalizeTag),
       owners: raw.dashboard?.owners ?? [],
-      executionBuckets: (raw.dashboard?.executionBuckets ?? []).map((bucket) => ({
-        ...bucket,
-        tasks: (bucket.tasks ?? []).map(normalizeTask)
-      })),
+      executionBuckets: (raw.dashboard?.executionBuckets ?? []).map(
+        (bucket) => ({
+          ...bucket,
+          tasks: (bucket.tasks ?? []).map(normalizeTask)
+        })
+      ),
       gamification: raw.dashboard?.gamification ?? {
         totalXp: raw.metrics?.totalXp ?? 0,
         level: raw.metrics?.level ?? 1,
@@ -319,12 +357,25 @@ export function normalizeForgeSnapshot(raw: ForgeSnapshot | LegacySnapshot): For
     overview: {
       generatedAt: raw.overview?.generatedAt ?? new Date().toISOString(),
       strategicHeader: {
-        streakDays: raw.overview?.strategicHeader?.streakDays ?? raw.metrics?.streakDays ?? 0,
+        streakDays:
+          raw.overview?.strategicHeader?.streakDays ??
+          raw.metrics?.streakDays ??
+          0,
         level: raw.overview?.strategicHeader?.level ?? raw.metrics?.level ?? 1,
-        totalXp: raw.overview?.strategicHeader?.totalXp ?? raw.metrics?.totalXp ?? 0,
-        currentLevelXp: raw.overview?.strategicHeader?.currentLevelXp ?? raw.metrics?.currentLevelXp ?? 0,
-        nextLevelXp: raw.overview?.strategicHeader?.nextLevelXp ?? raw.metrics?.nextLevelXp ?? 120,
-        momentumScore: raw.overview?.strategicHeader?.momentumScore ?? raw.metrics?.momentumScore ?? 0,
+        totalXp:
+          raw.overview?.strategicHeader?.totalXp ?? raw.metrics?.totalXp ?? 0,
+        currentLevelXp:
+          raw.overview?.strategicHeader?.currentLevelXp ??
+          raw.metrics?.currentLevelXp ??
+          0,
+        nextLevelXp:
+          raw.overview?.strategicHeader?.nextLevelXp ??
+          raw.metrics?.nextLevelXp ??
+          120,
+        momentumScore:
+          raw.overview?.strategicHeader?.momentumScore ??
+          raw.metrics?.momentumScore ??
+          0,
         focusTasks: raw.overview?.strategicHeader?.focusTasks ?? 0,
         overdueTasks: raw.overview?.strategicHeader?.overdueTasks ?? 0
       },
@@ -334,7 +385,12 @@ export function normalizeForgeSnapshot(raw: ForgeSnapshot | LegacySnapshot): For
         ...normalizeGoal(goal)
       })),
       topTasks: (raw.overview?.topTasks ?? []).map(normalizeTask),
-      dueHabits: (raw.overview?.dueHabits ?? raw.today?.dueHabits ?? raw.dashboard?.habits ?? []).map(normalizeHabit),
+      dueHabits: (
+        raw.overview?.dueHabits ??
+        raw.today?.dueHabits ??
+        raw.dashboard?.habits ??
+        []
+      ).map(normalizeHabit),
       recentEvidence: raw.overview?.recentEvidence ?? [],
       achievements: raw.overview?.achievements ?? [],
       domainBalance: raw.overview?.domainBalance ?? [],
@@ -343,7 +399,9 @@ export function normalizeForgeSnapshot(raw: ForgeSnapshot | LegacySnapshot): For
     today: {
       generatedAt: raw.today?.generatedAt ?? new Date().toISOString(),
       directive: {
-        task: raw.today?.directive?.task ? normalizeTask(raw.today.directive.task) : null,
+        task: raw.today?.directive?.task
+          ? normalizeTask(raw.today.directive.task)
+          : null,
         goalTitle: raw.today?.directive?.goalTitle ?? null,
         rewardXp: raw.today?.directive?.rewardXp ?? 0,
         sessionLabel: raw.today?.directive?.sessionLabel ?? "No active session"
@@ -352,7 +410,12 @@ export function normalizeForgeSnapshot(raw: ForgeSnapshot | LegacySnapshot): For
         ...bucket,
         tasks: (bucket.tasks ?? []).map(normalizeTask)
       })),
-      dueHabits: (raw.today?.dueHabits ?? raw.overview?.dueHabits ?? raw.dashboard?.habits ?? []).map(normalizeHabit),
+      dueHabits: (
+        raw.today?.dueHabits ??
+        raw.overview?.dueHabits ??
+        raw.dashboard?.habits ??
+        []
+      ).map(normalizeHabit),
       dailyQuests: raw.today?.dailyQuests ?? [],
       milestoneRewards: raw.today?.milestoneRewards ?? [],
       recentHabitRewards: raw.today?.recentHabitRewards ?? [],

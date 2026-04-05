@@ -74,6 +74,32 @@ const noteInputSchema = () =>
     )
   });
 
+const wikiPageMutationSchema = () =>
+  Type.Object({
+    pageId: optionalString(),
+    kind: Type.Optional(
+      Type.Union([Type.Literal("wiki"), Type.Literal("evidence")])
+    ),
+    title: Type.String({ minLength: 1 }),
+    slug: optionalString(),
+    summary: optionalString(),
+    aliases: Type.Optional(Type.Array(Type.String())),
+    contentMarkdown: Type.String({ minLength: 1 }),
+    author: optionalNullableString(),
+    tags: Type.Optional(Type.Array(Type.String())),
+    spaceId: optionalString(),
+    frontmatter: Type.Optional(Type.Record(Type.String(), Type.Any())),
+    links: Type.Optional(
+      Type.Array(
+        Type.Object({
+          entityType: Type.String({ minLength: 1 }),
+          entityId: Type.String({ minLength: 1 }),
+          anchorKey: optionalNullableString()
+        })
+      )
+    )
+  });
+
 async function resolveUiEntrypoint(config: ForgePluginConfig) {
   let webAppUrl = config.webAppUrl;
 
@@ -110,6 +136,29 @@ function withUserIds(path: string, userIds: string[] | undefined) {
   for (const userId of userIds) {
     if (userId.trim()) {
       search.append("userIds", userId.trim());
+    }
+  }
+  return search.size > 0 ? `${path}?${search.toString()}` : path;
+}
+
+function withQueryParams(
+  path: string,
+  params: Record<string, unknown>,
+  allowedKeys: string[]
+) {
+  const search = new URLSearchParams();
+  for (const key of allowedKeys) {
+    const value = params[key];
+    if (typeof value === "string" && value.trim()) {
+      search.set(key, value.trim());
+    } else if (typeof value === "number" && Number.isFinite(value)) {
+      search.set(key, String(value));
+    } else if (Array.isArray(value)) {
+      for (const item of value) {
+        if (typeof item === "string" && item.trim()) {
+          search.append(key, item.trim());
+        }
+      }
     }
   }
   return search.size > 0 ? `${path}?${search.toString()}` : path;
@@ -243,6 +292,202 @@ export function registerForgePluginTools(
       "Read the current weekly review payload with wins, trends, and reward framing.",
     parameters: scopedReadSchema,
     path: (params) => withUserIds("/api/v1/reviews/weekly", params.userIds as string[] | undefined)
+  });
+
+  registerReadTool(api, config, {
+    name: "forge_get_wiki_settings",
+    label: "Forge Wiki Settings",
+    description:
+      "Read the current wiki spaces plus enabled LLM and embedding profiles before search, ingest, or page writes.",
+    path: () => "/api/v1/wiki/settings"
+  });
+
+  registerReadTool(api, config, {
+    name: "forge_list_wiki_pages",
+    label: "Forge List Wiki Pages",
+    description:
+      "List wiki or evidence pages inside one space without search ranking.",
+    parameters: Type.Object({
+      spaceId: optionalString(),
+      kind: Type.Optional(
+        Type.Union([Type.Literal("wiki"), Type.Literal("evidence")])
+      ),
+      limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 500 }))
+    }),
+    path: (params) =>
+      withQueryParams("/api/v1/wiki/pages", params as Record<string, unknown>, [
+        "spaceId",
+        "kind",
+        "limit"
+      ])
+  });
+
+  registerReadTool(api, config, {
+    name: "forge_get_wiki_page",
+    label: "Forge Get Wiki Page",
+    description:
+      "Read one wiki page with backlinks, source notes, and attached assets.",
+    parameters: Type.Object({
+      pageId: Type.String({ minLength: 1 })
+    }),
+    path: (params) =>
+      `/api/v1/wiki/pages/${encodeURIComponent(
+        (params as Record<string, unknown>).pageId as string
+      )}`
+  });
+
+  registerReadTool(api, config, {
+    name: "forge_get_wiki_health",
+    label: "Forge Wiki Health",
+    description:
+      "Read unresolved links, orphan pages, missing summaries, raw-source counts, and index-path state for one wiki space.",
+    parameters: Type.Object({
+      spaceId: optionalString()
+    }),
+    path: (params) =>
+      withQueryParams("/api/v1/wiki/health", params as Record<string, unknown>, [
+        "spaceId"
+      ])
+  });
+
+  registerWriteTool(api, config, {
+    name: "forge_search_wiki",
+    label: "Forge Search Wiki",
+    description:
+      "Search the wiki with text, semantic, entity, or hybrid retrieval.",
+    parameters: Type.Object({
+      spaceId: optionalString(),
+      kind: Type.Optional(
+        Type.Union([Type.Literal("wiki"), Type.Literal("evidence")])
+      ),
+      mode: Type.Optional(
+        Type.Union([
+          Type.Literal("text"),
+          Type.Literal("semantic"),
+          Type.Literal("entity"),
+          Type.Literal("hybrid")
+        ])
+      ),
+      query: optionalString(),
+      profileId: optionalString(),
+      linkedEntity: Type.Optional(
+        Type.Object({
+          entityType: Type.String({ minLength: 1 }),
+          entityId: Type.String({ minLength: 1 })
+        })
+      ),
+      limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 50 }))
+    }),
+    method: "POST",
+    path: "/api/v1/wiki/search"
+  });
+
+  api.registerTool({
+    name: "forge_upsert_wiki_page",
+    label: "Forge Upsert Wiki Page",
+    description:
+      "Create a new wiki page or update an existing one through the file-backed wiki surface.",
+    parameters: wikiPageMutationSchema(),
+    async execute(_toolCallId, params) {
+      const typed = (params ?? {}) as Record<string, unknown>;
+      const pageId =
+        typeof typed.pageId === "string" && typed.pageId.trim()
+          ? typed.pageId.trim()
+          : null;
+      const body = {
+        kind: typed.kind,
+        title: typed.title,
+        slug: typed.slug,
+        summary: typed.summary,
+        aliases: typed.aliases,
+        contentMarkdown: typed.contentMarkdown,
+        author: typed.author,
+        tags: typed.tags,
+        spaceId: typed.spaceId,
+        frontmatter: typed.frontmatter,
+        links: typed.links
+      };
+      return jsonResult(
+        await runWrite(config, {
+          method: pageId ? "PATCH" : "POST",
+          path: pageId
+            ? `/api/v1/wiki/pages/${encodeURIComponent(pageId)}`
+            : "/api/v1/wiki/pages",
+          body
+        })
+      );
+    }
+  });
+
+  registerWriteTool(api, config, {
+    name: "forge_sync_wiki_vault",
+    label: "Forge Sync Wiki Vault",
+    description:
+      "Resync Markdown files from the local wiki vault into Forge metadata.",
+    parameters: Type.Object({
+      spaceId: optionalString()
+    }),
+    method: "POST",
+    path: "/api/v1/wiki/sync"
+  });
+
+  registerWriteTool(api, config, {
+    name: "forge_reindex_wiki_embeddings",
+    label: "Forge Reindex Wiki Embeddings",
+    description:
+      "Recompute wiki embedding chunks for one space and optional profile.",
+    parameters: Type.Object({
+      spaceId: optionalString(),
+      profileId: optionalString()
+    }),
+    method: "POST",
+    path: "/api/v1/wiki/reindex"
+  });
+
+  registerWriteTool(api, config, {
+    name: "forge_ingest_wiki_source",
+    label: "Forge Ingest Wiki Source",
+    description:
+      "Ingest raw text, local files, or URLs into the wiki, preserving a raw source artifact and returning page plus proposal outputs.",
+    parameters: Type.Object({
+      spaceId: optionalString(),
+      titleHint: optionalString(),
+      sourceKind: Type.Union([
+        Type.Literal("raw_text"),
+        Type.Literal("local_path"),
+        Type.Literal("url")
+      ]),
+      sourceText: optionalString(),
+      sourcePath: optionalString(),
+      sourceUrl: optionalString(),
+      mimeType: optionalString(),
+      llmProfileId: optionalString(),
+      parseStrategy: Type.Optional(
+        Type.Union([
+          Type.Literal("auto"),
+          Type.Literal("text_only"),
+          Type.Literal("multimodal")
+        ])
+      ),
+      entityProposalMode: Type.Optional(
+        Type.Union([Type.Literal("none"), Type.Literal("suggest")])
+      ),
+      userId: optionalNullableString(),
+      createAsKind: Type.Optional(
+        Type.Union([Type.Literal("wiki"), Type.Literal("evidence")])
+      ),
+      linkedEntityHints: Type.Optional(
+        Type.Array(
+          Type.Object({
+            entityType: Type.String({ minLength: 1 }),
+            entityId: Type.String({ minLength: 1 }),
+            anchorKey: optionalNullableString()
+          })
+        )
+      )
+    }),
+    method: "POST",
+    path: "/api/v1/wiki/ingest-jobs"
   });
 
   api.registerTool({

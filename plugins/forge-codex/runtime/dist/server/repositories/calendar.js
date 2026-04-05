@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { getDatabase, runInTransaction } from "../db.js";
 import { recordActivityEvent } from "./activity-events.js";
+import { decorateOwnedEntity, filterOwnedEntities, inferFirstOwnedUserId, setEntityOwner } from "./entity-ownership.js";
 import { getProjectById } from "./projects.js";
 import { getTaskById } from "./tasks.js";
 import { calendarConnectionSchema, calendarContextConflictSchema, calendarEventSchema, calendarEventLinkSchema, calendarEventSourceSchema, calendarOverviewPayloadSchema, calendarSchema, calendarSchedulingRulesSchema, taskTimeboxSchema, workBlockInstanceSchema, workBlockTemplateSchema } from "../types.js";
@@ -130,6 +131,15 @@ function mapEvent(row) {
         title: row.title,
         description: row.description,
         location: row.location,
+        place: {
+            label: row.place_label,
+            address: row.place_address,
+            timezone: row.place_timezone,
+            latitude: row.place_latitude,
+            longitude: row.place_longitude,
+            source: row.place_source,
+            externalPlaceId: row.place_external_id
+        },
         startAt: row.start_at,
         endAt: row.end_at,
         timezone: normalizeTimezone(row.timezone),
@@ -180,6 +190,20 @@ function mapTimebox(row) {
         createdAt: row.created_at,
         updatedAt: row.updated_at
     });
+}
+function inferCalendarEventOwnerId(input) {
+    return (input.userId ??
+        inferFirstOwnedUserId((input.links ?? []).map((link) => ({
+            entityType: link.entityType,
+            entityId: link.entityId
+        }))));
+}
+function inferTaskTimeboxOwnerId(input) {
+    return (input.userId ??
+        inferFirstOwnedUserId([
+            { entityType: "task", entityId: input.taskId },
+            { entityType: "project", entityId: input.projectId ?? null }
+        ]));
 }
 function addMinutes(date, minutes) {
     return new Date(date.getTime() + minutes * 60 * 1000);
@@ -385,25 +409,28 @@ export function listCalendarEvents(query) {
     params.push(query.to);
     const rows = getDatabase()
         .prepare(`SELECT id, preferred_connection_id, preferred_calendar_id, ownership, origin_type, status, title, description, location,
+              place_label, place_address, place_timezone, place_latitude, place_longitude, place_source, place_external_id,
               start_at, end_at, timezone, is_all_day, availability, event_type, categories_json, deleted_at, created_at, updated_at
        FROM forge_events
        WHERE ${clauses.join(" AND ")}
        ORDER BY start_at ASC, title ASC`)
         .all(...params);
-    return rows.map(mapEvent);
+    return filterOwnedEntities("calendar_event", rows.map(mapEvent), query.userIds);
 }
 export function getCalendarEventById(eventId) {
     const row = getDatabase()
         .prepare(`SELECT id, preferred_connection_id, preferred_calendar_id, ownership, origin_type, status, title, description, location,
+              place_label, place_address, place_timezone, place_latitude, place_longitude, place_source, place_external_id,
               start_at, end_at, timezone, is_all_day, availability, event_type, categories_json, deleted_at, created_at, updated_at
        FROM forge_events
        WHERE id = ?`)
         .get(eventId);
-    return row ? mapEvent(row) : undefined;
+    return row ? decorateOwnedEntity("calendar_event", mapEvent(row)) : undefined;
 }
 export function getCalendarEventStorageRecord(eventId) {
     return getDatabase()
         .prepare(`SELECT id, preferred_connection_id, preferred_calendar_id, ownership, origin_type, status, title, description, location,
+              place_label, place_address, place_timezone, place_latitude, place_longitude, place_source, place_external_id,
               start_at, end_at, timezone, is_all_day, availability, event_type, categories_json, deleted_at, created_at, updated_at
        FROM forge_events
        WHERE id = ?`)
@@ -413,6 +440,8 @@ export function getCalendarEventByRemoteId(connectionId, calendarId, remoteId) {
     const row = getDatabase()
         .prepare(`SELECT forge_events.id, forge_events.preferred_connection_id, forge_events.preferred_calendar_id, forge_events.ownership,
               forge_events.origin_type, forge_events.status, forge_events.title, forge_events.description, forge_events.location,
+              forge_events.place_label, forge_events.place_address, forge_events.place_timezone, forge_events.place_latitude,
+              forge_events.place_longitude, forge_events.place_source, forge_events.place_external_id,
               forge_events.start_at, forge_events.end_at, forge_events.timezone, forge_events.is_all_day, forge_events.availability,
               forge_events.event_type, forge_events.categories_json, forge_events.deleted_at, forge_events.created_at, forge_events.updated_at
        FROM forge_event_sources
@@ -489,9 +518,10 @@ export function upsertCalendarEventRecord(connectionId, input) {
         getDatabase()
             .prepare(`UPDATE forge_events
          SET preferred_connection_id = ?, preferred_calendar_id = ?, ownership = ?, origin_type = ?, status = ?, title = ?, description = ?, location = ?,
+             place_label = ?, place_address = ?, place_timezone = ?, place_latitude = ?, place_longitude = ?, place_source = ?, place_external_id = ?,
              start_at = ?, end_at = ?, timezone = ?, is_all_day = ?, availability = ?, event_type = ?, categories_json = ?, deleted_at = ?, updated_at = ?
          WHERE id = ?`)
-            .run(connectionId, calendar.id, input.ownership ?? existing.ownership, connection.provider, input.status ?? existing.status, input.title, input.description ?? "", input.location ?? "", input.startAt, input.endAt, calendar.timezone, input.isAllDay ? 1 : 0, input.availability ?? existing.availability, input.eventType ?? "", JSON.stringify(input.categories ?? []), input.deletedAt ?? null, now, existing.id);
+            .run(connectionId, calendar.id, input.ownership ?? existing.ownership, connection.provider, input.status ?? existing.status, input.title, input.description ?? "", input.location ?? "", input.location ?? "", "", "", null, null, "", "", input.startAt, input.endAt, calendar.timezone, input.isAllDay ? 1 : 0, input.availability ?? existing.availability, input.eventType ?? "", JSON.stringify(input.categories ?? []), input.deletedAt ?? null, now, existing.id);
         upsertEventSource({
             forgeEventId: existing.id,
             provider: connection.provider,
@@ -516,10 +546,11 @@ export function upsertCalendarEventRecord(connectionId, input) {
     getDatabase()
         .prepare(`INSERT INTO forge_events (
          id, preferred_connection_id, preferred_calendar_id, ownership, origin_type, status, title, description, location,
+         place_label, place_address, place_timezone, place_latitude, place_longitude, place_source, place_external_id,
          start_at, end_at, timezone, is_all_day, availability, event_type, categories_json, deleted_at, created_at, updated_at
        )
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-        .run(id, connectionId, calendar.id, input.ownership ?? "external", connection.provider, input.status ?? "confirmed", input.title, input.description ?? "", input.location ?? "", input.startAt, input.endAt, calendar.timezone, input.isAllDay ? 1 : 0, input.availability ?? "busy", input.eventType ?? "", JSON.stringify(input.categories ?? []), input.deletedAt ?? null, now, now);
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+        .run(id, connectionId, calendar.id, input.ownership ?? "external", connection.provider, input.status ?? "confirmed", input.title, input.description ?? "", input.location ?? "", input.location ?? "", "", "", null, null, "", "", input.startAt, input.endAt, calendar.timezone, input.isAllDay ? 1 : 0, input.availability ?? "busy", input.eventType ?? "", JSON.stringify(input.categories ?? []), input.deletedAt ?? null, now, now);
     upsertEventSource({
         forgeEventId: id,
         provider: connection.provider,
@@ -543,6 +574,15 @@ export function upsertCalendarEventRecord(connectionId, input) {
 export function createCalendarEvent(input) {
     const now = nowIso();
     const id = `calevent_${randomUUID().replaceAll("-", "").slice(0, 10)}`;
+    const place = input.place ?? {
+        label: "",
+        address: "",
+        timezone: "",
+        latitude: null,
+        longitude: null,
+        source: "",
+        externalPlaceId: ""
+    };
     const preferredCalendar = input.preferredCalendarId === undefined
         ? getDefaultWritableCalendar() ?? null
         : input.preferredCalendarId
@@ -551,11 +591,13 @@ export function createCalendarEvent(input) {
     getDatabase()
         .prepare(`INSERT INTO forge_events (
          id, preferred_connection_id, preferred_calendar_id, ownership, origin_type, status, title, description, location,
+         place_label, place_address, place_timezone, place_latitude, place_longitude, place_source, place_external_id,
          start_at, end_at, timezone, is_all_day, availability, event_type, categories_json, created_at, updated_at
        )
-       VALUES (?, ?, ?, 'forge', 'native', 'confirmed', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-        .run(id, preferredCalendar?.connectionId ?? null, preferredCalendar?.id ?? null, input.title, input.description, input.location, input.startAt, input.endAt, normalizeTimezone(input.timezone), input.isAllDay ? 1 : 0, input.availability, input.eventType, JSON.stringify(input.categories), now, now);
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+        .run(id, preferredCalendar?.connectionId ?? null, preferredCalendar?.id ?? null, "forge", "native", "confirmed", input.title, input.description, input.location, place.label || input.location, place.address, place.timezone, place.latitude, place.longitude, place.source, place.externalPlaceId, input.startAt, input.endAt, normalizeTimezone(input.timezone), input.isAllDay ? 1 : 0, input.availability, input.eventType, JSON.stringify(input.categories), now, now);
     replaceEventLinks(id, input.links);
+    setEntityOwner("calendar_event", id, inferCalendarEventOwnerId(input));
     return getCalendarEventById(id);
 }
 export function updateCalendarEvent(eventId, patch) {
@@ -578,6 +620,19 @@ export function updateCalendarEvent(eventId, patch) {
         title: patch.title ?? current.title,
         description: patch.description ?? current.description,
         location: patch.location ?? current.location,
+        place: {
+            label: patch.place?.label ?? current.place.label,
+            address: patch.place?.address ?? current.place.address,
+            timezone: patch.place?.timezone ?? current.place.timezone,
+            latitude: patch.place?.latitude === undefined
+                ? current.place.latitude
+                : patch.place.latitude,
+            longitude: patch.place?.longitude === undefined
+                ? current.place.longitude
+                : patch.place.longitude,
+            source: patch.place?.source ?? current.place.source,
+            externalPlaceId: patch.place?.externalPlaceId ?? current.place.externalPlaceId
+        },
         startAt: patch.startAt ?? current.startAt,
         endAt: patch.endAt ?? current.endAt,
         timezone: normalizeTimezone(patch.timezone ?? current.timezone),
@@ -590,11 +645,20 @@ export function updateCalendarEvent(eventId, patch) {
     getDatabase()
         .prepare(`UPDATE forge_events
        SET preferred_connection_id = ?, preferred_calendar_id = ?, title = ?, description = ?, location = ?,
+           place_label = ?, place_address = ?, place_timezone = ?, place_latitude = ?, place_longitude = ?, place_source = ?, place_external_id = ?,
            start_at = ?, end_at = ?, timezone = ?, is_all_day = ?, availability = ?, event_type = ?, categories_json = ?, updated_at = ?
        WHERE id = ?`)
-        .run(next.preferredConnectionId, next.preferredCalendarId, next.title, next.description, next.location, next.startAt, next.endAt, next.timezone, next.isAllDay ? 1 : 0, next.availability, next.eventType, JSON.stringify(next.categories), next.updatedAt, eventId);
+        .run(next.preferredConnectionId, next.preferredCalendarId, next.title, next.description, next.location, next.place.label, next.place.address, next.place.timezone, next.place.latitude, next.place.longitude, next.place.source, next.place.externalPlaceId, next.startAt, next.endAt, next.timezone, next.isAllDay ? 1 : 0, next.availability, next.eventType, JSON.stringify(next.categories), next.updatedAt, eventId);
     if (patch.links) {
         replaceEventLinks(eventId, patch.links);
+    }
+    if (patch.userId !== undefined || patch.links !== undefined) {
+        setEntityOwner("calendar_event", eventId, patch.userId === undefined
+            ? inferCalendarEventOwnerId({
+                userId: current.userId ?? null,
+                links: patch.links ?? current.links
+            })
+            : patch.userId);
     }
     if (current.sourceMappings.length > 0) {
         const nextSyncState = current.deletedAt !== null ? "deleted" : current.originType === "native" ? "pending_update" : "synced";
@@ -635,16 +699,17 @@ export function createWorkBlockTemplate(input) {
          )
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
             .run(id, input.title, input.kind, input.color, normalizeTimezone(input.timezone), JSON.stringify(input.weekDays), input.startMinute, input.endMinute, input.startsOn ?? null, input.endsOn ?? null, input.blockingState, now, now);
+        setEntityOwner("work_block_template", id, input.userId);
         return getWorkBlockTemplateById(id);
     });
 }
-export function listWorkBlockTemplates() {
+export function listWorkBlockTemplates(filters = {}) {
     const rows = getDatabase()
         .prepare(`SELECT id, title, kind, color, timezone, weekdays_json, start_minute, end_minute, starts_on, ends_on, blocking_state, created_at, updated_at
        FROM work_block_templates
        ORDER BY COALESCE(starts_on, ''), start_minute ASC, title ASC`)
         .all();
-    return rows.map(mapWorkBlockTemplate);
+    return filterOwnedEntities("work_block_template", rows.map(mapWorkBlockTemplate), filters.userIds);
 }
 export function getWorkBlockTemplateById(templateId) {
     const row = getDatabase()
@@ -652,7 +717,9 @@ export function getWorkBlockTemplateById(templateId) {
        FROM work_block_templates
        WHERE id = ?`)
         .get(templateId);
-    return row ? mapWorkBlockTemplate(row) : undefined;
+    return row
+        ? decorateOwnedEntity("work_block_template", mapWorkBlockTemplate(row))
+        : undefined;
 }
 export function updateWorkBlockTemplate(templateId, patch) {
     const current = getWorkBlockTemplateById(templateId);
@@ -677,6 +744,9 @@ export function updateWorkBlockTemplate(templateId, patch) {
        SET title = ?, kind = ?, color = ?, timezone = ?, weekdays_json = ?, start_minute = ?, end_minute = ?, starts_on = ?, ends_on = ?, blocking_state = ?, updated_at = ?
        WHERE id = ?`)
         .run(next.title, next.kind, next.color, next.timezone, JSON.stringify(next.weekDays), next.startMinute, next.endMinute, next.startsOn, next.endsOn, next.blockingState, next.updatedAt, templateId);
+    if (patch.userId !== undefined) {
+        setEntityOwner("work_block_template", templateId, patch.userId);
+    }
     return getWorkBlockTemplateById(templateId);
 }
 export function deleteWorkBlockTemplate(templateId) {
@@ -730,7 +800,7 @@ export function ensureWorkBlockInstancesInRange(_query) {
     return [];
 }
 export function listWorkBlockInstances(query) {
-    return listWorkBlockTemplates()
+    return listWorkBlockTemplates({ userIds: query.userIds })
         .flatMap((template) => deriveWorkBlockInstances(template, query))
         .sort((left, right) => left.startAt.localeCompare(right.startAt) || left.title.localeCompare(right.title));
 }
@@ -752,7 +822,7 @@ export function listTaskTimeboxes(query) {
        WHERE ${clauses.join(" AND ")}
        ORDER BY starts_at ASC`)
         .all(...params);
-    return rows.map(mapTimebox);
+    return filterOwnedEntities("task_timebox", rows.map(mapTimebox), query.userIds);
 }
 export function getTaskTimeboxById(timeboxId) {
     const row = getDatabase()
@@ -761,7 +831,7 @@ export function getTaskTimeboxById(timeboxId) {
        FROM task_timeboxes
        WHERE id = ?`)
         .get(timeboxId);
-    return row ? mapTimebox(row) : undefined;
+    return row ? decorateOwnedEntity("task_timebox", mapTimebox(row)) : undefined;
 }
 export function createTaskTimebox(input) {
     const now = nowIso();
@@ -772,6 +842,7 @@ export function createTaskTimebox(input) {
        )
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
         .run(id, input.taskId, input.projectId ?? null, input.connectionId ?? null, input.calendarId ?? null, input.linkedTaskRunId ?? null, input.status ?? "planned", input.source ?? "manual", input.title, input.startsAt, input.endsAt, input.overrideReason ?? null, now, now);
+    setEntityOwner("task_timebox", id, inferTaskTimeboxOwnerId(input));
     return getTaskTimeboxById(id);
 }
 export function updateTaskTimebox(timeboxId, patch) {
@@ -798,6 +869,9 @@ export function updateTaskTimebox(timeboxId, patch) {
            starts_at = ?, ends_at = ?, override_reason = ?, updated_at = ?
        WHERE id = ?`)
         .run(next.connectionId, next.calendarId, next.remoteEventId, next.linkedTaskRunId, next.status, next.source, next.title, next.startsAt, next.endsAt, next.overrideReason, next.updatedAt, timeboxId);
+    if (patch.userId !== undefined) {
+        setEntityOwner("task_timebox", timeboxId, patch.userId);
+    }
     return getTaskTimeboxById(timeboxId);
 }
 export function deleteTaskTimebox(timeboxId) {
@@ -1082,7 +1156,7 @@ export function getCalendarOverview(query) {
         connections: listCalendarConnections().map(({ credentialsSecretId: _secret, ...connection }) => connection),
         calendars: listCalendars(),
         events: listCalendarEvents(query),
-        workBlockTemplates: listWorkBlockTemplates(),
+        workBlockTemplates: listWorkBlockTemplates({ userIds: query.userIds }),
         workBlockInstances: listWorkBlockInstances(query),
         timeboxes: listTaskTimeboxes(query)
     });

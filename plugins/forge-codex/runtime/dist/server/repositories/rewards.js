@@ -770,6 +770,57 @@ export function recordHabitCheckInReward(habit, status, dateKey, activity) {
         }
     });
 }
+export function recordHabitGeneratedWorkoutReward(input, activity) {
+    ensureDefaultRewardRules();
+    if (input.xpReward <= 0) {
+        return null;
+    }
+    const reversibleGroup = `habit_generated_workout:${input.checkInId}`;
+    const existing = getDatabase()
+        .prepare(`SELECT
+         id, rule_id, event_log_id, entity_type, entity_id, actor, source, delta_xp, reason_title, reason_summary,
+         reversible_group, reversed_by_reward_id, metadata_json, created_at
+       FROM reward_ledger
+       WHERE reversible_group = ?
+       LIMIT 1`)
+        .get(reversibleGroup);
+    if (existing) {
+        return mapLedger(existing);
+    }
+    const eventLog = recordEventLog({
+        eventKind: "reward.habit_generated_workout",
+        entityType: "habit",
+        entityId: input.habitId,
+        actor: activity.actor ?? null,
+        source: activity.source,
+        metadata: {
+            habitId: input.habitId,
+            checkInId: input.checkInId,
+            workoutId: input.workoutId,
+            workoutType: input.workoutType,
+            xpReward: input.xpReward
+        }
+    });
+    return insertLedgerEvent({
+        ruleId: null,
+        eventLogId: eventLog.id,
+        entityType: "habit",
+        entityId: input.habitId,
+        actor: activity.actor ?? null,
+        source: activity.source,
+        deltaXp: input.xpReward,
+        reasonTitle: `Generated workout: ${input.habitTitle}`,
+        reasonSummary: `Created a ${input.workoutType} session from a completed habit.`,
+        reversibleGroup,
+        metadata: {
+            habitId: input.habitId,
+            checkInId: input.checkInId,
+            workoutId: input.workoutId,
+            workoutType: input.workoutType,
+            rewardCategory: "habit_generated_workout"
+        }
+    });
+}
 export function recordWeeklyReviewCompletionReward(input, activity) {
     ensureDefaultRewardRules();
     const rule = getRuleByCode("weekly_review_completed");

@@ -1,9 +1,18 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowRight, ChevronDown, ChevronUp, ClipboardList, Plus } from "lucide-react";
+import {
+  ArrowRight,
+  ChevronDown,
+  ChevronUp,
+  ClipboardList,
+  Plus
+} from "lucide-react";
 import { AgentTokenFlowDialog } from "@/components/settings/agent-token-flow-dialog";
 import { LogWorkFlowDialog } from "@/components/settings/log-work-flow-dialog";
-import { TokenRevealDialog, type TokenRevealState } from "@/components/settings/token-reveal-dialog";
+import {
+  TokenRevealDialog,
+  type TokenRevealState
+} from "@/components/settings/token-reveal-dialog";
 import { SettingsSectionNav } from "@/components/settings/settings-section-nav";
 import { PageHero } from "@/components/shell/page-hero";
 import { SurfaceSkeleton } from "@/components/experience/surface-skeleton";
@@ -39,7 +48,9 @@ export function SettingsAgentsPage() {
 
   // ── Dialog state ──────────────────────────────────────────────────────────
   const [tokenDialogOpen, setTokenDialogOpen] = useState(false);
-  const [tokenDialogPreset, setTokenDialogPreset] = useState<"review" | "operator" | "autonomous" | "custom">("operator");
+  const [tokenDialogPreset, setTokenDialogPreset] = useState<
+    "review" | "operator" | "autonomous" | "custom"
+  >("operator");
   const [revealState, setRevealState] = useState<TokenRevealState | null>(null);
   const [revealDialogOpen, setRevealDialogOpen] = useState(false);
   const [logWorkDialogOpen, setLogWorkDialogOpen] = useState(false);
@@ -126,12 +137,22 @@ export function SettingsAgentsPage() {
   const onboarding = onboardingQuery.data?.onboarding;
   const operatorContext = operatorContextQuery.data?.context;
 
-  const activeTokens = settings?.agentTokens.filter((t) => t.status === "active") ?? [];
+  const activeTokens =
+    settings?.agentTokens.filter((t) => t.status === "active") ?? [];
   const recommendedScopes = onboarding?.recommendedScopes ?? [];
-  const hasFullOperatorToken = activeTokens.some((t) => tokenHasScopes(t, recommendedScopes));
-  const hasRewardManager = activeTokens.some((t) => tokenHasScopes(t, ["rewards.manage"]));
-  const hasPsycheWriter = activeTokens.some((t) => tokenHasScopes(t, ["psyche.write"]));
-  const hasScopedWriter = activeTokens.some((t) => t.autonomyMode !== "approval_required" && tokenHasScopes(t, ["write"]));
+  const hasFullOperatorToken = activeTokens.some((t) =>
+    tokenHasScopes(t, recommendedScopes)
+  );
+  const hasRewardManager = activeTokens.some((t) =>
+    tokenHasScopes(t, ["rewards.manage"])
+  );
+  const hasPsycheWriter = activeTokens.some((t) =>
+    tokenHasScopes(t, ["psyche.write"])
+  );
+  const hasScopedWriter = activeTokens.some(
+    (t) =>
+      t.autonomyMode !== "approval_required" && tokenHasScopes(t, ["write"])
+  );
   const hasAnyToken = activeTokens.length > 0;
 
   const operatorTasks = useMemo(() => {
@@ -274,11 +295,23 @@ export function SettingsAgentsPage() {
   }
 
   if (operatorSessionQuery.isError) {
-    return <ErrorState eyebrow="Settings · Agents" error={operatorSessionQuery.error} onRetry={() => void operatorSessionQuery.refetch()} />;
+    return (
+      <ErrorState
+        eyebrow="Settings · Agents"
+        error={operatorSessionQuery.error}
+        onRetry={() => void operatorSessionQuery.refetch()}
+      />
+    );
   }
 
   if (settingsQuery.isError || !settings) {
-    return <ErrorState eyebrow="Settings · Agents" error={settingsQuery.error ?? new Error("Could not load settings.")} onRetry={() => void settingsQuery.refetch()} />;
+    return (
+      <ErrorState
+        eyebrow="Settings · Agents"
+        error={settingsQuery.error ?? new Error("Could not load settings.")}
+        onRetry={() => void settingsQuery.refetch()}
+      />
+    );
   }
 
   return (
@@ -330,13 +363,24 @@ export function SettingsAgentsPage() {
       />
 
       <div className="grid gap-5">
-
         {/* ── Operator console overview ── */}
         {operatorContext ? (
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-            <MetricTile label="Active projects" value={operatorContext.activeProjects.length} tone="core" />
-            <MetricTile label="Focus tasks" value={operatorContext.focusTasks.length} tone="core" />
-            <MetricTile label="Pending approvals" value={approvals.filter((a) => a.status === "pending").length} tone="core" />
+            <MetricTile
+              label="Active projects"
+              value={operatorContext.activeProjects.length}
+              tone="core"
+            />
+            <MetricTile
+              label="Focus tasks"
+              value={operatorContext.focusTasks.length}
+              tone="core"
+            />
+            <MetricTile
+              label="Pending approvals"
+              value={approvals.filter((a) => a.status === "pending").length}
+              tone="core"
+            />
             <MetricTile
               label="Operator level"
               value={operatorContext.xp.profile.level}
@@ -348,7 +392,9 @@ export function SettingsAgentsPage() {
 
         {/* ── Capability status ── */}
         <Card>
-          <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">Capability status</div>
+          <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">
+            Capability status
+          </div>
           <div className="mt-4 grid gap-3">
             {capabilities.map((cap) => (
               <div
@@ -370,7 +416,9 @@ export function SettingsAgentsPage() {
                       {cap.badge}
                     </Badge>
                   </div>
-                  <div className="mt-1 text-sm leading-6 text-white/55">{cap.detail}</div>
+                  <div className="mt-1 text-sm leading-6 text-white/55">
+                    {cap.detail}
+                  </div>
                 </div>
                 {cap.action ? (
                   <button
@@ -390,7 +438,9 @@ export function SettingsAgentsPage() {
         {/* ── Token management ── */}
         <Card>
           <div className="flex items-center justify-between gap-4">
-            <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">Agent tokens</div>
+            <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">
+              Agent tokens
+            </div>
             <Button
               size="sm"
               variant="secondary"
@@ -407,19 +457,36 @@ export function SettingsAgentsPage() {
           <div className="mt-4 grid gap-3">
             {settings.agentTokens.length === 0 ? (
               <div className="rounded-[18px] bg-white/[0.04] px-4 py-4 text-sm text-white/55">
-                No tokens yet. Issue one to let external agents or scripts authenticate with Forge.
+                No tokens yet. Issue one to let external agents or scripts
+                authenticate with Forge.
               </div>
             ) : (
               settings.agentTokens.map((token) => (
-                <div key={token.id} className="rounded-[18px] bg-white/[0.04] p-4">
+                <div
+                  key={token.id}
+                  className="rounded-[18px] bg-white/[0.04] p-4"
+                >
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
-                      <div className="font-medium text-white">{token.label}</div>
+                      <div className="font-medium text-white">
+                        {token.label}
+                      </div>
                       <div className="mt-0.5 text-sm text-white/50">
-                        {token.agentLabel ?? "Unassigned agent"} · <span className="font-mono text-xs">{token.tokenPrefix}</span>
+                        {token.agentLabel ?? "Unassigned agent"} ·{" "}
+                        <span className="font-mono text-xs">
+                          {token.tokenPrefix}
+                        </span>
                       </div>
                     </div>
-                    <Badge className={token.status === "active" ? "text-emerald-300" : "text-white/45"}>{token.status}</Badge>
+                    <Badge
+                      className={
+                        token.status === "active"
+                          ? "text-emerald-300"
+                          : "text-white/45"
+                      }
+                    >
+                      {token.status}
+                    </Badge>
                   </div>
                   <div className="mt-3 flex flex-wrap gap-2 text-xs text-white/55">
                     <span>{token.trustLevel}</span>
@@ -429,14 +496,20 @@ export function SettingsAgentsPage() {
                     <span>{token.approvalMode.replaceAll("_", " ")}</span>
                   </div>
                   <div className="mt-3 flex flex-wrap gap-1.5">
-                    {["write", "rewards.manage", "psyche.write"].map((scope) => (
-                      <Badge
-                        key={scope}
-                        className={token.scopes.includes(scope) ? "text-emerald-300" : "text-white/30"}
-                      >
-                        {scope}
-                      </Badge>
-                    ))}
+                    {["write", "rewards.manage", "psyche.write"].map(
+                      (scope) => (
+                        <Badge
+                          key={scope}
+                          className={
+                            token.scopes.includes(scope)
+                              ? "text-emerald-300"
+                              : "text-white/30"
+                          }
+                        >
+                          {scope}
+                        </Badge>
+                      )
+                    )}
                   </div>
                   <div className="mt-4 flex flex-wrap gap-2">
                     <Button
@@ -463,24 +536,37 @@ export function SettingsAgentsPage() {
             )}
           </div>
           <div className="mt-3 px-1 text-xs text-white/35">
-            Raw token values are shown once and are never recoverable. If a token is lost, rotate or issue a new one.
+            Raw token values are shown once and are never recoverable. If a
+            token is lost, rotate or issue a new one.
           </div>
         </Card>
 
         {/* ── Agent roster ── */}
         {settings.agents.length > 0 ? (
           <Card>
-            <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">Connected agents</div>
+            <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">
+              Connected agents
+            </div>
             <div className="mt-4 grid gap-3">
               {settings.agents.map((agent) => (
-                <div key={agent.id} className="flex items-start justify-between gap-3 rounded-[18px] bg-white/[0.04] p-4">
+                <div
+                  key={agent.id}
+                  className="flex items-start justify-between gap-3 rounded-[18px] bg-white/[0.04] p-4"
+                >
                   <div className="min-w-0">
                     <div className="font-medium text-white">{agent.label}</div>
-                    {agent.description ? <div className="mt-1 text-sm text-white/52">{agent.description}</div> : null}
+                    {agent.description ? (
+                      <div className="mt-1 text-sm text-white/52">
+                        {agent.description}
+                      </div>
+                    ) : null}
                     <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm text-white/55">
                       <span>{agent.agentType}</span>
                       <span>{agent.autonomyMode.replaceAll("_", " ")}</span>
-                      <span>{agent.activeTokenCount} active token{agent.activeTokenCount !== 1 ? "s" : ""}</span>
+                      <span>
+                        {agent.activeTokenCount} active token
+                        {agent.activeTokenCount !== 1 ? "s" : ""}
+                      </span>
                     </div>
                   </div>
                   <Badge className="text-white/60">{agent.trustLevel}</Badge>
@@ -494,35 +580,73 @@ export function SettingsAgentsPage() {
         {operatorContext ? (
           <div className="grid gap-3 lg:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)]">
             <Card>
-              <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">Recommended next move</div>
+              <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">
+                Recommended next move
+              </div>
               {operatorContext.recommendedNextTask ? (
                 <div className="mt-4 grid gap-2">
-                  <EntityName kind="task" label={operatorContext.recommendedNextTask.title} variant="heading" size="lg" />
+                  <EntityName
+                    kind="task"
+                    label={operatorContext.recommendedNextTask.title}
+                    variant="heading"
+                    size="lg"
+                  />
                   <div className="text-sm leading-6 text-white/58">
-                    {operatorContext.recommendedNextTask.description || "No extra notes yet."}
+                    {operatorContext.recommendedNextTask.description ||
+                      "No extra notes yet."}
                   </div>
                   <div className="mt-1 flex flex-wrap gap-2">
-                    <Badge>{operatorContext.recommendedNextTask.status.replaceAll("_", " ")}</Badge>
-                    <Badge>{operatorContext.recommendedNextTask.points} xp</Badge>
+                    <Badge>
+                      {operatorContext.recommendedNextTask.status.replaceAll(
+                        "_",
+                        " "
+                      )}
+                    </Badge>
+                    <Badge>
+                      {operatorContext.recommendedNextTask.points} xp
+                    </Badge>
                     <Badge>{operatorContext.recommendedNextTask.owner}</Badge>
                   </div>
                 </div>
               ) : (
-                <div className="mt-4 text-sm text-white/55">Board is clear. No recommended task right now.</div>
+                <div className="mt-4 text-sm text-white/55">
+                  Board is clear. No recommended task right now.
+                </div>
               )}
             </Card>
             <Card>
-              <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">Board pulse</div>
+              <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">
+                Board pulse
+              </div>
               <div className="mt-4 grid grid-cols-2 gap-3">
                 {[
-                  { label: "Backlog", value: operatorContext.currentBoard.backlog.length },
-                  { label: "Focus", value: operatorContext.currentBoard.focus.length },
-                  { label: "In progress", value: operatorContext.currentBoard.inProgress.length },
-                  { label: "Blocked", value: operatorContext.currentBoard.blocked.length }
+                  {
+                    label: "Backlog",
+                    value: operatorContext.currentBoard.backlog.length
+                  },
+                  {
+                    label: "Focus",
+                    value: operatorContext.currentBoard.focus.length
+                  },
+                  {
+                    label: "In progress",
+                    value: operatorContext.currentBoard.inProgress.length
+                  },
+                  {
+                    label: "Blocked",
+                    value: operatorContext.currentBoard.blocked.length
+                  }
                 ].map((col) => (
-                  <div key={col.label} className="rounded-[18px] bg-white/[0.04] p-4">
-                    <div className="text-xs uppercase tracking-[0.14em] text-white/38">{col.label}</div>
-                    <div className="mt-2 font-display text-3xl text-white">{col.value}</div>
+                  <div
+                    key={col.label}
+                    className="rounded-[18px] bg-white/[0.04] p-4"
+                  >
+                    <div className="text-xs uppercase tracking-[0.14em] text-white/38">
+                      {col.label}
+                    </div>
+                    <div className="mt-2 font-display text-3xl text-white">
+                      {col.value}
+                    </div>
                   </div>
                 ))}
               </div>
@@ -533,19 +657,30 @@ export function SettingsAgentsPage() {
         {/* ── Active projects ── */}
         {operatorContext && operatorContext.activeProjects.length > 0 ? (
           <Card>
-            <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">Active projects</div>
+            <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">
+              Active projects
+            </div>
             <div className="mt-4 grid gap-3 sm:grid-cols-2">
               {operatorContext.activeProjects.slice(0, 6).map((project) => (
-                <div key={project.id} className="rounded-[18px] bg-white/[0.04] p-4">
+                <div
+                  key={project.id}
+                  className="rounded-[18px] bg-white/[0.04] p-4"
+                >
                   <div className="flex items-start justify-between gap-3">
                     <EntityName kind="project" label={project.title} />
                     <Badge>{project.progress}%</Badge>
                   </div>
                   <div className="mt-2">
-                    <EntityBadge kind="goal" label={project.goalTitle} compact gradient={false} />
+                    <EntityBadge
+                      kind="goal"
+                      label={project.goalTitle}
+                      compact
+                      gradient={false}
+                    />
                   </div>
                   <div className="mt-2 text-xs text-white/38">
-                    {project.activeTaskCount} active · {project.completedTaskCount} done
+                    {project.activeTaskCount} active ·{" "}
+                    {project.completedTaskCount} done
                   </div>
                 </div>
               ))}
@@ -556,9 +691,13 @@ export function SettingsAgentsPage() {
         {/* ── Approval queue ── */}
         <Card>
           <div className="flex items-center justify-between gap-4">
-            <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">Approval queue</div>
+            <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">
+              Approval queue
+            </div>
             {approvals.filter((a) => a.status === "pending").length > 0 ? (
-              <Badge className="text-amber-300">{approvals.filter((a) => a.status === "pending").length} pending</Badge>
+              <Badge className="text-amber-300">
+                {approvals.filter((a) => a.status === "pending").length} pending
+              </Badge>
             ) : null}
           </div>
           <div className="mt-4 grid gap-3">
@@ -568,13 +707,26 @@ export function SettingsAgentsPage() {
               </div>
             ) : (
               approvals.map((approval) => (
-                <div key={approval.id} className="rounded-[18px] bg-white/[0.04] p-4">
+                <div
+                  key={approval.id}
+                  className="rounded-[18px] bg-white/[0.04] p-4"
+                >
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
-                      <div className="font-medium text-white">{approval.title}</div>
-                      <div className="mt-0.5 text-sm text-white/55">{approval.summary || approval.actionType}</div>
+                      <div className="font-medium text-white">
+                        {approval.title}
+                      </div>
+                      <div className="mt-0.5 text-sm text-white/55">
+                        {approval.summary || approval.actionType}
+                      </div>
                     </div>
-                    <Badge className={approval.status === "pending" ? "text-amber-300" : "text-white/45"}>
+                    <Badge
+                      className={
+                        approval.status === "pending"
+                          ? "text-amber-300"
+                          : "text-white/45"
+                      }
+                    >
                       {approval.status}
                     </Badge>
                   </div>
@@ -585,7 +737,9 @@ export function SettingsAgentsPage() {
                         size="sm"
                         pending={approveMutation.isPending}
                         pendingLabel="Approving"
-                        onClick={() => void approveMutation.mutateAsync(approval.id)}
+                        onClick={() =>
+                          void approveMutation.mutateAsync(approval.id)
+                        }
                       >
                         Approve
                       </Button>
@@ -594,7 +748,9 @@ export function SettingsAgentsPage() {
                         size="sm"
                         pending={rejectMutation.isPending}
                         pendingLabel="Rejecting"
-                        onClick={() => void rejectMutation.mutateAsync(approval.id)}
+                        onClick={() =>
+                          void rejectMutation.mutateAsync(approval.id)
+                        }
                       >
                         Reject
                       </Button>
@@ -610,9 +766,12 @@ export function SettingsAgentsPage() {
         <Card>
           <div className="flex items-center justify-between gap-4">
             <div>
-              <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">Retroactive work log</div>
+              <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">
+                Retroactive work log
+              </div>
               <div className="mt-1 text-sm text-white/55">
-                Capture work done outside the timer so it counts toward progress and XP.
+                Capture work done outside the timer so it counts toward progress
+                and XP.
               </div>
             </div>
             <Button
@@ -628,9 +787,14 @@ export function SettingsAgentsPage() {
             <div className="mt-4 rounded-[18px] bg-[rgba(192,193,255,0.10)] px-4 py-3 text-sm text-white">
               Logged{" "}
               <span className="inline-block align-middle">
-                <EntityName kind="task" label={logWorkMutation.data.task.title} showKind={false} />
+                <EntityName
+                  kind="task"
+                  label={logWorkMutation.data.task.title}
+                  showKind={false}
+                />
               </span>
-              . Operator XP updated to {logWorkMutation.data.xp.profile.totalXp}.
+              . Operator XP updated to {logWorkMutation.data.xp.profile.totalXp}
+              .
             </div>
           ) : null}
         </Card>
@@ -643,7 +807,9 @@ export function SettingsAgentsPage() {
             onClick={() => setOnboardingExpanded((v) => !v)}
           >
             <div>
-              <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">Connection &amp; onboarding</div>
+              <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">
+                Connection &amp; onboarding
+              </div>
               {onboarding ? (
                 <div className="mt-1 text-sm text-white/55">
                   {onboarding.forgeBaseUrl}
@@ -661,53 +827,213 @@ export function SettingsAgentsPage() {
             <div className="mt-5 grid gap-4">
               <div className="grid gap-3 md:grid-cols-2">
                 <div className="rounded-[18px] bg-white/[0.04] p-4">
-                  <div className="text-xs uppercase tracking-[0.14em] text-white/40">Forge API</div>
-                  <div className="mt-2 break-all text-sm text-white">{onboarding.forgeBaseUrl}</div>
+                  <div className="text-xs uppercase tracking-[0.14em] text-white/40">
+                    Forge API
+                  </div>
+                  <div className="mt-2 break-all text-sm text-white">
+                    {onboarding.forgeBaseUrl}
+                  </div>
                 </div>
                 <div className="rounded-[18px] bg-white/[0.04] p-4">
-                  <div className="text-xs uppercase tracking-[0.14em] text-white/40">Web app</div>
-                  <div className="mt-2 break-all text-sm text-white">{onboarding.webAppUrl}</div>
+                  <div className="text-xs uppercase tracking-[0.14em] text-white/40">
+                    Web app
+                  </div>
+                  <div className="mt-2 break-all text-sm text-white">
+                    {onboarding.webAppUrl}
+                  </div>
                 </div>
                 <div className="rounded-[18px] bg-white/[0.04] p-4">
-                  <div className="text-xs uppercase tracking-[0.14em] text-white/40">OpenAPI spec</div>
-                  <div className="mt-2 break-all text-sm text-white">{onboarding.openApiUrl}</div>
+                  <div className="text-xs uppercase tracking-[0.14em] text-white/40">
+                    OpenAPI spec
+                  </div>
+                  <div className="mt-2 break-all text-sm text-white">
+                    {onboarding.openApiUrl}
+                  </div>
                 </div>
                 <div className="rounded-[18px] bg-white/[0.04] p-4">
-                  <div className="text-xs uppercase tracking-[0.14em] text-white/40">Default policy</div>
+                  <div className="text-xs uppercase tracking-[0.14em] text-white/40">
+                    Default policy
+                  </div>
                   <div className="mt-2 text-sm text-white">
-                    {onboarding.recommendedTrustLevel} · {onboarding.recommendedAutonomyMode.replaceAll("_", " ")} · {onboarding.recommendedApprovalMode.replaceAll("_", " ")}
+                    {onboarding.recommendedTrustLevel} ·{" "}
+                    {onboarding.recommendedAutonomyMode.replaceAll("_", " ")} ·{" "}
+                    {onboarding.recommendedApprovalMode.replaceAll("_", " ")}
                   </div>
                 </div>
               </div>
 
               <div className="grid gap-3 md:grid-cols-2">
                 <div className="rounded-[18px] bg-white/[0.04] p-4">
-                  <div className="font-medium text-white">{onboarding.authModes.operatorSession.label}</div>
-                  <Badge className="mt-1 text-emerald-300">{onboarding.defaultConnectionMode === "operator_session" ? "default" : "available"}</Badge>
-                  <div className="mt-3 text-sm leading-6 text-white/60">{onboarding.authModes.operatorSession.summary}</div>
+                  <div className="font-medium text-white">
+                    {onboarding.authModes.operatorSession.label}
+                  </div>
+                  <Badge className="mt-1 text-emerald-300">
+                    {onboarding.defaultConnectionMode === "operator_session"
+                      ? "default"
+                      : "available"}
+                  </Badge>
+                  <div className="mt-3 text-sm leading-6 text-white/60">
+                    {onboarding.authModes.operatorSession.summary}
+                  </div>
                   <div className="mt-3 flex flex-wrap gap-2">
-                    {onboarding.authModes.operatorSession.trustedTargets.map((t) => (
-                      <Badge key={t} className="text-white/65">{t}</Badge>
-                    ))}
+                    {onboarding.authModes.operatorSession.trustedTargets.map(
+                      (t) => (
+                        <Badge key={t} className="text-white/65">
+                          {t}
+                        </Badge>
+                      )
+                    )}
                   </div>
                 </div>
                 <div className="rounded-[18px] bg-white/[0.04] p-4">
-                  <div className="font-medium text-white">{onboarding.authModes.managedToken.label}</div>
+                  <div className="font-medium text-white">
+                    {onboarding.authModes.managedToken.label}
+                  </div>
                   <Badge className="mt-1 text-white/55">optional</Badge>
-                  <div className="mt-3 text-sm leading-6 text-white/60">{onboarding.authModes.managedToken.summary}</div>
-                  <div className="mt-2 text-sm leading-6 text-white/48">{onboarding.tokenRecovery.rotationSummary}</div>
+                  <div className="mt-3 text-sm leading-6 text-white/60">
+                    {onboarding.authModes.managedToken.summary}
+                  </div>
+                  <div className="mt-2 text-sm leading-6 text-white/48">
+                    {onboarding.tokenRecovery.rotationSummary}
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid gap-3 md:grid-cols-3">
+                <div className="rounded-[18px] bg-white/[0.04] p-4">
+                  <div className="text-xs uppercase tracking-[0.14em] text-white/40">
+                    Shared runtime
+                  </div>
+                  <div className="mt-3 text-sm leading-6 text-white/60">
+                    Keep Forge, OpenClaw, Hermes, and the browser on the same
+                    runtime when they should see one shared user directory, one
+                    strategy graph, and one task history.
+                  </div>
+                  <div className="mt-3 text-xs leading-5 text-white/46">
+                    Base URL: {onboarding.forgeBaseUrl}
+                  </div>
+                </div>
+                <div className="rounded-[18px] bg-white/[0.04] p-4">
+                  <div className="text-xs uppercase tracking-[0.14em] text-white/40">
+                    Agent identity
+                  </div>
+                  <div className="mt-3 text-sm leading-6 text-white/60">
+                    Create each agent as a bot user, then write with that
+                    user&apos;s `userId`. The relationship graph in Settings
+                    -&gt; Users controls what each direction can see, message,
+                    share, plan, and affect.
+                  </div>
+                  <div className="mt-3 text-xs leading-5 text-white/46">
+                    Cross-owner links stay valid even when ownership differs.
+                  </div>
+                </div>
+                <div className="rounded-[18px] bg-white/[0.04] p-4">
+                  <div className="text-xs uppercase tracking-[0.14em] text-white/40">
+                    Contract timing
+                  </div>
+                  <div className="mt-3 text-sm leading-6 text-white/60">
+                    Leave strategies editable while humans and bots refine the
+                    graph. Lock them only when the plan becomes the contract the
+                    alignment metrics should judge.
+                  </div>
+                  <div className="mt-3 text-xs leading-5 text-white/46">
+                    Coverage, sequencing, scope discipline, and quality all
+                    contribute to alignment now.
+                  </div>
                 </div>
               </div>
 
               <div className="rounded-[18px] bg-white/[0.04] p-4">
-                <div className="text-xs uppercase tracking-[0.14em] text-white/40">Quick-connect verification</div>
+                <div className="text-xs uppercase tracking-[0.14em] text-white/40">
+                  Fast onboarding checklist
+                </div>
+                <div className="mt-3 grid gap-2 text-sm leading-6 text-white/60">
+                  <div>
+                    1. Create the human and bot users in Settings -&gt; Users.
+                  </div>
+                  <div>
+                    2. Keep the default graph permissive until collaboration is
+                    flowing cleanly.
+                  </div>
+                  <div>
+                    3. Point OpenClaw and Hermes at the same Forge runtime and
+                    storage root when they should collaborate.
+                  </div>
+                  <div>
+                    4. Give each adapter a distinct actor label so activity
+                    stays readable.
+                  </div>
+                  <div>
+                    5. Build strategies as drafts first, then lock when the plan
+                    is ready to become the contract.
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid gap-3 md:grid-cols-2">
+                <div className="rounded-[18px] bg-white/[0.04] p-4">
+                  <div className="text-xs uppercase tracking-[0.14em] text-white/40">
+                    Rights language
+                  </div>
+                  <div className="mt-3 grid gap-2 text-sm leading-6 text-white/60">
+                    <div>
+                      `See` means discover, search, and read another owner.
+                    </div>
+                    <div>
+                      `Message` means coordinate and hand off through Forge.
+                    </div>
+                    <div>
+                      `Plan` means draft or edit that owner&apos;s strategies.
+                    </div>
+                    <div>
+                      `Affect` means create or mutate that owner&apos;s work.
+                    </div>
+                  </div>
+                </div>
+                <div className="rounded-[18px] bg-white/[0.04] p-4">
+                  <div className="text-xs uppercase tracking-[0.14em] text-white/40">
+                    Strategy lifecycle
+                  </div>
+                  <div className="mt-3 grid gap-2 text-sm leading-6 text-white/60">
+                    <div>
+                      1. Save an incomplete draft while the plan is still being
+                      negotiated.
+                    </div>
+                    <div>
+                      2. Let humans and bots refine targets, nodes, and sequence
+                      together.
+                    </div>
+                    <div>
+                      3. Lock only when the graph becomes the contract for
+                      alignment.
+                    </div>
+                    <div>
+                      4. Unlock only when the contract itself is being
+                      renegotiated.
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="rounded-[18px] bg-white/[0.04] p-4">
+                <div className="text-xs uppercase tracking-[0.14em] text-white/40">
+                  Quick-connect verification
+                </div>
                 <pre className="mt-3 overflow-x-auto rounded-[16px] bg-[rgba(8,13,28,0.78)] p-4 text-xs leading-6 text-white/72">
-                  <code>{[`curl -s ${onboarding.healthUrl}`, `openclaw plugins install ./projects/forge`, "openclaw gateway restart"].join("\n")}</code>
+                  <code>
+                    {[
+                      `curl -s ${onboarding.healthUrl}`,
+                      `openclaw plugins install ./projects/forge`,
+                      "openclaw gateway restart"
+                    ].join("\n")}
+                  </code>
                 </pre>
               </div>
 
               <div className="rounded-[18px] bg-white/[0.04] p-4">
-                <div className="text-xs uppercase tracking-[0.14em] text-white/40">Required API headers</div>
+                <div className="text-xs uppercase tracking-[0.14em] text-white/40">
+                  Required API headers
+                </div>
                 <div className="mt-3 grid gap-1 text-sm text-white/60">
                   <div>{onboarding.requiredHeaders.authorization}</div>
                   <div>{onboarding.requiredHeaders.source}</div>
@@ -722,7 +1048,10 @@ export function SettingsAgentsPage() {
                     onboarding.connectionGuides.hermes
                   ] as const
                 ).map((guide) => (
-                  <div key={guide.label} className="rounded-[18px] bg-white/[0.04] p-4">
+                  <div
+                    key={guide.label}
+                    className="rounded-[18px] bg-white/[0.04] p-4"
+                  >
                     <div className="font-medium text-white">{guide.label}</div>
                     <div className="mt-3 grid gap-2 text-sm leading-6 text-white/60">
                       {guide.installSteps.map((step) => (
@@ -743,8 +1072,12 @@ export function SettingsAgentsPage() {
 
               <div className="grid gap-3 md:grid-cols-2">
                 <div className="rounded-[18px] bg-white/[0.04] p-4">
-                  <div className="text-xs uppercase tracking-[0.14em] text-white/40">Multi-user model</div>
-                  <div className="mt-3 text-sm leading-6 text-white/60">{onboarding.multiUserModel.summary}</div>
+                  <div className="text-xs uppercase tracking-[0.14em] text-white/40">
+                    Multi-user model
+                  </div>
+                  <div className="mt-3 text-sm leading-6 text-white/60">
+                    {onboarding.multiUserModel.summary}
+                  </div>
                   <div className="mt-3 grid gap-1 text-sm leading-6 text-white/48">
                     {onboarding.multiUserModel.routeScoping.map((line) => (
                       <div key={line}>{line}</div>
@@ -752,12 +1085,18 @@ export function SettingsAgentsPage() {
                   </div>
                 </div>
                 <div className="rounded-[18px] bg-white/[0.04] p-4">
-                  <div className="text-xs uppercase tracking-[0.14em] text-white/40">Strategy contracts</div>
-                  <div className="mt-3 text-sm leading-6 text-white/60">{onboarding.strategyContractModel.lockSummary}</div>
+                  <div className="text-xs uppercase tracking-[0.14em] text-white/40">
+                    Strategy contracts
+                  </div>
+                  <div className="mt-3 text-sm leading-6 text-white/60">
+                    {onboarding.strategyContractModel.lockSummary}
+                  </div>
                   <div className="mt-3 grid gap-1 text-sm leading-6 text-white/48">
-                    {onboarding.strategyContractModel.metricBreakdown.map((line) => (
-                      <div key={line}>{line}</div>
-                    ))}
+                    {onboarding.strategyContractModel.metricBreakdown.map(
+                      (line) => (
+                        <div key={line}>{line}</div>
+                      )
+                    )}
                   </div>
                 </div>
               </div>

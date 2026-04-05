@@ -47,7 +47,17 @@ export const defaultHabitValues: HabitMutationInput = {
   linkedReportIds: [],
   linkedBehaviorId: "",
   rewardXp: 12,
-  penaltyXp: 8
+  penaltyXp: 8,
+  generatedHealthEventTemplate: {
+    enabled: false,
+    workoutType: "workout",
+    title: "",
+    durationMinutes: 45,
+    xpReward: 0,
+    tags: [],
+    links: [],
+    notesTemplate: ""
+  }
 };
 
 const WEEKDAY_OPTIONS = [
@@ -81,7 +91,8 @@ function habitToFormValues(habit: Habit): HabitMutationInput {
     linkedReportIds: habit.linkedReportIds,
     linkedBehaviorId: habit.linkedBehaviorId ?? "",
     rewardXp: habit.rewardXp,
-    penaltyXp: habit.penaltyXp
+    penaltyXp: habit.penaltyXp,
+    generatedHealthEventTemplate: habit.generatedHealthEventTemplate
   };
 }
 
@@ -296,6 +307,112 @@ export function HabitDialog({
               ]}
             />
           </FlowField>
+        </>
+      )
+    },
+    {
+      id: "generation",
+      eyebrow: "Generation",
+      title: "Decide whether this habit should create a workout record",
+      description:
+        "Use this when a completed habit should generate a structured sports or recovery session in Forge, then reconcile with HealthKit later if the same session gets imported.",
+      render: (value, setValue) => (
+        <>
+          <FlowField label="Generate workout record">
+            <FlowChoiceGrid
+              value={
+                value.generatedHealthEventTemplate.enabled ? "enabled" : "disabled"
+              }
+              onChange={(next) =>
+                setValue({
+                  generatedHealthEventTemplate: {
+                    ...value.generatedHealthEventTemplate,
+                    enabled: next === "enabled"
+                  }
+                })
+              }
+              options={[
+                {
+                  value: "disabled",
+                  label: "Disabled",
+                  description: "This habit only affects the habit ledger."
+                },
+                {
+                  value: "enabled",
+                  label: "Enabled",
+                  description:
+                    "A completed check-in creates a workout or recovery session."
+                }
+              ]}
+              columns={2}
+            />
+          </FlowField>
+          {value.generatedHealthEventTemplate.enabled ? (
+            <>
+              <FlowField label="Workout type">
+                <Input
+                  value={value.generatedHealthEventTemplate.workoutType}
+                  onChange={(event) =>
+                    setValue({
+                      generatedHealthEventTemplate: {
+                        ...value.generatedHealthEventTemplate,
+                        workoutType: event.target.value
+                      }
+                    })
+                  }
+                  placeholder="mobility, walk, strength, recovery"
+                />
+              </FlowField>
+              <div className="grid gap-4 md:grid-cols-2">
+                <FlowField label="Duration (minutes)">
+                  <Input
+                    type="number"
+                    min={1}
+                    max={1440}
+                    value={value.generatedHealthEventTemplate.durationMinutes}
+                    onChange={(event) =>
+                      setValue({
+                        generatedHealthEventTemplate: {
+                          ...value.generatedHealthEventTemplate,
+                          durationMinutes: Number(event.target.value) || 45
+                        }
+                      })
+                    }
+                  />
+                </FlowField>
+                <FlowField label="Workout XP">
+                  <Input
+                    type="number"
+                    min={0}
+                    max={500}
+                    value={value.generatedHealthEventTemplate.xpReward}
+                    onChange={(event) =>
+                      setValue({
+                        generatedHealthEventTemplate: {
+                          ...value.generatedHealthEventTemplate,
+                          xpReward: Number(event.target.value) || 0
+                        }
+                      })
+                    }
+                  />
+                </FlowField>
+              </div>
+              <FlowField label="Generated session note">
+                <Textarea
+                  value={value.generatedHealthEventTemplate.notesTemplate}
+                  onChange={(event) =>
+                    setValue({
+                      generatedHealthEventTemplate: {
+                        ...value.generatedHealthEventTemplate,
+                        notesTemplate: event.target.value
+                      }
+                    })
+                  }
+                  placeholder="Morning routine session generated from habit completion."
+                />
+              </FlowField>
+            </>
+          ) : null}
         </>
       )
     },

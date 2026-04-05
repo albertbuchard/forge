@@ -1,0 +1,671 @@
+import Foundation
+import SwiftUI
+import Combine
+
+@MainActor
+final class CompanionAppModel: ObservableObject {
+    private struct SimulatorPairingResponse: Decodable {
+        let qrPayload: PairingPayload
+    }
+
+    private struct SimulatorPairingRequest: Encodable {
+        let label: String
+        let capabilities: [String]
+    }
+
+    private enum SimulatorLocalForge {
+        static let apiBaseUrl = "http://127.0.0.1:4317"
+        static let uiBaseUrl = "http://127.0.0.1:3027/forge/"
+        static let pairingLabel = "iOS Simulator"
+        static let capabilities = ["healthkit.sleep", "healthkit.fitness"]
+    }
+
+    private enum StorageKeys {
+        static let pairingPayload = "forge_companion_pairing_payload"
+        static let latestSyncReport = "forge_companion_latest_sync_report"
+        static let lastSuccessfulSyncAt = "forge_companion_last_successful_sync_at"
+        static let healthAuthorizationGranted = "forge_companion_health_authorized"
+        static let healthAccessStatus = "forge_companion_health_access_status"
+        static let deferredHealthPrompt = "forge_companion_deferred_health_prompt"
+    }
+
+    @Published var pairing: PairingPayload? {
+        didSet {
+            companionDebugLog(
+                "CompanionAppModel",
+                "pairing -> session=\(pairing?.sessionId ?? "nil") apiBaseUrl=\(pairing?.apiBaseUrl ?? "nil")"
+            )
+        }
+    }
+    @Published var syncState: SyncState = .disconnected {
+        didSet {
+            companionDebugLog("CompanionAppModel", "syncState -> \(syncState.rawValue)")
+        }
+    }
+    @Published var lastSyncMessage: String = "Not paired" {
+        didSet {
+            companionDebugLog("CompanionAppModel", "lastSyncMessage -> \(lastSyncMessage)")
+        }
+    }
+    @Published var latestError: String? {
+        didSet {
+            companionDebugLog("CompanionAppModel", "latestError -> \(latestError ?? "nil")")
+        }
+    }
+    @Published var latestSyncReport: SyncReport?
+    @Published var healthAuthorizationGranted = false
+    @Published var healthAccessStatus: HealthAccessStatus = .notSet {
+        didSet {
+            companionDebugLog(
+                "CompanionAppModel",
+                "healthAccessStatus -> \(healthAccessStatus.rawValue)"
+            )
+        }
+    }
+    @Published var lastSuccessfulSyncAt: Date?
+    @Published var healthPermissionPromptDeferred = false
+    @Published var discoveredServers: [DiscoveredForgeServer] = [] {
+        didSet {
+            companionDebugLog(
+                "CompanionAppModel",
+                "discoveredServers -> count=\(discoveredServers.count)"
+            )
+        }
+    }
+    @Published var discoveryInFlight = false {
+        didSet {
+            companionDebugLog("CompanionAppModel", "discoveryInFlight -> \(discoveryInFlight)")
+        }
+    }
+    @Published var discoveryMessage = "Search the local network and Tailscale for Forge." {
+        didSet {
+            companionDebugLog("CompanionAppModel", "discoveryMessage -> \(discoveryMessage)")
+        }
+    }
+
+    let healthStore = HealthSyncStore()
+    let syncClient = ForgeSyncClient()
+    let qrScanner = QRPairingScanner()
+    let backgroundScheduler = CompanionBackgroundScheduler()
+    let discoveryService = ForgeServerDiscovery()
+    private let keychain = KeychainStore(service: "com.aurel.forgecompanion")
+
+    init() {
+        companionDebugLog("CompanionAppModel", "init start")
+        restorePairing()
+        restoreCachedState()
+        backgroundScheduler.register { [weak self] in
+            guard let self else { return false }
+            companionDebugLog("CompanionAppModel", "background refresh closure invoked")
+            return await self.performBackgroundRefresh()
+        }
+        if pairing != nil {
+            companionDebugLog("CompanionAppModel", "init scheduling background refresh because pairing exists")
+            backgroundScheduler.schedule()
+        }
+        Task {
+            companionDebugLog("CompanionAppModel", "startup task begin")
+            await attemptLocalSimulatorBootstrapIfNeeded()
+            await refreshHealthAccessStatus()
+            refreshSyncState()
+            await attemptAutomaticSimulatorSyncIfPossible()
+            companionDebugLog("CompanionAppModel", "startup task complete")
+        }
+    }
+
+    func connect(with payload: PairingPayload) {
+        companionDebugLog(
+            "CompanionAppModel",
+            "connect called session=\(payload.sessionId) apiBaseUrl=\(payload.apiBaseUrl)"
+        )
+        completeConnection(with: payload, message: "Pairing ready")
+    }
+
+    func verifyAndConnect(with payload: PairingPayload) async throws {
+        companionDebugLog(
+            "CompanionAppModel",
+            "verifyAndConnect start session=\(payload.sessionId) apiBaseUrl=\(payload.apiBaseUrl)"
+        )
+        let normalizedPayload = normalizedPairingPayload(payload)
+        try await syncClient.verifyPairing(
+            payload: normalizedPayload,
+            apiBaseUrl: normalizedPayload.apiBaseUrl
+        )
+        companionDebugLog(
+            "CompanionAppModel",
+            "verifyAndConnect verifyPairing success session=\(normalizedPayload.sessionId)"
+        )
+        completeConnection(with: normalizedPayload, message: "Connected to Forge")
+        await refreshHealthAccessStatus()
+        refreshSyncState()
+        companionDebugLog("CompanionAppModel", "verifyAndConnect complete")
+    }
+
+    func disconnect() {
+        companionDebugLog(
+            "CompanionAppModel",
+            "disconnect start currentSession=\(pairing?.sessionId ?? "nil")"
+        )
+        pairing = nil
+        syncState = .disconnected
+        lastSyncMessage = "Not paired"
+        latestError = nil
+        healthPermissionPromptDeferred = false
+        keychain.delete(forKey: StorageKeys.pairingPayload)
+        UserDefaults.standard.removeObject(forKey: StorageKeys.deferredHealthPrompt)
+        companionDebugLog("CompanionAppModel", "disconnect complete")
+    }
+
+    func requestHealthPermissions() async {
+        companionDebugLog("CompanionAppModel", "requestHealthPermissions start")
+        do {
+            let granted = try await healthStore.requestAuthorization()
+            companionDebugLog("CompanionAppModel", "requestHealthPermissions result granted=\(granted)")
+            await refreshHealthAccessStatus()
+            refreshSyncState()
+            lastSyncMessage = healthAccessStatus == .fullAccess
+                ? "Health access granted"
+                : healthAccessStatus == .customAccess
+                    ? "Health access is partial"
+                    : "Health access not set"
+            if healthAccessStatus != .notSet {
+                healthPermissionPromptDeferred = false
+                UserDefaults.standard.set(false, forKey: StorageKeys.deferredHealthPrompt)
+            }
+            latestError = nil
+        } catch {
+            companionDebugLog(
+                "CompanionAppModel",
+                "requestHealthPermissions failed error=\(error.localizedDescription)"
+            )
+            latestError = error.localizedDescription
+            syncState = .error
+        }
+    }
+
+    func runManualSync() async {
+        companionDebugLog("CompanionAppModel", "runManualSync start")
+        _ = await performSync(trigger: "manual")
+    }
+
+    func discoverForgeServers() async {
+        companionDebugLog("CompanionAppModel", "discoverForgeServers start")
+        discoveryInFlight = true
+        discoveryMessage = "Scanning for Forge runtimes…"
+        let servers = await discoveryService.discoverServers()
+        discoveredServers = servers
+        discoveryInFlight = false
+        discoveryMessage = servers.isEmpty
+            ? "No Forge runtime found yet. Keep Forge running and try again."
+            : "Found \(servers.count) Forge runtime\(servers.count == 1 ? "" : "s")."
+        companionDebugLog("CompanionAppModel", "discoverForgeServers complete count=\(servers.count)")
+    }
+
+    func bootstrapPairing(for server: DiscoveredForgeServer) async throws {
+        companionDebugLog(
+            "CompanionAppModel",
+            "bootstrapPairing start serverId=\(server.id) apiBaseUrl=\(server.apiBaseUrl)"
+        )
+        let payload = try await syncClient.bootstrapPairingSession(
+            baseUrl: server.apiBaseUrl,
+            label: UIDevice.current.name,
+            capabilities: SimulatorLocalForge.capabilities
+        )
+        companionDebugLog(
+            "CompanionAppModel",
+            "bootstrapPairing bootstrap success session=\(payload.sessionId)"
+        )
+        try await verifyAndConnect(with: payload)
+        lastSyncMessage = "Connected to \(server.name)"
+        companionDebugLog("CompanionAppModel", "bootstrapPairing complete")
+    }
+
+    private func persistPairing() {
+        guard let pairing, let data = try? JSONEncoder().encode(pairing) else {
+            companionDebugLog("CompanionAppModel", "persistPairing skipped")
+            return
+        }
+        keychain.save(data, forKey: StorageKeys.pairingPayload)
+        companionDebugLog("CompanionAppModel", "persistPairing saved session=\(pairing.sessionId)")
+    }
+
+    private func restorePairing() {
+        companionDebugLog("CompanionAppModel", "restorePairing start")
+        guard
+            let data =
+                keychain.load(forKey: StorageKeys.pairingPayload) ??
+                UserDefaults.standard.data(forKey: StorageKeys.pairingPayload),
+            let payload = try? JSONDecoder().decode(PairingPayload.self, from: data)
+        else {
+            companionDebugLog("CompanionAppModel", "restorePairing no stored payload")
+            return
+        }
+        pairing = normalizedPairingPayload(payload)
+        lastSyncMessage = "Pairing restored"
+        persistPairing()
+        UserDefaults.standard.removeObject(forKey: StorageKeys.pairingPayload)
+        companionDebugLog("CompanionAppModel", "restorePairing restored session=\(payload.sessionId)")
+    }
+
+    private func restoreCachedState() {
+        companionDebugLog("CompanionAppModel", "restoreCachedState start")
+        healthAuthorizationGranted = UserDefaults.standard.bool(
+            forKey: StorageKeys.healthAuthorizationGranted
+        )
+        if
+            let rawValue = UserDefaults.standard.string(forKey: StorageKeys.healthAccessStatus),
+            let storedStatus = HealthAccessStatus(rawValue: rawValue)
+        {
+            healthAccessStatus = storedStatus
+        }
+
+        if UserDefaults.standard.object(forKey: StorageKeys.lastSuccessfulSyncAt) != nil {
+            lastSuccessfulSyncAt = Date(
+                timeIntervalSince1970: UserDefaults.standard.double(
+                    forKey: StorageKeys.lastSuccessfulSyncAt
+                )
+            )
+        }
+
+        if
+            let data = UserDefaults.standard.data(forKey: StorageKeys.latestSyncReport),
+            let report = try? JSONDecoder().decode(PersistedSyncReport.self, from: data)
+        {
+            latestSyncReport = report.asSyncReport
+        }
+
+        healthPermissionPromptDeferred = UserDefaults.standard.bool(
+            forKey: StorageKeys.deferredHealthPrompt
+        )
+        companionDebugLog(
+            "CompanionAppModel",
+            "restoreCachedState complete healthAuthorized=\(healthAuthorizationGranted) lastSuccessfulSyncAt=\(lastSuccessfulSyncAt?.description ?? "nil")"
+        )
+    }
+
+    private func persistSyncState(report: SyncReport) {
+        lastSuccessfulSyncAt = report.syncedAt
+        UserDefaults.standard.set(
+            report.syncedAt.timeIntervalSince1970,
+            forKey: StorageKeys.lastSuccessfulSyncAt
+        )
+        if let data = try? JSONEncoder().encode(PersistedSyncReport(report: report)) {
+            UserDefaults.standard.set(data, forKey: StorageKeys.latestSyncReport)
+        }
+    }
+
+    func refreshHealthAccessStatus() async {
+        companionDebugLog("CompanionAppModel", "refreshHealthAccessStatus start")
+        let status = await healthStore.accessStatus()
+        healthAccessStatus = status
+        healthAuthorizationGranted = status != .notSet
+        if status != .notSet {
+            healthPermissionPromptDeferred = false
+            UserDefaults.standard.set(false, forKey: StorageKeys.deferredHealthPrompt)
+        }
+        UserDefaults.standard.set(status.rawValue, forKey: StorageKeys.healthAccessStatus)
+        UserDefaults.standard.set(healthAuthorizationGranted, forKey: StorageKeys.healthAuthorizationGranted)
+        companionDebugLog(
+            "CompanionAppModel",
+            "refreshHealthAccessStatus complete status=\(status.rawValue) authorized=\(healthAuthorizationGranted)"
+        )
+    }
+
+    func deferHealthPermissionPrompt() {
+        companionDebugLog("CompanionAppModel", "deferHealthPermissionPrompt")
+        healthPermissionPromptDeferred = true
+        UserDefaults.standard.set(true, forKey: StorageKeys.deferredHealthPrompt)
+    }
+
+    private func refreshSyncState() {
+        companionDebugLog("CompanionAppModel", "refreshSyncState evaluating")
+        guard pairing != nil else {
+            syncState = .disconnected
+            companionDebugLog("CompanionAppModel", "refreshSyncState -> disconnected")
+            return
+        }
+        if healthAccessStatus == .notSet {
+            syncState = .permissionDenied
+            companionDebugLog("CompanionAppModel", "refreshSyncState -> permissionDenied")
+            return
+        }
+        if let lastSuccessfulSyncAt,
+           Date.now.timeIntervalSince(lastSuccessfulSyncAt) > 24 * 60 * 60
+        {
+            syncState = .stale
+            companionDebugLog("CompanionAppModel", "refreshSyncState -> stale")
+            return
+        }
+        syncState = lastSuccessfulSyncAt == nil ? .connected : .healthy
+        companionDebugLog("CompanionAppModel", "refreshSyncState -> \(syncState.rawValue)")
+    }
+
+    private func performBackgroundRefresh() async -> Bool {
+        companionDebugLog("CompanionAppModel", "performBackgroundRefresh start")
+        return await performSync(trigger: "background")
+    }
+
+    private func completeConnection(with payload: PairingPayload, message: String) {
+        companionDebugLog(
+            "CompanionAppModel",
+            "completeConnection start session=\(payload.sessionId) apiBaseUrl=\(payload.apiBaseUrl)"
+        )
+        pairing = normalizedPairingPayload(payload)
+        healthPermissionPromptDeferred = false
+        UserDefaults.standard.set(false, forKey: StorageKeys.deferredHealthPrompt)
+        lastSyncMessage = message
+        latestError = nil
+        persistPairing()
+        backgroundScheduler.schedule()
+        Task {
+            await refreshHealthAccessStatus()
+            refreshSyncState()
+        }
+        companionDebugLog("CompanionAppModel", "completeConnection scheduled follow-up refresh")
+    }
+
+    private func normalizedPairingPayload(_ payload: PairingPayload) -> PairingPayload {
+        PairingPayload(
+            kind: payload.kind,
+            apiBaseUrl: normalizeApiBaseUrl(payload.apiBaseUrl),
+            sessionId: payload.sessionId,
+            pairingToken: payload.pairingToken,
+            expiresAt: payload.expiresAt,
+            capabilities: payload.capabilities
+        )
+    }
+
+    private func normalizeApiBaseUrl(_ rawValue: String) -> String {
+        guard let url = URL(string: rawValue) else {
+            return rawValue
+        }
+        let trimmedPath = url.path.replacingOccurrences(of: "/+$", with: "", options: .regularExpression)
+        let normalizedPath: String
+        if trimmedPath.hasSuffix("/api/v1") {
+            normalizedPath = trimmedPath
+        } else if trimmedPath.hasSuffix("/forge") {
+            normalizedPath = "\(trimmedPath)/api/v1"
+        } else {
+            normalizedPath = "\(trimmedPath)/api/v1"
+        }
+        var components = URLComponents(url: url, resolvingAgainstBaseURL: false)
+        components?.path = normalizedPath
+        return components?.url?.absoluteString ?? rawValue
+    }
+
+    private func makeLocalOperatorRequest(path: String, method: String) -> URLRequest? {
+        guard let url = URL(string: "\(SimulatorLocalForge.apiBaseUrl)/api/v1\(path)") else {
+            return nil
+        }
+        var request = URLRequest(url: url)
+        request.httpMethod = method
+        request.setValue(SimulatorLocalForge.uiBaseUrl, forHTTPHeaderField: "Origin")
+        request.setValue(
+            "\(SimulatorLocalForge.uiBaseUrl)/settings/mobile",
+            forHTTPHeaderField: "Referer"
+        )
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        return request
+    }
+
+    private func bootstrapLocalOperatorSession() async throws {
+        guard var request = makeLocalOperatorRequest(path: "/auth/operator-session", method: "GET") else {
+            throw URLError(.badURL)
+        }
+        request.httpBody = nil
+        let (_, response) = try await URLSession.shared.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse,
+              (200..<300).contains(httpResponse.statusCode)
+        else {
+            throw URLError(.cannotConnectToHost)
+        }
+    }
+
+    private func createLocalSimulatorPairing() async throws -> PairingPayload {
+        try await bootstrapLocalOperatorSession()
+        guard var request = makeLocalOperatorRequest(path: "/health/pairing-sessions", method: "POST") else {
+            throw URLError(.badURL)
+        }
+        request.httpBody = try JSONEncoder().encode(
+            SimulatorPairingRequest(
+                label: SimulatorLocalForge.pairingLabel,
+                capabilities: SimulatorLocalForge.capabilities
+            )
+        )
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse,
+              (200..<300).contains(httpResponse.statusCode)
+        else {
+            throw URLError(.cannotConnectToHost)
+        }
+        return try JSONDecoder().decode(SimulatorPairingResponse.self, from: data).qrPayload
+    }
+
+    private func attemptLocalSimulatorBootstrapIfNeeded() async {
+#if targetEnvironment(simulator)
+        companionDebugLog("CompanionAppModel", "attemptLocalSimulatorBootstrapIfNeeded start")
+        let expectedApiBaseUrl = normalizeApiBaseUrl(SimulatorLocalForge.uiBaseUrl)
+        if pairing?.apiBaseUrl == expectedApiBaseUrl {
+            companionDebugLog("CompanionAppModel", "attemptLocalSimulatorBootstrapIfNeeded skipped existing local pairing")
+            return
+        }
+        do {
+            let payload = try await createLocalSimulatorPairing()
+            connect(with: payload)
+            lastSyncMessage = "Connected to local Forge"
+            latestError = nil
+            companionDebugLog("CompanionAppModel", "attemptLocalSimulatorBootstrapIfNeeded success session=\(payload.sessionId)")
+        } catch {
+            companionDebugLog(
+                "CompanionAppModel",
+                "attemptLocalSimulatorBootstrapIfNeeded failed error=\(error.localizedDescription)"
+            )
+            if latestError == nil {
+                lastSyncMessage = "Local Forge not connected"
+            }
+        }
+#endif
+    }
+
+    private func attemptAutomaticSimulatorSyncIfPossible() async {
+#if targetEnvironment(simulator)
+        companionDebugLog("CompanionAppModel", "attemptAutomaticSimulatorSyncIfPossible start")
+        guard pairing != nil else { return }
+        guard healthAccessStatus != .notSet else {
+            refreshSyncState()
+            companionDebugLog("CompanionAppModel", "attemptAutomaticSimulatorSyncIfPossible skipped healthAccessStatus not set")
+            return
+        }
+        _ = await performSync(trigger: "simulator startup")
+#endif
+    }
+
+    private func performSync(trigger: String) async -> Bool {
+        companionDebugLog("CompanionAppModel", "performSync start trigger=\(trigger)")
+        guard let pairing else { return false }
+        syncState = .syncing
+        do {
+            let payload = try await healthStore.buildSyncPayload(
+                pairing: pairing,
+                healthKitAuthorized: healthAuthorizationGranted,
+                lastSuccessfulSyncAt: lastSuccessfulSyncAt
+            )
+            let receipt = try await syncClient.pushHealthSync(
+                payload: payload,
+                apiBaseUrl: pairing.apiBaseUrl
+            )
+            let report = SyncReport(
+                syncedAt: Date.now,
+                sleepSessions: receipt.imported.sleepSessions,
+                workouts: receipt.imported.workouts,
+                createdCount: receipt.imported.createdCount,
+                updatedCount: receipt.imported.updatedCount,
+                mergedCount: receipt.imported.mergedCount
+            )
+            latestSyncReport = report
+            persistSyncState(report: report)
+            lastSyncMessage =
+                "Synced \(receipt.imported.sleepSessions) sleep and \(receipt.imported.workouts) workouts via \(trigger)"
+            latestError = nil
+            await refreshHealthAccessStatus()
+            refreshSyncState()
+            backgroundScheduler.schedule()
+            companionDebugLog(
+                "CompanionAppModel",
+                "performSync success trigger=\(trigger) created=\(receipt.imported.createdCount) updated=\(receipt.imported.updatedCount) merged=\(receipt.imported.mergedCount)"
+            )
+            return true
+        } catch {
+            companionDebugLog(
+                "CompanionAppModel",
+                "performSync failed trigger=\(trigger) error=\(error.localizedDescription)"
+            )
+            latestError = error.localizedDescription
+            syncState = .error
+            return false
+        }
+    }
+
+    var shouldShowSetupHero: Bool {
+        pairing == nil
+    }
+
+    var shouldPromptForHealthAccess: Bool {
+        pairing != nil
+            && healthAccessStatus == .notSet
+            && !healthPermissionPromptDeferred
+    }
+
+    var connectionStatusTitle: String {
+        if pairing == nil {
+            return "Not connected"
+        }
+        if syncState == .syncing {
+            return "Syncing now"
+        }
+        if healthAccessStatus == .notSet {
+            return "Needs Health access"
+        }
+        if latestSyncReport == nil {
+            return "Ready to sync"
+        }
+        if syncState == .stale {
+            return "Needs refresh"
+        }
+        if syncState == .error {
+            return "Needs attention"
+        }
+        return "Connected"
+    }
+
+    var healthAccessLabel: String {
+        switch healthAccessStatus {
+        case .fullAccess:
+            return "HealthKit full access"
+        case .customAccess:
+            return "HealthKit custom access"
+        case .notSet:
+            return "HealthKit not set"
+        }
+    }
+
+    var syncStateLabel: String {
+        switch syncState {
+        case .disconnected:
+            return "Not connected"
+        case .connected:
+            return "Ready to sync"
+        case .syncing:
+            return "Syncing now"
+        case .healthy:
+            return "Healthy sync"
+        case .stale:
+            return "Stale sync"
+        case .permissionDenied:
+            return "Permission needed"
+        case .error:
+            return "Needs attention"
+        }
+    }
+
+    var forgeWebURL: URL? {
+        guard let pairing else {
+            return nil
+        }
+        return URL(string: uiBaseUrl(from: pairing.apiBaseUrl))
+    }
+
+    var forgeHostLabel: String {
+        guard let forgeWebURL else {
+            return "Not connected"
+        }
+        if forgeWebURL.host == "127.0.0.1" || forgeWebURL.host == "localhost" {
+            return "Local Forge"
+        }
+        return forgeWebURL.host ?? forgeWebURL.absoluteString
+    }
+
+    var needsNativeAttention: Bool {
+        healthAccessStatus == .notSet || syncState == .stale || syncState == .error
+    }
+
+    var latestImportSummary: String {
+        guard let report = latestSyncReport else {
+            return "No sync yet"
+        }
+        return "\(report.sleepSessions) sleep, \(report.workouts) workouts"
+    }
+
+    private func uiBaseUrl(from apiBaseUrl: String) -> String {
+        guard let url = URL(string: normalizeApiBaseUrl(apiBaseUrl)) else {
+            return apiBaseUrl
+        }
+        var components = URLComponents(url: url, resolvingAgainstBaseURL: false)
+        let uiPath = url.path.replacingOccurrences(
+            of: "/api/v1$",
+            with: "",
+            options: .regularExpression
+        )
+        let normalizedUiPath: String
+        if uiPath.isEmpty || uiPath == "/" {
+            normalizedUiPath = "/"
+        } else if uiPath.hasSuffix("/") {
+            normalizedUiPath = uiPath
+        } else {
+            normalizedUiPath = "\(uiPath)/"
+        }
+        components?.path = normalizedUiPath
+        components?.query = nil
+        components?.fragment = nil
+        return components?.url?.absoluteString ?? apiBaseUrl
+    }
+}
+
+private struct PersistedSyncReport: Codable {
+    let syncedAt: Date
+    let sleepSessions: Int
+    let workouts: Int
+    let createdCount: Int
+    let updatedCount: Int
+    let mergedCount: Int
+
+    init(report: SyncReport) {
+        syncedAt = report.syncedAt
+        sleepSessions = report.sleepSessions
+        workouts = report.workouts
+        createdCount = report.createdCount
+        updatedCount = report.updatedCount
+        mergedCount = report.mergedCount
+    }
+
+    var asSyncReport: SyncReport {
+        SyncReport(
+            syncedAt: syncedAt,
+            sleepSessions: sleepSessions,
+            workouts: workouts,
+            createdCount: createdCount,
+            updatedCount: updatedCount,
+            mergedCount: mergedCount
+        )
+    }
+}

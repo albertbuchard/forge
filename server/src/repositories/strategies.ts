@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { getDatabase, runInTransaction } from "../db.js";
+import { HttpError } from "../errors.js";
 import {
   decorateOwnedEntity,
   filterOwnedEntities,
@@ -206,6 +207,9 @@ function buildStrategyMetrics(
   const completedNodeIds = graph.nodes
     .filter((node) => (nodeProgressById.get(node.id) ?? 0) >= 1)
     .map((node) => node.id);
+  const startedNodeIds = graph.nodes
+    .filter((node) => (nodeProgressById.get(node.id) ?? 0) > 0)
+    .map((node) => node.id);
   const blockedNodeIds = graph.nodes
     .filter((node) => {
       if (node.entityType === "project") {
@@ -267,6 +271,24 @@ function buildStrategyMetrics(
       .map((node) => node.entityId)
   );
   const offPlanEntityKeys = new Set<string>();
+  const offPlanActiveEntityKeys = new Set<string>();
+  const offPlanCompletedEntityKeys = new Set<string>();
+
+  const markOffPlanTask = (taskId: string) => {
+    const task = getTaskById(taskId);
+    if (!task) {
+      return;
+    }
+    const entityKey = `task:${task.id}`;
+    offPlanEntityKeys.add(entityKey);
+    if (task.status === "done") {
+      offPlanCompletedEntityKeys.add(entityKey);
+      return;
+    }
+    if (["focus", "in_progress", "blocked"].includes(task.status)) {
+      offPlanActiveEntityKeys.add(entityKey);
+    }
+  };
 
   for (const projectId of targetProjectIds) {
     const project = getProjectById(projectId);
@@ -275,14 +297,16 @@ function buildStrategyMetrics(
       !graphProjectIds.has(project.id) &&
       project.status !== "completed"
     ) {
-      offPlanEntityKeys.add(`project:${project.id}`);
+      const entityKey = `project:${project.id}`;
+      offPlanEntityKeys.add(entityKey);
+      offPlanActiveEntityKeys.add(entityKey);
     }
     for (const task of listTasks({ projectId })) {
       if (
         !graphTaskIds.has(task.id) &&
         ["focus", "in_progress", "done", "blocked"].includes(task.status)
       ) {
-        offPlanEntityKeys.add(`task:${task.id}`);
+        markOffPlanTask(task.id);
       }
     }
   }
@@ -293,13 +317,15 @@ function buildStrategyMetrics(
         !graphTaskIds.has(task.id) &&
         ["focus", "in_progress", "done", "blocked"].includes(task.status)
       ) {
-        offPlanEntityKeys.add(`task:${task.id}`);
+        markOffPlanTask(task.id);
       }
     }
   }
 
   const totalNodes = Math.max(1, graph.nodes.length);
   const offPlanEntityCount = offPlanEntityKeys.size;
+  const offPlanActiveEntityCount = offPlanActiveEntityKeys.size;
+  const offPlanCompletedEntityCount = offPlanCompletedEntityKeys.size;
   const planCoverageScore = Math.max(
     0,
     Math.min(100, Math.round(nodeAverage * 100))
@@ -313,10 +339,7 @@ function buildStrategyMetrics(
   );
   const scopeDisciplineScore = Math.max(
     0,
-    Math.min(
-      100,
-      Math.round(100 - (offPlanEntityCount / totalNodes) * 100)
-    )
+    Math.min(100, Math.round(100 - (offPlanEntityCount / totalNodes) * 100))
   );
   const blockedRatio = blockedNodeIds.length / totalNodes;
   const qualityScore = Math.max(
@@ -330,6 +353,10 @@ function buildStrategyMetrics(
         ) * 100
       )
     )
+  );
+  const targetProgressScore = Math.max(
+    0,
+    Math.min(100, Math.round(targetAverage * 100))
   );
   const alignmentScore = Math.max(
     0,
@@ -350,16 +377,58 @@ function buildStrategyMetrics(
     sequencingScore,
     scopeDisciplineScore,
     qualityScore,
+    targetProgressScore,
     completedNodeCount: completedNodeIds.length,
+    startedNodeCount: startedNodeIds.length,
+    readyNodeCount: activeNodeIds.length,
     totalNodeCount: totalNodes,
     completedTargetCount: targetScores.filter((score) => score >= 1).length,
     totalTargetCount: targetScores.length,
     offPlanEntityCount,
+    offPlanActiveEntityCount,
+    offPlanCompletedEntityCount,
     activeNodeIds: activeNodeIds.slice(0, 8),
     nextNodeIds: activeNodeIds.slice(0, 5),
     blockedNodeIds,
     outOfOrderNodeIds
   };
+}
+
+function assertStrategyContractReady(input: {
+  title: string;
+  overview: string;
+  endStateDescription: string;
+  targetGoalIds: string[];
+  targetProjectIds: string[];
+  graph: StrategyGraph;
+}) {
+  if (input.graph.nodes.length === 0) {
+    throw new HttpError(
+      400,
+      "strategy_contract_invalid",
+      "A locked strategy needs at least one project or task node in its graph.",
+      { fields: ["graph.nodes"] }
+    );
+  }
+  if (input.targetGoalIds.length === 0 && input.targetProjectIds.length === 0) {
+    throw new HttpError(
+      400,
+      "strategy_contract_invalid",
+      "A locked strategy must target at least one goal or project.",
+      { fields: ["targetGoalIds", "targetProjectIds"] }
+    );
+  }
+  if (
+    input.overview.trim().length === 0 &&
+    input.endStateDescription.trim().length === 0
+  ) {
+    throw new HttpError(
+      400,
+      "strategy_contract_invalid",
+      "A locked strategy needs an overview or end-state description so the contract is explicit.",
+      { fields: ["overview", "endStateDescription"] }
+    );
+  }
 }
 
 function mapStrategy(row: StrategyRow): Strategy {
@@ -386,7 +455,7 @@ function mapStrategy(row: StrategyRow): Strategy {
       lockedAt: row.locked_at,
       lockedByUserId: row.locked_by_user_id,
       lockedByUser: row.locked_by_user_id
-        ? getUserById(row.locked_by_user_id) ?? null
+        ? (getUserById(row.locked_by_user_id) ?? null)
         : null,
       createdAt: row.created_at,
       updatedAt: row.updated_at
@@ -440,6 +509,9 @@ export function createStrategy(input: CreateStrategyInput): Strategy {
   return runInTransaction(() => {
     const parsed = createStrategySchema.parse(input);
     assertStrategyRelations(parsed);
+    if (parsed.isLocked) {
+      assertStrategyContractReady(parsed);
+    }
     const now = new Date().toISOString();
     const id = `strategy_${randomUUID().replaceAll("-", "").slice(0, 10)}`;
     const inferredOwnerUserId =
@@ -514,7 +586,11 @@ export function updateStrategy(
       parsed.linkedEntities !== undefined ||
       parsed.graph !== undefined ||
       parsed.userId !== undefined;
-    if (current.isLocked && parsed.isLocked !== false && changesCoreStrategyShape) {
+    if (
+      current.isLocked &&
+      parsed.isLocked !== false &&
+      changesCoreStrategyShape
+    ) {
       throw new Error(
         "Strategy is locked as a contract. Unlock it before changing the plan, targets, links, or owner."
       );
@@ -560,6 +636,9 @@ export function updateStrategy(
       updatedAt: new Date().toISOString()
     };
     assertStrategyRelations(next);
+    if (next.isLocked) {
+      assertStrategyContractReady(next);
+    }
     getDatabase()
       .prepare(
         `UPDATE strategies

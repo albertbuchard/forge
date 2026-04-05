@@ -70,16 +70,21 @@ function resolveActivityOwner(
         correctedEntityType === "work_block"
           ? "work_block_template"
           : correctedEntityType;
-      const user = getEntityOwner(mappedEntityType, correctedEntityId);
+      const user = getEntityOwner(
+        mappedEntityType as Parameters<typeof getEntityOwner>[0],
+        correctedEntityId
+      );
       return { userId: user?.id ?? null, user };
     }
   }
 
+  const rawEntityType = row.entity_type as string;
   const mappedEntityType =
-    row.entity_type === "work_block"
-      ? "work_block_template"
-      : row.entity_type;
-  const user = getEntityOwner(mappedEntityType, row.entity_id);
+    rawEntityType === "work_block" ? "work_block_template" : rawEntityType;
+  const user = getEntityOwner(
+    mappedEntityType as Parameters<typeof getEntityOwner>[0],
+    row.entity_id
+  );
   return { userId: user?.id ?? null, user };
 }
 

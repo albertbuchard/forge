@@ -1,13 +1,17 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate, useParams } from "react-router-dom";
+import { PreferenceEntityHandoffButton } from "@/components/preferences/preference-entity-handoff-button";
 import { StrategyDialog } from "@/components/strategy-dialog";
+import { StrategyGraphCanvas } from "@/components/strategy-graph-canvas";
+import { StrategyHierarchyTree } from "@/components/strategy-hierarchy-tree";
 import { PageHero } from "@/components/shell/page-hero";
 import { UserBadge } from "@/components/ui/user-badge";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { ErrorState, LoadingState } from "@/components/ui/page-state";
+import { ProgressMeter } from "@/components/ui/progress-meter";
 import { useForgeShell } from "@/components/shell/app-shell";
 import {
   createStrategy,
@@ -16,6 +20,11 @@ import {
   patchStrategy
 } from "@/lib/api";
 import { getEntityRoute } from "@/lib/note-helpers";
+import {
+  buildStrategyContractChecks,
+  isStrategyContractReady
+} from "@/lib/strategy-contract";
+import { buildStrategyAlignmentBreakdown } from "@/lib/strategy-metrics";
 import { getSingleSelectedUserId } from "@/lib/user-ownership";
 
 export function StrategyDetailPage() {
@@ -24,6 +33,7 @@ export function StrategyDetailPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [dialogInitialStepId, setDialogInitialStepId] = useState<string>();
   const defaultUserId = getSingleSelectedUserId(shell.selectedUserIds);
 
   const scopedStrategy =
@@ -70,10 +80,9 @@ export function StrategyDetailPage() {
       (
         await patchStrategy(strategyId!, {
           isLocked: nextLocked,
-          lockedByUserId:
-            nextLocked
-              ? defaultUserId ?? strategy?.userId ?? "user_operator"
-              : null
+          lockedByUserId: nextLocked
+            ? (defaultUserId ?? strategy?.userId ?? "user_operator")
+            : null
         })
       ).strategy,
     onSuccess: refreshStrategy
@@ -98,18 +107,71 @@ export function StrategyDetailPage() {
     [shell.snapshot.tasks]
   );
 
-  const predecessorsByNodeId = useMemo(() => {
+  const graphOwnersByNodeId = useMemo(() => {
     if (!strategy) {
-      return new Map<string, string[]>();
+      return new Map<string, { label: string; color: string } | null>();
     }
-    const map = new Map(
-      strategy.graph.nodes.map((node) => [node.id, [] as string[]])
+    return new Map(
+      strategy.graph.nodes.map((node) => {
+        const owner =
+          node.entityType === "project"
+            ? projectsById.get(node.entityId)?.user
+            : tasksById.get(node.entityId)?.user;
+        return [
+          node.id,
+          owner
+            ? {
+                label: `${owner.displayName} (${owner.kind})`,
+                color: owner.accentColor
+              }
+            : null
+        ] as const;
+      })
     );
-    for (const edge of strategy.graph.edges) {
-      map.set(edge.to, [...(map.get(edge.to) ?? []), edge.from]);
-    }
-    return map;
-  }, [strategy]);
+  }, [projectsById, strategy, tasksById]);
+  const strategyContractShape = strategy ?? {
+    title: "",
+    overview: "",
+    endStateDescription: "",
+    targetGoalIds: [],
+    targetProjectIds: [],
+    graph: { nodes: [], edges: [] }
+  };
+  const contractChecks = useMemo(
+    () => buildStrategyContractChecks(strategyContractShape),
+    [strategyContractShape]
+  );
+  const canLockStrategy = useMemo(
+    () => isStrategyContractReady(strategyContractShape),
+    [strategyContractShape]
+  );
+  const alignmentBreakdown = useMemo(
+    () =>
+      buildStrategyAlignmentBreakdown(
+        strategy?.metrics ?? {
+          alignmentScore: 0,
+          planCoverageScore: 0,
+          sequencingScore: 0,
+          scopeDisciplineScore: 0,
+          qualityScore: 0,
+          targetProgressScore: 0,
+          completedNodeCount: 0,
+          startedNodeCount: 0,
+          readyNodeCount: 0,
+          totalNodeCount: 1,
+          completedTargetCount: 0,
+          totalTargetCount: 0,
+          offPlanEntityCount: 0,
+          offPlanActiveEntityCount: 0,
+          offPlanCompletedEntityCount: 0,
+          activeNodeIds: [],
+          nextNodeIds: [],
+          blockedNodeIds: [],
+          outOfOrderNodeIds: []
+        }
+      ),
+    [strategy?.metrics]
+  );
 
   if (strategyQuery.isLoading && !strategy) {
     return (
@@ -150,13 +212,28 @@ export function StrategyDetailPage() {
         badge={`${strategy.metrics.alignmentScore}% aligned`}
         actions={
           <div className="flex flex-wrap gap-2">
+            <PreferenceEntityHandoffButton
+              userId={defaultUserId}
+              domain="strategies"
+              entityType="strategy"
+              entityId={strategy.id}
+              label={strategy.title}
+              description={strategy.overview || strategy.endStateDescription}
+            />
             {!strategy.isLocked ? (
-              <Button variant="secondary" onClick={() => setDialogOpen(true)}>
+              <Button
+                variant="secondary"
+                onClick={() => {
+                  setDialogInitialStepId(undefined);
+                  setDialogOpen(true);
+                }}
+              >
                 Edit strategy
               </Button>
             ) : null}
             <Button
               variant="secondary"
+              disabled={!strategy.isLocked && !canLockStrategy}
               pending={lockStrategyMutation.isPending}
               pendingLabel={
                 strategy.isLocked ? "Unlocking contract" : "Locking contract"
@@ -218,104 +295,48 @@ export function StrategyDetailPage() {
           </Card>
 
           <Card className="grid gap-4">
-            <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">
-              Directed execution graph
-            </div>
-            <div className="grid gap-3">
-              {strategy.graph.nodes.map((node, index) => {
-                const href =
-                  node.entityType === "project"
-                    ? `/projects/${node.entityId}`
-                    : `/tasks/${node.entityId}`;
-                const predecessors =
-                  predecessorsByNodeId
-                    .get(node.id)
-                    ?.map(
-                      (predecessorId) =>
-                        strategy.graph.nodes.find(
-                          (entry) => entry.id === predecessorId
-                        )?.title ?? predecessorId
-                    ) ?? [];
-                const isActive = strategy.metrics.activeNodeIds.includes(
-                  node.id
-                );
-                const isBlocked = strategy.metrics.blockedNodeIds.includes(
-                  node.id
-                );
-                const isOutOfOrder = strategy.metrics.outOfOrderNodeIds.includes(
-                  node.id
-                );
-                return (
-                  <div
-                    key={node.id}
-                    className="rounded-[22px] border border-white/8 bg-white/[0.03] p-4"
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">
+                  Directed execution graph
+                </div>
+                <div className="mt-2 text-sm leading-6 text-white/58">
+                  The graph is the contract surface for this strategy. It shows
+                  which branches are available now, where work is blocked, and
+                  whether any node is moving out of sequence.
+                </div>
+              </div>
+              {!strategy.isLocked ? (
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    variant="secondary"
+                    onClick={() => {
+                      setDialogInitialStepId("sequence");
+                      setDialogOpen(true);
+                    }}
                   >
-                    <div className="flex flex-wrap items-start justify-between gap-3">
-                      <div>
-                        <div className="flex flex-wrap gap-2">
-                          <Badge className="bg-white/[0.08] text-white/76">
-                            Step {index + 1}
-                          </Badge>
-                          <Badge className="bg-white/[0.08] text-white/76">
-                            {node.entityType}
-                          </Badge>
-                          {isActive ? (
-                            <Badge className="bg-emerald-500/12 text-emerald-200">
-                              Active branch
-                            </Badge>
-                          ) : null}
-                          {isBlocked ? (
-                            <Badge className="bg-rose-500/12 text-rose-200">
-                              Blocked
-                            </Badge>
-                          ) : null}
-                          {isOutOfOrder ? (
-                            <Badge className="bg-amber-500/12 text-amber-200">
-                              Out of order
-                            </Badge>
-                          ) : null}
-                        </div>
-                        <Link
-                          to={href}
-                          className="mt-3 block text-lg font-medium text-white transition hover:text-[var(--primary)]"
-                        >
-                          {node.title}
-                        </Link>
-                        <div className="mt-2">
-                          <UserBadge
-                            user={
-                              node.entityType === "project"
-                                ? projectsById.get(node.entityId)?.user
-                                : tasksById.get(node.entityId)?.user
-                            }
-                            compact
-                          />
-                        </div>
-                        {node.branchLabel ? (
-                          <div className="mt-2 text-sm text-white/56">
-                            Branch: {node.branchLabel}
-                          </div>
-                        ) : null}
-                        {node.notes ? (
-                          <div className="mt-2 text-sm leading-6 text-white/58">
-                            {node.notes}
-                          </div>
-                        ) : null}
-                      </div>
-                      <div className="text-right text-sm text-white/52">
-                        {predecessors.length === 0 ? (
-                          <div>Start node</div>
-                        ) : (
-                          predecessors.map((label) => (
-                            <div key={label}>{label}</div>
-                          ))
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
+                    Refine sequence
+                  </Button>
+                  <Button
+                    onClick={() => {
+                      setDialogInitialStepId("sequence");
+                      setDialogOpen(true);
+                    }}
+                  >
+                    Add parallel work
+                  </Button>
+                </div>
+              ) : null}
             </div>
+            <StrategyGraphCanvas
+              strategy={strategy}
+              ownerByNodeId={graphOwnersByNodeId}
+            />
+            <StrategyHierarchyTree
+              strategy={strategy}
+              projectsById={projectsById}
+              tasksById={tasksById}
+            />
           </Card>
         </div>
 
@@ -333,48 +354,85 @@ export function StrategyDetailPage() {
               {strategy.isLocked ? (
                 <div className="mt-3 flex flex-wrap gap-2 text-sm text-white/60">
                   <span>
-                    Locked by {strategy.lockedByUser?.displayName ?? "Unknown user"}
+                    Locked by{" "}
+                    {strategy.lockedByUser?.displayName ?? "Unknown user"}
                   </span>
-                  {strategy.lockedAt ? <span>· {new Date(strategy.lockedAt).toLocaleString()}</span> : null}
+                  {strategy.lockedAt ? (
+                    <span>
+                      · {new Date(strategy.lockedAt).toLocaleString()}
+                    </span>
+                  ) : null}
+                </div>
+              ) : null}
+              {!strategy.isLocked ? (
+                <div className="mt-4 grid gap-2">
+                  {contractChecks.map((check) => (
+                    <div
+                      key={check.id}
+                      className="flex items-center justify-between gap-3 rounded-[14px] bg-white/[0.03] px-3 py-2"
+                    >
+                      <div className="text-sm text-white/64">{check.label}</div>
+                      <Badge
+                        className={
+                          check.satisfied
+                            ? "bg-emerald-500/12 text-emerald-200"
+                            : "bg-amber-500/12 text-amber-200"
+                        }
+                      >
+                        {check.satisfied ? "Ready" : "Missing"}
+                      </Badge>
+                    </div>
+                  ))}
                 </div>
               ) : null}
             </div>
+            {!strategy.isLocked && !canLockStrategy ? (
+              <div className="rounded-[18px] border border-amber-400/18 bg-amber-500/[0.08] px-4 py-3 text-sm leading-6 text-amber-100/86">
+                Add a target goal or project plus an overview or end state
+                before locking this draft as the execution contract.
+              </div>
+            ) : null}
+            {!strategy.isLocked ? (
+              <div className="mt-4 text-xs leading-5 text-white/46">
+                Drafts may stay incomplete while humans and agents negotiate the
+                plan. Only the lock action requires the contract checks to pass.
+              </div>
+            ) : null}
           </Card>
 
           <Card className="grid gap-3">
             <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">
               Alignment metrics
             </div>
-            <div className="rounded-[18px] bg-white/[0.04] px-4 py-3">
+            <div className="rounded-[18px] bg-white/[0.04] px-4 py-4">
               <div className="text-sm text-white/56">Alignment score</div>
               <div className="mt-2 font-display text-3xl text-[var(--primary)]">
                 {strategy.metrics.alignmentScore}%
               </div>
-            </div>
-            <div className="rounded-[18px] bg-white/[0.04] px-4 py-3">
-              <div className="text-sm text-white/56">Plan coverage</div>
-              <div className="mt-2 text-white">
-                {strategy.metrics.planCoverageScore}%
+              <div className="mt-3 text-xs leading-5 text-white/48">
+                {strategy.metrics.startedNodeCount}/
+                {strategy.metrics.totalNodeCount} planned nodes started,{" "}
+                {strategy.metrics.completedNodeCount} completed,{" "}
+                {strategy.metrics.readyNodeCount} ready now.
               </div>
             </div>
-            <div className="rounded-[18px] bg-white/[0.04] px-4 py-3">
-              <div className="text-sm text-white/56">Sequencing</div>
-              <div className="mt-2 text-white">
-                {strategy.metrics.sequencingScore}%
+            {alignmentBreakdown.map((metric) => (
+              <div
+                key={metric.id}
+                className="rounded-[18px] bg-white/[0.04] px-4 py-4"
+              >
+                <div className="flex items-center justify-between gap-3">
+                  <div className="text-sm text-white/56">{metric.label}</div>
+                  <div className="text-sm font-medium text-white">
+                    {metric.value}%
+                  </div>
+                </div>
+                <ProgressMeter value={metric.value} className="mt-3" />
+                <div className="mt-3 text-xs leading-5 text-white/48">
+                  {metric.detail}
+                </div>
               </div>
-            </div>
-            <div className="rounded-[18px] bg-white/[0.04] px-4 py-3">
-              <div className="text-sm text-white/56">Scope discipline</div>
-              <div className="mt-2 text-white">
-                {strategy.metrics.scopeDisciplineScore}% · {strategy.metrics.offPlanEntityCount} off-plan
-              </div>
-            </div>
-            <div className="rounded-[18px] bg-white/[0.04] px-4 py-3">
-              <div className="text-sm text-white/56">Quality</div>
-              <div className="mt-2 text-white">
-                {strategy.metrics.qualityScore}% · {strategy.metrics.blockedNodeIds.length} blocked
-              </div>
-            </div>
+            ))}
           </Card>
 
           <Card className="grid gap-3">
@@ -489,7 +547,13 @@ export function StrategyDetailPage() {
         strategies={shell.snapshot.strategies}
         users={shell.snapshot.users}
         defaultUserId={defaultUserId}
-        onOpenChange={setDialogOpen}
+        initialStepId={dialogInitialStepId}
+        onOpenChange={(nextOpen) => {
+          setDialogOpen(nextOpen);
+          if (!nextOpen) {
+            setDialogInitialStepId(undefined);
+          }
+        }}
         onSubmit={async (input) => {
           await saveStrategyMutation.mutateAsync({
             input,

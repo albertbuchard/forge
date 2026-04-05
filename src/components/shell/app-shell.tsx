@@ -7,6 +7,7 @@ import {
   useState,
   type ReactNode
 } from "react";
+import * as Dialog from "@radix-ui/react-dialog";
 import {
   useIsFetching,
   useIsMutating,
@@ -14,27 +15,35 @@ import {
   useQuery,
   useQueryClient
 } from "@tanstack/react-query";
-import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
+import { motion, useReducedMotion } from "framer-motion";
 import {
   Activity,
   ArrowUpRight,
   BarChart3,
+  Bot,
+  BookCopy,
   BrainCircuit,
   BriefcaseBusiness,
   CalendarDays,
+  Check,
   ChevronsLeft,
   ChevronsRight,
   Clock3,
+  Dumbbell,
   Flame,
   GitBranch,
   LayoutDashboard,
+  Moon,
   NotebookPen,
   Radar,
   RefreshCcw,
   Repeat,
   Search,
   Settings,
+  SlidersHorizontal,
   Target,
+  UserRound,
+  Users,
   Zap
 } from "lucide-react";
 import {
@@ -157,10 +166,28 @@ const PRIMARY_ROUTES = [
     icon: GitBranch
   },
   {
+    to: "/preferences",
+    labelKey: "common.routeLabels.preferences",
+    detailKey: "common.routeDetails.preferences",
+    icon: SlidersHorizontal
+  },
+  {
     to: "/calendar",
     labelKey: "common.routeLabels.calendar",
     detailKey: "common.routeDetails.calendar",
     icon: CalendarDays
+  },
+  {
+    to: "/sleep",
+    labelKey: "common.routeLabels.sleep",
+    detailKey: "common.routeDetails.sleep",
+    icon: Moon
+  },
+  {
+    to: "/sports",
+    labelKey: "common.routeLabels.sports",
+    detailKey: "common.routeDetails.sports",
+    icon: Dumbbell
   },
   {
     to: "/kanban",
@@ -179,6 +206,12 @@ const PRIMARY_ROUTES = [
     labelKey: "common.routeLabels.notes",
     detailKey: "common.routeDetails.notes",
     icon: NotebookPen
+  },
+  {
+    to: "/wiki",
+    labelKey: "common.routeLabels.wiki",
+    detailKey: "common.routeDetails.wiki",
+    icon: BookCopy
   },
   {
     to: "/psyche",
@@ -214,9 +247,9 @@ const PRIMARY_ROUTES = [
 
 const MOBILE_CORE_ROUTES = [
   PRIMARY_ROUTES[0],
-  PRIMARY_ROUTES[7],
-  PRIMARY_ROUTES[6],
-  PRIMARY_ROUTES[9]
+  PRIMARY_ROUTES[10],
+  PRIMARY_ROUTES[9],
+  PRIMARY_ROUTES[13]
 ] as const;
 const MOBILE_MORE_ROUTES = [
   PRIMARY_ROUTES[1],
@@ -224,14 +257,38 @@ const MOBILE_MORE_ROUTES = [
   PRIMARY_ROUTES[3],
   PRIMARY_ROUTES[4],
   PRIMARY_ROUTES[5],
+  PRIMARY_ROUTES[6],
+  PRIMARY_ROUTES[7],
   PRIMARY_ROUTES[8],
-  PRIMARY_ROUTES[10],
   PRIMARY_ROUTES[11],
   PRIMARY_ROUTES[12],
-  PRIMARY_ROUTES[13]
+  PRIMARY_ROUTES[14],
+  PRIMARY_ROUTES[15],
+  PRIMARY_ROUTES[16],
+  PRIMARY_ROUTES[17]
 ] as const;
 
 const USER_SCOPE_STORAGE_KEY = "forge.selected-user-ids";
+
+function clamp(value: number, minimum: number, maximum: number) {
+  return Math.min(Math.max(value, minimum), maximum);
+}
+
+function interpolateNumber(progress: number, from: number, to: number) {
+  return from + (to - from) * progress;
+}
+
+function readWindowScrollTop() {
+  if (typeof window === "undefined") {
+    return 0;
+  }
+  return Math.max(
+    window.scrollY || 0,
+    document.scrollingElement?.scrollTop || 0,
+    document.documentElement?.scrollTop || 0,
+    document.body?.scrollTop || 0
+  );
+}
 
 function formatCompactNumber(value: number) {
   return new Intl.NumberFormat("en", {
@@ -285,7 +342,82 @@ function sameUserScope(left: string[], right: string[]) {
   return leftKey === rightKey;
 }
 
-function UserScopePicker({
+function getInitials(label: string) {
+  const parts = label
+    .split(/\s+/)
+    .map((part) => part.trim())
+    .filter(Boolean);
+  if (parts.length === 0) {
+    return "??";
+  }
+  if (parts.length === 1) {
+    return parts[0].slice(0, 2).toUpperCase();
+  }
+  return `${parts[0][0] ?? ""}${parts[1][0] ?? ""}`.toUpperCase();
+}
+
+function buildUserScopeOptions(users: UserSummary[]) {
+  const humans = users.filter((user) => user.kind === "human");
+  const bots = users.filter((user) => user.kind === "bot");
+  return [
+    {
+      id: "all",
+      label: "All",
+      shortLabel: "All",
+      description: "Show every human and bot together.",
+      userIds: [] as string[],
+      token: "ALL",
+      icon: Users
+    },
+    {
+      id: "humans",
+      label: "Humans",
+      shortLabel: "Humans",
+      description: "Focus only on human-owned work.",
+      userIds: humans.map((user) => user.id),
+      token: "HU",
+      icon: UserRound
+    },
+    {
+      id: "bots",
+      label: "Bots",
+      shortLabel: "Bots",
+      description: "Focus only on bot-owned work.",
+      userIds: bots.map((user) => user.id),
+      token: "AI",
+      icon: Bot
+    },
+    ...users.map((user) => ({
+      id: user.id,
+      label: user.displayName,
+      shortLabel: user.displayName,
+      description: `${user.kind === "human" ? "Human" : "Bot"} · ${user.handle}`,
+      userIds: [user.id],
+      token: getInitials(user.displayName),
+      icon: user.kind === "human" ? UserRound : Bot
+    }))
+  ];
+}
+
+function resolveUserScopeOption(users: UserSummary[], selectedUserIds: string[]) {
+  return (
+    buildUserScopeOptions(users).find((option) =>
+      sameUserScope(selectedUserIds, option.userIds)
+    ) ?? {
+      id: "custom",
+      label:
+        selectedUserIds.length > 1 ? `${selectedUserIds.length} selected` : "Custom",
+      shortLabel:
+        selectedUserIds.length > 1 ? `${selectedUserIds.length} selected` : "Custom",
+      description: "Using a custom combination of users.",
+      userIds: selectedUserIds,
+      token: selectedUserIds.length > 1 ? String(selectedUserIds.length) : "C",
+      icon: Users
+    }
+  );
+}
+
+function UserScopeSelector({
   users,
   selectedUserIds,
   onChange,
@@ -296,65 +428,99 @@ function UserScopePicker({
   onChange: (userIds: string[]) => void;
   compact?: boolean;
 }) {
-  const humans = users.filter((user) => user.kind === "human");
-  const bots = users.filter((user) => user.kind === "bot");
-  const options = [
-    {
-      id: "all",
-      label: "All",
-      description: "Show every human and bot together.",
-      userIds: []
-    },
-    {
-      id: "humans",
-      label: "Humans",
-      description: "Focus only on human-owned work.",
-      userIds: humans.map((user) => user.id)
-    },
-    {
-      id: "bots",
-      label: "Bots",
-      description: "Focus only on bot-owned work.",
-      userIds: bots.map((user) => user.id)
-    },
-    ...users.map((user) => ({
-      id: user.id,
-      label: user.displayName,
-      description: `${user.kind === "human" ? "Human" : "Bot"} · ${user.handle}`,
-      userIds: [user.id]
-    }))
-  ];
+  const [open, setOpen] = useState(false);
+  const options = useMemo(() => buildUserScopeOptions(users), [users]);
+  const activeOption = useMemo(
+    () => resolveUserScopeOption(users, selectedUserIds),
+    [selectedUserIds, users]
+  );
 
   return (
-    <div className="grid gap-2">
-      {!compact ? (
-        <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/40">
-          User scope
-        </div>
-      ) : null}
-      <div className="flex flex-wrap gap-2">
-        {options.map((option) => {
-          const selected = sameUserScope(selectedUserIds, option.userIds);
-          return (
-            <button
-              key={option.id}
-              type="button"
-              title={option.description}
-              className={cn(
-                "rounded-full border px-3 py-2 text-sm transition",
-                compact ? "text-[12px]" : "text-sm",
-                selected
-                  ? "border-[rgba(192,193,255,0.28)] bg-[rgba(192,193,255,0.16)] text-white"
-                  : "border-white/8 bg-white/[0.04] text-white/62 hover:bg-white/[0.08] hover:text-white"
-              )}
-              onClick={() => onChange(option.userIds)}
-            >
-              {option.label}
-            </button>
-          );
-        })}
-      </div>
-    </div>
+    <Dialog.Root open={open} onOpenChange={setOpen}>
+      <Dialog.Trigger asChild>
+        <button
+          type="button"
+          className={cn(
+            "shell-scope-trigger inline-flex items-center gap-2",
+            compact ? "px-2.5 text-[12px]" : "px-3.5 text-[13px]"
+          )}
+        >
+          <span className="shell-scope-avatar">{activeOption.token}</span>
+          <span
+            className={cn(
+              "truncate text-left",
+              compact ? "max-w-[7.5rem]" : "max-w-[11rem]"
+            )}
+          >
+            {activeOption.shortLabel}
+          </span>
+        </button>
+      </Dialog.Trigger>
+
+      <Dialog.Portal>
+        <Dialog.Overlay className="fixed inset-0 z-50 bg-[rgba(3,7,18,0.72)] backdrop-blur-sm" />
+        <Dialog.Content className="fixed left-1/2 top-[12vh] z-50 w-[min(40rem,calc(100vw-1.5rem))] -translate-x-1/2 rounded-[30px] border border-white/10 bg-[rgba(10,15,28,0.97)] p-4 shadow-[0_32px_90px_rgba(0,0,0,0.45)] sm:p-5">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <Dialog.Title className="font-display text-[1.25rem] tracking-[-0.04em] text-white">
+                Choose user scope
+              </Dialog.Title>
+              <Dialog.Description className="mt-1 text-[13px] leading-6 text-white/56">
+                Change which humans and bots shape the current Forge view.
+              </Dialog.Description>
+            </div>
+            <Dialog.Close asChild>
+              <button
+                type="button"
+                className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-2 text-[12px] font-medium text-white/70 transition hover:bg-white/[0.08] hover:text-white"
+              >
+                Close
+              </button>
+            </Dialog.Close>
+          </div>
+
+          <div className="mt-4 grid gap-3 sm:grid-cols-2">
+            {options.map((option) => {
+              const selected = sameUserScope(selectedUserIds, option.userIds);
+              const Icon = option.icon;
+              return (
+                <button
+                  key={option.id}
+                  type="button"
+                  className={cn(
+                    "flex items-center justify-between gap-3 rounded-[24px] border px-4 py-4 text-left transition",
+                    selected
+                      ? "border-[rgba(192,193,255,0.24)] bg-[rgba(192,193,255,0.12)] text-white"
+                      : "border-white/8 bg-white/[0.03] text-white/78 hover:bg-white/[0.06] hover:text-white"
+                  )}
+                  onClick={() => {
+                    onChange(option.userIds);
+                    setOpen(false);
+                  }}
+                >
+                  <span className="flex min-w-0 items-center gap-3">
+                    <span className="shell-scope-avatar">
+                      <Icon className="size-3.5" />
+                    </span>
+                    <span className="min-w-0">
+                      <span className="block truncate text-[14px] font-semibold">
+                        {option.label}
+                      </span>
+                      <span className="mt-1 block text-[12px] leading-5 text-white/52">
+                        {option.description}
+                      </span>
+                    </span>
+                  </span>
+                  {selected ? (
+                    <Check className="size-4 shrink-0 text-[var(--primary)]" />
+                  ) : null}
+                </button>
+              );
+            })}
+          </div>
+        </Dialog.Content>
+      </Dialog.Portal>
+    </Dialog.Root>
   );
 }
 
@@ -554,12 +720,13 @@ function ShellFrame({
     PRIMARY_ROUTES.find((route) => location.pathname.startsWith(route.to)) ??
     PRIMARY_ROUTES[0];
   const [paletteOpen, setPaletteOpen] = useState(false);
-  const [collapsed, setCollapsed] = useState(false);
+  const [collapseProgress, setCollapseProgress] = useState(0);
   const [navCollapsed, setNavCollapsed] = useState(false);
   const isPsyche = location.pathname.startsWith("/psyche");
   const fetching = useIsFetching();
   const mutating = useIsMutating();
   const reduceMotion = useReducedMotion();
+  const collapsed = collapseProgress >= 0.96;
   const activityCount = fetching + mutating;
   const sidebarMetrics = [
     {
@@ -682,10 +849,16 @@ function ShellFrame({
   }, [navCollapsed]);
 
   useEffect(() => {
-    const threshold = window.innerWidth >= 1024 ? 52 : 32;
-
     const syncCollapsed = () => {
-      setCollapsed(window.scrollY > threshold);
+      const collapseDistance = window.innerWidth >= 1024 ? 72 : 56;
+      const nextProgress = clamp(
+        readWindowScrollTop() / collapseDistance,
+        0,
+        1
+      );
+      setCollapseProgress((current) =>
+        Math.abs(current - nextProgress) < 0.01 ? current : nextProgress
+      );
     };
 
     syncCollapsed();
@@ -696,6 +869,21 @@ function ShellFrame({
       window.removeEventListener("resize", syncCollapsed);
     };
   }, []);
+
+  const desktopHeaderPaddingTop = interpolateNumber(collapseProgress, 10, 6);
+  const desktopHeaderPaddingBottom = interpolateNumber(collapseProgress, 9, 6);
+  const desktopTitleSize = interpolateNumber(collapseProgress, 1.12, 1);
+  const desktopSecondaryOpacity = 1 - collapseProgress;
+  const desktopSecondaryMaxHeight = interpolateNumber(collapseProgress, 160, 0);
+  const desktopSecondarySpacing = interpolateNumber(collapseProgress, 12, 0);
+  const desktopSecondaryTranslateY = interpolateNumber(collapseProgress, 0, -10);
+
+  const mobileHeaderPaddingTop = interpolateNumber(collapseProgress, 9, 6);
+  const mobileHeaderPaddingBottom = interpolateNumber(collapseProgress, 8, 6);
+  const mobileTitleSize = interpolateNumber(collapseProgress, 1, 0.95);
+  const mobileCopyOpacity = 1 - collapseProgress;
+  const mobileCopyMaxHeight = interpolateNumber(collapseProgress, 240, 0);
+  const mobileCopyTranslateY = interpolateNumber(collapseProgress, 0, -8);
 
   return (
     <div
@@ -835,14 +1023,11 @@ function ShellFrame({
           <TaskTimerRailProvider>
             <motion.header
               className="sticky top-0 z-30 border-b border-white/5 bg-[rgba(10,16,30,0.82)] px-6 backdrop-blur-xl"
-              animate={
-                reduceMotion
-                  ? undefined
-                  : {
-                      paddingTop: collapsed ? 6 : 10,
-                      paddingBottom: collapsed ? 6 : 9
-                    }
-              }
+              animate={reduceMotion ? undefined : undefined}
+              style={{
+                paddingTop: `${desktopHeaderPaddingTop}px`,
+                paddingBottom: `${desktopHeaderPaddingBottom}px`
+              }}
               transition={{ duration: 0.35, ease: "easeOut" }}
             >
               {/* ── Title row: page title + work bar + action buttons — all same height ── */}
@@ -850,14 +1035,11 @@ function ShellFrame({
                 <div className="flex min-w-0 flex-1 items-center gap-5">
                   <motion.div
                     className="shrink-0 font-display text-white"
-                    animate={
-                      reduceMotion
-                        ? undefined
-                        : {
-                            fontSize: collapsed ? "1rem" : "1.12rem",
-                            lineHeight: 1
-                          }
-                    }
+                    animate={reduceMotion ? undefined : undefined}
+                    style={{
+                      fontSize: `${desktopTitleSize}rem`,
+                      lineHeight: 1
+                    }}
                     transition={{ duration: 0.35, ease: "easeOut" }}
                   >
                     {t(active.labelKey)}
@@ -906,78 +1088,61 @@ function ShellFrame({
                 onComplete={onCompleteRun}
               />
 
-              <AnimatePresence initial={false}>
-                {!collapsed ? (
-                  <motion.div
-                    key="desktop-shell-secondary-row"
-                    className="mt-3 flex items-center justify-between gap-4 border-t border-white/6 pt-3"
-                    initial={
-                      reduceMotion
-                        ? undefined
-                        : { opacity: 0, height: 0, marginTop: 0, paddingTop: 0 }
-                    }
-                    animate={
-                      reduceMotion
-                        ? undefined
-                        : {
-                            opacity: 1,
-                            height: "auto",
-                            marginTop: 12,
-                            paddingTop: 12
-                          }
-                    }
-                    exit={
-                      reduceMotion
-                        ? undefined
-                        : { opacity: 0, height: 0, marginTop: 0, paddingTop: 0 }
-                    }
-                    transition={{ duration: 0.28, ease: "easeOut" }}
-                  >
-                    <div className="grid min-w-0 gap-3">
-                      <div className="flex flex-wrap gap-2">
-                        {railLinks.map((link) => (
-                          <Link
-                            key={link.to}
-                            to={link.to}
-                            className="interactive-tap inline-flex min-h-10 min-w-max items-center justify-center rounded-full bg-white/[0.04] px-4 py-2 text-[13px] leading-none whitespace-nowrap text-white/62 transition hover:bg-white/[0.07] hover:text-white"
-                          >
-                            {link.label}
-                          </Link>
-                        ))}
-                      </div>
-                      <UserScopePicker
-                        users={shell.snapshot.users}
-                        selectedUserIds={shell.selectedUserIds}
-                        onChange={shell.setSelectedUserIds}
-                      />
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                      <Badge tone="meta">
-                        {t(
-                          shell.snapshot.metrics.streakDays === 1
-                            ? "common.shell.momentum.streakBadgeOne"
-                            : "common.shell.momentum.streakBadgeOther",
-                          {
-                            count: shell.snapshot.metrics.streakDays
-                          }
-                        )}
-                      </Badge>
-                      <Badge tone="meta">
-                        {t("common.shell.momentum.weeklyXp", {
-                          count: shell.snapshot.metrics.weeklyXp
+              <motion.div
+                className="flex items-center justify-between gap-4 overflow-hidden border-t border-white/6"
+                animate={reduceMotion ? undefined : undefined}
+                style={{
+                  opacity: desktopSecondaryOpacity,
+                  maxHeight: `${desktopSecondaryMaxHeight}px`,
+                  marginTop: `${desktopSecondarySpacing}px`,
+                  paddingTop: `${desktopSecondarySpacing}px`,
+                  transform: `translateY(${desktopSecondaryTranslateY}px)`,
+                  pointerEvents: collapseProgress >= 0.96 ? "none" : "auto"
+                }}
+                transition={{ duration: 0.28, ease: "easeOut" }}
+              >
+                <div className="flex min-w-0 flex-wrap items-center gap-2">
+                    {railLinks.map((link) => (
+                      <Link
+                        key={link.to}
+                        to={link.to}
+                        className="interactive-tap inline-flex min-h-10 min-w-max items-center justify-center rounded-full bg-white/[0.04] px-4 py-2 text-[13px] leading-none whitespace-nowrap text-white/62 transition hover:bg-white/[0.07] hover:text-white"
+                      >
+                        {link.label}
+                      </Link>
+                    ))}
+                  <UserScopeSelector
+                    users={shell.snapshot.users}
+                    selectedUserIds={shell.selectedUserIds}
+                    onChange={shell.setSelectedUserIds}
+                    compact
+                  />
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <Badge tone="meta">
+                    {t(
+                      shell.snapshot.metrics.streakDays === 1
+                        ? "common.shell.momentum.streakBadgeOne"
+                        : "common.shell.momentum.streakBadgeOther",
+                      {
+                        count: shell.snapshot.metrics.streakDays
+                      }
+                    )}
+                  </Badge>
+                  <Badge tone="meta">
+                    {t("common.shell.momentum.weeklyXp", {
+                      count: shell.snapshot.metrics.weeklyXp
+                    })}
+                  </Badge>
+                  <Badge tone={isPsyche ? "signal" : "meta"}>
+                    {isPsyche
+                      ? t("common.shell.momentum.psycheMode")
+                      : t("common.shell.momentum.liveMomentum", {
+                          count: shell.snapshot.metrics.momentumScore
                         })}
-                      </Badge>
-                      <Badge tone={isPsyche ? "signal" : "meta"}>
-                        {isPsyche
-                          ? t("common.shell.momentum.psycheMode")
-                          : t("common.shell.momentum.liveMomentum", {
-                              count: shell.snapshot.metrics.momentumScore
-                            })}
-                      </Badge>
-                    </div>
-                  </motion.div>
-                ) : null}
-              </AnimatePresence>
+                  </Badge>
+                </div>
+              </motion.div>
             </motion.header>
           </TaskTimerRailProvider>
 
@@ -1019,14 +1184,11 @@ function ShellFrame({
         <TaskTimerRailProvider>
           <motion.header
             className="sticky top-0 z-30 border-b border-white/6 bg-[rgba(8,13,28,0.92)] px-4 backdrop-blur-xl"
-            animate={
-              reduceMotion
-                ? undefined
-                : {
-                    paddingTop: collapsed ? 6 : 9,
-                    paddingBottom: collapsed ? 6 : 8
-                  }
-            }
+            animate={reduceMotion ? undefined : undefined}
+            style={{
+              paddingTop: `${mobileHeaderPaddingTop}px`,
+              paddingBottom: `${mobileHeaderPaddingBottom}px`
+            }}
             transition={{ duration: 0.35, ease: "easeOut" }}
           >
             <div className="flex items-center justify-between gap-2">
@@ -1036,6 +1198,7 @@ function ShellFrame({
                     "shrink-0 font-display text-white transition",
                     collapsed ? "text-[0.95rem]" : "text-base"
                   )}
+                  style={{ fontSize: `${mobileTitleSize}rem` }}
                 >
                   {t(active.labelKey)}
                 </div>
@@ -1083,26 +1246,23 @@ function ShellFrame({
               onComplete={onCompleteRun}
             />
 
+            <motion.div
+              className="overflow-hidden"
+              animate={reduceMotion ? undefined : undefined}
+              style={{
+                opacity: mobileCopyOpacity,
+                maxHeight: `${mobileCopyMaxHeight}px`,
+                transform: `translateY(${mobileCopyTranslateY}px)`,
+                pointerEvents: collapseProgress >= 0.96 ? "none" : "auto"
+              }}
+              transition={{ duration: 0.28, ease: "easeOut" }}
+            >
+              <div className="mt-2 text-[13px] leading-5 text-white/52">
+                {t(active.detailKey)}
+              </div>
+            </motion.div>
             {!collapsed ? (
               <>
-                <AnimatePresence initial={false}>
-                  <motion.div
-                    key="mobile-shell-copy"
-                    initial={
-                      reduceMotion ? undefined : { opacity: 0, height: 0 }
-                    }
-                    animate={
-                      reduceMotion ? undefined : { opacity: 1, height: "auto" }
-                    }
-                    exit={reduceMotion ? undefined : { opacity: 0, height: 0 }}
-                    transition={{ duration: 0.28, ease: "easeOut" }}
-                    className="overflow-hidden"
-                  >
-                    <div className="mt-2 text-[13px] leading-5 text-white/52">
-                      {t(active.detailKey)}
-                    </div>
-                  </motion.div>
-                </AnimatePresence>
                 <div className="mt-2">
                   <AmbientActivityPill
                     active={activityCount > 0}
@@ -1110,7 +1270,7 @@ function ShellFrame({
                   />
                 </div>
                 <div className="mt-3 overflow-x-auto pb-1">
-                  <UserScopePicker
+                  <UserScopeSelector
                     users={shell.snapshot.users}
                     selectedUserIds={shell.selectedUserIds}
                     onChange={shell.setSelectedUserIds}

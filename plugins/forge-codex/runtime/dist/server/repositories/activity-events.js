@@ -1,8 +1,45 @@
 import { randomUUID } from "node:crypto";
 import { getDatabase, runInTransaction } from "../db.js";
+import { getEntityOwner } from "./entity-ownership.js";
 import { recordEventLog } from "./event-log.js";
 import { activityEventSchema } from "../types.js";
+function resolveActivityOwner(row) {
+    if (row.entity_type === "task_run") {
+        const taskRunRow = getDatabase()
+            .prepare(`SELECT task_id FROM task_runs WHERE id = ?`)
+            .get(row.entity_id);
+        if (taskRunRow) {
+            const user = getEntityOwner("task", taskRunRow.task_id);
+            return { userId: user?.id ?? null, user };
+        }
+    }
+    if (row.entity_type === "work_block") {
+        const user = getEntityOwner("work_block_template", row.entity_id);
+        return { userId: user?.id ?? null, user };
+    }
+    if (row.entity_type === "system") {
+        const metadata = JSON.parse(row.metadata_json);
+        const correctedEntityType = typeof metadata.correctedEntityType === "string"
+            ? metadata.correctedEntityType
+            : null;
+        const correctedEntityId = typeof metadata.correctedEntityId === "string"
+            ? metadata.correctedEntityId
+            : null;
+        if (correctedEntityType && correctedEntityId) {
+            const mappedEntityType = correctedEntityType === "work_block"
+                ? "work_block_template"
+                : correctedEntityType;
+            const user = getEntityOwner(mappedEntityType, correctedEntityId);
+            return { userId: user?.id ?? null, user };
+        }
+    }
+    const rawEntityType = row.entity_type;
+    const mappedEntityType = rawEntityType === "work_block" ? "work_block_template" : rawEntityType;
+    const user = getEntityOwner(mappedEntityType, row.entity_id);
+    return { userId: user?.id ?? null, user };
+}
 function mapActivityEvent(row) {
+    const owner = resolveActivityOwner(row);
     return activityEventSchema.parse({
         id: row.id,
         entityType: row.entity_type,
@@ -13,7 +50,9 @@ function mapActivityEvent(row) {
         actor: row.actor,
         source: row.source,
         metadata: JSON.parse(row.metadata_json),
-        createdAt: row.created_at
+        createdAt: row.created_at,
+        userId: owner.userId,
+        user: owner.user
     });
 }
 export function recordActivityEvent(input, now = new Date()) {
@@ -80,9 +119,14 @@ export function listActivityEvents(filters = {}) {
        ORDER BY created_at DESC
        ${limitSql}`)
         .all(...params);
-    return rows.map(mapActivityEvent);
+    const events = rows.map(mapActivityEvent);
+    if (!filters.userIds || filters.userIds.length === 0) {
+        return events;
+    }
+    const allowed = new Set(filters.userIds);
+    return events.filter((event) => event.userId !== null && allowed.has(event.userId));
 }
-export function listActivityEventsForTask(taskId, limit = 25) {
+export function listActivityEventsForTask(taskId, limit = 25, userIds) {
     const rows = getDatabase()
         .prepare(`SELECT
          activity_events.id,
@@ -112,7 +156,12 @@ export function listActivityEventsForTask(taskId, limit = 25) {
        ORDER BY activity_events.created_at DESC
        LIMIT ?`)
         .all(taskId, taskId, limit);
-    return rows.map(mapActivityEvent);
+    const events = rows.map(mapActivityEvent);
+    if (!userIds || userIds.length === 0) {
+        return events;
+    }
+    const allowed = new Set(userIds);
+    return events.filter((event) => event.userId !== null && allowed.has(event.userId));
 }
 export function getActivityEventById(eventId) {
     const row = getDatabase()

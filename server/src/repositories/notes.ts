@@ -25,15 +25,33 @@ import {
   type NotesSummaryByEntity,
   type UpdateNoteInput
 } from "../types.js";
+import {
+  deleteNoteWikiArtifacts,
+  prepareNoteWikiFields,
+  syncNoteWikiArtifacts
+} from "./wiki-memory.js";
 
 type NoteRow = {
   id: string;
+  kind: Note["kind"];
+  title: string;
+  slug: string;
+  space_id: string;
+  parent_slug: string | null;
+  index_order: number;
+  show_in_index: number;
+  aliases_json: string;
+  summary: string;
   content_markdown: string;
   content_plain: string;
   author: string | null;
   source: ActivitySource;
   tags_json: string;
   destroy_at: string | null;
+  source_path: string;
+  frontmatter_json: string;
+  revision_hash: string;
+  last_synced_at: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -97,6 +115,35 @@ function parseTagsJson(raw: string): string[] {
       : [];
   } catch {
     return [];
+  }
+}
+
+function parseAliasesJson(raw: string): string[] {
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    return Array.isArray(parsed)
+      ? Array.from(
+          new Set(
+            parsed
+              .filter((value): value is string => typeof value === "string")
+              .map((value) => value.trim())
+              .filter(Boolean)
+          )
+        )
+      : [];
+  } catch {
+    return [];
+  }
+}
+
+function parseFrontmatterJson(raw: string): Record<string, unknown> {
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+      ? (parsed as Record<string, unknown>)
+      : {};
+  } catch {
+    return {};
   }
 }
 
@@ -169,7 +216,8 @@ function buildFtsQuery(query: string): string | null {
 function getNoteRow(noteId: string): NoteRow | undefined {
   return getDatabase()
     .prepare(
-      `SELECT id, content_markdown, content_plain, author, source, tags_json, destroy_at, created_at, updated_at
+      `SELECT id, kind, title, slug, space_id, aliases_json, summary, content_markdown, content_plain, author, source, tags_json, destroy_at,
+              source_path, frontmatter_json, revision_hash, last_synced_at, parent_slug, index_order, show_in_index, created_at, updated_at
        FROM notes
        WHERE id = ?`
     )
@@ -202,10 +250,23 @@ function mapLinks(rows: NoteLinkRow[]): NoteLink[] {
 function mapNote(row: NoteRow, linkRows: NoteLinkRow[]): Note {
   return noteSchema.parse(decorateOwnedEntity("note", {
     id: row.id,
+    kind: row.kind,
+    title: row.title,
+    slug: row.slug,
+    spaceId: row.space_id,
+    parentSlug: row.parent_slug,
+    indexOrder: row.index_order,
+    showInIndex: row.show_in_index === 1,
+    aliases: parseAliasesJson(row.aliases_json),
+    summary: row.summary,
     contentMarkdown: row.content_markdown,
     contentPlain: row.content_plain,
     author: row.author,
     source: row.source,
+    sourcePath: row.source_path,
+    frontmatter: parseFrontmatterJson(row.frontmatter_json),
+    revisionHash: row.revision_hash,
+    lastSyncedAt: row.last_synced_at,
     tags: parseTagsJson(row.tags_json),
     destroyAt: row.destroy_at,
     createdAt: row.created_at,
@@ -234,7 +295,8 @@ function deleteSearchRow(noteId: string) {
 function listAllNoteRows(): NoteRow[] {
   return getDatabase()
     .prepare(
-      `SELECT id, content_markdown, content_plain, author, source, tags_json, destroy_at, created_at, updated_at
+      `SELECT id, kind, title, slug, space_id, aliases_json, summary, content_markdown, content_plain, author, source, tags_json, destroy_at,
+              source_path, frontmatter_json, revision_hash, last_synced_at, parent_slug, index_order, show_in_index, created_at, updated_at
        FROM notes
        ORDER BY created_at DESC`
     )
@@ -410,6 +472,15 @@ export function listNotes(query: NotesListQuery = {}): Note[] {
     "note",
     rows
       .filter((row) =>
+        parsed.kind ? row.kind === parsed.kind : true
+      )
+      .filter((row) =>
+        parsed.spaceId ? row.space_id === parsed.spaceId : true
+      )
+      .filter((row) =>
+        parsed.slug ? row.slug.toLowerCase() === parsed.slug.toLowerCase() : true
+      )
+      .filter((row) =>
         parsed.author
           ? (row.author ?? "")
               .toLowerCase()
@@ -476,21 +547,51 @@ export function createNote(input: CreateNoteInput, context: NoteContext): Note {
   });
   const now = new Date().toISOString();
   const id = `note_${randomUUID().replaceAll("-", "").slice(0, 10)}`;
+  const wikiFields = prepareNoteWikiFields({
+    id,
+    contentMarkdown: parsed.contentMarkdown,
+    kind: parsed.kind,
+    title: parsed.title,
+    slug: parsed.slug,
+    spaceId: parsed.spaceId,
+    parentSlug: parsed.parentSlug,
+    indexOrder: parsed.indexOrder,
+    showInIndex: parsed.showInIndex,
+    aliases: parsed.aliases,
+    summary: parsed.summary,
+    userId: parsed.userId ?? null
+  });
   const contentPlain = stripMarkdown(parsed.contentMarkdown);
 
   getDatabase()
     .prepare(
-      `INSERT INTO notes (id, content_markdown, content_plain, author, source, tags_json, destroy_at, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      `INSERT INTO notes (
+         id, kind, title, slug, space_id, parent_slug, index_order, show_in_index, aliases_json, summary, content_markdown, content_plain, author, source, tags_json, destroy_at,
+         source_path, frontmatter_json, revision_hash, last_synced_at, created_at, updated_at
+       )
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
     .run(
       id,
+      wikiFields.kind,
+      wikiFields.title,
+      wikiFields.slug,
+      wikiFields.spaceId,
+      wikiFields.parentSlug,
+      wikiFields.indexOrder,
+      wikiFields.showInIndex ? 1 : 0,
+      JSON.stringify(wikiFields.aliases),
+      wikiFields.summary,
       parsed.contentMarkdown,
       contentPlain,
       parsed.author ?? context.actor ?? null,
       context.source,
       JSON.stringify(parsed.tags),
       parsed.destroyAt,
+      parsed.sourcePath,
+      JSON.stringify(parsed.frontmatter),
+      parsed.revisionHash,
+      parsed.lastSyncedAt ?? null,
       now,
       now
     );
@@ -500,8 +601,9 @@ export function createNote(input: CreateNoteInput, context: NoteContext): Note {
   upsertSearchRow(id, contentPlain, parsed.author ?? context.actor ?? null);
 
   const note = getNoteById(id, { skipCleanup: true })!;
+  syncNoteWikiArtifacts(note);
   recordNoteActivity(note, "note.created", "Note added", context);
-  return note;
+  return getNoteById(id, { skipCleanup: true })!;
 }
 
 export function createLinkedNotes(
@@ -516,11 +618,23 @@ export function createLinkedNotes(
   return notes.map((note) =>
     createNote(
       {
+        kind: "evidence",
+        title: "",
+        slug: "",
+        spaceId: "",
+        parentSlug: null,
+        indexOrder: 0,
+        showInIndex: false,
+        aliases: [],
+        summary: "",
         contentMarkdown: note.contentMarkdown,
         author: note.author,
         tags: note.tags,
         destroyAt: note.destroyAt,
-        links: [entityLink, ...note.links]
+        links: [entityLink, ...note.links],
+        sourcePath: "",
+        frontmatter: {},
+        revisionHash: ""
       },
       context
     )
@@ -549,20 +663,61 @@ export function updateNote(
   const nextTags = patch.tags ?? existing.tags;
   const nextDestroyAt =
     patch.destroyAt === undefined ? existing.destroyAt : patch.destroyAt;
+  const wikiFields = prepareNoteWikiFields({
+    id: noteId,
+    contentMarkdown: nextMarkdown,
+    kind: patch.kind ?? existing.kind,
+    title: patch.title,
+    slug: patch.slug,
+    spaceId: patch.spaceId,
+    parentSlug: patch.parentSlug,
+    indexOrder: patch.indexOrder,
+    showInIndex: patch.showInIndex,
+    aliases: patch.aliases,
+    summary: patch.summary,
+    userId: patch.userId ?? existing.userId ?? null,
+    existing
+  });
+  const nextFrontmatter =
+    patch.frontmatter === undefined ? existing.frontmatter : patch.frontmatter;
+  const nextSourcePath =
+    patch.sourcePath === undefined ? existing.sourcePath : patch.sourcePath;
+  const nextRevisionHash =
+    patch.revisionHash === undefined
+      ? existing.revisionHash
+      : patch.revisionHash;
+  const nextLastSyncedAt =
+    patch.lastSyncedAt === undefined
+      ? existing.lastSyncedAt
+      : patch.lastSyncedAt;
   const updatedAt = new Date().toISOString();
 
   getDatabase()
     .prepare(
       `UPDATE notes
-       SET content_markdown = ?, content_plain = ?, author = ?, tags_json = ?, destroy_at = ?, updated_at = ?
+       SET kind = ?, title = ?, slug = ?, space_id = ?, parent_slug = ?, index_order = ?, show_in_index = ?, aliases_json = ?, summary = ?, content_markdown = ?, content_plain = ?, author = ?,
+           tags_json = ?, destroy_at = ?, source_path = ?, frontmatter_json = ?, revision_hash = ?, last_synced_at = ?, updated_at = ?
        WHERE id = ?`
     )
     .run(
+      wikiFields.kind,
+      wikiFields.title,
+      wikiFields.slug,
+      wikiFields.spaceId,
+      wikiFields.parentSlug,
+      wikiFields.indexOrder,
+      wikiFields.showInIndex ? 1 : 0,
+      JSON.stringify(wikiFields.aliases),
+      wikiFields.summary,
       nextMarkdown,
       nextPlain,
       nextAuthor,
       JSON.stringify(nextTags),
       nextDestroyAt,
+      nextSourcePath,
+      JSON.stringify(nextFrontmatter),
+      nextRevisionHash,
+      nextLastSyncedAt,
       updatedAt,
       noteId
     );
@@ -575,20 +730,7 @@ export function updateNote(
   }
 
   const note = getNoteByIdIncludingDeleted(noteId, { skipCleanup: true })!;
-  if (note.links.length > 0) {
-    clearDeletedEntityRecord("note", noteId);
-  } else {
-    const details = describeNote(note);
-    upsertDeletedEntityRecord({
-      entityType: "note",
-      entityId: note.id,
-      title: details.title,
-      subtitle: details.subtitle,
-      snapshot: note,
-      deleteReason: "Note no longer has any linked entities.",
-      context
-    });
-  }
+  clearDeletedEntityRecord("note", noteId);
   upsertSearchRow(noteId, nextPlain, nextAuthor);
   if (nextDestroyAt && Date.parse(nextDestroyAt) <= Date.now()) {
     deleteNoteInternal(
@@ -598,6 +740,7 @@ export function updateNote(
     );
     return undefined;
   }
+  syncNoteWikiArtifacts(note);
   recordNoteActivity(note, "note.updated", "Note updated", context);
   return getNoteById(noteId);
 }
@@ -617,6 +760,7 @@ function deleteNoteInternal(
   getDatabase().prepare(`DELETE FROM note_links WHERE note_id = ?`).run(noteId);
   getDatabase().prepare(`DELETE FROM notes WHERE id = ?`).run(noteId);
   deleteSearchRow(noteId);
+  deleteNoteWikiArtifacts(existing);
   clearDeletedEntityRecord("note", noteId);
   recordNoteActivity(existing, "note.deleted", title, context);
   return existing;
@@ -703,19 +847,6 @@ export function unlinkNotesForEntity(
       clearDeletedEntityRecord("note", row.note_id);
       continue;
     }
-    const note = getNoteByIdIncludingDeleted(row.note_id);
-    if (!note) {
-      continue;
-    }
-    const details = describeNote(note);
-    upsertDeletedEntityRecord({
-      entityType: "note",
-      entityId: note.id,
-      title: details.title,
-      subtitle: details.subtitle,
-      snapshot: { ...note, links: [] },
-      deleteReason: `All links were removed when ${entityType} ${entityId} was deleted.`,
-      context
-    });
+    clearDeletedEntityRecord("note", row.note_id);
   }
 }

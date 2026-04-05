@@ -1,5 +1,12 @@
 import { useEffect, useId, useMemo, useState, type ReactNode } from "react";
-import { ArrowUpRight, ChevronDown, ChevronUp, Pencil, Play } from "lucide-react";
+import {
+  ArrowUpRight,
+  ChevronDown,
+  ChevronUp,
+  Pencil,
+  Play,
+  Trash2
+} from "lucide-react";
 import {
   DndContext,
   DragOverlay,
@@ -17,6 +24,7 @@ import {
 import { SortableContext, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { EntityBadge } from "@/components/ui/entity-badge";
 import { EntityName } from "@/components/ui/entity-name";
@@ -38,6 +46,10 @@ function isLaneContainer(container: { id: string | number; data?: { current?: Re
   return container.data?.current?.type === "lane" || isLaneContainerId(String(container.id));
 }
 
+function isTrashContainer(container: { data?: { current?: Record<string, unknown> } }) {
+  return container.data?.current?.type === "trash";
+}
+
 function getRectIntersectionArea(
   first: { left: number; right: number; top: number; bottom: number },
   second: { left: number; right: number; top: number; bottom: number }
@@ -49,6 +61,15 @@ function getRectIntersectionArea(
 
 export const laneFirstCollision: CollisionDetection = (args) => {
   const pointerHits = pointerWithin(args);
+  const trashHit = pointerHits.find((entry) => {
+    const container = args.droppableContainers.find(
+      (candidate) => candidate.id === entry.id
+    );
+    return container ? isTrashContainer(container) : false;
+  });
+  if (trashHit) {
+    return [trashHit];
+  }
   const laneHit = pointerHits.find((entry) => isLaneContainerId(String(entry.id)));
   if (laneHit) {
     return [laneHit];
@@ -367,6 +388,57 @@ function LaneDropzone({
   );
 }
 
+function TrashDropzone({
+  droppableId,
+  title,
+  detail
+}: {
+  droppableId: string;
+  title: string;
+  detail: string;
+}) {
+  const { setNodeRef, isOver } = useDroppable({
+    id: droppableId,
+    data: {
+      type: "trash"
+    }
+  });
+
+  return (
+    <div
+      ref={setNodeRef}
+      className={cn(
+        "pointer-events-auto fixed right-4 top-4 z-50 w-[min(18rem,calc(100vw-2rem))] rounded-[28px] border px-5 py-4 shadow-[0_24px_80px_rgba(6,10,20,0.48)] backdrop-blur-2xl transition lg:right-6 lg:top-6",
+        isOver
+          ? "border-rose-300/38 bg-[linear-gradient(180deg,rgba(244,63,94,0.28),rgba(120,24,42,0.46))] text-white scale-[1.02]"
+          : "border-white/10 bg-[linear-gradient(180deg,rgba(18,24,38,0.96),rgba(10,14,24,0.94))] text-white/84"
+      )}
+      data-testid="kanban-trash-dropzone"
+      data-trash-hover={isOver ? "true" : "false"}
+    >
+      <div className="flex items-center gap-3">
+        <div
+          className={cn(
+            "flex size-12 items-center justify-center rounded-full border transition",
+            isOver
+              ? "border-white/28 bg-white/12"
+              : "border-white/12 bg-white/6"
+          )}
+        >
+          <Trash2 className="size-5" />
+        </div>
+        <div className="min-w-0">
+          <div className="font-label text-[11px] uppercase tracking-[0.2em] text-white/55">
+            Bin
+          </div>
+          <div className="mt-1 text-base font-medium text-white">{title}</div>
+          <div className="mt-1 text-sm leading-5 text-white/62">{detail}</div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function ExecutionBoard({
   tasks,
   goals,
@@ -376,6 +448,7 @@ export function ExecutionBoard({
   onSelectTask,
   onStartTask,
   onQuickReopenTask,
+  onDeleteTask,
   onOpenTask,
   onEditTask,
   notesSummaryByEntity
@@ -388,12 +461,14 @@ export function ExecutionBoard({
   onSelectTask: (taskId: string) => void;
   onStartTask?: (taskId: string) => Promise<void>;
   onQuickReopenTask?: (taskId: string) => Promise<void>;
+  onDeleteTask?: (taskId: string) => Promise<void>;
   onOpenTask?: (taskId: string) => void;
   onEditTask?: (taskId: string) => void;
   notesSummaryByEntity?: NotesSummaryByEntity;
 }) {
   const { t } = useI18n();
   const boardInstanceId = useId();
+  const trashDroppableId = `${boardInstanceId}:trash`;
   const [isMobileBoard, setIsMobileBoard] = useState(() => {
     if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
       return false;
@@ -404,6 +479,23 @@ export function ExecutionBoard({
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } })
   );
   const [activeTaskId, setActiveTaskId] = useState<string | null>(null);
+  const [confirmingDeleteTask, setConfirmingDeleteTask] = useState<Task | null>(
+    null
+  );
+  const [deletePendingTaskId, setDeletePendingTaskId] = useState<string | null>(
+    null
+  );
+  const [skipDeleteConfirm, setSkipDeleteConfirm] = useState(() => {
+    if (typeof window === "undefined") {
+      return false;
+    }
+    return (
+      window.localStorage.getItem("forge.kanban-skip-delete-confirmation") ===
+      "true"
+    );
+  });
+  const [disableDeleteConfirmChoice, setDisableDeleteConfirmChoice] =
+    useState(false);
   const [optimisticStatuses, setOptimisticStatuses] = useState<Record<string, TaskStatus>>({});
   const laneLabels: Record<TaskStatus, { title: string; detail: string }> = {
     backlog: { title: t("common.executionBoard.laneBacklogTitle"), detail: t("common.executionBoard.laneBacklogDetail") },
@@ -483,6 +575,39 @@ export function ExecutionBoard({
     }
   }
 
+  const persistDeleteConfirmPreference = (value: boolean) => {
+    setSkipDeleteConfirm(value);
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem(
+        "forge.kanban-skip-delete-confirmation",
+        value ? "true" : "false"
+      );
+    }
+  };
+
+  const deleteTaskNow = async (task: Task, disableConfirm: boolean) => {
+    if (!onDeleteTask) {
+      return;
+    }
+
+    setDeletePendingTaskId(task.id);
+    try {
+      if (disableConfirm) {
+        persistDeleteConfirmPreference(true);
+      }
+      await onDeleteTask(task.id);
+      setConfirmingDeleteTask(null);
+      setDisableDeleteConfirmChoice(false);
+      setOptimisticStatuses((current) => {
+        const next = { ...current };
+        delete next[task.id];
+        return next;
+      });
+    } finally {
+      setDeletePendingTaskId(null);
+    }
+  };
+
   async function handleDragEnd(event: DragEndEvent) {
     const { active, over } = event;
     setActiveTaskId(null);
@@ -493,6 +618,19 @@ export function ExecutionBoard({
     const activeTaskId = typeof active.data.current?.taskId === "string" ? active.data.current.taskId : String(active.id);
     const task = boardTasks.find((entry) => entry.id === activeTaskId);
     if (!task) {
+      return;
+    }
+
+    if (over.data.current?.type === "trash") {
+      if (!onDeleteTask) {
+        return;
+      }
+      if (skipDeleteConfirm) {
+        await deleteTaskNow(task, false);
+        return;
+      }
+      setDisableDeleteConfirmChoice(false);
+      setConfirmingDeleteTask(task);
       return;
     }
 
@@ -555,6 +693,13 @@ export function ExecutionBoard({
       onDragCancel={() => setActiveTaskId(null)}
       onDragEnd={(event) => void handleDragEnd(event)}
     >
+      {activeTask && onDeleteTask ? (
+        <TrashDropzone
+          droppableId={trashDroppableId}
+          title={t("common.executionBoard.deleteDropTitle")}
+          detail={t("common.executionBoard.deleteDropDetail")}
+        />
+      ) : null}
       <div className="w-full max-w-full min-w-0 pb-2">
         {isMobileBoard ? (
           <div className="grid w-full max-w-full min-w-0 gap-2">
@@ -659,6 +804,62 @@ export function ExecutionBoard({
           </div>
         ) : null}
       </DragOverlay>
+      {confirmingDeleteTask ? (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-[rgba(5,8,18,0.74)] p-4 backdrop-blur-xl">
+          <Card className="w-full max-w-md border border-white/10 bg-[linear-gradient(180deg,rgba(16,22,36,0.96),rgba(9,13,22,0.98))] shadow-[0_32px_90px_rgba(5,8,18,0.58)]">
+            <div className="flex items-start gap-3">
+              <div className="mt-1 flex size-11 shrink-0 items-center justify-center rounded-full bg-rose-500/14 text-rose-100">
+                <Trash2 className="size-5" />
+              </div>
+              <div className="min-w-0">
+                <div className="font-display text-[1.35rem] leading-tight text-white">
+                  {t("common.executionBoard.deleteConfirmTitle")}
+                </div>
+                <div className="mt-2 text-sm leading-6 text-white/64">
+                  {t("common.executionBoard.deleteConfirmDescription", {
+                    title: confirmingDeleteTask.title
+                  })}
+                </div>
+              </div>
+            </div>
+            <label className="mt-5 flex items-center gap-3 rounded-[18px] bg-white/[0.05] px-4 py-3 text-sm text-white/76">
+              <input
+                type="checkbox"
+                checked={disableDeleteConfirmChoice}
+                onChange={(event) =>
+                  setDisableDeleteConfirmChoice(event.target.checked)
+                }
+                className="size-4 rounded border-white/20 bg-transparent text-[var(--primary)]"
+              />
+              <span>{t("common.executionBoard.deleteConfirmCheckbox")}</span>
+            </label>
+            <div className="mt-5 flex flex-wrap justify-end gap-3">
+              <Button
+                variant="secondary"
+                onClick={() => {
+                  setConfirmingDeleteTask(null);
+                  setDisableDeleteConfirmChoice(false);
+                }}
+              >
+                {t("common.executionBoard.deleteConfirmCancel")}
+              </Button>
+              <Button
+                className="bg-[linear-gradient(135deg,rgba(251,113,133,0.3),rgba(190,24,93,0.26))] text-white shadow-[0_16px_36px_rgba(190,24,93,0.18)]"
+                pending={deletePendingTaskId === confirmingDeleteTask.id}
+                pendingLabel={t("common.executionBoard.deletingTask")}
+                onClick={() =>
+                  void deleteTaskNow(
+                    confirmingDeleteTask,
+                    disableDeleteConfirmChoice
+                  )
+                }
+              >
+                {t("common.executionBoard.deleteConfirmSubmit")}
+              </Button>
+            </div>
+          </Card>
+        </div>
+      ) : null}
     </DndContext>
   );
 }

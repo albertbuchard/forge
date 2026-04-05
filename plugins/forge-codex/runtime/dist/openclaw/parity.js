@@ -1,5 +1,6 @@
 export const FORGE_SUPPORTED_PLUGIN_API_ROUTES = [
     { method: "GET", path: "/api/v1/health", purpose: "diagnostics" },
+    { method: "GET", path: "/api/v1/users/directory", purpose: "operator_context" },
     { method: "GET", path: "/api/v1/operator/overview", purpose: "overview" },
     { method: "GET", path: "/api/v1/operator/context", purpose: "operator_context" },
     { method: "GET", path: "/api/v1/agents/onboarding", purpose: "onboarding" },

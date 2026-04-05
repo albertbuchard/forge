@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
+import { Link } from "react-router-dom";
 import { SettingsSectionNav } from "@/components/settings/settings-section-nav";
 import { PageHero } from "@/components/shell/page-hero";
 import { SurfaceSkeleton } from "@/components/experience/surface-skeleton";
@@ -244,6 +245,21 @@ export function SettingsPage() {
               Save settings
             </Button>
           </form>
+        </Card>
+
+        <Card>
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div>
+              <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">Mobile companion</div>
+              <div className="mt-2 text-lg text-white">Pair the native iPhone bridge for HealthKit, background sync, and future watch or location signals.</div>
+            </div>
+            <Link
+              to="/settings/mobile"
+              className="inline-flex min-h-11 items-center rounded-[16px] bg-white/[0.08] px-4 py-3 text-sm text-white transition hover:bg-white/[0.12]"
+            >
+              Open mobile settings
+            </Link>
+          </div>
         </Card>
 
         <Card>

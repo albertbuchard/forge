@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -386,6 +386,398 @@ test("scoped context returns bot-owned goals and strategies when userIds are req
   }
 });
 
+test("mobile health sync builds richer summaries and reconciles habit-generated workouts", async () => {
+  const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-mobile-health-"));
+  const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
+
+  try {
+    const operatorCookie = await issueOperatorSessionCookie(app);
+    const goalsResponse = await app.inject({
+      method: "GET",
+      url: "/api/v1/goals"
+    });
+    const goalId = (
+      goalsResponse.json() as { goals: Array<{ id: string }> }
+    ).goals[0]!.id;
+
+    const habitResponse = await app.inject({
+      method: "POST",
+      url: "/api/v1/habits",
+      headers: {
+        cookie: operatorCookie
+      },
+      payload: {
+        title: "Morning sport routine",
+        description: "Generate a recovery walk session on completion.",
+        status: "active",
+        polarity: "positive",
+        frequency: "daily",
+        targetCount: 1,
+        weekDays: [],
+        linkedGoalIds: [goalId],
+        linkedProjectIds: [],
+        linkedTaskIds: [],
+        linkedValueIds: [],
+        linkedPatternIds: [],
+        linkedBehaviorIds: [],
+        linkedBeliefIds: [],
+        linkedModeIds: [],
+        linkedReportIds: [],
+        linkedBehaviorId: null,
+        rewardXp: 12,
+        penaltyXp: 8,
+        generatedHealthEventTemplate: {
+          enabled: true,
+          workoutType: "walk",
+          title: "Morning walk",
+          durationMinutes: 45,
+          xpReward: 25,
+          tags: ["morning", "recovery"],
+          links: [],
+          notesTemplate: "Habit-generated recovery walk."
+        }
+      }
+    });
+    assert.equal(habitResponse.statusCode, 201);
+    const habitId = (habitResponse.json() as { habit: { id: string } }).habit.id;
+
+    const checkInResponse = await app.inject({
+      method: "POST",
+      url: `/api/v1/habits/${habitId}/check-ins`,
+      headers: {
+        cookie: operatorCookie
+      },
+      payload: {
+        dateKey: "2026-04-05",
+        status: "done",
+        note: "Completed before work."
+      }
+    });
+    assert.equal(checkInResponse.statusCode, 200);
+
+    const pairingResponse = await app.inject({
+      method: "POST",
+      url: "/api/v1/health/pairing-sessions",
+      headers: {
+        cookie: operatorCookie,
+        host: "127.0.0.1:4317"
+      },
+      payload: {
+        userId: "user_operator"
+      }
+    });
+    assert.equal(pairingResponse.statusCode, 201);
+    const qrPayload = (
+      pairingResponse.json() as {
+        qrPayload: {
+          sessionId: string;
+          pairingToken: string;
+        };
+      }
+    ).qrPayload;
+
+    const syncResponse = await app.inject({
+      method: "POST",
+      url: "/api/v1/mobile/healthkit/sync",
+      payload: {
+        sessionId: qrPayload.sessionId,
+        pairingToken: qrPayload.pairingToken,
+        device: {
+          name: "Omar iPhone",
+          platform: "ios",
+          appVersion: "1.0",
+          sourceDevice: "iPhone"
+        },
+        permissions: {
+          healthKitAuthorized: true,
+          backgroundRefreshEnabled: true,
+          motionReady: false,
+          locationReady: false
+        },
+        sleepSessions: [
+          {
+            externalUid: "sleep-2026-04-04",
+            startedAt: "2026-04-04T22:45:00.000Z",
+            endedAt: "2026-04-05T06:30:00.000Z",
+            timeInBedSeconds: 29400,
+            asleepSeconds: 27000,
+            awakeSeconds: 900,
+            stageBreakdown: [
+              { stage: "deep", seconds: 5400 },
+              { stage: "rem", seconds: 6000 },
+              { stage: "core", seconds: 15600 }
+            ],
+            recoveryMetrics: {
+              sleepWindowStart: "2026-04-04T22:45:00.000Z"
+            },
+            links: [
+              {
+                entityType: "goal",
+                entityId: goalId,
+                relationshipType: "context"
+              }
+            ],
+            annotations: {
+              qualitySummary: "Solid night before a structured day.",
+              notes: "Low rumination and good wind-down.",
+              tags: ["routine"]
+            }
+          }
+        ],
+        workouts: [
+          {
+            externalUid: "workout-2026-04-05",
+            workoutType: "walk",
+            startedAt: "2026-04-05T07:15:00.000Z",
+            endedAt: "2026-04-05T07:58:00.000Z",
+            activeEnergyKcal: 220,
+            totalEnergyKcal: 240,
+            distanceMeters: 4100,
+            stepCount: 5200,
+            exerciseMinutes: 43,
+            averageHeartRate: 118,
+            maxHeartRate: 141,
+            sourceDevice: "Apple Watch",
+            links: [
+              {
+                entityType: "goal",
+                entityId: goalId,
+                relationshipType: "context"
+              }
+            ],
+            annotations: {
+              moodBefore: "flat",
+              moodAfter: "steady",
+              meaningText: "Used this walk to protect recovery and sleep rhythm.",
+              tags: ["sleep-support"]
+            }
+          }
+        ]
+      }
+    });
+    assert.equal(syncResponse.statusCode, 200);
+    const syncBody = syncResponse.json() as {
+      sync: { imported: { mergedCount: number } };
+    };
+    assert.equal(syncBody.sync.imported.mergedCount, 1);
+
+    const overviewResponse = await app.inject({
+      method: "GET",
+      url: "/api/v1/health/overview"
+    });
+    assert.equal(overviewResponse.statusCode, 200);
+    const overview = (
+      overviewResponse.json() as {
+        overview: {
+          healthState: string;
+          counts: {
+            reflectiveSleepSessions: number;
+            reconciledWorkouts: number;
+          };
+          permissions: {
+            healthKitAuthorized: boolean;
+            backgroundRefreshEnabled: boolean;
+          };
+        };
+      }
+    ).overview;
+    assert.equal(overview.healthState, "healthy_sync");
+    assert.equal(overview.counts.reflectiveSleepSessions, 1);
+    assert.equal(overview.counts.reconciledWorkouts, 1);
+    assert.equal(overview.permissions.healthKitAuthorized, true);
+    assert.equal(overview.permissions.backgroundRefreshEnabled, true);
+
+    const sleepResponse = await app.inject({
+      method: "GET",
+      url: "/api/v1/health/sleep"
+    });
+    assert.equal(sleepResponse.statusCode, 200);
+    const sleep = (
+      sleepResponse.json() as {
+        sleep: {
+          summary: {
+            averageEfficiency: number;
+            averageRestorativeShare: number;
+            reflectiveNightCount: number;
+          };
+          stageAverages: Array<{ stage: string; averageSeconds: number }>;
+        };
+      }
+    ).sleep;
+    assert.ok(sleep.summary.averageEfficiency > 0.8);
+    assert.ok(sleep.summary.averageRestorativeShare > 0.3);
+    assert.equal(sleep.summary.reflectiveNightCount, 1);
+    assert.ok(
+      sleep.stageAverages.some(
+        (stage) => stage.stage === "deep" && stage.averageSeconds > 0
+      )
+    );
+
+    const fitnessResponse = await app.inject({
+      method: "GET",
+      url: "/api/v1/health/fitness"
+    });
+    assert.equal(fitnessResponse.statusCode, 200);
+    const fitness = (
+      fitnessResponse.json() as {
+        fitness: {
+          summary: {
+            reconciledSessionCount: number;
+            topWorkoutType: string | null;
+            linkedSessionCount: number;
+          };
+          typeBreakdown: Array<{ workoutType: string; totalMinutes: number }>;
+        };
+      }
+    ).fitness;
+    assert.equal(fitness.summary.reconciledSessionCount, 1);
+    assert.equal(fitness.summary.topWorkoutType, "walk");
+    assert.equal(fitness.summary.linkedSessionCount, 1);
+    assert.ok(
+      fitness.typeBreakdown.some(
+        (entry) => entry.workoutType === "walk" && entry.totalMinutes >= 40
+      )
+    );
+  } finally {
+    await app.close();
+    closeDatabase();
+    await rm(rootDir, { recursive: true, force: true });
+  }
+});
+
+test("strategy lock rejects drafts that are missing targets or narrative", async () => {
+  const rootDir = await mkdtemp(
+    path.join(os.tmpdir(), "forge-strategy-lock-guard-")
+  );
+  const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
+
+  try {
+    const operatorCookie = await issueOperatorSessionCookie(app);
+    const contextResponse = await app.inject({
+      method: "GET",
+      url: "/api/v1/context"
+    });
+    assert.equal(contextResponse.statusCode, 200);
+    const context = contextResponse.json() as {
+      goals: Array<{ id: string }>;
+      tasks: Array<{ id: string }>;
+    };
+    const taskId = context.tasks[0]?.id;
+    assert.ok(taskId);
+    const goalId = context.goals[0]?.id;
+    assert.ok(goalId);
+
+    const createResponse = await app.inject({
+      method: "POST",
+      url: "/api/v1/strategies",
+      headers: {
+        cookie: operatorCookie
+      },
+      payload: {
+        title: "Loose draft strategy",
+        overview: "",
+        endStateDescription: "",
+        status: "active",
+        targetGoalIds: [],
+        targetProjectIds: [],
+        linkedEntities: [],
+        graph: {
+          nodes: [
+            {
+              id: "draft_node",
+              entityType: "task",
+              entityId: taskId,
+              title: "Draft node",
+              branchLabel: "",
+              notes: ""
+            }
+          ],
+          edges: []
+        }
+      }
+    });
+
+    assert.equal(createResponse.statusCode, 201);
+    const strategyId = (createResponse.json() as { strategy: { id: string } })
+      .strategy.id;
+
+    const lockResponse = await app.inject({
+      method: "PATCH",
+      url: `/api/v1/strategies/${strategyId}`,
+      headers: {
+        cookie: operatorCookie
+      },
+      payload: {
+        isLocked: true
+      }
+    });
+
+    assert.equal(lockResponse.statusCode, 400);
+    const lockBody = lockResponse.json() as {
+      code: string;
+      error: string;
+    };
+    assert.equal(lockBody.code, "strategy_contract_invalid");
+    assert.match(lockBody.error, /target at least one goal or project/i);
+
+    const narrativeDraftResponse = await app.inject({
+      method: "POST",
+      url: "/api/v1/strategies",
+      headers: {
+        cookie: operatorCookie
+      },
+      payload: {
+        title: "Untold contract draft",
+        overview: "",
+        endStateDescription: "",
+        status: "active",
+        targetGoalIds: [goalId],
+        targetProjectIds: [],
+        linkedEntities: [],
+        graph: {
+          nodes: [
+            {
+              id: "narrative_node",
+              entityType: "task",
+              entityId: taskId,
+              title: "Draft node",
+              branchLabel: "",
+              notes: ""
+            }
+          ],
+          edges: []
+        }
+      }
+    });
+    assert.equal(narrativeDraftResponse.statusCode, 201);
+    const narrativeStrategyId = (
+      narrativeDraftResponse.json() as { strategy: { id: string } }
+    ).strategy.id;
+
+    const narrativeLockResponse = await app.inject({
+      method: "PATCH",
+      url: `/api/v1/strategies/${narrativeStrategyId}`,
+      headers: {
+        cookie: operatorCookie
+      },
+      payload: {
+        isLocked: true
+      }
+    });
+    assert.equal(narrativeLockResponse.statusCode, 400);
+    const narrativeLockBody = narrativeLockResponse.json() as {
+      code: string;
+      error: string;
+    };
+    assert.equal(narrativeLockBody.code, "strategy_contract_invalid");
+    assert.match(narrativeLockBody.error, /overview or end-state description/i);
+  } finally {
+    await app.close();
+    closeDatabase();
+    await rm(rootDir, { recursive: true, force: true });
+  }
+});
+
 test("user directory exposes permissive grants and ownership summaries for new users", async () => {
   const rootDir = await mkdtemp(
     path.join(os.tmpdir(), "forge-user-directory-")
@@ -431,6 +823,7 @@ test("user directory exposes permissive grants and ownership summaries for new u
             accessLevel: string;
           }>;
           ownership: Array<{ userId: string; totalOwnedEntities: number }>;
+          xp: Array<{ userId: string; totalXp: number; weeklyXp: number }>;
           posture: { accessModel: string; futureReady: boolean };
         };
       }
@@ -450,7 +843,7 @@ test("user directory exposes permissive grants and ownership summaries for new u
         (grant) =>
           grant.subjectUserId === "user_operator" &&
           grant.targetUserId === createdUser.id &&
-          grant.accessLevel === "view"
+          grant.accessLevel === "manage"
       )
     );
     assert.ok(
@@ -459,7 +852,15 @@ test("user directory exposes permissive grants and ownership summaries for new u
           entry.userId === createdUser.id && entry.totalOwnedEntities === 0
       )
     );
-    assert.equal(directory.posture.accessModel, "permissive");
+    assert.ok(
+      directory.xp.some(
+        (entry) =>
+          entry.userId === createdUser.id &&
+          entry.totalXp === 0 &&
+          entry.weeklyXp === 0
+      )
+    );
+    assert.equal(directory.posture.accessModel, "directional_graph");
     assert.equal(directory.posture.futureReady, true);
   } finally {
     await app.close();
@@ -2629,6 +3030,16 @@ test("habits persist with check-ins and XP updates through the versioned API", a
         linkedGoalIds: [goalId],
         linkedProjectIds: [projectId],
         linkedTaskIds: [taskId],
+        generatedHealthEventTemplate: {
+          enabled: true,
+          workoutType: "recovery_walk",
+          title: "Morning sport routine",
+          durationMinutes: 35,
+          xpReward: 11,
+          tags: ["habit-generated", "recovery"],
+          links: [],
+          notesTemplate: "Generated from the morning sport routine habit."
+        },
         rewardXp: 14,
         penaltyXp: 9
       }
@@ -2707,6 +3118,39 @@ test("habits persist with check-ins and XP updates through the versioned API", a
       checkInBody.metrics.recentLedger.some(
         (entry) =>
           entry.entityType === "habit" && entry.entityId === createdHabit.id
+      )
+    );
+    assert.ok(
+      checkInBody.metrics.recentLedger.some(
+        (entry) =>
+          entry.entityType === "habit" &&
+          entry.entityId === createdHabit.id &&
+          entry.deltaXp === 11
+      )
+    );
+
+    const fitness = await app.inject({
+      method: "GET",
+      url: "/api/v1/health/fitness"
+    });
+    assert.equal(fitness.statusCode, 200);
+    const fitnessBody = fitness.json() as {
+      fitness: {
+        sessions: Array<{
+          workoutType: string;
+          source: string;
+          reconciliationStatus: string;
+          generatedFromHabitId: string | null;
+        }>;
+      };
+    };
+    assert.ok(
+      fitnessBody.fitness.sessions.some(
+        (session) =>
+          session.workoutType === "recovery_walk" &&
+          session.source === "forge_habit" &&
+          session.reconciliationStatus === "awaiting_import_match" &&
+          session.generatedFromHabitId === createdHabit.id
       )
     );
 
@@ -4128,6 +4572,279 @@ test("notes support custom and memory tags plus ephemeral auto-destruction", asy
       }
     });
     assert.equal(expiredGet.statusCode, 404);
+  } finally {
+    await app.close();
+    closeDatabase();
+    await rm(rootDir, { recursive: true, force: true });
+  }
+});
+
+test("wiki pages are file-backed, searchable, backlink-aware, and ingestable", async () => {
+  const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-wiki-memory-"));
+  const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
+
+  try {
+    const operatorCookie = await issueOperatorSessionCookie(app);
+
+    const starterTree = await app.inject({
+      method: "GET",
+      url: "/api/v1/wiki/tree",
+      headers: {
+        cookie: operatorCookie
+      }
+    });
+    assert.equal(starterTree.statusCode, 200);
+    const starterTreeBody = starterTree.json() as {
+      tree: Array<{
+        page: { slug: string };
+        children: Array<{ page: { slug: string } }>;
+      }>;
+    };
+    assert.equal(starterTreeBody.tree[0]?.page.slug, "index");
+    assert.deepEqual(
+      starterTreeBody.tree[0]?.children.map((entry) => entry.page.slug),
+      ["people", "projects", "concepts", "sources", "chronicle"]
+    );
+
+    const evidenceNote = await app.inject({
+      method: "POST",
+      url: "/api/v1/notes",
+      headers: {
+        cookie: operatorCookie
+      },
+      payload: {
+        contentMarkdown: "Daily Forge Checkup Note - Evening",
+        links: [],
+        tags: []
+      }
+    });
+    assert.equal(evidenceNote.statusCode, 201);
+
+    const treeAfterEvidence = await app.inject({
+      method: "GET",
+      url: "/api/v1/wiki/tree",
+      headers: {
+        cookie: operatorCookie
+      }
+    });
+    assert.equal(treeAfterEvidence.statusCode, 200);
+    const treeAfterEvidenceBody = treeAfterEvidence.json() as {
+      tree: Array<{
+        page: { slug: string };
+        children: Array<{ page: { slug: string } }>;
+      }>;
+    };
+    assert.equal(treeAfterEvidenceBody.tree.length, 1);
+    assert.equal(treeAfterEvidenceBody.tree[0]?.page.slug, "index");
+    assert.deepEqual(
+      treeAfterEvidenceBody.tree[0]?.children.map((entry) => entry.page.slug),
+      ["people", "projects", "concepts", "sources", "chronicle"]
+    );
+
+    const home = await app.inject({
+      method: "GET",
+      url: "/api/v1/wiki/home",
+      headers: {
+        cookie: operatorCookie
+      }
+    });
+    assert.equal(home.statusCode, 200);
+    const homeBody = home.json() as { page: { slug: string; title: string } };
+    assert.equal(homeBody.page.slug, "index");
+    assert.equal(homeBody.page.title, "Home");
+
+    const releasePlaybook = await app.inject({
+      method: "POST",
+      url: "/api/v1/wiki/pages",
+      headers: {
+        cookie: operatorCookie
+      },
+      payload: {
+        title: "Release playbook",
+        slug: "release-playbook",
+        summary: "Shared checklist for shipping the plugin surface safely.",
+        aliases: ["ship checklist", "launch checklist"],
+        contentMarkdown:
+          "# Release playbook\n\nCapture the release checklist, rollback protocol, and launch owner.",
+        links: []
+      }
+    });
+    assert.equal(releasePlaybook.statusCode, 201);
+    const releaseBody = releasePlaybook.json() as {
+      page: { id: string; slug: string; kind: string; sourcePath: string };
+    };
+    assert.equal(releaseBody.page.slug, "release-playbook");
+    assert.equal(releaseBody.page.kind, "wiki");
+    assert.ok(releaseBody.page.sourcePath.endsWith("release-playbook.md"));
+    const releaseFile = await readFile(releaseBody.page.sourcePath, "utf8");
+    assert.match(releaseFile, /title:\s+"Release playbook"/);
+    assert.match(releaseFile, /slug:\s+"release-playbook"/);
+
+    const launchLog = await app.inject({
+      method: "POST",
+      url: "/api/v1/wiki/pages",
+      headers: {
+        cookie: operatorCookie
+      },
+      payload: {
+        title: "Launch log",
+        summary: "Field notes from the final rehearsal before launch.",
+        contentMarkdown:
+          "# Launch log\n\nWe rehearsed the release against [[release-playbook]] and confirmed the fallback path.\n\n[[forge:task:task_plugin_surface|Plugin surface task]] stays the operational anchor.",
+        links: [
+          {
+            entityType: "task",
+            entityId: "task_plugin_surface",
+            anchorKey: null
+          }
+        ]
+      }
+    });
+    assert.equal(launchLog.statusCode, 201);
+    const launchBody = launchLog.json() as { page: { id: string; slug: string } };
+
+    const detail = await app.inject({
+      method: "GET",
+      url: `/api/v1/wiki/pages/${releaseBody.page.id}`,
+      headers: {
+        cookie: operatorCookie
+      }
+    });
+    assert.equal(detail.statusCode, 200);
+    const detailBody = detail.json() as {
+      backlinks: Array<{ sourceNoteId: string; rawTarget: string }>;
+      backlinksBySourceId: Record<string, { slug: string } | null>;
+    };
+    assert.ok(
+      detailBody.backlinks.some(
+        (entry) =>
+          entry.sourceNoteId === launchBody.page.id &&
+          entry.rawTarget === "release-playbook"
+      )
+    );
+    assert.equal(
+      detailBody.backlinksBySourceId[launchBody.page.id]?.slug,
+      launchBody.page.slug
+    );
+
+    const detailBySlug = await app.inject({
+      method: "GET",
+      url: "/api/v1/wiki/by-slug/release-playbook",
+      headers: {
+        cookie: operatorCookie
+      }
+    });
+    assert.equal(detailBySlug.statusCode, 200);
+    const detailBySlugBody = detailBySlug.json() as {
+      page: { id: string; slug: string };
+    };
+    assert.equal(detailBySlugBody.page.id, releaseBody.page.id);
+    assert.equal(detailBySlugBody.page.slug, "release-playbook");
+
+    const textSearch = await app.inject({
+      method: "POST",
+      url: "/api/v1/wiki/search",
+      headers: {
+        cookie: operatorCookie
+      },
+      payload: {
+        mode: "text",
+        query: "final rehearsal"
+      }
+    });
+    assert.equal(textSearch.statusCode, 200);
+    const textSearchBody = textSearch.json() as {
+      results: Array<{ page: { id: string } }>;
+    };
+    assert.ok(
+      textSearchBody.results.some((entry) => entry.page.id === launchBody.page.id)
+    );
+
+    const entitySearch = await app.inject({
+      method: "POST",
+      url: "/api/v1/wiki/search",
+      headers: {
+        cookie: operatorCookie
+      },
+      payload: {
+        mode: "entity",
+        linkedEntity: {
+          entityType: "task",
+          entityId: "task_plugin_surface"
+        }
+      }
+    });
+    assert.equal(entitySearch.statusCode, 200);
+    const entitySearchBody = entitySearch.json() as {
+      results: Array<{ page: { id: string } }>;
+    };
+    assert.ok(
+      entitySearchBody.results.some((entry) => entry.page.id === launchBody.page.id)
+    );
+
+    const compatibilityList = await app.inject({
+      method: "GET",
+      url: "/api/v1/notes?kind=wiki&slug=release-playbook",
+      headers: {
+        cookie: operatorCookie
+      }
+    });
+    assert.equal(compatibilityList.statusCode, 200);
+    const compatibilityBody = compatibilityList.json() as {
+      notes: Array<{ id: string }>;
+    };
+    assert.equal(compatibilityBody.notes.length, 1);
+    assert.equal(compatibilityBody.notes[0]?.id, releaseBody.page.id);
+
+    const ingest = await app.inject({
+      method: "POST",
+      url: "/api/v1/wiki/ingest-jobs",
+      headers: {
+        cookie: operatorCookie
+      },
+      payload: {
+        sourceKind: "raw_text",
+        titleHint: "Imported field notes",
+        sourceText:
+          "Farza-style personal wiki entries should stay explicit, navigable, and reusable by any agent over files.",
+        linkedEntityHints: []
+      }
+    });
+    assert.equal(ingest.statusCode, 201);
+    const ingestBody = ingest.json() as {
+      job:
+        | {
+            job: { status: string; pageNoteId: string | null };
+          }
+        | null;
+      page: { id: string; title: string; kind: string };
+    };
+    assert.equal(ingestBody.job?.job.status, "completed");
+    assert.equal(ingestBody.page.kind, "wiki");
+    assert.equal(ingestBody.page.title, "Imported field notes");
+    assert.equal(ingestBody.job?.job.pageNoteId, ingestBody.page.id);
+    assert.ok(
+      ingestBody.job?.items.some((item) => item.itemType === "raw_source")
+    );
+
+    const health = await app.inject({
+      method: "GET",
+      url: "/api/v1/wiki/health",
+      headers: {
+        cookie: operatorCookie
+      }
+    });
+    assert.equal(health.statusCode, 200);
+    const healthBody = health.json() as {
+      health: {
+        pageCount: number;
+        rawSourceCount: number;
+        indexPath: string;
+      };
+    };
+    assert.ok(healthBody.health.pageCount >= 3);
+    assert.ok(healthBody.health.rawSourceCount >= 1);
+    assert.match(healthBody.health.indexPath, /index\.md$/);
   } finally {
     await app.close();
     closeDatabase();
@@ -5617,6 +6334,15 @@ test("calendar events omit preferredCalendarId to use the default writable calen
       title: "Auto-sync event",
       description: "",
       location: "",
+      place: {
+        label: "",
+        address: "",
+        timezone: "",
+        latitude: null,
+        longitude: null,
+        source: "",
+        externalPlaceId: ""
+      },
       startAt: "2026-04-08T11:00:00.000Z",
       endAt: "2026-04-08T12:00:00.000Z",
       timezone: "Europe/Zurich",
@@ -5634,6 +6360,15 @@ test("calendar events omit preferredCalendarId to use the default writable calen
       title: "Explicit Forge-only event",
       description: "",
       location: "",
+      place: {
+        label: "",
+        address: "",
+        timezone: "",
+        latitude: null,
+        longitude: null,
+        source: "",
+        externalPlaceId: ""
+      },
       startAt: "2026-04-08T13:00:00.000Z",
       endAt: "2026-04-08T14:00:00.000Z",
       timezone: "Europe/Zurich",
@@ -5647,6 +6382,207 @@ test("calendar events omit preferredCalendarId to use the default writable calen
 
     assert.equal(forgeOnlyEvent.calendarId, null);
     assert.equal(forgeOnlyEvent.connectionId, null);
+  } finally {
+    await app.close();
+    closeDatabase();
+    await rm(rootDir, { recursive: true, force: true });
+  }
+});
+
+test("preferences workspace supports items, entity enqueue, judgments, signals, and contexts", async () => {
+  const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-preferences-"));
+  const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
+
+  try {
+    const operatorCookie = await issueOperatorSessionCookie(app);
+    const userDirectoryResponse = await app.inject({
+      method: "GET",
+      url: "/api/v1/users",
+      headers: {
+        cookie: operatorCookie
+      }
+    });
+    assert.equal(userDirectoryResponse.statusCode, 200);
+    const userId = (
+      userDirectoryResponse.json() as {
+        users: Array<{ id: string }>;
+      }
+    ).users[0]?.id;
+    assert.ok(userId);
+
+    const workspaceResponse = await app.inject({
+      method: "GET",
+      url: `/api/v1/preferences/workspace?userId=${userId}&domain=projects`,
+      headers: {
+        cookie: operatorCookie
+      }
+    });
+    assert.equal(workspaceResponse.statusCode, 200);
+    const initialWorkspace = (
+      workspaceResponse.json() as {
+        workspace: {
+          selectedContext: { id: string };
+          contexts: Array<{ id: string; name: string }>;
+          summary: { totalItems: number };
+        };
+      }
+    ).workspace;
+    assert.ok(initialWorkspace.contexts.length >= 1);
+
+    const createItemResponse = await app.inject({
+      method: "POST",
+      url: "/api/v1/preferences/items",
+      headers: {
+        cookie: operatorCookie
+      },
+      payload: {
+        userId,
+        domain: "projects",
+        label: "Narrative operating style",
+        description: "Preference for deep, structured project execution.",
+        tags: ["writing", "focus"],
+        featureWeights: {
+          novelty: -0.1,
+          simplicity: 0.2,
+          rigor: 0.85,
+          aesthetics: 0.35,
+          depth: 0.9,
+          structure: 0.8,
+          familiarity: 0.15,
+          surprise: -0.2
+        },
+        queueForCompare: true
+      }
+    });
+    assert.equal(createItemResponse.statusCode, 201);
+    const createdItemId = (
+      createItemResponse.json() as { item: { id: string } }
+    ).item.id;
+
+    const goalsResponse = await app.inject({
+      method: "GET",
+      url: "/api/v1/goals"
+    });
+    const goalId = (
+      goalsResponse.json() as { goals: Array<{ id: string }> }
+    ).goals[0]?.id;
+    assert.ok(goalId);
+
+    const enqueueEntityResponse = await app.inject({
+      method: "POST",
+      url: "/api/v1/preferences/items/from-entity",
+      headers: {
+        cookie: operatorCookie
+      },
+      payload: {
+        userId,
+        domain: "projects",
+        entityType: "goal",
+        entityId: goalId
+      }
+    });
+    assert.equal(enqueueEntityResponse.statusCode, 201);
+    const linkedItemId = (
+      enqueueEntityResponse.json() as { item: { id: string } }
+    ).item.id;
+
+    const createContextResponse = await app.inject({
+      method: "POST",
+      url: "/api/v1/preferences/contexts",
+      headers: {
+        cookie: operatorCookie
+      },
+      payload: {
+        userId,
+        domain: "projects",
+        name: "Deep work",
+        description: "Preference state for deliberate project work.",
+        shareMode: "isolated",
+        active: true,
+        isDefault: false,
+        decayDays: 45
+      }
+    });
+    assert.equal(createContextResponse.statusCode, 201);
+    const createdContext = (
+      createContextResponse.json() as { context: { id: string; name: string } }
+    ).context;
+    assert.equal(createdContext.name, "Deep work");
+
+    const judgmentResponse = await app.inject({
+      method: "POST",
+      url: "/api/v1/preferences/judgments",
+      headers: {
+        cookie: operatorCookie
+      },
+      payload: {
+        userId,
+        domain: "projects",
+        contextId: initialWorkspace.selectedContext.id,
+        leftItemId: createdItemId,
+        rightItemId: linkedItemId,
+        outcome: "left",
+        strength: 1.5
+      }
+    });
+    assert.equal(judgmentResponse.statusCode, 201);
+
+    const signalResponse = await app.inject({
+      method: "POST",
+      url: "/api/v1/preferences/signals",
+      headers: {
+        cookie: operatorCookie
+      },
+      payload: {
+        userId,
+        domain: "projects",
+        contextId: initialWorkspace.selectedContext.id,
+        itemId: createdItemId,
+        signalType: "favorite",
+        strength: 1
+      }
+    });
+    assert.equal(signalResponse.statusCode, 201);
+
+    const scoreResponse = await app.inject({
+      method: "PATCH",
+      url: `/api/v1/preferences/items/${createdItemId}/score`,
+      headers: {
+        cookie: operatorCookie
+      },
+      payload: {
+        userId,
+        domain: "projects",
+        contextId: initialWorkspace.selectedContext.id,
+        manualStatus: "favorite",
+        bookmarked: true,
+        compareLater: false
+      }
+    });
+    assert.equal(scoreResponse.statusCode, 200);
+    const patchedWorkspace = (
+      scoreResponse.json() as {
+        workspace: {
+          contexts: Array<{ id: string; name: string }>;
+          history: { judgments: Array<{ id: string }>; signals: Array<{ id: string }> };
+          scores: Array<{
+            itemId: string;
+            manualStatus: string | null;
+            bookmarked: boolean;
+          }>;
+        };
+      }
+    ).workspace;
+    assert.ok(
+      patchedWorkspace.contexts.some((context) => context.name === "Deep work")
+    );
+    assert.ok(patchedWorkspace.history.judgments.length >= 1);
+    assert.ok(patchedWorkspace.history.signals.length >= 1);
+    const patchedScore = patchedWorkspace.scores.find(
+      (score) => score.itemId === createdItemId
+    );
+    assert.equal(patchedScore?.manualStatus, "favorite");
+    assert.equal(patchedScore?.bookmarked, true);
   } finally {
     await app.close();
     closeDatabase();
@@ -6094,6 +7030,13 @@ test("settings and local agent token management persist through the versioned AP
           exampleQuestions: string[];
           notes: string[];
         }>;
+        conversationRules: string[];
+        entityConversationPlaybooks: Array<{
+          focus: string;
+          openingQuestion: string;
+          coachingGoal: string;
+          askSequence: string[];
+        }>;
         relationshipModel: string[];
         entityCatalog: Array<{
           entityType: string;
@@ -6220,6 +7163,49 @@ test("settings and local agent token management persist through the versioned AP
     assert.match(
       onboardingBody.onboarding.psycheSubmoduleModel.triggerReport,
       /incident chain/
+    );
+    assert.ok(
+      onboardingBody.onboarding.conversationRules.some((rule) =>
+        /missing or unclear/i.test(rule)
+      )
+    );
+    const goalConversationPlaybook =
+      onboardingBody.onboarding.entityConversationPlaybooks.find(
+        (playbook) => playbook.focus === "goal"
+      );
+    assert.ok(goalConversationPlaybook);
+    assert.match(
+      goalConversationPlaybook.openingQuestion,
+      /direction are you trying to hold onto/i
+    );
+    const taskConversationPlaybook =
+      onboardingBody.onboarding.entityConversationPlaybooks.find(
+        (playbook) => playbook.focus === "task"
+      );
+    assert.ok(taskConversationPlaybook);
+    assert.ok(
+      taskConversationPlaybook.askSequence.some((step) =>
+        /next concrete action/i.test(step)
+      )
+    );
+    const noteConversationPlaybook =
+      onboardingBody.onboarding.entityConversationPlaybooks.find(
+        (playbook) => playbook.focus === "note"
+      );
+    assert.ok(noteConversationPlaybook);
+    assert.ok(
+      noteConversationPlaybook.askSequence.some((step) =>
+        /durable or temporary/i.test(step)
+      )
+    );
+    const insightConversationPlaybook =
+      onboardingBody.onboarding.entityConversationPlaybooks.find(
+        (playbook) => playbook.focus === "insight"
+      );
+    assert.ok(insightConversationPlaybook);
+    assert.match(
+      insightConversationPlaybook.openingQuestion,
+      /observation or recommendation/i
     );
     const valuePlaybook =
       onboardingBody.onboarding.psycheCoachingPlaybooks.find(
@@ -6410,6 +7396,7 @@ test("settings and local agent token management persist through the versioned AP
     assert.deepEqual(
       onboardingBody.onboarding.recommendedPluginTools.readModels,
       [
+        "forge_get_user_directory",
         "forge_get_operator_context",
         "forge_get_current_work",
         "forge_get_psyche_overview",

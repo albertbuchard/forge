@@ -1,42 +1,54 @@
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
-import net from "node:net";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ForgePluginConfig } from "./api-client";
 
-async function listenOnPort(port: number) {
-  const server = net.createServer();
-  await new Promise<void>((resolve, reject) => {
-    server.once("error", reject);
-    server.listen({ host: "127.0.0.1", port }, () => resolve());
+function installNetMock(occupiedPorts: number[]) {
+  const occupied = new Set(occupiedPorts);
+  vi.doMock("node:net", async (importOriginal) => {
+    const actual = await importOriginal<typeof import("node:net")>();
+    const createServer = () => {
+      let errorHandler: ((error: NodeJS.ErrnoException) => void) | null = null;
+      return {
+        unref: vi.fn(),
+        once(event: string, handler: (error: NodeJS.ErrnoException) => void) {
+          if (event === "error") {
+            errorHandler = handler;
+          }
+          return this;
+        },
+        listen(
+          options: { host?: string; port?: number; exclusive?: boolean },
+          callback?: () => void
+        ) {
+          const port = options.port ?? 0;
+          if (occupied.has(port)) {
+            errorHandler?.(
+              Object.assign(new Error(`port ${port} in use`), {
+                code: "EADDRINUSE"
+              })
+            );
+            return this;
+          }
+          callback?.();
+          return this;
+        },
+        close(callback?: () => void) {
+          callback?.();
+          return this;
+        }
+      };
+    };
+    return {
+      ...actual,
+      createServer,
+      default: {
+        ...("default" in actual && actual.default ? actual.default : {}),
+        createServer
+      }
+    };
   });
-  return server;
-}
-
-async function closeServer(server: net.Server) {
-  await new Promise<void>((resolve, reject) => {
-    server.close((error) => (error ? reject(error) : resolve()));
-  });
-}
-
-async function isPortFree(port: number) {
-  const server = net.createServer();
-  return await new Promise<boolean>((resolve) => {
-    server.once("error", () => resolve(false));
-    server.listen({ host: "127.0.0.1", port }, () => {
-      void closeServer(server).then(() => resolve(true));
-    });
-  });
-}
-
-async function findPortWindow() {
-  for (let candidate = 46000; candidate < 47000; candidate += 1) {
-    if ((await isPortFree(candidate)) && (await isPortFree(candidate + 1))) {
-      return { occupiedPort: candidate, nextPort: candidate + 1 };
-    }
-  }
-  throw new Error("Could not find two consecutive free localhost ports for the Forge runtime test.");
 }
 
 function createLocalConfig(overrides: Partial<ForgePluginConfig> = {}): ForgePluginConfig {
@@ -65,8 +77,9 @@ describe("forge local runtime", () => {
   it("auto-picks the next free localhost port when the default port is occupied", async () => {
     const tempHome = mkdtempSync(path.join(tmpdir(), "forge-runtime-home-"));
     vi.stubEnv("HOME", tempHome);
-    const { occupiedPort, nextPort } = await findPortWindow();
-    const occupiedServer = await listenOnPort(occupiedPort);
+    const occupiedPort = 46001;
+    const nextPort = 46002;
+    installNetMock([occupiedPort]);
     try {
       let runtimeStarted = false;
       const fakeChild = {
@@ -131,7 +144,6 @@ describe("forge local runtime", () => {
       ) as { port: number };
       expect(preferredPortState.port).toBe(nextPort);
     } finally {
-      await closeServer(occupiedServer);
       rmSync(tempHome, { recursive: true, force: true });
     }
   });
@@ -139,8 +151,8 @@ describe("forge local runtime", () => {
   it("fails clearly when an explicitly configured local port is occupied", async () => {
     const tempHome = mkdtempSync(path.join(tmpdir(), "forge-runtime-home-"));
     vi.stubEnv("HOME", tempHome);
-    const { occupiedPort } = await findPortWindow();
-    const occupiedServer = await listenOnPort(occupiedPort);
+    const occupiedPort = 46011;
+    installNetMock([occupiedPort]);
     try {
       const spawnMock = vi.fn();
       vi.doMock("node:child_process", async (importOriginal) => {
@@ -172,7 +184,6 @@ describe("forge local runtime", () => {
       );
       expect(spawnMock).not.toHaveBeenCalled();
     } finally {
-      await closeServer(occupiedServer);
       rmSync(tempHome, { recursive: true, force: true });
     }
   });

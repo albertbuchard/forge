@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Link, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import {
   BriefcaseBusiness,
   CheckCheck,
@@ -15,6 +15,7 @@ import { SchedulingRulesEditor } from "@/components/calendar/scheduling-rules-ed
 import { SheetScaffold } from "@/components/experience/sheet-scaffold";
 import { NoteMarkdown } from "@/components/notes/note-markdown";
 import { EntityNotesSurface } from "@/components/notes/entity-notes-surface";
+import { PreferenceEntityHandoffButton } from "@/components/preferences/preference-entity-handoff-button";
 import { TaskDialog } from "@/components/task-dialog";
 import { WorkAdjustmentDialog } from "@/components/work-adjustment-dialog";
 import { PageHero } from "@/components/shell/page-hero";
@@ -29,6 +30,7 @@ import { UserBadge } from "@/components/ui/user-badge";
 import {
   completeTaskRun,
   createWorkAdjustment,
+  deleteTask,
   getCalendarOverview,
   getTaskContext,
   patchTask,
@@ -107,7 +109,9 @@ export function TaskDetailPage() {
     ? shell.selectedUserIds
     : [];
   const params = useParams();
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const defaultUserId = getSingleSelectedUserId(selectedUserIds);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [workAdjustmentOpen, setWorkAdjustmentOpen] = useState(false);
   const [statusSheetOpen, setStatusSheetOpen] = useState(false);
@@ -127,8 +131,6 @@ export function TaskDetailPage() {
       to: to.toISOString()
     };
   });
-  const defaultUserId = getSingleSelectedUserId(selectedUserIds);
-
   useEffect(() => {
     if (
       typeof window === "undefined" ||
@@ -229,6 +231,10 @@ export function TaskDetailPage() {
     mutationFn: createWorkAdjustment,
     onSuccess: invalidateAll
   });
+  const deleteTaskMutation = useMutation({
+    mutationFn: (taskId: string) => deleteTask(taskId),
+    onSuccess: invalidateAll
+  });
 
   const payload = taskContextQuery.data;
 
@@ -297,6 +303,25 @@ export function TaskDetailPage() {
     setStatusSheetOpen(false);
   };
 
+  const handleDeleteTask = async () => {
+    const confirmed = window.confirm(
+      t("common.taskDetail.deleteTaskConfirm", {
+        title: payload.task.title
+      })
+    );
+    if (!confirmed) {
+      return;
+    }
+    await deleteTaskMutation.mutateAsync(payload.task.id);
+    navigate(
+      payload.project
+        ? `/projects/${payload.project.id}`
+        : payload.goal
+          ? `/goals/${payload.goal.id}`
+          : "/kanban"
+    );
+  };
+
   return (
     <div className="grid gap-5">
       <PageHero
@@ -324,6 +349,16 @@ export function TaskDetailPage() {
           )
         }
         badge={`${payload.task.points} xp`}
+        actions={
+          <PreferenceEntityHandoffButton
+            userId={defaultUserId}
+            domain="tasks"
+            entityType="task"
+            entityId={payload.task.id}
+            label={payload.task.title}
+            description={payload.task.description}
+          />
+        }
       />
 
       {payload.task.user ? (
@@ -447,6 +482,15 @@ export function TaskDetailPage() {
                 Mark as not done
               </Button>
             ) : null}
+            <Button
+              variant="ghost"
+              className="text-rose-200 hover:bg-rose-500/10"
+              pending={deleteTaskMutation.isPending}
+              pendingLabel={t("common.taskDetail.deleting")}
+              onClick={() => void handleDeleteTask()}
+            >
+              {t("common.taskDetail.deleteTask")}
+            </Button>
           </div>
         </div>
 

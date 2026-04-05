@@ -238,6 +238,114 @@ UPDATE_OPERATION = object_schema(
     required=["entityType", "id", "patch"],
 )
 
+PREFERENCE_DOMAINS = [
+    "projects",
+    "tasks",
+    "strategies",
+    "habits",
+    "calendar",
+    "sleep",
+    "sports",
+    "activities",
+    "food",
+    "places",
+    "countries",
+    "fashion",
+    "people",
+    "media",
+    "tools",
+    "custom",
+]
+
+PREFERENCE_CONTEXT_SHARE_MODES = ["shared", "isolated", "blended"]
+PREFERENCE_JUDGMENT_OUTCOMES = ["left", "right", "tie", "skip"]
+PREFERENCE_SIGNAL_TYPES = ["favorite", "veto", "must_have", "bookmark", "neutral", "compare_later"]
+PREFERENCE_ITEM_STATUSES = [
+    "liked",
+    "disliked",
+    "uncertain",
+    "vetoed",
+    "bookmarked",
+    "favorite",
+    "must_have",
+    "neutral",
+]
+
+
+def preference_workspace_path(args: Dict[str, Any]) -> str:
+    return with_query("/api/v1/preferences/workspace", args, ["userId", "domain", "contextId"])
+
+
+def preference_catalog_path(args: Dict[str, Any]) -> str:
+    return f"/api/v1/preferences/catalogs/{args['catalogId']}"
+
+
+def preference_catalog_item_path(args: Dict[str, Any]) -> str:
+    return f"/api/v1/preferences/catalog-items/{args['itemId']}"
+
+
+def preference_context_path(args: Dict[str, Any]) -> str:
+    return f"/api/v1/preferences/contexts/{args['contextId']}"
+
+
+def preference_item_path(args: Dict[str, Any]) -> str:
+    return f"/api/v1/preferences/items/{args['itemId']}"
+
+
+def preference_score_path(args: Dict[str, Any]) -> str:
+    return f"/api/v1/preferences/items/{args['itemId']}/score"
+
+
+def wiki_pages_path(args: Dict[str, Any]) -> str:
+    return with_query("/api/v1/wiki/pages", args, ["spaceId", "kind", "limit"])
+
+
+def wiki_page_path(args: Dict[str, Any]) -> str:
+    return f"/api/v1/wiki/pages/{args['pageId']}"
+
+
+def wiki_health_path(args: Dict[str, Any]) -> str:
+    return with_query("/api/v1/wiki/health", args, ["spaceId"])
+
+
+def wiki_upsert_page_path(args: Dict[str, Any]) -> str:
+    page_id = args.get("pageId")
+    if isinstance(page_id, str) and page_id.strip():
+        return f"/api/v1/wiki/pages/{page_id.strip()}"
+    return "/api/v1/wiki/pages"
+
+
+def wiki_upsert_page_method(args: Dict[str, Any]) -> str:
+    page_id = args.get("pageId")
+    return "PATCH" if isinstance(page_id, str) and page_id.strip() else "POST"
+
+
+def wiki_upsert_page_body(args: Dict[str, Any], _config: Any) -> Dict[str, Any]:
+    return {
+        key: value
+        for key, value in args.items()
+        if key
+        in {
+            "kind",
+            "title",
+            "slug",
+            "summary",
+            "aliases",
+            "contentMarkdown",
+            "author",
+            "tags",
+            "spaceId",
+            "frontmatter",
+            "links",
+        }
+    }
+
+
+PREFERENCE_FEATURE_WEIGHTS = {
+    "type": "object",
+    "description": "Optional weights keyed by novelty, simplicity, rigor, aesthetics, depth, structure, familiarity, and surprise.",
+}
+
 TOOL_CATALOG: List[ToolSpec] = [
     {
         "name": "forge_get_operator_overview",
@@ -266,6 +374,503 @@ TOOL_CATALOG: List[ToolSpec] = [
         "parameters": object_schema({}),
         "method": "GET",
         "path": "/api/v1/users/directory",
+    },
+    {
+        "name": "forge_get_wiki_settings",
+        "description": "Read the current wiki spaces plus enabled LLM and embedding profiles before search, ingest, or page writes.",
+        "parameters": object_schema({}),
+        "method": "GET",
+        "path": "/api/v1/wiki/settings",
+    },
+    {
+        "name": "forge_list_wiki_pages",
+        "description": "List wiki or evidence pages inside one space without search ranking.",
+        "parameters": object_schema(
+            {
+                "spaceId": optional_string("Optional wiki space id."),
+                "kind": {"enum": ["wiki", "evidence"]},
+                "limit": {"type": "integer", "minimum": 1, "maximum": 500},
+            }
+        ),
+        "method": "GET",
+        "path_builder": wiki_pages_path,
+    },
+    {
+        "name": "forge_get_wiki_page",
+        "description": "Read one wiki page with backlinks, source notes, and attached assets.",
+        "parameters": object_schema(
+            {
+                "pageId": {"type": "string", "minLength": 1},
+            },
+            required=["pageId"],
+        ),
+        "method": "GET",
+        "path_builder": wiki_page_path,
+    },
+    {
+        "name": "forge_get_wiki_health",
+        "description": "Read unresolved links, orphan pages, missing summaries, raw-source counts, and index-path state for one wiki space.",
+        "parameters": object_schema(
+            {
+                "spaceId": optional_string("Optional wiki space id."),
+            }
+        ),
+        "method": "GET",
+        "path_builder": wiki_health_path,
+    },
+    {
+        "name": "forge_search_wiki",
+        "description": "Search the wiki with text, semantic, entity, or hybrid retrieval.",
+        "parameters": object_schema(
+            {
+                "spaceId": optional_string("Optional wiki space id."),
+                "kind": {"enum": ["wiki", "evidence"]},
+                "mode": {"enum": ["text", "semantic", "entity", "hybrid"]},
+                "query": optional_string("Optional free-text wiki query."),
+                "profileId": optional_string("Optional embedding profile id."),
+                "linkedEntity": object_schema(
+                    {
+                        "entityType": {"type": "string", "minLength": 1},
+                        "entityId": {"type": "string", "minLength": 1},
+                    },
+                    required=["entityType", "entityId"],
+                ),
+                "limit": {"type": "integer", "minimum": 1, "maximum": 50},
+            }
+        ),
+        "method": "POST",
+        "path": "/api/v1/wiki/search",
+        "write": True,
+    },
+    {
+        "name": "forge_upsert_wiki_page",
+        "description": "Create a new wiki page or update an existing one through the file-backed wiki surface.",
+        "parameters": object_schema(
+            {
+                "pageId": optional_string("Optional page id for updates."),
+                "kind": {"enum": ["wiki", "evidence"]},
+                "title": {"type": "string", "minLength": 1},
+                "slug": optional_string("Optional slug."),
+                "summary": optional_string("Optional summary."),
+                "aliases": array_schema({"type": "string"}, "Optional aliases."),
+                "contentMarkdown": {"type": "string", "minLength": 1},
+                "author": optional_nullable_string("Optional author."),
+                "tags": array_schema({"type": "string"}, "Optional tags."),
+                "spaceId": optional_string("Optional wiki space id."),
+                "frontmatter": {"type": "object"},
+                "links": array_schema(
+                    object_schema(
+                        {
+                            "entityType": {"type": "string", "minLength": 1},
+                            "entityId": {"type": "string", "minLength": 1},
+                            "anchorKey": optional_nullable_string("Optional anchor key."),
+                        },
+                        required=["entityType", "entityId"],
+                    ),
+                    "Optional Forge entity links.",
+                ),
+            },
+            required=["title", "contentMarkdown"],
+        ),
+        "method_builder": wiki_upsert_page_method,
+        "path_builder": wiki_upsert_page_path,
+        "body_builder": wiki_upsert_page_body,
+        "write": True,
+    },
+    {
+        "name": "forge_sync_wiki_vault",
+        "description": "Resync Markdown files from the local wiki vault into Forge metadata.",
+        "parameters": object_schema(
+            {
+                "spaceId": optional_string("Optional wiki space id."),
+            }
+        ),
+        "method": "POST",
+        "path": "/api/v1/wiki/sync",
+        "write": True,
+    },
+    {
+        "name": "forge_reindex_wiki_embeddings",
+        "description": "Recompute wiki embedding chunks for one space and optional profile.",
+        "parameters": object_schema(
+            {
+                "spaceId": optional_string("Optional wiki space id."),
+                "profileId": optional_string("Optional embedding profile id."),
+            }
+        ),
+        "method": "POST",
+        "path": "/api/v1/wiki/reindex",
+        "write": True,
+    },
+    {
+        "name": "forge_ingest_wiki_source",
+        "description": "Ingest raw text, local files, or URLs into the wiki, preserving a raw source artifact and returning page plus proposal outputs.",
+        "parameters": object_schema(
+            {
+                "spaceId": optional_string("Optional wiki space id."),
+                "titleHint": optional_string("Optional title hint."),
+                "sourceKind": {"enum": ["raw_text", "local_path", "url"]},
+                "sourceText": optional_string("Inline source text."),
+                "sourcePath": optional_string("Absolute local path."),
+                "sourceUrl": optional_string("Remote URL."),
+                "mimeType": optional_string("Optional MIME type override."),
+                "llmProfileId": optional_string("Optional LLM profile id."),
+                "parseStrategy": {"enum": ["auto", "text_only", "multimodal"]},
+                "entityProposalMode": {"enum": ["none", "suggest"]},
+                "userId": optional_nullable_string("Optional Forge user id."),
+                "createAsKind": {"enum": ["wiki", "evidence"]},
+                "linkedEntityHints": array_schema(
+                    object_schema(
+                        {
+                            "entityType": {"type": "string", "minLength": 1},
+                            "entityId": {"type": "string", "minLength": 1},
+                            "anchorKey": optional_nullable_string("Optional anchor key."),
+                        },
+                        required=["entityType", "entityId"],
+                    ),
+                    "Optional linked-entity hints.",
+                ),
+            },
+            required=["sourceKind"],
+        ),
+        "method": "POST",
+        "path": "/api/v1/wiki/ingest-jobs",
+        "write": True,
+    },
+    {
+        "name": "forge_get_preferences_workspace",
+        "description": "Read Forge's current preference model for one user and domain, including the summary-first landing view, next comparison pair, concept libraries, map, table, and history.",
+        "parameters": object_schema(
+            {
+                "userId": optional_string("Optional Forge user id. Defaults to the operator."),
+                "domain": {"enum": PREFERENCE_DOMAINS},
+                "contextId": optional_string("Optional preference context id."),
+            }
+        ),
+        "method": "GET",
+        "path_builder": preference_workspace_path,
+    },
+    {
+        "name": "forge_start_preferences_game",
+        "description": "Start or refresh the Forge Preferences comparison game for one domain. Forge will seed matching Forge entities automatically for Forge-native domains and can seed a chosen concept catalog for broader taste domains.",
+        "parameters": object_schema(
+            {
+                "userId": {"type": "string", "minLength": 1},
+                "domain": {"enum": PREFERENCE_DOMAINS},
+                "contextId": optional_string("Optional preference context id."),
+                "catalogId": optional_string("Optional concept catalog id for seeded concept domains."),
+            },
+            required=["userId", "domain"],
+        ),
+        "method": "POST",
+        "path": "/api/v1/preferences/game/start",
+        "write": True,
+    },
+    {
+        "name": "forge_create_preferences_catalog",
+        "description": "Create a new editable concept list inside Forge Preferences for one user and domain.",
+        "parameters": object_schema(
+            {
+                "userId": {"type": "string", "minLength": 1},
+                "domain": {"enum": PREFERENCE_DOMAINS},
+                "title": {"type": "string", "minLength": 1},
+                "description": optional_string("Optional catalog description."),
+                "slug": optional_string("Optional stable slug."),
+            },
+            required=["userId", "domain", "title"],
+        ),
+        "method": "POST",
+        "path": "/api/v1/preferences/catalogs",
+        "write": True,
+    },
+    {
+        "name": "forge_update_preferences_catalog",
+        "description": "Rename or revise an existing Forge Preferences concept list.",
+        "parameters": object_schema(
+            {
+                "catalogId": {"type": "string", "minLength": 1},
+                "title": optional_string("Optional new title."),
+                "description": optional_string("Optional new description."),
+                "slug": optional_string("Optional new slug."),
+            },
+            required=["catalogId"],
+        ),
+        "method": "PATCH",
+        "path_builder": preference_catalog_path,
+        "body_builder": lambda args, _config: {
+            key: value for key, value in args.items() if key != "catalogId"
+        },
+        "write": True,
+    },
+    {
+        "name": "forge_delete_preferences_catalog",
+        "description": "Archive a Forge Preferences concept list and its editable item surface.",
+        "parameters": object_schema(
+            {
+                "catalogId": {"type": "string", "minLength": 1},
+            },
+            required=["catalogId"],
+        ),
+        "method": "DELETE",
+        "path_builder": preference_catalog_path,
+        "write": True,
+    },
+    {
+        "name": "forge_create_preferences_catalog_item",
+        "description": "Add a concept to an editable Forge Preferences list.",
+        "parameters": object_schema(
+            {
+                "catalogId": {"type": "string", "minLength": 1},
+                "label": {"type": "string", "minLength": 1},
+                "description": optional_string("Optional concept description."),
+                "tags": array_schema({"type": "string"}, "Optional concept tags."),
+                "featureWeights": PREFERENCE_FEATURE_WEIGHTS,
+                "position": {"type": "integer", "minimum": 0},
+            },
+            required=["catalogId", "label"],
+        ),
+        "method": "POST",
+        "path": "/api/v1/preferences/catalog-items",
+        "write": True,
+    },
+    {
+        "name": "forge_update_preferences_catalog_item",
+        "description": "Edit one concept inside a Forge Preferences list.",
+        "parameters": object_schema(
+            {
+                "itemId": {"type": "string", "minLength": 1},
+                "label": optional_string("Optional new label."),
+                "description": optional_string("Optional new description."),
+                "tags": array_schema({"type": "string"}, "Optional concept tags."),
+                "featureWeights": PREFERENCE_FEATURE_WEIGHTS,
+                "position": {"type": "integer", "minimum": 0},
+            },
+            required=["itemId"],
+        ),
+        "method": "PATCH",
+        "path_builder": preference_catalog_item_path,
+        "body_builder": lambda args, _config: {
+            key: value for key, value in args.items() if key != "itemId"
+        },
+        "write": True,
+    },
+    {
+        "name": "forge_delete_preferences_catalog_item",
+        "description": "Archive one concept from a Forge Preferences list.",
+        "parameters": object_schema(
+            {
+                "itemId": {"type": "string", "minLength": 1},
+            },
+            required=["itemId"],
+        ),
+        "method": "DELETE",
+        "path_builder": preference_catalog_item_path,
+        "write": True,
+    },
+    {
+        "name": "forge_create_preferences_context",
+        "description": "Create a contextual preference profile slice such as work, personal, discovery, or deep research.",
+        "parameters": object_schema(
+            {
+                "userId": {"type": "string", "minLength": 1},
+                "domain": {"enum": PREFERENCE_DOMAINS},
+                "name": {"type": "string", "minLength": 1},
+                "description": optional_string("Optional context description."),
+                "shareMode": {"enum": PREFERENCE_CONTEXT_SHARE_MODES},
+                "active": {"type": "boolean"},
+                "isDefault": {"type": "boolean"},
+                "decayDays": {"type": "integer", "minimum": 7, "maximum": 365},
+            },
+            required=["userId", "domain", "name"],
+        ),
+        "method": "POST",
+        "path": "/api/v1/preferences/contexts",
+        "write": True,
+    },
+    {
+        "name": "forge_update_preferences_context",
+        "description": "Edit a Forge Preferences context without changing its owning user or domain.",
+        "parameters": object_schema(
+            {
+                "contextId": {"type": "string", "minLength": 1},
+                "name": optional_string("Optional new context name."),
+                "description": optional_string("Optional new description."),
+                "shareMode": {"enum": PREFERENCE_CONTEXT_SHARE_MODES},
+                "active": {"type": "boolean"},
+                "isDefault": {"type": "boolean"},
+                "decayDays": {"type": "integer", "minimum": 7, "maximum": 365},
+            },
+            required=["contextId"],
+        ),
+        "method": "PATCH",
+        "path_builder": preference_context_path,
+        "body_builder": lambda args, _config: {
+            key: value for key, value in args.items() if key != "contextId"
+        },
+        "write": True,
+    },
+    {
+        "name": "forge_merge_preferences_contexts",
+        "description": "Merge one Forge Preferences context into another when the distinction is no longer useful.",
+        "parameters": object_schema(
+            {
+                "sourceContextId": {"type": "string", "minLength": 1},
+                "targetContextId": {"type": "string", "minLength": 1},
+            },
+            required=["sourceContextId", "targetContextId"],
+        ),
+        "method": "POST",
+        "path": "/api/v1/preferences/contexts/merge",
+        "write": True,
+    },
+    {
+        "name": "forge_create_preferences_item",
+        "description": "Create a direct preference item inside Forge when it does not already exist as a Forge entity or catalog concept.",
+        "parameters": object_schema(
+            {
+                "userId": {"type": "string", "minLength": 1},
+                "domain": {"enum": PREFERENCE_DOMAINS},
+                "label": {"type": "string", "minLength": 1},
+                "description": optional_string("Optional item description."),
+                "tags": array_schema({"type": "string"}, "Optional item tags."),
+                "featureWeights": PREFERENCE_FEATURE_WEIGHTS,
+                "sourceEntityType": optional_nullable_string("Optional source Forge entity type."),
+                "sourceEntityId": optional_nullable_string("Optional source Forge entity id."),
+                "metadata": {"type": "object"},
+                "queueForCompare": {"type": "boolean"},
+            },
+            required=["userId", "domain", "label"],
+        ),
+        "method": "POST",
+        "path": "/api/v1/preferences/items",
+        "write": True,
+    },
+    {
+        "name": "forge_update_preferences_item",
+        "description": "Edit a Forge Preferences item without changing its owning user or domain.",
+        "parameters": object_schema(
+            {
+                "itemId": {"type": "string", "minLength": 1},
+                "label": optional_string("Optional new label."),
+                "description": optional_string("Optional new description."),
+                "tags": array_schema({"type": "string"}, "Optional item tags."),
+                "featureWeights": PREFERENCE_FEATURE_WEIGHTS,
+                "sourceEntityType": optional_nullable_string("Optional source Forge entity type."),
+                "sourceEntityId": optional_nullable_string("Optional source Forge entity id."),
+                "metadata": {"type": "object"},
+                "queueForCompare": {"type": "boolean"},
+            },
+            required=["itemId"],
+        ),
+        "method": "PATCH",
+        "path_builder": preference_item_path,
+        "body_builder": lambda args, _config: {
+            key: value for key, value in args.items() if key != "itemId"
+        },
+        "write": True,
+    },
+    {
+        "name": "forge_enqueue_preferences_item_from_entity",
+        "description": "Queue an existing Forge entity into a preference domain so it can appear in the comparison game.",
+        "parameters": object_schema(
+            {
+                "userId": {"type": "string", "minLength": 1},
+                "domain": {"enum": PREFERENCE_DOMAINS},
+                "entityType": {"type": "string", "minLength": 1},
+                "entityId": {"type": "string", "minLength": 1},
+                "label": optional_string("Optional override label."),
+                "description": optional_string("Optional override description."),
+                "tags": array_schema({"type": "string"}, "Optional item tags."),
+            },
+            required=["userId", "domain", "entityType", "entityId"],
+        ),
+        "method": "POST",
+        "path": "/api/v1/preferences/items/from-entity",
+        "write": True,
+    },
+    {
+        "name": "forge_submit_preferences_judgment",
+        "description": "Record one pairwise comparison result in Forge Preferences.",
+        "parameters": object_schema(
+            {
+                "userId": {"type": "string", "minLength": 1},
+                "domain": {"enum": PREFERENCE_DOMAINS},
+                "contextId": {"type": "string", "minLength": 1},
+                "leftItemId": {"type": "string", "minLength": 1},
+                "rightItemId": {"type": "string", "minLength": 1},
+                "outcome": {"enum": PREFERENCE_JUDGMENT_OUTCOMES},
+                "strength": {"type": "number", "minimum": 0.5, "maximum": 2},
+                "responseTimeMs": {
+                    "anyOf": [
+                        {"type": "integer", "minimum": 0},
+                        {"type": "null"},
+                    ]
+                },
+                "reasonTags": array_schema({"type": "string"}, "Optional predefined reason tags."),
+            },
+            required=["userId", "domain", "contextId", "leftItemId", "rightItemId", "outcome"],
+        ),
+        "method": "POST",
+        "path": "/api/v1/preferences/judgments",
+        "write": True,
+    },
+    {
+        "name": "forge_submit_preferences_signal",
+        "description": "Record a direct non-pairwise preference signal such as favorite, veto, must-have, bookmark, neutral, or compare-later.",
+        "parameters": object_schema(
+            {
+                "userId": {"type": "string", "minLength": 1},
+                "domain": {"enum": PREFERENCE_DOMAINS},
+                "contextId": {"type": "string", "minLength": 1},
+                "itemId": {"type": "string", "minLength": 1},
+                "signalType": {"enum": PREFERENCE_SIGNAL_TYPES},
+                "strength": {"type": "number", "minimum": 0.5, "maximum": 2},
+            },
+            required=["userId", "domain", "contextId", "itemId", "signalType"],
+        ),
+        "method": "POST",
+        "path": "/api/v1/preferences/signals",
+        "write": True,
+    },
+    {
+        "name": "forge_update_preferences_score",
+        "description": "Override or protect the inferred state of one preference item when the user wants explicit correction.",
+        "parameters": object_schema(
+            {
+                "itemId": {"type": "string", "minLength": 1},
+                "userId": {"type": "string", "minLength": 1},
+                "domain": {"enum": PREFERENCE_DOMAINS},
+                "contextId": {"type": "string", "minLength": 1},
+                "manualStatus": {
+                    "anyOf": [
+                        {"enum": PREFERENCE_ITEM_STATUSES},
+                        {"type": "null"},
+                    ]
+                },
+                "manualScore": {
+                    "anyOf": [
+                        {"type": "number"},
+                        {"type": "null"},
+                    ]
+                },
+                "confidenceLock": {
+                    "anyOf": [
+                        {"type": "number", "minimum": 0, "maximum": 1},
+                        {"type": "null"},
+                    ]
+                },
+                "bookmarked": {"type": "boolean"},
+                "compareLater": {"type": "boolean"},
+                "frozen": {"type": "boolean"},
+            },
+            required=["itemId", "userId", "domain", "contextId"],
+        ),
+        "method": "PATCH",
+        "path_builder": preference_score_path,
+        "body_builder": lambda args, _config: {
+            key: value for key, value in args.items() if key != "itemId"
+        },
+        "write": True,
     },
     {
         "name": "forge_get_ui_entrypoint",

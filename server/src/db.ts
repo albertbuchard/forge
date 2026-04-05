@@ -27,6 +27,10 @@ function getDataDir(): string {
   return path.join(dataRoot, "data");
 }
 
+export function resolveDataDir(): string {
+  return getDataDir();
+}
+
 function getDatabasePath(): string {
   return path.join(getDataDir(), "forge.sqlite");
 }

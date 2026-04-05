@@ -21,6 +21,8 @@ tmp-width-probe.cjs
 openclaw-plugin/*.tgz
 openclaw-plugin/data/
 plugins/forge-codex/runtime/data/
+ios-companion/ForgeCompanion/**/*.xcuserstate
+ios-companion/ForgeCompanion/**/xcuserdata/
 # Keep publishable plugin manifests and bundled runtime assets trackable.
 !openclaw-plugin/package.json
 !openclaw-plugin/openclaw.plugin.json

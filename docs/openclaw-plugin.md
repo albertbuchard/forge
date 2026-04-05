@@ -49,6 +49,34 @@ The intended workflow is:
 - store agent-authored recommendations with `forge_post_insight`
 - use `forge_get_ui_entrypoint` when the user should continue in the visual Forge UI
 
+## Preferences Workspace
+
+Forge now treats Preferences as a first-class product area.
+
+The UI behavior is:
+
+- arrive on what Forge already knows about the selected user's preferences
+- if the model is weak, say that clearly and show one prominent `Start the game` action
+- run the comparison flow inside a modal with two simple cards instead of an inline form
+- seed Forge-native domains from real Forge entities automatically
+- seed broader taste domains from editable concept libraries
+
+The current concept-library domains are:
+
+- `food`
+- `activities`
+- `places`
+- `countries`
+- `fashion`
+- `people`
+- `media`
+- `tools`
+
+The runtime surface lives under `/api/v1/preferences/*`.
+Hermes exposes dedicated Preferences tools directly, while OpenClaw should use
+the live onboarding contract for exact route-facing fields and prefer a UI
+handoff when the user wants to play the comparison game visually.
+
 ## Notes contract
 
 Forge notes are the durable collaboration record across the app, API, and plugin surface.
@@ -128,11 +156,20 @@ Current strategy metrics are deliberately concrete:
 - active and next nodes are incomplete nodes whose dependencies are already
   complete
 - target progress comes from linked goals and projects
-- `alignmentScore` is
-  `round((average node progress * 0.7 + average target progress * 0.3) * 100)`
+- `planCoverageScore` measures how much of the graph and end targets are
+  genuinely moving or complete
+- `sequencingScore` penalizes out-of-order execution
+- `scopeDisciplineScore` penalizes off-plan work happening inside the strategy
+  scope
+- `qualityScore` reflects blocked nodes and weak end-target completion
+- `alignmentScore` is the weighted blend of those four scores
 
 That is enough for a user or agent to inspect the current plan honestly instead
 of treating strategy as only a narrative note.
+
+Forge also now exposes per-user XP summaries through the user directory so
+humans and bot agents can each accumulate their own visible reward trail while
+still collaborating inside one shared runtime.
 
 The plugin no longer mirrors every Forge route. Forge itself still has the full `/api/v1` surface for the web app and internal runtime.
 Instead, the plugin exposes the parts the agent actually needs: overview, current context, Psyche and XP reads, batch entity mutations, signed minute corrections, completion-style retroactive work logging, real task-run control, insight posting, and UI entry.

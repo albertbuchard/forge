@@ -1,7 +1,13 @@
 import { z } from "zod";
+import { userSummarySchema } from "./types.js";
 const trimmedString = z.string().trim();
 const nonEmptyTrimmedString = trimmedString.min(1);
 const uniqueStringArraySchema = z.array(nonEmptyTrimmedString);
+const optionalOwnedUserIdSchema = z.string().trim().min(1).nullable().optional();
+const ownedEntityFieldsSchema = {
+    userId: optionalOwnedUserIdSchema,
+    user: userSummarySchema.nullable().optional()
+};
 export const triggerReportStatusSchema = z.enum(["draft", "reviewed", "integrated"]);
 export const behaviorKindSchema = z.enum(["away", "committed", "recovery"]);
 export const beliefTypeSchema = z.enum(["absolute", "conditional"]);
@@ -42,7 +48,8 @@ export const eventTypeSchema = z.object({
     description: trimmedString,
     system: z.boolean(),
     createdAt: z.string(),
-    updatedAt: z.string()
+    updatedAt: z.string(),
+    ...ownedEntityFieldsSchema
 });
 export const emotionDefinitionSchema = z.object({
     id: z.string(),
@@ -52,7 +59,8 @@ export const emotionDefinitionSchema = z.object({
     category: trimmedString,
     system: z.boolean(),
     createdAt: z.string(),
-    updatedAt: z.string()
+    updatedAt: z.string(),
+    ...ownedEntityFieldsSchema
 });
 export const psycheValueSchema = z.object({
     id: z.string(),
@@ -66,7 +74,8 @@ export const psycheValueSchema = z.object({
     linkedTaskIds: uniqueStringArraySchema.default([]),
     committedActions: z.array(trimmedString).default([]),
     createdAt: z.string(),
-    updatedAt: z.string()
+    updatedAt: z.string(),
+    ...ownedEntityFieldsSchema
 });
 export const behaviorPatternSchema = z.object({
     id: z.string(),
@@ -84,7 +93,8 @@ export const behaviorPatternSchema = z.object({
     linkedModeIds: uniqueStringArraySchema.default([]),
     linkedBeliefIds: uniqueStringArraySchema.default([]),
     createdAt: z.string(),
-    updatedAt: z.string()
+    updatedAt: z.string(),
+    ...ownedEntityFieldsSchema
 });
 export const behaviorSchema = z.object({
     id: z.string(),
@@ -103,7 +113,8 @@ export const behaviorSchema = z.object({
     linkedSchemaIds: uniqueStringArraySchema.default([]),
     linkedModeIds: uniqueStringArraySchema.default([]),
     createdAt: z.string(),
-    updatedAt: z.string()
+    updatedAt: z.string(),
+    ...ownedEntityFieldsSchema
 });
 export const beliefEntrySchema = z.object({
     id: z.string(),
@@ -121,7 +132,8 @@ export const beliefEntrySchema = z.object({
     linkedModeIds: uniqueStringArraySchema.default([]),
     linkedReportIds: uniqueStringArraySchema.default([]),
     createdAt: z.string(),
-    updatedAt: z.string()
+    updatedAt: z.string(),
+    ...ownedEntityFieldsSchema
 });
 export const modeProfileSchema = z.object({
     id: z.string(),
@@ -142,7 +154,8 @@ export const modeProfileSchema = z.object({
     linkedBehaviorIds: uniqueStringArraySchema.default([]),
     linkedValueIds: uniqueStringArraySchema.default([]),
     createdAt: z.string(),
-    updatedAt: z.string()
+    updatedAt: z.string(),
+    ...ownedEntityFieldsSchema
 });
 export const modeTimelineEntrySchema = z.object({
     id: z.string(),
@@ -168,7 +181,8 @@ export const modeGuideSessionSchema = z.object({
     answers: z.array(modeGuideAnswerSchema),
     results: z.array(modeGuideResultSchema),
     createdAt: z.string(),
-    updatedAt: z.string()
+    updatedAt: z.string(),
+    ...ownedEntityFieldsSchema
 });
 export const triggerEmotionSchema = z.object({
     id: z.string(),
@@ -222,7 +236,8 @@ export const triggerReportSchema = z.object({
     modeTimeline: z.array(modeTimelineEntrySchema).default([]),
     nextMoves: z.array(trimmedString).default([]),
     createdAt: z.string(),
-    updatedAt: z.string()
+    updatedAt: z.string(),
+    ...ownedEntityFieldsSchema
 });
 export const schemaPressureEntrySchema = z.object({
     schemaId: z.string(),
@@ -251,7 +266,8 @@ export const createPsycheValueSchema = z.object({
     linkedGoalIds: uniqueStringArraySchema.default([]),
     linkedProjectIds: uniqueStringArraySchema.default([]),
     linkedTaskIds: uniqueStringArraySchema.default([]),
-    committedActions: z.array(trimmedString).default([])
+    committedActions: z.array(trimmedString).default([]),
+    userId: optionalOwnedUserIdSchema
 });
 export const updatePsycheValueSchema = createPsycheValueSchema.partial();
 export const createBehaviorPatternSchema = z.object({
@@ -266,7 +282,8 @@ export const createBehaviorPatternSchema = z.object({
     linkedSchemaLabels: z.array(trimmedString).default([]),
     linkedModeLabels: z.array(trimmedString).default([]),
     linkedModeIds: uniqueStringArraySchema.default([]),
-    linkedBeliefIds: uniqueStringArraySchema.default([])
+    linkedBeliefIds: uniqueStringArraySchema.default([]),
+    userId: optionalOwnedUserIdSchema
 });
 export const updateBehaviorPatternSchema = createBehaviorPatternSchema.partial();
 export const createBehaviorSchema = z.object({
@@ -282,7 +299,8 @@ export const createBehaviorSchema = z.object({
     linkedPatternIds: uniqueStringArraySchema.default([]),
     linkedValueIds: uniqueStringArraySchema.default([]),
     linkedSchemaIds: uniqueStringArraySchema.default([]),
-    linkedModeIds: uniqueStringArraySchema.default([])
+    linkedModeIds: uniqueStringArraySchema.default([]),
+    userId: optionalOwnedUserIdSchema
 });
 export const updateBehaviorSchema = createBehaviorSchema.partial();
 export const createBeliefEntrySchema = z.object({
@@ -297,7 +315,8 @@ export const createBeliefEntrySchema = z.object({
     linkedValueIds: uniqueStringArraySchema.default([]),
     linkedBehaviorIds: uniqueStringArraySchema.default([]),
     linkedModeIds: uniqueStringArraySchema.default([]),
-    linkedReportIds: uniqueStringArraySchema.default([])
+    linkedReportIds: uniqueStringArraySchema.default([]),
+    userId: optionalOwnedUserIdSchema
 });
 export const updateBeliefEntrySchema = createBeliefEntrySchema.partial();
 export const createModeProfileSchema = z.object({
@@ -315,23 +334,27 @@ export const createModeProfileSchema = z.object({
     firstAppearanceAt: trimmedString.nullable().default(null),
     linkedPatternIds: uniqueStringArraySchema.default([]),
     linkedBehaviorIds: uniqueStringArraySchema.default([]),
-    linkedValueIds: uniqueStringArraySchema.default([])
+    linkedValueIds: uniqueStringArraySchema.default([]),
+    userId: optionalOwnedUserIdSchema
 });
 export const updateModeProfileSchema = createModeProfileSchema.partial();
 export const createModeGuideSessionSchema = z.object({
     summary: nonEmptyTrimmedString,
-    answers: z.array(modeGuideAnswerSchema).min(1)
+    answers: z.array(modeGuideAnswerSchema).min(1),
+    userId: optionalOwnedUserIdSchema
 });
 export const updateModeGuideSessionSchema = createModeGuideSessionSchema.partial();
 export const createEventTypeSchema = z.object({
     label: nonEmptyTrimmedString,
-    description: trimmedString.default("")
+    description: trimmedString.default(""),
+    userId: optionalOwnedUserIdSchema
 });
 export const updateEventTypeSchema = createEventTypeSchema.partial();
 export const createEmotionDefinitionSchema = z.object({
     label: nonEmptyTrimmedString,
     description: trimmedString.default(""),
-    category: trimmedString.default("")
+    category: trimmedString.default(""),
+    userId: optionalOwnedUserIdSchema
 });
 export const updateEmotionDefinitionSchema = createEmotionDefinitionSchema.partial();
 export const createTriggerReportSchema = z.object({
@@ -361,6 +384,7 @@ export const createTriggerReportSchema = z.object({
     modeOverlays: z.array(trimmedString).default([]),
     schemaLinks: z.array(trimmedString).default([]),
     modeTimeline: z.array(modeTimelineEntrySchema.omit({ id: true }).extend({ id: z.string().optional() })).default([]),
-    nextMoves: z.array(trimmedString).default([])
+    nextMoves: z.array(trimmedString).default([]),
+    userId: optionalOwnedUserIdSchema
 });
 export const updateTriggerReportSchema = createTriggerReportSchema.partial();

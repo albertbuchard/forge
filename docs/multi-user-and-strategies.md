@@ -177,6 +177,9 @@ The browser UI is where the shared user scope becomes most visible:
 - the shell-level scope selector can focus on one user, humans, bots, or all
 - strategy pages, search bars, detail views, notes, and calendar linking all
   surface ownership directly
+- the Users page includes a directed graph editor for relationship rights plus
+  per-user XP summaries so the operator can see which human or bot is moving
+  real work
 
 ## User Creation Checklist
 
@@ -321,19 +324,28 @@ Target progress is computed from:
 
 ### Alignment score
 
-The current alignment score is:
+The current implementation now breaks alignment into four concrete pieces:
 
-```text
-round((average node progress * 0.7 + average target progress * 0.3) * 100)
-```
+- `planCoverageScore`: how much of the graph and end targets are genuinely
+  moving or complete
+- `sequencingScore`: whether work is being done in the agreed order
+- `scopeDisciplineScore`: whether off-plan work is appearing inside the
+  strategy scope
+- `qualityScore`: whether blocked nodes and weak end-target completion are
+  dragging the plan down
 
-That weighting means:
+`alignmentScore` is the weighted blend of those four scores.
 
-- most of the score comes from progress through the actual strategy sequence
-- some of the score comes from the end-state targets the strategy is meant to land
+That keeps the metric close to the user's actual question:
 
-This gives the user a readable planning number without pretending it is more
-precise than the underlying execution data.
+- are we doing the planned work at all
+- are we doing it in order
+- are we doing extra work that was not agreed
+- are we doing the work well enough to land the intended end state
+
+Forge also now rolls XP up per user in the shared directory so the human and
+each bot can accumulate their own visible reward trail while still
+participating in one collaborative strategy system.
 
 ## Recommended Strategy Authoring Pattern
 

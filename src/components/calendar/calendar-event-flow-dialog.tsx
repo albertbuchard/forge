@@ -32,6 +32,8 @@ type EventDraft = {
   title: string;
   description: string;
   location: string;
+  placeAddress: string;
+  placeTimezone: string;
   startAtLocal: string;
   endAtLocal: string;
   timezone: string;
@@ -69,6 +71,15 @@ function createDraft(
     title: string;
     description: string;
     location: string;
+    place?: {
+      label?: string;
+      address?: string;
+      timezone?: string;
+      latitude?: number | null;
+      longitude?: number | null;
+      source?: string;
+      externalPlaceId?: string;
+    };
     startAt: string;
     endAt: string;
     timezone: string;
@@ -85,6 +96,8 @@ function createDraft(
     title: seed?.title ?? event?.title ?? "",
     description: seed?.description ?? event?.description ?? "",
     location: seed?.location ?? event?.location ?? "",
+    placeAddress: seed?.place?.address ?? event?.place?.address ?? "",
+    placeTimezone: seed?.place?.timezone ?? event?.place?.timezone ?? "",
     startAtLocal: event
       ? toLocalInputValue(event.startAt)
       : seed?.startAt
@@ -137,6 +150,15 @@ export function CalendarEventFlowDialog({
     title: string;
     description: string;
     location: string;
+    place?: {
+      label?: string;
+      address?: string;
+      timezone?: string;
+      latitude?: number | null;
+      longitude?: number | null;
+      source?: string;
+      externalPlaceId?: string;
+    };
     startAt: string;
     endAt: string;
     timezone: string;
@@ -149,6 +171,15 @@ export function CalendarEventFlowDialog({
     title: string;
     description?: string;
     location?: string;
+    place?: {
+      label?: string;
+      address?: string;
+      timezone?: string;
+      latitude?: number | null;
+      longitude?: number | null;
+      source?: string;
+      externalPlaceId?: string;
+    };
     startAt: string;
     endAt: string;
     timezone?: string;
@@ -224,6 +255,20 @@ export function CalendarEventFlowDialog({
                 value={value.location}
                 onChange={(next) => setValue({ location: next.target.value })}
                 placeholder="Clinic room 2 or Zoom"
+              />
+            </FlowField>
+            <FlowField label="Place address">
+              <Input
+                value={value.placeAddress}
+                onChange={(next) => setValue({ placeAddress: next.target.value })}
+                placeholder="Bahnhofstrasse 10, Zurich"
+              />
+            </FlowField>
+            <FlowField label="Place timezone">
+              <Input
+                value={value.placeTimezone}
+                onChange={(next) => setValue({ placeTimezone: next.target.value })}
+                placeholder="Europe/Zurich"
               />
             </FlowField>
           </div>
@@ -440,6 +485,15 @@ export function CalendarEventFlowDialog({
           title: draft.title.trim(),
           description: draft.description.trim(),
           location: draft.location.trim(),
+          place: {
+            label: draft.location.trim(),
+            address: draft.placeAddress.trim(),
+            timezone: draft.placeTimezone.trim(),
+            latitude: null,
+            longitude: null,
+            source: draft.placeAddress.trim() ? "manual" : "",
+            externalPlaceId: ""
+          },
           startAt: new Date(draft.startAtLocal).toISOString(),
           endAt: new Date(draft.endAtLocal).toISOString(),
           timezone: draft.timezone.trim() || "UTC",

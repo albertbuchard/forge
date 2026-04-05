@@ -47,6 +47,20 @@ Seventh, it must support collaborative multi-user work between humans and bots. 
 human-owned project may legitimately link to bot-owned tasks, a bot may hold its own
 goals and strategies, and the user must be able to intentionally widen search or list
 views to other users instead of being trapped inside one invisible owner namespace.
+Eighth, it must support a native iPhone companion that can pair securely with a local
+Forge runtime, request Apple permissions directly, import HealthKit sleep and workout
+data, and turn that mobile-native context into structured Forge records instead of
+opaque wellness blobs. After pairing, that companion should default to Forge itself in
+a full-screen embedded web view, with native iOS controls reserved for permissions,
+sync, and device-specific settings.
+Ninth, it must support Preferences as a first-class domain. Forge should be able to
+learn and store what a user prefers across concrete domains and contexts through a
+fully algorithmic system of pairwise comparisons, direct preference signals, explicit
+uncertainty, inspectable inferred scores, and editable overrides without depending on
+LLMs for the inference loop. That preference system must now be arrival-first: show
+what Forge knows before asking for setup work, admit clearly when evidence is still
+thin, and launch comparison rounds through one simple Start the game flow that chooses
+a domain or concept area and then auto-populates the candidates.
 
 ## Product Concepts That Must Be Explained Clearly
 
@@ -85,6 +99,49 @@ other Forge entities, and a structured non-cyclic directed graph of task or proj
 steps. The graph can branch, but it must remain a DAG with a sensible initial side and
 an end-state side. Strategies are how Forge represents “how this unfolds over time,”
 not just “what exists right now.”
+
+A preference profile is the top-level record for one user's preferences within one
+domain. It owns contexts, comparable items, judgments, direct signals, inferred item
+scores, interpretable dimensions, and snapshots of the learned model over time. A
+preference profile is not a vague recommendation blob. It is an auditable model state
+that answers what Forge currently thinks the user likes, in what context, with what
+confidence.
+
+A preference context is a named mode inside one preference profile, such as Work,
+Personal, Discovery, or Deep Research. Contexts let the same user express different
+preferences under different operating conditions. A context can be active or disabled,
+can be the default for a profile, and can inherit or isolate evidence depending on
+its configured sharing mode.
+
+A preference item is a comparable object inside a preference profile. It can be a
+standalone item described directly in the Preferences workspace, or it can be linked
+to another Forge entity such as a goal, project, task, strategy, habit, note, or
+calendar event. Preference items carry tags, interpretable dimension weights, and
+free-text explanation fields so the user can inspect or correct what the model is
+learning from.
+
+A preference concept library is the editable source list that Forge can use to seed
+comparison candidates for one preference profile and domain. Some libraries come from
+Forge entities, while others begin as hardcoded starter concept lists such as food,
+activities, places, countries, media, fashion, or person-style concepts. Once loaded
+into Forge they become ordinary user-editable records, because the system should not
+trap the user inside an unchangeable default taxonomy.
+
+A pairwise judgment is a single comparison between two preference items inside a
+context. It records which side won, whether the judgment was strong, tied, skipped,
+or uncertain, optional reason tags, response time, and source attribution.
+
+An absolute signal is a direct preference action such as favorite, veto, must-have,
+bookmark, neutral, or compare-later. These signals matter because some preferences are
+constraints rather than rankings.
+
+An item score is the inferred state of one preference item inside one context. It
+stores latent score, confidence, uncertainty, evidence count, derived status,
+dominant dimensions, and optional manual overrides or locks. This is the state the UI
+should explain, not hide.
+
+A preference snapshot is a stored checkpoint of the inferred model for a context at a
+moment in time. Snapshots make preference drift, flips, and stale evidence visible.
 
 A habit is a recurring commitment tracked separately from tasks. Habits need their own
 management surface, recurrence rules, and clear XP consequences so they do not become
@@ -137,6 +194,21 @@ identities are therefore not the event itself. Forge keeps the canonical event r
 keeps provider source mappings separately, and keeps event-to-entity links separately
 so calendar meaning can connect back to goals, projects, tasks, habits, notes, and
 other Forge records without depending on remote provider payloads.
+Calendar events now also need future-ready place structure. A readable location string
+is still useful, but Forge must also preserve a structured place label, address,
+timezone, coordinates when known, and future provider identifiers so location-aware
+planning and travel reasoning can build on the existing event system.
+
+Sleep sessions are now first-class Forge records imported from the iOS companion. A
+sleep session records start and end, total sleep, time in bed, stage breakdown when
+available, derived recovery and regularity metrics, annotations, provenance, and links
+back to goals, projects, tasks, habits, notes, and Psyche entities.
+
+Workout sessions are now first-class Forge records imported from the iOS companion or
+generated from habits. A workout session records its type, timing, energy, distance,
+heart-rate context when available, subjective annotations, provenance, and links back
+to Forge and Psyche records. Imported HealthKit workouts and habit-generated workouts
+must reconcile rather than piling up as duplicate sessions.
 
 Rewards are the structured XP outcomes attached to meaningful behavior. Starting work,
 sustaining work, completing work, and preserving momentum should all create explainable
@@ -153,6 +225,27 @@ short-term memory, episodic memory, semantic memory, and procedural memory. Note
 also be durable or ephemeral: if a destroy time is set, Forge must automatically
 remove the note once that time passes instead of leaving expired scratch context
 behind indefinitely.
+
+That document layer must now grow into a first-class Wiki memory system instead of
+remaining only an evidence log. Forge needs a dedicated Wiki workspace where canonical
+knowledge lives as local markdown files plus media assets on disk, while Forge keeps a
+synced SQLite metadata, backlink, and search index on top. Evidence notes and richer
+wiki pages are two kinds of the same local-first document system, not two unrelated
+products. Wiki pages must support `[[page]]` links, links to Forge entities,
+backlinks, per-user and shared spaces, and optional semantic search driven by
+user-configured embedding profiles, while lexical search and entity-linked search
+remain available even when embeddings are disabled.
+That wiki surface must be reading-first. The space home is an `index` page, not an
+editor. The primary browse surface should present a hierarchical page index on the
+left, article content in the center, and article-authored metadata infoboxes rendered
+from markdown directives rather than generic app chrome.
+
+Forge also needs an auto-ingest path into that Wiki layer. The current production
+runtime can begin with raw text, local-path, and URL ingest, but the product
+direction is explicitly multimodal: documents, images, audio, and video should flow
+into stored media assets, compiled wiki pages, and suggested Forge entities through
+LLM-backed ingestion profiles. The ingest flow must remain file-first and
+inspection-first so the user can always see and manage the resulting artifacts.
 
 Psyche is Forge's structured reflection domain. It contains values, beliefs and
 schemas, behaviors, modes, patterns, reports, and the goal map. These records help the
@@ -183,6 +276,10 @@ project from linking to a bot-owned task, a bot-owned strategy from pointing at 
 human-owned goal, or a note from referencing entities across user boundaries. Ownership
 and relationship are separate ideas: ownership answers “whose record is this,” while
 links answer “what does this record connect to.”
+That same rule applies inside Preferences. A human user must be able to create a
+preference item that points at a bot-owned strategy or task if that is what they are
+actually evaluating. The preference record belongs to the evaluating user, while the
+linked entity can belong to another user.
 
 The execution experience is a flagship responsibility. The Kanban board must be
 stable, readable, responsive, and physically trustworthy. Columns must not overlap,
@@ -217,6 +314,10 @@ Responsive behavior is part of the product contract. Every web-facing surface mu
 designed for both desktop and mobile at the same time. A mobile screen is not allowed
 to be a broken or compressed version of desktop. If a surface contains dense data, the
 mobile version must intentionally reorganize it rather than letting it overflow.
+That same requirement now applies to the companion architecture: the iOS app is not a
+web wrapper. It is a native SwiftUI and Apple-framework surface designed around phone
+permissions, background sync, and future watch or location capabilities, while the main
+Forge web runtime remains the primary reflective workspace.
 
 Multi-user behavior is also part of the contract. The main list routes, snapshot
 payloads, entity detail routes, and search routes must all understand explicit user
@@ -275,7 +376,9 @@ mounted under `/forge/`. The public contract is a versioned REST API with an Ope
 3.1 document at `/api/v1/openapi.json`. Agent adapters currently span the published
 OpenClaw plugin, a Hermes Agent plugin packaged as a Python distribution with a
 `hermes_agent.plugins` entry point plus bundled runtime assets, and a repo-local Codex
-MCP plugin.
+MCP plugin. The Wiki memory layer is part of that same stack: markdown and media files
+are canonical on the local filesystem, while Fastify and SQLite provide metadata,
+backlinks, search indexes, ingest jobs, and optional embedding-profile state.
 
 Forge also has a long-term canonical desktop architecture that remains binding even
 while the current Node bridge is in place. That canonical architecture is Tauri 2 with

@@ -93,6 +93,13 @@ type CalendarEventRow = {
   title: string;
   description: string;
   location: string;
+  place_label: string;
+  place_address: string;
+  place_timezone: string;
+  place_latitude: number | null;
+  place_longitude: number | null;
+  place_source: string;
+  place_external_id: string;
   start_at: string;
   end_at: string;
   timezone: string;
@@ -368,6 +375,15 @@ function mapEvent(row: CalendarEventRow) {
     title: row.title,
     description: row.description,
     location: row.location,
+    place: {
+      label: row.place_label,
+      address: row.place_address,
+      timezone: row.place_timezone,
+      latitude: row.place_latitude,
+      longitude: row.place_longitude,
+      source: row.place_source,
+      externalPlaceId: row.place_external_id
+    },
     startAt: row.start_at,
     endAt: row.end_at,
     timezone: normalizeTimezone(row.timezone),
@@ -793,6 +809,7 @@ export function listCalendarEvents(
   const rows = getDatabase()
     .prepare(
       `SELECT id, preferred_connection_id, preferred_calendar_id, ownership, origin_type, status, title, description, location,
+              place_label, place_address, place_timezone, place_latitude, place_longitude, place_source, place_external_id,
               start_at, end_at, timezone, is_all_day, availability, event_type, categories_json, deleted_at, created_at, updated_at
        FROM forge_events
        WHERE ${clauses.join(" AND ")}
@@ -806,6 +823,7 @@ export function getCalendarEventById(eventId: string) {
   const row = getDatabase()
     .prepare(
       `SELECT id, preferred_connection_id, preferred_calendar_id, ownership, origin_type, status, title, description, location,
+              place_label, place_address, place_timezone, place_latitude, place_longitude, place_source, place_external_id,
               start_at, end_at, timezone, is_all_day, availability, event_type, categories_json, deleted_at, created_at, updated_at
        FROM forge_events
        WHERE id = ?`
@@ -818,6 +836,7 @@ export function getCalendarEventStorageRecord(eventId: string) {
   return getDatabase()
     .prepare(
       `SELECT id, preferred_connection_id, preferred_calendar_id, ownership, origin_type, status, title, description, location,
+              place_label, place_address, place_timezone, place_latitude, place_longitude, place_source, place_external_id,
               start_at, end_at, timezone, is_all_day, availability, event_type, categories_json, deleted_at, created_at, updated_at
        FROM forge_events
        WHERE id = ?`
@@ -830,6 +849,8 @@ export function getCalendarEventByRemoteId(connectionId: string, calendarId: str
     .prepare(
       `SELECT forge_events.id, forge_events.preferred_connection_id, forge_events.preferred_calendar_id, forge_events.ownership,
               forge_events.origin_type, forge_events.status, forge_events.title, forge_events.description, forge_events.location,
+              forge_events.place_label, forge_events.place_address, forge_events.place_timezone, forge_events.place_latitude,
+              forge_events.place_longitude, forge_events.place_source, forge_events.place_external_id,
               forge_events.start_at, forge_events.end_at, forge_events.timezone, forge_events.is_all_day, forge_events.availability,
               forge_events.event_type, forge_events.categories_json, forge_events.deleted_at, forge_events.created_at, forge_events.updated_at
        FROM forge_event_sources
@@ -1008,6 +1029,7 @@ export function upsertCalendarEventRecord(connectionId: string, input: CalendarS
       .prepare(
         `UPDATE forge_events
          SET preferred_connection_id = ?, preferred_calendar_id = ?, ownership = ?, origin_type = ?, status = ?, title = ?, description = ?, location = ?,
+             place_label = ?, place_address = ?, place_timezone = ?, place_latitude = ?, place_longitude = ?, place_source = ?, place_external_id = ?,
              start_at = ?, end_at = ?, timezone = ?, is_all_day = ?, availability = ?, event_type = ?, categories_json = ?, deleted_at = ?, updated_at = ?
          WHERE id = ?`
       )
@@ -1020,6 +1042,13 @@ export function upsertCalendarEventRecord(connectionId: string, input: CalendarS
         input.title,
         input.description ?? "",
         input.location ?? "",
+        input.location ?? "",
+        "",
+        "",
+        null,
+        null,
+        "",
+        "",
         input.startAt,
         input.endAt,
         calendar.timezone,
@@ -1059,9 +1088,10 @@ export function upsertCalendarEventRecord(connectionId: string, input: CalendarS
     .prepare(
       `INSERT INTO forge_events (
          id, preferred_connection_id, preferred_calendar_id, ownership, origin_type, status, title, description, location,
+         place_label, place_address, place_timezone, place_latitude, place_longitude, place_source, place_external_id,
          start_at, end_at, timezone, is_all_day, availability, event_type, categories_json, deleted_at, created_at, updated_at
        )
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
     .run(
       id,
@@ -1073,6 +1103,13 @@ export function upsertCalendarEventRecord(connectionId: string, input: CalendarS
       input.title,
       input.description ?? "",
       input.location ?? "",
+      input.location ?? "",
+      "",
+      "",
+      null,
+      null,
+      "",
+      "",
       input.startAt,
       input.endAt,
       calendar.timezone,
@@ -1110,6 +1147,15 @@ export function upsertCalendarEventRecord(connectionId: string, input: CalendarS
 export function createCalendarEvent(input: CreateCalendarEventInput) {
   const now = nowIso();
   const id = `calevent_${randomUUID().replaceAll("-", "").slice(0, 10)}`;
+  const place = input.place ?? {
+    label: "",
+    address: "",
+    timezone: "",
+    latitude: null,
+    longitude: null,
+    source: "",
+    externalPlaceId: ""
+  };
   const preferredCalendar =
     input.preferredCalendarId === undefined
       ? getDefaultWritableCalendar() ?? null
@@ -1121,17 +1167,28 @@ export function createCalendarEvent(input: CreateCalendarEventInput) {
     .prepare(
       `INSERT INTO forge_events (
          id, preferred_connection_id, preferred_calendar_id, ownership, origin_type, status, title, description, location,
+         place_label, place_address, place_timezone, place_latitude, place_longitude, place_source, place_external_id,
          start_at, end_at, timezone, is_all_day, availability, event_type, categories_json, created_at, updated_at
        )
-       VALUES (?, ?, ?, 'forge', 'native', 'confirmed', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
     .run(
       id,
       preferredCalendar?.connectionId ?? null,
       preferredCalendar?.id ?? null,
+      "forge",
+      "native",
+      "confirmed",
       input.title,
       input.description,
       input.location,
+      place.label || input.location,
+      place.address,
+      place.timezone,
+      place.latitude,
+      place.longitude,
+      place.source,
+      place.externalPlaceId,
       input.startAt,
       input.endAt,
       normalizeTimezone(input.timezone),
@@ -1179,6 +1236,22 @@ export function updateCalendarEvent(
     title: patch.title ?? current.title,
     description: patch.description ?? current.description,
     location: patch.location ?? current.location,
+    place: {
+      label: patch.place?.label ?? current.place.label,
+      address: patch.place?.address ?? current.place.address,
+      timezone: patch.place?.timezone ?? current.place.timezone,
+      latitude:
+        patch.place?.latitude === undefined
+          ? current.place.latitude
+          : patch.place.latitude,
+      longitude:
+        patch.place?.longitude === undefined
+          ? current.place.longitude
+          : patch.place.longitude,
+      source: patch.place?.source ?? current.place.source,
+      externalPlaceId:
+        patch.place?.externalPlaceId ?? current.place.externalPlaceId
+    },
     startAt: patch.startAt ?? current.startAt,
     endAt: patch.endAt ?? current.endAt,
     timezone: normalizeTimezone(patch.timezone ?? current.timezone),
@@ -1193,6 +1266,7 @@ export function updateCalendarEvent(
     .prepare(
       `UPDATE forge_events
        SET preferred_connection_id = ?, preferred_calendar_id = ?, title = ?, description = ?, location = ?,
+           place_label = ?, place_address = ?, place_timezone = ?, place_latitude = ?, place_longitude = ?, place_source = ?, place_external_id = ?,
            start_at = ?, end_at = ?, timezone = ?, is_all_day = ?, availability = ?, event_type = ?, categories_json = ?, updated_at = ?
        WHERE id = ?`
     )
@@ -1202,6 +1276,13 @@ export function updateCalendarEvent(
       next.title,
       next.description,
       next.location,
+      next.place.label,
+      next.place.address,
+      next.place.timezone,
+      next.place.latitude,
+      next.place.longitude,
+      next.place.source,
+      next.place.externalPlaceId,
       next.startAt,
       next.endAt,
       next.timezone,

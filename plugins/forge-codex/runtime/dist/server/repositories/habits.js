@@ -1,6 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { getDatabase, runInTransaction } from "../db.js";
 import { HttpError } from "../errors.js";
+import { createGeneratedWorkoutFromHabit, parseGeneratedHealthEventTemplate } from "../health.js";
+import { decorateOwnedEntity, inferFirstOwnedUserId, setEntityOwner } from "./entity-ownership.js";
 import { getGoalById } from "./goals.js";
 import { getProjectById } from "./projects.js";
 import { getBehaviorById, getBehaviorPatternById, getBeliefEntryById, getModeProfileById, getPsycheValueById, getTriggerReportById } from "./psyche.js";
@@ -13,17 +15,25 @@ function todayKey(now = new Date()) {
 }
 function parseWeekDays(raw) {
     const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed.filter((value) => Number.isInteger(value) && value >= 0 && value <= 6) : [];
+    return Array.isArray(parsed)
+        ? parsed.filter((value) => Number.isInteger(value) && value >= 0 && value <= 6)
+        : [];
 }
 function parseIdList(raw) {
     const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed.filter((value) => typeof value === "string" && value.trim().length > 0) : [];
+    return Array.isArray(parsed)
+        ? parsed.filter((value) => typeof value === "string" && value.trim().length > 0)
+        : [];
 }
 function uniqueIds(values) {
-    return [...new Set(values.filter((value) => typeof value === "string" && value.trim().length > 0))];
+    return [
+        ...new Set(values.filter((value) => typeof value === "string" && value.trim().length > 0))
+    ];
 }
 function normalizeLinkedBehaviorIds(input) {
-    const fromArray = Array.isArray(input.linkedBehaviorIds) ? input.linkedBehaviorIds : [];
+    const fromArray = Array.isArray(input.linkedBehaviorIds)
+        ? input.linkedBehaviorIds
+        : [];
     return uniqueIds([...fromArray, input.linkedBehaviorId ?? null]);
 }
 function validateExistingIds(ids, getById, code, label) {
@@ -56,7 +66,8 @@ function listCheckInsForHabit(habitId, limit = 14) {
     return rows.map(mapCheckIn);
 }
 function isAligned(habit, checkIn) {
-    return (habit.polarity === "positive" && checkIn.status === "done") || (habit.polarity === "negative" && checkIn.status === "missed");
+    return ((habit.polarity === "positive" && checkIn.status === "done") ||
+        (habit.polarity === "negative" && checkIn.status === "missed"));
 }
 function calculateCompletionRate(habit, checkIns) {
     if (checkIns.length === 0) {
@@ -120,6 +131,7 @@ function mapHabit(row, checkIns = listCheckInsForHabit(row.id)) {
         linkedBehaviorTitles: linkedBehaviors.map((behavior) => behavior.title),
         rewardXp: row.reward_xp,
         penaltyXp: row.penalty_xp,
+        generatedHealthEventTemplate: parseGeneratedHealthEventTemplate(row.generated_health_event_template_json),
         createdAt: row.created_at,
         updatedAt: row.updated_at,
         lastCheckInAt: latestCheckIn?.createdAt ?? null,
@@ -129,8 +141,12 @@ function mapHabit(row, checkIns = listCheckInsForHabit(row.id)) {
         dueToday: false,
         checkIns
     };
-    draft.dueToday = isHabitDueToday({ status: draft.status, frequency: draft.frequency, weekDays: draft.weekDays }, latestCheckIn);
-    return habitSchema.parse(draft);
+    draft.dueToday = isHabitDueToday({
+        status: draft.status,
+        frequency: draft.frequency,
+        weekDays: draft.weekDays
+    }, latestCheckIn);
+    return habitSchema.parse(decorateOwnedEntity("habit", draft));
 }
 function getHabitRow(habitId) {
     return getDatabase()
@@ -139,7 +155,7 @@ function getHabitRow(habitId) {
          linked_goal_ids_json, linked_project_ids_json, linked_task_ids_json,
          linked_value_ids_json, linked_pattern_ids_json, linked_behavior_ids_json,
          linked_belief_ids_json, linked_mode_ids_json, linked_report_ids_json,
-         linked_behavior_id, reward_xp, penalty_xp, created_at, updated_at
+         linked_behavior_id, reward_xp, penalty_xp, generated_health_event_template_json, created_at, updated_at
        FROM habits
        WHERE id = ?`)
         .get(habitId);
@@ -167,7 +183,7 @@ export function listHabits(filters = {}) {
          linked_goal_ids_json, linked_project_ids_json, linked_task_ids_json,
          linked_value_ids_json, linked_pattern_ids_json, linked_behavior_ids_json,
          linked_belief_ids_json, linked_mode_ids_json, linked_report_ids_json,
-         linked_behavior_id, reward_xp, penalty_xp, created_at, updated_at
+         linked_behavior_id, reward_xp, penalty_xp, generated_health_event_template_json, created_at, updated_at
        FROM habits
        ${whereSql}
        ORDER BY
@@ -203,9 +219,24 @@ export function createHabit(input, activity) {
           linked_goal_ids_json, linked_project_ids_json, linked_task_ids_json,
           linked_value_ids_json, linked_pattern_ids_json, linked_behavior_ids_json,
           linked_belief_ids_json, linked_mode_ids_json, linked_report_ids_json,
-          linked_behavior_id, reward_xp, penalty_xp, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-            .run(id, parsed.title, parsed.description, parsed.status, parsed.polarity, parsed.frequency, parsed.targetCount, JSON.stringify(parsed.weekDays), JSON.stringify(parsed.linkedGoalIds), JSON.stringify(parsed.linkedProjectIds), JSON.stringify(parsed.linkedTaskIds), JSON.stringify(parsed.linkedValueIds), JSON.stringify(parsed.linkedPatternIds), JSON.stringify(linkedBehaviorIds), JSON.stringify(parsed.linkedBeliefIds), JSON.stringify(parsed.linkedModeIds), JSON.stringify(parsed.linkedReportIds), linkedBehaviorIds[0] ?? null, parsed.rewardXp, parsed.penaltyXp, now, now);
+          linked_behavior_id, reward_xp, penalty_xp, generated_health_event_template_json, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+            .run(id, parsed.title, parsed.description, parsed.status, parsed.polarity, parsed.frequency, parsed.targetCount, JSON.stringify(parsed.weekDays), JSON.stringify(parsed.linkedGoalIds), JSON.stringify(parsed.linkedProjectIds), JSON.stringify(parsed.linkedTaskIds), JSON.stringify(parsed.linkedValueIds), JSON.stringify(parsed.linkedPatternIds), JSON.stringify(linkedBehaviorIds), JSON.stringify(parsed.linkedBeliefIds), JSON.stringify(parsed.linkedModeIds), JSON.stringify(parsed.linkedReportIds), linkedBehaviorIds[0] ?? null, parsed.rewardXp, parsed.penaltyXp, JSON.stringify(parsed.generatedHealthEventTemplate), now, now);
+        setEntityOwner("habit", id, parsed.userId ??
+            inferFirstOwnedUserId([
+                ...parsed.linkedProjectIds.map((entityId) => ({
+                    entityType: "project",
+                    entityId
+                })),
+                ...parsed.linkedGoalIds.map((entityId) => ({
+                    entityType: "goal",
+                    entityId
+                })),
+                ...parsed.linkedTaskIds.map((entityId) => ({
+                    entityType: "task",
+                    entityId
+                }))
+            ]));
         const habit = getHabitById(id);
         if (activity) {
             recordActivityEvent({
@@ -232,7 +263,8 @@ export function updateHabit(habitId, input, activity) {
         return undefined;
     }
     const parsed = updateHabitSchema.parse(input);
-    const nextLinkedBehaviorIds = parsed.linkedBehaviorIds !== undefined || parsed.linkedBehaviorId !== undefined
+    const nextLinkedBehaviorIds = parsed.linkedBehaviorIds !== undefined ||
+        parsed.linkedBehaviorId !== undefined
         ? normalizeLinkedBehaviorIds({
             linkedBehaviorIds: parsed.linkedBehaviorIds ?? current.linkedBehaviorIds,
             linkedBehaviorId: parsed.linkedBehaviorId === undefined
@@ -257,9 +289,12 @@ export function updateHabit(habitId, input, activity) {
              week_days_json = ?, linked_goal_ids_json = ?, linked_project_ids_json = ?, linked_task_ids_json = ?,
              linked_value_ids_json = ?, linked_pattern_ids_json = ?, linked_behavior_ids_json = ?,
              linked_belief_ids_json = ?, linked_mode_ids_json = ?, linked_report_ids_json = ?,
-             linked_behavior_id = ?, reward_xp = ?, penalty_xp = ?, updated_at = ?
+             linked_behavior_id = ?, reward_xp = ?, penalty_xp = ?, generated_health_event_template_json = ?, updated_at = ?
          WHERE id = ?`)
-            .run(parsed.title ?? current.title, parsed.description ?? current.description, parsed.status ?? current.status, parsed.polarity ?? current.polarity, parsed.frequency ?? current.frequency, parsed.targetCount ?? current.targetCount, JSON.stringify(parsed.weekDays ?? current.weekDays), JSON.stringify(parsed.linkedGoalIds ?? current.linkedGoalIds), JSON.stringify(parsed.linkedProjectIds ?? current.linkedProjectIds), JSON.stringify(parsed.linkedTaskIds ?? current.linkedTaskIds), JSON.stringify(parsed.linkedValueIds ?? current.linkedValueIds), JSON.stringify(parsed.linkedPatternIds ?? current.linkedPatternIds), JSON.stringify(nextLinkedBehaviorIds), JSON.stringify(parsed.linkedBeliefIds ?? current.linkedBeliefIds), JSON.stringify(parsed.linkedModeIds ?? current.linkedModeIds), JSON.stringify(parsed.linkedReportIds ?? current.linkedReportIds), nextLinkedBehaviorIds[0] ?? null, parsed.rewardXp ?? current.rewardXp, parsed.penaltyXp ?? current.penaltyXp, updatedAt, habitId);
+            .run(parsed.title ?? current.title, parsed.description ?? current.description, parsed.status ?? current.status, parsed.polarity ?? current.polarity, parsed.frequency ?? current.frequency, parsed.targetCount ?? current.targetCount, JSON.stringify(parsed.weekDays ?? current.weekDays), JSON.stringify(parsed.linkedGoalIds ?? current.linkedGoalIds), JSON.stringify(parsed.linkedProjectIds ?? current.linkedProjectIds), JSON.stringify(parsed.linkedTaskIds ?? current.linkedTaskIds), JSON.stringify(parsed.linkedValueIds ?? current.linkedValueIds), JSON.stringify(parsed.linkedPatternIds ?? current.linkedPatternIds), JSON.stringify(nextLinkedBehaviorIds), JSON.stringify(parsed.linkedBeliefIds ?? current.linkedBeliefIds), JSON.stringify(parsed.linkedModeIds ?? current.linkedModeIds), JSON.stringify(parsed.linkedReportIds ?? current.linkedReportIds), nextLinkedBehaviorIds[0] ?? null, parsed.rewardXp ?? current.rewardXp, parsed.penaltyXp ?? current.penaltyXp, JSON.stringify(parsed.generatedHealthEventTemplate ?? current.generatedHealthEventTemplate), updatedAt, habitId);
+        if (parsed.userId !== undefined) {
+            setEntityOwner("habit", habitId, parsed.userId);
+        }
         const habit = getHabitById(habitId);
         if (activity) {
             recordActivityEvent({
@@ -353,6 +388,40 @@ export function createHabitCheckIn(habitId, input, activity) {
                 deltaXp: reward.deltaXp
             }
         });
+        if (parsed.status === "done") {
+            const checkInId = existing?.id
+                ? existing.id
+                : getDatabase()
+                    .prepare(`SELECT id FROM habit_check_ins WHERE habit_id = ? AND date_key = ?`)
+                    .get(habitId, parsed.dateKey)?.id;
+            if (checkInId) {
+                createGeneratedWorkoutFromHabit({
+                    habitId: habit.id,
+                    checkInId,
+                    habitTitle: habit.title,
+                    userId: habit.userId ?? "user_operator",
+                    dateKey: parsed.dateKey,
+                    template: habit.generatedHealthEventTemplate,
+                    linkedEntities: [
+                        ...habit.linkedGoalIds.map((entityId) => ({
+                            entityType: "goal",
+                            entityId,
+                            relationshipType: "habit_context"
+                        })),
+                        ...habit.linkedProjectIds.map((entityId) => ({
+                            entityType: "project",
+                            entityId,
+                            relationshipType: "habit_context"
+                        })),
+                        ...habit.linkedTaskIds.map((entityId) => ({
+                            entityType: "task",
+                            entityId,
+                            relationshipType: "habit_context"
+                        }))
+                    ]
+                });
+            }
+        }
         return getHabitById(habitId);
     });
 }

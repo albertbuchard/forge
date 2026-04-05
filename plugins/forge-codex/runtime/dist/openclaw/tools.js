@@ -28,6 +28,9 @@ async function runWrite(config, options) {
     return expectForgeSuccess(result);
 }
 const emptyObjectSchema = Type.Object({});
+const scopedReadSchema = Type.Object({
+    userIds: Type.Optional(Type.Array(Type.String()))
+});
 const optionalString = () => Type.Optional(Type.String());
 const optionalNullableString = () => Type.Optional(Type.Union([Type.String(), Type.Null()]));
 const optionalDeleteMode = () => Type.Optional(Type.Union([Type.Literal("soft"), Type.Literal("hard")]));
@@ -66,34 +69,17 @@ async function resolveUiEntrypoint(config) {
         note: "You can continue directly in the Forge UI when a visual workflow is easier for review, Kanban, or Psyche exploration."
     };
 }
-async function resolveCurrentWork(config) {
-    const payload = await runRead(config, "/api/v1/operator/context");
-    const context = typeof payload === "object" &&
-        payload !== null &&
-        "context" in payload &&
-        typeof payload.context === "object" &&
-        payload.context !== null
-        ? payload.context
-        : null;
-    const recentTaskRuns = Array.isArray(context?.recentTaskRuns)
-        ? context.recentTaskRuns
-        : [];
-    const activeTaskRuns = recentTaskRuns.filter((run) => typeof run === "object" &&
-        run !== null &&
-        "status" in run &&
-        run.status === "active");
-    const focusTasks = Array.isArray(context?.focusTasks)
-        ? context.focusTasks
-        : [];
-    return {
-        generatedAt: typeof context?.generatedAt === "string"
-            ? context.generatedAt
-            : new Date().toISOString(),
-        activeTaskRuns,
-        focusTasks,
-        recommendedNextTask: context?.recommendedNextTask ?? null,
-        xp: context?.xp ?? null
-    };
+function withUserIds(path, userIds) {
+    if (!userIds || userIds.length === 0) {
+        return path;
+    }
+    const search = new URLSearchParams();
+    for (const userId of userIds) {
+        if (userId.trim()) {
+            search.append("userIds", userId.trim());
+        }
+    }
+    return search.size > 0 ? `${path}?${search.toString()}` : path;
 }
 function registerReadTool(api, config, options) {
     api.registerTool({
@@ -127,19 +113,27 @@ export function registerForgePluginTools(api, config) {
         name: "forge_get_operator_overview",
         label: "Forge Operator Overview",
         description: "Start here for most Forge work. Read the one-shot operator overview with current priorities, momentum, and onboarding guidance before searching or mutating.",
-        path: () => "/api/v1/operator/overview"
+        parameters: scopedReadSchema,
+        path: (params) => withUserIds("/api/v1/operator/overview", params.userIds)
     });
     registerReadTool(api, config, {
         name: "forge_get_operator_context",
         label: "Forge Operator Context",
         description: "Read the current operational task board, focus queue, recent task runs, and XP state. Use this for current-work questions and work runtime decisions.",
-        path: () => "/api/v1/operator/context"
+        parameters: scopedReadSchema,
+        path: (params) => withUserIds("/api/v1/operator/context", params.userIds)
     });
     registerReadTool(api, config, {
         name: "forge_get_agent_onboarding",
         label: "Forge Agent Onboarding",
         description: "Fetch the live Forge onboarding contract with the exact Forge tool list, batch payload rules, UI handoff rules, and verification guidance.",
         path: () => "/api/v1/agents/onboarding"
+    });
+    registerReadTool(api, config, {
+        name: "forge_get_user_directory",
+        label: "Forge User Directory",
+        description: "Read the current human and bot user directory, ownership counts, and directional relationship graph before doing multi-user planning or cross-owner edits.",
+        path: () => "/api/v1/users/directory"
     });
     api.registerTool({
         name: "forge_get_ui_entrypoint",
@@ -154,7 +148,8 @@ export function registerForgePluginTools(api, config) {
         name: "forge_get_psyche_overview",
         label: "Forge Psyche Overview",
         description: "Read the aggregate Psyche state across values, patterns, behaviors, beliefs, modes, and trigger reports before making Psyche recommendations or updates.",
-        path: () => "/api/v1/psyche/overview"
+        parameters: scopedReadSchema,
+        path: (params) => withUserIds("/api/v1/psyche/overview", params.userIds)
     });
     registerReadTool(api, config, {
         name: "forge_get_xp_metrics",
@@ -166,15 +161,43 @@ export function registerForgePluginTools(api, config) {
         name: "forge_get_weekly_review",
         label: "Forge Weekly Review",
         description: "Read the current weekly review payload with wins, trends, and reward framing.",
-        path: () => "/api/v1/reviews/weekly"
+        parameters: scopedReadSchema,
+        path: (params) => withUserIds("/api/v1/reviews/weekly", params.userIds)
     });
     api.registerTool({
         name: "forge_get_current_work",
         label: "Forge Current Work",
         description: "Get the current live-work picture: active task runs, focus tasks, the recommended next task, and current XP state.",
-        parameters: emptyObjectSchema,
-        async execute() {
-            return jsonResult(await resolveCurrentWork(config));
+        parameters: scopedReadSchema,
+        async execute(_toolCallId, params) {
+            const path = withUserIds("/api/v1/operator/context", (params ?? {}).userIds);
+            const payload = await runRead(config, path);
+            const context = typeof payload === "object" &&
+                payload !== null &&
+                "context" in payload &&
+                typeof payload.context === "object" &&
+                payload.context !== null
+                ? payload.context
+                : null;
+            const recentTaskRuns = Array.isArray(context?.recentTaskRuns)
+                ? context.recentTaskRuns
+                : [];
+            const activeTaskRuns = recentTaskRuns.filter((run) => typeof run === "object" &&
+                run !== null &&
+                "status" in run &&
+                run.status === "active");
+            const focusTasks = Array.isArray(context?.focusTasks)
+                ? context.focusTasks
+                : [];
+            return jsonResult({
+                generatedAt: typeof context?.generatedAt === "string"
+                    ? context.generatedAt
+                    : new Date().toISOString(),
+                activeTaskRuns,
+                focusTasks,
+                recommendedNextTask: context?.recommendedNextTask ?? null,
+                xp: context?.xp ?? null
+            });
         }
     });
     registerWriteTool(api, config, {
@@ -186,6 +209,7 @@ export function registerForgePluginTools(api, config) {
                 entityTypes: Type.Optional(Type.Array(Type.String())),
                 query: optionalString(),
                 ids: Type.Optional(Type.Array(Type.String())),
+                userIds: Type.Optional(Type.Array(Type.String())),
                 status: Type.Optional(Type.Array(Type.String())),
                 linkedTo: Type.Optional(Type.Object({
                     entityType: Type.String({ minLength: 1 }),

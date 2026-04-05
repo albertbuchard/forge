@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { getDatabase, runInTransaction } from "../db.js";
 import { recordActivityEvent } from "./activity-events.js";
 import { filterDeletedEntities, filterDeletedIds, isEntityDeleted } from "./deleted-entities.js";
+import { clearEntityOwner, decorateOwnedEntity, setEntityOwner } from "./entity-ownership.js";
 import { recordEventLog } from "./event-log.js";
 import { unlinkNotesForEntity } from "./notes.js";
 import { recordPsycheClarityReward, recordPsycheReflectionReward } from "./rewards.js";
@@ -12,6 +13,9 @@ function parseJson(value) {
 }
 function buildId(prefix) {
     return `${prefix}_${randomUUID().replaceAll("-", "").slice(0, 10)}`;
+}
+function assignOwnedEntity(entityType, entityId, userId, actor) {
+    return setEntityOwner(entityType, entityId, userId, actor ?? null);
 }
 function enrichTriggerItems(items, prefix) {
     return items.map((item) => ({
@@ -388,7 +392,7 @@ export function getEventTypeById(eventTypeId) {
     const row = getRow(`SELECT id, domain_id, label, description, system, created_at, updated_at
      FROM event_types
      WHERE id = ?`, eventTypeId);
-    return row ? mapEventType(row) : undefined;
+    return row ? decorateOwnedEntity("event_type", mapEventType(row)) : undefined;
 }
 export function createEventType(input, context) {
     const parsed = createEventTypeSchema.parse(input);
@@ -406,6 +410,7 @@ export function createEventType(input, context) {
         .prepare(`INSERT INTO event_types (id, domain_id, label, description, system, created_at, updated_at)
        VALUES (?, ?, ?, ?, 0, ?, ?)`)
         .run(eventType.id, eventType.domainId, eventType.label, eventType.description, eventType.createdAt, eventType.updatedAt);
+    assignOwnedEntity("event_type", eventType.id, parsed.userId, context.actor);
     mapCreateUpdateContext({
         entityType: "event_type",
         entityId: eventType.id,
@@ -415,7 +420,7 @@ export function createEventType(input, context) {
         actor: context.actor ?? null,
         metadata: { domainId: eventType.domainId }
     });
-    return eventType;
+    return decorateOwnedEntity("event_type", eventType);
 }
 export function updateEventType(eventTypeId, patch, context) {
     const existing = getEventTypeById(eventTypeId);
@@ -433,6 +438,9 @@ export function updateEventType(eventTypeId, patch, context) {
        SET label = ?, description = ?, updated_at = ?
        WHERE id = ?`)
         .run(updated.label, updated.description, updated.updatedAt, eventTypeId);
+    if (parsed.userId !== undefined) {
+        assignOwnedEntity("event_type", eventTypeId, parsed.userId, context.actor);
+    }
     mapCreateUpdateContext({
         entityType: "event_type",
         entityId: eventTypeId,
@@ -442,7 +450,7 @@ export function updateEventType(eventTypeId, patch, context) {
         actor: context.actor ?? null,
         metadata: { domainId: updated.domainId }
     });
-    return updated;
+    return decorateOwnedEntity("event_type", updated);
 }
 export function deleteEventType(eventTypeId, context) {
     const existing = getEventTypeById(eventTypeId);
@@ -451,6 +459,7 @@ export function deleteEventType(eventTypeId, context) {
     }
     return runInTransaction(() => {
         unlinkEntityNotes("event_type", eventTypeId);
+        clearEntityOwner("event_type", eventTypeId);
         getDatabase()
             .prepare(`DELETE FROM event_types WHERE id = ?`)
             .run(eventTypeId);
@@ -482,7 +491,9 @@ export function getEmotionDefinitionById(emotionId) {
     const row = getRow(`SELECT id, domain_id, label, description, category, system, created_at, updated_at
      FROM emotion_definitions
      WHERE id = ?`, emotionId);
-    return row ? mapEmotionDefinition(row) : undefined;
+    return row
+        ? decorateOwnedEntity("emotion_definition", mapEmotionDefinition(row))
+        : undefined;
 }
 export function createEmotionDefinition(input, context) {
     const parsed = createEmotionDefinitionSchema.parse(input);
@@ -501,6 +512,7 @@ export function createEmotionDefinition(input, context) {
         .prepare(`INSERT INTO emotion_definitions (id, domain_id, label, description, category, system, created_at, updated_at)
        VALUES (?, ?, ?, ?, ?, 0, ?, ?)`)
         .run(emotion.id, emotion.domainId, emotion.label, emotion.description, emotion.category, emotion.createdAt, emotion.updatedAt);
+    assignOwnedEntity("emotion_definition", emotion.id, parsed.userId, context.actor);
     mapCreateUpdateContext({
         entityType: "emotion_definition",
         entityId: emotion.id,
@@ -510,7 +522,7 @@ export function createEmotionDefinition(input, context) {
         actor: context.actor ?? null,
         metadata: { domainId: emotion.domainId }
     });
-    return emotion;
+    return decorateOwnedEntity("emotion_definition", emotion);
 }
 export function updateEmotionDefinition(emotionId, patch, context) {
     const existing = getEmotionDefinitionById(emotionId);
@@ -528,6 +540,9 @@ export function updateEmotionDefinition(emotionId, patch, context) {
        SET label = ?, description = ?, category = ?, updated_at = ?
        WHERE id = ?`)
         .run(updated.label, updated.description, updated.category, updated.updatedAt, emotionId);
+    if (parsed.userId !== undefined) {
+        assignOwnedEntity("emotion_definition", emotionId, parsed.userId, context.actor);
+    }
     mapCreateUpdateContext({
         entityType: "emotion_definition",
         entityId: emotionId,
@@ -537,7 +552,7 @@ export function updateEmotionDefinition(emotionId, patch, context) {
         actor: context.actor ?? null,
         metadata: { domainId: updated.domainId }
     });
-    return updated;
+    return decorateOwnedEntity("emotion_definition", updated);
 }
 export function deleteEmotionDefinition(emotionId, context) {
     const existing = getEmotionDefinitionById(emotionId);
@@ -547,6 +562,7 @@ export function deleteEmotionDefinition(emotionId, context) {
     return runInTransaction(() => {
         nullifyTriggerEmotionReferences(emotionId);
         unlinkEntityNotes("emotion_definition", emotionId);
+        clearEntityOwner("emotion_definition", emotionId);
         getDatabase()
             .prepare(`DELETE FROM emotion_definitions WHERE id = ?`)
             .run(emotionId);
@@ -582,7 +598,7 @@ export function getPsycheValueById(valueId) {
        linked_goal_ids_json, linked_project_ids_json, linked_task_ids_json, committed_actions_json, created_at, updated_at
      FROM psyche_values
      WHERE id = ?`, valueId);
-    return row ? mapPsycheValue(row) : undefined;
+    return row ? decorateOwnedEntity("psyche_value", mapPsycheValue(row)) : undefined;
 }
 export function createPsycheValue(input, context) {
     const parsed = createPsycheValueSchema.parse(input);
@@ -607,6 +623,7 @@ export function createPsycheValue(input, context) {
         linked_task_ids_json, committed_actions_json, created_at, updated_at
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
         .run(value.id, value.domainId, value.title, value.description, value.valuedDirection, value.whyItMatters, JSON.stringify(value.linkedGoalIds), JSON.stringify(value.linkedProjectIds), JSON.stringify(value.linkedTaskIds), JSON.stringify(value.committedActions), value.createdAt, value.updatedAt);
+    assignOwnedEntity("psyche_value", value.id, parsed.userId, context.actor);
     mapCreateUpdateContext({
         entityType: "psyche_value",
         entityId: value.id,
@@ -617,7 +634,7 @@ export function createPsycheValue(input, context) {
         metadata: { domainId: value.domainId }
     });
     recordPsycheClarityReward("psyche_value", value.id, value.title, "psyche_value_defined", context);
-    return value;
+    return decorateOwnedEntity("psyche_value", value);
 }
 export function updatePsycheValue(valueId, patch, context) {
     const existing = getPsycheValueById(valueId);
@@ -637,6 +654,9 @@ export function updatePsycheValue(valueId, patch, context) {
            linked_project_ids_json = ?, linked_task_ids_json = ?, committed_actions_json = ?, updated_at = ?
        WHERE id = ?`)
         .run(updated.title, updated.description, updated.valuedDirection, updated.whyItMatters, JSON.stringify(updated.linkedGoalIds), JSON.stringify(updated.linkedProjectIds), JSON.stringify(updated.linkedTaskIds), JSON.stringify(updated.committedActions), updated.updatedAt, valueId);
+    if (parsed.userId !== undefined) {
+        assignOwnedEntity("psyche_value", valueId, parsed.userId, context.actor);
+    }
     mapCreateUpdateContext({
         entityType: "psyche_value",
         entityId: valueId,
@@ -646,7 +666,7 @@ export function updatePsycheValue(valueId, patch, context) {
         actor: context.actor ?? null,
         metadata: { domainId: updated.domainId }
     });
-    return updated;
+    return decorateOwnedEntity("psyche_value", updated);
 }
 export function deletePsycheValue(valueId, context) {
     const existing = getPsycheValueById(valueId);
@@ -660,6 +680,7 @@ export function deletePsycheValue(valueId, context) {
         removeIdFromStringArrayColumn("mode_profiles", "linked_value_ids_json", valueId);
         removeIdFromStringArrayColumn("trigger_reports", "linked_value_ids_json", valueId);
         unlinkEntityNotes("psyche_value", valueId);
+        clearEntityOwner("psyche_value", valueId);
         getDatabase()
             .prepare(`DELETE FROM psyche_values WHERE id = ?`)
             .run(valueId);
@@ -697,7 +718,9 @@ export function getBehaviorPatternById(patternId) {
        linked_belief_ids_json, created_at, updated_at
      FROM behavior_patterns
      WHERE id = ?`, patternId);
-    return row ? mapBehaviorPattern(row) : undefined;
+    return row
+        ? decorateOwnedEntity("behavior_pattern", mapBehaviorPattern(row))
+        : undefined;
 }
 export function createBehaviorPattern(input, context) {
     const parsed = createBehaviorPatternSchema.parse(input);
@@ -727,6 +750,7 @@ export function createBehaviorPattern(input, context) {
         linked_belief_ids_json, created_at, updated_at
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
         .run(pattern.id, pattern.domainId, pattern.title, pattern.description, pattern.targetBehavior, JSON.stringify(pattern.cueContexts), pattern.shortTermPayoff, pattern.longTermCost, pattern.preferredResponse, JSON.stringify(pattern.linkedValueIds), JSON.stringify(pattern.linkedSchemaLabels), JSON.stringify(pattern.linkedModeLabels), JSON.stringify(pattern.linkedModeIds), JSON.stringify(pattern.linkedBeliefIds), pattern.createdAt, pattern.updatedAt);
+    assignOwnedEntity("behavior_pattern", pattern.id, parsed.userId, context.actor);
     mapCreateUpdateContext({
         entityType: "behavior_pattern",
         entityId: pattern.id,
@@ -737,7 +761,7 @@ export function createBehaviorPattern(input, context) {
         metadata: { domainId: pattern.domainId }
     });
     recordPsycheClarityReward("behavior_pattern", pattern.id, pattern.title, "psyche_pattern_defined", context);
-    return pattern;
+    return decorateOwnedEntity("behavior_pattern", pattern);
 }
 export function updateBehaviorPattern(patternId, patch, context) {
     const existing = getBehaviorPatternById(patternId);
@@ -757,6 +781,9 @@ export function updateBehaviorPattern(patternId, patch, context) {
            linked_mode_ids_json = ?, linked_belief_ids_json = ?, updated_at = ?
        WHERE id = ?`)
         .run(updated.title, updated.description, updated.targetBehavior, JSON.stringify(updated.cueContexts), updated.shortTermPayoff, updated.longTermCost, updated.preferredResponse, JSON.stringify(updated.linkedValueIds), JSON.stringify(updated.linkedSchemaLabels), JSON.stringify(updated.linkedModeLabels), JSON.stringify(updated.linkedModeIds), JSON.stringify(updated.linkedBeliefIds), updated.updatedAt, patternId);
+    if (parsed.userId !== undefined) {
+        assignOwnedEntity("behavior_pattern", patternId, parsed.userId, context.actor);
+    }
     mapCreateUpdateContext({
         entityType: "behavior_pattern",
         entityId: patternId,
@@ -766,7 +793,7 @@ export function updateBehaviorPattern(patternId, patch, context) {
         actor: context.actor ?? null,
         metadata: { domainId: updated.domainId }
     });
-    return updated;
+    return decorateOwnedEntity("behavior_pattern", updated);
 }
 export function deleteBehaviorPattern(patternId, context) {
     const existing = getBehaviorPatternById(patternId);
@@ -778,6 +805,7 @@ export function deleteBehaviorPattern(patternId, context) {
         removeIdFromStringArrayColumn("mode_profiles", "linked_pattern_ids_json", patternId);
         removeIdFromStringArrayColumn("trigger_reports", "linked_pattern_ids_json", patternId);
         unlinkEntityNotes("behavior_pattern", patternId);
+        clearEntityOwner("behavior_pattern", patternId);
         getDatabase()
             .prepare(`DELETE FROM behavior_patterns WHERE id = ?`)
             .run(patternId);
@@ -815,7 +843,7 @@ export function getBehaviorById(behaviorId) {
        linked_mode_ids_json, created_at, updated_at
      FROM psyche_behaviors
      WHERE id = ?`, behaviorId);
-    return row ? mapBehavior(row) : undefined;
+    return row ? decorateOwnedEntity("behavior", mapBehavior(row)) : undefined;
 }
 export function createBehavior(input, context) {
     const parsed = createBehaviorSchema.parse(input);
@@ -834,6 +862,7 @@ export function createBehavior(input, context) {
         created_at, updated_at
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
         .run(behavior.id, behavior.domainId, behavior.kind, behavior.title, behavior.description, JSON.stringify(behavior.commonCues), behavior.urgeStory, behavior.shortTermPayoff, behavior.longTermCost, behavior.replacementMove, behavior.repairPlan, JSON.stringify(behavior.linkedPatternIds), JSON.stringify(behavior.linkedValueIds), JSON.stringify(behavior.linkedSchemaIds), JSON.stringify(behavior.linkedModeIds), behavior.createdAt, behavior.updatedAt);
+    assignOwnedEntity("behavior", behavior.id, parsed.userId, context.actor);
     mapCreateUpdateContext({
         entityType: "behavior",
         entityId: behavior.id,
@@ -844,7 +873,7 @@ export function createBehavior(input, context) {
         metadata: { kind: behavior.kind, domainId: behavior.domainId }
     });
     recordPsycheClarityReward("behavior", behavior.id, behavior.title, "psyche_behavior_defined", context);
-    return behavior;
+    return decorateOwnedEntity("behavior", behavior);
 }
 export function updateBehavior(behaviorId, patch, context) {
     const existing = getBehaviorById(behaviorId);
@@ -864,6 +893,9 @@ export function updateBehavior(behaviorId, patch, context) {
            linked_mode_ids_json = ?, updated_at = ?
        WHERE id = ?`)
         .run(updated.kind, updated.title, updated.description, JSON.stringify(updated.commonCues), updated.urgeStory, updated.shortTermPayoff, updated.longTermCost, updated.replacementMove, updated.repairPlan, JSON.stringify(updated.linkedPatternIds), JSON.stringify(updated.linkedValueIds), JSON.stringify(updated.linkedSchemaIds), JSON.stringify(updated.linkedModeIds), updated.updatedAt, behaviorId);
+    if (parsed.userId !== undefined) {
+        assignOwnedEntity("behavior", behaviorId, parsed.userId, context.actor);
+    }
     mapCreateUpdateContext({
         entityType: "behavior",
         entityId: behaviorId,
@@ -873,7 +905,7 @@ export function updateBehavior(behaviorId, patch, context) {
         actor: context.actor ?? null,
         metadata: { kind: updated.kind, domainId: updated.domainId }
     });
-    return updated;
+    return decorateOwnedEntity("behavior", updated);
 }
 export function deleteBehavior(behaviorId, context) {
     const existing = getBehaviorById(behaviorId);
@@ -886,6 +918,7 @@ export function deleteBehavior(behaviorId, context) {
         removeIdFromStringArrayColumn("trigger_reports", "linked_behavior_ids_json", behaviorId);
         nullifyTriggerBehaviorReferences(behaviorId);
         unlinkEntityNotes("behavior", behaviorId);
+        clearEntityOwner("behavior", behaviorId);
         getDatabase()
             .prepare(`DELETE FROM psyche_behaviors WHERE id = ?`)
             .run(behaviorId);
@@ -923,7 +956,7 @@ export function getBeliefEntryById(beliefId) {
        created_at, updated_at
      FROM belief_entries
      WHERE id = ?`, beliefId);
-    return row ? mapBeliefEntry(row) : undefined;
+    return row ? decorateOwnedEntity("belief_entry", mapBeliefEntry(row)) : undefined;
 }
 export function createBeliefEntry(input, context) {
     const parsed = createBeliefEntrySchema.parse(input);
@@ -942,6 +975,7 @@ export function createBeliefEntry(input, context) {
         created_at, updated_at
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
         .run(belief.id, belief.domainId, belief.schemaId, belief.statement, belief.beliefType, belief.originNote, belief.confidence, JSON.stringify(belief.evidenceFor), JSON.stringify(belief.evidenceAgainst), belief.flexibleAlternative, JSON.stringify(belief.linkedValueIds), JSON.stringify(belief.linkedBehaviorIds), JSON.stringify(belief.linkedModeIds), JSON.stringify(belief.linkedReportIds), belief.createdAt, belief.updatedAt);
+    assignOwnedEntity("belief_entry", belief.id, parsed.userId, context.actor);
     mapCreateUpdateContext({
         entityType: "belief_entry",
         entityId: belief.id,
@@ -952,7 +986,7 @@ export function createBeliefEntry(input, context) {
         metadata: { schemaId: belief.schemaId ?? "" }
     });
     recordPsycheClarityReward("belief_entry", belief.id, belief.statement, "psyche_belief_captured", context);
-    return belief;
+    return decorateOwnedEntity("belief_entry", belief);
 }
 export function updateBeliefEntry(beliefId, patch, context) {
     const existing = getBeliefEntryById(beliefId);
@@ -972,6 +1006,9 @@ export function updateBeliefEntry(beliefId, patch, context) {
            linked_mode_ids_json = ?, linked_report_ids_json = ?, updated_at = ?
        WHERE id = ?`)
         .run(updated.schemaId, updated.statement, updated.beliefType, updated.originNote, updated.confidence, JSON.stringify(updated.evidenceFor), JSON.stringify(updated.evidenceAgainst), updated.flexibleAlternative, JSON.stringify(updated.linkedValueIds), JSON.stringify(updated.linkedBehaviorIds), JSON.stringify(updated.linkedModeIds), JSON.stringify(updated.linkedReportIds), updated.updatedAt, beliefId);
+    if (parsed.userId !== undefined) {
+        assignOwnedEntity("belief_entry", beliefId, parsed.userId, context.actor);
+    }
     mapCreateUpdateContext({
         entityType: "belief_entry",
         entityId: beliefId,
@@ -981,7 +1018,7 @@ export function updateBeliefEntry(beliefId, patch, context) {
         actor: context.actor ?? null,
         metadata: { schemaId: updated.schemaId ?? "" }
     });
-    return updated;
+    return decorateOwnedEntity("belief_entry", updated);
 }
 export function deleteBeliefEntry(beliefId, context) {
     const existing = getBeliefEntryById(beliefId);
@@ -993,6 +1030,7 @@ export function deleteBeliefEntry(beliefId, context) {
         removeIdFromStringArrayColumn("trigger_reports", "linked_belief_ids_json", beliefId);
         nullifyTriggerThoughtBeliefReferences(beliefId);
         unlinkEntityNotes("belief_entry", beliefId);
+        clearEntityOwner("belief_entry", beliefId);
         getDatabase()
             .prepare(`DELETE FROM belief_entries WHERE id = ?`)
             .run(beliefId);
@@ -1028,7 +1066,7 @@ export function getModeProfileById(modeId) {
        origin_context, first_appearance_at, linked_pattern_ids_json, linked_behavior_ids_json, linked_value_ids_json, created_at, updated_at
      FROM mode_profiles
      WHERE id = ?`, modeId);
-    return row ? mapModeProfile(row) : undefined;
+    return row ? decorateOwnedEntity("mode_profile", mapModeProfile(row)) : undefined;
 }
 export function createModeProfile(input, context) {
     const parsed = createModeProfileSchema.parse(input);
@@ -1046,6 +1084,7 @@ export function createModeProfile(input, context) {
         origin_context, first_appearance_at, linked_pattern_ids_json, linked_behavior_ids_json, linked_value_ids_json, created_at, updated_at
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
         .run(mode.id, mode.domainId, mode.family, mode.archetype, mode.title, mode.persona, mode.imagery, mode.symbolicForm, mode.facialExpression, mode.fear, mode.burden, mode.protectiveJob, mode.originContext, mode.firstAppearanceAt, JSON.stringify(mode.linkedPatternIds), JSON.stringify(mode.linkedBehaviorIds), JSON.stringify(mode.linkedValueIds), mode.createdAt, mode.updatedAt);
+    assignOwnedEntity("mode_profile", mode.id, parsed.userId, context.actor);
     mapCreateUpdateContext({
         entityType: "mode_profile",
         entityId: mode.id,
@@ -1056,7 +1095,7 @@ export function createModeProfile(input, context) {
         metadata: { family: mode.family }
     });
     recordPsycheClarityReward("mode_profile", mode.id, mode.title, "psyche_mode_named", context);
-    return mode;
+    return decorateOwnedEntity("mode_profile", mode);
 }
 export function updateModeProfile(modeId, patch, context) {
     const existing = getModeProfileById(modeId);
@@ -1079,6 +1118,9 @@ export function updateModeProfile(modeId, patch, context) {
            linked_behavior_ids_json = ?, linked_value_ids_json = ?, updated_at = ?
        WHERE id = ?`)
         .run(updated.family, updated.archetype, updated.title, updated.persona, updated.imagery, updated.symbolicForm, updated.facialExpression, updated.fear, updated.burden, updated.protectiveJob, updated.originContext, updated.firstAppearanceAt, JSON.stringify(updated.linkedPatternIds), JSON.stringify(updated.linkedBehaviorIds), JSON.stringify(updated.linkedValueIds), updated.updatedAt, modeId);
+    if (parsed.userId !== undefined) {
+        assignOwnedEntity("mode_profile", modeId, parsed.userId, context.actor);
+    }
     mapCreateUpdateContext({
         entityType: "mode_profile",
         entityId: modeId,
@@ -1088,7 +1130,7 @@ export function updateModeProfile(modeId, patch, context) {
         actor: context.actor ?? null,
         metadata: { family: updated.family }
     });
-    return updated;
+    return decorateOwnedEntity("mode_profile", updated);
 }
 export function deleteModeProfile(modeId, context) {
     const existing = getModeProfileById(modeId);
@@ -1102,6 +1144,7 @@ export function deleteModeProfile(modeId, context) {
         removeIdFromStringArrayColumn("trigger_reports", "linked_mode_ids_json", modeId);
         nullifyTriggerTimelineModeReferences(modeId);
         unlinkEntityNotes("mode_profile", modeId);
+        clearEntityOwner("mode_profile", modeId);
         getDatabase()
             .prepare(`DELETE FROM mode_profiles WHERE id = ?`)
             .run(modeId);
@@ -1133,7 +1176,9 @@ export function getModeGuideSessionById(sessionId) {
     const row = getRow(`SELECT id, summary, answers_json, results_json, created_at, updated_at
      FROM mode_guide_sessions
      WHERE id = ?`, sessionId);
-    return row ? mapModeGuideSession(row) : undefined;
+    return row
+        ? decorateOwnedEntity("mode_guide_session", mapModeGuideSession(row))
+        : undefined;
 }
 export function createModeGuideSession(input, context) {
     const parsed = createModeGuideSessionSchema.parse(input);
@@ -1150,6 +1195,7 @@ export function createModeGuideSession(input, context) {
         .prepare(`INSERT INTO mode_guide_sessions (id, summary, answers_json, results_json, created_at, updated_at)
        VALUES (?, ?, ?, ?, ?, ?)`)
         .run(session.id, session.summary, JSON.stringify(session.answers), JSON.stringify(session.results), session.createdAt, session.updatedAt);
+    assignOwnedEntity("mode_guide_session", session.id, parsed.userId, context.actor);
     recordEventLog({
         eventKind: "mode_guide_session.created",
         entityType: "system",
@@ -1158,7 +1204,7 @@ export function createModeGuideSession(input, context) {
         source: context.source,
         metadata: { summary: session.summary }
     });
-    return session;
+    return decorateOwnedEntity("mode_guide_session", session);
 }
 export function updateModeGuideSession(sessionId, patch, context) {
     const existing = getModeGuideSessionById(sessionId);
@@ -1180,6 +1226,9 @@ export function updateModeGuideSession(sessionId, patch, context) {
        SET summary = ?, answers_json = ?, results_json = ?, updated_at = ?
        WHERE id = ?`)
         .run(updated.summary, JSON.stringify(updated.answers), JSON.stringify(updated.results), updated.updatedAt, sessionId);
+    if (parsed.userId !== undefined) {
+        assignOwnedEntity("mode_guide_session", sessionId, parsed.userId, context.actor);
+    }
     recordEventLog({
         eventKind: "mode_guide_session.updated",
         entityType: "system",
@@ -1188,7 +1237,7 @@ export function updateModeGuideSession(sessionId, patch, context) {
         source: context.source,
         metadata: { summary: updated.summary }
     });
-    return updated;
+    return decorateOwnedEntity("mode_guide_session", updated);
 }
 export function deleteModeGuideSession(sessionId, context) {
     const existing = getModeGuideSessionById(sessionId);
@@ -1196,6 +1245,7 @@ export function deleteModeGuideSession(sessionId, context) {
         return undefined;
     }
     return runInTransaction(() => {
+        clearEntityOwner("mode_guide_session", sessionId);
         getDatabase()
             .prepare(`DELETE FROM mode_guide_sessions WHERE id = ?`)
             .run(sessionId);
@@ -1236,7 +1286,9 @@ export function getTriggerReportById(reportId) {
        schema_links_json, mode_timeline_json, next_moves_json, created_at, updated_at
      FROM trigger_reports
      WHERE id = ?`, reportId);
-    return row ? mapTriggerReport(row) : undefined;
+    return row
+        ? decorateOwnedEntity("trigger_report", mapTriggerReport(row))
+        : undefined;
 }
 export function createTriggerReport(input, context) {
     const parsed = createTriggerReportSchema.parse(input);
@@ -1277,6 +1329,7 @@ export function createTriggerReport(input, context) {
         next_moves_json, created_at, updated_at
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
         .run(report.id, report.domainId, report.title, report.status, report.eventTypeId, report.customEventType, report.eventSituation, report.occurredAt, JSON.stringify(report.emotions), JSON.stringify(report.thoughts), JSON.stringify(report.behaviors), JSON.stringify(report.consequences), JSON.stringify(report.linkedPatternIds), JSON.stringify(report.linkedValueIds), JSON.stringify(report.linkedGoalIds), JSON.stringify(report.linkedProjectIds), JSON.stringify(report.linkedTaskIds), JSON.stringify(report.linkedBehaviorIds), JSON.stringify(report.linkedBeliefIds), JSON.stringify(report.linkedModeIds), JSON.stringify(report.modeOverlays), JSON.stringify(report.schemaLinks), JSON.stringify(report.modeTimeline), JSON.stringify(report.nextMoves), report.createdAt, report.updatedAt);
+    assignOwnedEntity("trigger_report", report.id, parsed.userId, context.actor);
     mapCreateUpdateContext({
         entityType: "trigger_report",
         entityId: report.id,
@@ -1290,7 +1343,7 @@ export function createTriggerReport(input, context) {
         }
     });
     recordPsycheReflectionReward(report.id, report.title, { actor: context.actor ?? null, source: context.source });
-    return report;
+    return decorateOwnedEntity("trigger_report", report);
 }
 export function updateTriggerReport(reportId, patch, context) {
     const existing = getTriggerReportById(reportId);
@@ -1317,6 +1370,9 @@ export function updateTriggerReport(reportId, patch, context) {
            next_moves_json = ?, updated_at = ?
        WHERE id = ?`)
         .run(updated.title, updated.status, updated.eventTypeId, updated.customEventType, updated.eventSituation, updated.occurredAt, JSON.stringify(updated.emotions), JSON.stringify(updated.thoughts), JSON.stringify(updated.behaviors), JSON.stringify(updated.consequences), JSON.stringify(updated.linkedPatternIds), JSON.stringify(updated.linkedValueIds), JSON.stringify(updated.linkedGoalIds), JSON.stringify(updated.linkedProjectIds), JSON.stringify(updated.linkedTaskIds), JSON.stringify(updated.linkedBehaviorIds), JSON.stringify(updated.linkedBeliefIds), JSON.stringify(updated.linkedModeIds), JSON.stringify(updated.modeOverlays), JSON.stringify(updated.schemaLinks), JSON.stringify(updated.modeTimeline), JSON.stringify(updated.nextMoves), updated.updatedAt, reportId);
+    if (parsed.userId !== undefined) {
+        assignOwnedEntity("trigger_report", reportId, parsed.userId, context.actor);
+    }
     mapCreateUpdateContext({
         entityType: "trigger_report",
         entityId: reportId,
@@ -1326,7 +1382,7 @@ export function updateTriggerReport(reportId, patch, context) {
         actor: context.actor ?? null,
         metadata: { status: updated.status }
     });
-    return updated;
+    return decorateOwnedEntity("trigger_report", updated);
 }
 export function deleteTriggerReport(reportId, context) {
     const existing = getTriggerReportById(reportId);
@@ -1336,6 +1392,7 @@ export function deleteTriggerReport(reportId, context) {
     return runInTransaction(() => {
         removeIdFromStringArrayColumn("belief_entries", "linked_report_ids_json", reportId);
         unlinkEntityNotes("trigger_report", reportId);
+        clearEntityOwner("trigger_report", reportId);
         getDatabase()
             .prepare(`DELETE FROM trigger_reports WHERE id = ?`)
             .run(reportId);

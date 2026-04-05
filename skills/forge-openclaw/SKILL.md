@@ -11,6 +11,16 @@ NEGATIVE HABIT CHECK-IN RULE: for a `negative` habit, the correct aligned/resist
 
 Write to Forge only with clear user consent. If the user is just thinking aloud, helping first is usually better than writing immediately. After helping, you may offer one short Forge prompt if the match is strong. If the user agrees, ask only for the missing fields and only one to three focused questions at a time. Do not offer Forge again after a decline unless the user reopens it.
 
+Entity conversation rule:
+
+- For all entity creation or update flows, first use [`entity_conversation_playbooks.md`](./entity_conversation_playbooks.md) to decide the next best question.
+- Ask only for what is missing or unclear. Do not walk through every schema field.
+- Prefer a progression of:
+  concrete example or intent -> working name -> purpose or meaning -> placement in Forge -> operational details -> linked context.
+- When updating an entity, start with what is changing, what should stay true, and what prompted the update now.
+- When enough is clear, briefly summarize what you heard in the user's own language before asking for the last missing structural detail.
+- The quick intake prompts later in this file are fallback checkpoints, not a script to read aloud.
+
 Forge data location rule:
 
 - by default, Forge stores data under the active runtime root at `data/forge.sqlite`

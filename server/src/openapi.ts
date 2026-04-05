@@ -3435,6 +3435,383 @@ export function buildOpenApiDocument() {
           }
         }
       },
+      "/api/v1/users/directory": {
+        get: {
+          summary:
+            "Read the live human and bot directory with ownership summaries and directional relationship graph",
+          responses: {
+            "200": jsonResponse(
+              {
+                type: "object",
+                required: ["directory"],
+                properties: {
+                  directory: {
+                    type: "object",
+                    additionalProperties: true
+                  }
+                }
+              },
+              "User directory"
+            )
+          }
+        }
+      },
+      "/api/v1/preferences/workspace": {
+        get: {
+          summary:
+            "Get the inferred Preferences workspace for one user, domain, and optional context",
+          responses: {
+            "200": jsonResponse(
+              {
+                type: "object",
+                required: ["workspace"],
+                properties: {
+                  workspace: {
+                    type: "object",
+                    additionalProperties: true
+                  }
+                }
+              },
+              "Preferences workspace"
+            ),
+            default: { $ref: "#/components/responses/Error" }
+          }
+        }
+      },
+      "/api/v1/preferences/game/start": {
+        post: {
+          summary:
+            "Start the Preferences game for a domain or concept list and return the refreshed workspace",
+          responses: {
+            "200": jsonResponse(
+              {
+                type: "object",
+                required: ["workspace"],
+                properties: {
+                  workspace: {
+                    type: "object",
+                    additionalProperties: true
+                  }
+                }
+              },
+              "Refreshed Preferences workspace"
+            ),
+            default: { $ref: "#/components/responses/Error" }
+          }
+        }
+      },
+      "/api/v1/preferences/catalogs": {
+        post: {
+          summary: "Create a Preferences concept list",
+          responses: {
+            "201": jsonResponse(
+              {
+                type: "object",
+                required: ["catalog"],
+                properties: {
+                  catalog: {
+                    type: "object",
+                    additionalProperties: true
+                  }
+                }
+              },
+              "Created Preferences catalog"
+            ),
+            default: { $ref: "#/components/responses/Error" }
+          }
+        }
+      },
+      "/api/v1/preferences/catalogs/{id}": {
+        patch: {
+          summary: "Update a Preferences concept list",
+          responses: {
+            "200": jsonResponse(
+              {
+                type: "object",
+                required: ["catalog"],
+                properties: {
+                  catalog: {
+                    type: "object",
+                    additionalProperties: true
+                  }
+                }
+              },
+              "Updated Preferences catalog"
+            ),
+            default: { $ref: "#/components/responses/Error" }
+          }
+        },
+        delete: {
+          summary: "Delete a Preferences concept list",
+          responses: {
+            "200": jsonResponse(
+              {
+                type: "object",
+                required: ["catalog"],
+                properties: {
+                  catalog: {
+                    type: "object",
+                    additionalProperties: true
+                  }
+                }
+              },
+              "Deleted Preferences catalog"
+            ),
+            default: { $ref: "#/components/responses/Error" }
+          }
+        }
+      },
+      "/api/v1/preferences/catalog-items": {
+        post: {
+          summary: "Create a Preferences concept entry",
+          responses: {
+            "201": jsonResponse(
+              {
+                type: "object",
+                required: ["item"],
+                properties: {
+                  item: {
+                    type: "object",
+                    additionalProperties: true
+                  }
+                }
+              },
+              "Created Preferences catalog item"
+            ),
+            default: { $ref: "#/components/responses/Error" }
+          }
+        }
+      },
+      "/api/v1/preferences/catalog-items/{id}": {
+        patch: {
+          summary: "Update a Preferences concept entry",
+          responses: {
+            "200": jsonResponse(
+              {
+                type: "object",
+                required: ["item"],
+                properties: {
+                  item: {
+                    type: "object",
+                    additionalProperties: true
+                  }
+                }
+              },
+              "Updated Preferences catalog item"
+            ),
+            default: { $ref: "#/components/responses/Error" }
+          }
+        },
+        delete: {
+          summary: "Delete a Preferences concept entry",
+          responses: {
+            "200": jsonResponse(
+              {
+                type: "object",
+                required: ["item"],
+                properties: {
+                  item: {
+                    type: "object",
+                    additionalProperties: true
+                  }
+                }
+              },
+              "Deleted Preferences catalog item"
+            ),
+            default: { $ref: "#/components/responses/Error" }
+          }
+        }
+      },
+      "/api/v1/preferences/contexts": {
+        post: {
+          summary: "Create a Preferences context",
+          responses: {
+            "201": jsonResponse(
+              {
+                type: "object",
+                required: ["context"],
+                properties: {
+                  context: {
+                    type: "object",
+                    additionalProperties: true
+                  }
+                }
+              },
+              "Created Preferences context"
+            ),
+            default: { $ref: "#/components/responses/Error" }
+          }
+        }
+      },
+      "/api/v1/preferences/contexts/{id}": {
+        patch: {
+          summary: "Update a Preferences context",
+          responses: {
+            "200": jsonResponse(
+              {
+                type: "object",
+                required: ["context"],
+                properties: {
+                  context: {
+                    type: "object",
+                    additionalProperties: true
+                  }
+                }
+              },
+              "Updated Preferences context"
+            ),
+            default: { $ref: "#/components/responses/Error" }
+          }
+        }
+      },
+      "/api/v1/preferences/contexts/merge": {
+        post: {
+          summary: "Merge one Preferences context into another",
+          responses: {
+            "200": jsonResponse(
+              {
+                type: "object",
+                required: ["merge"],
+                properties: {
+                  merge: {
+                    type: "object",
+                    additionalProperties: true
+                  }
+                }
+              },
+              "Merged Preferences contexts"
+            ),
+            default: { $ref: "#/components/responses/Error" }
+          }
+        }
+      },
+      "/api/v1/preferences/items": {
+        post: {
+          summary: "Create a standalone Preferences item",
+          responses: {
+            "201": jsonResponse(
+              {
+                type: "object",
+                required: ["item"],
+                properties: {
+                  item: {
+                    type: "object",
+                    additionalProperties: true
+                  }
+                }
+              },
+              "Created Preferences item"
+            ),
+            default: { $ref: "#/components/responses/Error" }
+          }
+        }
+      },
+      "/api/v1/preferences/items/{id}": {
+        patch: {
+          summary: "Update a Preferences item",
+          responses: {
+            "200": jsonResponse(
+              {
+                type: "object",
+                required: ["item"],
+                properties: {
+                  item: {
+                    type: "object",
+                    additionalProperties: true
+                  }
+                }
+              },
+              "Updated Preferences item"
+            ),
+            default: { $ref: "#/components/responses/Error" }
+          }
+        }
+      },
+      "/api/v1/preferences/items/from-entity": {
+        post: {
+          summary: "Create or queue a Preferences item from an existing Forge entity",
+          responses: {
+            "201": jsonResponse(
+              {
+                type: "object",
+                required: ["item"],
+                properties: {
+                  item: {
+                    type: "object",
+                    additionalProperties: true
+                  }
+                }
+              },
+              "Queued entity-backed Preferences item"
+            ),
+            default: { $ref: "#/components/responses/Error" }
+          }
+        }
+      },
+      "/api/v1/preferences/judgments": {
+        post: {
+          summary: "Submit a pairwise Preferences judgment",
+          responses: {
+            "201": jsonResponse(
+              {
+                type: "object",
+                required: ["judgment"],
+                properties: {
+                  judgment: {
+                    type: "object",
+                    additionalProperties: true
+                  }
+                }
+              },
+              "Created pairwise judgment"
+            ),
+            default: { $ref: "#/components/responses/Error" }
+          }
+        }
+      },
+      "/api/v1/preferences/signals": {
+        post: {
+          summary: "Submit an absolute Preferences signal",
+          responses: {
+            "201": jsonResponse(
+              {
+                type: "object",
+                required: ["signal"],
+                properties: {
+                  signal: {
+                    type: "object",
+                    additionalProperties: true
+                  }
+                }
+              },
+              "Created absolute signal"
+            ),
+            default: { $ref: "#/components/responses/Error" }
+          }
+        }
+      },
+      "/api/v1/preferences/items/{id}/score": {
+        patch: {
+          summary:
+            "Patch manual score state for a Preferences item and return the refreshed workspace",
+          responses: {
+            "200": jsonResponse(
+              {
+                type: "object",
+                required: ["workspace"],
+                properties: {
+                  workspace: {
+                    type: "object",
+                    additionalProperties: true
+                  }
+                }
+              },
+              "Refreshed Preferences workspace"
+            ),
+            default: { $ref: "#/components/responses/Error" }
+          }
+        }
+      },
       "/api/v1/operator/overview": {
         get: {
           summary:

@@ -55,6 +55,7 @@ function readExecutionConfig() {
 }
 function mapTaskRun(row, now = new Date(), cached = computeWorkTime(now)) {
     const metric = cached.runMetrics.get(row.id);
+    const task = getTaskById(row.task_id);
     return taskRunSchema.parse({
         id: row.id,
         taskId: row.task_id,
@@ -77,7 +78,9 @@ function mapTaskRun(row, now = new Date(), cached = computeWorkTime(now)) {
         releasedAt: row.released_at,
         timedOutAt: row.timed_out_at,
         overrideReason: row.override_reason ?? null,
-        updatedAt: row.updated_at
+        updatedAt: row.updated_at,
+        userId: task?.userId ?? null,
+        user: task?.user ?? null
     });
 }
 function getTaskRunRowById(taskRunId) {
@@ -284,7 +287,12 @@ export function listTaskRuns(filters = {}, now = new Date()) {
          ${limitSql}`)
             .all(...params);
         const cached = computeWorkTime(now);
-        return rows.map((row) => mapTaskRun(row, now, cached));
+        const runs = rows.map((row) => mapTaskRun(row, now, cached));
+        if (!filters.userIds || filters.userIds.length === 0) {
+            return runs;
+        }
+        const allowed = new Set(filters.userIds);
+        return runs.filter((run) => run.userId !== null && allowed.has(run.userId));
     });
 }
 export function claimTaskRun(taskId, input, now = new Date(), activity = { source: "ui" }) {

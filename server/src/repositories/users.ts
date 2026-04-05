@@ -6,6 +6,7 @@ import {
   userAccessGrantSchema,
   userAccessRightsSchema,
   userOwnershipSummarySchema,
+  userXpSummarySchema,
   updateUserAccessGrantSchema,
   userSummarySchema,
   type CreateUserInput,
@@ -16,6 +17,7 @@ import {
   type UpdateUserAccessGrantInput,
   type UserKind,
   type UserOwnershipSummary,
+  type UserXpSummary,
   type UserSummary
 } from "../types.js";
 
@@ -40,6 +42,23 @@ type UserAccessGrantRow = {
   updated_at: string;
 };
 
+type RewardOwnershipRow = {
+  entity_type: string;
+  entity_id: string;
+  actor: string | null;
+  delta_xp: number;
+  created_at: string;
+};
+
+function startOfWeek(date: Date): Date {
+  const clone = new Date(date);
+  const day = clone.getDay();
+  const delta = day === 0 ? -6 : 1 - day;
+  clone.setDate(clone.getDate() + delta);
+  clone.setHours(0, 0, 0, 0);
+  return clone;
+}
+
 function normalizeHandle(value: string): string {
   return value
     .trim()
@@ -49,9 +68,7 @@ function normalizeHandle(value: string): string {
     .slice(0, 48);
 }
 
-function buildDefaultRights(
-  self = false
-): UserAccessRights {
+function buildDefaultRights(self = false): UserAccessRights {
   return userAccessRightsSchema.parse({
     discoverable: true,
     canListUsers: true,
@@ -59,6 +76,7 @@ function buildDefaultRights(
     canReadEntities: true,
     canSearchEntities: true,
     canLinkEntities: true,
+    canCoordinate: true,
     canAffectEntities: true,
     canManageStrategies: true,
     canCreateOnBehalf: true,
@@ -87,8 +105,7 @@ function normalizeGrantConfig(
       : {};
   const defaultConfig = buildGrantConfig(options.self ?? false);
   return {
-    self:
-      typeof current.self === "boolean" ? current.self : defaultConfig.self,
+    self: typeof current.self === "boolean" ? current.self : defaultConfig.self,
     mutable:
       typeof current.mutable === "boolean"
         ? current.mutable
@@ -108,7 +125,9 @@ function normalizeGrantConfig(
   };
 }
 
-function deriveAccessLevel(config: UserAccessGrantConfig): UserAccessGrant["accessLevel"] {
+function deriveAccessLevel(
+  config: UserAccessGrantConfig
+): UserAccessGrant["accessLevel"] {
   return config.self ||
     config.mutable ||
     config.rights.canAffectEntities ||
@@ -375,6 +394,93 @@ export function listUserOwnershipSummaries(): UserOwnershipSummary[] {
       entityCounts
     });
   });
+}
+
+export function listUserXpSummaries(): UserXpSummary[] {
+  const users = listUsers();
+  const summaries = new Map<
+    string,
+    {
+      userId: string;
+      totalXp: number;
+      weeklyXp: number;
+      rewardEventCount: number;
+      lastRewardAt: string | null;
+    }
+  >(
+    users.map((user) => [
+      user.id,
+      {
+        userId: user.id,
+        totalXp: 0,
+        weeklyXp: 0,
+        rewardEventCount: 0,
+        lastRewardAt: null
+      }
+    ])
+  );
+  const ownerRows = getDatabase()
+    .prepare(
+      `SELECT entity_type, entity_id, user_id
+       FROM entity_owners`
+    )
+    .all() as Array<{
+    entity_type: string;
+    entity_id: string;
+    user_id: string;
+  }>;
+  const ownerByEntityKey = new Map(
+    ownerRows.map(
+      (row) => [`${row.entity_type}:${row.entity_id}`, row.user_id] as const
+    )
+  );
+  const usersByLabel = new Map<string, string>();
+  for (const user of users) {
+    usersByLabel.set(user.displayName.trim().toLowerCase(), user.id);
+    usersByLabel.set(user.handle.trim().toLowerCase(), user.id);
+  }
+  const weekStartIso = startOfWeek(new Date()).toISOString();
+  const rewardRows = getDatabase()
+    .prepare(
+      `SELECT entity_type, entity_id, actor, delta_xp, created_at
+       FROM reward_ledger
+       ORDER BY created_at ASC`
+    )
+    .all() as RewardOwnershipRow[];
+
+  for (const row of rewardRows) {
+    const ownedUserId =
+      row.entity_type === "system"
+        ? row.actor
+          ? (usersByLabel.get(row.actor.trim().toLowerCase()) ?? null)
+          : null
+        : (ownerByEntityKey.get(`${row.entity_type}:${row.entity_id}`) ?? null);
+    if (!ownedUserId) {
+      continue;
+    }
+    const summary = summaries.get(ownedUserId);
+    if (!summary) {
+      continue;
+    }
+    summary.totalXp += row.delta_xp;
+    if (row.created_at >= weekStartIso) {
+      summary.weeklyXp += row.delta_xp;
+    }
+    summary.rewardEventCount += 1;
+    summary.lastRewardAt = row.created_at;
+  }
+
+  return users.map((user) =>
+    userXpSummarySchema.parse(
+      summaries.get(user.id) ?? {
+        userId: user.id,
+        totalXp: 0,
+        weeklyXp: 0,
+        rewardEventCount: 0,
+        lastRewardAt: null
+      }
+    )
+  );
 }
 
 export function findUserByLabel(label: string): UserSummary | undefined {

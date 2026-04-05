@@ -1,6 +1,6 @@
 import * as Dialog from "@radix-ui/react-dialog";
 import { useEffect, useMemo, useState } from "react";
-import { ArrowRight, BrainCircuit, BriefcaseBusiness, CalendarDays, Clock3, GitBranch, LayoutDashboard, NotebookPen, Repeat, Search, Settings, Target, Zap } from "lucide-react";
+import { ArrowRight, BookCopy, BrainCircuit, BriefcaseBusiness, CalendarDays, Clock3, GitBranch, LayoutDashboard, NotebookPen, Repeat, Search, Settings, SlidersHorizontal, Target, Zap } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { EntityName } from "@/components/ui/entity-name";
 import { Input } from "@/components/ui/input";
@@ -42,10 +42,12 @@ export function CommandPalette({ open, onOpenChange, snapshot }: CommandPaletteP
       { id: "route-kanban", title: t("common.routeLabels.kanban"), detail: t("common.commandPalette.routeKanban"), href: "/kanban", category: t("common.commandPalette.categoryRoute") },
       { id: "route-psyche", title: t("common.routeLabels.psyche"), detail: t("common.commandPalette.routePsyche"), href: "/psyche", category: t("common.commandPalette.categoryRoute") },
       { id: "route-notes", title: t("common.routeLabels.notes"), detail: t("common.commandPalette.routeNotes"), href: "/notes", category: t("common.commandPalette.categoryRoute") },
+      { id: "route-wiki", title: t("common.routeLabels.wiki"), detail: t("common.commandPalette.routeWiki"), href: "/wiki", category: t("common.commandPalette.categoryRoute") },
       { id: "route-goals", title: t("common.routeLabels.goals"), detail: t("common.commandPalette.routeGoals"), href: "/goals", category: t("common.commandPalette.categoryRoute") },
       { id: "route-habits", title: t("common.routeLabels.habits"), detail: t("common.commandPalette.routeHabits"), href: "/habits", category: t("common.commandPalette.categoryRoute") },
       { id: "route-projects", title: t("common.routeLabels.projects"), detail: t("common.commandPalette.routeProjects"), href: "/projects", category: t("common.commandPalette.categoryRoute") },
       { id: "route-strategies", title: t("common.routeLabels.strategies"), detail: t("common.commandPalette.routeStrategies"), href: "/strategies", category: t("common.commandPalette.categoryRoute") },
+      { id: "route-preferences", title: t("common.routeLabels.preferences"), detail: t("common.commandPalette.routePreferences"), href: "/preferences", category: t("common.commandPalette.categoryRoute") },
       { id: "route-calendar", title: t("common.routeLabels.calendar"), detail: t("common.commandPalette.routeCalendar"), href: "/calendar", category: t("common.commandPalette.categoryRoute") },
       { id: "route-review", title: t("common.routeLabels.review"), detail: t("common.commandPalette.routeReview"), href: "/review/weekly", category: t("common.commandPalette.categoryRoute") },
       { id: "route-settings", title: t("common.routeLabels.settings"), detail: t("common.commandPalette.routeSettings"), href: "/settings", category: t("common.commandPalette.categoryRoute") }
@@ -127,11 +129,13 @@ export function CommandPalette({ open, onOpenChange, snapshot }: CommandPaletteP
                 { label: t("common.routeLabels.today"), icon: Clock3 },
                 { label: t("common.routeLabels.kanban"), icon: Zap },
                 { label: t("common.routeLabels.notes"), icon: NotebookPen },
+                { label: t("common.routeLabels.wiki"), icon: BookCopy },
                 { label: t("common.routeLabels.psyche"), icon: BrainCircuit },
                 { label: t("common.routeLabels.goals"), icon: Target },
                 { label: t("common.routeLabels.habits"), icon: Repeat },
                 { label: t("common.routeLabels.projects"), icon: BriefcaseBusiness },
                 { label: t("common.routeLabels.strategies"), icon: GitBranch },
+                { label: t("common.routeLabels.preferences"), icon: SlidersHorizontal },
                 { label: t("common.routeLabels.calendar"), icon: CalendarDays },
                 { label: t("common.routeLabels.settings"), icon: Settings }
               ].map((entry) => (

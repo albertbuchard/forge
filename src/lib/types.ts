@@ -99,6 +99,7 @@ export interface UserAccessRights {
   canReadEntities: boolean;
   canSearchEntities: boolean;
   canLinkEntities: boolean;
+  canCoordinate: boolean;
   canAffectEntities: boolean;
   canManageStrategies: boolean;
   canCreateOnBehalf: boolean;
@@ -131,10 +132,19 @@ export interface UserOwnershipSummary {
   entityCounts: Record<string, number>;
 }
 
+export interface UserXpSummary {
+  userId: string;
+  totalXp: number;
+  weeklyXp: number;
+  rewardEventCount: number;
+  lastRewardAt: string | null;
+}
+
 export interface UserDirectoryPayload {
   users: UserSummary[];
   grants: UserAccessGrant[];
   ownership: UserOwnershipSummary[];
+  xp: UserXpSummary[];
   posture: {
     accessModel: "permissive" | "directional_graph";
     summary: string;
@@ -192,15 +202,201 @@ export interface NoteLink {
 
 export interface Note extends OwnedEntity {
   id: string;
+  kind: "evidence" | "wiki";
+  title: string;
+  slug: string;
+  spaceId: string;
+  parentSlug: string | null;
+  indexOrder: number;
+  showInIndex: boolean;
+  aliases: string[];
+  summary: string;
   contentMarkdown: string;
   contentPlain: string;
   author: string | null;
   source: "ui" | "openclaw" | "agent" | "system";
+  sourcePath: string;
+  frontmatter: Record<string, unknown>;
+  revisionHash: string;
+  lastSyncedAt: string | null;
   createdAt: string;
   updatedAt: string;
   links: NoteLink[];
   tags?: string[];
   destroyAt?: string | null;
+}
+
+export interface WikiSpace {
+  id: string;
+  slug: string;
+  label: string;
+  description: string;
+  ownerUserId: string | null;
+  visibility: "personal" | "shared";
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface WikiLinkEdge {
+  sourceNoteId: string;
+  targetType: "page" | "entity" | "unresolved";
+  targetNoteId: string | null;
+  targetEntityType: CrudEntityType | null;
+  targetEntityId: string | null;
+  label: string;
+  rawTarget: string;
+  isEmbed: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface WikiMediaAsset {
+  id: string;
+  spaceId: string;
+  noteId: string | null;
+  label: string;
+  mimeType: string;
+  fileName: string;
+  filePath: string;
+  sizeBytes: number;
+  checksum: string;
+  transcriptNoteId: string | null;
+  metadata: Record<string, unknown>;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface WikiLlmProfile {
+  id: string;
+  label: string;
+  provider: string;
+  baseUrl: string;
+  model: string;
+  secretId: string | null;
+  systemPrompt: string;
+  enabled: boolean;
+  metadata: Record<string, unknown>;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface WikiEmbeddingProfile {
+  id: string;
+  label: string;
+  provider: string;
+  baseUrl: string;
+  model: string;
+  secretId: string | null;
+  dimensions: number | null;
+  chunkSize: number;
+  chunkOverlap: number;
+  enabled: boolean;
+  metadata: Record<string, unknown>;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface WikiSettingsPayload {
+  spaces: WikiSpace[];
+  llmProfiles: WikiLlmProfile[];
+  embeddingProfiles: WikiEmbeddingProfile[];
+}
+
+export interface WikiHealthPayload {
+  space: WikiSpace;
+  indexPath: string;
+  rawDirectoryPath: string;
+  pageCount: number;
+  wikiPageCount: number;
+  evidencePageCount: number;
+  assetCount: number;
+  rawSourceCount: number;
+  unresolvedLinks: Array<{
+    sourceNoteId: string;
+    sourceSlug: string;
+    sourceTitle: string;
+    rawTarget: string;
+    updatedAt: string;
+  }>;
+  orphanPages: Array<{
+    id: string;
+    slug: string;
+    title: string;
+    kind: Note["kind"];
+    updatedAt: string;
+  }>;
+  missingSummaries: Array<{
+    id: string;
+    slug: string;
+    title: string;
+    updatedAt: string;
+  }>;
+  enabledEmbeddingProfiles: Array<{
+    id: string;
+    label: string;
+    model: string;
+  }>;
+  enabledLlmProfiles: Array<{
+    id: string;
+    label: string;
+    model: string;
+  }>;
+}
+
+export interface WikiPageDetailPayload {
+  page: Note;
+  backlinks: WikiLinkEdge[];
+  backlinkSourceNotes: Note[];
+  assets: WikiMediaAsset[];
+  backlinksBySourceId: Record<string, Note | null>;
+}
+
+export interface WikiTreeNode {
+  page: Note;
+  children: WikiTreeNode[];
+}
+
+export interface WikiSearchResult {
+  page: Note;
+  score: number;
+}
+
+export interface WikiSearchResponse {
+  mode: "text" | "semantic" | "entity" | "hybrid";
+  profileId: string | null;
+  results: WikiSearchResult[];
+}
+
+export interface WikiIngestJobItem {
+  id: string;
+  itemType: string;
+  status: string;
+  noteId: string | null;
+  mediaAssetId: string | null;
+  payload: Record<string, unknown>;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface WikiIngestJobPayload {
+  job: {
+    id: string;
+    spaceId: string;
+    llmProfileId: string | null;
+    status: string;
+    sourceKind: string;
+    sourceLocator: string;
+    mimeType: string;
+    titleHint: string;
+    summary: string;
+    pageNoteId: string | null;
+    createdByActor: string | null;
+    errorMessage: string;
+    createdAt: string;
+    updatedAt: string;
+    completedAt: string | null;
+  };
+  items: WikiIngestJobItem[];
 }
 
 export interface NoteSummary {
@@ -611,6 +807,7 @@ export interface CompanionPairingSession {
 
 export interface CompanionOverviewPayload {
   pairings: CompanionPairingSession[];
+  importRuns: HealthImportRun[];
   healthState:
     | "disconnected"
     | "connected"
@@ -621,7 +818,35 @@ export interface CompanionOverviewPayload {
   counts: {
     sleepSessions: number;
     workouts: number;
+    reflectiveSleepSessions: number;
+    linkedWorkouts: number;
+    habitGeneratedWorkouts: number;
+    reconciledWorkouts: number;
   };
+  permissions: {
+    healthKitAuthorized: boolean;
+    backgroundRefreshEnabled: boolean;
+    locationReady: boolean;
+    motionReady: boolean;
+  };
+}
+
+export interface HealthImportRun {
+  id: string;
+  pairingSessionId: string | null;
+  userId: string;
+  source: string;
+  sourceDevice: string;
+  status: string;
+  payloadSummary: Record<string, unknown>;
+  importedCount: number;
+  createdCount: number;
+  updatedCount: number;
+  mergedCount: number;
+  errorMessage: string | null;
+  importedAt: string;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface HealthLink {
@@ -701,6 +926,12 @@ export interface SleepViewData {
     averageTimeInBedSeconds: number;
     averageSleepScore: number;
     averageRegularityScore: number;
+    averageEfficiency: number;
+    averageRestorativeShare: number;
+    reflectiveNightCount: number;
+    linkedNightCount: number;
+    averageBedtimeConsistencyMinutes: number;
+    averageWakeConsistencyMinutes: number;
     latestBedtime: string | null;
     latestWakeTime: string | null;
   };
@@ -718,6 +949,14 @@ export interface SleepViewData {
     wakeHour: number;
     sleepHours: number;
   }>;
+  stageAverages: Array<{
+    stage: string;
+    averageSeconds: number;
+  }>;
+  linkBreakdown: Array<{
+    entityType: string;
+    count: number;
+  }>;
   sessions: SleepSessionRecord[];
 }
 
@@ -729,6 +968,14 @@ export interface FitnessViewData {
     energyBurnedKcal: number;
     distanceMeters: number;
     workoutTypes: string[];
+    averageSessionMinutes: number;
+    averageEffort: number;
+    linkedSessionCount: number;
+    plannedSessionCount: number;
+    importedSessionCount: number;
+    habitGeneratedSessionCount: number;
+    reconciledSessionCount: number;
+    topWorkoutType: string | null;
     streakDays: number;
   };
   weeklyTrend: Array<{
@@ -736,6 +983,12 @@ export interface FitnessViewData {
     dateKey: string;
     workoutType: string;
     durationMinutes: number;
+    energyKcal: number;
+  }>;
+  typeBreakdown: Array<{
+    workoutType: string;
+    sessionCount: number;
+    totalMinutes: number;
     energyKcal: number;
   }>;
   sessions: WorkoutSessionRecord[];
@@ -1038,11 +1291,16 @@ export interface StrategyMetrics {
   sequencingScore: number;
   scopeDisciplineScore: number;
   qualityScore: number;
+  targetProgressScore: number;
   completedNodeCount: number;
+  startedNodeCount: number;
+  readyNodeCount: number;
   totalNodeCount: number;
   completedTargetCount: number;
   totalTargetCount: number;
   offPlanEntityCount: number;
+  offPlanActiveEntityCount: number;
+  offPlanCompletedEntityCount: number;
   activeNodeIds: string[];
   nextNodeIds: string[];
   blockedNodeIds: string[];
@@ -1639,4 +1897,406 @@ export interface ForgeSnapshot {
   habits: Habit[];
   activity: ActivityEvent[];
   activeTaskRuns: TaskRun[];
+}
+
+export type PreferenceDomain =
+  | "projects"
+  | "tasks"
+  | "strategies"
+  | "habits"
+  | "calendar"
+  | "sleep"
+  | "sports"
+  | "activities"
+  | "food"
+  | "places"
+  | "countries"
+  | "fashion"
+  | "people"
+  | "media"
+  | "tools"
+  | "custom";
+
+export type PreferenceCatalogSource = "seeded" | "custom";
+
+export type PreferenceContextShareMode = "shared" | "isolated" | "blended";
+export type PreferenceJudgmentOutcome = "left" | "right" | "tie" | "skip";
+export type PreferenceSignalType =
+  | "favorite"
+  | "veto"
+  | "must_have"
+  | "bookmark"
+  | "neutral"
+  | "compare_later";
+export type PreferenceDimensionId =
+  | "novelty"
+  | "simplicity"
+  | "rigor"
+  | "aesthetics"
+  | "depth"
+  | "structure"
+  | "familiarity"
+  | "surprise";
+export type PreferenceItemStatus =
+  | "liked"
+  | "disliked"
+  | "uncertain"
+  | "vetoed"
+  | "bookmarked"
+  | "favorite"
+  | "must_have"
+  | "neutral";
+
+export interface PreferenceDimensionVector {
+  novelty: number;
+  simplicity: number;
+  rigor: number;
+  aesthetics: number;
+  depth: number;
+  structure: number;
+  familiarity: number;
+  surprise: number;
+}
+
+export interface PreferenceLinkedEntity {
+  entityType: CrudEntityType;
+  entityId: string;
+}
+
+export interface PreferenceProfile {
+  id: string;
+  userId: string;
+  domain: PreferenceDomain;
+  defaultContextId: string | null;
+  modelVersion: string;
+  createdAt: string;
+  updatedAt: string;
+  user?: UserSummary | null;
+}
+
+export interface PreferenceContext {
+  id: string;
+  profileId: string;
+  name: string;
+  description: string;
+  shareMode: PreferenceContextShareMode;
+  active: boolean;
+  isDefault: boolean;
+  decayDays: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PreferenceItem {
+  id: string;
+  profileId: string;
+  label: string;
+  description: string;
+  tags: string[];
+  featureWeights: PreferenceDimensionVector;
+  sourceEntityType?: CrudEntityType | null;
+  sourceEntityId?: string | null;
+  linkedEntity?: PreferenceLinkedEntity | null;
+  metadata: Record<string, unknown>;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PreferenceCatalogItem {
+  id: string;
+  catalogId: string;
+  label: string;
+  description: string;
+  tags: string[];
+  featureWeights: PreferenceDimensionVector;
+  position: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PreferenceCatalog {
+  id: string;
+  profileId: string;
+  domain: PreferenceDomain;
+  slug: string;
+  title: string;
+  description: string;
+  source: PreferenceCatalogSource;
+  createdAt: string;
+  updatedAt: string;
+  items: PreferenceCatalogItem[];
+}
+
+export interface PairwiseJudgment {
+  id: string;
+  profileId: string;
+  contextId: string;
+  userId: string;
+  leftItemId: string;
+  rightItemId: string;
+  outcome: PreferenceJudgmentOutcome;
+  strength: number;
+  responseTimeMs: number | null;
+  source: string;
+  reasonTags: string[];
+  createdAt: string;
+}
+
+export interface AbsoluteSignal {
+  id: string;
+  profileId: string;
+  contextId: string;
+  userId: string;
+  itemId: string;
+  signalType: PreferenceSignalType;
+  strength: number;
+  source: string;
+  createdAt: string;
+}
+
+export interface PreferenceItemScore {
+  id: string;
+  profileId: string;
+  contextId: string;
+  itemId: string;
+  latentScore: number;
+  confidence: number;
+  uncertainty: number;
+  evidenceCount: number;
+  pairwiseWins: number;
+  pairwiseLosses: number;
+  pairwiseTies: number;
+  signalCount: number;
+  conflictCount: number;
+  status: PreferenceItemStatus;
+  dominantDimensions: PreferenceDimensionId[];
+  explanation: string[];
+  manualStatus?: PreferenceItemStatus | null;
+  manualScore?: number | null;
+  confidenceLock?: number | null;
+  bookmarked: boolean;
+  compareLater: boolean;
+  frozen: boolean;
+  lastInferredAt: string;
+  lastJudgmentAt: string | null;
+  updatedAt: string;
+  item?: PreferenceItem;
+}
+
+export interface PreferenceDimensionSummary {
+  id: string;
+  profileId: string;
+  contextId: string;
+  dimensionId: PreferenceDimensionId;
+  leaning: number;
+  confidence: number;
+  movement: number;
+  contextSensitivity: number;
+  evidenceCount: number;
+  updatedAt: string;
+}
+
+export interface PreferenceSnapshot {
+  id: string;
+  profileId: string;
+  contextId: string;
+  summaryMetrics: Record<string, unknown>;
+  serializedModelState: Record<string, unknown>;
+  createdAt: string;
+}
+
+export interface PreferenceMapPoint {
+  itemId: string;
+  label: string;
+  x: number;
+  y: number;
+  score: number;
+  confidence: number;
+  uncertainty: number;
+  status: PreferenceItemStatus;
+  clusterKey: string;
+  tags: string[];
+  sourceEntityType?: CrudEntityType | null;
+  sourceEntityId?: string | null;
+}
+
+export interface PreferenceComparePair {
+  left: PreferenceItem;
+  right: PreferenceItem;
+  rationale: string[];
+  score: number;
+}
+
+export interface PreferenceWorkspacePayload {
+  profile: PreferenceProfile;
+  selectedContext: PreferenceContext;
+  contexts: PreferenceContext[];
+  catalogs: PreferenceCatalog[];
+  dimensions: PreferenceDimensionSummary[];
+  scores: PreferenceItemScore[];
+  map: PreferenceMapPoint[];
+  history: {
+    judgments: PairwiseJudgment[];
+    signals: AbsoluteSignal[];
+    snapshots: PreferenceSnapshot[];
+    staleItemIds: string[];
+    flippedItemIds: string[];
+  };
+  compare: {
+    nextPair: PreferenceComparePair | null;
+    pendingCount: number;
+    candidateCount: number;
+  };
+  summary: {
+    totalItems: number;
+    likedCount: number;
+    dislikedCount: number;
+    uncertainCount: number;
+    bookmarkedCount: number;
+    vetoedCount: number;
+    averageConfidence: number;
+    pendingComparisons: number;
+  };
+  libraries: {
+    totalCatalogs: number;
+    totalCatalogItems: number;
+    seededCatalogCount: number;
+    customCatalogCount: number;
+  };
+}
+
+export interface PreferenceWorkspaceQuery {
+  userId?: string;
+  domain?: PreferenceDomain;
+  contextId?: string;
+}
+
+export interface PreferenceContextMutationInput {
+  userId: string;
+  domain: PreferenceDomain;
+  name: string;
+  description?: string;
+  shareMode?: PreferenceContextShareMode;
+  active?: boolean;
+  isDefault?: boolean;
+  decayDays?: number;
+}
+
+export interface PreferenceContextPatchInput {
+  name?: string;
+  description?: string;
+  shareMode?: PreferenceContextShareMode;
+  active?: boolean;
+  isDefault?: boolean;
+  decayDays?: number;
+}
+
+export interface PreferenceContextMergeInput {
+  sourceContextId: string;
+  targetContextId: string;
+}
+
+export interface PreferenceItemMutationInput {
+  userId: string;
+  domain: PreferenceDomain;
+  label: string;
+  description?: string;
+  tags?: string[];
+  featureWeights?: Partial<PreferenceDimensionVector>;
+  sourceEntityType?: CrudEntityType | null;
+  sourceEntityId?: string | null;
+  metadata?: Record<string, unknown>;
+  queueForCompare?: boolean;
+}
+
+export interface PreferenceItemPatchInput {
+  label?: string;
+  description?: string;
+  tags?: string[];
+  featureWeights?: Partial<PreferenceDimensionVector>;
+  sourceEntityType?: CrudEntityType | null;
+  sourceEntityId?: string | null;
+  metadata?: Record<string, unknown>;
+  queueForCompare?: boolean;
+}
+
+export interface EnqueuePreferenceEntityInput {
+  userId: string;
+  domain: PreferenceDomain;
+  entityType: CrudEntityType;
+  entityId: string;
+  label?: string;
+  description?: string;
+  tags?: string[];
+}
+
+export interface PreferenceJudgmentInput {
+  userId: string;
+  domain: PreferenceDomain;
+  contextId: string;
+  leftItemId: string;
+  rightItemId: string;
+  outcome: PreferenceJudgmentOutcome;
+  strength?: number;
+  responseTimeMs?: number | null;
+  reasonTags?: string[];
+}
+
+export interface PreferenceSignalInput {
+  userId: string;
+  domain: PreferenceDomain;
+  contextId: string;
+  itemId: string;
+  signalType: PreferenceSignalType;
+  strength?: number;
+}
+
+export interface PreferenceScorePatchInput {
+  userId: string;
+  domain: PreferenceDomain;
+  contextId: string;
+  manualStatus?: PreferenceItemStatus | null;
+  manualScore?: number | null;
+  confidenceLock?: number | null;
+  bookmarked?: boolean;
+  compareLater?: boolean;
+  frozen?: boolean;
+}
+
+export interface PreferenceCatalogMutationInput {
+  userId: string;
+  domain: PreferenceDomain;
+  title: string;
+  description?: string;
+  slug?: string;
+}
+
+export interface PreferenceCatalogPatchInput {
+  title?: string;
+  description?: string;
+  slug?: string;
+}
+
+export interface PreferenceCatalogItemMutationInput {
+  catalogId: string;
+  label: string;
+  description?: string;
+  tags?: string[];
+  featureWeights?: Partial<PreferenceDimensionVector>;
+  position?: number;
+}
+
+export interface PreferenceCatalogItemPatchInput {
+  label?: string;
+  description?: string;
+  tags?: string[];
+  featureWeights?: Partial<PreferenceDimensionVector>;
+  position?: number;
+}
+
+export interface PreferenceGameStartInput {
+  userId: string;
+  domain: PreferenceDomain;
+  contextId?: string;
+  catalogId?: string;
 }

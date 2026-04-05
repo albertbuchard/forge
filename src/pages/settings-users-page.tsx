@@ -100,6 +100,10 @@ export function SettingsUsersPage() {
       ),
     [directory?.ownership]
   );
+  const xpByUserId = useMemo(
+    () => new Map((directory?.xp ?? []).map((entry) => [entry.userId, entry])),
+    [directory?.xp]
+  );
   const readableTargetsByUserId = useMemo(() => {
     const map = new Map<string, UserSummary[]>();
     for (const grant of directory?.grants ?? []) {
@@ -111,6 +115,25 @@ export function SettingsUsersPage() {
       map.set(grant.subjectUserId, current);
     }
     return map;
+  }, [directory?.grants]);
+  const relationshipStats = useMemo(() => {
+    const directionalGrants = (directory?.grants ?? []).filter(
+      (grant) => grant.subjectUserId !== grant.targetUserId
+    );
+    return {
+      totalEdges: directionalGrants.length,
+      fullyOpenEdges: directionalGrants.filter((grant) =>
+        Object.values(grant.config.rights).every(Boolean)
+      ).length,
+      coordinationEdges: directionalGrants.filter(
+        (grant) => grant.config.rights.canCoordinate
+      ).length,
+      executionEdges: directionalGrants.filter(
+        (grant) =>
+          grant.config.rights.canAffectEntities ||
+          grant.config.rights.canCreateOnBehalf
+      ).length
+    };
   }, [directory?.grants]);
 
   const normalizedSearch = searchQuery.trim().toLowerCase();
@@ -299,6 +322,16 @@ export function SettingsUsersPage() {
                           {user.description || "No description yet."}
                         </div>
                         <div className="mt-3 flex flex-wrap gap-2">
+                          <Badge className="bg-[var(--primary)]/14 text-[var(--primary)]">
+                            {xpByUserId.get(user.id)?.totalXp ?? 0} XP
+                          </Badge>
+                          <Badge className="bg-white/[0.08] text-white/70">
+                            {xpByUserId.get(user.id)?.weeklyXp ?? 0} weekly
+                          </Badge>
+                          <Badge className="bg-white/[0.08] text-white/70">
+                            {xpByUserId.get(user.id)?.rewardEventCount ?? 0}{" "}
+                            rewards
+                          </Badge>
                           {Object.entries(
                             ownershipByUserId.get(user.id)?.entityCounts ?? {}
                           )
@@ -327,6 +360,14 @@ export function SettingsUsersPage() {
                             )
                             .join(", ") || "no other users"}
                         </div>
+                        {xpByUserId.get(user.id)?.lastRewardAt ? (
+                          <div className="mt-2 text-xs leading-5 text-white/45">
+                            Last XP movement:{" "}
+                            {new Date(
+                              xpByUserId.get(user.id)!.lastRewardAt!
+                            ).toLocaleString()}
+                          </div>
+                        ) : null}
                       </div>
                       <div className="flex gap-2">
                         <Button
@@ -348,6 +389,77 @@ export function SettingsUsersPage() {
         </div>
 
         <div className="grid gap-5">
+          <Card className="grid gap-4">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">
+                  Multi-agent onboarding
+                </div>
+                <div className="mt-2 text-sm leading-6 text-white/60">
+                  Forge now treats the users graph as the collaboration control
+                  plane. Create each human or bot here, keep the runtime shared,
+                  then narrow only the specific arrows that should stop seeing,
+                  coordinating, planning, or affecting another user.
+                </div>
+              </div>
+              <Badge className="bg-white/[0.08] text-white/72">
+                default open
+              </Badge>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+              <div className="rounded-[18px] bg-white/[0.04] px-4 py-3">
+                <div className="font-label text-[11px] uppercase tracking-[0.16em] text-white/40">
+                  Directional edges
+                </div>
+                <div className="mt-2 text-lg text-white">
+                  {relationshipStats.totalEdges}
+                </div>
+              </div>
+              <div className="rounded-[18px] bg-white/[0.04] px-4 py-3">
+                <div className="font-label text-[11px] uppercase tracking-[0.16em] text-white/40">
+                  Fully open
+                </div>
+                <div className="mt-2 text-lg text-white">
+                  {relationshipStats.fullyOpenEdges}
+                </div>
+              </div>
+              <div className="rounded-[18px] bg-white/[0.04] px-4 py-3">
+                <div className="font-label text-[11px] uppercase tracking-[0.16em] text-white/40">
+                  Coordination
+                </div>
+                <div className="mt-2 text-lg text-white">
+                  {relationshipStats.coordinationEdges}
+                </div>
+              </div>
+              <div className="rounded-[18px] bg-white/[0.04] px-4 py-3">
+                <div className="font-label text-[11px] uppercase tracking-[0.16em] text-white/40">
+                  Execution control
+                </div>
+                <div className="mt-2 text-lg text-white">
+                  {relationshipStats.executionEdges}
+                </div>
+              </div>
+            </div>
+            <div className="grid gap-2 text-sm leading-6 text-white/56">
+              <div>
+                1. Create the human and bot users that should exist in the
+                shared Forge system.
+              </div>
+              <div>
+                2. Point OpenClaw, Hermes, and the browser at the same Forge
+                runtime and storage root.
+              </div>
+              <div>
+                3. Use the graph below to decide what each direction can see,
+                message, plan, or change.
+              </div>
+              <div>
+                4. Keep strategy drafting open while the plan is negotiated,
+                then lock the strategy once it becomes the contract.
+              </div>
+            </div>
+          </Card>
+
           <UserRelationshipGraph
             users={directory?.users ?? shell.snapshot.users}
             grants={directory?.grants ?? []}
@@ -365,12 +477,13 @@ export function SettingsUsersPage() {
               OpenClaw, Hermes, and the Forge UI all read this same multi-user
               graph. Keep the defaults open while you are still wiring
               collaboration, then narrow specific arrows when one user or agent
-              should stop seeing or changing another user&apos;s work.
+              should stop seeing, messaging, planning, or changing another
+              user&apos;s work.
             </div>
             <div className="text-sm leading-6 text-white/52">
               Forge now treats every owner as either human or bot, keeps search
-              cross-user by default, and allows cross-owner links between
-              projects, tasks, notes, and strategies.
+              cross-user by default, and allows cross-owner links plus explicit
+              coordination lanes between projects, tasks, notes, and strategies.
             </div>
             <div>
               <Link

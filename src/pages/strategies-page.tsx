@@ -12,6 +12,7 @@ import { Input } from "@/components/ui/input";
 import { EmptyState } from "@/components/ui/page-state";
 import { useForgeShell } from "@/components/shell/app-shell";
 import { createStrategy, deleteStrategy, patchStrategy } from "@/lib/api";
+import { buildStrategyAlignmentBreakdown } from "@/lib/strategy-metrics";
 import type { Strategy } from "@/lib/types";
 import { getSingleSelectedUserId } from "@/lib/user-ownership";
 
@@ -33,11 +34,14 @@ export function StrategiesPage() {
     if (searchParams.get("create") === "1") {
       setEditingStrategy(null);
       setDialogOpen(true);
-      setSearchParams((current) => {
-        const next = new URLSearchParams(current);
-        next.delete("create");
-        return next;
-      }, { replace: true });
+      setSearchParams(
+        (current) => {
+          const next = new URLSearchParams(current);
+          next.delete("create");
+          return next;
+        },
+        { replace: true }
+      );
     }
   }, [searchParams, setSearchParams]);
 
@@ -76,7 +80,10 @@ export function StrategiesPage() {
   const projectsById = useMemo(
     () =>
       new Map(
-        shell.snapshot.dashboard.projects.map((project) => [project.id, project])
+        shell.snapshot.dashboard.projects.map((project) => [
+          project.id,
+          project
+        ])
       ),
     [shell.snapshot.dashboard.projects]
   );
@@ -100,8 +107,8 @@ export function StrategiesPage() {
       const graphTitles = strategy.graph.nodes
         .map((node) =>
           node.entityType === "project"
-            ? projectsById.get(node.entityId)?.title ?? ""
-            : tasksById.get(node.entityId)?.title ?? ""
+            ? (projectsById.get(node.entityId)?.title ?? "")
+            : (tasksById.get(node.entityId)?.title ?? "")
         )
         .join(" ");
       return [
@@ -185,6 +192,9 @@ export function StrategiesPage() {
             const activeNodes = strategy.graph.nodes.filter((node) =>
               strategy.metrics.activeNodeIds.includes(node.id)
             );
+            const alignmentBreakdown = buildStrategyAlignmentBreakdown(
+              strategy.metrics
+            );
             return (
               <Card key={strategy.id} className="grid gap-4">
                 <div className="flex flex-wrap items-start justify-between gap-3">
@@ -228,8 +238,22 @@ export function StrategiesPage() {
                       Graph progress
                     </div>
                     <div className="mt-2 text-xl text-white">
-                      {strategy.metrics.completedNodeCount}/
+                      {strategy.metrics.startedNodeCount}/
                       {strategy.metrics.totalNodeCount}
+                    </div>
+                    <div className="text-xs leading-5 text-white/46">
+                      {strategy.metrics.completedNodeCount} completed
+                    </div>
+                  </div>
+                  <div className="rounded-[18px] bg-white/[0.04] px-4 py-3">
+                    <div className="font-label text-[11px] uppercase tracking-[0.16em] text-white/40">
+                      Ready branches
+                    </div>
+                    <div className="mt-2 text-xl text-white">
+                      {strategy.metrics.readyNodeCount}
+                    </div>
+                    <div className="text-xs leading-5 text-white/46">
+                      Nodes whose prerequisites are already satisfied.
                     </div>
                   </div>
                   <div className="rounded-[18px] bg-white/[0.04] px-4 py-3">
@@ -240,13 +264,8 @@ export function StrategiesPage() {
                       {strategy.metrics.completedTargetCount}/
                       {strategy.metrics.totalTargetCount || 0}
                     </div>
-                  </div>
-                  <div className="rounded-[18px] bg-white/[0.04] px-4 py-3">
-                    <div className="font-label text-[11px] uppercase tracking-[0.16em] text-white/40">
-                      Nodes
-                    </div>
-                    <div className="mt-2 text-xl text-white">
-                      {strategy.graph.nodes.length}
+                    <div className="text-xs leading-5 text-white/46">
+                      {strategy.metrics.targetProgressScore}% target progress
                     </div>
                   </div>
                   <div className="rounded-[18px] bg-white/[0.04] px-4 py-3">
@@ -288,25 +307,29 @@ export function StrategiesPage() {
                           Alignment breakdown
                         </div>
                         <div className="mt-3 grid gap-2 text-sm text-white/58">
-                          <div>Coverage {strategy.metrics.planCoverageScore}%</div>
-                          <div>Scope discipline {strategy.metrics.scopeDisciplineScore}%</div>
-                          <div>Quality {strategy.metrics.qualityScore}%</div>
+                          {alignmentBreakdown.map((metric) => (
+                            <div key={metric.id}>
+                              {metric.label} {metric.value}%
+                            </div>
+                          ))}
                         </div>
                       </div>
                     </div>
                   </div>
 
                   <div className="flex flex-wrap items-end justify-end gap-2">
-                    <Button
-                      variant="secondary"
-                      onClick={() => {
-                        setEditingStrategy(strategy);
-                        setDialogOpen(true);
-                      }}
-                    >
-                      <Pencil className="size-4" />
-                      Edit
-                    </Button>
+                    {!strategy.isLocked ? (
+                      <Button
+                        variant="secondary"
+                        onClick={() => {
+                          setEditingStrategy(strategy);
+                          setDialogOpen(true);
+                        }}
+                      >
+                        <Pencil className="size-4" />
+                        Edit
+                      </Button>
+                    ) : null}
                     <Button
                       variant="secondary"
                       pending={
@@ -328,7 +351,9 @@ export function StrategiesPage() {
                       <Trash2 className="size-4" />
                       Delete
                     </Button>
-                    <Button onClick={() => navigate(`/strategies/${strategy.id}`)}>
+                    <Button
+                      onClick={() => navigate(`/strategies/${strategy.id}`)}
+                    >
                       Open strategy
                     </Button>
                   </div>

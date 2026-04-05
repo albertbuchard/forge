@@ -2,6 +2,10 @@ import { randomUUID } from "node:crypto";
 import { getDatabase, runInTransaction } from "../db.js";
 import { HttpError } from "../errors.js";
 import {
+  createGeneratedWorkoutFromHabit,
+  parseGeneratedHealthEventTemplate
+} from "../health.js";
+import {
   decorateOwnedEntity,
   inferFirstOwnedUserId,
   setEntityOwner
@@ -55,6 +59,7 @@ type HabitRow = {
   linked_behavior_id: string | null;
   reward_xp: number;
   penalty_xp: number;
+  generated_health_event_template_json: string;
   created_at: string;
   updated_at: string;
 };
@@ -252,6 +257,9 @@ function mapHabit(
     linkedBehaviorTitles: linkedBehaviors.map((behavior) => behavior.title),
     rewardXp: row.reward_xp,
     penaltyXp: row.penalty_xp,
+    generatedHealthEventTemplate: parseGeneratedHealthEventTemplate(
+      row.generated_health_event_template_json
+    ),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     lastCheckInAt: latestCheckIn?.createdAt ?? null,
@@ -284,7 +292,7 @@ function getHabitRow(habitId: string): HabitRow | undefined {
          linked_goal_ids_json, linked_project_ids_json, linked_task_ids_json,
          linked_value_ids_json, linked_pattern_ids_json, linked_behavior_ids_json,
          linked_belief_ids_json, linked_mode_ids_json, linked_report_ids_json,
-         linked_behavior_id, reward_xp, penalty_xp, created_at, updated_at
+         linked_behavior_id, reward_xp, penalty_xp, generated_health_event_template_json, created_at, updated_at
        FROM habits
        WHERE id = ?`
     )
@@ -316,7 +324,7 @@ export function listHabits(filters: HabitListQuery = {}): Habit[] {
          linked_goal_ids_json, linked_project_ids_json, linked_task_ids_json,
          linked_value_ids_json, linked_pattern_ids_json, linked_behavior_ids_json,
          linked_belief_ids_json, linked_mode_ids_json, linked_report_ids_json,
-         linked_behavior_id, reward_xp, penalty_xp, created_at, updated_at
+         linked_behavior_id, reward_xp, penalty_xp, generated_health_event_template_json, created_at, updated_at
        FROM habits
        ${whereSql}
        ORDER BY
@@ -404,8 +412,8 @@ export function createHabit(
           linked_goal_ids_json, linked_project_ids_json, linked_task_ids_json,
           linked_value_ids_json, linked_pattern_ids_json, linked_behavior_ids_json,
           linked_belief_ids_json, linked_mode_ids_json, linked_report_ids_json,
-          linked_behavior_id, reward_xp, penalty_xp, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+          linked_behavior_id, reward_xp, penalty_xp, generated_health_event_template_json, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       )
       .run(
         id,
@@ -428,6 +436,7 @@ export function createHabit(
         linkedBehaviorIds[0] ?? null,
         parsed.rewardXp,
         parsed.penaltyXp,
+        JSON.stringify(parsed.generatedHealthEventTemplate),
         now,
         now
       );
@@ -556,7 +565,7 @@ export function updateHabit(
              week_days_json = ?, linked_goal_ids_json = ?, linked_project_ids_json = ?, linked_task_ids_json = ?,
              linked_value_ids_json = ?, linked_pattern_ids_json = ?, linked_behavior_ids_json = ?,
              linked_belief_ids_json = ?, linked_mode_ids_json = ?, linked_report_ids_json = ?,
-             linked_behavior_id = ?, reward_xp = ?, penalty_xp = ?, updated_at = ?
+             linked_behavior_id = ?, reward_xp = ?, penalty_xp = ?, generated_health_event_template_json = ?, updated_at = ?
          WHERE id = ?`
       )
       .run(
@@ -579,6 +588,9 @@ export function updateHabit(
         nextLinkedBehaviorIds[0] ?? null,
         parsed.rewardXp ?? current.rewardXp,
         parsed.penaltyXp ?? current.penaltyXp,
+        JSON.stringify(
+          parsed.generatedHealthEventTemplate ?? current.generatedHealthEventTemplate
+        ),
         updatedAt,
         habitId
       );
@@ -709,6 +721,43 @@ export function createHabitCheckIn(
         deltaXp: reward.deltaXp
       }
     });
+
+    if (parsed.status === "done") {
+      const checkInId = existing?.id
+        ? existing.id
+        : (getDatabase()
+            .prepare(
+              `SELECT id FROM habit_check_ins WHERE habit_id = ? AND date_key = ?`
+            )
+            .get(habitId, parsed.dateKey) as { id: string } | undefined)?.id;
+      if (checkInId) {
+        createGeneratedWorkoutFromHabit({
+          habitId: habit.id,
+          checkInId,
+          habitTitle: habit.title,
+          userId: habit.userId ?? "user_operator",
+          dateKey: parsed.dateKey,
+          template: habit.generatedHealthEventTemplate,
+          linkedEntities: [
+            ...habit.linkedGoalIds.map((entityId) => ({
+              entityType: "goal",
+              entityId,
+              relationshipType: "habit_context"
+            })),
+            ...habit.linkedProjectIds.map((entityId) => ({
+              entityType: "project",
+              entityId,
+              relationshipType: "habit_context"
+            })),
+            ...habit.linkedTaskIds.map((entityId) => ({
+              entityType: "task",
+              entityId,
+              relationshipType: "habit_context"
+            }))
+          ]
+        });
+      }
+    }
 
     return getHabitById(habitId);
   });

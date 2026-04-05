@@ -9,6 +9,7 @@ Forge gives the user and trusted agents one structured operating record for:
 - human and bot users, each with an explicit owner identity
 - life goals, projects, and Kanban tasks
 - directed strategies that sequence projects and tasks toward target goals or projects
+- a first-class Preferences workspace with pairwise comparisons, contextual profiles, map inspection, and exact overrides
 - real timed work sessions and signed retrospective minute corrections
 - linked Markdown notes
 - XP, momentum, and weekly review
@@ -43,6 +44,7 @@ Multi-user model:
 Detailed guides:
 
 - [Multi-user, multi-agent, and strategy guide](./docs/multi-user-and-strategies.md)
+- [Preferences system guide](./docs/preferences-system.md)
 - [OpenClaw plugin guide](./docs/openclaw-plugin.md)
 - [Hermes plugin guide](./docs/hermes-plugin.md)
 
@@ -133,6 +135,54 @@ This gives the user a clear answer to two different questions:
 Forge is especially strong when planning, execution, evidence, and reflective
 records need to stay in one inspectable system. Other tools may be good at one
 piece of that stack. Forge is built to keep the whole path connected.
+
+## Preferences Workspace
+
+Preferences is now a dedicated Forge workspace, not a hidden recommendation
+layer. It exists at `/preferences` in the web app and has its own API domain
+under `/api/v1/preferences/*`.
+
+Current product shape:
+
+- top-level route and navigation icon in the main shell
+- user-scoped preference profiles, split by explicit domains such as
+  `projects`, `tasks`, `strategies`, `habits`, `activities`, `food`,
+  `places`, `countries`, `fashion`, `people`, `media`, and `tools`
+- context-aware preference learning with default, work, personal, and
+  discovery-style contexts
+- a summary-first landing page that shows what Forge knows before asking for setup work
+- a modal `Start the game` flow that chooses a domain first and only then opens comparison rounds
+- Tinder-style pairwise comparison inside that game modal
+- algorithmic scoring only: no LLM dependency in inference, ranking,
+  uncertainty, or next-question selection
+- layered inspection: summary dimensions, preference map, explanation panel,
+  evidence table, history, context controls, and concept libraries
+- seeded concept libraries for non-Forge domains plus full create/edit/delete
+  controls for custom concept lists and concept entries
+- direct handoff from goal, project, task, and strategy detail pages into the
+  compare queue
+- custom standalone preference items plus linked Forge entities in the same
+  model
+
+Current API coverage:
+
+- `GET /api/v1/preferences/workspace`
+- `POST /api/v1/preferences/game/start`
+- `POST /api/v1/preferences/catalogs`
+- `PATCH /api/v1/preferences/catalogs/:id`
+- `DELETE /api/v1/preferences/catalogs/:id`
+- `POST /api/v1/preferences/catalog-items`
+- `PATCH /api/v1/preferences/catalog-items/:id`
+- `DELETE /api/v1/preferences/catalog-items/:id`
+- `POST /api/v1/preferences/contexts`
+- `PATCH /api/v1/preferences/contexts/:id`
+- `POST /api/v1/preferences/contexts/merge`
+- `POST /api/v1/preferences/items`
+- `PATCH /api/v1/preferences/items/:id`
+- `POST /api/v1/preferences/items/from-entity`
+- `POST /api/v1/preferences/judgments`
+- `POST /api/v1/preferences/signals`
+- `PATCH /api/v1/preferences/items/:id/score`
 
 ## Install Forge In OpenClaw
 

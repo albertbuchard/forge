@@ -2,15 +2,17 @@ import { getDatabase, runInTransaction } from "../db.js";
 import { createInsight, deleteInsight, getInsightById, listInsights, updateInsight } from "../repositories/collaboration.js";
 import { createCalendarEvent, createTaskTimebox, createWorkBlockTemplate, deleteCalendarEvent, deleteTaskTimebox, deleteWorkBlockTemplate, getCalendarEventById, getTaskTimeboxById, getWorkBlockTemplateById, listCalendarEvents, listTaskTimeboxes, listWorkBlockTemplates, updateCalendarEvent, updateTaskTimebox, updateWorkBlockTemplate } from "../repositories/calendar.js";
 import { createNote, deleteNote, getNoteById, listNotes, unlinkNotesForEntity, updateNote } from "../repositories/notes.js";
+import { clearEntityOwner, filterOwnedEntities } from "../repositories/entity-ownership.js";
 import { createBehaviorPatternSchema, createBehaviorSchema, createBeliefEntrySchema, createEmotionDefinitionSchema, createEventTypeSchema, createModeGuideSessionSchema, createModeProfileSchema, createPsycheValueSchema, createTriggerReportSchema, updateBehaviorPatternSchema, updateBehaviorSchema, updateBeliefEntrySchema, updateEmotionDefinitionSchema, updateEventTypeSchema, updateModeGuideSessionSchema, updateModeProfileSchema, updatePsycheValueSchema, updateTriggerReportSchema } from "../psyche-types.js";
 import { buildSettingsBinPayload, cascadeSoftDeleteAnchoredCollaboration, clearDeletedEntityRecord, getDeletedEntityRecord, listDeletedEntities, restoreAnchoredCollaboration, restoreDeletedEntityRecord, upsertDeletedEntityRecord } from "../repositories/deleted-entities.js";
 import { createGoal, deleteGoal, getGoalById, listGoals, updateGoal } from "../repositories/goals.js";
 import { createHabit, deleteHabit, getHabitById, listHabits, updateHabit } from "../repositories/habits.js";
 import { createBehavior, createBehaviorPattern, createBeliefEntry, createEmotionDefinition, createEventType, createModeGuideSession, createModeProfile, createPsycheValue, createTriggerReport, deleteBehavior, deleteBehaviorPattern, deleteBeliefEntry, deleteEmotionDefinition, deleteEventType, deleteModeGuideSession, deleteModeProfile, deletePsycheValue, deleteTriggerReport, getBehaviorById, getBehaviorPatternById, getBeliefEntryById, getEmotionDefinitionById, getEventTypeById, getModeGuideSessionById, getModeProfileById, getPsycheValueById, getTriggerReportById, listBehaviors, listBehaviorPatterns, listBeliefEntries, listEmotionDefinitions, listEventTypes, listModeGuideSessions, listModeProfiles, listPsycheValues, listTriggerReports, updateBehavior, updateBehaviorPattern, updateBeliefEntry, updateEmotionDefinition, updateEventType, updateModeGuideSession, updateModeProfile, updatePsycheValue, updateTriggerReport } from "../repositories/psyche.js";
 import { createProject, deleteProject, getProjectById, listProjects, updateProject } from "../repositories/projects.js";
+import { createStrategy, deleteStrategy, getStrategyById, listStrategies, updateStrategy } from "../repositories/strategies.js";
 import { createTag, deleteTag, getTagById, listTags, updateTag } from "../repositories/tags.js";
 import { createTask, deleteTask, getTaskById, listTasks, updateTask } from "../repositories/tasks.js";
-import { createCalendarEventSchema, createGoalSchema, createHabitSchema, createInsightSchema, createNoteSchema, createProjectSchema, createTaskTimeboxSchema, createTagSchema, createTaskSchema, createWorkBlockTemplateSchema, updateCalendarEventSchema, updateGoalSchema, updateHabitSchema, updateInsightSchema, updateNoteSchema, updateProjectSchema, updateTaskTimeboxSchema, updateTagSchema, updateTaskSchema, updateWorkBlockTemplateSchema } from "../types.js";
+import { createCalendarEventSchema, createGoalSchema, createHabitSchema, createInsightSchema, createNoteSchema, createProjectSchema, createStrategySchema, createTaskTimeboxSchema, createTagSchema, createTaskSchema, createWorkBlockTemplateSchema, updateCalendarEventSchema, updateGoalSchema, updateHabitSchema, updateInsightSchema, updateNoteSchema, updateProjectSchema, updateStrategySchema, updateTaskTimeboxSchema, updateTagSchema, updateTaskSchema, updateWorkBlockTemplateSchema } from "../types.js";
 const ENTITY_CALENDAR_LIST_RANGE = {
     from: "1970-01-01T00:00:00.000Z",
     to: "2100-01-01T00:00:00.000Z"
@@ -60,6 +62,17 @@ const CRUD_ENTITY_CAPABILITIES = {
         create: (data, context) => createTask(data, context),
         update: (id, patch, context) => updateTask(id, patch, context),
         hardDelete: (id, context) => deleteTask(id, context)
+    },
+    strategy: {
+        entityType: "strategy",
+        routeBase: "/api/v1/strategies",
+        deleteMode: "soft_default",
+        inBin: true,
+        list: () => listStrategies(),
+        get: (id) => getStrategyById(id),
+        create: (data) => createStrategy(data),
+        update: (id, patch) => updateStrategy(id, patch),
+        hardDelete: (id) => deleteStrategy(id)
     },
     habit: {
         entityType: "habit",
@@ -254,6 +267,7 @@ const CREATE_ENTITY_SCHEMAS = {
     goal: createGoalSchema,
     project: createProjectSchema,
     task: createTaskSchema,
+    strategy: createStrategySchema,
     habit: createHabitSchema,
     tag: createTagSchema,
     note: createNoteSchema,
@@ -275,6 +289,7 @@ const UPDATE_ENTITY_SCHEMAS = {
     goal: updateGoalSchema,
     project: updateProjectSchema,
     task: updateTaskSchema,
+    strategy: updateStrategySchema,
     habit: updateHabitSchema,
     tag: updateTagSchema,
     note: updateNoteSchema,
@@ -536,6 +551,7 @@ export function deleteEntity(entityType, id, options, context) {
             purgeAnchoredCollaboration(entityType, id);
         }
         const deleted = capability.hardDelete(id, context);
+        clearEntityOwner(entityType, id);
         clearDeletedEntityRecord(entityType, id);
         return deleted;
     });
@@ -652,8 +668,7 @@ export function searchEntities(input) {
     return {
         results: input.searches.map((search) => {
             const entityTypes = search.entityTypes && search.entityTypes.length > 0 ? search.entityTypes : defaultEntityTypes;
-            const liveMatches = entityTypes.flatMap((entityType) => getCapability(entityType)
-                .list()
+            const liveMatches = entityTypes.flatMap((entityType) => filterOwnedEntities(entityType, getCapability(entityType).list(), search.userIds)
                 .filter((entity) => (search.ids && search.ids.length > 0 ? search.ids.includes(String(entity.id ?? "")) : true))
                 .filter((entity) => matchesQuery(entity, search.query))
                 .filter((entity) => matchesStatus(entity, search.status))
@@ -664,6 +679,9 @@ export function searchEntities(input) {
                 ? deleted
                     .filter((item) => entityTypes.includes(item.entityType))
                     .filter((item) => (search.ids && search.ids.length > 0 ? search.ids.includes(item.entityId) : true))
+                    .filter((item) => !search.userIds || search.userIds.length === 0
+                    ? true
+                    : search.userIds.includes(String(item.snapshot.userId ?? "")))
                     .filter((item) => matchesQuery(item.snapshot, search.query) || matchesQuery(item, search.query))
                     .filter((item) => matchesStatus(item.snapshot, search.status))
                     .filter((item) => (search.linkedTo ? matchesLinkedTo(item.entityType, item.snapshot, search.linkedTo) : true))
