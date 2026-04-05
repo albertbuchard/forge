@@ -391,6 +391,15 @@ li {
   border-radius: var(--radius-xl);
 }
 
+#getting-started .install-card,
+#getting-started .card-grid {
+  margin-top: 18px;
+}
+
+#getting-started .card-grid + .card-grid {
+  margin-top: 20px;
+}
+
 .install-tabs {
   display: flex;
   flex-wrap: wrap;
