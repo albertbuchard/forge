@@ -2967,6 +2967,7 @@ test("habit soft delete hides the habit from list and direct reads while keeping
       linkedValueIds: [],
       linkedPatternIds: [],
       linkedBehaviorIds: [],
+      linkedBehaviorId: null,
       linkedBeliefIds: [],
       linkedModeIds: [],
       linkedReportIds: [],

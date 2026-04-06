@@ -8,6 +8,7 @@ import { getProjectById } from "./projects.js";
 import { getBehaviorById, getBehaviorPatternById, getBeliefEntryById, getModeProfileById, getPsycheValueById, getTriggerReportById } from "./psyche.js";
 import { getTaskById } from "./tasks.js";
 import { recordActivityEvent } from "./activity-events.js";
+import { filterDeletedEntities, filterDeletedIds, isEntityDeleted } from "./deleted-entities.js";
 import { recordHabitCheckInReward, reverseLatestHabitCheckInReward } from "./rewards.js";
 import { createHabitCheckInSchema, createHabitSchema, habitCheckInSchema, habitSchema, updateHabitSchema } from "../types.js";
 function todayKey(now = new Date()) {
@@ -117,9 +118,9 @@ function mapHabit(row, checkIns = listCheckInsForHabit(row.id)) {
         frequency: row.frequency,
         targetCount: row.target_count,
         weekDays: parseWeekDays(row.week_days_json),
-        linkedGoalIds: parseIdList(row.linked_goal_ids_json),
-        linkedProjectIds: parseIdList(row.linked_project_ids_json),
-        linkedTaskIds: parseIdList(row.linked_task_ids_json),
+        linkedGoalIds: filterDeletedIds("goal", parseIdList(row.linked_goal_ids_json)),
+        linkedProjectIds: filterDeletedIds("project", parseIdList(row.linked_project_ids_json)),
+        linkedTaskIds: filterDeletedIds("task", parseIdList(row.linked_task_ids_json)),
         linkedValueIds: parseIdList(row.linked_value_ids_json),
         linkedPatternIds: parseIdList(row.linked_pattern_ids_json),
         linkedBehaviorIds,
@@ -191,10 +192,13 @@ export function listHabits(filters = {}) {
          updated_at DESC
        ${limitSql}`)
         .all(...params);
-    const habits = rows.map((row) => mapHabit(row));
+    const habits = filterDeletedEntities("habit", rows.map((row) => mapHabit(row)));
     return parsed.dueToday ? habits.filter((habit) => habit.dueToday) : habits;
 }
 export function getHabitById(habitId) {
+    if (isEntityDeleted("habit", habitId)) {
+        return undefined;
+    }
     const row = getHabitRow(habitId);
     return row ? mapHabit(row) : undefined;
 }

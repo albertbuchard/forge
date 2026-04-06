@@ -314,14 +314,14 @@ export function getTotalXp() {
     const row = getDatabase()
         .prepare(`SELECT COALESCE(SUM(delta_xp), 0) AS total FROM reward_ledger`)
         .get();
-    return row.total;
+    return Math.max(0, row.total);
 }
 export function getWeeklyXp(weekStartIso) {
     ensureDefaultRewardRules();
     const row = getDatabase()
         .prepare(`SELECT COALESCE(SUM(delta_xp), 0) AS total FROM reward_ledger WHERE created_at >= ?`)
         .get(weekStartIso);
-    return row.total;
+    return Math.max(0, row.total);
 }
 export function getDailyAmbientXp(dayKey) {
     ensureDefaultRewardRules();
