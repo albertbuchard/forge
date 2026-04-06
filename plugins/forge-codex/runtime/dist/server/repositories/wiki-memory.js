@@ -8,6 +8,7 @@ import { resolveDataDir, getDatabase } from "../db.js";
 import { decorateOwnedEntity } from "./entity-ownership.js";
 import { createNoteLinkSchema, crudEntityTypeSchema, noteKindSchema, noteSchema as persistedNoteSchema, wikiSearchModeSchema, wikiSpaceVisibilitySchema } from "../types.js";
 import { deleteEncryptedSecret, readEncryptedSecret, storeEncryptedSecret } from "./calendar.js";
+import { isEntityDeleted } from "./deleted-entities.js";
 import { recordDiagnosticLog } from "./diagnostic-logs.js";
 const wikiSpaceSchema = z.object({
     id: z.string(),
@@ -526,6 +527,20 @@ function getNoteBySlugRaw(spaceId, slug, exceptNoteId) {
          ${exceptNoteId ? "AND id != ?" : ""}
        LIMIT 1`)
         .get(...(exceptNoteId ? [spaceId, slug, exceptNoteId] : [spaceId, slug]));
+    return row;
+}
+function getActiveNoteByIdRaw(noteId) {
+    const row = getNoteByIdRaw(noteId);
+    if (!row || isEntityDeleted("note", row.id)) {
+        return null;
+    }
+    return row;
+}
+function getActiveNoteBySlugRaw(spaceId, slug, exceptNoteId) {
+    const row = getNoteBySlugRaw(spaceId, slug, exceptNoteId);
+    if (!row || isEntityDeleted("note", row.id)) {
+        return null;
+    }
     return row;
 }
 function buildContentPlain(markdown) {
@@ -1465,7 +1480,9 @@ function listAllNotes() {
         current.push(link);
         linksByNoteId.set(link.note_id, current);
     }
-    return rows.map((row) => mapNoteRow(row, linksByNoteId.get(row.id) ?? []));
+    return rows
+        .filter((row) => !isEntityDeleted("note", row.id))
+        .map((row) => mapNoteRow(row, linksByNoteId.get(row.id) ?? []));
 }
 export function listWikiSpaces() {
     ensureSharedWikiSpace();
@@ -1530,7 +1547,7 @@ export function listWikiPageTree(query) {
 export function getWikiHomePageDetail(input = {}) {
     const spaceId = resolveSpaceId(input.spaceId, null);
     ensureWikiSpaceSeedPages(spaceId);
-    const home = getNoteBySlugRaw(spaceId, "index");
+    const home = getActiveNoteBySlugRaw(spaceId, "index");
     if (!home) {
         return null;
     }
@@ -1539,14 +1556,14 @@ export function getWikiHomePageDetail(input = {}) {
 export function getWikiPageDetailBySlug(input) {
     const spaceId = resolveSpaceId(input.spaceId, null);
     ensureWikiSpaceSeedPages(spaceId);
-    const row = getNoteBySlugRaw(spaceId, input.slug.trim());
+    const row = getActiveNoteBySlugRaw(spaceId, input.slug.trim());
     if (!row) {
         return null;
     }
     return getWikiPageDetail(row.id);
 }
 export function getWikiPageDetail(noteId) {
-    const row = getNoteByIdRaw(noteId);
+    const row = getActiveNoteByIdRaw(noteId);
     if (!row) {
         return null;
     }
@@ -3123,6 +3140,9 @@ export async function reviewWikiIngestJob(jobId, input, options) {
     for (const decision of parsed.decisions) {
         const candidate = candidates.find((entry) => entry.id === decision.candidateId);
         if (!candidate) {
+            continue;
+        }
+        if (candidate.status === "applied") {
             continue;
         }
         const action = decision.action ??

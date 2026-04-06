@@ -4688,6 +4688,33 @@ export async function buildServer(options = {}) {
         }
         return getWikiPageDetail(note.id);
     });
+    app.delete("/api/v1/wiki/pages/:id", async (request, reply) => {
+        const { id } = request.params;
+        const current = getNoteById(id);
+        if (!current || (current.kind !== "wiki" && current.kind !== "evidence")) {
+            reply.code(404);
+            return { error: "Wiki page not found" };
+        }
+        if (current.slug === "index") {
+            reply.code(400);
+            return { error: "The wiki home page cannot be deleted." };
+        }
+        const linkedEntityType = current.links[0]?.entityType ?? null;
+        const auth = requireNoteAccess(request.headers, linkedEntityType, {
+            route: "/api/v1/wiki/pages/:id",
+            entityType: linkedEntityType
+        });
+        const deleted = deleteEntity("note", id, entityDeleteQuerySchema.parse(request.query ?? {}), toActivityContext(auth));
+        if (!deleted) {
+            reply.code(404);
+            return { error: "Wiki page not found" };
+        }
+        return {
+            deleted: {
+                id: deleted.id
+            }
+        };
+    });
     app.post("/api/v1/wiki/search", async (request) => {
         requireScopedAccess(request.headers, ["read", "write"], { route: "/api/v1/wiki/search" });
         return searchWikiPages(wikiSearchQuerySchema.parse(request.body ?? {}), managers.secrets);
