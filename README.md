@@ -29,6 +29,20 @@ openclaw forge health
 
 If the plugin is installed but does not load, the missing piece is usually `plugins.allow`. The full setup and runtime notes are in the [reference docs](https://albertbuchard.github.io/forge/reference.html).
 
+Temporary bypass for some OpenClaw `2026.4.x` builds:
+
+Recent OpenClaw versions can block Forge during `plugins install` because Forge launches a local runtime and gets flagged as dangerous by the installer scanner. I am trying to get a cleaner long-term install path upstream. Until then, the reliable bypass is to install the npm package, then load that package path explicitly from `openclaw.json`.
+
+```bash
+npm install -g forge-openclaw-plugin
+node -e 'const cp=require("child_process"); const fs=require("fs"); const path=require("path"); const p=process.env.HOME+"/.openclaw/openclaw.json"; const j=JSON.parse(fs.readFileSync(p,"utf8")); const pluginPath=path.join(cp.execSync("npm root -g",{encoding:"utf8"}).trim(),"forge-openclaw-plugin"); j.plugins ??= {}; j.plugins.allow = Array.from(new Set([...(j.plugins.allow || []), "forge-openclaw-plugin"])); j.plugins.load ??= {}; j.plugins.load.paths = Array.from(new Set([...(j.plugins.load.paths || []), pluginPath])); j.plugins.entries ??= {}; j.plugins.entries["forge-openclaw-plugin"] = { enabled: true, config: { origin: "http://127.0.0.1", port: 4317, actorLabel: "aurel", timeoutMs: 15000 } }; fs.writeFileSync(p, JSON.stringify(j, null, 2)+"\n"); console.log("Configured", pluginPath);'
+openclaw gateway restart
+openclaw plugins info forge-openclaw-plugin
+openclaw forge health
+```
+
+That bypass keeps the normal Forge package, but asks OpenClaw to trust and load the npm-installed folder directly instead of relying on the current installer path.
+
 ### Hermes
 
 ```bash

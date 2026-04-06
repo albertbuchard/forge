@@ -8,6 +8,7 @@ OpenClaw install note:
 - `openclaw plugins enable forge-openclaw-plugin` is not always enough by itself.
 - If `forge-openclaw-plugin` is missing from `plugins.allow`, OpenClaw can still refuse to load it.
 - The install section below includes the `node -e ...` step that repairs `plugins.allow` safely.
+- On some OpenClaw `2026.4.x` builds, `plugins install` can still block Forge because the package launches a local Forge runtime and gets flagged as dangerous by the installer scanner. I am trying to get a better long-term path upstream. A concise temporary bypass is included below.
 
 ## Open the UI
 
@@ -208,6 +209,18 @@ node -e 'const fs=require("fs"); const p=process.env.HOME+"/.openclaw/openclaw.j
 openclaw gateway restart
 openclaw forge health
 ```
+
+If the install path is blocked on your OpenClaw build, use this temporary npm bypass instead:
+
+```bash
+npm install -g forge-openclaw-plugin
+node -e 'const cp=require("child_process"); const fs=require("fs"); const path=require("path"); const p=process.env.HOME+"/.openclaw/openclaw.json"; const j=JSON.parse(fs.readFileSync(p,"utf8")); const pluginPath=path.join(cp.execSync("npm root -g",{encoding:"utf8"}).trim(),"forge-openclaw-plugin"); j.plugins ??= {}; j.plugins.allow = Array.from(new Set([...(j.plugins.allow || []), "forge-openclaw-plugin"])); j.plugins.load ??= {}; j.plugins.load.paths = Array.from(new Set([...(j.plugins.load.paths || []), pluginPath])); j.plugins.entries ??= {}; j.plugins.entries["forge-openclaw-plugin"] = { enabled: true, config: { origin: "http://127.0.0.1", port: 4317, actorLabel: "aurel", timeoutMs: 15000 } }; fs.writeFileSync(p, JSON.stringify(j, null, 2)+"\n"); console.log("Configured", pluginPath);'
+openclaw gateway restart
+openclaw plugins info forge-openclaw-plugin
+openclaw forge health
+```
+
+That bypass still uses the published npm package. It just tells OpenClaw to load the npm-installed folder directly from `plugins.load.paths`, which avoids the current installer regression on some builds.
 
 `openclaw plugins enable forge-openclaw-plugin` marks the plugin enabled, but it does not guarantee that `plugins.allow` was repaired. The `node -e ...` command above preserves the current allow list and appends `"forge-openclaw-plugin"` if it is missing.
 

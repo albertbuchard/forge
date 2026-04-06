@@ -177,7 +177,7 @@
             <p class="eyebrow">Getting Started</p>
             <h2 id="install-title">Install Forge in OpenClaw.</h2>
             <p class="section-copy" id="install-copy">
-              This page shows the normal local install path.
+              Start with the normal install path. If OpenClaw 2026.4.x blocks it, use the temporary bypass directly below.
             </p>
           </div>
 
@@ -324,19 +324,26 @@
       const installModes = {
         openclaw: {
           title: "Install Forge in OpenClaw.",
-          copy: "This is the standard local install path.",
+          copy: "Start with the standard install path. If your OpenClaw build blocks Forge as dangerous, use the temporary bypass in the same block.",
           command: `openclaw plugins install forge-openclaw-plugin
 openclaw plugins enable forge-openclaw-plugin
 node -e 'const fs=require("fs"); const p=process.env.HOME+"/.openclaw/openclaw.json"; const j=JSON.parse(fs.readFileSync(p,"utf8")); j.plugins ??= {}; j.plugins.allow = Array.from(new Set([...(j.plugins.allow || []), "forge-openclaw-plugin"])); fs.writeFileSync(p, JSON.stringify(j, null, 2)+"\\n");'
 openclaw gateway restart
+openclaw forge health
+
+# Temporary bypass for some OpenClaw 2026.4.x builds
+npm install -g forge-openclaw-plugin
+node -e 'const cp=require("child_process"); const fs=require("fs"); const path=require("path"); const p=process.env.HOME+"/.openclaw/openclaw.json"; const j=JSON.parse(fs.readFileSync(p,"utf8")); const pluginPath=path.join(cp.execSync("npm root -g",{encoding:"utf8"}).trim(),"forge-openclaw-plugin"); j.plugins ??= {}; j.plugins.allow = Array.from(new Set([...(j.plugins.allow || []), "forge-openclaw-plugin"])); j.plugins.load ??= {}; j.plugins.load.paths = Array.from(new Set([...(j.plugins.load.paths || []), pluginPath])); j.plugins.entries ??= {}; j.plugins.entries["forge-openclaw-plugin"] = { enabled: true, config: { origin: "http://127.0.0.1", port: 4317, actorLabel: "aurel", timeoutMs: 15000 } }; fs.writeFileSync(p, JSON.stringify(j, null, 2)+"\\n"); console.log("Configured", pluginPath);'
+openclaw gateway restart
+openclaw plugins info forge-openclaw-plugin
 openclaw forge health`,
-          step1: "Install the published OpenClaw plugin and enable it.",
+          step1: "Try the normal published OpenClaw install first.",
           step2:
-            "Repair <code>plugins.allow</code> so <code>forge-openclaw-plugin</code> is explicitly allowed.",
+            "If OpenClaw blocks the install, use the temporary npm bypass to add <code>plugins.allow</code>, register the npm-installed folder in <code>plugins.load.paths</code>, and keep a single trusted config entry.",
           step3:
-            "Restart the gateway, run the health check, then open the Forge UI or use the tools.",
+            "Restart the gateway, run the health check, then open the Forge UI or use the tools. I am trying to replace this bypass with a cleaner upstream-supported install flow.",
           ui: "The common local UI address is <code>http://127.0.0.1:4317/forge/</code>.",
-          data: "OpenClaw stores Forge under <code>~/.openclaw/extensions/forge-openclaw-plugin/data/forge.sqlite</code> unless you set a custom <code>dataRoot</code>."
+          data: "On the normal path OpenClaw usually stores Forge under <code>~/.openclaw/extensions/forge-openclaw-plugin/data/forge.sqlite</code>. On the temporary bypass path, the plugin is loaded from the npm-installed folder unless you set a custom <code>dataRoot</code>."
         },
         hermes: {
           title: "Install Forge in Hermes.",
