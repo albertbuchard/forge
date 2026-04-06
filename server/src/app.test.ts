@@ -5128,9 +5128,24 @@ test("wiki ingest review can map an entity proposal onto an existing Forge entit
   const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
   const originalFetch = globalThis.fetch;
 
-  globalThis.fetch = (async () =>
-    new Response(
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = String(input);
+    if (init?.method === "POST" && url.endsWith("/responses")) {
+      return new Response(
+        JSON.stringify({
+          id: "resp_map_existing",
+          status: "queued"
+        }),
+        {
+          status: 200,
+          headers: { "content-type": "application/json" }
+        }
+      );
+    }
+    return new Response(
       JSON.stringify({
+        id: "resp_map_existing",
+        status: "completed",
         output: [
           {
             content: [
@@ -5195,7 +5210,8 @@ test("wiki ingest review can map an entity proposal onto an existing Forge entit
         status: 200,
         headers: { "content-type": "application/json" }
       }
-    )) as typeof fetch;
+    );
+  }) as typeof fetch;
 
   try {
     const operatorCookie = await issueOperatorSessionCookie(app);
@@ -5267,7 +5283,7 @@ test("wiki ingest review can map an entity proposal onto an existing Forge entit
     assert.ok(jobId);
 
     let jobPayload: WikiIngestJobPollPayload | null = null;
-    for (let attempt = 0; attempt < 40; attempt += 1) {
+    for (let attempt = 0; attempt < 160; attempt += 1) {
       const poll = await app.inject({
         method: "GET",
         url: `/api/v1/wiki/ingest-jobs/${jobId}`,
