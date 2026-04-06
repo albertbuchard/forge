@@ -26,6 +26,11 @@ import { PsycheGoalMapPage } from "@/pages/psyche-goal-map-page";
 import { PsycheModeGuidePage } from "@/pages/psyche-mode-guide-page";
 import { PsycheModesPage } from "@/pages/psyche-modes-page";
 import { PsychePatternsPage } from "@/pages/psyche-patterns-page";
+import { PsycheQuestionnaireBuilderPage } from "@/pages/psyche-questionnaire-builder-page";
+import { PsycheQuestionnaireDetailPage } from "@/pages/psyche-questionnaire-detail-page";
+import { PsycheQuestionnaireRunDetailPage } from "@/pages/psyche-questionnaire-run-detail-page";
+import { PsycheQuestionnaireRunPage } from "@/pages/psyche-questionnaire-run-page";
+import { PsycheQuestionnairesPage } from "@/pages/psyche-questionnaires-page";
 import { PsycheReportDetailPage } from "@/pages/psyche-report-detail-page";
 import { PsycheReportsPage } from "@/pages/psyche-reports-page";
 import { PsycheSelfObservationPage } from "@/pages/psyche-self-observation-page";
@@ -134,6 +139,12 @@ export function App() {
           <Route path="psyche" element={<PsychePage />} />
           <Route path="psyche/values" element={<PsycheValuesPage />} />
           <Route path="psyche/patterns" element={<PsychePatternsPage />} />
+          <Route path="psyche/questionnaires" element={<PsycheQuestionnairesPage />} />
+          <Route path="psyche/questionnaires/new" element={<PsycheQuestionnaireBuilderPage />} />
+          <Route path="psyche/questionnaires/:instrumentId" element={<PsycheQuestionnaireDetailPage />} />
+          <Route path="psyche/questionnaires/:instrumentId/edit" element={<PsycheQuestionnaireBuilderPage />} />
+          <Route path="psyche/questionnaires/:instrumentId/take" element={<PsycheQuestionnaireRunPage />} />
+          <Route path="psyche/questionnaire-runs/:runId" element={<PsycheQuestionnaireRunDetailPage />} />
           <Route path="psyche/self-observation" element={<PsycheSelfObservationPage />} />
           <Route path="psyche/behaviors" element={<PsycheBehaviorsPage />} />
           <Route path="psyche/reports" element={<PsycheReportsPage />} />

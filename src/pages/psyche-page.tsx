@@ -17,7 +17,7 @@ import { InteractiveCard } from "@/components/ui/interactive-card";
 import { ErrorState } from "@/components/ui/page-state";
 import { getEntityButtonClassName } from "@/lib/entity-visuals";
 import { cn } from "@/lib/utils";
-import { getPsycheOverview } from "@/lib/api";
+import { getPsycheOverview, listQuestionnaires } from "@/lib/api";
 
 export function PsychePage() {
   const shell = useForgeShell();
@@ -29,6 +29,10 @@ export function PsychePage() {
   const overviewQuery = useQuery({
     queryKey: ["forge-psyche-overview"],
     queryFn: getPsycheOverview
+  });
+  const questionnairesQuery = useQuery({
+    queryKey: ["forge-psyche-questionnaires-hub"],
+    queryFn: () => listQuestionnaires()
   });
 
   const overview = overviewQuery.data?.overview;
@@ -111,6 +115,12 @@ export function PsychePage() {
     scene.inspectors[scene.defaultSelectedId];
   const hotPattern = overview.patterns[0] ?? null;
   const nextReport = overview.reports[0] ?? null;
+  const latestQuestionnaire =
+    [...(questionnairesQuery.data?.instruments ?? [])].sort((left, right) => {
+      const leftTime = left.latestRunAt ? new Date(left.latestRunAt).getTime() : 0;
+      const rightTime = right.latestRunAt ? new Date(right.latestRunAt).getTime() : 0;
+      return rightTime - leftTime;
+    })[0] ?? null;
 
   return (
     <div className="grid min-w-0 gap-4 overflow-x-clip">
@@ -287,6 +297,32 @@ export function PsychePage() {
           </div>
         </InteractiveCard>
       </section>
+
+      <InteractiveCard
+        to={
+          latestQuestionnaire?.latestRunId
+            ? `/psyche/questionnaire-runs/${latestQuestionnaire.latestRunId}`
+            : "/psyche/questionnaires"
+        }
+        className="rounded-[28px] border border-white/8 bg-[linear-gradient(180deg,rgba(17,31,39,0.97),rgba(10,18,24,0.95))] p-5"
+      >
+        <div className="font-label text-[11px] uppercase tracking-[0.18em] text-sky-100/72">
+          Questionnaire pulse
+        </div>
+        <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
+          <div className="font-display text-[clamp(1.4rem,2.2vw,2rem)] leading-none text-white">
+            {latestQuestionnaire?.title ?? "Questionnaire library ready"}
+          </div>
+          <Badge className="bg-white/[0.08] text-white/78">
+            {(questionnairesQuery.data?.instruments ?? []).length} available
+          </Badge>
+        </div>
+        <p className="mt-3 text-sm leading-6 text-white/58">
+          {latestQuestionnaire?.latestRunAt
+            ? `Latest recorded run on ${new Date(latestQuestionnaire.latestRunAt).toLocaleDateString()}. Open it to inspect the stored score history or launch the next guided pass.`
+            : "Browse the seeded assessment library, filter it by domain or source class, then open a guided run that scores against the exact stored version."}
+        </p>
+      </InteractiveCard>
 
       <ReflectFlowDialog
         open={reflectOpen}

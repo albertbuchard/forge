@@ -251,6 +251,11 @@ Psyche is Forge's structured reflection domain. It contains values, beliefs and
 schemas, behaviors, modes, patterns, reports, and the goal map. These records help the
 user understand why they behave as they do, which patterns repeat, which values matter,
 and where reflection should connect back to real projects or tasks.
+Psyche now also includes questionnaires as a first-class assessment surface. A
+questionnaire instrument is a versioned self-report definition stored in SQLite with
+metadata, sections, items, provenance, and a scoring model. A questionnaire run is one
+time-stamped administration of one exact questionnaire version, with raw answers,
+persisted computed scores, optional subscores, and longitudinal history.
 
 Insights are structured interpretations, observations, or recommendations that can be
 stored by the user or trusted agents. They should never replace the raw operating
@@ -363,6 +368,10 @@ should separate directions from goals, and belief or mode work should emerge nat
 from the conversation rather than being demanded as a form fill. When one Psyche entity
 reveals an adjacent one, the agent should notice that and help the user decide whether
 to map the linked belief, mode, value, or pattern too.
+That same contract now extends to questionnaire work. The versioned API must let the UI
+and trusted agents list questionnaire instruments, inspect seeded provenance, create or
+clone drafts, publish immutable versions, start or resume runs, autosave answers, and
+fetch stored result history without recomputing scores ad hoc in the client.
 
 ## Technical Stack And Architecture
 
@@ -379,6 +388,11 @@ OpenClaw plugin, a Hermes Agent plugin packaged as a Python distribution with a
 MCP plugin. The Wiki memory layer is part of that same stack: markdown and media files
 are canonical on the local filesystem, while Fastify and SQLite provide metadata,
 backlinks, search indexes, ingest jobs, and optional embedding-profile state.
+The questionnaire workspace is part of this same production stack. Questionnaire
+definitions, version records, runs, answer rows, and score rows live in migration-backed
+SQLite tables. Scoring is not freeform code execution: the server evaluates a safe JSON
+AST that can express arithmetic, item references, score references, filtered counts,
+conditional logic, and dependent subscores while keeping the runtime auditable.
 
 Forge also has a long-term canonical desktop architecture that remains binding even
 while the current Node bridge is in place. That canonical architecture is Tauri 2 with

@@ -94,6 +94,8 @@ export const activityEntityTypeSchema = z.enum([
   "mode_profile",
   "mode_guide_session",
   "trigger_report",
+  "questionnaire_instrument",
+  "questionnaire_run",
   "note",
   "event_type",
   "emotion_definition",

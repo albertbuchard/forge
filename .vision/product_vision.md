@@ -316,6 +316,14 @@ into repeatable loops. The Reports page should capture observed events, incident
 reflections. The Psyche Report detail page should let the user inspect one report in
 full. The Goal Map page should visualize how goals connect to related entities through a
 graph that uses the same identity system as the rest of the app.
+The Psyche Questionnaires page should act as a rich assessment library, not a raw table.
+It should let the user browse seeded self-report instruments, search by title or alias,
+pin facet chips for domain and source class, open a detail surface with provenance and
+history, and move straight into a guided run or builder draft. The guided runner should
+feel immersive and focused, using single-question flow for short tools and grouped
+batched Likert flow for long inventories such as YSQ-R. Questionnaire results should
+stay longitudinal: raw answers, computed totals, subscores, bands, and prior run trend
+points should remain explorable over time on the detail and run-result surfaces.
 These Psyche surfaces and the matching agent tools should guide the user through
 active-listening exploration rather than dumping raw fields. Value work should clarify
 direction and committed action. Pattern work should slow down into a functional
@@ -448,6 +456,12 @@ assets are canonical files on the local filesystem, while Fastify and SQLite man
 metadata, backlinks, lexical search, embedding chunks, ingest jobs, and profile
 configuration. That file-over-app posture is a product requirement, not an implementation
 accident.
+Questionnaire delivery belongs in that same stack. The library, builder, runner, and
+history surfaces are React routes backed by Fastify endpoints and SQLite tables for
+questionnaire instruments, versions, runs, answers, and score rows. The scoring layer is
+a safe JSON-AST evaluator on the server, not freeform string execution in the browser,
+so mathematical score formulas, dependent subscores, and threshold labels remain
+inspectable and reproducible.
 than raw calendar-URL entry. The canonical event layer is local-first: Forge events,
 event-source mappings, and event links all live in the local database and are then
 reconciled outward to connected providers.

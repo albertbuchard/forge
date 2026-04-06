@@ -68,6 +68,26 @@ vi.mock("@/pages/psyche-patterns-page", () => ({
   PsychePatternsPage: () => <div>Psyche patterns route</div>
 }));
 
+vi.mock("@/pages/psyche-questionnaires-page", () => ({
+  PsycheQuestionnairesPage: () => <div>Psyche questionnaires route</div>
+}));
+
+vi.mock("@/pages/psyche-questionnaire-detail-page", () => ({
+  PsycheQuestionnaireDetailPage: () => <div>Psyche questionnaire detail route</div>
+}));
+
+vi.mock("@/pages/psyche-questionnaire-run-page", () => ({
+  PsycheQuestionnaireRunPage: () => <div>Psyche questionnaire run route</div>
+}));
+
+vi.mock("@/pages/psyche-questionnaire-run-detail-page", () => ({
+  PsycheQuestionnaireRunDetailPage: () => <div>Psyche questionnaire run detail route</div>
+}));
+
+vi.mock("@/pages/psyche-questionnaire-builder-page", () => ({
+  PsycheQuestionnaireBuilderPage: () => <div>Psyche questionnaire builder route</div>
+}));
+
 vi.mock("@/pages/psyche-self-observation-page", () => ({
   PsycheSelfObservationPage: () => <div>Psyche self observation route</div>
 }));
@@ -184,6 +204,34 @@ describe("App routing", () => {
     expect(await screen.findByText("Psyche behaviors route")).toBeInTheDocument();
 
     render(
+      <MemoryRouter initialEntries={["/psyche/questionnaires"]}>
+        <App />
+      </MemoryRouter>
+    );
+    expect(await screen.findByText("Psyche questionnaires route")).toBeInTheDocument();
+
+    render(
+      <MemoryRouter initialEntries={["/psyche/questionnaires/q_1"]}>
+        <App />
+      </MemoryRouter>
+    );
+    expect(await screen.findByText("Psyche questionnaire detail route")).toBeInTheDocument();
+
+    render(
+      <MemoryRouter initialEntries={["/psyche/questionnaires/q_1/take"]}>
+        <App />
+      </MemoryRouter>
+    );
+    expect(await screen.findByText("Psyche questionnaire run route")).toBeInTheDocument();
+
+    render(
+      <MemoryRouter initialEntries={["/psyche/questionnaire-runs/run_1"]}>
+        <App />
+      </MemoryRouter>
+    );
+    expect(await screen.findByText("Psyche questionnaire run detail route")).toBeInTheDocument();
+
+    render(
       <MemoryRouter initialEntries={["/psyche/self-observation"]}>
         <App />
       </MemoryRouter>
@@ -203,6 +251,13 @@ describe("App routing", () => {
       </MemoryRouter>
     );
     expect(await screen.findByText("Psyche mode guide route")).toBeInTheDocument();
+
+    render(
+      <MemoryRouter initialEntries={["/psyche/questionnaires/new"]}>
+        <App />
+      </MemoryRouter>
+    );
+    expect(await screen.findByText("Psyche questionnaire builder route")).toBeInTheDocument();
   });
 
   it("redirects legacy campaigns to projects", async () => {

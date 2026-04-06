@@ -114,6 +114,14 @@ import type {
   TriggerReportInput
 } from "./psyche-types";
 import type {
+  CreateQuestionnaireInstrumentInput,
+  QuestionnaireInstrumentDetail,
+  QuestionnaireInstrumentSummary,
+  QuestionnaireRunDetail,
+  QuestionnaireAnswerInput,
+  UpdateQuestionnaireVersionInput
+} from "./questionnaire-types";
+import type {
   CreateAgentTokenInput,
   CreateInsightInput,
   GoalMutationInput,
@@ -555,6 +563,131 @@ export function getPsycheOverview(userIds?: string[] | unknown) {
   const suffix = search.size > 0 ? `?${search.toString()}` : "";
   return request<{ overview: PsycheOverviewPayload }>(
     `/api/v1/psyche/overview${suffix}`
+  );
+}
+
+export function listQuestionnaires(userIds?: string[] | unknown) {
+  const search = new URLSearchParams();
+  appendUserIds(search, coerceUserIds(userIds));
+  const suffix = search.size > 0 ? `?${search.toString()}` : "";
+  return request<{ instruments: QuestionnaireInstrumentSummary[] }>(
+    `/api/v1/psyche/questionnaires${suffix}`
+  );
+}
+
+export function getQuestionnaire(instrumentId: string, userIds?: string[] | unknown) {
+  const search = new URLSearchParams();
+  appendUserIds(search, coerceUserIds(userIds));
+  const suffix = search.size > 0 ? `?${search.toString()}` : "";
+  return request<{ instrument: QuestionnaireInstrumentDetail }>(
+    `/api/v1/psyche/questionnaires/${instrumentId}${suffix}`
+  );
+}
+
+export function createQuestionnaire(input: CreateQuestionnaireInstrumentInput) {
+  return request<{ instrument: QuestionnaireInstrumentDetail }>(
+    "/api/v1/psyche/questionnaires",
+    {
+      method: "POST",
+      body: JSON.stringify(input)
+    }
+  );
+}
+
+export function cloneQuestionnaire(
+  instrumentId: string,
+  input: { userId?: string | null } = {}
+) {
+  return request<{ instrument: QuestionnaireInstrumentDetail }>(
+    `/api/v1/psyche/questionnaires/${instrumentId}/clone`,
+    {
+      method: "POST",
+      body: JSON.stringify(input)
+    }
+  );
+}
+
+export function ensureQuestionnaireDraft(instrumentId: string) {
+  return request<{ instrument: QuestionnaireInstrumentDetail }>(
+    `/api/v1/psyche/questionnaires/${instrumentId}/draft`,
+    {
+      method: "POST",
+      body: JSON.stringify({})
+    }
+  );
+}
+
+export function updateQuestionnaireDraft(
+  instrumentId: string,
+  input: UpdateQuestionnaireVersionInput
+) {
+  return request<{ instrument: QuestionnaireInstrumentDetail }>(
+    `/api/v1/psyche/questionnaires/${instrumentId}/draft`,
+    {
+      method: "PATCH",
+      body: JSON.stringify(input)
+    }
+  );
+}
+
+export function publishQuestionnaireDraft(
+  instrumentId: string,
+  input: { label?: string } = {}
+) {
+  return request<{ instrument: QuestionnaireInstrumentDetail }>(
+    `/api/v1/psyche/questionnaires/${instrumentId}/publish`,
+    {
+      method: "POST",
+      body: JSON.stringify(input)
+    }
+  );
+}
+
+export function startQuestionnaireRun(
+  instrumentId: string,
+  input: { versionId?: string | null; userId?: string | null } = {}
+) {
+  return request<QuestionnaireRunDetail>(
+    `/api/v1/psyche/questionnaires/${instrumentId}/runs`,
+    {
+      method: "POST",
+      body: JSON.stringify(input)
+    }
+  );
+}
+
+export function getQuestionnaireRun(runId: string, userIds?: string[] | unknown) {
+  const search = new URLSearchParams();
+  appendUserIds(search, coerceUserIds(userIds));
+  const suffix = search.size > 0 ? `?${search.toString()}` : "";
+  return request<QuestionnaireRunDetail>(
+    `/api/v1/psyche/questionnaire-runs/${runId}${suffix}`
+  );
+}
+
+export function patchQuestionnaireRun(
+  runId: string,
+  input: {
+    answers?: QuestionnaireAnswerInput[];
+    progressIndex?: number | null;
+  }
+) {
+  return request<QuestionnaireRunDetail>(
+    `/api/v1/psyche/questionnaire-runs/${runId}`,
+    {
+      method: "PATCH",
+      body: JSON.stringify(input)
+    }
+  );
+}
+
+export function completeQuestionnaireAssessment(runId: string) {
+  return request<QuestionnaireRunDetail>(
+    `/api/v1/psyche/questionnaire-runs/${runId}/complete`,
+    {
+      method: "POST",
+      body: JSON.stringify({})
+    }
   );
 }
 

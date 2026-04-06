@@ -138,6 +138,19 @@ import {
   updatePsycheValue,
   updateTriggerReport
 } from "./repositories/psyche.js";
+import {
+  cloneQuestionnaireInstrument,
+  completeQuestionnaireRun,
+  createQuestionnaireInstrument,
+  ensureQuestionnaireDraftVersion,
+  getQuestionnaireInstrumentDetail,
+  getQuestionnaireRunDetail,
+  listQuestionnaireInstruments,
+  publishQuestionnaireDraftVersion,
+  startQuestionnaireRun,
+  updateQuestionnaireDraftVersion,
+  updateQuestionnaireRun
+} from "./repositories/questionnaires.js";
 import { createProject, updateProject } from "./repositories/projects.js";
 import {
   createPreferenceCatalog,
@@ -312,6 +325,13 @@ import {
   updatePsycheValueSchema,
   updateTriggerReportSchema
 } from "./psyche-types.js";
+import {
+  createQuestionnaireInstrumentSchema,
+  publishQuestionnaireVersionSchema,
+  startQuestionnaireRunSchema,
+  updateQuestionnaireRunSchema,
+  updateQuestionnaireVersionSchema
+} from "./questionnaire-types.js";
 import {
   createPreferenceCatalogItemSchema,
   createPreferenceCatalogSchema,
@@ -4859,6 +4879,142 @@ export async function buildServer(
       request.query as Record<string, unknown>
     );
     return { overview: getPsycheOverview(userIds) };
+  });
+  app.get("/api/v1/psyche/questionnaires", async (request) => {
+    requirePsycheScopedAccess(
+      request.headers as Record<string, unknown>,
+      ["psyche.read"],
+      { route: "/api/v1/psyche/questionnaires" }
+    );
+    const userIds = resolveScopedUserIds(
+      request.query as Record<string, unknown>
+    );
+    return listQuestionnaireInstruments({ userIds });
+  });
+  app.post("/api/v1/psyche/questionnaires", async (request, reply) => {
+    const auth = requirePsycheScopedAccess(
+      request.headers as Record<string, unknown>,
+      ["psyche.write"],
+      { route: "/api/v1/psyche/questionnaires" }
+    );
+    const result = createQuestionnaireInstrument(
+      createQuestionnaireInstrumentSchema.parse(request.body ?? {}),
+      toActivityContext(auth)
+    );
+    reply.code(201);
+    return result;
+  });
+  app.get("/api/v1/psyche/questionnaires/:id", async (request) => {
+    requirePsycheScopedAccess(
+      request.headers as Record<string, unknown>,
+      ["psyche.read"],
+      { route: "/api/v1/psyche/questionnaires/:id" }
+    );
+    const { id } = request.params as { id: string };
+    const userIds = resolveScopedUserIds(
+      request.query as Record<string, unknown>
+    );
+    return getQuestionnaireInstrumentDetail(id, { userIds });
+  });
+  app.post("/api/v1/psyche/questionnaires/:id/clone", async (request, reply) => {
+    const auth = requirePsycheScopedAccess(
+      request.headers as Record<string, unknown>,
+      ["psyche.write"],
+      { route: "/api/v1/psyche/questionnaires/:id/clone" }
+    );
+    const { id } = request.params as { id: string };
+    const body = (request.body ?? {}) as Record<string, unknown>;
+    const userId =
+      typeof body.userId === "string" && body.userId.trim().length > 0
+        ? body.userId.trim()
+        : null;
+    const result = cloneQuestionnaireInstrument(id, { userId }, toActivityContext(auth));
+    reply.code(201);
+    return result;
+  });
+  app.post("/api/v1/psyche/questionnaires/:id/draft", async (request) => {
+    const auth = requirePsycheScopedAccess(
+      request.headers as Record<string, unknown>,
+      ["psyche.write"],
+      { route: "/api/v1/psyche/questionnaires/:id/draft" }
+    );
+    const { id } = request.params as { id: string };
+    return ensureQuestionnaireDraftVersion(id, toActivityContext(auth));
+  });
+  app.patch("/api/v1/psyche/questionnaires/:id/draft", async (request) => {
+    const auth = requirePsycheScopedAccess(
+      request.headers as Record<string, unknown>,
+      ["psyche.write"],
+      { route: "/api/v1/psyche/questionnaires/:id/draft" }
+    );
+    const { id } = request.params as { id: string };
+    return updateQuestionnaireDraftVersion(
+      id,
+      updateQuestionnaireVersionSchema.parse(request.body ?? {}),
+      toActivityContext(auth)
+    );
+  });
+  app.post("/api/v1/psyche/questionnaires/:id/publish", async (request) => {
+    const auth = requirePsycheScopedAccess(
+      request.headers as Record<string, unknown>,
+      ["psyche.write"],
+      { route: "/api/v1/psyche/questionnaires/:id/publish" }
+    );
+    const { id } = request.params as { id: string };
+    return publishQuestionnaireDraftVersion(
+      id,
+      publishQuestionnaireVersionSchema.parse(request.body ?? {}),
+      toActivityContext(auth)
+    );
+  });
+  app.post("/api/v1/psyche/questionnaires/:id/runs", async (request, reply) => {
+    const auth = requirePsycheScopedAccess(
+      request.headers as Record<string, unknown>,
+      ["psyche.write", "psyche.read"],
+      { route: "/api/v1/psyche/questionnaires/:id/runs" }
+    );
+    const { id } = request.params as { id: string };
+    const result = startQuestionnaireRun(
+      id,
+      startQuestionnaireRunSchema.parse(request.body ?? {}),
+      toActivityContext(auth)
+    );
+    reply.code(201);
+    return result;
+  });
+  app.get("/api/v1/psyche/questionnaire-runs/:id", async (request) => {
+    requirePsycheScopedAccess(
+      request.headers as Record<string, unknown>,
+      ["psyche.read"],
+      { route: "/api/v1/psyche/questionnaire-runs/:id" }
+    );
+    const { id } = request.params as { id: string };
+    const userIds = resolveScopedUserIds(
+      request.query as Record<string, unknown>
+    );
+    return getQuestionnaireRunDetail(id, { userIds });
+  });
+  app.patch("/api/v1/psyche/questionnaire-runs/:id", async (request) => {
+    const auth = requirePsycheScopedAccess(
+      request.headers as Record<string, unknown>,
+      ["psyche.write"],
+      { route: "/api/v1/psyche/questionnaire-runs/:id" }
+    );
+    const { id } = request.params as { id: string };
+    return updateQuestionnaireRun(
+      id,
+      updateQuestionnaireRunSchema.parse(request.body ?? {}),
+      toActivityContext(auth)
+    );
+  });
+  app.post("/api/v1/psyche/questionnaire-runs/:id/complete", async (request) => {
+    const auth = requirePsycheScopedAccess(
+      request.headers as Record<string, unknown>,
+      ["psyche.write"],
+      { route: "/api/v1/psyche/questionnaire-runs/:id/complete" }
+    );
+    const { id } = request.params as { id: string };
+    return completeQuestionnaireRun(id, toActivityContext(auth));
   });
   app.get("/api/v1/psyche/self-observation/calendar", async (request) => {
     requirePsycheScopedAccess(

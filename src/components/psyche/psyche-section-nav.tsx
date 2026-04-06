@@ -3,6 +3,7 @@ import {
   BrainCircuit,
   GitBranchPlus,
   HeartHandshake,
+  ListChecks,
   Moon,
   Orbit,
   SlidersHorizontal,
@@ -21,6 +22,7 @@ export const PSYCHE_SECTIONS = [
   { to: "/psyche", label: "Overview", icon: BrainCircuit },
   { to: "/psyche/values", label: "Values", icon: Orbit },
   { to: "/psyche/patterns", label: "Patterns", icon: Waves },
+  { to: "/psyche/questionnaires", label: "Questionnaires", icon: ListChecks },
   {
     to: "/psyche/self-observation",
     label: "Self Observation",
