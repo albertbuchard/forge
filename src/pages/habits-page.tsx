@@ -456,12 +456,15 @@ export function HabitsPage() {
   );
   const [historyNote, setHistoryNote] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [confirmingDeleteHabit, setConfirmingDeleteHabit] =
+    useState<Habit | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const selectedUserIds = coerceSelectedUserIds(shell.selectedUserIds);
   const defaultUserId = getSingleSelectedUserId(selectedUserIds);
+  const habitsQueryKey = ["forge-habits", ...selectedUserIds];
 
   const habitsQuery = useQuery({
-    queryKey: ["forge-habits", ...selectedUserIds],
+    queryKey: habitsQueryKey,
     queryFn: async () =>
       (
         await listHabits({
@@ -541,11 +544,24 @@ export function HabitsPage() {
 
   const deleteHabitMutation = useMutation({
     mutationFn: async (habitId: string) => deleteHabit(habitId),
+    onMutate: async (habitId) => {
+      await queryClient.cancelQueries({ queryKey: habitsQueryKey });
+      const previousHabits = queryClient.getQueryData<Habit[]>(habitsQueryKey);
+      queryClient.setQueryData<Habit[]>(
+        habitsQueryKey,
+        (current) => current?.filter((habit) => habit.id !== habitId) ?? []
+      );
+      return { previousHabits };
+    },
     onSuccess: async () => {
       setErrorMessage(null);
+      setConfirmingDeleteHabit(null);
       await refreshHabits();
     },
-    onError: (error) => {
+    onError: (error, _habitId, context) => {
+      if (context?.previousHabits) {
+        queryClient.setQueryData(habitsQueryKey, context.previousHabits);
+      }
       setErrorMessage(
         error instanceof Error ? error.message : "Habit delete failed."
       );
@@ -897,14 +913,7 @@ export function HabitsPage() {
                           size="sm"
                           className="h-7 min-w-0 rounded-[11px] border border-white/8 bg-white/[0.04] px-3 text-white/72 hover:bg-white/[0.08] hover:text-white"
                           disabled={deleteHabitMutation.isPending}
-                          onClick={() => {
-                            if (
-                              !window.confirm(`Delete habit "${habit.title}"?`)
-                            ) {
-                              return;
-                            }
-                            void deleteHabitMutation.mutateAsync(habit.id);
-                          }}
+                          onClick={() => setConfirmingDeleteHabit(habit)}
                           aria-label={`Delete ${habit.title}`}
                           title="Delete habit"
                         >
@@ -1126,6 +1135,77 @@ export function HabitsPage() {
           }
         }}
       />
+      <Dialog.Root
+        open={confirmingDeleteHabit !== null}
+        onOpenChange={(open) => {
+          if (!open && !deleteHabitMutation.isPending) {
+            setConfirmingDeleteHabit(null);
+          }
+        }}
+      >
+        <Dialog.Portal>
+          <Dialog.Overlay className="fixed inset-0 z-40 bg-[rgba(4,8,18,0.72)] backdrop-blur-xl" />
+          <Dialog.Content className="fixed inset-x-4 top-1/2 z-50 mx-auto w-[min(30rem,calc(100vw-2rem))] max-w-[30rem] -translate-y-1/2 overflow-hidden rounded-[30px] border border-white/8 bg-[linear-gradient(180deg,rgba(20,28,42,0.98),rgba(12,17,30,0.98))] shadow-[0_32px_90px_rgba(3,8,18,0.45)]">
+            <div className="border-b border-white/8 px-5 py-4">
+              <div className="flex items-start justify-between gap-4">
+                <div className="min-w-0">
+                  <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/40">
+                    Delete habit
+                  </div>
+                  <Dialog.Title className="mt-2 text-lg font-semibold text-white">
+                    {confirmingDeleteHabit?.title ?? "Delete this habit?"}
+                  </Dialog.Title>
+                  <Dialog.Description className="mt-3 text-sm text-white/56">
+                    Remove this habit from Forge. The habit card disappears
+                    immediately after delete succeeds.
+                  </Dialog.Description>
+                </div>
+                <Dialog.Close asChild>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-10 w-10 rounded-[14px] border border-white/8 bg-white/[0.04] px-0 text-white/72 hover:bg-white/[0.08] hover:text-white"
+                    aria-label="Close delete habit modal"
+                    title="Close"
+                    disabled={deleteHabitMutation.isPending}
+                  >
+                    <X className="size-4" />
+                  </Button>
+                </Dialog.Close>
+              </div>
+            </div>
+
+            <div className="grid gap-4 p-5">
+              <div className="rounded-[20px] border border-rose-400/16 bg-rose-400/8 px-4 py-3 text-sm leading-6 text-rose-100/90">
+                This removes the habit and its check-in history from the habits
+                page.
+              </div>
+              <div className="flex flex-wrap items-center justify-end gap-3">
+                <Button
+                  variant="secondary"
+                  onClick={() => setConfirmingDeleteHabit(null)}
+                  disabled={deleteHabitMutation.isPending}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  className="border border-rose-300/18 bg-rose-300/14 text-rose-50 hover:bg-rose-300/20"
+                  pending={deleteHabitMutation.isPending}
+                  pendingLabel="Deleting"
+                  onClick={() => {
+                    if (!confirmingDeleteHabit) {
+                      return;
+                    }
+                    void deleteHabitMutation.mutateAsync(confirmingDeleteHabit.id);
+                  }}
+                >
+                  Delete habit
+                </Button>
+              </div>
+            </div>
+          </Dialog.Content>
+        </Dialog.Portal>
+      </Dialog.Root>
       <Dialog.Root
         open={historyEditor !== null}
         onOpenChange={(open) => {

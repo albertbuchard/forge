@@ -13,6 +13,7 @@ import {
   enforceDiagnosticLogRetention,
   recordDiagnosticLog
 } from "./repositories/diagnostic-logs.js";
+import { createHabit } from "./repositories/habits.js";
 import {
   createUploadedWikiIngestJob,
   processWikiIngestJob
@@ -2936,6 +2937,93 @@ test("project delete routes support soft delete, restore, and hard delete", asyn
       url: `/api/v1/projects/${softProjectId}`
     });
     assert.equal(restoredProject.statusCode, 200);
+  } finally {
+    await app.close();
+    closeDatabase();
+    await rm(rootDir, { recursive: true, force: true });
+  }
+});
+
+test("habit soft delete hides the habit from list and direct reads while keeping it in the bin", async () => {
+  const rootDir = await mkdtemp(
+    path.join(os.tmpdir(), "forge-habit-delete-modes-")
+  );
+  const app = await buildServer({ dataRoot: rootDir, seedDemoData: false });
+
+  try {
+    const operatorCookie = await issueOperatorSessionCookie(app);
+
+    const habitId = createHabit({
+      title: "Sleep before 11",
+      description: "Delete coverage habit.",
+      status: "active",
+      polarity: "positive",
+      frequency: "daily",
+      targetCount: 1,
+      weekDays: [],
+      linkedGoalIds: [],
+      linkedProjectIds: [],
+      linkedTaskIds: [],
+      linkedValueIds: [],
+      linkedPatternIds: [],
+      linkedBehaviorIds: [],
+      linkedBeliefIds: [],
+      linkedModeIds: [],
+      linkedReportIds: [],
+      rewardXp: 5,
+      penaltyXp: 2,
+      generatedHealthEventTemplate: {
+        enabled: false,
+        workoutType: "workout",
+        title: "",
+        durationMinutes: 45,
+        xpReward: 0,
+        tags: [],
+        links: [],
+        notesTemplate: ""
+      }
+    }).id;
+
+    const deleteResponse = await app.inject({
+      method: "DELETE",
+      url: `/api/v1/habits/${habitId}`,
+      headers: { cookie: operatorCookie }
+    });
+    assert.equal(deleteResponse.statusCode, 200);
+
+    const listResponse = await app.inject({
+      method: "GET",
+      url: "/api/v1/habits"
+    });
+    assert.equal(listResponse.statusCode, 200);
+    const listBody = listResponse.json() as {
+      habits: Array<{ id: string }>;
+    };
+    assert.equal(
+      listBody.habits.some((habit) => habit.id === habitId),
+      false
+    );
+
+    const getResponse = await app.inject({
+      method: "GET",
+      url: `/api/v1/habits/${habitId}`
+    });
+    assert.equal(getResponse.statusCode, 404);
+
+    const binResponse = await app.inject({
+      method: "GET",
+      url: "/api/v1/settings/bin",
+      headers: { cookie: operatorCookie }
+    });
+    assert.equal(binResponse.statusCode, 200);
+    const binBody = binResponse.json() as {
+      bin: { records: Array<{ entityType: string; entityId: string }> };
+    };
+    assert.ok(
+      binBody.bin.records.some(
+        (record) => record.entityType === "habit" && record.entityId === habitId
+      )
+    );
   } finally {
     await app.close();
     closeDatabase();

@@ -35,6 +35,10 @@ const MAX_STRING_LENGTH = 4_000;
 const MAX_ARRAY_ITEMS = 24;
 const MAX_OBJECT_KEYS = 40;
 const MAX_DEPTH = 4;
+const LIST_MAX_STRING_LENGTH = 600;
+const LIST_MAX_ARRAY_ITEMS = 8;
+const LIST_MAX_OBJECT_KEYS = 16;
+const LIST_MAX_DEPTH = 2;
 let nextRetentionSweepAt = 0;
 
 function nowIso() {
@@ -126,7 +130,75 @@ function sanitizeDetails(
   );
 }
 
-function mapRow(row: DiagnosticLogRow): DiagnosticLogEntry {
+function compactDiagnosticValue(value: unknown, depth = 0): unknown {
+  if (
+    value === null ||
+    typeof value === "boolean" ||
+    typeof value === "number"
+  ) {
+    return value;
+  }
+
+  if (typeof value === "string") {
+    return value.length > LIST_MAX_STRING_LENGTH
+      ? `${value.slice(0, LIST_MAX_STRING_LENGTH)}…`
+      : value;
+  }
+
+  if (typeof value === "bigint") {
+    return value.toString();
+  }
+
+  if (typeof value === "function" || typeof value === "symbol") {
+    return String(value);
+  }
+
+  if (value instanceof Date) {
+    return value.toISOString();
+  }
+
+  if (depth >= LIST_MAX_DEPTH) {
+    if (Array.isArray(value)) {
+      return `[Array(${value.length})]`;
+    }
+    return "[Object]";
+  }
+
+  if (Array.isArray(value)) {
+    return value
+      .slice(0, LIST_MAX_ARRAY_ITEMS)
+      .map((entry) => compactDiagnosticValue(entry, depth + 1));
+  }
+
+  if (value && typeof value === "object") {
+    const entries = Object.entries(value).slice(0, LIST_MAX_OBJECT_KEYS);
+    return Object.fromEntries(
+      entries.map(([key, entry]) => [
+        key,
+        compactDiagnosticValue(entry, depth + 1)
+      ])
+    );
+  }
+
+  return String(value);
+}
+
+function compactDiagnosticDetails(
+  details: Record<string, unknown>
+): Record<string, unknown> {
+  return Object.fromEntries(
+    Object.entries(details).map(([key, value]) => [
+      key,
+      compactDiagnosticValue(value)
+    ])
+  );
+}
+
+function mapRow(
+  row: DiagnosticLogRow,
+  options: { compactDetails?: boolean } = {}
+): DiagnosticLogEntry {
+  const parsedDetails = JSON.parse(row.details_json) as Record<string, unknown>;
   return diagnosticLogEntrySchema.parse({
     id: row.id,
     level: row.level,
@@ -140,7 +212,9 @@ function mapRow(row: DiagnosticLogRow): DiagnosticLogEntry {
     entityType: row.entity_type,
     entityId: row.entity_id,
     jobId: row.job_id,
-    details: JSON.parse(row.details_json) as Record<string, unknown>,
+    details: options.compactDetails
+      ? compactDiagnosticDetails(parsedDetails)
+      : parsedDetails,
     createdAt: row.created_at
   });
 }
@@ -302,7 +376,7 @@ export function listDiagnosticLogs(
 
   const whereSql =
     whereClauses.length > 0 ? `WHERE ${whereClauses.join(" AND ")}` : "";
-  const limit = filters.limit ?? 200;
+  const limit = filters.limit ?? 100;
   const rows = getDatabase()
     .prepare(
       `SELECT id, level, source, scope, event_key, message, route, function_name,
@@ -314,7 +388,7 @@ export function listDiagnosticLogs(
     )
     .all(...params, limit) as DiagnosticLogRow[];
 
-  const logs = rows.map(mapRow);
+  const logs = rows.map((row) => mapRow(row, { compactDetails: true }));
   const tail = rows.at(-1) ?? null;
   return {
     logs,

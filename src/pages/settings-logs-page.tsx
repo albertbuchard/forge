@@ -1,5 +1,12 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
+import {
+  memo,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode
+} from "react";
+import { useInfiniteQuery } from "@tanstack/react-query";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { Search, X } from "lucide-react";
 import { useSearchParams } from "react-router-dom";
@@ -12,23 +19,14 @@ import { Card } from "@/components/ui/card";
 import { EntityBadge } from "@/components/ui/entity-badge";
 import { ErrorState } from "@/components/ui/page-state";
 import { Input } from "@/components/ui/input";
-import { UserBadge } from "@/components/ui/user-badge";
-import { getForgeSnapshot, listDiagnosticLogs } from "@/lib/api";
+import { listDiagnosticLogs } from "@/lib/api";
 import { type EntityKind, isEntityKind } from "@/lib/entity-visuals";
-import {
-  buildOwnedEntitySearchText,
-  formatOwnedEntityDescription,
-  formatOwnedEntityOptionLabel
-} from "@/lib/user-ownership";
 import { cn } from "@/lib/utils";
 import type {
   DiagnosticLogCursor,
   DiagnosticLogEntry,
   DiagnosticLogLevel,
-  DiagnosticLogSource,
-  ForgeSnapshot,
-  Tag,
-  UserSummary
+  DiagnosticLogSource
 } from "@/lib/types";
 
 type FilterOption = {
@@ -48,7 +46,7 @@ const SOURCES: DiagnosticLogSource[] = [
   "agent",
   "openclaw"
 ];
-const DIAGNOSTIC_LOG_PAGE_SIZE = 120;
+const DIAGNOSTIC_LOG_PAGE_SIZE = 60;
 
 function normalize(text: string) {
   return text.trim().toLowerCase();
@@ -154,26 +152,7 @@ function renderSoftBadge(label: string, className?: string) {
   );
 }
 
-function renderEntityFilterBadge(
-  entityType: string,
-  label: string,
-  user?: UserSummary | null,
-  tag?: Tag | null
-) {
-  if (entityType === "user") {
-    return <UserBadge user={user ?? null} compact />;
-  }
-  if (entityType === "tag") {
-    return (
-      <Badge
-        size="sm"
-        className="bg-white/[0.08] text-white/84"
-        style={tag?.color ? { color: tag.color } : undefined}
-      >
-        {label}
-      </Badge>
-    );
-  }
+function renderEntityFilterBadge(entityType: string, label: string) {
   if (isEntityKind(entityType)) {
     return (
       <EntityBadge
@@ -387,127 +366,9 @@ function addEntityOption(
 }
 
 function buildEntityOptions(
-  snapshot: ForgeSnapshot | undefined,
   logs: DiagnosticLogEntry[]
 ) {
   const options = new Map<string, FilterOption>();
-
-  if (snapshot) {
-    for (const goal of snapshot.dashboard.goals) {
-      addEntityOption(options, {
-        entityType: "goal",
-        entityId: goal.id,
-        label: formatOwnedEntityOptionLabel(goal.title, goal.user),
-        description: formatOwnedEntityDescription(goal.description, goal.user),
-        searchText: buildOwnedEntitySearchText(
-          [goal.title, goal.description, goal.status, goal.horizon],
-          goal
-        ),
-        badge: renderEntityFilterBadge("goal", goal.title, goal.user),
-        menuBadge: renderEntityFilterBadge("goal", goal.title, goal.user)
-      });
-    }
-
-    for (const project of snapshot.dashboard.projects) {
-      addEntityOption(options, {
-        entityType: "project",
-        entityId: project.id,
-        label: formatOwnedEntityOptionLabel(project.title, project.user),
-        description: formatOwnedEntityDescription(project.description, project.user),
-        searchText: buildOwnedEntitySearchText(
-          [project.title, project.description, project.status, project.goalTitle],
-          project
-        ),
-        badge: renderEntityFilterBadge("project", project.title, project.user),
-        menuBadge: renderEntityFilterBadge("project", project.title, project.user)
-      });
-    }
-
-    for (const task of snapshot.dashboard.tasks) {
-      addEntityOption(options, {
-        entityType: "task",
-        entityId: task.id,
-        label: formatOwnedEntityOptionLabel(task.title, task.user),
-        description: formatOwnedEntityDescription(
-          task.description,
-          task.user
-        ),
-        searchText: buildOwnedEntitySearchText(
-          [
-            task.title,
-            task.description,
-            task.status
-          ],
-          task
-        ),
-        badge: renderEntityFilterBadge("task", task.title, task.user),
-        menuBadge: renderEntityFilterBadge("task", task.title, task.user)
-      });
-    }
-
-    for (const habit of snapshot.dashboard.habits) {
-      addEntityOption(options, {
-        entityType: "habit",
-        entityId: habit.id,
-        label: formatOwnedEntityOptionLabel(habit.title, habit.user),
-        description: formatOwnedEntityDescription(habit.description, habit.user),
-        searchText: buildOwnedEntitySearchText(
-          [habit.title, habit.description, habit.frequency, habit.status],
-          habit
-        ),
-        badge: renderEntityFilterBadge("habit", habit.title, habit.user),
-        menuBadge: renderEntityFilterBadge("habit", habit.title, habit.user)
-      });
-    }
-
-    for (const strategy of snapshot.strategies) {
-      addEntityOption(options, {
-        entityType: "strategy",
-        entityId: strategy.id,
-        label: formatOwnedEntityOptionLabel(strategy.title, strategy.user),
-        description: formatOwnedEntityDescription(
-          strategy.overview,
-          strategy.user
-        ),
-        searchText: buildOwnedEntitySearchText(
-          [strategy.title, strategy.overview, strategy.endStateDescription],
-          strategy
-        ),
-        badge: renderEntityFilterBadge("strategy", strategy.title, strategy.user),
-        menuBadge: renderEntityFilterBadge(
-          "strategy",
-          strategy.title,
-          strategy.user
-        )
-      });
-    }
-
-    for (const tag of snapshot.dashboard.tags) {
-      addEntityOption(options, {
-        entityType: "tag",
-        entityId: tag.id,
-        label: tag.name,
-        description: tag.description || "Forge tag",
-        searchText: normalize(`${tag.name} ${tag.description ?? ""}`),
-        badge: renderEntityFilterBadge("tag", tag.name, null, tag),
-        menuBadge: renderEntityFilterBadge("tag", tag.name, null, tag)
-      });
-    }
-
-    for (const user of snapshot.users) {
-      addEntityOption(options, {
-        entityType: "user",
-        entityId: user.id,
-        label: formatOwnedEntityOptionLabel(user.displayName, user),
-        description: user.description || `${user.kind} Forge user`,
-        searchText: normalize(
-          `${user.displayName} ${user.handle ?? ""} ${user.kind} ${user.description ?? ""}`
-        ),
-        badge: renderEntityFilterBadge("user", user.displayName, user),
-        menuBadge: renderEntityFilterBadge("user", user.displayName, user)
-      });
-    }
-  }
 
   for (const entry of logs) {
     if (!entry.entityType || !entry.entityId) {
@@ -538,6 +399,79 @@ function buildEntityOptions(
     left.label.localeCompare(right.label)
   );
 }
+
+const DiagnosticLogRowCard = memo(function DiagnosticLogRowCard({
+  entry
+}: {
+  entry: DiagnosticLogEntry;
+}) {
+  const [detailsOpen, setDetailsOpen] = useState(false);
+  const serializedDetails = useMemo(
+    () =>
+      detailsOpen && Object.keys(entry.details).length > 0
+        ? JSON.stringify(entry.details, null, 2)
+        : "",
+    [detailsOpen, entry.details]
+  );
+
+  return (
+    <Card className="grid gap-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="grid gap-3">
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span
+              className={cn(
+                "rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em]",
+                levelTone(entry.level)
+              )}
+            >
+              {entry.level}
+            </span>
+            <span className="rounded-full border border-white/10 bg-white/[0.04] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-white/60">
+              {entry.source}
+            </span>
+            <span className="rounded-full border border-white/10 bg-white/[0.04] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-white/60">
+              {entry.scope}
+            </span>
+            {entry.eventKey ? (
+              <span className="rounded-full border border-white/10 bg-white/[0.04] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-white/46">
+                {entry.eventKey}
+              </span>
+            ) : null}
+          </div>
+          <div className="text-base font-medium text-white">{entry.message}</div>
+          <div className="flex flex-wrap gap-3 text-xs text-white/45">
+            {copyableDetailRows(entry).map((row) => (
+              <span key={row}>{row}</span>
+            ))}
+          </div>
+        </div>
+        <div className="shrink-0 text-right text-xs text-white/40">
+          <div>{formatTimestamp(entry.createdAt)}</div>
+          <div className="mt-1 font-mono text-[11px]">{entry.id}</div>
+        </div>
+      </div>
+
+      {Object.keys(entry.details).length > 0 ? (
+        <details
+          className="rounded-[18px] border border-white/8 bg-[rgba(7,11,21,0.72)] px-4 py-3"
+          onToggle={(event) =>
+            setDetailsOpen((event.currentTarget as HTMLDetailsElement).open)
+          }
+        >
+          <summary className="cursor-pointer text-sm text-white/70">
+            View structured details
+          </summary>
+          {detailsOpen ? (
+            <pre className="mt-3 overflow-x-auto whitespace-pre-wrap text-xs leading-6 text-white/58">
+              {serializedDetails}
+            </pre>
+          ) : null}
+        </details>
+      ) : null}
+    </Card>
+  );
+});
 
 export function SettingsLogsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -572,13 +506,9 @@ export function SettingsLogsPage() {
         beforeCreatedAt: pageParam?.beforeCreatedAt,
         beforeId: pageParam?.beforeId
       }),
-    getNextPageParam: (lastPage) => lastPage.nextCursor
-  });
-
-  const snapshotQuery = useQuery({
-    queryKey: ["forge-diagnostic-log-entities"],
-    queryFn: () => getForgeSnapshot(),
-    staleTime: 60_000
+    getNextPageParam: (lastPage) => lastPage.nextCursor,
+    retry: false,
+    refetchOnWindowFocus: false
   });
 
   const setTextFilter = (key: string, value: string) => {
@@ -622,28 +552,6 @@ export function SettingsLogsPage() {
     ].forEach((key) => next.delete(key));
     setSearchParams(next, { replace: true });
   };
-
-  if (logsQuery.isPending) {
-    return (
-      <SurfaceSkeleton
-        eyebrow="Settings"
-        title="Loading diagnostics"
-        description="Collecting the latest frontend, backend, and runtime traces."
-        columns={1}
-        blocks={6}
-      />
-    );
-  }
-
-  if (logsQuery.isError) {
-    return (
-      <ErrorState
-        eyebrow="Settings"
-        error={logsQuery.error}
-        onRetry={() => void logsQuery.refetch()}
-      />
-    );
-  }
 
   const rawLogs = useMemo(
     () => logsQuery.data?.pages.flatMap((page) => page.logs) ?? [],
@@ -716,8 +624,8 @@ export function SettingsLogsPage() {
   );
 
   const entityOptions = useMemo(
-    () => buildEntityOptions(snapshotQuery.data, rawLogs),
-    [rawLogs, snapshotQuery.data]
+    () => buildEntityOptions(rawLogs),
+    [rawLogs]
   );
 
   const filteredLogs = useMemo(
@@ -816,6 +724,28 @@ export function SettingsLogsPage() {
     filters.jobs.length +
     filters.entities.length +
     (filters.search.trim() ? 1 : 0);
+
+  if (logsQuery.isPending) {
+    return (
+      <SurfaceSkeleton
+        eyebrow="Settings"
+        title="Loading diagnostics"
+        description="Collecting the latest frontend, backend, and runtime traces."
+        columns={1}
+        blocks={6}
+      />
+    );
+  }
+
+  if (logsQuery.isError) {
+    return (
+      <ErrorState
+        eyebrow="Settings"
+        error={logsQuery.error}
+        onRetry={() => void logsQuery.refetch()}
+      />
+    );
+  }
 
   return (
     <div className="mx-auto grid w-full max-w-[1220px] gap-5">
@@ -918,11 +848,7 @@ export function SettingsLogsPage() {
             onChange={(values) =>
               setMultiFilter("entity", values, ["entityType", "entityId"])
             }
-            emptyMessage={
-              snapshotQuery.isFetching
-                ? "Loading Forge entities…"
-                : "No Forge entities or logged ids match yet."
-            }
+            emptyMessage="No logged entities match yet."
           />
         </div>
       </Card>
@@ -958,58 +884,7 @@ export function SettingsLogsPage() {
                         transform: `translateY(${virtualRow.start}px)`
                       }}
                     >
-                      <Card className="grid gap-4">
-                        <div className="flex flex-wrap items-start justify-between gap-3">
-                          <div className="grid gap-3">
-                            <div className="flex flex-wrap items-center gap-1.5">
-                              <span
-                                className={cn(
-                                  "rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em]",
-                                  levelTone(entry.level)
-                                )}
-                              >
-                                {entry.level}
-                              </span>
-                              <span className="rounded-full border border-white/10 bg-white/[0.04] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-white/60">
-                                {entry.source}
-                              </span>
-                              <span className="rounded-full border border-white/10 bg-white/[0.04] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-white/60">
-                                {entry.scope}
-                              </span>
-                              {entry.eventKey ? (
-                                <span className="rounded-full border border-white/10 bg-white/[0.04] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-white/46">
-                                  {entry.eventKey}
-                                </span>
-                              ) : null}
-                            </div>
-                            <div className="text-base font-medium text-white">
-                              {entry.message}
-                            </div>
-                            <div className="flex flex-wrap gap-3 text-xs text-white/45">
-                              {copyableDetailRows(entry).map((row) => (
-                                <span key={row}>{row}</span>
-                              ))}
-                            </div>
-                          </div>
-                          <div className="shrink-0 text-right text-xs text-white/40">
-                            <div>{formatTimestamp(entry.createdAt)}</div>
-                            <div className="mt-1 font-mono text-[11px]">
-                              {entry.id}
-                            </div>
-                          </div>
-                        </div>
-
-                        {Object.keys(entry.details).length > 0 ? (
-                          <details className="rounded-[18px] border border-white/8 bg-[rgba(7,11,21,0.72)] px-4 py-3">
-                            <summary className="cursor-pointer text-sm text-white/70">
-                              View structured details
-                            </summary>
-                            <pre className="mt-3 overflow-x-auto whitespace-pre-wrap text-xs leading-6 text-white/58">
-                              {JSON.stringify(entry.details, null, 2)}
-                            </pre>
-                          </details>
-                        ) : null}
-                      </Card>
+                      <DiagnosticLogRowCard entry={entry} />
                     </div>
                   );
                 })}

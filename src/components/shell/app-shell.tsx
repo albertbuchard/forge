@@ -1598,7 +1598,9 @@ export function AppShell() {
   } | null>(null);
   const operatorSessionQuery = useQuery({
     queryKey: ["forge-shell-operator-session"],
-    queryFn: ensureOperatorSession
+    queryFn: ensureOperatorSession,
+    retry: false,
+    staleTime: 5 * 60_000
   });
   const snapshotQuery = useQuery({
     queryKey: ["forge-snapshot", ...selectedUserIds],
