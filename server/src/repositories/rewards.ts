@@ -490,7 +490,7 @@ export function getTotalXp(): number {
   const row = getDatabase()
     .prepare(`SELECT COALESCE(SUM(delta_xp), 0) AS total FROM reward_ledger`)
     .get() as { total: number };
-  return row.total;
+  return Math.max(0, row.total);
 }
 
 export function getWeeklyXp(weekStartIso: string): number {
@@ -500,7 +500,7 @@ export function getWeeklyXp(weekStartIso: string): number {
       `SELECT COALESCE(SUM(delta_xp), 0) AS total FROM reward_ledger WHERE created_at >= ?`
     )
     .get(weekStartIso) as { total: number };
-  return row.total;
+  return Math.max(0, row.total);
 }
 
 export function getDailyAmbientXp(dayKey: string): number {

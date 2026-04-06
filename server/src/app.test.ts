@@ -3350,6 +3350,88 @@ test("habits persist with check-ins and XP updates through the versioned API", a
   }
 });
 
+test("misaligned habit penalties do not break the context payload", async () => {
+  const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-habit-context-"));
+  const app = await buildServer({ dataRoot: rootDir, seedDemoData: false });
+
+  try {
+    const operatorCookie = await issueOperatorSessionCookie(app);
+
+    const created = await app.inject({
+      method: "POST",
+      url: "/api/v1/habits",
+      headers: { cookie: operatorCookie },
+      payload: {
+        title: "Avoid late-night doomscrolling",
+        description: "Treat late-night scrolling as a recovery risk.",
+        polarity: "positive",
+        frequency: "daily",
+        targetCount: 1,
+        rewardXp: 3,
+        penaltyXp: 11
+      }
+    });
+
+    assert.equal(created.statusCode, 201);
+    const habitId = (created.json() as { habit: { id: string } }).habit.id;
+
+    const checkIn = await app.inject({
+      method: "POST",
+      url: `/api/v1/habits/${habitId}/check-ins`,
+      headers: { cookie: operatorCookie },
+      payload: {
+        dateKey: "2026-04-06",
+        status: "missed"
+      }
+    });
+
+    assert.equal(checkIn.statusCode, 200);
+    const checkInBody = checkIn.json() as {
+      habit: {
+        checkIns: Array<{ deltaXp: number }>;
+      };
+      metrics: {
+        profile: {
+          totalXp: number;
+          weeklyXp: number;
+        };
+        recentLedger: Array<{ entityType: string; entityId: string; deltaXp: number }>;
+      };
+    };
+    assert.equal(checkInBody.habit.checkIns[0]?.deltaXp, -11);
+    assert.equal(checkInBody.metrics.profile.totalXp, 0);
+    assert.equal(checkInBody.metrics.profile.weeklyXp, 0);
+    assert.ok(
+      checkInBody.metrics.recentLedger.some(
+        (entry) =>
+          entry.entityType === "habit" &&
+          entry.entityId === habitId &&
+          entry.deltaXp === -11
+      )
+    );
+
+    const contextResponse = await app.inject({
+      method: "GET",
+      url: "/api/v1/context",
+      headers: { cookie: operatorCookie }
+    });
+
+    assert.equal(contextResponse.statusCode, 200);
+    const contextBody = contextResponse.json() as {
+      metrics: {
+        totalXp: number;
+        weeklyXp: number;
+      };
+    };
+    assert.equal(contextBody.metrics.totalXp, 0);
+    assert.equal(contextBody.metrics.weeklyXp, 0);
+  } finally {
+    await app.close();
+    closeDatabase();
+    await rm(rootDir, { recursive: true, force: true });
+  }
+});
+
 test("psyche notes persist and scoped tokens cannot read psyche without explicit grant", async () => {
   const rootDir = await mkdtemp(
     path.join(os.tmpdir(), "forge-psyche-note-scope-")
