@@ -36,6 +36,17 @@ async function issueOperatorSessionCookie(
   return `${cookie.name}=${cookie.value}`;
 }
 
+type WikiIngestJobPollPayload = {
+  job: { status: string };
+  candidates: Array<{
+    id: string;
+    candidateType: string;
+    title?: string;
+    publishedEntityId?: string | null;
+    publishedNoteId?: string | null;
+  }>;
+};
+
 test("companion pairings collapse stale duplicates and support bulk revoke", async () => {
   const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-companion-"));
   const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
@@ -89,13 +100,21 @@ test("companion pairings collapse stale duplicates and support bulk revoke", asy
 
     const first = await createPairing();
     const second = await createPairing();
-    let rows = getDatabase()
+    let rows: Array<{
+      id: string;
+      status: string;
+      device_name: string | null;
+    }> = (getDatabase()
       .prepare(
         `SELECT id, status
          FROM companion_pairing_sessions
          ORDER BY created_at ASC`
       )
-      .all() as Array<{ id: string; status: string }>;
+      .all() as Array<{ id: string; status: string }>).map((row) => ({
+      id: row.id,
+      status: row.status,
+      device_name: null
+    }));
     assert.equal(rows.length, 2);
     assert.equal(rows[0]?.id, first.session.id);
     assert.equal(rows[0]?.status, "revoked");
@@ -5247,17 +5266,7 @@ test("wiki ingest review can map an entity proposal onto an existing Forge entit
     const jobId = ingestBody.job?.job.id ?? "";
     assert.ok(jobId);
 
-    let jobPayload:
-      | {
-          job: { status: string };
-          candidates: Array<{
-            id: string;
-            candidateType: string;
-            title: string;
-            publishedEntityId: string | null;
-          }>;
-        }
-      | null = null;
+    let jobPayload: WikiIngestJobPollPayload | null = null;
     for (let attempt = 0; attempt < 40; attempt += 1) {
       const poll = await app.inject({
         method: "GET",
@@ -5267,7 +5276,7 @@ test("wiki ingest review can map an entity proposal onto an existing Forge entit
         }
       });
       assert.equal(poll.statusCode, 200);
-      jobPayload = poll.json() as typeof jobPayload;
+      jobPayload = poll.json() as WikiIngestJobPollPayload;
       if (jobPayload?.job.status === "completed") {
         break;
       }
@@ -5275,8 +5284,10 @@ test("wiki ingest review can map an entity proposal onto an existing Forge entit
     }
 
     assert.ok(jobPayload);
-    const entityCandidate = jobPayload?.candidates.find(
-      (candidate) => candidate.candidateType === "entity"
+    const resolvedJobPayload = jobPayload as WikiIngestJobPollPayload;
+    const entityCandidate = resolvedJobPayload.candidates.find(
+      (candidate: WikiIngestJobPollPayload["candidates"][number]) =>
+        candidate.candidateType === "entity"
     );
     assert.ok(entityCandidate);
 
@@ -5287,7 +5298,8 @@ test("wiki ingest review can map an entity proposal onto an existing Forge entit
         cookie: operatorCookie
       },
       payload: {
-        decisions: (jobPayload?.candidates ?? []).map((candidate) =>
+        decisions: resolvedJobPayload.candidates.map(
+          (candidate: WikiIngestJobPollPayload["candidates"][number]) =>
           candidate.id === entityCandidate?.id
             ? {
                 candidateId: candidate.id,
@@ -5526,16 +5538,7 @@ test("wiki ingest review can merge a page candidate into an existing wiki page",
     const jobId = createIngestBody.job?.job.id ?? "";
     assert.ok(jobId);
 
-    let jobPayload:
-      | {
-          job: { status: string };
-          candidates: Array<{
-            id: string;
-            candidateType: string;
-            publishedNoteId: string | null;
-          }>;
-        }
-      | null = null;
+    let jobPayload: WikiIngestJobPollPayload | null = null;
     for (let attempt = 0; attempt < 30; attempt += 1) {
       const jobResponse = await app.inject({
         method: "GET",
@@ -5545,7 +5548,7 @@ test("wiki ingest review can merge a page candidate into an existing wiki page",
         }
       });
       assert.equal(jobResponse.statusCode, 200);
-      jobPayload = jobResponse.json() as typeof jobPayload;
+      jobPayload = jobResponse.json() as WikiIngestJobPollPayload;
       if (
         jobPayload &&
         !["queued", "processing"].includes(jobPayload.job.status)
@@ -5556,8 +5559,10 @@ test("wiki ingest review can merge a page candidate into an existing wiki page",
     }
 
     assert.ok(jobPayload);
-    const pageCandidate = jobPayload?.candidates.find(
-      (candidate) => candidate.candidateType === "page"
+    const resolvedJobPayload = jobPayload as WikiIngestJobPollPayload;
+    const pageCandidate = resolvedJobPayload.candidates.find(
+      (candidate: WikiIngestJobPollPayload["candidates"][number]) =>
+        candidate.candidateType === "page"
     );
     assert.ok(pageCandidate);
 
@@ -5765,12 +5770,10 @@ test("wiki ingest history entries can be deleted without deleting published note
     const jobId = createIngestBody.job?.job.id;
     assert.ok(jobId);
 
-    let jobPayload: {
-      job: { status: string };
-      candidates: Array<{ id: string; candidateType: string; publishedNoteId: string | null }>;
-    } | null = null;
+    let jobPayload: WikiIngestJobPollPayload | null = null;
     for (let attempt = 0; attempt < 30; attempt += 1) {
-      const jobResponse = await app.inject({
+      const jobResponse: Awaited<ReturnType<typeof app.inject>> =
+        await app.inject({
         method: "GET",
         url: `/api/v1/wiki/ingest-jobs/${jobId}`,
         headers: {
@@ -5778,7 +5781,7 @@ test("wiki ingest history entries can be deleted without deleting published note
         }
       });
       assert.equal(jobResponse.statusCode, 200);
-      jobPayload = jobResponse.json() as typeof jobPayload;
+      jobPayload = jobResponse.json() as WikiIngestJobPollPayload;
       if (
         jobPayload &&
         !["queued", "processing"].includes(jobPayload.job.status)
@@ -5788,10 +5791,17 @@ test("wiki ingest history entries can be deleted without deleting published note
       await new Promise((resolve) => setTimeout(resolve, 50));
     }
     assert.ok(jobPayload);
+    const resolvedJobPayload = jobPayload as WikiIngestJobPollPayload;
     const pageCandidateIds =
-      jobPayload?.candidates
-        .filter((candidate) => candidate.candidateType === "page")
-        .map((candidate) => candidate.id) ?? [];
+      resolvedJobPayload.candidates
+        .filter(
+          (candidate: WikiIngestJobPollPayload["candidates"][number]) =>
+            candidate.candidateType === "page"
+        )
+        .map(
+          (candidate: WikiIngestJobPollPayload["candidates"][number]) =>
+            candidate.id
+        ) ?? [];
     assert.ok(pageCandidateIds.length > 0);
 
     const review = await app.inject({
@@ -5801,7 +5811,7 @@ test("wiki ingest history entries can be deleted without deleting published note
         cookie: operatorCookie
       },
       payload: {
-        decisions: pageCandidateIds.map((candidateId) => ({
+        decisions: pageCandidateIds.map((candidateId: string) => ({
           candidateId,
           keep: true
         }))
@@ -8884,7 +8894,8 @@ test("failed wiki ingests can be rerun into a fresh job", async () => {
 
     let rerunStatus = "queued";
     for (let attempt = 0; attempt < 50; attempt += 1) {
-      const jobResponse = await app.inject({
+      const jobResponse: Awaited<ReturnType<typeof app.inject>> =
+        await app.inject({
         method: "GET",
         url: `/api/v1/wiki/ingest-jobs/${rerunJobId}`,
         headers: {
@@ -9032,7 +9043,8 @@ test("diagnostic log retention prunes expired entries before the store grows ind
         source: "server",
         scope: "retention_probe",
         eventKey: "stale_log",
-        message: "This old diagnostic entry should be removed."
+        message: "This old diagnostic entry should be removed.",
+        details: {}
       },
       staleTimestamp
     );
@@ -9041,7 +9053,8 @@ test("diagnostic log retention prunes expired entries before the store grows ind
       source: "server",
       scope: "retention_probe",
       eventKey: "fresh_log",
-      message: "This recent diagnostic entry should remain visible."
+      message: "This recent diagnostic entry should remain visible.",
+      details: {}
     });
 
     const retention = enforceDiagnosticLogRetention({ force: true });
@@ -9193,8 +9206,12 @@ test("background job manager can run multiple jobs at the same time", async () =
   assert.ok(manager.isActive("bg_parallel_one"));
   assert.ok(manager.isActive("bg_parallel_two"));
 
-  releaseFirst?.();
-  releaseSecond?.();
+  const releaseFirstFn = releaseFirst;
+  const releaseSecondFn = releaseSecond;
+  assert.ok(releaseFirstFn);
+  assert.ok(releaseSecondFn);
+  (releaseFirstFn as () => void)();
+  (releaseSecondFn as () => void)();
   await manager.stop();
 });
 

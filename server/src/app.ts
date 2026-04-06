@@ -403,6 +403,7 @@ import {
   recommendTaskTimeboxesSchema,
   strategyListQuerySchema,
   type Note,
+  type CrudEntityType,
   type TaskTimeSummary,
   type WorkAdjustmentEntityType
 } from "./types.js";
@@ -6099,6 +6100,7 @@ export async function buildServer(
         {
           entityTypes: [entityType],
           ids: [entityId],
+          includeDeleted: false,
           limit: 1
         }
       ]

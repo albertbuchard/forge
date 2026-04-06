@@ -80,7 +80,8 @@ test("wiki ingest response schema is strict and fully required for nested propos
   }
 
   assert.ok(capturedBody);
-  const text = capturedBody.text as {
+  const requestBody = capturedBody as Record<string, unknown>;
+  const text = requestBody.text as {
     format?: { schema?: Record<string, unknown> };
   };
   const schema = text.format?.schema as Record<string, unknown>;
@@ -126,12 +127,12 @@ test("wiki ingest response schema is strict and fully required for nested propos
   assert.ok(articleCandidateProperties.markdown);
   assert.ok(articleCandidateProperties.parentSlug);
   assert.ok(articleCandidateProperties.aliases);
-  assert.equal(capturedBody.temperature, undefined);
-  assert.equal(capturedBody.background, true);
-  assert.equal(capturedBody.store, true);
-  assert.equal(capturedBody.prompt_cache_retention, "in_memory");
+  assert.equal(requestBody.temperature, undefined);
+  assert.equal(requestBody.background, true);
+  assert.equal(requestBody.store, true);
+  assert.equal(requestBody.prompt_cache_retention, "in_memory");
   assert.equal(
-    capturedBody.prompt_cache_key,
+    requestBody.prompt_cache_key,
     "forge-wiki-ingest:gpt-5.4-mini:auto:text/plain"
   );
 });

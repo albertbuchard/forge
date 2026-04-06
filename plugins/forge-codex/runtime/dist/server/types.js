@@ -117,6 +117,19 @@ export const activitySourceSchema = z.enum([
     "agent",
     "system"
 ]);
+export const diagnosticLogLevelSchema = z.enum([
+    "debug",
+    "info",
+    "warning",
+    "error"
+]);
+export const diagnosticLogSourceSchema = z.enum([
+    "ui",
+    "openclaw",
+    "agent",
+    "system",
+    "server"
+]);
 export const agentTrustLevelSchema = z.enum([
     "standard",
     "trusted",
@@ -1239,6 +1252,22 @@ export const eventLogEntrySchema = z.object({
     metadata: z.record(z.string(), z.union([z.string(), z.number(), z.boolean(), z.null()])),
     createdAt: z.string()
 });
+export const diagnosticLogEntrySchema = z.object({
+    id: z.string(),
+    level: diagnosticLogLevelSchema,
+    source: diagnosticLogSourceSchema,
+    scope: z.string(),
+    eventKey: z.string(),
+    message: z.string(),
+    route: z.string().nullable(),
+    functionName: z.string().nullable(),
+    requestId: z.string().nullable(),
+    entityType: z.string().nullable(),
+    entityId: z.string().nullable(),
+    jobId: z.string().nullable(),
+    details: z.record(z.string(), z.unknown()),
+    createdAt: z.string()
+});
 export const insightEvidenceSchema = z.object({
     entityType: z.string(),
     entityId: z.string(),
@@ -2251,6 +2280,33 @@ export const eventsListQuerySchema = z.object({
     entityId: nonEmptyTrimmedString.optional(),
     eventKind: nonEmptyTrimmedString.optional(),
     limit: z.coerce.number().int().positive().max(200).optional()
+});
+export const diagnosticLogListQuerySchema = z.object({
+    level: diagnosticLogLevelSchema.optional(),
+    source: diagnosticLogSourceSchema.optional(),
+    scope: nonEmptyTrimmedString.optional(),
+    route: nonEmptyTrimmedString.optional(),
+    entityType: nonEmptyTrimmedString.optional(),
+    entityId: nonEmptyTrimmedString.optional(),
+    jobId: nonEmptyTrimmedString.optional(),
+    search: nonEmptyTrimmedString.optional(),
+    beforeCreatedAt: nonEmptyTrimmedString.optional(),
+    beforeId: nonEmptyTrimmedString.optional(),
+    limit: z.coerce.number().int().positive().max(500).optional()
+});
+export const createDiagnosticLogSchema = z.object({
+    level: diagnosticLogLevelSchema.default("info"),
+    source: diagnosticLogSourceSchema.optional(),
+    scope: nonEmptyTrimmedString,
+    eventKey: trimmedString.default(""),
+    message: nonEmptyTrimmedString,
+    route: trimmedString.nullable().optional(),
+    functionName: trimmedString.nullable().optional(),
+    requestId: trimmedString.nullable().optional(),
+    entityType: trimmedString.nullable().optional(),
+    entityId: trimmedString.nullable().optional(),
+    jobId: trimmedString.nullable().optional(),
+    details: z.record(z.string(), z.unknown()).default({})
 });
 export const rewardsLedgerQuerySchema = z.object({
     entityType: nonEmptyTrimmedString.optional(),

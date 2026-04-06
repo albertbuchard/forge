@@ -793,7 +793,8 @@ export function revokeAllCompanionPairingSessions(
   const rows = listPairingRows(parsed.userIds.length > 0 ? parsed.userIds : undefined)
     .filter((row) => parsed.includeRevoked || row.status !== "revoked");
   const sessions = revokePairingRows(rows, {
-    ...activity,
+    actor: activity?.actor ?? null,
+    source: activity?.source ?? "ui",
     reason: "Revoked by operator (bulk)"
   });
   return {

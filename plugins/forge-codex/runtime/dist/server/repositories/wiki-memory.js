@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import AdmZip from "adm-zip";
-import { existsSync, mkdirSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, unlinkSync, rmSync, writeFileSync } from "node:fs";
 import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { z } from "zod";
@@ -8,6 +8,7 @@ import { resolveDataDir, getDatabase } from "../db.js";
 import { decorateOwnedEntity } from "./entity-ownership.js";
 import { createNoteLinkSchema, crudEntityTypeSchema, noteKindSchema, noteSchema as persistedNoteSchema, wikiSearchModeSchema, wikiSpaceVisibilitySchema } from "../types.js";
 import { deleteEncryptedSecret, readEncryptedSecret, storeEncryptedSecret } from "./calendar.js";
+import { recordDiagnosticLog } from "./diagnostic-logs.js";
 const wikiSpaceSchema = z.object({
     id: z.string(),
     slug: z.string(),
@@ -201,13 +202,52 @@ const wikiIngestJobPayloadSchema = z.object({
 });
 const listWikiIngestJobsQuerySchema = z.object({
     spaceId: z.string().trim().optional(),
-    limit: z.coerce.number().int().positive().max(50).default(20)
+    limit: z.coerce.number().int().positive().max(200).default(20)
 });
 export const reviewWikiIngestJobSchema = z.object({
     decisions: z
-        .array(z.object({
+        .array(z
+        .object({
         candidateId: z.string().trim().min(1),
-        keep: z.boolean()
+        keep: z.boolean().optional(),
+        action: z
+            .enum(["keep", "discard", "map_existing", "merge_existing"])
+            .optional(),
+        mappedEntityType: crudEntityTypeSchema.optional(),
+        mappedEntityId: z.string().trim().min(1).optional(),
+        targetNoteId: z.string().trim().min(1).optional()
+    })
+        .superRefine((value, context) => {
+        if (value.action === "map_existing") {
+            if (!value.mappedEntityType) {
+                context.addIssue({
+                    code: z.ZodIssueCode.custom,
+                    path: ["mappedEntityType"],
+                    message: "mappedEntityType is required when action is map_existing"
+                });
+            }
+            if (!value.mappedEntityId) {
+                context.addIssue({
+                    code: z.ZodIssueCode.custom,
+                    path: ["mappedEntityId"],
+                    message: "mappedEntityId is required when action is map_existing"
+                });
+            }
+        }
+        if (value.action === "merge_existing" && !value.targetNoteId) {
+            context.addIssue({
+                code: z.ZodIssueCode.custom,
+                path: ["targetNoteId"],
+                message: "targetNoteId is required when action is merge_existing"
+            });
+        }
+        if (value.action === undefined && value.keep === undefined) {
+            context.addIssue({
+                code: z.ZodIssueCode.custom,
+                path: ["action"],
+                message: "Either keep or action is required"
+            });
+        }
     }))
         .min(1)
 });
@@ -218,6 +258,14 @@ export const createWikiSpaceSchema = z.object({
     ownerUserId: z.string().trim().nullable().optional(),
     visibility: wikiSpaceVisibilitySchema.default("personal")
 });
+const wikiLlmReasoningEffortSchema = z.enum([
+    "none",
+    "low",
+    "medium",
+    "high",
+    "xhigh"
+]);
+const wikiLlmVerbositySchema = z.enum(["low", "medium", "high"]);
 export const upsertWikiLlmProfileSchema = z.object({
     id: z.string().trim().optional(),
     label: z.string().trim().min(1),
@@ -226,8 +274,19 @@ export const upsertWikiLlmProfileSchema = z.object({
     model: z.string().trim().min(1),
     apiKey: z.string().trim().optional(),
     systemPrompt: z.string().trim().default(""),
+    reasoningEffort: wikiLlmReasoningEffortSchema.optional(),
+    verbosity: wikiLlmVerbositySchema.optional(),
     enabled: z.boolean().default(true),
     metadata: z.record(z.string(), z.unknown()).default({})
+});
+export const testWikiLlmProfileSchema = z.object({
+    profileId: z.string().trim().optional(),
+    provider: z.string().trim().min(1).default("openai-responses"),
+    baseUrl: z.string().trim().default("https://api.openai.com/v1"),
+    model: z.string().trim().min(1),
+    apiKey: z.string().trim().optional(),
+    reasoningEffort: wikiLlmReasoningEffortSchema.optional(),
+    verbosity: wikiLlmVerbositySchema.optional()
 });
 export const upsertWikiEmbeddingProfileSchema = z.object({
     id: z.string().trim().optional(),
@@ -390,6 +449,10 @@ function parseJsonStringArray(raw) {
         return [];
     }
 }
+function readStringRecordValue(record, key) {
+    const value = record[key];
+    return typeof value === "string" && value.trim().length > 0 ? value : null;
+}
 function listLinkRowsForNotes(noteIds) {
     if (noteIds.length === 0) {
         return [];
@@ -496,6 +559,32 @@ function inferTitle(markdown, fallback) {
 function inferSummary(markdown) {
     const plain = buildContentPlain(markdown).replace(/\s+/g, " ").trim();
     return plain.slice(0, 240);
+}
+function stripLeadingHeading(markdown, title) {
+    const normalizedTitle = title.trim().toLowerCase();
+    const trimmed = markdown.trim();
+    const match = trimmed.match(/^#\s+(.+?)\n+/);
+    if (!match) {
+        return trimmed;
+    }
+    const heading = match[1]?.trim().toLowerCase() ?? "";
+    if (heading !== normalizedTitle) {
+        return trimmed;
+    }
+    return trimmed.slice(match[0].length).trim();
+}
+function mergeWikiPageContent(targetMarkdown, incoming) {
+    const mergedBody = stripLeadingHeading(incoming.markdown, incoming.title) ||
+        incoming.markdown.trim();
+    return [
+        targetMarkdown.trim(),
+        "",
+        `## ${incoming.title}`,
+        "",
+        mergedBody
+    ]
+        .filter((part) => part.trim().length > 0)
+        .join("\n");
 }
 function slugify(value) {
     const normalized = value
@@ -1876,6 +1965,21 @@ export function upsertWikiLlmProfile(input, secrets) {
                 `wiki_llm_secret_${randomUUID().replaceAll("-", "").slice(0, 10)}`;
         storeEncryptedSecret(secretId, secrets.sealJson({ apiKey: parsed.apiKey.trim() }), `${parsed.label} wiki LLM profile`);
     }
+    const metadata = {
+        ...parsed.metadata
+    };
+    if (parsed.reasoningEffort) {
+        metadata.reasoningEffort = parsed.reasoningEffort;
+    }
+    else {
+        delete metadata.reasoningEffort;
+    }
+    if (parsed.verbosity) {
+        metadata.verbosity = parsed.verbosity;
+    }
+    else {
+        delete metadata.verbosity;
+    }
     getDatabase()
         .prepare(`INSERT INTO wiki_llm_profiles (id, label, provider, base_url, model, secret_id, system_prompt, enabled, metadata_json, created_at, updated_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -1889,7 +1993,7 @@ export function upsertWikiLlmProfile(input, secrets) {
          enabled = excluded.enabled,
          metadata_json = excluded.metadata_json,
          updated_at = excluded.updated_at`)
-        .run(id, parsed.label, parsed.provider, parsed.baseUrl, parsed.model, secretId, parsed.systemPrompt, parsed.enabled ? 1 : 0, JSON.stringify(parsed.metadata), now, now);
+        .run(id, parsed.label, parsed.provider, parsed.baseUrl, parsed.model, secretId, parsed.systemPrompt, parsed.enabled ? 1 : 0, JSON.stringify(metadata), now, now);
     return listWikiLlmProfiles().find((entry) => entry.id === id);
 }
 export function upsertWikiEmbeddingProfile(input, secrets) {
@@ -2088,11 +2192,103 @@ function updateWikiIngestJob(jobId, patch) {
         .run(next.status, next.phase, next.progressPercent, next.totalFiles, next.processedFiles, next.createdPageCount, next.createdEntityCount, next.acceptedCount, next.rejectedCount, next.latestMessage, next.sourceLocator, next.mimeType, next.summary, next.pageNoteId, next.errorMessage, next.completedAt, next.updatedAt, jobId);
     return getWikiIngestJob(jobId);
 }
-function createWikiIngestLog(jobId, message, level = "info", metadata = {}) {
-    getDatabase()
-        .prepare(`INSERT INTO wiki_ingest_job_logs (id, job_id, level, message, metadata_json, created_at)
-       VALUES (?, ?, ?, ?, ?, ?)`)
-        .run(`wiki_ingest_log_${randomUUID().replaceAll("-", "").slice(0, 10)}`, jobId, level, message, JSON.stringify(metadata), nowIso());
+function createWikiIngestLog(jobId, message, level = "info", metadata = {}, options = {}) {
+    const createdAt = nowIso();
+    const logMetadata = options.aggregateKey
+        ? { ...metadata, aggregateKey: options.aggregateKey }
+        : metadata;
+    const aggregateKey = options.aggregateKey?.trim() || null;
+    if (aggregateKey) {
+        const current = [...listWikiIngestJobLogsInternal(jobId)]
+            .reverse()
+            .find((entry) => {
+            const parsed = parseJsonRecord(entry.metadata_json);
+            return parsed.aggregateKey === aggregateKey;
+        });
+        if (current) {
+            getDatabase()
+                .prepare(`UPDATE wiki_ingest_job_logs
+           SET level = ?, message = ?, metadata_json = ?, created_at = ?
+           WHERE id = ?`)
+                .run(level, message, JSON.stringify(logMetadata), createdAt, current.id);
+        }
+        else {
+            getDatabase()
+                .prepare(`INSERT INTO wiki_ingest_job_logs (id, job_id, level, message, metadata_json, created_at)
+           VALUES (?, ?, ?, ?, ?, ?)`)
+                .run(`wiki_ingest_log_${randomUUID().replaceAll("-", "").slice(0, 10)}`, jobId, level, message, JSON.stringify(logMetadata), createdAt);
+        }
+    }
+    else {
+        getDatabase()
+            .prepare(`INSERT INTO wiki_ingest_job_logs (id, job_id, level, message, metadata_json, created_at)
+         VALUES (?, ?, ?, ?, ?, ?)`)
+            .run(`wiki_ingest_log_${randomUUID().replaceAll("-", "").slice(0, 10)}`, jobId, level, message, JSON.stringify(logMetadata), createdAt);
+    }
+    if (options.recordDiagnostic !== false) {
+        recordDiagnosticLog({
+            level,
+            source: "server",
+            scope: typeof metadata.scope === "string" && metadata.scope.trim()
+                ? metadata.scope
+                : "wiki_ingest",
+            eventKey: typeof metadata.eventKey === "string" && metadata.eventKey.trim()
+                ? metadata.eventKey
+                : "wiki_ingest_log",
+            message,
+            functionName: "createWikiIngestLog",
+            entityType: "wiki_ingest_job",
+            entityId: jobId,
+            jobId,
+            details: logMetadata
+        });
+    }
+}
+function findOpenAiResponseIdForJobAsset(input) {
+    const normalizedFileName = input.fileName.trim().toLowerCase();
+    const normalizedSourceLocator = input.sourceLocator.trim().toLowerCase();
+    const normalizedChecksum = input.checksum.trim().toLowerCase();
+    const sameNamedAssets = listWikiIngestJobAssetsInternal(input.jobId).filter((asset) => asset.file_name.trim().toLowerCase() === normalizedFileName).length;
+    const logs = [...listWikiIngestJobLogsInternal(input.jobId)].reverse();
+    for (const entry of logs) {
+        const metadata = parseJsonRecord(entry.metadata_json);
+        const responseId = readStringRecordValue(metadata, "responseId");
+        if (!responseId) {
+            continue;
+        }
+        const loggedAssetId = readStringRecordValue(metadata, "sourceAssetId") ??
+            readStringRecordValue(metadata, "assetId");
+        if (loggedAssetId) {
+            if (loggedAssetId === input.assetId) {
+                return responseId;
+            }
+            continue;
+        }
+        const loggedSourceLocator = readStringRecordValue(metadata, "sourceLocator");
+        if (loggedSourceLocator) {
+            if (loggedSourceLocator.trim().toLowerCase() === normalizedSourceLocator) {
+                return responseId;
+            }
+            continue;
+        }
+        const loggedChecksum = readStringRecordValue(metadata, "checksum");
+        if (loggedChecksum) {
+            if (loggedChecksum.trim().toLowerCase() === normalizedChecksum) {
+                return responseId;
+            }
+            continue;
+        }
+        const loggedFileName = readStringRecordValue(metadata, "currentFileName") ??
+            readStringRecordValue(metadata, "fileName");
+        if (!loggedFileName) {
+            return responseId;
+        }
+        if (sameNamedAssets === 1 &&
+            loggedFileName.trim().toLowerCase() === normalizedFileName) {
+            return responseId;
+        }
+    }
+    return null;
 }
 function createWikiIngestAssetRecord(input) {
     const id = `wiki_ingest_asset_${randomUUID().replaceAll("-", "").slice(0, 10)}`;
@@ -2121,6 +2317,15 @@ function updateWikiIngestAsset(assetId, patch) {
         .run(patch.status ?? current.status, patch.filePath ?? current.file_path, patch.mimeType ?? current.mime_type, patch.sizeBytes ?? current.size_bytes, patch.checksum ?? current.checksum, JSON.stringify(patch.metadata ?? parseJsonRecord(current.metadata_json)), nowIso(), assetId);
 }
 function createWikiIngestCandidate(input) {
+    const existing = listWikiIngestCandidatesInternal(input.jobId).find((candidate) => candidate.source_asset_id === (input.sourceAssetId ?? null) &&
+        candidate.candidate_type === input.candidateType &&
+        candidate.title === (input.title ?? "") &&
+        candidate.summary === (input.summary ?? "") &&
+        candidate.target_key === (input.targetKey ?? "") &&
+        candidate.payload_json === JSON.stringify(input.payload));
+    if (existing) {
+        return existing.id;
+    }
     const id = `wiki_ingest_candidate_${randomUUID().replaceAll("-", "").slice(0, 10)}`;
     const now = nowIso();
     getDatabase()
@@ -2338,8 +2543,13 @@ function createPageCandidatePayload(input) {
         summary: input.summary,
         contentMarkdown: input.markdown,
         kind: input.createAsKind,
+        aliases: normalizeTags(input.aliases),
+        parentSlug: typeof input.parentSlug === "string" && input.parentSlug.trim().length > 0
+            ? input.parentSlug.trim()
+            : null,
         sourceLocator: input.sourceLocator,
-        links: input.linkedEntityHints
+        links: input.linkedEntityHints,
+        tags: normalizeTags(input.tags)
     };
 }
 export async function processWikiIngestJob(jobId, options) {
@@ -2355,12 +2565,114 @@ export async function processWikiIngestJob(jobId, options) {
         ? (listWikiLlmProfiles().find((entry) => entry.id === parsed.llmProfileId) ?? null)
         : null;
     const space = getWikiSpaceById(job.space_id) ?? ensureSharedWikiSpace();
+    if (parsed.llmProfileId && !llmProfile) {
+        updateWikiIngestJob(jobId, {
+            status: "failed",
+            phase: "failed",
+            latestMessage: "The selected LLM profile could not be found.",
+            errorMessage: "The selected LLM profile could not be found.",
+            completedAt: nowIso()
+        });
+        createWikiIngestLog(jobId, "The selected LLM profile could not be found.", "error");
+        return getWikiIngestJob(jobId);
+    }
     updateWikiIngestJob(jobId, {
         status: "processing",
         phase: "processing",
-        latestMessage: "Processing queued wiki ingest sources."
+        latestMessage: "Processing queued wiki ingest sources.",
+        errorMessage: "",
+        completedAt: null
     });
     createWikiIngestLog(jobId, "Started background wiki ingestion.");
+    let currentAssetContext = null;
+    let currentPollCount = 0;
+    const updateCurrentAssetMetadata = (patch) => {
+        if (!currentAssetContext) {
+            return;
+        }
+        const asset = listWikiIngestJobAssetsInternal(jobId).find((entry) => entry.id === currentAssetContext?.assetId);
+        if (!asset) {
+            return;
+        }
+        updateWikiIngestAsset(asset.id, {
+            metadata: {
+                ...parseJsonRecord(asset.metadata_json),
+                ...patch
+            }
+        });
+    };
+    const llmDiagnosticLogger = ({ level, message, details = {} }) => {
+        const enrichedDetails = {
+            ...details,
+            sourceAssetId: currentAssetContext?.assetId ?? null,
+            currentFileName: currentAssetContext?.fileName ?? null,
+            sourceLocator: currentAssetContext?.sourceLocator ?? null,
+            checksum: currentAssetContext?.checksum ?? null,
+            currentFileIndex: currentAssetContext?.fileIndex ?? null,
+            currentFileTotal: currentAssetContext?.totalFiles ?? null,
+            chunkIndex: typeof details.chunkIndex === "number"
+                ? details.chunkIndex
+                : currentAssetContext?.chunkIndex ?? null,
+            chunkCount: typeof details.chunkCount === "number"
+                ? details.chunkCount
+                : currentAssetContext?.chunkCount ?? null
+        };
+        const eventKey = typeof details.eventKey === "string" ? details.eventKey : "";
+        if (eventKey === "llm_compile_background_started") {
+            currentPollCount = 0;
+            updateCurrentAssetMetadata({
+                openAiResponseId: typeof details.responseId === "string" ? details.responseId : null,
+                openAiResponseStatus: typeof details.status === "string" ? details.status : "queued",
+                openAiLastPolledAt: nowIso()
+            });
+        }
+        if (eventKey === "llm_compile_background_polled") {
+            currentPollCount += 1;
+            const pollStatus = typeof details.status === "string" ? details.status : "in_progress";
+            const chunkSuffix = (currentAssetContext?.chunkCount ?? 1) > 1
+                ? ` · chunk ${currentAssetContext?.chunkIndex ?? 1}/${currentAssetContext?.chunkCount ?? 1}`
+                : "";
+            const fileLabel = currentAssetContext?.fileName ?? "current source";
+            const progressMessage = `Waiting for OpenAI on ${fileLabel}${chunkSuffix}. Poll ${currentPollCount} · ${pollStatus}.`;
+            updateWikiIngestJob(jobId, {
+                latestMessage: progressMessage
+            });
+            updateCurrentAssetMetadata({
+                openAiResponseId: typeof details.responseId === "string" ? details.responseId : null,
+                openAiResponseStatus: pollStatus,
+                openAiLastPolledAt: nowIso(),
+                openAiPollCount: currentPollCount
+            });
+            createWikiIngestLog(jobId, progressMessage, "info", {
+                ...enrichedDetails,
+                pollCount: currentPollCount,
+                status: pollStatus
+            }, {
+                aggregateKey: `llm_compile_background_polled:${currentAssetContext?.assetId ?? "job"}`,
+                recordDiagnostic: false
+            });
+            return;
+        }
+        if (eventKey === "llm_compile_success" ||
+            eventKey === "llm_compile_unparseable" ||
+            eventKey === "llm_compile_background_terminal_error") {
+            updateCurrentAssetMetadata({
+                openAiResponseId: typeof details.responseId === "string" ? details.responseId : null,
+                openAiResponseStatus: eventKey === "llm_compile_background_terminal_error"
+                    ? typeof details.status === "string"
+                        ? details.status
+                        : "failed"
+                    : "completed",
+                openAiLastPolledAt: nowIso(),
+                openAiPollCount: currentPollCount
+            });
+        }
+        createWikiIngestLog(jobId, message, level === "debug" ? "info" : level, {
+            scope: "wiki_llm",
+            eventKey: "wiki_llm_event",
+            ...enrichedDetails
+        });
+    };
     const refreshCounts = () => {
         const candidates = listWikiIngestCandidatesInternal(jobId);
         const pageCount = candidates.filter((candidate) => candidate.candidate_type === "page").length;
@@ -2368,11 +2680,12 @@ export async function processWikiIngestJob(jobId, options) {
         return { pageCount, entityCount };
     };
     const assetQueue = () => listWikiIngestJobAssetsInternal(jobId).filter((asset) => ["queued", "processing"].includes(asset.status));
-    let processedFiles = job.processed_files;
-    let totalFiles = job.total_files;
+    const initialAssets = listWikiIngestJobAssetsInternal(jobId);
+    let processedFiles = initialAssets.filter((asset) => asset.status === "completed").length;
+    let totalFiles = Math.max(job.total_files, initialAssets.length);
     let hadSuccess = false;
     while (assetQueue().length > 0) {
-        const nextAsset = assetQueue().find((asset) => asset.status === "queued");
+        const nextAsset = assetQueue().find((asset) => ["processing", "queued"].includes(asset.status));
         if (!nextAsset) {
             break;
         }
@@ -2433,7 +2746,27 @@ export async function processWikiIngestJob(jobId, options) {
             continue;
         }
         updateWikiIngestAsset(nextAsset.id, { status: "processing" });
-        createWikiIngestLog(jobId, `Processing ${nextAsset.file_name || nextAsset.source_locator}.`);
+        currentAssetContext = {
+            assetId: nextAsset.id,
+            fileName: nextAsset.file_name || nextAsset.source_locator || "Source",
+            sourceLocator: nextAsset.source_locator,
+            checksum: nextAsset.checksum,
+            fileIndex: Math.min(totalFiles, processedFiles + 1),
+            totalFiles,
+            chunkIndex: 1,
+            chunkCount: 1
+        };
+        currentPollCount = 0;
+        createWikiIngestLog(jobId, `Processing ${currentAssetContext.fileName} (${currentAssetContext.fileIndex}/${currentAssetContext.totalFiles}).`, "info", {
+            sourceAssetId: currentAssetContext.assetId,
+            fileName: currentAssetContext.fileName,
+            sourceLocator: currentAssetContext.sourceLocator,
+            checksum: currentAssetContext.checksum,
+            fileIndex: currentAssetContext.fileIndex,
+            totalFiles: currentAssetContext.totalFiles,
+            chunkIndex: currentAssetContext.chunkIndex,
+            chunkCount: currentAssetContext.chunkCount
+        });
         try {
             const fetched = nextAsset.source_kind === "url"
                 ? await getFetchedContent("url", {
@@ -2451,6 +2784,15 @@ export async function processWikiIngestJob(jobId, options) {
                 jobId,
                 fetched
             });
+            const existingAssetMetadata = parseJsonRecord(nextAsset.metadata_json);
+            const resumeResponseId = readStringRecordValue(existingAssetMetadata, "openAiResponseId") ??
+                findOpenAiResponseIdForJobAsset({
+                    jobId,
+                    assetId: nextAsset.id,
+                    fileName: nextAsset.file_name,
+                    sourceLocator: nextAsset.source_locator,
+                    checksum: nextAsset.checksum
+                });
             const compiled = llmProfile && parsed.parseStrategy !== "text_only"
                 ? await options.llm.compileWikiIngest(llmProfile, {
                     titleHint: parsed.titleHint,
@@ -2458,7 +2800,9 @@ export async function processWikiIngestJob(jobId, options) {
                     binary: fetched.binary,
                     mimeType: fetched.mimeType,
                     parseStrategy: parsed.parseStrategy
-                })
+                }, {
+                    resumeResponseId
+                }, llmDiagnosticLogger)
                 : llmProfile && fetched.contentText
                     ? await options.llm.compileWikiIngest(llmProfile, {
                         titleHint: parsed.titleHint,
@@ -2466,8 +2810,13 @@ export async function processWikiIngestJob(jobId, options) {
                         binary: fetched.binary,
                         mimeType: fetched.mimeType,
                         parseStrategy: "text_only"
-                    })
+                    }, {
+                        resumeResponseId
+                    }, llmDiagnosticLogger)
                     : null;
+            if (llmProfile && !compiled) {
+                throw new Error("The LLM did not produce structured draft candidates. Check the OpenAI settings and try again.");
+            }
             const title = compiled?.title ||
                 parsed.titleHint ||
                 inferTitle(fetched.contentText || fetched.fileName, "Imported source");
@@ -2491,6 +2840,7 @@ export async function processWikiIngestJob(jobId, options) {
                     markdown,
                     sourceLocator: fetched.locator,
                     createAsKind: parsed.createAsKind,
+                    tags: compiled?.tags,
                     linkedEntityHints: parsed.linkedEntityHints
                 })
             });
@@ -2551,11 +2901,23 @@ export async function processWikiIngestJob(jobId, options) {
                     payload: createPageCandidatePayload({
                         title: articleTitle,
                         summary: articleSummary,
-                        markdown: `# ${articleTitle}\n\n${articleSummary}\n\n${articleRationale
-                            ? `## Why this page\n\n${articleRationale}\n`
-                            : ""}`,
+                        markdown: typeof candidate.markdown === "string" &&
+                            candidate.markdown.trim().length > 0
+                            ? candidate.markdown
+                            : `# ${articleTitle}\n\n${articleSummary}\n\n${articleRationale
+                                ? `## Why this page\n\n${articleRationale}\n`
+                                : ""}`,
                         sourceLocator: fetched.locator,
                         createAsKind: "wiki",
+                        aliases: Array.isArray(candidate.aliases)
+                            ? candidate.aliases.filter((alias) => typeof alias === "string")
+                            : [],
+                        parentSlug: typeof candidate.parentSlug === "string"
+                            ? candidate.parentSlug
+                            : null,
+                        tags: Array.isArray(candidate.tags)
+                            ? candidate.tags.filter((tag) => typeof tag === "string")
+                            : [],
                         linkedEntityHints: parsed.linkedEntityHints
                     })
                 });
@@ -2568,7 +2930,9 @@ export async function processWikiIngestJob(jobId, options) {
                 checksum: rawSource.checksum,
                 metadata: {
                     ...(parseJsonRecord(nextAsset.metadata_json) ?? {}),
-                    rawSourcePath: rawSource.filePath
+                    rawSourcePath: rawSource.filePath,
+                    openAiResponseStatus: llmProfile ? "completed" : null,
+                    openAiLastPolledAt: llmProfile ? nowIso() : null
                 }
             });
             hadSuccess = true;
@@ -2586,20 +2950,38 @@ export async function processWikiIngestJob(jobId, options) {
                 latestMessage: `Prepared candidates from ${fetched.fileName}.`
             });
             createWikiIngestLog(jobId, `Prepared candidates from ${fetched.fileName}.`, "info", {
+                fileName: currentAssetContext?.fileName ?? fetched.fileName,
+                sourceAssetId: currentAssetContext?.assetId ?? null,
+                fileIndex: currentAssetContext?.fileIndex ?? processedFiles,
+                totalFiles: currentAssetContext?.totalFiles ?? totalFiles,
                 pageCandidates: counts.pageCount,
                 entityCandidates: counts.entityCount
             });
+            currentAssetContext = null;
+            currentPollCount = 0;
         }
         catch (error) {
             processedFiles += 1;
             updateWikiIngestAsset(nextAsset.id, { status: "failed" });
+            updateCurrentAssetMetadata({
+                openAiResponseStatus: "failed",
+                openAiLastPolledAt: nowIso(),
+                openAiPollCount: currentPollCount
+            });
             updateWikiIngestJob(jobId, {
                 processedFiles,
                 totalFiles,
                 progressPercent: calculateProgress(totalFiles, processedFiles),
                 latestMessage: error instanceof Error ? error.message : "Source ingest failed."
             });
-            createWikiIngestLog(jobId, error instanceof Error ? error.message : "Source ingest failed.", "error");
+            createWikiIngestLog(jobId, error instanceof Error ? error.message : "Source ingest failed.", "error", {
+                fileName: currentAssetContext?.fileName ?? null,
+                fileIndex: currentAssetContext?.fileIndex ?? null,
+                totalFiles: currentAssetContext?.totalFiles ?? totalFiles,
+                pollCount: currentPollCount
+            });
+            currentAssetContext = null;
+            currentPollCount = 0;
         }
     }
     const counts = refreshCounts();
@@ -2635,6 +3017,94 @@ export function listWikiIngestJobs(input = {}) {
         .map((row) => getWikiIngestJob(row.id))
         .filter((job) => job !== null);
 }
+export async function rerunWikiIngestJob(jobId, options = {}) {
+    const job = readWikiIngestJobRow(jobId);
+    if (!job) {
+        return null;
+    }
+    if (["queued", "processing"].includes(job.status)) {
+        throw new Error("Wiki ingest jobs can only be rerun after processing ends.");
+    }
+    const ingestInput = readWikiIngestInput(jobId);
+    if (!ingestInput) {
+        throw new Error("Wiki ingest input could not be restored.");
+    }
+    const rootAssets = listWikiIngestJobAssetsInternal(jobId).filter((asset) => {
+        const metadata = parseJsonRecord(asset.metadata_json);
+        return !metadata?.parentAssetId && asset.source_kind !== "url";
+    });
+    const replayResult = rootAssets.length > 0
+        ? await createUploadedWikiIngestJob({
+            spaceId: ingestInput.spaceId,
+            titleHint: ingestInput.titleHint,
+            llmProfileId: ingestInput.llmProfileId,
+            parseStrategy: ingestInput.parseStrategy,
+            entityProposalMode: ingestInput.entityProposalMode,
+            userId: ingestInput.userId ?? null,
+            createAsKind: ingestInput.createAsKind,
+            linkedEntityHints: ingestInput.linkedEntityHints
+        }, await Promise.all(rootAssets.map(async (asset) => ({
+            fileName: asset.file_name,
+            mimeType: asset.mime_type,
+            payload: await readFile(asset.file_path)
+        }))), {
+            actor: options.actor ?? job.created_by_actor ?? null
+        })
+        : await ingestWikiSource(ingestInput, {
+            actor: options.actor ?? job.created_by_actor ?? null
+        });
+    const nextJobId = replayResult.job?.job.id ?? null;
+    if (nextJobId) {
+        createWikiIngestLog(nextJobId, `Reran ingest from ${jobId}.`, "info", {
+            scope: "wiki_ingest",
+            eventKey: "wiki_ingest_rerun",
+            sourceJobId: jobId
+        });
+        createWikiIngestLog(jobId, `Created rerun job ${nextJobId}.`, "info", {
+            scope: "wiki_ingest",
+            eventKey: "wiki_ingest_rerun_requested",
+            rerunJobId: nextJobId
+        });
+    }
+    return replayResult;
+}
+export function deleteWikiIngestJob(jobId) {
+    const job = readWikiIngestJobRow(jobId);
+    if (!job) {
+        return null;
+    }
+    if (["queued", "processing"].includes(job.status)) {
+        throw new Error("Wiki ingest jobs can only be deleted after processing ends.");
+    }
+    const candidates = listWikiIngestCandidatesInternal(jobId);
+    const assets = listWikiIngestJobAssetsInternal(jobId);
+    const preservedAssetIds = new Set(candidates
+        .filter((candidate) => candidate.status === "applied")
+        .map((candidate) => candidate.source_asset_id)
+        .filter((assetId) => typeof assetId === "string"));
+    for (const asset of assets) {
+        if (preservedAssetIds.has(asset.id)) {
+            continue;
+        }
+        const metadata = parseJsonRecord(asset.metadata_json);
+        const rawSourcePath = typeof metadata?.rawSourcePath === "string"
+            ? metadata.rawSourcePath
+            : null;
+        if (rawSourcePath && existsSync(rawSourcePath)) {
+            unlinkSync(rawSourcePath);
+        }
+    }
+    const jobDir = getWikiIngestJobDir(jobId);
+    if (existsSync(jobDir)) {
+        rmSync(jobDir, { recursive: true, force: true });
+    }
+    getDatabase()
+        .prepare(`DELETE FROM wiki_ingest_jobs WHERE id = ?`)
+        .run(jobId);
+    return {
+        id: jobId
+    };
+}
 export async function reviewWikiIngestJob(jobId, input, options) {
     const parsed = reviewWikiIngestJobSchema.parse(input);
     const job = readWikiIngestJobRow(jobId);
@@ -2647,6 +3117,7 @@ export async function reviewWikiIngestJob(jobId, input, options) {
     }
     const candidates = listWikiIngestCandidatesInternal(jobId);
     let acceptedCount = 0;
+    let mappedCount = 0;
     let rejectedCount = 0;
     let firstPublishedPageId = null;
     for (const decision of parsed.decisions) {
@@ -2654,7 +3125,9 @@ export async function reviewWikiIngestJob(jobId, input, options) {
         if (!candidate) {
             continue;
         }
-        if (!decision.keep) {
+        const action = decision.action ??
+            (decision.keep === false ? "discard" : "keep");
+        if (action === "discard") {
             rejectedCount += 1;
             updateWikiIngestCandidate(candidate.id, { status: "rejected" });
             continue;
@@ -2662,36 +3135,77 @@ export async function reviewWikiIngestJob(jobId, input, options) {
         try {
             const payload = parseJsonRecord(candidate.payload_json);
             if (candidate.candidate_type === "page") {
-                const note = options.createNote({
-                    kind: payload.kind === "evidence" ? "evidence" : "wiki",
-                    title: typeof payload.title === "string" ? payload.title : candidate.title,
-                    slug: "",
-                    indexOrder: 0,
-                    aliases: [],
-                    summary: typeof payload.summary === "string"
-                        ? payload.summary
-                        : candidate.summary,
-                    sourcePath: "",
-                    frontmatter: {},
-                    revisionHash: "",
-                    spaceId: job.space_id,
-                    contentMarkdown: typeof payload.contentMarkdown === "string"
+                if (action === "merge_existing") {
+                    const target = decision.targetNoteId
+                        ? (getWikiPageDetail(decision.targetNoteId)?.page ?? null)
+                        : null;
+                    if (!target || target.spaceId !== job.space_id) {
+                        throw new Error("Merge target page was not found.");
+                    }
+                    const incomingTitle = typeof payload.title === "string" ? payload.title : candidate.title;
+                    const incomingMarkdown = typeof payload.contentMarkdown === "string"
                         ? payload.contentMarkdown
-                        : `# ${candidate.title}\n`,
-                    author: ingestInput.userId ?? null,
-                    links: Array.isArray(payload.links)
-                        ? payload.links
-                        : ingestInput.linkedEntityHints,
-                    tags: [],
-                    destroyAt: null,
-                    userId: ingestInput.userId ?? null
-                });
-                acceptedCount += 1;
-                firstPublishedPageId = firstPublishedPageId ?? note.id;
-                updateWikiIngestCandidate(candidate.id, {
-                    status: "applied",
-                    publishedNoteId: note.id
-                });
+                        : `# ${candidate.title}\n`;
+                    const mergedContentMarkdown = mergeWikiPageContent(target.contentMarkdown, {
+                        title: incomingTitle,
+                        markdown: incomingMarkdown
+                    });
+                    const mergedSummary = inferSummary(mergedContentMarkdown);
+                    const updated = options.updateNote(target.id, {
+                        contentMarkdown: mergedContentMarkdown,
+                        summary: mergedSummary
+                    });
+                    if (!updated) {
+                        throw new Error("Merge target page could not be updated.");
+                    }
+                    acceptedCount += 1;
+                    firstPublishedPageId = firstPublishedPageId ?? updated.id;
+                    updateWikiIngestCandidate(candidate.id, {
+                        status: "applied",
+                        publishedNoteId: updated.id
+                    });
+                }
+                else {
+                    const note = options.createNote({
+                        kind: payload.kind === "evidence" ? "evidence" : "wiki",
+                        title: typeof payload.title === "string"
+                            ? payload.title
+                            : candidate.title,
+                        slug: "",
+                        indexOrder: 0,
+                        aliases: Array.isArray(payload.aliases)
+                            ? payload.aliases.filter((alias) => typeof alias === "string")
+                            : [],
+                        summary: typeof payload.summary === "string"
+                            ? payload.summary
+                            : candidate.summary,
+                        sourcePath: "",
+                        frontmatter: {},
+                        revisionHash: "",
+                        spaceId: job.space_id,
+                        parentSlug: typeof payload.parentSlug === "string"
+                            ? payload.parentSlug
+                            : null,
+                        contentMarkdown: typeof payload.contentMarkdown === "string"
+                            ? payload.contentMarkdown
+                            : `# ${candidate.title}\n`,
+                        author: ingestInput.userId ?? null,
+                        links: Array.isArray(payload.links)
+                            ? payload.links
+                            : ingestInput.linkedEntityHints,
+                        tags: Array.isArray(payload.tags)
+                            ? payload.tags.filter((tag) => typeof tag === "string")
+                            : [],
+                        destroyAt: null,
+                        userId: ingestInput.userId ?? null
+                    });
+                    acceptedCount += 1;
+                    firstPublishedPageId = firstPublishedPageId ?? note.id;
+                    updateWikiIngestCandidate(candidate.id, {
+                        status: "applied",
+                        publishedNoteId: note.id
+                    });
+                }
             }
             else if (candidate.candidate_type === "page_update") {
                 const targetSlug = typeof payload.targetSlug === "string"
@@ -2723,13 +3237,32 @@ export async function reviewWikiIngestJob(jobId, input, options) {
                 }
             }
             else if (candidate.candidate_type === "entity") {
-                const result = options.publishEntity(payload);
-                acceptedCount += 1;
-                updateWikiIngestCandidate(candidate.id, {
-                    status: "applied",
-                    publishedEntityType: result.entityType,
-                    publishedEntityId: result.entityId
-                });
+                if (action === "map_existing") {
+                    const proposedType = typeof payload.entityType === "string" ? payload.entityType : "";
+                    if (decision.mappedEntityType !== proposedType) {
+                        throw new Error("Mapped entity type must match the proposed entity type.");
+                    }
+                    const mapped = options.resolveMappedEntity(decision.mappedEntityType, decision.mappedEntityId);
+                    if (!mapped) {
+                        throw new Error("Mapped entity was not found.");
+                    }
+                    acceptedCount += 1;
+                    mappedCount += 1;
+                    updateWikiIngestCandidate(candidate.id, {
+                        status: "applied",
+                        publishedEntityType: mapped.entityType,
+                        publishedEntityId: mapped.entityId
+                    });
+                }
+                else {
+                    const result = options.publishEntity(payload);
+                    acceptedCount += 1;
+                    updateWikiIngestCandidate(candidate.id, {
+                        status: "applied",
+                        publishedEntityType: result.entityType,
+                        publishedEntityId: result.entityId
+                    });
+                }
             }
         }
         catch {
@@ -2742,10 +3275,10 @@ export async function reviewWikiIngestJob(jobId, input, options) {
         rejectedCount,
         pageNoteId: firstPublishedPageId,
         latestMessage: acceptedCount > 0 || rejectedCount > 0
-            ? `Review saved with ${acceptedCount} kept and ${rejectedCount} discarded.`
+            ? `Review saved with ${acceptedCount} kept${mappedCount > 0 ? ` (${mappedCount} mapped)` : ""} and ${rejectedCount} discarded.`
             : "Review saved."
     });
-    createWikiIngestLog(jobId, `Review saved with ${acceptedCount} kept and ${rejectedCount} discarded.`);
+    createWikiIngestLog(jobId, `Review saved with ${acceptedCount} kept${mappedCount > 0 ? ` (${mappedCount} mapped)` : ""} and ${rejectedCount} discarded.`);
     return getWikiIngestJob(jobId);
 }
 export function getWikiIngestJob(jobId) {
