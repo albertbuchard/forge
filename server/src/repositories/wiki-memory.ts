@@ -5,6 +5,7 @@ import {
   existsSync,
   mkdirSync,
   readdirSync,
+  unlinkSync,
   rmSync,
   writeFileSync
 } from "node:fs";
@@ -37,6 +38,7 @@ import {
   readEncryptedSecret,
   storeEncryptedSecret
 } from "./calendar.js";
+import { recordDiagnosticLog } from "./diagnostic-logs.js";
 import type { SecretsManager } from "../managers/platform/secrets-manager.js";
 import type { LlmManager } from "../managers/platform/llm-manager.js";
 
@@ -173,11 +175,12 @@ const wikiPageTreeNodeSchema: z.ZodType<
   WikiPageTreeNode,
   z.ZodTypeDef,
   unknown
-> = z.lazy((): z.ZodType<WikiPageTreeNode, z.ZodTypeDef, unknown> =>
-  z.object({
-    page: persistedNoteSchema,
-    children: z.array(wikiPageTreeNodeSchema)
-  })
+> = z.lazy(
+  (): z.ZodType<WikiPageTreeNode, z.ZodTypeDef, unknown> =>
+    z.object({
+      page: persistedNoteSchema,
+      children: z.array(wikiPageTreeNodeSchema)
+    })
 );
 
 const wikiHealthPayloadSchema = z.object({
@@ -316,16 +319,47 @@ const wikiIngestJobPayloadSchema = z.object({
 
 const listWikiIngestJobsQuerySchema = z.object({
   spaceId: z.string().trim().optional(),
-  limit: z.coerce.number().int().positive().max(50).default(20)
+  limit: z.coerce.number().int().positive().max(200).default(20)
 });
 
 export const reviewWikiIngestJobSchema = z.object({
   decisions: z
     .array(
-      z.object({
-        candidateId: z.string().trim().min(1),
-        keep: z.boolean()
-      })
+      z
+        .object({
+          candidateId: z.string().trim().min(1),
+          keep: z.boolean().optional(),
+          action: z.enum(["keep", "discard", "map_existing"]).optional(),
+          mappedEntityType: crudEntityTypeSchema.optional(),
+          mappedEntityId: z.string().trim().min(1).optional()
+        })
+        .superRefine((value, context) => {
+          if (value.action === "map_existing") {
+            if (!value.mappedEntityType) {
+              context.addIssue({
+                code: z.ZodIssueCode.custom,
+                path: ["mappedEntityType"],
+                message:
+                  "mappedEntityType is required when action is map_existing"
+              });
+            }
+            if (!value.mappedEntityId) {
+              context.addIssue({
+                code: z.ZodIssueCode.custom,
+                path: ["mappedEntityId"],
+                message:
+                  "mappedEntityId is required when action is map_existing"
+              });
+            }
+          }
+          if (value.action === undefined && value.keep === undefined) {
+            context.addIssue({
+              code: z.ZodIssueCode.custom,
+              path: ["action"],
+              message: "Either keep or action is required"
+            });
+          }
+        })
     )
     .min(1)
 });
@@ -338,6 +372,16 @@ export const createWikiSpaceSchema = z.object({
   visibility: wikiSpaceVisibilitySchema.default("personal")
 });
 
+const wikiLlmReasoningEffortSchema = z.enum([
+  "none",
+  "low",
+  "medium",
+  "high",
+  "xhigh"
+]);
+
+const wikiLlmVerbositySchema = z.enum(["low", "medium", "high"]);
+
 export const upsertWikiLlmProfileSchema = z.object({
   id: z.string().trim().optional(),
   label: z.string().trim().min(1),
@@ -346,8 +390,20 @@ export const upsertWikiLlmProfileSchema = z.object({
   model: z.string().trim().min(1),
   apiKey: z.string().trim().optional(),
   systemPrompt: z.string().trim().default(""),
+  reasoningEffort: wikiLlmReasoningEffortSchema.optional(),
+  verbosity: wikiLlmVerbositySchema.optional(),
   enabled: z.boolean().default(true),
   metadata: z.record(z.string(), z.unknown()).default({})
+});
+
+export const testWikiLlmProfileSchema = z.object({
+  profileId: z.string().trim().optional(),
+  provider: z.string().trim().min(1).default("openai-responses"),
+  baseUrl: z.string().trim().default("https://api.openai.com/v1"),
+  model: z.string().trim().min(1),
+  apiKey: z.string().trim().optional(),
+  reasoningEffort: wikiLlmReasoningEffortSchema.optional(),
+  verbosity: wikiLlmVerbositySchema.optional()
 });
 
 export const upsertWikiEmbeddingProfileSchema = z.object({
@@ -2621,6 +2677,19 @@ export function upsertWikiLlmProfile(
       `${parsed.label} wiki LLM profile`
     );
   }
+  const metadata = {
+    ...parsed.metadata
+  };
+  if (parsed.reasoningEffort) {
+    metadata.reasoningEffort = parsed.reasoningEffort;
+  } else {
+    delete metadata.reasoningEffort;
+  }
+  if (parsed.verbosity) {
+    metadata.verbosity = parsed.verbosity;
+  } else {
+    delete metadata.verbosity;
+  }
   getDatabase()
     .prepare(
       `INSERT INTO wiki_llm_profiles (id, label, provider, base_url, model, secret_id, system_prompt, enabled, metadata_json, created_at, updated_at)
@@ -2645,7 +2714,7 @@ export function upsertWikiLlmProfile(
       secretId,
       parsed.systemPrompt,
       parsed.enabled ? 1 : 0,
-      JSON.stringify(parsed.metadata),
+      JSON.stringify(metadata),
       now,
       now
     );
@@ -3046,6 +3115,7 @@ function createWikiIngestLog(
   level: "info" | "warning" | "error" = "info",
   metadata: Record<string, unknown> = {}
 ) {
+  const createdAt = nowIso();
   getDatabase()
     .prepare(
       `INSERT INTO wiki_ingest_job_logs (id, job_id, level, message, metadata_json, created_at)
@@ -3057,8 +3127,26 @@ function createWikiIngestLog(
       level,
       message,
       JSON.stringify(metadata),
-      nowIso()
+      createdAt
     );
+  recordDiagnosticLog({
+    level,
+    source: "server",
+    scope:
+      typeof metadata.scope === "string" && metadata.scope.trim()
+        ? metadata.scope
+        : "wiki_ingest",
+    eventKey:
+      typeof metadata.eventKey === "string" && metadata.eventKey.trim()
+        ? metadata.eventKey
+        : "wiki_ingest_log",
+    message,
+    functionName: "createWikiIngestLog",
+    entityType: "wiki_ingest_job",
+    entityId: jobId,
+    jobId,
+    details: metadata
+  });
 }
 
 function createWikiIngestAssetRecord(input: {
@@ -3537,6 +3625,9 @@ function createPageCandidatePayload(input: {
   markdown: string;
   sourceLocator: string;
   createAsKind: NoteKind;
+  aliases?: string[];
+  parentSlug?: string | null;
+  tags?: string[];
   linkedEntityHints: Array<{
     entityType: CrudEntityType;
     entityId: string;
@@ -3548,8 +3639,14 @@ function createPageCandidatePayload(input: {
     summary: input.summary,
     contentMarkdown: input.markdown,
     kind: input.createAsKind,
+    aliases: normalizeTags(input.aliases),
+    parentSlug:
+      typeof input.parentSlug === "string" && input.parentSlug.trim().length > 0
+        ? input.parentSlug.trim()
+        : null,
     sourceLocator: input.sourceLocator,
-    links: input.linkedEntityHints
+    links: input.linkedEntityHints,
+    tags: normalizeTags(input.tags)
   };
 }
 
@@ -3574,12 +3671,48 @@ export async function processWikiIngestJob(
     : null;
   const space = getWikiSpaceById(job.space_id) ?? ensureSharedWikiSpace();
 
+  if (parsed.llmProfileId && !llmProfile) {
+    updateWikiIngestJob(jobId, {
+      status: "failed",
+      phase: "failed",
+      latestMessage: "The selected LLM profile could not be found.",
+      errorMessage: "The selected LLM profile could not be found.",
+      completedAt: nowIso()
+    });
+    createWikiIngestLog(
+      jobId,
+      "The selected LLM profile could not be found.",
+      "error"
+    );
+    return getWikiIngestJob(jobId);
+  }
+
   updateWikiIngestJob(jobId, {
     status: "processing",
     phase: "processing",
     latestMessage: "Processing queued wiki ingest sources."
   });
   createWikiIngestLog(jobId, "Started background wiki ingestion.");
+  const llmDiagnosticLogger = ({
+    level,
+    message,
+    details = {}
+  }: {
+    level: "debug" | "info" | "warning" | "error";
+    message: string;
+    details?: Record<string, unknown>;
+  }) => {
+    createWikiIngestLog(
+      jobId,
+      message,
+      level === "debug" ? "info" : level,
+      {
+        scope: "wiki_llm",
+        eventKey: "wiki_llm_event",
+        ...details
+      }
+    );
+  };
 
   const refreshCounts = () => {
     const candidates = listWikiIngestCandidatesInternal(jobId);
@@ -3704,7 +3837,7 @@ export async function processWikiIngestJob(
               binary: fetched.binary,
               mimeType: fetched.mimeType,
               parseStrategy: parsed.parseStrategy
-            })
+            }, llmDiagnosticLogger)
           : llmProfile && fetched.contentText
             ? await options.llm.compileWikiIngest(llmProfile, {
                 titleHint: parsed.titleHint,
@@ -3712,8 +3845,14 @@ export async function processWikiIngestJob(
                 binary: fetched.binary,
                 mimeType: fetched.mimeType,
                 parseStrategy: "text_only"
-              })
+              }, llmDiagnosticLogger)
             : null;
+
+      if (llmProfile && !compiled) {
+        throw new Error(
+          "The LLM did not produce structured draft candidates. Check the OpenAI settings and try again."
+        );
+      }
 
       const title =
         compiled?.title ||
@@ -3741,6 +3880,7 @@ export async function processWikiIngestJob(
           markdown,
           sourceLocator: fetched.locator,
           createAsKind: parsed.createAsKind,
+          tags: compiled?.tags,
           linkedEntityHints: parsed.linkedEntityHints
         })
       });
@@ -3814,13 +3954,31 @@ export async function processWikiIngestJob(
           payload: createPageCandidatePayload({
             title: articleTitle,
             summary: articleSummary,
-            markdown: `# ${articleTitle}\n\n${articleSummary}\n\n${
-              articleRationale
-                ? `## Why this page\n\n${articleRationale}\n`
-                : ""
-            }`,
+            markdown:
+              typeof candidate.markdown === "string" &&
+              candidate.markdown.trim().length > 0
+                ? candidate.markdown
+                : `# ${articleTitle}\n\n${articleSummary}\n\n${
+                    articleRationale
+                      ? `## Why this page\n\n${articleRationale}\n`
+                      : ""
+                  }`,
             sourceLocator: fetched.locator,
             createAsKind: "wiki",
+            aliases: Array.isArray(candidate.aliases)
+              ? candidate.aliases.filter(
+                  (alias): alias is string => typeof alias === "string"
+                )
+              : [],
+            parentSlug:
+              typeof candidate.parentSlug === "string"
+                ? candidate.parentSlug
+                : null,
+            tags: Array.isArray(candidate.tags)
+              ? candidate.tags.filter(
+                  (tag): tag is string => typeof tag === "string"
+                )
+              : [],
             linkedEntityHints: parsed.linkedEntityHints
           })
         });
@@ -3927,6 +4085,131 @@ export function listWikiIngestJobs(
     .filter((job): job is WikiIngestJobPayload => job !== null);
 }
 
+export async function rerunWikiIngestJob(
+  jobId: string,
+  options: {
+    actor?: string | null;
+  } = {}
+) {
+  const job = readWikiIngestJobRow(jobId);
+  if (!job) {
+    return null;
+  }
+  if (["queued", "processing"].includes(job.status)) {
+    throw new Error("Wiki ingest jobs can only be rerun after processing ends.");
+  }
+
+  const ingestInput = readWikiIngestInput(jobId);
+  if (!ingestInput) {
+    throw new Error("Wiki ingest input could not be restored.");
+  }
+
+  const rootAssets = listWikiIngestJobAssetsInternal(jobId).filter((asset) => {
+    const metadata = parseJsonRecord(asset.metadata_json);
+    return !metadata?.parentAssetId && asset.source_kind !== "url";
+  });
+
+  const replayResult =
+    rootAssets.length > 0
+      ? await createUploadedWikiIngestJob(
+          {
+            spaceId: ingestInput.spaceId,
+            titleHint: ingestInput.titleHint,
+            llmProfileId: ingestInput.llmProfileId,
+            parseStrategy: ingestInput.parseStrategy,
+            entityProposalMode: ingestInput.entityProposalMode,
+            userId: ingestInput.userId ?? null,
+            createAsKind: ingestInput.createAsKind,
+            linkedEntityHints: ingestInput.linkedEntityHints
+          },
+          await Promise.all(
+            rootAssets.map(async (asset) => ({
+              fileName: asset.file_name,
+              mimeType: asset.mime_type,
+              payload: await readFile(asset.file_path)
+            }))
+          ),
+          {
+            actor: options.actor ?? job.created_by_actor ?? null
+          }
+        )
+      : await ingestWikiSource(ingestInput, {
+          actor: options.actor ?? job.created_by_actor ?? null
+        });
+
+  const nextJobId = replayResult.job?.job.id ?? null;
+  if (nextJobId) {
+    createWikiIngestLog(
+      nextJobId,
+      `Reran ingest from ${jobId}.`,
+      "info",
+      {
+        scope: "wiki_ingest",
+        eventKey: "wiki_ingest_rerun",
+        sourceJobId: jobId
+      }
+    );
+    createWikiIngestLog(
+      jobId,
+      `Created rerun job ${nextJobId}.`,
+      "info",
+      {
+        scope: "wiki_ingest",
+        eventKey: "wiki_ingest_rerun_requested",
+        rerunJobId: nextJobId
+      }
+    );
+  }
+
+  return replayResult;
+}
+
+export function deleteWikiIngestJob(jobId: string) {
+  const job = readWikiIngestJobRow(jobId);
+  if (!job) {
+    return null;
+  }
+  if (["queued", "processing"].includes(job.status)) {
+    throw new Error("Wiki ingest jobs can only be deleted after processing ends.");
+  }
+
+  const candidates = listWikiIngestCandidatesInternal(jobId);
+  const assets = listWikiIngestJobAssetsInternal(jobId);
+  const preservedAssetIds = new Set(
+    candidates
+      .filter((candidate) => candidate.status === "applied")
+      .map((candidate) => candidate.source_asset_id)
+      .filter((assetId): assetId is string => typeof assetId === "string")
+  );
+
+  for (const asset of assets) {
+    if (preservedAssetIds.has(asset.id)) {
+      continue;
+    }
+    const metadata = parseJsonRecord(asset.metadata_json);
+    const rawSourcePath =
+      typeof metadata?.rawSourcePath === "string"
+        ? metadata.rawSourcePath
+        : null;
+    if (rawSourcePath && existsSync(rawSourcePath)) {
+      unlinkSync(rawSourcePath);
+    }
+  }
+
+  const jobDir = getWikiIngestJobDir(jobId);
+  if (existsSync(jobDir)) {
+    rmSync(jobDir, { recursive: true, force: true });
+  }
+
+  getDatabase()
+    .prepare(`DELETE FROM wiki_ingest_jobs WHERE id = ?`)
+    .run(jobId);
+
+  return {
+    id: jobId
+  };
+}
+
 export async function reviewWikiIngestJob(
   jobId: string,
   input: z.input<typeof reviewWikiIngestJobSchema>,
@@ -3940,6 +4223,15 @@ export async function reviewWikiIngestJob(
       entityType: string;
       entityId: string;
     };
+    resolveMappedEntity: (
+      entityType: CrudEntityType,
+      entityId: string
+    ) =>
+      | {
+          entityType: CrudEntityType;
+          entityId: string;
+        }
+      | null;
   }
 ) {
   const parsed = reviewWikiIngestJobSchema.parse(input);
@@ -3953,6 +4245,7 @@ export async function reviewWikiIngestJob(
   }
   const candidates = listWikiIngestCandidatesInternal(jobId);
   let acceptedCount = 0;
+  let mappedCount = 0;
   let rejectedCount = 0;
   let firstPublishedPageId: string | null = null;
 
@@ -3963,7 +4256,10 @@ export async function reviewWikiIngestJob(
     if (!candidate) {
       continue;
     }
-    if (!decision.keep) {
+    const action =
+      decision.action ??
+      (decision.keep === false ? "discard" : "keep");
+    if (action === "discard") {
       rejectedCount += 1;
       updateWikiIngestCandidate(candidate.id, { status: "rejected" });
       continue;
@@ -3978,7 +4274,11 @@ export async function reviewWikiIngestJob(
             typeof payload.title === "string" ? payload.title : candidate.title,
           slug: "",
           indexOrder: 0,
-          aliases: [],
+          aliases: Array.isArray(payload.aliases)
+            ? payload.aliases.filter(
+                (alias): alias is string => typeof alias === "string"
+              )
+            : [],
           summary:
             typeof payload.summary === "string"
               ? payload.summary
@@ -3987,6 +4287,10 @@ export async function reviewWikiIngestJob(
           frontmatter: {},
           revisionHash: "",
           spaceId: job.space_id,
+          parentSlug:
+            typeof payload.parentSlug === "string"
+              ? payload.parentSlug
+              : null,
           contentMarkdown:
             typeof payload.contentMarkdown === "string"
               ? payload.contentMarkdown
@@ -3995,7 +4299,9 @@ export async function reviewWikiIngestJob(
           links: Array.isArray(payload.links)
             ? (payload.links as CreateNoteInput["links"])
             : ingestInput.linkedEntityHints,
-          tags: [],
+          tags: Array.isArray(payload.tags)
+            ? payload.tags.filter((tag): tag is string => typeof tag === "string")
+            : [],
           destroyAt: null,
           userId: ingestInput.userId ?? null
         });
@@ -4040,13 +4346,37 @@ export async function reviewWikiIngestJob(
           updateWikiIngestCandidate(candidate.id, { status: "failed" });
         }
       } else if (candidate.candidate_type === "entity") {
-        const result = options.publishEntity(payload);
-        acceptedCount += 1;
-        updateWikiIngestCandidate(candidate.id, {
-          status: "applied",
-          publishedEntityType: result.entityType,
-          publishedEntityId: result.entityId
-        });
+        if (action === "map_existing") {
+          const proposedType =
+            typeof payload.entityType === "string" ? payload.entityType : "";
+          if (decision.mappedEntityType !== proposedType) {
+            throw new Error(
+              "Mapped entity type must match the proposed entity type."
+            );
+          }
+          const mapped = options.resolveMappedEntity(
+            decision.mappedEntityType,
+            decision.mappedEntityId!
+          );
+          if (!mapped) {
+            throw new Error("Mapped entity was not found.");
+          }
+          acceptedCount += 1;
+          mappedCount += 1;
+          updateWikiIngestCandidate(candidate.id, {
+            status: "applied",
+            publishedEntityType: mapped.entityType,
+            publishedEntityId: mapped.entityId
+          });
+        } else {
+          const result = options.publishEntity(payload);
+          acceptedCount += 1;
+          updateWikiIngestCandidate(candidate.id, {
+            status: "applied",
+            publishedEntityType: result.entityType,
+            publishedEntityId: result.entityId
+          });
+        }
       }
     } catch {
       updateWikiIngestCandidate(candidate.id, { status: "failed" });
@@ -4060,12 +4390,16 @@ export async function reviewWikiIngestJob(
     pageNoteId: firstPublishedPageId,
     latestMessage:
       acceptedCount > 0 || rejectedCount > 0
-        ? `Review saved with ${acceptedCount} kept and ${rejectedCount} discarded.`
+        ? `Review saved with ${acceptedCount} kept${
+            mappedCount > 0 ? ` (${mappedCount} mapped)` : ""
+          } and ${rejectedCount} discarded.`
         : "Review saved."
   });
   createWikiIngestLog(
     jobId,
-    `Review saved with ${acceptedCount} kept and ${rejectedCount} discarded.`
+    `Review saved with ${acceptedCount} kept${
+      mappedCount > 0 ? ` (${mappedCount} mapped)` : ""
+    } and ${rejectedCount} discarded.`
   );
   return getWikiIngestJob(jobId);
 }

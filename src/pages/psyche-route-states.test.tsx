@@ -2,6 +2,7 @@ import { cleanup, render, screen } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter } from "react-router-dom";
+import { PsychePage } from "@/pages/psyche-page";
 import { PsycheModeGuidePage } from "@/pages/psyche-mode-guide-page";
 import { PsycheModesPage } from "@/pages/psyche-modes-page";
 import { PsycheReportsPage } from "@/pages/psyche-reports-page";
@@ -38,6 +39,14 @@ vi.mock("@/components/shell/page-hero", () => ({
 
 vi.mock("@/components/psyche/psyche-section-nav", () => ({
   PsycheSectionNav: () => <div>Psyche section nav</div>
+}));
+
+vi.mock("@/components/psyche/psyche-graph", () => ({
+  PsycheGraphCanvas: ({ title }: { title: string }) => <div>{title}</div>
+}));
+
+vi.mock("@/components/psyche/reflect-flow-dialog", () => ({
+  ReflectFlowDialog: () => null
 }));
 
 afterEach(() => {
@@ -193,6 +202,37 @@ function renderWithProviders(element: React.ReactNode, initialEntries: string[] 
 }
 
 describe("psyche route states", () => {
+  it("keeps preferences and sleep inside the shared psyche nav instead of duplicate promo cards", () => {
+    useForgeShellMock.mockReturnValue({ snapshot: createSnapshot() });
+    useQueryMock.mockReturnValue(
+      createQueryResult({
+        data: {
+          overview: {
+            domain: { title: "Reflective field" },
+            values: [],
+            reports: [],
+            behaviors: [],
+            beliefs: [],
+            patterns: [],
+            openInsights: 0,
+            openNotes: 0
+          }
+        }
+      })
+    );
+
+    renderWithProviders(<PsychePage />, ["/psyche"]);
+
+    expect(screen.getByText("Psyche section nav")).toBeInTheDocument();
+    expect(screen.queryByText("Psyche side surface")).not.toBeInTheDocument();
+    expect(
+      screen.queryByText(/Taste modeling, comparison flows, and concept libraries/i)
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByText(/Sleep review now lives alongside the reflective module/i)
+    ).not.toBeInTheDocument();
+  });
+
   it("shows a loading state for the values route", () => {
     useForgeShellMock.mockReturnValue({ snapshot: createSnapshot() });
     useQueryMock.mockReturnValue(createQueryResult({ isLoading: true, isPending: true }));

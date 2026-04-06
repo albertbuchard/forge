@@ -1,7 +1,15 @@
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import QRCode from "qrcode";
-import { Link2, QrCode, RefreshCcw, ShieldOff, UploadCloud } from "lucide-react";
+import {
+  ChevronDown,
+  ChevronUp,
+  Link2,
+  QrCode,
+  RefreshCcw,
+  ShieldOff,
+  UploadCloud
+} from "lucide-react";
 import { Link } from "react-router-dom";
 import { SurfaceSkeleton } from "@/components/experience/surface-skeleton";
 import { SettingsSectionNav } from "@/components/settings/settings-section-nav";
@@ -14,6 +22,7 @@ import { useForgeShell } from "@/components/shell/app-shell";
 import {
   createCompanionPairingSession,
   getCompanionOverview,
+  revokeAllCompanionPairingSessions,
   revokeCompanionPairingSession
 } from "@/lib/api";
 import { getSingleSelectedUserId } from "@/lib/user-ownership";
@@ -44,6 +53,7 @@ export function SettingsMobilePage() {
     : [];
   const defaultUserId = getSingleSelectedUserId(selectedUserIds);
   const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
+  const [qrPanelOpen, setQrPanelOpen] = useState(false);
   const [latestPairing, setLatestPairing] = useState<{
     qrPayload: {
       apiBaseUrl: string;
@@ -66,6 +76,7 @@ export function SettingsMobilePage() {
       }),
     onSuccess: async (result) => {
       setLatestPairing({ qrPayload: result.qrPayload });
+      setQrPanelOpen(true);
       await queryClient.invalidateQueries({
         queryKey: ["forge-companion-overview"]
       });
@@ -75,6 +86,19 @@ export function SettingsMobilePage() {
   const revokeMutation = useMutation({
     mutationFn: async (pairingSessionId: string) =>
       revokeCompanionPairingSession(pairingSessionId),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({
+        queryKey: ["forge-companion-overview"]
+      });
+    }
+  });
+
+  const revokeAllMutation = useMutation({
+    mutationFn: async () =>
+      revokeAllCompanionPairingSessions({
+        userIds: selectedUserIds,
+        includeRevoked: false
+      }),
     onSuccess: async () => {
       await queryClient.invalidateQueries({
         queryKey: ["forge-companion-overview"]
@@ -116,6 +140,21 @@ export function SettingsMobilePage() {
   }
 
   const overview = overviewQuery.data;
+  const activePairings = overview.pairings.filter(
+    (pairing) => pairing.status !== "revoked"
+  );
+  const revokedPairingsCount = overview.pairings.length - activePairings.length;
+  const handleQrAction = async () => {
+    if (latestPairing && qrPanelOpen) {
+      setQrPanelOpen(false);
+      return;
+    }
+    if (latestPairing && !qrPanelOpen) {
+      setQrPanelOpen(true);
+      return;
+    }
+    await pairingMutation.mutateAsync();
+  };
 
   return (
     <div className="mx-auto grid w-full max-w-[1220px] gap-5">
@@ -127,7 +166,7 @@ export function SettingsMobilePage() {
 
       <SettingsSectionNav />
 
-      <section className="grid gap-4 lg:grid-cols-[0.95fr_1.05fr]">
+      <section className="grid gap-4">
         <Card className="grid gap-4">
           <div className="flex items-center justify-between gap-3">
             <div>
@@ -135,45 +174,98 @@ export function SettingsMobilePage() {
                 Pair iPhone
               </div>
               <div className="mt-2 text-lg text-white">
-                Generate a QR code for Forge Companion
+                Open a pairing QR only when you need it
+              </div>
+              <div className="mt-2 max-w-3xl text-sm leading-6 text-white/58">
+                Keep the page compact by generating or reopening the one-time
+                QR only when you are about to scan it from Forge Companion.
               </div>
             </div>
             <Button
-              onClick={() => void pairingMutation.mutateAsync()}
+              onClick={() => void handleQrAction()}
               pending={pairingMutation.isPending}
               pendingLabel="Generating"
             >
               <QrCode className="size-4" />
-              Generate QR
+              {latestPairing
+                ? qrPanelOpen
+                  ? "Hide QR"
+                  : "Show QR"
+                : "Generate QR"}
+              {latestPairing ? (
+                qrPanelOpen ? (
+                  <ChevronUp className="size-4" />
+                ) : (
+                  <ChevronDown className="size-4" />
+                )
+              ) : null}
             </Button>
           </div>
 
-          {qrDataUrl ? (
-            <div className="grid justify-items-center gap-4 rounded-[24px] bg-white px-6 py-6 text-slate-950">
-              <img src={qrDataUrl} alt="Forge Companion pairing QR code" className="w-full max-w-[320px]" />
-              <div className="max-w-[320px] text-center text-sm text-slate-600">
-                Scan this in the iOS companion to pass the Forge API address and the one-time pairing token.
+          {qrPanelOpen ? (
+            <div className="grid gap-4 rounded-[24px] border border-white/8 bg-white/[0.03] p-4 sm:p-5">
+              {qrDataUrl ? (
+                <div className="grid justify-items-center gap-4 rounded-[24px] bg-white px-6 py-6 text-slate-950">
+                  <img
+                    src={qrDataUrl}
+                    alt="Forge Companion pairing QR code"
+                    className="w-full max-w-[320px]"
+                  />
+                  <div className="max-w-[320px] text-center text-sm text-slate-600">
+                    Scan this in the iOS companion to pass the Forge API
+                    address and the one-time pairing token.
+                  </div>
+                </div>
+              ) : (
+                <div className="rounded-[24px] border border-dashed border-white/10 bg-white/[0.03] px-5 py-8 text-center text-sm text-white/55">
+                  Generating the QR code now.
+                </div>
+              )}
+
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="text-sm text-white/62">
+                  {latestPairing ? (
+                    <>
+                      Expires{" "}
+                      {new Date(
+                        latestPairing.qrPayload.expiresAt
+                      ).toLocaleString()}
+                      .
+                    </>
+                  ) : (
+                    "Generate the one-time QR and scan it from the iPhone app."
+                  )}
+                </div>
+                {latestPairing ? (
+                  <Button
+                    variant="secondary"
+                    pending={pairingMutation.isPending}
+                    pendingLabel="Generating"
+                    onClick={() => void pairingMutation.mutateAsync()}
+                  >
+                    <RefreshCcw className="size-4" />
+                    Regenerate QR
+                  </Button>
+                ) : null}
               </div>
+
+              {latestPairing ? (
+                <div className="grid gap-3 rounded-[18px] bg-white/[0.04] p-4 text-sm text-white/62">
+                  <div className="rounded-[16px] bg-slate-950/60 p-3 font-mono text-[11px] leading-5 text-white/70">
+                    {JSON.stringify(latestPairing.qrPayload, null, 2)}
+                  </div>
+                  <div className="text-xs text-white/45">
+                    The same payload can be pasted into the iPhone app if the
+                    camera path is unavailable.
+                  </div>
+                </div>
+              ) : null}
             </div>
           ) : (
-            <div className="rounded-[24px] border border-dashed border-white/10 bg-white/[0.03] px-5 py-8 text-center text-sm text-white/55">
-              Generate a QR code here, then scan it from the iPhone app.
+            <div className="rounded-[24px] border border-dashed border-white/10 bg-white/[0.03] px-5 py-6 text-sm text-white/55">
+              Tap the QR button when you actually want to pair a phone.
             </div>
           )}
-
-          {latestPairing ? (
-            <div className="grid gap-3 rounded-[18px] bg-white/[0.04] p-4 text-sm text-white/62">
-              <div>
-                Expires {new Date(latestPairing.qrPayload.expiresAt).toLocaleString()}.
-              </div>
-              <div className="rounded-[16px] bg-slate-950/60 p-3 font-mono text-[11px] leading-5 text-white/70">
-                {JSON.stringify(latestPairing.qrPayload, null, 2)}
-              </div>
-              <div className="text-xs text-white/45">
-                The same payload can be pasted into the iPhone app if the camera path is unavailable.
-              </div>
-            </div>
-          ) : null}
         </Card>
 
         <Card className="grid gap-4">
@@ -184,8 +276,13 @@ export function SettingsMobilePage() {
             <div className="rounded-[18px] bg-white/[0.04] p-4">
               <div className="text-sm text-white/58">Pairings</div>
               <div className="mt-2 font-display text-3xl text-white">
-                {overview.pairings.length}
+                {activePairings.length}
               </div>
+              {revokedPairingsCount > 0 ? (
+                <div className="mt-2 text-xs text-white/42">
+                  {revokedPairingsCount} revoked hidden
+                </div>
+              ) : null}
             </div>
             <div className="rounded-[18px] bg-white/[0.04] p-4">
               <div className="text-sm text-white/58">Sleep sessions</div>
@@ -262,7 +359,20 @@ export function SettingsMobilePage() {
           </div>
 
           <div className="grid gap-3">
-            {overview.pairings.map((pairing) => (
+            {activePairings.length > 0 ? (
+              <div className="flex justify-end">
+                <Button
+                  variant="secondary"
+                  pending={revokeAllMutation.isPending}
+                  pendingLabel="Revoking all"
+                  onClick={() => void revokeAllMutation.mutateAsync()}
+                >
+                  <ShieldOff className="size-4" />
+                  Revoke all
+                </Button>
+              </div>
+            ) : null}
+            {activePairings.map((pairing) => (
               <div
                 key={pairing.id}
                 className="grid gap-3 rounded-[18px] bg-white/[0.04] px-4 py-4"
@@ -322,7 +432,7 @@ export function SettingsMobilePage() {
                 </div>
               </div>
             ))}
-            {overview.pairings.length === 0 ? (
+            {activePairings.length === 0 ? (
               <div className="rounded-[18px] bg-white/[0.04] px-4 py-6 text-sm text-white/55">
                 No companion paired yet. Generate a QR code, then open the iOS companion and scan it.
               </div>

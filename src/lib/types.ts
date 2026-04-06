@@ -280,6 +280,16 @@ export interface WikiLlmProfile {
   updatedAt: string;
 }
 
+export interface WikiLlmConnectionTestResult {
+  provider: string;
+  model: string;
+  baseUrl: string;
+  reasoningEffort: string | null;
+  verbosity: string | null;
+  usingStoredKey: boolean;
+  outputPreview: string;
+}
+
 export interface WikiEmbeddingProfile {
   id: string;
   label: string;
@@ -550,6 +560,31 @@ export interface EventLogEntry {
   source: "ui" | "openclaw" | "agent" | "system";
   causedByEventId: string | null;
   metadata: Record<string, string | number | boolean | null>;
+  createdAt: string;
+}
+
+export type DiagnosticLogLevel = "debug" | "info" | "warning" | "error";
+export type DiagnosticLogSource =
+  | "ui"
+  | "openclaw"
+  | "agent"
+  | "system"
+  | "server";
+
+export interface DiagnosticLogEntry {
+  id: string;
+  level: DiagnosticLogLevel;
+  source: DiagnosticLogSource;
+  scope: string;
+  eventKey: string;
+  message: string;
+  route: string | null;
+  functionName: string | null;
+  requestId: string | null;
+  entityType: string | null;
+  entityId: string | null;
+  jobId: string | null;
+  details: Record<string, unknown>;
   createdAt: string;
 }
 

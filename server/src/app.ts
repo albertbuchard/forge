@@ -29,6 +29,15 @@ import {
 } from "./repositories/collaboration.js";
 import { listEventLog } from "./repositories/event-log.js";
 import {
+  createDiagnosticMessage,
+  DIAGNOSTIC_LOG_RETENTION_SWEEP_INTERVAL_MS,
+  enforceDiagnosticLogRetention,
+  listDiagnosticLogs,
+  normalizeDiagnosticSource,
+  recordDiagnosticLog,
+  serializeDiagnosticError
+} from "./repositories/diagnostic-logs.js";
+import {
   createGoal,
   getGoalById,
   listGoals,
@@ -56,6 +65,7 @@ import {
   createUploadedWikiIngestJob,
   createWikiSpace,
   createWikiSpaceSchema,
+  deleteWikiIngestJob,
   deleteWikiProfile,
   getWikiHealth,
   getWikiIngestJob,
@@ -65,17 +75,20 @@ import {
   getWikiSettingsPayload,
   ingestWikiSource,
   listWikiIngestJobs,
+  listWikiLlmProfiles,
   listWikiPageTree,
   listWikiPages,
   listWikiSpaces,
   processWikiIngestJob,
   reindexWikiEmbeddings,
   reindexWikiEmbeddingsSchema,
+  rerunWikiIngestJob,
   reviewWikiIngestJob,
   reviewWikiIngestJobSchema,
   searchWikiPages,
   syncWikiVaultFromDisk,
   syncWikiVaultSchema,
+  testWikiLlmProfileSchema,
   upsertWikiEmbeddingProfile,
   upsertWikiEmbeddingProfileSchema,
   upsertWikiLlmProfile,
@@ -336,6 +349,7 @@ import {
   createCalendarEventSchema,
   createHabitCheckInSchema,
   createCalendarConnectionSchema,
+  createDiagnosticLogSchema,
   discoverCalendarConnectionSchema,
   startMicrosoftCalendarOauthSchema,
   testMicrosoftCalendarOauthConfigurationSchema,
@@ -349,6 +363,7 @@ import {
   notesListQuerySchema,
   updateTagSchema,
   createTaskSchema,
+  diagnosticLogListQuerySchema,
   eventsListQuerySchema,
   operatorLogWorkSchema,
   projectBoardPayloadSchema,
@@ -403,6 +418,8 @@ import {
   getSleepViewData,
   ingestMobileHealthSync,
   mobileHealthSyncSchema,
+  revokeAllCompanionPairingSessions,
+  revokeAllCompanionPairingSessionsSchema,
   revokeCompanionPairingSession,
   verifyCompanionPairing,
   verifyCompanionPairingSchema,
@@ -4263,12 +4280,101 @@ export async function buildServer(
     credentials: true
   });
   await app.register(multipart);
+  enforceDiagnosticLogRetention({ force: true });
+  const diagnosticRetentionTimer = setInterval(() => {
+    try {
+      enforceDiagnosticLogRetention({ force: true });
+    } catch {
+      // Diagnostics cleanup should never bring down the server loop.
+    }
+  }, DIAGNOSTIC_LOG_RETENTION_SWEEP_INTERVAL_MS);
+  diagnosticRetentionTimer.unref?.();
   app.addHook("onClose", async () => {
+    clearInterval(diagnosticRetentionTimer);
     taskRunWatchdog?.stop();
     await managers.backgroundJobs.stop();
   });
 
-  app.setErrorHandler((error, _request, reply) => {
+  const enqueueWikiIngestJob = (jobId: string) => {
+    managers.backgroundJobs.enqueue({
+      id: jobId,
+      label: `Wiki ingest ${jobId}`,
+      handler: async () => {
+        await processWikiIngestJob(jobId, { llm: managers.llm });
+      }
+    });
+  };
+
+  const shouldSkipAutomaticDiagnosticRoute = (url: string | undefined) => {
+    if (!url) {
+      return false;
+    }
+    return (
+      url.startsWith("/api/v1/diagnostics/logs") ||
+      url === "/api/health" ||
+      url === "/api/v1/health" ||
+      url.startsWith("/api/v1/events/meta")
+    );
+  };
+
+  app.addHook("onRequest", async (request) => {
+    (request as typeof request & { diagnosticStartedAt?: bigint }).diagnosticStartedAt =
+      process.hrtime.bigint();
+  });
+
+  app.addHook("onResponse", async (request, reply) => {
+    const routeUrl = request.routeOptions.url || request.url;
+    if (shouldSkipAutomaticDiagnosticRoute(routeUrl)) {
+      return;
+    }
+
+    const startedAt = (
+      request as typeof request & { diagnosticStartedAt?: bigint }
+    ).diagnosticStartedAt;
+    const durationMs =
+      typeof startedAt === "bigint"
+        ? Number(process.hrtime.bigint() - startedAt) / 1_000_000
+        : null;
+    const source = normalizeDiagnosticSource(request.headers["x-forge-source"]);
+
+    try {
+      recordDiagnosticLog({
+        level:
+          reply.statusCode >= 500
+            ? "error"
+            : reply.statusCode >= 400
+              ? "warning"
+              : "debug",
+        source,
+        scope: "api_request",
+        eventKey: `http_${request.method.toLowerCase()}`,
+        message: createDiagnosticMessage({
+          method: request.method,
+          route: routeUrl,
+          statusCode: reply.statusCode
+        }),
+        route: routeUrl,
+        requestId: request.id,
+        details: {
+          method: request.method,
+          rawUrl: request.url,
+          statusCode: reply.statusCode,
+          durationMs:
+            typeof durationMs === "number"
+              ? Number(durationMs.toFixed(2))
+              : null,
+          userAgent:
+            typeof request.headers["user-agent"] === "string"
+              ? request.headers["user-agent"]
+              : null
+        }
+      });
+    } catch {
+      // Avoid surfacing diagnostics failures as request failures.
+    }
+  });
+
+  app.setErrorHandler((error, request, reply) => {
     const validationIssues =
       error instanceof ZodError ? formatValidationIssues(error) : undefined;
     const statusCode = isHttpError(error)
@@ -4278,6 +4384,38 @@ export async function buildServer(
         : error instanceof ZodError
           ? 400
           : 500;
+    const routeUrl = request.routeOptions.url || request.url;
+    if (!shouldSkipAutomaticDiagnosticRoute(routeUrl)) {
+      try {
+        recordDiagnosticLog({
+          level: statusCode >= 500 ? "error" : "warning",
+          source: normalizeDiagnosticSource(request.headers["x-forge-source"]),
+          scope: "api_error",
+          eventKey: isHttpError(error)
+            ? error.code
+            : isManagerError(error)
+              ? error.code
+              : statusCode === 400
+                ? "invalid_request"
+                : "internal_error",
+          message: getErrorMessage(error),
+          route: routeUrl,
+          functionName: "setErrorHandler",
+          requestId: request.id,
+          details: {
+            statusCode,
+            validationIssues:
+              validationIssues?.map((issue) => ({
+                path: issue.path,
+                message: issue.message
+              })) ?? [],
+            error: serializeDiagnosticError(error)
+          }
+        });
+      } catch {
+        // Avoid cascading on the error path.
+      }
+    }
     reply.code(statusCode).send({
       code: isHttpError(error)
         ? error.code
@@ -4614,6 +4752,21 @@ export async function buildServer(
       return { error: "Companion pairing session not found" };
     }
     return { session };
+  });
+  app.post("/api/v1/health/pairing-sessions/revoke-all", async (request) => {
+    const auth = requireOperatorSession(
+      request.headers as Record<string, unknown>,
+      {
+        route: "/api/v1/health/pairing-sessions/revoke-all"
+      }
+    );
+    return revokeAllCompanionPairingSessions(
+      revokeAllCompanionPairingSessionsSchema.parse(request.body ?? {}),
+      {
+        actor: auth.actor ?? null,
+        source: "ui"
+      }
+    );
   });
   app.post("/api/v1/mobile/pairing/verify", async (request) => ({
     pairing: verifyCompanionPairing(
@@ -5658,6 +5811,60 @@ export async function buildServer(
     return { profile };
   });
   app.post(
+    "/api/v1/wiki/settings/llm-profiles/test",
+    async (request, reply) => {
+      requireScopedAccess(
+        request.headers as Record<string, unknown>,
+        ["write"],
+        { route: "/api/v1/wiki/settings/llm-profiles/test" }
+      );
+      const parsed = testWikiLlmProfileSchema.parse(request.body ?? {});
+      const existingProfile = parsed.profileId
+        ? (listWikiLlmProfiles().find(
+            (entry) => entry.id === parsed.profileId
+          ) ?? null)
+        : null;
+      const profile = {
+        provider: parsed.provider,
+        baseUrl: parsed.baseUrl,
+        model: parsed.model,
+        systemPrompt: existingProfile?.systemPrompt ?? "",
+        secretId: existingProfile?.secretId ?? null,
+        metadata: {
+          ...(existingProfile?.metadata ?? {}),
+          ...(parsed.reasoningEffort
+            ? { reasoningEffort: parsed.reasoningEffort }
+            : {}),
+          ...(parsed.verbosity ? { verbosity: parsed.verbosity } : {})
+        }
+      };
+      const result = await managers.llm.testWikiConnection(
+        profile,
+        parsed.apiKey ?? null,
+        ({ level, message, details = {} }) => {
+          recordDiagnosticLog({
+            level,
+            source: normalizeDiagnosticSource(
+              request.headers["x-forge-source"]
+            ),
+            scope:
+              typeof details.scope === "string" ? details.scope : "wiki_llm",
+            eventKey:
+              typeof details.eventKey === "string"
+                ? details.eventKey
+                : "llm_connection_test",
+            message,
+            route: "/api/v1/wiki/settings/llm-profiles/test",
+            functionName: "testWikiConnection",
+            details
+          });
+        }
+      );
+      reply.code(200);
+      return { result };
+    }
+  );
+  app.post(
     "/api/v1/wiki/settings/embedding-profiles",
     async (request, reply) => {
       requireScopedAccess(
@@ -5877,6 +6084,40 @@ export async function buildServer(
             typeof entry === "string" && entry.trim().length > 0
         )
       : [];
+  const resolveMappedIngestEntity = (
+    entityType: CrudEntityType,
+    entityId: string
+  ) => {
+    const result = searchEntities({
+      searches: [
+        {
+          entityTypes: [entityType],
+          ids: [entityId],
+          limit: 1
+        }
+      ]
+    }).results[0] as
+      | {
+          ok?: boolean;
+          matches?: Array<{
+            entityType?: CrudEntityType;
+            id?: string;
+          }>;
+        }
+      | undefined;
+    if (!result?.ok) {
+      return null;
+    }
+    const match = result.matches?.find(
+      (entry) => entry.entityType === entityType && entry.id === entityId
+    );
+    return match
+      ? {
+          entityType,
+          entityId
+        }
+      : null;
+  };
   const publishIngestProposalEntity = (
     proposal: Record<string, unknown>,
     auth: ReturnType<typeof authenticateRequest>
@@ -6066,6 +6307,41 @@ export async function buildServer(
         );
         return { entityType: "habit", entityId: habit.id };
       }
+      case "psyche_value": {
+        const value = createPsycheValue(
+          {
+            title,
+            description: summary,
+            valuedDirection: readStringField(
+              suggestedFields,
+              "valuedDirection"
+            ),
+            whyItMatters: readStringField(suggestedFields, "whyItMatters"),
+            linkedGoalIds: readStringArrayField(
+              suggestedFields,
+              "linkedGoalIds"
+            ),
+            linkedProjectIds: readStringArrayField(
+              suggestedFields,
+              "linkedProjectIds"
+            ),
+            linkedTaskIds: readStringArrayField(
+              suggestedFields,
+              "linkedTaskIds"
+            ),
+            committedActions: readStringArrayField(
+              suggestedFields,
+              "committedActions"
+            ),
+            userId:
+              typeof suggestedFields.userId === "string"
+                ? (suggestedFields.userId as string)
+                : null
+          },
+          toActivityContext(auth)
+        );
+        return { entityType: "psyche_value", entityId: value.id };
+      }
       case "strategy": {
         const targetProjectIds = readStringArrayField(
           suggestedFields,
@@ -6244,13 +6520,7 @@ export async function buildServer(
 
     const jobId = result.job?.job.id;
     if (jobId) {
-      managers.backgroundJobs.enqueue({
-        id: jobId,
-        label: `Wiki ingest ${jobId}`,
-        handler: async () => {
-          await processWikiIngestJob(jobId, { llm: managers.llm });
-        }
-      });
+      enqueueWikiIngestJob(jobId);
     }
     reply.code(201);
     return result;
@@ -6271,13 +6541,7 @@ export async function buildServer(
     });
     const jobId = result.job?.job.id;
     if (jobId) {
-      managers.backgroundJobs.enqueue({
-        id: jobId,
-        label: `Wiki ingest ${jobId}`,
-        handler: async () => {
-          await processWikiIngestJob(jobId, { llm: managers.llm });
-        }
-      });
+      enqueueWikiIngestJob(jobId);
     }
     reply.code(201);
     return result;
@@ -6296,6 +6560,67 @@ export async function buildServer(
     }
     return job;
   });
+  app.post("/api/v1/wiki/ingest-jobs/:id/rerun", async (request, reply) => {
+    requireScopedAccess(
+      request.headers as Record<string, unknown>,
+      ["write"],
+      { route: "/api/v1/wiki/ingest-jobs/:id/rerun" }
+    );
+    const { id } = request.params as { id: string };
+    try {
+      const result = await rerunWikiIngestJob(id, {
+        actor:
+          requireAuthenticatedActor(
+            request.headers as Record<string, unknown>,
+            { route: "/api/v1/wiki/ingest-jobs/:id/rerun" }
+          ).actor ?? null
+      });
+      if (!result) {
+        reply.code(404);
+        return { error: "Wiki ingest job not found" };
+      }
+      const nextJobId = result.job?.job.id;
+      if (nextJobId) {
+        enqueueWikiIngestJob(nextJobId);
+      }
+      reply.code(201);
+      return result;
+    } catch (error) {
+      if (
+        error instanceof Error &&
+        error.message.includes("can only be rerun")
+      ) {
+        reply.code(409);
+        return { error: error.message };
+      }
+      throw error;
+    }
+  });
+  app.delete("/api/v1/wiki/ingest-jobs/:id", async (request, reply) => {
+    requireScopedAccess(
+      request.headers as Record<string, unknown>,
+      ["write"],
+      { route: "/api/v1/wiki/ingest-jobs/:id" }
+    );
+    const { id } = request.params as { id: string };
+    try {
+      const deleted = deleteWikiIngestJob(id);
+      if (!deleted) {
+        reply.code(404);
+        return { error: "Wiki ingest job not found" };
+      }
+      return { deleted };
+    } catch (error) {
+      if (
+        error instanceof Error &&
+        error.message.includes("can only be deleted")
+      ) {
+        reply.code(409);
+        return { error: error.message };
+      }
+      throw error;
+    }
+  });
   app.post("/api/v1/wiki/ingest-jobs/:id/review", async (request, reply) => {
     const auth = requireScopedAccess(
       request.headers as Record<string, unknown>,
@@ -6310,7 +6635,9 @@ export async function buildServer(
         createNote: (note) => createNote(note, toActivityContext(auth)),
         updateNote: (noteId, patch) =>
           updateNote(noteId, patch as any, toActivityContext(auth)),
-        publishEntity: (proposal) => publishIngestProposalEntity(proposal, auth)
+        publishEntity: (proposal) => publishIngestProposalEntity(proposal, auth),
+        resolveMappedEntity: (entityType, entityId) =>
+          resolveMappedIngestEntity(entityType, entityId)
       }
     );
     if (!reviewed) {
@@ -7100,6 +7427,24 @@ export async function buildServer(
     });
     reply.code(201);
     return event;
+  });
+  app.post("/api/v1/diagnostics/logs", async (request, reply) => {
+    const payload = createDiagnosticLogSchema.parse(request.body ?? {});
+    const entry = recordDiagnosticLog({
+      ...payload,
+      source:
+        payload.source ??
+        normalizeDiagnosticSource(request.headers["x-forge-source"])
+    });
+    reply.code(201);
+    return { log: entry };
+  });
+  app.get("/api/v1/diagnostics/logs", async (request) => {
+    requireOperatorSession(request.headers as Record<string, unknown>, {
+      route: "/api/v1/diagnostics/logs"
+    });
+    const query = diagnosticLogListQuerySchema.parse(request.query ?? {});
+    return { logs: listDiagnosticLogs(query) };
   });
   app.get("/api/v1/events", async (request) => {
     const query = eventsListQuerySchema.parse(request.query ?? {});

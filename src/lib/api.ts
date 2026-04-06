@@ -15,6 +15,7 @@ import type {
   CalendarResource,
   CalendarSchedulingRules,
   CompanionOverviewPayload,
+  DiagnosticLogEntry,
   EventLogEntry,
   FitnessViewData,
   FinalizeWeeklyReviewResult,
@@ -75,6 +76,7 @@ import type {
   WikiEmbeddingProfile,
   WikiHealthPayload,
   WikiIngestJobPayload,
+  WikiLlmConnectionTestResult,
   WikiPageDetailPayload,
   WikiSearchResponse,
   WikiSettingsPayload,
@@ -121,6 +123,7 @@ import type {
   TagMutationInput
 } from "./schemas";
 import { ForgeApiError, type ForgeValidationIssue } from "./api-error";
+import { publishUiDiagnosticLog } from "./diagnostics";
 import { resolveForgePath } from "./runtime-paths";
 import { normalizeForgeSnapshot } from "./snapshot-normalizer";
 
@@ -184,11 +187,36 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     headers.set("content-type", "application/json");
   }
 
-  const response = await fetch(resolveForgePath(path), {
-    credentials: "same-origin",
-    headers,
-    ...init
-  });
+  let response: Response;
+  try {
+    response = await fetch(resolveForgePath(path), {
+      credentials: "same-origin",
+      headers,
+      ...init
+    });
+  } catch (error) {
+    if (path !== "/api/v1/diagnostics/logs") {
+      void publishUiDiagnosticLog({
+        level: "error",
+        scope: "frontend_api",
+        eventKey: "request_network_failure",
+        message: `API request failed before reaching Forge: ${path}`,
+        route: path,
+        functionName: "request",
+        details: {
+          error:
+            error instanceof Error
+              ? {
+                  name: error.name,
+                  message: error.message,
+                  stack: error.stack ?? null
+                }
+              : String(error)
+        }
+      });
+    }
+    throw error;
+  }
 
   const body = await parseResponseBody(response);
 
@@ -200,6 +228,32 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     const details = Array.isArray(maybeBody?.details)
       ? (maybeBody.details as ForgeValidationIssue[])
       : [];
+    if (path !== "/api/v1/diagnostics/logs") {
+      void publishUiDiagnosticLog({
+        level: response.status >= 500 ? "error" : "warning",
+        scope: "frontend_api",
+        eventKey: "request_failed",
+        message: `API request failed: ${path}`,
+        route: path,
+        functionName: "request",
+        details: {
+          statusCode: response.status,
+          code:
+            typeof maybeBody?.code === "string"
+              ? maybeBody.code
+              : typeof maybeBody?.error === "string"
+                ? maybeBody.error
+                : "request_failed",
+          response:
+            typeof body === "string"
+              ? body
+              : body && typeof body === "object"
+                ? body
+                : null,
+          validationIssues: details
+        }
+      });
+    }
     throw new ForgeApiError({
       status: response.status,
       code:
@@ -1183,11 +1237,31 @@ export function createWikiLlmProfile(input: {
   model: string;
   apiKey?: string;
   systemPrompt?: string;
+  reasoningEffort?: "none" | "low" | "medium" | "high" | "xhigh";
+  verbosity?: "low" | "medium" | "high";
   enabled?: boolean;
   metadata?: Record<string, unknown>;
 }) {
   return request<{ profile: import("./types").WikiLlmProfile }>(
     "/api/v1/wiki/settings/llm-profiles",
+    {
+      method: "POST",
+      body: JSON.stringify(input)
+    }
+  );
+}
+
+export function testWikiLlmProfile(input: {
+  profileId?: string;
+  provider?: string;
+  baseUrl?: string;
+  model: string;
+  apiKey?: string;
+  reasoningEffort?: "none" | "low" | "medium" | "high" | "xhigh";
+  verbosity?: "low" | "medium" | "high";
+}) {
+  return request<{ result: WikiLlmConnectionTestResult }>(
+    "/api/v1/wiki/settings/llm-profiles/test",
     {
       method: "POST",
       body: JSON.stringify(input)
@@ -1297,10 +1371,12 @@ export function createWikiIngestUploadJob(input: {
   });
 }
 
-export function listWikiIngestJobs(input: {
-  spaceId?: string;
-  limit?: number;
-} = {}) {
+export function listWikiIngestJobs(
+  input: {
+    spaceId?: string;
+    limit?: number;
+  } = {}
+) {
   const search = new URLSearchParams();
   if (input.spaceId?.trim()) {
     search.set("spaceId", input.spaceId.trim());
@@ -1317,9 +1393,35 @@ export function getWikiIngestJob(jobId: string) {
   return request<WikiIngestJobPayload>(`/api/v1/wiki/ingest-jobs/${jobId}`);
 }
 
+export function deleteWikiIngestJob(jobId: string) {
+  return request<{ deleted: { id: string } }>(
+    `/api/v1/wiki/ingest-jobs/${jobId}`,
+    {
+      method: "DELETE"
+    }
+  );
+}
+
+export function rerunWikiIngestJob(jobId: string) {
+  return request<{
+    job: WikiIngestJobPayload | null;
+    page: Note | null;
+  }>(`/api/v1/wiki/ingest-jobs/${jobId}/rerun`, {
+    method: "POST"
+  });
+}
+
 export function reviewWikiIngestJob(input: {
   jobId: string;
-  decisions: Array<{ candidateId: string; keep: boolean }>;
+  decisions: Array<
+    | { candidateId: string; keep: boolean }
+    | {
+        candidateId: string;
+        action: "keep" | "discard" | "map_existing";
+        mappedEntityType?: CrudEntityType;
+        mappedEntityId?: string;
+      }
+  >;
 }) {
   return request<{ job: WikiIngestJobPayload }>(
     `/api/v1/wiki/ingest-jobs/${input.jobId}/review`,
@@ -2028,6 +2130,19 @@ export function revokeCompanionPairingSession(pairingSessionId: string) {
   });
 }
 
+export function revokeAllCompanionPairingSessions(input?: {
+  userIds?: string[];
+  includeRevoked?: boolean;
+}) {
+  return request<{
+    revokedCount: number;
+    sessions: CompanionOverviewPayload["pairings"];
+  }>("/api/v1/health/pairing-sessions/revoke-all", {
+    method: "POST",
+    body: JSON.stringify(input ?? {})
+  });
+}
+
 export function patchWorkoutSession(
   workoutId: string,
   patch: Partial<{
@@ -2441,6 +2556,50 @@ export function listActivity(
   appendUserIds(search, coerceUserIds(input.userIds));
   return request<{ activity: ForgeSnapshot["activity"] }>(
     `/api/v1/activity?${search.toString()}`
+  );
+}
+
+export function listDiagnosticLogs(
+  input: {
+    limit?: number;
+    level?: string;
+    source?: string;
+    scope?: string;
+    route?: string;
+    entityType?: string;
+    entityId?: string;
+    jobId?: string;
+    search?: string;
+  } = {}
+) {
+  const search = new URLSearchParams();
+  search.set("limit", String(input.limit ?? 200));
+  if (input.level) {
+    search.set("level", input.level);
+  }
+  if (input.source) {
+    search.set("source", input.source);
+  }
+  if (input.scope) {
+    search.set("scope", input.scope);
+  }
+  if (input.route) {
+    search.set("route", input.route);
+  }
+  if (input.entityType) {
+    search.set("entityType", input.entityType);
+  }
+  if (input.entityId) {
+    search.set("entityId", input.entityId);
+  }
+  if (input.jobId) {
+    search.set("jobId", input.jobId);
+  }
+  if (input.search) {
+    search.set("search", input.search);
+  }
+  return request<{ logs: DiagnosticLogEntry[] }>(
+    `/api/v1/diagnostics/logs?${search.toString()}`
   );
 }
 

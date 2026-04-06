@@ -1,12 +1,18 @@
 import assert from "node:assert/strict";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { access, mkdtemp, readFile, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { buildServer } from "./app.js";
 import { closeDatabase, getDatabase } from "./db.js";
+import { BackgroundJobManager } from "./managers/platform/background-job-manager.js";
 import { createCalendarEvent } from "./repositories/calendar.js";
 import { upsertDeletedEntityRecord } from "./repositories/deleted-entities.js";
+import {
+  DIAGNOSTIC_LOG_RETENTION_DAYS,
+  enforceDiagnosticLogRetention,
+  recordDiagnosticLog
+} from "./repositories/diagnostic-logs.js";
 import { getCrudEntityCapabilityMatrix } from "./services/entity-crud.js";
 import type { StartupTaskRunRecoverySummary } from "./services/run-recovery.js";
 
@@ -25,6 +31,128 @@ async function issueOperatorSessionCookie(
   assert.ok(cookie);
   return `${cookie.name}=${cookie.value}`;
 }
+
+test("companion pairings collapse stale duplicates and support bulk revoke", async () => {
+  const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-companion-"));
+  const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
+
+  try {
+    const operatorCookie = await issueOperatorSessionCookie(app);
+    const createPairing = async () => {
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/v1/health/pairing-sessions",
+        headers: {
+          cookie: operatorCookie,
+          host: "127.0.0.1:4317"
+        },
+        payload: {
+          userId: "user_operator"
+        }
+      });
+      assert.equal(response.statusCode, 201);
+      return response.json() as {
+        session: { id: string; status: string };
+        qrPayload: {
+          sessionId: string;
+          pairingToken: string;
+        };
+      };
+    };
+
+    const verifyPairing = async (sessionId: string, pairingToken: string) => {
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/v1/mobile/pairing/verify",
+        payload: {
+          sessionId,
+          pairingToken,
+          device: {
+            name: "Omar iPhone",
+            platform: "ios",
+            appVersion: "1.0",
+            sourceDevice: "iPhone"
+          }
+        }
+      });
+      assert.equal(response.statusCode, 200);
+      return response.json() as {
+        pairing: {
+          pairingSession: { id: string; status: string };
+        };
+      };
+    };
+
+    const first = await createPairing();
+    const second = await createPairing();
+    let rows = getDatabase()
+      .prepare(
+        `SELECT id, status
+         FROM companion_pairing_sessions
+         ORDER BY created_at ASC`
+      )
+      .all() as Array<{ id: string; status: string }>;
+    assert.equal(rows.length, 2);
+    assert.equal(rows[0]?.id, first.session.id);
+    assert.equal(rows[0]?.status, "revoked");
+    assert.equal(rows[1]?.id, second.session.id);
+    assert.equal(rows[1]?.status, "pending");
+
+    const secondVerify = await verifyPairing(
+      second.qrPayload.sessionId,
+      second.qrPayload.pairingToken
+    );
+    assert.equal(secondVerify.pairing.pairingSession.status, "paired");
+
+    const third = await createPairing();
+    const thirdVerify = await verifyPairing(
+      third.qrPayload.sessionId,
+      third.qrPayload.pairingToken
+    );
+    assert.equal(thirdVerify.pairing.pairingSession.status, "paired");
+
+    rows = getDatabase()
+      .prepare(
+        `SELECT id, status, device_name
+         FROM companion_pairing_sessions
+         ORDER BY created_at ASC`
+      )
+      .all() as Array<{
+      id: string;
+      status: string;
+      device_name: string | null;
+    }>;
+    assert.equal(rows.length, 3);
+    assert.equal(rows[1]?.id, second.session.id);
+    assert.equal(rows[1]?.status, "revoked");
+    assert.equal(rows[2]?.id, third.session.id);
+    assert.equal(rows[2]?.status, "paired");
+    assert.equal(rows[2]?.device_name, "Omar iPhone");
+
+    const revokeAllResponse = await app.inject({
+      method: "POST",
+      url: "/api/v1/health/pairing-sessions/revoke-all",
+      headers: {
+        cookie: operatorCookie
+      },
+      payload: {
+        userIds: ["user_operator"]
+      }
+    });
+    assert.equal(revokeAllResponse.statusCode, 200);
+    const revokeAllPayload = revokeAllResponse.json() as {
+      revokedCount: number;
+      sessions: Array<{ id: string; status: string }>;
+    };
+    assert.equal(revokeAllPayload.revokedCount, 1);
+    assert.equal(revokeAllPayload.sessions[0]?.id, third.session.id);
+    assert.equal(revokeAllPayload.sessions[0]?.status, "revoked");
+  } finally {
+    await app.close();
+    closeDatabase();
+    await rm(rootDir, { recursive: true, force: true });
+  }
+});
 
 test("dashboard bootstraps goals, tasks, tags, and premium stats", async () => {
   const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-dashboard-"));
@@ -4873,7 +5001,11 @@ test("wiki pages are file-backed, searchable, backlink-aware, and ingestable", a
           acceptedCount: number;
           rejectedCount: number;
         };
-        candidates: Array<{ id: string; candidateType: string; status: string }>;
+        candidates: Array<{
+          id: string;
+          candidateType: string;
+          status: string;
+        }>;
       };
     } | null = null;
 
@@ -4914,7 +5046,11 @@ test("wiki pages are file-backed, searchable, backlink-aware, and ingestable", a
               acceptedCount: number;
               rejectedCount: number;
             };
-            candidates: Array<{ id: string; candidateType: string; status: string }>;
+            candidates: Array<{
+              id: string;
+              candidateType: string;
+              status: string;
+            }>;
           };
         };
         break;
@@ -4955,6 +5091,467 @@ test("wiki pages are file-backed, searchable, backlink-aware, and ingestable", a
     assert.ok(healthBody.health.pageCount >= 3);
     assert.ok(healthBody.health.rawSourceCount >= 1);
     assert.match(healthBody.health.indexPath, /index\.md$/);
+  } finally {
+    await app.close();
+    closeDatabase();
+    await rm(rootDir, { recursive: true, force: true });
+  }
+});
+
+test("wiki ingest review can map an entity proposal onto an existing Forge entity", async () => {
+  const rootDir = await mkdtemp(
+    path.join(os.tmpdir(), "forge-wiki-ingest-map-existing-")
+  );
+  const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
+  const originalFetch = globalThis.fetch;
+
+  globalThis.fetch = (async () =>
+    new Response(
+      JSON.stringify({
+        output: [
+          {
+            content: [
+              {
+                type: "output_text",
+                text: JSON.stringify({
+                  title: "Arthur chat overview",
+                  summary: "Durable summary for Forge review.",
+                  markdown:
+                    "# Arthur chat overview\n\nThis source suggests a durable goal relationship page and one existing goal mapping.\n",
+                  tags: ["relationship"],
+                  entityProposals: [
+                    {
+                      entityType: "goal",
+                      title: "Map existing ingest goal",
+                      summary: "Keep Arthur connection warm and explicit.",
+                      rationale:
+                        "The chat repeatedly points toward one durable relationship goal.",
+                      confidence: 0.88,
+                      suggestedFields: {
+                        goalId: null,
+                        projectId: null,
+                        horizon: "year",
+                        status: "active",
+                        priority: null,
+                        dueDate: null,
+                        themeColor: "#c8a46b",
+                        polarity: null,
+                        frequency: null,
+                        endStateDescription: null,
+                        valuedDirection: null,
+                        whyItMatters: null,
+                        userId: null,
+                        targetPoints: 300,
+                        estimatedMinutes: null,
+                        targetCount: null,
+                        rewardXp: null,
+                        penaltyXp: null,
+                        linkedGoalIds: [],
+                        linkedProjectIds: [],
+                        linkedTaskIds: [],
+                        linkedValueIds: [],
+                        targetGoalIds: [],
+                        targetProjectIds: [],
+                        weekDays: [],
+                        linkedEntities: [],
+                        committedActions: [],
+                        notes: [],
+                        tags: []
+                      }
+                    }
+                  ],
+                  pageUpdateSuggestions: [],
+                  articleCandidates: []
+                })
+              }
+            ]
+          }
+        ]
+      }),
+      {
+        status: 200,
+        headers: { "content-type": "application/json" }
+      }
+    )) as typeof fetch;
+
+  try {
+    const operatorCookie = await issueOperatorSessionCookie(app);
+
+    const goalCreate = await app.inject({
+      method: "POST",
+      url: "/api/v1/goals",
+      headers: {
+        cookie: operatorCookie
+      },
+      payload: {
+        title: "Map existing ingest goal",
+        description: "Existing goal that the ingest review should reuse.",
+        horizon: "year",
+        status: "active",
+        targetPoints: 300,
+        themeColor: "#c8a46b",
+        tagIds: [],
+        notes: []
+      }
+    });
+    assert.equal(goalCreate.statusCode, 201);
+    const goalCreateBody = goalCreate.json() as { goal: { id: string } };
+    const existingGoalId = goalCreateBody.goal.id;
+
+    const createProfile = await app.inject({
+      method: "POST",
+      url: "/api/v1/wiki/settings/llm-profiles",
+      headers: {
+        cookie: operatorCookie
+      },
+      payload: {
+        label: "Forge wiki ingest",
+        provider: "openai-responses",
+        baseUrl: "https://api.openai.com/v1",
+        model: "gpt-5.4-mini",
+        apiKey: "sk-test-map-existing",
+        reasoningEffort: "medium",
+        verbosity: "medium",
+        systemPrompt: "Keep entity proposals conservative."
+      }
+    });
+    assert.equal(createProfile.statusCode, 201);
+    const createProfileBody = createProfile.json() as {
+      profile: { id: string };
+    };
+
+    const ingest = await app.inject({
+      method: "POST",
+      url: "/api/v1/wiki/ingest-jobs",
+      headers: {
+        cookie: operatorCookie
+      },
+      payload: {
+        sourceKind: "raw_text",
+        titleHint: "Arthur chat",
+        sourceText:
+          "Arthur and Albert keep discussing staying close and protecting the friendship as an explicit long-term priority.",
+        mimeType: "text/plain",
+        llmProfileId: createProfileBody.profile.id,
+        linkedEntityHints: []
+      }
+    });
+    assert.equal(ingest.statusCode, 201);
+    const ingestBody = ingest.json() as {
+      job: { job: { id: string } } | null;
+    };
+    const jobId = ingestBody.job?.job.id ?? "";
+    assert.ok(jobId);
+
+    let jobPayload:
+      | {
+          job: { status: string };
+          candidates: Array<{
+            id: string;
+            candidateType: string;
+            title: string;
+            publishedEntityId: string | null;
+          }>;
+        }
+      | null = null;
+    for (let attempt = 0; attempt < 40; attempt += 1) {
+      const poll = await app.inject({
+        method: "GET",
+        url: `/api/v1/wiki/ingest-jobs/${jobId}`,
+        headers: {
+          cookie: operatorCookie
+        }
+      });
+      assert.equal(poll.statusCode, 200);
+      jobPayload = poll.json() as typeof jobPayload;
+      if (jobPayload?.job.status === "completed") {
+        break;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 25));
+    }
+
+    assert.ok(jobPayload);
+    const entityCandidate = jobPayload?.candidates.find(
+      (candidate) => candidate.candidateType === "entity"
+    );
+    assert.ok(entityCandidate);
+
+    const review = await app.inject({
+      method: "POST",
+      url: `/api/v1/wiki/ingest-jobs/${jobId}/review`,
+      headers: {
+        cookie: operatorCookie
+      },
+      payload: {
+        decisions: (jobPayload?.candidates ?? []).map((candidate) =>
+          candidate.id === entityCandidate?.id
+            ? {
+                candidateId: candidate.id,
+                action: "map_existing",
+                mappedEntityType: "goal",
+                mappedEntityId: existingGoalId
+              }
+            : {
+                candidateId: candidate.id,
+                action: "discard"
+              }
+        )
+      }
+    });
+    assert.equal(review.statusCode, 200);
+    const reviewBody = review.json() as {
+      job: {
+        job: {
+          acceptedCount: number;
+          rejectedCount: number;
+        };
+        candidates: Array<{
+          id: string;
+          candidateType: string;
+          status: string;
+          publishedEntityId: string | null;
+          publishedEntityType: string | null;
+        }>;
+      };
+    };
+    assert.equal(reviewBody.job.job.acceptedCount, 1);
+    assert.ok(reviewBody.job.job.rejectedCount >= 1);
+    const reviewedEntityCandidate = reviewBody.job.candidates.find(
+      (candidate) => candidate.id === entityCandidate?.id
+    );
+    assert.equal(reviewedEntityCandidate?.status, "applied");
+    assert.equal(reviewedEntityCandidate?.publishedEntityType, "goal");
+    assert.equal(reviewedEntityCandidate?.publishedEntityId, existingGoalId);
+
+    const goalCountRow = getDatabase()
+      .prepare(`SELECT COUNT(*) as count FROM goals WHERE title = ?`)
+      .get("Map existing ingest goal") as { count: number };
+    assert.equal(goalCountRow.count, 1);
+  } finally {
+    globalThis.fetch = originalFetch;
+    await app.close();
+    closeDatabase();
+    await rm(rootDir, { recursive: true, force: true });
+  }
+});
+
+test("wiki settings can test a saved OpenAI ingest profile", async () => {
+  const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-wiki-llm-"));
+  const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
+  const originalFetch = globalThis.fetch;
+  const fetchCalls: Array<{ url: string; init: RequestInit | undefined }> = [];
+
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    fetchCalls.push({ url: String(input), init });
+    return new Response(
+      JSON.stringify({
+        output: [
+          {
+            content: [{ type: "output_text", text: "ok" }]
+          }
+        ]
+      }),
+      {
+        status: 200,
+        headers: {
+          "content-type": "application/json"
+        }
+      }
+    );
+  }) as typeof fetch;
+
+  try {
+    const operatorCookie = await issueOperatorSessionCookie(app);
+
+    const createProfile = await app.inject({
+      method: "POST",
+      url: "/api/v1/wiki/settings/llm-profiles",
+      headers: {
+        cookie: operatorCookie
+      },
+      payload: {
+        label: "Forge wiki ingest",
+        provider: "openai-responses",
+        baseUrl: "https://api.openai.com/v1",
+        model: "gpt-5.4-mini",
+        apiKey: "sk-test-123",
+        reasoningEffort: "high",
+        verbosity: "high",
+        systemPrompt: "Keep wiki pages structured."
+      }
+    });
+    assert.equal(createProfile.statusCode, 201);
+    const createProfileBody = createProfile.json() as {
+      profile: { id: string; secretId: string | null };
+    };
+    assert.ok(createProfileBody.profile.secretId);
+
+    const testConnection = await app.inject({
+      method: "POST",
+      url: "/api/v1/wiki/settings/llm-profiles/test",
+      headers: {
+        cookie: operatorCookie
+      },
+      payload: {
+        profileId: createProfileBody.profile.id,
+        model: "gpt-5.4-mini",
+        baseUrl: "https://api.openai.com/v1",
+        provider: "openai-responses",
+        reasoningEffort: "xhigh",
+        verbosity: "low"
+      }
+    });
+    assert.equal(testConnection.statusCode, 200);
+    const testConnectionBody = testConnection.json() as {
+      result: {
+        model: string;
+        reasoningEffort: string | null;
+        verbosity: string | null;
+        usingStoredKey: boolean;
+        outputPreview: string;
+      };
+    };
+    assert.equal(testConnectionBody.result.model, "gpt-5.4-mini");
+    assert.equal(testConnectionBody.result.reasoningEffort, "xhigh");
+    assert.equal(testConnectionBody.result.verbosity, "low");
+    assert.equal(testConnectionBody.result.usingStoredKey, true);
+    assert.equal(testConnectionBody.result.outputPreview, "ok");
+
+    assert.equal(fetchCalls.length, 1);
+    const request = fetchCalls[0];
+    assert.ok(request);
+    assert.equal(request.url, "https://api.openai.com/v1/responses");
+    assert.equal(
+      (request.init?.headers as Record<string, string>).authorization,
+      "Bearer sk-test-123"
+    );
+    const payload = JSON.parse(String(request.init?.body)) as {
+      model: string;
+      reasoning?: { effort?: string };
+      text?: { verbosity?: string };
+    };
+    assert.equal(payload.model, "gpt-5.4-mini");
+    assert.equal(payload.reasoning?.effort, "xhigh");
+    assert.equal(payload.text?.verbosity, "low");
+  } finally {
+    globalThis.fetch = originalFetch;
+    await app.close();
+    closeDatabase();
+    await rm(rootDir, { recursive: true, force: true });
+  }
+});
+
+test("wiki ingest history entries can be deleted without deleting published notes", async () => {
+  const rootDir = await mkdtemp(
+    path.join(os.tmpdir(), "forge-wiki-ingest-delete-")
+  );
+  const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
+
+  try {
+    const operatorCookie = await issueOperatorSessionCookie(app);
+    const createIngest = await app.inject({
+      method: "POST",
+      url: "/api/v1/wiki/ingest-jobs",
+      headers: {
+        cookie: operatorCookie
+      },
+      payload: {
+        titleHint: "Preserved ingest page",
+        sourceKind: "raw_text",
+        sourceText: "Forge should keep the published wiki page after the ingest history entry is deleted.",
+        mimeType: "text/plain",
+        parseStrategy: "text_only",
+        createAsKind: "wiki"
+      }
+    });
+    assert.equal(createIngest.statusCode, 201);
+    const createIngestBody = createIngest.json() as {
+      job: { job: { id: string } } | null;
+    };
+    const jobId = createIngestBody.job?.job.id;
+    assert.ok(jobId);
+
+    let jobPayload: {
+      job: { status: string };
+      candidates: Array<{ id: string; candidateType: string; publishedNoteId: string | null }>;
+    } | null = null;
+    for (let attempt = 0; attempt < 30; attempt += 1) {
+      const jobResponse = await app.inject({
+        method: "GET",
+        url: `/api/v1/wiki/ingest-jobs/${jobId}`,
+        headers: {
+          cookie: operatorCookie
+        }
+      });
+      assert.equal(jobResponse.statusCode, 200);
+      jobPayload = jobResponse.json() as typeof jobPayload;
+      if (
+        jobPayload &&
+        !["queued", "processing"].includes(jobPayload.job.status)
+      ) {
+        break;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+    assert.ok(jobPayload);
+    const pageCandidateIds =
+      jobPayload?.candidates
+        .filter((candidate) => candidate.candidateType === "page")
+        .map((candidate) => candidate.id) ?? [];
+    assert.ok(pageCandidateIds.length > 0);
+
+    const review = await app.inject({
+      method: "POST",
+      url: `/api/v1/wiki/ingest-jobs/${jobId}/review`,
+      headers: {
+        cookie: operatorCookie
+      },
+      payload: {
+        decisions: pageCandidateIds.map((candidateId) => ({
+          candidateId,
+          keep: true
+        }))
+      }
+    });
+    assert.equal(review.statusCode, 200);
+    const publishedNoteRow = getDatabase()
+      .prepare(
+        `SELECT id
+         FROM notes
+         WHERE title = ?
+         ORDER BY created_at DESC
+         LIMIT 1`
+      )
+      .get("Preserved ingest page") as { id: string } | undefined;
+    const publishedNoteId = publishedNoteRow?.id ?? null;
+    assert.ok(publishedNoteId);
+
+    const deleteResponse = await app.inject({
+      method: "DELETE",
+      url: `/api/v1/wiki/ingest-jobs/${jobId}`,
+      headers: {
+        cookie: operatorCookie
+      }
+    });
+    assert.equal(deleteResponse.statusCode, 200);
+
+    const deletedJob = await app.inject({
+      method: "GET",
+      url: `/api/v1/wiki/ingest-jobs/${jobId}`,
+      headers: {
+        cookie: operatorCookie
+      }
+    });
+    assert.equal(deletedJob.statusCode, 404);
+
+    const noteRow = getDatabase()
+      .prepare(`SELECT id FROM notes WHERE id = ?`)
+      .get(publishedNoteId) as { id: string } | undefined;
+    assert.equal(noteRow?.id, publishedNoteId);
+
+    await assert.rejects(() =>
+      access(path.join(rootDir, "data", "wiki-ingest", jobId))
+    );
   } finally {
     await app.close();
     closeDatabase();
@@ -7893,6 +8490,493 @@ test("session events and reward endpoints expose bounded ambient XP", async () =
     assert.ok(
       eventsBody.events.some(
         (entry) => entry.eventKind === "session.dwell_120_seconds"
+      )
+    );
+  } finally {
+    await app.close();
+    closeDatabase();
+    await rm(rootDir, { recursive: true, force: true });
+  }
+});
+
+test("failed wiki ingests can be rerun into a fresh job", async () => {
+  const rootDir = await mkdtemp(
+    path.join(os.tmpdir(), "forge-wiki-ingest-rerun-")
+  );
+  const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
+
+  try {
+    const operatorCookie = await issueOperatorSessionCookie(app);
+
+    const createProfileResponse = await app.inject({
+      method: "POST",
+      url: "/api/v1/wiki/settings/llm-profiles",
+      headers: {
+        cookie: operatorCookie
+      },
+      payload: {
+        label: "Missing key profile",
+        provider: "openai-responses",
+        baseUrl: "https://api.openai.com/v1",
+        model: "gpt-5.4-mini",
+        enabled: true,
+        systemPrompt: ""
+      }
+    });
+    assert.equal(createProfileResponse.statusCode, 201);
+    const createProfileBody = createProfileResponse.json() as {
+      profile: { id: string };
+    };
+
+    const createJobResponse = await app.inject({
+      method: "POST",
+      url: "/api/v1/wiki/ingest-jobs",
+      headers: {
+        cookie: operatorCookie
+      },
+      payload: {
+        titleHint: "Rerunnable ingest",
+        sourceKind: "raw_text",
+        sourceText: "Forge should be able to rerun this failed ingest.",
+        mimeType: "text/plain",
+        llmProfileId: createProfileBody.profile.id,
+        parseStrategy: "auto",
+        entityProposalMode: "suggest",
+        createAsKind: "wiki",
+        linkedEntityHints: []
+      }
+    });
+    assert.equal(createJobResponse.statusCode, 201);
+    const createJobBody = createJobResponse.json() as {
+      job: { job: { id: string } };
+    };
+    const originalJobId = createJobBody.job.job.id;
+
+    let originalStatus = "queued";
+    for (let attempt = 0; attempt < 50; attempt += 1) {
+      const jobResponse = await app.inject({
+        method: "GET",
+        url: `/api/v1/wiki/ingest-jobs/${originalJobId}`,
+        headers: {
+          cookie: operatorCookie
+        }
+      });
+      assert.equal(jobResponse.statusCode, 200);
+      const jobBody = jobResponse.json() as {
+        job: { status: string };
+      };
+      originalStatus = jobBody.job.status;
+      if (!["queued", "processing"].includes(originalStatus)) {
+        break;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    }
+    assert.equal(originalStatus, "failed");
+
+    const rerunResponse = await app.inject({
+      method: "POST",
+      url: `/api/v1/wiki/ingest-jobs/${originalJobId}/rerun`,
+      headers: {
+        cookie: operatorCookie
+      }
+    });
+    assert.equal(rerunResponse.statusCode, 201);
+    const rerunBody = rerunResponse.json() as {
+      job: { job: { id: string } } | null;
+    };
+    const rerunJobId = rerunBody.job?.job.id;
+    assert.ok(rerunJobId);
+    assert.notEqual(rerunJobId, originalJobId);
+
+    let rerunStatus = "queued";
+    for (let attempt = 0; attempt < 50; attempt += 1) {
+      const jobResponse = await app.inject({
+        method: "GET",
+        url: `/api/v1/wiki/ingest-jobs/${rerunJobId}`,
+        headers: {
+          cookie: operatorCookie
+        }
+      });
+      assert.equal(jobResponse.statusCode, 200);
+      const jobBody = jobResponse.json() as {
+        job: { status: string };
+        logs: Array<{ eventKey?: string; metadata?: Record<string, unknown> }>;
+      };
+      rerunStatus = jobBody.job.status;
+      if (!["queued", "processing"].includes(rerunStatus)) {
+        assert.ok(
+          jobBody.logs.some(
+            (entry) =>
+              entry.metadata?.eventKey === "wiki_ingest_rerun" &&
+              entry.metadata?.sourceJobId === originalJobId
+          )
+        );
+        break;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    }
+    assert.equal(rerunStatus, "failed");
+  } finally {
+    await app.close();
+    closeDatabase();
+    await rm(rootDir, { recursive: true, force: true });
+  }
+});
+
+test("diagnostic logs capture UI-published entries plus backend request and error traces", async () => {
+  const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-diagnostics-"));
+  const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
+
+  try {
+    const operatorCookie = await issueOperatorSessionCookie(app);
+
+    const contextResponse = await app.inject({
+      method: "GET",
+      url: "/api/v1/context",
+      headers: {
+        cookie: operatorCookie,
+        "x-forge-source": "ui"
+      }
+    });
+    assert.equal(contextResponse.statusCode, 200);
+
+    const unauthorizedRewards = await app.inject({
+      method: "GET",
+      url: "/api/v1/rewards/ledger?limit=10",
+      headers: {
+        "x-forge-source": "ui"
+      }
+    });
+    assert.equal(unauthorizedRewards.statusCode, 401);
+
+    const published = await app.inject({
+      method: "POST",
+      url: "/api/v1/diagnostics/logs",
+      headers: {
+        "x-forge-source": "ui"
+      },
+      payload: {
+        level: "error",
+        scope: "frontend_runtime",
+        eventKey: "manual_ui_error",
+        message: "Widget exploded in the browser.",
+        route: "/wiki",
+        jobId: "wiki_ingest_demo",
+        details: {
+          component: "WikiComposer",
+          statusCode: 400
+        }
+      }
+    });
+    assert.equal(published.statusCode, 201);
+
+    const logsResponse = await app.inject({
+      method: "GET",
+      url: "/api/v1/diagnostics/logs?limit=50",
+      headers: {
+        cookie: operatorCookie
+      }
+    });
+    assert.equal(logsResponse.statusCode, 200);
+    const logsBody = logsResponse.json() as {
+      logs: Array<{
+        scope: string;
+        eventKey: string;
+        message: string;
+        source: string;
+        route: string | null;
+        level: string;
+        jobId: string | null;
+      }>;
+    };
+
+    assert.ok(
+      logsBody.logs.some(
+        (entry) =>
+          entry.scope === "frontend_runtime" &&
+          entry.eventKey === "manual_ui_error" &&
+          entry.source === "ui" &&
+          entry.jobId === "wiki_ingest_demo"
+      )
+    );
+    assert.ok(
+      logsBody.logs.some(
+        (entry) =>
+          entry.scope === "api_request" &&
+          entry.route === "/api/v1/context" &&
+          entry.source === "ui"
+      )
+    );
+    assert.ok(
+      logsBody.logs.some(
+        (entry) =>
+          entry.scope === "api_error" &&
+          entry.route === "/api/v1/rewards/ledger" &&
+          entry.level === "warning"
+      )
+    );
+  } finally {
+    await app.close();
+    closeDatabase();
+    await rm(rootDir, { recursive: true, force: true });
+  }
+});
+
+test("diagnostic log retention prunes expired entries before the store grows indefinitely", async () => {
+  const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-diagnostic-retention-"));
+  const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
+
+  try {
+    const operatorCookie = await issueOperatorSessionCookie(app);
+    const staleTimestamp = new Date(
+      Date.now() - (DIAGNOSTIC_LOG_RETENTION_DAYS + 2) * 24 * 60 * 60 * 1_000
+    );
+
+    recordDiagnosticLog(
+      {
+        level: "info",
+        source: "server",
+        scope: "retention_probe",
+        eventKey: "stale_log",
+        message: "This old diagnostic entry should be removed."
+      },
+      staleTimestamp
+    );
+    recordDiagnosticLog({
+      level: "info",
+      source: "server",
+      scope: "retention_probe",
+      eventKey: "fresh_log",
+      message: "This recent diagnostic entry should remain visible."
+    });
+
+    const retention = enforceDiagnosticLogRetention({ force: true });
+    assert.ok(retention.ran);
+    assert.ok(retention.prunedCount >= 1);
+
+    const logsResponse = await app.inject({
+      method: "GET",
+      url: "/api/v1/diagnostics/logs?scope=retention_probe&limit=20",
+      headers: {
+        cookie: operatorCookie
+      }
+    });
+    assert.equal(logsResponse.statusCode, 200);
+    const logsBody = logsResponse.json() as {
+      logs: Array<{ eventKey: string }>;
+    };
+
+    assert.ok(logsBody.logs.some((entry) => entry.eventKey === "fresh_log"));
+    assert.ok(!logsBody.logs.some((entry) => entry.eventKey === "stale_log"));
+  } finally {
+    await app.close();
+    closeDatabase();
+    await rm(rootDir, { recursive: true, force: true });
+  }
+});
+
+test("background job diagnostics capture enqueue, success, and failure lifecycle events", async () => {
+  const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-background-logs-"));
+  const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
+  const manager = new BackgroundJobManager();
+
+  try {
+    const operatorCookie = await issueOperatorSessionCookie(app);
+
+    await new Promise<void>((resolve) => {
+      manager.enqueue({
+        id: "bg_success_demo",
+        label: "Successful job",
+        handler: async () => {
+          resolve();
+        }
+      });
+    });
+
+    await new Promise<void>((resolve) => {
+      manager.enqueue({
+        id: "bg_failure_demo",
+        label: "Failing job",
+        handler: async () => {
+          resolve();
+          throw new Error("Simulated background failure");
+        }
+      });
+    });
+
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
+    const logsResponse = await app.inject({
+      method: "GET",
+      url: "/api/v1/diagnostics/logs?scope=background_job&limit=20",
+      headers: {
+        cookie: operatorCookie
+      }
+    });
+    assert.equal(logsResponse.statusCode, 200);
+    const logsBody = logsResponse.json() as {
+      logs: Array<{
+        eventKey: string;
+        source: string;
+        jobId: string | null;
+        level: string;
+      }>;
+    };
+
+    assert.ok(
+      logsBody.logs.some(
+        (entry) =>
+          entry.eventKey === "background_job_enqueued" &&
+          entry.source === "system" &&
+          entry.jobId === "bg_success_demo"
+      )
+    );
+    assert.ok(
+      logsBody.logs.some(
+        (entry) =>
+          entry.eventKey === "background_job_completed" &&
+          entry.source === "system" &&
+          entry.jobId === "bg_success_demo"
+      )
+    );
+    assert.ok(
+      logsBody.logs.some(
+        (entry) =>
+          entry.eventKey === "background_job_failed" &&
+          entry.level === "error" &&
+          entry.jobId === "bg_failure_demo"
+      )
+    );
+  } finally {
+    await manager.stop();
+    await app.close();
+    closeDatabase();
+    await rm(rootDir, { recursive: true, force: true });
+  }
+});
+
+test("wiki ingest diagnostics explain missing llm api key and background job execution", async () => {
+  const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-wiki-llm-logs-"));
+  const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
+
+  try {
+    const operatorCookie = await issueOperatorSessionCookie(app);
+
+    const createProfileResponse = await app.inject({
+      method: "POST",
+      url: "/api/v1/wiki/settings/llm-profiles",
+      headers: {
+        cookie: operatorCookie
+      },
+      payload: {
+        label: "Missing key profile",
+        provider: "openai-responses",
+        baseUrl: "https://api.openai.com/v1",
+        model: "gpt-5.4-mini",
+        enabled: true,
+        systemPrompt: ""
+      }
+    });
+    assert.equal(createProfileResponse.statusCode, 201);
+    const createProfileBody = createProfileResponse.json() as {
+      profile: { id: string };
+    };
+
+    const createJobResponse = await app.inject({
+      method: "POST",
+      url: "/api/v1/wiki/ingest-jobs",
+      headers: {
+        cookie: operatorCookie
+      },
+      payload: {
+        titleHint: "Missing key ingest",
+        sourceKind: "raw_text",
+        sourceText: "Short note about a meeting.",
+        mimeType: "text/plain",
+        llmProfileId: createProfileBody.profile.id,
+        parseStrategy: "auto",
+        entityProposalMode: "suggest",
+        createAsKind: "wiki",
+        linkedEntityHints: []
+      }
+    });
+    assert.equal(createJobResponse.statusCode, 201);
+    const createJobBody = createJobResponse.json() as {
+      job: { job: { id: string } };
+    };
+    const jobId = createJobBody.job.job.id;
+
+    let jobStatus = "queued";
+    for (let attempt = 0; attempt < 50; attempt += 1) {
+      const jobResponse = await app.inject({
+        method: "GET",
+        url: `/api/v1/wiki/ingest-jobs/${jobId}`,
+        headers: {
+          cookie: operatorCookie
+        }
+      });
+      assert.equal(jobResponse.statusCode, 200);
+      const jobBody = jobResponse.json() as {
+        job: { status: string };
+      };
+      jobStatus = jobBody.job.status;
+      if (!["queued", "processing"].includes(jobStatus)) {
+        break;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    }
+
+    assert.equal(jobStatus, "failed");
+
+    const logsResponse = await app.inject({
+      method: "GET",
+      url: `/api/v1/diagnostics/logs?jobId=${jobId}&limit=50`,
+      headers: {
+        cookie: operatorCookie
+      }
+    });
+    assert.equal(logsResponse.statusCode, 200);
+    const logsBody = logsResponse.json() as {
+      logs: Array<{
+        scope: string;
+        eventKey: string;
+        message: string;
+        jobId: string | null;
+      }>;
+    };
+
+    assert.ok(
+      logsBody.logs.some(
+        (entry) =>
+          entry.scope === "background_job" &&
+          entry.eventKey === "background_job_enqueued" &&
+          entry.jobId === jobId
+      )
+    );
+    assert.ok(
+      logsBody.logs.some(
+        (entry) =>
+          entry.scope === "background_job" &&
+          entry.eventKey === "background_job_completed" &&
+          entry.jobId === jobId
+      )
+    );
+    assert.ok(
+      logsBody.logs.some(
+        (entry) =>
+          entry.scope === "wiki_llm" &&
+          entry.eventKey === "llm_api_key_missing" &&
+          entry.jobId === jobId
+      )
+    );
+    assert.ok(
+      logsBody.logs.some(
+        (entry) =>
+          entry.scope === "wiki_ingest" &&
+          entry.message.includes(
+            "The LLM did not produce structured draft candidates"
+          ) &&
+          entry.jobId === jobId
       )
     );
   } finally {

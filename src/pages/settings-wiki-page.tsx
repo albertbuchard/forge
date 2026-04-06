@@ -1,45 +1,60 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { DatabaseZap, KeyRound, LibraryBig, Trash2 } from "lucide-react";
+import {
+  ArrowUpRight,
+  DatabaseZap,
+  KeyRound,
+  LibraryBig,
+  PencilLine,
+  ShieldCheck,
+  Sparkles,
+  Trash2
+} from "lucide-react";
+import { useSearchParams } from "react-router-dom";
+import { WikiLlmSetupModal } from "@/components/settings/wiki-llm-setup-modal";
 import { SettingsSectionNav } from "@/components/settings/settings-section-nav";
 import { PageHero } from "@/components/shell/page-hero";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { InfoTooltip } from "@/components/ui/info-tooltip";
 import { Input } from "@/components/ui/input";
 import { ErrorState, LoadingState } from "@/components/ui/page-state";
 import { Textarea } from "@/components/ui/textarea";
 import {
   createWikiEmbeddingProfile,
-  createWikiLlmProfile,
   createWikiSpace,
   deleteWikiProfile,
   getWikiSettings,
   reindexWiki,
   syncWikiVault
 } from "@/lib/api";
+import type { WikiLlmProfile } from "@/lib/types";
+import { summarizeWikiLlmProfile } from "@/lib/wiki-llm";
 
 export function SettingsWikiPage() {
   const queryClient = useQueryClient();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [spaceLabel, setSpaceLabel] = useState("");
   const [spaceDescription, setSpaceDescription] = useState("");
   const [spaceVisibility, setSpaceVisibility] = useState<"personal" | "shared">(
     "personal"
   );
-  const [llmLabel, setLlmLabel] = useState("");
-  const [llmModel, setLlmModel] = useState("gpt-4.1-mini");
-  const [llmBaseUrl, setLlmBaseUrl] = useState("https://api.openai.com/v1");
-  const [llmApiKey, setLlmApiKey] = useState("");
-  const [llmPrompt, setLlmPrompt] = useState(
-    "Compile this source into a Forge wiki page with concise structure, clear backlinks, and a durable summary."
-  );
   const [embeddingLabel, setEmbeddingLabel] = useState("Fast wiki search");
-  const [embeddingModel, setEmbeddingModel] = useState("text-embedding-3-small");
+  const [embeddingModel, setEmbeddingModel] = useState(
+    "text-embedding-3-small"
+  );
   const [embeddingBaseUrl, setEmbeddingBaseUrl] = useState(
     "https://api.openai.com/v1"
   );
   const [embeddingApiKey, setEmbeddingApiKey] = useState("");
   const [chunkSize, setChunkSize] = useState("1200");
   const [chunkOverlap, setChunkOverlap] = useState("200");
+  const [llmModalOpen, setLlmModalOpen] = useState(
+    searchParams.get("setupLlm") === "1"
+  );
+  const [editingLlmProfile, setEditingLlmProfile] =
+    useState<WikiLlmProfile | null>(null);
 
   const settingsQuery = useQuery({
     queryKey: ["forge-wiki-settings"],
@@ -66,22 +81,6 @@ export function SettingsWikiPage() {
       setSpaceLabel("");
       setSpaceDescription("");
       setSpaceVisibility("personal");
-      await invalidateSettings();
-    }
-  });
-
-  const createLlmMutation = useMutation({
-    mutationFn: () =>
-      createWikiLlmProfile({
-        label: llmLabel.trim(),
-        model: llmModel.trim(),
-        baseUrl: llmBaseUrl.trim(),
-        apiKey: llmApiKey.trim() || undefined,
-        systemPrompt: llmPrompt.trim()
-      }),
-    onSuccess: async () => {
-      setLlmLabel("");
-      setLlmApiKey("");
       await invalidateSettings();
     }
   });
@@ -123,6 +122,13 @@ export function SettingsWikiPage() {
     onSuccess: invalidateSettings
   });
 
+  useEffect(() => {
+    if (searchParams.get("setupLlm") === "1") {
+      setEditingLlmProfile(null);
+      setLlmModalOpen(true);
+    }
+  }, [searchParams]);
+
   if (settingsQuery.isLoading) {
     return (
       <LoadingState
@@ -154,8 +160,27 @@ export function SettingsWikiPage() {
     );
   }
 
+  const activeLlmProfile =
+    settings.llmProfiles.find((profile) => profile.enabled) ??
+    settings.llmProfiles[0] ??
+    null;
+  const activeLlmSummary = activeLlmProfile
+    ? summarizeWikiLlmProfile(activeLlmProfile)
+    : null;
+  const operatingModelTooltip =
+    "Canonical knowledge lives as markdown and media files on disk, with Forge keeping a synced metadata, link, and search index on top. Text search and entity-linked search work without embeddings, while semantic search stays additive and profile-driven. Ingest jobs can create pages and media assets now, with room for richer OCR, transcription, and multimodal compilation later.";
+
+  const handleLlmModalChange = (open: boolean) => {
+    setLlmModalOpen(open);
+    if (!open) {
+      const next = new URLSearchParams(searchParams);
+      next.delete("setupLlm");
+      setSearchParams(next, { replace: true });
+    }
+  };
+
   return (
-    <div className="mx-auto grid w-full max-w-[1240px] gap-5">
+    <div className="mx-auto grid w-full max-w-[1440px] gap-5">
       <PageHero
         eyebrow="File-first memory"
         title="Wiki Settings"
@@ -186,15 +211,187 @@ export function SettingsWikiPage() {
 
       <SettingsSectionNav />
 
-      <div className="grid gap-5 xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
+      <div className="grid gap-5">
+        <Card className="grid gap-4">
+          <div className="flex items-center gap-3">
+            <KeyRound className="size-4 text-[var(--secondary)]" />
+            <div>
+              <div className="text-sm text-white">Auto-ingest model</div>
+              <div className="text-xs leading-5 text-white/50">
+                Set the OpenAI model that turns imported source material into
+                draft wiki pages and entity proposals before review.
+              </div>
+            </div>
+          </div>
+
+          <div className="grid gap-4 xl:grid-cols-[minmax(0,1.8fr)_minmax(24rem,0.9fr)]">
+            <div className="grid gap-5 rounded-[28px] border border-white/8 bg-[linear-gradient(180deg,rgba(22,32,49,0.9),rgba(12,18,31,0.9))] p-6">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <div className="text-[11px] uppercase tracking-[0.18em] text-white/42">
+                    Current profile
+                  </div>
+                  <div className="mt-2 text-xl font-semibold text-white">
+                    {activeLlmProfile?.label ?? "OpenAI not configured"}
+                  </div>
+                  <div className="mt-2 max-w-3xl text-sm leading-6 text-white/58">
+                    {activeLlmProfile
+                      ? "This profile is used by the wiki ingest flow when Forge turns uploads into draft pages and entities."
+                      : "Forge needs an OpenAI profile before auto-ingest can create structured draft pages instead of importing one raw dump page."}
+                  </div>
+                </div>
+                <Button
+                  onClick={() => {
+                    setEditingLlmProfile(activeLlmProfile);
+                    setLlmModalOpen(true);
+                  }}
+                >
+                  <Sparkles className="size-4" />
+                  {activeLlmProfile ? "Edit OpenAI" : "Set up OpenAI"}
+                </Button>
+              </div>
+
+              <div className="grid gap-3 lg:grid-cols-3">
+                <div className="rounded-[20px] border border-white/8 bg-white/[0.03] px-4 py-3">
+                  <div className="text-[11px] uppercase tracking-[0.16em] text-white/40">
+                    Model
+                  </div>
+                  <div className="mt-2 text-white">
+                    {activeLlmSummary?.model ?? "Not set"}
+                  </div>
+                </div>
+                <div className="rounded-[20px] border border-white/8 bg-white/[0.03] px-4 py-3">
+                  <div className="text-[11px] uppercase tracking-[0.16em] text-white/40">
+                    Thinking
+                  </div>
+                  <div className="mt-2 text-white">
+                    {activeLlmSummary?.reasoning ?? "Not set"}
+                  </div>
+                </div>
+                <div className="rounded-[20px] border border-white/8 bg-white/[0.03] px-4 py-3">
+                  <div className="text-[11px] uppercase tracking-[0.16em] text-white/40">
+                    Key
+                  </div>
+                  <div className="mt-2 flex items-center gap-2 text-white">
+                    {activeLlmSummary?.hasKey ? (
+                      <>
+                        <ShieldCheck className="size-4 text-emerald-300" />
+                        Saved
+                      </>
+                    ) : (
+                      "Missing"
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="grid gap-3 rounded-[28px] border border-white/8 bg-white/[0.03] p-6">
+              <div className="text-[11px] uppercase tracking-[0.18em] text-white/42">
+                Supported controls
+              </div>
+              <div className="text-sm leading-6 text-white/58">
+                Forge exposes the current GPT-5.4 family with model choice,
+                reasoning effort, and verbosity on top of the OpenAI Responses
+                API.
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {["GPT-5.4", "GPT-5.4 mini", "GPT-5.4 nano"].map((label) => (
+                  <Badge key={label} className="bg-white/[0.06] text-white/78">
+                    {label}
+                  </Badge>
+                ))}
+              </div>
+              <Button
+                variant="secondary"
+                onClick={() => {
+                  setEditingLlmProfile(activeLlmProfile);
+                  setLlmModalOpen(true);
+                }}
+              >
+                Open setup
+                <ArrowUpRight className="size-4" />
+              </Button>
+            </div>
+          </div>
+
+          <div className="grid gap-3">
+            {settings.llmProfiles.length === 0 ? (
+              <div className="rounded-[18px] border border-dashed border-white/10 bg-white/[0.02] px-4 py-5 text-sm leading-6 text-white/58">
+                No LLM profile yet. Set up OpenAI once, test it, and Forge will
+                use it for wiki auto-ingest.
+              </div>
+            ) : null}
+
+            {settings.llmProfiles.map((profile) => {
+              const summary = summarizeWikiLlmProfile(profile);
+              return (
+                <div
+                  key={profile.id}
+                  className="grid gap-3 rounded-[18px] bg-white/[0.04] px-4 py-4"
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="text-white">{profile.label}</div>
+                      <div className="mt-1 text-xs text-white/46">
+                        {summary.model} · thinking {summary.reasoning} ·
+                        verbosity {summary.verbosity}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        className="rounded-full p-2 text-white/48 transition hover:bg-white/[0.08] hover:text-white"
+                        onClick={() => {
+                          setEditingLlmProfile(profile);
+                          setLlmModalOpen(true);
+                        }}
+                      >
+                        <PencilLine className="size-4" />
+                      </button>
+                      <button
+                        type="button"
+                        className="rounded-full p-2 text-white/48 transition hover:bg-white/[0.08] hover:text-white"
+                        onClick={() =>
+                          void deleteProfileMutation.mutateAsync({
+                            kind: "llm",
+                            profileId: profile.id
+                          })
+                        }
+                      >
+                        <Trash2 className="size-4" />
+                      </button>
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap gap-2 text-xs text-white/58">
+                    <Badge className="bg-white/[0.06] text-white/76">
+                      {profile.baseUrl}
+                    </Badge>
+                    <Badge className="bg-white/[0.06] text-white/76">
+                      {summary.hasKey ? "key saved" : "key missing"}
+                    </Badge>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </Card>
+
         <div className="grid gap-5">
           <Card className="grid gap-4">
             <div className="flex items-center gap-3">
               <LibraryBig className="size-4 text-[var(--secondary)]" />
-              <div>
-                <div className="text-sm text-white">Spaces</div>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2">
+                  <div className="text-sm text-white">Spaces</div>
+                  <InfoTooltip
+                    content={operatingModelTooltip}
+                    label="Explain the wiki operating model"
+                  />
+                </div>
                 <div className="text-xs leading-5 text-white/50">
-                  Personal and shared wiki vaults map to explicit file-backed roots and metadata namespaces.
+                  Personal and shared wiki vaults map to explicit file-backed
+                  roots and metadata namespaces.
                 </div>
               </div>
             </div>
@@ -234,7 +431,9 @@ export function SettingsWikiPage() {
                 className="rounded-[16px] border border-white/10 bg-white/[0.04] px-3 py-3 text-sm text-white"
                 value={spaceVisibility}
                 onChange={(event) =>
-                  setSpaceVisibility(event.target.value as "personal" | "shared")
+                  setSpaceVisibility(
+                    event.target.value as "personal" | "shared"
+                  )
                 }
               >
                 <option value="personal">Personal</option>
@@ -257,7 +456,9 @@ export function SettingsWikiPage() {
               <div>
                 <div className="text-sm text-white">Embedding profiles</div>
                 <div className="text-xs leading-5 text-white/50">
-                  Semantic search stays opt-in. The recommended starter is fast and cheap, with heading-aware chunking for agent memory retrieval.
+                  Semantic search stays opt-in. The recommended starter is fast
+                  and cheap, with heading-aware chunking for agent memory
+                  retrieval.
                 </div>
               </div>
             </div>
@@ -287,7 +488,8 @@ export function SettingsWikiPage() {
                     {profile.model} · {profile.baseUrl}
                   </div>
                   <div className="text-sm text-white/60">
-                    chunkSize {profile.chunkSize} · overlap {profile.chunkOverlap}
+                    chunkSize {profile.chunkSize} · overlap{" "}
+                    {profile.chunkOverlap}
                   </div>
                 </div>
               ))}
@@ -340,105 +542,14 @@ export function SettingsWikiPage() {
             </div>
           </Card>
         </div>
-
-        <div className="grid gap-5">
-          <Card className="grid gap-4">
-            <div className="flex items-center gap-3">
-              <KeyRound className="size-4 text-[var(--secondary)]" />
-              <div>
-                <div className="text-sm text-white">LLM parse profiles</div>
-                <div className="text-xs leading-5 text-white/50">
-                  Parse profiles power wiki compilation and future multimodal ingest flows. Secrets stay local in Forge’s encrypted storage.
-                </div>
-              </div>
-            </div>
-
-            <div className="grid gap-3">
-              {settings.llmProfiles.map((profile) => (
-                <div
-                  key={profile.id}
-                  className="grid gap-2 rounded-[18px] bg-white/[0.04] px-4 py-4"
-                >
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="text-white">{profile.label}</div>
-                    <button
-                      type="button"
-                      className="rounded-full p-2 text-white/48 transition hover:bg-white/[0.08] hover:text-white"
-                      onClick={() =>
-                        void deleteProfileMutation.mutateAsync({
-                          kind: "llm",
-                          profileId: profile.id
-                        })
-                      }
-                    >
-                      <Trash2 className="size-4" />
-                    </button>
-                  </div>
-                  <div className="text-xs text-white/46">
-                    {profile.model} · {profile.baseUrl}
-                  </div>
-                  <div className="text-sm text-white/60">
-                    {profile.systemPrompt || "No custom system prompt."}
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            <div className="grid gap-3 rounded-[20px] bg-white/[0.03] p-4">
-              <Input
-                value={llmLabel}
-                onChange={(event) => setLlmLabel(event.target.value)}
-                placeholder="Profile label"
-              />
-              <Input
-                value={llmModel}
-                onChange={(event) => setLlmModel(event.target.value)}
-                placeholder="Model"
-              />
-              <Input
-                value={llmBaseUrl}
-                onChange={(event) => setLlmBaseUrl(event.target.value)}
-                placeholder="Base URL"
-              />
-              <Input
-                value={llmApiKey}
-                onChange={(event) => setLlmApiKey(event.target.value)}
-                placeholder="API key (optional)"
-                type="password"
-              />
-              <Textarea
-                value={llmPrompt}
-                onChange={(event) => setLlmPrompt(event.target.value)}
-                className="min-h-[10rem]"
-                placeholder="System prompt"
-              />
-              <Button
-                pending={createLlmMutation.isPending}
-                pendingLabel="Saving"
-                disabled={!llmLabel.trim() || !llmModel.trim()}
-                onClick={() => void createLlmMutation.mutateAsync()}
-              >
-                Save LLM profile
-              </Button>
-            </div>
-          </Card>
-
-          <Card className="grid gap-4">
-            <div className="text-sm text-white">Operating model</div>
-            <div className="grid gap-3 text-sm leading-6 text-white/62">
-              <div>
-                Canonical knowledge lives as markdown and media files on disk, with Forge keeping a synced metadata, link, and search index on top.
-              </div>
-              <div>
-                Text search and entity-linked search work without embeddings. Semantic search is additive and profile-driven, not a hidden requirement.
-              </div>
-              <div>
-                Ingest jobs create pages and media assets now, while leaving room for richer OCR, transcription, and multimodal compilation as you add profiles.
-              </div>
-            </div>
-          </Card>
-        </div>
       </div>
+
+      <WikiLlmSetupModal
+        open={llmModalOpen}
+        onOpenChange={handleLlmModalChange}
+        profile={editingLlmProfile}
+        onSaved={invalidateSettings}
+      />
     </div>
   );
 }

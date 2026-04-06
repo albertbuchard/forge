@@ -1,4 +1,5 @@
 import { AbstractManager } from "../base.js";
+import { recordDiagnosticLog } from "../../repositories/diagnostic-logs.js";
 
 type BackgroundJobTask = {
   id: string;
@@ -18,6 +19,15 @@ export class BackgroundJobManager extends AbstractManager {
 
   enqueue(input: BackgroundJobTask) {
     this.queue.push(input);
+    this.recordLifecycleLog("info", "background_job_enqueued", {
+      task: input,
+      message: `Enqueued background job ${input.label}.`,
+      details: {
+        queueDepth: this.queue.length,
+        activeCount: this.active.size
+      },
+      functionName: "enqueue"
+    });
     this.scheduleDrain();
   }
 
@@ -50,9 +60,40 @@ export class BackgroundJobManager extends AbstractManager {
       return;
     }
     this.active.add(next.id);
+    const startedAt = Date.now();
+    this.recordLifecycleLog("info", "background_job_started", {
+      task: next,
+      message: `Started background job ${next.label}.`,
+      details: {
+        queueDepth: this.queue.length,
+        activeCount: this.active.size
+      },
+      functionName: "drainNext"
+    });
     try {
       await next.handler();
+      this.recordLifecycleLog("info", "background_job_completed", {
+        task: next,
+        message: `Completed background job ${next.label}.`,
+        details: {
+          durationMs: Date.now() - startedAt,
+          queueDepth: this.queue.length,
+          activeCount: this.active.size
+        },
+        functionName: "drainNext"
+      });
     } catch (error) {
+      this.recordLifecycleLog("error", "background_job_failed", {
+        task: next,
+        message: `Background job failed for ${next.label}.`,
+        details: {
+          durationMs: Date.now() - startedAt,
+          queueDepth: this.queue.length,
+          activeCount: this.active.size,
+          error
+        },
+        functionName: "drainNext"
+      });
       console.error(
         `[${this.name}] background job failed for ${next.label}:`,
         error
@@ -60,6 +101,37 @@ export class BackgroundJobManager extends AbstractManager {
     } finally {
       this.active.delete(next.id);
       this.scheduleDrain();
+    }
+  }
+
+  private recordLifecycleLog(
+    level: "info" | "error",
+    eventKey: string,
+    input: {
+      task: BackgroundJobTask;
+      message: string;
+      details?: Record<string, unknown>;
+      functionName: string;
+    }
+  ) {
+    try {
+      recordDiagnosticLog({
+        level,
+        source: "system",
+        scope: "background_job",
+        eventKey,
+        message: input.message,
+        functionName: input.functionName,
+        entityType: "background_job",
+        entityId: input.task.id,
+        jobId: input.task.id,
+        details: {
+          label: input.task.label,
+          ...(input.details ?? {})
+        }
+      });
+    } catch {
+      // Diagnostics should never block job execution.
     }
   }
 }

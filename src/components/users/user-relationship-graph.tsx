@@ -1,22 +1,20 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
 import {
   Background,
   Controls,
   MarkerType,
-  MiniMap,
   ReactFlow,
   type Edge,
   type Node
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
-import { ProgressMeter } from "@/components/ui/progress-meter";
+import { InfoTooltip } from "@/components/ui/info-tooltip";
 import { UserBadge } from "@/components/ui/user-badge";
 import type { UserAccessGrant, UserSummary } from "@/lib/types";
 
-type GrantRightKey = keyof UserAccessGrant["config"]["rights"];
+export type GrantRightKey = keyof UserAccessGrant["config"]["rights"];
 
 type RightGroup = {
   id: string;
@@ -29,7 +27,7 @@ type RightGroup = {
   }>;
 };
 
-const RIGHT_GROUPS: RightGroup[] = [
+export const RIGHT_GROUPS: RightGroup[] = [
   {
     id: "visibility",
     label: "Discovery and visibility",
@@ -128,7 +126,7 @@ const RIGHT_GROUPS: RightGroup[] = [
   }
 ];
 
-const EDGE_PRESETS: Array<{
+export const EDGE_PRESETS: Array<{
   id: string;
   label: string;
   description: string;
@@ -216,16 +214,16 @@ const EDGE_PRESETS: Array<{
   }
 ];
 
-const TOTAL_RIGHTS = RIGHT_GROUPS.reduce(
+export const TOTAL_RIGHTS = RIGHT_GROUPS.reduce(
   (sum, group) => sum + group.rights.length,
   0
 );
 
-function countEnabledRights(grant: UserAccessGrant) {
+export function countEnabledRights(grant: UserAccessGrant) {
   return Object.values(grant.config.rights).filter(Boolean).length;
 }
 
-function summarizeGrant(grant: UserAccessGrant) {
+export function summarizeGrant(grant: UserAccessGrant) {
   const labels = [];
   if (grant.config.rights.canReadEntities) {
     labels.push("See");
@@ -242,7 +240,7 @@ function summarizeGrant(grant: UserAccessGrant) {
   return labels.join(" · ") || "Hidden";
 }
 
-function describeGrantTone(grant: UserAccessGrant) {
+export function describeGrantTone(grant: UserAccessGrant) {
   if (
     !grant.config.rights.discoverable &&
     !grant.config.rights.canReadEntities
@@ -264,6 +262,50 @@ function describeGrantTone(grant: UserAccessGrant) {
   return "Observed";
 }
 
+export function buildGrantCapabilitySummary(grant: UserAccessGrant) {
+  return [
+    {
+      id: "see",
+      label: "See",
+      enabled:
+        grant.config.rights.discoverable &&
+        grant.config.rights.canReadEntities &&
+        grant.config.rights.canSearchEntities
+    },
+    {
+      id: "message",
+      label: "Message",
+      enabled: grant.config.rights.canCoordinate
+    },
+    {
+      id: "share",
+      label: "Share context",
+      enabled: grant.config.rights.canLinkEntities
+    },
+    {
+      id: "plan",
+      label: "Plan",
+      enabled: grant.config.rights.canManageStrategies
+    },
+    {
+      id: "affect",
+      label: "Affect",
+      enabled:
+        grant.config.rights.canAffectEntities ||
+        grant.config.rights.canCreateOnBehalf
+    }
+  ];
+}
+
+export function presetMatchesGrant(
+  grant: UserAccessGrant,
+  preset: (typeof EDGE_PRESETS)[number]
+) {
+  return Object.entries(preset.rights).every(
+    ([key, value]) => grant.config.rights[key as GrantRightKey] === value
+  );
+}
+
 function buildNodes(
   users: UserSummary[],
   options: {
@@ -274,8 +316,8 @@ function buildNodes(
   const humans = users.filter((user) => user.kind === "human");
   const bots = users.filter((user) => user.kind === "bot");
   const groups = [
-    { entries: humans, x: 72 },
-    { entries: bots, x: 432 }
+    { entries: humans, x: 120 },
+    { entries: bots, x: 1040 }
   ] as const;
   const highlightedUserIds = new Set(
     options.selectedGrant
@@ -294,7 +336,7 @@ function buildNodes(
       const isSelected = user.id === options.selectedUserId;
       return {
         id: user.id,
-        position: { x: group.x, y: 52 + index * 140 },
+        position: { x: group.x, y: 64 + index * 168 },
         draggable: false,
         selectable: false,
         data: {
@@ -376,113 +418,23 @@ function buildEdges(
     });
 }
 
-function presetMatchesGrant(
-  grant: UserAccessGrant,
-  preset: (typeof EDGE_PRESETS)[number]
-) {
-  return Object.entries(preset.rights).every(
-    ([key, value]) => grant.config.rights[key as GrantRightKey] === value
-  );
-}
-
-function grantPartnerLabels(
-  grants: UserAccessGrant[],
-  predicate: (grant: UserAccessGrant) => boolean
-) {
-  return grants
-    .filter(predicate)
-    .map((grant) => grant.targetUser?.displayName ?? grant.targetUserId);
-}
-
-function buildGrantCapabilitySummary(grant: UserAccessGrant) {
-  return [
-    {
-      id: "see",
-      label: "See",
-      enabled:
-        grant.config.rights.discoverable &&
-        grant.config.rights.canReadEntities &&
-        grant.config.rights.canSearchEntities
-    },
-    {
-      id: "message",
-      label: "Message",
-      enabled: grant.config.rights.canCoordinate
-    },
-    {
-      id: "share",
-      label: "Share context",
-      enabled: grant.config.rights.canLinkEntities
-    },
-    {
-      id: "plan",
-      label: "Plan",
-      enabled: grant.config.rights.canManageStrategies
-    },
-    {
-      id: "affect",
-      label: "Affect",
-      enabled:
-        grant.config.rights.canAffectEntities ||
-        grant.config.rights.canCreateOnBehalf
-    }
-  ];
-}
-
 export function UserRelationshipGraph({
   users,
   grants,
-  pendingGrantId = null,
-  onUpdateGrant
+  selectedGrantId = null,
+  selectedUserId = null,
+  onOpenGrant,
+  onOpenUser
 }: {
   users: UserSummary[];
   grants: UserAccessGrant[];
-  pendingGrantId?: string | null;
-  onUpdateGrant: (
-    grantId: string,
-    patch: Partial<{
-      accessLevel: "view" | "manage";
-      rights: Partial<UserAccessGrant["config"]["rights"]>;
-    }>
-  ) => Promise<void>;
+  selectedGrantId?: string | null;
+  selectedUserId?: string | null;
+  onOpenGrant: (grantId: string) => void;
+  onOpenUser: (userId: string) => void;
 }) {
-  const defaultGrantId =
-    grants.find((grant) => grant.subjectUserId !== grant.targetUserId)?.id ??
-    null;
-  const [selectedGrantId, setSelectedGrantId] = useState<string | null>(
-    defaultGrantId
-  );
-  const [selectedUserId, setSelectedUserId] = useState<string | null>(
-    users[0]?.id ?? null
-  );
-
-  useEffect(() => {
-    if (
-      selectedGrantId !== null &&
-      !grants.some((grant) => grant.id === selectedGrantId)
-    ) {
-      setSelectedGrantId(defaultGrantId);
-    }
-  }, [defaultGrantId, grants, selectedGrantId]);
-
-  useEffect(() => {
-    if (!selectedUserId || !users.some((user) => user.id === selectedUserId)) {
-      setSelectedUserId(users[0]?.id ?? null);
-    }
-  }, [selectedUserId, users]);
-
   const selectedGrant =
     grants.find((grant) => grant.id === selectedGrantId) ?? null;
-  const selectedUser = users.find((user) => user.id === selectedUserId) ?? null;
-  const reverseGrant =
-    selectedGrant === null
-      ? null
-      : (grants.find(
-          (grant) =>
-            grant.subjectUserId === selectedGrant.targetUserId &&
-            grant.targetUserId === selectedGrant.subjectUserId
-        ) ?? null);
-
   const nodes = useMemo(
     () => buildNodes(users, { selectedUserId, selectedGrant }),
     [selectedGrant, selectedUserId, users]
@@ -496,20 +448,6 @@ export function UserRelationshipGraph({
     () => grants.filter((grant) => grant.subjectUserId !== grant.targetUserId),
     [grants]
   );
-  const selectedUserOutgoing = useMemo(
-    () =>
-      directionalGrants.filter(
-        (grant) => grant.subjectUserId === selectedUserId
-      ),
-    [directionalGrants, selectedUserId]
-  );
-  const selectedUserIncoming = useMemo(
-    () =>
-      directionalGrants.filter(
-        (grant) => grant.targetUserId === selectedUserId
-      ),
-    [directionalGrants, selectedUserId]
-  );
   const fullyOpenEdges = directionalGrants.filter(
     (grant) => countEnabledRights(grant) === TOTAL_RIGHTS
   ).length;
@@ -522,512 +460,88 @@ export function UserRelationshipGraph({
       grant.config.rights.canCreateOnBehalf
   ).length;
 
-  const selectedGrantRatio = selectedGrant
-    ? Math.round((countEnabledRights(selectedGrant) / TOTAL_RIGHTS) * 100)
-    : 0;
-  const reverseGrantRatio = reverseGrant
-    ? Math.round((countEnabledRights(reverseGrant) / TOTAL_RIGHTS) * 100)
-    : 0;
-
-  const applyRightsPatch = async (
-    nextGrant: UserAccessGrant,
-    rights: Partial<UserAccessGrant["config"]["rights"]>
-  ) => {
-    await onUpdateGrant(nextGrant.id, { rights });
-  };
-
-  const applyRightsToPair = async (
-    rights: Partial<UserAccessGrant["config"]["rights"]>
-  ) => {
-    if (!selectedGrant) {
-      return;
-    }
-    await applyRightsPatch(selectedGrant, rights);
-    if (reverseGrant) {
-      await applyRightsPatch(reverseGrant, rights);
-    }
-  };
-
   return (
-    <div className="grid gap-4 xl:grid-cols-[minmax(0,1.35fr)_minmax(20rem,0.92fr)]">
-      <Card className="overflow-hidden p-0">
-        <div className="grid gap-4 border-b border-white/8 px-5 py-4">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div>
+    <Card className="overflow-hidden p-0">
+      <div className="grid gap-4 border-b border-white/8 px-5 py-4">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="max-w-3xl">
+            <div className="flex items-center gap-2">
               <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">
                 Directed relationship graph
               </div>
-              <div className="mt-1 text-sm leading-6 text-white/58">
-                Nodes are humans or bots. Each arrow is one directional
-                contract: `A → B` defines what `A` can see, coordinate, plan, or
-                change on `B`.
-              </div>
+              <InfoTooltip
+                content="Keep Forge, OpenClaw, Hermes, and the browser on the same runtime and storage root when these arrows should describe one shared human and bot system."
+                label="Explain the shared runtime rule"
+              />
             </div>
-            <div className="flex flex-wrap gap-2">
-              <Badge className="bg-white/[0.08] text-white/70">
-                {directionalGrants.length} edges
-              </Badge>
-              <Badge className="bg-emerald-500/12 text-emerald-200">
-                {fullyOpenEdges} fully open
-              </Badge>
+            <div className="mt-2 text-sm leading-6 text-white/58">
+              Click a user card to open that user&apos;s settings. Click any
+              arrow to open the exact directional relationship flow for that
+              lane.
             </div>
           </div>
-
-          <div className="grid gap-3 sm:grid-cols-3">
-            <div className="rounded-[18px] bg-white/[0.04] px-4 py-3">
-              <div className="font-label text-[11px] uppercase tracking-[0.16em] text-white/40">
-                Full collaboration
-              </div>
-              <div className="mt-2 text-lg text-white">{fullyOpenEdges}</div>
-              <div className="text-xs leading-5 text-white/48">
-                Directions still running with the default fully open posture.
-              </div>
-            </div>
-            <div className="rounded-[18px] bg-white/[0.04] px-4 py-3">
-              <div className="font-label text-[11px] uppercase tracking-[0.16em] text-white/40">
-                Coordination lanes
-              </div>
-              <div className="mt-2 text-lg text-white">{coordinationEdges}</div>
-              <div className="text-xs leading-5 text-white/48">
-                Directions allowed to coordinate directly through Forge.
-              </div>
-            </div>
-            <div className="rounded-[18px] bg-white/[0.04] px-4 py-3">
-              <div className="font-label text-[11px] uppercase tracking-[0.16em] text-white/40">
-                Execution control
-              </div>
-              <div className="mt-2 text-lg text-white">{executionEdges}</div>
-              <div className="text-xs leading-5 text-white/48">
-                Directions allowed to create or mutate target-owned work.
-              </div>
-            </div>
+          <div className="flex flex-wrap gap-2">
+            <Badge className="bg-white/[0.08] text-white/70">
+              {directionalGrants.length} edges
+            </Badge>
+            <Badge className="bg-emerald-500/12 text-emerald-200">
+              {fullyOpenEdges} fully open
+            </Badge>
           </div>
         </div>
 
-        <div className="h-[680px] bg-[radial-gradient(circle_at_top,rgba(244,185,122,0.08),transparent_34%),linear-gradient(180deg,rgba(6,10,20,0.97),rgba(8,14,26,0.94))]">
-          <ReactFlow
-            nodes={nodes}
-            edges={edges}
-            fitView
-            nodesDraggable={false}
-            nodesConnectable={false}
-            elementsSelectable
-            onNodeClick={(_event, node) => {
-              setSelectedUserId(node.id);
-              setSelectedGrantId(null);
-            }}
-            onEdgeClick={(_event, edge) => {
-              setSelectedGrantId(edge.id);
-              setSelectedUserId(edge.source);
-            }}
-            attributionPosition="bottom-left"
-          >
-            <MiniMap
-              pannable
-              zoomable
-              nodeColor={(node) =>
-                users.find((user) => user.id === node.id)?.accentColor ??
-                "#c0c1ff"
-              }
-            />
-            <Controls showInteractive={false} />
-            <Background gap={28} size={1} color="rgba(255,255,255,0.06)" />
-          </ReactFlow>
+        <div className="grid gap-3 sm:grid-cols-3">
+          <div className="rounded-[18px] bg-white/[0.04] px-4 py-3">
+            <div className="font-label text-[11px] uppercase tracking-[0.16em] text-white/40">
+              Full collaboration
+            </div>
+            <div className="mt-2 text-lg text-white">{fullyOpenEdges}</div>
+            <div className="text-xs leading-5 text-white/48">
+              Directions still running with the default fully open posture.
+            </div>
+          </div>
+          <div className="rounded-[18px] bg-white/[0.04] px-4 py-3">
+            <div className="font-label text-[11px] uppercase tracking-[0.16em] text-white/40">
+              Coordination lanes
+            </div>
+            <div className="mt-2 text-lg text-white">{coordinationEdges}</div>
+            <div className="text-xs leading-5 text-white/48">
+              Directions allowed to coordinate directly through Forge.
+            </div>
+          </div>
+          <div className="rounded-[18px] bg-white/[0.04] px-4 py-3">
+            <div className="font-label text-[11px] uppercase tracking-[0.16em] text-white/40">
+              Execution control
+            </div>
+            <div className="mt-2 text-lg text-white">{executionEdges}</div>
+            <div className="text-xs leading-5 text-white/48">
+              Directions allowed to create or mutate target-owned work.
+            </div>
+          </div>
         </div>
-      </Card>
-
-      <div className="grid gap-4">
-        {selectedGrant ? (
-          <Card className="grid gap-4">
-            <div>
-              <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">
-                Edge rights
-              </div>
-              <div className="mt-2 text-sm leading-6 text-white/58">
-                Use presets for the common trust levels, then tune the
-                individual rights only where that relationship needs a sharper
-                boundary.
-              </div>
-            </div>
-
-            <div className="rounded-[20px] bg-white/[0.04] px-4 py-4">
-              <div className="flex flex-wrap items-center gap-2">
-                <UserBadge user={selectedGrant.subjectUser} />
-                <span className="text-white/45">→</span>
-                <UserBadge user={selectedGrant.targetUser} />
-              </div>
-              <div className="mt-3 flex flex-wrap gap-2">
-                <Badge className="bg-white/[0.08] text-white/74">
-                  {describeGrantTone(selectedGrant)}
-                </Badge>
-                <Badge className="bg-white/[0.08] text-white/74">
-                  {selectedGrant.accessLevel}
-                </Badge>
-                <Badge className="bg-[var(--primary)]/14 text-[var(--primary)]">
-                  {countEnabledRights(selectedGrant)}/{TOTAL_RIGHTS} rights
-                  enabled
-                </Badge>
-              </div>
-              <div className="mt-4">
-                <ProgressMeter value={selectedGrantRatio} />
-              </div>
-            </div>
-
-            <div className="grid gap-3">
-              <div>
-                <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">
-                  Pair contract
-                </div>
-                <div className="mt-1 text-xs leading-5 text-white/48">
-                  Read the two arrows separately. `A → B` answers what A can see
-                  or do to B. `B → A` may stay different.
-                </div>
-              </div>
-              <div className="grid gap-3">
-                {[
-                  {
-                    grant: selectedGrant,
-                    ratio: selectedGrantRatio,
-                    active: true
-                  },
-                  ...(reverseGrant
-                    ? [
-                        {
-                          grant: reverseGrant,
-                          ratio: reverseGrantRatio,
-                          active: false
-                        }
-                      ]
-                    : [])
-                ].map(({ grant, ratio, active }) => (
-                  <button
-                    key={grant.id}
-                    type="button"
-                    className={`rounded-[18px] border px-4 py-4 text-left transition ${
-                      active
-                        ? "border-[rgba(244,185,122,0.32)] bg-[rgba(244,185,122,0.08)]"
-                        : "border-white/8 bg-white/[0.03] hover:bg-white/[0.05]"
-                    }`}
-                    onClick={() => {
-                      setSelectedGrantId(grant.id);
-                      setSelectedUserId(grant.subjectUserId);
-                    }}
-                  >
-                    <div className="flex flex-wrap items-center gap-2">
-                      <UserBadge user={grant.subjectUser} />
-                      <span className="text-white/45">→</span>
-                      <UserBadge user={grant.targetUser} />
-                      <Badge className="bg-white/[0.08] text-white/70">
-                        {describeGrantTone(grant)}
-                      </Badge>
-                    </div>
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      {buildGrantCapabilitySummary(grant).map((capability) => (
-                        <Badge
-                          key={`${grant.id}-${capability.id}`}
-                          className={
-                            capability.enabled
-                              ? "bg-white/[0.08] text-white/78"
-                              : "bg-white/[0.04] text-white/38"
-                          }
-                        >
-                          {capability.label}
-                        </Badge>
-                      ))}
-                    </div>
-                    <div className="mt-3">
-                      <ProgressMeter value={ratio} />
-                    </div>
-                  </button>
-                ))}
-              </div>
-              <div className="flex flex-wrap gap-2">
-                {reverseGrant ? (
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    size="sm"
-                    disabled={pendingGrantId === selectedGrant.id}
-                    onClick={() => {
-                      void applyRightsPatch(
-                        reverseGrant,
-                        selectedGrant.config.rights
-                      );
-                    }}
-                  >
-                    Mirror to reverse arrow
-                  </Button>
-                ) : null}
-                <Button
-                  type="button"
-                  variant="secondary"
-                  size="sm"
-                  disabled={pendingGrantId === selectedGrant.id}
-                  onClick={() => {
-                    void applyRightsToPair(EDGE_PRESETS[0]!.rights);
-                  }}
-                >
-                  Open both directions
-                </Button>
-                <Button
-                  type="button"
-                  variant="secondary"
-                  size="sm"
-                  disabled={pendingGrantId === selectedGrant.id}
-                  onClick={() => {
-                    void applyRightsToPair(EDGE_PRESETS[2]!.rights);
-                  }}
-                >
-                  Observe both ways
-                </Button>
-              </div>
-            </div>
-
-            <div className="grid gap-2">
-              <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">
-                Quick presets
-              </div>
-              <div className="grid gap-2">
-                {EDGE_PRESETS.map((preset) => (
-                  <div
-                    key={preset.id}
-                    className={`rounded-[18px] border px-4 py-3 transition ${
-                      presetMatchesGrant(selectedGrant, preset)
-                        ? "border-[rgba(244,185,122,0.42)] bg-[rgba(244,185,122,0.10)]"
-                        : "border-white/8 bg-white/[0.03]"
-                    }`}
-                  >
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <div className="text-sm font-medium text-white">
-                          {preset.label}
-                        </div>
-                        <div className="mt-1 text-xs leading-5 text-white/50">
-                          {preset.description}
-                        </div>
-                      </div>
-                      {presetMatchesGrant(selectedGrant, preset) ? (
-                        <Badge className="bg-white/[0.08] text-white/72">
-                          Active
-                        </Badge>
-                      ) : null}
-                    </div>
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      <Button
-                        type="button"
-                        variant="secondary"
-                        size="sm"
-                        disabled={pendingGrantId === selectedGrant.id}
-                        onClick={() => {
-                          void applyRightsPatch(selectedGrant, preset.rights);
-                        }}
-                      >
-                        This arrow
-                      </Button>
-                      {reverseGrant ? (
-                        <Button
-                          type="button"
-                          variant="secondary"
-                          size="sm"
-                          disabled={pendingGrantId === selectedGrant.id}
-                          onClick={() => {
-                            void applyRightsToPair(preset.rights);
-                          }}
-                        >
-                          Both arrows
-                        </Button>
-                      ) : null}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {RIGHT_GROUPS.map((group) => (
-              <div key={group.id} className="grid gap-3">
-                <div>
-                  <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">
-                    {group.label}
-                  </div>
-                  <div className="mt-1 text-xs leading-5 text-white/48">
-                    {group.description}
-                  </div>
-                </div>
-                <div className="grid gap-2">
-                  {group.rights.map((right) => {
-                    const checked = selectedGrant.config.rights[right.key];
-                    return (
-                      <label
-                        key={right.key}
-                        className="flex items-start justify-between gap-3 rounded-[18px] bg-white/[0.04] px-4 py-3"
-                      >
-                        <div>
-                          <div className="text-sm font-medium text-white">
-                            {right.label}
-                          </div>
-                          <div className="mt-1 text-xs leading-5 text-white/50">
-                            {right.description}
-                          </div>
-                        </div>
-                        <input
-                          type="checkbox"
-                          checked={checked}
-                          disabled={pendingGrantId === selectedGrant.id}
-                          onChange={(event) => {
-                            void onUpdateGrant(selectedGrant.id, {
-                              rights: {
-                                [right.key]: event.target.checked
-                              }
-                            });
-                          }}
-                        />
-                      </label>
-                    );
-                  })}
-                </div>
-              </div>
-            ))}
-          </Card>
-        ) : null}
-
-        {selectedUser ? (
-          <Card className="grid gap-4">
-            <div>
-              <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">
-                User lane summary
-              </div>
-              <div className="mt-2 text-sm leading-6 text-white/58">
-                Click any node to inspect the user's inbound and outbound trust
-                lanes. Click any arrow to edit that exact direction.
-              </div>
-            </div>
-
-            <div className="rounded-[20px] bg-white/[0.04] px-4 py-4">
-              <UserBadge user={selectedUser} />
-              <div className="mt-3 text-sm leading-6 text-white/56">
-                @{selectedUser.handle} ·{" "}
-                {selectedUser.description || "No description yet."}
-              </div>
-            </div>
-
-            <div className="grid gap-3 sm:grid-cols-2">
-              <div className="rounded-[18px] bg-white/[0.04] px-4 py-3">
-                <div className="font-label text-[11px] uppercase tracking-[0.16em] text-white/40">
-                  Outbound lanes
-                </div>
-                <div className="mt-2 text-lg text-white">
-                  {selectedUserOutgoing.length}
-                </div>
-                <div className="text-xs leading-5 text-white/48">
-                  Directions where this user can inspect or act on others.
-                </div>
-              </div>
-              <div className="rounded-[18px] bg-white/[0.04] px-4 py-3">
-                <div className="font-label text-[11px] uppercase tracking-[0.16em] text-white/40">
-                  Inbound lanes
-                </div>
-                <div className="mt-2 text-lg text-white">
-                  {selectedUserIncoming.length}
-                </div>
-                <div className="text-xs leading-5 text-white/48">
-                  Directions where other users can inspect or act on this user.
-                </div>
-              </div>
-            </div>
-
-            <div className="grid gap-3">
-              <div className="rounded-[18px] bg-white/[0.04] px-4 py-4">
-                <div className="font-label text-[11px] uppercase tracking-[0.16em] text-white/40">
-                  This user can message
-                </div>
-                <div className="mt-3 flex flex-wrap gap-2">
-                  {grantPartnerLabels(
-                    selectedUserOutgoing,
-                    (grant) => grant.config.rights.canCoordinate
-                  ).length > 0 ? (
-                    grantPartnerLabels(
-                      selectedUserOutgoing,
-                      (grant) => grant.config.rights.canCoordinate
-                    ).map((label) => (
-                      <Badge
-                        key={`out-${selectedUser.id}-${label}`}
-                        className="bg-white/[0.08] text-white/74"
-                      >
-                        {label}
-                      </Badge>
-                    ))
-                  ) : (
-                    <div className="text-sm text-white/52">
-                      No active messaging or coordination lanes from this user
-                      yet.
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              <div className="rounded-[18px] bg-white/[0.04] px-4 py-4">
-                <div className="font-label text-[11px] uppercase tracking-[0.16em] text-white/40">
-                  Others can affect this user
-                </div>
-                <div className="mt-3 flex flex-wrap gap-2">
-                  {selectedUserIncoming.filter(
-                    (grant) => grant.config.rights.canAffectEntities
-                  ).length > 0 ? (
-                    selectedUserIncoming
-                      .filter((grant) => grant.config.rights.canAffectEntities)
-                      .map((grant) => (
-                        <Badge
-                          key={`in-${grant.id}`}
-                          className="bg-white/[0.08] text-white/74"
-                        >
-                          {grant.subjectUser?.displayName ??
-                            grant.subjectUserId}
-                        </Badge>
-                      ))
-                  ) : (
-                    <div className="text-sm text-white/52">
-                      No other user can directly mutate this user's work.
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-
-            {selectedGrant ? null : (
-              <div className="rounded-[18px] border border-dashed border-white/10 bg-white/[0.02] px-4 py-4 text-sm leading-6 text-white/52">
-                Select an arrow to edit the exact directional rights from one
-                user to another. The graph defaults to full collaboration so
-                onboarding stays easy, then narrows only where a boundary is
-                intentional.
-              </div>
-            )}
-          </Card>
-        ) : null}
-
-        {selectedGrant && selectedUser ? (
-          <Card className="grid gap-3">
-            <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">
-              Shared-runtime rule
-            </div>
-            <div className="text-sm leading-6 text-white/58">
-              Keep OpenClaw, Hermes, and the Forge UI on the same runtime and
-              storage root when these lanes should describe one shared human and
-              bot system. The graph stays directional, but the runtime stays
-              single-source.
-            </div>
-            <div className="flex flex-wrap gap-2">
-              <Button
-                type="button"
-                variant="secondary"
-                size="sm"
-                onClick={() => setSelectedGrantId(null)}
-              >
-                Inspect user lane
-              </Button>
-            </div>
-          </Card>
-        ) : null}
       </div>
-    </div>
+
+      <div className="h-[min(72vh,54rem)] min-h-[34rem] bg-[radial-gradient(circle_at_top,rgba(244,185,122,0.08),transparent_34%),linear-gradient(180deg,rgba(6,10,20,0.97),rgba(8,14,26,0.94))]">
+        <ReactFlow
+          nodes={nodes}
+          edges={edges}
+          fitView
+          fitViewOptions={{ padding: 0.12, maxZoom: 1 }}
+          nodesDraggable={false}
+          nodesConnectable={false}
+          elementsSelectable
+          onNodeClick={(_event, node) => {
+            onOpenUser(node.id);
+          }}
+          onEdgeClick={(_event, edge) => {
+            onOpenGrant(edge.id);
+          }}
+          attributionPosition="bottom-left"
+        >
+          <Controls showInteractive={false} />
+          <Background gap={28} size={1} color="rgba(255,255,255,0.06)" />
+        </ReactFlow>
+      </div>
+    </Card>
   );
 }

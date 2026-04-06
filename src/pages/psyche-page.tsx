@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Moon, SlidersHorizontal } from "lucide-react";
 import { Link, useSearchParams } from "react-router-dom";
 import { buildGoalGravityScene } from "@/components/psyche/goal-gravity-scene";
 import { PsycheGraphCanvas } from "@/components/psyche/psyche-graph";
@@ -133,48 +132,6 @@ export function PsychePage() {
       />
 
       <PsycheSectionNav />
-
-      <section className="grid min-w-0 gap-4 md:grid-cols-2">
-        <InteractiveCard
-          to="/preferences"
-          className="rounded-[28px] border border-white/8 bg-[linear-gradient(180deg,rgba(20,28,40,0.96),rgba(12,18,28,0.94))] p-5"
-        >
-          <div className="inline-flex size-11 items-center justify-center rounded-[16px] bg-[rgba(192,193,255,0.14)] text-[var(--primary)]">
-            <SlidersHorizontal className="size-5" />
-          </div>
-          <div className="mt-4 font-label text-[11px] uppercase tracking-[0.18em] text-white/42">
-            Psyche side surface
-          </div>
-          <div className="mt-2 font-display text-[clamp(1.25rem,2vw,1.6rem)] leading-none text-white">
-            Preferences
-          </div>
-          <p className="mt-3 text-sm leading-6 text-white/60">
-            Taste modeling, comparison flows, and concept libraries now sit as
-            part of the reflective Psyche area instead of taking their own
-            top-level menu slot.
-          </p>
-        </InteractiveCard>
-
-        <InteractiveCard
-          to="/sleep"
-          className="rounded-[28px] border border-white/8 bg-[linear-gradient(180deg,rgba(18,26,36,0.96),rgba(10,16,24,0.94))] p-5"
-        >
-          <div className="inline-flex size-11 items-center justify-center rounded-[16px] bg-[rgba(116,232,176,0.14)] text-[var(--tertiary)]">
-            <Moon className="size-5" />
-          </div>
-          <div className="mt-4 font-label text-[11px] uppercase tracking-[0.18em] text-white/42">
-            Psyche side surface
-          </div>
-          <div className="mt-2 font-display text-[clamp(1.25rem,2vw,1.6rem)] leading-none text-white">
-            Sleep
-          </div>
-          <p className="mt-3 text-sm leading-6 text-white/60">
-            Sleep review now lives alongside the reflective module so recovery,
-            regulation, and linked context stay close to values, reports, and
-            patterns.
-          </p>
-        </InteractiveCard>
-      </section>
 
       <section className="grid min-w-0 gap-4 xl:grid-cols-[minmax(0,1fr)_19rem]">
         <PsycheGraphCanvas

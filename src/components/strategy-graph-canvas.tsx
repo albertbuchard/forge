@@ -3,7 +3,6 @@ import {
   Background,
   Controls,
   MarkerType,
-  MiniMap,
   ReactFlow,
   type Edge,
   type Node
@@ -188,13 +187,6 @@ export function StrategyGraphCanvas({
         elementsSelectable={false}
         attributionPosition="bottom-left"
       >
-        <MiniMap
-          pannable
-          zoomable
-          nodeColor={(node) =>
-            ownerByNodeId?.get(node.id)?.color ?? "rgba(192,193,255,0.72)"
-          }
-        />
         <Controls showInteractive={false} />
         <Background gap={28} size={1} color="rgba(255,255,255,0.06)" />
       </ReactFlow>

@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import * as Dialog from "@radix-ui/react-dialog";
 import { useQuery } from "@tanstack/react-query";
 import {
   Check,
-  LoaderCircle,
+  ChevronDown,
+  History,
   PenSquare,
   Plus,
   Search,
@@ -31,7 +32,6 @@ import {
   getWikiPageBySlug,
   getWikiSettings,
   getWikiTree,
-  listWikiIngestJobs,
   searchWiki
 } from "@/lib/api";
 import { getEntityRoute } from "@/lib/note-helpers";
@@ -183,10 +183,12 @@ export function WikiPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [searchOpen, setSearchOpen] = useState(false);
   const [spacePickerOpen, setSpacePickerOpen] = useState(false);
+  const [ingestMenuOpen, setIngestMenuOpen] = useState(false);
   const [searchMode, setSearchMode] = useState<WikiSearchMode>("hybrid");
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedEmbeddingProfileId, setSelectedEmbeddingProfileId] =
     useState("");
+  const ingestMenuRef = useRef<HTMLDivElement | null>(null);
 
   const selectedSpaceId = searchParams.get("spaceId") ?? "";
   const ingestOpen = searchParams.get("ingest") === "1";
@@ -264,21 +266,6 @@ export function WikiPage() {
       searchOpen && Boolean(activeSpaceId) && searchQuery.trim().length > 0
   });
 
-  const ingestJobsQuery = useQuery({
-    queryKey: ["forge-wiki-ingest-jobs", activeSpaceId],
-    queryFn: () =>
-      listWikiIngestJobs({ spaceId: activeSpaceId || undefined, limit: 8 }),
-    enabled: Boolean(activeSpaceId),
-    refetchInterval: (query) => {
-      const jobs = query.state.data?.jobs ?? [];
-      return jobs.some((job) =>
-        ["queued", "processing"].includes(job.job.status)
-      )
-        ? 2000
-        : false;
-    }
-  });
-
   const requestedDetail = slug
     ? (pageQuery.data ?? null)
     : (homeQuery.data ?? null);
@@ -309,8 +296,6 @@ export function WikiPage() {
       })),
     [selectedPage?.links]
   );
-
-  const recentIngestJobs = ingestJobsQuery.data?.jobs ?? [];
 
   const updateModalParams = (
     updater: (params: URLSearchParams) => void,
@@ -350,8 +335,34 @@ export function WikiPage() {
       } else {
         next.delete("ingestJobId");
       }
+      if (activeSpaceId) {
+        next.set("spaceId", activeSpaceId);
+      }
     });
   };
+
+  useEffect(() => {
+    if (!ingestMenuOpen) {
+      return;
+    }
+    const handlePointerDown = (event: PointerEvent) => {
+      if (ingestMenuRef.current?.contains(event.target as Node)) {
+        return;
+      }
+      setIngestMenuOpen(false);
+    };
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setIngestMenuOpen(false);
+      }
+    };
+    document.addEventListener("pointerdown", handlePointerDown);
+    document.addEventListener("keydown", handleEscape);
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown);
+      document.removeEventListener("keydown", handleEscape);
+    };
+  }, [ingestMenuOpen]);
 
   if (
     !selectedPage &&
@@ -436,15 +447,66 @@ export function WikiPage() {
                     {activeSpace?.label ?? "Wiki space"}
                   </span>
                 </button>
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  className="min-h-[2.9rem]"
-                  onClick={() => openIngestModal()}
-                >
-                  <Sparkles className="size-3.5" />
-                  Ingest
-                </Button>
+                <div className="relative" ref={ingestMenuRef}>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    className="min-h-[2.9rem]"
+                    onClick={() => setIngestMenuOpen((current) => !current)}
+                  >
+                    <Sparkles className="size-3.5" />
+                    Ingest
+                    <ChevronDown className="size-3.5" />
+                  </Button>
+                  {ingestMenuOpen ? (
+                    <div className="absolute right-0 top-[calc(100%+0.5rem)] z-20 grid min-w-[15rem] gap-2 rounded-[22px] border border-white/10 bg-[rgba(9,14,27,0.98)] p-2 shadow-[0_24px_60px_rgba(0,0,0,0.35)]">
+                      <button
+                        type="button"
+                        className="flex items-start gap-3 rounded-[18px] px-3 py-3 text-left transition hover:bg-white/[0.06]"
+                        onClick={() => {
+                          setIngestMenuOpen(false);
+                          openIngestModal();
+                        }}
+                      >
+                        <Sparkles className="mt-0.5 size-4 shrink-0 text-[var(--primary)]" />
+                        <span>
+                          <span className="block text-sm font-medium text-white">
+                            New ingest
+                          </span>
+                          <span className="mt-1 block text-xs leading-5 text-white/48">
+                            Start a fresh import from files, URLs, or pasted
+                            text.
+                          </span>
+                        </span>
+                      </button>
+                      <button
+                        type="button"
+                        className="flex items-start gap-3 rounded-[18px] px-3 py-3 text-left transition hover:bg-white/[0.06]"
+                        onClick={() => {
+                          setIngestMenuOpen(false);
+                          navigate(
+                            `/wiki/ingest-history${
+                              activeSpaceId
+                                ? `?spaceId=${encodeURIComponent(activeSpaceId)}`
+                                : ""
+                            }`
+                          );
+                        }}
+                      >
+                        <History className="mt-0.5 size-4 shrink-0 text-[var(--secondary)]" />
+                        <span>
+                          <span className="block text-sm font-medium text-white">
+                            History
+                          </span>
+                          <span className="mt-1 block text-xs leading-5 text-white/48">
+                            Browse prior ingests, reopen reviews, and delete old
+                            ingest records.
+                          </span>
+                        </span>
+                      </button>
+                    </div>
+                  ) : null}
+                </div>
                 <Button
                   variant="secondary"
                   size="sm"
@@ -477,49 +539,6 @@ export function WikiPage() {
                 </Button>
               </div>
             </div>
-
-            {recentIngestJobs.length > 0 ? (
-              <div className="mt-4 grid gap-2 lg:grid-cols-3">
-                {recentIngestJobs.slice(0, 3).map((job) => {
-                  const jobActive = ["queued", "processing"].includes(
-                    job.job.status
-                  );
-                  return (
-                    <button
-                      key={job.job.id}
-                      type="button"
-                      className="rounded-[20px] border border-white/8 bg-white/[0.04] px-4 py-3 text-left transition hover:bg-white/[0.07]"
-                      onClick={() => openIngestModal(job.job.id)}
-                    >
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="min-w-0">
-                          <div className="text-[11px] uppercase tracking-[0.16em] text-white/42">
-                            Wiki ingest
-                          </div>
-                          <div className="mt-2 truncate text-[14px] font-semibold text-white">
-                            {job.job.titleHint ||
-                              job.job.latestMessage ||
-                              "Background ingest"}
-                          </div>
-                          <div className="mt-1 text-[12px] leading-5 text-white/54">
-                            {job.job.status} · {job.job.progressPercent}% ·{" "}
-                            {job.job.createdPageCount} pages ·{" "}
-                            {job.job.createdEntityCount} entities
-                          </div>
-                        </div>
-                        {jobActive ? (
-                          <LoaderCircle className="mt-0.5 size-4 shrink-0 animate-spin text-[var(--secondary)]" />
-                        ) : (
-                          <Badge size="sm" tone="meta">
-                            {job.job.phase}
-                          </Badge>
-                        )}
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
-            ) : null}
           </section>
 
           <section className="grid gap-4 lg:grid-cols-[15rem_minmax(0,1fr)] xl:grid-cols-[16rem_minmax(0,1fr)]">

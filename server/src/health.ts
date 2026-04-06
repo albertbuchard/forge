@@ -83,6 +83,11 @@ export const createCompanionPairingSessionSchema = z.object({
     ])
 });
 
+export const revokeAllCompanionPairingSessionsSchema = z.object({
+  userIds: z.array(z.string().trim().min(1)).default([]),
+  includeRevoked: z.boolean().default(false)
+});
+
 export const mobileHealthSyncSchema = z.object({
   sessionId: z.string().trim().min(1),
   pairingToken: z.string().trim().min(1),
@@ -700,6 +705,48 @@ function listPairingRows(userIds?: string[]) {
     .all(...params) as PairingSessionRow[];
 }
 
+function revokePairingRows(
+  rows: PairingSessionRow[],
+  activity?: ActivityContext & { reason?: string }
+) {
+  if (rows.length === 0) {
+    return [] as Array<ReturnType<typeof mapPairingSession>>;
+  }
+  const now = nowIso();
+  const reason = activity?.reason ?? "Revoked by operator";
+  const revokeStatement = getDatabase().prepare(
+    `UPDATE companion_pairing_sessions
+     SET status = 'revoked', last_sync_error = ?, updated_at = ?
+     WHERE id = ?`
+  );
+  const refetchStatement = getDatabase().prepare(
+    `SELECT * FROM companion_pairing_sessions WHERE id = ?`
+  );
+
+  for (const row of rows) {
+    revokeStatement.run(reason, now, row.id);
+    recordActivityEvent({
+      entityType: "system",
+      entityId: row.id,
+      eventType: "companion_pairing_revoked",
+      title: "Companion pairing revoked",
+      description:
+        "An operator revoked a Forge Companion pairing session and blocked further syncs for that device.",
+      actor: activity?.actor ?? null,
+      source: activity?.source ?? "ui",
+      metadata: {
+        label: row.label,
+        deviceName: row.device_name,
+        platform: row.platform
+      }
+    });
+  }
+
+  return rows.map((row) =>
+    mapPairingSession(refetchStatement.get(row.id) as PairingSessionRow)
+  );
+}
+
 function listHealthImportRunRows(userIds?: string[], limit = 12) {
   const params: Array<string | number> = [];
   const where =
@@ -735,34 +782,24 @@ export function revokeCompanionPairingSession(
   if (!current) {
     return undefined;
   }
-  const now = nowIso();
-  getDatabase()
-    .prepare(
-      `UPDATE companion_pairing_sessions
-       SET status = 'revoked', last_sync_error = ?, updated_at = ?
-       WHERE id = ?`
-    )
-    .run("Revoked by operator", now, pairingSessionId);
-  recordActivityEvent({
-    entityType: "system",
-    entityId: pairingSessionId,
-    eventType: "companion_pairing_revoked",
-    title: "Companion pairing revoked",
-    description:
-      "An operator revoked a Forge Companion pairing session and blocked further syncs for that device.",
-    actor: activity?.actor ?? null,
-    source: activity?.source ?? "ui",
-    metadata: {
-      label: current.label,
-      deviceName: current.device_name,
-      platform: current.platform
-    }
+  return revokePairingRows([current], activity)[0];
+}
+
+export function revokeAllCompanionPairingSessions(
+  input?: z.infer<typeof revokeAllCompanionPairingSessionsSchema>,
+  activity?: ActivityContext
+) {
+  const parsed = revokeAllCompanionPairingSessionsSchema.parse(input ?? {});
+  const rows = listPairingRows(parsed.userIds.length > 0 ? parsed.userIds : undefined)
+    .filter((row) => parsed.includeRevoked || row.status !== "revoked");
+  const sessions = revokePairingRows(rows, {
+    ...activity,
+    reason: "Revoked by operator (bulk)"
   });
-  return mapPairingSession(
-    getDatabase()
-      .prepare(`SELECT * FROM companion_pairing_sessions WHERE id = ?`)
-      .get(pairingSessionId) as PairingSessionRow
-  );
+  return {
+    revokedCount: sessions.length,
+    sessions
+  };
 }
 
 export function createCompanionPairingSession(
@@ -771,11 +808,36 @@ export function createCompanionPairingSession(
 ) {
   const parsed = createCompanionPairingSessionSchema.parse(input);
   const now = new Date();
+  const userId = parsed.userId ?? "user_operator";
+  const serializedCapabilities = JSON.stringify(parsed.capabilities);
   const expiresAt = new Date(
     now.getTime() + parsed.expiresInMinutes * 60_000
   ).toISOString();
   const id = `pair_${randomUUID().replaceAll("-", "").slice(0, 12)}`;
   const pairingToken = randomUUID().replaceAll("-", "");
+  const stalePendingRows = getDatabase()
+    .prepare(
+      `SELECT *
+       FROM companion_pairing_sessions
+       WHERE user_id = ?
+         AND label = ?
+         AND api_base_url = ?
+         AND capability_flags_json = ?
+         AND status = 'pending'`
+    )
+    .all(
+      userId,
+      parsed.label,
+      baseApiUrl,
+      serializedCapabilities
+    ) as PairingSessionRow[];
+  if (stalePendingRows.length > 0) {
+    revokePairingRows(stalePendingRows, {
+      actor: null,
+      source: "system",
+      reason: "Superseded by a newer pairing QR"
+    });
+  }
   getDatabase()
     .prepare(
       `INSERT INTO companion_pairing_sessions (
@@ -786,10 +848,10 @@ export function createCompanionPairingSession(
     )
     .run(
       id,
-      parsed.userId ?? "user_operator",
+      userId,
       parsed.label,
       pairingToken,
-      JSON.stringify(parsed.capabilities),
+      serializedCapabilities,
       baseApiUrl,
       expiresAt,
       now.toISOString(),
@@ -845,6 +907,32 @@ export function verifyCompanionPairing(
       now,
       pairing.id
     );
+
+  if (parsed.device.name.trim().length > 0) {
+    const duplicateRows = getDatabase()
+      .prepare(
+        `SELECT *
+         FROM companion_pairing_sessions
+         WHERE user_id = ?
+           AND id != ?
+           AND status != 'revoked'
+           AND COALESCE(device_name, '') = ?
+           AND COALESCE(platform, '') = ?`
+      )
+      .all(
+        pairing.user_id,
+        pairing.id,
+        parsed.device.name,
+        parsed.device.platform
+      ) as PairingSessionRow[];
+    if (duplicateRows.length > 0) {
+      revokePairingRows(duplicateRows, {
+        actor: null,
+        source: "system",
+        reason: "Superseded by a newer verified device pairing"
+      });
+    }
+  }
 
   return {
     pairingSession: mapPairingSession(

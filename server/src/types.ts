@@ -118,6 +118,19 @@ export const activitySourceSchema = z.enum([
   "agent",
   "system"
 ]);
+export const diagnosticLogLevelSchema = z.enum([
+  "debug",
+  "info",
+  "warning",
+  "error"
+]);
+export const diagnosticLogSourceSchema = z.enum([
+  "ui",
+  "openclaw",
+  "agent",
+  "system",
+  "server"
+]);
 export const agentTrustLevelSchema = z.enum([
   "standard",
   "trusted",
@@ -1349,6 +1362,23 @@ export const eventLogEntrySchema = z.object({
   createdAt: z.string()
 });
 
+export const diagnosticLogEntrySchema = z.object({
+  id: z.string(),
+  level: diagnosticLogLevelSchema,
+  source: diagnosticLogSourceSchema,
+  scope: z.string(),
+  eventKey: z.string(),
+  message: z.string(),
+  route: z.string().nullable(),
+  functionName: z.string().nullable(),
+  requestId: z.string().nullable(),
+  entityType: z.string().nullable(),
+  entityId: z.string().nullable(),
+  jobId: z.string().nullable(),
+  details: z.record(z.string(), z.unknown()),
+  createdAt: z.string()
+});
+
 export const insightEvidenceSchema = z.object({
   entityType: z.string(),
   entityId: z.string(),
@@ -2467,6 +2497,33 @@ export const eventsListQuerySchema = z.object({
   limit: z.coerce.number().int().positive().max(200).optional()
 });
 
+export const diagnosticLogListQuerySchema = z.object({
+  level: diagnosticLogLevelSchema.optional(),
+  source: diagnosticLogSourceSchema.optional(),
+  scope: nonEmptyTrimmedString.optional(),
+  route: nonEmptyTrimmedString.optional(),
+  entityType: nonEmptyTrimmedString.optional(),
+  entityId: nonEmptyTrimmedString.optional(),
+  jobId: nonEmptyTrimmedString.optional(),
+  search: nonEmptyTrimmedString.optional(),
+  limit: z.coerce.number().int().positive().max(500).optional()
+});
+
+export const createDiagnosticLogSchema = z.object({
+  level: diagnosticLogLevelSchema.default("info"),
+  source: diagnosticLogSourceSchema.optional(),
+  scope: nonEmptyTrimmedString,
+  eventKey: trimmedString.default(""),
+  message: nonEmptyTrimmedString,
+  route: trimmedString.nullable().optional(),
+  functionName: trimmedString.nullable().optional(),
+  requestId: trimmedString.nullable().optional(),
+  entityType: trimmedString.nullable().optional(),
+  entityId: trimmedString.nullable().optional(),
+  jobId: trimmedString.nullable().optional(),
+  details: z.record(z.string(), z.unknown()).default({})
+});
+
 export const rewardsLedgerQuerySchema = z.object({
   entityType: nonEmptyTrimmedString.optional(),
   entityId: nonEmptyTrimmedString.optional(),
@@ -2952,6 +3009,9 @@ export type AgentTrustLevel = z.infer<typeof agentTrustLevelSchema>;
 export type AutonomyMode = z.infer<typeof autonomyModeSchema>;
 export type ApprovalMode = z.infer<typeof approvalModeSchema>;
 export type EventLogEntry = z.infer<typeof eventLogEntrySchema>;
+export type DiagnosticLogLevel = z.infer<typeof diagnosticLogLevelSchema>;
+export type DiagnosticLogSource = z.infer<typeof diagnosticLogSourceSchema>;
+export type DiagnosticLogEntry = z.infer<typeof diagnosticLogEntrySchema>;
 export type InsightEvidence = z.infer<typeof insightEvidenceSchema>;
 export type Insight = z.infer<typeof insightSchema>;
 export type InsightFeedback = z.infer<typeof insightFeedbackSchema>;
@@ -2981,6 +3041,7 @@ export type TaskTimeSummary = z.infer<typeof taskTimeSummarySchema>;
 export type TaskDueFilter = z.infer<typeof taskDueFilterSchema>;
 export type ActivityListQuery = z.infer<typeof activityListQuerySchema>;
 export type EventsListQuery = z.infer<typeof eventsListQuerySchema>;
+export type DiagnosticLogListQuery = z.infer<typeof diagnosticLogListQuerySchema>;
 export type ProjectListQuery = z.infer<typeof projectListQuerySchema>;
 export type Strategy = z.infer<typeof strategySchema>;
 export type StrategyGraph = z.infer<typeof strategyGraphSchema>;
@@ -3014,6 +3075,7 @@ export type UpdateCalendarConnectionInput = z.infer<
 export type UpdateWorkBlockTemplateInput = z.infer<
   typeof updateWorkBlockTemplateSchema
 >;
+export type CreateDiagnosticLogInput = z.infer<typeof createDiagnosticLogSchema>;
 export type UpdateTaskTimeboxInput = z.infer<typeof updateTaskTimeboxSchema>;
 export type UpdateCalendarEventInput = z.infer<
   typeof updateCalendarEventSchema
