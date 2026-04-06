@@ -36,6 +36,7 @@ import {
   getWikiTree,
   searchWiki
 } from "@/lib/api";
+import { ForgeApiError } from "@/lib/api-error";
 import { getEntityRoute } from "@/lib/note-helpers";
 import { resolveForgePath } from "@/lib/runtime-paths";
 import type { WikiSpace, WikiTreeNode } from "@/lib/types";
@@ -50,6 +51,14 @@ function formatUpdatedAt(value: string) {
     day: "numeric",
     year: "numeric"
   }).format(new Date(value));
+}
+
+function slugifyLinkedTitle(value: string) {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
 }
 
 function WikiIndexTree({
@@ -290,6 +299,29 @@ export function WikiPage() {
       (space) => space.id === activeSpaceId
     ) ?? null;
   const canDeletePage = selectedPage?.slug !== "index";
+  const missingLinkedTitle =
+    slug &&
+    pageQuery.error instanceof ForgeApiError &&
+    pageQuery.error.status === 404
+      ? slug.trim()
+      : null;
+
+  useEffect(() => {
+    if (!activeSpaceId || !missingLinkedTitle) {
+      return;
+    }
+
+    const nextSearch = new URLSearchParams();
+    nextSearch.set("spaceId", activeSpaceId);
+    nextSearch.set("title", missingLinkedTitle);
+    const suggestedSlug = slugifyLinkedTitle(missingLinkedTitle);
+    if (suggestedSlug) {
+      nextSearch.set("slug", suggestedSlug);
+    }
+    navigate(`/wiki/new?${nextSearch.toString()}`, {
+      replace: true
+    });
+  }, [activeSpaceId, missingLinkedTitle, navigate]);
 
   const linkedEntityItems = useMemo(
     () =>
@@ -416,6 +448,7 @@ export function WikiPage() {
 
   if (
     !selectedPage &&
+    !missingLinkedTitle &&
     (settingsQuery.isError ||
       homeQuery.isError ||
       pageQuery.isError ||
@@ -441,6 +474,15 @@ export function WikiPage() {
   }
 
   if (!selectedPage) {
+    if (missingLinkedTitle) {
+      return (
+        <LoadingState
+          eyebrow="Wiki"
+          title="Opening a new page"
+          description={`Creating a draft for ${missingLinkedTitle}.`}
+        />
+      );
+    }
     return (
       <EmptyState
         eyebrow="Wiki"

@@ -151,6 +151,16 @@ function createBlankDraft(): WikiPageDraft {
   };
 }
 
+function createDraftFromLinkedTitle(title: string, slug?: string): WikiPageDraft {
+  const normalizedTitle = title.trim() || "Untitled";
+  return {
+    ...createBlankDraft(),
+    title: normalizedTitle,
+    slug: slug?.trim() || slugifyTitle(normalizedTitle),
+    contentMarkdown: `# ${normalizedTitle}\n\n`
+  };
+}
+
 function toDraft(page: Note): WikiPageDraft {
   return {
     pageId: page.id,
@@ -300,8 +310,11 @@ export function WikiEditorPage() {
   const [wikiLinkQuery, setWikiLinkQuery] = useState("");
   const [forgeLinkQuery, setForgeLinkQuery] = useState("");
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const prefillAppliedRef = useRef(false);
   const seededPage =
     (location.state as { initialPage?: Note } | null)?.initialPage ?? null;
+  const linkedTitlePrefill = searchParams.get("title")?.trim() ?? "";
+  const linkedSlugPrefill = searchParams.get("slug")?.trim() ?? "";
 
   const settingsQuery = useQuery({
     queryKey: ["forge-wiki-settings"],
@@ -340,6 +353,20 @@ export function WikiEditorPage() {
       setDraft(toDraft(seededPage));
     }
   }, [pageId, seededPage]);
+
+  useEffect(() => {
+    if (
+      pageId ||
+      seededPage ||
+      prefillAppliedRef.current ||
+      !linkedTitlePrefill
+    ) {
+      return;
+    }
+
+    prefillAppliedRef.current = true;
+    setDraft(createDraftFromLinkedTitle(linkedTitlePrefill, linkedSlugPrefill));
+  }, [linkedSlugPrefill, linkedTitlePrefill, pageId, seededPage]);
 
   useEffect(() => {
     if (!pageQuery.data?.page) {
