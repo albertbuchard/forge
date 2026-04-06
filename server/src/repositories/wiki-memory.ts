@@ -38,6 +38,7 @@ import {
   readEncryptedSecret,
   storeEncryptedSecret
 } from "./calendar.js";
+import { isEntityDeleted } from "./deleted-entities.js";
 import { recordDiagnosticLog } from "./diagnostic-logs.js";
 import type { SecretsManager } from "../managers/platform/secrets-manager.js";
 import type { LlmManager } from "../managers/platform/llm-manager.js";
@@ -713,6 +714,26 @@ function getNoteBySlugRaw(
     .get(
       ...(exceptNoteId ? [spaceId, slug, exceptNoteId] : [spaceId, slug])
     ) as NoteRow | undefined;
+  return row;
+}
+
+function getActiveNoteByIdRaw(noteId: string) {
+  const row = getNoteByIdRaw(noteId);
+  if (!row || isEntityDeleted("note", row.id)) {
+    return null;
+  }
+  return row;
+}
+
+function getActiveNoteBySlugRaw(
+  spaceId: string,
+  slug: string,
+  exceptNoteId?: string
+) {
+  const row = getNoteBySlugRaw(spaceId, slug, exceptNoteId);
+  if (!row || isEntityDeleted("note", row.id)) {
+    return null;
+  }
   return row;
 }
 
@@ -1997,7 +2018,9 @@ function listAllNotes() {
     current.push(link);
     linksByNoteId.set(link.note_id, current);
   }
-  return rows.map((row) => mapNoteRow(row, linksByNoteId.get(row.id) ?? []));
+  return rows
+    .filter((row) => !isEntityDeleted("note", row.id))
+    .map((row) => mapNoteRow(row, linksByNoteId.get(row.id) ?? []));
 }
 
 export function listWikiSpaces() {
@@ -2091,7 +2114,7 @@ export function listWikiPageTree(query: { spaceId?: string; kind?: NoteKind }) {
 export function getWikiHomePageDetail(input: { spaceId?: string } = {}) {
   const spaceId = resolveSpaceId(input.spaceId, null);
   ensureWikiSpaceSeedPages(spaceId);
-  const home = getNoteBySlugRaw(spaceId, "index");
+  const home = getActiveNoteBySlugRaw(spaceId, "index");
   if (!home) {
     return null;
   }
@@ -2104,7 +2127,7 @@ export function getWikiPageDetailBySlug(input: {
 }) {
   const spaceId = resolveSpaceId(input.spaceId, null);
   ensureWikiSpaceSeedPages(spaceId);
-  const row = getNoteBySlugRaw(spaceId, input.slug.trim());
+  const row = getActiveNoteBySlugRaw(spaceId, input.slug.trim());
   if (!row) {
     return null;
   }
@@ -2112,7 +2135,7 @@ export function getWikiPageDetailBySlug(input: {
 }
 
 export function getWikiPageDetail(noteId: string) {
-  const row = getNoteByIdRaw(noteId);
+  const row = getActiveNoteByIdRaw(noteId);
   if (!row) {
     return null;
   }
@@ -4602,6 +4625,9 @@ export async function reviewWikiIngestJob(
       (entry) => entry.id === decision.candidateId
     );
     if (!candidate) {
+      continue;
+    }
+    if (candidate.status === "applied") {
       continue;
     }
     const action =

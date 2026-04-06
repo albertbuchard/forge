@@ -49,7 +49,7 @@ The repo dev server commonly serves the UI at `http://127.0.0.1:3027/forge/` and
 
 - goals, projects, tasks, habits, and live task runs
 - strategies with directed graph planning
-- a file-first wiki with spaces, backlinks, search, and background ingest
+- a file-first wiki with spaces, backlinks, search, background ingest, page deletion, and idempotent ingest review publishing
 - preferences with pairwise comparison, direct signals, and concept libraries
 - Psyche records such as beliefs, values, patterns, modes, and trigger reports
 - sleep and sports records linked back to Forge entities
@@ -88,6 +88,7 @@ npm run dev
 npx tsc --noEmit
 npm run test
 node --import tsx --test --test-concurrency=1 server/src/*.test.ts
+node --import tsx scripts/dedupe-wiki-pages.ts --apply
 ```
 
 Forge is served under `/forge/`, so local and shared dev setups should preserve that base path.

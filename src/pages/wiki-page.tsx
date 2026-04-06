@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import * as Dialog from "@radix-ui/react-dialog";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Check,
   ChevronDown,
@@ -9,6 +9,7 @@ import {
   Plus,
   Search,
   Sparkles,
+  Trash2,
   X
 } from "lucide-react";
 import {
@@ -28,6 +29,7 @@ import {
 } from "@/components/ui/page-state";
 import { Input } from "@/components/ui/input";
 import {
+  deleteWikiPage,
   getWikiHome,
   getWikiPageBySlug,
   getWikiSettings,
@@ -179,6 +181,7 @@ function WikiSpacePickerDialog({
 
 export function WikiPage() {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const { slug } = useParams<{ slug?: string }>();
   const [searchParams, setSearchParams] = useSearchParams();
   const [searchOpen, setSearchOpen] = useState(false);
@@ -286,6 +289,7 @@ export function WikiPage() {
     settingsQuery.data?.settings.spaces.find(
       (space) => space.id === activeSpaceId
     ) ?? null;
+  const canDeletePage = selectedPage?.slug !== "index";
 
   const linkedEntityItems = useMemo(
     () =>
@@ -296,6 +300,23 @@ export function WikiPage() {
       })),
     [selectedPage?.links]
   );
+
+  const deletePageMutation = useMutation({
+    mutationFn: async (pageId: string) => deleteWikiPage(pageId),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["forge-wiki-tree"] }),
+        queryClient.invalidateQueries({ queryKey: ["forge-wiki-home"] }),
+        queryClient.invalidateQueries({
+          queryKey: ["forge-wiki-page-by-slug"]
+        }),
+        queryClient.invalidateQueries({ queryKey: ["forge-wiki-modal-search"] })
+      ]);
+      navigate(
+        `/wiki${activeSpaceId ? `?spaceId=${encodeURIComponent(activeSpaceId)}` : ""}`
+      );
+    }
+  });
 
   const updateModalParams = (
     updater: (params: URLSearchParams) => void,
@@ -339,6 +360,19 @@ export function WikiPage() {
         next.set("spaceId", activeSpaceId);
       }
     });
+  };
+
+  const handleDeletePage = () => {
+    if (!selectedPage || !canDeletePage || deletePageMutation.isPending) {
+      return;
+    }
+    const confirmed = window.confirm(
+      `Delete wiki page "${selectedPage.title}"? You can restore it later from the bin.`
+    );
+    if (!confirmed) {
+      return;
+    }
+    void deletePageMutation.mutateAsync(selectedPage.id);
   };
 
   useEffect(() => {
@@ -526,6 +560,26 @@ export function WikiPage() {
                   Edit
                 </Button>
                 <Button
+                  variant="secondary"
+                  size="sm"
+                  className={cn(
+                    "min-h-[2.9rem] border border-rose-400/18 bg-rose-500/10 text-rose-100 hover:bg-rose-500/18",
+                    !canDeletePage && "opacity-60"
+                  )}
+                  onClick={handleDeletePage}
+                  pending={deletePageMutation.isPending}
+                  pendingLabel="Deleting"
+                  disabled={!canDeletePage}
+                  title={
+                    canDeletePage
+                      ? "Delete this wiki page"
+                      : "The wiki home page cannot be deleted"
+                  }
+                >
+                  <Trash2 className="size-3.5" />
+                  Delete
+                </Button>
+                <Button
                   size="sm"
                   className="min-h-[2.9rem]"
                   onClick={() =>
@@ -564,6 +618,13 @@ export function WikiPage() {
                 <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-[linear-gradient(90deg,transparent,rgba(192,193,255,0.8),transparent)] opacity-90" />
               ) : null}
               <div className="wiki-reading-copy wiki-reading-flow mx-auto max-w-[76rem]">
+                {deletePageMutation.isError ? (
+                  <div className="mb-4 rounded-[18px] border border-rose-400/20 bg-rose-500/10 px-4 py-3 text-sm text-rose-100">
+                    {deletePageMutation.error instanceof Error
+                      ? deletePageMutation.error.message
+                      : "Forge could not delete this wiki page."}
+                  </div>
+                ) : null}
                 <WikiArticleMarkdown
                   markdown={selectedPage.contentMarkdown}
                   spaceId={activeSpaceId}

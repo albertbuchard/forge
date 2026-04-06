@@ -1181,6 +1181,17 @@ export function patchWikiPage(
   });
 }
 
+export function deleteWikiPage(pageId: string, mode: DeleteMode = "soft") {
+  const search = new URLSearchParams();
+  search.set("mode", mode);
+  return request<{ deleted: { id: string } }>(
+    `/api/v1/wiki/pages/${pageId}?${search.toString()}`,
+    {
+      method: "DELETE"
+    }
+  );
+}
+
 export function searchWiki(input: {
   spaceId?: string;
   kind?: Note["kind"];

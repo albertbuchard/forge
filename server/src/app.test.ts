@@ -4834,7 +4834,9 @@ test("wiki pages are file-backed, searchable, backlink-aware, and ingestable", a
       }
     });
     assert.equal(home.statusCode, 200);
-    const homeBody = home.json() as { page: { slug: string; title: string } };
+    const homeBody = home.json() as {
+      page: { id: string; slug: string; title: string };
+    };
     assert.equal(homeBody.page.slug, "index");
     assert.equal(homeBody.page.title, "Home");
 
@@ -4986,6 +4988,54 @@ test("wiki pages are file-backed, searchable, backlink-aware, and ingestable", a
     };
     assert.equal(compatibilityBody.notes.length, 1);
     assert.equal(compatibilityBody.notes[0]?.id, releaseBody.page.id);
+
+    const blockHomeDelete = await app.inject({
+      method: "DELETE",
+      url: `/api/v1/wiki/pages/${homeBody.page.id}`,
+      headers: {
+        cookie: operatorCookie
+      }
+    });
+    assert.equal(blockHomeDelete.statusCode, 400);
+
+    const deleteReleasePlaybook = await app.inject({
+      method: "DELETE",
+      url: `/api/v1/wiki/pages/${releaseBody.page.id}`,
+      headers: {
+        cookie: operatorCookie
+      }
+    });
+    assert.equal(deleteReleasePlaybook.statusCode, 200);
+    const deleteReleaseBody = deleteReleasePlaybook.json() as {
+      deleted: { id: string };
+    };
+    assert.equal(deleteReleaseBody.deleted.id, releaseBody.page.id);
+
+    const deletedPageLookup = await app.inject({
+      method: "GET",
+      url: `/api/v1/wiki/pages/${releaseBody.page.id}`,
+      headers: {
+        cookie: operatorCookie
+      }
+    });
+    assert.equal(deletedPageLookup.statusCode, 404);
+
+    const treeAfterDelete = await app.inject({
+      method: "GET",
+      url: "/api/v1/wiki/tree",
+      headers: {
+        cookie: operatorCookie
+      }
+    });
+    assert.equal(treeAfterDelete.statusCode, 200);
+    const treeAfterDeleteBody = treeAfterDelete.json() as {
+      tree: Array<{
+        page: { slug: string };
+        children: Array<{ page: { slug: string } }>;
+      }>;
+    };
+    const rootSlugs = treeAfterDeleteBody.tree.map((entry) => entry.page.slug);
+    assert.ok(!rootSlugs.includes("release-playbook"));
 
     const ingest = await app.inject({
       method: "POST",
@@ -5626,6 +5676,41 @@ test("wiki ingest review can merge a page candidate into an existing wiki page",
         .get() as { count: number }
     ).count;
     assert.equal(noteCountAfterReview, noteCountBeforeReview);
+
+    const repeatReview = await app.inject({
+      method: "POST",
+      url: `/api/v1/wiki/ingest-jobs/${jobId}/review`,
+      headers: {
+        cookie: operatorCookie
+      },
+      payload: {
+        decisions: [
+          {
+            candidateId: pageCandidate?.id,
+            action: "merge_existing",
+            targetNoteId: existingPageId
+          }
+        ]
+      }
+    });
+    assert.equal(repeatReview.statusCode, 200);
+    const repeatReviewBody = repeatReview.json() as {
+      job: {
+        job: {
+          acceptedCount: number;
+          rejectedCount: number;
+        };
+      };
+    };
+    assert.equal(repeatReviewBody.job.job.acceptedCount, 0);
+    assert.equal(repeatReviewBody.job.job.rejectedCount, 0);
+
+    const noteCountAfterRepeatReview = (
+      getDatabase()
+        .prepare(`SELECT COUNT(*) as count FROM notes`)
+        .get() as { count: number }
+    ).count;
+    assert.equal(noteCountAfterRepeatReview, noteCountBeforeReview);
 
     const mergedPage = getDatabase()
       .prepare(`SELECT content_markdown FROM notes WHERE id = ?`)

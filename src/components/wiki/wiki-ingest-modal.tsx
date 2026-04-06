@@ -827,16 +827,17 @@ export function WikiIngestModal({
     if (!job) {
       return;
     }
-    setDecisions(
-      Object.fromEntries(
-        job.candidates.map((candidate) => [
-          candidate.id,
-          candidate.status === "rejected"
+    setDecisions((current) => {
+      const next: Record<string, IngestDecisionDraft> = {};
+      for (const candidate of job.candidates) {
+        next[candidate.id] =
+          current[candidate.id] ??
+          (candidate.status === "rejected"
             ? { action: "discard" }
-            : { action: "keep" }
-        ])
-      )
-    );
+            : { action: "keep" });
+      }
+      return next;
+    });
   }, [jobQuery.data]);
 
   useEffect(() => {
@@ -1007,6 +1008,10 @@ export function WikiIngestModal({
     },
     onSuccess: async (result) => {
       setReviewError(null);
+      queryClient.setQueryData(
+        ["forge-wiki-ingest-job", result.job.job.id],
+        result.job
+      );
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["forge-wiki-ingest-jobs"] }),
         queryClient.invalidateQueries({
@@ -1094,7 +1099,7 @@ export function WikiIngestModal({
   const reviewableCandidates = useMemo(
     () =>
       activeJob?.candidates.filter((candidate) =>
-        ["suggested", "accepted", "rejected"].includes(candidate.status)
+        ["suggested", "rejected", "failed"].includes(candidate.status)
       ) ?? [],
     [activeJob]
   );
