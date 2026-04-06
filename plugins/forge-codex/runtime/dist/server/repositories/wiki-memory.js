@@ -737,6 +737,7 @@ function getNoteStoragePath(note, space) {
 }
 function buildNoteFrontmatter(note) {
     return {
+        ...note.frontmatter,
         id: note.id,
         kind: note.kind,
         title: note.title,

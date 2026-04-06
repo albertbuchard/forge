@@ -42,13 +42,15 @@ function buildOptions(tags: string[]): EntityLinkOption[] {
 export function NoteTagsInput({
   value,
   onChange,
+  availableTags = [],
   placeholder = "Add a memory tag or create a custom tag"
 }: {
   value: string[];
   onChange: (value: string[]) => void;
+  availableTags?: string[];
   placeholder?: string;
 }) {
-  const options = buildOptions(value);
+  const options = buildOptions([...availableTags, ...value]);
 
   return (
     <EntityLinkMultiSelect

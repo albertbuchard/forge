@@ -105,6 +105,7 @@ import type {
   ModeProfile,
   ModeProfileInput,
   PsycheOverviewPayload,
+  PsycheObservationCalendarPayload,
   PsycheValue,
   PsycheValueInput,
   SchemaCatalogEntry,
@@ -986,6 +987,8 @@ export function createNote(input: {
   author?: string | null;
   tags?: string[];
   destroyAt?: string | null;
+  frontmatter?: Record<string, unknown>;
+  userId?: string | null;
   links: Array<{
     entityType: CrudEntityType;
     entityId: string;
@@ -1005,6 +1008,8 @@ export function patchNote(
     author?: string | null;
     tags?: string[];
     destroyAt?: string | null;
+    frontmatter?: Record<string, unknown>;
+    userId?: string | null;
     links?: Array<{
       entityType: CrudEntityType;
       entityId: string;
@@ -1570,6 +1575,27 @@ export function getCalendarOverview(
     ...response,
     calendar: normalizeCalendarOverviewPayload(response.calendar)
   }));
+}
+
+export function getPsycheObservationCalendar(
+  input: {
+    from?: string;
+    to?: string;
+    userIds?: string[] | unknown;
+  } = {}
+) {
+  const search = new URLSearchParams();
+  if (input.from) {
+    search.set("from", input.from);
+  }
+  if (input.to) {
+    search.set("to", input.to);
+  }
+  appendUserIds(search, coerceUserIds(input.userIds));
+  const suffix = search.size > 0 ? `?${search.toString()}` : "";
+  return request<{ calendar: PsycheObservationCalendarPayload }>(
+    `/api/v1/psyche/self-observation/calendar${suffix}`
+  );
 }
 
 export function listCalendarConnections() {

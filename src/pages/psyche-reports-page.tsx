@@ -107,6 +107,19 @@ const DEFAULT_REPORT_DRAFT: ReportDraft = {
   userId: null
 };
 
+function formatDateTimeLocal(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return "";
+  }
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  const hours = String(date.getHours()).padStart(2, "0");
+  const minutes = String(date.getMinutes()).padStart(2, "0");
+  return `${year}-${month}-${day}T${hours}:${minutes}`;
+}
+
 export function PsycheReportsPage() {
   const shell = useForgeShell();
   const queryClient = useQueryClient();
@@ -139,7 +152,10 @@ export function PsycheReportsPage() {
       setDialogOpen(true);
       setDraft({
         ...DEFAULT_REPORT_DRAFT,
-        userId: defaultUserId,
+        userId: searchParams.get("userId") ?? defaultUserId,
+        occurredAt: searchParams.get("occurredAt")
+          ? formatDateTimeLocal(searchParams.get("occurredAt")!)
+          : "",
         customEventType:
           searchParams.get("intent") === "execution_tension"
             ? "Execution tension"
@@ -162,6 +178,8 @@ export function PsycheReportsPage() {
       const next = new URLSearchParams(searchParams);
       next.delete("create");
       next.delete("intent");
+      next.delete("occurredAt");
+      next.delete("userId");
       next.delete("valueId");
       next.delete("behaviorId");
       next.delete("beliefId");

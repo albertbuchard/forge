@@ -18,6 +18,7 @@ import {
 import { useNavigate } from "react-router-dom";
 import { CalendarEventFlowDialog } from "@/components/calendar/calendar-event-flow-dialog";
 import { CalendarQuickRenameDialog } from "@/components/calendar/calendar-quick-rename-dialog";
+import { CalendarWeekToolbar } from "@/components/calendar/calendar-week-toolbar";
 import { TaskSchedulingDialog } from "@/components/calendar/task-scheduling-dialog";
 import { TimeboxPlanningDialog } from "@/components/calendar/timebox-planning-dialog";
 import { WorkBlockFlowDialog } from "@/components/calendar/work-block-flow-dialog";
@@ -50,7 +51,7 @@ import {
   getFallbackCalendarColor,
   readCalendarDisplayPreferences
 } from "@/lib/calendar-display-preferences";
-import { addDays, formatWeekday, startOfWeek } from "@/lib/calendar-ui";
+import { addDays, buildWeekDays, formatWeekday, startOfWeek } from "@/lib/calendar-ui";
 import type { EntityKind } from "@/lib/entity-visuals";
 import type { CalendarEvent, CalendarEventLink, TaskTimebox, WorkBlockKind, WorkBlockTemplate } from "@/lib/types";
 import {
@@ -631,7 +632,7 @@ export function CalendarPage() {
   });
   const calendarData = calendarQuery.data?.calendar;
   const days = useMemo(
-    () => Array.from({ length: 7 }, (_, index) => addDays(weekStart, index)),
+    () => buildWeekDays(weekStart),
     [weekStart]
   );
   const overview = useMemo(
@@ -948,15 +949,13 @@ export function CalendarPage() {
       />
 
       <Card className="grid gap-4 rounded-[32px] border border-white/8 bg-[linear-gradient(180deg,rgba(17,28,39,0.985),rgba(10,17,29,0.985))]">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <div className="text-[11px] uppercase tracking-[0.18em] text-white/45">Week view</div>
-            <p className="mt-2 max-w-3xl text-sm leading-6 text-white/60">
-              The calendar is the priority surface here. Connected provider events, recurring work blocks, and owned task timeboxes all stay visible together.
-            </p>
-            {eventSyncStatus ? (
+        <CalendarWeekToolbar
+          description="The calendar is the priority surface here. Connected provider events, recurring work blocks, and owned task timeboxes all stay visible together."
+          weekStart={weekStart}
+          status={
+            eventSyncStatus ? (
               <div
-                className={`mt-3 inline-flex max-w-full items-center gap-2 rounded-full px-3 py-1.5 text-xs ${
+                className={`inline-flex max-w-full items-center gap-2 rounded-full px-3 py-1.5 text-xs ${
                   eventSyncStatus.tone === "error"
                     ? "border border-rose-400/20 bg-rose-400/10 text-rose-200"
                     : "border border-[var(--primary)]/18 bg-[var(--primary)]/12 text-[var(--primary)]"
@@ -964,35 +963,27 @@ export function CalendarPage() {
               >
                 {eventSyncStatus.message}
               </div>
-            ) : null}
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <Badge className="bg-[var(--primary)]/14 text-[var(--primary)]">
-              <CalendarDays className="mr-1 size-3.5" />
-              Week of {formatWeekday(weekStart)}
-            </Badge>
-            {eventSyncPending ? (
-              <Badge className="bg-white/[0.08] text-white/78">
-                <RefreshCcw className="mr-1 size-3.5 animate-spin" />
-                Syncing changes
-              </Badge>
-            ) : null}
-            {clipboardEntry ? (
-              <Badge className="bg-white/[0.08] text-white/74">
-                {clipboardEntry.mode === "cut" ? "Cut" : "Copied"} · {clipboardEntry.label}
-              </Badge>
-            ) : null}
-            <Button variant="secondary" onClick={() => setWeekStart(addDays(weekStart, -7))}>
-              Previous
-            </Button>
-            <Button variant="secondary" onClick={() => setWeekStart(startOfWeek())}>
-              This week
-            </Button>
-            <Button variant="secondary" onClick={() => setWeekStart(addDays(weekStart, 7))}>
-              Next
-            </Button>
-          </div>
-        </div>
+            ) : null
+          }
+          badges={
+            <>
+              {eventSyncPending ? (
+                <Badge className="bg-white/[0.08] text-white/78">
+                  <RefreshCcw className="mr-1 size-3.5 animate-spin" />
+                  Syncing changes
+                </Badge>
+              ) : null}
+              {clipboardEntry ? (
+                <Badge className="bg-white/[0.08] text-white/74">
+                  {clipboardEntry.mode === "cut" ? "Cut" : "Copied"} · {clipboardEntry.label}
+                </Badge>
+              ) : null}
+            </>
+          }
+          onPrevious={() => setWeekStart(addDays(weekStart, -7))}
+          onCurrent={() => setWeekStart(startOfWeek())}
+          onNext={() => setWeekStart(addDays(weekStart, 7))}
+        />
 
         <div className="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(min(100%,17rem),1fr))] 2xl:[grid-template-columns:repeat(7,minmax(0,1fr))]">
           {days.map((day) => {

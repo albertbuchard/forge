@@ -68,6 +68,10 @@ vi.mock("@/pages/psyche-patterns-page", () => ({
   PsychePatternsPage: () => <div>Psyche patterns route</div>
 }));
 
+vi.mock("@/pages/psyche-self-observation-page", () => ({
+  PsycheSelfObservationPage: () => <div>Psyche self observation route</div>
+}));
+
 vi.mock("@/pages/psyche-behaviors-page", () => ({
   PsycheBehaviorsPage: () => <div>Psyche behaviors route</div>
 }));
@@ -178,6 +182,13 @@ describe("App routing", () => {
       </MemoryRouter>
     );
     expect(await screen.findByText("Psyche behaviors route")).toBeInTheDocument();
+
+    render(
+      <MemoryRouter initialEntries={["/psyche/self-observation"]}>
+        <App />
+      </MemoryRouter>
+    );
+    expect(await screen.findByText("Psyche self observation route")).toBeInTheDocument();
 
     render(
       <MemoryRouter initialEntries={["/psyche/schemas-beliefs"]}>

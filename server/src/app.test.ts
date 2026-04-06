@@ -10346,3 +10346,191 @@ test("v1 health reports degraded status when watchdog recovery fails", async () 
     await rm(rootDir, { recursive: true, force: true });
   }
 });
+
+test("notes list respects explicit userIds owner filtering", async () => {
+  const rootDir = await mkdtemp(
+    path.join(os.tmpdir(), "forge-notes-user-scope-")
+  );
+  const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
+
+  try {
+    const operatorCookie = await issueOperatorSessionCookie(app);
+
+    const humanResponse = await app.inject({
+      method: "POST",
+      url: "/api/v1/notes",
+      headers: { cookie: operatorCookie },
+      payload: {
+        contentMarkdown: "Human scoped note",
+        author: "Albert",
+        userId: "user_operator",
+        links: [{ entityType: "goal", entityId: "goal_health", anchorKey: null }]
+      }
+    });
+    assert.equal(humanResponse.statusCode, 201);
+
+    const botResponse = await app.inject({
+      method: "POST",
+      url: "/api/v1/notes",
+      headers: { cookie: operatorCookie },
+      payload: {
+        contentMarkdown: "Bot scoped note",
+        author: "Forge Bot",
+        userId: "user_forge_bot",
+        links: [{ entityType: "goal", entityId: "goal_health", anchorKey: null }]
+      }
+    });
+    assert.equal(botResponse.statusCode, 201);
+
+    const filtered = await app.inject({
+      method: "GET",
+      url: "/api/v1/notes?userIds=user_forge_bot",
+      headers: { cookie: operatorCookie }
+    });
+    assert.equal(filtered.statusCode, 200);
+    const body = filtered.json() as {
+      notes: Array<{ contentMarkdown: string; userId: string | null }>;
+    };
+    assert.equal(body.notes.length, 1);
+    assert.equal(body.notes[0]?.contentMarkdown, "Bot scoped note");
+    assert.equal(body.notes[0]?.userId, "user_forge_bot");
+  } finally {
+    await app.close();
+    closeDatabase();
+    await rm(rootDir, { recursive: true, force: true });
+  }
+});
+
+test("self observation calendar returns observed notes with linked psyche context", async () => {
+  const rootDir = await mkdtemp(
+    path.join(os.tmpdir(), "forge-self-observation-calendar-")
+  );
+  const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
+
+  try {
+    const operatorCookie = await issueOperatorSessionCookie(app);
+
+    const patternResponse = await app.inject({
+      method: "POST",
+      url: "/api/v1/psyche/patterns",
+      headers: { cookie: operatorCookie },
+      payload: {
+        title: "Withdrawal loop",
+        description: "Pulling back under perceived pressure.",
+        targetBehavior: "Withdraw",
+        cueContexts: ["silence"],
+        shortTermPayoff: "Protection",
+        longTermCost: "Distance",
+        preferredResponse: "Stay and name the fear",
+        linkedValueIds: [],
+        linkedSchemaLabels: [],
+        linkedModeIds: [],
+        linkedBeliefIds: [],
+        userId: "user_operator"
+      }
+    });
+    assert.equal(patternResponse.statusCode, 201);
+    const patternId = (
+      patternResponse.json() as { pattern: { id: string } }
+    ).pattern.id;
+
+    const reportResponse = await app.inject({
+      method: "POST",
+      url: "/api/v1/psyche/reports",
+      headers: { cookie: operatorCookie },
+      payload: {
+        title: "Meeting spiral",
+        status: "draft",
+        eventSituation: "Silence after vulnerability triggered a retreat.",
+        occurredAt: "2026-04-06T09:10:00.000Z",
+        emotions: [],
+        thoughts: [],
+        behaviors: [],
+        consequences: {
+          selfShortTerm: [],
+          selfLongTerm: [],
+          othersShortTerm: [],
+          othersLongTerm: []
+        },
+        linkedPatternIds: [],
+        linkedValueIds: [],
+        linkedGoalIds: [],
+        linkedProjectIds: [],
+        linkedTaskIds: [],
+        linkedBehaviorIds: [],
+        linkedBeliefIds: [],
+        linkedModeIds: [],
+        modeOverlays: [],
+        schemaLinks: [],
+        nextMoves: [],
+        userId: "user_operator"
+      }
+    });
+    assert.equal(reportResponse.statusCode, 201);
+    const reportId = (
+      reportResponse.json() as { report: { id: string } }
+    ).report.id;
+
+    const noteResponse = await app.inject({
+      method: "POST",
+      url: "/api/v1/notes",
+      headers: { cookie: operatorCookie },
+      payload: {
+        contentMarkdown: "Noticed the retreat impulse immediately.",
+        author: "Albert",
+        userId: "user_operator",
+        tags: ["focus"],
+        frontmatter: {
+          observedAt: "2026-04-06T09:15:00.000Z"
+        },
+        links: [
+          { entityType: "behavior_pattern", entityId: patternId, anchorKey: null },
+          { entityType: "trigger_report", entityId: reportId, anchorKey: null }
+        ]
+      }
+    });
+    assert.equal(noteResponse.statusCode, 201);
+
+    const calendarResponse = await app.inject({
+      method: "GET",
+      url:
+        "/api/v1/psyche/self-observation/calendar" +
+        "?from=2026-04-06T00:00:00.000Z&to=2026-04-07T00:00:00.000Z&userIds=user_operator",
+      headers: { cookie: operatorCookie }
+    });
+    assert.equal(calendarResponse.statusCode, 200);
+    const body = calendarResponse.json() as {
+      calendar: {
+        observations: Array<{
+          observedAt: string;
+          note: { contentMarkdown: string; userId: string | null };
+          linkedPatterns: Array<{ id: string }>;
+          linkedReports: Array<{ id: string }>;
+        }>;
+        availableTags: string[];
+      };
+    };
+    assert.equal(body.calendar.observations.length, 1);
+    assert.equal(
+      body.calendar.observations[0]?.note.contentMarkdown,
+      "Noticed the retreat impulse immediately."
+    );
+    assert.equal(
+      body.calendar.observations[0]?.observedAt,
+      "2026-04-06T09:15:00.000Z"
+    );
+    assert.equal(
+      body.calendar.observations[0]?.linkedPatterns[0]?.id,
+      patternId
+    );
+    assert.equal(
+      body.calendar.observations[0]?.linkedReports[0]?.id,
+      reportId
+    );
+    assert.deepEqual(body.calendar.availableTags, ["focus"]);
+  } finally {
+    await app.close();
+    closeDatabase();
+    await rm(rootDir, { recursive: true, force: true });
+  }
+});

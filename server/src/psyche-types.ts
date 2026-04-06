@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { userSummarySchema } from "./types.js";
+import { noteSchema, userSummarySchema } from "./types.js";
 
 const trimmedString = z.string().trim();
 const nonEmptyTrimmedString = trimmedString.min(1);
@@ -282,6 +282,22 @@ export const psycheOverviewPayloadSchema = z.object({
   committedActions: z.array(trimmedString)
 });
 
+export const psycheObservationEntrySchema = z.object({
+  id: z.string(),
+  observedAt: z.string(),
+  note: noteSchema,
+  linkedPatterns: z.array(behaviorPatternSchema),
+  linkedReports: z.array(triggerReportSchema)
+});
+
+export const psycheObservationCalendarPayloadSchema = z.object({
+  generatedAt: z.string(),
+  from: z.string(),
+  to: z.string(),
+  observations: z.array(psycheObservationEntrySchema),
+  availableTags: z.array(trimmedString)
+});
+
 export const createPsycheValueSchema = z.object({
   title: nonEmptyTrimmedString,
   description: trimmedString.default(""),
@@ -443,6 +459,10 @@ export type ModeTimelineEntry = z.infer<typeof modeTimelineEntrySchema>;
 export type ModeGuideSession = z.infer<typeof modeGuideSessionSchema>;
 export type TriggerReport = z.infer<typeof triggerReportSchema>;
 export type PsycheOverviewPayload = z.infer<typeof psycheOverviewPayloadSchema>;
+export type PsycheObservationEntry = z.infer<typeof psycheObservationEntrySchema>;
+export type PsycheObservationCalendarPayload = z.infer<
+  typeof psycheObservationCalendarPayloadSchema
+>;
 export type CreatePsycheValueInput = z.infer<typeof createPsycheValueSchema>;
 export type UpdatePsycheValueInput = z.infer<typeof updatePsycheValueSchema>;
 export type CreateBehaviorPatternInput = z.infer<typeof createBehaviorPatternSchema>;

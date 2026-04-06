@@ -73,6 +73,10 @@ export function addDays(date: Date, days: number) {
   return next;
 }
 
+export function buildWeekDays(weekStart: Date) {
+  return Array.from({ length: 7 }, (_, index) => addDays(weekStart, index));
+}
+
 export function formatWeekday(date: Date) {
   return new Intl.DateTimeFormat("en", {
     weekday: "short",
@@ -87,4 +91,8 @@ export function minutesToLabel(totalMinutes: number) {
     .padStart(2, "0");
   const minutes = String(totalMinutes % 60).padStart(2, "0");
   return `${hours}:${minutes}`;
+}
+
+export function formatHourLabel(hour: number) {
+  return `${hour.toString().padStart(2, "0")}:00`;
 }

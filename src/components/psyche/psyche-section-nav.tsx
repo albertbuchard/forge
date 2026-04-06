@@ -7,6 +7,7 @@ import {
   Orbit,
   SlidersHorizontal,
   Sparkles,
+  StickyNote,
   UnfoldVertical,
   Waves,
   Waypoints
@@ -20,6 +21,11 @@ export const PSYCHE_SECTIONS = [
   { to: "/psyche", label: "Overview", icon: BrainCircuit },
   { to: "/psyche/values", label: "Values", icon: Orbit },
   { to: "/psyche/patterns", label: "Patterns", icon: Waves },
+  {
+    to: "/psyche/self-observation",
+    label: "Self Observation",
+    icon: StickyNote
+  },
   { to: "/psyche/behaviors", label: "Behaviors", icon: GitBranchPlus },
   { to: "/psyche/reports", label: "Reports", icon: Sparkles },
   { to: "/psyche/goal-map", label: "Goal Map", icon: Waypoints },

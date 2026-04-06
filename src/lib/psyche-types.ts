@@ -254,6 +254,22 @@ export interface TriggerReportDetailPayload {
   insights: Insight[];
 }
 
+export interface PsycheObservationEntry {
+  id: string;
+  observedAt: string;
+  note: Note;
+  linkedPatterns: BehaviorPattern[];
+  linkedReports: TriggerReport[];
+}
+
+export interface PsycheObservationCalendarPayload {
+  generatedAt: string;
+  from: string;
+  to: string;
+  observations: PsycheObservationEntry[];
+  availableTags: string[];
+}
+
 export interface PsycheValueInput {
   title: string;
   description: string;

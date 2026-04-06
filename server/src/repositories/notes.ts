@@ -155,6 +155,29 @@ function noteMatchesTextTerm(note: Note, term: string): boolean {
   return note.tags.some((tag) => tag.toLowerCase().includes(normalized));
 }
 
+function filterNotesByOwnerIds(notes: Note[], userIds?: string[]) {
+  if (!userIds || userIds.length === 0) {
+    return notes;
+  }
+  const allowed = new Set(userIds);
+  return notes.filter(
+    (note) => note.userId !== null && allowed.has(note.userId)
+  );
+}
+
+export function resolveNoteObservedAt(
+  note: Pick<Note, "frontmatter" | "createdAt">
+) {
+  const observedAt =
+    typeof note.frontmatter.observedAt === "string"
+      ? note.frontmatter.observedAt.trim()
+      : "";
+  if (observedAt.length > 0 && !Number.isNaN(Date.parse(observedAt))) {
+    return new Date(observedAt).toISOString();
+  }
+  return note.createdAt;
+}
+
 function cleanupExpiredNotes() {
   const expiredRows = getDatabase()
     .prepare(
@@ -301,6 +324,21 @@ function listAllNoteRows(): NoteRow[] {
        ORDER BY created_at DESC`
     )
     .all() as NoteRow[];
+}
+
+function listActiveNotes(): Note[] {
+  const rows = listAllNoteRows();
+  const linksByNoteId = new Map<string, NoteLinkRow[]>();
+  for (const link of listLinkRowsForNotes(rows.map((row) => row.id))) {
+    const current = linksByNoteId.get(link.note_id) ?? [];
+    current.push(link);
+    linksByNoteId.set(link.note_id, current);
+  }
+
+  return filterDeletedEntities(
+    "note",
+    rows.map((row) => mapNote(row, linksByNoteId.get(row.id) ?? []))
+  );
 }
 
 function findMatchingNoteIds(query: string): Set<string> {
@@ -460,34 +498,26 @@ export function listNotes(query: NotesListQuery = {}): Note[] {
     ...(parsed.query ? [parsed.query] : []),
     ...parsed.textTerms
   ]);
-  const rows = listAllNoteRows();
-  const linksByNoteId = new Map<string, NoteLinkRow[]>();
-  for (const link of listLinkRowsForNotes(rows.map((row) => row.id))) {
-    const current = linksByNoteId.get(link.note_id) ?? [];
-    current.push(link);
-    linksByNoteId.set(link.note_id, current);
-  }
-
-  return filterDeletedEntities(
-    "note",
-    rows
-      .filter((row) =>
-        parsed.kind ? row.kind === parsed.kind : true
+  return filterNotesByOwnerIds(
+    listActiveNotes()
+      .filter((note) =>
+        parsed.kind ? note.kind === parsed.kind : true
       )
-      .filter((row) =>
-        parsed.spaceId ? row.space_id === parsed.spaceId : true
+      .filter((note) =>
+        parsed.spaceId ? note.spaceId === parsed.spaceId : true
       )
-      .filter((row) =>
-        parsed.slug ? row.slug.toLowerCase() === parsed.slug.toLowerCase() : true
+      .filter((note) =>
+        parsed.slug
+          ? note.slug.toLowerCase() === parsed.slug.toLowerCase()
+          : true
       )
-      .filter((row) =>
+      .filter((note) =>
         parsed.author
-          ? (row.author ?? "")
+          ? (note.author ?? "")
               .toLowerCase()
               .includes(parsed.author.toLowerCase())
           : true
       )
-      .map((row) => mapNote(row, linksByNoteId.get(row.id) ?? []))
       .filter((note) => {
         if (!matchingIds) {
           return true;
@@ -534,8 +564,45 @@ export function listNotes(query: NotesListQuery = {}): Note[] {
         }
         return true;
       })
-      .slice(0, parsed.limit ?? 100)
+      .slice(0, parsed.limit ?? 100),
+    parsed.userIds
   );
+}
+
+export function listNotesByObservedAtRange({
+  from,
+  to,
+  userIds,
+  limit = 400
+}: {
+  from: string;
+  to: string;
+  userIds?: string[];
+  limit?: number;
+}) {
+  cleanupExpiredNotes();
+  const fromMs = Date.parse(from);
+  const toMs = Date.parse(to);
+  if (Number.isNaN(fromMs) || Number.isNaN(toMs)) {
+    return [] as Note[];
+  }
+
+  return filterNotesByOwnerIds(listActiveNotes(), userIds)
+    .map((note) => ({
+      note,
+      observedAt: resolveNoteObservedAt(note)
+    }))
+    .filter(({ observedAt }) => {
+      const observedAtMs = Date.parse(observedAt);
+      return (
+        !Number.isNaN(observedAtMs) &&
+        observedAtMs >= fromMs &&
+        observedAtMs < toMs
+      );
+    })
+    .sort((left, right) => left.observedAt.localeCompare(right.observedAt))
+    .slice(0, limit)
+    .map(({ note }) => note);
 }
 
 export function createNote(input: CreateNoteInput, context: NoteContext): Note {

@@ -999,6 +999,7 @@ function getNoteStoragePath(note: Note, space: WikiSpace) {
 
 function buildNoteFrontmatter(note: Note) {
   return {
+    ...note.frontmatter,
     id: note.id,
     kind: note.kind,
     title: note.title,

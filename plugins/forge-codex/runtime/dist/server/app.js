@@ -32,6 +32,7 @@ import { buildGamificationOverview, buildGamificationProfile, buildXpMomentumPul
 import { getInsightsPayload } from "./services/insights.js";
 import { createEntities, deleteEntities, deleteEntity, getSettingsBinPayload, restoreEntities, searchEntities, updateEntities } from "./services/entity-crud.js";
 import { getPsycheOverview } from "./services/psyche.js";
+import { getPsycheObservationCalendar } from "./services/psyche-observation-calendar.js";
 import { getProjectBoard, getProjectSummary, listProjectSummaries } from "./services/projects.js";
 import { getWeeklyReviewPayload } from "./services/reviews.js";
 import { finalizeWeeklyReviewClosure } from "./repositories/weekly-reviews.js";
@@ -3947,6 +3948,22 @@ export async function buildServer(options = {}) {
         requirePsycheScopedAccess(request.headers, ["psyche.read"], { route: "/api/v1/psyche/overview" });
         const userIds = resolveScopedUserIds(request.query);
         return { overview: getPsycheOverview(userIds) };
+    });
+    app.get("/api/v1/psyche/self-observation/calendar", async (request) => {
+        requirePsycheScopedAccess(request.headers, ["psyche.read"], { route: "/api/v1/psyche/self-observation/calendar" });
+        const query = calendarOverviewQuerySchema.parse(request.query ?? {});
+        const now = new Date();
+        const from = query.from ??
+            new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString();
+        const to = query.to ??
+            new Date(now.getTime() + 21 * 24 * 60 * 60 * 1000).toISOString();
+        return {
+            calendar: getPsycheObservationCalendar({
+                from,
+                to,
+                userIds: query.userIds
+            })
+        };
     });
     app.get("/api/v1/psyche/values", async (request) => {
         requirePsycheScopedAccess(request.headers, ["psyche.read"], { route: "/api/v1/psyche/values" });

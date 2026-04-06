@@ -28,6 +28,7 @@ import { PsycheModesPage } from "@/pages/psyche-modes-page";
 import { PsychePatternsPage } from "@/pages/psyche-patterns-page";
 import { PsycheReportDetailPage } from "@/pages/psyche-report-detail-page";
 import { PsycheReportsPage } from "@/pages/psyche-reports-page";
+import { PsycheSelfObservationPage } from "@/pages/psyche-self-observation-page";
 import { PsycheSchemasBeliefsPage } from "@/pages/psyche-schemas-beliefs-page";
 import { PsycheValuesPage } from "@/pages/psyche-values-page";
 import { SettingsPage } from "@/pages/settings-page";
@@ -133,6 +134,7 @@ export function App() {
           <Route path="psyche" element={<PsychePage />} />
           <Route path="psyche/values" element={<PsycheValuesPage />} />
           <Route path="psyche/patterns" element={<PsychePatternsPage />} />
+          <Route path="psyche/self-observation" element={<PsycheSelfObservationPage />} />
           <Route path="psyche/behaviors" element={<PsycheBehaviorsPage />} />
           <Route path="psyche/reports" element={<PsycheReportsPage />} />
           <Route path="psyche/reports/:reportId" element={<PsycheReportDetailPage />} />
