@@ -588,6 +588,16 @@ export interface DiagnosticLogEntry {
   createdAt: string;
 }
 
+export interface DiagnosticLogCursor {
+  beforeCreatedAt: string;
+  beforeId: string;
+}
+
+export interface DiagnosticLogListPayload {
+  logs: DiagnosticLogEntry[];
+  nextCursor: DiagnosticLogCursor | null;
+}
+
 export interface TaskRun extends OwnedEntity {
   id: string;
   taskId: string;

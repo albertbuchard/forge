@@ -1,5 +1,6 @@
-import { useMemo, useState, type ReactNode } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
+import { useVirtualizer } from "@tanstack/react-virtual";
 import { Search, X } from "lucide-react";
 import { useSearchParams } from "react-router-dom";
 import { SurfaceSkeleton } from "@/components/experience/surface-skeleton";
@@ -21,6 +22,7 @@ import {
 } from "@/lib/user-ownership";
 import { cn } from "@/lib/utils";
 import type {
+  DiagnosticLogCursor,
   DiagnosticLogEntry,
   DiagnosticLogLevel,
   DiagnosticLogSource,
@@ -46,6 +48,7 @@ const SOURCES: DiagnosticLogSource[] = [
   "agent",
   "openclaw"
 ];
+const DIAGNOSTIC_LOG_PAGE_SIZE = 120;
 
 function normalize(text: string) {
   return text.trim().toLowerCase();
@@ -560,9 +563,16 @@ export function SettingsLogsPage() {
     };
   }, [searchParams]);
 
-  const logsQuery = useQuery({
+  const logsQuery = useInfiniteQuery({
     queryKey: ["forge-diagnostic-logs", "settings-filters"],
-    queryFn: () => listDiagnosticLogs({ limit: 500 })
+    initialPageParam: null as DiagnosticLogCursor | null,
+    queryFn: ({ pageParam }) =>
+      listDiagnosticLogs({
+        limit: DIAGNOSTIC_LOG_PAGE_SIZE,
+        beforeCreatedAt: pageParam?.beforeCreatedAt,
+        beforeId: pageParam?.beforeId
+      }),
+    getNextPageParam: (lastPage) => lastPage.nextCursor
   });
 
   const snapshotQuery = useQuery({
@@ -613,7 +623,7 @@ export function SettingsLogsPage() {
     setSearchParams(next, { replace: true });
   };
 
-  if (logsQuery.isLoading) {
+  if (logsQuery.isPending) {
     return (
       <SurfaceSkeleton
         eyebrow="Settings"
@@ -635,8 +645,12 @@ export function SettingsLogsPage() {
     );
   }
 
-  const rawLogs = logsQuery.data?.logs ?? [];
+  const rawLogs = useMemo(
+    () => logsQuery.data?.pages.flatMap((page) => page.logs) ?? [],
+    [logsQuery.data]
+  );
   const normalizedSearch = normalize(filters.search);
+  const scrollParentRef = useRef<HTMLDivElement | null>(null);
 
   const levelOptions = useMemo<FilterOption[]>(
     () =>
@@ -759,6 +773,41 @@ export function SettingsLogsPage() {
     [filters, normalizedSearch, rawLogs]
   );
 
+  const filterSignature = [
+    filters.search,
+    filters.levels.join("|"),
+    filters.sources.join("|"),
+    filters.scopes.join("|"),
+    filters.routes.join("|"),
+    filters.jobs.join("|"),
+    filters.entities.join("|")
+  ].join("::");
+
+  useEffect(() => {
+    scrollParentRef.current?.scrollTo({ top: 0 });
+  }, [filterSignature]);
+
+  const rowVirtualizer = useVirtualizer({
+    count: filteredLogs.length,
+    getScrollElement: () => scrollParentRef.current,
+    estimateSize: () => 260,
+    overscan: 8
+  });
+
+  const virtualRows = rowVirtualizer.getVirtualItems();
+
+  const handleLogScroll = () => {
+    const element = scrollParentRef.current;
+    if (!element || !logsQuery.hasNextPage || logsQuery.isFetchingNextPage) {
+      return;
+    }
+    const remaining =
+      element.scrollHeight - element.scrollTop - element.clientHeight;
+    if (remaining <= 800) {
+      void logsQuery.fetchNextPage();
+    }
+  };
+
   const activeFilterCount =
     filters.levels.length +
     filters.sources.length +
@@ -773,7 +822,7 @@ export function SettingsLogsPage() {
       <PageHero
         title="Logs"
         description="Inspect shared diagnostics from the UI, backend routes, background jobs, and LLM flows."
-        badge={`${filteredLogs.length} matching${filteredLogs.length !== rawLogs.length ? ` · ${rawLogs.length} loaded` : ""}`}
+        badge={`${filteredLogs.length} matching${filteredLogs.length !== rawLogs.length ? ` · ${rawLogs.length} loaded` : ""}${logsQuery.hasNextPage ? " · more available" : ""}`}
       />
 
       <SettingsSectionNav />
@@ -800,7 +849,7 @@ export function SettingsLogsPage() {
               variant="secondary"
               size="sm"
               onClick={() => void logsQuery.refetch()}
-              pending={logsQuery.isRefetching}
+              pending={logsQuery.isRefetching && !logsQuery.isFetchingNextPage}
               pendingLabel="Refreshing"
             >
               Refresh
@@ -884,58 +933,96 @@ export function SettingsLogsPage() {
             No diagnostic entries match the current filters yet.
           </Card>
         ) : (
-          filteredLogs.map((entry) => (
-            <Card key={entry.id} className="grid gap-4">
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div className="grid gap-3">
-                  <div className="flex flex-wrap items-center gap-1.5">
-                    <span
-                      className={cn(
-                        "rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em]",
-                        levelTone(entry.level)
-                      )}
+          <Card className="p-0">
+            <div
+              ref={scrollParentRef}
+              onScroll={handleLogScroll}
+              className="h-[72vh] overflow-y-auto px-3 py-3"
+            >
+              <div
+                className="relative"
+                style={{ height: `${rowVirtualizer.getTotalSize()}px` }}
+              >
+                {virtualRows.map((virtualRow) => {
+                  const entry = filteredLogs[virtualRow.index];
+                  if (!entry) {
+                    return null;
+                  }
+                  return (
+                    <div
+                      key={entry.id}
+                      data-index={virtualRow.index}
+                      ref={rowVirtualizer.measureElement}
+                      className="absolute left-0 top-0 w-full pb-3"
+                      style={{
+                        transform: `translateY(${virtualRow.start}px)`
+                      }}
                     >
-                      {entry.level}
-                    </span>
-                    <span className="rounded-full border border-white/10 bg-white/[0.04] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-white/60">
-                      {entry.source}
-                    </span>
-                    <span className="rounded-full border border-white/10 bg-white/[0.04] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-white/60">
-                      {entry.scope}
-                    </span>
-                    {entry.eventKey ? (
-                      <span className="rounded-full border border-white/10 bg-white/[0.04] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-white/46">
-                        {entry.eventKey}
-                      </span>
-                    ) : null}
-                  </div>
-                  <div className="text-base font-medium text-white">
-                    {entry.message}
-                  </div>
-                  <div className="flex flex-wrap gap-3 text-xs text-white/45">
-                    {copyableDetailRows(entry).map((row) => (
-                      <span key={row}>{row}</span>
-                    ))}
-                  </div>
-                </div>
-                <div className="shrink-0 text-right text-xs text-white/40">
-                  <div>{formatTimestamp(entry.createdAt)}</div>
-                  <div className="mt-1 font-mono text-[11px]">{entry.id}</div>
-                </div>
-              </div>
+                      <Card className="grid gap-4">
+                        <div className="flex flex-wrap items-start justify-between gap-3">
+                          <div className="grid gap-3">
+                            <div className="flex flex-wrap items-center gap-1.5">
+                              <span
+                                className={cn(
+                                  "rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em]",
+                                  levelTone(entry.level)
+                                )}
+                              >
+                                {entry.level}
+                              </span>
+                              <span className="rounded-full border border-white/10 bg-white/[0.04] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-white/60">
+                                {entry.source}
+                              </span>
+                              <span className="rounded-full border border-white/10 bg-white/[0.04] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-white/60">
+                                {entry.scope}
+                              </span>
+                              {entry.eventKey ? (
+                                <span className="rounded-full border border-white/10 bg-white/[0.04] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-white/46">
+                                  {entry.eventKey}
+                                </span>
+                              ) : null}
+                            </div>
+                            <div className="text-base font-medium text-white">
+                              {entry.message}
+                            </div>
+                            <div className="flex flex-wrap gap-3 text-xs text-white/45">
+                              {copyableDetailRows(entry).map((row) => (
+                                <span key={row}>{row}</span>
+                              ))}
+                            </div>
+                          </div>
+                          <div className="shrink-0 text-right text-xs text-white/40">
+                            <div>{formatTimestamp(entry.createdAt)}</div>
+                            <div className="mt-1 font-mono text-[11px]">
+                              {entry.id}
+                            </div>
+                          </div>
+                        </div>
 
-              {Object.keys(entry.details).length > 0 ? (
-                <details className="rounded-[18px] border border-white/8 bg-[rgba(7,11,21,0.72)] px-4 py-3">
-                  <summary className="cursor-pointer text-sm text-white/70">
-                    View structured details
-                  </summary>
-                  <pre className="mt-3 overflow-x-auto whitespace-pre-wrap text-xs leading-6 text-white/58">
-                    {JSON.stringify(entry.details, null, 2)}
-                  </pre>
-                </details>
-              ) : null}
-            </Card>
-          ))
+                        {Object.keys(entry.details).length > 0 ? (
+                          <details className="rounded-[18px] border border-white/8 bg-[rgba(7,11,21,0.72)] px-4 py-3">
+                            <summary className="cursor-pointer text-sm text-white/70">
+                              View structured details
+                            </summary>
+                            <pre className="mt-3 overflow-x-auto whitespace-pre-wrap text-xs leading-6 text-white/58">
+                              {JSON.stringify(entry.details, null, 2)}
+                            </pre>
+                          </details>
+                        ) : null}
+                      </Card>
+                    </div>
+                  );
+                })}
+              </div>
+              <div className="border-t border-white/6 px-1 py-3 text-center text-xs text-white/46">
+                {logsQuery.isFetchingNextPage
+                  ? "Loading older logs…"
+                  : logsQuery.hasNextPage
+                    ? "Scroll to load older logs."
+                    : `Showing all ${rawLogs.length} loaded logs.`}
+              </div>
+            </div>
+          </Card>
         )}
       </div>
     </div>

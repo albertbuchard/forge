@@ -36,6 +36,33 @@ For all other entity creation and update flows, use
 [`entity_conversation_playbooks.md`](./entity_conversation_playbooks.md) before you
 fall back to field-by-field intake.
 
+## Wiki model
+
+Treat the wiki as Forge's canonical long-form memory layer rather than as a loose pile
+of notes. The wiki has a stable top-level structure. The home page is `index`, and the
+default high-level branches are `people`, `projects`, `concepts`, `sources`, and
+`chronicle`. `people` holds durable person pages and relationship context. `projects`
+holds bounded workstreams and long-running initiatives. `concepts` holds reusable
+ideas, methods, frameworks, and named operating concepts. `sources` holds raw
+materials, imports, and references. `chronicle` holds timeline-style logs and ongoing
+narrative.
+
+Keep `wiki` pages and `evidence` notes distinct. A wiki page is a curated, durable
+synthesis page. An evidence note is supporting operating context, raw detail, or a
+linked record that may be useful without becoming the canonical long-form page.
+
+When Hermes is trying to find the right wiki record, use these search patterns:
+
+- For a person, search the full name first, then aliases, nicknames, role labels, or
+  paired context such as collaborator names or city.
+- For a conversation or chat, search the conversation title, participant names, and
+  any distinctive nickname used in the thread. Imports often become a normalized
+  synthesis page rather than preserving the raw upload filename.
+- For a concept, search the exact phrase first, then close variants, abbreviations,
+  and neighboring terms.
+- For one exact page, search the exact title or slug first and then open the best hit
+  instead of broad browsing.
+
 ## Preferred workflow
 
 1. Start with `forge_get_operator_overview`.
@@ -55,6 +82,17 @@ fall back to field-by-field intake.
 9. Use `forge_adjust_work_minutes` for signed minute corrections on existing tasks or projects, not to fake a live session.
 10. Use `forge_post_insight` only for agent-authored interpretation or recommendation, not as a substitute for creating a real goal, project, task, note, or Psyche record.
 11. Use `forge_get_ui_entrypoint` only when the Forge UI is genuinely the better surface for Kanban, review, graph exploration, or complex multi-record editing.
+
+For wiki-specific recall:
+
+- Use `forge_search_wiki` as the default wiki lookup tool for people, conversations,
+  concepts, and exact page recall.
+- Use `forge_list_wiki_pages` when the user wants to browse the page tree or inspect a
+  branch such as `people` or `concepts`.
+- Use `forge_get_wiki_page` after search yields a likely hit, or when the page is
+  already known.
+- Use `forge_get_wiki_health` or `forge_get_wiki_settings` for wiki maintenance,
+  ingest configuration, unresolved-link cleanup, indexing, or vault integrity work.
 
 ## Entity guidance
 

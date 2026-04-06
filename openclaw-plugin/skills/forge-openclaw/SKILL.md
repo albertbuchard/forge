@@ -24,6 +24,20 @@ Wiki rule:
 - `forge_ingest_wiki_source` now queues the ingest as background work; use the Forge UI handoff when the user wants to review or keep only selected wiki/entity candidates after the ingest finishes.
 - Keep evidence notes and wiki pages conceptually distinct: evidence notes are linked operating records, while wiki pages are the curated memory vault.
 
+Wiki navigation and search rule:
+
+- The wiki has a stable top-level structure. The home page is `index`, and the default high-level branches are `people`, `projects`, `concepts`, `sources`, and `chronicle`.
+- `people` is for durable person pages and relationship context. `projects` is for ongoing initiatives and bounded workstreams. `concepts` is for reusable ideas, methods, and frameworks. `sources` is for raw materials and imports. `chronicle` is for timeline-style logs and ongoing narrative.
+- Treat `wiki` pages as canonical synthesis and `evidence` notes as supporting records. If the user wants the durable summary, search the wiki pages first. If they want raw supporting context or operational detail, evidence notes may be the better target.
+- When the user wants a person, search the full name first, then obvious aliases, nicknames, or paired context such as collaborator names or city. Person pages often sit under the `people` branch but the reliable method is still search-first.
+- When the user wants a conversation or chat, search the conversation name, the participant names, and any distinctive nickname used in the thread. Group-chat imports often become a durable synthesis page with a normalized title rather than the raw file name.
+- When the user wants a concept, search the exact phrase first, then close variants, abbreviations, and adjacent terms. Concept pages often live under `concepts`, but search is still better than assuming the parent branch.
+- When the user wants one exact page and already knows the title or slug, search that exact title or slug first, then open the best wiki page result instead of broad browsing.
+- Use `forge_search_wiki` as the default wiki recall tool. It is the main route for people, conversations, concepts, and exact page lookup.
+- Use `forge_list_wiki_pages` when the user wants to browse structure, inspect a branch, or understand how pages are organized rather than search by phrase.
+- Use `forge_get_wiki_page` after search yields a likely hit, or when the user already identified the page to open.
+- Use `forge_get_wiki_settings` or `forge_get_wiki_health` when the task is about wiki maintenance, indexing, unresolved links, ingest setup, or vault integrity rather than content recall.
+
 Health rule:
 
 - Sleep and sports records are first-class health surfaces, not generic notes or tasks.

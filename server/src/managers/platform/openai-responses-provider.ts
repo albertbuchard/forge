@@ -27,7 +27,16 @@ const SUPPORTED_INGEST_ENTITY_TYPES = [
   "note"
 ] as const;
 
-const MAX_SOURCE_TEXT_CHARS = 120_000;
+const MODEL_CONTEXT_WINDOWS: Record<string, number> = {
+  "gpt-5.4": 1_050_000,
+  "gpt-5.4-mini": 400_000,
+  "gpt-5.4-nano": 400_000
+};
+const DEFAULT_CONTEXT_WINDOW = 400_000;
+const RESERVED_RESPONSE_TOKENS = 140_000;
+const APPROX_CHARS_PER_TOKEN = 4;
+const REQUEST_TIMEOUT_MS = 90_000;
+const BACKGROUND_POLL_INTERVAL_MS = 2_000;
 
 type JsonSchema = Record<string, unknown>;
 
@@ -216,9 +225,69 @@ function buildTextConfiguration(options: {
   return Object.keys(text).length > 0 ? text : undefined;
 }
 
+function estimateTokens(text: string) {
+  return Math.ceil(text.length / APPROX_CHARS_PER_TOKEN);
+}
+
+function computeSourceExcerpt(profile: WikiLlmProfileLike, sourceText: string) {
+  const contextWindow = MODEL_CONTEXT_WINDOWS[profile.model] ?? DEFAULT_CONTEXT_WINDOW;
+  const inputBudget = Math.max(16_000, contextWindow - RESERVED_RESPONSE_TOKENS);
+  const estimatedTokens = estimateTokens(sourceText);
+  if (estimatedTokens <= inputBudget) {
+    return {
+      sourceExcerpt: sourceText,
+      estimatedTokens,
+      contextWindow,
+      inputBudget,
+      truncated: false
+    };
+  }
+
+  const allowedChars = Math.max(
+    8_000,
+    Math.floor(inputBudget * APPROX_CHARS_PER_TOKEN)
+  );
+  return {
+    sourceExcerpt: sourceText.slice(0, allowedChars),
+    estimatedTokens,
+    contextWindow,
+    inputBudget,
+    truncated: true
+  };
+}
+
 async function readJsonPayload(response: Response) {
   const payload = (await response.json()) as Record<string, unknown>;
   return payload;
+}
+
+function readResponseStatus(payload: Record<string, unknown>) {
+  return typeof payload.status === "string" ? payload.status : null;
+}
+
+function readResponseId(payload: Record<string, unknown>) {
+  return typeof payload.id === "string" ? payload.id : null;
+}
+
+function readResponseError(payload: Record<string, unknown>) {
+  const error = payload.error;
+  if (!error || typeof error !== "object") {
+    return null;
+  }
+  const message =
+    typeof (error as { message?: unknown }).message === "string"
+      ? (error as { message: string }).message
+      : null;
+  return message;
+}
+
+function isTerminalBackgroundStatus(status: string | null) {
+  return (
+    status === "completed" ||
+    status === "failed" ||
+    status === "cancelled" ||
+    status === "incomplete"
+  );
 }
 
 function normalizeResult(
@@ -370,13 +439,10 @@ export class OpenAiResponsesProvider implements WikiLlmProvider {
     apiKey,
     profile,
     input,
+    resumeResponseId,
     logger
   }: Parameters<WikiLlmProvider["compile"]>[0]) {
     const sourceText = input.rawText.trim();
-    const sourceExcerpt =
-      sourceText.length > MAX_SOURCE_TEXT_CHARS
-        ? sourceText.slice(0, MAX_SOURCE_TEXT_CHARS)
-        : sourceText;
     const prompt = [
       "You convert user-provided source material into reviewable Forge wiki drafts.",
       "You are preparing candidates for human review. Do not publish anything directly.",
@@ -465,6 +531,28 @@ export class OpenAiResponsesProvider implements WikiLlmProvider {
     ]
       .filter(Boolean)
       .join("\n");
+    const sourcePlan = computeSourceExcerpt(profile, sourceText);
+
+    emitDiagnostic(logger, {
+      level: "info",
+      message: "Started OpenAI wiki compilation request.",
+      details: {
+        scope: "wiki_llm",
+        eventKey: "llm_compile_start",
+        provider: profile.provider,
+        baseUrl: profile.baseUrl,
+        model: profile.model,
+        mimeType: input.mimeType,
+        parseStrategy: input.parseStrategy,
+        titleHint: input.titleHint,
+        rawTextLength: input.rawText.length,
+        includesBinary: Boolean(input.binary),
+        estimatedInputTokens: sourcePlan.estimatedTokens,
+        contextWindow: sourcePlan.contextWindow,
+        inputBudget: sourcePlan.inputBudget,
+        truncated: sourcePlan.truncated
+      }
+    });
 
     const inputs: Array<Record<string, unknown>> = [
       {
@@ -481,8 +569,8 @@ export class OpenAiResponsesProvider implements WikiLlmProvider {
           `Mime type: ${input.mimeType}`,
           `Parse strategy: ${input.parseStrategy}`,
           `Source length: ${sourceText.length} characters`,
-          sourceText.length > MAX_SOURCE_TEXT_CHARS
-            ? `Source was truncated to the first ${MAX_SOURCE_TEXT_CHARS} characters before sending to the model. Focus on durable structure, not verbatim reproduction.`
+          sourcePlan.truncated
+            ? `Source was truncated to fit the model context budget (${sourcePlan.inputBudget} estimated input tokens). Focus on durable structure, not verbatim reproduction.`
             : "Source was sent in full."
         ].join("\n")
       }
@@ -491,7 +579,7 @@ export class OpenAiResponsesProvider implements WikiLlmProvider {
     if (sourceText) {
       userContent.push({
         type: "input_text",
-        text: `Source:\n${sourceExcerpt}`
+        text: `Source:\n${sourcePlan.sourceExcerpt}`
       });
     }
 
@@ -511,101 +599,287 @@ export class OpenAiResponsesProvider implements WikiLlmProvider {
       content: userContent
     });
 
-    emitDiagnostic(logger, {
-      level: "info",
-      message: "Started OpenAI wiki compilation request.",
-      details: {
-        scope: "wiki_llm",
-        eventKey: "llm_compile_start",
-        provider: profile.provider,
-        baseUrl: profile.baseUrl,
-        model: profile.model,
-        mimeType: input.mimeType,
-        parseStrategy: input.parseStrategy,
-        titleHint: input.titleHint,
-        rawTextLength: input.rawText.length,
-        includesBinary: Boolean(input.binary)
-      }
-    });
-
-    let response: Response;
-    try {
-      response = await fetch(
-        `${profile.baseUrl.replace(/\/$/, "")}/responses`,
+    let payload: Record<string, unknown>;
+    let responseId = resumeResponseId?.trim() || null;
+    if (responseId) {
+      emitDiagnostic(logger, {
+        level: "info",
+        message:
+          "Resuming OpenAI wiki compilation from an existing background response.",
+        details: {
+          scope: "wiki_llm",
+          eventKey: "llm_compile_background_resuming",
+          provider: profile.provider,
+          baseUrl: profile.baseUrl,
+          model: profile.model,
+          responseId
+        }
+      });
+      const resumeResponse = await fetch(
+        `${profile.baseUrl.replace(/\/$/, "")}/responses/${responseId}`,
         {
-          method: "POST",
+          method: "GET",
           headers: {
-            "content-type": "application/json",
             authorization: `Bearer ${apiKey}`
           },
-          body: JSON.stringify({
-            model: profile.model,
-            input: inputs,
-            reasoning: buildReasoningConfiguration(profile),
-            text: buildTextConfiguration({
-              profile,
-              format: {
-                type: "json_schema",
-                name: "forge_wiki_ingest_compilation",
-                strict: true,
-                schema: buildWikiIngestSchema()
-              }
-            })
-          })
+          signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS)
         }
       );
-    } catch (error) {
+      if (!resumeResponse.ok) {
+        const message = await resumeResponse.text();
+        throw new Error(
+          `OpenAI background wiki compilation resume failed: ${resumeResponse.status}${
+            message ? `: ${message}` : ""
+          }`
+        );
+      }
+      payload = await readJsonPayload(resumeResponse);
       emitDiagnostic(logger, {
-        level: "error",
-        message: "OpenAI wiki compilation could not reach the provider.",
+        level: "info",
+        message:
+          "Forge reattached to the existing OpenAI background wiki compilation job.",
         details: {
           scope: "wiki_llm",
-          eventKey: "llm_compile_transport_error",
+          eventKey: "llm_compile_background_started",
           provider: profile.provider,
           baseUrl: profile.baseUrl,
           model: profile.model,
-          mimeType: input.mimeType,
-          parseStrategy: input.parseStrategy,
-          rawTextLength: input.rawText.length,
-          error:
-            error instanceof Error
-              ? {
-                  name: error.name,
-                  message: error.message,
-                  stack: error.stack ?? null
+          responseId,
+          status: readResponseStatus(payload),
+          resumed: true
+        }
+      });
+    } else {
+      let createResponse: Response;
+      try {
+        createResponse = await fetch(
+          `${profile.baseUrl.replace(/\/$/, "")}/responses`,
+          {
+            method: "POST",
+            headers: {
+              "content-type": "application/json",
+              authorization: `Bearer ${apiKey}`
+            },
+            body: JSON.stringify({
+              model: profile.model,
+              input: inputs,
+              store: true,
+              background: true,
+              prompt_cache_retention:
+                profile.model === "gpt-5.4" ? "24h" : "in_memory",
+              prompt_cache_key: `forge-wiki-ingest:${profile.model}:${input.parseStrategy}:${input.mimeType}`,
+              reasoning: buildReasoningConfiguration(profile),
+              text: buildTextConfiguration({
+                profile,
+                format: {
+                  type: "json_schema",
+                  name: "forge_wiki_ingest_compilation",
+                  strict: true,
+                  schema: buildWikiIngestSchema()
                 }
-              : String(error)
-        }
-      });
-      throw error;
-    }
+              })
+            }),
+            signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS)
+          }
+        );
+      } catch (error) {
+        const finalError =
+          error instanceof Error ? error : new Error(String(error));
+        emitDiagnostic(logger, {
+          level: "error",
+          message: "OpenAI wiki compilation could not reach the provider.",
+          details: {
+            scope: "wiki_llm",
+            eventKey: "llm_compile_transport_error",
+            provider: profile.provider,
+            baseUrl: profile.baseUrl,
+            model: profile.model,
+            mimeType: input.mimeType,
+            parseStrategy: input.parseStrategy,
+            rawTextLength: input.rawText.length,
+            estimatedInputTokens: sourcePlan.estimatedTokens,
+            truncated: sourcePlan.truncated,
+            error: {
+              name: finalError.name,
+              message: finalError.message,
+              stack: finalError.stack ?? null
+            }
+          }
+        });
+        throw finalError;
+      }
 
-    if (!response.ok) {
-      const message = await response.text();
+      if (!createResponse.ok) {
+        const message = await createResponse.text();
+        emitDiagnostic(logger, {
+          level: "error",
+          message: `LLM compilation failed: ${createResponse.status}`,
+          details: {
+            scope: "wiki_llm",
+            eventKey: "llm_compile_failed",
+            provider: profile.provider,
+            baseUrl: profile.baseUrl,
+            model: profile.model,
+            mimeType: input.mimeType,
+            parseStrategy: input.parseStrategy,
+            rawTextLength: input.rawText.length,
+            estimatedInputTokens: sourcePlan.estimatedTokens,
+            truncated: sourcePlan.truncated,
+            status: createResponse.status,
+            responseBody: truncate(message)
+          }
+        });
+        throw new Error(
+          `LLM compilation failed: ${createResponse.status}${
+            message ? `: ${message}` : ""
+          }`
+        );
+      }
+
+      payload = await readJsonPayload(createResponse);
+      responseId = readResponseId(payload);
+      if (!responseId) {
+        throw new Error(
+          "OpenAI background response did not include an id for polling."
+        );
+      }
+
       emitDiagnostic(logger, {
-        level: "error",
-        message: `LLM compilation failed: ${response.status}`,
+        level: "info",
+        message:
+          "OpenAI accepted the wiki compilation job for background processing.",
         details: {
           scope: "wiki_llm",
-          eventKey: "llm_compile_failed",
+          eventKey: "llm_compile_background_started",
           provider: profile.provider,
           baseUrl: profile.baseUrl,
           model: profile.model,
-          mimeType: input.mimeType,
-          parseStrategy: input.parseStrategy,
-          rawTextLength: input.rawText.length,
-          status: response.status,
-          responseBody: truncate(message)
+          responseId,
+          status: readResponseStatus(payload),
+          resumed: false
         }
       });
-      throw new Error(
-        `LLM compilation failed: ${response.status}${
-          message ? `: ${message}` : ""
-        }`
-      );
     }
 
-    const payload = await readJsonPayload(response);
+    let pollCount = 0;
+    let consecutivePollFailures = 0;
+    while (!isTerminalBackgroundStatus(readResponseStatus(payload))) {
+      await new Promise((resolve) =>
+        setTimeout(resolve, BACKGROUND_POLL_INTERVAL_MS)
+      );
+      try {
+        const pollResponse = await fetch(
+          `${profile.baseUrl.replace(/\/$/, "")}/responses/${responseId}`,
+          {
+            method: "GET",
+            headers: {
+              authorization: `Bearer ${apiKey}`
+            },
+            signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS)
+          }
+        );
+        if (!pollResponse.ok) {
+          const message = await pollResponse.text();
+          if (pollResponse.status >= 500) {
+            consecutivePollFailures += 1;
+            emitDiagnostic(logger, {
+              level: "warning",
+              message:
+                "OpenAI background wiki compilation polling hit a server error. Forge will keep retrying.",
+              details: {
+                scope: "wiki_llm",
+                eventKey: "llm_compile_background_poll_retry",
+                provider: profile.provider,
+                baseUrl: profile.baseUrl,
+                model: profile.model,
+                responseId,
+                pollCount,
+                consecutivePollFailures,
+                status: pollResponse.status,
+                responseBody: truncate(message)
+              }
+            });
+            continue;
+          }
+          throw new Error(
+            `OpenAI background wiki compilation polling failed: ${pollResponse.status}${
+              message ? `: ${message}` : ""
+            }`
+          );
+        }
+        payload = await readJsonPayload(pollResponse);
+        pollCount += 1;
+        consecutivePollFailures = 0;
+        emitDiagnostic(logger, {
+          level: "info",
+          message: "Polled OpenAI background wiki compilation status.",
+          details: {
+            scope: "wiki_llm",
+            eventKey: "llm_compile_background_polled",
+            provider: profile.provider,
+            baseUrl: profile.baseUrl,
+            model: profile.model,
+            responseId,
+            pollCount,
+            status: readResponseStatus(payload)
+          }
+        });
+      } catch (error) {
+        const finalError = error instanceof Error ? error : new Error(String(error));
+        const isRetriableTransport =
+          finalError.name === "TypeError" ||
+          finalError.name === "TimeoutError" ||
+          /fetch failed/i.test(finalError.message) ||
+          /network/i.test(finalError.message) ||
+          /timeout/i.test(finalError.message);
+        if (!isRetriableTransport) {
+          throw finalError;
+        }
+        consecutivePollFailures += 1;
+        emitDiagnostic(logger, {
+          level: "warning",
+          message:
+            "OpenAI background wiki compilation polling lost connectivity. Forge will keep retrying.",
+          details: {
+            scope: "wiki_llm",
+            eventKey: "llm_compile_background_poll_retry",
+            provider: profile.provider,
+            baseUrl: profile.baseUrl,
+            model: profile.model,
+            responseId,
+            pollCount,
+            consecutivePollFailures,
+            error: {
+              name: finalError.name,
+              message: finalError.message,
+              stack: finalError.stack ?? null
+            }
+          }
+        });
+      }
+    }
+
+    const finalStatus = readResponseStatus(payload);
+    if (finalStatus !== "completed") {
+      const errorMessage =
+        readResponseError(payload) ??
+        `OpenAI background wiki compilation ended with status ${finalStatus}.`;
+      emitDiagnostic(logger, {
+        level: "error",
+        message: errorMessage,
+        details: {
+          scope: "wiki_llm",
+          eventKey: "llm_compile_background_terminal_error",
+          provider: profile.provider,
+          baseUrl: profile.baseUrl,
+          model: profile.model,
+          responseId,
+          status: finalStatus
+        }
+      });
+      throw new Error(errorMessage);
+    }
+
     const content = parseOutputText(payload);
     const result = normalizeResult(content, input);
     emitDiagnostic(logger, {
@@ -619,6 +893,9 @@ export class OpenAiResponsesProvider implements WikiLlmProvider {
         provider: profile.provider,
         baseUrl: profile.baseUrl,
         model: profile.model,
+        responseId,
+        estimatedInputTokens: sourcePlan.estimatedTokens,
+        truncated: sourcePlan.truncated,
         responsePreview: truncate(content ?? "", 600),
         articleCandidateCount: result?.articleCandidates.length ?? 0,
         entityProposalCount: result?.entityProposals.length ?? 0,

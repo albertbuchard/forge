@@ -243,7 +243,13 @@ export function recordDiagnosticLog(
 
 export function listDiagnosticLogs(
   filters: DiagnosticLogListQuery = {}
-): DiagnosticLogEntry[] {
+): {
+  logs: DiagnosticLogEntry[];
+  nextCursor: {
+    beforeCreatedAt: string;
+    beforeId: string;
+  } | null;
+} {
   enforceDiagnosticLogRetention();
   const whereClauses: string[] = [];
   const params: Array<string | number> = [];
@@ -283,6 +289,16 @@ export function listDiagnosticLogs(
     const term = `%${filters.search}%`;
     params.push(term, term, term, term, term);
   }
+  if (filters.beforeCreatedAt && filters.beforeId) {
+    whereClauses.push(
+      "(created_at < ? OR (created_at = ? AND id < ?))"
+    );
+    params.push(
+      filters.beforeCreatedAt,
+      filters.beforeCreatedAt,
+      filters.beforeId
+    );
+  }
 
   const whereSql =
     whereClauses.length > 0 ? `WHERE ${whereClauses.join(" AND ")}` : "";
@@ -293,12 +309,23 @@ export function listDiagnosticLogs(
               request_id, entity_type, entity_id, job_id, details_json, created_at
        FROM diagnostic_logs
        ${whereSql}
-       ORDER BY created_at DESC
+       ORDER BY created_at DESC, id DESC
        LIMIT ?`
     )
     .all(...params, limit) as DiagnosticLogRow[];
 
-  return rows.map(mapRow);
+  const logs = rows.map(mapRow);
+  const tail = rows.at(-1) ?? null;
+  return {
+    logs,
+    nextCursor:
+      rows.length >= limit && tail
+        ? {
+            beforeCreatedAt: tail.created_at,
+            beforeId: tail.id
+          }
+        : null
+  };
 }
 
 export function normalizeDiagnosticSource(value: unknown): DiagnosticLogSource {

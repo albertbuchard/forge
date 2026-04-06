@@ -13,6 +13,10 @@ import {
   enforceDiagnosticLogRetention,
   recordDiagnosticLog
 } from "./repositories/diagnostic-logs.js";
+import {
+  createUploadedWikiIngestJob,
+  processWikiIngestJob
+} from "./repositories/wiki-memory.js";
 import { getCrudEntityCapabilityMatrix } from "./services/entity-crud.js";
 import type { StartupTaskRunRecoverySummary } from "./services/run-recovery.js";
 
@@ -5335,6 +5339,296 @@ test("wiki ingest review can map an entity proposal onto an existing Forge entit
   }
 });
 
+test("wiki ingest recovery does not reuse one OpenAI response across duplicate file names", async () => {
+  const rootDir = await mkdtemp(
+    path.join(os.tmpdir(), "forge-wiki-ingest-duplicate-file-names-")
+  );
+  const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
+
+  try {
+    const operatorCookie = await issueOperatorSessionCookie(app);
+    const createProfile = await app.inject({
+      method: "POST",
+      url: "/api/v1/wiki/settings/llm-profiles",
+      headers: {
+        cookie: operatorCookie
+      },
+      payload: {
+        label: "Forge wiki ingest",
+        provider: "openai-responses",
+        baseUrl: "https://api.openai.com/v1",
+        model: "gpt-5.4-mini",
+        apiKey: "sk-test-duplicate-filenames",
+        reasoningEffort: "medium",
+        verbosity: "medium",
+        systemPrompt: "Keep each file separate."
+      }
+    });
+    assert.equal(createProfile.statusCode, 201);
+    const createProfileBody = createProfile.json() as {
+      profile: { id: string };
+    };
+
+    const created = await createUploadedWikiIngestJob(
+      {
+        llmProfileId: createProfileBody.profile.id,
+        parseStrategy: "auto",
+        createAsKind: "wiki",
+        userId: "user_operator"
+      },
+      [
+        {
+          fileName: "_chat.txt",
+          mimeType: "text/plain",
+          payload: Buffer.from("Alpha transcript", "utf8")
+        },
+        {
+          fileName: "_chat.txt",
+          mimeType: "text/plain",
+          payload: Buffer.from("Beta transcript", "utf8")
+        }
+      ],
+      {
+        actor: "user_operator"
+      }
+    );
+    const jobId = created.job?.job.id ?? "";
+    assert.ok(jobId);
+
+    const assets = getDatabase()
+      .prepare(
+        `SELECT id, file_name
+         FROM wiki_ingest_job_assets
+         WHERE job_id = ?
+         ORDER BY created_at ASC`
+      )
+      .all(jobId) as Array<{ id: string; file_name: string }>;
+    assert.equal(assets.length, 2);
+
+    const firstAsset = assets[0];
+    const secondAsset = assets[1];
+    assert.ok(firstAsset);
+    assert.ok(secondAsset);
+
+    const now = new Date().toISOString();
+    getDatabase()
+      .prepare(
+        `INSERT INTO wiki_ingest_job_logs (
+          id, job_id, level, message, metadata_json, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?)`
+      )
+      .run(
+        "wiki_ingest_log_duplicate_filename_seed",
+        jobId,
+        "info",
+        "Seeded OpenAI background response for the first duplicate file.",
+        JSON.stringify({
+          scope: "wiki_llm",
+          eventKey: "llm_compile_background_started",
+          responseId: "resp_first_duplicate_file",
+          sourceAssetId: firstAsset.id,
+          currentFileName: firstAsset.file_name
+        }),
+        now
+      );
+
+    const resumeResponseIds: Array<string | null> = [];
+    let callIndex = 0;
+    await processWikiIngestJob(jobId, {
+      llm: {
+        compileWikiIngest: async (
+          _profile: unknown,
+          input: { rawText: string },
+          options: { resumeResponseId?: string | null }
+        ) => {
+          resumeResponseIds.push(options.resumeResponseId ?? null);
+          callIndex += 1;
+          return {
+            title: `Imported page ${callIndex}`,
+            summary: input.rawText,
+            markdown: `# Imported page ${callIndex}\n\n${input.rawText}`,
+            tags: [],
+            entityProposals: [],
+            pageUpdateSuggestions: [],
+            articleCandidates: []
+          };
+        }
+      } as any
+    });
+
+    assert.deepEqual(resumeResponseIds, [
+      "resp_first_duplicate_file",
+      null
+    ]);
+  } finally {
+    await app.close();
+    closeDatabase();
+    await rm(rootDir, { recursive: true, force: true });
+  }
+});
+
+test("wiki ingest review can merge a page candidate into an existing wiki page", async () => {
+  const rootDir = await mkdtemp(
+    path.join(os.tmpdir(), "forge-wiki-ingest-merge-page-")
+  );
+  const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
+
+  try {
+    const operatorCookie = await issueOperatorSessionCookie(app);
+
+    const existingPageResponse = await app.inject({
+      method: "POST",
+      url: "/api/v1/wiki/pages",
+      headers: {
+        cookie: operatorCookie
+      },
+      payload: {
+        title: "Arthur knowledge",
+        slug: "arthur-knowledge",
+        summary: "Existing durable page for Arthur.",
+        contentMarkdown:
+          "# Arthur knowledge\n\nBaseline context that should stay at the top.",
+        links: []
+      }
+    });
+    assert.equal(existingPageResponse.statusCode, 201);
+    const existingPageBody = existingPageResponse.json() as {
+      page: { id: string };
+    };
+    const existingPageId = existingPageBody.page.id;
+
+    const noteCountBeforeReview = (
+      getDatabase()
+        .prepare(`SELECT COUNT(*) as count FROM notes`)
+        .get() as { count: number }
+    ).count;
+
+    const createIngest = await app.inject({
+      method: "POST",
+      url: "/api/v1/wiki/ingest-jobs",
+      headers: {
+        cookie: operatorCookie
+      },
+      payload: {
+        titleHint: "Arthur chat supplement",
+        sourceKind: "raw_text",
+        sourceText:
+          "# Arthur chat supplement\n\nNew durable detail about how Arthur and Albert keep the relationship warm over distance.",
+        mimeType: "text/plain",
+        parseStrategy: "text_only",
+        createAsKind: "wiki"
+      }
+    });
+    assert.equal(createIngest.statusCode, 201);
+    const createIngestBody = createIngest.json() as {
+      job: { job: { id: string } } | null;
+    };
+    const jobId = createIngestBody.job?.job.id ?? "";
+    assert.ok(jobId);
+
+    let jobPayload:
+      | {
+          job: { status: string };
+          candidates: Array<{
+            id: string;
+            candidateType: string;
+            publishedNoteId: string | null;
+          }>;
+        }
+      | null = null;
+    for (let attempt = 0; attempt < 30; attempt += 1) {
+      const jobResponse = await app.inject({
+        method: "GET",
+        url: `/api/v1/wiki/ingest-jobs/${jobId}`,
+        headers: {
+          cookie: operatorCookie
+        }
+      });
+      assert.equal(jobResponse.statusCode, 200);
+      jobPayload = jobResponse.json() as typeof jobPayload;
+      if (
+        jobPayload &&
+        !["queued", "processing"].includes(jobPayload.job.status)
+      ) {
+        break;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+
+    assert.ok(jobPayload);
+    const pageCandidate = jobPayload?.candidates.find(
+      (candidate) => candidate.candidateType === "page"
+    );
+    assert.ok(pageCandidate);
+
+    const review = await app.inject({
+      method: "POST",
+      url: `/api/v1/wiki/ingest-jobs/${jobId}/review`,
+      headers: {
+        cookie: operatorCookie
+      },
+      payload: {
+        decisions: [
+          {
+            candidateId: pageCandidate?.id,
+            action: "merge_existing",
+            targetNoteId: existingPageId
+          }
+        ]
+      }
+    });
+    assert.equal(review.statusCode, 200);
+    const reviewBody = review.json() as {
+      job: {
+        job: {
+          acceptedCount: number;
+          rejectedCount: number;
+        };
+        candidates: Array<{
+          id: string;
+          status: string;
+          publishedNoteId: string | null;
+        }>;
+      };
+    };
+    assert.equal(reviewBody.job.job.acceptedCount, 1);
+    assert.equal(reviewBody.job.job.rejectedCount, 0);
+    const reviewedCandidate = reviewBody.job.candidates.find(
+      (candidate) => candidate.id === pageCandidate?.id
+    );
+    assert.equal(reviewedCandidate?.status, "applied");
+    assert.equal(reviewedCandidate?.publishedNoteId, existingPageId);
+
+    const noteCountAfterReview = (
+      getDatabase()
+        .prepare(`SELECT COUNT(*) as count FROM notes`)
+        .get() as { count: number }
+    ).count;
+    assert.equal(noteCountAfterReview, noteCountBeforeReview);
+
+    const mergedPage = getDatabase()
+      .prepare(`SELECT content_markdown FROM notes WHERE id = ?`)
+      .get(existingPageId) as { content_markdown: string } | undefined;
+    assert.ok(mergedPage);
+    assert.match(
+      mergedPage?.content_markdown ?? "",
+      /Baseline context that should stay at the top\./
+    );
+    assert.match(
+      mergedPage?.content_markdown ?? "",
+      /## Arthur chat supplement/
+    );
+    assert.match(
+      mergedPage?.content_markdown ?? "",
+      /keep the relationship warm over distance/
+    );
+  } finally {
+    await app.close();
+    closeDatabase();
+    await rm(rootDir, { recursive: true, force: true });
+  }
+});
+
 test("wiki settings can test a saved OpenAI ingest profile", async () => {
   const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-wiki-llm-"));
   const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
@@ -8853,6 +9147,55 @@ test("background job diagnostics capture enqueue, success, and failure lifecycle
     closeDatabase();
     await rm(rootDir, { recursive: true, force: true });
   }
+});
+
+test("background job manager can run multiple jobs at the same time", async () => {
+  const manager = new BackgroundJobManager(2);
+  let activeCount = 0;
+  let maxSeenActiveCount = 0;
+  let releaseFirst: (() => void) | null = null;
+  let releaseSecond: (() => void) | null = null;
+
+  const firstStarted = new Promise<void>((resolve) => {
+    manager.enqueue({
+      id: "bg_parallel_one",
+      label: "Parallel one",
+      handler: async () => {
+        activeCount += 1;
+        maxSeenActiveCount = Math.max(maxSeenActiveCount, activeCount);
+        resolve();
+        await new Promise<void>((innerResolve) => {
+          releaseFirst = innerResolve;
+        });
+        activeCount -= 1;
+      }
+    });
+  });
+
+  const secondStarted = new Promise<void>((resolve) => {
+    manager.enqueue({
+      id: "bg_parallel_two",
+      label: "Parallel two",
+      handler: async () => {
+        activeCount += 1;
+        maxSeenActiveCount = Math.max(maxSeenActiveCount, activeCount);
+        resolve();
+        await new Promise<void>((innerResolve) => {
+          releaseSecond = innerResolve;
+        });
+        activeCount -= 1;
+      }
+    });
+  });
+
+  await Promise.all([firstStarted, secondStarted]);
+  assert.equal(maxSeenActiveCount, 2);
+  assert.ok(manager.isActive("bg_parallel_one"));
+  assert.ok(manager.isActive("bg_parallel_two"));
+
+  releaseFirst?.();
+  releaseSecond?.();
+  await manager.stop();
 });
 
 test("wiki ingest diagnostics explain missing llm api key and background job execution", async () => {

@@ -2506,6 +2506,8 @@ export const diagnosticLogListQuerySchema = z.object({
   entityId: nonEmptyTrimmedString.optional(),
   jobId: nonEmptyTrimmedString.optional(),
   search: nonEmptyTrimmedString.optional(),
+  beforeCreatedAt: nonEmptyTrimmedString.optional(),
+  beforeId: nonEmptyTrimmedString.optional(),
   limit: z.coerce.number().int().positive().max(500).optional()
 });
 

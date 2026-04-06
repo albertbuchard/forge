@@ -1393,6 +1393,27 @@ export function getWikiIngestJob(jobId: string) {
   return request<WikiIngestJobPayload>(`/api/v1/wiki/ingest-jobs/${jobId}`);
 }
 
+export function searchWikiPages(input: {
+  spaceId?: string;
+  kind?: "wiki" | "evidence";
+  mode?: "text" | "semantic" | "entity" | "hybrid";
+  query?: string;
+  profileId?: string;
+  limit?: number;
+}) {
+  return request<WikiSearchResponse>("/api/v1/wiki/search", {
+    method: "POST",
+    body: JSON.stringify({
+      spaceId: input.spaceId,
+      kind: input.kind,
+      mode: input.mode ?? "text",
+      query: input.query ?? "",
+      profileId: input.profileId,
+      limit: input.limit ?? 8
+    })
+  });
+}
+
 export function deleteWikiIngestJob(jobId: string) {
   return request<{ deleted: { id: string } }>(
     `/api/v1/wiki/ingest-jobs/${jobId}`,
@@ -1411,15 +1432,25 @@ export function rerunWikiIngestJob(jobId: string) {
   });
 }
 
+export function resumeWikiIngestJob(jobId: string) {
+  return request<{
+    job: WikiIngestJobPayload | null;
+    resumed: boolean;
+  }>(`/api/v1/wiki/ingest-jobs/${jobId}/resume`, {
+    method: "POST"
+  });
+}
+
 export function reviewWikiIngestJob(input: {
   jobId: string;
   decisions: Array<
     | { candidateId: string; keep: boolean }
     | {
         candidateId: string;
-        action: "keep" | "discard" | "map_existing";
+        action: "keep" | "discard" | "map_existing" | "merge_existing";
         mappedEntityType?: CrudEntityType;
         mappedEntityId?: string;
+        targetNoteId?: string;
       }
   >;
 }) {
@@ -2570,6 +2601,8 @@ export function listDiagnosticLogs(
     entityId?: string;
     jobId?: string;
     search?: string;
+    beforeCreatedAt?: string;
+    beforeId?: string;
   } = {}
 ) {
   const search = new URLSearchParams();
@@ -2598,7 +2631,13 @@ export function listDiagnosticLogs(
   if (input.search) {
     search.set("search", input.search);
   }
-  return request<{ logs: DiagnosticLogEntry[] }>(
+  if (input.beforeCreatedAt) {
+    search.set("beforeCreatedAt", input.beforeCreatedAt);
+  }
+  if (input.beforeId) {
+    search.set("beforeId", input.beforeId);
+  }
+  return request<import("./types").DiagnosticLogListPayload>(
     `/api/v1/diagnostics/logs?${search.toString()}`
   );
 }

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import * as Dialog from "@radix-ui/react-dialog";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -22,8 +22,10 @@ import {
   createWikiIngestUploadJob,
   deleteWikiIngestJob,
   getWikiIngestJob,
+  resumeWikiIngestJob,
   rerunWikiIngestJob,
   reviewWikiIngestJob,
+  searchWikiPages,
   searchEntities
 } from "@/lib/api";
 import { EntityBadge } from "@/components/ui/entity-badge";
@@ -40,6 +42,7 @@ import { cn } from "@/lib/utils";
 type IngestMode = "files" | "url" | "text";
 
 const ACTIVE_JOB_STATUSES = new Set(["queued", "processing"]);
+const STALE_INGEST_RESUME_THRESHOLD_MS = 15_000;
 const SEARCHABLE_ENTITY_TYPES: CrudEntityType[] = [
   "goal",
   "project",
@@ -51,10 +54,12 @@ const SEARCHABLE_ENTITY_TYPES: CrudEntityType[] = [
 ];
 
 type IngestDecisionDraft = {
-  action: "keep" | "discard" | "map_existing";
+  action: "keep" | "discard" | "map_existing" | "merge_existing";
   mappedEntityType?: CrudEntityType;
   mappedEntityId?: string;
   mappedEntityLabel?: string;
+  targetNoteId?: string;
+  targetNoteLabel?: string;
 };
 
 type MappedEntitySearchResult = {
@@ -65,6 +70,17 @@ type MappedEntitySearchResult = {
   kind: EntityKind | null;
 };
 
+type MappedPageSearchResult = {
+  noteId: string;
+  title: string;
+  slug: string;
+  summary: string;
+};
+
+type DisplayWikiIngestLogEntry = WikiIngestJobPayload["logs"][number] & {
+  repetitionCount: number;
+};
+
 function formatTimestamp(value: string) {
   return new Intl.DateTimeFormat(undefined, {
     month: "short",
@@ -72,6 +88,115 @@ function formatTimestamp(value: string) {
     hour: "2-digit",
     minute: "2-digit"
   }).format(new Date(value));
+}
+
+function readMetadataNumber(
+  metadata: Record<string, unknown>,
+  key: string
+): number | null {
+  const value = metadata[key];
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function readMetadataString(
+  metadata: Record<string, unknown>,
+  key: string
+): string | null {
+  const value = metadata[key];
+  return typeof value === "string" && value.trim().length > 0 ? value : null;
+}
+
+function buildPollingDisplayMessage(
+  entry: WikiIngestJobPayload["logs"][number],
+  repetitionCount: number
+) {
+  const fileName =
+    readMetadataString(entry.metadata, "currentFileName") ??
+    readMetadataString(entry.metadata, "fileName") ??
+    "current source";
+  const status =
+    readMetadataString(entry.metadata, "status") ?? "in_progress";
+  const chunkIndex = readMetadataNumber(entry.metadata, "chunkIndex");
+  const chunkCount = readMetadataNumber(entry.metadata, "chunkCount");
+  const fileIndex = readMetadataNumber(entry.metadata, "currentFileIndex");
+  const fileTotal = readMetadataNumber(entry.metadata, "currentFileTotal");
+  const filePart =
+    fileIndex !== null && fileTotal !== null
+      ? `${fileName} (${fileIndex}/${fileTotal})`
+      : fileName;
+  const chunkPart =
+    chunkIndex !== null && chunkCount !== null && chunkCount > 1
+      ? ` · chunk ${chunkIndex}/${chunkCount}`
+      : "";
+  return `Waiting for OpenAI on ${filePart}${chunkPart}. ${repetitionCount} polls · ${status}.`;
+}
+
+function compactWikiIngestLogs(
+  logs: WikiIngestJobPayload["logs"]
+): DisplayWikiIngestLogEntry[] {
+  const compacted: DisplayWikiIngestLogEntry[] = [];
+  for (const entry of logs) {
+    const scope = readMetadataString(entry.metadata, "scope");
+    const eventKey = readMetadataString(entry.metadata, "eventKey");
+    const isPollingEntry = eventKey === "llm_compile_background_polled";
+    const currentFileName =
+      readMetadataString(entry.metadata, "currentFileName") ??
+      readMetadataString(entry.metadata, "fileName");
+    const chunkIndex = readMetadataNumber(entry.metadata, "chunkIndex");
+    const chunkCount = readMetadataNumber(entry.metadata, "chunkCount");
+    const aggregationKey = isPollingEntry
+      ? [
+          "poll",
+          scope ?? "",
+          currentFileName ?? "",
+          chunkIndex ?? "",
+          chunkCount ?? ""
+        ].join(":")
+      : null;
+    const previous = compacted[compacted.length - 1];
+    const previousEventKey =
+      previous && readMetadataString(previous.metadata, "eventKey");
+    const previousFileName =
+      previous &&
+      (readMetadataString(previous.metadata, "currentFileName") ??
+        readMetadataString(previous.metadata, "fileName"));
+    const previousChunkIndex =
+      previous && readMetadataNumber(previous.metadata, "chunkIndex");
+    const previousChunkCount =
+      previous && readMetadataNumber(previous.metadata, "chunkCount");
+    const previousAggregationKey =
+      previous && previousEventKey === "llm_compile_background_polled"
+        ? [
+            "poll",
+            readMetadataString(previous.metadata, "scope") ?? "",
+            previousFileName ?? "",
+            previousChunkIndex ?? "",
+            previousChunkCount ?? ""
+          ].join(":")
+        : null;
+
+    if (
+      isPollingEntry &&
+      previous &&
+      previousAggregationKey === aggregationKey
+    ) {
+      compacted[compacted.length - 1] = {
+        ...entry,
+        repetitionCount: previous.repetitionCount + 1,
+        metadata: {
+          ...entry.metadata,
+          aggregatedPollCount: previous.repetitionCount + 1
+        }
+      };
+      continue;
+    }
+
+    compacted.push({
+      ...entry,
+      repetitionCount: 1
+    });
+  }
+  return compacted;
 }
 
 function entityTypeToKind(entityType: CrudEntityType): EntityKind | null {
@@ -145,17 +270,22 @@ function inferMappedEntityDescription(
 function CandidateCard({
   candidate,
   decision,
-  onDecisionChange
+  onDecisionChange,
+  spaceId
 }: {
   candidate: WikiIngestJobPayload["candidates"][number];
   decision: IngestDecisionDraft;
   onDecisionChange: (next: IngestDecisionDraft) => void;
+  spaceId: string;
 }) {
   const proposalEntityType = isCrudEntityType(candidate.payload.entityType)
     ? candidate.payload.entityType
     : null;
   const [mapQuery, setMapQuery] = useState(
     decision.mappedEntityLabel || candidate.title || ""
+  );
+  const [mergeQuery, setMergeQuery] = useState(
+    decision.targetNoteLabel || candidate.title || ""
   );
   const previewText =
     typeof candidate.payload.contentMarkdown === "string"
@@ -225,6 +355,31 @@ function CandidateCard({
     }
   });
   const mappedResults = mappedSearch.data ?? [];
+  const mergedPageSearch = useQuery({
+    queryKey: ["forge-wiki-ingest-merge-search", spaceId, mergeQuery.trim()],
+    enabled:
+      candidate.candidateType === "page" &&
+      decision.action === "merge_existing" &&
+      mergeQuery.trim().length > 0,
+    queryFn: async () => {
+      const response = await searchWikiPages({
+        spaceId,
+        kind: "wiki",
+        mode: "text",
+        query: mergeQuery.trim(),
+        limit: 8
+      });
+      return response.results.map(
+        (result): MappedPageSearchResult => ({
+          noteId: result.page.id,
+          title: result.page.title,
+          slug: result.page.slug,
+          summary: result.page.summary
+        })
+      );
+    }
+  });
+  const mergedPageResults = mergedPageSearch.data ?? [];
   const selectedMappedResult =
     decision.mappedEntityId && decision.mappedEntityType
       ? mappedResults.find(
@@ -239,6 +394,18 @@ function CandidateCard({
               label: decision.mappedEntityLabel,
               description: "",
               kind: entityTypeToKind(decision.mappedEntityType)
+            }
+          : null)
+      : null;
+  const selectedMergedPage =
+    decision.targetNoteId
+      ? mergedPageResults.find((entry) => entry.noteId === decision.targetNoteId) ??
+        (decision.targetNoteLabel
+          ? {
+              noteId: decision.targetNoteId,
+              title: decision.targetNoteLabel,
+              slug: "",
+              summary: ""
             }
           : null)
       : null;
@@ -311,6 +478,25 @@ function CandidateCard({
               }
             >
               Map existing
+            </button>
+          ) : null}
+          {candidate.candidateType === "page" ? (
+            <button
+              type="button"
+              className={cn(
+                "rounded-full px-3 py-1.5 text-xs font-medium transition",
+                decision.action === "merge_existing"
+                  ? "bg-[rgba(133,222,255,0.18)] text-white"
+                  : "text-white/54 hover:text-white"
+              )}
+              onClick={() =>
+                onDecisionChange({
+                  ...decision,
+                  action: "merge_existing"
+                })
+              }
+            >
+              Merge existing
             </button>
           ) : null}
           <button
@@ -450,6 +636,101 @@ function CandidateCard({
           </div>
         </div>
       ) : null}
+      {candidate.candidateType === "page" &&
+      decision.action === "merge_existing" ? (
+        <div className="mt-4 grid gap-3 rounded-[18px] border border-white/8 bg-[rgba(6,10,20,0.55)] p-4">
+          <div className="text-[11px] uppercase tracking-[0.16em] text-white/42">
+            Merge into existing page
+          </div>
+          {selectedMergedPage ? (
+            <div className="flex flex-wrap gap-2">
+              <span className="inline-flex items-center gap-2 rounded-full border border-white/8 bg-white/[0.06] px-2.5 py-1.5">
+                <Badge className="bg-white/[0.08] text-white/78">
+                  {selectedMergedPage.title}
+                </Badge>
+                <button
+                  type="button"
+                  className="rounded-full text-white/50 transition hover:text-white"
+                  onClick={() =>
+                    onDecisionChange({
+                      ...decision,
+                      targetNoteId: undefined,
+                      targetNoteLabel: undefined
+                    })
+                  }
+                  aria-label="Clear merge target"
+                >
+                  <X className="size-3.5" />
+                </button>
+              </span>
+            </div>
+          ) : null}
+          <div className="flex items-center gap-3 rounded-[20px] border border-white/8 bg-white/[0.04] px-4 py-3">
+            <Search className="size-4 text-white/34" />
+            <input
+              value={mergeQuery}
+              onChange={(event) => {
+                setMergeQuery(event.target.value);
+                if (decision.targetNoteId) {
+                  onDecisionChange({
+                    ...decision,
+                    targetNoteId: undefined,
+                    targetNoteLabel: undefined
+                  });
+                }
+              }}
+              placeholder="Search existing wiki pages"
+              className="min-w-0 flex-1 bg-transparent text-sm text-white placeholder:text-white/34 focus:outline-none"
+            />
+          </div>
+          <div className="grid gap-2">
+            {mergedPageSearch.isPending ? (
+              <div className="rounded-[16px] border border-white/8 bg-white/[0.03] px-3 py-3 text-sm text-white/48">
+                Searching Forge…
+              </div>
+            ) : mergedPageResults.length === 0 ? (
+              <div className="rounded-[16px] border border-dashed border-white/10 px-3 py-3 text-sm text-white/42">
+                No existing wiki pages match yet.
+              </div>
+            ) : (
+              mergedPageResults.map((result) => {
+                const selected = decision.targetNoteId === result.noteId;
+                return (
+                  <button
+                    key={result.noteId}
+                    type="button"
+                    className={cn(
+                      "flex w-full items-start justify-between gap-3 rounded-[18px] border px-3 py-3 text-left transition",
+                      selected
+                        ? "border-[rgba(133,222,255,0.24)] bg-[rgba(133,222,255,0.12)] text-white"
+                        : "border-white/8 bg-white/[0.03] text-white/72 hover:bg-white/[0.06] hover:text-white"
+                    )}
+                    onClick={() =>
+                      onDecisionChange({
+                        action: "merge_existing",
+                        targetNoteId: result.noteId,
+                        targetNoteLabel: result.title
+                      })
+                    }
+                  >
+                    <div className="min-w-0">
+                      <div className="truncate text-sm font-medium">
+                        {result.title}
+                      </div>
+                      <div className="mt-1 text-xs leading-5 text-white/46">
+                        {result.slug ? `${result.slug}` : ""}
+                        {result.summary
+                          ? `${result.slug ? " · " : ""}${result.summary}`
+                          : ""}
+                      </div>
+                    </div>
+                  </button>
+                );
+              })
+            )}
+          </div>
+        </div>
+      ) : null}
       {previewText ? (
         <div className="mt-4 rounded-[18px] border border-white/8 bg-[rgba(6,10,20,0.65)] px-4 py-3 text-sm leading-6 text-white/72">
           <pre className="whitespace-pre-wrap font-sans">{previewText}</pre>
@@ -510,6 +791,7 @@ export function WikiIngestModal({
   >({});
   const [formError, setFormError] = useState<string | null>(null);
   const [reviewError, setReviewError] = useState<string | null>(null);
+  const lastResumeAttemptRef = useRef<Record<string, number>>({});
 
   useEffect(() => {
     if (initialSpaceId) {
@@ -562,6 +844,47 @@ export function WikiIngestModal({
       setReviewError(null);
     }
   }, [decisions, reviewError]);
+
+  const resumeJobMutation = useMutation({
+    mutationFn: async (jobId: string) => resumeWikiIngestJob(jobId),
+    onSuccess: (result, jobId) => {
+      if (result.job) {
+        queryClient.setQueryData(["forge-wiki-ingest-job", jobId], result.job);
+      }
+      queryClient.invalidateQueries({ queryKey: ["forge-wiki-ingest-jobs"] });
+      queryClient.invalidateQueries({ queryKey: ["forge-wiki-ingest-history"] });
+    }
+  });
+
+  useEffect(() => {
+    const job = jobQuery.data;
+    if (!job || !ACTIVE_JOB_STATUSES.has(job.job.status)) {
+      return;
+    }
+    const latestLogAt = job.logs.reduce<number>((latest, entry) => {
+      const createdAt = Number(new Date(entry.createdAt));
+      return Number.isFinite(createdAt) ? Math.max(latest, createdAt) : latest;
+    }, 0);
+    const updatedAt = Number(new Date(job.job.updatedAt));
+    const freshestActivityAt = Math.max(
+      Number.isFinite(updatedAt) ? updatedAt : 0,
+      latestLogAt
+    );
+    if (!Number.isFinite(freshestActivityAt) || freshestActivityAt <= 0) {
+      return;
+    }
+    const now = Date.now();
+    const isStale = now - freshestActivityAt >= STALE_INGEST_RESUME_THRESHOLD_MS;
+    if (!isStale || resumeJobMutation.isPending) {
+      return;
+    }
+    const lastAttempt = lastResumeAttemptRef.current[job.job.id] ?? 0;
+    if (now - lastAttempt < STALE_INGEST_RESUME_THRESHOLD_MS) {
+      return;
+    }
+    lastResumeAttemptRef.current[job.job.id] = now;
+    resumeJobMutation.mutate(job.job.id);
+  }, [jobQuery.data, resumeJobMutation]);
 
   const createJobMutation = useMutation({
     mutationFn: async () => {
@@ -654,6 +977,11 @@ export function WikiIngestModal({
             ).replaceAll("_", " ")} before publishing the review.`
           );
         }
+        if (decision.action === "merge_existing" && !decision.targetNoteId) {
+          throw new Error(
+            `Choose an existing wiki page before publishing the review for ${candidate.title || "this page candidate"}.`
+          );
+        }
         return decision.action === "map_existing"
           ? {
               candidateId: candidate.id,
@@ -661,6 +989,12 @@ export function WikiIngestModal({
               mappedEntityType: decision.mappedEntityType,
               mappedEntityId: decision.mappedEntityId
             }
+          : decision.action === "merge_existing"
+            ? {
+                candidateId: candidate.id,
+                action: "merge_existing" as const,
+                targetNoteId: decision.targetNoteId
+              }
           : {
               candidateId: candidate.id,
               action: decision.action
@@ -763,6 +1097,10 @@ export function WikiIngestModal({
         ["suggested", "accepted", "rejected"].includes(candidate.status)
       ) ?? [],
     [activeJob]
+  );
+  const displayLogs = useMemo(
+    () => compactWikiIngestLogs(activeJob?.logs ?? []),
+    [activeJob?.logs]
   );
 
   const resetToDraft = () => {
@@ -1302,12 +1640,12 @@ export function WikiIngestModal({
                       </Button>
                     </div>
                     <div className="mt-4 grid max-h-[28rem] gap-2 overflow-y-auto">
-                      {activeJob.logs.length === 0 ? (
+                      {displayLogs.length === 0 ? (
                         <div className="rounded-[18px] border border-dashed border-white/10 px-4 py-4 text-sm text-white/45">
                           Waiting for the backend to emit progress.
                         </div>
                       ) : (
-                        activeJob.logs.map((entry) => (
+                        displayLogs.map((entry) => (
                           <div
                             key={entry.id}
                             className="rounded-[18px] border border-white/8 bg-[rgba(7,11,21,0.72)] px-4 py-3"
@@ -1330,8 +1668,22 @@ export function WikiIngestModal({
                                   ) : null}
                                 </div>
                                 <div className="mt-2 text-sm text-white/82">
-                                  {entry.message}
+                                  {readMetadataString(
+                                    entry.metadata,
+                                    "eventKey"
+                                  ) === "llm_compile_background_polled"
+                                    ? buildPollingDisplayMessage(
+                                        entry,
+                                        entry.repetitionCount
+                                      )
+                                    : entry.message}
                                 </div>
+                                {entry.repetitionCount > 1 ? (
+                                  <div className="mt-2 text-xs text-white/44">
+                                    Combined {entry.repetitionCount} repeated
+                                    polling updates.
+                                  </div>
+                                ) : null}
                                 {Object.keys(entry.metadata).length > 0 ? (
                                   <details className="mt-3">
                                     <summary className="cursor-pointer text-xs text-white/45">
@@ -1414,6 +1766,7 @@ export function WikiIngestModal({
                           <CandidateCard
                             key={candidate.id}
                             candidate={candidate}
+                            spaceId={activeJob.job.spaceId}
                             decision={
                               decisions[candidate.id] ?? { action: "keep" }
                             }

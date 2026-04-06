@@ -51,6 +51,7 @@ export interface WikiLlmProvider {
     apiKey: string;
     profile: WikiLlmProfileLike;
     input: WikiCompileInput;
+    resumeResponseId?: string | null;
     logger?: WikiLlmDiagnosticLogger;
   }): Promise<WikiCompileResult | null>;
   testConnection(input: {
@@ -88,6 +89,9 @@ export class LlmManager extends AbstractManager {
   async compileWikiIngest(
     profile: WikiLlmProfileLike,
     input: WikiCompileInput,
+    options: {
+      resumeResponseId?: string | null;
+    } = {},
     logger?: WikiLlmDiagnosticLogger
   ) {
     const provider = this.resolveProvider(profile.provider);
@@ -121,7 +125,13 @@ export class LlmManager extends AbstractManager {
       });
       return null;
     }
-    return provider.compile({ apiKey, profile, input, logger });
+    return provider.compile({
+      apiKey,
+      profile,
+      input,
+      resumeResponseId: options.resumeResponseId ?? null,
+      logger
+    });
   }
 
   async testWikiConnection(

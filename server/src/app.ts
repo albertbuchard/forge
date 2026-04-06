@@ -4305,6 +4305,12 @@ export async function buildServer(
     });
   };
 
+  for (const pendingJob of listWikiIngestJobs({ limit: 100 })) {
+    if (["queued", "processing"].includes(pendingJob.job.status)) {
+      enqueueWikiIngestJob(pendingJob.job.id);
+    }
+  }
+
   const shouldSkipAutomaticDiagnosticRoute = (url: string | undefined) => {
     if (!url) {
       return false;
@@ -6596,6 +6602,48 @@ export async function buildServer(
       throw error;
     }
   });
+  app.post("/api/v1/wiki/ingest-jobs/:id/resume", async (request, reply) => {
+    requireScopedAccess(
+      request.headers as Record<string, unknown>,
+      ["write"],
+      { route: "/api/v1/wiki/ingest-jobs/:id/resume" }
+    );
+    const { id } = request.params as { id: string };
+    const job = getWikiIngestJob(id);
+    if (!job) {
+      reply.code(404);
+      return { error: "Wiki ingest job not found" };
+    }
+    const hasRecoverableOpenAiResponse =
+      job.logs.some(
+        (entry) => typeof entry.metadata.responseId === "string"
+      ) ||
+      job.assets.some(
+        (asset) =>
+          typeof asset.metadata.openAiResponseId === "string" ||
+          asset.status === "processing"
+      );
+    const canResume =
+      ["queued", "processing"].includes(job.job.status) ||
+      (job.job.status === "failed" && hasRecoverableOpenAiResponse);
+    if (!canResume) {
+      reply.code(409);
+      return {
+        error:
+          "Only active wiki ingest jobs, or failed jobs with a recoverable OpenAI background response, can be resumed.",
+        job,
+        resumed: false
+      };
+    }
+    const alreadyActive = managers.backgroundJobs.has(id);
+    if (!alreadyActive) {
+      enqueueWikiIngestJob(id);
+    }
+    return {
+      job: getWikiIngestJob(id),
+      resumed: !alreadyActive
+    };
+  });
   app.delete("/api/v1/wiki/ingest-jobs/:id", async (request, reply) => {
     requireScopedAccess(
       request.headers as Record<string, unknown>,
@@ -7444,7 +7492,7 @@ export async function buildServer(
       route: "/api/v1/diagnostics/logs"
     });
     const query = diagnosticLogListQuerySchema.parse(request.query ?? {});
-    return { logs: listDiagnosticLogs(query) };
+    return listDiagnosticLogs(query);
   });
   app.get("/api/v1/events", async (request) => {
     const query = eventsListQuerySchema.parse(request.query ?? {});

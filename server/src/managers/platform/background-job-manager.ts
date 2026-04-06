@@ -13,11 +13,27 @@ export class BackgroundJobManager extends AbstractManager {
   private active = new Set<string>();
   private draining = false;
 
+  constructor(private readonly maxConcurrentJobs = 3) {
+    super();
+  }
+
   start() {
     return;
   }
 
   enqueue(input: BackgroundJobTask) {
+    if (this.has(input.id)) {
+      this.recordLifecycleLog("info", "background_job_enqueue_skipped", {
+        task: input,
+        message: `Skipped duplicate background job ${input.label}.`,
+        details: {
+          queueDepth: this.queue.length,
+          activeCount: this.active.size
+        },
+        functionName: "enqueue"
+      });
+      return;
+    }
     this.queue.push(input);
     this.recordLifecycleLog("info", "background_job_enqueued", {
       task: input,
@@ -35,6 +51,12 @@ export class BackgroundJobManager extends AbstractManager {
     return this.active.has(jobId);
   }
 
+  has(jobId: string) {
+    return (
+      this.active.has(jobId) || this.queue.some((task) => task.id === jobId)
+    );
+  }
+
   async stop() {
     this.draining = true;
     while (this.active.size > 0) {
@@ -43,32 +65,47 @@ export class BackgroundJobManager extends AbstractManager {
   }
 
   private scheduleDrain() {
-    if (this.draining || this.queue.length === 0) {
+    if (
+      this.draining ||
+      this.queue.length === 0 ||
+      this.active.size >= this.maxConcurrentJobs
+    ) {
       return;
     }
     queueMicrotask(() => {
-      void this.drainNext();
+      void this.drainAvailable();
     });
   }
 
-  private async drainNext() {
-    if (this.draining || this.active.size > 0) {
+  private async drainAvailable() {
+    if (this.draining) {
       return;
     }
-    const next = this.queue.shift();
-    if (!next) {
-      return;
+    while (
+      !this.draining &&
+      this.queue.length > 0 &&
+      this.active.size < this.maxConcurrentJobs
+    ) {
+      const next = this.queue.shift();
+      if (!next) {
+        return;
+      }
+      this.active.add(next.id);
+      void this.runTask(next);
     }
-    this.active.add(next.id);
+  }
+
+  private async runTask(next: BackgroundJobTask) {
     const startedAt = Date.now();
     this.recordLifecycleLog("info", "background_job_started", {
       task: next,
       message: `Started background job ${next.label}.`,
       details: {
         queueDepth: this.queue.length,
-        activeCount: this.active.size
+        activeCount: this.active.size,
+        maxConcurrentJobs: this.maxConcurrentJobs
       },
-      functionName: "drainNext"
+      functionName: "runTask"
     });
     try {
       await next.handler();
@@ -78,9 +115,10 @@ export class BackgroundJobManager extends AbstractManager {
         details: {
           durationMs: Date.now() - startedAt,
           queueDepth: this.queue.length,
-          activeCount: this.active.size
+          activeCount: this.active.size,
+          maxConcurrentJobs: this.maxConcurrentJobs
         },
-        functionName: "drainNext"
+        functionName: "runTask"
       });
     } catch (error) {
       this.recordLifecycleLog("error", "background_job_failed", {
@@ -90,9 +128,10 @@ export class BackgroundJobManager extends AbstractManager {
           durationMs: Date.now() - startedAt,
           queueDepth: this.queue.length,
           activeCount: this.active.size,
+          maxConcurrentJobs: this.maxConcurrentJobs,
           error
         },
-        functionName: "drainNext"
+        functionName: "runTask"
       });
       console.error(
         `[${this.name}] background job failed for ${next.label}:`,
