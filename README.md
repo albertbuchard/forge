@@ -45,6 +45,12 @@ npm run dev
 
 The repo dev server commonly serves the UI at `http://127.0.0.1:3027/forge/` and the API at `http://127.0.0.1:4317/api/v1/`.
 
+When Forge is running inside this monorepo, the local runtime now prefers the
+tracked shared data root at `/Users/omarclaw/Documents/aurel-monorepo/data/forge`
+when it exists, so the app, plugins, and checked-in Forge data stay aligned by
+default. Set `FORGE_DATA_ROOT` or an explicit plugin `dataRoot` if you want a
+different runtime store.
+
 ## What Forge Includes
 
 - goals, projects, tasks, habits, and live task runs

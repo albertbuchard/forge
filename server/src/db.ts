@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs";
 import { mkdir, readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -15,8 +16,25 @@ function dateOffsetIso(days: number): string {
 
 const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 const migrationsDir = path.join(projectRoot, "server", "migrations");
+const monorepoForgeDataRoot = path.resolve(projectRoot, "..", "..", "data", "forge");
 
-let dataRoot = process.cwd();
+export function resolveDefaultDataRoot(currentWorkingDir = process.cwd()): string {
+  const configured = process.env.FORGE_DATA_ROOT?.trim();
+  if (configured) {
+    return path.resolve(configured);
+  }
+
+  // Inside the private monorepo, prefer the tracked shared Forge data root so
+  // the local app, Hermes, OpenClaw, and repo-managed data all point at the
+  // same state by default.
+  if (existsSync(path.join(monorepoForgeDataRoot, "data"))) {
+    return monorepoForgeDataRoot;
+  }
+
+  return path.resolve(currentWorkingDir);
+}
+
+let dataRoot = resolveDefaultDataRoot();
 let seedDemoDataEnabled = false;
 
 let db: DatabaseSync | null = null;

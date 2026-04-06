@@ -529,6 +529,28 @@ function getNoteBySlugRaw(spaceId, slug, exceptNoteId) {
         .get(...(exceptNoteId ? [spaceId, slug, exceptNoteId] : [spaceId, slug]));
     return row;
 }
+function getNoteByTitleRaw(spaceId, title, exceptNoteId) {
+    return getDatabase()
+        .prepare(`SELECT id, kind, title, slug, space_id, aliases_json, summary, content_markdown, content_plain, author, source,
+              tags_json, destroy_at, source_path, frontmatter_json, revision_hash, last_synced_at, parent_slug, index_order, show_in_index, created_at, updated_at
+       FROM notes
+       WHERE space_id = ?
+         AND lower(title) = lower(?)
+         ${exceptNoteId ? "AND id != ?" : ""}
+       LIMIT 1`)
+        .get(...(exceptNoteId ? [spaceId, title, exceptNoteId] : [spaceId, title]));
+}
+function listNotesByTitleRaw(spaceId, title, exceptNoteId) {
+    return getDatabase()
+        .prepare(`SELECT id, kind, title, slug, space_id, aliases_json, summary, content_markdown, content_plain, author, source,
+              tags_json, destroy_at, source_path, frontmatter_json, revision_hash, last_synced_at, parent_slug, index_order, show_in_index, created_at, updated_at
+       FROM notes
+       WHERE space_id = ?
+         AND lower(title) = lower(?)
+         ${exceptNoteId ? "AND id != ?" : ""}
+       ORDER BY updated_at DESC`)
+        .all(...(exceptNoteId ? [spaceId, title, exceptNoteId] : [spaceId, title]));
+}
 function getActiveNoteByIdRaw(noteId) {
     const row = getNoteByIdRaw(noteId);
     if (!row || isEntityDeleted("note", row.id)) {
@@ -542,6 +564,67 @@ function getActiveNoteBySlugRaw(spaceId, slug, exceptNoteId) {
         return null;
     }
     return row;
+}
+function scoreReferenceMatch(reference, row) {
+    const referenceSlug = slugify(reference);
+    const titleSlug = slugify(row.title);
+    if (referenceSlug && row.slug === referenceSlug) {
+        return 0;
+    }
+    if (titleSlug && row.slug === titleSlug) {
+        return 1;
+    }
+    const parseSuffix = (base) => {
+        if (!base || !row.slug.startsWith(`${base}-`)) {
+            return null;
+        }
+        const suffix = Number(row.slug.slice(base.length + 1));
+        return Number.isFinite(suffix) ? suffix : null;
+    };
+    const referenceSuffix = parseSuffix(referenceSlug);
+    if (referenceSuffix !== null) {
+        return 100 + referenceSuffix;
+    }
+    const titleSuffix = parseSuffix(titleSlug);
+    if (titleSuffix !== null) {
+        return 200 + titleSuffix;
+    }
+    return 10_000;
+}
+function chooseBestActiveReferenceMatch(reference, rows) {
+    const activeRows = rows.filter((row) => !isEntityDeleted("note", row.id));
+    if (activeRows.length === 0) {
+        return null;
+    }
+    return [...activeRows].sort((left, right) => {
+        const leftScore = scoreReferenceMatch(reference, left);
+        const rightScore = scoreReferenceMatch(reference, right);
+        if (leftScore !== rightScore) {
+            return leftScore - rightScore;
+        }
+        if (left.updated_at !== right.updated_at) {
+            return right.updated_at.localeCompare(left.updated_at);
+        }
+        return left.id.localeCompare(right.id);
+    })[0];
+}
+function getActiveNoteByReferenceRaw(spaceId, reference, exceptNoteId) {
+    const normalized = reference.trim();
+    if (!normalized) {
+        return null;
+    }
+    const slugMatch = getActiveNoteBySlugRaw(spaceId, normalized, exceptNoteId);
+    if (slugMatch) {
+        return slugMatch;
+    }
+    const titleMatch = chooseBestActiveReferenceMatch(normalized, listNotesByTitleRaw(spaceId, normalized, exceptNoteId));
+    if (titleMatch) {
+        return titleMatch;
+    }
+    const lowered = normalized.toLowerCase();
+    const aliasMatch = chooseBestActiveReferenceMatch(normalized, getNoteRows("WHERE space_id = ?", [spaceId]).filter((row) => row.id !== exceptNoteId &&
+        parseJsonStringArray(row.aliases_json).some((alias) => alias.trim().toLowerCase() === lowered)));
+    return aliasMatch ?? null;
 }
 function buildContentPlain(markdown) {
     return markdown
@@ -1443,7 +1526,7 @@ function rebuildWikiLinkEdges(note) {
                 continue;
             }
         }
-        const targetNote = getNoteBySlugRaw(note.spaceId, left.trim(), note.id);
+        const targetNote = getActiveNoteByReferenceRaw(note.spaceId, left.trim(), note.id);
         if (targetNote) {
             insert.run(note.id, "page", targetNote.id, null, null, label, left.trim(), isEmbed ? 1 : 0, now, now);
             continue;
@@ -1556,7 +1639,7 @@ export function getWikiHomePageDetail(input = {}) {
 export function getWikiPageDetailBySlug(input) {
     const spaceId = resolveSpaceId(input.spaceId, null);
     ensureWikiSpaceSeedPages(spaceId);
-    const row = getActiveNoteBySlugRaw(spaceId, input.slug.trim());
+    const row = getActiveNoteByReferenceRaw(spaceId, input.slug.trim());
     if (!row) {
         return null;
     }

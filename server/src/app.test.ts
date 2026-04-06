@@ -4930,6 +4930,135 @@ test("wiki pages are file-backed, searchable, backlink-aware, and ingestable", a
     assert.equal(detailBySlugBody.page.id, releaseBody.page.id);
     assert.equal(detailBySlugBody.page.slug, "release-playbook");
 
+    const detailByAlias = await app.inject({
+      method: "GET",
+      url: "/api/v1/wiki/by-slug/ship%20checklist",
+      headers: {
+        cookie: operatorCookie
+      }
+    });
+    assert.equal(detailByAlias.statusCode, 200);
+    const detailByAliasBody = detailByAlias.json() as {
+      page: { id: string; slug: string };
+    };
+    assert.equal(detailByAliasBody.page.id, releaseBody.page.id);
+    assert.equal(detailByAliasBody.page.slug, "release-playbook");
+
+    const personPage = await app.inject({
+      method: "POST",
+      url: "/api/v1/wiki/pages",
+      headers: {
+        cookie: operatorCookie
+      },
+      payload: {
+        title: "Albert Buchard",
+        slug: "albert-buchard",
+        summary: "Person page resolved by exact-title wiki links.",
+        contentMarkdown: "# Albert Buchard\n\nGeneva psychiatrist and researcher.",
+        links: []
+      }
+    });
+    assert.equal(personPage.statusCode, 201);
+    const personBody = personPage.json() as {
+      page: { id: string; slug: string };
+    };
+
+    const detailByTitle = await app.inject({
+      method: "GET",
+      url: "/api/v1/wiki/by-slug/Albert%20Buchard",
+      headers: {
+        cookie: operatorCookie
+      }
+    });
+    assert.equal(detailByTitle.statusCode, 200);
+    const detailByTitleBody = detailByTitle.json() as {
+      page: { id: string; slug: string };
+    };
+    assert.equal(detailByTitleBody.page.id, personBody.page.id);
+    assert.equal(detailByTitleBody.page.slug, "albert-buchard");
+
+    const duplicatePersonPage = await app.inject({
+      method: "POST",
+      url: "/api/v1/wiki/pages",
+      headers: {
+        cookie: operatorCookie
+      },
+      payload: {
+        title: "Albert Buchard",
+        slug: "albert-buchard",
+        summary: "Deleted duplicate should not shadow the canonical title route.",
+        contentMarkdown: "# Albert Buchard\n\nDuplicate candidate.\n",
+        links: []
+      }
+    });
+    assert.equal(duplicatePersonPage.statusCode, 201);
+    const duplicatePersonBody = duplicatePersonPage.json() as {
+      page: { id: string; slug: string };
+    };
+    assert.equal(duplicatePersonBody.page.slug, "albert-buchard-2");
+
+    const deleteDuplicatePerson = await app.inject({
+      method: "DELETE",
+      url: `/api/v1/wiki/pages/${duplicatePersonBody.page.id}?spaceId=wiki_space_shared`,
+      headers: {
+        cookie: operatorCookie
+      }
+    });
+    assert.equal(deleteDuplicatePerson.statusCode, 200);
+
+    const detailByTitleAfterDeletedDuplicate = await app.inject({
+      method: "GET",
+      url: "/api/v1/wiki/by-slug/Albert%20Buchard",
+      headers: {
+        cookie: operatorCookie
+      }
+    });
+    assert.equal(detailByTitleAfterDeletedDuplicate.statusCode, 200);
+    const detailByTitleAfterDeletedDuplicateBody =
+      detailByTitleAfterDeletedDuplicate.json() as {
+        page: { id: string; slug: string };
+      };
+    assert.equal(detailByTitleAfterDeletedDuplicateBody.page.id, personBody.page.id);
+    assert.equal(detailByTitleAfterDeletedDuplicateBody.page.slug, "albert-buchard");
+
+    const titleLinkedPage = await app.inject({
+      method: "POST",
+      url: "/api/v1/wiki/pages",
+      headers: {
+        cookie: operatorCookie
+      },
+      payload: {
+        title: "People log",
+        summary: "Uses a title-based wiki link instead of a slug.",
+        contentMarkdown:
+          "# People log\n\nWe should keep [[Albert Buchard]] easy to find from the wiki.",
+        links: []
+      }
+    });
+    assert.equal(titleLinkedPage.statusCode, 201);
+    const titleLinkedBody = titleLinkedPage.json() as {
+      page: { id: string };
+    };
+
+    const personDetail = await app.inject({
+      method: "GET",
+      url: `/api/v1/wiki/pages/${personBody.page.id}`,
+      headers: {
+        cookie: operatorCookie
+      }
+    });
+    assert.equal(personDetail.statusCode, 200);
+    const personDetailBody = personDetail.json() as {
+      backlinks: Array<{ sourceNoteId: string; rawTarget: string }>;
+    };
+    assert.ok(
+      personDetailBody.backlinks.some(
+        (entry) =>
+          entry.sourceNoteId === titleLinkedBody.page.id &&
+          entry.rawTarget === "Albert Buchard"
+      )
+    );
+
     const textSearch = await app.inject({
       method: "POST",
       url: "/api/v1/wiki/search",
