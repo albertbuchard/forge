@@ -17,6 +17,7 @@ type Deferred<T> = {
 type SessionRecord = {
   publicSession: OpenAiCodexOauthSession;
   manualInput: Deferred<string>;
+  authReady: Deferred<void>;
   credentials: OAuthCredentials | null;
 };
 
@@ -70,7 +71,11 @@ function parseError(error: unknown) {
   return String(error);
 }
 
-export function startOpenAiCodexOauthSession() {
+export async function startOpenAiCodexOauthSession(
+  options: {
+    login?: typeof loginOpenAICodex;
+  } = {}
+) {
   const id = `ocx_${randomUUID().replaceAll("-", "").slice(0, 8)}`;
   const now = new Date();
   const record: SessionRecord = {
@@ -85,28 +90,34 @@ export function startOpenAiCodexOauthSession() {
       credentialExpiresAt: null
     }),
     manualInput: createDeferred<string>(),
+    authReady: createDeferred<void>(),
     credentials: null
   };
   sessions.set(id, record);
 
-  void loginOpenAICodex({
+  const login = options.login ?? loginOpenAICodex;
+
+  void login({
     onAuth: ({ url }) => {
       updateSession(id, {
         status: "awaiting_browser",
         authUrl: url,
         error: null
       });
+      record.authReady.resolve();
     },
     onPrompt: async () => {
       updateSession(id, {
         status: "awaiting_manual_input"
       });
+      record.authReady.resolve();
       return await record.manualInput.promise;
     },
     onManualCodeInput: async () => {
       updateSession(id, {
         status: "awaiting_manual_input"
       });
+      record.authReady.resolve();
       return await record.manualInput.promise;
     }
   })
@@ -129,8 +140,17 @@ export function startOpenAiCodexOauthSession() {
         status: "error",
         error: parseError(error)
       });
+      try {
+        record.authReady.resolve();
+      } catch {
+        return;
+      }
     });
 
+  await Promise.race([
+    record.authReady.promise,
+    new Promise((resolve) => setTimeout(resolve, 250))
+  ]);
   return record.publicSession;
 }
 

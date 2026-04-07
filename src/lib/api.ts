@@ -2353,6 +2353,100 @@ export function submitOpenAiCodexOauthManualCode(
   );
 }
 
+export function getSurfaceAiProcessors(surfaceId: string) {
+  return request<{ graph: import("./types").SurfaceProcessorGraphPayload }>(
+    `/api/v1/surfaces/${surfaceId}/ai-processors`
+  );
+}
+
+export function createAiProcessor(input: {
+  surfaceId: string;
+  title: string;
+  promptFlow?: string;
+  contextInput?: string;
+  toolConfig?: import("./types").AiProcessorTool[];
+  agentIds?: string[];
+  triggerMode?: "manual" | "route" | "cron";
+  cronExpression?: string;
+  machineAccess?: { read: boolean; write: boolean; exec: boolean };
+  endpointEnabled?: boolean;
+}) {
+  return request<{ processor: import("./types").AiProcessor }>(
+    `/api/v1/surfaces/${input.surfaceId}/ai-processors`,
+    {
+      method: "POST",
+      body: JSON.stringify(input)
+    }
+  );
+}
+
+export function updateAiProcessor(
+  processorId: string,
+  patch: Partial<{
+    title: string;
+    promptFlow: string;
+    contextInput: string;
+    toolConfig: import("./types").AiProcessorTool[];
+    agentIds: string[];
+    triggerMode: "manual" | "route" | "cron";
+    cronExpression: string;
+    machineAccess: Partial<{ read: boolean; write: boolean; exec: boolean }>;
+    endpointEnabled: boolean;
+  }>
+) {
+  return request<{ processor: import("./types").AiProcessor }>(
+    `/api/v1/ai-processors/${processorId}`,
+    {
+      method: "PATCH",
+      body: JSON.stringify(patch)
+    }
+  );
+}
+
+export function deleteAiProcessor(processorId: string) {
+  return request<{ processor: import("./types").AiProcessor }>(
+    `/api/v1/ai-processors/${processorId}`,
+    { method: "DELETE" }
+  );
+}
+
+export function createAiProcessorLink(input: {
+  surfaceId: string;
+  sourceWidgetId: string;
+  targetProcessorId: string;
+  accessMode?: "read" | "write" | "read_write" | "exec";
+  capabilityMode?: "content" | "tool" | "mcp" | "processor";
+  metadata?: Record<string, unknown>;
+}) {
+  return request<{ link: import("./types").AiProcessorLink }>(
+    "/api/v1/ai-processor-links",
+    {
+      method: "POST",
+      body: JSON.stringify(input)
+    }
+  );
+}
+
+export function deleteAiProcessorLink(linkId: string) {
+  return request<{ link: import("./types").AiProcessorLink }>(
+    `/api/v1/ai-processor-links/${linkId}`,
+    { method: "DELETE" }
+  );
+}
+
+export function runAiProcessor(
+  processorId: string,
+  input: { input?: string; context?: Record<string, unknown> }
+) {
+  return request<{
+    processor: import("./types").AiProcessor;
+    output: { concatenated: string; byAgent: Record<string, string> };
+  }>(`/api/v1/ai-processors/${processorId}/run`, {
+    method: "POST",
+    body: JSON.stringify(input)
+  });
+}
+
 export function getCompanionOverview(userIds?: string[] | unknown) {
   const search = new URLSearchParams();
   appendUserIds(search, coerceUserIds(userIds));

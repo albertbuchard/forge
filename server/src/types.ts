@@ -1395,6 +1395,82 @@ export const modelSettingsPayloadSchema = z.object({
   })
 });
 
+export const aiProcessorTriggerModeSchema = z.enum([
+  "manual",
+  "route",
+  "cron"
+]);
+
+export const aiProcessorCapabilityModeSchema = z.enum([
+  "content",
+  "tool",
+  "mcp",
+  "processor"
+]);
+
+export const aiProcessorAccessModeSchema = z.enum([
+  "read",
+  "write",
+  "read_write",
+  "exec"
+]);
+
+export const aiProcessorMachineAccessSchema = z.object({
+  read: z.boolean().default(false),
+  write: z.boolean().default(false),
+  exec: z.boolean().default(false)
+});
+
+export const aiProcessorToolSchema = z.object({
+  key: nonEmptyTrimmedString,
+  label: nonEmptyTrimmedString,
+  description: trimmedString.default(""),
+  endpoint: trimmedString.default(""),
+  mode: aiProcessorCapabilityModeSchema.default("tool")
+});
+
+export const aiProcessorSchema = z.object({
+  id: z.string(),
+  surfaceId: z.string(),
+  title: z.string(),
+  promptFlow: z.string(),
+  contextInput: z.string(),
+  toolConfig: z.array(aiProcessorToolSchema),
+  agentIds: z.array(z.string()),
+  triggerMode: aiProcessorTriggerModeSchema,
+  cronExpression: z.string(),
+  machineAccess: aiProcessorMachineAccessSchema,
+  endpointEnabled: z.boolean(),
+  lastRunAt: z.string().nullable(),
+  lastRunStatus: z.enum(["idle", "running", "completed", "failed"]).nullable(),
+  lastRunOutput: z
+    .object({
+      concatenated: z.string(),
+      byAgent: z.record(z.string(), z.string())
+    })
+    .nullable(),
+  createdAt: z.string(),
+  updatedAt: z.string()
+});
+
+export const aiProcessorLinkSchema = z.object({
+  id: z.string(),
+  surfaceId: z.string(),
+  sourceWidgetId: z.string(),
+  targetProcessorId: z.string(),
+  accessMode: aiProcessorAccessModeSchema,
+  capabilityMode: aiProcessorCapabilityModeSchema,
+  metadata: z.record(z.string(), z.unknown()),
+  createdAt: z.string(),
+  updatedAt: z.string()
+});
+
+export const surfaceProcessorGraphPayloadSchema = z.object({
+  surfaceId: z.string(),
+  processors: z.array(aiProcessorSchema),
+  links: z.array(aiProcessorLinkSchema)
+});
+
 export const openAiCodexOauthSessionSchema = z.object({
   id: z.string(),
   status: z.enum([
@@ -2655,6 +2731,49 @@ export const submitOpenAiCodexOauthManualCodeSchema = z.object({
   codeOrUrl: nonEmptyTrimmedString
 });
 
+export const createAiProcessorSchema = z.object({
+  surfaceId: nonEmptyTrimmedString,
+  title: nonEmptyTrimmedString,
+  promptFlow: trimmedString.default(""),
+  contextInput: trimmedString.default(""),
+  toolConfig: z.array(aiProcessorToolSchema).default([]),
+  agentIds: z.array(z.string().trim().min(1)).default([]),
+  triggerMode: aiProcessorTriggerModeSchema.default("manual"),
+  cronExpression: trimmedString.default(""),
+  machineAccess: aiProcessorMachineAccessSchema.default({
+    read: false,
+    write: false,
+    exec: false
+  }),
+  endpointEnabled: z.boolean().default(true)
+});
+
+export const updateAiProcessorSchema = z.object({
+  title: nonEmptyTrimmedString.optional(),
+  promptFlow: trimmedString.optional(),
+  contextInput: trimmedString.optional(),
+  toolConfig: z.array(aiProcessorToolSchema).optional(),
+  agentIds: z.array(z.string().trim().min(1)).optional(),
+  triggerMode: aiProcessorTriggerModeSchema.optional(),
+  cronExpression: trimmedString.optional(),
+  machineAccess: aiProcessorMachineAccessSchema.partial().optional(),
+  endpointEnabled: z.boolean().optional()
+});
+
+export const createAiProcessorLinkSchema = z.object({
+  surfaceId: nonEmptyTrimmedString,
+  sourceWidgetId: nonEmptyTrimmedString,
+  targetProcessorId: nonEmptyTrimmedString,
+  accessMode: aiProcessorAccessModeSchema.default("read"),
+  capabilityMode: aiProcessorCapabilityModeSchema.default("content"),
+  metadata: z.record(z.string(), z.unknown()).default({})
+});
+
+export const runAiProcessorSchema = z.object({
+  input: trimmedString.default(""),
+  context: z.record(z.string(), z.unknown()).default({})
+});
+
 export const createAgentTokenSchema = z.object({
   label: nonEmptyTrimmedString,
   agentLabel: nonEmptyTrimmedString.default("Forge Agent"),
@@ -3181,6 +3300,11 @@ export type ModelSettingsPayload = z.infer<typeof modelSettingsPayloadSchema>;
 export type OpenAiCodexOauthSession = z.infer<
   typeof openAiCodexOauthSessionSchema
 >;
+export type AiProcessor = z.infer<typeof aiProcessorSchema>;
+export type AiProcessorLink = z.infer<typeof aiProcessorLinkSchema>;
+export type SurfaceProcessorGraphPayload = z.infer<
+  typeof surfaceProcessorGraphPayloadSchema
+>;
 export type OperatorContextPayload = z.infer<
   typeof operatorContextPayloadSchema
 >;
@@ -3279,6 +3403,12 @@ export type UpsertAiModelConnectionInput = z.infer<
 export type TestAiModelConnectionInput = z.infer<
   typeof testAiModelConnectionSchema
 >;
+export type CreateAiProcessorInput = z.infer<typeof createAiProcessorSchema>;
+export type UpdateAiProcessorInput = z.infer<typeof updateAiProcessorSchema>;
+export type CreateAiProcessorLinkInput = z.infer<
+  typeof createAiProcessorLinkSchema
+>;
+export type RunAiProcessorInput = z.infer<typeof runAiProcessorSchema>;
 export type CreateAgentTokenInput = z.infer<typeof createAgentTokenSchema>;
 export type CreateAgentActionInput = z.infer<typeof createAgentActionSchema>;
 export type CreateInsightFeedbackInput = z.infer<

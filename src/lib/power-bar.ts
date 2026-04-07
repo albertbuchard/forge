@@ -51,7 +51,7 @@ function readUserSummary(value: unknown): UserSummary | null {
 
   return {
     id,
-    kind,
+    kind: kind as UserSummary["kind"],
     displayName,
     handle: readString(candidate.handle) ?? "",
     description: readString(candidate.description) ?? "",

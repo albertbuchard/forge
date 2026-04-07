@@ -86,7 +86,7 @@ function createEnglishDictionary() {
         appName: "The Kinetic Forge",
         appMark: "FORGE",
         more: "More",
-        command: "Command",
+        command: "Power bar",
         moreRoutesEyebrow: "More routes",
         moreRoutesTitle: "Move through Forge",
         moreRoutesDescription: "Use this sheet for secondary destinations so the bottom bar stays clean and easy to use.",
@@ -182,8 +182,8 @@ function createEnglishDictionary() {
         newStrategyDescription: "Add a directed plan across projects and tasks."
     },
     commandPalette: {
-      searchPlaceholder: "Jump to a route, wiki page, goal, project, strategy, preference workspace, or focus task",
-      noResults: "No command matches this search yet.",
+      searchPlaceholder: "Search Forge routes, records, wiki pages, notes, and active work",
+      noResults: "No Forge result matches this search yet.",
       categoryRoute: "Route",
       categoryGoal: "Goal",
       categoryProject: "Project",
@@ -636,7 +636,7 @@ export const fr: typeof en = {
       appName: "The Kinetic Forge",
       appMark: "FORGE",
       more: "Plus",
-      command: "Commande",
+      command: "Barre de puissance",
       moreRoutesEyebrow: "Autres vues",
       moreRoutesTitle: "Parcourir Forge",
       moreRoutesDescription: "Utilisez ce panneau pour accéder aux vues secondaires sans surcharger la barre inférieure.",
@@ -732,8 +732,8 @@ export const fr: typeof en = {
       newStrategyDescription: "Ajouter un plan dirigé à travers projets et tâches."
     },
     commandPalette: {
-      searchPlaceholder: "Aller à une vue, une page wiki, un objectif, un projet, une stratégie, l'espace préférences ou une tâche prioritaire",
-      noResults: "Aucune commande ne correspond à cette recherche.",
+      searchPlaceholder: "Rechercher les vues Forge, les fiches, les pages wiki, les notes et le travail actif",
+      noResults: "Aucun résultat Forge ne correspond à cette recherche.",
       categoryRoute: "Vue",
       categoryGoal: "Objectif",
       categoryProject: "Projet",

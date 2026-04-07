@@ -226,9 +226,16 @@ function buildResponsesUrl(
   profile: WikiLlmProfileLike,
   responseId?: string | null
 ) {
+  const baseUrl = normalizeBaseUrl(profile);
   const root = isCodexProfile(profile)
-    ? `${normalizeBaseUrl(profile)}/codex/responses`
-    : `${normalizeBaseUrl(profile)}/responses`;
+    ? baseUrl.endsWith("/codex/responses")
+      ? baseUrl
+      : baseUrl.endsWith("/codex")
+        ? `${baseUrl}/responses`
+        : `${baseUrl}/codex/responses`
+    : baseUrl.endsWith("/responses")
+      ? baseUrl
+      : `${baseUrl}/responses`;
   return responseId ? `${root}/${responseId}` : root;
 }
 
@@ -238,7 +245,9 @@ function extractCodexAccountId(accessToken: string) {
     if (parts.length !== 3) {
       throw new Error("Invalid token");
     }
-    const payload = JSON.parse(atob(parts[1])) as Record<string, unknown>;
+    const payload = JSON.parse(
+      Buffer.from(parts[1], "base64url").toString("utf8")
+    ) as Record<string, unknown>;
     const auth = payload[CODEX_JWT_CLAIM_PATH];
     if (!auth || typeof auth !== "object") {
       throw new Error("Missing auth claim");
@@ -507,6 +516,68 @@ export class OpenAiResponsesProvider implements WikiLlmProvider {
     });
     return {
       outputPreview: parseOutputText(payload)?.trim() || "ok"
+    };
+  }
+
+  async runText({
+    apiKey,
+    profile,
+    systemPrompt,
+    prompt,
+    logger
+  }: NonNullable<WikiLlmProvider["runText"]> extends (
+    input: infer T
+  ) => Promise<unknown>
+    ? T
+    : never) {
+    emitDiagnostic(logger, {
+      level: "info",
+      message: "Running OpenAI text prompt.",
+      details: {
+        scope: "ai_processor",
+        eventKey: "prompt_run_start",
+        provider: profile.provider,
+        baseUrl: profile.baseUrl,
+        model: profile.model
+      }
+    });
+    const response = await fetch(buildResponsesUrl(profile), {
+      method: "POST",
+      headers: buildRequestHeaders(profile, apiKey, {
+        includeJsonContentType: true
+      }),
+      body: JSON.stringify({
+        model: profile.model,
+        input: [
+          ...(systemPrompt?.trim()
+            ? [
+                {
+                  role: "system",
+                  content: [{ type: "input_text", text: systemPrompt.trim() }]
+                }
+              ]
+            : []),
+          {
+            role: "user",
+            content: [{ type: "input_text", text: prompt }]
+          }
+        ],
+        reasoning: buildReasoningConfiguration(profile),
+        text: buildTextConfiguration({ profile }),
+        max_output_tokens: 1200
+      })
+    });
+    if (!response.ok) {
+      const message = await response.text();
+      throw new Error(
+        `OpenAI text prompt failed (${response.status})${
+          message ? `: ${message}` : ""
+        }`
+      );
+    }
+    const payload = await readJsonPayload(response);
+    return {
+      outputText: parseOutputText(payload)?.trim() || ""
     };
   }
 

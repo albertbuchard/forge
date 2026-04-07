@@ -8590,7 +8590,7 @@ test("settings and local agent token management persist through the versioned AP
     assert.ok(goalConversationPlaybook);
     assert.match(
       goalConversationPlaybook.openingQuestion,
-      /direction are you trying to hold onto/i
+      /feels important enough.*keep it in view/i
     );
     const taskConversationPlaybook =
       onboardingBody.onboarding.entityConversationPlaybooks.find(
