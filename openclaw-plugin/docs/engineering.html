@@ -1,0 +1,306 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Forge Engineering Reference</title>
+    <meta
+      name="description"
+      content="Forge architecture, stack, runtime surfaces, repository layout, and data model."
+    />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=Sora:wght@600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="page-shell">
+      <div class="ambient a"></div>
+      <div class="ambient b"></div>
+
+      <header class="topbar">
+        <a class="brand" href="./index.html">
+          <span class="brand-mark">F</span>
+          <span class="brand-copy">
+            <strong>Forge</strong>
+            <span>Engineering Docs</span>
+          </span>
+        </a>
+        <nav class="topnav">
+          <a href="./index.html">Home</a>
+          <a class="active" href="./engineering.html">Engineering</a>
+          <a href="./development.html">Development</a>
+          <a href="./integrations.html">Integrations</a>
+          <a href="./api/">API</a>
+          <a href="https://github.com/albertbuchard/forge">GitHub</a>
+        </nav>
+      </header>
+
+      <main class="page">
+        <div class="breadcrumbs">
+          <a href="./index.html">Docs</a>
+          <span>/</span>
+          <span>Engineering</span>
+        </div>
+
+        <section class="hero split">
+          <div class="hero-card">
+            <p class="eyebrow">Engineering Reference</p>
+            <h1>Runtime shape, storage model, and repository boundaries.</h1>
+            <p class="lede">
+              Forge is a local-first multi-surface system. The same runtime serves
+              the web app, the HTTP API, the OpenAPI document, the agent adapters,
+              and the file-backed wiki memory layer.
+            </p>
+          </div>
+          <aside class="hero-card">
+            <p class="eyebrow">Page Sections</p>
+            <ul class="guide-list">
+              <li><a href="#runtime-surfaces">Runtime surfaces</a></li>
+              <li><a href="#stack">Stack</a></li>
+              <li><a href="#data-model">Storage and data model</a></li>
+              <li><a href="#route-families">Route families</a></li>
+              <li><a href="#repository-layout">Repository layout</a></li>
+            </ul>
+          </aside>
+        </section>
+
+        <section class="section" id="runtime-surfaces">
+          <div class="section-heading">
+            <p class="eyebrow">Runtime Surfaces</p>
+            <h2>What Forge exposes at runtime.</h2>
+          </div>
+          <div class="card-grid three">
+            <article class="card">
+              <h3>Web application</h3>
+              <p>
+                The user-facing app is mounted under <code>/forge/</code>. The UI
+                includes execution, calendar, notes, wiki, health, preferences, and
+                Psyche surfaces.
+              </p>
+            </article>
+            <article class="card">
+              <h3>HTTP API</h3>
+              <p>
+                The versioned API is mounted under <code>/api/v1/</code>. The
+                generated OpenAPI 3.1 document is served from
+                <code>/api/v1/openapi.json</code>.
+              </p>
+            </article>
+            <article class="card">
+              <h3>Agent adapters</h3>
+              <p>
+                OpenClaw, Hermes, and Codex do not mirror the entire internal API.
+                They expose curated operator, mutation, and UI-handoff surfaces on top
+                of the same Forge model.
+              </p>
+            </article>
+          </div>
+        </section>
+
+        <section class="section" id="stack">
+          <div class="section-heading">
+            <p class="eyebrow">Stack</p>
+            <h2>Current production stack in this repo.</h2>
+          </div>
+          <table class="doc-table">
+            <thead>
+              <tr>
+                <th>Concern</th>
+                <th>Technology</th>
+                <th>Why it matters here</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>UI</td>
+                <td>React 19, TypeScript 5.8, Vite 6, Tailwind CSS 4</td>
+                <td>SPA served from the same repo, with local and mounted runtime paths.</td>
+              </tr>
+              <tr>
+                <td>Backend</td>
+                <td>Fastify 5, TypeScript, custom OpenAPI generator</td>
+                <td>One server process exposes runtime API, auth bootstrap, and OpenAPI JSON.</td>
+              </tr>
+              <tr>
+                <td>Persistence</td>
+                <td>SQLite, structured JSON columns, file-backed wiki storage</td>
+                <td>Execution and reflection records stay local-first and auditable.</td>
+              </tr>
+              <tr>
+                <td>Desktop / native</td>
+                <td>Tauri 2 and Swift iOS companion</td>
+                <td>Desktop shell and HealthKit import path are separate runtime surfaces.</td>
+              </tr>
+              <tr>
+                <td>Documentation</td>
+                <td>GitHub Pages static docs + generated OpenAPI reference</td>
+                <td>Engineering docs are published alongside a rendered API reference.</td>
+              </tr>
+            </tbody>
+          </table>
+        </section>
+
+        <section class="section" id="data-model">
+          <div class="section-heading">
+            <p class="eyebrow">Storage And Data Model</p>
+            <h2>How Forge stores operational and long-form data.</h2>
+          </div>
+          <div class="card-grid two">
+            <article class="card">
+              <h3>Structured runtime records</h3>
+              <p>
+                Goals, projects, tasks, task runs, habits, calendar records,
+                preferences, Psyche entities, questionnaires, sleep, workouts, and
+                notes are stored in SQLite with typed repository boundaries.
+              </p>
+            </article>
+            <article class="card">
+              <h3>File-first wiki memory</h3>
+              <p>
+                Wiki pages remain Markdown-first and file-backed. Forge stores the
+                page metadata, ingest jobs, and search index state while keeping the
+                article source as files.
+              </p>
+            </article>
+            <article class="card">
+              <h3>Multi-user ownership</h3>
+              <p>
+                Most entity families support explicit <code>userId</code> ownership
+                for human and bot actors. Read flows may widen scope with repeated
+                <code>userIds</code>.
+              </p>
+            </article>
+            <article class="card">
+              <h3>Local-first by default</h3>
+              <p>
+                The repo runtime, OpenClaw plugin, and Hermes plugin can all point at
+                one shared local data root. That is the expected shape for a shared
+                Forge system.
+              </p>
+            </article>
+          </div>
+        </section>
+
+        <section class="section" id="route-families">
+          <div class="section-heading">
+            <p class="eyebrow">Route Families</p>
+            <h2>How the API is organized.</h2>
+          </div>
+          <table class="doc-table">
+            <thead>
+              <tr>
+                <th>Family</th>
+                <th>Root</th>
+                <th>Coverage</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Execution</td>
+                <td><code>/api/v1/goals</code>, <code>/projects</code>, <code>/tasks</code></td>
+                <td>Goals, projects, tasks, task runs, adjustments, activity, metrics, and reviews.</td>
+              </tr>
+              <tr>
+                <td>Calendar</td>
+                <td><code>/api/v1/calendar/*</code></td>
+                <td>Connections, mirrored events, work blocks, timeboxes, and native events.</td>
+              </tr>
+              <tr>
+                <td>Knowledge</td>
+                <td><code>/api/v1/wiki/*</code>, <code>/api/v1/notes</code></td>
+                <td>Wiki pages, ingest, search, embeddings, and Markdown evidence records.</td>
+              </tr>
+              <tr>
+                <td>Preferences</td>
+                <td><code>/api/v1/preferences/*</code></td>
+                <td>Contexts, concept lists, items, judgments, signals, and score updates.</td>
+              </tr>
+              <tr>
+                <td>Psyche</td>
+                <td><code>/api/v1/psyche/*</code></td>
+                <td>Values, patterns, behaviors, beliefs, modes, reports, questionnaires, and self-observation.</td>
+              </tr>
+              <tr>
+                <td>Health</td>
+                <td><code>/api/v1/health/*</code></td>
+                <td>Sleep, sports, workouts, and iPhone companion sync/update flows.</td>
+              </tr>
+              <tr>
+                <td>Platform</td>
+                <td><code>/api/v1/settings</code>, <code>/entities/*</code>, <code>/agents/*</code></td>
+                <td>Settings, batch entity mutation, approvals, agents, users, and onboarding.</td>
+              </tr>
+            </tbody>
+          </table>
+        </section>
+
+        <section class="section" id="repository-layout">
+          <div class="section-heading">
+            <p class="eyebrow">Repository Layout</p>
+            <h2>Where the major Forge concerns live.</h2>
+          </div>
+          <table class="doc-table">
+            <thead>
+              <tr>
+                <th>Path</th>
+                <th>Purpose</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><code>src/</code></td>
+                <td>React app routes, components, view logic, API client, and UI state.</td>
+              </tr>
+              <tr>
+                <td><code>server/src/</code></td>
+                <td>Fastify app, repositories, managers, OpenAPI builder, and tests.</td>
+              </tr>
+              <tr>
+                <td><code>docs/</code></td>
+                <td>Longer engineering guides kept as Markdown inside the repo.</td>
+              </tr>
+              <tr>
+                <td><code>openclaw-plugin/</code></td>
+                <td>Published OpenClaw package and GitHub Pages output boundary.</td>
+              </tr>
+              <tr>
+                <td><code>plugins/forge-hermes/</code></td>
+                <td>Hermes plugin package.</td>
+              </tr>
+              <tr>
+                <td><code>plugins/forge-codex/</code></td>
+                <td>Repo-local Codex adapter and runtime payload.</td>
+              </tr>
+              <tr>
+                <td><code>ios-companion/</code></td>
+                <td>Swift iPhone companion for pairing and HealthKit import.</td>
+              </tr>
+              <tr>
+                <td><code>src-tauri/</code></td>
+                <td>Tauri desktop shell integration.</td>
+              </tr>
+            </tbody>
+          </table>
+        </section>
+
+        <section class="section">
+          <div class="note">
+            The rendered API reference at <a href="./api/">`/api/`</a> is built
+            from the same OpenAPI generator the Forge runtime serves at
+            <code>/api/v1/openapi.json</code>. The GitHub Pages site is not a second
+            hand-maintained spec.
+          </div>
+        </section>
+
+        <footer class="footer">
+          For longer operational guides, use the repo Markdown docs in
+          <code>docs/</code> alongside this Pages site.
+        </footer>
+      </main>
+    </div>
+  </body>
+</html>

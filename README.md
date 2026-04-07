@@ -1,19 +1,17 @@
 # Forge
 
 [![React 19](https://img.shields.io/badge/React-19-61dafb?logo=react&logoColor=06121c)](https://react.dev/)
-[![TypeScript 5](https://img.shields.io/badge/TypeScript-5.8-3178c6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+[![TypeScript 5.8](https://img.shields.io/badge/TypeScript-5.8-3178c6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
 [![Fastify 5](https://img.shields.io/badge/Fastify-5-000000?logo=fastify&logoColor=white)](https://fastify.dev/)
-[![Docs](https://img.shields.io/badge/docs-GitHub%20Pages-b7c4ff)](https://albertbuchard.github.io/forge/)
+[![SQLite](https://img.shields.io/badge/SQLite-local--first-003b57?logo=sqlite&logoColor=white)](https://www.sqlite.org/)
+[![Tauri 2](https://img.shields.io/badge/Tauri-2-ffc131?logo=tauri&logoColor=1f2937)](https://tauri.app/)
+[![OpenAPI 3.1](https://img.shields.io/badge/OpenAPI-3.1-6ba539?logo=openapiinitiative&logoColor=white)](https://www.openapis.org/)
+[![Docs](https://img.shields.io/badge/docs-GitHub%20Pages-8ab4ff)](https://albertbuchard.github.io/forge/)
 
-Forge is a local-first planning, execution, memory, and reflection system. It combines a React web app, a Fastify API, a file-first wiki, health surfaces, and curated agent adapters for OpenClaw, Hermes, and Codex.
-
-- Docs: [Forge docs](https://albertbuchard.github.io/forge/)
-- Product reference: [Feature reference](https://albertbuchard.github.io/forge/features.html)
-- Integration and API reference: [Reference docs](https://albertbuchard.github.io/forge/reference.html)
-- OpenClaw package: [`openclaw-plugin/`](./openclaw-plugin)
-- Hermes package: [`plugins/forge-hermes/`](./plugins/forge-hermes)
-
-![Forge overview](./openclaw-plugin/docs/assets/forge-overview-dashboard.png)
+Forge is a local-first execution, planning, memory, health, and reflection system.
+The repo contains the React web app, the Fastify API, the SQLite-backed runtime, the
+file-first wiki layer, the OpenClaw and Hermes adapter packages, the Codex adapter,
+and the iPhone companion.
 
 ## Getting Started
 
@@ -27,11 +25,10 @@ openclaw gateway restart
 openclaw forge health
 ```
 
-If the plugin is installed but does not load, the missing piece is usually `plugins.allow`. The full setup and runtime notes are in the [reference docs](https://albertbuchard.github.io/forge/reference.html).
+If the plugin installs but does not load, the missing piece is usually the
+`plugins.allow` entry in `openclaw.json`.
 
 Temporary bypass for some OpenClaw `2026.4.x` builds:
-
-Recent OpenClaw versions can block Forge during `plugins install` because Forge launches a local runtime and gets flagged as dangerous by the installer scanner. I am trying to get a cleaner long-term install path upstream. Until then, the reliable bypass is to install the npm package, then load that package path explicitly from `openclaw.json`.
 
 ```bash
 npm install -g forge-openclaw-plugin
@@ -40,8 +37,6 @@ openclaw gateway restart
 openclaw plugins info forge-openclaw-plugin
 openclaw forge health
 ```
-
-That bypass keeps the normal Forge package, but asks OpenClaw to trust and load the npm-installed folder directly instead of relying on the current installer path.
 
 ### Hermes
 
@@ -57,49 +52,88 @@ npm install
 npm run dev
 ```
 
-The repo dev server commonly serves the UI at `http://127.0.0.1:3027/forge/` and the API at `http://127.0.0.1:4317/api/v1/`.
+Default local runtime addresses:
 
-When Forge is running inside this monorepo, the local runtime now prefers the
-tracked shared data root at `/Users/omarclaw/Documents/aurel-monorepo/data/forge`
-when it exists, so the app, plugins, and checked-in Forge data stay aligned by
-default. Set `FORGE_DATA_ROOT` or an explicit plugin `dataRoot` if you want a
-different runtime store.
+- UI: `http://127.0.0.1:3027/forge/`
+- API: `http://127.0.0.1:4317/api/v1/`
+- OpenAPI: `http://127.0.0.1:4317/api/v1/openapi.json`
 
-## What Forge Includes
+When Forge runs inside this monorepo, the local runtime prefers the shared tracked
+data root at `/Users/omarclaw/Documents/aurel-monorepo/data/forge` when it exists.
+Set `FORGE_DATA_ROOT` or an explicit plugin `dataRoot` if you want another store.
 
-- goals, projects, tasks, habits, and live task runs
-- strategies with directed graph planning
-- a file-first wiki with spaces, backlinks, search, background ingest, page deletion, and idempotent ingest review publishing
-- preferences with pairwise comparison, direct signals, and concept libraries
-- Psyche records such as beliefs, values, patterns, modes, and trigger reports
-- sleep and sports records linked back to Forge entities
-- multi-user ownership across human and bot users
-- OpenClaw, Hermes, and Codex adapter surfaces on top of the same Forge model
+## Table Of Contents
 
-## Screenshots
-
-<p align="center">
-  <img src="./openclaw-plugin/docs/assets/forge-wiki-memory.png" alt="Forge wiki" width="48%" />
-  <img src="./openclaw-plugin/docs/assets/forge-preference-game.png" alt="Forge preferences" width="48%" />
-</p>
+- [Documentation](#documentation)
+- [What Forge Includes](#what-forge-includes)
+- [Current Stack](#current-stack)
+- [Runtime Surfaces](#runtime-surfaces)
+- [Repository Layout](#repository-layout)
+- [Development](#development)
+- [Verification](#verification)
+- [Integration Notes](#integration-notes)
 
 ## Documentation
 
-- [Docs home](https://albertbuchard.github.io/forge/) for the short overview and install paths
-- [Feature reference](https://albertbuchard.github.io/forge/features.html) for product surfaces and screenshots
-- [Reference docs](https://albertbuchard.github.io/forge/reference.html) for runtime surfaces, API groups, adapters, and repo structure
-- [Multi-user and strategy guide](./docs/multi-user-and-strategies.md)
-- [Preferences system guide](./docs/preferences-system.md)
-- [OpenClaw plugin guide](./docs/openclaw-plugin.md)
-- [Hermes plugin guide](./docs/hermes-plugin.md)
+- GitHub Pages docs: [albertbuchard.github.io/forge](https://albertbuchard.github.io/forge/)
+- API reference: [albertbuchard.github.io/forge/api/](https://albertbuchard.github.io/forge/api/)
+- Engineering reference: [albertbuchard.github.io/forge/engineering.html](https://albertbuchard.github.io/forge/engineering.html)
+- Development guide: [albertbuchard.github.io/forge/development.html](https://albertbuchard.github.io/forge/development.html)
+- Integration guide: [albertbuchard.github.io/forge/integrations.html](https://albertbuchard.github.io/forge/integrations.html)
+- Raw OpenAPI spec on Pages: [albertbuchard.github.io/forge/api/openapi.json](https://albertbuchard.github.io/forge/api/openapi.json)
+- Repo guides: [`docs/`](./docs)
+
+## What Forge Includes
+
+- goals, projects, tasks, habits, strategies, and timed task runs
+- a file-first wiki with search, ingest, health checks, and page-backed memory
+- notes as first-class Markdown evidence records
+- preferences with pairwise judgments, direct signals, and concept libraries
+- Psyche entities such as values, beliefs, patterns, modes, reports, and questionnaires
+- sleep and workout records linked back to Forge context
+- explicit multi-user ownership across human and bot users
+- OpenClaw, Hermes, and Codex adapter surfaces on top of the same runtime
+- an iPhone companion for pairing and HealthKit import
+
+![Forge overview](./openclaw-plugin/docs/assets/forge-overview-dashboard.png)
+
+## Current Stack
+
+| Layer | Stack | Notes |
+| --- | --- | --- |
+| Web UI | React 19, TypeScript 5.8, Vite 6, Tailwind CSS 4 | Main app served under `/forge/` |
+| Backend | Fastify 5, TypeScript, generated OpenAPI 3.1 | Main API served under `/api/v1/` |
+| Storage | SQLite + file-backed wiki storage | Local-first canonical store |
+| Desktop / native | Tauri 2 + Swift iOS companion | Desktop shell and HealthKit path |
+| Packages | OpenClaw plugin, Hermes plugin, Codex adapter | Shared runtime model across agent hosts |
+| Docs | GitHub Pages + rendered OpenAPI reference | Pages artifact includes engineering docs and API docs |
+
+## Runtime Surfaces
+
+- Web app: `/forge/`
+- API root: `/api/v1/`
+- OpenAPI JSON: `/api/v1/openapi.json`
+- Wiki routes: `/api/v1/wiki/*`
+- Preferences routes: `/api/v1/preferences/*`
+- Psyche routes: `/api/v1/psyche/*`
+- Questionnaires: `/api/v1/psyche/questionnaires` and `/api/v1/psyche/questionnaire-runs/*`
+- Health surfaces: `/api/v1/health/sleep`, `/api/v1/health/fitness`
+
+The agent adapters intentionally expose a curated surface on top of this runtime
+instead of mirroring every internal route one to one.
 
 ## Repository Layout
 
-- [`src/`](./src) contains the Forge web app
-- [`server/`](./server) contains the Fastify API and data layer
-- [`openclaw-plugin/`](./openclaw-plugin) contains the published OpenClaw package and GitHub Pages site
-- [`plugins/forge-hermes/`](./plugins/forge-hermes) contains the Hermes package
-- [`plugins/forge-codex/`](./plugins/forge-codex) contains the repo-local Codex adapter
+| Path | Purpose |
+| --- | --- |
+| [`src/`](./src) | React app routes, components, page logic, and shared frontend libraries |
+| [`server/src/`](./server/src) | Fastify app, repositories, platform managers, OpenAPI generator, and tests |
+| [`docs/`](./docs) | Longer engineering guides kept as Markdown |
+| [`openclaw-plugin/`](./openclaw-plugin) | Published OpenClaw package and GitHub Pages artifact |
+| [`plugins/forge-hermes/`](./plugins/forge-hermes) | Hermes plugin package |
+| [`plugins/forge-codex/`](./plugins/forge-codex) | Repo-local Codex adapter |
+| [`ios-companion/`](./ios-companion) | Swift iPhone companion |
+| [`src-tauri/`](./src-tauri) | Tauri desktop shell |
 
 ## Development
 
@@ -107,8 +141,70 @@ different runtime store.
 npm run dev
 npx tsc --noEmit
 npm run test
-node --import tsx --test --test-concurrency=1 server/src/*.test.ts
+npm run test:server
+npm run docs:openapi
+```
+
+Useful additional commands:
+
+```bash
+npm run build
+npm run build:openclaw-plugin
+npm run check:openclaw-plugin
 node --import tsx scripts/dedupe-wiki-pages.ts --apply
 ```
 
-Forge is served under `/forge/`, so local and shared dev setups should preserve that base path.
+Forge is mounted under `/forge/`, so local and shared setups should preserve that
+base path.
+
+## Verification
+
+Expected Forge verification after substantive changes:
+
+```bash
+npx tsc --noEmit
+node --import tsx --test --test-concurrency=1 server/src/*.test.ts
+npm run test
+tailscale serve status
+curl -I http://127.0.0.1:4317/api/v1/health
+curl -I http://127.0.0.1:3027/forge/
+```
+
+If you are changing the public docs surface, also regenerate the Pages OpenAPI copy:
+
+```bash
+npm run docs:openapi
+```
+
+## Integration Notes
+
+### Shared Runtime
+
+If the browser, OpenClaw, Hermes, and Codex are meant to operate on the same Forge
+system, keep these aligned:
+
+- `origin`
+- `port`
+- `dataRoot`
+- explicit `userId` on writes
+- explicit `userIds` on cross-owner reads
+
+### OpenClaw
+
+Published package boundary:
+
+- package: [`openclaw-plugin/`](./openclaw-plugin)
+- Pages docs artifact: [`openclaw-plugin/docs/`](./openclaw-plugin/docs)
+
+### Hermes
+
+Hermes install path:
+
+```bash
+~/.hermes/hermes-agent/venv/bin/python -m pip install --upgrade ./plugins/forge-hermes
+```
+
+### Codex
+
+Codex uses the repo-local adapter under [`plugins/forge-codex/`](./plugins/forge-codex)
+and shares the same runtime model rather than maintaining a separate data plane.

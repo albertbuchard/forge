@@ -388,6 +388,10 @@ OpenClaw plugin, a Hermes Agent plugin packaged as a Python distribution with a
 MCP plugin. The Wiki memory layer is part of that same stack: markdown and media files
 are canonical on the local filesystem, while Fastify and SQLite provide metadata,
 backlinks, search indexes, ingest jobs, and optional embedding-profile state.
+Project documentation is also part of the production stack now. Forge publishes an
+engineering-first GitHub Pages site from `openclaw-plugin/docs`, and that static docs
+artifact includes a rendered API reference driven by the same generated OpenAPI
+document rather than by a second hand-maintained specification.
 The questionnaire workspace is part of this same production stack. Questionnaire
 definitions, version records, runs, answer rows, and score rows live in migration-backed
 SQLite tables. Scoring is not freeform code execution: the server evaluates a safe JSON
