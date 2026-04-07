@@ -20,6 +20,7 @@ import {
   Minus,
   Plus,
   RotateCcw,
+  Share2,
   Settings2,
   X
 } from "lucide-react";
@@ -37,6 +38,12 @@ export type SurfaceWidgetDefinition = {
   id: string;
   title: string;
   description?: string;
+  isProcessor?: boolean;
+  processorCapability?: {
+    label: string;
+    mode: "content" | "tool" | "mcp" | "processor";
+    metadata?: Record<string, unknown>;
+  };
   defaultWidth: number;
   defaultHeight: number;
   defaultHidden?: boolean;
@@ -95,6 +102,9 @@ function SortableWidget({
   columns,
   onResize,
   onHide,
+  onHandleClick,
+  selected,
+  linkedDescriptions,
   children
 }: {
   definition: SurfaceWidgetDefinition;
@@ -106,6 +116,9 @@ function SortableWidget({
     patch: Partial<Pick<SurfaceLayoutItem, "width" | "height">>
   ) => void;
   onHide: (id: string) => void;
+  onHandleClick?: (definition: SurfaceWidgetDefinition) => void;
+  selected?: boolean;
+  linkedDescriptions?: string[];
   children: ReactNode;
 }) {
   const {
@@ -136,7 +149,12 @@ function SortableWidget({
       style={style}
       className={cn("min-w-0", isDragging && "z-20 opacity-90")}
     >
-      <Card className="flex h-full min-w-0 flex-col gap-3 overflow-hidden p-4">
+      <Card
+        className={cn(
+          "flex h-full min-w-0 flex-col gap-3 overflow-hidden p-4",
+          selected && "ring-1 ring-[var(--primary)]/50"
+        )}
+      >
         <div className="flex min-w-0 items-start justify-between gap-3">
           <div className="min-w-0">
             <div className="truncate text-[0.72rem] font-semibold uppercase tracking-[0.16em] text-white/38">
@@ -150,6 +168,19 @@ function SortableWidget({
           </div>
           {editing ? (
             <div className="flex shrink-0 items-center gap-1">
+              {onHandleClick ? (
+                <button
+                  type="button"
+                  className={cn(
+                    "inline-flex size-8 items-center justify-center rounded-full bg-white/[0.05] text-white/58 transition hover:bg-white/[0.08] hover:text-white",
+                    selected && "bg-[var(--primary)]/[0.16] text-[var(--primary)]"
+                  )}
+                  onClick={() => onHandleClick(definition)}
+                  aria-label={`Connect ${definition.title}`}
+                >
+                  <Share2 className="size-3.5" />
+                </button>
+              ) : null}
               <button
                 type="button"
                 className="inline-flex size-8 items-center justify-center rounded-full bg-white/[0.05] text-white/58 transition hover:bg-white/[0.08] hover:text-white"
@@ -220,6 +251,13 @@ function SortableWidget({
             </div>
           ) : null}
         </div>
+        {linkedDescriptions && linkedDescriptions.length > 0 ? (
+          <div className="grid gap-2 rounded-[18px] bg-white/[0.03] p-3 text-[12px] leading-5 text-white/56">
+            {linkedDescriptions.map((line) => (
+              <div key={line}>{line}</div>
+            ))}
+          </div>
+        ) : null}
         <div className="min-h-0 flex-1">{children}</div>
       </Card>
     </div>
@@ -230,12 +268,18 @@ export function EditableSurface({
   surfaceId,
   widgets,
   defaultEditing = false,
-  actions
+  actions,
+  selectedWidgetId,
+  linkedDescriptionsByWidgetId,
+  onWidgetHandleClick
 }: {
   surfaceId: string;
   widgets: SurfaceWidgetDefinition[];
   defaultEditing?: boolean;
   actions?: ReactNode;
+  selectedWidgetId?: string | null;
+  linkedDescriptionsByWidgetId?: Record<string, string[]>;
+  onWidgetHandleClick?: (definition: SurfaceWidgetDefinition) => void;
 }) {
   const columns = useResponsiveColumns();
   const defaults = useMemo<SurfaceLayoutItem[]>(
@@ -379,6 +423,9 @@ export function EditableSurface({
                   columns={columns}
                   onResize={updateItem}
                   onHide={(id) => updateItem(id, { hidden: true })}
+                  onHandleClick={onWidgetHandleClick}
+                  selected={selectedWidgetId === item.id}
+                  linkedDescriptions={linkedDescriptionsByWidgetId?.[item.id]}
                 >
                   {definition.render({
                     compact:
