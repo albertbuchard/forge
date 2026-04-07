@@ -1356,6 +1356,58 @@ export interface OpenAiCodexOauthSession {
   credentialExpiresAt: string | null;
 }
 
+export interface AiProcessorTool {
+  key: string;
+  label: string;
+  description: string;
+  endpoint: string;
+  mode: "content" | "tool" | "mcp" | "processor";
+}
+
+export interface AiProcessor {
+  id: string;
+  surfaceId: string;
+  title: string;
+  promptFlow: string;
+  contextInput: string;
+  toolConfig: AiProcessorTool[];
+  agentIds: string[];
+  triggerMode: "manual" | "route" | "cron";
+  cronExpression: string;
+  machineAccess: {
+    read: boolean;
+    write: boolean;
+    exec: boolean;
+  };
+  endpointEnabled: boolean;
+  lastRunAt: string | null;
+  lastRunStatus: "idle" | "running" | "completed" | "failed" | null;
+  lastRunOutput: {
+    concatenated: string;
+    byAgent: Record<string, string>;
+  } | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AiProcessorLink {
+  id: string;
+  surfaceId: string;
+  sourceWidgetId: string;
+  targetProcessorId: string;
+  accessMode: "read" | "write" | "read_write" | "exec";
+  capabilityMode: "content" | "tool" | "mcp" | "processor";
+  metadata: Record<string, unknown>;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SurfaceProcessorGraphPayload {
+  surfaceId: string;
+  processors: AiProcessor[];
+  links: AiProcessorLink[];
+}
+
 export interface InsightEvidence {
   entityType: string;
   entityId: string;

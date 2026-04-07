@@ -63,6 +63,13 @@ export interface WikiLlmProvider {
     profile: WikiLlmProfileLike;
     logger?: WikiLlmDiagnosticLogger;
   }): Promise<{ outputPreview: string }>;
+  runText?(input: {
+    apiKey: string;
+    profile: WikiLlmProfileLike;
+    systemPrompt?: string;
+    prompt: string;
+    logger?: WikiLlmDiagnosticLogger;
+  }): Promise<{ outputText: string }>;
 }
 
 type StoredSecretPayload = {
@@ -200,6 +207,33 @@ export class LlmManager extends AbstractManager {
       usingStoredKey: !explicitApiKey?.trim(),
       outputPreview: result.outputPreview
     };
+  }
+
+  async runTextPrompt(
+    profile: WikiLlmProfileLike,
+    input: {
+      explicitApiKey?: string | null;
+      systemPrompt?: string;
+      prompt: string;
+    },
+    logger?: WikiLlmDiagnosticLogger
+  ) {
+    const provider = this.resolveProvider(profile.provider);
+    if (!provider?.runText) {
+      throw new Error("This LLM provider does not support text prompt execution.");
+    }
+    const apiKey =
+      input.explicitApiKey?.trim() || (await this.readApiKey(profile.secretId));
+    if (!apiKey) {
+      throw new Error("Missing provider credential for prompt execution.");
+    }
+    return await provider.runText({
+      apiKey,
+      profile,
+      systemPrompt: input.systemPrompt,
+      prompt: input.prompt,
+      logger
+    });
   }
 
   private resolveProvider(providerName: string) {

@@ -27,6 +27,16 @@ import {
   rejectApprovalRequest,
   updateInsight
 } from "./repositories/collaboration.js";
+import {
+  createAiProcessor,
+  createAiProcessorLink,
+  deleteAiProcessor,
+  deleteAiProcessorLink,
+  getAiProcessorById,
+  getSurfaceProcessorGraph,
+  runAiProcessor,
+  updateAiProcessor
+} from "./repositories/ai-processors.js";
 import { listEventLog } from "./repositories/event-log.js";
 import {
   createDiagnosticMessage,
@@ -366,6 +376,8 @@ import {
   activitySourceSchema,
   createAgentActionSchema,
   createAgentTokenSchema,
+  createAiProcessorLinkSchema,
+  createAiProcessorSchema,
   upsertAiModelConnectionSchema,
   testAiModelConnectionSchema,
   submitOpenAiCodexOauthManualCodeSchema,
@@ -433,6 +445,8 @@ import {
   updateTaskSchema,
   updateUserAccessGrantSchema,
   updateWorkBlockTemplateSchema,
+  updateAiProcessorSchema,
+  runAiProcessorSchema,
   workAdjustmentResultSchema,
   finalizeWeeklyReviewResultSchema,
   goalListQuerySchema,
@@ -8484,7 +8498,7 @@ export async function buildServer(
     requireScopedAccess(request.headers as Record<string, unknown>, ["write"], {
       route: "/api/v1/settings/models/oauth/openai-codex/start"
     });
-    return { session: startOpenAiCodexOauthSession() };
+    return { session: await startOpenAiCodexOauthSession() };
   });
   app.get(
     "/api/v1/settings/models/oauth/openai-codex/session/:id",
@@ -8529,6 +8543,120 @@ export async function buildServer(
       };
     }
   );
+  app.get("/api/v1/surfaces/:surfaceId/ai-processors", async (request) => {
+    requireScopedAccess(request.headers as Record<string, unknown>, ["read"], {
+      route: "/api/v1/surfaces/:surfaceId/ai-processors"
+    });
+    return {
+      graph: getSurfaceProcessorGraph(
+        (request.params as { surfaceId: string }).surfaceId
+      )
+    };
+  });
+  app.post("/api/v1/surfaces/:surfaceId/ai-processors", async (request, reply) => {
+    requireScopedAccess(request.headers as Record<string, unknown>, ["write"], {
+      route: "/api/v1/surfaces/:surfaceId/ai-processors"
+    });
+    const processor = createAiProcessor({
+      ...createAiProcessorSchema.parse(request.body ?? {}),
+      surfaceId: (request.params as { surfaceId: string }).surfaceId
+    });
+    reply.code(201);
+    return { processor };
+  });
+  app.patch("/api/v1/ai-processors/:id", async (request, reply) => {
+    requireScopedAccess(request.headers as Record<string, unknown>, ["write"], {
+      route: "/api/v1/ai-processors/:id"
+    });
+    const processor = updateAiProcessor(
+      (request.params as { id: string }).id,
+      updateAiProcessorSchema.parse(request.body ?? {})
+    );
+    if (!processor) {
+      reply.code(404);
+      return { error: "AI processor not found" };
+    }
+    return { processor };
+  });
+  app.delete("/api/v1/ai-processors/:id", async (request, reply) => {
+    requireScopedAccess(request.headers as Record<string, unknown>, ["write"], {
+      route: "/api/v1/ai-processors/:id"
+    });
+    const processor = deleteAiProcessor((request.params as { id: string }).id);
+    if (!processor) {
+      reply.code(404);
+      return { error: "AI processor not found" };
+    }
+    return { processor };
+  });
+  app.post("/api/v1/ai-processor-links", async (request, reply) => {
+    requireScopedAccess(request.headers as Record<string, unknown>, ["write"], {
+      route: "/api/v1/ai-processor-links"
+    });
+    const link = createAiProcessorLink(
+      createAiProcessorLinkSchema.parse(request.body ?? {})
+    );
+    reply.code(201);
+    return { link };
+  });
+  app.delete("/api/v1/ai-processor-links/:id", async (request, reply) => {
+    requireScopedAccess(request.headers as Record<string, unknown>, ["write"], {
+      route: "/api/v1/ai-processor-links/:id"
+    });
+    const link = deleteAiProcessorLink((request.params as { id: string }).id);
+    if (!link) {
+      reply.code(404);
+      return { error: "AI processor link not found" };
+    }
+    return { link };
+  });
+  app.post("/api/v1/ai-processors/:id/run", async (request, reply) => {
+    requireScopedAccess(request.headers as Record<string, unknown>, ["write"], {
+      route: "/api/v1/ai-processors/:id/run"
+    });
+    const processor = getAiProcessorById((request.params as { id: string }).id);
+    if (!processor) {
+      reply.code(404);
+      return { error: "AI processor not found" };
+    }
+    return await runAiProcessor(
+      processor.id,
+      runAiProcessorSchema.parse(request.body ?? {}),
+      {
+        llm: managers.llm,
+        secrets: managers.secrets
+      }
+    );
+  });
+  app.get("/api/v1/aiproc/:id", async (request, reply) => {
+    requireScopedAccess(request.headers as Record<string, unknown>, ["read"], {
+      route: "/api/v1/aiproc/:id"
+    });
+    const processor = getAiProcessorById((request.params as { id: string }).id);
+    if (!processor) {
+      reply.code(404);
+      return { error: "AI processor not found" };
+    }
+    return { processor };
+  });
+  app.post("/api/v1/aiproc/:id/run", async (request, reply) => {
+    requireScopedAccess(request.headers as Record<string, unknown>, ["write"], {
+      route: "/api/v1/aiproc/:id/run"
+    });
+    const processor = getAiProcessorById((request.params as { id: string }).id);
+    if (!processor) {
+      reply.code(404);
+      return { error: "AI processor not found" };
+    }
+    return await runAiProcessor(
+      processor.id,
+      runAiProcessorSchema.parse(request.body ?? {}),
+      {
+        llm: managers.llm,
+        secrets: managers.secrets
+      }
+    );
+  });
   app.post("/api/v1/settings/tokens", async (request, reply) => {
     const auth = requireOperatorSession(
       request.headers as Record<string, unknown>,

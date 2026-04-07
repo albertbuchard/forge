@@ -23,6 +23,7 @@ import {
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { EntityBadge } from "@/components/ui/entity-badge";
+import { EntityName } from "@/components/ui/entity-name";
 import { getEntityVisual, type EntityKind } from "@/lib/entity-visuals";
 import { Input } from "@/components/ui/input";
 import { searchEntities } from "@/lib/api";
@@ -236,7 +237,6 @@ export function CommandPalette({
           t("common.commandPalette.categoryRoute")
         ),
         score: 0,
-        icon: LayoutDashboard,
         ...getAuxiliaryVisual("route", LayoutDashboard)
       },
       {
@@ -252,7 +252,6 @@ export function CommandPalette({
           t("common.commandPalette.categoryRoute")
         ),
         score: 0,
-        icon: Clock3,
         ...getAuxiliaryVisual("route", Clock3)
       },
       {
@@ -268,7 +267,6 @@ export function CommandPalette({
           t("common.commandPalette.categoryRoute")
         ),
         score: 0,
-        icon: Zap,
         ...getAuxiliaryVisual("route", Zap)
       },
       {
@@ -284,7 +282,6 @@ export function CommandPalette({
           t("common.commandPalette.categoryRoute")
         ),
         score: 0,
-        icon: BrainCircuit,
         ...getAuxiliaryVisual("route", BrainCircuit)
       },
       {
@@ -300,7 +297,6 @@ export function CommandPalette({
           t("common.commandPalette.categoryRoute")
         ),
         score: 0,
-        icon: NotebookPen,
         ...getAuxiliaryVisual("route", NotebookPen)
       },
       {
@@ -316,7 +312,6 @@ export function CommandPalette({
           t("common.commandPalette.categoryRoute")
         ),
         score: 0,
-        icon: BookCopy,
         ...getAuxiliaryVisual("route", BookCopy)
       },
       {
@@ -332,7 +327,6 @@ export function CommandPalette({
           t("common.commandPalette.categoryRoute")
         ),
         score: 0,
-        icon: Target,
         ...getAuxiliaryVisual("route", Target)
       },
       {
@@ -348,7 +342,6 @@ export function CommandPalette({
           t("common.commandPalette.categoryRoute")
         ),
         score: 0,
-        icon: Repeat,
         ...getAuxiliaryVisual("route", Repeat)
       },
       {
@@ -364,7 +357,6 @@ export function CommandPalette({
           t("common.commandPalette.categoryRoute")
         ),
         score: 0,
-        icon: BriefcaseBusiness,
         ...getAuxiliaryVisual("route", BriefcaseBusiness)
       },
       {
@@ -380,7 +372,6 @@ export function CommandPalette({
           t("common.commandPalette.categoryRoute")
         ),
         score: 0,
-        icon: GitBranch,
         ...getAuxiliaryVisual("route", GitBranch)
       },
       {
@@ -396,7 +387,6 @@ export function CommandPalette({
           t("common.commandPalette.categoryRoute")
         ),
         score: 0,
-        icon: SlidersHorizontal,
         ...getAuxiliaryVisual("route", SlidersHorizontal)
       },
       {
@@ -412,7 +402,6 @@ export function CommandPalette({
           t("common.commandPalette.categoryRoute")
         ),
         score: 0,
-        icon: CalendarDays,
         ...getAuxiliaryVisual("route", CalendarDays)
       },
       {
@@ -428,7 +417,6 @@ export function CommandPalette({
           t("common.commandPalette.categoryRoute")
         ),
         score: 0,
-        icon: Settings,
         ...getAuxiliaryVisual("route", Settings)
       }
     ],
