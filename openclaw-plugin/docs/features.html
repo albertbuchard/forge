@@ -2,26 +2,302 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta http-equiv="refresh" content="0; url=./engineering.html" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Forge Docs Redirect</title>
+    <title>Forge Feature Reference</title>
+    <meta
+      name="description"
+      content="Engineering-style feature reference for the Forge runtime surfaces, data model, and user workflows."
+    />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=Sora:wght@600;700&display=swap"
+      rel="stylesheet"
+    />
     <link rel="stylesheet" href="./styles.css" />
   </head>
   <body>
-    <main class="page">
-      <section class="section">
-        <div class="section-card redirect-card">
-          <p class="eyebrow">Redirect</p>
-          <h1>Forge engineering docs moved.</h1>
-          <p>
-            The old features page now redirects to the engineering reference.
-          </p>
-          <div class="hero-actions">
-            <a class="button primary" href="./engineering.html">Open engineering reference</a>
-            <a class="button" href="./index.html">Docs home</a>
-          </div>
+    <div class="page-shell">
+      <div class="ambient a"></div>
+      <div class="ambient b"></div>
+
+      <header class="topbar">
+        <a class="brand" href="./index.html">
+          <span class="brand-mark">F</span>
+          <span class="brand-copy">
+            <strong>Forge</strong>
+            <span>Engineering Docs</span>
+          </span>
+        </a>
+        <nav class="topnav">
+          <a href="./index.html">Home</a>
+          <a class="active" href="./features.html">Features</a>
+          <a href="./engineering.html">Engineering</a>
+          <a href="./development.html">Development</a>
+          <a href="./integrations.html">Integrations</a>
+          <a href="./api/">API</a>
+          <a href="https://github.com/albertbuchard/forge">GitHub</a>
+        </nav>
+      </header>
+
+      <main class="page">
+        <div class="breadcrumbs">
+          <a href="./index.html">Docs</a>
+          <span>/</span>
+          <span>Feature Reference</span>
         </div>
-      </section>
-    </main>
+
+        <section class="hero split">
+          <div class="hero-card">
+            <p class="eyebrow">Feature Reference</p>
+            <h1>
+              Product surfaces and behaviors exposed by the Forge runtime.
+            </h1>
+            <p class="lede">
+              This page is the feature inventory for Forge in engineering
+              language. It describes what the runtime supports, which records
+              exist, and where those surfaces show up in the UI and API.
+            </p>
+          </div>
+          <aside class="hero-card">
+            <p class="eyebrow">Jump To</p>
+            <ul class="guide-list">
+              <li><a href="#execution">Execution and planning</a></li>
+              <li><a href="#memory">Memory and knowledge</a></li>
+              <li><a href="#health">Health and reflection</a></li>
+              <li><a href="#agents">Agents and integrations</a></li>
+              <li><a href="#runtime">Runtime guarantees</a></li>
+            </ul>
+          </aside>
+        </section>
+
+        <section class="section" id="execution">
+          <div class="section-heading">
+            <p class="eyebrow">Execution And Planning</p>
+            <h2>Core work-management features.</h2>
+          </div>
+          <div class="card-grid three">
+            <article class="card">
+              <h3>Goals, projects, tasks</h3>
+              <p>
+                Forge stores long-horizon goals, active projects, and executable
+                tasks as separate first-class records with explicit links
+                between them.
+              </p>
+            </article>
+            <article class="card">
+              <h3>Strategies</h3>
+              <p>
+                Strategies sit above project execution and model multi-step
+                plans with linked goals, projects, tasks, and directed
+                sequencing.
+              </p>
+            </article>
+            <article class="card">
+              <h3>Live work sessions</h3>
+              <p>
+                Task runs record active or historical timed work, credited
+                duration, manual adjustments, and current focus state.
+              </p>
+            </article>
+            <article class="card">
+              <h3>Recurring habits</h3>
+              <p>
+                Habits are not task aliases. They have their own recurrence
+                logic, check-in history, and reward consequences.
+              </p>
+            </article>
+            <article class="card">
+              <h3>Calendar scheduling</h3>
+              <p>
+                Forge supports provider connections, work blocks, native events,
+                and task timeboxes under one runtime model.
+              </p>
+            </article>
+            <article class="card">
+              <h3>Reward ledger</h3>
+              <p>
+                XP and reward events are attached to concrete runtime behavior
+                rather than decorative counters.
+              </p>
+            </article>
+          </div>
+        </section>
+
+        <section class="section" id="memory">
+          <div class="section-heading">
+            <p class="eyebrow">Memory And Knowledge</p>
+            <h2>Evidence capture and knowledge surfaces.</h2>
+          </div>
+          <div class="card-grid three">
+            <article class="card">
+              <h3>Notes</h3>
+              <p>
+                Notes are first-class Markdown evidence records with links to
+                tasks, projects, goals, Psyche records, and other entities.
+              </p>
+            </article>
+            <article class="card">
+              <h3>Wiki</h3>
+              <p>
+                The wiki is file-first and supports pages, backlinks, vault
+                sync, ingest, search, semantic indexing profiles, and explicit
+                settings.
+              </p>
+            </article>
+            <article class="card">
+              <h3>Tags</h3>
+              <p>
+                Shared tags provide classification across notes, goals,
+                projects, tasks, and other records.
+              </p>
+            </article>
+            <article class="card">
+              <h3>Preferences</h3>
+              <p>
+                Preference profiles, contexts, signals, comparisons, and
+                inferred scores are stored as inspectable data rather than
+                opaque assistant output.
+              </p>
+            </article>
+            <article class="card">
+              <h3>Search and browse</h3>
+              <p>
+                Forge supports runtime browse views, text search, and
+                entity-linked search across the main knowledge surfaces.
+              </p>
+            </article>
+            <article class="card">
+              <h3>Multi-user ownership</h3>
+              <p>
+                Records can belong to human or bot users, and the runtime
+                supports explicit cross-owner reads and linked work.
+              </p>
+            </article>
+          </div>
+        </section>
+
+        <section class="section" id="health">
+          <div class="section-heading">
+            <p class="eyebrow">Health And Reflection</p>
+            <h2>Reflective and body-state record types.</h2>
+          </div>
+          <div class="card-grid three">
+            <article class="card">
+              <h3>Sleep records</h3>
+              <p>
+                Sleep sessions store start and end time, time asleep, time in
+                bed, stage breakdown when available, derived metrics, and linked
+                context.
+              </p>
+            </article>
+            <article class="card">
+              <h3>Sports and workouts</h3>
+              <p>
+                Workout sessions store type, duration, distance, energy,
+                annotations, provenance, and links back to goals, habits, sleep,
+                and Psyche data.
+              </p>
+            </article>
+            <article class="card">
+              <h3>Psyche model</h3>
+              <p>
+                Values, beliefs, behaviors, patterns, modes, reports,
+                questionnaires, and insights all live as structured runtime
+                records.
+              </p>
+            </article>
+            <article class="card">
+              <h3>Weekly reviews</h3>
+              <p>
+                Review routes and stored summaries support regular close-out and
+                system-level reflection on what changed.
+              </p>
+            </article>
+            <article class="card">
+              <h3>Activity history</h3>
+              <p>
+                Activity feeds and event logs provide an operational timeline
+                across execution, knowledge capture, and reflection surfaces.
+              </p>
+            </article>
+            <article class="card">
+              <h3>Health import</h3>
+              <p>
+                The iPhone companion can import HealthKit sleep and workout data
+                into the same Forge runtime model.
+              </p>
+            </article>
+          </div>
+        </section>
+
+        <section class="section" id="agents">
+          <div class="section-heading">
+            <p class="eyebrow">Agents And Integrations</p>
+            <h2>Operational surfaces outside the browser UI.</h2>
+          </div>
+          <div class="card-grid two">
+            <article class="card">
+              <h3>OpenClaw and Hermes</h3>
+              <p>
+                Agent adapters expose curated Forge tools for overview,
+                mutation, notes, wiki, habits, strategies, health, and UI
+                handoff rather than dumping the entire internal API surface.
+              </p>
+            </article>
+            <article class="card">
+              <h3>HTTP API and OpenAPI</h3>
+              <p>
+                The runtime serves a versioned API under <code>/api/v1/</code>
+                and a generated OpenAPI 3.1 document that powers the public
+                interactive docs.
+              </p>
+            </article>
+          </div>
+        </section>
+
+        <section class="section" id="runtime">
+          <div class="section-heading">
+            <p class="eyebrow">Runtime Guarantees</p>
+            <h2>How these feature surfaces are delivered.</h2>
+          </div>
+          <table class="doc-table">
+            <thead>
+              <tr>
+                <th>Concern</th>
+                <th>Current behavior</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Web UI</td>
+                <td>
+                  Mounted under <code>/forge/</code> with responsive desktop and
+                  mobile surfaces.
+                </td>
+              </tr>
+              <tr>
+                <td>API</td>
+                <td>
+                  Mounted under <code>/api/v1/</code> with a generated OpenAPI
+                  document.
+                </td>
+              </tr>
+              <tr>
+                <td>Docs</td>
+                <td>
+                  Published through GitHub Pages with a static feature reference
+                  and interactive API explorer.
+                </td>
+              </tr>
+              <tr>
+                <td>Storage</td>
+                <td>Local-first SQLite plus file-backed wiki content.</td>
+              </tr>
+            </tbody>
+          </table>
+        </section>
+      </main>
+    </div>
   </body>
 </html>
