@@ -1,0 +1,228 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Forge Development Guide</title>
+    <meta
+      name="description"
+      content="Forge local development, verification, docs generation, and release-oriented commands."
+    />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=Sora:wght@600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="page-shell">
+      <div class="ambient a"></div>
+      <div class="ambient b"></div>
+
+      <header class="topbar">
+        <a class="brand" href="./index.html">
+          <span class="brand-mark">F</span>
+          <span class="brand-copy">
+            <strong>Forge</strong>
+            <span>Engineering Docs</span>
+          </span>
+        </a>
+        <nav class="topnav">
+          <a href="./index.html">Home</a>
+          <a href="./engineering.html">Engineering</a>
+          <a class="active" href="./development.html">Development</a>
+          <a href="./integrations.html">Integrations</a>
+          <a href="./api/">API</a>
+          <a href="https://github.com/albertbuchard/forge">GitHub</a>
+        </nav>
+      </header>
+
+      <main class="page">
+        <div class="breadcrumbs">
+          <a href="./index.html">Docs</a>
+          <span>/</span>
+          <span>Development</span>
+        </div>
+
+        <section class="hero split">
+          <div class="hero-card">
+            <p class="eyebrow">Development</p>
+            <h1>Local runtime, verification, and docs generation.</h1>
+            <p class="lede">
+              Forge development means verifying both the TypeScript codebase and
+              the live mounted runtime surfaces. The local repo setup is expected to
+              serve the UI under <code>/forge/</code> and the backend under
+              <code>/api/v1/</code>.
+            </p>
+          </div>
+          <aside class="hero-card">
+            <p class="eyebrow">Jump To</p>
+            <ul class="guide-list">
+              <li><a href="#local-development">Local development</a></li>
+              <li><a href="#verification">Verification</a></li>
+              <li><a href="#docs-pipeline">Docs pipeline</a></li>
+              <li><a href="#release-adjacent">Release-adjacent commands</a></li>
+            </ul>
+          </aside>
+        </section>
+
+        <section class="section" id="local-development">
+          <div class="section-heading">
+            <p class="eyebrow">Local Development</p>
+            <h2>Default repo commands.</h2>
+          </div>
+          <div class="card-grid two">
+            <article class="card">
+              <h3>Install and run</h3>
+              <pre><code>npm install
+npm run dev</code></pre>
+              <p>
+                The normal repo dev command starts the Fastify backend and the Vite
+                UI together.
+              </p>
+            </article>
+            <article class="card">
+              <h3>OpenClaw data-root variant</h3>
+              <pre><code>npm run dev:server:openclaw-data
+FORGE_BASE_PATH=/forge/ npm run dev:web -- --host 127.0.0.1 --port 3027</code></pre>
+              <p>
+                Use this path when you need the repo runtime aligned with the tracked
+                shared Forge data root.
+              </p>
+            </article>
+          </div>
+        </section>
+
+        <section class="section">
+          <div class="section-heading">
+            <p class="eyebrow">Primary Commands</p>
+            <h2>Repo commands that matter day to day.</h2>
+          </div>
+          <table class="doc-table">
+            <thead>
+              <tr>
+                <th>Command</th>
+                <th>Purpose</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><code>npm run dev</code></td>
+                <td>Run Fastify and Vite together for repo-local development.</td>
+              </tr>
+              <tr>
+                <td><code>npm run build</code></td>
+                <td>Build the main Forge web app.</td>
+              </tr>
+              <tr>
+                <td><code>npm run test</code></td>
+                <td>Run the Vitest frontend suite.</td>
+              </tr>
+              <tr>
+                <td><code>npm run test:server</code></td>
+                <td>Run the server test suite through Node + tsx.</td>
+              </tr>
+              <tr>
+                <td><code>npm run docs:openapi</code></td>
+                <td>Export the current generated OpenAPI document into the Pages artifact.</td>
+              </tr>
+              <tr>
+                <td><code>npm run build:openclaw-plugin</code></td>
+                <td>Bundle the published OpenClaw package with the built Forge runtime payload.</td>
+              </tr>
+            </tbody>
+          </table>
+        </section>
+
+        <section class="section" id="verification">
+          <div class="section-heading">
+            <p class="eyebrow">Verification</p>
+            <h2>Baseline verification expected after changes.</h2>
+          </div>
+          <div class="card-grid two">
+            <article class="card">
+              <h3>Static verification</h3>
+              <pre><code>npx tsc --noEmit
+node --import tsx --test --test-concurrency=1 server/src/*.test.ts
+npm run test</code></pre>
+            </article>
+            <article class="card">
+              <h3>Live runtime verification</h3>
+              <pre><code>tailscale serve status
+curl -I http://127.0.0.1:4317/api/v1/health
+curl -I http://127.0.0.1:3027/forge/</code></pre>
+            </article>
+          </div>
+          <div class="note warning">
+            Forge’s local repo instructions treat live runtime verification as
+            mandatory. Static type-checking is not enough if the app shell or API
+            mount is broken.
+          </div>
+        </section>
+
+        <section class="section" id="docs-pipeline">
+          <div class="section-heading">
+            <p class="eyebrow">Docs Pipeline</p>
+            <h2>How GitHub Pages stays aligned with the runtime spec.</h2>
+          </div>
+          <div class="card-grid two">
+            <article class="card">
+              <h3>Source of the API truth</h3>
+              <p>
+                Forge generates its OpenAPI document in
+                <code>server/src/openapi.ts</code>. The runtime serves that same
+                document at <code>/api/v1/openapi.json</code>.
+              </p>
+            </article>
+            <article class="card">
+              <h3>Pages export step</h3>
+              <p>
+                The docs export script writes the current generated spec into
+                <code>openclaw-plugin/docs/api/openapi.json</code> so GitHub Pages can
+                render the same contract without a live Forge server.
+              </p>
+            </article>
+          </div>
+          <pre><code>npm run docs:openapi</code></pre>
+        </section>
+
+        <section class="section" id="release-adjacent">
+          <div class="section-heading">
+            <p class="eyebrow">Release-Adjacent</p>
+            <h2>Commands near packaging and public distribution.</h2>
+          </div>
+          <div class="card-grid three">
+            <article class="card">
+              <h3>OpenClaw package</h3>
+              <p>
+                Use <code>npm run build:openclaw-plugin</code> to produce the published
+                OpenClaw package payload with the built runtime.
+              </p>
+            </article>
+            <article class="card">
+              <h3>Plugin parity</h3>
+              <p>
+                Run <code>npm run check:openclaw-plugin</code> when the adapter surface,
+                runtime packaging, or manifest behavior changes.
+              </p>
+            </article>
+            <article class="card">
+              <h3>Pages deploy</h3>
+              <p>
+                The GitHub Pages workflow publishes the static docs site from the
+                repo’s docs artifact, including the exported OpenAPI JSON.
+              </p>
+            </article>
+          </div>
+        </section>
+
+        <footer class="footer">
+          Repo-specific operational guides still live in <code>docs/</code> as
+          Markdown alongside this summary.
+        </footer>
+      </main>
+    </div>
+  </body>
+</html>

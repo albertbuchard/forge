@@ -438,7 +438,11 @@ locally on port `4317` by default. The web application lives under the `/forge/`
 path, and the versioned REST contract is documented through OpenAPI 3.1 at
 `/api/v1/openapi.json`. The current agent-integration stack spans the published
 OpenClaw adapter, a Hermes plugin packaged as a Python distribution with Hermes
-entry-point discovery, and a repo-local Codex MCP adapter. Calendar provider sync runs inside this live runtime today,
+entry-point discovery, and a repo-local Codex MCP adapter. Forge also publishes an
+engineering-first GitHub Pages site from `openclaw-plugin/docs`, and that static docs
+artifact includes a rendered API reference generated from the same OpenAPI document so
+the public documentation surface does not drift from the runtime contract. Calendar
+provider sync runs inside this live runtime today,
 with Google Calendar, Apple Calendar, and custom CalDAV adapters, encrypted provider
 credentials, migration-backed calendar tables, and a dedicated Forge calendar per
 connection. Apple setup is discovery-first from `https://caldav.icloud.com` rather

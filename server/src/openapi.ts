@@ -22,6 +22,305 @@ function jsonResponse(schema: Record<string, unknown>, description: string) {
   };
 }
 
+const HTTP_METHODS = new Set([
+  "get",
+  "post",
+  "put",
+  "patch",
+  "delete",
+  "options",
+  "head"
+]);
+
+const API_TAGS = [
+  {
+    name: "Meta",
+    description: "OpenAPI discovery and route-level API metadata."
+  },
+  {
+    name: "Health",
+    description: "Runtime health, sleep, sports, workout, and mobile sync surfaces."
+  },
+  {
+    name: "Auth",
+    description: "Operator session bootstrapping for trusted local usage."
+  },
+  {
+    name: "Platform",
+    description: "Top-level runtime context and canonical Forge domain catalogs."
+  },
+  {
+    name: "Operator",
+    description: "Current work, overview, and operator-facing runtime state."
+  },
+  {
+    name: "Users",
+    description: "Forge user directory, ownership, and multi-user runtime surfaces."
+  },
+  {
+    name: "Settings",
+    description: "Local runtime settings, settings bin, and token management."
+  },
+  {
+    name: "Agents",
+    description: "Agent onboarding, registry, and action feeds."
+  },
+  {
+    name: "Approvals",
+    description: "Approval workflows for deferred or gated agent actions."
+  },
+  {
+    name: "Entity Batch",
+    description: "Batch create, update, delete, restore, and search operations across entity types."
+  },
+  {
+    name: "Goals",
+    description: "Long-horizon life goals."
+  },
+  {
+    name: "Projects",
+    description: "Project execution surfaces and project summaries."
+  },
+  {
+    name: "Strategies",
+    description: "Directed planning structures that sit above project execution."
+  },
+  {
+    name: "Tasks",
+    description: "Task CRUD, task context, and execution-adjacent task routes."
+  },
+  {
+    name: "Task Runs",
+    description: "Live task timer and timed work-session operations."
+  },
+  {
+    name: "Habits",
+    description: "Recurring commitments and habit check-ins."
+  },
+  {
+    name: "Calendar",
+    description: "Calendar connections, work blocks, timeboxes, and native Forge events."
+  },
+  {
+    name: "Notes",
+    description: "Markdown evidence records linked to one or more Forge entities."
+  },
+  {
+    name: "Tags",
+    description: "Tag CRUD for shared Forge classification."
+  },
+  {
+    name: "Wiki",
+    description: "File-first wiki settings, pages, ingest, sync, health, and search."
+  },
+  {
+    name: "Preferences",
+    description: "Preference profiles, comparisons, concepts, contexts, and learned scores."
+  },
+  {
+    name: "Psyche",
+    description: "Values, patterns, behaviors, beliefs, modes, reports, and related Psyche surfaces."
+  },
+  {
+    name: "Questionnaires",
+    description: "Psyche questionnaire libraries, runs, scoring, and self-observation calendar integration."
+  },
+  {
+    name: "Insights",
+    description: "Stored insights and structured feedback on them."
+  },
+  {
+    name: "Metrics",
+    description: "XP, reward-ledger, and runtime metric surfaces."
+  },
+  {
+    name: "Reviews",
+    description: "Weekly review and review-finalization operations."
+  },
+  {
+    name: "Activity",
+    description: "Activity feeds, event logs, and ambient session events."
+  },
+  {
+    name: "Diagnostics",
+    description: "Runtime diagnostics and operational logging routes."
+  }
+] as const;
+
+const API_TAG_GROUPS = [
+  {
+    name: "Runtime",
+    tags: ["Meta", "Health", "Auth", "Platform", "Operator", "Diagnostics"]
+  },
+  {
+    name: "Core Work",
+    tags: [
+      "Goals",
+      "Projects",
+      "Strategies",
+      "Tasks",
+      "Task Runs",
+      "Habits",
+      "Calendar",
+      "Notes",
+      "Tags",
+      "Activity",
+      "Metrics",
+      "Reviews",
+      "Insights"
+    ]
+  },
+  {
+    name: "Knowledge And Reflection",
+    tags: ["Wiki", "Preferences", "Psyche", "Questionnaires"]
+  },
+  {
+    name: "Platform And Agents",
+    tags: ["Users", "Settings", "Agents", "Approvals", "Entity Batch"]
+  }
+] as const;
+
+function resolveTagsForPath(path: string) {
+  if (path === "/api/v1/openapi.json") {
+    return ["Meta"];
+  }
+  if (path.startsWith("/api/v1/diagnostics")) {
+    return ["Diagnostics"];
+  }
+  if (path.startsWith("/api/v1/auth")) {
+    return ["Auth"];
+  }
+  if (
+    path.startsWith("/api/v1/health") ||
+    path.startsWith("/api/v1/mobile")
+  ) {
+    return ["Health"];
+  }
+  if (path === "/api/v1/context" || path.startsWith("/api/v1/domains")) {
+    return ["Platform"];
+  }
+  if (path.startsWith("/api/v1/operator")) {
+    return ["Operator"];
+  }
+  if (path.startsWith("/api/v1/users")) {
+    return ["Users"];
+  }
+  if (path.startsWith("/api/v1/settings")) {
+    return ["Settings"];
+  }
+  if (path.startsWith("/api/v1/approval-requests")) {
+    return ["Approvals"];
+  }
+  if (
+    path.startsWith("/api/v1/agents") ||
+    path.startsWith("/api/v1/agent-actions")
+  ) {
+    return ["Agents"];
+  }
+  if (path.startsWith("/api/v1/entities")) {
+    return ["Entity Batch"];
+  }
+  if (path.startsWith("/api/v1/wiki")) {
+    return ["Wiki"];
+  }
+  if (path.startsWith("/api/v1/preferences")) {
+    return ["Preferences"];
+  }
+  if (
+    path.startsWith("/api/v1/psyche/questionnaires") ||
+    path.startsWith("/api/v1/psyche/questionnaire-runs") ||
+    path.startsWith("/api/v1/psyche/self-observation")
+  ) {
+    return ["Questionnaires", "Psyche"];
+  }
+  if (path.startsWith("/api/v1/psyche")) {
+    return ["Psyche"];
+  }
+  if (path.startsWith("/api/v1/notes")) {
+    return ["Notes"];
+  }
+  if (path.startsWith("/api/v1/strategies")) {
+    return ["Strategies"];
+  }
+  if (path.startsWith("/api/v1/projects") || path.startsWith("/api/v1/campaigns")) {
+    return ["Projects"];
+  }
+  if (path.startsWith("/api/v1/goals")) {
+    return ["Goals"];
+  }
+  if (path.startsWith("/api/v1/habits")) {
+    return ["Habits"];
+  }
+  if (path.startsWith("/api/v1/tags")) {
+    return ["Tags"];
+  }
+  if (path.startsWith("/api/v1/task-runs")) {
+    return ["Task Runs"];
+  }
+  if (
+    path.startsWith("/api/v1/tasks") ||
+    path.startsWith("/api/v1/work-adjustments")
+  ) {
+    return ["Tasks"];
+  }
+  if (path.startsWith("/api/v1/calendar")) {
+    return ["Calendar"];
+  }
+  if (
+    path.startsWith("/api/v1/activity") ||
+    path.startsWith("/api/v1/events") ||
+    path.startsWith("/api/v1/session-events")
+  ) {
+    return ["Activity"];
+  }
+  if (
+    path.startsWith("/api/v1/metrics") ||
+    path.startsWith("/api/v1/rewards")
+  ) {
+    return ["Metrics"];
+  }
+  if (path.startsWith("/api/v1/reviews")) {
+    return ["Reviews"];
+  }
+  if (path.startsWith("/api/v1/insights")) {
+    return ["Insights"];
+  }
+  return ["Platform"];
+}
+
+function toOperationId(method: string, path: string) {
+  return `${method}${path
+    .replace(/^\/api\/v1\//, "_")
+    .replace(/[{}]/g, "")
+    .replace(/[^A-Za-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "")}`;
+}
+
+function annotateOpenApiDocument(document: Record<string, unknown>) {
+  const paths = document.paths as
+    | Record<string, Record<string, Record<string, unknown>>>
+    | undefined;
+
+  document.tags = [...API_TAGS];
+  document["x-tagGroups"] = [...API_TAG_GROUPS];
+
+  if (!paths) {
+    return document;
+  }
+
+  for (const [path, pathItem] of Object.entries(paths)) {
+    for (const [method, operation] of Object.entries(pathItem)) {
+      if (!HTTP_METHODS.has(method)) {
+        continue;
+      }
+      operation.tags ??= resolveTagsForPath(path);
+      operation.operationId ??= toOperationId(method, path);
+    }
+  }
+
+  return document;
+}
+
 export function buildOpenApiDocument() {
   const validationIssue = {
     type: "object",
@@ -3440,18 +3739,22 @@ export function buildOpenApiDocument() {
     }
   };
 
-  return {
+  const document = {
     openapi: "3.1.0",
     info: {
       title: "Forge API",
       version: "v1",
       description:
-        "Projects-first API for the Forge life-goal, project, task, and evidence system."
+        "Local-first execution, planning, memory, health, and Psyche API for the Forge runtime."
     },
     servers: [
       {
+        url: "http://127.0.0.1:4317",
+        description: "Default local Forge runtime"
+      },
+      {
         url: "/",
-        description: "Forge runtime"
+        description: "Embedded runtime-relative origin"
       }
     ],
     components: {
@@ -6972,4 +7275,6 @@ export function buildOpenApiDocument() {
       }
     }
   };
+
+  return annotateOpenApiDocument(document);
 }

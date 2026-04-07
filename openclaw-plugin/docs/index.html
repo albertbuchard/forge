@@ -6,7 +6,7 @@
     <title>Forge Docs</title>
     <meta
       name="description"
-      content="Forge is a structured workspace for planning, execution, wiki memory, sleep, sports, preferences, and Psyche records. Start here for a clear overview and setup."
+      content="Engineering documentation for the Forge runtime, repository, integrations, and API."
     />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -18,435 +18,235 @@
   </head>
   <body>
     <div class="page-shell">
-      <div class="ambient ambient-a"></div>
-      <div class="ambient ambient-b"></div>
+      <div class="ambient a"></div>
+      <div class="ambient b"></div>
 
       <header class="topbar">
         <a class="brand" href="./index.html">
           <span class="brand-mark">F</span>
           <span class="brand-copy">
             <strong>Forge</strong>
-            <span>Docs</span>
+            <span>Engineering Docs</span>
           </span>
         </a>
         <nav class="topnav">
-          <a href="./index.html">Home</a>
-          <a href="./features.html">Features</a>
-          <a href="./reference.html">Reference</a>
-          <a href="#getting-started">Getting started</a>
+          <a class="active" href="./index.html">Home</a>
+          <a href="./engineering.html">Engineering</a>
+          <a href="./development.html">Development</a>
+          <a href="./integrations.html">Integrations</a>
+          <a href="./api/">API</a>
           <a href="https://github.com/albertbuchard/forge">GitHub</a>
         </nav>
       </header>
 
       <main class="page">
-        <section class="hero hero-home">
-          <div class="hero-copy">
-            <p class="eyebrow">Forge</p>
-            <h1>One system for planning, execution, memory, and review.</h1>
+        <section class="hero split">
+          <div class="hero-card">
+            <p class="eyebrow">Getting Started</p>
+            <h1>Run Forge locally or through its agent adapters.</h1>
             <p class="lede">
-              Forge keeps goals, projects, tasks, habits, task runs, notes, wiki
-              pages, sleep records, workout records, preferences, and Psyche
-              records in one local system. OpenClaw and Hermes can read that
-              data, update it, and hand off to the Forge UI when the UI is the
-              better surface.
+              Forge is a local-first system for goals, projects, tasks, task runs,
+              notes, wiki pages, calendar planning, preferences, health records,
+              and Psyche data. This docs site is the engineering reference for the
+              runtime, repository, integrations, and API.
             </p>
-            <div class="hero-actions">
-              <a class="button primary" href="#getting-started">Start setup</a>
-              <a class="button secondary" href="./features.html"
-                >View features</a
-              >
+            <div class="pill-row">
+              <span class="pill">React 19 + Vite 6</span>
+              <span class="pill secondary">Fastify 5 + OpenAPI 3.1</span>
+              <span class="pill">SQLite + file-backed wiki</span>
             </div>
-            <div class="hero-points">
-              <div class="point">
-                Explicit ownership for human and bot users.
-              </div>
-              <div class="point">
-                Real task runs and signed work corrections.
-              </div>
-              <div class="point">
-                File-first wiki with search, health, and ingest.
-              </div>
-              <div class="point">
-                Sleep and sports records linked to Forge context.
-              </div>
+            <div class="hero-actions" style="margin-top: 18px">
+              <a class="button primary" href="./development.html#local-development"
+                >Local development</a
+              >
+              <a class="button" href="./api/">Open API reference</a>
             </div>
           </div>
 
-          <div class="preview-frame">
-            <div class="preview-topbar">
-              <span></span>
-              <span></span>
-              <span></span>
+          <aside class="hero-card">
+            <p class="eyebrow">Primary Entry Points</p>
+            <div class="link-row">
+              <a class="button" href="./engineering.html#runtime-surfaces"
+                >Runtime surfaces</a
+              >
+              <a class="button" href="./engineering.html#repository-layout"
+                >Repository layout</a
+              >
+              <a class="button" href="./integrations.html#shared-runtime"
+                >Shared runtime</a
+              >
+              <a class="button" href="./api/openapi.json">Raw OpenAPI JSON</a>
             </div>
+            <div class="kpi-list">
+              <div class="metric">
+                <strong>`/forge/`</strong>
+                <span>Main web UI base path</span>
+              </div>
+              <div class="metric">
+                <strong>`/api/v1/`</strong>
+                <span>Versioned HTTP API root</span>
+              </div>
+              <div class="metric">
+                <strong>`openclaw-plugin/`</strong>
+                <span>Published OpenClaw package boundary</span>
+              </div>
+            </div>
+          </aside>
+        </section>
+
+        <section class="section" id="quick-start">
+          <div class="section-heading">
+            <p class="eyebrow">Install Paths</p>
+            <h2>Choose the runtime surface you actually need.</h2>
+          </div>
+          <div class="card-grid three">
+            <article class="card">
+              <h3>OpenClaw plugin</h3>
+              <p>Use the published plugin when OpenClaw is the main host runtime.</p>
+              <pre><code>openclaw plugins install forge-openclaw-plugin
+openclaw plugins enable forge-openclaw-plugin
+openclaw gateway restart
+openclaw forge health</code></pre>
+            </article>
+            <article class="card">
+              <h3>Hermes plugin</h3>
+              <p>Use the Python plugin when Hermes is the main agent runtime.</p>
+              <pre><code>~/.hermes/hermes-agent/venv/bin/python -m ensurepip --upgrade
+~/.hermes/hermes-agent/venv/bin/python -m pip install --upgrade ./plugins/forge-hermes</code></pre>
+            </article>
+            <article class="card">
+              <h3>Standalone repo runtime</h3>
+              <p>Use the repo directly when you need the full Forge app and API locally.</p>
+              <pre><code>npm install
+npm run dev</code></pre>
+            </article>
+          </div>
+        </section>
+
+        <section class="section">
+          <div class="section-heading">
+            <p class="eyebrow">Docs Map</p>
+            <h2>Use the Pages site by concern, not by marketing category.</h2>
+          </div>
+          <div class="card-grid two">
+            <article class="card">
+              <h3><a href="./engineering.html">Engineering reference</a></h3>
+              <p>
+                Production stack, runtime addresses, storage model, route families,
+                repository layout, and package boundaries.
+              </p>
+            </article>
+            <article class="card">
+              <h3><a href="./development.html">Development guide</a></h3>
+              <p>
+                Local dev setup, test commands, release paths, and how docs and
+                OpenAPI generation fit into the repo workflow.
+              </p>
+            </article>
+            <article class="card">
+              <h3><a href="./integrations.html">Integration guide</a></h3>
+              <p>
+                OpenClaw, Hermes, Codex, iPhone companion, and shared multi-user
+                runtime notes.
+              </p>
+            </article>
+            <article class="card">
+              <h3><a href="./api/">API reference</a></h3>
+              <p>
+                Rendered OpenAPI reference from the same generated Forge spec served
+                by the runtime.
+              </p>
+            </article>
+          </div>
+        </section>
+
+        <section class="section">
+          <div class="section-heading">
+            <p class="eyebrow">Current Stack</p>
+            <h2>What is actually in production in this repo.</h2>
+          </div>
+          <table class="doc-table">
+            <thead>
+              <tr>
+                <th>Layer</th>
+                <th>Current stack</th>
+                <th>Notes</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Web UI</td>
+                <td>React 19, TypeScript 5.8, Vite 6, Tailwind CSS 4</td>
+                <td>Served under <code>/forge/</code> in production and local dev.</td>
+              </tr>
+              <tr>
+                <td>Backend</td>
+                <td>Fastify 5, TypeScript, OpenAPI 3.1</td>
+                <td>Spec is generated from <code>server/src/openapi.ts</code>.</td>
+              </tr>
+              <tr>
+                <td>Storage</td>
+                <td>SQLite + file-backed wiki vault</td>
+                <td>Forge keeps canonical runtime records locally first.</td>
+              </tr>
+              <tr>
+                <td>Desktop / native</td>
+                <td>Tauri 2 and iOS companion</td>
+                <td>Desktop shell plus HealthKit-powered iPhone companion.</td>
+              </tr>
+              <tr>
+                <td>Docs</td>
+                <td>GitHub Pages static site + rendered OpenAPI reference</td>
+                <td>The Pages artifact includes this site and the generated spec.</td>
+              </tr>
+            </tbody>
+          </table>
+        </section>
+
+        <section class="section">
+          <div class="section-heading">
+            <p class="eyebrow">Runtime Addresses</p>
+            <h2>Default local addresses and public docs entry points.</h2>
+          </div>
+          <div class="split-list">
+            <div class="section-card">
+              <h3>Local development</h3>
+              <pre><code>UI:  http://127.0.0.1:3027/forge/
+API: http://127.0.0.1:4317/api/v1/
+Spec: http://127.0.0.1:4317/api/v1/openapi.json</code></pre>
+            </div>
+            <div class="section-card">
+              <h3>GitHub Pages</h3>
+              <pre><code>Docs home: /forge/
+Engineering: /forge/engineering.html
+Development: /forge/development.html
+Integrations: /forge/integrations.html
+API docs: /forge/api/</code></pre>
+            </div>
+          </div>
+        </section>
+
+        <section class="section">
+          <figure class="shot">
             <img
               src="./assets/forge-overview-dashboard.png"
               alt="Forge overview dashboard"
             />
-          </div>
+            <figcaption>
+              Forge keeps execution, planning, memory, health, and Psyche records in
+              one runtime. Use the UI when the work is visual; use the API or agent
+              adapters when the work is operational.
+            </figcaption>
+          </figure>
         </section>
 
-        <section class="section">
-          <div class="section-heading">
-            <p class="eyebrow">What You Get</p>
-            <h2>What Forge includes.</h2>
-            <p class="section-copy">
-              This is the short product map. Use the features page for the
-              longer reference.
-            </p>
-          </div>
-          <div class="card-grid card-grid-3">
-            <article class="card">
-              <h3>Planning</h3>
-              <p>
-                Goals, projects, tasks, habits, strategies, notes, and calendar
-                records stay linked in one graph.
-              </p>
-            </article>
-            <article class="card">
-              <h3>Execution</h3>
-              <p>
-                Task runs track real work. Work adjustments fix logged minutes
-                without inventing a fake run.
-              </p>
-            </article>
-            <article class="card">
-              <h3>Wiki memory</h3>
-              <p>
-                The wiki stores durable pages with backlinks, search, health
-                checks, and background ingest jobs.
-              </p>
-            </article>
-            <article class="card">
-              <h3>Health</h3>
-              <p>
-                Sleep and sports are first-class record types with notes, tags,
-                and Forge links.
-              </p>
-            </article>
-            <article class="card">
-              <h3>Preferences</h3>
-              <p>
-                Preferences includes comparison rounds, direct signals, and
-                editable concept libraries.
-              </p>
-            </article>
-            <article class="card">
-              <h3>Psyche</h3>
-              <p>
-                Values, beliefs, patterns, modes, and trigger reports stay in
-                the same system as work and review.
-              </p>
-            </article>
-          </div>
-        </section>
-
-        <section class="section">
-          <div class="section-heading">
-            <p class="eyebrow">Choose A Surface</p>
-            <h2>Choose how you want to run Forge.</h2>
-            <p class="section-copy">
-              Pick the adapter that matches your runtime.
-            </p>
-          </div>
-          <div class="card-grid card-grid-3">
-            <article class="card">
-              <h3>OpenClaw</h3>
-              <p>
-                Published plugin. Best if you want the standard install path and
-                built-in Forge runtime commands.
-              </p>
-            </article>
-            <article class="card">
-              <h3>Hermes</h3>
-              <p>
-                Native Python plugin. Best if Hermes is your main agent runtime.
-              </p>
-            </article>
-            <article class="card">
-              <h3>Standalone</h3>
-              <p>
-                Run Forge directly from the repo if you only need the app and
-                API without an agent host.
-              </p>
-            </article>
-          </div>
-        </section>
-
-        <section class="section" id="getting-started">
-          <div class="section-heading">
-            <p class="eyebrow">Getting Started</p>
-            <h2 id="install-title">Install Forge in OpenClaw.</h2>
-            <p class="section-copy" id="install-copy">
-              Start with the normal install path. If OpenClaw 2026.4.x blocks it, use the temporary bypass directly below.
-            </p>
-          </div>
-
-          <div class="install-card">
-            <div class="install-tabs" role="tablist" aria-label="Install mode">
-              <button
-                type="button"
-                class="install-tab active"
-                data-install-mode="openclaw"
-              >
-                OpenClaw
-              </button>
-              <button
-                type="button"
-                class="install-tab"
-                data-install-mode="hermes"
-              >
-                Hermes
-              </button>
-              <button
-                type="button"
-                class="install-tab"
-                data-install-mode="standalone"
-              >
-                Standalone
-              </button>
-            </div>
-
-            <div class="install-shell">
-              <div class="shell-header">
-                <span>Setup</span>
-                <button
-                  class="copy-button"
-                  type="button"
-                  data-copy-target="install-command"
-                >
-                  Copy
-                </button>
-              </div>
-              <pre><code id="install-command"></code></pre>
-            </div>
-          </div>
-
-          <div class="card-grid card-grid-3 compact-grid">
-            <article class="card">
-              <h3>1. Install</h3>
-              <p id="step-1">
-                Install the published OpenClaw plugin and enable it.
-              </p>
-            </article>
-            <article class="card">
-              <h3>2. Allow</h3>
-              <p id="step-2">
-                Add the plugin to <code>plugins.allow</code> if it is not
-                already present.
-              </p>
-            </article>
-            <article class="card">
-              <h3>3. Restart and check</h3>
-              <p id="step-3">
-                Restart the gateway, run the health check, then open the UI.
-              </p>
-            </article>
-          </div>
-
-          <div class="card-grid card-grid-2">
-            <article class="card">
-              <h3>Important for OpenClaw</h3>
-              <p>
-                <code>openclaw plugins enable forge-openclaw-plugin</code> is
-                not always enough by itself. If
-                <code>forge-openclaw-plugin</code> is missing from
-                <code>plugins.allow</code>, OpenClaw can still refuse to load
-                it.
-              </p>
-            </article>
-            <article class="card">
-              <h3>What the check confirms</h3>
-              <p>
-                <code>openclaw forge health</code> confirms the plugin loaded,
-                the Forge runtime is reachable, and the local API is answering.
-              </p>
-            </article>
-          </div>
-
-          <div class="card-grid card-grid-2">
-            <article class="card">
-              <h3>Default local UI</h3>
-              <p id="info-ui">
-                The common local UI address is
-                <code>http://127.0.0.1:4317/forge/</code>.
-              </p>
-            </article>
-            <article class="card">
-              <h3>Default data path</h3>
-              <p id="info-data">
-                OpenClaw stores Forge under
-                <code
-                  >~/.openclaw/extensions/forge-openclaw-plugin/data/forge.sqlite</code
-                >
-                unless you set a custom <code>dataRoot</code>.
-              </p>
-            </article>
-          </div>
-        </section>
-
-        <section class="section">
-          <div class="section-heading">
-            <p class="eyebrow">Documentation</p>
-            <h2>Open the page that matches the question you have.</h2>
-            <p class="section-copy">
-              Keep the home page for setup. Use the other pages for product or
-              integration details.
-            </p>
-          </div>
-          <div class="card-grid card-grid-3">
-            <a class="card link-card" href="./features.html">
-              <h3>Open feature reference</h3>
-              <p>
-                Planning, strategies, wiki, health, preferences, and plugin
-                coverage.
-              </p>
-            </a>
-            <a class="card link-card" href="./reference.html">
-              <h3>Open reference docs</h3>
-              <p>
-                Runtime surfaces, API groups, adapters, routes, and repo
-                structure.
-              </p>
-            </a>
-            <a
-              class="card link-card"
-              href="https://github.com/albertbuchard/forge"
-            >
-              <h3>Open GitHub repo</h3>
-              <p>Source, plugin packages, and repo-level setup files.</p>
-            </a>
-          </div>
-        </section>
+        <footer class="footer">
+          Source of truth lives in the Forge repo: runtime code in
+          <code>server/</code> and <code>src/</code>, docs pages in
+          <code>openclaw-plugin/docs/</code>, and longer engineering guides in
+          <code>docs/</code>.
+        </footer>
       </main>
     </div>
-
-    <script>
-      const installModes = {
-        openclaw: {
-          title: "Install Forge in OpenClaw.",
-          copy: "Start with the standard install path. If your OpenClaw build blocks Forge as dangerous, use the temporary bypass in the same block.",
-          command: `openclaw plugins install forge-openclaw-plugin
-openclaw plugins enable forge-openclaw-plugin
-node -e 'const fs=require("fs"); const p=process.env.HOME+"/.openclaw/openclaw.json"; const j=JSON.parse(fs.readFileSync(p,"utf8")); j.plugins ??= {}; j.plugins.allow = Array.from(new Set([...(j.plugins.allow || []), "forge-openclaw-plugin"])); fs.writeFileSync(p, JSON.stringify(j, null, 2)+"\\n");'
-openclaw gateway restart
-openclaw forge health
-
-# Temporary bypass for some OpenClaw 2026.4.x builds
-npm install -g forge-openclaw-plugin
-node -e 'const cp=require("child_process"); const fs=require("fs"); const path=require("path"); const p=process.env.HOME+"/.openclaw/openclaw.json"; const j=JSON.parse(fs.readFileSync(p,"utf8")); const pluginPath=path.join(cp.execSync("npm root -g",{encoding:"utf8"}).trim(),"forge-openclaw-plugin"); j.plugins ??= {}; j.plugins.allow = Array.from(new Set([...(j.plugins.allow || []), "forge-openclaw-plugin"])); j.plugins.load ??= {}; j.plugins.load.paths = Array.from(new Set([...(j.plugins.load.paths || []), pluginPath])); j.plugins.entries ??= {}; j.plugins.entries["forge-openclaw-plugin"] = { enabled: true, config: { origin: "http://127.0.0.1", port: 4317, actorLabel: "aurel", timeoutMs: 15000 } }; fs.writeFileSync(p, JSON.stringify(j, null, 2)+"\\n"); console.log("Configured", pluginPath);'
-openclaw gateway restart
-openclaw plugins info forge-openclaw-plugin
-openclaw forge health`,
-          step1: "Try the normal published OpenClaw install first.",
-          step2:
-            "If OpenClaw blocks the install, use the temporary npm bypass to add <code>plugins.allow</code>, register the npm-installed folder in <code>plugins.load.paths</code>, and keep a single trusted config entry.",
-          step3:
-            "Restart the gateway, run the health check, then open the Forge UI or use the tools. I am trying to replace this bypass with a cleaner upstream-supported install flow.",
-          ui: "The common local UI address is <code>http://127.0.0.1:4317/forge/</code>.",
-          data: "On the normal path OpenClaw usually stores Forge under <code>~/.openclaw/extensions/forge-openclaw-plugin/data/forge.sqlite</code>. On the temporary bypass path, the plugin is loaded from the npm-installed folder unless you set a custom <code>dataRoot</code>."
-        },
-        hermes: {
-          title: "Install Forge in Hermes.",
-          copy: "Use this when Hermes is your main agent runtime.",
-          command: `~/.hermes/hermes-agent/venv/bin/python -m ensurepip --upgrade
-~/.hermes/hermes-agent/venv/bin/python -m pip install --upgrade ./plugins/forge-hermes`,
-          step1:
-            "Install the Hermes plugin into Hermes' own Python environment.",
-          step2: "Restart Hermes so it loads the plugin entry point.",
-          step3:
-            "Use the same Forge runtime and data root if Hermes should share state with OpenClaw.",
-          ui: "Hermes still uses the same Forge UI and API once the runtime is available.",
-          data: "Hermes defaults to <code>~/.hermes/forge/data/forge.sqlite</code> and reads its plugin config from <code>~/.hermes/forge/config.json</code>."
-        },
-        standalone: {
-          title: "Run Forge directly from the repo.",
-          copy: "Use this when you want the app and API without an agent host.",
-          command: `cd projects/forge
-npm install
-npm run dev`,
-          step1:
-            "Install the repo dependencies in <code>projects/forge</code>.",
-          step2:
-            "Start the combined server and web dev runtime with <code>npm run dev</code>.",
-          step3: "Open the local Forge UI in the browser.",
-          ui: "The repo dev server commonly serves Forge at <code>http://127.0.0.1:3027/forge/</code>.",
-          data: "Set <code>FORGE_DATA_ROOT</code> if you want the database somewhere other than the default runtime folder."
-        }
-      };
-
-      const installTitle = document.getElementById("install-title");
-      const installCopy = document.getElementById("install-copy");
-      const installCommand = document.getElementById("install-command");
-      const step1 = document.getElementById("step-1");
-      const step2 = document.getElementById("step-2");
-      const step3 = document.getElementById("step-3");
-      const infoUi = document.getElementById("info-ui");
-      const infoData = document.getElementById("info-data");
-      const installButtons = Array.from(
-        document.querySelectorAll("[data-install-mode]")
-      );
-      const copyButtons = Array.from(
-        document.querySelectorAll("[data-copy-target]")
-      );
-
-      function setMode(mode) {
-        const config = installModes[mode];
-        if (!config) return;
-
-        installTitle.textContent = config.title;
-        installCopy.textContent = config.copy;
-        installCommand.textContent = config.command;
-        step1.innerHTML = config.step1;
-        step2.innerHTML = config.step2;
-        step3.innerHTML = config.step3;
-        infoUi.innerHTML = config.ui;
-        infoData.innerHTML = config.data;
-
-        installButtons.forEach((button) => {
-          const active = button.dataset.installMode === mode;
-          button.classList.toggle("active", active);
-          button.setAttribute("aria-selected", active ? "true" : "false");
-        });
-      }
-
-      async function copyText(targetId, button) {
-        const node = document.getElementById(targetId);
-        if (!node) return;
-        const text = node.textContent ?? "";
-
-        try {
-          await navigator.clipboard.writeText(text);
-        } catch {
-          const helper = document.createElement("textarea");
-          helper.value = text;
-          helper.style.position = "absolute";
-          helper.style.left = "-9999px";
-          document.body.appendChild(helper);
-          helper.select();
-          document.execCommand("copy");
-          document.body.removeChild(helper);
-        }
-
-        const previous = button.textContent;
-        button.textContent = "Copied";
-        window.setTimeout(() => {
-          button.textContent = previous;
-        }, 1400);
-      }
-
-      installButtons.forEach((button) => {
-        button.addEventListener("click", () =>
-          setMode(button.dataset.installMode)
-        );
-      });
-
-      copyButtons.forEach((button) => {
-        button.addEventListener("click", () =>
-          copyText(button.dataset.copyTarget, button)
-        );
-      });
-
-      setMode("openclaw");
-    </script>
   </body>
 </html>

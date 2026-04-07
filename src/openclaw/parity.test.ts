@@ -6,7 +6,9 @@ import { buildRouteParityReport, collectMirroredApiRouteKeys } from "./routes";
 describe("forge plugin route parity", () => {
   it("covers the curated plugin contract and nothing broader", () => {
     const openapi = buildOpenApiDocument();
-    const report = buildRouteParityReport(openapi.paths ?? {});
+    const report = buildRouteParityReport(
+      (openapi.paths ?? {}) as Record<string, Record<string, unknown>>
+    );
 
     expect(report.missingFromPlugin).toEqual([]);
     expect(report.missingFromOpenApi).toEqual([]);
