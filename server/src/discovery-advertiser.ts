@@ -53,13 +53,19 @@ export async function startForgeDiscoveryAdvertiser(
     }
   });
 
-  service.start();
+  if (typeof service.start === "function") {
+    service.start();
+  }
 
   return {
     stop: () => {
-      service.stop(() => {
-        bonjour.destroy();
-      });
+      if (typeof service.stop === "function") {
+        service.stop(() => {
+          bonjour.destroy();
+        });
+        return;
+      }
+      bonjour.destroy();
     }
   };
 }

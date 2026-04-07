@@ -118,6 +118,9 @@ export function OverviewPage() {
       removable: false,
       minHeight: 2,
       maxHeight: 3,
+      surfaceChrome: "none",
+      defaultTitleVisible: false,
+      defaultDescriptionVisible: false,
       render: () => (
         <PageHero
           title="Overview"

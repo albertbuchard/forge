@@ -23,7 +23,9 @@ export function FacetedTokenSearch({
   selectedOptionIds,
   onSelectedOptionIdsChange,
   resultSummary,
-  clearLabel = "Clear filters"
+  clearLabel = "Clear filters",
+  placeholder = "Search title, alias, domain, source, or filter chip",
+  emptyStateMessage = "Keep typing to search the library or pick one of the suggested filter chips."
 }: {
   title: string;
   description: string;
@@ -34,6 +36,8 @@ export function FacetedTokenSearch({
   onSelectedOptionIdsChange: (value: string[]) => void;
   resultSummary: string;
   clearLabel?: string;
+  placeholder?: string;
+  emptyStateMessage?: string;
 }) {
   const [open, setOpen] = useState(false);
   const [highlightedIndex, setHighlightedIndex] = useState(0);
@@ -169,7 +173,7 @@ export function FacetedTokenSearch({
                   addOption(filteredOptions[highlightedIndex]!.id);
                 }
               }}
-              placeholder="Search questionnaire title, alias, domain, source, response style, or filter chip"
+              placeholder={placeholder}
               className="min-w-0 flex-1 bg-transparent text-sm text-white placeholder:text-white/34 focus:outline-none"
             />
           </div>
@@ -205,7 +209,7 @@ export function FacetedTokenSearch({
                 ))
               ) : (
                 <div className="px-3 py-2.5 text-sm text-white/42">
-                  Keep typing to search the library or pick one of the suggested filter chips.
+                  {emptyStateMessage}
                 </div>
               )}
             </div>

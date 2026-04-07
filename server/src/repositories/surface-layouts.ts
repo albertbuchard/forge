@@ -11,11 +11,64 @@ type SurfaceLayoutRow = {
   updated_at: string;
 };
 
+type LegacySurfaceLayoutPayload = {
+  surfaceId?: string;
+  order?: string[];
+  widgets?: Record<string, unknown>;
+  layouts?: {
+    lg?: Array<{ i?: string; w?: number; x?: number; y?: number }>;
+  };
+};
+
 function parseLayout(row: SurfaceLayoutRow): SurfaceLayoutPayload {
-  const parsed = JSON.parse(row.payload_json) as SurfaceLayoutPayload;
+  const parsed = JSON.parse(row.payload_json) as
+    | SurfaceLayoutPayload
+    | LegacySurfaceLayoutPayload;
+  const legacy = "layouts" in parsed ? parsed : null;
+  const legacyOrder =
+    Array.isArray(legacy?.layouts?.lg)
+      ? [...legacy.layouts.lg]
+          .sort((left, right) => {
+            const leftY = typeof left.y === "number" ? left.y : 0;
+            const rightY = typeof right.y === "number" ? right.y : 0;
+            if (leftY !== rightY) {
+              return leftY - rightY;
+            }
+            const leftX = typeof left.x === "number" ? left.x : 0;
+            const rightX = typeof right.x === "number" ? right.x : 0;
+            return leftX - rightX;
+          })
+          .map((item) => item.i)
+          .filter((item): item is string => typeof item === "string" && item.trim().length > 0)
+      : [];
+  const widgets = Object.fromEntries(
+    Object.entries(parsed.widgets ?? {}).map(([widgetId, rawValue]) => {
+      const value =
+        rawValue && typeof rawValue === "object"
+          ? (rawValue as Record<string, unknown>)
+          : {};
+      const legacyLg = legacy?.layouts?.lg?.find((entry) => entry.i === widgetId);
+      return [
+        widgetId,
+        {
+          hidden: value.hidden === true,
+          fullWidth:
+            value.fullWidth === true ||
+            (typeof legacyLg?.w === "number" && legacyLg.w >= 10),
+          titleVisible: value.titleVisible !== false,
+          descriptionVisible: value.descriptionVisible !== false
+        }
+      ];
+    })
+  );
   return surfaceLayoutPayloadSchema.parse({
     ...parsed,
     surfaceId: row.surface_id,
+    order:
+      Array.isArray(parsed.order) && parsed.order.length > 0
+        ? parsed.order
+        : legacyOrder,
+    widgets,
     updatedAt: row.updated_at
   });
 }

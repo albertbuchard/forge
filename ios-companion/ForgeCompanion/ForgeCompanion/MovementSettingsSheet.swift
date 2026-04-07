@@ -121,6 +121,11 @@ struct MovementSettingsSheet: View {
                 .foregroundStyle(CompanionStyle.textMuted)
                 .fixedSize(horizontal: false, vertical: true)
 
+            Text("These tags stay open-ended. Seeded tags like home, workplace, gym, holiday, grocery, or nature matter for downstream calculations, but you can define your own tags too.")
+                .font(.system(size: 12, weight: .medium, design: .rounded))
+                .foregroundStyle(CompanionStyle.textMuted.opacity(0.9))
+                .fixedSize(horizontal: false, vertical: true)
+
             VStack(spacing: 10) {
                 TextField("Current place label", text: $newPlaceLabel)
                     .textInputAutocapitalization(.words)
@@ -136,7 +141,7 @@ struct MovementSettingsSheet: View {
                             )
                     )
 
-                TextField("Tags: home, grocery, nature", text: $newPlaceTags)
+                TextField("Tags: home, gym, holiday, parents-house", text: $newPlaceTags)
                     .font(.system(size: 15, weight: .medium, design: .rounded))
                     .padding(.horizontal, 14)
                     .padding(.vertical, 12)

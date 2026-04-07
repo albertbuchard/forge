@@ -6,6 +6,14 @@ import UIKit
 
 @MainActor
 final class MovementSyncStore: NSObject, ObservableObject, CLLocationManagerDelegate {
+    private enum DetectionThresholds {
+        static let stayRadiusMeters: Double = 100
+        static let stayConfirmationSeconds: TimeInterval = 10 * 60
+        static let tripMinimumSeconds: TimeInterval = 5 * 60
+        static let tripMinimumDisplacementMeters: Double = 100
+        static let stopMinimumSeconds: TimeInterval = 3 * 60
+    }
+
     struct StoredKnownPlace: Codable, Identifiable, Hashable {
         let id: String
         var externalUid: String
@@ -124,6 +132,7 @@ final class MovementSyncStore: NSObject, ObservableObject, CLLocationManagerDele
     private var stationaryCandidateStartedAt: Date?
     private var lastStopWindowStartedAt: Date?
     private var shouldEscalateToAlwaysAuthorization = false
+    private var suspendedStayIdBeforeTrip: String?
 
     override init() {
         super.init()
@@ -169,18 +178,32 @@ final class MovementSyncStore: NSObject, ObservableObject, CLLocationManagerDele
         }
     }
 
-    func addKnownPlace(label: String, categoryTags: [String]) {
-        guard let latestLocation = recentLocations.last else {
-            companionDebugLog("MovementSyncStore", "addKnownPlace skipped no latest location")
-            return
+    @discardableResult
+    func addKnownPlace(
+        label: String,
+        categoryTags: [String],
+        latitude: Double? = nil,
+        longitude: Double? = nil
+    ) -> StoredKnownPlace? {
+        let resolvedLatitude: Double
+        let resolvedLongitude: Double
+        if let latitude, let longitude {
+            resolvedLatitude = latitude
+            resolvedLongitude = longitude
+        } else if let latestLocation = recentLocations.last {
+            resolvedLatitude = latestLocation.coordinate.latitude
+            resolvedLongitude = latestLocation.coordinate.longitude
+        } else {
+            companionDebugLog("MovementSyncStore", "addKnownPlace skipped no coordinates")
+            return nil
         }
         let place = StoredKnownPlace(
             id: "place_\(UUID().uuidString.lowercased())",
             externalUid: "ios-place-\(UUID().uuidString.lowercased())",
             label: label,
             aliases: [],
-            latitude: latestLocation.coordinate.latitude,
-            longitude: latestLocation.coordinate.longitude,
+            latitude: resolvedLatitude,
+            longitude: resolvedLongitude,
             radiusMeters: 100,
             categoryTags: categoryTags,
             visibility: "shared",
@@ -189,6 +212,7 @@ final class MovementSyncStore: NSObject, ObservableObject, CLLocationManagerDele
         )
         knownPlaces = [place] + knownPlaces.filter { $0.label != place.label }
         persistState()
+        return place
     }
 
     func mergeBootstrap(_ bootstrap: SyncReceipt.MovementBootstrapEnvelope?) {
@@ -223,6 +247,9 @@ final class MovementSyncStore: NSObject, ObservableObject, CLLocationManagerDele
 
     func buildMovementPayload() -> CompanionSyncPayload.MovementPayload {
         pruneLongTermRawPointsIfNeeded()
+        let syncableTrips = storedTrips.filter { trip in
+            trip.status == "active" ? tripQualifies(trip) : true
+        }
         return CompanionSyncPayload.MovementPayload(
             settings: .init(
                 trackingEnabled: trackingEnabled,
@@ -268,7 +295,7 @@ final class MovementSyncStore: NSObject, ObservableObject, CLLocationManagerDele
                     metadata: stay.metadata
                 )
             },
-            trips: storedTrips.map { trip in
+            trips: syncableTrips.map { trip in
                 .init(
                     externalUid: trip.id,
                     label: trip.label,
@@ -326,6 +353,90 @@ final class MovementSyncStore: NSObject, ObservableObject, CLLocationManagerDele
         return "\(staysCount) stays · \(tripsCount) trips"
     }
 
+    var activeStay: StoredStay? {
+        guard let currentStayId else {
+            return nil
+        }
+        return storedStays.first(where: { $0.id == currentStayId })
+    }
+
+    var activeTrip: StoredTrip? {
+        guard let currentTripId else {
+            return nil
+        }
+        return storedTrips.first(where: { $0.id == currentTripId })
+    }
+
+    func reconcileCanonicalStay(_ stay: ForgeMovementTimelineStay) {
+        guard let index = storedStays.firstIndex(where: { $0.id == stay.externalUid }) else {
+            return
+        }
+        storedStays[index].label = stay.label
+        storedStays[index].status = stay.status
+        storedStays[index].classification = stay.classification
+        storedStays[index].startedAt = isoFormatter.date(from: stay.startedAt) ?? storedStays[index].startedAt
+        storedStays[index].endedAt = isoFormatter.date(from: stay.endedAt) ?? storedStays[index].endedAt
+        storedStays[index].centerLatitude = stay.centerLatitude
+        storedStays[index].centerLongitude = stay.centerLongitude
+        storedStays[index].radiusMeters = stay.radiusMeters
+        storedStays[index].sampleCount = stay.sampleCount
+        storedStays[index].placeExternalUid = stay.place?.externalUid ?? storedStays[index].placeExternalUid
+        storedStays[index].placeLabel = stay.place?.label ?? storedStays[index].placeLabel
+        storedStays[index].tags = stay.place?.categoryTags ?? stay.metrics.values["tags"]?.components(separatedBy: ", ").filter { $0.isEmpty == false } ?? storedStays[index].tags
+        storedStays[index].metadata = stay.metadata.values
+        persistState()
+    }
+
+    func reconcileCanonicalTrip(_ trip: ForgeMovementTimelineTrip) {
+        guard let index = storedTrips.firstIndex(where: { $0.id == trip.externalUid }) else {
+            return
+        }
+        storedTrips[index].label = trip.label
+        storedTrips[index].status = trip.status
+        storedTrips[index].travelMode = trip.travelMode
+        storedTrips[index].activityType = trip.activityType
+        storedTrips[index].startedAt = isoFormatter.date(from: trip.startedAt) ?? storedTrips[index].startedAt
+        storedTrips[index].endedAt = isoFormatter.date(from: trip.endedAt) ?? storedTrips[index].endedAt
+        storedTrips[index].startPlaceExternalUid = trip.startPlace?.externalUid ?? storedTrips[index].startPlaceExternalUid
+        storedTrips[index].endPlaceExternalUid = trip.endPlace?.externalUid ?? storedTrips[index].endPlaceExternalUid
+        storedTrips[index].distanceMeters = trip.distanceMeters
+        storedTrips[index].movingSeconds = trip.movingSeconds
+        storedTrips[index].idleSeconds = trip.idleSeconds
+        storedTrips[index].averageSpeedMps = trip.averageSpeedMps
+        storedTrips[index].maxSpeedMps = trip.maxSpeedMps
+        storedTrips[index].caloriesKcal = trip.caloriesKcal
+        storedTrips[index].expectedMet = trip.expectedMet
+        storedTrips[index].tags = trip.tags
+        storedTrips[index].metadata = trip.metadata.values
+        persistState()
+    }
+
+    func updateLocalStay(
+        id: String,
+        label: String,
+        tags: [String],
+        placeLabel: String,
+        placeExternalUid: String
+    ) {
+        guard let index = storedStays.firstIndex(where: { $0.id == id }) else {
+            return
+        }
+        storedStays[index].label = label
+        storedStays[index].placeLabel = placeLabel
+        storedStays[index].placeExternalUid = placeExternalUid
+        storedStays[index].tags = tags
+        persistState()
+    }
+
+    func updateLocalTrip(id: String, label: String, tags: [String]) {
+        guard let index = storedTrips.firstIndex(where: { $0.id == id }) else {
+            return
+        }
+        storedTrips[index].label = label
+        storedTrips[index].tags = tags
+        persistState()
+    }
+
     func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
         refreshPermissionState()
         if shouldEscalateToAlwaysAuthorization, manager.authorizationStatus == .authorizedWhenInUse {
@@ -379,16 +490,24 @@ final class MovementSyncStore: NSObject, ObservableObject, CLLocationManagerDele
                 stationaryCandidateStartedAt = location.timestamp
             }
             if let stationaryCandidateStartedAt,
-               location.timestamp.timeIntervalSince(stationaryCandidateStartedAt) >= 180
+               location.timestamp.timeIntervalSince(stationaryCandidateStartedAt) >= DetectionThresholds.stayConfirmationSeconds
             {
                 finalizeTripIfNeeded(with: location)
+                enterStationaryMode(
+                    with: location,
+                    retroactiveStart: stationaryCandidateStartedAt
+                )
+            } else if currentStayId != nil {
+                enterStationaryMode(with: location)
             }
-            enterStationaryMode(with: location)
         }
         persistState()
     }
 
-    private func enterStationaryMode(with location: CLLocation) {
+    private func enterStationaryMode(
+        with location: CLLocation,
+        retroactiveStart: Date? = nil
+    ) {
         let matchedPlace = matchKnownPlace(for: location)
         if let tripId = currentTripId,
            let index = storedTrips.firstIndex(where: { $0.id == tripId })
@@ -399,7 +518,7 @@ final class MovementSyncStore: NSObject, ObservableObject, CLLocationManagerDele
                     0,
                     Int(location.timestamp.timeIntervalSince(point.recordedAt))
                 )
-                if stopDuration >= 180 {
+                if Double(stopDuration) >= DetectionThresholds.stopMinimumSeconds {
                     let stop = StoredTripStop(
                         id: "stop_\(UUID().uuidString.lowercased())",
                         externalUid: "ios-stop-\(UUID().uuidString.lowercased())",
@@ -435,16 +554,17 @@ final class MovementSyncStore: NSObject, ObservableObject, CLLocationManagerDele
             return
         }
 
+        let startedAt = retroactiveStart ?? location.timestamp
         let stay = StoredStay(
             id: "stay_\(UUID().uuidString.lowercased())",
             label: matchedPlace?.label ?? "Unlabeled stay",
             status: "active",
             classification: "stationary",
-            startedAt: location.timestamp,
+            startedAt: startedAt,
             endedAt: location.timestamp,
             centerLatitude: location.coordinate.latitude,
             centerLongitude: location.coordinate.longitude,
-            radiusMeters: 100,
+            radiusMeters: DetectionThresholds.stayRadiusMeters,
             sampleCount: 1,
             placeExternalUid: matchedPlace?.externalUid ?? "",
             placeLabel: matchedPlace?.label ?? "",
@@ -463,6 +583,7 @@ final class MovementSyncStore: NSObject, ObservableObject, CLLocationManagerDele
             stay.status = "completed"
             stay.endedAt = location.timestamp
             storedStays[index] = stay
+            suspendedStayIdBeforeTrip = stay.id
             currentStayId = nil
         }
 
@@ -528,11 +649,19 @@ final class MovementSyncStore: NSObject, ObservableObject, CLLocationManagerDele
             return
         }
         var trip = storedTrips[index]
-        trip.status = "completed"
         trip.endedAt = location.timestamp
         trip.points.append(point(from: location, isStopAnchor: true))
+        if tripQualifies(trip) == false {
+            storedTrips.remove(at: index)
+            currentTripId = nil
+            lastStopWindowStartedAt = nil
+            reviveSuspendedStayIfNeeded(with: location)
+            return
+        }
+        trip.status = "completed"
         storedTrips[index] = trip
         currentTripId = nil
+        suspendedStayIdBeforeTrip = nil
         lastStopWindowStartedAt = nil
     }
 
@@ -553,7 +682,7 @@ final class MovementSyncStore: NSObject, ObservableObject, CLLocationManagerDele
                 lastStopWindowStartedAt = first.recordedAt
             }
             if let lastStopWindowStartedAt,
-               newLocation.timestamp.timeIntervalSince(lastStopWindowStartedAt) >= 180
+               newLocation.timestamp.timeIntervalSince(lastStopWindowStartedAt) >= DetectionThresholds.stopMinimumSeconds
             {
                 let matchedPlace = matchKnownPlace(for: newLocation)
                 let stop = StoredTripStop(
@@ -596,7 +725,7 @@ final class MovementSyncStore: NSObject, ObservableObject, CLLocationManagerDele
                 latitude: stay.centerLatitude,
                 longitude: stay.centerLongitude
             ).distance(from: location)
-            if distance > max(100, stay.radiusMeters) {
+            if distance > max(DetectionThresholds.tripMinimumDisplacementMeters, stay.radiusMeters) {
                 return true
             }
         }
@@ -609,7 +738,7 @@ final class MovementSyncStore: NSObject, ObservableObject, CLLocationManagerDele
             return false
         }
         return cluster.allSatisfy { sample in
-            sample.distance(from: location) <= 100
+            sample.distance(from: location) <= DetectionThresholds.stayRadiusMeters
         }
     }
 
@@ -623,7 +752,7 @@ final class MovementSyncStore: NSObject, ObservableObject, CLLocationManagerDele
                 )
             }
             .filter { pair in
-                pair.distance <= max(100, pair.place.radiusMeters)
+                pair.distance <= max(DetectionThresholds.stayRadiusMeters, pair.place.radiusMeters)
             }
             .sorted { left, right in
                 left.distance < right.distance
@@ -672,6 +801,51 @@ final class MovementSyncStore: NSObject, ObservableObject, CLLocationManagerDele
             speedMps: location.speed >= 0 ? location.speed : nil,
             isStopAnchor: isStopAnchor
         )
+    }
+
+    private func tripQualifies(_ trip: StoredTrip) -> Bool {
+        let duration = trip.endedAt.timeIntervalSince(trip.startedAt)
+        guard duration >= DetectionThresholds.tripMinimumSeconds else {
+            return false
+        }
+        guard
+            let firstPoint = trip.points.first,
+            let lastPoint = trip.points.last
+        else {
+            return false
+        }
+        let displacement = CLLocation(
+            latitude: firstPoint.latitude,
+            longitude: firstPoint.longitude
+        ).distance(
+            from: CLLocation(
+                latitude: lastPoint.latitude,
+                longitude: lastPoint.longitude
+            )
+        )
+        return displacement >= DetectionThresholds.tripMinimumDisplacementMeters
+    }
+
+    private func reviveSuspendedStayIfNeeded(with location: CLLocation) {
+        guard let suspendedStayIdBeforeTrip else {
+            return
+        }
+        self.suspendedStayIdBeforeTrip = nil
+        guard let index = storedStays.firstIndex(where: { $0.id == suspendedStayIdBeforeTrip }) else {
+            return
+        }
+        let matchedPlace = matchKnownPlace(for: location)
+        var stay = storedStays[index]
+        stay.status = "active"
+        stay.endedAt = location.timestamp
+        stay.sampleCount += 1
+        stay.centerLatitude = ((stay.centerLatitude * Double(max(1, stay.sampleCount - 1))) + location.coordinate.latitude) / Double(stay.sampleCount)
+        stay.centerLongitude = ((stay.centerLongitude * Double(max(1, stay.sampleCount - 1))) + location.coordinate.longitude) / Double(stay.sampleCount)
+        stay.placeExternalUid = matchedPlace?.externalUid ?? stay.placeExternalUid
+        stay.placeLabel = matchedPlace?.label ?? stay.placeLabel
+        stay.label = matchedPlace?.label ?? stay.label
+        storedStays[index] = stay
+        currentStayId = stay.id
     }
 
     private func startMotionUpdatesIfAvailable() {

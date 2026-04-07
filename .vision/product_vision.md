@@ -31,21 +31,30 @@ be able to connect back to a project or task when relevant. A reward should be
 traceable to actual behavior. This is what makes Forge one coherent structured memory
 product rather than just a set of pages.
 
-That product now also needs one universal surface system rather than a handful of
-special-case dashboards. Every routed web view, including browse pages, detail pages,
-editor pages, and settings pages, should render inside the same responsive grid model.
-Each route needs a stable `surfaceId`, a shipped default layout for desktop and mobile
-breakpoints, persistent per-widget presentation preferences, and a reset path back to
-the shipped default. Layout editing should feel like a serious dashboard product:
-whole-card drag, edge and corner resize, optional title chrome, dense or comfortable
-card density, and saved state that survives refresh and later sessions.
+That product now also needs one universal surface arrangement system rather than a
+handful of special-case dashboards. Every routed web view, including browse pages,
+detail pages, editor pages, and settings pages, should participate in the same box
+registry and persistence contract, but normal viewing mode must preserve each page's
+authored responsive composition instead of forcing the entire app through one
+height-managed grid. Layout editing should therefore stay intentionally lightweight:
+hide or restore boxes, reorder them, and toggle whether a box spans the full route
+width on large screens.
 
-That surface system must also be the home for AI processors. A processor is a real
-widget that can sit beside ordinary route content, accept linked inputs from other
-widgets, call allowed tools, run with one or more configured agents, expose its own
-route endpoint, and optionally run on a cron schedule. The Workbench page is the most
-explicit editing surface for this, but the same processor and layout runtime should be
-available across the rest of Forge instead of living as a one-off page experiment.
+Forge navigation must feel smooth and continuous rather than page-flashy. When the
+user navigates between routed views, Forge should keep the current page visible until
+the incoming route has loaded the data it needs to render its authored surface. The
+background activity pill and related runtime status surfaces are the place where
+loading work becomes visible. Route handoff must not dump the user into intermediate
+empty states, generic skeleton flashes, or half-loaded page shells just because a
+query is still in flight.
+
+AI automation should move out of page-local widgets and into a dedicated global
+Connectors workspace. A connector is a graph asset that can consume registered Forge
+boxes from any view, pull structured content snapshots, invoke approved box tools, and
+run either as a one-shot functor or as a chat connector with optional memory. The
+graph editor should feel like a serious visual workflow product, but its visuals must
+still belong to Forge's theme and type system rather than importing an alien design
+language into the app.
 
 That operating model must now be explicitly multi-user. Forge should support multiple
 Forge users in one runtime, and every Forge user must be marked as either `human` or
@@ -103,7 +112,12 @@ change-detection model, and sync structured place, stay, stop, and trip records 
 into Forge. That companion must also be able to discover a nearby Forge runtime
 without manual entry when the runtime is already trusted: same-Wi-Fi discovery should
 work through Bonjour, and Tailscale discovery should work through advertised tailnet
-HTTPS URLs instead of assuming the phone can enumerate peers by itself.
+HTTPS URLs instead of assuming the phone can enumerate peers by itself. The companion
+also needs a native full-screen Life Timeline view for movement history: one vertically
+scrolling road-of-life surface where the current live stay or trip sits near the
+middle, older canonical stays and trips alternate left and right into the past, long
+durations visually cap while preserving the real duration label, and selecting a
+segment opens rich detail and edit actions without dropping the user into the web app.
 
 ## What The Main Views Are Supposed To Do
 
@@ -251,7 +265,11 @@ should default to a stylized curved trajectory view, with an exact map as a seco
 toggle for recent trips. The month view should offer metric-switching charts, and the
 all-time view should summarize place distribution, movement patterns, country or city
 breadth, and meaningful outside-the-home behavior in a visually serious way that
-matches Forge's theme.
+matches Forge's theme. The paired iPhone companion should mirror that seriousness with
+its own native Life Timeline screen: a full-screen historical movement narrative built
+from canonical stays and trips, with alternating stay blocks, curved trip connectors,
+current-state overlay, and direct edit affordances for labels, places, tags, and
+timing.
 
 The Project detail page should be board-first and action-first. The main task board for
 the project should dominate the page, because that is the work surface. Project status,
@@ -494,9 +512,10 @@ they are using a broken fallback interface.
 ## Runtime, Stack, And Delivery
 
 Forge currently ships as a React 19.1 and TypeScript 5.8 application built with Vite
-6.3 and Tailwind CSS 4.1. The front end uses React Router 7 for navigation, TanStack
-Query for server-state synchronization, React Hook Form and Zod for forms, dnd-kit for
-Kanban interactions, Framer Motion for motion, Recharts for charts, and Lucide React
+6.3 and Tailwind CSS 4.1. The front end uses app-local shadcn-style UI primitives,
+React Router 7 for navigation, TanStack Query for server-state synchronization, React
+Hook Form and Zod for forms, dnd-kit for ordering interactions, Framer Motion for
+motion, Recharts for charts, `@xyflow/react` for connector graphs, and Lucide React
 for iconography. The API runtime is Fastify 5, started through `tsx`, and served
 locally on port `4317` by default. The web application lives under the `/forge/` base
 path, and the versioned REST contract is documented through OpenAPI 3.1 at
@@ -534,6 +553,10 @@ controls. The iPhone companion talks to the same Fastify runtime through pairing
 tokens and dedicated mobile health and watch routes, while imported sleep, workout,
 movement, and watch-capture records are stored in Forge-owned SQLite tables with
 provenance, derived metrics, annotations, and reconciliation support.
+The movement contract itself now includes a canonical paginated timeline read endpoint
+plus canonical stay and trip patch endpoints, with paired mobile wrappers so the native
+iPhone companion can render and edit long-range movement history without inventing a
+separate movement model.
 
 The watch product surface is intentionally narrower than the phone. It should open fast,
 show Habits, Check In, Mark Moment, and Prompt Inbox as the primary launch surfaces,

@@ -23,6 +23,9 @@ export function WorkbenchPage() {
       defaultWidth: 12,
       defaultHeight: 1,
       removable: false,
+      surfaceChrome: "none",
+      defaultTitleVisible: false,
+      defaultDescriptionVisible: false,
       processorCapability: {
         label: "Workbench summary",
         mode: "content",

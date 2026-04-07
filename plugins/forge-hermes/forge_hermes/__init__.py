@@ -27,9 +27,9 @@ def _install_skill_bundle() -> None:
     for source in sorted(PACKAGE_DIR.glob("*.md")):
         destination_name = "SKILL.md" if source.name == "skill.md" else source.name
         destination = destination_dir / destination_name
-        if destination.exists():
-            continue
         destination.parent.mkdir(parents=True, exist_ok=True)
+        if destination.exists() and destination.read_bytes() == source.read_bytes():
+            continue
         shutil.copy2(source, destination)
 
 

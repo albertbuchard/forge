@@ -1,0 +1,1278 @@
+import { execFile as execFileCallback } from "node:child_process";
+import { randomUUID } from "node:crypto";
+import { readFile, writeFile } from "node:fs/promises";
+import path from "node:path";
+import { promisify } from "node:util";
+import { getDatabase } from "../db.js";
+import type { SecretsManager } from "../managers/platform/secrets-manager.js";
+import { LlmManager, type WikiLlmProfileLike } from "../managers/platform/llm-manager.js";
+import {
+  createAiConnectorSchema,
+  aiConnectorConversationSchema,
+  aiConnectorRunResultSchema,
+  aiConnectorRunSchema,
+  aiConnectorSchema,
+  runAiConnectorSchema,
+  updateAiConnectorSchema,
+  type AiConnector,
+  type AiConnectorConversation,
+  type AiConnectorEdge,
+  type AiConnectorNode,
+  type AiConnectorRun,
+  type CreateAiConnectorInput,
+  type RunAiConnectorInput,
+  type UpdateAiConnectorInput
+} from "../types.js";
+import {
+  FORGE_DEFAULT_AGENT_ID,
+  getAiModelConnectionById,
+  listAiModelConnections,
+  readModelConnectionCredential
+} from "./model-settings.js";
+import {
+  createAiProcessor,
+  getAiProcessorById,
+  listAiProcessorLinks,
+  listAiProcessors
+} from "./ai-processors.js";
+import {
+  buildConnectorOutputCatalogEntry,
+  executeForgeBoxTool,
+  getForgeBoxCatalogEntry,
+  resolveForgeBoxSnapshot
+} from "../connectors/box-registry.js";
+
+const execFile = promisify(execFileCallback);
+const MAX_TOOL_STEPS = 6;
+const MAX_RUN_HISTORY = 20;
+const DEFAULT_OPENAI_BASE_URL = "https://api.openai.com/v1";
+
+type AiConnectorRow = {
+  id: string;
+  slug: string;
+  title: string;
+  description: string;
+  kind: "functor" | "chat";
+  home_surface_id: string | null;
+  endpoint_enabled: number;
+  graph_json: string;
+  published_outputs_json: string;
+  last_run_json: string | null;
+  legacy_processor_id: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+type AiConnectorRunRow = {
+  id: string;
+  connector_id: string;
+  mode: "run" | "chat";
+  status: "running" | "completed" | "failed";
+  user_input: string;
+  context_json: string;
+  conversation_id: string | null;
+  result_json: string | null;
+  error: string | null;
+  created_at: string;
+  completed_at: string | null;
+};
+
+type AiConnectorConversationRow = {
+  id: string;
+  connector_id: string;
+  provider: string | null;
+  external_conversation_id: string | null;
+  transcript_json: string;
+  created_at: string;
+  updated_at: string;
+};
+
+type ConnectorExecutionResult = {
+  connector: AiConnector;
+  run: AiConnectorRun;
+  conversation: AiConnectorConversation | null;
+};
+
+type ConnectorNodeValue = {
+  text: string;
+  json: Record<string, unknown> | null;
+  tools: Array<{ boxId: string; key: string; label: string; description: string }>;
+  conversationId: string | null;
+};
+
+function parseJson<T>(value: string | null, fallback: T) {
+  try {
+    return value ? (JSON.parse(value) as T) : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function slugifySegment(value: string) {
+  const normalized = value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  return normalized || "connector";
+}
+
+function buildConnectorSlug(title: string, id: string) {
+  return `${slugifySegment(title)}-${id.slice(-6)}`;
+}
+
+function normalizeBaseUrl(profile: WikiLlmProfileLike) {
+  const trimmed = profile.baseUrl.trim();
+  return trimmed.length > 0 ? trimmed.replace(/\/$/, "") : DEFAULT_OPENAI_BASE_URL;
+}
+
+function isOpenAiFamily(profile: WikiLlmProfileLike) {
+  return (
+    profile.provider === "openai-api" ||
+    profile.provider === "openai-compatible" ||
+    profile.provider === "openai-codex"
+  );
+}
+
+function isCodexProfile(profile: WikiLlmProfileLike) {
+  return profile.provider === "openai-codex";
+}
+
+function extractCodexAccountId(accessToken: string) {
+  const parts = accessToken.split(".");
+  if (parts.length !== 3) {
+    throw new Error("Failed to extract accountId from OpenAI Codex token.");
+  }
+  const payload = JSON.parse(
+    Buffer.from(parts[1], "base64url").toString("utf8")
+  ) as Record<string, unknown>;
+  const auth = payload["https://api.openai.com/auth"];
+  if (!auth || typeof auth !== "object") {
+    throw new Error("Failed to extract accountId from OpenAI Codex token.");
+  }
+  const accountId = (auth as { chatgpt_account_id?: unknown }).chatgpt_account_id;
+  if (typeof accountId !== "string" || accountId.trim().length === 0) {
+    throw new Error("Failed to extract accountId from OpenAI Codex token.");
+  }
+  return accountId;
+}
+
+function buildRequestHeaders(profile: WikiLlmProfileLike, apiKey: string) {
+  const headers: Record<string, string> = {
+    authorization: `Bearer ${apiKey}`,
+    "content-type": "application/json"
+  };
+  if (!isCodexProfile(profile)) {
+    return headers;
+  }
+  headers["OpenAI-Beta"] = "responses=experimental";
+  headers.originator = "pi";
+  headers["chatgpt-account-id"] = extractCodexAccountId(apiKey);
+  return headers;
+}
+
+function buildResponsesUrl(profile: WikiLlmProfileLike) {
+  const baseUrl = normalizeBaseUrl(profile);
+  if (isCodexProfile(profile)) {
+    if (baseUrl.endsWith("/codex/responses")) {
+      return baseUrl;
+    }
+    if (baseUrl.endsWith("/codex")) {
+      return `${baseUrl}/responses`;
+    }
+    return `${baseUrl}/codex/responses`;
+  }
+  return baseUrl.endsWith("/responses") ? baseUrl : `${baseUrl}/responses`;
+}
+
+function buildConversationsUrl(profile: WikiLlmProfileLike) {
+  const baseUrl = normalizeBaseUrl(profile);
+  if (isCodexProfile(profile)) {
+    if (baseUrl.endsWith("/codex")) {
+      return `${baseUrl}/conversations`;
+    }
+    if (baseUrl.endsWith("/codex/responses")) {
+      return baseUrl.replace(/\/responses$/, "/conversations");
+    }
+    return `${baseUrl}/codex/conversations`;
+  }
+  return baseUrl.endsWith("/v1") ? `${baseUrl}/conversations` : `${baseUrl}/conversations`;
+}
+
+function parseOutputText(payload: Record<string, unknown>) {
+  const output = Array.isArray(payload.output) ? payload.output : [];
+  for (const item of output) {
+    if (!item || typeof item !== "object") {
+      continue;
+    }
+    const content = Array.isArray((item as { content?: unknown }).content)
+      ? ((item as { content?: unknown }).content as Array<unknown>)
+      : [];
+    for (const part of content) {
+      if (
+        part &&
+        typeof part === "object" &&
+        (part as { type?: unknown }).type === "output_text" &&
+        typeof (part as { text?: unknown }).text === "string"
+      ) {
+        return (part as { text: string }).text;
+      }
+    }
+  }
+  return "";
+}
+
+function buildDefaultGraph(kind: "functor" | "chat", title: string) {
+  const modelNodeId = "node_model";
+  const outputNodeId = "node_output";
+  return {
+    nodes: [
+      {
+        id: "node_input",
+        type: "user_input",
+        position: { x: 60, y: 160 },
+        data: {
+          label: "User input",
+          description: "Manual runtime input.",
+          enabledToolKeys: []
+        }
+      },
+      {
+        id: modelNodeId,
+        type: kind === "chat" ? "chat" : "functor",
+        position: { x: 340, y: 150 },
+        data: {
+          label: title,
+          description:
+            kind === "chat"
+              ? "Chat connector node."
+              : "Functor node.",
+          prompt:
+            kind === "chat"
+              ? "Respond helpfully using the linked inputs and available tools."
+              : "Transform the linked inputs and return the best final answer.",
+          systemPrompt: "",
+          enabledToolKeys: [],
+          modelConfig: {
+            connectionId: null,
+            provider: null,
+            baseUrl: null,
+            model: "",
+            thinking: null,
+            verbosity: null
+          }
+        }
+      },
+      {
+        id: outputNodeId,
+        type: "output",
+        position: { x: 660, y: 150 },
+        data: {
+          label: "Output",
+          description: "Published connector output.",
+          outputKey: "primary",
+          enabledToolKeys: []
+        }
+      }
+    ],
+    edges: [
+      {
+        id: "edge_input_model",
+        source: "node_input",
+        target: modelNodeId
+      },
+      {
+        id: "edge_model_output",
+        source: modelNodeId,
+        target: outputNodeId
+      }
+    ]
+  } satisfies AiConnector["graph"];
+}
+
+function ensurePublishedOutputs(connectorId: string, graph: AiConnector["graph"]) {
+  const outputNodes = graph.nodes.filter((node) => node.type === "output");
+  if (outputNodes.length === 0) {
+    return [
+      buildConnectorOutputCatalogEntry({
+        connectorId,
+        title: "Connector",
+        outputId: "primary"
+      })
+    ].map((entry) => ({
+      id: entry.boxId.replace(/^connector-output:/, ""),
+      nodeId: "node_output",
+      label: entry.label,
+      apiPath: `/api/v1/ai-connectors/${connectorId}/output`
+    }));
+  }
+  return outputNodes.map((node, index) => ({
+    id: `${connectorId}_out_${index + 1}`,
+    nodeId: node.id,
+    label: node.data.label || `Output ${index + 1}`,
+    apiPath: `/api/v1/ai-connectors/${connectorId}/output`
+  }));
+}
+
+function mapRun(row: AiConnectorRunRow): AiConnectorRun {
+  return aiConnectorRunSchema.parse({
+    id: row.id,
+    connectorId: row.connector_id,
+    mode: row.mode,
+    status: row.status,
+    userInput: row.user_input,
+    context: parseJson(row.context_json, {}),
+    conversationId: row.conversation_id,
+    result: parseJson(row.result_json, null),
+    error: row.error,
+    createdAt: row.created_at,
+    completedAt: row.completed_at
+  });
+}
+
+function mapConversation(row: AiConnectorConversationRow): AiConnectorConversation {
+  return aiConnectorConversationSchema.parse({
+    id: row.id,
+    connectorId: row.connector_id,
+    provider: row.provider,
+    externalConversationId: row.external_conversation_id,
+    transcript: parseJson(row.transcript_json, []),
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
+  });
+}
+
+function mapConnector(row: AiConnectorRow): AiConnector {
+  return aiConnectorSchema.parse({
+    id: row.id,
+    slug: row.slug,
+    title: row.title,
+    description: row.description,
+    kind: row.kind,
+    homeSurfaceId: row.home_surface_id,
+    endpointEnabled: row.endpoint_enabled === 1,
+    graph: parseJson(row.graph_json, { nodes: [], edges: [] }),
+    publishedOutputs: parseJson(row.published_outputs_json, []),
+    lastRun: parseJson(row.last_run_json, null),
+    legacyProcessorId: row.legacy_processor_id,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
+  });
+}
+
+export function listAiConnectorRuns(connectorId: string) {
+  const rows = getDatabase()
+    .prepare(
+      `SELECT * FROM ai_connector_runs WHERE connector_id = ? ORDER BY created_at DESC LIMIT ?`
+    )
+    .all(connectorId, MAX_RUN_HISTORY) as AiConnectorRunRow[];
+  return rows.map(mapRun);
+}
+
+export function getAiConnectorConversationById(conversationId: string) {
+  const row = getDatabase()
+    .prepare(`SELECT * FROM ai_connector_conversations WHERE id = ?`)
+    .get(conversationId) as AiConnectorConversationRow | undefined;
+  return row ? mapConversation(row) : null;
+}
+
+export function getAiConnectorConversationForConnector(connectorId: string) {
+  const row = getDatabase()
+    .prepare(`SELECT * FROM ai_connector_conversations WHERE connector_id = ?`)
+    .get(connectorId) as AiConnectorConversationRow | undefined;
+  return row ? mapConversation(row) : null;
+}
+
+function saveAiConnectorConversation(input: AiConnectorConversation) {
+  getDatabase()
+    .prepare(
+      `INSERT INTO ai_connector_conversations (
+        id, connector_id, provider, external_conversation_id, transcript_json, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(connector_id) DO UPDATE SET
+        provider = excluded.provider,
+        external_conversation_id = excluded.external_conversation_id,
+        transcript_json = excluded.transcript_json,
+        updated_at = excluded.updated_at`
+    )
+    .run(
+      input.id,
+      input.connectorId,
+      input.provider,
+      input.externalConversationId,
+      JSON.stringify(input.transcript),
+      input.createdAt,
+      input.updatedAt
+    );
+  return getAiConnectorConversationById(input.id)!;
+}
+
+function updateConnectorLastRun(connectorId: string, run: AiConnectorRun) {
+  getDatabase()
+    .prepare(`UPDATE ai_connectors SET last_run_json = ?, updated_at = ? WHERE id = ?`)
+    .run(JSON.stringify(run), new Date().toISOString(), connectorId);
+}
+
+function insertRun(input: AiConnectorRun) {
+  getDatabase()
+    .prepare(
+      `INSERT INTO ai_connector_runs (
+        id, connector_id, mode, status, user_input, context_json, conversation_id, result_json, error, created_at, completed_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(id) DO UPDATE SET
+        connector_id = excluded.connector_id,
+        mode = excluded.mode,
+        status = excluded.status,
+        user_input = excluded.user_input,
+        context_json = excluded.context_json,
+        conversation_id = excluded.conversation_id,
+        result_json = excluded.result_json,
+        error = excluded.error,
+        created_at = excluded.created_at,
+        completed_at = excluded.completed_at`
+    )
+    .run(
+      input.id,
+      input.connectorId,
+      input.mode,
+      input.status,
+      input.userInput,
+      JSON.stringify(input.context),
+      input.conversationId,
+      input.result ? JSON.stringify(input.result) : null,
+      input.error,
+      input.createdAt,
+      input.completedAt
+    );
+  updateConnectorLastRun(input.connectorId, input);
+  return input;
+}
+
+function resolveAllowedPath(inputPath: string) {
+  const candidate = path.resolve(process.cwd(), inputPath);
+  const workspaceRoot = process.cwd();
+  if (
+    candidate !== workspaceRoot &&
+    !candidate.startsWith(`${workspaceRoot}${path.sep}`)
+  ) {
+    throw new Error("Machine access is restricted to the Forge workspace root.");
+  }
+  return candidate;
+}
+
+function tryParseStructuredAgentResponse(value: string) {
+  try {
+    return JSON.parse(value) as
+      | {
+          action: "final";
+          text: string;
+        }
+      | {
+          action: "tool";
+          tool: string;
+          args: Record<string, unknown>;
+        };
+  } catch {
+    return null;
+  }
+}
+
+async function executeMachineTool(
+  tool: "machine_read_file" | "machine_write_file" | "machine_exec",
+  args: Record<string, unknown>
+) {
+  if (tool === "machine_read_file") {
+    const targetPath =
+      typeof args.path === "string" ? resolveAllowedPath(args.path) : null;
+    if (!targetPath) {
+      throw new Error("machine_read_file requires a string path.");
+    }
+    const content = await readFile(targetPath, "utf8");
+    return { path: targetPath, content };
+  }
+  if (tool === "machine_write_file") {
+    const targetPath =
+      typeof args.path === "string" ? resolveAllowedPath(args.path) : null;
+    if (!targetPath || typeof args.content !== "string") {
+      throw new Error("machine_write_file requires { path, content }.");
+    }
+    await writeFile(targetPath, args.content, "utf8");
+    return { path: targetPath, bytesWritten: Buffer.byteLength(args.content, "utf8") };
+  }
+  if (typeof args.command !== "string" || args.command.trim().length === 0) {
+    throw new Error("machine_exec requires a command string.");
+  }
+  const cwd =
+    typeof args.cwd === "string" && args.cwd.trim().length > 0
+      ? resolveAllowedPath(args.cwd)
+      : process.cwd();
+  const result = await execFile("zsh", ["-lc", args.command], {
+    cwd,
+    timeout: 15_000,
+    maxBuffer: 256_000
+  });
+  return {
+    cwd,
+    stdout: result.stdout.trim(),
+    stderr: result.stderr.trim()
+  };
+}
+
+function getConversationBasePrompt(input: {
+  connector: AiConnector;
+  node: AiConnectorNode;
+  userInput: string;
+  upstream: ConnectorNodeValue[];
+  transcript: string[];
+}) {
+  return [
+    input.node.data.prompt?.trim() || "",
+    input.userInput ? `User input:\n${input.userInput}` : "",
+    input.upstream.length > 0
+      ? `Linked inputs:\n${input.upstream
+          .map(
+            (entry, index) =>
+              `Input ${index + 1}:\n${entry.text}${entry.json ? `\nJSON: ${JSON.stringify(entry.json)}` : ""}`
+          )
+          .join("\n\n")}`
+      : "",
+    input.transcript.length > 0 ? `Tool transcript:\n${input.transcript.join("\n\n")}` : ""
+  ]
+    .filter(Boolean)
+    .join("\n\n");
+}
+
+async function createOpenAiConversation(
+  profile: WikiLlmProfileLike,
+  apiKey: string
+) {
+  const response = await fetch(buildConversationsUrl(profile), {
+    method: "POST",
+    headers: buildRequestHeaders(profile, apiKey),
+    body: JSON.stringify({})
+  });
+  if (!response.ok) {
+    const message = await response.text();
+    throw new Error(
+      `OpenAI conversation creation failed (${response.status})${
+        message ? `: ${message}` : ""
+      }`
+    );
+  }
+  const payload = (await response.json()) as Record<string, unknown>;
+  const conversationId = typeof payload.id === "string" ? payload.id : null;
+  if (!conversationId) {
+    throw new Error("OpenAI conversation creation did not return an id.");
+  }
+  return conversationId;
+}
+
+async function runOpenAiConversationPrompt(input: {
+  profile: WikiLlmProfileLike;
+  apiKey: string;
+  systemPrompt?: string;
+  prompt: string;
+  conversationId: string | null;
+}) {
+  const conversationId =
+    input.conversationId ?? (await createOpenAiConversation(input.profile, input.apiKey));
+  const response = await fetch(buildResponsesUrl(input.profile), {
+    method: "POST",
+    headers: buildRequestHeaders(input.profile, input.apiKey),
+    body: JSON.stringify({
+      model: input.profile.model,
+      conversation: { id: conversationId },
+      input: [
+        ...(input.systemPrompt?.trim()
+          ? [
+              {
+                role: "system",
+                content: [{ type: "input_text", text: input.systemPrompt.trim() }]
+              }
+            ]
+          : []),
+        {
+          role: "user",
+          content: [{ type: "input_text", text: input.prompt }]
+        }
+      ],
+      reasoning:
+        typeof input.profile.metadata.reasoningEffort === "string"
+          ? { effort: input.profile.metadata.reasoningEffort }
+          : undefined,
+      text:
+        typeof input.profile.metadata.verbosity === "string"
+          ? { verbosity: input.profile.metadata.verbosity }
+          : undefined,
+      max_output_tokens: 1200
+    })
+  });
+  if (!response.ok) {
+    const message = await response.text();
+    throw new Error(
+      `OpenAI connector prompt failed (${response.status})${
+        message ? `: ${message}` : ""
+      }`
+    );
+  }
+  const payload = (await response.json()) as Record<string, unknown>;
+  return {
+    text: parseOutputText(payload)?.trim() || "",
+    conversationId
+  };
+}
+
+function resolveConnectorModelProfile(
+  node: AiConnectorNode,
+  secrets: SecretsManager
+) {
+  const requestedConnectionId = node.data.modelConfig?.connectionId;
+  const fallbackConnection =
+    (requestedConnectionId
+      ? getAiModelConnectionById(requestedConnectionId)
+      : null) ??
+    getAiModelConnectionById(FORGE_DEFAULT_AGENT_ID) ??
+    listAiModelConnections()[0] ??
+    null;
+
+  if (!fallbackConnection) {
+    throw new Error("No model connection is configured for this connector node.");
+  }
+
+  const credential = readModelConnectionCredential(
+    fallbackConnection.id,
+    secrets
+  );
+  const explicitApiKey =
+    credential?.kind === "api_key"
+      ? credential.apiKey
+      : credential?.kind === "oauth"
+        ? credential.access
+        : null;
+  if (!explicitApiKey) {
+    throw new Error("The selected connector model connection is missing a credential.");
+  }
+
+  const profile: WikiLlmProfileLike = {
+    provider: fallbackConnection.provider,
+    baseUrl:
+      node.data.modelConfig?.baseUrl?.trim() ||
+      fallbackConnection.baseUrl ||
+      DEFAULT_OPENAI_BASE_URL,
+    model:
+      node.data.modelConfig?.model?.trim() || fallbackConnection.model || "",
+    systemPrompt: "",
+    secretId: null,
+    metadata: {
+      reasoningEffort: node.data.modelConfig?.thinking ?? null,
+      verbosity: node.data.modelConfig?.verbosity ?? null
+    }
+  };
+
+  return {
+    profile,
+    apiKey: explicitApiKey
+  };
+}
+
+async function runModelNode(input: {
+  connector: AiConnector;
+  node: AiConnectorNode;
+  userInput: string;
+  upstream: ConnectorNodeValue[];
+  services: {
+    llm: LlmManager;
+    secrets: SecretsManager;
+  };
+  conversation: AiConnectorConversation | null;
+}) {
+  const { profile, apiKey } = resolveConnectorModelProfile(
+    input.node,
+    input.services.secrets
+  );
+  const availableTools = input.upstream.flatMap((entry) => entry.tools);
+  const enabledKeys = new Set(input.node.data.enabledToolKeys ?? []);
+  const activeTools =
+    enabledKeys.size > 0
+      ? availableTools.filter((tool) => enabledKeys.has(tool.key))
+      : availableTools;
+  const transcript: string[] = [];
+  const conversationAware = input.node.type === "chat";
+  let conversationId = input.conversation?.externalConversationId ?? null;
+
+  for (let step = 0; step < MAX_TOOL_STEPS; step += 1) {
+    const systemPrompt = [
+      input.node.data.systemPrompt?.trim() || "",
+      activeTools.length > 0
+        ? [
+            "You may call available tools when needed.",
+            "Return strict JSON only.",
+            'For a final answer return {"action":"final","text":"..."}',
+            'For a tool call return {"action":"tool","tool":"tool_key","args":{...}}',
+            `Available tools: ${activeTools
+              .map((tool) => `${tool.key} (${tool.description})`)
+              .join("; ")}.`
+          ].join(" ")
+        : "Return only the final answer text."
+    ]
+      .filter(Boolean)
+      .join("\n\n");
+
+    const prompt = getConversationBasePrompt({
+      connector: input.connector,
+      node: input.node,
+      userInput: input.userInput,
+      upstream: input.upstream,
+      transcript
+    });
+
+    let rawText = "";
+    if (conversationAware && isOpenAiFamily(profile)) {
+      const result = await runOpenAiConversationPrompt({
+        profile,
+        apiKey,
+        systemPrompt,
+        prompt,
+        conversationId
+      });
+      rawText = result.text;
+      conversationId = result.conversationId;
+    } else {
+      rawText = (
+        await input.services.llm.runTextPrompt(
+          profile,
+          {
+            explicitApiKey: apiKey,
+            systemPrompt,
+            prompt
+          }
+        )
+      ).outputText.trim();
+    }
+
+    if (activeTools.length === 0) {
+      return {
+        text: rawText.trim(),
+        conversationId
+      };
+    }
+
+    const structured = tryParseStructuredAgentResponse(rawText.trim());
+    if (!structured || structured.action === "final") {
+      return {
+        text: structured?.text?.trim() || rawText.trim(),
+        conversationId
+      };
+    }
+
+    const toolResult = structured.tool.startsWith("machine_")
+      ? await executeMachineTool(
+          structured.tool as "machine_read_file" | "machine_write_file" | "machine_exec",
+          structured.args
+        )
+      : await executeForgeBoxTool(
+          activeTools.find((tool) => tool.key === structured.tool)?.boxId ?? "",
+          structured.tool,
+          structured.args
+        );
+
+    transcript.push(
+      `Tool call ${structured.tool}: ${JSON.stringify(structured.args)}`,
+      `Tool result: ${JSON.stringify(toolResult)}`
+    );
+  }
+
+  return {
+    text: "Connector stopped after reaching the maximum tool step count.",
+    conversationId
+  };
+}
+
+function validateConnectorGraph(graph: AiConnector["graph"]) {
+  const nodeIds = new Set(graph.nodes.map((node) => node.id));
+  for (const edge of graph.edges) {
+    if (!nodeIds.has(edge.source) || !nodeIds.has(edge.target)) {
+      throw new Error("Connector graph edge references a missing node.");
+    }
+  }
+
+  const adjacency = new Map<string, string[]>();
+  for (const edge of graph.edges) {
+    const current = adjacency.get(edge.source) ?? [];
+    current.push(edge.target);
+    adjacency.set(edge.source, current);
+  }
+
+  const visiting = new Set<string>();
+  const visited = new Set<string>();
+  const visit = (nodeId: string) => {
+    if (visiting.has(nodeId)) {
+      throw new Error("Connector graphs cannot contain cycles.");
+    }
+    if (visited.has(nodeId)) {
+      return;
+    }
+    visiting.add(nodeId);
+    for (const target of adjacency.get(nodeId) ?? []) {
+      visit(target);
+    }
+    visiting.delete(nodeId);
+    visited.add(nodeId);
+  };
+
+  for (const node of graph.nodes) {
+    visit(node.id);
+  }
+}
+
+function buildOutputResult(
+  connector: AiConnector,
+  resolvedNodeValues: Map<string, ConnectorNodeValue>
+) {
+  const outputs = Object.fromEntries(
+    connector.publishedOutputs.map((output) => {
+      const nodeValue = resolvedNodeValues.get(output.nodeId);
+      return [
+        output.id,
+        {
+          label: output.label,
+          text: nodeValue?.text ?? "",
+          json: nodeValue?.json ?? null
+        }
+      ];
+    })
+  );
+  const first = connector.publishedOutputs[0];
+  return aiConnectorRunResultSchema.parse({
+    primaryText: first ? outputs[first.id]?.text ?? "" : "",
+    outputs
+  });
+}
+
+function createConversationRecord(input: {
+  connectorId: string;
+  provider: string | null;
+  externalConversationId: string | null;
+  transcript: AiConnectorConversation["transcript"];
+  existing?: AiConnectorConversation | null;
+}) {
+  const now = new Date().toISOString();
+  return saveAiConnectorConversation(
+    aiConnectorConversationSchema.parse({
+      id: input.existing?.id ?? `aicv_${randomUUID().replaceAll("-", "").slice(0, 10)}`,
+      connectorId: input.connectorId,
+      provider: input.provider,
+      externalConversationId: input.externalConversationId,
+      transcript: input.transcript,
+      createdAt: input.existing?.createdAt ?? now,
+      updatedAt: now
+    })
+  );
+}
+
+async function executeConnector(
+  connector: AiConnector,
+  rawInput: RunAiConnectorInput,
+  services: {
+    llm: LlmManager;
+    secrets: SecretsManager;
+  }
+) {
+  validateConnectorGraph(connector.graph);
+  const parsedInput = runAiConnectorSchema.parse(rawInput);
+  const incoming = new Map<string, AiConnectorEdge[]>();
+  for (const edge of connector.graph.edges) {
+    const list = incoming.get(edge.target) ?? [];
+    list.push(edge);
+    incoming.set(edge.target, list);
+  }
+  const values = new Map<string, ConnectorNodeValue>();
+  const outputNodes = connector.graph.nodes.filter((node) => node.type === "output");
+  const activeConversation =
+    parsedInput.conversationId
+      ? getAiConnectorConversationById(parsedInput.conversationId)
+      : getAiConnectorConversationForConnector(connector.id);
+
+  const evaluateNode = async (nodeId: string): Promise<ConnectorNodeValue> => {
+    const existing = values.get(nodeId);
+    if (existing) {
+      return existing;
+    }
+    const node = connector.graph.nodes.find((entry) => entry.id === nodeId);
+    if (!node) {
+      throw new Error(`Missing connector node ${nodeId}.`);
+    }
+    const upstream = await Promise.all(
+      (incoming.get(nodeId) ?? []).map((edge) => evaluateNode(edge.source))
+    );
+    let resolved: ConnectorNodeValue;
+
+    if (node.type === "box_input") {
+      const boxId = node.data.boxId?.trim() || "";
+      const providedSnapshot = boxId ? parsedInput.boxSnapshots[boxId] : null;
+      const snapshot =
+        providedSnapshot && typeof providedSnapshot === "object"
+          ? {
+              ...resolveForgeBoxSnapshot(boxId),
+              contentJson: providedSnapshot as Record<string, unknown>
+            }
+          : boxId
+            ? resolveForgeBoxSnapshot(boxId)
+            : {
+                boxId: "",
+                label: node.data.label,
+                capturedAt: new Date().toISOString(),
+                contentText: "No box is configured for this node yet.",
+                contentJson: null,
+                tools: []
+              };
+      resolved = {
+        text: snapshot.contentText,
+        json: snapshot.contentJson,
+        tools: snapshot.tools.map((tool) => ({
+          boxId: snapshot.boxId,
+          key: tool.key,
+          label: tool.label,
+          description: tool.description
+        })),
+        conversationId: null
+      };
+    } else if (node.type === "user_input") {
+      resolved = {
+        text: parsedInput.userInput || "",
+        json: Object.keys(parsedInput.context).length > 0 ? parsedInput.context : null,
+        tools: [],
+        conversationId: activeConversation?.id ?? null
+      };
+    } else if (node.type === "output") {
+      const mergedText = upstream.map((entry) => entry.text).filter(Boolean).join("\n\n");
+      resolved = {
+        text: mergedText,
+        json: upstream[0]?.json ?? null,
+        tools: [],
+        conversationId: upstream.find((entry) => entry.conversationId)?.conversationId ?? null
+      };
+    } else {
+      const modelResult = await runModelNode({
+        connector,
+        node,
+        userInput: parsedInput.userInput,
+        upstream,
+        services,
+        conversation: activeConversation
+      });
+      resolved = {
+        text: modelResult.text,
+        json: null,
+        tools: [],
+        conversationId: modelResult.conversationId
+      };
+    }
+
+    values.set(nodeId, resolved);
+    return resolved;
+  };
+
+  for (const outputNode of outputNodes) {
+    await evaluateNode(outputNode.id);
+  }
+  const result = buildOutputResult(connector, values);
+  const conversationProviderNode = connector.graph.nodes.find((node) => node.type === "chat");
+  const resolvedConversationId =
+    [...values.values()].find((entry) => entry.conversationId)?.conversationId ?? null;
+  const nextConversation =
+    conversationProviderNode
+      ? createConversationRecord({
+          connectorId: connector.id,
+          provider: conversationProviderNode.data.modelConfig?.provider ?? null,
+          externalConversationId:
+            conversationProviderNode.data.modelConfig?.provider &&
+            isOpenAiFamily({
+              provider: conversationProviderNode.data.modelConfig.provider,
+              baseUrl: conversationProviderNode.data.modelConfig.baseUrl ?? DEFAULT_OPENAI_BASE_URL,
+              model: conversationProviderNode.data.modelConfig.model,
+              systemPrompt: "",
+              secretId: null,
+              metadata: {}
+            })
+              ? resolvedConversationId
+              : null,
+          transcript: [
+            ...(activeConversation?.transcript ?? []),
+            ...(parsedInput.userInput
+              ? [
+                  {
+                    role: "user" as const,
+                    text: parsedInput.userInput,
+                    createdAt: new Date().toISOString()
+                  }
+                ]
+              : []),
+            {
+              role: "assistant" as const,
+              text: result.primaryText,
+              createdAt: new Date().toISOString()
+            }
+          ],
+          existing: activeConversation
+        })
+      : null;
+
+  return {
+    result,
+    conversation: nextConversation
+  };
+}
+
+function migrateLegacyProcessor(processorId: string) {
+  const processor = getAiProcessorById(processorId);
+  if (!processor) {
+    return null;
+  }
+  const existing = getDatabase()
+    .prepare(`SELECT * FROM ai_connectors WHERE legacy_processor_id = ?`)
+    .get(processorId) as AiConnectorRow | undefined;
+  if (existing) {
+    return mapConnector(existing);
+  }
+
+  const sourceLinks = listAiProcessorLinks(processor.surfaceId).filter(
+    (link) => link.targetProcessorId === processor.id
+  );
+  const inputNodes: AiConnectorNode[] = sourceLinks.map((link, index) => ({
+    id: `legacy_input_${index + 1}`,
+    type: "box_input",
+    position: { x: 60, y: 80 + index * 120 },
+    data: {
+      label: `Legacy input ${index + 1}`,
+      description: `Imported from ${link.sourceWidgetId}`,
+      boxId: `legacy:${link.sourceWidgetId}`,
+      enabledToolKeys: []
+    }
+  }));
+  const modelNode: AiConnectorNode = {
+    id: "legacy_functor",
+    type: "functor",
+    position: { x: 360, y: 160 },
+    data: {
+      label: processor.title,
+      description: "Imported from a legacy AI processor.",
+      prompt: processor.promptFlow,
+      systemPrompt: processor.contextInput,
+      enabledToolKeys: processor.toolConfig.map((tool) => tool.key),
+      modelConfig: {
+        connectionId: processor.agentConfigs[0]?.connectionId ?? null,
+        provider: null,
+        baseUrl: null,
+        model: processor.agentConfigs[0]?.model ?? "",
+        thinking: null,
+        verbosity: null
+      }
+    }
+  };
+  const outputNode: AiConnectorNode = {
+    id: "legacy_output",
+    type: "output",
+    position: { x: 700, y: 160 },
+    data: {
+      label: "Output",
+      description: "Imported legacy output.",
+      outputKey: "primary",
+      enabledToolKeys: []
+    }
+  };
+  const graph = {
+    nodes: [...inputNodes, modelNode, outputNode],
+    edges: [
+      ...inputNodes.map((node, index) => ({
+        id: `legacy_edge_input_${index + 1}`,
+        source: node.id,
+        target: modelNode.id
+      })),
+      {
+        id: "legacy_edge_output",
+        source: modelNode.id,
+        target: outputNode.id
+      }
+    ]
+  };
+  return createAiConnector({
+    title: processor.title,
+    description: "Migrated from a legacy AI processor.",
+    kind: "functor",
+    homeSurfaceId: processor.surfaceId,
+    endpointEnabled: processor.endpointEnabled,
+    graph,
+    legacyProcessorId: processor.id
+  });
+}
+
+export function ensureLegacyProcessorsMigrated() {
+  for (const processor of listAiProcessors()) {
+    migrateLegacyProcessor(processor.id);
+  }
+}
+
+export function listAiConnectors() {
+  ensureLegacyProcessorsMigrated();
+  const rows = getDatabase()
+    .prepare(`SELECT * FROM ai_connectors ORDER BY created_at ASC`)
+    .all() as AiConnectorRow[];
+  return rows.map(mapConnector);
+}
+
+export function getAiConnectorById(connectorId: string) {
+  ensureLegacyProcessorsMigrated();
+  const row = getDatabase()
+    .prepare(`SELECT * FROM ai_connectors WHERE id = ?`)
+    .get(connectorId) as AiConnectorRow | undefined;
+  return row ? mapConnector(row) : null;
+}
+
+export function getAiConnectorBySlug(slug: string) {
+  ensureLegacyProcessorsMigrated();
+  const row = getDatabase()
+    .prepare(`SELECT * FROM ai_connectors WHERE slug = ?`)
+    .get(slug) as AiConnectorRow | undefined;
+  return row ? mapConnector(row) : null;
+}
+
+export function createAiConnector(
+  input: CreateAiConnectorInput & { legacyProcessorId?: string | null }
+) {
+  const parsed = createAiConnectorSchema.parse(input);
+  const now = new Date().toISOString();
+  const id = `aic_${randomUUID().replaceAll("-", "").slice(0, 10)}`;
+  const slug = buildConnectorSlug(parsed.title, id);
+  const graph = parsed.graph.nodes.length > 0 ? parsed.graph : buildDefaultGraph(parsed.kind, parsed.title);
+  const publishedOutputs = ensurePublishedOutputs(id, graph);
+  getDatabase()
+    .prepare(
+      `INSERT INTO ai_connectors (
+        id, slug, title, description, kind, home_surface_id, endpoint_enabled, graph_json, published_outputs_json, last_run_json, legacy_processor_id, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    )
+    .run(
+      id,
+      slug,
+      parsed.title,
+      parsed.description,
+      parsed.kind,
+      parsed.homeSurfaceId,
+      parsed.endpointEnabled ? 1 : 0,
+      JSON.stringify(graph),
+      JSON.stringify(publishedOutputs),
+      null,
+      input.legacyProcessorId ?? null,
+      now,
+      now
+    );
+  return getAiConnectorById(id)!;
+}
+
+export function updateAiConnector(connectorId: string, patch: UpdateAiConnectorInput) {
+  const current = getAiConnectorById(connectorId);
+  if (!current) {
+    return null;
+  }
+  const parsed = updateAiConnectorSchema.parse(patch);
+  const nextGraph = parsed.graph ?? current.graph;
+  validateConnectorGraph(nextGraph);
+  const nextTitle = parsed.title ?? current.title;
+  const next = {
+    ...current,
+    ...parsed,
+    title: nextTitle,
+    slug:
+      parsed.title && parsed.title !== current.title
+        ? buildConnectorSlug(parsed.title, current.id)
+        : current.slug,
+    graph: nextGraph,
+    publishedOutputs: ensurePublishedOutputs(current.id, nextGraph)
+  };
+  const now = new Date().toISOString();
+  getDatabase()
+    .prepare(
+      `UPDATE ai_connectors
+       SET slug = ?, title = ?, description = ?, kind = ?, home_surface_id = ?, endpoint_enabled = ?, graph_json = ?, published_outputs_json = ?, updated_at = ?
+       WHERE id = ?`
+    )
+    .run(
+      next.slug,
+      next.title,
+      next.description,
+      next.kind,
+      next.homeSurfaceId,
+      next.endpointEnabled ? 1 : 0,
+      JSON.stringify(next.graph),
+      JSON.stringify(next.publishedOutputs),
+      now,
+      connectorId
+    );
+  return getAiConnectorById(connectorId)!;
+}
+
+export function deleteAiConnector(connectorId: string) {
+  const current = getAiConnectorById(connectorId);
+  if (!current) {
+    return null;
+  }
+  getDatabase().prepare(`DELETE FROM ai_connectors WHERE id = ?`).run(connectorId);
+  return current;
+}
+
+export async function runAiConnector(
+  connectorId: string,
+  input: RunAiConnectorInput,
+  services: {
+    llm: LlmManager;
+    secrets: SecretsManager;
+  },
+  mode: "run" | "chat" = "run"
+): Promise<ConnectorExecutionResult> {
+  const connector = getAiConnectorById(connectorId);
+  if (!connector) {
+    throw new Error(`Connector ${connectorId} was not found.`);
+  }
+
+  const pendingRun = aiConnectorRunSchema.parse({
+    id: `aicr_${randomUUID().replaceAll("-", "").slice(0, 10)}`,
+    connectorId,
+    mode,
+    status: "running",
+    userInput: input.userInput ?? "",
+    context: input.context ?? {},
+    conversationId: input.conversationId ?? null,
+    result: null,
+    error: null,
+    createdAt: new Date().toISOString(),
+    completedAt: null
+  });
+  insertRun(pendingRun);
+
+  try {
+    const execution = await executeConnector(connector, input, services);
+    const completedRun = aiConnectorRunSchema.parse({
+      ...pendingRun,
+      status: "completed",
+      result: execution.result,
+      conversationId: execution.conversation?.id ?? pendingRun.conversationId,
+      completedAt: new Date().toISOString()
+    });
+    insertRun(completedRun);
+    return {
+      connector: getAiConnectorById(connectorId)!,
+      run: completedRun,
+      conversation: execution.conversation
+    };
+  } catch (error) {
+    const failedRun = aiConnectorRunSchema.parse({
+      ...pendingRun,
+      status: "failed",
+      error: error instanceof Error ? error.message : "Connector run failed",
+      completedAt: new Date().toISOString()
+    });
+    insertRun(failedRun);
+    throw error;
+  }
+}

@@ -4,15 +4,14 @@ import { getDatabase, runInTransaction } from "./db.js";
 import { HttpError } from "./errors.js";
 import { updateWorkoutMetadata } from "./health.js";
 import {
+  canonicalizeMovementCategoryTags,
   listMovementPlaces,
-  movementCategoryTags,
+  normalizeMovementCategoryTag,
   updateMovementPlace
 } from "./movement.js";
 import { listHabits } from "./repositories/habits.js";
 
 const watchCapability = "watch-ready";
-const movementCategoryTagSet = new Set<string>(movementCategoryTags);
-
 const watchHistoryStateSchema = z.enum(["aligned", "unaligned", "unknown"]);
 const watchPromptKindSchema = z.enum([
   "new_place",
@@ -327,10 +326,10 @@ const routinePromptOptions = [
 const watchCategoryMap = new Map<string, string[]>([
   ["Home", ["home"]],
   ["Work", ["workplace"]],
-  ["Clinic", ["other"]],
+  ["Clinic", ["clinic"]],
   ["Grocery", ["grocery"]],
-  ["Gym", ["other"]],
-  ["Cafe", ["other"]],
+  ["Gym", ["gym"]],
+  ["Cafe", ["cafe"]],
   ["Nature", ["nature"]],
   ["Travel", ["travel"]],
   ["Social", ["social"]],
@@ -512,19 +511,13 @@ function projectionForStoredEvent(
     const categoryCandidate = Array.isArray(event.payload.categoryTags)
       ? event.payload.categoryTags
       : typeof event.payload.category === "string"
-        ? watchCategoryMap.get(event.payload.category) ?? []
+        ? watchCategoryMap.get(event.payload.category) ?? [event.payload.category]
         : [];
-    const categoryTags = Array.from(
-      new Set(
-        categoryCandidate.flatMap((value) => {
-          if (typeof value !== "string") {
-            return [];
-          }
-          const trimmed = value.trim();
-          return trimmed && movementCategoryTagSet.has(trimmed) ? [trimmed] : [];
-        })
+    const categoryTags = canonicalizeMovementCategoryTags(
+      categoryCandidate.flatMap((value) =>
+        typeof value === "string" ? [normalizeMovementCategoryTag(value)] : []
       )
-    ) as Array<(typeof movementCategoryTags)[number]>;
+    );
     try {
       const place = updateMovementPlace(
         event.linkedContext.placeId,

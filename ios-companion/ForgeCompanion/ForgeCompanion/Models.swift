@@ -297,6 +297,226 @@ struct SyncCoverageRow: Identifiable {
     let isMissing: Bool
 }
 
+struct LooseJSONObject: Codable, Hashable {
+    let values: [String: String]
+
+    init(values: [String: String] = [:]) {
+        self.values = values
+    }
+
+    init(from decoder: Decoder) throws {
+        if let keyed = try? decoder.container(keyedBy: DynamicCodingKey.self) {
+            var collected: [String: String] = [:]
+            for key in keyed.allKeys {
+                collected[key.stringValue] = try keyed.decodeLossyString(forKey: key)
+            }
+            values = collected
+            return
+        }
+        if var unkeyed = try? decoder.unkeyedContainer() {
+            var collected: [String: String] = [:]
+            var index = 0
+            while unkeyed.isAtEnd == false {
+                let nestedDecoder = try unkeyed.superDecoder()
+                let nestedValue = try LooseJSONLeaf(from: nestedDecoder)
+                collected["\(index)"] = nestedValue.stringValue
+                index += 1
+            }
+            values = collected
+            return
+        }
+        let singleValue = try decoder.singleValueContainer()
+        if singleValue.decodeNil() {
+            values = [:]
+            return
+        }
+        let leaf = try LooseJSONLeaf(from: decoder)
+        values = ["value": leaf.stringValue]
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: DynamicCodingKey.self)
+        for (key, value) in values {
+            try container.encode(value, forKey: DynamicCodingKey(key))
+        }
+    }
+}
+
+enum MovementTimelineLaneSide: String, Codable {
+    case left
+    case right
+}
+
+struct ForgeMovementTimelinePage: Decodable {
+    let segments: [ForgeMovementTimelineSegment]
+    let nextCursor: String?
+    let hasMore: Bool
+}
+
+struct ForgeMovementTimelinePlace: Decodable, Hashable, Identifiable {
+    let id: String
+    let externalUid: String
+    let label: String
+    let aliases: [String]
+    let latitude: Double
+    let longitude: Double
+    let radiusMeters: Double
+    let categoryTags: [String]
+    let visibility: String
+    let wikiNoteId: String?
+}
+
+struct ForgeMovementTimelineNote: Decodable, Hashable {
+    let id: String
+    let title: String
+    let slug: String
+}
+
+struct ForgeMovementTimelineTripPoint: Decodable, Hashable, Identifiable {
+    let id: String
+    let recordedAt: String
+    let latitude: Double
+    let longitude: Double
+    let accuracyMeters: Double?
+    let altitudeMeters: Double?
+    let speedMps: Double?
+    let isStopAnchor: Bool
+}
+
+struct ForgeMovementTimelineTripStop: Decodable, Hashable, Identifiable {
+    let id: String
+    let externalUid: String
+    let sequenceIndex: Int
+    let label: String
+    let placeId: String?
+    let startedAt: String
+    let endedAt: String
+    let durationSeconds: Int
+    let latitude: Double
+    let longitude: Double
+    let radiusMeters: Double
+    let metadata: LooseJSONObject
+    let place: ForgeMovementTimelinePlace?
+}
+
+struct ForgeMovementTimelineStay: Decodable, Hashable, Identifiable {
+    let id: String
+    let externalUid: String
+    let pairingSessionId: String?
+    let userId: String
+    let placeId: String?
+    let label: String
+    let status: String
+    let classification: String
+    let startedAt: String
+    let endedAt: String
+    let durationSeconds: Int
+    let centerLatitude: Double
+    let centerLongitude: Double
+    let radiusMeters: Double
+    let sampleCount: Int
+    let weather: LooseJSONObject
+    let metrics: LooseJSONObject
+    let metadata: LooseJSONObject
+    let publishedNoteId: String?
+    let createdAt: String
+    let updatedAt: String
+    let place: ForgeMovementTimelinePlace?
+    let note: ForgeMovementTimelineNote?
+}
+
+struct ForgeMovementTimelineTrip: Decodable, Hashable, Identifiable {
+    let id: String
+    let externalUid: String
+    let pairingSessionId: String?
+    let userId: String
+    let startPlaceId: String?
+    let endPlaceId: String?
+    let label: String
+    let status: String
+    let travelMode: String
+    let activityType: String
+    let startedAt: String
+    let endedAt: String
+    let durationSeconds: Int
+    let distanceMeters: Double
+    let movingSeconds: Int
+    let idleSeconds: Int
+    let averageSpeedMps: Double?
+    let maxSpeedMps: Double?
+    let caloriesKcal: Double?
+    let expectedMet: Double?
+    let weather: LooseJSONObject
+    let tags: [String]
+    let metadata: LooseJSONObject
+    let publishedNoteId: String?
+    let createdAt: String
+    let updatedAt: String
+    let startPlace: ForgeMovementTimelinePlace?
+    let endPlace: ForgeMovementTimelinePlace?
+    let points: [ForgeMovementTimelineTripPoint]
+    let stops: [ForgeMovementTimelineTripStop]
+    let note: ForgeMovementTimelineNote?
+}
+
+struct ForgeMovementTimelineSegment: Decodable, Hashable, Identifiable {
+    let id: String
+    let kind: String
+    let startedAt: String
+    let endedAt: String
+    let durationSeconds: Int
+    let laneSide: MovementTimelineLaneSide
+    let connectorFromLane: MovementTimelineLaneSide
+    let connectorToLane: MovementTimelineLaneSide
+    let title: String
+    let subtitle: String
+    let placeLabel: String?
+    let tags: [String]
+    let syncSource: String
+    let cursor: String
+    let stay: ForgeMovementTimelineStay?
+    let trip: ForgeMovementTimelineTrip?
+}
+
+struct ForgeMovementStayPatch: Encodable {
+    var label: String?
+    var status: String?
+    var classification: String?
+    var startedAt: String?
+    var endedAt: String?
+    var centerLatitude: Double?
+    var centerLongitude: Double?
+    var radiusMeters: Double?
+    var sampleCount: Int?
+    var placeId: String??
+    var placeExternalUid: String??
+    var placeLabel: String?
+    var tags: [String]?
+    var metadata: [String: String]?
+}
+
+struct ForgeMovementTripPatch: Encodable {
+    var label: String?
+    var status: String?
+    var travelMode: String?
+    var activityType: String?
+    var startedAt: String?
+    var endedAt: String?
+    var startPlaceId: String??
+    var endPlaceId: String??
+    var startPlaceExternalUid: String??
+    var endPlaceExternalUid: String??
+    var distanceMeters: Double?
+    var movingSeconds: Int?
+    var idleSeconds: Int?
+    var averageSpeedMps: Double??
+    var maxSpeedMps: Double??
+    var caloriesKcal: Double??
+    var expectedMet: Double??
+    var tags: [String]?
+    var metadata: [String: String]?
+}
+
 enum HealthAccessStatus: String, Codable {
     case notSet = "not_set"
     case customAccess = "custom_access"
@@ -311,4 +531,71 @@ enum SyncState: String {
     case stale
     case permissionDenied
     case error
+}
+
+private struct DynamicCodingKey: CodingKey, Hashable {
+    var stringValue: String
+    var intValue: Int?
+
+    init(_ stringValue: String) {
+        self.stringValue = stringValue
+        self.intValue = nil
+    }
+
+    init?(stringValue: String) {
+        self.init(stringValue)
+    }
+
+    init?(intValue: Int) {
+        self.stringValue = "\(intValue)"
+        self.intValue = intValue
+    }
+}
+
+private struct LooseJSONLeaf: Decodable {
+    let stringValue: String
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        if container.decodeNil() {
+            stringValue = "null"
+        } else if let value = try? container.decode(String.self) {
+            stringValue = value
+        } else if let value = try? container.decode(Double.self) {
+            stringValue = value.formatted(.number)
+        } else if let value = try? container.decode(Int.self) {
+            stringValue = "\(value)"
+        } else if let value = try? container.decode(Bool.self) {
+            stringValue = value ? "true" : "false"
+        } else {
+            stringValue = "<object>"
+        }
+    }
+}
+
+private extension KeyedDecodingContainer where Key == DynamicCodingKey {
+    func decodeLossyString(forKey key: Key) throws -> String {
+        if let value = try? decode(String.self, forKey: key) {
+            return value
+        }
+        if let value = try? decode(Double.self, forKey: key) {
+            return value.formatted(.number)
+        }
+        if let value = try? decode(Int.self, forKey: key) {
+            return "\(value)"
+        }
+        if let value = try? decode(Bool.self, forKey: key) {
+            return value ? "true" : "false"
+        }
+        if let nested = try? decode(LooseJSONObject.self, forKey: key) {
+            return nested.values
+                .sorted { $0.key < $1.key }
+                .map { "\($0.key): \($0.value)" }
+                .joined(separator: ", ")
+        }
+        if let values = try? decode([String].self, forKey: key) {
+            return values.joined(separator: ", ")
+        }
+        return "<value>"
+    }
 }

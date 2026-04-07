@@ -148,6 +148,9 @@ export function TodayPage() {
       defaultWidth: 12,
       defaultHeight: 2,
       removable: false,
+      surfaceChrome: "none",
+      defaultTitleVisible: false,
+      defaultDescriptionVisible: false,
       render: () => (
         <PageHero
           title="Today"

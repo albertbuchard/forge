@@ -117,7 +117,7 @@ export function GoalsPage() {
               <Link
                 key={goal.id}
                 to={`/goals/${goal.id}`}
-                className="rounded-[28px] border border-white/6 bg-[linear-gradient(180deg,rgba(255,255,255,0.05),rgba(255,255,255,0.03))] p-4 transition hover:bg-[linear-gradient(180deg,rgba(255,255,255,0.08),rgba(255,255,255,0.04))] sm:p-5"
+                className="min-w-0 overflow-hidden rounded-[28px] border border-white/6 bg-[linear-gradient(180deg,rgba(255,255,255,0.05),rgba(255,255,255,0.03))] p-4 transition hover:bg-[linear-gradient(180deg,rgba(255,255,255,0.08),rgba(255,255,255,0.04))] sm:p-5"
               >
                 <div className="grid gap-4 xl:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)] xl:gap-5">
                   <div className="min-w-0">
@@ -142,6 +142,7 @@ export function GoalsPage() {
                         label={goal.title}
                         variant="heading"
                         size="xl"
+                        lines={2}
                       />
                     </div>
                     <p className="mt-3 max-w-2xl text-sm leading-7 text-white/58">
@@ -185,12 +186,12 @@ export function GoalsPage() {
                     </div>
                   </div>
 
-                  <div className="rounded-[24px] bg-white/[0.04] p-4">
+                  <div className="min-w-0 rounded-[24px] bg-white/[0.04] p-4">
                     <div className="flex items-center justify-between gap-3">
-                      <div className="font-medium text-white">
+                      <div className="min-w-0 flex-1 text-sm font-medium text-white sm:text-base">
                         Projects carrying this direction
                       </div>
-                      <div className="text-sm text-white/48">
+                      <div className="shrink-0 text-sm text-white/48">
                         {linkedProjects.length}
                       </div>
                     </div>
@@ -207,8 +208,8 @@ export function GoalsPage() {
                             key={project.id}
                             className="rounded-[18px] bg-white/[0.05] px-4 py-4"
                           >
-                            <div className="flex items-center justify-between gap-3">
-                              <div className="flex min-w-0 items-center gap-2">
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="flex min-w-0 flex-1 items-center gap-2">
                                 <EntityBadge
                                   kind="project"
                                   compact
@@ -219,9 +220,10 @@ export function GoalsPage() {
                                   label={project.title}
                                   className="min-w-0"
                                   showIcon={false}
+                                  lines={2}
                                 />
                               </div>
-                              <Badge>{project.status}</Badge>
+                              <Badge className="shrink-0">{project.status}</Badge>
                             </div>
                             <div className="mt-2 text-sm leading-6 text-white/58">
                               {project.description}

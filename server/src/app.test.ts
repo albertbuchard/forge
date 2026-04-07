@@ -864,7 +864,7 @@ test("movement sync stores places, stays, trips, and serves the movement workspa
               latitude: 46.5191,
               longitude: 6.6323,
               radiusMeters: 120,
-              categoryTags: ["home"],
+              categoryTags: ["Home", "Gym", "Parents house"],
               visibility: "shared",
               wikiNoteId: null,
               linkedEntities: [],
@@ -901,6 +901,22 @@ test("movement sync stores places, stays, trips, and serves the movement workspa
               placeExternalUid: "place_home",
               placeLabel: "Home",
               tags: ["home"],
+              metadata: {}
+            },
+            {
+              externalUid: "stay_grocery_after",
+              label: "Corner Grocery",
+              status: "active",
+              classification: "stationary",
+              startedAt: "2026-04-06T08:20:00.000Z",
+              endedAt: "2026-04-06T09:00:00.000Z",
+              centerLatitude: 46.5214,
+              centerLongitude: 6.6407,
+              radiusMeters: 85,
+              sampleCount: 6,
+              placeExternalUid: "place_grocery",
+              placeLabel: "Corner Grocery",
+              tags: ["grocery", "errand"],
               metadata: {}
             }
           ],
@@ -975,6 +991,134 @@ test("movement sync stores places, stays, trips, and serves the movement workspa
     });
     assert.equal(syncResponse.statusCode, 200);
 
+    const firstObservationCalendarResponse = await app.inject({
+      method: "GET",
+      url:
+        "/api/v1/psyche/self-observation/calendar" +
+        "?from=2026-04-06T00:00:00.000Z&to=2026-04-07T00:00:00.000Z"
+    });
+    assert.equal(firstObservationCalendarResponse.statusCode, 200);
+    const firstObservationCalendar = firstObservationCalendarResponse.json() as {
+      calendar: {
+        observations: Array<{
+          note: {
+            id: string;
+            tags: string[];
+            contentMarkdown: string;
+            frontmatter: Record<string, unknown>;
+          };
+        }>;
+      };
+    };
+    assert.equal(firstObservationCalendar.calendar.observations.length, 3);
+    const firstGroceryStayObservation = firstObservationCalendar.calendar.observations.find(
+      (entry) =>
+        entry.note.contentMarkdown.includes("Currently staying at **Corner Grocery**.")
+    );
+    assert.ok(firstGroceryStayObservation);
+    assert.ok(firstGroceryStayObservation?.note.tags.includes("movement"));
+    const rollingStayNoteId = firstGroceryStayObservation?.note.id ?? "";
+    assert.ok(rollingStayNoteId);
+
+    const secondSyncResponse = await app.inject({
+      method: "POST",
+      url: "/api/v1/mobile/healthkit/sync",
+      payload: {
+        sessionId: qrPayload.sessionId,
+        pairingToken: qrPayload.pairingToken,
+        device: {
+          name: "Omar iPhone",
+          platform: "ios",
+          appVersion: "1.0",
+          sourceDevice: "iPhone"
+        },
+        permissions: {
+          healthKitAuthorized: true,
+          backgroundRefreshEnabled: true,
+          motionReady: true,
+          locationReady: true
+        },
+        sleepSessions: [],
+        workouts: [],
+        movement: {
+          settings: {
+            trackingEnabled: true,
+            publishMode: "auto_publish",
+            retentionMode: "aggregates_only",
+            locationPermissionStatus: "always",
+            motionPermissionStatus: "ready",
+            backgroundTrackingReady: true,
+            metadata: {}
+          },
+          knownPlaces: [],
+          stays: [
+            {
+              externalUid: "stay_grocery_after",
+              label: "Corner Grocery",
+              status: "completed",
+              classification: "stationary",
+              startedAt: "2026-04-06T08:20:00.000Z",
+              endedAt: "2026-04-06T09:15:00.000Z",
+              centerLatitude: 46.5214,
+              centerLongitude: 6.6407,
+              radiusMeters: 85,
+              sampleCount: 8,
+              placeExternalUid: "place_grocery",
+              placeLabel: "Corner Grocery",
+              tags: ["grocery", "errand"],
+              metadata: {}
+            }
+          ],
+          trips: [
+            {
+              externalUid: "trip_grocery_home",
+              label: "Grocery to home",
+              status: "active",
+              travelMode: "travel",
+              activityType: "walking",
+              startedAt: "2026-04-06T09:15:00.000Z",
+              endedAt: "2026-04-06T09:35:00.000Z",
+              startPlaceExternalUid: "place_grocery",
+              endPlaceExternalUid: "place_home",
+              distanceMeters: 2050,
+              movingSeconds: 860,
+              idleSeconds: 90,
+              averageSpeedMps: 1.8,
+              maxSpeedMps: 2.3,
+              caloriesKcal: 110,
+              expectedMet: 3.1,
+              tags: ["grocery", "return"],
+              linkedEntities: [],
+              linkedPeople: [],
+              metadata: {},
+              points: [
+                {
+                  recordedAt: "2026-04-06T09:15:00.000Z",
+                  latitude: 46.5214,
+                  longitude: 6.6407,
+                  accuracyMeters: 8,
+                  altitudeMeters: null,
+                  speedMps: 1.3,
+                  isStopAnchor: false
+                },
+                {
+                  recordedAt: "2026-04-06T09:35:00.000Z",
+                  latitude: 46.5191,
+                  longitude: 6.6323,
+                  accuracyMeters: 8,
+                  altitudeMeters: null,
+                  speedMps: 1.6,
+                  isStopAnchor: true
+                }
+              ],
+              stops: []
+            }
+          ]
+        }
+      }
+    });
+    assert.equal(secondSyncResponse.statusCode, 200);
+
     const dayResponse = await app.inject({
       method: "GET",
       url: "/api/v1/movement/day?date=2026-04-06"
@@ -985,11 +1129,18 @@ test("movement sync stores places, stays, trips, and serves the movement workspa
         summary: { tripCount: number; stayCount: number };
         places: Array<{ label: string }>;
         trips: Array<{ id: string; distanceMeters: number }>;
+        stays: Array<{ id: string; label: string }>;
       };
     }).movement;
-    assert.equal(day.summary.tripCount, 1);
-    assert.equal(day.summary.stayCount, 1);
+    assert.equal(day.summary.tripCount, 2);
+    assert.equal(day.summary.stayCount, 2);
     assert.ok(day.places.some((place) => place.label === "Home"));
+    const homePlace = day.places.find((place) => place.label === "Home") as
+      | { label: string; categoryTags?: string[] }
+      | undefined;
+    assert.ok(homePlace);
+    const groceryStayId = day.stays.find((stay) => stay.label === "Corner Grocery")?.id;
+    assert.ok(groceryStayId);
 
     const tripResponse = await app.inject({
       method: "GET",
@@ -997,14 +1148,520 @@ test("movement sync stores places, stays, trips, and serves the movement workspa
     });
     assert.equal(tripResponse.statusCode, 200);
 
+    const placesResponse = await app.inject({
+      method: "GET",
+      url: "/api/v1/movement/places"
+    });
+    assert.equal(placesResponse.statusCode, 200);
+    const places = (
+      placesResponse.json() as {
+        places: Array<{ label: string; categoryTags: string[] }>;
+      }
+    ).places;
+    const syncedHomePlace = places.find((place) => place.label === "Home");
+    assert.ok(syncedHomePlace?.categoryTags.includes("home"));
+    assert.ok(syncedHomePlace?.categoryTags.includes("gym"));
+    assert.ok(syncedHomePlace?.categoryTags.includes("parents-house"));
+
+    const timelineResponse = await app.inject({
+      method: "GET",
+      url: "/api/v1/movement/timeline?limit=2"
+    });
+    assert.equal(timelineResponse.statusCode, 200);
+    const timeline = timelineResponse.json() as {
+      movement: {
+        segments: Array<{
+          id: string;
+          kind: "stay" | "trip";
+          laneSide: "left" | "right";
+          connectorFromLane: "left" | "right";
+          connectorToLane: "left" | "right";
+          cursor: string;
+          stay: { label: string } | null;
+          trip: { label: string } | null;
+        }>;
+        nextCursor: string | null;
+        hasMore: boolean;
+      };
+    };
+    assert.equal(timeline.movement.segments.length, 2);
+    assert.equal(timeline.movement.segments[0]?.kind, "trip");
+    assert.equal(timeline.movement.segments[1]?.kind, "stay");
+    assert.equal(timeline.movement.hasMore, true);
+    assert.ok(timeline.movement.nextCursor);
+
+    const olderTimelineResponse = await app.inject({
+      method: "POST",
+      url: "/api/v1/mobile/movement/timeline",
+      payload: {
+        sessionId: qrPayload.sessionId,
+        pairingToken: qrPayload.pairingToken,
+        before: timeline.movement.nextCursor,
+        limit: 2
+      }
+    });
+    assert.equal(olderTimelineResponse.statusCode, 200);
+    const olderTimeline = olderTimelineResponse.json() as {
+      movement: {
+        segments: Array<{
+          kind: "stay" | "trip";
+          stay: { label: string } | null;
+        }>;
+      };
+    };
+    assert.equal(olderTimeline.movement.segments.length, 2);
+    assert.equal(olderTimeline.movement.segments[0]?.kind, "trip");
+    assert.equal(olderTimeline.movement.segments[1]?.kind, "stay");
+    assert.equal(olderTimeline.movement.segments[1]?.stay?.label, "Home");
+
+    const patchStayResponse = await app.inject({
+      method: "PATCH",
+      url: `/api/v1/movement/stays/${groceryStayId}`,
+      headers: { cookie: operatorCookie },
+      payload: {
+        label: "After groceries",
+        tags: ["grocery", "errand", "custom-stop"]
+      }
+    });
+    assert.equal(patchStayResponse.statusCode, 200);
+    const patchedStay = (
+      patchStayResponse.json() as {
+        stay: { label: string; metrics: { tags?: string[] } };
+      }
+    ).stay;
+    assert.equal(patchedStay.label, "After groceries");
+    assert.ok(patchedStay.metrics.tags?.includes("custom-stop"));
+
+    const patchTripResponse = await app.inject({
+      method: "PATCH",
+      url: `/api/v1/movement/trips/${day.trips[0]!.id}`,
+      headers: { cookie: operatorCookie },
+      payload: {
+        label: "Morning grocery walk",
+        tags: ["grocery", "errand", "custom-route"]
+      }
+    });
+    assert.equal(patchTripResponse.statusCode, 200);
+    const patchedTrip = (
+      patchTripResponse.json() as {
+        trip: { label: string; tags: string[] };
+      }
+    ).trip;
+    assert.equal(patchedTrip.label, "Morning grocery walk");
+    assert.ok(patchedTrip.tags.includes("custom-route"));
+
     const allTimeResponse = await app.inject({
       method: "GET",
       url: "/api/v1/movement/all-time"
     });
     assert.equal(allTimeResponse.statusCode, 200);
     const allTime = (allTimeResponse.json() as { movement: { summary: { tripCount: number; knownPlaceCount: number } } }).movement;
-    assert.equal(allTime.summary.tripCount, 1);
+    assert.equal(allTime.summary.tripCount, 2);
     assert.equal(allTime.summary.knownPlaceCount, 2);
+
+    const secondObservationCalendarResponse = await app.inject({
+      method: "GET",
+      url:
+        "/api/v1/psyche/self-observation/calendar" +
+        "?from=2026-04-06T00:00:00.000Z&to=2026-04-07T00:00:00.000Z"
+    });
+    assert.equal(secondObservationCalendarResponse.statusCode, 200);
+    const secondObservationCalendar = secondObservationCalendarResponse.json() as {
+      calendar: {
+        observations: Array<{
+          note: {
+            id: string;
+            tags: string[];
+            contentMarkdown: string;
+            frontmatter: Record<string, unknown>;
+          };
+        }>;
+      };
+    };
+    assert.equal(secondObservationCalendar.calendar.observations.length, 4);
+    const updatedStayObservation = secondObservationCalendar.calendar.observations.find(
+      (entry) => entry.note.id === rollingStayNoteId
+    );
+    assert.ok(updatedStayObservation);
+    assert.match(
+      updatedStayObservation?.note.contentMarkdown ?? "",
+      /Stayed at \*\*Corner Grocery\*\*\./
+    );
+    const updatedMovementFrontmatter = updatedStayObservation?.note.frontmatter
+      .movement as
+      | {
+          state?: string;
+          endedAt?: string;
+          durationSeconds?: number;
+        }
+      | undefined;
+    assert.equal(updatedMovementFrontmatter?.state, "closed");
+    assert.equal(updatedMovementFrontmatter?.endedAt, "2026-04-06T09:15:00.000Z");
+    assert.equal(updatedMovementFrontmatter?.durationSeconds, 3300);
+  } finally {
+    await app.close();
+    closeDatabase();
+    await rm(rootDir, { recursive: true, force: true });
+  }
+});
+
+test("movement timeline hides overlapping stays and trips and flags them invalid", async () => {
+  const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-movement-overlap-"));
+  const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
+
+  try {
+    const operatorCookie = await issueOperatorSessionCookie(app);
+    const pairingResponse = await app.inject({
+      method: "POST",
+      url: "/api/v1/health/pairing-sessions",
+      headers: {
+        cookie: operatorCookie,
+        host: "127.0.0.1:4317"
+      },
+      payload: {
+        userId: "user_operator"
+      }
+    });
+    assert.equal(pairingResponse.statusCode, 201);
+    const qrPayload = (
+      pairingResponse.json() as {
+        qrPayload: {
+          sessionId: string;
+          pairingToken: string;
+        };
+      }
+    ).qrPayload;
+
+    const syncResponse = await app.inject({
+      method: "POST",
+      url: "/api/v1/mobile/healthkit/sync",
+      payload: {
+        sessionId: qrPayload.sessionId,
+        pairingToken: qrPayload.pairingToken,
+        device: {
+          name: "Omar iPhone",
+          platform: "ios",
+          appVersion: "1.0",
+          sourceDevice: "iPhone"
+        },
+        permissions: {
+          healthKitAuthorized: true,
+          backgroundRefreshEnabled: true,
+          motionReady: true,
+          locationReady: true
+        },
+        sleepSessions: [],
+        workouts: [],
+        movement: {
+          settings: {
+            trackingEnabled: true,
+            publishMode: "auto_publish",
+            retentionMode: "aggregates_only",
+            locationPermissionStatus: "always",
+            motionPermissionStatus: "ready",
+            backgroundTrackingReady: true,
+            metadata: {}
+          },
+          knownPlaces: [
+            {
+              externalUid: "place_home_overlap",
+              label: "Home",
+              aliases: [],
+              latitude: 46.5191,
+              longitude: 6.6323,
+              radiusMeters: 120,
+              categoryTags: ["home"],
+              visibility: "shared",
+              wikiNoteId: null,
+              linkedEntities: [],
+              linkedPeople: [],
+              metadata: {}
+            },
+            {
+              externalUid: "place_shop_overlap",
+              label: "Shop",
+              aliases: [],
+              latitude: 46.5214,
+              longitude: 6.6407,
+              radiusMeters: 90,
+              categoryTags: ["grocery"],
+              visibility: "shared",
+              wikiNoteId: null,
+              linkedEntities: [],
+              linkedPeople: [],
+              metadata: {}
+            }
+          ],
+          stays: [
+            {
+              externalUid: "stay_valid_before_overlap",
+              label: "Home",
+              status: "completed",
+              classification: "stationary",
+              startedAt: "2026-04-05T07:00:00.000Z",
+              endedAt: "2026-04-05T08:00:00.000Z",
+              centerLatitude: 46.5191,
+              centerLongitude: 6.6323,
+              radiusMeters: 100,
+              sampleCount: 10,
+              placeExternalUid: "place_home_overlap",
+              placeLabel: "Home",
+              tags: ["home"],
+              metadata: {}
+            },
+            {
+              externalUid: "stay_invalid_overlap",
+              label: "Home",
+              status: "completed",
+              classification: "stationary",
+              startedAt: "2026-04-05T08:30:00.000Z",
+              endedAt: "2026-04-05T09:30:00.000Z",
+              centerLatitude: 46.5191,
+              centerLongitude: 6.6323,
+              radiusMeters: 100,
+              sampleCount: 10,
+              placeExternalUid: "place_home_overlap",
+              placeLabel: "Home",
+              tags: ["home"],
+              metadata: {}
+            }
+          ],
+          trips: [
+            {
+              externalUid: "trip_invalid_overlap",
+              label: "trip",
+              status: "completed",
+              travelMode: "travel",
+              activityType: "walking",
+              startedAt: "2026-04-05T09:00:00.000Z",
+              endedAt: "2026-04-05T10:00:00.000Z",
+              startPlaceExternalUid: "place_home_overlap",
+              endPlaceExternalUid: "place_shop_overlap",
+              distanceMeters: 1500,
+              movingSeconds: 1800,
+              idleSeconds: 120,
+              averageSpeedMps: 1.5,
+              maxSpeedMps: 2.2,
+              caloriesKcal: 80,
+              expectedMet: 2.8,
+              tags: ["movement"],
+              linkedEntities: [],
+              linkedPeople: [],
+              metadata: {},
+              points: [
+                {
+                  recordedAt: "2026-04-05T09:00:00.000Z",
+                  latitude: 46.5191,
+                  longitude: 6.6323,
+                  accuracyMeters: 8,
+                  altitudeMeters: null,
+                  speedMps: 1.2,
+                  isStopAnchor: false
+                },
+                {
+                  recordedAt: "2026-04-05T10:00:00.000Z",
+                  latitude: 46.5214,
+                  longitude: 6.6407,
+                  accuracyMeters: 8,
+                  altitudeMeters: null,
+                  speedMps: 1.4,
+                  isStopAnchor: true
+                }
+              ],
+              stops: []
+            }
+          ]
+        }
+      }
+    });
+    assert.equal(syncResponse.statusCode, 200);
+
+    const timelineResponse = await app.inject({
+      method: "GET",
+      url: "/api/v1/movement/timeline"
+    });
+    assert.equal(timelineResponse.statusCode, 200);
+    const timeline = timelineResponse.json() as {
+      movement: {
+        invalidSegmentCount: number;
+        segments: Array<{ id: string; kind: string }>;
+      };
+    };
+    assert.equal(timeline.movement.invalidSegmentCount, 2);
+    assert.equal(timeline.movement.segments.length, 1);
+    assert.equal(timeline.movement.segments[0]?.kind, "stay");
+
+    const invalidStay = getDatabase()
+      .prepare(
+        `SELECT metadata_json
+         FROM movement_stays
+         WHERE external_uid = 'stay_invalid_overlap'`
+      )
+      .get() as { metadata_json: string };
+    const invalidTrip = getDatabase()
+      .prepare(
+        `SELECT metadata_json
+         FROM movement_trips
+         WHERE external_uid = 'trip_invalid_overlap'`
+      )
+      .get() as { metadata_json: string };
+    const stayMetadata = JSON.parse(invalidStay.metadata_json) as {
+      validation?: { invalidOverlap?: boolean; overlapIssues?: string[] };
+    };
+    const tripMetadata = JSON.parse(invalidTrip.metadata_json) as {
+      validation?: { invalidOverlap?: boolean; overlapIssues?: string[] };
+    };
+    assert.equal(stayMetadata.validation?.invalidOverlap, true);
+    assert.equal(tripMetadata.validation?.invalidOverlap, true);
+    assert.ok((stayMetadata.validation?.overlapIssues?.length ?? 0) > 0);
+    assert.ok((tripMetadata.validation?.overlapIssues?.length ?? 0) > 0);
+  } finally {
+    await app.close();
+    closeDatabase();
+    await rm(rootDir, { recursive: true, force: true });
+  }
+});
+
+test("movement timeline hides tiny trips under the minimum distance or duration", async () => {
+  const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-movement-tiny-trip-"));
+  const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
+
+  try {
+    const operatorCookie = await issueOperatorSessionCookie(app);
+    const pairingResponse = await app.inject({
+      method: "POST",
+      url: "/api/v1/health/pairing-sessions",
+      headers: {
+        cookie: operatorCookie,
+        host: "127.0.0.1:4317"
+      },
+      payload: {
+        userId: "user_operator"
+      }
+    });
+    assert.equal(pairingResponse.statusCode, 201);
+    const qrPayload = (
+      pairingResponse.json() as {
+        qrPayload: {
+          sessionId: string;
+          pairingToken: string;
+        };
+      }
+    ).qrPayload;
+
+    const syncResponse = await app.inject({
+      method: "POST",
+      url: "/api/v1/mobile/healthkit/sync",
+      payload: {
+        sessionId: qrPayload.sessionId,
+        pairingToken: qrPayload.pairingToken,
+        device: {
+          name: "Omar iPhone",
+          platform: "ios",
+          appVersion: "1.0",
+          sourceDevice: "iPhone"
+        },
+        permissions: {
+          healthKitAuthorized: true,
+          backgroundRefreshEnabled: true,
+          motionReady: true,
+          locationReady: true
+        },
+        sleepSessions: [],
+        workouts: [],
+        movement: {
+          settings: {
+            trackingEnabled: true,
+            publishMode: "auto_publish",
+            retentionMode: "aggregates_only",
+            locationPermissionStatus: "always",
+            motionPermissionStatus: "ready",
+            backgroundTrackingReady: true,
+            metadata: {}
+          },
+          knownPlaces: [],
+          stays: [],
+          trips: [
+            {
+              externalUid: "trip_tiny_invalid",
+              label: "trip",
+              status: "completed",
+              travelMode: "travel",
+              activityType: "walking",
+              startedAt: "2026-04-05T09:00:00.000Z",
+              endedAt: "2026-04-05T09:03:00.000Z",
+              startPlaceExternalUid: "",
+              endPlaceExternalUid: "",
+              distanceMeters: 80,
+              movingSeconds: 120,
+              idleSeconds: 20,
+              averageSpeedMps: 1.1,
+              maxSpeedMps: 1.3,
+              caloriesKcal: 10,
+              expectedMet: 2,
+              tags: ["movement"],
+              linkedEntities: [],
+              linkedPeople: [],
+              metadata: {},
+              points: [
+                {
+                  recordedAt: "2026-04-05T09:00:00.000Z",
+                  latitude: 46.5191,
+                  longitude: 6.6323,
+                  accuracyMeters: 8,
+                  altitudeMeters: null,
+                  speedMps: 1.1,
+                  isStopAnchor: false
+                },
+                {
+                  recordedAt: "2026-04-05T09:03:00.000Z",
+                  latitude: 46.5196,
+                  longitude: 6.6327,
+                  accuracyMeters: 8,
+                  altitudeMeters: null,
+                  speedMps: 1.1,
+                  isStopAnchor: true
+                }
+              ],
+              stops: []
+            }
+          ]
+        }
+      }
+    });
+    assert.equal(syncResponse.statusCode, 200);
+
+    const timelineResponse = await app.inject({
+      method: "GET",
+      url: "/api/v1/movement/timeline"
+    });
+    assert.equal(timelineResponse.statusCode, 200);
+    const timeline = timelineResponse.json() as {
+      movement: {
+        invalidSegmentCount: number;
+        segments: Array<{ id: string; kind: string }>;
+      };
+    };
+    assert.equal(timeline.movement.invalidSegmentCount, 1);
+    assert.equal(timeline.movement.segments.length, 0);
+
+    const invalidTrip = getDatabase()
+      .prepare(
+        `SELECT metadata_json
+         FROM movement_trips
+         WHERE external_uid = 'trip_tiny_invalid'`
+      )
+      .get() as { metadata_json: string };
+    const tripMetadata = JSON.parse(invalidTrip.metadata_json) as {
+      validation?: {
+        invalid?: boolean;
+        invalidTinyMove?: boolean;
+        tinyMoveIssues?: string[];
+      };
+    };
+    assert.equal(tripMetadata.validation?.invalid, true);
+    assert.equal(tripMetadata.validation?.invalidTinyMove, true);
+    assert.ok((tripMetadata.validation?.tinyMoveIssues?.length ?? 0) >= 1);
   } finally {
     await app.close();
     closeDatabase();
@@ -1381,7 +2038,7 @@ test("watch capture batch stores raw events, dedupes repeats, and projects exact
             },
             payload: {
               label: "Lake walk corner",
-              category: "Nature"
+              categoryTags: ["Gym", "Parents House"]
             }
           },
           {
@@ -1425,7 +2082,8 @@ test("watch capture batch stores raw events, dedupes repeats, and projects exact
       }
     ).places.find((place) => place.id === placeId);
     assert.equal(updatedPlace?.label, "Lake walk corner");
-    assert.ok(updatedPlace?.categoryTags.includes("nature"));
+    assert.ok(updatedPlace?.categoryTags.includes("gym"));
+    assert.ok(updatedPlace?.categoryTags.includes("parents-house"));
 
     const updatedFitnessResponse = await app.inject({
       method: "GET",
@@ -4205,6 +4863,145 @@ test("misaligned habit penalties do not break the context payload", async () => 
     };
     assert.equal(contextBody.metrics.totalXp, 0);
     assert.equal(contextBody.metrics.weeklyXp, 0);
+  } finally {
+    await app.close();
+    closeDatabase();
+    await rm(rootDir, { recursive: true, force: true });
+  }
+});
+
+test("habit streaks use consecutive cadence windows instead of raw aligned check-in counts", async () => {
+  const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-habit-streak-"));
+  const app = await buildServer({ dataRoot: rootDir, seedDemoData: false });
+
+  try {
+    const operatorCookie = await issueOperatorSessionCookie(app);
+
+    const createHabitResponse = async (
+      title: string,
+      polarity: "positive" | "negative",
+      frequency: "daily" | "weekly",
+      targetCount: number,
+      weekDays: number[] = []
+    ) =>
+      app.inject({
+        method: "POST",
+        url: "/api/v1/habits",
+        headers: { cookie: operatorCookie },
+        payload: {
+          title,
+          description: "Regression test for true consecutive streaks.",
+          status: "active",
+          polarity,
+          frequency,
+          targetCount,
+          weekDays,
+          rewardXp: 3,
+          penaltyXp: 2
+        }
+      });
+
+    const dailyPositiveResponse = await createHabitResponse(
+      "Hyrox daily strength",
+      "positive",
+      "daily",
+      1
+    );
+    assert.equal(dailyPositiveResponse.statusCode, 201);
+    const dailyPositiveId = (
+      dailyPositiveResponse.json() as { habit: { id: string } }
+    ).habit.id;
+
+    const dailyNegativeResponse = await createHabitResponse(
+      "No doomscrolling",
+      "negative",
+      "daily",
+      1
+    );
+    assert.equal(dailyNegativeResponse.statusCode, 201);
+    const dailyNegativeId = (
+      dailyNegativeResponse.json() as { habit: { id: string } }
+    ).habit.id;
+
+    const weeklyPositiveResponse = await createHabitResponse(
+      "Hyrox sessions",
+      "positive",
+      "weekly",
+      2,
+      [1, 3, 5]
+    );
+    assert.equal(weeklyPositiveResponse.statusCode, 201);
+    const weeklyPositiveId = (
+      weeklyPositiveResponse.json() as { habit: { id: string } }
+    ).habit.id;
+
+    for (const dateKey of [
+      "2026-04-07",
+      "2026-04-06",
+      "2026-04-05",
+      "2026-04-04",
+      "2026-04-02",
+      "2026-04-01",
+      "2026-03-31"
+    ]) {
+      const positiveCheckIn = await app.inject({
+        method: "POST",
+        url: `/api/v1/habits/${dailyPositiveId}/check-ins`,
+        headers: { cookie: operatorCookie },
+        payload: { dateKey, status: "done" }
+      });
+      assert.equal(positiveCheckIn.statusCode, 200);
+
+      const negativeCheckIn = await app.inject({
+        method: "POST",
+        url: `/api/v1/habits/${dailyNegativeId}/check-ins`,
+        headers: { cookie: operatorCookie },
+        payload: { dateKey, status: "missed" }
+      });
+      assert.equal(negativeCheckIn.statusCode, 200);
+    }
+
+    for (const dateKey of [
+      "2026-04-06",
+      "2026-04-08",
+      "2026-03-30",
+      "2026-04-01",
+      "2026-03-16",
+      "2026-03-18"
+    ]) {
+      const weeklyCheckIn = await app.inject({
+        method: "POST",
+        url: `/api/v1/habits/${weeklyPositiveId}/check-ins`,
+        headers: { cookie: operatorCookie },
+        payload: { dateKey, status: "done" }
+      });
+      assert.equal(weeklyCheckIn.statusCode, 200);
+    }
+
+    const habitsResponse = await app.inject({
+      method: "GET",
+      url: "/api/v1/habits",
+      headers: { cookie: operatorCookie }
+    });
+    assert.equal(habitsResponse.statusCode, 200);
+    const habits = (
+      habitsResponse.json() as {
+        habits: Array<{ id: string; streakCount: number }>;
+      }
+    ).habits;
+
+    assert.equal(
+      habits.find((habit) => habit.id === dailyPositiveId)?.streakCount,
+      4
+    );
+    assert.equal(
+      habits.find((habit) => habit.id === dailyNegativeId)?.streakCount,
+      4
+    );
+    assert.equal(
+      habits.find((habit) => habit.id === weeklyPositiveId)?.streakCount,
+      2
+    );
   } finally {
     await app.close();
     closeDatabase();

@@ -3,10 +3,9 @@ import { z } from "zod";
 import { getDatabase, runInTransaction } from "./db.js";
 import { HttpError } from "./errors.js";
 import { updateWorkoutMetadata } from "./health.js";
-import { listMovementPlaces, movementCategoryTags, updateMovementPlace } from "./movement.js";
+import { canonicalizeMovementCategoryTags, listMovementPlaces, normalizeMovementCategoryTag, updateMovementPlace } from "./movement.js";
 import { listHabits } from "./repositories/habits.js";
 const watchCapability = "watch-ready";
-const movementCategoryTagSet = new Set(movementCategoryTags);
 const watchHistoryStateSchema = z.enum(["aligned", "unaligned", "unknown"]);
 const watchPromptKindSchema = z.enum([
     "new_place",
@@ -226,10 +225,10 @@ const routinePromptOptions = [
 const watchCategoryMap = new Map([
     ["Home", ["home"]],
     ["Work", ["workplace"]],
-    ["Clinic", ["other"]],
+    ["Clinic", ["clinic"]],
     ["Grocery", ["grocery"]],
-    ["Gym", ["other"]],
-    ["Cafe", ["other"]],
+    ["Gym", ["gym"]],
+    ["Cafe", ["cafe"]],
     ["Nature", ["nature"]],
     ["Travel", ["travel"]],
     ["Social", ["social"]],
@@ -373,15 +372,9 @@ function projectionForStoredEvent(event) {
         const categoryCandidate = Array.isArray(event.payload.categoryTags)
             ? event.payload.categoryTags
             : typeof event.payload.category === "string"
-                ? watchCategoryMap.get(event.payload.category) ?? []
+                ? watchCategoryMap.get(event.payload.category) ?? [event.payload.category]
                 : [];
-        const categoryTags = Array.from(new Set(categoryCandidate.flatMap((value) => {
-            if (typeof value !== "string") {
-                return [];
-            }
-            const trimmed = value.trim();
-            return trimmed && movementCategoryTagSet.has(trimmed) ? [trimmed] : [];
-        })));
+        const categoryTags = canonicalizeMovementCategoryTags(categoryCandidate.flatMap((value) => typeof value === "string" ? [normalizeMovementCategoryTag(value)] : []));
         try {
             const place = updateMovementPlace(event.linkedContext.placeId, {
                 ...(nextLabel ? { label: nextLabel } : {}),

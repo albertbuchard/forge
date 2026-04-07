@@ -12,7 +12,8 @@ sports and workout sessions, companion pairing, and habit-generated workout reco
 The Preferences side covers contextual taste modeling, pairwise comparisons, direct
 signals, editable concept libraries, and preference items. The Psyche side covers
 values, patterns, behaviors, beliefs, modes, guided mode sessions, trigger reports,
-event types, and reusable emotion definitions. Forge also has a file-first Wiki
+event types, reusable emotion definitions, structured questionnaires, questionnaire
+runs, and a self-observation calendar backed by note-based observations. Forge also has a file-first Wiki
 memory layer with explicit spaces, local markdown pages, backlinks, optional
 embeddings, and structured Forge links. Forge is also multi-user: every entity can belong to a
 typed `human` or `bot` user through `userId`, and Hermes can scope reads with `userId`
@@ -101,6 +102,11 @@ For wiki-specific recall:
 - `insight` is not a batch entity. Use `forge_post_insight`.
 - Sleep and workout sessions are not batch entities. Use the dedicated health tools for those records.
 - Wiki pages are not batch entities. Use the dedicated wiki tools so the markdown vault, backlinks, and metadata index stay aligned.
+- Use the high-level batch routes for basic Preferences CRUD. `preference_catalog`, `preference_catalog_item`, `preference_context`, and `preference_item` should normally flow through `forge_create_entities`, `forge_update_entities`, and `forge_delete_entities`.
+- Use the high-level batch routes for basic questionnaire CRUD too. `questionnaire_instrument` should normally flow through `forge_create_entities`, `forge_update_entities`, and `forge_delete_entities`.
+- Keep dedicated Preferences tools only for real preference actions and read models: workspace reads, game starts, context merges, entity seeding, judgments, direct signals, and score overrides.
+- Keep dedicated questionnaire tools only for real flow actions and read models: list/get, clone, ensure draft, publish, start run, update run, complete run.
+- Self-observation is note-backed. Read the calendar through the dedicated self-observation tool, but create or update the stored observation through `note` with tag `Self-observation`, `frontmatter.observedAt`, and links to the relevant Psyche or Forge records.
 - For `goal`, `project`, or `task`, nested `notes` on create can include `contentMarkdown`, `author`, `tags`, `destroyAt`, and extra `links`.
 - Standalone `note` creates can include `contentMarkdown`, `author`, `tags`, `destroyAt`, and `links`.
 - When preserving a work summary from `forge_log_work`, `forge_complete_task_run`, or `forge_release_task_run`, prefer `closeoutNote` so the summary becomes a real linked note rather than transient run metadata.
@@ -118,10 +124,12 @@ For wiki-specific recall:
 - Use `forge_update_sleep_session` and `forge_update_workout_session` only to enrich those records with reflective context, tags, and links. Do not pretend they are generic task or note mutations.
 - Ephemeral notes are appropriate for scratch memory, temporary handoffs, or “what just happened” captures that should disappear automatically later.
 - For every entity flow, ask only for what is missing or unclear instead of walking through the whole schema.
+- Before you ask, decide the exact missing thing you need and how that answer will help you name, place, or save the record.
 - Use a natural progression of intent or example -> working name -> purpose -> placement -> operational detail -> links.
 - When updating, start with what is changing, what should stay true, and what prompted the update now.
 - Before saving, briefly summarize the working formulation in the user's own language when that would reduce ambiguity.
 - For Psyche work, ask permission to explore, ask one or two focused questions at a time, reflect before the next question, and start from a recent concrete example rather than a diagnostic label.
+- For Psyche work, sound professionally warm and therapist-like: grounded, accurate, reflective, and intentional, not clinical, vague, or lecture-like.
 - If the user asks to understand a Psyche issue before saving it, start with one orienting question rather than a full interpretation, save pitch, replacement belief, or suggested title.
 - In that first exploratory turn, keep the reflection to one or two short sentences, avoid numbered lists or worksheet-style dumps, and wait for the user's answer before offering a fuller formulation.
 - In that first exploratory turn, stay in plain prose, end with one question, and do not mention Forge fields or save formatting yet unless the user interrupts to save immediately.

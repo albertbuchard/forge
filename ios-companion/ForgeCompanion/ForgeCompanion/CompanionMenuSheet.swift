@@ -7,6 +7,7 @@ struct CompanionMenuSheet: View {
     let reloadForge: () -> Void
     let openDiagnostics: () -> Void
     let openMovementSettings: () -> Void
+    let openLifeTimeline: () -> Void
     let closeMenu: () -> Void
 
     @State private var syncing = false
@@ -60,6 +61,15 @@ struct CompanionMenuSheet: View {
                     closeMenu()
                     DispatchQueue.main.async {
                         openMovementSettings()
+                    }
+                }
+                .buttonStyle(CompanionGhostButtonStyle())
+
+                Button("Life Timeline") {
+                    companionDebugLog("CompanionMenuSheet", "tap Life Timeline")
+                    closeMenu()
+                    DispatchQueue.main.async {
+                        openLifeTimeline()
                     }
                 }
                 .buttonStyle(CompanionGhostButtonStyle())

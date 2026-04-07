@@ -82,6 +82,62 @@ struct ForgeSyncClient {
         let watch: ForgeWatchBootstrap
     }
 
+    private struct MovementTimelineRequest: Encodable {
+        let sessionId: String
+        let pairingToken: String
+        let before: String?
+        let limit: Int
+    }
+
+    private struct MovementTimelineEnvelope: Decodable {
+        let movement: ForgeMovementTimelinePage
+    }
+
+    private struct MovementPlaceMutationRequest: Encodable {
+        struct Place: Encodable {
+            let externalUid: String
+            let label: String
+            let aliases: [String]
+            let latitude: Double
+            let longitude: Double
+            let radiusMeters: Double
+            let categoryTags: [String]
+            let visibility: String
+            let wikiNoteId: String?
+            let linkedEntities: [[String: String]]
+            let linkedPeople: [[String: String]]
+            let metadata: [String: String]
+        }
+
+        let sessionId: String
+        let pairingToken: String
+        let place: Place
+    }
+
+    private struct MovementPlaceEnvelope: Decodable {
+        let place: ForgeMovementTimelinePlace
+    }
+
+    private struct MovementStayPatchRequest: Encodable {
+        let sessionId: String
+        let pairingToken: String
+        let patch: ForgeMovementStayPatch
+    }
+
+    private struct MovementStayPatchEnvelope: Decodable {
+        let stay: ForgeMovementTimelineStay
+    }
+
+    private struct MovementTripPatchRequest: Encodable {
+        let sessionId: String
+        let pairingToken: String
+        let patch: ForgeMovementTripPatch
+    }
+
+    private struct MovementTripPatchEnvelope: Decodable {
+        let trip: ForgeMovementTimelineTrip
+    }
+
     private struct ErrorEnvelope: Decodable {
         struct ValidationIssue: Decodable {
             let path: [String]
@@ -208,6 +264,124 @@ struct ForgeSyncClient {
             "fetchWatchBootstrap success habits=\(envelope.watch.habits.count) prompts=\(envelope.watch.pendingPrompts.count)"
         )
         return envelope.watch
+    }
+
+    func fetchMovementTimeline(
+        payload: PairingPayload,
+        before: String?,
+        limit: Int = 36
+    ) async throws -> ForgeMovementTimelinePage {
+        companionDebugLog(
+            "ForgeSyncClient",
+            "fetchMovementTimeline start session=\(payload.sessionId) before=\(before ?? "nil") limit=\(limit)"
+        )
+        let envelope: MovementTimelineEnvelope = try await sendRequest(
+            path: "/mobile/movement/timeline",
+            apiBaseUrl: payload.apiBaseUrl,
+            body: MovementTimelineRequest(
+                sessionId: payload.sessionId,
+                pairingToken: payload.pairingToken,
+                before: before,
+                limit: limit
+            )
+        )
+        companionDebugLog(
+            "ForgeSyncClient",
+            "fetchMovementTimeline success segments=\(envelope.movement.segments.count) hasMore=\(envelope.movement.hasMore)"
+        )
+        return envelope.movement
+    }
+
+    func patchMovementStay(
+        stayId: String,
+        patch: ForgeMovementStayPatch,
+        pairing: PairingPayload
+    ) async throws -> ForgeMovementTimelineStay {
+        companionDebugLog(
+            "ForgeSyncClient",
+            "patchMovementStay start stay=\(stayId)"
+        )
+        let envelope: MovementStayPatchEnvelope = try await sendRequest(
+            path: "/mobile/movement/stays/\(stayId)",
+            apiBaseUrl: pairing.apiBaseUrl,
+            method: "PATCH",
+            body: MovementStayPatchRequest(
+                sessionId: pairing.sessionId,
+                pairingToken: pairing.pairingToken,
+                patch: patch
+            )
+        )
+        companionDebugLog(
+            "ForgeSyncClient",
+            "patchMovementStay success stay=\(stayId)"
+        )
+        return envelope.stay
+    }
+
+    func patchMovementTrip(
+        tripId: String,
+        patch: ForgeMovementTripPatch,
+        pairing: PairingPayload
+    ) async throws -> ForgeMovementTimelineTrip {
+        companionDebugLog(
+            "ForgeSyncClient",
+            "patchMovementTrip start trip=\(tripId)"
+        )
+        let envelope: MovementTripPatchEnvelope = try await sendRequest(
+            path: "/mobile/movement/trips/\(tripId)",
+            apiBaseUrl: pairing.apiBaseUrl,
+            method: "PATCH",
+            body: MovementTripPatchRequest(
+                sessionId: pairing.sessionId,
+                pairingToken: pairing.pairingToken,
+                patch: patch
+            )
+        )
+        companionDebugLog(
+            "ForgeSyncClient",
+            "patchMovementTrip success trip=\(tripId)"
+        )
+        return envelope.trip
+    }
+
+    func createMovementPlace(
+        label: String,
+        latitude: Double,
+        longitude: Double,
+        categoryTags: [String],
+        pairing: PairingPayload
+    ) async throws -> ForgeMovementTimelinePlace {
+        companionDebugLog(
+            "ForgeSyncClient",
+            "createMovementPlace start label=\(label)"
+        )
+        let envelope: MovementPlaceEnvelope = try await sendRequest(
+            path: "/mobile/movement/places",
+            apiBaseUrl: pairing.apiBaseUrl,
+            body: MovementPlaceMutationRequest(
+                sessionId: pairing.sessionId,
+                pairingToken: pairing.pairingToken,
+                place: .init(
+                    externalUid: "",
+                    label: label,
+                    aliases: [],
+                    latitude: latitude,
+                    longitude: longitude,
+                    radiusMeters: 100,
+                    categoryTags: categoryTags,
+                    visibility: "shared",
+                    wikiNoteId: nil,
+                    linkedEntities: [],
+                    linkedPeople: [],
+                    metadata: [:]
+                )
+            )
+        )
+        companionDebugLog(
+            "ForgeSyncClient",
+            "createMovementPlace success label=\(label) placeId=\(envelope.place.id)"
+        )
+        return envelope.place
     }
 
     func submitWatchHabitCheckIn(
@@ -373,6 +547,9 @@ struct ForgeSyncClient {
         }
         var components = URLComponents(url: url, resolvingAgainstBaseURL: false)
         components?.path = path
+        if components?.host?.contains(".ts.net") == true, components?.scheme == "http" {
+            components?.scheme = "https"
+        }
         let normalized = components?.url?.absoluteString ?? rawValue
         companionDebugLog(
             "ForgeSyncClient",

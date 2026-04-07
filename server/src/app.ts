@@ -29,6 +29,17 @@ import {
   updateInsight
 } from "./repositories/collaboration.js";
 import {
+  createAiConnector,
+  deleteAiConnector,
+  getAiConnectorById,
+  getAiConnectorBySlug,
+  getAiConnectorConversationForConnector,
+  listAiConnectorRuns,
+  listAiConnectors,
+  runAiConnector,
+  updateAiConnector
+} from "./repositories/ai-connectors.js";
+import {
   createAiProcessor,
   createAiProcessorLink,
   deleteAiProcessor,
@@ -61,6 +72,7 @@ import {
   resetSurfaceLayout,
   saveSurfaceLayout
 } from "./repositories/surface-layouts.js";
+import { listForgeBoxCatalog } from "./connectors/box-registry.js";
 import {
   createHabit,
   createHabitCheckIn,
@@ -385,8 +397,10 @@ import {
   activitySourceSchema,
   createAgentActionSchema,
   createAgentTokenSchema,
+  createAiConnectorSchema,
   createAiProcessorLinkSchema,
   createAiProcessorSchema,
+  runAiConnectorSchema,
   writeSurfaceLayoutSchema,
   upsertAiModelConnectionSchema,
   testAiModelConnectionSchema,
@@ -455,6 +469,7 @@ import {
   updateTaskSchema,
   updateUserAccessGrantSchema,
   updateWorkBlockTemplateSchema,
+  updateAiConnectorSchema,
   updateAiProcessorSchema,
   runAiProcessorSchema,
   workAdjustmentResultSchema,
@@ -495,18 +510,28 @@ import {
   getMovementAllTimeSummary,
   getMovementDayDetail,
   getMovementMobileBootstrap,
+  getMovementTimeline,
   getMovementSelectionAggregate,
   getMovementSettings,
   getMovementTripDetail,
   getMovementMonthSummary,
   listMovementPlaces,
   movementMobileBootstrapSchema,
+  movementMobilePlaceMutationSchema,
+  movementMobileStayPatchSchema,
+  movementMobileTimelineSchema,
+  movementMobileTripPatchSchema,
   movementPlaceMutationSchema,
   movementPlacePatchSchema,
   movementSelectionAggregateSchema,
+  movementStayPatchSchema,
   movementSettingsPatchSchema,
+  movementTimelineQuerySchema,
+  movementTripPatchSchema,
   updateMovementPlace,
-  updateMovementSettings
+  updateMovementStay,
+  updateMovementSettings,
+  updateMovementTrip
 } from "./movement.js";
 import {
   assertWatchReady,
@@ -3477,7 +3502,7 @@ function buildAgentOnboardingPayload(request: {
       questionnaire:
         "Forge Psyche questionnaires are structured reusable instruments with provenance, scoring, draft and published versions, and user-owned answer runs.",
       selfObservation:
-        "Forge self-observation is a dedicated Psyche calendar view backed by note records tagged Self-observation and timestamped by frontmatter.observedAt.",
+        "Forge self-observation is a dedicated Psyche calendar view backed by observed notes timestamped by frontmatter.observedAt, including deliberate reflection notes and rolling movement notes from the companion.",
       insight:
         "An agent-authored observation or recommendation grounded in Forge data.",
       calendar:
@@ -3607,7 +3632,7 @@ function buildAgentOnboardingPayload(request: {
         selfObservation: {
           read: "/api/v1/psyche/self-observation/calendar",
           writeModel:
-            "Create or update a linked note with tag Self-observation and frontmatter.observedAt."
+            "Create or update an observed note with frontmatter.observedAt. Manual reflections usually carry the Self-observation tag, while movement sync can also publish rolling observed notes tagged movement."
         },
         sleep_session: {
           read: "/api/v1/health/sleep",
@@ -4988,6 +5013,18 @@ export async function buildServer(
       resolveScopedUserIds(request.query as Record<string, unknown>)
     )
   }));
+  app.get("/api/v1/movement/timeline", async (request) => {
+    const parsed = movementTimelineQuerySchema.parse(request.query ?? {});
+    return {
+      movement: getMovementTimeline({
+        ...parsed,
+        userIds:
+          parsed.userIds.length > 0
+            ? parsed.userIds
+            : (resolveScopedUserIds(request.query as Record<string, unknown>) ?? [])
+      })
+    };
+  });
   app.get("/api/v1/movement/settings", async (request) => ({
     settings: getMovementSettings(
       resolveScopedUserIds(request.query as Record<string, unknown>)
@@ -5053,6 +5090,42 @@ export async function buildServer(
       return { error: "Movement place not found" };
     }
     return { place };
+  });
+  app.patch("/api/v1/movement/stays/:id", async (request, reply) => {
+    const auth = requireScopedAccess(
+      request.headers as Record<string, unknown>,
+      ["write"],
+      { route: "/api/v1/movement/stays/:id" }
+    );
+    const { id } = request.params as { id: string };
+    const stay = updateMovementStay(
+      id,
+      movementStayPatchSchema.parse(request.body ?? {}),
+      toActivityContext(auth)
+    );
+    if (!stay) {
+      reply.code(404);
+      return { error: "Movement stay not found" };
+    }
+    return { stay };
+  });
+  app.patch("/api/v1/movement/trips/:id", async (request, reply) => {
+    const auth = requireScopedAccess(
+      request.headers as Record<string, unknown>,
+      ["write"],
+      { route: "/api/v1/movement/trips/:id" }
+    );
+    const { id } = request.params as { id: string };
+    const trip = updateMovementTrip(
+      id,
+      movementTripPatchSchema.parse(request.body ?? {}),
+      toActivityContext(auth)
+    );
+    if (!trip) {
+      reply.code(404);
+      return { error: "Movement trip not found" };
+    }
+    return { trip };
   });
   app.get("/api/v1/movement/trips/:id", async (request, reply) => {
     const { id } = request.params as { id: string };
@@ -5125,6 +5198,63 @@ export async function buildServer(
     return {
       movement: getMovementMobileBootstrap(pairing)
     };
+  });
+  app.post("/api/v1/mobile/movement/places", async (request, reply) => {
+    const parsed = movementMobilePlaceMutationSchema.parse(request.body ?? {});
+    const pairing = requireValidPairing(parsed.sessionId, parsed.pairingToken);
+    reply.code(201);
+    return {
+      place: createMovementPlace(
+        {
+          ...parsed.place,
+          userId: pairing.user_id,
+          source: "companion"
+        },
+        {
+          actor: "Forge Companion",
+          source: "system"
+        }
+      )
+    };
+  });
+  app.post("/api/v1/mobile/movement/timeline", async (request) => {
+    const parsed = movementMobileTimelineSchema.parse(request.body ?? {});
+    const pairing = requireValidPairing(parsed.sessionId, parsed.pairingToken);
+    return {
+      movement: getMovementTimeline({
+        before: parsed.before,
+        limit: parsed.limit,
+        userIds: [pairing.user_id]
+      })
+    };
+  });
+  app.patch("/api/v1/mobile/movement/stays/:id", async (request, reply) => {
+    const parsed = movementMobileStayPatchSchema.parse(request.body ?? {});
+    const pairing = requireValidPairing(parsed.sessionId, parsed.pairingToken);
+    const { id } = request.params as { id: string };
+    const stay = updateMovementStay(id, parsed.patch, {
+      actor: "Forge Companion",
+      source: "system"
+    }, { userId: pairing.user_id });
+    if (!stay) {
+      reply.code(404);
+      return { error: "Movement stay not found" };
+    }
+    return { stay };
+  });
+  app.patch("/api/v1/mobile/movement/trips/:id", async (request, reply) => {
+    const parsed = movementMobileTripPatchSchema.parse(request.body ?? {});
+    const pairing = requireValidPairing(parsed.sessionId, parsed.pairingToken);
+    const { id } = request.params as { id: string };
+    const trip = updateMovementTrip(id, parsed.patch, {
+      actor: "Forge Companion",
+      source: "system"
+    }, { userId: pairing.user_id });
+    if (!trip) {
+      reply.code(404);
+      return { error: "Movement trip not found" };
+    }
+    return { trip };
   });
   app.post("/api/v1/mobile/watch/bootstrap", async (request) => {
     const parsed = mobileWatchBootstrapSchema.parse(request.body ?? {});
@@ -9024,6 +9154,150 @@ export async function buildServer(
       },
       { trigger: "route" }
     );
+  });
+  app.get("/api/v1/ai-connectors/catalog/boxes", async (request) => {
+    requireScopedAccess(request.headers as Record<string, unknown>, ["read"], {
+      route: "/api/v1/ai-connectors/catalog/boxes"
+    });
+    return {
+      boxes: listForgeBoxCatalog()
+    };
+  });
+  app.get("/api/v1/ai-connectors", async (request) => {
+    requireScopedAccess(request.headers as Record<string, unknown>, ["read"], {
+      route: "/api/v1/ai-connectors"
+    });
+    return {
+      connectors: listAiConnectors()
+    };
+  });
+  app.post("/api/v1/ai-connectors", async (request, reply) => {
+    requireScopedAccess(request.headers as Record<string, unknown>, ["write"], {
+      route: "/api/v1/ai-connectors"
+    });
+    const connector = createAiConnector(
+      createAiConnectorSchema.parse(request.body ?? {})
+    );
+    reply.code(201);
+    return { connector };
+  });
+  app.get("/api/v1/ai-connectors/:id", async (request, reply) => {
+    requireScopedAccess(request.headers as Record<string, unknown>, ["read"], {
+      route: "/api/v1/ai-connectors/:id"
+    });
+    const connector = getAiConnectorById((request.params as { id: string }).id);
+    if (!connector) {
+      reply.code(404);
+      return { error: "AI connector not found" };
+    }
+    return {
+      connector,
+      runs: listAiConnectorRuns(connector.id),
+      conversation: getAiConnectorConversationForConnector(connector.id)
+    };
+  });
+  app.patch("/api/v1/ai-connectors/:id", async (request, reply) => {
+    requireScopedAccess(request.headers as Record<string, unknown>, ["write"], {
+      route: "/api/v1/ai-connectors/:id"
+    });
+    const connector = updateAiConnector(
+      (request.params as { id: string }).id,
+      updateAiConnectorSchema.parse(request.body ?? {})
+    );
+    if (!connector) {
+      reply.code(404);
+      return { error: "AI connector not found" };
+    }
+    return { connector };
+  });
+  app.delete("/api/v1/ai-connectors/:id", async (request, reply) => {
+    requireScopedAccess(request.headers as Record<string, unknown>, ["write"], {
+      route: "/api/v1/ai-connectors/:id"
+    });
+    const connector = deleteAiConnector((request.params as { id: string }).id);
+    if (!connector) {
+      reply.code(404);
+      return { error: "AI connector not found" };
+    }
+    return { connector };
+  });
+  app.post("/api/v1/ai-connectors/:id/run", async (request, reply) => {
+    requireScopedAccess(request.headers as Record<string, unknown>, ["write"], {
+      route: "/api/v1/ai-connectors/:id/run"
+    });
+    const connector = getAiConnectorById((request.params as { id: string }).id);
+    if (!connector) {
+      reply.code(404);
+      return { error: "AI connector not found" };
+    }
+    return await runAiConnector(
+      connector.id,
+      runAiConnectorSchema.parse(request.body ?? {}),
+      {
+        llm: managers.llm,
+        secrets: managers.secrets
+      },
+      "run"
+    );
+  });
+  app.post("/api/v1/ai-connectors/:id/chat", async (request, reply) => {
+    requireScopedAccess(request.headers as Record<string, unknown>, ["write"], {
+      route: "/api/v1/ai-connectors/:id/chat"
+    });
+    const connector = getAiConnectorById((request.params as { id: string }).id);
+    if (!connector) {
+      reply.code(404);
+      return { error: "AI connector not found" };
+    }
+    return await runAiConnector(
+      connector.id,
+      runAiConnectorSchema.parse(request.body ?? {}),
+      {
+        llm: managers.llm,
+        secrets: managers.secrets
+      },
+      "chat"
+    );
+  });
+  app.get("/api/v1/ai-connectors/:id/output", async (request, reply) => {
+    requireScopedAccess(request.headers as Record<string, unknown>, ["read"], {
+      route: "/api/v1/ai-connectors/:id/output"
+    });
+    const connector = getAiConnectorById((request.params as { id: string }).id);
+    if (!connector) {
+      reply.code(404);
+      return { error: "AI connector not found" };
+    }
+    return {
+      connector,
+      output: connector.lastRun?.result ?? null
+    };
+  });
+  app.get("/api/v1/ai-connectors/:id/runs", async (request, reply) => {
+    requireScopedAccess(request.headers as Record<string, unknown>, ["read"], {
+      route: "/api/v1/ai-connectors/:id/runs"
+    });
+    const connector = getAiConnectorById((request.params as { id: string }).id);
+    if (!connector) {
+      reply.code(404);
+      return { error: "AI connector not found" };
+    }
+    return {
+      runs: listAiConnectorRuns(connector.id)
+    };
+  });
+  app.get("/api/v1/ai-connectors/by-slug/:slug", async (request, reply) => {
+    requireScopedAccess(request.headers as Record<string, unknown>, ["read"], {
+      route: "/api/v1/ai-connectors/by-slug/:slug"
+    });
+    const connector = getAiConnectorBySlug(
+      (request.params as { slug: string }).slug
+    );
+    if (!connector) {
+      reply.code(404);
+      return { error: "AI connector not found" };
+    }
+    return { connector };
   });
   app.post("/api/v1/settings/tokens", async (request, reply) => {
     const auth = requireOperatorSession(

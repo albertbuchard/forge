@@ -1,7 +1,15 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Dumbbell, Save } from "lucide-react";
+import { useVirtualizer } from "@tanstack/react-virtual";
+import {
+  ArrowRight,
+  CalendarDays,
+  Dumbbell,
+  HeartPulse,
+  Save
+} from "lucide-react";
 import { EntityLinkMultiSelect } from "@/components/psyche/entity-link-multiselect";
+import { FacetedTokenSearch, type FacetedTokenOption } from "@/components/search/faceted-token-search";
 import { useForgeShell } from "@/components/shell/app-shell";
 import { PageHero } from "@/components/shell/page-hero";
 import { Button } from "@/components/ui/button";
@@ -11,6 +19,7 @@ import { ErrorState } from "@/components/ui/page-state";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { SheetScaffold } from "@/components/experience/sheet-scaffold";
 import {
   getFitnessView,
   listBehaviors,
@@ -24,6 +33,18 @@ import {
   buildHealthEntityLinkOptions,
   parseHealthLinkValues
 } from "@/lib/health-link-options";
+import type { FitnessViewData, WorkoutSessionRecord } from "@/lib/types";
+
+type WorkoutDraft = {
+  subjectiveEffort: string;
+  moodBefore: string;
+  moodAfter: string;
+  meaningText: string;
+  plannedContext: string;
+  socialContext: string;
+  tagsText: string;
+  linkValues: string[];
+};
 
 function minutesLabel(seconds: number) {
   return `${Math.round(seconds / 60)}m`;
@@ -36,27 +57,413 @@ function kilometersLabel(distanceMeters: number | null) {
   return `${(distanceMeters / 1000).toFixed(1)} km`;
 }
 
+function formatWorkoutWindow(startedAt: string, endedAt: string) {
+  const dateFormatter = new Intl.DateTimeFormat(undefined, {
+    weekday: "short",
+    day: "numeric",
+    month: "short"
+  });
+  const timeFormatter = new Intl.DateTimeFormat(undefined, {
+    hour: "2-digit",
+    minute: "2-digit"
+  });
+  return `${dateFormatter.format(new Date(startedAt))} · ${timeFormatter.format(new Date(startedAt))} - ${timeFormatter.format(new Date(endedAt))}`;
+}
+
+function buildWorkoutDraft(session: WorkoutSessionRecord): WorkoutDraft {
+  return {
+    subjectiveEffort:
+      session.subjectiveEffort !== null ? String(session.subjectiveEffort) : "",
+    moodBefore: session.moodBefore ?? "",
+    moodAfter: session.moodAfter ?? "",
+    meaningText: session.meaningText ?? "",
+    plannedContext: session.plannedContext ?? "",
+    socialContext: session.socialContext ?? "",
+    tagsText: Array.isArray(session.tags) ? session.tags.join(", ") : "",
+    linkValues: Array.isArray(session.links)
+      ? session.links.map((link) => `${link.entityType}:${link.entityId}`)
+      : []
+  };
+}
+
+function normalize(text: string) {
+  return text.trim().toLowerCase();
+}
+
+function buildWorkoutSearchText(session: WorkoutSessionRecord, draft: WorkoutDraft) {
+  return normalize(
+    [
+      session.workoutType,
+      session.sourceType,
+      session.sourceDevice,
+      session.reconciliationStatus,
+      session.moodBefore,
+      session.moodAfter,
+      session.meaningText,
+      session.plannedContext,
+      session.socialContext,
+      session.tags.join(" "),
+      draft.moodBefore,
+      draft.moodAfter,
+      draft.meaningText,
+      draft.plannedContext,
+      draft.socialContext,
+      draft.tagsText,
+      formatWorkoutWindow(session.startedAt, session.endedAt)
+    ].join(" ")
+  );
+}
+
+function createWorkoutFilterOptions(
+  sessions: WorkoutSessionRecord[]
+): FacetedTokenOption[] {
+  const options = new Map<string, FacetedTokenOption>();
+
+  for (const session of sessions) {
+    options.set(`workout:${session.workoutType}`, {
+      id: `workout:${session.workoutType}`,
+      label: session.workoutType,
+      description: "Workout type",
+      searchText: `${session.workoutType} workout`,
+      badge: <Badge tone="meta">{session.workoutType}</Badge>
+    });
+    options.set(`source:${session.sourceType}`, {
+      id: `source:${session.sourceType}`,
+      label: session.sourceType.replaceAll("_", " "),
+      description: "Source type",
+      searchText: `${session.sourceType} source`,
+      badge: (
+        <Badge tone="meta" className="capitalize">
+          {session.sourceType.replaceAll("_", " ")}
+        </Badge>
+      )
+    });
+    options.set(`status:${session.reconciliationStatus}`, {
+      id: `status:${session.reconciliationStatus}`,
+      label: session.reconciliationStatus.replaceAll("_", " "),
+      description: "Reconciliation status",
+      searchText: `${session.reconciliationStatus} status`,
+      badge: (
+        <Badge tone="meta" className="capitalize">
+          {session.reconciliationStatus.replaceAll("_", " ")}
+        </Badge>
+      )
+    });
+  }
+
+  options.set("linked:yes", {
+    id: "linked:yes",
+    label: "Linked",
+    description: "Already tied to Forge or Psyche context",
+    badge: <Badge tone="meta">Linked</Badge>
+  });
+  options.set("linked:no", {
+    id: "linked:no",
+    label: "Needs links",
+    description: "No Forge or Psyche links yet",
+    badge: <Badge tone="meta">Needs links</Badge>
+  });
+  options.set("habit:yes", {
+    id: "habit:yes",
+    label: "Habit-generated",
+    description: "Created from a habit completion",
+    badge: <Badge tone="meta">Habit-generated</Badge>
+  });
+  options.set("effort:rated", {
+    id: "effort:rated",
+    label: "Effort rated",
+    description: "Already has a subjective effort score",
+    badge: <Badge tone="meta">Effort rated</Badge>
+  });
+
+  return Array.from(options.values());
+}
+
+function matchesWorkoutFilters(
+  session: WorkoutSessionRecord,
+  selectedFilterIds: string[]
+) {
+  return selectedFilterIds.every((filterId) => {
+    if (filterId.startsWith("workout:")) {
+      return session.workoutType === filterId.slice("workout:".length);
+    }
+    if (filterId.startsWith("source:")) {
+      return session.sourceType === filterId.slice("source:".length);
+    }
+    if (filterId.startsWith("status:")) {
+      return session.reconciliationStatus === filterId.slice("status:".length);
+    }
+    if (filterId === "linked:yes") {
+      return session.links.length > 0;
+    }
+    if (filterId === "linked:no") {
+      return session.links.length === 0;
+    }
+    if (filterId === "habit:yes") {
+      return Boolean(session.generatedFromHabitId);
+    }
+    if (filterId === "effort:rated") {
+      return session.subjectiveEffort !== null;
+    }
+    return true;
+  });
+}
+
+function SportsSessionEditor({
+  session,
+  draft,
+  linkOptions,
+  pending,
+  step,
+  onStepChange,
+  onDraftChange,
+  onSave
+}: {
+  session: WorkoutSessionRecord;
+  draft: WorkoutDraft;
+  linkOptions: ReturnType<typeof buildHealthEntityLinkOptions>;
+  pending: boolean;
+  step: number;
+  onStepChange: (next: number) => void;
+  onDraftChange: (patch: Partial<WorkoutDraft>) => void;
+  onSave: () => void;
+}) {
+  const steps = [
+    {
+      id: "context",
+      title: "Session context",
+      description: "Quick facts, effort, and how this session happened."
+    },
+    {
+      id: "reflection",
+      title: "Reflection",
+      description: "Mood, meaning, and what the session actually did for you."
+    },
+    {
+      id: "links",
+      title: "Links",
+      description: "Tie the session back to Forge and Psyche context."
+    }
+  ] as const;
+
+  return (
+    <div className="grid gap-5">
+      <div className="rounded-[24px] bg-white/[0.04] p-4">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <div className="flex items-center gap-2 text-lg text-white">
+              <Dumbbell className="size-4 text-[var(--primary)]" />
+              <span>{session.workoutType}</span>
+            </div>
+            <div className="mt-2 text-sm text-white/58">
+              {formatWorkoutWindow(session.startedAt, session.endedAt)}
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Badge>{minutesLabel(session.durationSeconds)}</Badge>
+            {session.totalEnergyKcal ? (
+              <Badge tone="meta">{Math.round(session.totalEnergyKcal)} kcal</Badge>
+            ) : null}
+            {session.distanceMeters ? (
+              <Badge tone="meta">{kilometersLabel(session.distanceMeters)}</Badge>
+            ) : null}
+            <Badge tone="meta" className="capitalize">
+              {session.reconciliationStatus.replaceAll("_", " ")}
+            </Badge>
+          </div>
+        </div>
+      </div>
+
+      <div className="grid gap-2 sm:grid-cols-3">
+        {steps.map((entry, index) => (
+          <button
+            key={entry.id}
+            type="button"
+            onClick={() => onStepChange(index)}
+            className={`rounded-[20px] border px-4 py-3 text-left transition ${
+              step === index
+                ? "border-[var(--primary)] bg-[var(--primary)]/10 text-white"
+                : "border-white/8 bg-white/[0.04] text-white/62 hover:bg-white/[0.06] hover:text-white"
+            }`}
+          >
+            <div className="text-[11px] uppercase tracking-[0.18em] text-white/42">
+              Step {index + 1}
+            </div>
+            <div className="mt-2 text-sm font-medium">{entry.title}</div>
+          </button>
+        ))}
+      </div>
+
+      <div className="rounded-[24px] bg-white/[0.03] p-4">
+        <div className="text-[11px] uppercase tracking-[0.18em] text-white/42">
+          {steps[step]!.title}
+        </div>
+        <div className="mt-2 text-sm leading-6 text-white/58">
+          {steps[step]!.description}
+        </div>
+
+        {step === 0 ? (
+          <div className="mt-4 grid gap-4">
+            <div className="grid gap-3 md:grid-cols-3">
+              <div className="rounded-[18px] bg-white/[0.04] p-4">
+                <div className="text-sm text-white/58">Source</div>
+                <div className="mt-2 text-lg text-white capitalize">
+                  {session.sourceType.replaceAll("_", " ")}
+                </div>
+              </div>
+              <div className="rounded-[18px] bg-white/[0.04] p-4">
+                <div className="text-sm text-white/58">Steps</div>
+                <div className="mt-2 text-lg text-white">
+                  {session.stepCount ?? "n/a"}
+                </div>
+              </div>
+              <div className="rounded-[18px] bg-white/[0.04] p-4">
+                <div className="text-sm text-white/58">Max HR</div>
+                <div className="mt-2 text-lg text-white">
+                  {session.maxHeartRate ? Math.round(session.maxHeartRate) : "n/a"}
+                </div>
+              </div>
+            </div>
+            <div className="grid gap-3 md:grid-cols-3">
+              <label className="grid gap-2">
+                <span className="text-sm text-white/58">Effort</span>
+                <Input
+                  type="number"
+                  min={1}
+                  max={10}
+                  value={draft.subjectiveEffort}
+                  onChange={(event) =>
+                    onDraftChange({ subjectiveEffort: event.target.value })
+                  }
+                />
+              </label>
+              <label className="grid gap-2">
+                <span className="text-sm text-white/58">Planned vs spontaneous</span>
+                <Input
+                  value={draft.plannedContext}
+                  onChange={(event) =>
+                    onDraftChange({ plannedContext: event.target.value })
+                  }
+                  placeholder="Planned recovery block"
+                />
+              </label>
+              <label className="grid gap-2">
+                <span className="text-sm text-white/58">Social context</span>
+                <Input
+                  value={draft.socialContext}
+                  onChange={(event) =>
+                    onDraftChange({ socialContext: event.target.value })
+                  }
+                  placeholder="Solo, coach, group class, partner"
+                />
+              </label>
+            </div>
+            <label className="grid gap-2">
+              <span className="text-sm text-white/58">Tags</span>
+              <Input
+                value={draft.tagsText}
+                onChange={(event) => onDraftChange({ tagsText: event.target.value })}
+                placeholder="recovery, interval-block, stress-release"
+              />
+            </label>
+          </div>
+        ) : null}
+
+        {step === 1 ? (
+          <div className="mt-4 grid gap-4">
+            <div className="grid gap-3 md:grid-cols-2">
+              <label className="grid gap-2">
+                <span className="text-sm text-white/58">Mood before</span>
+                <Input
+                  value={draft.moodBefore}
+                  onChange={(event) => onDraftChange({ moodBefore: event.target.value })}
+                />
+              </label>
+              <label className="grid gap-2">
+                <span className="text-sm text-white/58">Mood after</span>
+                <Input
+                  value={draft.moodAfter}
+                  onChange={(event) => onDraftChange({ moodAfter: event.target.value })}
+                />
+              </label>
+            </div>
+            <label className="grid gap-2">
+              <span className="text-sm text-white/58">
+                Meaning, impact, and why this session mattered
+              </span>
+              <Textarea
+                className="min-h-[160px]"
+                value={draft.meaningText}
+                onChange={(event) => onDraftChange({ meaningText: event.target.value })}
+                placeholder="This session was planned as active recovery after a heavy work block and helped reset stress before sleep."
+              />
+            </label>
+          </div>
+        ) : null}
+
+        {step === 2 ? (
+          <div className="mt-4 grid gap-3">
+            <div className="text-sm text-white/58">
+              Search goals, projects, habits, values, beliefs, patterns, or reports and attach the ones that explain this session.
+            </div>
+            <EntityLinkMultiSelect
+              options={linkOptions}
+              selectedValues={draft.linkValues}
+              onChange={(linkValues) => onDraftChange({ linkValues })}
+              placeholder="Search Forge and Psyche records…"
+            />
+          </div>
+        ) : null}
+      </div>
+
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="text-sm text-white/48">
+          {step < steps.length - 1
+            ? "Move through the session one step at a time, then save when the context is clean."
+            : "Everything is in place. Save the session metadata back into Forge."}
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={() => onStepChange(Math.max(0, step - 1))}
+            disabled={step === 0}
+          >
+            Back
+          </Button>
+          {step < steps.length - 1 ? (
+            <Button type="button" onClick={() => onStepChange(step + 1)}>
+              Next
+              <ArrowRight className="size-4" />
+            </Button>
+          ) : null}
+          <Button
+            type="button"
+            pending={pending}
+            pendingLabel="Saving"
+            onClick={onSave}
+          >
+            <Save className="size-4" />
+            Save session
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function SportsPage() {
   const shell = useForgeShell();
   const queryClient = useQueryClient();
+  const listRef = useRef<HTMLDivElement | null>(null);
   const selectedUserIds = Array.isArray(shell.selectedUserIds)
     ? shell.selectedUserIds
     : [];
-  const [drafts, setDrafts] = useState<
-    Record<
-      string,
-      {
-        subjectiveEffort: string;
-        moodBefore: string;
-        moodAfter: string;
-        meaningText: string;
-        plannedContext: string;
-        socialContext: string;
-        tagsText: string;
-        linkValues: string[];
-      }
-    >
-  >({});
+  const [drafts, setDrafts] = useState<Record<string, WorkoutDraft>>({});
+  const [query, setQuery] = useState("");
+  const [selectedFilterIds, setSelectedFilterIds] = useState<string[]>([]);
+  const [selectedWorkoutId, setSelectedWorkoutId] = useState<string | null>(null);
+  const [editorStep, setEditorStep] = useState(0);
 
   const fitnessQuery = useQuery({
     queryKey: ["forge-fitness", ...selectedUserIds],
@@ -89,24 +496,7 @@ export function SportsPage() {
     }
     setDrafts(
       Object.fromEntries(
-        fitnessQuery.data.sessions.map((session) => [
-          session.id,
-          {
-            subjectiveEffort:
-              session.subjectiveEffort !== null
-                ? String(session.subjectiveEffort)
-                : "",
-            moodBefore: session.moodBefore ?? "",
-            moodAfter: session.moodAfter ?? "",
-            meaningText: session.meaningText ?? "",
-            plannedContext: session.plannedContext ?? "",
-            socialContext: session.socialContext ?? "",
-            tagsText: session.tags.join(", "),
-            linkValues: session.links.map(
-              (link) => `${link.entityType}:${link.entityId}`
-            )
-          }
-        ])
+        fitnessQuery.data.sessions.map((session) => [session.id, buildWorkoutDraft(session)])
       )
     );
   }, [fitnessQuery.data]);
@@ -144,6 +534,59 @@ export function SportsPage() {
     }
   });
 
+  const fitness = fitnessQuery.data;
+  const sessions = fitness?.sessions ?? [];
+  const linkOptions = buildHealthEntityLinkOptions({
+    goals: shell.snapshot.dashboard.goals,
+    projects: shell.snapshot.dashboard.projects,
+    tasks: shell.snapshot.dashboard.tasks,
+    habits: shell.snapshot.dashboard.habits,
+    values: valuesQuery.data ?? [],
+    patterns: patternsQuery.data ?? [],
+    behaviors: behaviorsQuery.data ?? [],
+    beliefs: beliefsQuery.data ?? [],
+    reports: reportsQuery.data ?? []
+  });
+  const searchOptions = useMemo(
+    () => createWorkoutFilterOptions(sessions),
+    [sessions]
+  );
+  const filteredSessions = useMemo(() => {
+    const normalizedQuery = normalize(query);
+    return [...sessions]
+      .sort(
+        (left, right) =>
+          new Date(right.startedAt).getTime() - new Date(left.startedAt).getTime()
+      )
+      .filter((session) => {
+        const draft = drafts[session.id] ?? buildWorkoutDraft(session);
+        const textMatch =
+          normalizedQuery.length === 0 ||
+          buildWorkoutSearchText(session, draft).includes(normalizedQuery);
+        return textMatch && matchesWorkoutFilters(session, selectedFilterIds);
+      });
+  }, [drafts, query, selectedFilterIds, sessions]);
+  const resultSummary =
+    filteredSessions.length === sessions.length &&
+    query.trim().length === 0 &&
+    selectedFilterIds.length === 0
+      ? `${sessions.length} workout sessions visible`
+      : `${filteredSessions.length} of ${sessions.length} workout sessions visible`;
+  const activeSession =
+    filteredSessions.find((session) => session.id === selectedWorkoutId) ??
+    sessions.find((session) => session.id === selectedWorkoutId) ??
+    null;
+  const activeDraft = activeSession
+    ? drafts[activeSession.id] ?? buildWorkoutDraft(activeSession)
+    : null;
+
+  const rowVirtualizer = useVirtualizer({
+    count: filteredSessions.length,
+    getScrollElement: () => listRef.current,
+    estimateSize: () => 108,
+    overscan: 8
+  });
+
   if (fitnessQuery.isLoading) {
     return (
       <SurfaceSkeleton
@@ -156,7 +599,7 @@ export function SportsPage() {
     );
   }
 
-  if (fitnessQuery.isError || !fitnessQuery.data) {
+  if (fitnessQuery.isError || !fitness) {
     return (
       <ErrorState
         eyebrow="Sports"
@@ -166,18 +609,45 @@ export function SportsPage() {
     );
   }
 
-  const { summary, weeklyTrend, typeBreakdown, sessions } = fitnessQuery.data;
-  const linkOptions = buildHealthEntityLinkOptions({
-    goals: shell.snapshot.dashboard.goals,
-    projects: shell.snapshot.dashboard.projects,
-    tasks: shell.snapshot.dashboard.tasks,
-    habits: shell.snapshot.dashboard.habits,
-    values: valuesQuery.data ?? [],
-    patterns: patternsQuery.data ?? [],
-    behaviors: behaviorsQuery.data ?? [],
-    beliefs: beliefsQuery.data ?? [],
-    reports: reportsQuery.data ?? []
-  });
+  const { summary, weeklyTrend, typeBreakdown } = fitness;
+
+  function patchDraft(sessionId: string, patch: Partial<WorkoutDraft>) {
+    setDrafts((current) => {
+      const base =
+        current[sessionId] ??
+        buildWorkoutDraft(
+          sessions.find((entry) => entry.id === sessionId) as WorkoutSessionRecord
+        );
+      return {
+        ...current,
+        [sessionId]: {
+          ...base,
+          ...patch
+        }
+      };
+    });
+  }
+
+  async function saveWorkout(workoutId: string) {
+    const session = sessions.find((entry) => entry.id === workoutId);
+    if (!session) {
+      return;
+    }
+    const draft = drafts[workoutId] ?? buildWorkoutDraft(session);
+    await saveMutation.mutateAsync({
+      workoutId,
+      subjectiveEffort: draft.subjectiveEffort,
+      moodBefore: draft.moodBefore,
+      moodAfter: draft.moodAfter,
+      meaningText: draft.meaningText,
+      plannedContext: draft.plannedContext,
+      socialContext: draft.socialContext,
+      tagsText: draft.tagsText,
+      linkValues: draft.linkValues
+    });
+    setSelectedWorkoutId(null);
+    setEditorStep(0);
+  }
 
   return (
     <div className="grid gap-5">
@@ -372,244 +842,149 @@ export function SportsPage() {
         </Card>
       </section>
 
-      <div className="grid gap-4">
-        {sessions.map((session) => {
-          const draft = drafts[session.id] ?? {
-            subjectiveEffort: "",
-            moodBefore: "",
-            moodAfter: "",
-            meaningText: ""
-          };
-          return (
-            <Card key={session.id} className="grid gap-4">
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div>
-                  <div className="flex items-center gap-2 text-lg text-white">
-                    <Dumbbell className="size-4 text-[var(--primary)]" />
-                    <span>{session.workoutType}</span>
-                  </div>
-                  <div className="mt-2 flex flex-wrap gap-2">
-                    <Badge>{minutesLabel(session.durationSeconds)}</Badge>
-                    {session.totalEnergyKcal ? (
-                      <Badge tone="meta">
-                        {Math.round(session.totalEnergyKcal)} kcal
-                      </Badge>
-                    ) : null}
-                    {session.distanceMeters ? (
-                      <Badge tone="meta">
-                        {(session.distanceMeters / 1000).toFixed(1)} km
-                      </Badge>
-                    ) : null}
-                    {session.averageHeartRate ? (
-                      <Badge tone="meta">
-                        Avg HR {Math.round(session.averageHeartRate)}
-                      </Badge>
-                    ) : null}
-                    <Badge tone="meta">
-                      {session.reconciliationStatus}
-                    </Badge>
-                  </div>
-                </div>
-                <Button
-                  size="sm"
-                  pending={saveMutation.isPending}
-                  pendingLabel="Saving"
-                  onClick={() =>
-                    void saveMutation.mutateAsync({
-                      workoutId: session.id,
-                      subjectiveEffort: draft.subjectiveEffort,
-                      moodBefore: draft.moodBefore,
-                      moodAfter: draft.moodAfter,
-                      meaningText: draft.meaningText,
-                      plannedContext: draft.plannedContext,
-                      socialContext: draft.socialContext,
-                      tagsText: draft.tagsText,
-                      linkValues: draft.linkValues
-                    })
-                  }
-                >
-                  <Save className="size-4" />
-                  Save metadata
-                </Button>
-              </div>
+      <section className="grid gap-4 xl:grid-cols-[minmax(0,25rem)_minmax(0,1fr)]">
+        <FacetedTokenSearch
+          title="Session browser"
+          description="Search past activities by workout type, source, reconciliation state, or whether they still need context."
+          query={query}
+          onQueryChange={setQuery}
+          options={searchOptions}
+          selectedOptionIds={selectedFilterIds}
+          onSelectedOptionIdsChange={setSelectedFilterIds}
+          resultSummary={resultSummary}
+          placeholder="Search workouts, devices, notes, moods, or filter chips"
+          emptyStateMessage="Keep typing or pick a filter chip to narrow the activity history."
+        />
 
-              <div className="grid gap-4 lg:grid-cols-2">
-                <div className="grid gap-3">
-                  <div className="rounded-[18px] bg-white/[0.04] p-4 text-sm text-white/62">
-                    {new Date(session.startedAt).toLocaleString()} to{" "}
-                    {new Date(session.endedAt).toLocaleString()} ·{" "}
-                    {session.sourceDevice}
-                  </div>
-                  <div className="grid gap-3 md:grid-cols-3">
-                    <div className="rounded-[18px] bg-white/[0.04] p-4">
-                      <div className="text-sm text-white/58">Source</div>
-                      <div className="mt-2 text-lg text-white">
-                        {session.sourceType.replaceAll("_", " ")}
-                      </div>
-                    </div>
-                    <div className="rounded-[18px] bg-white/[0.04] p-4">
-                      <div className="text-sm text-white/58">Steps</div>
-                      <div className="mt-2 text-lg text-white">
-                        {session.stepCount ?? "n/a"}
-                      </div>
-                    </div>
-                    <div className="rounded-[18px] bg-white/[0.04] p-4">
-                      <div className="text-sm text-white/58">Max HR</div>
-                      <div className="mt-2 text-lg text-white">
-                        {session.maxHeartRate
-                          ? Math.round(session.maxHeartRate)
-                          : "n/a"}
-                      </div>
-                    </div>
-                  </div>
-                  <div className="grid gap-3 md:grid-cols-3">
-                    <label className="grid gap-2">
-                      <span className="text-sm text-white/58">Effort</span>
-                      <Input
-                        type="number"
-                        min={1}
-                        max={10}
-                        value={draft.subjectiveEffort}
-                        onChange={(event) =>
-                          setDrafts((current) => ({
-                            ...current,
-                            [session.id]: {
-                              ...draft,
-                              subjectiveEffort: event.target.value
-                            }
-                          }))
-                        }
-                      />
-                    </label>
-                    <label className="grid gap-2">
-                      <span className="text-sm text-white/58">Mood before</span>
-                      <Input
-                        value={draft.moodBefore}
-                        onChange={(event) =>
-                          setDrafts((current) => ({
-                            ...current,
-                            [session.id]: {
-                              ...draft,
-                              moodBefore: event.target.value
-                            }
-                          }))
-                        }
-                      />
-                    </label>
-                    <label className="grid gap-2">
-                      <span className="text-sm text-white/58">Mood after</span>
-                      <Input
-                        value={draft.moodAfter}
-                        onChange={(event) =>
-                          setDrafts((current) => ({
-                            ...current,
-                            [session.id]: {
-                              ...draft,
-                              moodAfter: event.target.value
-                            }
-                          }))
-                        }
-                      />
-                    </label>
-                  </div>
-                  <div className="grid gap-3 md:grid-cols-2">
-                    <label className="grid gap-2">
-                      <span className="text-sm text-white/58">
-                        Planned vs spontaneous
-                      </span>
-                      <Input
-                        value={draft.plannedContext}
-                        onChange={(event) =>
-                          setDrafts((current) => ({
-                            ...current,
-                            [session.id]: {
-                              ...draft,
-                              plannedContext: event.target.value
-                            }
-                          }))
-                        }
-                        placeholder="Planned recovery block"
-                      />
-                    </label>
-                    <label className="grid gap-2">
-                      <span className="text-sm text-white/58">Social context</span>
-                      <Input
-                        value={draft.socialContext}
-                        onChange={(event) =>
-                          setDrafts((current) => ({
-                            ...current,
-                            [session.id]: {
-                              ...draft,
-                              socialContext: event.target.value
-                            }
-                          }))
-                        }
-                        placeholder="Solo, coach, group class, partner"
-                      />
-                    </label>
-                  </div>
-                  <label className="grid gap-2">
-                    <span className="text-sm text-white/58">Tags</span>
-                    <Input
-                      value={draft.tagsText}
-                      onChange={(event) =>
-                        setDrafts((current) => ({
-                          ...current,
-                          [session.id]: {
-                            ...draft,
-                            tagsText: event.target.value
-                          }
-                        }))
-                      }
-                      placeholder="sleep-support, recovery, strength-block"
-                    />
-                  </label>
-                </div>
-                <div className="grid gap-3">
-                  <label className="grid gap-2">
-                    <span className="text-sm text-white/58">
-                      Meaning, link to sleep, project, value, or therapeutic plan
-                    </span>
-                    <Textarea
-                      className="min-h-[120px]"
-                      value={draft.meaningText}
-                      onChange={(event) =>
-                        setDrafts((current) => ({
-                          ...current,
-                          [session.id]: {
-                            ...draft,
-                            meaningText: event.target.value
-                          }
-                        }))
-                      }
-                      placeholder="Planned recovery walk linked to sleep repair, stress regulation, or a specific project rhythm."
-                    />
-                  </label>
-                  <div className="grid gap-2">
-                    <span className="text-sm text-white/58">
-                      Linked Forge and Psyche records
-                    </span>
-                    <EntityLinkMultiSelect
-                      options={linkOptions}
-                      selectedValues={draft.linkValues}
-                      onChange={(linkValues) =>
-                        setDrafts((current) => ({
-                          ...current,
-                          [session.id]: {
-                            ...draft,
-                            linkValues
-                          }
-                        }))
-                      }
-                      placeholder="Search goals, projects, habits, values, beliefs, patterns…"
-                    />
-                  </div>
-                </div>
+        <Card className="grid gap-4">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">
+                Activity history
               </div>
-            </Card>
-          );
-        })}
-      </div>
+              <div className="mt-2 text-lg text-white">
+                Open a workout to add reflection and links in a guided modal.
+              </div>
+            </div>
+            <Badge tone="meta">{resultSummary}</Badge>
+          </div>
+
+          <div
+            ref={listRef}
+            className="h-[34rem] overflow-y-auto rounded-[24px] border border-white/8 bg-white/[0.03]"
+          >
+            {filteredSessions.length === 0 ? (
+              <div className="flex h-full items-center justify-center p-6 text-center text-sm leading-6 text-white/50">
+                No workout matches the current search yet. Clear some filters or search by workout type, device, or reflection text.
+              </div>
+            ) : (
+              <div
+                className="relative w-full"
+                style={{ height: `${rowVirtualizer.getTotalSize()}px` }}
+              >
+                {rowVirtualizer.getVirtualItems().map((virtualRow) => {
+                  const session = filteredSessions[virtualRow.index]!;
+                  const hasReflection =
+                    session.meaningText.trim().length > 0 ||
+                    session.moodBefore.trim().length > 0 ||
+                    session.moodAfter.trim().length > 0 ||
+                    session.tags.length > 0 ||
+                    session.links.length > 0;
+                  return (
+                    <div
+                      key={session.id}
+                      className="absolute left-0 top-0 w-full px-3 py-2"
+                      style={{
+                        transform: `translateY(${virtualRow.start}px)`
+                      }}
+                    >
+                      <button
+                        type="button"
+                        className="grid w-full gap-3 rounded-[20px] border border-white/8 bg-white/[0.04] px-4 py-3 text-left transition hover:bg-white/[0.07]"
+                        onClick={() => {
+                          setSelectedWorkoutId(session.id);
+                          setEditorStep(0);
+                        }}
+                      >
+                        <div className="flex flex-wrap items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-2 text-white">
+                              <Dumbbell className="size-4 shrink-0 text-[var(--primary)]" />
+                              <span className="truncate text-base font-medium">
+                                {session.workoutType}
+                              </span>
+                            </div>
+                            <div className="mt-2 flex items-center gap-2 text-sm text-white/56">
+                              <CalendarDays className="size-3.5 shrink-0" />
+                              <span className="truncate">
+                                {formatWorkoutWindow(session.startedAt, session.endedAt)}
+                              </span>
+                            </div>
+                          </div>
+                          <div className="inline-flex items-center gap-2 rounded-full bg-white/[0.05] px-3 py-1.5 text-xs text-white/70">
+                            <span>{hasReflection ? "Reflected" : "Needs reflection"}</span>
+                            <ArrowRight className="size-3.5" />
+                          </div>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          <Badge>{minutesLabel(session.durationSeconds)}</Badge>
+                          {session.totalEnergyKcal ? (
+                            <Badge tone="meta">{Math.round(session.totalEnergyKcal)} kcal</Badge>
+                          ) : null}
+                          {session.distanceMeters ? (
+                            <Badge tone="meta">{kilometersLabel(session.distanceMeters)}</Badge>
+                          ) : null}
+                          {session.averageHeartRate ? (
+                            <Badge tone="meta">
+                              <HeartPulse className="mr-1 size-3.5" />
+                              {Math.round(session.averageHeartRate)} bpm
+                            </Badge>
+                          ) : null}
+                          <Badge tone="meta" className="capitalize">
+                            {session.sourceType.replaceAll("_", " ")}
+                          </Badge>
+                          <Badge tone="meta" className="capitalize">
+                            {session.reconciliationStatus.replaceAll("_", " ")}
+                          </Badge>
+                        </div>
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </Card>
+      </section>
+
+      {activeSession && activeDraft ? (
+        <SheetScaffold
+          open={Boolean(activeSession)}
+          onOpenChange={(open) => {
+            if (!open) {
+              setSelectedWorkoutId(null);
+              setEditorStep(0);
+            }
+          }}
+          eyebrow="Sports session"
+          title={activeSession.workoutType}
+          description="Add contextual meaning without crowding the main training surface."
+        >
+          <SportsSessionEditor
+            session={activeSession}
+            draft={activeDraft}
+            linkOptions={linkOptions}
+            pending={
+              saveMutation.isPending &&
+              saveMutation.variables?.workoutId === activeSession.id
+            }
+            step={editorStep}
+            onStepChange={setEditorStep}
+            onDraftChange={(patch) => patchDraft(activeSession.id, patch)}
+            onSave={() => void saveWorkout(activeSession.id)}
+          />
+        </SheetScaffold>
+      ) : null}
     </div>
   );
 }

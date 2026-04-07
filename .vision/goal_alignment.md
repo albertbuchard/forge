@@ -67,16 +67,27 @@ Tenth, it must support Movement as a first-class domain across the backend, web 
 and iPhone companion. Forge should be able to passively detect stays, trips, stops,
 and known places with explicit permission onboarding, publish those movement records as
 structured evidence rather than opaque GPS blobs, and let the user review their
-mobility through day, month, and all-time views that connect movement to notes, work,
-health, and Psyche context.
-Eleventh, it must support one shared surface-grid runtime across the entire web app.
-Every routed page must be able to participate in the same draggable, resizable,
-server-persisted layout system rather than splitting Forge into a few customizable
-dashboards and many fixed pages.
-Twelfth, it must support AI processors as first-class surface widgets. A processor
-must be able to live on any routed surface, accept inputs from linked widgets or other
-processors, run with one or more configured agents, expose a route endpoint, and use
-real guarded machine access when that policy is explicitly enabled.
+mobility through day, month, all-time, and one native full-screen Life Timeline view
+that connects movement to notes, work, health, and Psyche context. That timeline must
+load canonical history from Forge, overlay the current live local stay or trip from the
+iPhone, paginate indefinitely into the past, and support canonical edits to stays,
+trips, places, labels, tags, and timing rather than trapping corrections in a
+phone-only cache.
+Eleventh, it must support one shared surface-arrangement runtime across the entire web
+app without forcing every page through one size-managed dashboard grid. Every routed
+page must keep its authored responsive mobile and desktop layout in normal viewing
+mode, while the layout editor only controls box visibility, ordering, and whether a
+box spans the full route width on larger screens.
+Twelfth, it must support global AI Connectors as first-class graph assets rather than
+surface widgets. A connector must be able to consume registered Forge boxes from any
+view, use box snapshots and tool adapters as graph inputs, run as a functor or chat
+connector, persist run history and optional conversation memory, and publish outputs
+through dedicated connector API routes.
+Thirteenth, it must enforce a smooth route-handoff contract across the whole web app.
+When the user switches views, Forge should keep the previous page visible until the
+next page has finished the route-critical fetch work needed for first render. The
+background activity bar is the truthful loading indicator for this work. Skeletons,
+empty states, and route chrome must not flash as a substitute for stable navigation.
 
 ## Product Concepts That Must Be Explained Clearly
 
@@ -227,11 +238,13 @@ to Forge and Psyche records. Imported HealthKit workouts and habit-generated wor
 must reconcile rather than piling up as duplicate sessions.
 
 Movement places are now first-class Forge records shared between the iPhone companion
-and the web app. A place records a label, aliases, coordinates, radius, semantic tags
-such as `home`, `workplace`, `grocery`, or `nature`, optional wiki linkage, and
-optional links to people or other Forge entities. Places are the canonical anchors for
-movement reasoning; wiki frontmatter can mirror that metadata, but the place record is
-the system of record.
+and the web app. A place records a label, aliases, coordinates, radius, semantic tags,
+optional wiki linkage, and optional links to people or other Forge entities. The tag
+system must stay open-ended: Forge should seed and recognize important canonical tags
+such as `home`, `workplace`, `gym`, `holiday`, `grocery`, or `nature` for downstream
+reasoning, while still letting the user define arbitrary additional tags. Places are
+the canonical anchors for movement reasoning; wiki frontmatter can mirror that
+metadata, but the place record is the system of record.
 
 Movement stays are first-class Forge records representing a span of time spent at one
 place or inside one stationary cluster. A stay records start and end time, center
@@ -244,6 +257,14 @@ speed and MET summaries, optional calorie estimate, simplified trajectory data, 
 anchors, labels, tags, linked entities, linked people, and optional published evidence
 note. Trips may also create bounded XP rewards and may produce a workout candidate when
 that would not duplicate an existing imported workout.
+
+Movement timeline segments are a first-class cross-surface read model derived from
+canonical stays and trips. A timeline segment can represent either a stay or a trip,
+must preserve exact timestamps and real duration, and must expose the visual lane and
+connector metadata needed by the native iPhone Life Timeline without turning the phone
+into the source of truth. The canonical movement API therefore has to support paginated
+timeline reads plus canonical stay and trip patch routes so the companion and future
+web timeline surfaces can edit movement history through the same shared contract.
 
 Rewards are the structured XP outcomes attached to meaningful behavior. Starting work,
 sustaining work, completing work, and preserving momentum should all create explainable
@@ -414,9 +435,10 @@ fetch stored result history without recomputing scores ad hoc in the client.
 ## Technical Stack And Architecture
 
 Forge currently runs as a React 19.1 + TypeScript 5.8 + Vite 6.3 web application with
-Tailwind CSS 4 styling, TanStack Query for server-state coordination, React Router 7
-for navigation, React Hook Form and Zod for forms and validation, dnd-kit for board
-interactions, Framer Motion for motion, Recharts for charts, and Lucide icons for the
+Tailwind CSS 4 styling, app-local shadcn-style UI primitives, TanStack Query for
+server-state coordination, React Router 7 for navigation, React Hook Form and Zod for
+forms and validation, dnd-kit for board interactions, Framer Motion for motion,
+Recharts for charts, `@xyflow/react` for connector graphs, and Lucide icons for the
 entity iconography. The server runtime is a Fastify 5 API served from `server/src`,
 started with `tsx`, and exposed locally on port `4317` by default with the web app
 mounted under `/forge/`. The public contract is a versioned REST API with an OpenAPI
@@ -441,6 +463,10 @@ WatchConnectivity and using WidgetKit plus App Intents for watch launch surfaces
 iPhone app owns pairing-session credentials, mobile API calls, retries, and bootstrap
 publication. The watch stays stateless with respect to Forge auth and only queues fast
 habit, check-in, prompt, and note-capture actions for the phone to forward.
+The iPhone companion also owns a native SwiftUI Life Timeline surface for movement
+history. That surface is not a web wrapper: it renders canonical paginated movement
+segments, overlays the current local stay or trip, and writes corrections back through
+the same Fastify movement contract the web app can reuse later.
 
 Forge also has a long-term canonical desktop architecture that remains binding even
 while the current Node bridge is in place. That canonical architecture is Tauri 2 with

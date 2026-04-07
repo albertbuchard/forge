@@ -66,32 +66,73 @@ export function PageHero({
   const Icon = entityVisual?.icon;
   const resolvedEyebrow = resolveHeroMeta({ eyebrow, titleText, entityKind, copyMode });
   const hasHeaderMeta = Boolean(entityVisual || resolvedEyebrow || badge);
-
   return (
-    <section className="grid w-full max-w-full min-w-0 gap-1.5 rounded-[24px] bg-[var(--hero-gradient)] px-4 py-2.5 shadow-[var(--card-shadow)] lg:grid-cols-[minmax(0,1fr)_auto] lg:px-5 lg:py-3">
-      <div className="min-w-0">
+    <header
+      className="relative min-w-0 w-full max-w-full overflow-hidden border-b border-white/6 bg-[linear-gradient(135deg,rgba(24,34,60,0.68)_0%,rgba(15,24,44,0.42)_58%,rgba(10,16,31,0.18)_100%)] px-5 py-5 sm:px-6 lg:grid lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end lg:px-7 lg:py-6"
+      style={{
+        paddingTop: "var(--forge-shell-hero-padding-top)",
+        paddingBottom: "var(--forge-shell-hero-padding-bottom)"
+      }}
+    >
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(121,136,255,0.16),transparent_34%)]" />
+      <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-white/10" />
+      <div className="relative min-w-0 w-full max-w-full">
         {hasHeaderMeta ? (
-          <div className="flex flex-wrap items-center gap-3">
+          <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2 text-[11px] font-medium uppercase tracking-[0.2em] text-white/40">
             {entityVisual && Icon ? (
-              <div
-                className={cn(
-                  "inline-flex size-8 shrink-0 items-center justify-center rounded-full border bg-white/[0.04] shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]",
-                  entityVisual.subtleBadgeClassName
-                )}
+              <span
+                className="inline-flex items-center gap-2 text-white/56"
                 aria-label={entityVisual.label}
                 title={entityVisual.label}
               >
-                <Icon className={cn("size-4", entityVisual.iconClassName)} />
-              </div>
+                <Icon className={cn("size-3.5", entityVisual.iconClassName)} />
+                <span>{entityVisual.label}</span>
+              </span>
             ) : null}
-            {resolvedEyebrow ? <div className="type-label text-[var(--secondary)]">{resolvedEyebrow}</div> : null}
-            {badge ? <Badge tone="signal" className="bg-white/[0.08] text-white/78">{badge}</Badge> : null}
+            {resolvedEyebrow ? (
+              <span className="text-[var(--secondary)]/80">{resolvedEyebrow}</span>
+            ) : null}
+            {badge ? (
+              <Badge
+                tone="signal"
+                className="h-8 rounded-full border border-white/8 bg-white/[0.04] px-3 text-[11px] font-medium tracking-[0.14em] text-white/80 uppercase"
+              >
+                {badge}
+              </Badge>
+            ) : null}
           </div>
         ) : null}
-        <div className={cn("max-w-4xl text-[clamp(1.2rem,1.85vw,1.7rem)] leading-[1] text-white", hasHeaderMeta ? "mt-1.5" : "")}>{title}</div>
-        <div className="mt-1 hidden max-w-3xl text-[13px] leading-5 text-white/54 sm:block">{description}</div>
+        <div
+          className={cn(
+            "min-w-0 max-w-4xl text-[clamp(1.85rem,3.5vw,4rem)] font-medium leading-[0.92] text-white",
+            hasHeaderMeta ? "mt-3" : ""
+          )}
+          style={{
+            transform:
+              "translateY(var(--forge-shell-hero-title-translate-y)) scale(var(--forge-shell-hero-title-scale))",
+            transformOrigin: "top left",
+            willChange: "transform"
+          }}
+        >
+          {title}
+        </div>
+        <div
+          className="mt-2 min-w-0 max-w-3xl text-[14px] leading-6 text-white/58 sm:text-[15px]"
+          style={{
+            opacity: "var(--forge-shell-hero-description-opacity)",
+            transform:
+              "translateY(var(--forge-shell-hero-description-translate-y))",
+            willChange: "opacity, transform"
+          }}
+        >
+          {description}
+        </div>
       </div>
-      {actions ? <div className="flex min-w-0 flex-wrap items-start gap-2 lg:justify-end">{actions}</div> : null}
-    </section>
+      {actions ? (
+        <div className="relative mt-4 flex min-w-0 w-full max-w-full flex-wrap items-center gap-2 lg:mt-0 lg:max-w-[26rem] lg:justify-end">
+          {actions}
+        </div>
+      ) : null}
+    </header>
   );
 }

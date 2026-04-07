@@ -131,30 +131,46 @@ export function PsychePage() {
         : 0;
       return rightTime - leftTime;
     })[0] ?? null;
+  const heroDescription =
+    "Values, patterns, behaviors, beliefs, habits, and reports in one live field.";
+  const heroActions = (
+    <Link
+      to="/psyche/goal-map"
+      className="inline-flex min-h-10 min-w-0 max-w-full items-center justify-center rounded-full bg-white/[0.08] px-4 py-2 text-sm whitespace-nowrap text-white transition hover:bg-white/[0.12]"
+    >
+      Open goal map
+    </Link>
+  );
 
   const customWidgets: SurfaceWidgetDefinition[] = [
     {
       id: "hero",
       title: "Psyche",
-      description: "Route header",
+      description: "Top route composition",
       defaultWidth: 12,
       defaultHeight: 1,
       removable: false,
+      surfaceChrome: "none",
+      defaultTitleVisible: false,
+      defaultDescriptionVisible: false,
       render: () => (
         <PageHero
           title="Psyche"
           titleText="Psyche"
-          description="See your goals, values, habits, beliefs, behaviors, projects, and reports together."
-          badge={`${overview.domain.title} active`}
+          description={heroDescription}
+          actions={heroActions}
         />
       )
     },
     {
       id: "sections",
       title: "Psyche sections",
-      description: "This navigation block can move into a custom layout.",
+      description: "Section switcher",
       defaultWidth: 12,
       defaultHeight: 1,
+      surfaceChrome: "none",
+      defaultTitleVisible: false,
+      defaultDescriptionVisible: false,
       render: () => <PsycheSectionNav />
     },
     {
@@ -367,24 +383,16 @@ export function PsychePage() {
 
   return (
     <div className="grid min-w-0 gap-4 overflow-x-clip">
-      <PageHero
-        title="Psyche"
-        titleText="Psyche"
-        description="See your goals, values, habits, beliefs, behaviors, projects, and reports together, then open the goal map when you want the full structure."
-        badge={`${overview.domain.title} active`}
-        actions={
-          <Link
-            to="/psyche/goal-map"
-            className="inline-flex min-h-10 min-w-0 max-w-full items-center justify-center rounded-full bg-white/[0.08] px-4 py-2 text-sm whitespace-nowrap text-white transition hover:bg-white/[0.12]"
-          >
-            Open goal map
-          </Link>
-        }
-      />
       {mode === "custom" ? (
         <AiSurfaceWorkspace surfaceId="psyche" baseWidgets={customWidgets} />
       ) : (
         <>
+          <PageHero
+            title="Psyche"
+            titleText="Psyche"
+            description={heroDescription}
+            actions={heroActions}
+          />
           <PsycheSectionNav />
 
           <section className="grid min-w-0 gap-4 xl:grid-cols-[minmax(0,1fr)_19rem]">

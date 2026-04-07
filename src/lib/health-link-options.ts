@@ -19,42 +19,52 @@ function option(value: string, label: string, description: string, kind: EntityL
 }
 
 export function buildHealthEntityLinkOptions(input: {
-  goals: DashboardGoal[];
-  projects: ProjectSummary[];
-  tasks: Task[];
-  habits: Habit[];
-  values: PsycheValue[];
-  patterns: BehaviorPattern[];
-  behaviors: Behavior[];
-  beliefs: BeliefEntry[];
-  reports: TriggerReport[];
+  goals?: DashboardGoal[];
+  projects?: ProjectSummary[];
+  tasks?: Task[];
+  habits?: Habit[];
+  values?: PsycheValue[];
+  patterns?: BehaviorPattern[];
+  behaviors?: Behavior[];
+  beliefs?: BeliefEntry[];
+  reports?: TriggerReport[];
 }): EntityLinkOption[] {
+  const goals = input.goals ?? [];
+  const projects = input.projects ?? [];
+  const tasks = input.tasks ?? [];
+  const habits = input.habits ?? [];
+  const values = input.values ?? [];
+  const patterns = input.patterns ?? [];
+  const behaviors = input.behaviors ?? [];
+  const beliefs = input.beliefs ?? [];
+  const reports = input.reports ?? [];
+
   return [
-    ...input.goals.map((goal) =>
+    ...goals.map((goal) =>
       option(`goal:${goal.id}`, goal.title, "Goal", "goal")
     ),
-    ...input.projects.map((project) =>
+    ...projects.map((project) =>
       option(`project:${project.id}`, project.title, "Project", "project")
     ),
-    ...input.tasks.map((task) =>
+    ...tasks.map((task) =>
       option(`task:${task.id}`, task.title, "Task", "task")
     ),
-    ...input.habits.map((habit) =>
+    ...habits.map((habit) =>
       option(`habit:${habit.id}`, habit.title, "Habit", "habit")
     ),
-    ...input.values.map((value) =>
+    ...values.map((value) =>
       option(`psyche_value:${value.id}`, value.title, "Value", "value")
     ),
-    ...input.patterns.map((pattern) =>
+    ...patterns.map((pattern) =>
       option(`behavior_pattern:${pattern.id}`, pattern.title, "Pattern", "pattern")
     ),
-    ...input.behaviors.map((behavior) =>
+    ...behaviors.map((behavior) =>
       option(`behavior:${behavior.id}`, behavior.title, "Behavior", "behavior")
     ),
-    ...input.beliefs.map((belief) =>
+    ...beliefs.map((belief) =>
       option(`belief_entry:${belief.id}`, belief.statement, "Belief", "belief")
     ),
-    ...input.reports.map((report) =>
+    ...reports.map((report) =>
       option(`trigger_report:${report.id}`, report.title, "Report", "report")
     )
   ];

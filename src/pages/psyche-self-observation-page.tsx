@@ -1,12 +1,6 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import {
-  ArrowUpRight,
-  Plus,
-  Sparkles,
-  StickyNote,
-  Trash2
-} from "lucide-react";
+import { ArrowUpRight, Plus, Sparkles, StickyNote, Trash2 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import {
   EntityLinkMultiSelect,
@@ -52,6 +46,7 @@ import {
   parseDateTimeLocalToIso
 } from "@/lib/note-memory-tags";
 import { formatEntityTypeLabel } from "@/lib/note-helpers";
+import { cn } from "@/lib/utils";
 import type {
   Behavior,
   BehaviorPattern,
@@ -180,17 +175,29 @@ function formatClock(value: string) {
 }
 
 function summarizeNote(note: Note) {
-  const text = (note.contentPlain || note.contentMarkdown).replace(/\s+/g, " ").trim();
+  const text = (note.contentPlain || note.contentMarkdown)
+    .replace(/\s+/g, " ")
+    .trim();
   if (text.length <= 120) {
     return text;
   }
   return `${text.slice(0, 117).trimEnd()}...`;
 }
 
+function isMovementObservation(observation: PsycheObservationEntry) {
+  const movement = observation.note.frontmatter.movement;
+  return !!movement && typeof movement === "object" && !Array.isArray(movement);
+}
+
 function moveObservedAtToSlot(sourceIso: string, day: Date, hour: number) {
   const source = new Date(sourceIso);
   const next = new Date(day);
-  next.setHours(hour, Number.isNaN(source.getTime()) ? 0 : source.getMinutes(), 0, 0);
+  next.setHours(
+    hour,
+    Number.isNaN(source.getTime()) ? 0 : source.getMinutes(),
+    0,
+    0
+  );
   return next.toISOString();
 }
 
@@ -231,7 +238,8 @@ function buildPatternOptions(patterns: BehaviorPattern[]) {
     value: pattern.id,
     label: pattern.title,
     description: `${pattern.targetBehavior || pattern.preferredResponse || "Pattern"}${pattern.user ? ` · ${formatUserSummaryLine(pattern.user)}` : ""}`,
-    searchText: `${pattern.title} ${pattern.targetBehavior} ${pattern.description} ${pattern.preferredResponse}`.toLowerCase(),
+    searchText:
+      `${pattern.title} ${pattern.targetBehavior} ${pattern.description} ${pattern.preferredResponse}`.toLowerCase(),
     kind: "pattern"
   })) satisfies EntityLinkOption[];
 }
@@ -241,7 +249,8 @@ function buildReportOptions(reports: TriggerReport[]) {
     value: report.id,
     label: report.title,
     description: `${report.customEventType || report.eventSituation || "Trigger report"}${report.user ? ` · ${formatUserSummaryLine(report.user)}` : ""}`,
-    searchText: `${report.title} ${report.customEventType} ${report.eventSituation}`.toLowerCase(),
+    searchText:
+      `${report.title} ${report.customEventType} ${report.eventSituation}`.toLowerCase(),
     kind: "report"
   })) satisfies EntityLinkOption[];
 }
@@ -306,7 +315,11 @@ function buildGenericLinkOptions({
     ...goals.map((goal) => ({
       value: encodeLinkedValue("goal", goal.id),
       label: goal.title,
-      description: formatOwnedEntityDescription(goal.description, goal.user, "Goal"),
+      description: formatOwnedEntityDescription(
+        goal.description,
+        goal.user,
+        "Goal"
+      ),
       searchText: buildOwnedEntitySearchText(
         [goal.title, goal.description ?? ""],
         goal
@@ -350,7 +363,11 @@ function buildGenericLinkOptions({
         "Strategy"
       ),
       searchText: buildOwnedEntitySearchText(
-        [strategy.title, strategy.overview ?? "", strategy.endStateDescription ?? ""],
+        [
+          strategy.title,
+          strategy.overview ?? "",
+          strategy.endStateDescription ?? ""
+        ],
         strategy
       ),
       kind: "strategy"
@@ -358,7 +375,11 @@ function buildGenericLinkOptions({
     ...habits.map((habit) => ({
       value: encodeLinkedValue("habit", habit.id),
       label: habit.title,
-      description: formatOwnedEntityDescription(habit.description, habit.user, "Habit"),
+      description: formatOwnedEntityDescription(
+        habit.description,
+        habit.user,
+        "Habit"
+      ),
       searchText: buildOwnedEntitySearchText(
         [habit.title, habit.description ?? ""],
         habit
@@ -436,7 +457,9 @@ function buildGenericLinkOptions({
     }))
   ] satisfies EntityLinkOption[];
 
-  return [...options].sort((left, right) => left.label.localeCompare(right.label));
+  return [...options].sort((left, right) =>
+    left.label.localeCompare(right.label)
+  );
 }
 
 function renderOtherLinkBadges(observation: PsycheObservationEntry) {
@@ -466,9 +489,7 @@ export function PsycheSelfObservationPage() {
     : [];
   const defaultUserId = getSingleSelectedUserId(selectedUserIds);
   const [weekStart, setWeekStart] = useState(() => startOfWeek());
-  const [selectedTags, setSelectedTags] = useState<string[]>([
-    SELF_OBSERVATION_TAG
-  ]);
+  const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [authorFilter, setAuthorFilter] = useState("");
   const [onlyHumanOwned, setOnlyHumanOwned] = useState(false);
   const [sheetOpen, setSheetOpen] = useState(false);
@@ -477,13 +498,16 @@ export function PsycheSelfObservationPage() {
     tags: seedObservationTags(),
     userId: defaultUserId
   });
-  const [draggedObservationId, setDraggedObservationId] = useState<string | null>(
-    null
-  );
+  const [draggedObservationId, setDraggedObservationId] = useState<
+    string | null
+  >(null);
 
   const weekEnd = useMemo(() => addDays(weekStart, 7), [weekStart]);
   const days = useMemo(() => buildWeekDays(weekStart), [weekStart]);
-  const hours = useMemo(() => Array.from({ length: 24 }, (_, index) => index), []);
+  const hours = useMemo(
+    () => Array.from({ length: 24 }, (_, index) => index),
+    []
+  );
 
   const observationQuery = useQuery({
     queryKey: [
@@ -526,7 +550,8 @@ export function PsycheSelfObservationPage() {
   const saveObservationMutation = useMutation({
     mutationFn: async (value: ObservationDraft) => {
       const observedAt =
-        parseDateTimeLocalToIso(value.observedAtInput) ?? new Date().toISOString();
+        parseDateTimeLocalToIso(value.observedAtInput) ??
+        new Date().toISOString();
       const links = dedupeNoteLinks([
         ...value.linkedEntityValues
           .map((entry) => decodeLinkedValue(entry))
@@ -725,7 +750,9 @@ export function PsycheSelfObservationPage() {
       map.set(slotKey, current);
     }
     for (const entries of map.values()) {
-      entries.sort((left, right) => left.observedAt.localeCompare(right.observedAt));
+      entries.sort((left, right) =>
+        left.observedAt.localeCompare(right.observedAt)
+      );
     }
     return map;
   }, [visibleObservations]);
@@ -735,7 +762,9 @@ export function PsycheSelfObservationPage() {
       ...EMPTY_DRAFT,
       userId: defaultUserId,
       tags: seedObservationTags(),
-      observedAtInput: seedDate ? formatLocalDateTimeInput(seedDate.toISOString()) : ""
+      observedAtInput: seedDate
+        ? formatLocalDateTimeInput(seedDate.toISOString())
+        : ""
     });
   };
 
@@ -795,11 +824,13 @@ export function PsycheSelfObservationPage() {
       <PageHero
         title="Self Observation"
         titleText="Self Observation"
-        description="Map notes onto the real week by hour, then link the pattern, trigger report, and any other Forge records that belong to that moment."
+        description="Map observed notes onto the real week by hour, including handwritten reflections plus rolling movement stays and trips coming from Forge Companion."
         badge={`${visibleObservations.length} visible`}
         actions={
           <Button
-            onClick={() => openComposerForSlot(new Date(), new Date().getHours())}
+            onClick={() =>
+              openComposerForSlot(new Date(), new Date().getHours())
+            }
           >
             <Plus className="size-4" />
             Add observation
@@ -812,11 +843,13 @@ export function PsycheSelfObservationPage() {
       <Card className="grid gap-4 rounded-[32px] border border-white/8 bg-[linear-gradient(180deg,rgba(18,31,34,0.96),rgba(13,24,27,0.94))]">
         <CalendarWeekToolbar
           eyebrow="Observation week"
-          description="Every note can live at the hour it actually happened. Filter the field, move through weeks, and keep pattern plus trigger links visible on the same card."
+          description="Every observed note can live at the hour it actually happened. Filter reflections and movement together, move through weeks, and keep pattern plus trigger links visible on the same card."
           weekStart={weekStart}
           badges={
             <>
-              <Badge className="bg-white/[0.08] text-white/74">{scopeSummary}</Badge>
+              <Badge className="bg-white/[0.08] text-white/74">
+                {scopeSummary}
+              </Badge>
               <Badge className="bg-[rgba(110,231,183,0.14)] text-[var(--tertiary)]">
                 {onlyHumanOwned ? "Human-owned only" : "All note owners"}
               </Badge>
@@ -889,7 +922,8 @@ export function PsycheSelfObservationPage() {
                 {days.map((day) => {
                   const dayKey = formatLocalDayKey(day);
                   const slotKey = `${dayKey}:${hour}`;
-                  const slotObservations = observationsBySlot.get(slotKey) ?? [];
+                  const slotObservations =
+                    observationsBySlot.get(slotKey) ?? [];
                   return (
                     <div
                       key={slotKey}
@@ -899,8 +933,9 @@ export function PsycheSelfObservationPage() {
                       onDrop={(event) => {
                         event.preventDefault();
                         const noteId =
-                          event.dataTransfer.getData("text/forge-self-observation-id") ||
-                          draggedObservationId;
+                          event.dataTransfer.getData(
+                            "text/forge-self-observation-id"
+                          ) || draggedObservationId;
                         if (!noteId) {
                           return;
                         }
@@ -941,19 +976,34 @@ export function PsycheSelfObservationPage() {
                               );
                             }}
                             onDragEnd={() => setDraggedObservationId(null)}
-                            className="rounded-[22px] border border-white/10 bg-[rgba(110,231,183,0.08)] p-3 text-white transition hover:border-white/18 hover:bg-[rgba(110,231,183,0.12)]"
+                            className={cn(
+                              "rounded-[22px] border p-3 text-white transition hover:border-white/18",
+                              isMovementObservation(observation)
+                                ? "border-[rgba(126,229,255,0.14)] bg-[rgba(126,229,255,0.08)] hover:bg-[rgba(126,229,255,0.12)]"
+                                : "border-white/10 bg-[rgba(110,231,183,0.08)] hover:bg-[rgba(110,231,183,0.12)]"
+                            )}
                           >
                             <div className="flex items-start justify-between gap-2">
                               <button
                                 type="button"
                                 className="min-w-0 flex-1 text-left"
-                                onClick={() => openComposerForObservation(observation)}
+                                onClick={() =>
+                                  openComposerForObservation(observation)
+                                }
                               >
                                 <div className="flex flex-wrap items-start justify-between gap-2">
                                   <div className="text-xs uppercase tracking-[0.16em] text-[rgba(110,231,183,0.82)]">
                                     {formatClock(observation.observedAt)}
                                   </div>
-                                  <UserBadge user={observation.note.user} compact />
+                                  {isMovementObservation(observation) ? (
+                                    <Badge className="bg-cyan-400/12 text-cyan-100">
+                                      Movement
+                                    </Badge>
+                                  ) : null}
+                                  <UserBadge
+                                    user={observation.note.user}
+                                    compact
+                                  />
                                 </div>
                                 <div className="mt-2 line-clamp-3 text-sm leading-6 text-white/78">
                                   {summarizeNote(observation.note)}
@@ -964,33 +1014,39 @@ export function PsycheSelfObservationPage() {
                                       {observation.note.author}
                                     </Badge>
                                   ) : null}
-                                  {(observation.note.tags ?? []).slice(0, 2).map((tag) => (
-                                    <Badge
-                                      key={`${observation.id}-${tag}`}
-                                      className="bg-cyan-400/10 text-cyan-50"
-                                    >
-                                      {tag}
-                                    </Badge>
-                                  ))}
+                                  {(observation.note.tags ?? [])
+                                    .slice(0, 2)
+                                    .map((tag) => (
+                                      <Badge
+                                        key={`${observation.id}-${tag}`}
+                                        className="bg-cyan-400/10 text-cyan-50"
+                                      >
+                                        {tag}
+                                      </Badge>
+                                    ))}
                                   {renderOtherLinkBadges(observation)}
-                                  {observation.linkedPatterns.slice(0, 2).map((pattern) => (
-                                    <EntityBadge
-                                      key={pattern.id}
-                                      kind="pattern"
-                                      label={pattern.title}
-                                      compact
-                                      gradient={false}
-                                    />
-                                  ))}
-                                  {observation.linkedReports.slice(0, 1).map((report) => (
-                                    <EntityBadge
-                                      key={report.id}
-                                      kind="report"
-                                      label={report.title}
-                                      compact
-                                      gradient={false}
-                                    />
-                                  ))}
+                                  {observation.linkedPatterns
+                                    .slice(0, 2)
+                                    .map((pattern) => (
+                                      <EntityBadge
+                                        key={pattern.id}
+                                        kind="pattern"
+                                        label={pattern.title}
+                                        compact
+                                        gradient={false}
+                                      />
+                                    ))}
+                                  {observation.linkedReports
+                                    .slice(0, 1)
+                                    .map((report) => (
+                                      <EntityBadge
+                                        key={report.id}
+                                        kind="report"
+                                        label={report.title}
+                                        compact
+                                        gradient={false}
+                                      />
+                                    ))}
                                 </div>
                               </button>
                               <button
@@ -999,7 +1055,9 @@ export function PsycheSelfObservationPage() {
                                 aria-label={`Delete observation ${observation.note.id}`}
                                 onClick={(event) => {
                                   event.stopPropagation();
-                                  void deleteObservationMutation.mutateAsync(observation.note.id);
+                                  void deleteObservationMutation.mutateAsync(
+                                    observation.note.id
+                                  );
                                 }}
                               >
                                 <Trash2 className="size-3.5" />
@@ -1044,7 +1102,9 @@ export function PsycheSelfObservationPage() {
                   <Button
                     size="sm"
                     variant="secondary"
-                    onClick={() => openComposerForSlot(day, new Date().getHours())}
+                    onClick={() =>
+                      openComposerForSlot(day, new Date().getHours())
+                    }
                   >
                     <Plus className="size-4" />
                     Add
@@ -1053,7 +1113,8 @@ export function PsycheSelfObservationPage() {
                 <div className="mt-3 grid gap-2">
                   {hours.map((hour) => {
                     const slotKey = `${dayKey}:${hour}`;
-                    const slotObservations = observationsBySlot.get(slotKey) ?? [];
+                    const slotObservations =
+                      observationsBySlot.get(slotKey) ?? [];
                     return (
                       <div
                         key={slotKey}
@@ -1086,34 +1147,53 @@ export function PsycheSelfObservationPage() {
                             slotObservations.map((observation) => (
                               <div
                                 key={observation.id}
-                                className="rounded-[16px] bg-[rgba(110,231,183,0.1)] p-3"
+                                className={cn(
+                                  "rounded-[16px] p-3",
+                                  isMovementObservation(observation)
+                                    ? "bg-[rgba(126,229,255,0.1)]"
+                                    : "bg-[rgba(110,231,183,0.1)]"
+                                )}
                               >
                                 <div className="flex items-start justify-between gap-2">
                                   <button
                                     type="button"
                                     className="min-w-0 flex-1 text-left"
-                                    onClick={() => openComposerForObservation(observation)}
+                                    onClick={() =>
+                                      openComposerForObservation(observation)
+                                    }
                                   >
                                     <div className="flex flex-wrap items-center gap-2">
-                                      <UserBadge user={observation.note.user} compact />
-                                      {observation.linkedPatterns.slice(0, 1).map((pattern) => (
-                                        <EntityBadge
-                                          key={pattern.id}
-                                          kind="pattern"
-                                          label={pattern.title}
-                                          compact
-                                          gradient={false}
-                                        />
-                                      ))}
-                                      {observation.linkedReports.slice(0, 1).map((report) => (
-                                        <EntityBadge
-                                          key={report.id}
-                                          kind="report"
-                                          label={report.title}
-                                          compact
-                                          gradient={false}
-                                        />
-                                      ))}
+                                      {isMovementObservation(observation) ? (
+                                        <Badge className="bg-cyan-400/12 text-cyan-100">
+                                          Movement
+                                        </Badge>
+                                      ) : null}
+                                      <UserBadge
+                                        user={observation.note.user}
+                                        compact
+                                      />
+                                      {observation.linkedPatterns
+                                        .slice(0, 1)
+                                        .map((pattern) => (
+                                          <EntityBadge
+                                            key={pattern.id}
+                                            kind="pattern"
+                                            label={pattern.title}
+                                            compact
+                                            gradient={false}
+                                          />
+                                        ))}
+                                      {observation.linkedReports
+                                        .slice(0, 1)
+                                        .map((report) => (
+                                          <EntityBadge
+                                            key={report.id}
+                                            kind="report"
+                                            label={report.title}
+                                            compact
+                                            gradient={false}
+                                          />
+                                        ))}
                                     </div>
                                     <div className="mt-2 text-sm leading-6 text-white/78">
                                       {summarizeNote(observation.note)}
@@ -1124,7 +1204,9 @@ export function PsycheSelfObservationPage() {
                                     className="rounded-full border border-white/8 bg-white/[0.04] p-2 text-white/54 transition hover:bg-rose-500/18 hover:text-rose-100"
                                     aria-label={`Delete observation ${observation.note.id}`}
                                     onClick={() =>
-                                      void deleteObservationMutation.mutateAsync(observation.note.id)
+                                      void deleteObservationMutation.mutateAsync(
+                                        observation.note.id
+                                      )
                                     }
                                   >
                                     <Trash2 className="size-3.5" />
@@ -1156,10 +1238,13 @@ export function PsycheSelfObservationPage() {
             <UserSelectField
               value={draft.userId}
               users={shell.snapshot.users}
-              onChange={(userId) => setDraft((current) => ({ ...current, userId }))}
+              onChange={(userId) =>
+                setDraft((current) => ({ ...current, userId }))
+              }
               defaultLabel={formatOwnerSelectDefaultLabel(
-                shell.snapshot.users.find((user) => user.id === defaultUserId) ??
-                  null,
+                shell.snapshot.users.find(
+                  (user) => user.id === defaultUserId
+                ) ?? null,
                 "Choose observation owner"
               )}
               help="Observation notes stay multi-user aware just like the rest of Forge."
@@ -1169,7 +1254,10 @@ export function PsycheSelfObservationPage() {
               <Input
                 value={draft.author}
                 onChange={(event) =>
-                  setDraft((current) => ({ ...current, author: event.target.value }))
+                  setDraft((current) => ({
+                    ...current,
+                    author: event.target.value
+                  }))
                 }
                 placeholder="Albert"
               />
@@ -1191,7 +1279,9 @@ export function PsycheSelfObservationPage() {
           </label>
 
           <label className="grid gap-2">
-            <span className="text-sm font-medium text-white">Observation note</span>
+            <span className="text-sm font-medium text-white">
+              Observation note
+            </span>
             <Textarea
               value={draft.contentMarkdown}
               onChange={(event) =>
@@ -1215,7 +1305,9 @@ export function PsycheSelfObservationPage() {
           <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
             <div className="grid gap-2">
               <div className="flex items-center justify-between gap-3">
-                <div className="text-sm font-medium text-white">Linked patterns</div>
+                <div className="text-sm font-medium text-white">
+                  Linked patterns
+                </div>
                 <button
                   type="button"
                   className="inline-flex items-center gap-2 rounded-full bg-white/[0.06] px-3 py-1.5 text-xs text-white/72 transition hover:bg-white/[0.1] hover:text-white"
@@ -1242,7 +1334,9 @@ export function PsycheSelfObservationPage() {
 
             <div className="grid gap-2">
               <div className="flex items-center justify-between gap-3">
-                <div className="text-sm font-medium text-white">Trigger report</div>
+                <div className="text-sm font-medium text-white">
+                  Trigger report
+                </div>
                 <button
                   type="button"
                   className="inline-flex items-center gap-2 rounded-full bg-white/[0.06] px-3 py-1.5 text-xs text-white/72 transition hover:bg-white/[0.1] hover:text-white"
@@ -1269,7 +1363,11 @@ export function PsycheSelfObservationPage() {
               </div>
               <EntityLinkMultiSelect
                 options={reportOptions}
-                selectedValues={draft.linkedTriggerReportId ? [draft.linkedTriggerReportId] : []}
+                selectedValues={
+                  draft.linkedTriggerReportId
+                    ? [draft.linkedTriggerReportId]
+                    : []
+                }
                 onChange={(values) =>
                   setDraft((current) => ({
                     ...current,
@@ -1298,12 +1396,14 @@ export function PsycheSelfObservationPage() {
           <div className="rounded-[22px] border border-white/8 bg-white/[0.03] px-4 py-4">
             <div className="flex flex-wrap items-center gap-2 text-sm text-white/70">
               <StickyNote className="size-4 text-[var(--tertiary)]" />
-              Cards appear in the hourly week grid at the exact observation time.
+              Cards appear in the hourly week grid at the exact observation
+              time, whether they came from deliberate reflection or rolling
+              movement sync.
             </div>
             <div className="mt-2 text-sm leading-6 text-white/52">
-              Move them later by drag-and-drop, edit the timestamp directly here,
-              or delete them from the card itself when the observation should not
-              stay on the calendar.
+              Move them later by drag-and-drop, edit the timestamp directly
+              here, or delete them from the card itself when the observation
+              should not stay on the calendar.
             </div>
           </div>
 
@@ -1328,7 +1428,9 @@ export function PsycheSelfObservationPage() {
                 <button
                   type="button"
                   className="inline-flex items-center gap-2 rounded-full bg-white/[0.06] px-3 py-2 text-sm text-white/72 transition hover:bg-white/[0.1] hover:text-white"
-                  onClick={() => navigate(`/psyche/reports/${draft.linkedTriggerReportId}`)}
+                  onClick={() =>
+                    navigate(`/psyche/reports/${draft.linkedTriggerReportId}`)
+                  }
                 >
                   <ArrowUpRight className="size-4" />
                   Open linked report

@@ -1,6 +1,5 @@
 import { useEffect, type ReactElement } from "react";
 import { Navigate, Route, Routes, useLocation } from "react-router-dom";
-import { SurfaceRouteFrame } from "@/components/customization/surface-route-frame";
 import { AppShell } from "@/components/shell/app-shell";
 import {
   createUiDiagnosticLogger,
@@ -8,6 +7,8 @@ import {
 } from "@/lib/diagnostics";
 import { ActivityPage } from "@/pages/activity-page";
 import { CalendarPage } from "@/pages/calendar-page";
+import { ConnectorDetailPage } from "@/pages/connector-detail-page";
+import { ConnectorsPage } from "@/pages/connectors-page";
 import { GoalDetailPage } from "@/pages/goal-detail-page";
 import { GoalsPage } from "@/pages/goals-page";
 import { HabitsPage } from "@/pages/habits-page";
@@ -125,20 +126,12 @@ function DiagnosticsBootstrap() {
 
 export function App() {
   function surface(
-    surfaceId: string,
-    title: string,
-    description: string,
+    _surfaceId: string,
+    _title: string,
+    _description: string,
     element: ReactElement
   ) {
-    return (
-      <SurfaceRouteFrame
-        surfaceId={surfaceId}
-        title={title}
-        description={description}
-      >
-        {element}
-      </SurfaceRouteFrame>
-    );
+    return element;
   }
 
   return (
@@ -225,6 +218,8 @@ export function App() {
               <CalendarPage />
             )}
           />
+          <Route path="connectors" element={<ConnectorsPage />} />
+          <Route path="connectors/:connectorId" element={<ConnectorDetailPage />} />
           <Route
             path="movement"
             element={surface(

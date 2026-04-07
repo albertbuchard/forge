@@ -5,6 +5,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type CSSProperties,
   type ReactNode
 } from "react";
 import * as Dialog from "@radix-ui/react-dialog";
@@ -15,7 +16,6 @@ import {
   useQuery,
   useQueryClient
 } from "@tanstack/react-query";
-import { motion, useReducedMotion } from "framer-motion";
 import {
   Activity,
   ArrowUpRight,
@@ -36,6 +36,7 @@ import {
   LayoutDashboard,
   LayoutGrid,
   Map,
+  Network,
   Moon,
   NotebookPen,
   Radar,
@@ -52,10 +53,12 @@ import {
 import {
   Link,
   NavLink,
-  Outlet,
+  UNSAFE_LocationContext,
   useLocation,
+  useOutlet,
   useOutletContext
 } from "react-router-dom";
+import type { Location as RouterLocation } from "react-router-dom";
 import { AmbientActivityPill } from "@/components/experience/ambient-activity-pill";
 import { CommandPalette } from "@/components/experience/command-palette";
 import { RouteTransitionFrame } from "@/components/experience/route-transition-frame";
@@ -202,6 +205,13 @@ const PRIMARY_ROUTES: ShellRouteDefinition[] = [
     icon: CalendarDays
   },
   {
+    id: "connectors",
+    to: "/connectors",
+    label: "Connectors",
+    detail: "Global AI connector graphs and published outputs",
+    icon: Network
+  },
+  {
     id: "movement",
     to: "/movement",
     labelKey: "common.routeLabels.movement",
@@ -315,25 +325,33 @@ const SHELL_NAV_ROUTES = PRIMARY_ROUTES.filter(
   (route) => route.to !== "/preferences" && route.to !== "/sleep"
 );
 
+function requirePrimaryRoute(id: string) {
+  const route = PRIMARY_ROUTES.find((entry) => entry.id === id);
+  if (!route) {
+    throw new Error(`Missing primary route: ${id}`);
+  }
+  return route;
+}
+
 const MOBILE_CORE_ROUTES = [
-  PRIMARY_ROUTES[0],
-  PRIMARY_ROUTES[10],
-  PRIMARY_ROUTES[9],
-  PRIMARY_ROUTES[13]
+  requirePrimaryRoute("overview"),
+  requirePrimaryRoute("today"),
+  requirePrimaryRoute("kanban"),
+  requirePrimaryRoute("notes")
 ] as const;
 const MOBILE_MORE_ROUTES = [
-  PRIMARY_ROUTES[1],
-  PRIMARY_ROUTES[2],
-  PRIMARY_ROUTES[3],
-  PRIMARY_ROUTES[4],
-  PRIMARY_ROUTES[6],
-  PRIMARY_ROUTES[8],
-  PRIMARY_ROUTES[11],
-  PRIMARY_ROUTES[12],
-  PRIMARY_ROUTES[14],
-  PRIMARY_ROUTES[15],
-  PRIMARY_ROUTES[16],
-  PRIMARY_ROUTES[17]
+  requirePrimaryRoute("goals"),
+  requirePrimaryRoute("habits"),
+  requirePrimaryRoute("projects"),
+  requirePrimaryRoute("strategies"),
+  requirePrimaryRoute("calendar"),
+  requirePrimaryRoute("connectors"),
+  requirePrimaryRoute("movement"),
+  requirePrimaryRoute("sports"),
+  requirePrimaryRoute("wiki"),
+  requirePrimaryRoute("psyche"),
+  requirePrimaryRoute("activity"),
+  requirePrimaryRoute("insights")
 ] as const;
 
 const USER_SCOPE_STORAGE_KEY = "forge.selected-user-ids";
@@ -346,6 +364,108 @@ function clamp(value: number, minimum: number, maximum: number) {
 
 function interpolateNumber(progress: number, from: number, to: number) {
   return from + (to - from) * progress;
+}
+
+function applyShellCollapseVariables(
+  target: HTMLElement | null,
+  progress: number
+) {
+  if (!target) {
+    return;
+  }
+  target.style.setProperty("--forge-shell-collapse", progress.toFixed(4));
+  target.style.setProperty(
+    "--forge-shell-desktop-header-padding-top",
+    `${interpolateNumber(progress, 18, 4)}px`
+  );
+  target.style.setProperty(
+    "--forge-shell-desktop-header-padding-bottom",
+    `${interpolateNumber(progress, 15, 4)}px`
+  );
+  target.style.setProperty(
+    "--forge-shell-desktop-title-size",
+    `${interpolateNumber(progress, 1.42, 0.96)}rem`
+  );
+  target.style.setProperty(
+    "--forge-shell-desktop-primary-translate-y",
+    `${interpolateNumber(progress, 0, 2)}px`
+  );
+  target.style.setProperty(
+    "--forge-shell-desktop-primary-scale",
+    `${interpolateNumber(progress, 1, 0.98)}`
+  );
+  target.style.setProperty(
+    "--forge-shell-desktop-secondary-opacity",
+    `${interpolateNumber(progress, 1, 0)}`
+  );
+  target.style.setProperty(
+    "--forge-shell-desktop-secondary-max-height",
+    `${interpolateNumber(progress, 176, 0)}px`
+  );
+  target.style.setProperty(
+    "--forge-shell-desktop-secondary-spacing",
+    `${interpolateNumber(progress, 14, 0)}px`
+  );
+  target.style.setProperty(
+    "--forge-shell-desktop-secondary-translate-y",
+    `${interpolateNumber(progress, 0, -18)}px`
+  );
+  target.style.setProperty(
+    "--forge-shell-mobile-header-padding-top",
+    `${interpolateNumber(progress, 14, 4)}px`
+  );
+  target.style.setProperty(
+    "--forge-shell-mobile-header-padding-bottom",
+    `${interpolateNumber(progress, 12, 4)}px`
+  );
+  target.style.setProperty(
+    "--forge-shell-mobile-title-size",
+    `${interpolateNumber(progress, 1.2, 0.9)}rem`
+  );
+  target.style.setProperty(
+    "--forge-shell-mobile-primary-translate-y",
+    `${interpolateNumber(progress, 0, 1)}px`
+  );
+  target.style.setProperty(
+    "--forge-shell-mobile-primary-scale",
+    `${interpolateNumber(progress, 1, 0.98)}`
+  );
+  target.style.setProperty(
+    "--forge-shell-mobile-copy-opacity",
+    `${interpolateNumber(progress, 1, 0)}`
+  );
+  target.style.setProperty(
+    "--forge-shell-mobile-copy-max-height",
+    `${interpolateNumber(progress, 320, 0)}px`
+  );
+  target.style.setProperty(
+    "--forge-shell-mobile-copy-translate-y",
+    `${interpolateNumber(progress, 0, -14)}px`
+  );
+  target.style.setProperty(
+    "--forge-shell-hero-padding-top",
+    `${interpolateNumber(progress, 20, 15)}px`
+  );
+  target.style.setProperty(
+    "--forge-shell-hero-padding-bottom",
+    `${interpolateNumber(progress, 20, 14)}px`
+  );
+  target.style.setProperty(
+    "--forge-shell-hero-title-translate-y",
+    `${interpolateNumber(progress, 0, -6)}px`
+  );
+  target.style.setProperty(
+    "--forge-shell-hero-title-scale",
+    `${interpolateNumber(progress, 1, 0.94)}`
+  );
+  target.style.setProperty(
+    "--forge-shell-hero-description-opacity",
+    `${interpolateNumber(progress, 1, 0.45)}`
+  );
+  target.style.setProperty(
+    "--forge-shell-hero-description-translate-y",
+    `${interpolateNumber(progress, 0, -5)}px`
+  );
 }
 
 function readWindowScrollTop() {
@@ -1137,6 +1257,7 @@ function ShellCommandButton({ onClick }: { onClick: () => void }) {
 
 function ShellFrame({
   children,
+  routeLocation,
   settings,
   timerPending,
   startWorkOpen,
@@ -1152,6 +1273,7 @@ function ShellFrame({
   onCompleteRun
 }: {
   children: ReactNode;
+  routeLocation: RouterLocation;
   settings: SettingsPayload;
   timerPending: boolean;
   startWorkOpen: boolean;
@@ -1181,17 +1303,17 @@ function ShellFrame({
   onPauseRun: (runId: string) => Promise<void>;
   onCompleteRun: (runId: string) => Promise<void>;
 }) {
-  const location = useLocation();
   const shell = useForgeShell();
   const { t } = useI18n();
   const active =
     NAV_ROUTE_REGISTRY.find((route) =>
-      routeMatches(location.pathname, route)
+      routeMatches(routeLocation.pathname, route)
     ) ?? PRIMARY_ROUTES[0];
-  const transitionKey = getRouteTransitionKey(location.pathname);
+  const transitionKey = getRouteTransitionKey(routeLocation.pathname);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [backgroundActivityOpen, setBackgroundActivityOpen] = useState(false);
-  const [collapseProgress, setCollapseProgress] = useState(0);
+  const shellRootRef = useRef<HTMLDivElement | null>(null);
+  const collapseProgressRef = useRef(0);
   const [navCollapsed, setNavCollapsed] = useState(false);
   const [desktopNavIds, setDesktopNavIds] = useState<string[]>(() =>
     readStoredNavIds(DESKTOP_NAV_STORAGE_KEY, [
@@ -1201,19 +1323,19 @@ function ShellFrame({
   );
   const [mobileNavIds, setMobileNavIds] = useState<string[]>(() =>
     readStoredNavIds(MOBILE_NAV_STORAGE_KEY, [
-      PRIMARY_ROUTES[0]!.id,
-      PRIMARY_ROUTES[10]!.id,
-      PRIMARY_ROUTES[9]!.id,
-      PRIMARY_ROUTES[13]!.id
+      requirePrimaryRoute("overview").id,
+      requirePrimaryRoute("today").id,
+      requirePrimaryRoute("kanban").id,
+      requirePrimaryRoute("notes").id
     ])
   );
   const [navEditorOpen, setNavEditorOpen] = useState(false);
   const autoCollapseAppliedRef = useRef(false);
   const preAutoCollapseRef = useRef(false);
   const skipNavPersistenceRef = useRef(false);
-  const isPsyche = isPsycheRoute(location.pathname);
-  const wikiSurface = isWikiRoute(location.pathname);
-  const psycheSurface = isPsycheRoute(location.pathname);
+  const isPsyche = isPsycheRoute(routeLocation.pathname);
+  const wikiSurface = isWikiRoute(routeLocation.pathname);
+  const psycheSurface = isPsycheRoute(routeLocation.pathname);
   const autoCollapseSurface = wikiSurface || psycheSurface;
   const desktopRoutes = desktopNavIds
     .map((id) => NAV_ROUTE_REGISTRY.find((route) => route.id === id) ?? null)
@@ -1223,8 +1345,6 @@ function ShellFrame({
     .filter((route): route is ShellRouteDefinition => route !== null);
   const fetching = useIsFetching();
   const mutating = useIsMutating();
-  const reduceMotion = useReducedMotion();
-  const collapsed = collapseProgress >= 0.96;
   const activityCount = fetching + mutating;
   const ingestJobsQuery = useQuery({
     queryKey: ["forge-background-wiki-ingest-jobs"],
@@ -1306,31 +1426,31 @@ function ShellFrame({
   );
 
   const railLinks = useMemo(() => {
-    if (location.pathname.startsWith("/tasks/")) {
+    if (routeLocation.pathname.startsWith("/tasks/")) {
       return [
         { to: "/kanban", label: t("common.shell.rail.taskBackToKanban") },
         { to: "/today", label: t("common.shell.rail.taskOpenToday") }
       ];
     }
-    if (location.pathname.startsWith("/projects/")) {
+    if (routeLocation.pathname.startsWith("/projects/")) {
       return [
         { to: "/projects", label: t("common.shell.rail.projectAll") },
         { to: "/goals", label: t("common.shell.rail.projectGoals") }
       ];
     }
-    if (location.pathname.startsWith("/goals/")) {
+    if (routeLocation.pathname.startsWith("/goals/")) {
       return [
         { to: "/goals", label: t("common.shell.rail.goalAll") },
         { to: "/projects", label: t("common.shell.rail.goalProjects") }
       ];
     }
-    if (location.pathname.startsWith("/strategies")) {
+    if (routeLocation.pathname.startsWith("/strategies")) {
       return [
         { to: "/strategies", label: t("common.routeLabels.strategies") },
         { to: "/projects", label: t("common.shell.rail.projectAll") }
       ];
     }
-    if (isPsycheRoute(location.pathname)) {
+    if (isPsycheRoute(routeLocation.pathname)) {
       return [
         { to: "/psyche", label: t("common.shell.rail.psycheHub") },
         { to: "/psyche/reports", label: t("common.shell.rail.psycheReports") }
@@ -1340,7 +1460,7 @@ function ShellFrame({
       { to: "/overview", label: t("common.shell.rail.overview") },
       { to: "/today", label: t("common.shell.rail.today") }
     ];
-  }, [location.pathname, t]);
+  }, [routeLocation.pathname, t]);
 
   useEffect(() => {
     let lastStandaloneShiftAt = 0;
@@ -1438,49 +1558,70 @@ function ShellFrame({
   }, [autoCollapseSurface, navCollapsed]);
 
   useEffect(() => {
-    const syncCollapsed = () => {
-      const collapseDistance = window.innerWidth >= 1024 ? 72 : 56;
-      const nextProgress = clamp(
-        readWindowScrollTop() / collapseDistance,
+    const updateCollapsed = () => {
+      const collapseDistance = window.innerWidth >= 1024 ? 124 : 96;
+      const scrollRoot =
+        document.scrollingElement ??
+        document.documentElement ??
+        document.body;
+      const maxScrollable = Math.max(
         0,
-        1
+        scrollRoot.scrollHeight - window.innerHeight
       );
-      setCollapseProgress((current) =>
-        Math.abs(current - nextProgress) < 0.01 ? current : nextProgress
-      );
+      const nextProgress =
+        maxScrollable < collapseDistance
+          ? 0
+          : clamp(readWindowScrollTop() / collapseDistance, 0, 1);
+      if (Math.abs(collapseProgressRef.current - nextProgress) < 0.001) {
+        return;
+      }
+      collapseProgressRef.current = nextProgress;
+      applyShellCollapseVariables(shellRootRef.current, nextProgress);
     };
-
-    syncCollapsed();
-    window.addEventListener("scroll", syncCollapsed, { passive: true });
-    window.addEventListener("resize", syncCollapsed);
+    updateCollapsed();
+    window.addEventListener("scroll", updateCollapsed, { passive: true });
+    window.addEventListener("resize", updateCollapsed);
     return () => {
-      window.removeEventListener("scroll", syncCollapsed);
-      window.removeEventListener("resize", syncCollapsed);
+      window.removeEventListener("scroll", updateCollapsed);
+      window.removeEventListener("resize", updateCollapsed);
     };
   }, []);
-
-  const desktopHeaderPaddingTop = interpolateNumber(collapseProgress, 10, 6);
-  const desktopHeaderPaddingBottom = interpolateNumber(collapseProgress, 9, 6);
-  const desktopTitleSize = interpolateNumber(collapseProgress, 1.12, 1);
-  const desktopSecondaryOpacity = 1 - collapseProgress;
-  const desktopSecondaryMaxHeight = interpolateNumber(collapseProgress, 160, 0);
-  const desktopSecondarySpacing = interpolateNumber(collapseProgress, 12, 0);
-  const desktopSecondaryTranslateY = interpolateNumber(
-    collapseProgress,
-    0,
-    -10
+  const shellRootStyle = useMemo(
+    () =>
+      ({
+        "--forge-shell-collapse": "0",
+        "--forge-shell-desktop-header-padding-top": "18px",
+        "--forge-shell-desktop-header-padding-bottom": "15px",
+        "--forge-shell-desktop-title-size": "1.42rem",
+        "--forge-shell-desktop-primary-translate-y": "0px",
+        "--forge-shell-desktop-primary-scale": "1",
+        "--forge-shell-desktop-secondary-opacity": "1",
+        "--forge-shell-desktop-secondary-max-height": "176px",
+        "--forge-shell-desktop-secondary-spacing": "14px",
+        "--forge-shell-desktop-secondary-translate-y": "0px",
+        "--forge-shell-mobile-header-padding-top": "14px",
+        "--forge-shell-mobile-header-padding-bottom": "12px",
+        "--forge-shell-mobile-title-size": "1.2rem",
+        "--forge-shell-mobile-primary-translate-y": "0px",
+        "--forge-shell-mobile-primary-scale": "1",
+        "--forge-shell-mobile-copy-opacity": "1",
+        "--forge-shell-mobile-copy-max-height": "320px",
+        "--forge-shell-mobile-copy-translate-y": "0px",
+        "--forge-shell-hero-padding-top": "20px",
+        "--forge-shell-hero-padding-bottom": "20px",
+        "--forge-shell-hero-title-translate-y": "0px",
+        "--forge-shell-hero-title-scale": "1",
+        "--forge-shell-hero-description-opacity": "1",
+        "--forge-shell-hero-description-translate-y": "0px"
+      }) as CSSProperties,
+    []
   );
-
-  const mobileHeaderPaddingTop = interpolateNumber(collapseProgress, 9, 6);
-  const mobileHeaderPaddingBottom = interpolateNumber(collapseProgress, 8, 6);
-  const mobileTitleSize = interpolateNumber(collapseProgress, 1, 0.95);
-  const mobileCopyOpacity = 1 - collapseProgress;
-  const mobileCopyMaxHeight = interpolateNumber(collapseProgress, 240, 0);
-  const mobileCopyTranslateY = interpolateNumber(collapseProgress, 0, -8);
 
   return (
     <div
+      ref={shellRootRef}
       className={`min-h-screen ${shell.snapshot.meta.mode === "transitional-node" ? "theme-forge-obsidian" : ""}`}
+      style={shellRootStyle}
     >
       <CommandPalette
         open={paletteOpen}
@@ -1623,29 +1764,36 @@ function ShellFrame({
 
         <div className="min-h-screen">
           <TaskTimerRailProvider>
-            <motion.header
+            <header
               className="sticky top-0 z-30 border-b border-white/5 bg-[rgba(10,16,30,0.82)] px-6 backdrop-blur-xl"
-              animate={reduceMotion ? undefined : undefined}
               style={{
-                paddingTop: `${desktopHeaderPaddingTop}px`,
-                paddingBottom: `${desktopHeaderPaddingBottom}px`
+                paddingTop: "var(--forge-shell-desktop-header-padding-top)",
+                paddingBottom:
+                  "var(--forge-shell-desktop-header-padding-bottom)",
+                willChange: "padding, background-color"
               }}
-              transition={{ duration: 0.35, ease: "easeOut" }}
             >
               {/* ── Title row: page title + work bar + action buttons — all same height ── */}
-              <div className="flex items-center justify-between gap-4">
+              <div
+                className="flex items-center justify-between gap-4"
+                style={{
+                  transform:
+                    "translateY(var(--forge-shell-desktop-primary-translate-y)) scale(var(--forge-shell-desktop-primary-scale))",
+                  transformOrigin: "top center",
+                  willChange: "transform"
+                }}
+              >
                 <div className="flex min-w-0 flex-1 items-center gap-5">
-                  <motion.div
+                  <div
                     className="shrink-0 font-display text-white"
-                    animate={reduceMotion ? undefined : undefined}
                     style={{
-                      fontSize: `${desktopTitleSize}rem`,
-                      lineHeight: 1
+                      fontSize: "var(--forge-shell-desktop-title-size)",
+                      lineHeight: 1,
+                      willChange: "font-size"
                     }}
-                    transition={{ duration: 0.35, ease: "easeOut" }}
                   >
                     {getRouteLabel(active, t)}
-                  </motion.div>
+                  </div>
                   <div className="min-w-0 flex-1">
                     <TaskTimerRailBar
                       runs={shell.snapshot.activeTaskRuns}
@@ -1691,18 +1839,17 @@ function ShellFrame({
                 onComplete={onCompleteRun}
               />
 
-              <motion.div
+              <div
                 className="flex items-center justify-between gap-4 overflow-hidden border-t border-white/6"
-                animate={reduceMotion ? undefined : undefined}
                 style={{
-                  opacity: desktopSecondaryOpacity,
-                  maxHeight: `${desktopSecondaryMaxHeight}px`,
-                  marginTop: `${desktopSecondarySpacing}px`,
-                  paddingTop: `${desktopSecondarySpacing}px`,
-                  transform: `translateY(${desktopSecondaryTranslateY}px)`,
-                  pointerEvents: collapseProgress >= 0.96 ? "none" : "auto"
+                  opacity: "var(--forge-shell-desktop-secondary-opacity)",
+                  maxHeight: "var(--forge-shell-desktop-secondary-max-height)",
+                  marginTop: "var(--forge-shell-desktop-secondary-spacing)",
+                  paddingTop: "var(--forge-shell-desktop-secondary-spacing)",
+                  transform:
+                    "translateY(var(--forge-shell-desktop-secondary-translate-y))",
+                  willChange: "opacity, max-height, transform"
                 }}
-                transition={{ duration: 0.28, ease: "easeOut" }}
               >
                 <div className="flex min-w-0 flex-wrap items-center gap-2">
                   {railLinks.map((link) => (
@@ -1745,8 +1892,8 @@ function ShellFrame({
                         })}
                   </Badge>
                 </div>
-              </motion.div>
-            </motion.header>
+              </div>
+            </header>
           </TaskTimerRailProvider>
 
           <div className="px-6 pt-3">
@@ -1772,7 +1919,7 @@ function ShellFrame({
             />
           </div>
 
-          <main className="px-6 py-3">
+          <main className="px-6 pb-3">
             <RouteTransitionFrame
               routeKey={transitionKey}
               tone={isPsyche ? "psyche" : "core"}
@@ -1785,23 +1932,30 @@ function ShellFrame({
 
       <div className="min-h-[100dvh] overflow-x-clip lg:hidden">
         <TaskTimerRailProvider>
-          <motion.header
+          <header
             className="sticky top-0 z-30 border-b border-white/6 bg-[rgba(8,13,28,0.92)] px-4 backdrop-blur-xl"
-            animate={reduceMotion ? undefined : undefined}
             style={{
-              paddingTop: `${mobileHeaderPaddingTop}px`,
-              paddingBottom: `${mobileHeaderPaddingBottom}px`
+              paddingTop: "var(--forge-shell-mobile-header-padding-top)",
+              paddingBottom: "var(--forge-shell-mobile-header-padding-bottom)",
+              willChange: "padding, background-color"
             }}
-            transition={{ duration: 0.35, ease: "easeOut" }}
           >
-            <div className="flex items-center justify-between gap-2">
+            <div
+              className="flex items-center justify-between gap-2"
+              style={{
+                transform:
+                  "translateY(var(--forge-shell-mobile-primary-translate-y)) scale(var(--forge-shell-mobile-primary-scale))",
+                transformOrigin: "top center",
+                willChange: "transform"
+              }}
+            >
               <div className="flex min-w-0 flex-1 items-center gap-3">
                 <div
-                  className={cn(
-                    "shrink-0 font-display text-white transition",
-                    collapsed ? "text-[0.95rem]" : "text-base"
-                  )}
-                  style={{ fontSize: `${mobileTitleSize}rem` }}
+                  className="min-w-0 truncate font-display text-white"
+                  style={{
+                    fontSize: "var(--forge-shell-mobile-title-size)",
+                    willChange: "font-size"
+                  }}
                 >
                   {getRouteLabel(active, t)}
                 </div>
@@ -1829,7 +1983,7 @@ function ShellFrame({
                 </Button>
                 <div className="inline-flex min-h-[2.125rem] items-center gap-1.5 rounded-full border border-white/8 bg-white/[0.05] px-2.5 text-[12px] font-medium text-[var(--primary)]">
                   <Zap className="size-3.5 shrink-0" />
-                  <span>
+                  <span className="max-w-[5.5rem] truncate">
                     {formatCompactNumber(shell.snapshot.metrics.totalXp)} XP
                   </span>
                 </div>
@@ -1849,41 +2003,36 @@ function ShellFrame({
               onComplete={onCompleteRun}
             />
 
-            <motion.div
+            <div
               className="overflow-hidden"
-              animate={reduceMotion ? undefined : undefined}
               style={{
-                opacity: mobileCopyOpacity,
-                maxHeight: `${mobileCopyMaxHeight}px`,
-                transform: `translateY(${mobileCopyTranslateY}px)`,
-                pointerEvents: collapseProgress >= 0.96 ? "none" : "auto"
+                opacity: "var(--forge-shell-mobile-copy-opacity)",
+                maxHeight: "var(--forge-shell-mobile-copy-max-height)",
+                transform:
+                  "translateY(var(--forge-shell-mobile-copy-translate-y))",
+                willChange: "opacity, max-height, transform"
               }}
-              transition={{ duration: 0.28, ease: "easeOut" }}
             >
               <div className="mt-2 text-[13px] leading-5 text-white/52">
                 {getRouteDetail(active, t)}
               </div>
-            </motion.div>
-            {!collapsed ? (
-              <>
-                <div className="mt-2">
-                  <AmbientActivityPill
-                    active={activityCount > 0 || hasActiveIngestJobs}
-                    label={activityLabel}
-                    onClick={() => setBackgroundActivityOpen(true)}
-                  />
-                </div>
-                <div className="mt-3 overflow-x-auto pb-1">
-                  <UserScopeSelector
-                    users={shell.snapshot.users}
-                    selectedUserIds={shell.selectedUserIds}
-                    onChange={shell.setSelectedUserIds}
-                    compact
-                  />
-                </div>
-              </>
-            ) : null}
-          </motion.header>
+              <div className="mt-2">
+                <AmbientActivityPill
+                  active={activityCount > 0 || hasActiveIngestJobs}
+                  label={activityLabel}
+                  onClick={() => setBackgroundActivityOpen(true)}
+                />
+              </div>
+              <div className="mt-3 overflow-x-auto pb-1">
+                <UserScopeSelector
+                  users={shell.snapshot.users}
+                  selectedUserIds={shell.selectedUserIds}
+                  onChange={shell.setSelectedUserIds}
+                  compact
+                />
+              </div>
+            </div>
+          </header>
         </TaskTimerRailProvider>
 
         <StartWorkComposer
@@ -1908,7 +2057,7 @@ function ShellFrame({
         />
 
         <main
-          className="overflow-x-clip px-4 py-2.5 lg:pb-24"
+          className="overflow-x-clip px-4 pb-2.5 lg:pb-24"
           style={{
             paddingBottom: "calc(var(--forge-mobile-nav-clearance) + 2.5rem)",
             paddingLeft: "max(1rem, calc(var(--forge-safe-area-left) + 1rem))",
@@ -2062,6 +2211,10 @@ export function AppShell() {
   const xpTimerRef = useRef<number | null>(null);
   const previousXpRef = useRef<number | null>(null);
   const queryClient = useQueryClient();
+  const routerLocation = useLocation();
+  const routerLocationContext = useContext(UNSAFE_LocationContext);
+  const outlet = useOutlet();
+  const fetching = useIsFetching();
   const [selectedUserIds, setSelectedUserIds] = useState<string[]>(
     readStoredSelectedUserIds
   );
@@ -2074,6 +2227,24 @@ export function AppShell() {
   const [xpNotice, setXpNotice] = useState<{
     deltaXp: number;
     totalXp: number;
+  } | null>(null);
+  const routePathKey = `${routerLocation.pathname}${routerLocation.search}${routerLocation.hash}`;
+  const previousFetchingRef = useRef(fetching);
+  const handoffTimerRef = useRef<number | null>(null);
+  const [displayedRoute, setDisplayedRoute] = useState<{
+    key: string;
+    node: ReactNode;
+    location: RouterLocation;
+  }>({
+    key: routePathKey,
+    node: outlet,
+    location: routerLocation
+  });
+  const [pendingRoute, setPendingRoute] = useState<{
+    key: string;
+    node: ReactNode;
+    location: RouterLocation;
+    baselineFetching: number;
   } | null>(null);
   const operatorSessionQuery = useQuery({
     queryKey: ["forge-shell-operator-session"],
@@ -2464,6 +2635,86 @@ export function AppShell() {
     return () => window.clearInterval(timer);
   }, [queryClient, snapshotQuery.data]);
 
+  useEffect(() => {
+    previousFetchingRef.current = fetching;
+  }, [fetching]);
+
+  useEffect(() => {
+    if (routePathKey === displayedRoute.key && pendingRoute === null) {
+      setDisplayedRoute((current) =>
+        current.node === outlet && current.location === routerLocation
+          ? current
+          : {
+              ...current,
+              node: outlet,
+              location: routerLocation
+            }
+      );
+      return;
+    }
+
+    if (routePathKey !== displayedRoute.key) {
+      setPendingRoute((current) => {
+        if (current?.key === routePathKey && current.node === outlet) {
+          return current;
+        }
+        return {
+          key: routePathKey,
+          node: outlet,
+          location: routerLocation,
+          baselineFetching: previousFetchingRef.current
+        };
+      });
+    }
+  }, [displayedRoute.key, outlet, pendingRoute, routePathKey, routerLocation]);
+
+  useEffect(() => {
+    if (!pendingRoute) {
+      if (handoffTimerRef.current !== null) {
+        window.clearTimeout(handoffTimerRef.current);
+        handoffTimerRef.current = null;
+      }
+      return;
+    }
+
+    if (fetching > pendingRoute.baselineFetching) {
+      if (handoffTimerRef.current !== null) {
+        window.clearTimeout(handoffTimerRef.current);
+        handoffTimerRef.current = null;
+      }
+      return;
+    }
+
+    if (handoffTimerRef.current !== null) {
+      return;
+    }
+
+    handoffTimerRef.current = window.setTimeout(() => {
+      setDisplayedRoute({
+        key: pendingRoute.key,
+        node: pendingRoute.node,
+        location: pendingRoute.location
+      });
+      setPendingRoute(null);
+      handoffTimerRef.current = null;
+    }, 140);
+
+    return () => {
+      if (handoffTimerRef.current !== null) {
+        window.clearTimeout(handoffTimerRef.current);
+        handoffTimerRef.current = null;
+      }
+    };
+  }, [fetching, pendingRoute]);
+
+  useEffect(() => {
+    return () => {
+      if (handoffTimerRef.current !== null) {
+        window.clearTimeout(handoffTimerRef.current);
+      }
+    };
+  }, []);
+
   if (
     operatorSessionQuery.isLoading ||
     snapshotQuery.isLoading ||
@@ -2569,12 +2820,22 @@ export function AppShell() {
       setStartWorkOpen(true);
     }
   };
+  const visibleLocation = pendingRoute
+    ? displayedRoute.location
+    : routerLocation;
+  const displayedLocationContext = routerLocationContext
+    ? {
+        ...routerLocationContext,
+        location: displayedRoute.location
+      }
+    : null;
 
   return (
     <I18nProvider locale={settingsQuery.data.settings.localePreference}>
       <ShellContext.Provider value={contextValue}>
         <>
           <ShellFrame
+            routeLocation={visibleLocation}
             settings={settingsQuery.data.settings}
             timerPending={
               focusTaskRunMutation.isPending ||
@@ -2658,7 +2919,25 @@ export function AppShell() {
               });
             }}
           >
-            <Outlet context={contextValue} />
+            <div className="relative min-w-0">
+              {displayedLocationContext ? (
+                <UNSAFE_LocationContext.Provider
+                  value={displayedLocationContext}
+                >
+                  {displayedRoute.node}
+                </UNSAFE_LocationContext.Provider>
+              ) : (
+                displayedRoute.node
+              )}
+              {pendingRoute ? (
+                <div
+                  aria-hidden="true"
+                  className="pointer-events-none absolute inset-0 overflow-hidden opacity-0"
+                >
+                  {pendingRoute.node}
+                </div>
+              ) : null}
+            </div>
           </ShellFrame>
           {xpNotice ? (
             <div className="pointer-events-none fixed inset-x-0 bottom-24 z-50 flex justify-center px-4 lg:bottom-6">

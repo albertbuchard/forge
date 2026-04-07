@@ -21,7 +21,7 @@ async function issueOperatorSessionCookie(
   return `${cookie.name}=${cookie.value}`;
 }
 
-test("ai processors can be created, linked, and run through the route endpoint", async () => {
+test("ai connectors can be created, run, and expose published outputs", async () => {
   const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-ai-proc-"));
   const originalFetch = globalThis.fetch;
   const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
@@ -92,99 +92,167 @@ test("ai processors can be created, linked, and run through the route endpoint",
     });
     assert.equal(patchResponse.statusCode, 200);
 
-    const processorResponse = await app.inject({
+    const connectorResponse = await app.inject({
       method: "POST",
-      url: "/api/v1/surfaces/workbench/ai-processors",
+      url: "/api/v1/ai-connectors",
       headers: {
         cookie: operatorCookie,
         host: "127.0.0.1:4317"
       },
       payload: {
-        title: "Test processor",
-        promptFlow: "Write the final answer.",
-        contextInput: "Use the linked widget data.",
-        agentIds: ["agt_forge_default"]
-      }
-    });
-    assert.equal(processorResponse.statusCode, 201);
-    const processorBody = processorResponse.json() as {
-      processor: { id: string; slug: string };
-    };
-    const processorId = processorBody.processor.id;
-    const processorSlug = processorBody.processor.slug;
-
-    const linkResponse = await app.inject({
-      method: "POST",
-      url: "/api/v1/ai-processor-links",
-      headers: {
-        cookie: operatorCookie,
-        host: "127.0.0.1:4317"
-      },
-      payload: {
-        surfaceId: "workbench",
-        sourceWidgetId: "time",
-        targetProcessorId: processorId,
-        accessMode: "read",
-        capabilityMode: "content",
-        metadata: {
-          widgetType: "time"
+        title: "Test connector",
+        description: "Connector under test",
+        kind: "functor",
+        homeSurfaceId: "overview",
+        graph: {
+          nodes: [
+            {
+              id: "node_box",
+              type: "box_input",
+              position: { x: 80, y: 120 },
+              data: {
+                label: "Overview priorities",
+                description: "Structured overview context",
+                boxId: "overview:priorities",
+                enabledToolKeys: []
+              }
+            },
+            {
+              id: "node_functor",
+              type: "functor",
+              position: { x: 360, y: 120 },
+              data: {
+                label: "Summarize",
+                description: "Summarize the linked box",
+                prompt: "Summarize the linked Forge context and return one line.",
+                systemPrompt: "",
+                enabledToolKeys: [],
+                modelConfig: {
+                  connectionId,
+                  provider: "openai-api",
+                  baseUrl: "https://api.openai.com/v1",
+                  model: "gpt-5.4-mini",
+                  thinking: null,
+                  verbosity: null
+                }
+              }
+            },
+            {
+              id: "node_output",
+              type: "output",
+              position: { x: 680, y: 120 },
+              data: {
+                label: "Output",
+                description: "Published connector output",
+                outputKey: "primary"
+              }
+            }
+          ],
+          edges: [
+            {
+              id: "edge_box_functor",
+              source: "node_box",
+              target: "node_functor",
+              sourceHandle: null,
+              targetHandle: null,
+              label: null
+            },
+            {
+              id: "edge_functor_output",
+              source: "node_functor",
+              target: "node_output",
+              sourceHandle: null,
+              targetHandle: null,
+              label: null
+            }
+          ]
         }
       }
     });
-    assert.equal(linkResponse.statusCode, 201);
+    assert.equal(connectorResponse.statusCode, 201);
+    const connectorBody = connectorResponse.json() as {
+      connector: { id: string; slug: string; publishedOutputs: Array<{ id: string }> };
+    };
+    const connectorId = connectorBody.connector.id;
+    const connectorSlug = connectorBody.connector.slug;
+    assert.equal(connectorBody.connector.publishedOutputs.length, 1);
 
-    const graphResponse = await app.inject({
+    const catalogResponse = await app.inject({
       method: "GET",
-      url: "/api/v1/surfaces/workbench/ai-processors",
+      url: "/api/v1/ai-connectors/catalog/boxes",
       headers: {
         cookie: operatorCookie,
         host: "127.0.0.1:4317"
       }
     });
-    assert.equal(graphResponse.statusCode, 200);
-    const graph = graphResponse.json() as {
-      graph: { processors: Array<{ id: string }>; links: Array<{ id: string }> };
+    assert.equal(catalogResponse.statusCode, 200);
+    const catalogBody = catalogResponse.json() as {
+      boxes: Array<{ boxId: string }>;
     };
-    assert.equal(graph.graph.processors.length, 1);
-    assert.equal(graph.graph.links.length, 1);
+    assert.ok(
+      catalogBody.boxes.some((entry) => entry.boxId === "overview:priorities")
+    );
 
     const runResponse = await app.inject({
       method: "POST",
-      url: `/api/v1/aiproc/${processorSlug}/run`,
+      url: `/api/v1/ai-connectors/${connectorId}/run`,
       headers: {
         cookie: operatorCookie,
         host: "127.0.0.1:4317"
       },
       payload: {
-        input: "run now"
+        userInput: "run now"
       }
     });
     assert.equal(runResponse.statusCode, 200);
     const runBody = runResponse.json() as {
-      output: { concatenated: string; byAgent: Record<string, string> };
+      connector: { id: string };
+      run: { result: { primaryText: string } };
     };
-    assert.match(runBody.output.concatenated, /processor-output/);
-    assert.ok(
-      Object.values(runBody.output.byAgent).includes("processor-output")
-    );
+    assert.equal(runBody.connector.id, connectorId);
+    assert.match(runBody.run.result.primaryText, /processor-output/);
 
-    const cycleResponse = await app.inject({
-      method: "POST",
-      url: "/api/v1/ai-processor-links",
+    const outputResponse = await app.inject({
+      method: "GET",
+      url: `/api/v1/ai-connectors/${connectorId}/output`,
       headers: {
         cookie: operatorCookie,
         host: "127.0.0.1:4317"
-      },
-      payload: {
-        surfaceId: "workbench",
-        sourceWidgetId: `aiproc:${processorId}`,
-        targetProcessorId: processorId,
-        accessMode: "read",
-        capabilityMode: "processor",
-        metadata: {}
       }
     });
-    assert.equal(cycleResponse.statusCode, 500);
+    assert.equal(outputResponse.statusCode, 200);
+    const outputBody = outputResponse.json() as {
+      connector: { slug: string };
+      output: { primaryText: string };
+    };
+    assert.equal(outputBody.connector.slug, connectorSlug);
+    assert.match(outputBody.output.primaryText, /processor-output/);
+
+    const runsResponse = await app.inject({
+      method: "GET",
+      url: `/api/v1/ai-connectors/${connectorId}/runs`,
+      headers: {
+        cookie: operatorCookie,
+        host: "127.0.0.1:4317"
+      }
+    });
+    assert.equal(runsResponse.statusCode, 200);
+    const runsBody = runsResponse.json() as {
+      runs: Array<{ status: string; result: { primaryText: string } }>;
+    };
+    assert.equal(runsBody.runs.length, 1);
+    assert.equal(runsBody.runs[0]?.status, "completed");
+    assert.match(runsBody.runs[0]?.result.primaryText ?? "", /processor-output/);
+
+    const bySlugResponse = await app.inject({
+      method: "GET",
+      url: `/api/v1/ai-connectors/by-slug/${connectorSlug}`,
+      headers: {
+        cookie: operatorCookie,
+        host: "127.0.0.1:4317"
+      }
+    });
+    assert.equal(bySlugResponse.statusCode, 200);
   } finally {
     globalThis.fetch = originalFetch;
     await app.close();
@@ -207,19 +275,19 @@ test("surface layouts round-trip through the surface layout routes", async () =>
         host: "127.0.0.1:4317"
       },
       payload: {
-        layouts: {
-          lg: [{ i: "hero", x: 0, y: 0, w: 12, h: 2 }],
-          md: [{ i: "hero", x: 0, y: 0, w: 10, h: 2 }],
-          sm: [{ i: "hero", x: 0, y: 0, w: 6, h: 2 }],
-          xs: [{ i: "hero", x: 0, y: 0, w: 4, h: 2 }],
-          xxs: [{ i: "hero", x: 0, y: 0, w: 2, h: 2 }]
-        },
+        order: ["hero", "summary"],
         widgets: {
           hero: {
             hidden: false,
             titleVisible: false,
             descriptionVisible: false,
-            density: "dense"
+            fullWidth: true
+          },
+          summary: {
+            hidden: true,
+            titleVisible: true,
+            descriptionVisible: true,
+            fullWidth: false
           }
         }
       }
@@ -238,17 +306,19 @@ test("surface layouts round-trip through the surface layout routes", async () =>
     const body = getResponse.json() as {
       layout: {
         surfaceId: string;
+        order: string[];
         widgets: {
           hero: {
             titleVisible: boolean;
-            density: string;
+            fullWidth: boolean;
           };
         };
       };
     };
     assert.equal(body.layout.surfaceId, "overview");
+    assert.deepEqual(body.layout.order, ["hero", "summary"]);
     assert.equal(body.layout.widgets.hero.titleVisible, false);
-    assert.equal(body.layout.widgets.hero.density, "dense");
+    assert.equal(body.layout.widgets.hero.fullWidth, true);
 
     const resetResponse = await app.inject({
       method: "POST",

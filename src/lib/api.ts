@@ -66,6 +66,7 @@ import type {
   MovementMonthData,
   MovementSelectionAggregate,
   MovementSettingsPayload,
+  MovementTimelineData,
   MovementTripDetailData,
   Strategy,
   Tag,
@@ -2374,7 +2375,7 @@ export function getSurfaceLayout(surfaceId: string) {
 
 export function saveSurfaceLayout(
   surfaceId: string,
-  payload: Pick<import("./types").SurfaceLayoutPayload, "layouts" | "widgets">
+  payload: Pick<import("./types").SurfaceLayoutPayload, "order" | "widgets">
 ) {
   return request<{ layout: import("./types").SurfaceLayoutPayload }>(
     `/api/v1/surfaces/${surfaceId}/layout`,
@@ -2511,6 +2512,129 @@ export function runAiProcessorBySlug(
   });
 }
 
+export function listForgeBoxCatalog() {
+  return request<{ boxes: import("./types").ForgeBoxCatalogEntry[] }>(
+    "/api/v1/ai-connectors/catalog/boxes"
+  );
+}
+
+export function listAiConnectors() {
+  return request<{ connectors: import("./types").AiConnector[] }>(
+    "/api/v1/ai-connectors"
+  );
+}
+
+export function createAiConnector(input: {
+  title: string;
+  description?: string;
+  kind?: import("./types").AiConnectorKind;
+  homeSurfaceId?: string | null;
+  endpointEnabled?: boolean;
+  graph?: {
+    nodes: import("./types").AiConnectorNode[];
+    edges: import("./types").AiConnectorEdge[];
+  };
+}) {
+  return request<{ connector: import("./types").AiConnector }>(
+    "/api/v1/ai-connectors",
+    {
+      method: "POST",
+      body: JSON.stringify(input)
+    }
+  );
+}
+
+export function getAiConnector(connectorId: string) {
+  return request<{
+    connector: import("./types").AiConnector;
+    runs: import("./types").AiConnectorRun[];
+    conversation: import("./types").AiConnectorConversation | null;
+  }>(`/api/v1/ai-connectors/${connectorId}`);
+}
+
+export function updateAiConnector(
+  connectorId: string,
+  patch: Partial<{
+    title: string;
+    description: string;
+    kind: import("./types").AiConnectorKind;
+    homeSurfaceId: string | null;
+    endpointEnabled: boolean;
+    graph: {
+      nodes: import("./types").AiConnectorNode[];
+      edges: import("./types").AiConnectorEdge[];
+    };
+  }>
+) {
+  return request<{ connector: import("./types").AiConnector }>(
+    `/api/v1/ai-connectors/${connectorId}`,
+    {
+      method: "PATCH",
+      body: JSON.stringify(patch)
+    }
+  );
+}
+
+export function deleteAiConnector(connectorId: string) {
+  return request<{ connector: import("./types").AiConnector }>(
+    `/api/v1/ai-connectors/${connectorId}`,
+    {
+      method: "DELETE"
+    }
+  );
+}
+
+export function runAiConnector(
+  connectorId: string,
+  input: {
+    userInput?: string;
+    context?: Record<string, unknown>;
+    boxSnapshots?: Record<string, unknown>;
+    conversationId?: string | null;
+  }
+) {
+  return request<{
+    connector: import("./types").AiConnector;
+    run: import("./types").AiConnectorRun;
+    conversation: import("./types").AiConnectorConversation | null;
+  }>(`/api/v1/ai-connectors/${connectorId}/run`, {
+    method: "POST",
+    body: JSON.stringify(input)
+  });
+}
+
+export function chatAiConnector(
+  connectorId: string,
+  input: {
+    userInput?: string;
+    context?: Record<string, unknown>;
+    boxSnapshots?: Record<string, unknown>;
+    conversationId?: string | null;
+  }
+) {
+  return request<{
+    connector: import("./types").AiConnector;
+    run: import("./types").AiConnectorRun;
+    conversation: import("./types").AiConnectorConversation | null;
+  }>(`/api/v1/ai-connectors/${connectorId}/chat`, {
+    method: "POST",
+    body: JSON.stringify(input)
+  });
+}
+
+export function getAiConnectorOutput(connectorId: string) {
+  return request<{
+    connector: import("./types").AiConnector;
+    output: import("./types").AiConnectorRunResult | null;
+  }>(`/api/v1/ai-connectors/${connectorId}/output`);
+}
+
+export function getAiConnectorRuns(connectorId: string) {
+  return request<{ runs: import("./types").AiConnectorRun[] }>(
+    `/api/v1/ai-connectors/${connectorId}/runs`
+  );
+}
+
 export function getCompanionOverview(userIds?: string[] | unknown) {
   const search = new URLSearchParams();
   appendUserIds(search, coerceUserIds(userIds));
@@ -2640,6 +2764,51 @@ export function patchMovementPlace(
 export function getMovementTripDetail(tripId: string) {
   return request<{ movement: MovementTripDetailData }>(
     `/api/v1/movement/trips/${tripId}`
+  );
+}
+
+export function getMovementTimeline(input?: {
+  before?: string;
+  limit?: number;
+  userIds?: string[] | unknown;
+}) {
+  const search = new URLSearchParams();
+  if (input?.before) {
+    search.set("before", input.before);
+  }
+  if (typeof input?.limit === "number") {
+    search.set("limit", String(input.limit));
+  }
+  appendUserIds(search, coerceUserIds(input?.userIds));
+  const suffix = search.size > 0 ? `?${search.toString()}` : "";
+  return request<{ movement: MovementTimelineData }>(
+    `/api/v1/movement/timeline${suffix}`
+  );
+}
+
+export function patchMovementStay(
+  stayId: string,
+  patch: Record<string, unknown>
+) {
+  return request<{ stay: MovementTimelineData["segments"][number]["stay"] }>(
+    `/api/v1/movement/stays/${stayId}`,
+    {
+      method: "PATCH",
+      body: JSON.stringify(patch)
+    }
+  );
+}
+
+export function patchMovementTrip(
+  tripId: string,
+  patch: Record<string, unknown>
+) {
+  return request<{ trip: MovementTimelineData["segments"][number]["trip"] }>(
+    `/api/v1/movement/trips/${tripId}`,
+    {
+      method: "PATCH",
+      body: JSON.stringify(patch)
+    }
   );
 }
 

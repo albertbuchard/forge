@@ -28,6 +28,7 @@ import { Card } from "@/components/ui/card";
 import { ErrorState } from "@/components/ui/page-state";
 import { Input } from "@/components/ui/input";
 import { SurfaceSkeleton } from "@/components/experience/surface-skeleton";
+import { MovementLifeTimeline } from "@/components/movement/movement-life-timeline";
 import {
   createMovementPlace,
   getMovementAllTime,
@@ -43,7 +44,7 @@ import {
 import { cn } from "@/lib/utils";
 import type { MovementKnownPlace, MovementTripPointRecord } from "@/lib/types";
 
-type MovementViewMode = "day" | "month" | "all_time";
+type MovementViewMode = "life" | "day" | "month" | "all_time";
 type MonthMetric = "distanceMeters" | "movingSeconds" | "idleSeconds" | "caloriesKcal";
 
 function formatDateLabel(value: string) {
@@ -321,7 +322,7 @@ function PlaceEditorDialog({
                     categoryTags: event.target.value
                   }))
                 }
-                placeholder="home, grocery, social"
+                placeholder="home, gym, holiday, parents-house"
               />
             </div>
           </div>
@@ -364,7 +365,7 @@ export function MovementPage() {
   const selectedUserIds = Array.isArray(shell.selectedUserIds)
     ? shell.selectedUserIds
     : [];
-  const [viewMode, setViewMode] = useState<MovementViewMode>("day");
+  const [viewMode, setViewMode] = useState<MovementViewMode>("life");
   const [targetDate, setTargetDate] = useState(
     new Date().toISOString().slice(0, 10)
   );
@@ -545,7 +546,7 @@ export function MovementPage() {
         badge={`${movementDay.summary.tripCount} trips today`}
         actions={
           <div className="flex flex-wrap gap-2">
-            {(["day", "month", "all_time"] as const).map((mode) => (
+            {(["life", "day", "month", "all_time"] as const).map((mode) => (
               <Button
                 key={mode}
                 variant="ghost"
@@ -557,7 +558,11 @@ export function MovementPage() {
                 )}
                 onClick={() => setViewMode(mode)}
               >
-                {mode === "all_time" ? "All time" : mode.charAt(0).toUpperCase() + mode.slice(1)}
+                {mode === "all_time"
+                  ? "All time"
+                  : mode === "life"
+                    ? "Life"
+                    : mode.charAt(0).toUpperCase() + mode.slice(1)}
               </Button>
             ))}
           </div>
@@ -684,6 +689,10 @@ export function MovementPage() {
           </div>
         </Card>
       </section>
+
+      {viewMode === "life" ? (
+        <MovementLifeTimeline userIds={selectedUserIds} />
+      ) : null}
 
       {viewMode === "day" ? (
         <section className="grid gap-4 xl:grid-cols-[minmax(0,1.55fr)_minmax(22rem,1fr)]">
@@ -1053,7 +1062,7 @@ export function MovementPage() {
                 Known places
               </div>
               <div className="mt-2 text-sm text-white/58">
-                These landmarks anchor stays, travel XP, and contextual reasoning in both Forge and the companion.
+                These landmarks anchor stays, travel XP, and contextual reasoning in both Forge and the companion. Seeded tags like home, workplace, gym, holiday, grocery, or nature matter for downstream calculations, but place tags stay open-ended.
               </div>
             </div>
             <div className="flex gap-2">

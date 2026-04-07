@@ -429,7 +429,7 @@ export function ProjectsPage() {
             className="flex h-full flex-col transition hover:bg-white/[0.06]"
           >
             <div className="flex items-center justify-between gap-3">
-              <div className="flex flex-wrap items-center gap-2">
+              <div className="flex min-w-0 flex-wrap items-center gap-2">
                 <EntityBadge kind="goal" label={project.goalTitle} compact />
                 <UserBadge user={project.user} compact />
               </div>
@@ -460,6 +460,7 @@ export function ProjectsPage() {
                   label={project.title}
                   variant="heading"
                   size="xl"
+                  lines={2}
                 />
               </Link>
             </div>
@@ -551,6 +552,9 @@ export function ProjectsPage() {
       defaultWidth: 12,
       defaultHeight: 2,
       removable: false,
+      surfaceChrome: "none",
+      defaultTitleVisible: false,
+      defaultDescriptionVisible: false,
       render: () => (
         <PageHero
           entityKind="project"
@@ -617,7 +621,7 @@ export function ProjectsPage() {
                         {project.goalTitle}
                       </div>
                     </div>
-                    <Badge className="bg-white/[0.08] text-white/72">
+                    <Badge className="shrink-0 bg-white/[0.08] text-white/72">
                       {project.earnedPoints} xp
                     </Badge>
                   </div>

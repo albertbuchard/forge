@@ -1332,38 +1332,20 @@ export const aiProcessorToolSchema = z.object({
     endpoint: trimmedString.default(""),
     mode: aiProcessorCapabilityModeSchema.default("tool")
 });
-export const surfaceLayoutBreakpointItemSchema = z.object({
-    i: nonEmptyTrimmedString,
-    x: z.number().int().min(0),
-    y: z.number().int().min(0),
-    w: z.number().int().min(1).max(24),
-    h: z.number().int().min(1).max(24),
-    minW: z.number().int().min(1).max(24).optional(),
-    maxW: z.number().int().min(1).max(24).optional(),
-    minH: z.number().int().min(1).max(24).optional(),
-    maxH: z.number().int().min(1).max(24).optional()
-});
-export const surfaceLayoutBreakpointsSchema = z.object({
-    lg: z.array(surfaceLayoutBreakpointItemSchema).default([]),
-    md: z.array(surfaceLayoutBreakpointItemSchema).default([]),
-    sm: z.array(surfaceLayoutBreakpointItemSchema).default([]),
-    xs: z.array(surfaceLayoutBreakpointItemSchema).default([]),
-    xxs: z.array(surfaceLayoutBreakpointItemSchema).default([])
-});
 export const surfaceWidgetPreferencesSchema = z.object({
     hidden: z.boolean().default(false),
+    fullWidth: z.boolean().default(false),
     titleVisible: z.boolean().default(true),
-    descriptionVisible: z.boolean().default(true),
-    density: surfaceWidgetDensitySchema.default("compact")
+    descriptionVisible: z.boolean().default(true)
 });
 export const surfaceLayoutPayloadSchema = z.object({
     surfaceId: nonEmptyTrimmedString,
-    layouts: surfaceLayoutBreakpointsSchema,
+    order: z.array(nonEmptyTrimmedString).default([]),
     widgets: z.record(z.string(), surfaceWidgetPreferencesSchema).default({}),
     updatedAt: z.string()
 });
 export const writeSurfaceLayoutSchema = z.object({
-    layouts: surfaceLayoutBreakpointsSchema,
+    order: z.array(nonEmptyTrimmedString).default([]),
     widgets: z.record(z.string(), surfaceWidgetPreferencesSchema).default({})
 });
 export const aiProcessorSchema = z.object({
@@ -1421,6 +1403,136 @@ export const surfaceProcessorGraphPayloadSchema = z.object({
     surfaceId: z.string(),
     processors: z.array(aiProcessorSchema),
     links: z.array(aiProcessorLinkSchema)
+});
+export const forgeBoxCapabilityModeSchema = z.enum([
+    "content",
+    "tool",
+    "action",
+    "mcp"
+]);
+export const forgeBoxToolAdapterSchema = z.object({
+    key: nonEmptyTrimmedString,
+    label: nonEmptyTrimmedString,
+    description: trimmedString.default(""),
+    accessMode: aiProcessorAccessModeSchema.default("read")
+});
+export const forgeBoxCatalogEntrySchema = z.object({
+    boxId: nonEmptyTrimmedString,
+    surfaceId: trimmedString.nullable(),
+    routePath: trimmedString.nullable(),
+    label: nonEmptyTrimmedString,
+    description: trimmedString.default(""),
+    category: nonEmptyTrimmedString,
+    capabilityModes: z.array(forgeBoxCapabilityModeSchema).default(["content"]),
+    toolAdapters: z.array(forgeBoxToolAdapterSchema).default([])
+});
+export const forgeBoxSnapshotSchema = z.object({
+    boxId: nonEmptyTrimmedString,
+    label: nonEmptyTrimmedString,
+    capturedAt: z.string(),
+    contentText: z.string(),
+    contentJson: z.record(z.string(), z.unknown()).nullable(),
+    tools: z.array(forgeBoxToolAdapterSchema).default([])
+});
+export const aiConnectorKindSchema = z.enum(["functor", "chat"]);
+export const aiConnectorNodeTypeSchema = z.enum([
+    "box_input",
+    "user_input",
+    "functor",
+    "chat",
+    "output"
+]);
+export const aiConnectorNodeModelConfigSchema = z.object({
+    connectionId: trimmedString.nullable().default(null),
+    provider: aiModelProviderSchema.nullable().default(null),
+    baseUrl: trimmedString.nullable().default(null),
+    model: trimmedString.default(""),
+    thinking: trimmedString.nullable().default(null),
+    verbosity: trimmedString.nullable().default(null)
+});
+export const aiConnectorNodeSchema = z.object({
+    id: nonEmptyTrimmedString,
+    type: aiConnectorNodeTypeSchema,
+    position: z.object({
+        x: z.number(),
+        y: z.number()
+    }),
+    data: z.object({
+        label: nonEmptyTrimmedString,
+        description: trimmedString.default(""),
+        boxId: trimmedString.nullable().optional(),
+        prompt: trimmedString.optional(),
+        systemPrompt: trimmedString.optional(),
+        outputKey: trimmedString.optional(),
+        enabledToolKeys: z.array(nonEmptyTrimmedString).default([]),
+        modelConfig: aiConnectorNodeModelConfigSchema.optional()
+    })
+});
+export const aiConnectorEdgeSchema = z.object({
+    id: nonEmptyTrimmedString,
+    source: nonEmptyTrimmedString,
+    target: nonEmptyTrimmedString,
+    sourceHandle: trimmedString.nullable().optional(),
+    targetHandle: trimmedString.nullable().optional(),
+    label: trimmedString.nullable().optional()
+});
+export const aiConnectorOutputSchema = z.object({
+    id: nonEmptyTrimmedString,
+    nodeId: nonEmptyTrimmedString,
+    label: nonEmptyTrimmedString,
+    apiPath: nonEmptyTrimmedString
+});
+export const aiConnectorRunResultSchema = z.object({
+    primaryText: z.string(),
+    outputs: z.record(z.string(), z.object({
+        label: z.string(),
+        text: z.string(),
+        json: z.record(z.string(), z.unknown()).nullable()
+    }))
+});
+export const aiConnectorRunSchema = z.object({
+    id: nonEmptyTrimmedString,
+    connectorId: nonEmptyTrimmedString,
+    mode: z.enum(["run", "chat"]),
+    status: z.enum(["running", "completed", "failed"]),
+    userInput: z.string(),
+    context: z.record(z.string(), z.unknown()).default({}),
+    conversationId: trimmedString.nullable(),
+    result: aiConnectorRunResultSchema.nullable(),
+    error: z.string().nullable(),
+    createdAt: z.string(),
+    completedAt: z.string().nullable()
+});
+export const aiConnectorConversationSchema = z.object({
+    id: nonEmptyTrimmedString,
+    connectorId: nonEmptyTrimmedString,
+    provider: trimmedString.nullable(),
+    externalConversationId: trimmedString.nullable(),
+    transcript: z.array(z.object({
+        role: z.enum(["system", "developer", "user", "assistant", "tool"]),
+        text: z.string(),
+        createdAt: z.string()
+    })),
+    createdAt: z.string(),
+    updatedAt: z.string()
+});
+export const aiConnectorSchema = z.object({
+    id: nonEmptyTrimmedString,
+    slug: nonEmptyTrimmedString,
+    title: nonEmptyTrimmedString,
+    description: trimmedString.default(""),
+    kind: aiConnectorKindSchema,
+    homeSurfaceId: trimmedString.nullable(),
+    endpointEnabled: z.boolean().default(true),
+    graph: z.object({
+        nodes: z.array(aiConnectorNodeSchema).default([]),
+        edges: z.array(aiConnectorEdgeSchema).default([])
+    }),
+    publishedOutputs: z.array(aiConnectorOutputSchema).default([]),
+    lastRun: aiConnectorRunSchema.nullable(),
+    legacyProcessorId: trimmedString.nullable().default(null),
+    createdAt: z.string(),
+    updatedAt: z.string()
 });
 export const openAiCodexOauthSessionSchema = z.object({
     id: z.string(),
@@ -2605,6 +2717,38 @@ export const runAiProcessorSchema = z.object({
     input: trimmedString.default(""),
     context: z.record(z.string(), z.unknown()).default({}),
     widgetSnapshots: z.record(z.string(), z.unknown()).default({})
+});
+export const createAiConnectorSchema = z.object({
+    title: nonEmptyTrimmedString,
+    description: trimmedString.default(""),
+    kind: aiConnectorKindSchema.default("functor"),
+    homeSurfaceId: trimmedString.nullable().default(null),
+    endpointEnabled: z.boolean().default(true),
+    graph: z
+        .object({
+        nodes: z.array(aiConnectorNodeSchema).default([]),
+        edges: z.array(aiConnectorEdgeSchema).default([])
+    })
+        .default({ nodes: [], edges: [] })
+});
+export const updateAiConnectorSchema = z.object({
+    title: nonEmptyTrimmedString.optional(),
+    description: trimmedString.optional(),
+    kind: aiConnectorKindSchema.optional(),
+    homeSurfaceId: trimmedString.nullable().optional(),
+    endpointEnabled: z.boolean().optional(),
+    graph: z
+        .object({
+        nodes: z.array(aiConnectorNodeSchema).default([]),
+        edges: z.array(aiConnectorEdgeSchema).default([])
+    })
+        .optional()
+});
+export const runAiConnectorSchema = z.object({
+    userInput: trimmedString.default(""),
+    context: z.record(z.string(), z.unknown()).default({}),
+    boxSnapshots: z.record(z.string(), z.unknown()).default({}),
+    conversationId: trimmedString.nullable().default(null)
 });
 export const createAgentTokenSchema = z.object({
     label: nonEmptyTrimmedString,

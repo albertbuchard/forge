@@ -6,6 +6,8 @@ import { spawn } from "node:child_process";
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const packageRoot = path.resolve(scriptDir, "..");
 const repoRoot = path.resolve(packageRoot, "..");
+const repoSkillDir = path.join(repoRoot, "skills", "forge-openclaw");
+const packageSkillDir = path.join(packageRoot, "skills", "forge-openclaw");
 const pluginDistDir = path.join(packageRoot, "dist");
 const pluginServerDir = path.join(packageRoot, "server");
 const codexRuntimeRoot = path.join(repoRoot, "plugins", "forge-codex", "runtime");
@@ -49,6 +51,8 @@ async function removeCompiledTests(directory) {
 await rm(pluginDistDir, { recursive: true, force: true });
 await rm(pluginServerDir, { recursive: true, force: true });
 await mkdir(pluginDistDir, { recursive: true });
+await rm(packageSkillDir, { recursive: true, force: true });
+await cp(repoSkillDir, packageSkillDir, { recursive: true, force: true });
 
 await run("npm", ["exec", "--", "tsc", "-p", "tsconfig.build.json"], packageRoot);
 await run("npm", ["exec", "--", "tsc", "-p", "../server/tsconfig.json", "--outDir", "./dist/server", "--rootDir", "../server/src"], packageRoot);

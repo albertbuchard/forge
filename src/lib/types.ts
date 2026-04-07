@@ -1364,6 +1364,48 @@ export interface MovementTripDetailData {
   selectionAggregate: MovementSelectionAggregate;
 }
 
+export type MovementTimelineLaneSide = "left" | "right";
+
+export interface MovementTimelineSegmentBase {
+  id: string;
+  kind: "stay" | "trip";
+  startedAt: string;
+  endedAt: string;
+  durationSeconds: number;
+  laneSide: MovementTimelineLaneSide;
+  connectorFromLane: MovementTimelineLaneSide;
+  connectorToLane: MovementTimelineLaneSide;
+  title: string;
+  subtitle: string;
+  placeLabel: string | null;
+  tags: string[];
+  syncSource: string;
+  cursor: string;
+}
+
+export interface MovementTimelineStaySegment extends MovementTimelineSegmentBase {
+  kind: "stay";
+  stay: MovementStayRecord;
+  trip: null;
+}
+
+export interface MovementTimelineTripSegment extends MovementTimelineSegmentBase {
+  kind: "trip";
+  stay: null;
+  trip: MovementTripRecord;
+}
+
+export type MovementTimelineSegment =
+  | MovementTimelineStaySegment
+  | MovementTimelineTripSegment;
+
+export interface MovementTimelineData {
+  segments: MovementTimelineSegment[];
+  nextCursor: string | null;
+  hasMore: boolean;
+  invalidSegmentCount: number;
+}
+
 export interface TaskRunClaimInput {
   actor: string;
   timerMode: TaskTimerMode;
@@ -1625,38 +1667,16 @@ export interface OpenAiCodexOauthSession {
   credentialExpiresAt: string | null;
 }
 
-export type SurfaceWidgetDensity = "dense" | "compact" | "comfortable";
-
-export interface SurfaceLayoutBreakpointItem {
-  i: string;
-  x: number;
-  y: number;
-  w: number;
-  h: number;
-  minW?: number;
-  maxW?: number;
-  minH?: number;
-  maxH?: number;
-}
-
-export interface SurfaceLayoutBreakpoints {
-  lg: SurfaceLayoutBreakpointItem[];
-  md: SurfaceLayoutBreakpointItem[];
-  sm: SurfaceLayoutBreakpointItem[];
-  xs: SurfaceLayoutBreakpointItem[];
-  xxs: SurfaceLayoutBreakpointItem[];
-}
-
 export interface SurfaceWidgetPreferences {
   hidden: boolean;
+  fullWidth: boolean;
   titleVisible: boolean;
   descriptionVisible: boolean;
-  density: SurfaceWidgetDensity;
 }
 
 export interface SurfaceLayoutPayload {
   surfaceId: string;
-  layouts: SurfaceLayoutBreakpoints;
+  order: string[];
   widgets: Record<string, SurfaceWidgetPreferences>;
   updatedAt: string;
 }
@@ -1732,6 +1752,143 @@ export interface SurfaceProcessorGraphPayload {
   surfaceId: string;
   processors: AiProcessor[];
   links: AiProcessorLink[];
+}
+
+export type ForgeBoxCapabilityMode = "content" | "tool" | "action" | "mcp";
+
+export interface ForgeBoxToolAdapter {
+  key: string;
+  label: string;
+  description: string;
+  accessMode: "read" | "write" | "read_write" | "exec";
+}
+
+export interface ForgeBoxCatalogEntry {
+  boxId: string;
+  surfaceId: string | null;
+  routePath: string | null;
+  label: string;
+  description: string;
+  category: string;
+  capabilityModes: ForgeBoxCapabilityMode[];
+  toolAdapters: ForgeBoxToolAdapter[];
+}
+
+export interface ForgeBoxSnapshot {
+  boxId: string;
+  label: string;
+  capturedAt: string;
+  contentText: string;
+  contentJson: Record<string, unknown> | null;
+  tools: ForgeBoxToolAdapter[];
+}
+
+export type AiConnectorKind = "functor" | "chat";
+export type AiConnectorNodeType =
+  | "box_input"
+  | "user_input"
+  | "functor"
+  | "chat"
+  | "output";
+
+export interface AiConnectorNodeModelConfig {
+  connectionId: string | null;
+  provider: AiModelProvider | null;
+  baseUrl: string | null;
+  model: string;
+  thinking: string | null;
+  verbosity: string | null;
+}
+
+export interface AiConnectorNode {
+  id: string;
+  type: AiConnectorNodeType;
+  position: { x: number; y: number };
+  data: {
+    label: string;
+    description: string;
+    boxId?: string | null;
+    prompt?: string;
+    systemPrompt?: string;
+    outputKey?: string;
+    enabledToolKeys?: string[];
+    modelConfig?: AiConnectorNodeModelConfig;
+  };
+}
+
+export interface AiConnectorEdge {
+  id: string;
+  source: string;
+  target: string;
+  sourceHandle?: string | null;
+  targetHandle?: string | null;
+  label?: string | null;
+}
+
+export interface AiConnectorOutput {
+  id: string;
+  nodeId: string;
+  label: string;
+  apiPath: string;
+}
+
+export interface AiConnectorRunResult {
+  primaryText: string;
+  outputs: Record<
+    string,
+    {
+      label: string;
+      text: string;
+      json: Record<string, unknown> | null;
+    }
+  >;
+}
+
+export interface AiConnectorRun {
+  id: string;
+  connectorId: string;
+  mode: "run" | "chat";
+  status: "running" | "completed" | "failed";
+  userInput: string;
+  context: Record<string, unknown>;
+  conversationId: string | null;
+  result: AiConnectorRunResult | null;
+  error: string | null;
+  createdAt: string;
+  completedAt: string | null;
+}
+
+export interface AiConnectorConversation {
+  id: string;
+  connectorId: string;
+  provider: string | null;
+  externalConversationId: string | null;
+  transcript: Array<{
+    role: "system" | "developer" | "user" | "assistant" | "tool";
+    text: string;
+    createdAt: string;
+  }>;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AiConnector {
+  id: string;
+  slug: string;
+  title: string;
+  description: string;
+  kind: AiConnectorKind;
+  homeSurfaceId: string | null;
+  endpointEnabled: boolean;
+  graph: {
+    nodes: AiConnectorNode[];
+    edges: AiConnectorEdge[];
+  };
+  publishedOutputs: AiConnectorOutput[];
+  lastRun: AiConnectorRun | null;
+  legacyProcessorId: string | null;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface InsightEvidence {

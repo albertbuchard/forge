@@ -7,11 +7,13 @@ import { configureDatabase, configureDatabaseSeeding, runInTransaction } from ".
 import { HttpError, isHttpError } from "./errors.js";
 import { listActivityEvents, listActivityEventsForTask, recordActivityEvent, removeActivityEvent } from "./repositories/activity-events.js";
 import { approveApprovalRequest, createAgentAction, createInsight, createInsightFeedback, deleteInsight, getInsightById, listAgentActions, listApprovalRequests, listInsights, rejectApprovalRequest, updateInsight } from "./repositories/collaboration.js";
+import { createAiConnector, deleteAiConnector, getAiConnectorById, getAiConnectorBySlug, getAiConnectorConversationForConnector, listAiConnectorRuns, listAiConnectors, runAiConnector, updateAiConnector } from "./repositories/ai-connectors.js";
 import { createAiProcessor, createAiProcessorLink, deleteAiProcessor, deleteAiProcessorLink, getAiProcessorById, getAiProcessorBySlug, listAiProcessors, getSurfaceProcessorGraph, runAiProcessor, updateAiProcessor } from "./repositories/ai-processors.js";
 import { listEventLog } from "./repositories/event-log.js";
 import { createDiagnosticMessage, DIAGNOSTIC_LOG_RETENTION_SWEEP_INTERVAL_MS, enforceDiagnosticLogRetention, listDiagnosticLogs, normalizeDiagnosticSource, recordDiagnosticLog, serializeDiagnosticError } from "./repositories/diagnostic-logs.js";
 import { createGoal, getGoalById, listGoals, updateGoal } from "./repositories/goals.js";
 import { getSurfaceLayout, resetSurfaceLayout, saveSurfaceLayout } from "./repositories/surface-layouts.js";
+import { listForgeBoxCatalog } from "./connectors/box-registry.js";
 import { createHabit, createHabitCheckIn, deleteHabitCheckIn, getHabitById, listHabits, updateHabit } from "./repositories/habits.js";
 import { listDomains } from "./repositories/domains.js";
 import { buildNotesSummaryByEntity, createNote, getNoteById, listNotes, updateNote } from "./repositories/notes.js";
@@ -48,13 +50,13 @@ import { consumeOpenAiCodexOauthCredentials, getOpenAiCodexOauthSession, startOp
 import { PSYCHE_ENTITY_TYPES, createBehaviorSchema, createBeliefEntrySchema, createBehaviorPatternSchema, createEmotionDefinitionSchema, createEventTypeSchema, createModeGuideSessionSchema, createModeProfileSchema, createPsycheValueSchema, createTriggerReportSchema, updateBehaviorSchema, updateBeliefEntrySchema, updateBehaviorPatternSchema, updateEmotionDefinitionSchema, updateEventTypeSchema, updateModeGuideSessionSchema, updateModeProfileSchema, updatePsycheValueSchema, updateTriggerReportSchema } from "./psyche-types.js";
 import { createQuestionnaireInstrumentSchema, publishQuestionnaireVersionSchema, startQuestionnaireRunSchema, updateQuestionnaireRunSchema, updateQuestionnaireVersionSchema } from "./questionnaire-types.js";
 import { createPreferenceCatalogItemSchema, createPreferenceCatalogSchema, createPreferenceContextSchema, createPreferenceItemSchema, enqueueEntityPreferenceItemSchema, mergePreferenceContextsSchema, preferenceWorkspaceQuerySchema, startPreferenceGameSchema, submitAbsoluteSignalSchema, submitPairwiseJudgmentSchema, updatePreferenceCatalogItemSchema, updatePreferenceCatalogSchema, updatePreferenceContextSchema, updatePreferenceItemSchema, updatePreferenceScoreSchema } from "./preferences-types.js";
-import { activityListQuerySchema, activitySourceSchema, createAgentActionSchema, createAgentTokenSchema, createAiProcessorLinkSchema, createAiProcessorSchema, writeSurfaceLayoutSchema, upsertAiModelConnectionSchema, testAiModelConnectionSchema, submitOpenAiCodexOauthManualCodeSchema, batchCreateEntitiesSchema, batchDeleteEntitiesSchema, batchRestoreEntitiesSchema, batchSearchEntitiesSchema, batchUpdateEntitiesSchema, createGoalSchema, createInsightFeedbackSchema, createInsightSchema, createStrategySchema, createUserSchema, createNoteSchema, createProjectSchema, createManualRewardGrantSchema, createCalendarEventSchema, createHabitCheckInSchema, createCalendarConnectionSchema, createDiagnosticLogSchema, discoverCalendarConnectionSchema, startMicrosoftCalendarOauthSchema, testMicrosoftCalendarOauthConfigurationSchema, createHabitSchema, createTaskTimeboxSchema, createWorkBlockTemplateSchema, createSessionEventSchema, createWorkAdjustmentSchema, createTagSchema, calendarOverviewQuerySchema, notesListQuerySchema, updateTagSchema, createTaskSchema, diagnosticLogListQuerySchema, eventsListQuerySchema, operatorLogWorkSchema, projectBoardPayloadSchema, projectListQuerySchema, entityDeleteQuerySchema, removeActivityEventSchema, resolveApprovalRequestSchema, rewardsLedgerQuerySchema, habitListQuerySchema, taskContextPayloadSchema, taskRunClaimSchema, taskRunFocusSchema, taskRunFinishSchema, taskRunHeartbeatSchema, taskRunListQuerySchema, taskListQuerySchema, tagSuggestionRequestSchema, uncompleteTaskSchema, updateSettingsSchema, updateGoalSchema, updateHabitSchema, updateInsightSchema, updateStrategySchema, updateUserSchema, updateCalendarConnectionSchema, updateCalendarEventSchema, updateNoteSchema, updateProjectSchema, updateRewardRuleSchema, updateTaskTimeboxSchema, updateTaskSchema, updateUserAccessGrantSchema, updateWorkBlockTemplateSchema, updateAiProcessorSchema, runAiProcessorSchema, workAdjustmentResultSchema, finalizeWeeklyReviewResultSchema, goalListQuerySchema, recommendTaskTimeboxesSchema, strategyListQuerySchema } from "./types.js";
+import { activityListQuerySchema, activitySourceSchema, createAgentActionSchema, createAgentTokenSchema, createAiConnectorSchema, createAiProcessorLinkSchema, createAiProcessorSchema, runAiConnectorSchema, writeSurfaceLayoutSchema, upsertAiModelConnectionSchema, testAiModelConnectionSchema, submitOpenAiCodexOauthManualCodeSchema, batchCreateEntitiesSchema, batchDeleteEntitiesSchema, batchRestoreEntitiesSchema, batchSearchEntitiesSchema, batchUpdateEntitiesSchema, createGoalSchema, createInsightFeedbackSchema, createInsightSchema, createStrategySchema, createUserSchema, createNoteSchema, createProjectSchema, createManualRewardGrantSchema, createCalendarEventSchema, createHabitCheckInSchema, createCalendarConnectionSchema, createDiagnosticLogSchema, discoverCalendarConnectionSchema, startMicrosoftCalendarOauthSchema, testMicrosoftCalendarOauthConfigurationSchema, createHabitSchema, createTaskTimeboxSchema, createWorkBlockTemplateSchema, createSessionEventSchema, createWorkAdjustmentSchema, createTagSchema, calendarOverviewQuerySchema, notesListQuerySchema, updateTagSchema, createTaskSchema, diagnosticLogListQuerySchema, eventsListQuerySchema, operatorLogWorkSchema, projectBoardPayloadSchema, projectListQuerySchema, entityDeleteQuerySchema, removeActivityEventSchema, resolveApprovalRequestSchema, rewardsLedgerQuerySchema, habitListQuerySchema, taskContextPayloadSchema, taskRunClaimSchema, taskRunFocusSchema, taskRunFinishSchema, taskRunHeartbeatSchema, taskRunListQuerySchema, taskListQuerySchema, tagSuggestionRequestSchema, uncompleteTaskSchema, updateSettingsSchema, updateGoalSchema, updateHabitSchema, updateInsightSchema, updateStrategySchema, updateUserSchema, updateCalendarConnectionSchema, updateCalendarEventSchema, updateNoteSchema, updateProjectSchema, updateRewardRuleSchema, updateTaskTimeboxSchema, updateTaskSchema, updateUserAccessGrantSchema, updateWorkBlockTemplateSchema, updateAiConnectorSchema, updateAiProcessorSchema, runAiProcessorSchema, workAdjustmentResultSchema, finalizeWeeklyReviewResultSchema, goalListQuerySchema, recommendTaskTimeboxesSchema, strategyListQuerySchema } from "./types.js";
 import { buildOpenApiDocument } from "./openapi.js";
 import { registerWebRoutes } from "./web.js";
 import { createManagerRuntime } from "./managers/runtime.js";
 import { isManagerError } from "./managers/type-guards.js";
 import { createCompanionPairingSession, createCompanionPairingSessionSchema, getCompanionOverview, getFitnessViewData, getSleepViewData, ingestMobileHealthSync, mobileHealthSyncSchema, requireValidPairing, revokeAllCompanionPairingSessions, revokeAllCompanionPairingSessionsSchema, revokeCompanionPairingSession, verifyCompanionPairing, verifyCompanionPairingSchema, updateSleepMetadata, updateSleepMetadataSchema, updateWorkoutMetadata, updateWorkoutMetadataSchema } from "./health.js";
-import { createMovementPlace, getMovementAllTimeSummary, getMovementDayDetail, getMovementMobileBootstrap, getMovementSelectionAggregate, getMovementSettings, getMovementTripDetail, getMovementMonthSummary, listMovementPlaces, movementMobileBootstrapSchema, movementPlaceMutationSchema, movementPlacePatchSchema, movementSelectionAggregateSchema, movementSettingsPatchSchema, updateMovementPlace, updateMovementSettings } from "./movement.js";
+import { createMovementPlace, getMovementAllTimeSummary, getMovementDayDetail, getMovementMobileBootstrap, getMovementTimeline, getMovementSelectionAggregate, getMovementSettings, getMovementTripDetail, getMovementMonthSummary, listMovementPlaces, movementMobileBootstrapSchema, movementMobileStayPatchSchema, movementMobileTimelineSchema, movementMobileTripPatchSchema, movementPlaceMutationSchema, movementPlacePatchSchema, movementSelectionAggregateSchema, movementStayPatchSchema, movementSettingsPatchSchema, movementTimelineQuerySchema, movementTripPatchSchema, updateMovementPlace, updateMovementStay, updateMovementSettings, updateMovementTrip } from "./movement.js";
 import { assertWatchReady, buildWatchBootstrap, ingestWatchCaptureBatch, mobileWatchBootstrapSchema, mobileWatchCaptureBatchSchema, mobileWatchHabitCheckInSchema } from "./watch-mobile.js";
 const COMPATIBILITY_SUNSET = "transitional-node";
 function markCompatibilityRoute(reply) {
@@ -126,8 +128,7 @@ function buildApiBaseUrl(request) {
     if (referer) {
         try {
             const url = new URL(referer);
-            const forgeMounted = url.pathname.startsWith("/forge/");
-            return `${url.origin}${forgeMounted ? "/forge" : ""}/api/v1`;
+            return `${url.origin}/api/v1`;
         }
         catch {
             // Fall through to host-based resolution.
@@ -4027,6 +4028,17 @@ export async function buildServer(options = {}) {
     app.get("/api/v1/movement/all-time", async (request) => ({
         movement: getMovementAllTimeSummary(resolveScopedUserIds(request.query))
     }));
+    app.get("/api/v1/movement/timeline", async (request) => {
+        const parsed = movementTimelineQuerySchema.parse(request.query ?? {});
+        return {
+            movement: getMovementTimeline({
+                ...parsed,
+                userIds: parsed.userIds.length > 0
+                    ? parsed.userIds
+                    : (resolveScopedUserIds(request.query) ?? [])
+            })
+        };
+    });
     app.get("/api/v1/movement/settings", async (request) => ({
         settings: getMovementSettings(resolveScopedUserIds(request.query))
     }));
@@ -4063,6 +4075,26 @@ export async function buildServer(options = {}) {
             return { error: "Movement place not found" };
         }
         return { place };
+    });
+    app.patch("/api/v1/movement/stays/:id", async (request, reply) => {
+        const auth = requireScopedAccess(request.headers, ["write"], { route: "/api/v1/movement/stays/:id" });
+        const { id } = request.params;
+        const stay = updateMovementStay(id, movementStayPatchSchema.parse(request.body ?? {}), toActivityContext(auth));
+        if (!stay) {
+            reply.code(404);
+            return { error: "Movement stay not found" };
+        }
+        return { stay };
+    });
+    app.patch("/api/v1/movement/trips/:id", async (request, reply) => {
+        const auth = requireScopedAccess(request.headers, ["write"], { route: "/api/v1/movement/trips/:id" });
+        const { id } = request.params;
+        const trip = updateMovementTrip(id, movementTripPatchSchema.parse(request.body ?? {}), toActivityContext(auth));
+        if (!trip) {
+            reply.code(404);
+            return { error: "Movement trip not found" };
+        }
+        return { trip };
     });
     app.get("/api/v1/movement/trips/:id", async (request, reply) => {
         const { id } = request.params;
@@ -4119,6 +4151,45 @@ export async function buildServer(options = {}) {
         return {
             movement: getMovementMobileBootstrap(pairing)
         };
+    });
+    app.post("/api/v1/mobile/movement/timeline", async (request) => {
+        const parsed = movementMobileTimelineSchema.parse(request.body ?? {});
+        const pairing = requireValidPairing(parsed.sessionId, parsed.pairingToken);
+        return {
+            movement: getMovementTimeline({
+                before: parsed.before,
+                limit: parsed.limit,
+                userIds: [pairing.user_id]
+            })
+        };
+    });
+    app.patch("/api/v1/mobile/movement/stays/:id", async (request, reply) => {
+        const parsed = movementMobileStayPatchSchema.parse(request.body ?? {});
+        const pairing = requireValidPairing(parsed.sessionId, parsed.pairingToken);
+        const { id } = request.params;
+        const stay = updateMovementStay(id, parsed.patch, {
+            actor: "Forge Companion",
+            source: "system"
+        }, { userId: pairing.user_id });
+        if (!stay) {
+            reply.code(404);
+            return { error: "Movement stay not found" };
+        }
+        return { stay };
+    });
+    app.patch("/api/v1/mobile/movement/trips/:id", async (request, reply) => {
+        const parsed = movementMobileTripPatchSchema.parse(request.body ?? {});
+        const pairing = requireValidPairing(parsed.sessionId, parsed.pairingToken);
+        const { id } = request.params;
+        const trip = updateMovementTrip(id, parsed.patch, {
+            actor: "Forge Companion",
+            source: "system"
+        }, { userId: pairing.user_id });
+        if (!trip) {
+            reply.code(404);
+            return { error: "Movement trip not found" };
+        }
+        return { trip };
     });
     app.post("/api/v1/mobile/watch/bootstrap", async (request) => {
         const parsed = mobileWatchBootstrapSchema.parse(request.body ?? {});
@@ -6830,6 +6901,133 @@ export async function buildServer(options = {}) {
             llm: managers.llm,
             secrets: managers.secrets
         }, { trigger: "route" });
+    });
+    app.get("/api/v1/ai-connectors/catalog/boxes", async (request) => {
+        requireScopedAccess(request.headers, ["read"], {
+            route: "/api/v1/ai-connectors/catalog/boxes"
+        });
+        return {
+            boxes: listForgeBoxCatalog()
+        };
+    });
+    app.get("/api/v1/ai-connectors", async (request) => {
+        requireScopedAccess(request.headers, ["read"], {
+            route: "/api/v1/ai-connectors"
+        });
+        return {
+            connectors: listAiConnectors()
+        };
+    });
+    app.post("/api/v1/ai-connectors", async (request, reply) => {
+        requireScopedAccess(request.headers, ["write"], {
+            route: "/api/v1/ai-connectors"
+        });
+        const connector = createAiConnector(createAiConnectorSchema.parse(request.body ?? {}));
+        reply.code(201);
+        return { connector };
+    });
+    app.get("/api/v1/ai-connectors/:id", async (request, reply) => {
+        requireScopedAccess(request.headers, ["read"], {
+            route: "/api/v1/ai-connectors/:id"
+        });
+        const connector = getAiConnectorById(request.params.id);
+        if (!connector) {
+            reply.code(404);
+            return { error: "AI connector not found" };
+        }
+        return {
+            connector,
+            runs: listAiConnectorRuns(connector.id),
+            conversation: getAiConnectorConversationForConnector(connector.id)
+        };
+    });
+    app.patch("/api/v1/ai-connectors/:id", async (request, reply) => {
+        requireScopedAccess(request.headers, ["write"], {
+            route: "/api/v1/ai-connectors/:id"
+        });
+        const connector = updateAiConnector(request.params.id, updateAiConnectorSchema.parse(request.body ?? {}));
+        if (!connector) {
+            reply.code(404);
+            return { error: "AI connector not found" };
+        }
+        return { connector };
+    });
+    app.delete("/api/v1/ai-connectors/:id", async (request, reply) => {
+        requireScopedAccess(request.headers, ["write"], {
+            route: "/api/v1/ai-connectors/:id"
+        });
+        const connector = deleteAiConnector(request.params.id);
+        if (!connector) {
+            reply.code(404);
+            return { error: "AI connector not found" };
+        }
+        return { connector };
+    });
+    app.post("/api/v1/ai-connectors/:id/run", async (request, reply) => {
+        requireScopedAccess(request.headers, ["write"], {
+            route: "/api/v1/ai-connectors/:id/run"
+        });
+        const connector = getAiConnectorById(request.params.id);
+        if (!connector) {
+            reply.code(404);
+            return { error: "AI connector not found" };
+        }
+        return await runAiConnector(connector.id, runAiConnectorSchema.parse(request.body ?? {}), {
+            llm: managers.llm,
+            secrets: managers.secrets
+        }, "run");
+    });
+    app.post("/api/v1/ai-connectors/:id/chat", async (request, reply) => {
+        requireScopedAccess(request.headers, ["write"], {
+            route: "/api/v1/ai-connectors/:id/chat"
+        });
+        const connector = getAiConnectorById(request.params.id);
+        if (!connector) {
+            reply.code(404);
+            return { error: "AI connector not found" };
+        }
+        return await runAiConnector(connector.id, runAiConnectorSchema.parse(request.body ?? {}), {
+            llm: managers.llm,
+            secrets: managers.secrets
+        }, "chat");
+    });
+    app.get("/api/v1/ai-connectors/:id/output", async (request, reply) => {
+        requireScopedAccess(request.headers, ["read"], {
+            route: "/api/v1/ai-connectors/:id/output"
+        });
+        const connector = getAiConnectorById(request.params.id);
+        if (!connector) {
+            reply.code(404);
+            return { error: "AI connector not found" };
+        }
+        return {
+            connector,
+            output: connector.lastRun?.result ?? null
+        };
+    });
+    app.get("/api/v1/ai-connectors/:id/runs", async (request, reply) => {
+        requireScopedAccess(request.headers, ["read"], {
+            route: "/api/v1/ai-connectors/:id/runs"
+        });
+        const connector = getAiConnectorById(request.params.id);
+        if (!connector) {
+            reply.code(404);
+            return { error: "AI connector not found" };
+        }
+        return {
+            runs: listAiConnectorRuns(connector.id)
+        };
+    });
+    app.get("/api/v1/ai-connectors/by-slug/:slug", async (request, reply) => {
+        requireScopedAccess(request.headers, ["read"], {
+            route: "/api/v1/ai-connectors/by-slug/:slug"
+        });
+        const connector = getAiConnectorBySlug(request.params.slug);
+        if (!connector) {
+            reply.code(404);
+            return { error: "AI connector not found" };
+        }
+        return { connector };
     });
     app.post("/api/v1/settings/tokens", async (request, reply) => {
         const auth = requireOperatorSession(request.headers, { route: "/api/v1/settings/tokens" });

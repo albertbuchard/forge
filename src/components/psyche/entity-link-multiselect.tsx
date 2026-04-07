@@ -32,8 +32,8 @@ export function EntityLinkMultiSelect({
   onCreate,
   className
 }: {
-  options: EntityLinkOption[];
-  selectedValues: string[];
+  options?: EntityLinkOption[];
+  selectedValues?: string[];
   onChange: (values: string[]) => void;
   placeholder?: string;
   emptyMessage?: string;
@@ -47,24 +47,26 @@ export function EntityLinkMultiSelect({
   const [pendingCreate, setPendingCreate] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
   const [createdOptions, setCreatedOptions] = useState<EntityLinkOption[]>([]);
+  const safeOptions = options ?? [];
+  const safeSelectedValues = selectedValues ?? [];
 
   const mergedOptions = useMemo(() => {
     const map = new Map<string, EntityLinkOption>();
-    [...createdOptions, ...options].forEach((option) => {
+    [...createdOptions, ...safeOptions].forEach((option) => {
       map.set(option.value, option);
     });
     return Array.from(map.values());
-  }, [createdOptions, options]);
+  }, [createdOptions, safeOptions]);
 
   const selectedOptions = useMemo(
     () =>
-      selectedValues.map((value) => mergedOptions.find((option) => option.value === value) ?? { value, label: value }),
-    [mergedOptions, selectedValues]
+      safeSelectedValues.map((value) => mergedOptions.find((option) => option.value === value) ?? { value, label: value }),
+    [mergedOptions, safeSelectedValues]
   );
 
   const normalizedQuery = normalize(query);
   const filteredOptions = useMemo(() => {
-    const pool = mergedOptions.filter((option) => !selectedValues.includes(option.value));
+    const pool = mergedOptions.filter((option) => !safeSelectedValues.includes(option.value));
     if (!normalizedQuery) {
       return pool.slice(0, 8);
     }
@@ -74,12 +76,12 @@ export function EntityLinkMultiSelect({
         return haystack.includes(normalizedQuery);
       })
       .slice(0, 8);
-  }, [mergedOptions, normalizedQuery, selectedValues]);
+  }, [mergedOptions, normalizedQuery, safeSelectedValues]);
 
   const hasExactMatch = mergedOptions.some((option) => normalize(option.label) === normalizedQuery);
 
   const selectValue = (value: string) => {
-    onChange(appendUnique(selectedValues, value));
+    onChange(appendUnique(safeSelectedValues, value));
     setQuery("");
     setCreateError(null);
     setHighlightedIndex(0);
@@ -87,7 +89,7 @@ export function EntityLinkMultiSelect({
   };
 
   const removeValue = (value: string) => {
-    onChange(selectedValues.filter((entry) => entry !== value));
+    onChange(safeSelectedValues.filter((entry) => entry !== value));
   };
 
   const createValue = async () => {
@@ -100,7 +102,7 @@ export function EntityLinkMultiSelect({
     try {
       const option = await onCreate(nextValue);
       setCreatedOptions((current) => (current.some((entry) => entry.value === option.value) ? current : [option, ...current]));
-      onChange(appendUnique(selectedValues, option.value));
+      onChange(appendUnique(safeSelectedValues, option.value));
       setQuery("");
       setCreateError(null);
       setHighlightedIndex(0);
@@ -156,8 +158,8 @@ export function EntityLinkMultiSelect({
               window.setTimeout(() => setOpen(false), 120);
             }}
             onKeyDown={(event) => {
-              if (event.key === "Backspace" && !query && selectedValues.length > 0) {
-                removeValue(selectedValues[selectedValues.length - 1]!);
+              if (event.key === "Backspace" && !query && safeSelectedValues.length > 0) {
+                removeValue(safeSelectedValues[safeSelectedValues.length - 1]!);
                 return;
               }
 
@@ -192,7 +194,7 @@ export function EntityLinkMultiSelect({
               }
 
               const exact = mergedOptions.find((option) => normalize(option.label) === normalizedQuery);
-              if (exact && !selectedValues.includes(exact.value)) {
+              if (exact && !safeSelectedValues.includes(exact.value)) {
                 selectValue(exact.value);
                 return;
               }

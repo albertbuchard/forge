@@ -35,7 +35,7 @@ export function GoalStudio({
     <>
       <Card>
         <div className="flex flex-wrap items-start justify-between gap-4">
-          <div>
+          <div className="min-w-0 flex-1">
             <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">
               Goal arcs
             </div>
@@ -73,7 +73,7 @@ export function GoalStudio({
                 className="rounded-[24px] border border-white/6 bg-[linear-gradient(180deg,rgba(255,255,255,0.06),rgba(255,255,255,0.03))] p-4 transition hover:bg-[linear-gradient(180deg,rgba(255,255,255,0.09),rgba(255,255,255,0.04))]"
               >
                 <div className="flex items-start justify-between gap-4">
-                  <div>
+                  <div className="min-w-0 flex-1">
                     <EntityBadge kind="goal" compact gradient={false} />
                     <div className="mt-2">
                       <EntityName
@@ -82,6 +82,7 @@ export function GoalStudio({
                         variant="heading"
                         size="lg"
                         showKind={false}
+                        lines={2}
                       />
                     </div>
                     <p className="mt-2 text-sm leading-6 text-white/58">
@@ -144,9 +145,11 @@ export function GoalStudio({
                 </div>
 
                 <div className="mt-3 flex items-center justify-between gap-3 text-[11px] uppercase tracking-[0.16em] text-white/42">
-                  <span>{goal.momentumLabel}</span>
+                  <span className="min-w-0 flex-1 truncate">
+                    {goal.momentumLabel}
+                  </span>
                   <span
-                    className="inline-flex items-center gap-2"
+                    className="inline-flex shrink-0 items-center gap-2"
                     style={{ color: goal.themeColor }}
                   >
                     Open arc

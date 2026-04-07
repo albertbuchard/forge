@@ -28,6 +28,9 @@ export const movementCategoryTags = [
   "school",
   "grocery",
   "bar",
+  "cafe",
+  "clinic",
+  "gym",
   "forest",
   "mountain",
   "nature",
@@ -37,7 +40,98 @@ export const movementCategoryTags = [
   "other"
 ] as const;
 
-export const movementCategoryTagSchema = z.enum(movementCategoryTags);
+const movementCanonicalCategoryTagSet = new Set<string>(movementCategoryTags);
+
+const movementCategoryTagAliases = new Map<string, (typeof movementCategoryTags)[number]>([
+  ["home", "home"],
+  ["house", "home"],
+  ["flat", "home"],
+  ["apartment", "home"],
+  ["work", "workplace"],
+  ["workplace", "workplace"],
+  ["office", "workplace"],
+  ["coworking", "workplace"],
+  ["school", "school"],
+  ["campus", "school"],
+  ["university", "school"],
+  ["college", "school"],
+  ["grocery", "grocery"],
+  ["groceries", "grocery"],
+  ["supermarket", "grocery"],
+  ["market", "grocery"],
+  ["bar", "bar"],
+  ["pub", "bar"],
+  ["cafe", "cafe"],
+  ["coffee", "cafe"],
+  ["coffee-shop", "cafe"],
+  ["coffeehouse", "cafe"],
+  ["clinic", "clinic"],
+  ["hospital", "clinic"],
+  ["medical", "clinic"],
+  ["gym", "gym"],
+  ["fitness", "gym"],
+  ["fitness-center", "gym"],
+  ["forest", "forest"],
+  ["woods", "forest"],
+  ["woodland", "forest"],
+  ["mountain", "mountain"],
+  ["mountains", "mountain"],
+  ["alps", "mountain"],
+  ["nature", "nature"],
+  ["outdoors", "nature"],
+  ["park", "nature"],
+  ["holiday", "holiday"],
+  ["vacation", "holiday"],
+  ["travel-holiday", "holiday"],
+  ["social", "social"],
+  ["friends", "social"],
+  ["socializing", "social"],
+  ["travel", "travel"],
+  ["trip", "travel"],
+  ["commute", "travel"],
+  ["other", "other"]
+]);
+
+function slugifyMovementTag(value: string) {
+  return value
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim()
+    .toLowerCase()
+    .replace(/['’]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
+export function normalizeMovementCategoryTag(value: string) {
+  const slug = slugifyMovementTag(value);
+  if (!slug) {
+    return "";
+  }
+  return movementCategoryTagAliases.get(slug) ?? slug;
+}
+
+export function canonicalizeMovementCategoryTags(values: string[]) {
+  return uniqStrings(
+    values
+      .map((value) => normalizeMovementCategoryTag(value))
+      .filter((value) => value.length > 0)
+  );
+}
+
+export function isImportantMovementCategoryTag(value: string) {
+  return movementCanonicalCategoryTagSet.has(normalizeMovementCategoryTag(value));
+}
+
+export const movementCategoryTagSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .max(64)
+  .transform((value) => normalizeMovementCategoryTag(value))
+  .refine((value) => value.length > 0, {
+    message: "Movement category tags must contain letters or numbers."
+  });
 
 const linkedEntitySchema = z.object({
   entityType: z.string().trim().min(1),
@@ -57,7 +151,7 @@ const movementPlaceInputSchema = z.object({
   latitude: z.number().finite(),
   longitude: z.number().finite(),
   radiusMeters: z.number().positive().max(2000).default(100),
-  categoryTags: z.array(movementCategoryTagSchema).default([]),
+  categoryTags: z.array(movementCategoryTagSchema).default([]).transform(canonicalizeMovementCategoryTags),
   visibility: movementVisibilitySchema.default("shared"),
   wikiNoteId: z.string().trim().min(1).nullable().default(null),
   linkedEntities: z.array(linkedEntitySchema).default([]),
@@ -162,9 +256,64 @@ export const movementSelectionAggregateSchema = z.object({
 });
 
 export const movementSettingsPatchSchema = movementSettingsInputSchema.partial();
+export const movementTimelineQuerySchema = z.object({
+  before: z.string().trim().min(1).optional(),
+  limit: z.coerce.number().int().min(1).max(120).default(40),
+  userIds: z.array(z.string().trim().min(1)).default([])
+});
+export const movementStayPatchSchema = z.object({
+  label: z.string().trim().optional(),
+  status: z.string().trim().optional(),
+  classification: z.string().trim().optional(),
+  startedAt: z.string().datetime().optional(),
+  endedAt: z.string().datetime().optional(),
+  centerLatitude: z.number().finite().optional(),
+  centerLongitude: z.number().finite().optional(),
+  radiusMeters: z.number().positive().optional(),
+  sampleCount: z.number().int().nonnegative().optional(),
+  placeId: z.string().trim().min(1).nullable().optional(),
+  placeExternalUid: z.string().trim().min(1).nullable().optional(),
+  placeLabel: z.string().trim().optional(),
+  tags: z.array(z.string().trim()).optional(),
+  metadata: z.record(z.string(), z.unknown()).optional()
+});
+export const movementTripPatchSchema = z.object({
+  label: z.string().trim().optional(),
+  status: z.string().trim().optional(),
+  travelMode: z.string().trim().optional(),
+  activityType: z.string().trim().optional(),
+  startedAt: z.string().datetime().optional(),
+  endedAt: z.string().datetime().optional(),
+  startPlaceId: z.string().trim().min(1).nullable().optional(),
+  endPlaceId: z.string().trim().min(1).nullable().optional(),
+  startPlaceExternalUid: z.string().trim().min(1).nullable().optional(),
+  endPlaceExternalUid: z.string().trim().min(1).nullable().optional(),
+  distanceMeters: z.number().nonnegative().optional(),
+  movingSeconds: z.number().int().nonnegative().optional(),
+  idleSeconds: z.number().int().nonnegative().optional(),
+  averageSpeedMps: z.number().nonnegative().nullable().optional(),
+  maxSpeedMps: z.number().nonnegative().nullable().optional(),
+  caloriesKcal: z.number().nonnegative().nullable().optional(),
+  expectedMet: z.number().nonnegative().nullable().optional(),
+  tags: z.array(z.string().trim()).optional(),
+  metadata: z.record(z.string(), z.unknown()).optional()
+});
 export const movementMobileBootstrapSchema = z.object({
   sessionId: z.string().trim().min(1),
   pairingToken: z.string().trim().min(1)
+});
+export const movementMobileTimelineSchema = movementMobileBootstrapSchema.extend({
+  before: z.string().trim().min(1).optional(),
+  limit: z.coerce.number().int().min(1).max(120).default(40)
+});
+export const movementMobilePlaceMutationSchema = movementMobileBootstrapSchema.extend({
+  place: movementPlaceMutationSchema.omit({ userId: true, source: true })
+});
+export const movementMobileStayPatchSchema = movementMobileBootstrapSchema.extend({
+  patch: movementStayPatchSchema
+});
+export const movementMobileTripPatchSchema = movementMobileBootstrapSchema.extend({
+  patch: movementTripPatchSchema
 });
 
 type ActivitySource = "ui" | "openclaw" | "agent" | "system";
@@ -297,6 +446,15 @@ type MovementSettingsRow = {
   updated_at: string;
 };
 
+type MovementTimelineLaneSide = "left" | "right";
+
+type MovementTimelineCursor = {
+  endedAt: string;
+  startedAt: string;
+  kind: "stay" | "trip";
+  id: string;
+};
+
 function nowIso() {
   return new Date().toISOString();
 }
@@ -338,6 +496,42 @@ function monthKey(value: string) {
   return value.slice(0, 7);
 }
 
+function hasOwn<T extends object, K extends PropertyKey>(
+  value: T,
+  key: K
+): value is T & Record<K, unknown> {
+  return Object.prototype.hasOwnProperty.call(value, key);
+}
+
+function encodeMovementTimelineCursor(cursor: MovementTimelineCursor) {
+  return Buffer.from(JSON.stringify(cursor)).toString("base64url");
+}
+
+function decodeMovementTimelineCursor(rawValue?: string) {
+  if (!rawValue) {
+    return null;
+  }
+  try {
+    const parsed = JSON.parse(
+      Buffer.from(rawValue, "base64url").toString("utf8")
+    ) as MovementTimelineCursor;
+    if (
+      typeof parsed.id !== "string" ||
+      typeof parsed.kind !== "string" ||
+      typeof parsed.startedAt !== "string" ||
+      typeof parsed.endedAt !== "string"
+    ) {
+      return null;
+    }
+    if (parsed.kind !== "stay" && parsed.kind !== "trip") {
+      return null;
+    }
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
 function haversineDistanceMeters(
   left: { latitude: number; longitude: number },
   right: { latitude: number; longitude: number }
@@ -357,7 +551,7 @@ function haversineDistanceMeters(
 }
 
 function estimateMovementXp(categoryTags: string[], distanceMeters: number) {
-  const tags = new Set(categoryTags);
+  const tags = new Set(canonicalizeMovementCategoryTags(categoryTags));
   if (tags.has("holiday")) {
     return 45;
   }
@@ -786,6 +980,196 @@ function resolvePlaceForCoordinates(
   return best?.row;
 }
 
+function rangesOverlap(
+  leftStartedAt: string,
+  leftEndedAt: string,
+  rightStartedAt: string,
+  rightEndedAt: string
+) {
+  return leftStartedAt < rightEndedAt && rightStartedAt < leftEndedAt;
+}
+
+function movementValidation(metadata: Record<string, unknown>) {
+  const validation =
+    metadata.validation &&
+    typeof metadata.validation === "object" &&
+    !Array.isArray(metadata.validation)
+      ? (metadata.validation as Record<string, unknown>)
+      : null;
+  return validation;
+}
+
+function hasInvalidMovementRecord(metadata: Record<string, unknown>) {
+  const validation = movementValidation(metadata);
+  return (
+    validation?.invalid === true ||
+    validation?.invalidOverlap === true ||
+    validation?.invalidTinyMove === true
+  );
+}
+
+function reconcileMovementOverlapValidation(userId: string) {
+  const stayRows = listMovementStayRows([userId]);
+  const tripRows = listMovementTripRows([userId]);
+  const entries = [
+    ...stayRows.map((row) => ({
+      id: row.id,
+      kind: "stay" as const,
+      startedAt: row.started_at,
+      endedAt: row.ended_at,
+      metadataJson: row.metadata_json,
+      label: row.label || "stay"
+    })),
+    ...tripRows.map((row) => ({
+      id: row.id,
+      kind: "trip" as const,
+      startedAt: row.started_at,
+      endedAt: row.ended_at,
+      metadataJson: row.metadata_json,
+      label: row.label || "trip"
+    }))
+  ].sort((left, right) =>
+    left.startedAt.localeCompare(right.startedAt) ||
+    left.endedAt.localeCompare(right.endedAt) ||
+    left.kind.localeCompare(right.kind) ||
+    left.id.localeCompare(right.id)
+  );
+
+  const overlapIssuesByKey = new Map<string, string[]>();
+  for (let index = 0; index < entries.length; index += 1) {
+    const current = entries[index]!;
+    for (let nextIndex = index + 1; nextIndex < entries.length; nextIndex += 1) {
+      const next = entries[nextIndex]!;
+      if (next.startedAt >= current.endedAt) {
+        break;
+      }
+      if (!rangesOverlap(current.startedAt, current.endedAt, next.startedAt, next.endedAt)) {
+        continue;
+      }
+      const currentKey = `${current.kind}:${current.id}`;
+      const nextKey = `${next.kind}:${next.id}`;
+      const currentIssues = overlapIssuesByKey.get(currentKey) ?? [];
+      currentIssues.push(
+        `Overlaps ${next.kind} ${next.id} from ${next.startedAt} to ${next.endedAt}.`
+      );
+      overlapIssuesByKey.set(currentKey, currentIssues);
+      const nextIssues = overlapIssuesByKey.get(nextKey) ?? [];
+      nextIssues.push(
+        `Overlaps ${current.kind} ${current.id} from ${current.startedAt} to ${current.endedAt}.`
+      );
+      overlapIssuesByKey.set(nextKey, nextIssues);
+    }
+  }
+
+  const now = nowIso();
+  stayRows.forEach((row) => {
+    const metadata = safeJsonParse<Record<string, unknown>>(row.metadata_json, {});
+    const issues = overlapIssuesByKey.get(`stay:${row.id}`) ?? [];
+    const validation = {
+      ...(
+        metadata.validation &&
+        typeof metadata.validation === "object" &&
+        !Array.isArray(metadata.validation)
+          ? (metadata.validation as Record<string, unknown>)
+          : {}
+      ),
+      invalidOverlap: issues.length > 0,
+      overlapIssues: issues,
+      checkedAt: now
+    };
+    const nextMetadata = {
+      ...metadata,
+      validation
+    };
+    if (JSON.stringify(nextMetadata) !== JSON.stringify(metadata)) {
+      getDatabase()
+        .prepare(
+          `UPDATE movement_stays
+           SET metadata_json = ?, updated_at = ?
+           WHERE id = ?`
+        )
+        .run(JSON.stringify(nextMetadata), now, row.id);
+    }
+  });
+  tripRows.forEach((row) => {
+    const metadata = safeJsonParse<Record<string, unknown>>(row.metadata_json, {});
+    const issues = overlapIssuesByKey.get(`trip:${row.id}`) ?? [];
+    const tinyMoveIssues = [
+      row.distance_meters < 100
+        ? `Distance ${Math.round(row.distance_meters)}m is below the 100m minimum for a valid move.`
+        : null,
+      durationSeconds(row.started_at, row.ended_at) < 5 * 60
+        ? `Duration ${durationSeconds(row.started_at, row.ended_at)}s is below the 5 minute minimum for a valid move.`
+        : null
+    ].filter((value): value is string => Boolean(value));
+    const validation = {
+      ...(
+        metadata.validation &&
+        typeof metadata.validation === "object" &&
+        !Array.isArray(metadata.validation)
+          ? (metadata.validation as Record<string, unknown>)
+          : {}
+      ),
+      invalid: issues.length > 0 || tinyMoveIssues.length > 0,
+      invalidOverlap: issues.length > 0,
+      invalidTinyMove: tinyMoveIssues.length > 0,
+      overlapIssues: issues,
+      tinyMoveIssues,
+      checkedAt: now
+    };
+    const nextMetadata = {
+      ...metadata,
+      validation
+    };
+    if (JSON.stringify(nextMetadata) !== JSON.stringify(metadata)) {
+      getDatabase()
+        .prepare(
+          `UPDATE movement_trips
+           SET metadata_json = ?, updated_at = ?
+           WHERE id = ?`
+        )
+        .run(JSON.stringify(nextMetadata), now, row.id);
+    }
+  });
+}
+
+function resolvePlaceRowById(userId: string, placeId: string | null | undefined) {
+  if (!placeId) {
+    return null;
+  }
+  return (
+    (getDatabase()
+      .prepare(
+        `SELECT *
+         FROM movement_places
+         WHERE id = ?
+           AND user_id = ?`
+      )
+      .get(placeId, userId) as MovementPlaceRow | undefined) ?? null
+  );
+}
+
+function resolvePlaceForPatch(input: {
+  userId: string;
+  explicitPlaceId?: string | null;
+  explicitPlaceExternalUid?: string | null;
+  fallbackCoordinates: { latitude: number; longitude: number };
+}) {
+  if (input.explicitPlaceId !== undefined) {
+    return resolvePlaceRowById(input.userId, input.explicitPlaceId);
+  }
+  if (input.explicitPlaceExternalUid !== undefined) {
+    return input.explicitPlaceExternalUid
+      ? resolvePlaceForCoordinates(
+          input.userId,
+          input.fallbackCoordinates,
+          input.explicitPlaceExternalUid
+        ) ?? null
+      : null;
+  }
+  return undefined;
+}
+
 function createMovementNote(input: {
   userId: string;
   title: string;
@@ -822,7 +1206,83 @@ function createMovementNote(input: {
   );
 }
 
-function maybeCreateStayNote(
+function formatMovementDurationForNote(valueSeconds: number) {
+  if (valueSeconds >= 86_400) {
+    return `${round(valueSeconds / 86_400, 1)} days`;
+  }
+  if (valueSeconds >= 3_600) {
+    return `${round(valueSeconds / 3_600, 1)} hours`;
+  }
+  return `${Math.max(1, Math.round(valueSeconds / 60))} minutes`;
+}
+
+function mergeMovementNoteTags(
+  existingTags: string[],
+  existingFrontmatter: Record<string, unknown>,
+  generatedTags: string[]
+) {
+  const movement =
+    existingFrontmatter.movement &&
+    typeof existingFrontmatter.movement === "object" &&
+    !Array.isArray(existingFrontmatter.movement)
+      ? (existingFrontmatter.movement as Record<string, unknown>)
+      : null;
+  const previousGeneratedTags = Array.isArray(movement?.generatedTags)
+    ? movement.generatedTags.filter(
+        (value): value is string => typeof value === "string"
+      )
+    : [];
+  const previousGeneratedTagSet = new Set(
+    previousGeneratedTags.map((tag) => tag.toLowerCase())
+  );
+  const preservedTags = existingTags.filter(
+    (tag) => !previousGeneratedTagSet.has(tag.toLowerCase())
+  );
+  return uniqStrings([...preservedTags, ...generatedTags]);
+}
+
+function syncMovementNote(input: {
+  userId: string;
+  publishedNoteId: string | null;
+  title: string;
+  contentMarkdown: string;
+  generatedTags: string[];
+  frontmatter: Record<string, unknown>;
+}) {
+  const existingNote = input.publishedNoteId
+    ? getNoteById(input.publishedNoteId)
+    : null;
+  if (existingNote && !Array.isArray(existingNote)) {
+    const updated = updateNote(
+      existingNote.id,
+      {
+        title: input.title,
+        contentMarkdown: input.contentMarkdown,
+        tags: mergeMovementNoteTags(
+          existingNote.tags ?? [],
+          existingNote.frontmatter,
+          input.generatedTags
+        ),
+        frontmatter: {
+          ...existingNote.frontmatter,
+          ...input.frontmatter
+        }
+      },
+      { actor: "Movement sync", source: "system" }
+    );
+    return updated?.id ?? existingNote.id;
+  }
+  const created = createMovementNote({
+    userId: input.userId,
+    title: input.title,
+    contentMarkdown: input.contentMarkdown,
+    tags: input.generatedTags,
+    frontmatter: input.frontmatter
+  });
+  return created?.id ?? null;
+}
+
+function syncStayNote(
   settings: ReturnType<typeof mapMovementSettings>,
   stay: MovementStayRow,
   place: MovementPlaceRow | undefined
@@ -831,36 +1291,49 @@ function maybeCreateStayNote(
     return null;
   }
   const label = place?.label || stay.label || "Unlabeled stay";
-  const durationMinutes = Math.round(durationSeconds(stay.started_at, stay.ended_at) / 60);
+  const durationSecondsValue = durationSeconds(stay.started_at, stay.ended_at);
+  const live =
+    stay.status.trim().toLowerCase() !== "completed" &&
+    stay.status.trim().toLowerCase() !== "closed";
+  const generatedTags = uniqStrings([
+    "movement",
+    "stay",
+    ...(place ? safeJsonParse<string[]>(place.category_tags_json, []) : [])
+  ]);
   const content = [
-    `Stayed at **${label}** for ${durationMinutes} minutes.`,
+    live ? `Currently staying at **${label}**.` : `Stayed at **${label}**.`,
     "",
     `- Started: ${stay.started_at}`,
-    `- Ended: ${stay.ended_at}`,
-    `- Radius: ${Math.round(stay.radius_meters)} m`
+    `- ${live ? "Current end" : "Ended"}: ${stay.ended_at}`,
+    `- Duration: ${formatMovementDurationForNote(durationSecondsValue)}`,
+    `- Radius: ${Math.round(stay.radius_meters)} m`,
+    `- Classification: ${stay.classification || "stationary"}`
   ].join("\n");
-  return createMovementNote({
+  return syncMovementNote({
     userId: stay.user_id,
+    publishedNoteId: stay.published_note_id,
     title: `Stay · ${label}`,
     contentMarkdown: content,
-    tags: uniqStrings([
-      "movement",
-      "stay",
-      ...(place ? safeJsonParse<string[]>(place.category_tags_json, []) : [])
-    ]),
+    generatedTags,
     frontmatter: {
       observedAt: stay.started_at,
       movement: {
         kind: "stay",
+        state: live ? "live" : "closed",
         stayId: stay.id,
         publishMode: settings.publishMode,
-        placeId: place?.id ?? null
+        placeId: place?.id ?? null,
+        placeLabel: label,
+        startedAt: stay.started_at,
+        endedAt: stay.ended_at,
+        durationSeconds: durationSecondsValue,
+        generatedTags
       }
     }
   });
 }
 
-function maybeCreateTripNote(
+function syncTripNote(
   settings: ReturnType<typeof mapMovementSettings>,
   trip: MovementTripRow,
   startPlace: MovementPlaceRow | undefined,
@@ -871,32 +1344,49 @@ function maybeCreateTripNote(
   }
   const startLabel = startPlace?.label || "Unknown start";
   const endLabel = endPlace?.label || "Unknown end";
+  const durationSecondsValue = durationSeconds(trip.started_at, trip.ended_at);
   const distanceKm = round(trip.distance_meters / 1000, 2);
+  const live =
+    trip.status.trim().toLowerCase() !== "completed" &&
+    trip.status.trim().toLowerCase() !== "closed";
+  const generatedTags = uniqStrings([
+    "movement",
+    "trip",
+    ...safeJsonParse<string[]>(trip.tags_json, [])
+  ]);
   const content = [
-    `Travelled from **${startLabel}** to **${endLabel}**.`,
+    live
+      ? `Currently moving from **${startLabel}** to **${endLabel}**.`
+      : `Travelled from **${startLabel}** to **${endLabel}**.`,
     "",
     `- Started: ${trip.started_at}`,
-    `- Ended: ${trip.ended_at}`,
+    `- ${live ? "Current end" : "Ended"}: ${trip.ended_at}`,
+    `- Duration: ${formatMovementDurationForNote(durationSecondsValue)}`,
     `- Distance: ${distanceKm} km`,
     `- Activity: ${trip.activity_type || trip.travel_mode}`
   ].join("\n");
-  return createMovementNote({
+  return syncMovementNote({
     userId: trip.user_id,
+    publishedNoteId: trip.published_note_id,
     title: `Trip · ${startLabel} → ${endLabel}`,
     contentMarkdown: content,
-    tags: uniqStrings([
-      "movement",
-      "trip",
-      ...safeJsonParse<string[]>(trip.tags_json, [])
-    ]),
+    generatedTags,
     frontmatter: {
       observedAt: trip.started_at,
       movement: {
         kind: "trip",
+        state: live ? "live" : "closed",
         tripId: trip.id,
         publishMode: settings.publishMode,
         startPlaceId: startPlace?.id ?? null,
-        endPlaceId: endPlace?.id ?? null
+        endPlaceId: endPlace?.id ?? null,
+        startPlaceLabel: startLabel,
+        endPlaceLabel: endLabel,
+        startedAt: trip.started_at,
+        endedAt: trip.ended_at,
+        durationSeconds: durationSecondsValue,
+        distanceMeters: trip.distance_meters,
+        generatedTags
       }
     }
   });
@@ -1033,7 +1523,7 @@ function upsertMovementPlaceInternal(input: {
       parsed.latitude,
       parsed.longitude,
       parsed.radiusMeters,
-      JSON.stringify(uniqStrings(parsed.categoryTags)),
+      JSON.stringify(canonicalizeMovementCategoryTags(parsed.categoryTags)),
       parsed.visibility,
       parsed.wikiNoteId,
       JSON.stringify(parsed.linkedEntities),
@@ -1224,19 +1714,21 @@ function upsertMovementStay(
       existing?.created_at ?? now,
       now
     );
+  reconcileMovementOverlapValidation(pairing.user_id);
   const fresh = getDatabase()
     .prepare(`SELECT * FROM movement_stays WHERE user_id = ? AND external_uid = ?`)
     .get(pairing.user_id, parsed.externalUid) as MovementStayRow;
-  if (!existing && settings?.publishMode === "auto_publish") {
-    const note = maybeCreateStayNote(settings, fresh, matchedPlace);
-    if (note) {
+  const freshMetadata = safeJsonParse<Record<string, unknown>>(fresh.metadata_json, {});
+  if (settings?.publishMode === "auto_publish" && !hasInvalidMovementRecord(freshMetadata)) {
+    const publishedNoteId = syncStayNote(settings, fresh, matchedPlace);
+    if (publishedNoteId && publishedNoteId !== fresh.published_note_id) {
       getDatabase()
         .prepare(
           `UPDATE movement_stays
            SET published_note_id = ?, updated_at = ?
            WHERE id = ?`
         )
-        .run(note.id, nowIso(), fresh.id);
+        .run(publishedNoteId, nowIso(), fresh.id);
     }
   }
   return {
@@ -1367,24 +1859,32 @@ function upsertMovementTrip(
       existing?.created_at ?? now,
       now
     );
+  reconcileMovementOverlapValidation(pairing.user_id);
   const fresh = getDatabase()
     .prepare(`SELECT * FROM movement_trips WHERE user_id = ? AND external_uid = ?`)
     .get(pairing.user_id, parsed.externalUid) as MovementTripRow;
   replaceTripChildren(fresh.id, parsed.points, parsed.stops, pairing.user_id);
-  if (!existing && settings?.publishMode === "auto_publish") {
-    const note = maybeCreateTripNote(settings, fresh, startPlace, endPlace);
-    if (note) {
+  reconcileMovementOverlapValidation(pairing.user_id);
+  const refreshed = getDatabase()
+    .prepare(`SELECT * FROM movement_trips WHERE id = ?`)
+    .get(fresh.id) as MovementTripRow;
+  const freshMetadata = safeJsonParse<Record<string, unknown>>(refreshed.metadata_json, {});
+  if (settings?.publishMode === "auto_publish" && !hasInvalidMovementRecord(freshMetadata)) {
+    const publishedNoteId = syncTripNote(settings, refreshed, startPlace, endPlace);
+    if (publishedNoteId && publishedNoteId !== refreshed.published_note_id) {
       getDatabase()
         .prepare(
           `UPDATE movement_trips
            SET published_note_id = ?, updated_at = ?
            WHERE id = ?`
         )
-        .run(note.id, nowIso(), fresh.id);
+        .run(publishedNoteId, nowIso(), refreshed.id);
     }
+  }
+  if (!existing && settings?.publishMode === "auto_publish" && !hasInvalidMovementRecord(freshMetadata)) {
     awardMovementXp({
       userId: pairing.user_id,
-      entityId: fresh.id,
+      entityId: refreshed.id,
       categoryTags: uniqStrings([
         ...(startPlace
           ? safeJsonParse<string[]>(startPlace.category_tags_json, [])
@@ -1394,13 +1894,13 @@ function upsertMovementTrip(
           : []),
         ...parsed.tags
       ]),
-      distanceMeters: fresh.distance_meters,
+      distanceMeters: refreshed.distance_meters,
       title: "Movement exploration"
     });
   }
   return {
     mode: existing ? "updated" as const : "created" as const,
-    tripId: fresh.id
+    tripId: refreshed.id
   };
 }
 
@@ -1580,6 +2080,514 @@ export function updateMovementPlace(
     }
   });
   return place;
+}
+
+function buildMovementTimelineTitleForStay(stay: ReturnType<typeof mapMovementStay>) {
+  return stay.place?.label || stay.label || "Stay";
+}
+
+function buildMovementTimelineSubtitleForStay(
+  stay: ReturnType<typeof mapMovementStay>
+) {
+  const metricTags = Array.isArray((stay.metrics as Record<string, unknown>).tags)
+    ? (((stay.metrics as Record<string, unknown>).tags as string[]) ?? [])
+    : [];
+  const metadataTags = Array.isArray((stay.metadata as Record<string, unknown>).tags)
+    ? (((stay.metadata as Record<string, unknown>).tags as string[]) ?? [])
+    : [];
+  const tags = uniqStrings([
+    ...(stay.place?.categoryTags ?? []),
+    ...metricTags,
+    ...metadataTags
+  ]);
+  if (tags.length > 0) {
+    return tags.join(" · ");
+  }
+  return stay.classification === "stationary" ? "Stay" : stay.classification;
+}
+
+function buildMovementTimelineTitleForTrip(trip: ReturnType<typeof mapMovementTrip>) {
+  return (
+    trip.label ||
+    `${trip.startPlace?.label ?? "Unknown"} → ${trip.endPlace?.label ?? "Unknown"}`
+  );
+}
+
+function buildMovementTimelineSubtitleForTrip(
+  trip: ReturnType<typeof mapMovementTrip>
+) {
+  const parts = [
+    trip.distanceMeters > 0 ? `${round(trip.distanceMeters / 1000, 1)} km` : "",
+    trip.activityType || trip.travelMode,
+    trip.stops.length > 0 ? `${trip.stops.length} stop${trip.stops.length === 1 ? "" : "s"}` : ""
+  ].filter(Boolean);
+  return parts.join(" · ");
+}
+
+function compareMovementTimelineDescending(
+  left: MovementTimelineCursor,
+  right: MovementTimelineCursor
+) {
+  return (
+    right.endedAt.localeCompare(left.endedAt) ||
+    right.startedAt.localeCompare(left.startedAt) ||
+    right.kind.localeCompare(left.kind) ||
+    right.id.localeCompare(left.id)
+  );
+}
+
+export function getMovementTimeline(input: z.input<typeof movementTimelineQuerySchema>) {
+  const parsed = movementTimelineQuerySchema.parse(input);
+  const userIds = parsed.userIds.length > 0 ? parsed.userIds : undefined;
+  const initialStayRows = listMovementStayRows(userIds);
+  const initialTripRows = listMovementTripRows(userIds);
+  const scopedUserIds = new Set<string>();
+  for (const row of initialStayRows) {
+    scopedUserIds.add(row.user_id);
+  }
+  for (const row of initialTripRows) {
+    scopedUserIds.add(row.user_id);
+  }
+  for (const scopedUserId of scopedUserIds) {
+    reconcileMovementOverlapValidation(scopedUserId);
+  }
+  const places = listMovementPlaceRows(userIds).map(mapMovementPlace);
+  const placesById = new Map(places.map((place) => [place.id, place] as const));
+  const stayRows = listMovementStayRows(userIds);
+  const tripRows = listMovementTripRows(userIds);
+  const tripIds = tripRows.map((row) => row.id);
+  const pointsByTrip = new Map<string, MovementTripPointRow[]>();
+  listTripPoints(tripIds).forEach((point) => {
+    pointsByTrip.set(point.trip_id, [...(pointsByTrip.get(point.trip_id) ?? []), point]);
+  });
+  const stopsByTrip = new Map<string, MovementTripStopRow[]>();
+  listTripStops(tripIds).forEach((stop) => {
+    stopsByTrip.set(stop.trip_id, [...(stopsByTrip.get(stop.trip_id) ?? []), stop]);
+  });
+
+  const chronological = [
+    ...stayRows.map((row) => ({
+      id: row.id,
+      kind: "stay" as const,
+      startedAt: row.started_at,
+      endedAt: row.ended_at,
+      stay: mapMovementStay(row, placesById)
+    })),
+    ...tripRows.map((row) => ({
+      id: row.id,
+      kind: "trip" as const,
+      startedAt: row.started_at,
+      endedAt: row.ended_at,
+      trip: mapMovementTrip(
+        row,
+        placesById,
+        pointsByTrip.get(row.id) ?? [],
+        stopsByTrip.get(row.id) ?? []
+      )
+    }))
+  ]
+    .sort((left, right) =>
+      left.startedAt.localeCompare(right.startedAt) ||
+      left.endedAt.localeCompare(right.endedAt) ||
+      left.kind.localeCompare(right.kind) ||
+      left.id.localeCompare(right.id)
+    );
+  const validChronological = chronological.filter((segment) =>
+    segment.kind === "stay"
+      ? !hasInvalidMovementRecord(segment.stay.metadata)
+      : !hasInvalidMovementRecord(segment.trip.metadata)
+  );
+
+  let nextStayLane: MovementTimelineLaneSide = "left";
+  const stayLaneById = new Map<string, MovementTimelineLaneSide>();
+  for (const segment of validChronological) {
+    if (segment.kind === "stay") {
+      stayLaneById.set(segment.id, nextStayLane);
+      nextStayLane = nextStayLane === "left" ? "right" : "left";
+    }
+  }
+
+  const decorated = validChronological.map((segment, index) => {
+    const previousStayId = [...validChronological.slice(0, index)]
+      .reverse()
+      .find((candidate) => candidate.kind === "stay")?.id;
+    const previousStayLane = previousStayId
+      ? stayLaneById.get(previousStayId)
+      : undefined;
+    const nextStayLaneId = validChronological
+      .slice(index + 1)
+      .find((candidate) => candidate.kind === "stay")?.id;
+    const nextStayLane =
+      nextStayLaneId ? stayLaneById.get(nextStayLaneId) : undefined;
+    const cursor = {
+      id: segment.id,
+      kind: segment.kind,
+      startedAt: segment.startedAt,
+      endedAt: segment.endedAt
+    } satisfies MovementTimelineCursor;
+    if (segment.kind === "stay") {
+      const laneSide = stayLaneById.get(segment.id) ?? "left";
+      return {
+        id: segment.id,
+        kind: "stay" as const,
+        startedAt: segment.startedAt,
+        endedAt: segment.endedAt,
+        durationSeconds: segment.stay.durationSeconds,
+        laneSide,
+        connectorFromLane: laneSide,
+        connectorToLane: laneSide,
+        title: buildMovementTimelineTitleForStay(segment.stay),
+        subtitle: buildMovementTimelineSubtitleForStay(segment.stay),
+        placeLabel: segment.stay.place?.label ?? segment.stay.placeId ?? null,
+        tags: uniqStrings([
+          ...(segment.stay.place?.categoryTags ?? []),
+          ...(Array.isArray((segment.stay.metrics as Record<string, unknown>).tags)
+            ? (((segment.stay.metrics as Record<string, unknown>).tags as string[]) ?? [])
+            : [])
+        ]),
+        syncSource: segment.stay.pairingSessionId ? "companion" : "forge",
+        cursor: encodeMovementTimelineCursor(cursor),
+        stay: segment.stay,
+        trip: null
+      };
+    }
+    const laneSide = nextStayLane ?? previousStayLane ?? "left";
+    return {
+      id: segment.id,
+      kind: "trip" as const,
+      startedAt: segment.startedAt,
+      endedAt: segment.endedAt,
+      durationSeconds: segment.trip.durationSeconds,
+      laneSide,
+      connectorFromLane: previousStayLane ?? laneSide,
+      connectorToLane: nextStayLane ?? laneSide,
+      title: buildMovementTimelineTitleForTrip(segment.trip),
+      subtitle: buildMovementTimelineSubtitleForTrip(segment.trip),
+      placeLabel:
+        segment.trip.endPlace?.label ??
+        segment.trip.startPlace?.label ??
+        null,
+      tags: uniqStrings([
+        ...segment.trip.tags,
+        ...(segment.trip.startPlace?.categoryTags ?? []),
+        ...(segment.trip.endPlace?.categoryTags ?? [])
+      ]),
+      syncSource: segment.trip.pairingSessionId ? "companion" : "forge",
+      cursor: encodeMovementTimelineCursor(cursor),
+      stay: null,
+      trip: segment.trip
+    };
+  });
+
+  const descending = [...decorated].sort((left, right) =>
+    compareMovementTimelineDescending(
+      {
+        id: left.id,
+        kind: left.kind,
+        startedAt: left.startedAt,
+        endedAt: left.endedAt
+      },
+      {
+        id: right.id,
+        kind: right.kind,
+        startedAt: right.startedAt,
+        endedAt: right.endedAt
+      }
+    )
+  );
+  const beforeCursor = decodeMovementTimelineCursor(parsed.before);
+  const filtered = beforeCursor
+    ? descending.filter((segment) =>
+        compareMovementTimelineDescending(
+          {
+            id: segment.id,
+            kind: segment.kind,
+            startedAt: segment.startedAt,
+            endedAt: segment.endedAt
+          },
+          beforeCursor
+        ) > 0
+      )
+    : descending;
+  const segments = filtered.slice(0, parsed.limit);
+  const nextCursor =
+    filtered.length > segments.length && segments.length > 0
+      ? segments[segments.length - 1]!.cursor
+      : null;
+  return {
+    segments,
+    nextCursor,
+    hasMore: nextCursor !== null,
+    invalidSegmentCount: chronological.length - validChronological.length
+  };
+}
+
+export function updateMovementStay(
+  stayId: string,
+  patch: z.input<typeof movementStayPatchSchema>,
+  context: ActivityContext,
+  options: { userId?: string } = {}
+) {
+  const existing = getDatabase()
+    .prepare(
+      `SELECT *
+       FROM movement_stays
+       WHERE id = ?`
+    )
+    .get(stayId) as MovementStayRow | undefined;
+  if (!existing) {
+    return undefined;
+  }
+  if (options.userId && existing.user_id !== options.userId) {
+    return undefined;
+  }
+  const parsed = movementStayPatchSchema.parse(patch);
+  const startedAt = parsed.startedAt ?? existing.started_at;
+  const endedAt = parsed.endedAt ?? existing.ended_at;
+  if (Date.parse(endedAt) < Date.parse(startedAt)) {
+    throw new HttpError(
+      400,
+      "invalid_movement_stay_range",
+      "Movement stay end time must be after the start time."
+    );
+  }
+  const resolvedPlace =
+    resolvePlaceForPatch({
+      userId: existing.user_id,
+      explicitPlaceId: hasOwn(parsed, "placeId") ? parsed.placeId : undefined,
+      explicitPlaceExternalUid:
+        hasOwn(parsed, "placeExternalUid") ? parsed.placeExternalUid : undefined,
+      fallbackCoordinates: {
+        latitude: parsed.centerLatitude ?? existing.center_latitude,
+        longitude: parsed.centerLongitude ?? existing.center_longitude
+      }
+    }) ?? (hasOwn(parsed, "placeId") || hasOwn(parsed, "placeExternalUid")
+      ? null
+      : resolvePlaceRowById(existing.user_id, existing.place_id));
+  const tags =
+    parsed.tags !== undefined
+      ? uniqStrings(parsed.tags)
+      : Array.isArray(
+            (safeJsonParse<Record<string, unknown>>(existing.metrics_json, {}).tags)
+          )
+        ? uniqStrings(
+            ((safeJsonParse<Record<string, unknown>>(existing.metrics_json, {}).tags as string[]) ??
+              [])
+          )
+        : [];
+  const metrics = {
+    ...safeJsonParse<Record<string, unknown>>(existing.metrics_json, {}),
+    tags
+  };
+  const metadata = {
+    ...safeJsonParse<Record<string, unknown>>(existing.metadata_json, {}),
+    ...(parsed.metadata ?? {})
+  };
+  getDatabase()
+    .prepare(
+      `UPDATE movement_stays
+       SET place_id = ?,
+           label = ?,
+           status = ?,
+           classification = ?,
+           started_at = ?,
+           ended_at = ?,
+           center_latitude = ?,
+           center_longitude = ?,
+           radius_meters = ?,
+           sample_count = ?,
+           metrics_json = ?,
+           metadata_json = ?,
+           updated_at = ?
+       WHERE id = ?`
+    )
+    .run(
+      resolvedPlace?.id ?? null,
+      parsed.label ?? parsed.placeLabel ?? existing.label,
+      parsed.status ?? existing.status,
+      parsed.classification ?? existing.classification,
+      startedAt,
+      endedAt,
+      parsed.centerLatitude ?? existing.center_latitude,
+      parsed.centerLongitude ?? existing.center_longitude,
+      parsed.radiusMeters ?? existing.radius_meters,
+      parsed.sampleCount ?? existing.sample_count,
+      JSON.stringify(metrics),
+      JSON.stringify(metadata),
+      nowIso(),
+      stayId
+    );
+  const places = listMovementPlaceRows([existing.user_id]).map(mapMovementPlace);
+  const placesById = new Map(places.map((place) => [place.id, place] as const));
+  const updated = mapMovementStay(
+    getDatabase()
+      .prepare(
+        `SELECT *
+         FROM movement_stays
+         WHERE id = ?`
+      )
+      .get(stayId) as MovementStayRow,
+    placesById
+  );
+  recordActivityEvent({
+    entityType: "system",
+    entityId: updated.id,
+    eventType: "movement_stay_updated",
+    title: "Movement stay updated",
+    description: `Updated ${updated.place?.label ?? (updated.label || "movement stay")}.`,
+    actor: context.actor ?? null,
+    source: context.source,
+    metadata: {
+      placeId: updated.placeId,
+      durationSeconds: updated.durationSeconds
+    }
+  });
+  return updated;
+}
+
+export function updateMovementTrip(
+  tripId: string,
+  patch: z.input<typeof movementTripPatchSchema>,
+  context: ActivityContext,
+  options: { userId?: string } = {}
+) {
+  const existing = getDatabase()
+    .prepare(
+      `SELECT *
+       FROM movement_trips
+       WHERE id = ?`
+    )
+    .get(tripId) as MovementTripRow | undefined;
+  if (!existing) {
+    return undefined;
+  }
+  if (options.userId && existing.user_id !== options.userId) {
+    return undefined;
+  }
+  const parsed = movementTripPatchSchema.parse(patch);
+  const startedAt = parsed.startedAt ?? existing.started_at;
+  const endedAt = parsed.endedAt ?? existing.ended_at;
+  if (Date.parse(endedAt) < Date.parse(startedAt)) {
+    throw new HttpError(
+      400,
+      "invalid_movement_trip_range",
+      "Movement trip end time must be after the start time."
+    );
+  }
+  const tripPoints = listTripPoints([tripId]);
+  const fallbackStartPoint = tripPoints[0]
+    ? {
+        latitude: tripPoints[0].latitude,
+        longitude: tripPoints[0].longitude
+      }
+    : { latitude: 0, longitude: 0 };
+  const fallbackEndPoint = tripPoints[tripPoints.length - 1]
+    ? {
+        latitude: tripPoints[tripPoints.length - 1]!.latitude,
+        longitude: tripPoints[tripPoints.length - 1]!.longitude
+      }
+    : fallbackStartPoint;
+  const startPlace =
+    resolvePlaceForPatch({
+      userId: existing.user_id,
+      explicitPlaceId: hasOwn(parsed, "startPlaceId") ? parsed.startPlaceId : undefined,
+      explicitPlaceExternalUid:
+        hasOwn(parsed, "startPlaceExternalUid")
+          ? parsed.startPlaceExternalUid
+          : undefined,
+      fallbackCoordinates: fallbackStartPoint
+    }) ?? (hasOwn(parsed, "startPlaceId") || hasOwn(parsed, "startPlaceExternalUid")
+      ? null
+      : resolvePlaceRowById(existing.user_id, existing.start_place_id));
+  const endPlace =
+    resolvePlaceForPatch({
+      userId: existing.user_id,
+      explicitPlaceId: hasOwn(parsed, "endPlaceId") ? parsed.endPlaceId : undefined,
+      explicitPlaceExternalUid:
+        hasOwn(parsed, "endPlaceExternalUid") ? parsed.endPlaceExternalUid : undefined,
+      fallbackCoordinates: fallbackEndPoint
+    }) ?? (hasOwn(parsed, "endPlaceId") || hasOwn(parsed, "endPlaceExternalUid")
+      ? null
+      : resolvePlaceRowById(existing.user_id, existing.end_place_id));
+  const metadata = {
+    ...safeJsonParse<Record<string, unknown>>(existing.metadata_json, {}),
+    ...(parsed.metadata ?? {})
+  };
+  getDatabase()
+    .prepare(
+      `UPDATE movement_trips
+       SET start_place_id = ?,
+           end_place_id = ?,
+           label = ?,
+           status = ?,
+           travel_mode = ?,
+           activity_type = ?,
+           started_at = ?,
+           ended_at = ?,
+           distance_meters = ?,
+           moving_seconds = ?,
+           idle_seconds = ?,
+           average_speed_mps = ?,
+           max_speed_mps = ?,
+           calories_kcal = ?,
+           expected_met = ?,
+           tags_json = ?,
+           metadata_json = ?,
+           updated_at = ?
+       WHERE id = ?`
+    )
+    .run(
+      startPlace?.id ?? null,
+      endPlace?.id ?? null,
+      parsed.label ?? existing.label,
+      parsed.status ?? existing.status,
+      parsed.travelMode ?? existing.travel_mode,
+      parsed.activityType ?? existing.activity_type,
+      startedAt,
+      endedAt,
+      parsed.distanceMeters ?? existing.distance_meters,
+      parsed.movingSeconds ?? existing.moving_seconds,
+      parsed.idleSeconds ?? existing.idle_seconds,
+      parsed.averageSpeedMps === undefined
+        ? existing.average_speed_mps
+        : parsed.averageSpeedMps,
+      parsed.maxSpeedMps === undefined ? existing.max_speed_mps : parsed.maxSpeedMps,
+      parsed.caloriesKcal === undefined ? existing.calories_kcal : parsed.caloriesKcal,
+      parsed.expectedMet === undefined ? existing.expected_met : parsed.expectedMet,
+      JSON.stringify(parsed.tags !== undefined ? uniqStrings(parsed.tags) : safeJsonParse<string[]>(existing.tags_json, [])),
+      JSON.stringify(metadata),
+      nowIso(),
+      tripId
+    );
+  const places = listMovementPlaceRows([existing.user_id]).map(mapMovementPlace);
+  const placesById = new Map(places.map((place) => [place.id, place] as const));
+  const updated = mapMovementTrip(
+    getDatabase()
+      .prepare(
+        `SELECT *
+         FROM movement_trips
+         WHERE id = ?`
+      )
+      .get(tripId) as MovementTripRow,
+    placesById,
+    tripPoints,
+    listTripStops([tripId])
+  );
+  recordActivityEvent({
+    entityType: "system",
+    entityId: updated.id,
+    eventType: "movement_trip_updated",
+    title: "Movement trip updated",
+    description: `Updated ${updated.label || "movement trip"}.`,
+    actor: context.actor ?? null,
+    source: context.source,
+    metadata: {
+      startPlaceId: updated.startPlaceId,
+      endPlaceId: updated.endPlaceId,
+      distanceMeters: updated.distanceMeters
+    }
+  });
+  return updated;
 }
 
 export function getMovementSettings(userIds?: string[]) {
