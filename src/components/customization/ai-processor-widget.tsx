@@ -36,9 +36,7 @@ export function AiProcessorWidget({
   const activeAgentLabels = useMemo(() => {
     const byId = new Map(agents.map((agent) => [agent.id, agent.label]));
     const labels = (agentIds.length > 0 ? agentIds : ["agt_forge_default"])
-      .map((id) =>
-        byId.get(id) ?? (id === "agt_forge_default" ? "Forge Agent" : id)
-      );
+      .map((id) => byId.get(id) ?? (id === "agt_forge_default" ? "Forge Agent" : id));
     return labels.join(", ");
   }, [agentIds, agents]);
 
