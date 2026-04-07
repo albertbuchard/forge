@@ -40,6 +40,9 @@ const BACKGROUND_POLL_INTERVAL_MS = 2_000;
 
 type JsonSchema = Record<string, unknown>;
 
+const DEFAULT_CODEX_BASE_URL = "https://chatgpt.com/backend-api";
+const CODEX_JWT_CLAIM_PATH = "https://api.openai.com/auth";
+
 function closedObject(properties: Record<string, JsonSchema>): JsonSchema {
   return {
     type: "object",
@@ -205,6 +208,73 @@ function readVerbosity(profile: WikiLlmProfileLike) {
     : null;
 }
 
+function isCodexProfile(profile: WikiLlmProfileLike) {
+  return profile.provider === "openai-codex";
+}
+
+function normalizeBaseUrl(profile: WikiLlmProfileLike) {
+  const trimmed = profile.baseUrl.trim();
+  if (trimmed.length > 0) {
+    return trimmed.replace(/\/$/, "");
+  }
+  return isCodexProfile(profile)
+    ? DEFAULT_CODEX_BASE_URL
+    : "https://api.openai.com/v1";
+}
+
+function buildResponsesUrl(
+  profile: WikiLlmProfileLike,
+  responseId?: string | null
+) {
+  const root = isCodexProfile(profile)
+    ? `${normalizeBaseUrl(profile)}/codex/responses`
+    : `${normalizeBaseUrl(profile)}/responses`;
+  return responseId ? `${root}/${responseId}` : root;
+}
+
+function extractCodexAccountId(accessToken: string) {
+  try {
+    const parts = accessToken.split(".");
+    if (parts.length !== 3) {
+      throw new Error("Invalid token");
+    }
+    const payload = JSON.parse(atob(parts[1])) as Record<string, unknown>;
+    const auth = payload[CODEX_JWT_CLAIM_PATH];
+    if (!auth || typeof auth !== "object") {
+      throw new Error("Missing auth claim");
+    }
+    const accountId = (auth as { chatgpt_account_id?: unknown }).chatgpt_account_id;
+    if (typeof accountId !== "string" || accountId.trim().length === 0) {
+      throw new Error("Missing account id");
+    }
+    return accountId;
+  } catch {
+    throw new Error("Failed to extract accountId from OpenAI Codex token.");
+  }
+}
+
+function buildRequestHeaders(
+  profile: WikiLlmProfileLike,
+  apiKey: string,
+  options: {
+    includeJsonContentType?: boolean;
+  } = {}
+) {
+  const headers: Record<string, string> = {
+    authorization: `Bearer ${apiKey}`
+  };
+  if (options.includeJsonContentType) {
+    headers["content-type"] = "application/json";
+  }
+  if (!isCodexProfile(profile)) {
+    return headers;
+  }
+  headers["OpenAI-Beta"] = "responses=experimental";
+  headers.originator = "pi";
+  headers["chatgpt-account-id"] = extractCodexAccountId(apiKey);
+  return headers;
+}
+
 function buildReasoningConfiguration(profile: WikiLlmProfileLike) {
   const effort = readReasoningEffort(profile);
   return effort ? { effort } : undefined;
@@ -335,7 +405,13 @@ function normalizeResult(
 }
 
 export class OpenAiResponsesProvider implements WikiLlmProvider {
-  readonly providerNames = ["openai", "openai-responses", "openai-compatible"];
+  readonly providerNames = [
+    "openai",
+    "openai-api",
+    "openai-codex",
+    "openai-responses",
+    "openai-compatible"
+  ];
 
   async testConnection({
     apiKey,
@@ -356,13 +432,12 @@ export class OpenAiResponsesProvider implements WikiLlmProvider {
     let response: Response;
     try {
       response = await fetch(
-        `${profile.baseUrl.replace(/\/$/, "")}/responses`,
+        buildResponsesUrl(profile),
         {
           method: "POST",
-          headers: {
-            "content-type": "application/json",
-            authorization: `Bearer ${apiKey}`
-          },
+          headers: buildRequestHeaders(profile, apiKey, {
+            includeJsonContentType: true
+          }),
           body: JSON.stringify({
             model: profile.model,
             input: "Reply with the single word ok.",
@@ -616,12 +691,10 @@ export class OpenAiResponsesProvider implements WikiLlmProvider {
         }
       });
       const resumeResponse = await fetch(
-        `${profile.baseUrl.replace(/\/$/, "")}/responses/${responseId}`,
+        buildResponsesUrl(profile, responseId),
         {
           method: "GET",
-          headers: {
-            authorization: `Bearer ${apiKey}`
-          },
+          headers: buildRequestHeaders(profile, apiKey),
           signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS)
         }
       );
@@ -653,13 +726,12 @@ export class OpenAiResponsesProvider implements WikiLlmProvider {
       let createResponse: Response;
       try {
         createResponse = await fetch(
-          `${profile.baseUrl.replace(/\/$/, "")}/responses`,
+          buildResponsesUrl(profile),
           {
             method: "POST",
-            headers: {
-              "content-type": "application/json",
-              authorization: `Bearer ${apiKey}`
-            },
+            headers: buildRequestHeaders(profile, apiKey, {
+              includeJsonContentType: true
+            }),
             body: JSON.stringify({
               model: profile.model,
               input: inputs,
@@ -769,12 +841,10 @@ export class OpenAiResponsesProvider implements WikiLlmProvider {
       );
       try {
         const pollResponse = await fetch(
-          `${profile.baseUrl.replace(/\/$/, "")}/responses/${responseId}`,
+          buildResponsesUrl(profile, responseId),
           {
             method: "GET",
-            headers: {
-              authorization: `Bearer ${apiKey}`
-            },
+            headers: buildRequestHeaders(profile, apiKey),
             signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS)
           }
         );

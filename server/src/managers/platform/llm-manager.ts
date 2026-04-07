@@ -1,6 +1,10 @@
 import { AbstractManager } from "../base.js";
+import { refreshOpenAICodexToken } from "@mariozechner/pi-ai/oauth";
 import type { SecretsManager } from "./secrets-manager.js";
-import { readEncryptedSecret } from "../../repositories/calendar.js";
+import {
+  readEncryptedSecret,
+  storeEncryptedSecret
+} from "../../repositories/calendar.js";
 
 export type WikiCompileInput = {
   titleHint: string;
@@ -62,7 +66,12 @@ export interface WikiLlmProvider {
 }
 
 type StoredSecretPayload = {
+  kind?: "api_key" | "oauth";
+  provider?: string;
   apiKey?: string;
+  access?: string;
+  refresh?: string;
+  expires?: number;
 };
 
 function emitDiagnostic(
@@ -109,7 +118,7 @@ export class LlmManager extends AbstractManager {
       });
       return null;
     }
-    const apiKey = this.readApiKey(profile.secretId);
+    const apiKey = await this.readApiKey(profile.secretId);
     if (!apiKey) {
       emitDiagnostic(logger, {
         level: "error",
@@ -154,7 +163,8 @@ export class LlmManager extends AbstractManager {
       });
       throw new Error("Unsupported LLM provider.");
     }
-    const apiKey = explicitApiKey?.trim() || this.readApiKey(profile.secretId);
+    const apiKey =
+      explicitApiKey?.trim() || (await this.readApiKey(profile.secretId));
     if (!apiKey) {
       emitDiagnostic(logger, {
         level: "error",
@@ -200,7 +210,7 @@ export class LlmManager extends AbstractManager {
     );
   }
 
-  private readApiKey(secretId: string | null | undefined) {
+  private async readApiKey(secretId: string | null | undefined) {
     if (!secretId) {
       return null;
     }
@@ -210,6 +220,31 @@ export class LlmManager extends AbstractManager {
     }
     const payload =
       this.secretsManager.openJson<StoredSecretPayload>(cipherText);
+    if (
+      payload.kind === "oauth" &&
+      payload.provider === "openai-codex" &&
+      typeof payload.refresh === "string"
+    ) {
+      let access = payload.access?.trim() || null;
+      const expires =
+        typeof payload.expires === "number" ? payload.expires : Date.now();
+      if (!access || expires <= Date.now() + 60_000) {
+        const refreshed = await refreshOpenAICodexToken(payload.refresh);
+        const nextPayload: StoredSecretPayload = {
+          ...payload,
+          access: refreshed.access,
+          refresh: refreshed.refresh,
+          expires: refreshed.expires
+        };
+        storeEncryptedSecret(
+          secretId,
+          this.secretsManager.sealJson(nextPayload),
+          "Refreshed OpenAI Codex OAuth credential"
+        );
+        access = refreshed.access;
+      }
+      return access;
+    }
     return payload.apiKey?.trim() || null;
   }
 }

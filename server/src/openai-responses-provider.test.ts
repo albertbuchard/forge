@@ -237,3 +237,80 @@ test("wiki ingest uses background polling and keeps large but valid source text 
     "forge-wiki-ingest:gpt-5.4:auto:text/plain"
   );
 });
+
+test("OpenAI Codex connection tests use the ChatGPT Codex backend and headers", async () => {
+  const provider = new OpenAiResponsesProvider();
+  const originalFetch = globalThis.fetch;
+  let capturedRequest: {
+    url: string;
+    headers: Headers;
+    body: Record<string, unknown>;
+  } | null = null;
+
+  const jwtPayload = Buffer.from(
+    JSON.stringify({
+      "https://api.openai.com/auth": {
+        chatgpt_account_id: "acct_codex_123"
+      }
+    })
+  ).toString("base64url");
+  const oauthAccessToken = `header.${jwtPayload}.sig`;
+
+  globalThis.fetch = (async (request, init) => {
+    capturedRequest = {
+      url: String(request),
+      headers: new Headers(init?.headers),
+      body: JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>
+    };
+    return new Response(
+      JSON.stringify({
+        output: [
+          {
+            content: [{ type: "output_text", text: "ok" }]
+          }
+        ]
+      }),
+      {
+        status: 200,
+        headers: { "content-type": "application/json" }
+      }
+    );
+  }) as typeof fetch;
+
+  try {
+    const result = await provider.testConnection({
+      apiKey: oauthAccessToken,
+      profile: {
+        provider: "openai-codex",
+        baseUrl: "https://chatgpt.com/backend-api",
+        model: "gpt-5.4-mini",
+        systemPrompt: "",
+        secretId: null,
+        metadata: {}
+      }
+    });
+    assert.equal(result.outputPreview, "ok");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+
+  assert.ok(capturedRequest);
+  assert.equal(
+    capturedRequest.url,
+    "https://chatgpt.com/backend-api/codex/responses"
+  );
+  assert.equal(
+    capturedRequest.headers.get("authorization"),
+    `Bearer ${oauthAccessToken}`
+  );
+  assert.equal(
+    capturedRequest.headers.get("chatgpt-account-id"),
+    "acct_codex_123"
+  );
+  assert.equal(capturedRequest.headers.get("originator"), "pi");
+  assert.equal(
+    capturedRequest.headers.get("OpenAI-Beta"),
+    "responses=experimental"
+  );
+  assert.equal(capturedRequest.body.model, "gpt-5.4-mini");
+});

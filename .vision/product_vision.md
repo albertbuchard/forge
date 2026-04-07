@@ -286,6 +286,18 @@ developer-only panel. Calendar provider setup and connection health also belong 
 under a dedicated Calendar section, including a guided connection modal and a step-
 by-step setup guide that names the exact credentials and URLs Forge needs. Settings
 must be legible on mobile and desktop.
+Settings also needs a dedicated Models section that is separate from Wiki settings.
+That Models section owns Forge Agent model defaults, OpenAI API credentials, OpenAI
+Codex OAuth setup, local OpenAI-compatible endpoints, and the list of external AI
+connections that become first-class chat agents inside Forge. Forge Agent remains the
+default built-in system agent with separate Basic chat and Wiki model slots, while each
+saved connection such as OpenAI Codex OAuth or OpenAI API should surface as its own
+agent identity that page widgets and future AI processors can target directly.
+Theme controls also belong here as a first-class user-facing surface. Forge should ship
+multiple distinct visual themes rather than one default look, and Settings should let
+the user switch among those presets through clear preview cards. Forge should also let
+the user define a custom theme through a guided modal editor and direct JSON import so
+advanced users can carry their own palette without editing source files.
 Settings also needs a user-management surface. The product should be able to list human
 and bot users, create or edit them, show their labels and types clearly, and expose the
 current permissive sharing posture while leaving room for future policy controls.

@@ -1,4 +1,8 @@
 import { z } from "zod";
+import {
+  forgeCustomThemeSchema,
+  forgeThemePreferenceSchema
+} from "@/lib/theme-system";
 
 export const appLocaleSchema = z.enum(["en", "fr"]);
 
@@ -51,7 +55,8 @@ export const settingsMutationSchema = z.object({
     maxActiveTasks: z.coerce.number().int().min(1).max(8),
     timeAccountingMode: z.enum(["split", "parallel", "primary_only"])
   }),
-  themePreference: z.enum(["obsidian", "solar", "system"]),
+  themePreference: forgeThemePreferenceSchema,
+  customTheme: forgeCustomThemeSchema.nullable().optional(),
   localePreference: appLocaleSchema,
   calendarProviders: z
     .object({
@@ -60,6 +65,26 @@ export const settingsMutationSchema = z.object({
           clientId: z.string().trim(),
           tenantId: z.string().trim(),
           redirectUri: z.string().trim()
+        })
+        .optional()
+    })
+    .optional(),
+  modelSettings: z
+    .object({
+      forgeAgent: z
+        .object({
+          basicChat: z
+            .object({
+              connectionId: z.string().trim().nullable().optional(),
+              model: z.string().trim().optional()
+            })
+            .optional(),
+          wiki: z
+            .object({
+              connectionId: z.string().trim().nullable().optional(),
+              model: z.string().trim().optional()
+            })
+            .optional()
         })
         .optional()
     })

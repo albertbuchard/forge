@@ -1,7 +1,8 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { Link } from "react-router-dom";
+import { ThemeCustomizerDialog } from "@/components/settings/theme-customizer-dialog";
 import { SettingsSectionNav } from "@/components/settings/settings-section-nav";
 import { PageHero } from "@/components/shell/page-hero";
 import { SurfaceSkeleton } from "@/components/experience/surface-skeleton";
@@ -17,10 +18,32 @@ import {
   revokeOperatorSession
 } from "@/lib/api";
 import { settingsMutationSchema, type SettingsMutationInput } from "@/lib/schemas";
+import {
+  applyForgeThemeToDocument,
+  defaultCustomTheme,
+  forgeThemeOptions,
+  getForgeThemePreview,
+  type ForgeThemePreference
+} from "@/lib/theme-system";
+
+function ThemePreviewSwatches({ theme }: { theme: ReturnType<typeof getForgeThemePreview> }) {
+  return (
+    <div className="mt-4 grid grid-cols-4 gap-2">
+      {[theme.primary, theme.secondary, theme.tertiary, theme.panelHigh].map((color) => (
+        <div
+          key={color}
+          className="h-10 rounded-[14px] border border-black/10"
+          style={{ background: color }}
+        />
+      ))}
+    </div>
+  );
+}
 
 export function SettingsPage() {
   const { t } = useI18n();
   const queryClient = useQueryClient();
+  const [themeEditorOpen, setThemeEditorOpen] = useState(false);
 
   const operatorSessionQuery = useQuery({
     queryKey: ["forge-operator-session"],
@@ -51,6 +74,7 @@ export function SettingsPage() {
         timeAccountingMode: "split"
       },
       themePreference: "obsidian",
+      customTheme: defaultCustomTheme,
       localePreference: "en"
     }
   });
@@ -81,6 +105,29 @@ export function SettingsPage() {
   }, [settingsQuery.data, settingsForm]);
 
   const settings = settingsQuery.data?.settings;
+  const selectedTheme = settingsForm.watch("themePreference");
+  const customTheme = settingsForm.watch("customTheme") ?? defaultCustomTheme;
+
+  useEffect(() => {
+    if (!settings) {
+      return;
+    }
+
+    applyForgeThemeToDocument(selectedTheme, customTheme);
+
+    return () => {
+      applyForgeThemeToDocument(
+        settings.themePreference,
+        settings.customTheme ?? null
+      );
+    };
+  }, [
+    customTheme,
+    selectedTheme,
+    settings,
+    settings?.customTheme,
+    settings?.themePreference
+  ]);
 
   if (operatorSessionQuery.isLoading || settingsQuery.isLoading) {
     return (
@@ -218,13 +265,68 @@ export function SettingsPage() {
             </label>
 
             <div className="mt-2 font-label text-[11px] uppercase tracking-[0.18em] text-white/45">Theme calibration</div>
-            <div className="grid gap-3 md:grid-cols-3">
-              {(["obsidian", "solar", "system"] as const).map((theme) => (
-                <label key={theme} className="flex items-center gap-3 rounded-[18px] bg-white/[0.04] px-4 py-4">
-                  <input type="radio" value={theme} {...settingsForm.register("themePreference")} />
-                  <span className="text-white/72 capitalize">{theme}</span>
-                </label>
-              ))}
+            <p className="text-sm text-white/58">
+              Switch between Forge presets, follow the system palette, or save your own dark shell theme.
+            </p>
+            <div className="grid gap-3 xl:grid-cols-3">
+              {forgeThemeOptions.map((themeOption) => {
+                const preview = getForgeThemePreview(themeOption.value, customTheme);
+                const selected = selectedTheme === themeOption.value;
+                return (
+                  <button
+                    key={themeOption.value}
+                    type="button"
+                    onClick={() =>
+                      settingsForm.setValue(
+                        "themePreference",
+                        themeOption.value as ForgeThemePreference,
+                        { shouldDirty: true }
+                      )
+                    }
+                    className={`rounded-[24px] border px-4 py-4 text-left transition ${
+                      selected
+                        ? "border-[rgba(192,193,255,0.28)] bg-[rgba(192,193,255,0.14)] shadow-[0_18px_36px_rgba(5,12,24,0.24)]"
+                        : "border-white/8 bg-white/[0.04] hover:bg-white/[0.07]"
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <div className="text-sm font-semibold text-white">
+                          {themeOption.value === "custom"
+                            ? customTheme.label
+                            : themeOption.label}
+                        </div>
+                        <div className="mt-2 text-sm leading-6 text-white/58">
+                          {themeOption.description}
+                        </div>
+                      </div>
+                      <div
+                        className={`mt-1 size-4 rounded-full border ${
+                          selected
+                            ? "border-[rgba(192,193,255,0.65)] bg-[var(--primary)]"
+                            : "border-white/25"
+                        }`}
+                      />
+                    </div>
+                    <ThemePreviewSwatches theme={preview} />
+                  </button>
+                );
+              })}
+            </div>
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-[18px] bg-white/[0.04] px-4 py-4">
+              <div>
+                <div className="text-sm font-medium text-white">Custom theme editor</div>
+                <div className="mt-1 text-sm leading-6 text-white/58">
+                  Save a custom Forge palette through a guided modal, or paste and upload JSON directly.
+                </div>
+              </div>
+              <Button
+                type="button"
+                variant={selectedTheme === "custom" ? "secondary" : "ghost"}
+                onClick={() => setThemeEditorOpen(true)}
+              >
+                {selectedTheme === "custom" ? "Edit custom theme" : "Create custom theme"}
+              </Button>
             </div>
 
             <div className="mt-2 font-label text-[11px] uppercase tracking-[0.18em] text-white/45">{t("common.settings.localeLabel")}</div>
@@ -276,6 +378,16 @@ export function SettingsPage() {
           </div>
         </Card>
       </div>
+
+      <ThemeCustomizerDialog
+        open={themeEditorOpen}
+        onOpenChange={setThemeEditorOpen}
+        value={customTheme}
+        onSave={(theme) => {
+          settingsForm.setValue("customTheme", theme, { shouldDirty: true });
+          settingsForm.setValue("themePreference", "custom", { shouldDirty: true });
+        }}
+      />
     </div>
   );
 }

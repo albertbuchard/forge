@@ -41,6 +41,7 @@ import { SettingsAgentsPage } from "@/pages/settings-agents-page";
 import { SettingsBinPage } from "@/pages/settings-bin-page";
 import { SettingsCalendarPage } from "@/pages/settings-calendar-page";
 import { SettingsMobilePage } from "@/pages/settings-mobile-page";
+import { SettingsModelsPage } from "@/pages/settings-models-page";
 import { SettingsLogsPage } from "@/pages/settings-logs-page";
 import { SettingsRewardsPage } from "@/pages/settings-rewards-page";
 import { SettingsUsersPage } from "@/pages/settings-users-page";
@@ -209,6 +210,7 @@ export function App() {
           <Route path="settings/users" element={<SettingsUsersPage />} />
           <Route path="settings/calendar" element={<SettingsCalendarPage />} />
           <Route path="settings/mobile" element={<SettingsMobilePage />} />
+          <Route path="settings/models" element={<SettingsModelsPage />} />
           <Route path="settings/agents" element={<SettingsAgentsPage />} />
           <Route path="settings/rewards" element={<SettingsRewardsPage />} />
           <Route path="settings/wiki" element={<SettingsWikiPage />} />

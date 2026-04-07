@@ -1299,7 +1299,30 @@ export const notificationPreferencesSchema = z.object({
   achievementCelebrations: z.boolean()
 });
 
-export const themePreferenceSchema = z.enum(["obsidian", "solar", "system"]);
+const hexColorSchema = z
+  .string()
+  .trim()
+  .regex(/^#[0-9a-fA-F]{6}$/, "Use a 6-digit hex color");
+
+export const themePreferenceSchema = z.enum([
+  "obsidian",
+  "solar",
+  "aurora",
+  "ember",
+  "custom",
+  "system"
+]);
+export const customThemeSchema = z.object({
+  label: z.string().trim().min(1).max(40),
+  primary: hexColorSchema,
+  secondary: hexColorSchema,
+  tertiary: hexColorSchema,
+  canvas: hexColorSchema,
+  panel: hexColorSchema,
+  panelHigh: hexColorSchema,
+  panelLow: hexColorSchema,
+  ink: hexColorSchema
+});
 export const executionSettingsSchema = z.object({
   maxActiveTasks: z.number().int().min(1).max(8),
   timeAccountingMode: timeAccountingModeSchema
@@ -1315,6 +1338,80 @@ export const microsoftCalendarAuthSettingsSchema = z.object({
   isConfigured: z.boolean(),
   isReadyForSignIn: z.boolean(),
   setupMessage: z.string()
+});
+
+export const aiModelProviderSchema = z.enum([
+  "openai-api",
+  "openai-codex",
+  "openai-compatible"
+]);
+
+export const aiModelAuthModeSchema = z.enum(["api_key", "oauth"]);
+
+export const aiModelConnectionStatusSchema = z.enum([
+  "connected",
+  "needs_attention"
+]);
+
+export const aiModelConnectionSchema = z.object({
+  id: z.string(),
+  label: z.string(),
+  provider: aiModelProviderSchema,
+  authMode: aiModelAuthModeSchema,
+  baseUrl: z.string(),
+  model: z.string(),
+  accountLabel: z.string().nullable(),
+  enabled: z.boolean(),
+  status: aiModelConnectionStatusSchema,
+  hasStoredCredential: z.boolean(),
+  usesOAuth: z.boolean(),
+  supportsCustomBaseUrl: z.boolean(),
+  agentId: z.string(),
+  agentLabel: z.string(),
+  createdAt: z.string(),
+  updatedAt: z.string()
+});
+
+export const forgeAgentModelSlotSchema = z.object({
+  connectionId: z.string().nullable(),
+  connectionLabel: z.string().nullable(),
+  provider: aiModelProviderSchema.nullable(),
+  baseUrl: z.string().nullable(),
+  model: z.string()
+});
+
+export const modelSettingsPayloadSchema = z.object({
+  forgeAgent: z.object({
+    basicChat: forgeAgentModelSlotSchema,
+    wiki: forgeAgentModelSlotSchema
+  }),
+  connections: z.array(aiModelConnectionSchema),
+  oauth: z.object({
+    openAiCodex: z.object({
+      authorizeUrl: z.string(),
+      callbackUrl: z.string(),
+      setupMessage: z.string()
+    })
+  })
+});
+
+export const openAiCodexOauthSessionSchema = z.object({
+  id: z.string(),
+  status: z.enum([
+    "starting",
+    "awaiting_browser",
+    "awaiting_manual_input",
+    "authorized",
+    "error",
+    "consumed",
+    "expired"
+  ]),
+  authUrl: z.string().nullable(),
+  accountLabel: z.string().nullable(),
+  error: z.string().nullable(),
+  createdAt: z.string(),
+  expiresAt: z.string(),
+  credentialExpiresAt: z.string().nullable()
 });
 
 export const agentTokenSummarySchema = z.object({
@@ -1569,6 +1666,7 @@ export const settingsPayloadSchema = z.object({
   notifications: notificationPreferencesSchema,
   execution: executionSettingsSchema,
   themePreference: themePreferenceSchema,
+  customTheme: customThemeSchema.nullable(),
   localePreference: appLocaleSchema,
   security: z.object({
     integrityScore: z.number().int().min(0).max(100),
@@ -1581,6 +1679,7 @@ export const settingsPayloadSchema = z.object({
   calendarProviders: z.object({
     microsoft: microsoftCalendarAuthSettingsSchema
   }),
+  modelSettings: modelSettingsPayloadSchema,
   agents: z.array(agentIdentitySchema),
   agentTokens: z.array(agentTokenSummarySchema)
 });
@@ -2457,6 +2556,7 @@ export const updateSettingsSchema = z.object({
   notifications: notificationPreferencesSchema.partial().optional(),
   execution: executionSettingsSchema.partial().optional(),
   themePreference: themePreferenceSchema.optional(),
+  customTheme: customThemeSchema.nullable().optional(),
   localePreference: appLocaleSchema.optional(),
   security: z
     .object({
@@ -2473,7 +2573,86 @@ export const updateSettingsSchema = z.object({
         })
         .optional()
     })
+    .optional(),
+  modelSettings: z
+    .object({
+      forgeAgent: z
+        .object({
+          basicChat: z
+            .object({
+              connectionId: trimmedString.nullable().optional(),
+              model: trimmedString.optional()
+            })
+            .optional(),
+          wiki: z
+            .object({
+              connectionId: trimmedString.nullable().optional(),
+              model: trimmedString.optional()
+            })
+            .optional()
+        })
+        .optional()
+    })
     .optional()
+});
+
+export const upsertAiModelConnectionSchema = z
+  .object({
+    id: trimmedString.optional(),
+    label: nonEmptyTrimmedString,
+    provider: aiModelProviderSchema,
+    authMode: aiModelAuthModeSchema.optional(),
+    baseUrl: trimmedString.optional(),
+    model: nonEmptyTrimmedString,
+    apiKey: trimmedString.optional(),
+    oauthSessionId: trimmedString.optional(),
+    enabled: z.boolean().default(true)
+  })
+  .superRefine((value, context) => {
+    const authMode =
+      value.authMode ??
+      (value.provider === "openai-codex" ? "oauth" : "api_key");
+    if (value.provider === "openai-codex" && authMode !== "oauth") {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["authMode"],
+        message: "OpenAI Codex connections must use OAuth."
+      });
+    }
+    if (
+      authMode === "api_key" &&
+      !value.id?.trim() &&
+      !value.apiKey?.trim()
+    ) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["apiKey"],
+        message: "API key is required for a new API-backed connection."
+      });
+    }
+    if (
+      authMode === "oauth" &&
+      !value.id?.trim() &&
+      !value.oauthSessionId?.trim()
+    ) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["oauthSessionId"],
+        message: "OAuth session is required for a new OAuth-backed connection."
+      });
+    }
+  });
+
+export const testAiModelConnectionSchema = z.object({
+  connectionId: trimmedString.optional(),
+  provider: aiModelProviderSchema.optional(),
+  baseUrl: trimmedString.optional(),
+  model: nonEmptyTrimmedString,
+  apiKey: trimmedString.optional()
+});
+
+export const submitOpenAiCodexOauthManualCodeSchema = z.object({
+  codeOrUrl: nonEmptyTrimmedString
 });
 
 export const createAgentTokenSchema = z.object({
@@ -2994,6 +3173,14 @@ export type SettingsPayload = z.infer<typeof settingsPayloadSchema>;
 export type MicrosoftCalendarAuthSettings = z.infer<
   typeof microsoftCalendarAuthSettingsSchema
 >;
+export type AiModelProvider = z.infer<typeof aiModelProviderSchema>;
+export type AiModelAuthMode = z.infer<typeof aiModelAuthModeSchema>;
+export type AiModelConnection = z.infer<typeof aiModelConnectionSchema>;
+export type ForgeAgentModelSlot = z.infer<typeof forgeAgentModelSlotSchema>;
+export type ModelSettingsPayload = z.infer<typeof modelSettingsPayloadSchema>;
+export type OpenAiCodexOauthSession = z.infer<
+  typeof openAiCodexOauthSessionSchema
+>;
 export type OperatorContextPayload = z.infer<
   typeof operatorContextPayloadSchema
 >;
@@ -3086,6 +3273,12 @@ export type UpdateCalendarEventInput = z.infer<
 >;
 export type UpdateRewardRuleInput = z.infer<typeof updateRewardRuleSchema>;
 export type UpdateSettingsInput = z.infer<typeof updateSettingsSchema>;
+export type UpsertAiModelConnectionInput = z.infer<
+  typeof upsertAiModelConnectionSchema
+>;
+export type TestAiModelConnectionInput = z.infer<
+  typeof testAiModelConnectionSchema
+>;
 export type CreateAgentTokenInput = z.infer<typeof createAgentTokenSchema>;
 export type CreateAgentActionInput = z.infer<typeof createAgentActionSchema>;
 export type CreateInsightFeedbackInput = z.infer<

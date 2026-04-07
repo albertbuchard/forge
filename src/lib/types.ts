@@ -1,3 +1,8 @@
+import type {
+  ForgeCustomTheme,
+  ForgeThemePreference
+} from "@/lib/theme-system";
+
 export type TaskStatus =
   | "backlog"
   | "focus"
@@ -1299,6 +1304,58 @@ export interface AgentIdentity {
   updatedAt: string;
 }
 
+export type AiModelProvider =
+  | "openai-api"
+  | "openai-codex"
+  | "openai-compatible";
+
+export type AiModelAuthMode = "api_key" | "oauth";
+
+export interface AiModelConnection {
+  id: string;
+  label: string;
+  provider: AiModelProvider;
+  authMode: AiModelAuthMode;
+  baseUrl: string;
+  model: string;
+  accountLabel: string | null;
+  enabled: boolean;
+  status: "connected" | "needs_attention";
+  hasStoredCredential: boolean;
+  usesOAuth: boolean;
+  supportsCustomBaseUrl: boolean;
+  agentId: string;
+  agentLabel: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ForgeAgentModelSlot {
+  connectionId: string | null;
+  connectionLabel: string | null;
+  provider: AiModelProvider | null;
+  baseUrl: string | null;
+  model: string;
+}
+
+export interface OpenAiCodexOauthSession {
+  id: string;
+  status:
+    | "starting"
+    | "awaiting_browser"
+    | "awaiting_manual_input"
+    | "authorized"
+    | "error"
+    | "consumed"
+    | "expired";
+  authUrl: string | null;
+  accountLabel: string | null;
+  error: string | null;
+  createdAt: string;
+  expiresAt: string;
+  credentialExpiresAt: string | null;
+}
+
 export interface InsightEvidence {
   entityType: string;
   entityId: string;
@@ -1610,7 +1667,8 @@ export interface SettingsPayload {
     maxActiveTasks: number;
     timeAccountingMode: TimeAccountingMode;
   };
-  themePreference: "obsidian" | "solar" | "system";
+  themePreference: ForgeThemePreference;
+  customTheme?: ForgeCustomTheme | null;
   localePreference: AppLocale;
   security: {
     integrityScore: number;
@@ -1631,6 +1689,20 @@ export interface SettingsPayload {
       isConfigured: boolean;
       isReadyForSignIn: boolean;
       setupMessage: string;
+    };
+  };
+  modelSettings: {
+    forgeAgent: {
+      basicChat: ForgeAgentModelSlot;
+      wiki: ForgeAgentModelSlot;
+    };
+    connections: AiModelConnection[];
+    oauth: {
+      openAiCodex: {
+        authorizeUrl: string;
+        callbackUrl: string;
+        setupMessage: string;
+      };
     };
   };
   agents: AgentIdentity[];

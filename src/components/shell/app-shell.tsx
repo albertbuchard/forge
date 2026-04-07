@@ -91,6 +91,7 @@ import {
 } from "@/lib/api";
 import { ForgeApiError } from "@/lib/api-error";
 import { I18nProvider, useI18n, type TranslationKey } from "@/lib/i18n";
+import { applyForgeThemeToDocument } from "@/lib/theme-system";
 import { cn } from "@/lib/utils";
 import type {
   GoalMutationInput,
@@ -1113,7 +1114,14 @@ function ShellCommandButton({ onClick }: { onClick: () => void }) {
         tone="meta"
         className="ml-1 hidden bg-white/[0.06] text-white/52 xl:inline-flex"
       >
-        ⌘K
+        Shift Shift
+      </Badge>
+      <Badge
+        size="sm"
+        tone="meta"
+        className="hidden bg-white/[0.06] text-white/52 2xl:inline-flex"
+      >
+        Cmd K
       </Badge>
     </Button>
   );
@@ -1327,10 +1335,36 @@ function ShellFrame({
   }, [location.pathname, t]);
 
   useEffect(() => {
+    let lastStandaloneShiftAt = 0;
+
     const onKeyDown = (event: KeyboardEvent) => {
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
         event.preventDefault();
         setPaletteOpen((current) => !current);
+        lastStandaloneShiftAt = 0;
+        return;
+      }
+
+      if (
+        event.key === "Shift" &&
+        !event.metaKey &&
+        !event.ctrlKey &&
+        !event.altKey &&
+        !event.repeat
+      ) {
+        const now = window.performance.now();
+        if (now - lastStandaloneShiftAt <= 360) {
+          event.preventDefault();
+          setPaletteOpen(true);
+          lastStandaloneShiftAt = 0;
+          return;
+        }
+        lastStandaloneShiftAt = now;
+        return;
+      }
+
+      if (!event.metaKey && !event.ctrlKey && !event.altKey) {
+        lastStandaloneShiftAt = 0;
       }
     };
 
@@ -1444,6 +1478,7 @@ function ShellFrame({
         open={paletteOpen}
         onOpenChange={setPaletteOpen}
         snapshot={shell.snapshot}
+        selectedUserIds={shell.selectedUserIds}
       />
 
       <div
@@ -2104,6 +2139,41 @@ export function AppShell() {
       }
     };
   }, []);
+
+  useEffect(() => {
+    const settings = settingsQuery.data?.settings;
+    if (!settings) {
+      return;
+    }
+
+    const applyTheme = () => {
+      applyForgeThemeToDocument(
+        settings.themePreference,
+        settings.customTheme ?? null
+      );
+    };
+
+    applyTheme();
+
+    if (
+      settings.themePreference !== "system" ||
+      typeof window === "undefined" ||
+      typeof window.matchMedia !== "function"
+    ) {
+      return;
+    }
+
+    const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
+    const handleChange = () => applyTheme();
+
+    if (typeof mediaQuery.addEventListener === "function") {
+      mediaQuery.addEventListener("change", handleChange);
+      return () => mediaQuery.removeEventListener("change", handleChange);
+    }
+
+    mediaQuery.addListener(handleChange);
+    return () => mediaQuery.removeListener(handleChange);
+  }, [settingsQuery.data?.settings]);
 
   useEffect(() => {
     if (!operatorSessionQuery.isSuccess) {

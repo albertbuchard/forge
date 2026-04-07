@@ -196,6 +196,12 @@ import {
   verifyAgentToken
 } from "./repositories/settings.js";
 import {
+  deleteAiModelConnection,
+  getAiModelConnectionById,
+  readModelConnectionCredential,
+  upsertAiModelConnection
+} from "./repositories/model-settings.js";
+import {
   createTag,
   getTagById,
   listTags,
@@ -305,6 +311,12 @@ import {
   updateCalendarConnectionSelection
 } from "./services/calendar-runtime.js";
 import {
+  consumeOpenAiCodexOauthCredentials,
+  getOpenAiCodexOauthSession,
+  startOpenAiCodexOauthSession,
+  submitOpenAiCodexOauthManualInput
+} from "./services/openai-codex-oauth.js";
+import {
   PSYCHE_ENTITY_TYPES,
   createBehaviorSchema,
   createBeliefEntrySchema,
@@ -354,6 +366,9 @@ import {
   activitySourceSchema,
   createAgentActionSchema,
   createAgentTokenSchema,
+  upsertAiModelConnectionSchema,
+  testAiModelConnectionSchema,
+  submitOpenAiCodexOauthManualCodeSchema,
   batchCreateEntitiesSchema,
   batchDeleteEntitiesSchema,
   batchRestoreEntitiesSchema,
@@ -8349,10 +8364,171 @@ export async function buildServer(
     return {
       settings: updateSettings(
         updateSettingsSchema.parse(request.body ?? {}),
-        toActivityContext(auth)
+        {
+          activity: toActivityContext(auth),
+          secrets: managers.secrets
+        }
       )
     };
   });
+  app.post("/api/v1/settings/models/connections", async (request, reply) => {
+    requireScopedAccess(request.headers as Record<string, unknown>, ["write"], {
+      route: "/api/v1/settings/models/connections"
+    });
+    const parsed = upsertAiModelConnectionSchema.parse(request.body ?? {});
+    const oauthCredential = parsed.oauthSessionId?.trim()
+      ? consumeOpenAiCodexOauthCredentials(parsed.oauthSessionId.trim())
+      : null;
+    const connection = upsertAiModelConnection(parsed, managers.secrets, {
+      oauthCredential
+    });
+    const currentSettings = getSettings();
+    const selectedWikiConnectionId =
+      currentSettings.modelSettings.forgeAgent.wiki.connectionId;
+    if (selectedWikiConnectionId === connection.id) {
+      updateSettings(
+        {
+          modelSettings: {
+            forgeAgent: {
+              wiki: {
+                connectionId: connection.id,
+                model: parsed.model
+              }
+            }
+          }
+        },
+        { secrets: managers.secrets }
+      );
+    }
+    reply.code(201);
+    return { connection };
+  });
+  app.delete(
+    "/api/v1/settings/models/connections/:id",
+    async (request, reply) => {
+      requireScopedAccess(
+        request.headers as Record<string, unknown>,
+        ["write"],
+        { route: "/api/v1/settings/models/connections/:id" }
+      );
+      const deletedId = deleteAiModelConnection(
+        (request.params as { id: string }).id,
+        managers.secrets
+      );
+      if (!deletedId) {
+        reply.code(404);
+        return { error: "AI model connection not found" };
+      }
+      return { deletedId };
+    }
+  );
+  app.post(
+    "/api/v1/settings/models/connections/test",
+    async (request, reply) => {
+      requireScopedAccess(
+        request.headers as Record<string, unknown>,
+        ["write"],
+        { route: "/api/v1/settings/models/connections/test" }
+      );
+      const parsed = testAiModelConnectionSchema.parse(request.body ?? {});
+      const existing = parsed.connectionId
+        ? getAiModelConnectionById(parsed.connectionId)
+        : null;
+      const credential = parsed.connectionId
+        ? readModelConnectionCredential(parsed.connectionId, managers.secrets)
+        : null;
+      const explicitApiKey =
+        parsed.apiKey?.trim() ||
+        (credential?.kind === "api_key"
+          ? credential.apiKey
+          : credential?.kind === "oauth"
+            ? credential.access
+            : null);
+      const result = await managers.llm.testWikiConnection(
+        {
+          provider: parsed.provider ?? existing?.provider ?? "openai-api",
+          baseUrl:
+            parsed.baseUrl?.trim() ||
+            existing?.baseUrl ||
+            "https://api.openai.com/v1",
+          model: parsed.model,
+          systemPrompt: "",
+          secretId: null,
+          metadata: {}
+        },
+        explicitApiKey,
+        ({ level, message, details = {} }) => {
+          recordDiagnosticLog({
+            level,
+            source: normalizeDiagnosticSource(
+              request.headers["x-forge-source"]
+            ),
+            scope:
+              typeof details.scope === "string" ? details.scope : "model_settings",
+            eventKey:
+              typeof details.eventKey === "string"
+                ? details.eventKey
+                : "model_connection_test",
+            message,
+            route: "/api/v1/settings/models/connections/test",
+            functionName: "testModelConnection",
+            details
+          });
+        }
+      );
+      reply.code(200);
+      return { result };
+    }
+  );
+  app.post("/api/v1/settings/models/oauth/openai-codex/start", async (request) => {
+    requireScopedAccess(request.headers as Record<string, unknown>, ["write"], {
+      route: "/api/v1/settings/models/oauth/openai-codex/start"
+    });
+    return { session: startOpenAiCodexOauthSession() };
+  });
+  app.get(
+    "/api/v1/settings/models/oauth/openai-codex/session/:id",
+    async (request, reply) => {
+      requireScopedAccess(
+        request.headers as Record<string, unknown>,
+        ["write"],
+        { route: "/api/v1/settings/models/oauth/openai-codex/session/:id" }
+      );
+      try {
+        return {
+          session: getOpenAiCodexOauthSession(
+            (request.params as { id: string }).id
+          )
+        };
+      } catch (error) {
+        if (
+          error instanceof Error &&
+          error.message.startsWith("Unknown OpenAI Codex OAuth session")
+        ) {
+          reply.code(404);
+          return { error: "OpenAI Codex OAuth session not found" };
+        }
+        throw error;
+      }
+    }
+  );
+  app.post(
+    "/api/v1/settings/models/oauth/openai-codex/session/:id/manual",
+    async (request) => {
+      requireScopedAccess(
+        request.headers as Record<string, unknown>,
+        ["write"],
+        { route: "/api/v1/settings/models/oauth/openai-codex/session/:id/manual" }
+      );
+      return {
+        session: submitOpenAiCodexOauthManualInput(
+          (request.params as { id: string }).id,
+          submitOpenAiCodexOauthManualCodeSchema.parse(request.body ?? {})
+            .codeOrUrl
+        )
+      };
+    }
+  );
   app.post("/api/v1/settings/tokens", async (request, reply) => {
     const auth = requireOperatorSession(
       request.headers as Record<string, unknown>,
