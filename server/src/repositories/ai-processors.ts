@@ -296,7 +296,10 @@ function resolveProcessorAgentProfiles(processor: AiProcessor, secrets: SecretsM
           : null;
     return {
       agentId,
-      agentLabel: connection.agentLabel,
+      agentLabel:
+        agentId === FORGE_DEFAULT_AGENT_ID
+          ? "Forge Agent"
+          : connection.agentLabel,
       profile: {
         provider: connection.provider,
         baseUrl: connection.baseUrl,
