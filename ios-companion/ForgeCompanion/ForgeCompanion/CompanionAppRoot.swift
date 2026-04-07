@@ -37,9 +37,6 @@ struct CompanionAppRoot: View {
         }
         .onChange(of: appModel.pairing?.sessionId) { _, sessionId in
             companionDebugLog("CompanionAppRoot", "pairing session changed -> \(sessionId ?? "nil")")
-            if sessionId != nil {
-                setupVisible = false
-            }
         }
     }
 }

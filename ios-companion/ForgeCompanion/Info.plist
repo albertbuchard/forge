@@ -4,7 +4,7 @@
 <dict>
 	<key>BGTaskSchedulerPermittedIdentifiers</key>
 	<array>
-		<string>com.aurel.forgecompanion.health-sync</string>
+		<string>com.albertbuchard.ForgeCompanion.health-sync</string>
 	</array>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
@@ -34,12 +34,29 @@
 	</array>
 	<key>NSCameraUsageDescription</key>
 	<string>Forge Companion uses the camera to scan the pairing QR code from Forge Settings.</string>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsLocalNetworking</key>
+		<true/>
+		<key>NSExceptionDomains</key>
+		<dict>
+			<key>100.100.100.100</key>
+			<dict>
+				<key>NSExceptionAllowsInsecureHTTPLoads</key>
+				<true/>
+				<key>NSIncludesSubdomains</key>
+				<true/>
+			</dict>
+		</dict>
+	</dict>
 	<key>NSHealthShareUsageDescription</key>
 	<string>Forge Companion reads Health data to sync sleep, workouts, and recovery into Forge.</string>
 	<key>NSHealthUpdateUsageDescription</key>
 	<string>Forge Companion may write reconciliation metadata in future milestones.</string>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>Forge Companion scans your local network to find Forge runtimes during setup.</string>
+	<key>NSMotionUsageDescription</key>
+	<string>Forge Companion uses motion activity to distinguish travel, walking, stationary periods, and movement context for truthful trip and stay capture.</string>
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
 	<string>Forge Companion uses background location to detect stays, trips, and stops so Forge can build a truthful movement timeline even when the app is not open.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
@@ -49,6 +66,8 @@
 		<key>UIApplicationSupportsMultipleScenes</key>
 		<false/>
 	</dict>
+	<key>UIRequiresFullScreen</key>
+	<true/>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>fetch</string>

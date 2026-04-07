@@ -10,6 +10,7 @@ struct PairedForgeScreen: View {
     @State private var isLoading = true
     @State private var webError: String?
     @State private var movementSettingsVisible = false
+    @State private var diagnosticsVisible = false
 
     var body: some View {
         GeometryReader { proxy in
@@ -94,6 +95,7 @@ struct PairedForgeScreen: View {
                     CompanionMenuSheet(
                         reopenSetup: reopenSetup,
                         reloadForge: { reloadToken = UUID() },
+                        openDiagnostics: { diagnosticsVisible = true },
                         openMovementSettings: { movementSettingsVisible = true },
                         closeMenu: { menuVisible = false }
                     )
@@ -114,6 +116,14 @@ struct PairedForgeScreen: View {
                 movementStore: appModel.movementStore,
                 close: { movementSettingsVisible = false }
             )
+            .presentationDetents([.large])
+            .presentationDragIndicator(.visible)
+        }
+        .sheet(isPresented: $diagnosticsVisible) {
+            CompanionDiagnosticsSheet(
+                close: { diagnosticsVisible = false }
+            )
+            .environmentObject(appModel)
             .presentationDetents([.large])
             .presentationDragIndicator(.visible)
         }

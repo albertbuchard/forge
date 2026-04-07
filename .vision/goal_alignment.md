@@ -52,7 +52,9 @@ Forge runtime, request Apple permissions directly, import HealthKit sleep and wo
 data, and turn that mobile-native context into structured Forge records instead of
 opaque wellness blobs. After pairing, that companion should default to Forge itself in
 a full-screen embedded web view, with native iOS controls reserved for permissions,
-sync, and device-specific settings.
+sync, and device-specific settings. Runtime discovery for that companion should work
+on trusted same-Wi-Fi networks and through Tailscale, with the Forge runtime
+advertising itself over Bonjour and publishing its Tailscale Serve URL when available.
 Ninth, it must support Preferences as a first-class domain. Forge should be able to
 learn and store what a user prefers across concrete domains and contexts through a
 fully algorithmic system of pairwise comparisons, direct preference signals, explicit

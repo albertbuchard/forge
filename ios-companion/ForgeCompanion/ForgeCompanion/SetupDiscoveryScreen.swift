@@ -23,7 +23,7 @@ struct SetupDiscoveryScreen: View {
         .onAppear {
             companionDebugLog(
                 "SetupDiscoveryScreen",
-                "onAppear discovered=\(appModel.discoveredServers.count) inFlight=\(appModel.discoveryInFlight)"
+                "onAppear discovered=\(appModel.discoveredServers.count) tailscaleDevices=\(appModel.discoveredTailscaleDevices.count) inFlight=\(appModel.discoveryInFlight)"
             )
         }
         .onChange(of: connectingServerId) { _, nextValue in
@@ -101,11 +101,34 @@ struct SetupDiscoveryScreen: View {
                             }
                         }
                     }
+
+                    tailscaleDevicesSection
                 }
                 .padding(.vertical, 10)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+    }
+
+    @ViewBuilder
+    private var tailscaleDevicesSection: some View {
+        if !appModel.discoveredTailscaleDevices.isEmpty || !appModel.tailscaleDiscoveryMessage.isEmpty {
+            CompanionSectionCard {
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("Tailscale devices")
+                        .font(.system(size: 12, weight: .semibold, design: .rounded))
+                        .foregroundStyle(CompanionStyle.textMuted)
+
+                    Text(appModel.tailscaleDiscoveryMessage)
+                        .font(.system(size: 11, weight: .medium, design: .rounded))
+                        .foregroundStyle(CompanionStyle.textSecondary)
+
+                    ForEach(appModel.discoveredTailscaleDevices) { device in
+                        tailscaleDeviceRow(device)
+                    }
+                }
+            }
+        }
     }
 
     private var footer: some View {
@@ -209,5 +232,45 @@ struct SetupDiscoveryScreen: View {
         case .bonjour:
             return "Bonjour"
         }
+    }
+
+    private func tailscaleDeviceRow(_ device: DiscoveredTailscaleDevice) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Text(device.name)
+                    .font(.system(size: 12, weight: .semibold, design: .rounded))
+                    .foregroundStyle(CompanionStyle.textPrimary)
+
+                Spacer(minLength: 8)
+
+                routeBadge(label: "API", reachable: device.forgeApiReachable)
+                routeBadge(label: "/forge", reachable: device.forgeUiReachable)
+            }
+
+            Text(device.dnsName ?? device.host)
+                .font(.system(size: 10, weight: .medium, design: .monospaced))
+                .foregroundStyle(CompanionStyle.textMuted)
+                .lineLimit(1)
+
+            Text(device.detail)
+                .font(.system(size: 10, weight: .medium, design: .rounded))
+                .foregroundStyle(CompanionStyle.textSecondary)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.vertical, 2)
+    }
+
+    private func routeBadge(label: String, reachable: Bool) -> some View {
+        Text(label)
+            .font(.system(size: 9, weight: .bold, design: .rounded))
+            .foregroundStyle(reachable ? Color(red: 0.18, green: 0.37, blue: 0.21) : CompanionStyle.textMuted)
+            .padding(.horizontal, 7)
+            .padding(.vertical, 4)
+            .background(
+                reachable
+                    ? Color(red: 0.67, green: 0.9, blue: 0.7)
+                    : Color.white.opacity(0.06),
+                in: Capsule()
+            )
     }
 }

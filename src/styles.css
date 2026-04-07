@@ -366,10 +366,15 @@ select {
 }
 
 .surface-grid-layout > .react-grid-item {
+  overflow: visible;
   transition:
     transform var(--motion-medium) var(--ease-standard),
     width var(--motion-medium) var(--ease-standard),
     height var(--motion-medium) var(--ease-standard);
+}
+
+.surface-grid-layout--editing > .react-grid-item {
+  transition: none;
 }
 
 .surface-grid-layout > .react-grid-item.react-grid-placeholder {
@@ -390,18 +395,23 @@ select {
 }
 
 .surface-grid-layout .react-resizable-handle {
+  display: none;
+}
+
+.surface-grid-layout--editing .react-resizable-handle {
+  display: block;
   width: 14px;
   height: 14px;
   opacity: 0;
   transition: opacity var(--motion-fast) var(--ease-standard);
 }
 
-.surface-grid-layout .react-grid-item:hover .react-resizable-handle,
-.surface-grid-layout .react-grid-item.react-resizable-resizing .react-resizable-handle {
+.surface-grid-layout--editing .react-grid-item:hover .react-resizable-handle,
+.surface-grid-layout--editing .react-grid-item.react-resizable-resizing .react-resizable-handle {
   opacity: 1;
 }
 
-.surface-grid-layout .react-resizable-handle::after {
+.surface-grid-layout--editing .react-resizable-handle::after {
   border-color: rgba(192, 193, 255, 0.58);
 }
 

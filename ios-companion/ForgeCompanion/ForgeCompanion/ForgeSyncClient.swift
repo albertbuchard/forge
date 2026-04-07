@@ -83,8 +83,14 @@ struct ForgeSyncClient {
     }
 
     private struct ErrorEnvelope: Decodable {
+        struct ValidationIssue: Decodable {
+            let path: [String]
+            let message: String
+        }
+
         let error: String?
         let message: String?
+        let details: [ValidationIssue]?
     }
 
     func verifyPairing(payload: PairingPayload, apiBaseUrl: String) async throws {
@@ -305,18 +311,28 @@ struct ForgeSyncClient {
             "sendRequest response method=\(method) url=\(url.absoluteString) status=\(httpResponse.statusCode) bytes=\(data.count)"
         )
         guard (200..<300).contains(httpResponse.statusCode) else {
-            let serverMessage = (try? JSONDecoder().decode(ErrorEnvelope.self, from: data))
-                .flatMap { $0.message ?? $0.error }
+            let decodedError = try? JSONDecoder().decode(ErrorEnvelope.self, from: data)
+            let serverMessage = decodedError.flatMap { $0.message ?? $0.error }
+            let validationMessage = decodedError?
+                .details?
+                .prefix(3)
+                .map { issue in
+                    let issuePath = issue.path.isEmpty ? "<root>" : issue.path.joined(separator: ".")
+                    return "\(issuePath): \(issue.message)"
+                }
+                .joined(separator: " | ")
+            let responseBody = String(data: data, encoding: .utf8) ?? "<non-utf8>"
             companionDebugLog(
                 "ForgeSyncClient",
-                "sendRequest failure status=\(httpResponse.statusCode) message=\(serverMessage ?? "nil")"
+                "sendRequest failure status=\(httpResponse.statusCode) message=\(serverMessage ?? "nil") validation=\(validationMessage ?? "nil") body=\(responseBody)"
             )
             throw NSError(
                 domain: "ForgeSyncClient",
                 code: httpResponse.statusCode,
                 userInfo: [
                     NSLocalizedDescriptionKey: serverMessage
-                        ?? "Forge rejected the request with status \(httpResponse.statusCode)."
+                        ?? "Forge rejected the request with status \(httpResponse.statusCode).",
+                    NSLocalizedFailureReasonErrorKey: validationMessage ?? responseBody
                 ]
             )
         }
@@ -341,7 +357,20 @@ struct ForgeSyncClient {
             return rawValue
         }
         let trimmedPath = url.path.replacingOccurrences(of: "/+$", with: "", options: .regularExpression)
-        let path = trimmedPath.hasSuffix("/api/v1") ? trimmedPath : "\(trimmedPath)/api/v1"
+        let path: String
+        if trimmedPath.hasSuffix("/forge/api/v1") {
+            path = trimmedPath.replacingOccurrences(
+                of: "/forge/api/v1$",
+                with: "/api/v1",
+                options: .regularExpression
+            )
+        } else if trimmedPath == "/forge" {
+            path = "/api/v1"
+        } else if trimmedPath.hasSuffix("/api/v1") {
+            path = trimmedPath
+        } else {
+            path = "\(trimmedPath)/api/v1"
+        }
         var components = URLComponents(url: url, resolvingAgainstBaseURL: false)
         components?.path = path
         let normalized = components?.url?.absoluteString ?? rawValue

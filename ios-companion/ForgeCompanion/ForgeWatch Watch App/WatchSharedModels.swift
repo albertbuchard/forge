@@ -8,6 +8,13 @@ enum ForgeWatchStorage {
     nonisolated static let actionMessageKey = "forge_watch_action_message"
     nonisolated static let ackMessageKey = "forge_watch_ack_message"
     nonisolated static let bootstrapContextKey = "forge_watch_bootstrap_context"
+
+    nonisolated static func sharedDefaults() -> UserDefaults {
+        guard FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: appGroupId) != nil else {
+            return .standard
+        }
+        return UserDefaults(suiteName: appGroupId) ?? .standard
+    }
 }
 
 enum WatchSurface: String, CaseIterable, Codable {

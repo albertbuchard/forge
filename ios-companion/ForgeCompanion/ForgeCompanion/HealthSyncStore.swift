@@ -56,20 +56,40 @@ actor HealthSyncStore {
         }
     }
 
-    func accessStatus() -> HealthAccessStatus {
+    func accessStatus(previousStoredStatus: HealthAccessStatus = .notSet) async -> HealthAccessStatus {
         let statuses = requestedReadTypes.map { store.authorizationStatus(for: $0) }
         let authorizedCount = statuses.filter { $0 == .sharingAuthorized }.count
         companionDebugLog(
             "HealthSyncStore",
             "accessStatus authorized=\(authorizedCount) total=\(statuses.count)"
         )
-        if authorizedCount == 0 {
-            return .notSet
-        }
         if authorizedCount == statuses.count {
             return .fullAccess
         }
-        return .customAccess
+        if authorizedCount > 0 {
+            return .customAccess
+        }
+
+        let requestStatus = await authorizationRequestStatus()
+        switch requestStatus {
+        case .shouldRequest:
+            return .notSet
+        case .unnecessary:
+            return previousStoredStatus == .notSet ? .customAccess : previousStoredStatus
+        case .unknown:
+            return previousStoredStatus
+        @unknown default:
+            return previousStoredStatus
+        }
+    }
+
+    private func authorizationRequestStatus() async -> HKAuthorizationRequestStatus {
+        let readTypes = requestedReadTypes
+        return await withCheckedContinuation { continuation in
+            store.getRequestStatusForAuthorization(toShare: [], read: readTypes) { status, _ in
+                continuation.resume(returning: status)
+            }
+        }
     }
 
     func buildSyncPayload(

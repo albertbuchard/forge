@@ -100,7 +100,10 @@ how much distance and energy they accumulated, and how that context related to n
 work, Psyche records, and other life evidence. The iPhone companion should explicitly
 ask for passive location permission, detect stays and trips with a truthful
 change-detection model, and sync structured place, stay, stop, and trip records back
-into Forge.
+into Forge. That companion must also be able to discover a nearby Forge runtime
+without manual entry when the runtime is already trusted: same-Wi-Fi discovery should
+work through Bonjour, and Tailscale discovery should work through advertised tailnet
+HTTPS URLs instead of assuming the phone can enumerate peers by itself.
 
 ## What The Main Views Are Supposed To Do
 

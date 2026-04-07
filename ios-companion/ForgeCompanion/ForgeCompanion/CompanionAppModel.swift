@@ -9,7 +9,15 @@ enum CompanionPairingURLResolver {
         }
         let trimmedPath = url.path.replacingOccurrences(of: "/+$", with: "", options: .regularExpression)
         let normalizedPath: String
-        if trimmedPath.hasSuffix("/api/v1") {
+        if trimmedPath.hasSuffix("/forge/api/v1") {
+            normalizedPath = trimmedPath.replacingOccurrences(
+                of: "/forge/api/v1$",
+                with: "/api/v1",
+                options: .regularExpression
+            )
+        } else if trimmedPath == "/forge" {
+            normalizedPath = "/api/v1"
+        } else if trimmedPath.hasSuffix("/api/v1") {
             normalizedPath = trimmedPath
         } else {
             normalizedPath = "\(trimmedPath)/api/v1"
@@ -105,10 +113,12 @@ final class CompanionAppModel: ObservableObject {
     private enum StorageKeys {
         static let pairingPayload = "forge_companion_pairing_payload"
         static let latestSyncReport = "forge_companion_latest_sync_report"
+        static let latestSyncPayloadSummary = "forge_companion_latest_sync_payload_summary"
         static let lastSuccessfulSyncAt = "forge_companion_last_successful_sync_at"
         static let healthAuthorizationGranted = "forge_companion_health_authorized"
         static let healthAccessStatus = "forge_companion_health_access_status"
         static let deferredHealthPrompt = "forge_companion_deferred_health_prompt"
+        static let movementPromptDeferred = "forge_companion_deferred_movement_prompt"
     }
 
     @Published var pairing: PairingPayload? {
@@ -135,6 +145,7 @@ final class CompanionAppModel: ObservableObject {
         }
     }
     @Published var latestSyncReport: SyncReport?
+    @Published var latestSyncPayloadSummary: SyncPayloadSummary?
     @Published var healthAuthorizationGranted = false
     @Published var healthAccessStatus: HealthAccessStatus = .notSet {
         didSet {
@@ -146,6 +157,7 @@ final class CompanionAppModel: ObservableObject {
     }
     @Published var lastSuccessfulSyncAt: Date?
     @Published var healthPermissionPromptDeferred = false
+    @Published var movementPermissionPromptDeferred = false
     @Published var discoveredServers: [DiscoveredForgeServer] = [] {
         didSet {
             companionDebugLog(
@@ -162,6 +174,22 @@ final class CompanionAppModel: ObservableObject {
     @Published var discoveryMessage = "Search the local network and Tailscale for Forge." {
         didSet {
             companionDebugLog("CompanionAppModel", "discoveryMessage -> \(discoveryMessage)")
+        }
+    }
+    @Published var discoveredTailscaleDevices: [DiscoveredTailscaleDevice] = [] {
+        didSet {
+            companionDebugLog(
+                "CompanionAppModel",
+                "discoveredTailscaleDevices -> count=\(discoveredTailscaleDevices.count)"
+            )
+        }
+    }
+    @Published var tailscaleDiscoveryMessage = "Checking Tailscale devices…" {
+        didSet {
+            companionDebugLog(
+                "CompanionAppModel",
+                "tailscaleDiscoveryMessage -> \(tailscaleDiscoveryMessage)"
+            )
         }
     }
 
@@ -267,6 +295,13 @@ final class CompanionAppModel: ObservableObject {
         do {
             let granted = try await healthStore.requestAuthorization()
             companionDebugLog("CompanionAppModel", "requestHealthPermissions result granted=\(granted)")
+            if granted {
+                healthAccessStatus = .customAccess
+                healthAuthorizationGranted = true
+                UserDefaults.standard.set(healthAccessStatus.rawValue, forKey: StorageKeys.healthAccessStatus)
+                UserDefaults.standard.set(true, forKey: StorageKeys.healthAuthorizationGranted)
+            }
+            try? await Task.sleep(for: .milliseconds(350))
             await refreshHealthAccessStatus()
             refreshSyncState()
             lastSyncMessage = healthAccessStatus == .fullAccess
@@ -291,7 +326,15 @@ final class CompanionAppModel: ObservableObject {
 
     func requestMovementPermissions() {
         companionDebugLog("CompanionAppModel", "requestMovementPermissions")
+        movementStore.setTrackingEnabled(true)
         movementStore.requestLocationAuthorization()
+        movementPermissionPromptDeferred = false
+        UserDefaults.standard.set(false, forKey: StorageKeys.movementPromptDeferred)
+    }
+
+    func requestRecommendedPermissions() async {
+        await requestHealthPermissions()
+        requestMovementPermissions()
     }
 
     func runManualSync() async {
@@ -303,13 +346,19 @@ final class CompanionAppModel: ObservableObject {
         companionDebugLog("CompanionAppModel", "discoverForgeServers start")
         discoveryInFlight = true
         discoveryMessage = "Scanning for Forge runtimes…"
-        let servers = await discoveryService.discoverServers()
-        discoveredServers = servers
+        tailscaleDiscoveryMessage = "Checking Tailscale devices…"
+        let report = await discoveryService.discoverEnvironment()
+        discoveredServers = report.servers
+        discoveredTailscaleDevices = report.tailscaleDevices
+        tailscaleDiscoveryMessage = report.tailscaleStatusMessage
         discoveryInFlight = false
-        discoveryMessage = servers.isEmpty
+        discoveryMessage = report.servers.isEmpty
             ? "No Forge runtime found yet. Keep Forge running and try again."
-            : "Found \(servers.count) Forge runtime\(servers.count == 1 ? "" : "s")."
-        companionDebugLog("CompanionAppModel", "discoverForgeServers complete count=\(servers.count)")
+            : "Found \(report.servers.count) Forge runtime\(report.servers.count == 1 ? "" : "s")."
+        companionDebugLog(
+            "CompanionAppModel",
+            "discoverForgeServers complete runtimes=\(report.servers.count) tailscaleDevices=\(report.tailscaleDevices.count)"
+        )
     }
 
     func bootstrapPairing(for server: DiscoveredForgeServer) async throws {
@@ -384,9 +433,18 @@ final class CompanionAppModel: ObservableObject {
         {
             latestSyncReport = report.asSyncReport
         }
+        if
+            let data = UserDefaults.standard.data(forKey: StorageKeys.latestSyncPayloadSummary),
+            let summary = try? JSONDecoder().decode(SyncPayloadSummary.self, from: data)
+        {
+            latestSyncPayloadSummary = summary
+        }
 
         healthPermissionPromptDeferred = UserDefaults.standard.bool(
             forKey: StorageKeys.deferredHealthPrompt
+        )
+        movementPermissionPromptDeferred = UserDefaults.standard.bool(
+            forKey: StorageKeys.movementPromptDeferred
         )
         companionDebugLog(
             "CompanionAppModel",
@@ -394,7 +452,7 @@ final class CompanionAppModel: ObservableObject {
         )
     }
 
-    private func persistSyncState(report: SyncReport) {
+    private func persistSyncState(report: SyncReport, payloadSummary: SyncPayloadSummary) {
         lastSuccessfulSyncAt = report.syncedAt
         UserDefaults.standard.set(
             report.syncedAt.timeIntervalSince1970,
@@ -403,11 +461,14 @@ final class CompanionAppModel: ObservableObject {
         if let data = try? JSONEncoder().encode(PersistedSyncReport(report: report)) {
             UserDefaults.standard.set(data, forKey: StorageKeys.latestSyncReport)
         }
+        if let data = try? JSONEncoder().encode(payloadSummary) {
+            UserDefaults.standard.set(data, forKey: StorageKeys.latestSyncPayloadSummary)
+        }
     }
 
     func refreshHealthAccessStatus() async {
         companionDebugLog("CompanionAppModel", "refreshHealthAccessStatus start")
-        let status = await healthStore.accessStatus()
+        let status = await healthStore.accessStatus(previousStoredStatus: healthAccessStatus)
         healthAccessStatus = status
         healthAuthorizationGranted = status != .notSet
         if status != .notSet {
@@ -426,6 +487,12 @@ final class CompanionAppModel: ObservableObject {
         companionDebugLog("CompanionAppModel", "deferHealthPermissionPrompt")
         healthPermissionPromptDeferred = true
         UserDefaults.standard.set(true, forKey: StorageKeys.deferredHealthPrompt)
+    }
+
+    func deferMovementPermissionPrompt() {
+        companionDebugLog("CompanionAppModel", "deferMovementPermissionPrompt")
+        movementPermissionPromptDeferred = true
+        UserDefaults.standard.set(true, forKey: StorageKeys.movementPromptDeferred)
     }
 
     private func refreshSyncState() {
@@ -467,7 +534,9 @@ final class CompanionAppModel: ObservableObject {
         )
         pairing = normalizedPairingPayload(payload, preferredUiBaseUrl: preferredUiBaseUrl)
         healthPermissionPromptDeferred = false
+        movementPermissionPromptDeferred = false
         UserDefaults.standard.set(false, forKey: StorageKeys.deferredHealthPrompt)
+        UserDefaults.standard.set(false, forKey: StorageKeys.movementPromptDeferred)
         lastSyncMessage = message
         latestError = nil
         persistPairing()
@@ -592,6 +661,8 @@ final class CompanionAppModel: ObservableObject {
                 lastSuccessfulSyncAt: lastSuccessfulSyncAt,
                 movementPayload: movementPayload
             )
+            let payloadSummary = buildPayloadSummary(from: payload)
+            latestSyncPayloadSummary = payloadSummary
             let receipt = try await syncClient.pushHealthSync(
                 payload: payload,
                 apiBaseUrl: pairing.apiBaseUrl
@@ -609,7 +680,7 @@ final class CompanionAppModel: ObservableObject {
                 movementKnownPlaces: receipt.imported.movementKnownPlaces ?? 0
             )
             latestSyncReport = report
-            persistSyncState(report: report)
+            persistSyncState(report: report, payloadSummary: payloadSummary)
             lastSyncMessage =
                 "Synced \(receipt.imported.sleepSessions) sleep, \(receipt.imported.workouts) workouts, and \(receipt.imported.movementTrips ?? 0) trips via \(trigger)"
             latestError = nil
@@ -623,11 +694,16 @@ final class CompanionAppModel: ObservableObject {
             )
             return true
         } catch {
+            let nsError = error as NSError
+            let failureReason = nsError.userInfo[NSLocalizedFailureReasonErrorKey] as? String
+            let combinedMessage = failureReason?.isEmpty == false
+                ? "\(error.localizedDescription): \(failureReason!)"
+                : error.localizedDescription
             companionDebugLog(
                 "CompanionAppModel",
-                "performSync failed trigger=\(trigger) error=\(error.localizedDescription)"
+                "performSync failed trigger=\(trigger) error=\(combinedMessage)"
             )
-            latestError = error.localizedDescription
+            latestError = combinedMessage
             syncState = .error
             return false
         }
@@ -655,6 +731,12 @@ final class CompanionAppModel: ObservableObject {
         pairing != nil
             && healthAccessStatus == .notSet
             && !healthPermissionPromptDeferred
+    }
+
+    var shouldPromptForMovementAccess: Bool {
+        pairing != nil
+            && movementStore.locationPermissionStatus == "not_determined"
+            && !movementPermissionPromptDeferred
     }
 
     var connectionStatusTitle: String {
@@ -739,7 +821,10 @@ final class CompanionAppModel: ObservableObject {
     }
 
     var needsNativeAttention: Bool {
-        healthAccessStatus == .notSet || syncState == .stale || syncState == .error
+        healthAccessStatus == .notSet
+            || movementStore.locationPermissionStatus == "not_determined"
+            || syncState == .stale
+            || syncState == .error
     }
 
     var latestImportSummary: String {
@@ -753,8 +838,67 @@ final class CompanionAppModel: ObservableObject {
         watchSessionManager.lastStatusMessage
     }
 
+    var syncCoverageRows: [SyncCoverageRow] {
+        let payloadSummary = latestSyncPayloadSummary
+        return [
+            SyncCoverageRow(
+                id: "sleep",
+                title: "Sleep",
+                value: "\(payloadSummary?.sleepSessions ?? 0) sessions",
+                detail: "Stage segments synced as summarized sleep sessions, not raw category samples.",
+                isMissing: (payloadSummary?.sleepSessions ?? 0) == 0
+            ),
+            SyncCoverageRow(
+                id: "workouts",
+                title: "Workouts",
+                value: "\(payloadSummary?.workouts ?? 0) workouts",
+                detail: "Workout sessions sync timing, energy, distance, step count, and average/max heart-rate metrics when available.",
+                isMissing: (payloadSummary?.workouts ?? 0) == 0
+            ),
+            SyncCoverageRow(
+                id: "heart-rate",
+                title: "Heart rate",
+                value: "\(payloadSummary?.workoutsWithAverageHeartRate ?? 0) avg + \(payloadSummary?.workoutsWithMaxHeartRate ?? 0) max",
+                detail: "Raw heart-rate datapoints are not synced yet. Forge only receives workout-level heart-rate summaries right now.",
+                isMissing: (payloadSummary?.workoutsWithAverageHeartRate ?? 0) == 0 && (payloadSummary?.workoutsWithMaxHeartRate ?? 0) == 0
+            ),
+            SyncCoverageRow(
+                id: "movement",
+                title: "Movement",
+                value: "\(payloadSummary?.movementStays ?? 0) stays, \(payloadSummary?.movementTrips ?? 0) trips",
+                detail: "Passive movement sync includes known places, stays, trips, trip points, and stop anchors from the phone.",
+                isMissing: (payloadSummary?.movementStays ?? 0) == 0 && (payloadSummary?.movementTrips ?? 0) == 0
+            ),
+            SyncCoverageRow(
+                id: "watch",
+                title: "Watch",
+                value: watchSyncLabel,
+                detail: "The watch uses the phone bridge and does not sync directly to Forge.",
+                isMissing: false
+            )
+        ]
+    }
+
     private func refreshWatchBootstrap(reason: String) async {
         await watchSessionManager.refreshBootstrapIfPossible(reason: reason)
+    }
+
+    private func buildPayloadSummary(from payload: CompanionSyncPayload) -> SyncPayloadSummary {
+        SyncPayloadSummary(
+            builtAt: .now,
+            sleepSessions: payload.sleepSessions.count,
+            sleepStageEntries: payload.sleepSessions.reduce(0) { $0 + $1.stageBreakdown.count },
+            workouts: payload.workouts.count,
+            workoutsWithAverageHeartRate: payload.workouts.reduce(0) { $0 + ($1.averageHeartRate == nil ? 0 : 1) },
+            workoutsWithMaxHeartRate: payload.workouts.reduce(0) { $0 + ($1.maxHeartRate == nil ? 0 : 1) },
+            workoutsWithStepCount: payload.workouts.reduce(0) { $0 + ($1.stepCount == nil ? 0 : 1) },
+            movementKnownPlaces: payload.movement.knownPlaces.count,
+            movementStays: payload.movement.stays.count,
+            movementTrips: payload.movement.trips.count,
+            movementTripPoints: payload.movement.trips.reduce(0) { $0 + $1.points.count },
+            movementTripStops: payload.movement.trips.reduce(0) { $0 + $1.stops.count },
+            rawHeartRateDatapointsSynced: 0
+        )
     }
 }
 

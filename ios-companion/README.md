@@ -72,3 +72,8 @@ Watch actions are never sent directly from the watch to Forge. The watch sends q
 messages to the iPhone through WatchConnectivity, the iPhone submits canonical habit
 check-ins or watch capture batches to Forge, and the iPhone sends a compact bootstrap
 snapshot back to the watch and widget surfaces.
+
+Runtime discovery prefers Bonjour on the local network. The Forge runtime now
+advertises `_forge._tcp` and, when Tailscale Serve is available, includes the
+tailnet HTTPS base URLs in the Bonjour TXT record so the iPhone can discover both
+local-network and Tailscale paths from one source.

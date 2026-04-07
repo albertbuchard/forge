@@ -2,9 +2,19 @@ import AppIntents
 import Foundation
 
 private func storeLaunchDestination(_ destination: String) {
-    let defaults =
-        UserDefaults(suiteName: "group.albertbuchard.ForgeCompanion") ?? .standard
+    let defaults = widgetSharedDefaults()
     defaults.set(destination, forKey: "forge_watch_pending_launch_destination")
+}
+
+private func widgetSharedDefaults() -> UserDefaults {
+    guard
+        FileManager.default.containerURL(
+            forSecurityApplicationGroupIdentifier: "group.albertbuchard.ForgeCompanion"
+        ) != nil
+    else {
+        return .standard
+    }
+    return UserDefaults(suiteName: "group.albertbuchard.ForgeCompanion") ?? .standard
 }
 
 struct OpenHabitsIntent: AppIntent {

@@ -10,8 +10,7 @@ final class WatchSessionManager: NSObject, ObservableObject {
     private let syncClient: ForgeSyncClient
     private let encoder = JSONEncoder()
     private let decoder = JSONDecoder()
-    private let defaults =
-        UserDefaults(suiteName: ForgeWatchStorage.appGroupId) ?? .standard
+    private let defaults = ForgeWatchStorage.sharedDefaults()
 
     private var pairingProvider: (() -> PairingPayload?)?
     private var processingTask: Task<Void, Never>?
@@ -34,13 +33,19 @@ final class WatchSessionManager: NSObject, ObservableObject {
         let session = WCSession.default
         session.delegate = self
         session.activate()
-        lastStatusMessage = "Watch bridge active"
+        lastStatusMessage = watchTransportAvailable(for: session)
+            ? "Watch bridge active"
+            : "Watch app not installed"
     }
 
     func refreshBootstrapIfPossible(reason: String) async {
         guard let pairing = pairingProvider?(), pairing.capabilities.contains("watch-ready") else {
             lastStatusMessage = "Watch bridge waiting for pairing"
             saveBootstrap(.empty)
+            return
+        }
+        guard watchTransportAvailable(for: WCSession.default) else {
+            lastStatusMessage = "Watch app not installed"
             return
         }
 
@@ -98,7 +103,7 @@ final class WatchSessionManager: NSObject, ObservableObject {
     }
 
     private func publishBootstrap(_ bootstrap: ForgeWatchBootstrap) {
-        guard WCSession.isSupported() else { return }
+        guard WCSession.isSupported(), watchTransportAvailable(for: WCSession.default) else { return }
         if let data = try? encoder.encode(bootstrap) {
             do {
                 try WCSession.default.updateApplicationContext([
@@ -113,6 +118,7 @@ final class WatchSessionManager: NSObject, ObservableObject {
     private func sendAck(_ envelope: ForgeWatchAckEnvelope) {
         guard
             WCSession.isSupported(),
+            watchTransportAvailable(for: WCSession.default),
             let data = try? encoder.encode(envelope)
         else { return }
 
@@ -130,6 +136,10 @@ final class WatchSessionManager: NSObject, ObservableObject {
         processingTask = Task { [weak self] in
             guard let self else { return }
             guard let pairing = self.pairingProvider?() else { return }
+            guard self.watchTransportAvailable(for: WCSession.default) else {
+                self.lastStatusMessage = "Watch app not installed"
+                return
+            }
 
             let remaining = self.loadQueue()
             var nextQueue: [ForgeWatchOutboundEnvelope] = []
@@ -186,6 +196,10 @@ final class WatchSessionManager: NSObject, ObservableObject {
         await processingTask?.value
     }
 
+    private func watchTransportAvailable(for session: WCSession) -> Bool {
+        session.isPaired && session.isWatchAppInstalled
+    }
+
 }
 
 extension WatchSessionManager: WCSessionDelegate {
@@ -194,9 +208,14 @@ extension WatchSessionManager: WCSessionDelegate {
         activationDidCompleteWith activationState: WCSessionActivationState,
         error: Error?
     ) {
+        let watchAvailable = session.isPaired && session.isWatchAppInstalled
         Task { @MainActor in
             if let error {
                 self.lastStatusMessage = "Watch activation failed: \(error.localizedDescription)"
+                return
+            }
+            guard watchAvailable else {
+                self.lastStatusMessage = "Watch app not installed"
                 return
             }
             self.lastStatusMessage = activationState == .activated
@@ -211,8 +230,9 @@ extension WatchSessionManager: WCSessionDelegate {
 
     nonisolated func sessionReachabilityDidChange(_ session: WCSession) {
         let isReachable = session.isReachable
+        let watchAvailable = session.isPaired && session.isWatchAppInstalled
         Task { @MainActor in
-            if isReachable {
+            if isReachable, watchAvailable {
                 await self.processPendingQueue()
             }
         }

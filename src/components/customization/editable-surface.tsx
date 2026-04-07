@@ -33,6 +33,8 @@ import {
   readCachedSurfaceLayout,
   SURFACE_BREAKPOINTS,
   SURFACE_COLUMNS,
+  SURFACE_GRID_MARGIN,
+  SURFACE_ROW_HEIGHT,
   writeCachedSurfaceLayout,
   type SurfaceBreakpointKey,
   type SurfaceWidgetLayoutDefinition
@@ -114,6 +116,24 @@ function summarizeHiddenWidgets(
   return widgets.filter((widget) => preferences[widget.id]?.hidden);
 }
 
+function layoutPayloadEquals(
+  left: SurfaceLayoutPayload,
+  right: SurfaceLayoutPayload
+) {
+  return (
+    left.surfaceId === right.surfaceId &&
+    JSON.stringify(left.layouts) === JSON.stringify(right.layouts) &&
+    JSON.stringify(left.widgets) === JSON.stringify(right.widgets)
+  );
+}
+
+function layoutsEqual(
+  left: SurfaceLayoutBreakpoints,
+  right: SurfaceLayoutBreakpoints
+) {
+  return JSON.stringify(left) === JSON.stringify(right);
+}
+
 function widgetSizeForBreakpoint(
   layouts: SurfaceLayoutBreakpoints,
   breakpoint: SurfaceBreakpointKey,
@@ -137,6 +157,18 @@ function isCompactWidget(
     return false;
   }
   return size.width <= 4 || size.height <= 2;
+}
+
+function sortLayoutItems(items: SurfaceLayoutBreakpointItem[]) {
+  return [...items].sort((left, right) => {
+    if (left.y !== right.y) {
+      return left.y - right.y;
+    }
+    if (left.x !== right.x) {
+      return left.x - right.x;
+    }
+    return left.i.localeCompare(right.i);
+  });
 }
 
 function SurfaceWidgetCard({
@@ -180,6 +212,7 @@ function SurfaceWidgetCard({
 
   return (
     <Card
+      data-surface-card="true"
       className={cn(
         "surface-grid-card surface-grid-draggable flex h-full min-w-0 flex-col gap-3 overflow-hidden transition",
         chromePadding,
@@ -317,9 +350,29 @@ export function EditableSurface({
   linkedDescriptionsByWidgetId?: Record<string, string[]>;
   onWidgetHandleClick?: (definition: SurfaceWidgetDefinition) => void;
 }) {
+  const widgetLayoutSignature = useMemo(
+    () =>
+      JSON.stringify(
+        widgets.map((widget) => ({
+          id: widget.id,
+          defaultWidth: widget.defaultWidth,
+          defaultHeight: widget.defaultHeight,
+          minWidth: widget.minWidth,
+          maxWidth: widget.maxWidth,
+          minHeight: widget.minHeight,
+          maxHeight: widget.maxHeight,
+          defaultHidden: widget.defaultHidden,
+          defaultTitleVisible: widget.defaultTitleVisible,
+          defaultDescriptionVisible: widget.defaultDescriptionVisible,
+          defaultDensity: widget.defaultDensity,
+          defaultPlacement: widget.defaultPlacement
+        }))
+      ),
+    [widgets]
+  );
   const defaults = useMemo(
     () => buildDefaultSurfaceLayoutPayload(surfaceId, widgets),
-    [surfaceId, widgets]
+    [surfaceId, widgetLayoutSignature]
   );
   const [editing, setEditing] = useState(defaultEditing);
   const [breakpoint, setBreakpoint] = useState<SurfaceBreakpointKey>("lg");
@@ -334,6 +387,7 @@ export function EditableSurface({
   const [containerWidth, setContainerWidth] = useState(1280);
   const saveTimerRef = useRef<number | null>(null);
   const hydrationCompleteRef = useRef(false);
+  const layoutInteractionRef = useRef(false);
   const containerRef = useRef<HTMLDivElement | null>(null);
 
   const layoutQuery = useQuery({
@@ -359,10 +413,12 @@ export function EditableSurface({
       widgets,
       layoutQuery.data?.layout ?? readCachedSurfaceLayout(surfaceId) ?? defaults
     );
-    setLayoutPayload(merged);
+    setLayoutPayload((current) =>
+      layoutPayloadEquals(current, merged) ? current : merged
+    );
     writeCachedSurfaceLayout(merged);
     hydrationCompleteRef.current = true;
-  }, [defaults, layoutQuery.data?.layout, surfaceId, widgets]);
+  }, [defaults, layoutQuery.data?.layout, surfaceId, widgetLayoutSignature]);
 
   useEffect(() => {
     const element = containerRef.current;
@@ -395,17 +451,21 @@ export function EditableSurface({
         window.clearTimeout(saveTimerRef.current);
       }
     };
-  }, [layoutPayload, saveMutation]);
+  }, [layoutPayload]);
 
   const widgetById = useMemo(
     () => new Map(widgets.map((widget) => [widget.id, widget])),
     [widgets]
   );
   const hiddenWidgets = summarizeHiddenWidgets(widgets, layoutPayload.widgets);
-  const visibleWidgetIds = new Set(
-    widgets
-      .filter((widget) => !layoutPayload.widgets[widget.id]?.hidden)
-      .map((widget) => widget.id)
+  const visibleWidgetIds = useMemo(
+    () =>
+      new Set(
+        widgets
+          .filter((widget) => !layoutPayload.widgets[widget.id]?.hidden)
+          .map((widget) => widget.id)
+      ),
+    [layoutPayload.widgets, widgets]
   );
   const visibleLayouts = useMemo(
     () =>
@@ -417,6 +477,10 @@ export function EditableSurface({
         xxs: layoutPayload.layouts.xxs.filter((item) => visibleWidgetIds.has(item.i))
       }) satisfies SurfaceLayoutBreakpoints,
     [layoutPayload.layouts, visibleWidgetIds]
+  );
+  const orderedVisibleItems = useMemo(
+    () => sortLayoutItems(visibleLayouts[breakpoint]),
+    [breakpoint, visibleLayouts]
   );
 
   function patchWidgetPreferences(
@@ -439,10 +503,19 @@ export function EditableSurface({
     _currentLayout: GridLayout,
     allLayouts: Partial<GridLayoutMap>
   ) {
-    setLayoutPayload((current) => ({
-      ...current,
-      layouts: fromLayouts(allLayouts, current.layouts)
-    }));
+    if (!layoutInteractionRef.current) {
+      return;
+    }
+    setLayoutPayload((current) => {
+      const nextLayouts = fromLayouts(allLayouts, current.layouts);
+      if (layoutsEqual(current.layouts, nextLayouts)) {
+        return current;
+      }
+      return {
+        ...current,
+        layouts: nextLayouts
+      };
+    });
   }
 
   function handleReset() {
@@ -488,81 +561,163 @@ export function EditableSurface({
       </div>
 
       <div ref={containerRef}>
-        <ResponsiveGridLayout
-          width={containerWidth}
-          className="surface-grid-layout"
-          breakpoints={SURFACE_BREAKPOINTS}
-          cols={SURFACE_COLUMNS}
-          rowHeight={56}
-          margin={[16, 16]}
-          containerPadding={[0, 0]}
-          layouts={toLayouts(visibleLayouts)}
-          isDraggable={editing}
-          isResizable={editing}
-          resizeHandles={["s", "w", "e", "n", "sw", "nw", "se", "ne"]}
-          draggableCancel=".surface-grid-toolbar,button,a,input,textarea,select,label,[data-no-drag='true']"
-          onLayoutChange={handleLayoutChange}
-          onBreakpointChange={(nextBreakpoint: string) =>
-            setBreakpoint(nextBreakpoint as SurfaceBreakpointKey)
-          }
-        >
-          {widgets
-            .filter((widget) => visibleWidgetIds.has(widget.id))
-            .map((widget) => {
+        {editing ? (
+          <ResponsiveGridLayout
+            width={containerWidth}
+            className={cn(
+              "surface-grid-layout",
+              editing && "surface-grid-layout--editing"
+            )}
+            breakpoints={SURFACE_BREAKPOINTS}
+            cols={SURFACE_COLUMNS}
+            rowHeight={SURFACE_ROW_HEIGHT}
+            margin={SURFACE_GRID_MARGIN}
+            containerPadding={[0, 0]}
+            layouts={toLayouts(visibleLayouts)}
+            compactType="vertical"
+            isDraggable={editing}
+            isResizable={editing}
+            resizeHandles={["s", "w", "e", "n", "sw", "nw", "se", "ne"]}
+            draggableCancel=".surface-grid-toolbar,button,a,input,textarea,select,label,[data-no-drag='true']"
+            onDragStart={() => {
+              layoutInteractionRef.current = true;
+            }}
+            onResizeStart={() => {
+              layoutInteractionRef.current = true;
+            }}
+            onDragStop={() => {
+              layoutInteractionRef.current = false;
+            }}
+            onResizeStop={() => {
+              layoutInteractionRef.current = false;
+            }}
+            onLayoutChange={handleLayoutChange}
+            onBreakpointChange={(nextBreakpoint: string) =>
+              setBreakpoint(nextBreakpoint as SurfaceBreakpointKey)
+            }
+          >
+            {widgets
+              .filter((widget) => visibleWidgetIds.has(widget.id))
+              .map((widget) => {
+                const preferences = layoutPayload.widgets[widget.id] ?? {
+                  hidden: false,
+                  titleVisible: true,
+                  descriptionVisible: true,
+                  density: "compact" as const
+                };
+                const size = widgetSizeForBreakpoint(
+                  visibleLayouts,
+                  breakpoint,
+                  widget.id
+                );
+                const compact = isCompactWidget(size, preferences.density);
+                return (
+                  <div key={widget.id}>
+                    <SurfaceWidgetCard
+                      definition={widget}
+                      preferences={preferences}
+                      size={size}
+                      editing={editing}
+                      selected={selectedWidgetId === widget.id}
+                      menuOpen={menuWidgetId === widget.id}
+                      linkedDescriptions={linkedDescriptionsByWidgetId?.[widget.id]}
+                      onToggleMenu={() =>
+                        setMenuWidgetId((current) =>
+                          current === widget.id ? null : widget.id
+                        )
+                      }
+                      onToggleHandle={
+                        onWidgetHandleClick
+                          ? () => onWidgetHandleClick(widget)
+                          : undefined
+                      }
+                      onHide={() =>
+                        patchWidgetPreferences(widget.id, { hidden: true })
+                      }
+                      onShowTitle={() =>
+                        patchWidgetPreferences(widget.id, {
+                          titleVisible: !preferences.titleVisible
+                        })
+                      }
+                      onShowDescription={() =>
+                        patchWidgetPreferences(widget.id, {
+                          descriptionVisible: !preferences.descriptionVisible
+                        })
+                      }
+                      onChangeDensity={(density) =>
+                        patchWidgetPreferences(widget.id, { density })
+                      }
+                    >
+                      {widget.render({
+                        compact,
+                        width: size.width,
+                        height: size.height,
+                        editing,
+                        density: preferences.density,
+                        preferences
+                      })}
+                    </SurfaceWidgetCard>
+                  </div>
+                );
+              })}
+          </ResponsiveGridLayout>
+        ) : (
+          <div
+            className="surface-flow-grid"
+            style={{
+              display: "grid",
+              gap: `${SURFACE_GRID_MARGIN[1]}px ${SURFACE_GRID_MARGIN[0]}px`,
+              gridTemplateColumns: `repeat(${SURFACE_COLUMNS[breakpoint]}, minmax(0, 1fr))`,
+              alignItems: "start"
+            }}
+          >
+            {orderedVisibleItems.map((item) => {
+              const widget = widgetById.get(item.i);
+              if (!widget) {
+                return null;
+              }
               const preferences = layoutPayload.widgets[widget.id] ?? {
                 hidden: false,
                 titleVisible: true,
                 descriptionVisible: true,
                 density: "compact" as const
               };
-              const size = widgetSizeForBreakpoint(
-                visibleLayouts,
-                breakpoint,
-                widget.id
-              );
+              const size = {
+                width: item.w,
+                height: item.h
+              };
               const compact = isCompactWidget(size, preferences.density);
               return (
-                <div key={widget.id}>
+                <div
+                  key={widget.id}
+                  style={{
+                    gridColumn: `span ${Math.min(item.w, SURFACE_COLUMNS[breakpoint])} / span ${Math.min(item.w, SURFACE_COLUMNS[breakpoint])}`
+                  }}
+                >
                   <SurfaceWidgetCard
                     definition={widget}
                     preferences={preferences}
                     size={size}
-                    editing={editing}
+                    editing={false}
                     selected={selectedWidgetId === widget.id}
-                    menuOpen={menuWidgetId === widget.id}
+                    menuOpen={false}
                     linkedDescriptions={linkedDescriptionsByWidgetId?.[widget.id]}
-                    onToggleMenu={() =>
-                      setMenuWidgetId((current) =>
-                        current === widget.id ? null : widget.id
-                      )
-                    }
+                    onToggleMenu={() => undefined}
                     onToggleHandle={
                       onWidgetHandleClick
                         ? () => onWidgetHandleClick(widget)
                         : undefined
                     }
-                    onHide={() =>
-                      patchWidgetPreferences(widget.id, { hidden: true })
-                    }
-                    onShowTitle={() =>
-                      patchWidgetPreferences(widget.id, {
-                        titleVisible: !preferences.titleVisible
-                      })
-                    }
-                    onShowDescription={() =>
-                      patchWidgetPreferences(widget.id, {
-                        descriptionVisible: !preferences.descriptionVisible
-                      })
-                    }
-                    onChangeDensity={(density) =>
-                      patchWidgetPreferences(widget.id, { density })
-                    }
+                    onHide={() => undefined}
+                    onShowTitle={() => undefined}
+                    onShowDescription={() => undefined}
+                    onChangeDensity={() => undefined}
                   >
                     {widget.render({
                       compact,
                       width: size.width,
                       height: size.height,
-                      editing,
+                      editing: false,
                       density: preferences.density,
                       preferences
                     })}
@@ -570,7 +725,8 @@ export function EditableSurface({
                 </div>
               );
             })}
-        </ResponsiveGridLayout>
+          </div>
+        )}
       </div>
 
       {hiddenWidgets.length > 0 ? (

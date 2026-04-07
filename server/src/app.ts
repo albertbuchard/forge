@@ -602,8 +602,7 @@ function buildApiBaseUrl(request: {
   if (referer) {
     try {
       const url = new URL(referer);
-      const forgeMounted = url.pathname.startsWith("/forge/");
-      return `${url.origin}${forgeMounted ? "/forge" : ""}/api/v1`;
+      return `${url.origin}/api/v1`;
     } catch {
       // Fall through to host-based resolution.
     }

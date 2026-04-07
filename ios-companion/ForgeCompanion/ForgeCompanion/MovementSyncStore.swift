@@ -123,6 +123,7 @@ final class MovementSyncStore: NSObject, ObservableObject, CLLocationManagerDele
     private var currentTripId: String?
     private var stationaryCandidateStartedAt: Date?
     private var lastStopWindowStartedAt: Date?
+    private var shouldEscalateToAlwaysAuthorization = false
 
     override init() {
         super.init()
@@ -149,7 +150,23 @@ final class MovementSyncStore: NSObject, ObservableObject, CLLocationManagerDele
 
     func requestLocationAuthorization() {
         companionDebugLog("MovementSyncStore", "requestLocationAuthorization start")
-        locationManager.requestAlwaysAuthorization()
+        refreshPermissionState()
+        switch locationManager.authorizationStatus {
+        case .notDetermined:
+            shouldEscalateToAlwaysAuthorization = true
+            locationManager.requestWhenInUseAuthorization()
+        case .authorizedWhenInUse:
+            shouldEscalateToAlwaysAuthorization = false
+            locationManager.requestAlwaysAuthorization()
+        case .authorizedAlways:
+            shouldEscalateToAlwaysAuthorization = false
+            applyTrackingState()
+        case .denied, .restricted:
+            shouldEscalateToAlwaysAuthorization = false
+            openAppSettings()
+        @unknown default:
+            shouldEscalateToAlwaysAuthorization = false
+        }
     }
 
     func addKnownPlace(label: String, categoryTags: [String]) {
@@ -311,6 +328,16 @@ final class MovementSyncStore: NSObject, ObservableObject, CLLocationManagerDele
 
     func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
         refreshPermissionState()
+        if shouldEscalateToAlwaysAuthorization, manager.authorizationStatus == .authorizedWhenInUse {
+            shouldEscalateToAlwaysAuthorization = false
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+                self.locationManager.requestAlwaysAuthorization()
+            }
+        } else if manager.authorizationStatus == .authorizedAlways
+                    || manager.authorizationStatus == .denied
+                    || manager.authorizationStatus == .restricted {
+            shouldEscalateToAlwaysAuthorization = false
+        }
         applyTrackingState()
     }
 
@@ -772,5 +799,12 @@ final class MovementSyncStore: NSObject, ObservableObject, CLLocationManagerDele
 
     private func isoString(_ value: Date) -> String {
         isoFormatter.string(from: value)
+    }
+
+    private func openAppSettings() {
+        guard let url = URL(string: UIApplication.openSettingsURLString) else {
+            return
+        }
+        UIApplication.shared.open(url)
     }
 }

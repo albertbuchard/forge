@@ -114,10 +114,10 @@ export function OverviewPage() {
       description:
         "The route header stays movable like any other surface block.",
       defaultWidth: 12,
-      defaultHeight: 1,
+      defaultHeight: 2,
       removable: false,
-      minHeight: 1,
-      maxHeight: 2,
+      minHeight: 2,
+      maxHeight: 3,
       render: () => (
         <PageHero
           title="Overview"
@@ -132,7 +132,7 @@ export function OverviewPage() {
       title: "Action signals",
       description: "Direct links to the next things worth opening.",
       defaultWidth: 7,
-      defaultHeight: 3,
+      defaultHeight: 4,
       minWidth: 4,
       render: () => (
         <FlagshipSignalDeck
@@ -205,7 +205,7 @@ export function OverviewPage() {
       description:
         "Smaller titles and denser metrics free space for the widgets themselves.",
       defaultWidth: 5,
-      defaultHeight: 3,
+      defaultHeight: 4,
       minWidth: 4,
       render: ({ compact }) => (
         <div className="grid h-full gap-3">
@@ -249,7 +249,7 @@ export function OverviewPage() {
       description:
         "Long-range direction stays visible without taking over the whole page.",
       defaultWidth: 8,
-      defaultHeight: 4,
+      defaultHeight: 5,
       minWidth: 4,
       render: ({ compact }) => (
         <div className="grid gap-3">
@@ -315,7 +315,7 @@ export function OverviewPage() {
       description:
         "Execution blocks can shrink while keeping the useful subtitles visible.",
       defaultWidth: 12,
-      defaultHeight: 4,
+      defaultHeight: 5,
       minWidth: 6,
       render: ({ compact }) => (
         <div className="grid min-w-0 gap-4 xl:grid-cols-3">

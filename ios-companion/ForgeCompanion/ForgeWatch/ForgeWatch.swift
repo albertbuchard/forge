@@ -19,8 +19,7 @@ private struct WidgetEntry: TimelineEntry {
 
 private struct WidgetProvider: TimelineProvider {
     private func currentEntry() -> WidgetEntry {
-        let defaults =
-            UserDefaults(suiteName: "group.albertbuchard.ForgeCompanion") ?? .standard
+        let defaults = widgetSharedDefaults()
         let bootstrap = defaults.data(forKey: "forge_watch_bootstrap").flatMap {
             try? JSONDecoder().decode(WidgetBootstrap.self, from: $0)
         }
@@ -45,6 +44,17 @@ private struct WidgetProvider: TimelineProvider {
         let nextRefresh = Calendar.current.date(byAdding: .minute, value: 15, to: Date()) ?? Date()
         completion(Timeline(entries: [entry], policy: .after(nextRefresh)))
     }
+}
+
+private func widgetSharedDefaults() -> UserDefaults {
+    guard
+        FileManager.default.containerURL(
+            forSecurityApplicationGroupIdentifier: "group.albertbuchard.ForgeCompanion"
+        ) != nil
+    else {
+        return .standard
+    }
+    return UserDefaults(suiteName: "group.albertbuchard.ForgeCompanion") ?? .standard
 }
 
 private struct ForgeWatchQuickActionsView: View {

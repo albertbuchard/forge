@@ -3,7 +3,7 @@ import Foundation
 
 @MainActor
 final class CompanionBackgroundScheduler {
-    private let taskIdentifier = "com.aurel.forgecompanion.health-sync"
+    private let taskIdentifier = "com.albertbuchard.ForgeCompanion.health-sync"
 
     func register(onRefresh: @escaping @Sendable () async -> Bool) {
 #if targetEnvironment(simulator)

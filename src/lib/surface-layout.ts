@@ -22,6 +22,9 @@ export const SURFACE_COLUMNS = {
   xxs: 2
 } as const;
 
+export const SURFACE_ROW_HEIGHT = 72;
+export const SURFACE_GRID_MARGIN = [16, 16] as const;
+
 export type SurfaceBreakpointKey = keyof typeof SURFACE_COLUMNS;
 
 export type SurfaceWidgetLayoutDefinition = {
@@ -36,6 +39,8 @@ export type SurfaceWidgetLayoutDefinition = {
   maxWidth?: number;
   minHeight?: number;
   maxHeight?: number;
+  defaultPlacement?: "flow" | "top";
+  autoSizeHeight?: boolean;
 };
 
 const STORAGE_PREFIX = "forge.surface-layout.v2";
@@ -110,12 +115,16 @@ function buildDefaultBreakpointLayout(
   breakpoint: SurfaceBreakpointKey
 ) {
   const columns = SURFACE_COLUMNS[breakpoint];
+  const orderedWidgets = [
+    ...widgets.filter((widget) => widget.defaultPlacement === "top"),
+    ...widgets.filter((widget) => widget.defaultPlacement !== "top")
+  ];
   const layout: SurfaceLayoutBreakpointItem[] = [];
   let cursorX = 0;
   let cursorY = 0;
   let rowHeight = 0;
 
-  for (const widget of widgets) {
+  for (const widget of orderedWidgets) {
     const minWidth = widget.minWidth ?? 1;
     const maxWidth = widget.maxWidth ?? columns;
     const minHeight = widget.minHeight ?? 1;
@@ -181,10 +190,52 @@ export function buildDefaultSurfaceLayoutPayload(
   };
 }
 
+function bottomOfLayout(layout: SurfaceLayoutBreakpointItem[]) {
+  return layout.reduce((max, item) => Math.max(max, item.y + item.h), 0);
+}
+
+function appendLayoutItems(
+  existing: SurfaceLayoutBreakpointItem[],
+  appended: SurfaceLayoutBreakpointItem[],
+  breakpoint: SurfaceBreakpointKey
+) {
+  if (appended.length === 0) {
+    return existing;
+  }
+  const columns = SURFACE_COLUMNS[breakpoint];
+  const next = [...existing];
+  let cursorX = 0;
+  let cursorY = bottomOfLayout(existing);
+  let rowHeight = 0;
+
+  for (const item of appended) {
+    if (cursorX + item.w > columns) {
+      cursorX = 0;
+      cursorY += rowHeight;
+      rowHeight = 0;
+    }
+    next.push({
+      ...item,
+      x: cursorX,
+      y: cursorY
+    });
+    cursorX += item.w;
+    rowHeight = Math.max(rowHeight, item.h);
+    if (cursorX >= columns) {
+      cursorX = 0;
+      cursorY += rowHeight;
+      rowHeight = 0;
+    }
+  }
+
+  return next;
+}
+
 function mergeBreakpointLayout(
   saved: SurfaceLayoutBreakpointItem[] | undefined,
   defaults: SurfaceLayoutBreakpointItem[],
-  breakpoint: SurfaceBreakpointKey
+  breakpoint: SurfaceBreakpointKey,
+  widgets: SurfaceWidgetLayoutDefinition[]
 ) {
   const columns = SURFACE_COLUMNS[breakpoint];
   const savedById = new Map(
@@ -193,16 +244,45 @@ function mergeBreakpointLayout(
       .filter((item): item is SurfaceLayoutBreakpointItem => item !== null)
       .map((item) => [item.i, item])
   );
-  return defaults.map((fallback) => {
-    const current = savedById.get(fallback.i);
-    if (!current) {
-      return fallback;
+  const defaultsById = new Map(defaults.map((item) => [item.i, item]));
+  const mergedExisting: SurfaceLayoutBreakpointItem[] = [];
+  const prependedDefaults: SurfaceLayoutBreakpointItem[] = [];
+  const appendedDefaults: SurfaceLayoutBreakpointItem[] = [];
+
+  for (const widget of widgets) {
+    const fallback = defaultsById.get(widget.id);
+    if (!fallback) {
+      continue;
     }
-    return {
-      ...fallback,
-      ...current
-    };
-  });
+    const current = savedById.get(widget.id);
+    if (current) {
+      mergedExisting.push({
+        ...fallback,
+        ...current
+      });
+      continue;
+    }
+    if (widget.defaultPlacement === "top") {
+      prependedDefaults.push(fallback);
+      continue;
+    }
+    appendedDefaults.push(fallback);
+  }
+
+  if (prependedDefaults.length === 0) {
+    return appendLayoutItems(mergedExisting, appendedDefaults, breakpoint);
+  }
+
+  const prependHeight = bottomOfLayout(prependedDefaults);
+  const shiftedExisting = mergedExisting.map((item) => ({
+    ...item,
+    y: item.y + prependHeight
+  }));
+  return appendLayoutItems(
+    [...prependedDefaults, ...shiftedExisting],
+    appendedDefaults,
+    breakpoint
+  );
 }
 
 export function mergeSurfaceLayoutPayload(
@@ -214,14 +294,35 @@ export function mergeSurfaceLayoutPayload(
   return {
     surfaceId,
     layouts: {
-      lg: mergeBreakpointLayout(payload?.layouts?.lg, defaults.layouts.lg, "lg"),
-      md: mergeBreakpointLayout(payload?.layouts?.md, defaults.layouts.md, "md"),
-      sm: mergeBreakpointLayout(payload?.layouts?.sm, defaults.layouts.sm, "sm"),
-      xs: mergeBreakpointLayout(payload?.layouts?.xs, defaults.layouts.xs, "xs"),
+      lg: mergeBreakpointLayout(
+        payload?.layouts?.lg,
+        defaults.layouts.lg,
+        "lg",
+        widgets
+      ),
+      md: mergeBreakpointLayout(
+        payload?.layouts?.md,
+        defaults.layouts.md,
+        "md",
+        widgets
+      ),
+      sm: mergeBreakpointLayout(
+        payload?.layouts?.sm,
+        defaults.layouts.sm,
+        "sm",
+        widgets
+      ),
+      xs: mergeBreakpointLayout(
+        payload?.layouts?.xs,
+        defaults.layouts.xs,
+        "xs",
+        widgets
+      ),
       xxs: mergeBreakpointLayout(
         payload?.layouts?.xxs,
         defaults.layouts.xxs,
-        "xxs"
+        "xxs",
+        widgets
       )
     },
     widgets: {

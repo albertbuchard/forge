@@ -45,6 +45,9 @@ struct CompanionSetupFlow: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .onAppear {
+            if appModel.pairing != nil {
+                step = .health
+            }
             companionDebugLog("CompanionSetupFlow", "onAppear step=\(String(describing: step))")
         }
         .onChange(of: step) { _, nextStep in
@@ -57,6 +60,8 @@ struct CompanionSetupFlow: View {
             )
             if sessionId != nil {
                 step = .health
+            } else {
+                step = .discovery
             }
         }
     }

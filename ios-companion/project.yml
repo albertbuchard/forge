@@ -20,15 +20,22 @@ targets:
         CODE_SIGN_STYLE: Automatic
         DEVELOPMENT_TEAM: KZ65F7924F
     info:
-      path: ForgeCompanion/ForgeCompanion/Info.plist
+      path: ForgeCompanion/Info.plist
       properties:
         CFBundleDisplayName: Forge Companion
         BGTaskSchedulerPermittedIdentifiers:
           - com.albertbuchard.ForgeCompanion.health-sync
+        NSAppTransportSecurity:
+          NSAllowsLocalNetworking: true
+          NSExceptionDomains:
+            100.100.100.100:
+              NSExceptionAllowsInsecureHTTPLoads: true
+              NSIncludesSubdomains: true
         NSCameraUsageDescription: Forge Companion uses the camera to scan the pairing QR code from Forge Settings.
         NSHealthShareUsageDescription: Forge Companion reads Health data to sync sleep, workouts, and recovery into Forge.
         NSHealthUpdateUsageDescription: Forge Companion may write reconciliation metadata in future milestones.
         NSLocalNetworkUsageDescription: Forge Companion scans your local network to find Forge runtimes during setup.
+        NSMotionUsageDescription: Forge Companion uses motion activity to distinguish travel, walking, stationary periods, and movement context for truthful trip and stay capture.
         NSLocationWhenInUseUsageDescription: Forge Companion uses location to detect stays, trips, and meaningful places for reflective movement history in Forge.
         NSLocationAlwaysAndWhenInUseUsageDescription: Forge Companion uses background location to detect stays, trips, and stops so Forge can build a truthful movement timeline even when the app is not open.
         NSBonjourServices:
@@ -40,6 +47,7 @@ targets:
           - location
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
+        UIRequiresFullScreen: true
         UIApplicationSceneManifest:
           UIApplicationSupportsMultipleScenes: false
   ForgeWatch Watch App:

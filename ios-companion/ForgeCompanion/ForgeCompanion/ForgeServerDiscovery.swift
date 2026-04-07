@@ -2,68 +2,94 @@ import Foundation
 import UIKit
 
 final class ForgeServerDiscovery {
+    private struct TailscalePeerFetchResult {
+        let peers: [TailscalePeer]
+        let statusMessage: String
+    }
+
+    private struct TailscalePeerProbeResult {
+        let device: DiscoveredTailscaleDevice
+        let server: DiscoveredForgeServer?
+    }
+
     struct BonjourSeed: Hashable {
         let name: String
         let host: String
+        let txtRecords: [String: String]
+    }
+
+    private struct TailscalePeer: Hashable {
+        let host: String
+        let name: String
+        let dnsName: String?
     }
 
     private static let forgeApiPort = 4317
     private static let forgeUiPort = 3027
     private static let maxConcurrentProbes = 40
+    private static let maxConcurrentTailscalePeerProbes = 8
 
-    func discoverServers() async -> [DiscoveredForgeServer] {
-        companionDebugLog("ForgeServerDiscovery", "discoverServers start")
+    func discoverEnvironment() async -> ForgeDiscoveryReport {
+        companionDebugLog("ForgeServerDiscovery", "discoverEnvironment start")
         if isRunningInSimulator {
-            companionDebugLog("ForgeServerDiscovery", "discoverServers simulator shortcut")
-            return [
-                DiscoveredForgeServer(
-                    id: "simulator-local-forge",
-                    name: "Local Forge",
-                    host: "127.0.0.1",
-                    apiBaseUrl: "http://127.0.0.1:4317",
-                    uiBaseUrl: "http://127.0.0.1:3027/forge/",
-                    source: .simulator,
-                    canBootstrapPairing: true,
-                    detail: "Simulator local development runtime"
-                )
-            ]
+            companionDebugLog("ForgeServerDiscovery", "discoverEnvironment simulator shortcut")
+            return ForgeDiscoveryReport(
+                servers: [
+                    DiscoveredForgeServer(
+                        id: "simulator-local-forge",
+                        name: "Local Forge",
+                        host: "127.0.0.1",
+                        apiBaseUrl: "http://127.0.0.1:4317",
+                        uiBaseUrl: "http://127.0.0.1:3027/forge/",
+                        source: .simulator,
+                        canBootstrapPairing: true,
+                        detail: "Simulator local development runtime"
+                    )
+                ],
+                tailscaleDevices: [],
+                tailscaleStatusMessage: "Simulator mode skips Tailscale peer discovery."
+            )
         }
-
-        async let bonjourSeeds = Self.discoverBonjourSeeds(timeout: 3.0)
-        async let tailscalePeers = Self.fetchTailscalePeers()
-        async let lanCandidates = Self.scanLanForForge()
 
         var candidates: [DiscoveredForgeServer] = []
-        candidates.append(contentsOf: await lanCandidates)
-        companionDebugLog("ForgeServerDiscovery", "discoverServers lanCandidates=\(candidates.count)")
-
-        let seeds = await bonjourSeeds
-        companionDebugLog("ForgeServerDiscovery", "discoverServers bonjourSeeds=\(seeds.count)")
+        var tailscaleDevices: [DiscoveredTailscaleDevice] = []
+        let seeds = await Self.discoverBonjourSeeds(timeout: 3.0)
+        companionDebugLog("ForgeServerDiscovery", "discoverEnvironment bonjourSeeds=\(seeds.count)")
         for seed in seeds {
-            if let server = await Self.probeForgeHost(
-                host: seed.host,
-                name: seed.name,
-                source: .bonjour
-            ) {
-                candidates.append(server)
-            }
+            candidates.append(contentsOf: await Self.probeBonjourSeed(seed))
         }
 
-        let peers = await tailscalePeers
-        companionDebugLog("ForgeServerDiscovery", "discoverServers tailscalePeers=\(peers.count)")
-        for peer in peers {
-            if let server = await Self.probeForgeHost(
-                host: peer.host,
-                name: peer.name,
-                source: .tailscale
-            ) {
-                candidates.append(server)
-            }
+        let tailscaleReport = await Self.discoverTailscalePeers()
+        tailscaleDevices = tailscaleReport.devices
+        candidates.append(contentsOf: tailscaleReport.servers)
+        companionDebugLog(
+            "ForgeServerDiscovery",
+            "discoverEnvironment tailscaleDevices=\(tailscaleDevices.count) tailscaleServers=\(tailscaleReport.servers.count)"
+        )
+
+        if candidates.contains(where: { $0.source == .tailscale }) {
+            companionDebugLog("ForgeServerDiscovery", "discoverEnvironment tailscale candidate available")
+        }
+
+        if candidates.isEmpty {
+            let lanCandidates = await Self.scanLanForForge()
+            candidates.append(contentsOf: lanCandidates)
+            companionDebugLog("ForgeServerDiscovery", "discoverEnvironment lanCandidates=\(lanCandidates.count)")
+        } else {
+            companionDebugLog("ForgeServerDiscovery", "discoverEnvironment skippedLanScan existingCandidates=\(candidates.count)")
         }
 
         let reconciled = Self.reconcile(candidates)
-        companionDebugLog("ForgeServerDiscovery", "discoverServers complete reconciled=\(reconciled.count)")
-        return reconciled
+        let reconciledTailscaleDevices = Self.reconcileTailscaleDevices(tailscaleDevices)
+        companionDebugLog(
+            "ForgeServerDiscovery",
+            "discoverEnvironment complete reconciled=\(reconciled.count) tailscaleDevices=\(reconciledTailscaleDevices.count)"
+        )
+        return ForgeDiscoveryReport(
+            servers: reconciled,
+            tailscaleDevices: reconciledTailscaleDevices,
+            tailscaleStatusMessage: tailscaleReport.statusMessage
+        )
     }
 
     private var isRunningInSimulator: Bool {
@@ -124,6 +150,39 @@ final class ForgeServerDiscovery {
             .lowercased()
     }
 
+    private static func reconcileTailscaleDevices(
+        _ devices: [DiscoveredTailscaleDevice]
+    ) -> [DiscoveredTailscaleDevice] {
+        var byHost: [String: DiscoveredTailscaleDevice] = [:]
+        for device in devices {
+            let key = normalizedHostKey(device.dnsName ?? device.host)
+            if let existing = byHost[key] {
+                byHost[key] = preferredTailscaleDevice(existing, device)
+            } else {
+                byHost[key] = device
+            }
+        }
+
+        return byHost.values.sorted {
+            $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
+        }
+    }
+
+    private static func preferredTailscaleDevice(
+        _ lhs: DiscoveredTailscaleDevice,
+        _ rhs: DiscoveredTailscaleDevice
+    ) -> DiscoveredTailscaleDevice {
+        let lhsScore = (lhs.forgeApiReachable ? 1 : 0) + (lhs.forgeUiReachable ? 1 : 0)
+        let rhsScore = (rhs.forgeApiReachable ? 1 : 0) + (rhs.forgeUiReachable ? 1 : 0)
+        if rhsScore > lhsScore {
+            return rhs
+        }
+        if lhs.dnsName == nil, rhs.dnsName != nil {
+            return rhs
+        }
+        return lhs
+    }
+
     private static func probeForgeHost(
         host: String,
         name: String,
@@ -168,6 +227,191 @@ final class ForgeServerDiscovery {
             "probeForgeHost success host=\(trimmedHost) name=\(displayName) canBootstrap=\(canBootstrap)"
         )
         return server
+    }
+
+    private static func probeTailscalePeer(_ peer: TailscalePeer) async -> TailscalePeerProbeResult {
+        let trimmedHost = peer.host.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedName = peer.name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let dnsHost = peer.dnsName?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .trimmingCharacters(in: CharacterSet(charactersIn: "."))
+
+        companionDebugLog(
+            "ForgeServerDiscovery",
+            "probeTailscalePeer start host=\(trimmedHost) dns=\(dnsHost ?? "nil")"
+        )
+
+        let displayName = trimmedName.isEmpty ? (dnsHost ?? trimmedHost) : trimmedName
+        let apiBaseUrl = dnsHost.map { "https://\($0)/api/v1" }
+        let uiBaseUrl = dnsHost.map { "https://\($0)/forge/" }
+        var apiReachable = false
+        var uiReachable = false
+
+        if let dnsHost, !dnsHost.isEmpty {
+            async let apiProbe = probeForgeHealth(apiBaseUrl: "https://\(dnsHost)/api/v1")
+            async let uiProbe = probeForgeUi(uiBaseUrl: "https://\(dnsHost)/forge/")
+            apiReachable = await apiProbe
+            uiReachable = await uiProbe
+            if apiReachable, uiReachable {
+                let server = DiscoveredForgeServer(
+                    id: "forge-ts-\(dnsHost)",
+                    name: displayName,
+                    host: dnsHost,
+                    apiBaseUrl: "https://\(dnsHost)/api/v1",
+                    uiBaseUrl: "https://\(dnsHost)/forge/",
+                    source: .tailscale,
+                    canBootstrapPairing: true,
+                    detail: "Tailscale HTTPS target via tailscale serve"
+                )
+                companionDebugLog(
+                    "ForgeServerDiscovery",
+                    "probeTailscalePeer success dns=\(dnsHost) name=\(displayName)"
+                )
+                return TailscalePeerProbeResult(
+                    device: DiscoveredTailscaleDevice(
+                        id: "ts-device-\(dnsHost)",
+                        name: displayName,
+                        host: trimmedHost,
+                        dnsName: dnsHost,
+                        forgeApiBaseUrl: apiBaseUrl,
+                        forgeUiBaseUrl: uiBaseUrl,
+                        forgeApiReachable: apiReachable,
+                        forgeUiReachable: uiReachable,
+                        detail: "Forge API and /forge route reachable over Tailscale"
+                    ),
+                    server: server
+                )
+            }
+        }
+
+        let detail: String
+        if dnsHost == nil {
+            detail = "MagicDNS hostname unavailable for this Tailscale device."
+        } else if apiReachable {
+            detail = "Forge API responded over Tailscale, but /forge did not."
+        } else if uiReachable {
+            detail = "/forge responded over Tailscale, but the Forge API did not."
+        } else {
+            detail = "No Forge /api or /forge route detected over Tailscale."
+        }
+        companionDebugLog(
+            "ForgeServerDiscovery",
+            "probeTailscalePeer no Forge serve routes dns=\(dnsHost ?? "nil") api=\(apiReachable) ui=\(uiReachable)"
+        )
+        return TailscalePeerProbeResult(
+            device: DiscoveredTailscaleDevice(
+                id: "ts-device-\(dnsHost ?? trimmedHost)",
+                name: displayName,
+                host: trimmedHost,
+                dnsName: dnsHost,
+                forgeApiBaseUrl: apiBaseUrl,
+                forgeUiBaseUrl: uiBaseUrl,
+                forgeApiReachable: apiReachable,
+                forgeUiReachable: uiReachable,
+                detail: detail
+            ),
+            server: nil
+        )
+    }
+
+    private static func probeBonjourSeed(_ seed: BonjourSeed) async -> [DiscoveredForgeServer] {
+        if let tailscaleServer = await probeTailscaleAdvertisement(seed) {
+            companionDebugLog(
+                "ForgeServerDiscovery",
+                "probeBonjourSeed using tailscale-preferred service=\(seed.name)"
+            )
+            return [tailscaleServer]
+        }
+
+        if let localServer = await probeForgeHost(host: seed.host, name: seed.name, source: .bonjour) {
+            return [localServer]
+        }
+
+        return []
+    }
+
+    private static func probeTailscaleAdvertisement(_ seed: BonjourSeed) async -> DiscoveredForgeServer? {
+        let rawApiBaseUrl = seed.txtRecords["tsApiBaseUrl"]?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let rawUiBaseUrl = seed.txtRecords["tsUiBaseUrl"]?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let rawDnsName = seed.txtRecords["tsDnsName"]?.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        let apiBaseUrl = normalizedTailscaleBaseUrl(rawApiBaseUrl)
+        let uiBaseUrl = normalizedTailscaleUiUrl(rawUiBaseUrl)
+        let dnsName = rawDnsName?.trimmingCharacters(in: CharacterSet(charactersIn: "."))
+
+        companionDebugLog(
+            "ForgeServerDiscovery",
+            "probeTailscaleAdvertisement start service=\(seed.name) dns=\(dnsName ?? "nil") api=\(apiBaseUrl ?? "nil")"
+        )
+
+        guard let apiBaseUrl else {
+            return nil
+        }
+        let resolvedUiBaseUrl = uiBaseUrl ?? inferredUiBaseUrl(from: apiBaseUrl)
+        async let apiProbe = probeForgeHealth(apiBaseUrl: apiBaseUrl)
+        async let uiProbe = probeForgeUi(uiBaseUrl: resolvedUiBaseUrl)
+        guard await apiProbe else {
+            companionDebugLog(
+                "ForgeServerDiscovery",
+                "probeTailscaleAdvertisement health failed service=\(seed.name)"
+            )
+            return nil
+        }
+        guard await uiProbe else {
+            companionDebugLog(
+                "ForgeServerDiscovery",
+                "probeTailscaleAdvertisement ui failed service=\(seed.name)"
+            )
+            return nil
+        }
+
+        let host = dnsName?.isEmpty == false ? dnsName! : URL(string: apiBaseUrl)?.host ?? seed.host
+        let server = DiscoveredForgeServer(
+            id: "forge-ts-bonjour-\(host)",
+            name: seed.name,
+            host: host,
+            apiBaseUrl: apiBaseUrl,
+            uiBaseUrl: resolvedUiBaseUrl,
+            source: .tailscale,
+            canBootstrapPairing: true,
+            detail: "Tailscale HTTPS target advertised by Forge"
+        )
+        companionDebugLog(
+            "ForgeServerDiscovery",
+            "probeTailscaleAdvertisement success service=\(seed.name) host=\(host)"
+        )
+        return server
+    }
+
+    private static func probeForgeUi(uiBaseUrl: String) async -> Bool {
+        guard let url = URL(string: uiBaseUrl) else {
+            companionDebugLog("ForgeServerDiscovery", "probeForgeUi badURL uiBaseUrl=\(uiBaseUrl)")
+            return false
+        }
+
+        var request = URLRequest(url: url)
+        request.timeoutInterval = 1.4
+        request.cachePolicy = .reloadIgnoringLocalCacheData
+
+        do {
+            let (_, response) = try await URLSession.shared.data(for: request)
+            guard let http = response as? HTTPURLResponse else {
+                companionDebugLog("ForgeServerDiscovery", "probeForgeUi no HTTP response url=\(url.absoluteString)")
+                return false
+            }
+            let success = (200..<400).contains(http.statusCode)
+            companionDebugLog(
+                "ForgeServerDiscovery",
+                "probeForgeUi response url=\(url.absoluteString) status=\(http.statusCode) success=\(success)"
+            )
+            return success
+        } catch {
+            companionDebugLog(
+                "ForgeServerDiscovery",
+                "probeForgeUi failed url=\(url.absoluteString) error=\(error.localizedDescription)"
+            )
+            return false
+        }
     }
 
     private static func probeForgeHealth(apiBaseUrl: String) async -> Bool {
@@ -243,41 +487,86 @@ final class ForgeServerDiscovery {
         return discovered
     }
 
-    private static func fetchTailscalePeers() async -> [(host: String, name: String)] {
+    private static func discoverTailscalePeers() async -> (
+        devices: [DiscoveredTailscaleDevice],
+        servers: [DiscoveredForgeServer],
+        statusMessage: String
+    ) {
+        let fetchResult = await fetchTailscalePeers()
+        guard !fetchResult.peers.isEmpty else {
+            return ([], [], fetchResult.statusMessage)
+        }
+
+        let limiter = ProbeLimiter(maxConcurrentTailscalePeerProbes)
+        let results = await withTaskGroup(of: TailscalePeerProbeResult.self, returning: [TailscalePeerProbeResult].self) { group in
+            for peer in fetchResult.peers {
+                group.addTask {
+                    await limiter.acquire()
+                    let result = await probeTailscalePeer(peer)
+                    await limiter.release()
+                    return result
+                }
+            }
+
+            var values: [TailscalePeerProbeResult] = []
+            for await result in group {
+                values.append(result)
+            }
+            return values
+        }
+
+        let devices = results.map(\.device)
+        let servers = results.compactMap(\.server)
+        let reachableForgeCount = devices.filter { $0.forgeApiReachable || $0.forgeUiReachable }.count
+        let statusMessage = "\(devices.count) Tailscale device\(devices.count == 1 ? "" : "s") visible. Forge routes detected on \(reachableForgeCount)."
+        return (devices, servers, statusMessage)
+    }
+
+    private static func fetchTailscalePeers() async -> TailscalePeerFetchResult {
         guard let url = URL(string: "http://100.100.100.100/localapi/v0/status") else {
             companionDebugLog("ForgeServerDiscovery", "fetchTailscalePeers badURL")
-            return []
+            return TailscalePeerFetchResult(peers: [], statusMessage: "Tailscale LocalAPI URL is invalid.")
         }
 
         let configuration = URLSessionConfiguration.ephemeral
         configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
-        configuration.timeoutIntervalForRequest = 1.8
-        configuration.timeoutIntervalForResource = 2.0
+        configuration.timeoutIntervalForRequest = 1.2
+        configuration.timeoutIntervalForResource = 1.4
         configuration.waitsForConnectivity = false
         let session = URLSession(configuration: configuration)
 
         var request = URLRequest(url: url)
         request.timeoutInterval = 1.8
+        request.setValue("local-tailscaled.sock", forHTTPHeaderField: "Host")
 
         do {
             let (data, response) = try await session.data(for: request)
             guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
                 companionDebugLog("ForgeServerDiscovery", "fetchTailscalePeers non-200")
-                return []
+                return TailscalePeerFetchResult(
+                    peers: [],
+                    statusMessage: "Tailscale is installed, but its local status endpoint did not answer cleanly."
+                )
             }
             let peers = parseTailscalePeers(data: data)
             companionDebugLog("ForgeServerDiscovery", "fetchTailscalePeers success count=\(peers.count)")
-            return peers
+            let statusMessage = peers.isEmpty
+                ? "No online Tailscale peers were reported by this phone."
+                : "Found \(peers.count) online Tailscale peer\(peers.count == 1 ? "" : "s")."
+            return TailscalePeerFetchResult(peers: peers, statusMessage: statusMessage)
         } catch {
             companionDebugLog(
                 "ForgeServerDiscovery",
                 "fetchTailscalePeers failed error=\(error.localizedDescription)"
             )
-            return []
+            return TailscalePeerFetchResult(
+                peers: [],
+                statusMessage: "Tailscale peer list unavailable on this device right now."
+            )
         }
     }
 
-    private static func parseTailscalePeers(data: Data) -> [(host: String, name: String)] {
+    private static func parseTailscalePeers(data: Data) -> [TailscalePeer] {
         guard
             let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
             let peers = json["Peer"] as? [String: Any]
@@ -286,7 +575,7 @@ final class ForgeServerDiscovery {
             return []
         }
 
-        var results: [(host: String, name: String)] = []
+        var results: [TailscalePeer] = []
         for value in peers.values {
             guard let peer = value as? [String: Any] else {
                 continue
@@ -297,14 +586,47 @@ final class ForgeServerDiscovery {
             let displayName = (peer["HostName"] as? String)?
                 .trimmingCharacters(in: .whitespacesAndNewlines)
                 .trimmingCharacters(in: CharacterSet(charactersIn: "."))
+            let dnsName = (peer["DNSName"] as? String)?
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .trimmingCharacters(in: CharacterSet(charactersIn: "."))
             let ips = peer["TailscaleIPs"] as? [String] ?? []
             guard let ipv4 = ips.first(where: isIPv4Address) else {
                 continue
             }
-            results.append((host: ipv4, name: displayName?.isEmpty == false ? displayName! : ipv4))
+            results.append(
+                TailscalePeer(
+                    host: ipv4,
+                    name: displayName?.isEmpty == false ? displayName! : ipv4,
+                    dnsName: dnsName?.isEmpty == false ? dnsName : nil
+                )
+            )
         }
         companionDebugLog("ForgeServerDiscovery", "parseTailscalePeers parsed count=\(results.count)")
         return results
+    }
+
+    private static func normalizedTailscaleBaseUrl(_ value: String?) -> String? {
+        guard let value, !value.isEmpty, let url = URL(string: value), url.scheme == "https" else {
+            return nil
+        }
+        return value.hasSuffix("/") ? String(value.dropLast()) : value
+    }
+
+    private static func normalizedTailscaleUiUrl(_ value: String?) -> String? {
+        guard let value, !value.isEmpty, let url = URL(string: value), url.scheme == "https" else {
+            return nil
+        }
+        return value.hasSuffix("/") ? value : "\(value)/"
+    }
+
+    private static func inferredUiBaseUrl(from apiBaseUrl: String) -> String {
+        guard let url = URL(string: apiBaseUrl), var components = URLComponents(url: url, resolvingAgainstBaseURL: false) else {
+            return apiBaseUrl
+        }
+        components.path = "/forge/"
+        components.query = nil
+        components.fragment = nil
+        return components.url?.absoluteString ?? apiBaseUrl
     }
 
     private static func isIPv4Address(_ value: String) -> Bool {
@@ -357,7 +679,7 @@ private final class BonjourServiceDiscoverer: NSObject, @preconcurrency NetServi
     private let serviceType: String
     private let browser = NetServiceBrowser()
     private var services: [NetService] = []
-    private var results: [String: String] = [:]
+    private var results: [String: ForgeServerDiscovery.BonjourSeed] = [:]
     private var pendingServices: Set<ObjectIdentifier> = []
     private var continuation: CheckedContinuation<[ForgeServerDiscovery.BonjourSeed], Never>?
     private var timeoutTask: Task<Void, Never>?
@@ -399,7 +721,7 @@ private final class BonjourServiceDiscoverer: NSObject, @preconcurrency NetServi
             service.stop()
             service.delegate = nil
         }
-        let seeds = results.map { ForgeServerDiscovery.BonjourSeed(name: $0.value, host: $0.key) }
+        let seeds = Array(results.values)
         companionDebugLog("BonjourServiceDiscoverer", "finish seeds=\(seeds.count)")
         continuation?.resume(returning: seeds)
         continuation = nil
@@ -418,7 +740,11 @@ private final class BonjourServiceDiscoverer: NSObject, @preconcurrency NetServi
         pendingServices.remove(ObjectIdentifier(sender))
         for address in sender.addresses ?? [] {
             guard let ip = ipv4Address(fromSockaddrData: address) else { continue }
-            results[ip] = sender.name
+            results[ip] = ForgeServerDiscovery.BonjourSeed(
+                name: sender.name,
+                host: ip,
+                txtRecords: txtRecords(from: sender)
+            )
             companionDebugLog("BonjourServiceDiscoverer", "resolved service=\(sender.name) ip=\(ip)")
             break
         }
@@ -457,6 +783,16 @@ private final class BonjourServiceDiscoverer: NSObject, @preconcurrency NetServi
                 return nil
             }
             return String(cString: buffer)
+        }
+    }
+
+    private func txtRecords(from service: NetService) -> [String: String] {
+        guard let txtRecordData = service.txtRecordData() else {
+            return [:]
+        }
+
+        return NetService.dictionary(fromTXTRecord: txtRecordData).reduce(into: [:]) { partialResult, entry in
+            partialResult[entry.key] = String(data: entry.value, encoding: .utf8) ?? ""
         }
     }
 }

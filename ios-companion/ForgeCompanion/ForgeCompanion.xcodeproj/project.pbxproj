@@ -104,6 +104,13 @@
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		2A7EAA342FE3F30100A1D7C1 /* Exceptions for "ForgeCompanion" folder in "ForgeCompanion" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = 815A1C0D2F82D4E200B6BAF2 /* ForgeCompanion */;
+		};
 		815A212C2F8521C800B6BAF2 /* Exceptions for "ForgeWatch" folder in "ForgeWatchExtension" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
@@ -111,20 +118,13 @@
 			);
 			target = 815A21162F8521C700B6BAF2 /* ForgeWatchExtension */;
 		};
-		815A21332F8522A300B6BAF2 /* Exceptions for "ForgeCompanion" folder in "ForgeCompanion" target */ = {
-			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
-			membershipExceptions = (
-				Info.plist,
-			);
-			target = 815A1C0D2F82D4E200B6BAF2 /* ForgeCompanion */;
-		};
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		815A1C102F82D4E200B6BAF2 /* ForgeCompanion */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			exceptions = (
-				815A21332F8522A300B6BAF2 /* Exceptions for "ForgeCompanion" folder in "ForgeCompanion" target */,
+				2A7EAA342FE3F30100A1D7C1 /* Exceptions for "ForgeCompanion" folder in "ForgeCompanion" target */,
 			);
 			path = ForgeCompanion;
 			sourceTree = "<group>";
@@ -762,8 +762,8 @@
 				DEVELOPMENT_TEAM = KZ65F7924F;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_FILE = ForgeCompanion/Info.plist;
-				INFOPLIST_KEY_BGTaskSchedulerPermittedIdentifiers = "com.aurel.forgecompanion.health-sync";
+				INFOPLIST_FILE = Info.plist;
+				INFOPLIST_KEY_BGTaskSchedulerPermittedIdentifiers = "com.albertbuchard.ForgeCompanion.health-sync";
 				INFOPLIST_KEY_CFBundleDisplayName = "Forge Companion";
 				INFOPLIST_KEY_LSApplicationQueriesSchemes = tailscale;
 				INFOPLIST_KEY_NSBonjourServices = _forge._tcp;
@@ -776,6 +776,7 @@
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UIBackgroundModes = fetch;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UIRequiresFullScreen = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = UIInterfaceOrientationPortrait;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -806,8 +807,8 @@
 				DEVELOPMENT_TEAM = KZ65F7924F;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_FILE = ForgeCompanion/Info.plist;
-				INFOPLIST_KEY_BGTaskSchedulerPermittedIdentifiers = "com.aurel.forgecompanion.health-sync";
+				INFOPLIST_FILE = Info.plist;
+				INFOPLIST_KEY_BGTaskSchedulerPermittedIdentifiers = "com.albertbuchard.ForgeCompanion.health-sync";
 				INFOPLIST_KEY_CFBundleDisplayName = "Forge Companion";
 				INFOPLIST_KEY_LSApplicationQueriesSchemes = tailscale;
 				INFOPLIST_KEY_NSBonjourServices = _forge._tcp;
@@ -820,6 +821,7 @@
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UIBackgroundModes = fetch;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UIRequiresFullScreen = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = UIInterfaceOrientationPortrait;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (

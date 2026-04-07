@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import {
   createAiProcessor,
   createAiProcessorLink,
+  deleteAiProcessor,
   deleteAiProcessorLink,
   getSettings,
   getSurfaceAiProcessors,
@@ -49,13 +50,27 @@ export function AiSurfaceWorkspace({
     queryFn: () => getSurfaceAiProcessors(surfaceId)
   });
 
-  const invalidateGraph = async () => {
-    await Promise.all([
-      queryClient.invalidateQueries({
-        queryKey: ["forge-surface-ai-processors", surfaceId]
-      }),
-      queryClient.invalidateQueries({ queryKey: ["forge-settings"] })
-    ]);
+  const patchGraphCache = (
+    updater: (current: SurfaceProcessorGraphPayload) => SurfaceProcessorGraphPayload
+  ) => {
+    queryClient.setQueryData(
+      ["forge-surface-ai-processors", surfaceId],
+      (
+        current:
+          | {
+              graph: SurfaceProcessorGraphPayload;
+            }
+          | undefined
+      ) => ({
+        graph: updater(
+          current?.graph ?? {
+            surfaceId,
+            processors: [],
+            links: []
+          }
+        )
+      })
+    );
   };
 
   const createProcessorMutation = useMutation({
@@ -71,7 +86,12 @@ export function AiSurfaceWorkspace({
         triggerMode: "manual",
         endpointEnabled: true
       }),
-    onSuccess: invalidateGraph
+    onSuccess: ({ processor }) => {
+      patchGraphCache((current) => ({
+        ...current,
+        processors: [...current.processors, processor]
+      }));
+    }
   });
 
   const updateProcessorMutation = useMutation({
@@ -82,7 +102,14 @@ export function AiSurfaceWorkspace({
       processorId: string;
       patch: Partial<AiProcessor>;
     }) => updateAiProcessor(processorId, patch),
-    onSuccess: invalidateGraph
+    onSuccess: ({ processor }) => {
+      patchGraphCache((current) => ({
+        ...current,
+        processors: current.processors.map((entry) =>
+          entry.id === processor.id ? processor : entry
+        )
+      }));
+    }
   });
 
   const runProcessorMutation = useMutation({
@@ -93,7 +120,25 @@ export function AiSurfaceWorkspace({
       processorId: string;
       input: string;
     }) => runAiProcessor(processorId, { input }),
-    onSuccess: invalidateGraph
+    onSuccess: ({ processor }) => {
+      patchGraphCache((current) => ({
+        ...current,
+        processors: current.processors.map((entry) =>
+          entry.id === processor.id ? processor : entry
+        )
+      }));
+    }
+  });
+
+  const deleteProcessorMutation = useMutation({
+    mutationFn: deleteAiProcessor,
+    onSuccess: ({ processor }) => {
+      patchGraphCache((current) => ({
+        ...current,
+        processors: current.processors.filter((entry) => entry.id !== processor.id),
+        links: current.links.filter((entry) => entry.targetProcessorId !== processor.id)
+      }));
+    }
   });
 
   const createLinkMutation = useMutation({
@@ -116,15 +161,23 @@ export function AiSurfaceWorkspace({
         capabilityMode,
         metadata
       }),
-    onSuccess: async () => {
+    onSuccess: ({ link }) => {
+      patchGraphCache((current) => ({
+        ...current,
+        links: [...current.links, link]
+      }));
       setPendingSourceWidgetId(null);
-      await invalidateGraph();
     }
   });
 
   const deleteLinkMutation = useMutation({
     mutationFn: deleteAiProcessorLink,
-    onSuccess: invalidateGraph
+    onSuccess: ({ link }) => {
+      patchGraphCache((current) => ({
+        ...current,
+        links: current.links.filter((entry) => entry.id !== link.id)
+      }));
+    }
   });
 
   const agents = settingsQuery.data?.settings.agents ?? [];
@@ -134,49 +187,76 @@ export function AiSurfaceWorkspace({
   const processors = graph?.processors ?? [];
   const links = graph?.links ?? [];
 
-  const processorWidgets: SurfaceWidgetDefinition[] = processors.map((processor) => ({
-    id: processorWidgetId(processor.id),
-    title: processor.title,
-    description: "AI processor widget.",
-    isProcessor: true,
-    defaultWidth: 6,
-    defaultHeight: 4,
-    minWidth: 3,
-    minHeight: 2,
-    processorCapability: {
-      label: processor.title,
-      mode: "processor",
-      metadata: {
-        processorId: processor.id,
-        slug: processor.slug,
-        runEndpoint: `/api/v1/aiproc/${processor.slug}/run`
-      }
-    },
-    render: ({ compact, editing }) => (
-      <AiProcessorWidget
-        processor={processor}
-        agents={agents}
-        modelConnections={modelConnections}
-        editing={editing}
-        compact={compact}
-        onSave={async (patch: Partial<AiProcessor>) => {
-          await updateProcessorMutation.mutateAsync({
+  const processorWidgets = useMemo<SurfaceWidgetDefinition[]>(
+    () =>
+      processors.map((processor) => ({
+        id: processorWidgetId(processor.id),
+        title: processor.title,
+        description: "AI processor widget.",
+        isProcessor: true,
+        defaultWidth: 12,
+        defaultHeight: 8,
+        minWidth: 6,
+        minHeight: 6,
+        maxHeight: 12,
+        defaultPlacement: "top",
+        autoSizeHeight: false,
+        processorCapability: {
+          label: processor.title,
+          mode: "processor",
+          metadata: {
             processorId: processor.id,
-            patch
-          });
-        }}
-        onRun={async (input: string) => {
-          await runProcessorMutation.mutateAsync({
-            processorId: processor.id,
-            input
-          });
-        }}
-      />
-    )
-  }));
+            slug: processor.slug,
+            runEndpoint: `/api/v1/aiproc/${processor.slug}/run`
+          }
+        },
+        render: ({ compact, editing }) => (
+          <AiProcessorWidget
+            key={`${processor.id}:${processor.updatedAt}`}
+            processor={processor}
+            agents={agents}
+            modelConnections={modelConnections}
+            editing={editing}
+            compact={compact}
+            onSave={async (patch: Partial<AiProcessor>) => {
+              await updateProcessorMutation.mutateAsync({
+                processorId: processor.id,
+                patch
+              });
+            }}
+            onRun={async (input: string) => {
+              await runProcessorMutation.mutateAsync({
+                processorId: processor.id,
+                input
+              });
+            }}
+            onDelete={async () => {
+              await deleteProcessorMutation.mutateAsync(processor.id);
+              setSelectedWidgetId((current) =>
+                current === processorWidgetId(processor.id) ? null : current
+              );
+            }}
+          />
+        )
+      })),
+    [
+      agents,
+      modelConnections,
+      processors,
+      deleteProcessorMutation,
+      runProcessorMutation,
+      updateProcessorMutation
+    ]
+  );
 
-  const widgets = [...baseWidgets, ...processorWidgets];
-  const widgetById = new Map(widgets.map((widget) => [widget.id, widget]));
+  const widgets = useMemo(
+    () => [...baseWidgets, ...processorWidgets],
+    [baseWidgets, processorWidgets]
+  );
+  const widgetById = useMemo(
+    () => new Map(widgets.map((widget) => [widget.id, widget])),
+    [widgets]
+  );
 
   const linkedDescriptionsByWidgetId = useMemo(() => {
     const output: Record<string, string[]> = {};

@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
-import { Bot, Play, Save } from "lucide-react";
+import { useMemo, useState } from "react";
+import { Bot, Play, Save, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type {
   AgentIdentity,
@@ -15,7 +15,8 @@ export function AiProcessorWidget({
   editing,
   compact,
   onSave,
-  onRun
+  onRun,
+  onDelete
 }: {
   processor: AiProcessor;
   agents: AgentIdentity[];
@@ -24,6 +25,7 @@ export function AiProcessorWidget({
   compact: boolean;
   onSave: (patch: Partial<AiProcessor>) => Promise<void>;
   onRun: (input: string) => Promise<void>;
+  onDelete?: () => Promise<void>;
 }) {
   const [title, setTitle] = useState(processor.title);
   const [promptFlow, setPromptFlow] = useState(processor.promptFlow);
@@ -34,15 +36,6 @@ export function AiProcessorWidget({
     processor.agentConfigs
   );
   const [runInput, setRunInput] = useState("");
-
-  useEffect(() => {
-    setTitle(processor.title);
-    setPromptFlow(processor.promptFlow);
-    setContextInput(processor.contextInput);
-    setTriggerMode(processor.triggerMode);
-    setAgentIds(processor.agentIds);
-    setAgentConfigs(processor.agentConfigs);
-  }, [processor]);
 
   const activeAgentLabels = useMemo(() => {
     const byId = new Map(agents.map((agent) => [agent.id, agent.label]));
@@ -236,6 +229,12 @@ export function AiProcessorWidget({
           <Play className="size-4" />
           Run
         </Button>
+        {onDelete ? (
+          <Button size="sm" variant="ghost" onClick={() => void onDelete()}>
+            <Trash2 className="size-4" />
+            Delete
+          </Button>
+        ) : null}
       </div>
     </div>
   );

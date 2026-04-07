@@ -10,8 +10,7 @@ final class WatchAppModel: NSObject, ObservableObject {
     @Published var selectedSurface: WatchSurface = .habits
     @Published var lastStatusMessage = "Waiting for iPhone"
 
-    private let defaults =
-        UserDefaults(suiteName: ForgeWatchStorage.appGroupId) ?? .standard
+    private let defaults = ForgeWatchStorage.sharedDefaults()
     private let encoder = JSONEncoder()
     private let decoder = JSONDecoder()
     private let previewMode: Bool

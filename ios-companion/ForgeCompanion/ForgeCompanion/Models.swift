@@ -18,6 +18,24 @@ struct DiscoveredForgeServer: Identifiable, Hashable {
     let detail: String
 }
 
+struct DiscoveredTailscaleDevice: Identifiable, Hashable {
+    let id: String
+    let name: String
+    let host: String
+    let dnsName: String?
+    let forgeApiBaseUrl: String?
+    let forgeUiBaseUrl: String?
+    let forgeApiReachable: Bool
+    let forgeUiReachable: Bool
+    let detail: String
+}
+
+struct ForgeDiscoveryReport {
+    let servers: [DiscoveredForgeServer]
+    let tailscaleDevices: [DiscoveredTailscaleDevice]
+    let tailscaleStatusMessage: String
+}
+
 struct PairingPayload: Codable {
     let kind: String
     let apiBaseUrl: String
@@ -253,6 +271,30 @@ struct SyncReport {
     let movementStays: Int
     let movementTrips: Int
     let movementKnownPlaces: Int
+}
+
+struct SyncPayloadSummary: Codable {
+    let builtAt: Date
+    let sleepSessions: Int
+    let sleepStageEntries: Int
+    let workouts: Int
+    let workoutsWithAverageHeartRate: Int
+    let workoutsWithMaxHeartRate: Int
+    let workoutsWithStepCount: Int
+    let movementKnownPlaces: Int
+    let movementStays: Int
+    let movementTrips: Int
+    let movementTripPoints: Int
+    let movementTripStops: Int
+    let rawHeartRateDatapointsSynced: Int
+}
+
+struct SyncCoverageRow: Identifiable {
+    let id: String
+    let title: String
+    let value: String
+    let detail: String
+    let isMissing: Bool
 }
 
 enum HealthAccessStatus: String, Codable {

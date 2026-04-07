@@ -549,7 +549,7 @@ export function ProjectsPage() {
       title: "Projects",
       description: "Route header",
       defaultWidth: 12,
-      defaultHeight: 1,
+      defaultHeight: 2,
       removable: false,
       render: () => (
         <PageHero
@@ -573,7 +573,7 @@ export function ProjectsPage() {
       title: "Search and results",
       description: "Search stays grouped with its live result set.",
       defaultWidth: 8,
-      defaultHeight: 5,
+      defaultHeight: 6,
       minWidth: 6,
       render: ({ compact }) => (
         <div className="grid gap-4">
@@ -635,7 +635,7 @@ export function ProjectsPage() {
       title: "Collection summary",
       description: "Counts and spotlight cards.",
       defaultWidth: 4,
-      defaultHeight: 4,
+      defaultHeight: 5,
       minWidth: 4,
       render: () => {
         const spotlight =

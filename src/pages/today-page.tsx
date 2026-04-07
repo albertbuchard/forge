@@ -146,7 +146,7 @@ export function TodayPage() {
       title: "Today",
       description: "Compact page header.",
       defaultWidth: 12,
-      defaultHeight: 1,
+      defaultHeight: 2,
       removable: false,
       render: () => (
         <PageHero
@@ -166,7 +166,7 @@ export function TodayPage() {
       description:
         "XP, level, and momentum stay visible but lighter than before.",
       defaultWidth: 5,
-      defaultHeight: 3,
+      defaultHeight: 4,
       minWidth: 4,
       render: ({ compact }) => (
         <div className="grid gap-3 sm:grid-cols-2">
@@ -235,7 +235,7 @@ export function TodayPage() {
       title: "Runway",
       description: "The execution lane itself can be widened or narrowed.",
       defaultWidth: 7,
-      defaultHeight: 5,
+      defaultHeight: 6,
       minWidth: 5,
       render: () => (
         <DailyRunway
@@ -261,7 +261,7 @@ export function TodayPage() {
       description:
         "Today's events stay grouped with their results instead of splitting search from outcome.",
       defaultWidth: 5,
-      defaultHeight: 4,
+      defaultHeight: 5,
       minWidth: 4,
       render: ({ compact }) => (
         <div className="grid gap-3">
@@ -337,7 +337,7 @@ export function TodayPage() {
       description:
         "Current task, comeback task, and due habits stay in one movable stack.",
       defaultWidth: 12,
-      defaultHeight: 3,
+      defaultHeight: 4,
       minWidth: 6,
       render: ({ compact }) => (
         <div className="grid min-w-0 gap-4 xl:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)]">
