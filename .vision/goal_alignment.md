@@ -67,6 +67,14 @@ and known places with explicit permission onboarding, publish those movement rec
 structured evidence rather than opaque GPS blobs, and let the user review their
 mobility through day, month, and all-time views that connect movement to notes, work,
 health, and Psyche context.
+Eleventh, it must support one shared surface-grid runtime across the entire web app.
+Every routed page must be able to participate in the same draggable, resizable,
+server-persisted layout system rather than splitting Forge into a few customizable
+dashboards and many fixed pages.
+Twelfth, it must support AI processors as first-class surface widgets. A processor
+must be able to live on any routed surface, accept inputs from linked widgets or other
+processors, run with one or more configured agents, expose a route endpoint, and use
+real guarded machine access when that policy is explicitly enabled.
 
 ## Product Concepts That Must Be Explained Clearly
 

@@ -1625,6 +1625,42 @@ export interface OpenAiCodexOauthSession {
   credentialExpiresAt: string | null;
 }
 
+export type SurfaceWidgetDensity = "dense" | "compact" | "comfortable";
+
+export interface SurfaceLayoutBreakpointItem {
+  i: string;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  minW?: number;
+  maxW?: number;
+  minH?: number;
+  maxH?: number;
+}
+
+export interface SurfaceLayoutBreakpoints {
+  lg: SurfaceLayoutBreakpointItem[];
+  md: SurfaceLayoutBreakpointItem[];
+  sm: SurfaceLayoutBreakpointItem[];
+  xs: SurfaceLayoutBreakpointItem[];
+  xxs: SurfaceLayoutBreakpointItem[];
+}
+
+export interface SurfaceWidgetPreferences {
+  hidden: boolean;
+  titleVisible: boolean;
+  descriptionVisible: boolean;
+  density: SurfaceWidgetDensity;
+}
+
+export interface SurfaceLayoutPayload {
+  surfaceId: string;
+  layouts: SurfaceLayoutBreakpoints;
+  widgets: Record<string, SurfaceWidgetPreferences>;
+  updatedAt: string;
+}
+
 export interface AiProcessorTool {
   key: string;
   label: string;
@@ -1633,14 +1669,22 @@ export interface AiProcessorTool {
   mode: "content" | "tool" | "mcp" | "processor";
 }
 
+export interface AiProcessorAgentConfig {
+  agentId: string;
+  connectionId: string | null;
+  model: string;
+}
+
 export interface AiProcessor {
   id: string;
+  slug: string;
   surfaceId: string;
   title: string;
   promptFlow: string;
   contextInput: string;
   toolConfig: AiProcessorTool[];
   agentIds: string[];
+  agentConfigs: AiProcessorAgentConfig[];
   triggerMode: "manual" | "route" | "cron";
   cronExpression: string;
   machineAccess: {
@@ -1655,6 +1699,19 @@ export interface AiProcessor {
     concatenated: string;
     byAgent: Record<string, string>;
   } | null;
+  runHistory: Array<{
+    id: string;
+    trigger: "manual" | "route" | "cron";
+    startedAt: string;
+    completedAt: string | null;
+    status: "running" | "completed" | "failed";
+    input: string;
+    output: {
+      concatenated: string;
+      byAgent: Record<string, string>;
+    } | null;
+    error: string | null;
+  }>;
   createdAt: string;
   updatedAt: string;
 }

@@ -3,9 +3,9 @@ import { useQuery } from "@tanstack/react-query";
 import { CalendarDays, ChevronRight } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import {
-  EditableSurface,
   type SurfaceWidgetDefinition
 } from "@/components/customization/editable-surface";
+import { AiSurfaceWorkspace } from "@/components/customization/ai-surface-workspace";
 import {
   MiniCalendarWidget,
   QuickCaptureWidget,
@@ -480,5 +480,5 @@ export function TodayPage() {
     }
   ];
 
-  return <EditableSurface surfaceId="today" widgets={widgets} />;
+  return <AiSurfaceWorkspace surfaceId="today" baseWidgets={widgets} />;
 }

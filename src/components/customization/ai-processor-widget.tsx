@@ -1,11 +1,17 @@
 import { useEffect, useMemo, useState } from "react";
 import { Bot, Play, Save } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import type { AgentIdentity, AiProcessor } from "@/lib/types";
+import type {
+  AgentIdentity,
+  AiModelConnection,
+  AiProcessor,
+  AiProcessorAgentConfig
+} from "@/lib/types";
 
 export function AiProcessorWidget({
   processor,
   agents,
+  modelConnections,
   editing,
   compact,
   onSave,
@@ -13,6 +19,7 @@ export function AiProcessorWidget({
 }: {
   processor: AiProcessor;
   agents: AgentIdentity[];
+  modelConnections: AiModelConnection[];
   editing: boolean;
   compact: boolean;
   onSave: (patch: Partial<AiProcessor>) => Promise<void>;
@@ -23,6 +30,9 @@ export function AiProcessorWidget({
   const [contextInput, setContextInput] = useState(processor.contextInput);
   const [triggerMode, setTriggerMode] = useState(processor.triggerMode);
   const [agentIds, setAgentIds] = useState<string[]>(processor.agentIds);
+  const [agentConfigs, setAgentConfigs] = useState<AiProcessorAgentConfig[]>(
+    processor.agentConfigs
+  );
   const [runInput, setRunInput] = useState("");
 
   useEffect(() => {
@@ -31,6 +41,7 @@ export function AiProcessorWidget({
     setContextInput(processor.contextInput);
     setTriggerMode(processor.triggerMode);
     setAgentIds(processor.agentIds);
+    setAgentConfigs(processor.agentConfigs);
   }, [processor]);
 
   const activeAgentLabels = useMemo(() => {
@@ -39,6 +50,37 @@ export function AiProcessorWidget({
       .map((id) => byId.get(id) ?? (id === "agt_forge_default" ? "Forge Agent" : id));
     return labels.join(", ");
   }, [agentIds, agents]);
+
+  const modelConnectionsByAgent = useMemo(() => {
+    const output = new Map<string, AiModelConnection[]>();
+    for (const connection of modelConnections) {
+      const current = output.get(connection.agentId) ?? [];
+      current.push(connection);
+      output.set(connection.agentId, current);
+    }
+    return output;
+  }, [modelConnections]);
+
+  function updateAgentConfig(
+    agentId: string,
+    patch: Partial<AiProcessorAgentConfig>
+  ) {
+    setAgentConfigs((current) => {
+      const existing =
+        current.find((entry) => entry.agentId === agentId) ?? {
+          agentId,
+          connectionId: null,
+          model: ""
+        };
+      return [
+        ...current.filter((entry) => entry.agentId !== agentId),
+        {
+          ...existing,
+          ...patch
+        }
+      ];
+    });
+  }
 
   if (!editing) {
     return (
@@ -55,6 +97,9 @@ export function AiProcessorWidget({
         </div>
         <div className="text-[12px] leading-5 text-white/50">
           Agents: {activeAgentLabels}
+        </div>
+        <div className="text-[11px] uppercase tracking-[0.16em] text-white/38">
+          `/api/v1/aiproc/{processor.slug}/run`
         </div>
         <textarea
           value={runInput}
@@ -113,24 +158,59 @@ export function AiProcessorWidget({
         <div className="grid gap-2">
           {agents.map((agent) => {
             const checked = agentIds.includes(agent.id);
+            const config =
+              agentConfigs.find((entry) => entry.agentId === agent.id) ?? null;
+            const agentConnections = modelConnectionsByAgent.get(agent.id) ?? [];
             return (
-              <label
+              <div
                 key={agent.id}
-                className="flex items-center gap-3 rounded-[16px] bg-white/[0.03] px-3 py-2 text-sm text-white/72"
+                className="grid gap-2 rounded-[16px] bg-white/[0.03] px-3 py-3 text-sm text-white/72"
               >
-                <input
-                  type="checkbox"
-                  checked={checked}
-                  onChange={(event) => {
-                    setAgentIds((current) =>
-                      event.target.checked
-                        ? [...current, agent.id]
-                        : current.filter((value) => value !== agent.id)
-                    );
-                  }}
-                />
-                <span>{agent.label}</span>
-              </label>
+                <label className="flex items-center gap-3">
+                  <input
+                    type="checkbox"
+                    checked={checked}
+                    onChange={(event) => {
+                      setAgentIds((current) =>
+                        event.target.checked
+                          ? [...current, agent.id]
+                          : current.filter((value) => value !== agent.id)
+                      );
+                    }}
+                  />
+                  <span>{agent.label}</span>
+                </label>
+                {checked ? (
+                  <div className="grid gap-2 md:grid-cols-2">
+                    <select
+                      value={config?.connectionId ?? ""}
+                      onChange={(event) =>
+                        updateAgentConfig(agent.id, {
+                          connectionId: event.target.value || null
+                        })
+                      }
+                      className="rounded-[14px] border border-white/10 bg-white/[0.04] px-3 py-2 text-sm text-white"
+                    >
+                      <option value="">Default connection</option>
+                      {agentConnections.map((connection) => (
+                        <option key={connection.id} value={connection.id}>
+                          {connection.label}
+                        </option>
+                      ))}
+                    </select>
+                    <input
+                      value={config?.model ?? ""}
+                      onChange={(event) =>
+                        updateAgentConfig(agent.id, {
+                          model: event.target.value
+                        })
+                      }
+                      className="rounded-[14px] border border-white/10 bg-white/[0.04] px-3 py-2 text-sm text-white outline-none"
+                      placeholder="Model override"
+                    />
+                  </div>
+                ) : null}
+              </div>
             );
           })}
         </div>
@@ -144,7 +224,8 @@ export function AiProcessorWidget({
               promptFlow,
               contextInput,
               triggerMode,
-              agentIds
+              agentIds,
+              agentConfigs
             })
           }
         >

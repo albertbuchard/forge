@@ -1,10 +1,9 @@
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
+import { AiSurfaceWorkspace } from "@/components/customization/ai-surface-workspace";
 import {
-  EditableSurface,
   type SurfaceWidgetDefinition
 } from "@/components/customization/editable-surface";
-import { SurfaceModeToggle } from "@/components/customization/surface-mode-toggle";
 import { PageHero } from "@/components/shell/page-hero";
 import { EntityNoteCountLink } from "@/components/notes/entity-note-count-link";
 import { ProjectCollectionFilters } from "@/components/projects/project-collection-filters";
@@ -31,7 +30,6 @@ import {
   buildOwnedEntitySearchText,
   formatOwnedEntityDescription
 } from "@/lib/user-ownership";
-import { useSurfaceMode } from "@/lib/surface-mode";
 
 const PROJECT_TYPE_LABELS = {
   execution: "Execution",
@@ -45,7 +43,6 @@ function normalize(text: string) {
 
 export function ProjectsPage() {
   const shell = useForgeShell();
-  const { mode, setMode } = useSurfaceMode("projects");
   const [collectionFilter, setCollectionFilter] =
     useState<ProjectCollectionStatusFilter>("active");
   const [searchQuery, setSearchQuery] = useState("");
@@ -687,22 +684,6 @@ export function ProjectsPage() {
 
   return (
     <div className="grid gap-5">
-      <PageHero
-        entityKind="project"
-        title={
-          <EntityName
-            kind="project"
-            label="Projects"
-            variant="heading"
-            size="lg"
-          />
-        }
-        titleText="Projects"
-        description="Projects are the concrete paths that move a life goal forward. Filter the active stack by default, then pull suspended or finished work back into view whenever you need to revive or inspect it."
-        badge={`${shell.snapshot.dashboard.projects.length} total projects`}
-        actions={<SurfaceModeToggle mode={mode} onModeChange={setMode} />}
-      />
-
       {shell.snapshot.dashboard.projects.length === 0 ? (
         <EmptyState
           eyebrow="Projects"
@@ -718,43 +699,7 @@ export function ProjectsPage() {
           }
         />
       ) : (
-        <>
-          {mode === "custom" ? (
-            <EditableSurface surfaceId="projects" widgets={customWidgets} />
-          ) : (
-            <>
-              <ProjectSearchBar
-                query={searchQuery}
-                onQueryChange={setSearchQuery}
-                options={searchOptions}
-                selectedOptionIds={selectedSearchOptionIds}
-                onSelectedOptionIdsChange={setSelectedSearchOptionIds}
-                resultSummary={resultSummary}
-              />
-
-              <ProjectCollectionFilters
-                value={collectionFilter}
-                counts={collectionCounts}
-                onChange={setCollectionFilter}
-              />
-
-              {visibleProjects.length === 0 ? (
-                <Card>
-                  <div className="font-label text-[11px] uppercase tracking-[0.16em] text-white/42">
-                    No matching projects
-                  </div>
-                  <div className="mt-3 text-sm leading-6 text-white/58">
-                    Nothing in this project collection matches the current
-                    search and chips. Clear the search, or switch the collection
-                    filter to pull suspended or finished projects back in.
-                  </div>
-                </Card>
-              ) : (
-                projectCards
-              )}
-            </>
-          )}
-        </>
+        <AiSurfaceWorkspace surfaceId="projects" baseWidgets={customWidgets} />
       )}
     </div>
   );

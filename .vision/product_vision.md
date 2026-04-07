@@ -31,6 +31,22 @@ be able to connect back to a project or task when relevant. A reward should be
 traceable to actual behavior. This is what makes Forge one coherent structured memory
 product rather than just a set of pages.
 
+That product now also needs one universal surface system rather than a handful of
+special-case dashboards. Every routed web view, including browse pages, detail pages,
+editor pages, and settings pages, should render inside the same responsive grid model.
+Each route needs a stable `surfaceId`, a shipped default layout for desktop and mobile
+breakpoints, persistent per-widget presentation preferences, and a reset path back to
+the shipped default. Layout editing should feel like a serious dashboard product:
+whole-card drag, edge and corner resize, optional title chrome, dense or comfortable
+card density, and saved state that survives refresh and later sessions.
+
+That surface system must also be the home for AI processors. A processor is a real
+widget that can sit beside ordinary route content, accept linked inputs from other
+widgets, call allowed tools, run with one or more configured agents, expose its own
+route endpoint, and optionally run on a cron schedule. The Workbench page is the most
+explicit editing surface for this, but the same processor and layout runtime should be
+available across the rest of Forge instead of living as a one-off page experiment.
+
 That operating model must now be explicitly multi-user. Forge should support multiple
 Forge users in one runtime, and every Forge user must be marked as either `human` or
 `bot`. Ownership has to be visible across the product: a project card, task detail, or

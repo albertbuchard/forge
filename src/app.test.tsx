@@ -1,4 +1,6 @@
 import { cleanup, render, screen } from "@testing-library/react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import type { ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter, Outlet } from "react-router-dom";
 import { App } from "./app";
@@ -15,6 +17,29 @@ vi.mock("@/components/shell/app-shell", () => ({
     </div>
   )
 }));
+
+vi.mock("@/components/customization/surface-route-frame", () => ({
+  SurfaceRouteFrame: ({ children }: { children: ReactNode }) => (
+    <div>{children}</div>
+  )
+}));
+
+function renderApp(initialEntry: string) {
+  const queryClient = new QueryClient({
+    defaultOptions: {
+      queries: {
+        retry: false
+      }
+    }
+  });
+  return render(
+    <QueryClientProvider client={queryClient}>
+      <MemoryRouter initialEntries={[initialEntry]}>
+        <App />
+      </MemoryRouter>
+    </QueryClientProvider>
+  );
+}
 
 vi.mock("@/pages/overview-page", () => ({
   OverviewPage: () => <div>Overview route</div>
@@ -146,96 +171,52 @@ vi.mock("@/pages/wiki-editor-page", () => ({
 
 describe("App routing", () => {
   it("redirects the index route to overview", async () => {
-    render(
-      <MemoryRouter initialEntries={["/"]}>
-        <App />
-      </MemoryRouter>
-    );
+    renderApp("/");
 
     expect(await screen.findByText("Forge shell")).toBeInTheDocument();
     expect(await screen.findByText("Overview route")).toBeInTheDocument();
   });
 
   it("renders the settings route inside the shell", async () => {
-    render(
-      <MemoryRouter initialEntries={["/settings"]}>
-        <App />
-      </MemoryRouter>
-    );
+    renderApp("/settings");
 
     expect(await screen.findByText("Forge shell")).toBeInTheDocument();
     expect(await screen.findByText("Settings route")).toBeInTheDocument();
   });
 
   it("renders the preferences route inside the shell", async () => {
-    render(
-      <MemoryRouter initialEntries={["/preferences"]}>
-        <App />
-      </MemoryRouter>
-    );
+    renderApp("/preferences");
 
     expect(await screen.findByText("Forge shell")).toBeInTheDocument();
     expect(await screen.findByText("Preferences route")).toBeInTheDocument();
   });
 
   it("renders psyche hub and detail routes inside the shell", async () => {
-    render(
-      <MemoryRouter initialEntries={["/psyche"]}>
-        <App />
-      </MemoryRouter>
-    );
+    renderApp("/psyche");
 
     expect(await screen.findByText("Forge shell")).toBeInTheDocument();
     expect(await screen.findByText("Psyche route")).toBeInTheDocument();
 
-    render(
-      <MemoryRouter initialEntries={["/psyche/reports/report_1"]}>
-        <App />
-      </MemoryRouter>
-    );
+    renderApp("/psyche/reports/report_1");
 
     expect(await screen.findByText("Psyche report detail route")).toBeInTheDocument();
 
-    render(
-      <MemoryRouter initialEntries={["/psyche/behaviors"]}>
-        <App />
-      </MemoryRouter>
-    );
+    renderApp("/psyche/behaviors");
     expect(await screen.findByText("Psyche behaviors route")).toBeInTheDocument();
 
-    render(
-      <MemoryRouter initialEntries={["/psyche/questionnaires"]}>
-        <App />
-      </MemoryRouter>
-    );
+    renderApp("/psyche/questionnaires");
     expect(await screen.findByText("Psyche questionnaires route")).toBeInTheDocument();
 
-    render(
-      <MemoryRouter initialEntries={["/psyche/questionnaires/q_1"]}>
-        <App />
-      </MemoryRouter>
-    );
+    renderApp("/psyche/questionnaires/q_1");
     expect(await screen.findByText("Psyche questionnaire detail route")).toBeInTheDocument();
 
-    render(
-      <MemoryRouter initialEntries={["/psyche/questionnaires/q_1/take"]}>
-        <App />
-      </MemoryRouter>
-    );
+    renderApp("/psyche/questionnaires/q_1/take");
     expect(await screen.findByText("Psyche questionnaire run route")).toBeInTheDocument();
 
-    render(
-      <MemoryRouter initialEntries={["/psyche/questionnaire-runs/run_1"]}>
-        <App />
-      </MemoryRouter>
-    );
+    renderApp("/psyche/questionnaire-runs/run_1");
     expect(await screen.findByText("Psyche questionnaire run detail route")).toBeInTheDocument();
 
-    render(
-      <MemoryRouter initialEntries={["/psyche/self-observation"]}>
-        <App />
-      </MemoryRouter>
-    );
+    renderApp("/psyche/self-observation");
     expect(await screen.findByText("Psyche self observation route")).toBeInTheDocument();
 
     render(
@@ -261,72 +242,40 @@ describe("App routing", () => {
   });
 
   it("redirects legacy campaigns to projects", async () => {
-    render(
-      <MemoryRouter initialEntries={["/campaigns"]}>
-        <App />
-      </MemoryRouter>
-    );
+    renderApp("/campaigns");
 
     expect(await screen.findByText("Forge shell")).toBeInTheDocument();
     expect(await screen.findByText("Projects route")).toBeInTheDocument();
   });
 
   it("renders the habits route inside the shell", async () => {
-    render(
-      <MemoryRouter initialEntries={["/habits"]}>
-        <App />
-      </MemoryRouter>
-    );
+    renderApp("/habits");
 
     expect(await screen.findByText("Forge shell")).toBeInTheDocument();
     expect(await screen.findByText("Habits route")).toBeInTheDocument();
   });
 
   it("renders wiki reading and writing routes inside the shell", async () => {
-    render(
-      <MemoryRouter initialEntries={["/wiki"]}>
-        <App />
-      </MemoryRouter>
-    );
+    renderApp("/wiki");
 
     expect(await screen.findByText("Wiki route")).toBeInTheDocument();
 
-    render(
-      <MemoryRouter initialEntries={["/wiki/page/index"]}>
-        <App />
-      </MemoryRouter>
-    );
+    renderApp("/wiki/page/index");
     expect(await screen.findAllByText("Wiki route")).not.toHaveLength(0);
 
-    render(
-      <MemoryRouter initialEntries={["/wiki/new"]}>
-        <App />
-      </MemoryRouter>
-    );
+    renderApp("/wiki/new");
     expect(await screen.findByText("Wiki editor route")).toBeInTheDocument();
   });
 
   it("renders goal, project, and task detail routes inside the shell", async () => {
-    render(
-      <MemoryRouter initialEntries={["/goals/goal_1", "/projects/project_1", "/tasks/task_1"]} initialIndex={0}>
-        <App />
-      </MemoryRouter>
-    );
+    renderApp("/goals/goal_1");
 
     expect(await screen.findByText("Goal detail route")).toBeInTheDocument();
 
-    render(
-      <MemoryRouter initialEntries={["/projects/project_1"]}>
-        <App />
-      </MemoryRouter>
-    );
+    renderApp("/projects/project_1");
     expect(await screen.findByText("Project detail route")).toBeInTheDocument();
 
-    render(
-      <MemoryRouter initialEntries={["/tasks/task_1"]}>
-        <App />
-      </MemoryRouter>
-    );
+    renderApp("/tasks/task_1");
     expect(await screen.findByText("Task detail route")).toBeInTheDocument();
   });
 });

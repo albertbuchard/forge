@@ -107,9 +107,11 @@ test("ai processors can be created, linked, and run through the route endpoint",
       }
     });
     assert.equal(processorResponse.statusCode, 201);
-    const processorId = (
-      processorResponse.json() as { processor: { id: string } }
-    ).processor.id;
+    const processorBody = processorResponse.json() as {
+      processor: { id: string; slug: string };
+    };
+    const processorId = processorBody.processor.id;
+    const processorSlug = processorBody.processor.slug;
 
     const linkResponse = await app.inject({
       method: "POST",
@@ -148,7 +150,7 @@ test("ai processors can be created, linked, and run through the route endpoint",
 
     const runResponse = await app.inject({
       method: "POST",
-      url: `/api/v1/aiproc/${processorId}/run`,
+      url: `/api/v1/aiproc/${processorSlug}/run`,
       headers: {
         cookie: operatorCookie,
         host: "127.0.0.1:4317"
@@ -165,8 +167,99 @@ test("ai processors can be created, linked, and run through the route endpoint",
     assert.ok(
       Object.values(runBody.output.byAgent).includes("processor-output")
     );
+
+    const cycleResponse = await app.inject({
+      method: "POST",
+      url: "/api/v1/ai-processor-links",
+      headers: {
+        cookie: operatorCookie,
+        host: "127.0.0.1:4317"
+      },
+      payload: {
+        surfaceId: "workbench",
+        sourceWidgetId: `aiproc:${processorId}`,
+        targetProcessorId: processorId,
+        accessMode: "read",
+        capabilityMode: "processor",
+        metadata: {}
+      }
+    });
+    assert.equal(cycleResponse.statusCode, 500);
   } finally {
     globalThis.fetch = originalFetch;
+    await app.close();
+    await rm(rootDir, { recursive: true, force: true });
+  }
+});
+
+test("surface layouts round-trip through the surface layout routes", async () => {
+  const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-surface-layout-"));
+  const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
+
+  try {
+    const operatorCookie = await issueOperatorSessionCookie(app);
+
+    const saveResponse = await app.inject({
+      method: "PUT",
+      url: "/api/v1/surfaces/overview/layout",
+      headers: {
+        cookie: operatorCookie,
+        host: "127.0.0.1:4317"
+      },
+      payload: {
+        layouts: {
+          lg: [{ i: "hero", x: 0, y: 0, w: 12, h: 2 }],
+          md: [{ i: "hero", x: 0, y: 0, w: 10, h: 2 }],
+          sm: [{ i: "hero", x: 0, y: 0, w: 6, h: 2 }],
+          xs: [{ i: "hero", x: 0, y: 0, w: 4, h: 2 }],
+          xxs: [{ i: "hero", x: 0, y: 0, w: 2, h: 2 }]
+        },
+        widgets: {
+          hero: {
+            hidden: false,
+            titleVisible: false,
+            descriptionVisible: false,
+            density: "dense"
+          }
+        }
+      }
+    });
+    assert.equal(saveResponse.statusCode, 200);
+
+    const getResponse = await app.inject({
+      method: "GET",
+      url: "/api/v1/surfaces/overview/layout",
+      headers: {
+        cookie: operatorCookie,
+        host: "127.0.0.1:4317"
+      }
+    });
+    assert.equal(getResponse.statusCode, 200);
+    const body = getResponse.json() as {
+      layout: {
+        surfaceId: string;
+        widgets: {
+          hero: {
+            titleVisible: boolean;
+            density: string;
+          };
+        };
+      };
+    };
+    assert.equal(body.layout.surfaceId, "overview");
+    assert.equal(body.layout.widgets.hero.titleVisible, false);
+    assert.equal(body.layout.widgets.hero.density, "dense");
+
+    const resetResponse = await app.inject({
+      method: "POST",
+      url: "/api/v1/surfaces/overview/layout/reset",
+      headers: {
+        cookie: operatorCookie,
+        host: "127.0.0.1:4317"
+      }
+    });
+    assert.equal(resetResponse.statusCode, 200);
+  } finally {
     await app.close();
     await rm(rootDir, { recursive: true, force: true });
   }

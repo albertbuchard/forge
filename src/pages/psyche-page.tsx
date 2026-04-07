@@ -5,7 +5,7 @@ import {
   EditableSurface,
   type SurfaceWidgetDefinition
 } from "@/components/customization/editable-surface";
-import { SurfaceModeToggle } from "@/components/customization/surface-mode-toggle";
+import { AiSurfaceWorkspace } from "@/components/customization/ai-surface-workspace";
 import { buildGoalGravityScene } from "@/components/psyche/goal-gravity-scene";
 import { PsycheGraphCanvas } from "@/components/psyche/psyche-graph";
 import { ReflectFlowDialog } from "@/components/psyche/reflect-flow-dialog";
@@ -23,11 +23,10 @@ import { ErrorState } from "@/components/ui/page-state";
 import { getEntityButtonClassName } from "@/lib/entity-visuals";
 import { cn } from "@/lib/utils";
 import { getPsycheOverview, listQuestionnaires } from "@/lib/api";
-import { useSurfaceMode } from "@/lib/surface-mode";
 
 export function PsychePage() {
   const shell = useForgeShell();
-  const { mode, setMode } = useSurfaceMode("psyche");
+  const mode = "custom" as const;
   const [searchParams, setSearchParams] = useSearchParams();
   const [reflectOpen, setReflectOpen] = useState(
     searchParams.get("reflect") === "1"
@@ -374,19 +373,16 @@ export function PsychePage() {
         description="See your goals, values, habits, beliefs, behaviors, projects, and reports together, then open the goal map when you want the full structure."
         badge={`${overview.domain.title} active`}
         actions={
-          <>
-            <SurfaceModeToggle mode={mode} onModeChange={setMode} />
-            <Link
-              to="/psyche/goal-map"
-              className="inline-flex min-h-10 min-w-0 max-w-full items-center justify-center rounded-full bg-white/[0.08] px-4 py-2 text-sm whitespace-nowrap text-white transition hover:bg-white/[0.12]"
-            >
-              Open goal map
-            </Link>
-          </>
+          <Link
+            to="/psyche/goal-map"
+            className="inline-flex min-h-10 min-w-0 max-w-full items-center justify-center rounded-full bg-white/[0.08] px-4 py-2 text-sm whitespace-nowrap text-white transition hover:bg-white/[0.12]"
+          >
+            Open goal map
+          </Link>
         }
       />
       {mode === "custom" ? (
-        <EditableSurface surfaceId="psyche" widgets={customWidgets} />
+        <AiSurfaceWorkspace surfaceId="psyche" baseWidgets={customWidgets} />
       ) : (
         <>
           <PsycheSectionNav />

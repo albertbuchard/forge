@@ -1,5 +1,6 @@
-import { useEffect } from "react";
+import { useEffect, type ReactElement } from "react";
 import { Navigate, Route, Routes, useLocation } from "react-router-dom";
+import { SurfaceRouteFrame } from "@/components/customization/surface-route-frame";
 import { AppShell } from "@/components/shell/app-shell";
 import {
   createUiDiagnosticLogger,
@@ -123,6 +124,23 @@ function DiagnosticsBootstrap() {
 }
 
 export function App() {
+  function surface(
+    surfaceId: string,
+    title: string,
+    description: string,
+    element: ReactElement
+  ) {
+    return (
+      <SurfaceRouteFrame
+        surfaceId={surfaceId}
+        title={title}
+        description={description}
+      >
+        {element}
+      </SurfaceRouteFrame>
+    );
+  }
+
   return (
     <>
       <DiagnosticsBootstrap />
@@ -130,95 +148,446 @@ export function App() {
         <Route element={<AppShell />}>
           <Route index element={<Navigate to="/overview" replace />} />
           <Route path="overview" element={<OverviewPage />} />
-          <Route path="goals" element={<GoalsPage />} />
-          <Route path="habits" element={<HabitsPage />} />
-          <Route path="goals/:goalId" element={<GoalDetailPage />} />
+          <Route
+            path="goals"
+            element={surface(
+              "goals-index",
+              "Goals",
+              "Goal planning and long-horizon direction.",
+              <GoalsPage />
+            )}
+          />
+          <Route
+            path="habits"
+            element={surface(
+              "habits-index",
+              "Habits",
+              "Recurring commitments, streaks, and check-ins.",
+              <HabitsPage />
+            )}
+          />
+          <Route
+            path="goals/:goalId"
+            element={surface(
+              "goal-detail",
+              "Goal detail",
+              "Goal detail, progress, and linked execution context.",
+              <GoalDetailPage />
+            )}
+          />
           <Route path="projects" element={<ProjectsPage />} />
-          <Route path="projects/:projectId" element={<ProjectDetailPage />} />
-          <Route path="strategies" element={<StrategiesPage />} />
+          <Route
+            path="projects/:projectId"
+            element={surface(
+              "project-detail",
+              "Project detail",
+              "Project detail, tasks, and execution health.",
+              <ProjectDetailPage />
+            )}
+          />
+          <Route
+            path="strategies"
+            element={surface(
+              "strategies-index",
+              "Strategies",
+              "Strategy graphs and long-range execution plans.",
+              <StrategiesPage />
+            )}
+          />
           <Route
             path="strategies/:strategyId"
-            element={<StrategyDetailPage />}
+            element={surface(
+              "strategy-detail",
+              "Strategy detail",
+              "Strategy DAG detail, targets, and progress.",
+              <StrategyDetailPage />
+            )}
           />
-          <Route path="preferences" element={<PreferencesPage />} />
+          <Route
+            path="preferences"
+            element={surface(
+              "preferences-index",
+              "Preferences",
+              "Preference profiles, pairwise judgments, and model state.",
+              <PreferencesPage />
+            )}
+          />
           <Route
             path="campaigns"
             element={<Navigate to="/projects" replace />}
           />
-          <Route path="calendar" element={<CalendarPage />} />
-          <Route path="movement" element={<MovementPage />} />
-          <Route path="sleep" element={<SleepPage />} />
-          <Route path="sports" element={<SportsPage />} />
+          <Route
+            path="calendar"
+            element={surface(
+              "calendar-index",
+              "Calendar",
+              "Calendar planning, timeboxes, and provider sync.",
+              <CalendarPage />
+            )}
+          />
+          <Route
+            path="movement"
+            element={surface(
+              "movement-index",
+              "Movement",
+              "Movement traces, places, and trip evidence.",
+              <MovementPage />
+            )}
+          />
+          <Route
+            path="sleep"
+            element={surface(
+              "sleep-index",
+              "Sleep",
+              "Sleep sessions, health context, and recovery trends.",
+              <SleepPage />
+            )}
+          />
+          <Route
+            path="sports"
+            element={surface(
+              "sports-index",
+              "Sports",
+              "Fitness, workouts, and sports context.",
+              <SportsPage />
+            )}
+          />
           <Route path="psyche" element={<PsychePage />} />
-          <Route path="psyche/values" element={<PsycheValuesPage />} />
-          <Route path="psyche/patterns" element={<PsychePatternsPage />} />
+          <Route
+            path="psyche/values"
+            element={surface(
+              "psyche-values",
+              "Psyche values",
+              "Values and linked goal context.",
+              <PsycheValuesPage />
+            )}
+          />
+          <Route
+            path="psyche/patterns"
+            element={surface(
+              "psyche-patterns",
+              "Psyche patterns",
+              "Behavior patterns and recurring loops.",
+              <PsychePatternsPage />
+            )}
+          />
           <Route
             path="psyche/questionnaires"
-            element={<PsycheQuestionnairesPage />}
+            element={surface(
+              "psyche-questionnaires",
+              "Questionnaires",
+              "Questionnaire library and recent runs.",
+              <PsycheQuestionnairesPage />
+            )}
           />
           <Route
             path="psyche/questionnaires/new"
-            element={<PsycheQuestionnaireBuilderPage />}
+            element={surface(
+              "psyche-questionnaire-new",
+              "New questionnaire",
+              "Questionnaire builder workspace.",
+              <PsycheQuestionnaireBuilderPage />
+            )}
           />
           <Route
             path="psyche/questionnaires/:instrumentId"
-            element={<PsycheQuestionnaireDetailPage />}
+            element={surface(
+              "psyche-questionnaire-detail",
+              "Questionnaire detail",
+              "Questionnaire detail and scores.",
+              <PsycheQuestionnaireDetailPage />
+            )}
           />
           <Route
             path="psyche/questionnaires/:instrumentId/edit"
-            element={<PsycheQuestionnaireBuilderPage />}
+            element={surface(
+              "psyche-questionnaire-edit",
+              "Edit questionnaire",
+              "Questionnaire builder workspace.",
+              <PsycheQuestionnaireBuilderPage />
+            )}
           />
           <Route
             path="psyche/questionnaires/:instrumentId/take"
-            element={<PsycheQuestionnaireRunPage />}
+            element={surface(
+              "psyche-questionnaire-run",
+              "Take questionnaire",
+              "Questionnaire runner and answers.",
+              <PsycheQuestionnaireRunPage />
+            )}
           />
           <Route
             path="psyche/questionnaire-runs/:runId"
-            element={<PsycheQuestionnaireRunDetailPage />}
+            element={surface(
+              "psyche-questionnaire-run-detail",
+              "Questionnaire run detail",
+              "Questionnaire result review.",
+              <PsycheQuestionnaireRunDetailPage />
+            )}
           />
           <Route
             path="psyche/self-observation"
-            element={<PsycheSelfObservationPage />}
+            element={surface(
+              "psyche-self-observation",
+              "Self observation",
+              "Self-observation notes and reflective tracking.",
+              <PsycheSelfObservationPage />
+            )}
           />
-          <Route path="psyche/behaviors" element={<PsycheBehaviorsPage />} />
-          <Route path="psyche/reports" element={<PsycheReportsPage />} />
+          <Route
+            path="psyche/behaviors"
+            element={surface(
+              "psyche-behaviors",
+              "Behaviors",
+              "Behavior records and linked evidence.",
+              <PsycheBehaviorsPage />
+            )}
+          />
+          <Route
+            path="psyche/reports"
+            element={surface(
+              "psyche-reports",
+              "Reports",
+              "Trigger and reflective report review.",
+              <PsycheReportsPage />
+            )}
+          />
           <Route
             path="psyche/reports/:reportId"
-            element={<PsycheReportDetailPage />}
+            element={surface(
+              "psyche-report-detail",
+              "Report detail",
+              "Detailed reflective report view.",
+              <PsycheReportDetailPage />
+            )}
           />
-          <Route path="psyche/goal-map" element={<PsycheGoalMapPage />} />
+          <Route
+            path="psyche/goal-map"
+            element={surface(
+              "psyche-goal-map",
+              "Goal map",
+              "Goal-to-values relationship map.",
+              <PsycheGoalMapPage />
+            )}
+          />
           <Route
             path="psyche/schemas-beliefs"
-            element={<PsycheSchemasBeliefsPage />}
+            element={surface(
+              "psyche-schemas-beliefs",
+              "Schemas and beliefs",
+              "Beliefs, schemas, and linked patterns.",
+              <PsycheSchemasBeliefsPage />
+            )}
           />
-          <Route path="psyche/modes" element={<PsycheModesPage />} />
-          <Route path="psyche/modes/guide" element={<PsycheModeGuidePage />} />
-          <Route path="kanban" element={<KanbanPage />} />
-          <Route path="notes" element={<NotesPage />} />
-          <Route path="wiki" element={<WikiPage />} />
+          <Route
+            path="psyche/modes"
+            element={surface(
+              "psyche-modes",
+              "Modes",
+              "Mode profiles and guides.",
+              <PsycheModesPage />
+            )}
+          />
+          <Route
+            path="psyche/modes/guide"
+            element={surface(
+              "psyche-mode-guide",
+              "Mode guide",
+              "Guided mode session flow.",
+              <PsycheModeGuidePage />
+            )}
+          />
+          <Route
+            path="kanban"
+            element={surface(
+              "kanban-index",
+              "Kanban",
+              "Task board execution surface.",
+              <KanbanPage />
+            )}
+          />
+          <Route
+            path="notes"
+            element={surface(
+              "notes-index",
+              "Notes",
+              "Notes, evidence, and writing surfaces.",
+              <NotesPage />
+            )}
+          />
+          <Route
+            path="wiki"
+            element={surface(
+              "wiki-index",
+              "Wiki",
+              "Wiki memory search and page navigation.",
+              <WikiPage />
+            )}
+          />
           <Route
             path="wiki/ingest-history"
-            element={<WikiIngestHistoryPage />}
+            element={surface(
+              "wiki-ingest-history",
+              "Wiki ingest history",
+              "Ingest jobs and processing history.",
+              <WikiIngestHistoryPage />
+            )}
           />
-          <Route path="wiki/page/:slug" element={<WikiPage />} />
-          <Route path="wiki/new" element={<WikiEditorPage />} />
-          <Route path="wiki/edit/:pageId" element={<WikiEditorPage />} />
+          <Route
+            path="wiki/page/:slug"
+            element={surface(
+              "wiki-page-detail",
+              "Wiki page",
+              "Wiki page detail and backlinks.",
+              <WikiPage />
+            )}
+          />
+          <Route
+            path="wiki/new"
+            element={surface(
+              "wiki-new",
+              "New wiki page",
+              "Wiki editor for new pages.",
+              <WikiEditorPage />
+            )}
+          />
+          <Route
+            path="wiki/edit/:pageId"
+            element={surface(
+              "wiki-edit",
+              "Edit wiki page",
+              "Wiki editor for existing pages.",
+              <WikiEditorPage />
+            )}
+          />
           <Route path="today" element={<TodayPage />} />
           <Route path="workbench" element={<WorkbenchPage />} />
-          <Route path="activity" element={<ActivityPage />} />
-          <Route path="insights" element={<InsightsPage />} />
-          <Route path="review/weekly" element={<WeeklyReviewPage />} />
-          <Route path="settings" element={<SettingsPage />} />
-          <Route path="settings/users" element={<SettingsUsersPage />} />
-          <Route path="settings/calendar" element={<SettingsCalendarPage />} />
-          <Route path="settings/mobile" element={<SettingsMobilePage />} />
-          <Route path="settings/models" element={<SettingsModelsPage />} />
-          <Route path="settings/agents" element={<SettingsAgentsPage />} />
-          <Route path="settings/rewards" element={<SettingsRewardsPage />} />
-          <Route path="settings/wiki" element={<SettingsWikiPage />} />
-          <Route path="settings/logs" element={<SettingsLogsPage />} />
-          <Route path="settings/bin" element={<SettingsBinPage />} />
-          <Route path="tasks/:taskId" element={<TaskDetailPage />} />
+          <Route
+            path="activity"
+            element={surface(
+              "activity-index",
+              "Activity",
+              "Activity log and event history.",
+              <ActivityPage />
+            )}
+          />
+          <Route
+            path="insights"
+            element={surface(
+              "insights-index",
+              "Insights",
+              "Insight review and decisions.",
+              <InsightsPage />
+            )}
+          />
+          <Route
+            path="review/weekly"
+            element={surface(
+              "weekly-review",
+              "Weekly review",
+              "Weekly review workflow and closeout.",
+              <WeeklyReviewPage />
+            )}
+          />
+          <Route
+            path="settings"
+            element={surface(
+              "settings-index",
+              "Settings",
+              "Operator settings and runtime configuration.",
+              <SettingsPage />
+            )}
+          />
+          <Route
+            path="settings/users"
+            element={surface(
+              "settings-users",
+              "Settings users",
+              "User directory and ownership settings.",
+              <SettingsUsersPage />
+            )}
+          />
+          <Route
+            path="settings/calendar"
+            element={surface(
+              "settings-calendar",
+              "Settings calendar",
+              "Calendar provider settings and sync.",
+              <SettingsCalendarPage />
+            )}
+          />
+          <Route
+            path="settings/mobile"
+            element={surface(
+              "settings-mobile",
+              "Settings mobile",
+              "Mobile companion settings and pairing.",
+              <SettingsMobilePage />
+            )}
+          />
+          <Route
+            path="settings/models"
+            element={surface(
+              "settings-models",
+              "Settings models",
+              "Model connections and defaults.",
+              <SettingsModelsPage />
+            )}
+          />
+          <Route
+            path="settings/agents"
+            element={surface(
+              "settings-agents",
+              "Settings agents",
+              "Agent tokens and runtime access.",
+              <SettingsAgentsPage />
+            )}
+          />
+          <Route
+            path="settings/rewards"
+            element={surface(
+              "settings-rewards",
+              "Settings rewards",
+              "Rewards and XP rule settings.",
+              <SettingsRewardsPage />
+            )}
+          />
+          <Route
+            path="settings/wiki"
+            element={surface(
+              "settings-wiki",
+              "Settings wiki",
+              "Wiki ingestion and profile settings.",
+              <SettingsWikiPage />
+            )}
+          />
+          <Route
+            path="settings/logs"
+            element={surface(
+              "settings-logs",
+              "Settings logs",
+              "Diagnostics and event logs.",
+              <SettingsLogsPage />
+            )}
+          />
+          <Route
+            path="settings/bin"
+            element={surface(
+              "settings-bin",
+              "Settings bin",
+              "Deleted entity recovery.",
+              <SettingsBinPage />
+            )}
+          />
+          <Route
+            path="tasks/:taskId"
+            element={surface(
+              "task-detail",
+              "Task detail",
+              "Task detail, timer, and notes.",
+              <TaskDetailPage />
+            )}
+          />
         </Route>
         <Route path="*" element={<Navigate to="/overview" replace />} />
       </Routes>

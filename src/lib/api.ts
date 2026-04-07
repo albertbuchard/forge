@@ -2366,6 +2366,34 @@ export function getSurfaceAiProcessors(surfaceId: string) {
   );
 }
 
+export function getSurfaceLayout(surfaceId: string) {
+  return request<{
+    layout: import("./types").SurfaceLayoutPayload | null;
+  }>(`/api/v1/surfaces/${surfaceId}/layout`);
+}
+
+export function saveSurfaceLayout(
+  surfaceId: string,
+  payload: Pick<import("./types").SurfaceLayoutPayload, "layouts" | "widgets">
+) {
+  return request<{ layout: import("./types").SurfaceLayoutPayload }>(
+    `/api/v1/surfaces/${surfaceId}/layout`,
+    {
+      method: "PUT",
+      body: JSON.stringify(payload)
+    }
+  );
+}
+
+export function resetSurfaceLayout(surfaceId: string) {
+  return request<{ layout: import("./types").SurfaceLayoutPayload | null }>(
+    `/api/v1/surfaces/${surfaceId}/layout/reset`,
+    {
+      method: "POST"
+    }
+  );
+}
+
 export function createAiProcessor(input: {
   surfaceId: string;
   title: string;
@@ -2373,6 +2401,7 @@ export function createAiProcessor(input: {
   contextInput?: string;
   toolConfig?: import("./types").AiProcessorTool[];
   agentIds?: string[];
+  agentConfigs?: import("./types").AiProcessorAgentConfig[];
   triggerMode?: "manual" | "route" | "cron";
   cronExpression?: string;
   machineAccess?: { read: boolean; write: boolean; exec: boolean };
@@ -2395,6 +2424,7 @@ export function updateAiProcessor(
     contextInput: string;
     toolConfig: import("./types").AiProcessorTool[];
     agentIds: string[];
+    agentConfigs: import("./types").AiProcessorAgentConfig[];
     triggerMode: "manual" | "route" | "cron";
     cronExpression: string;
     machineAccess: Partial<{ read: boolean; write: boolean; exec: boolean }>;
@@ -2443,12 +2473,39 @@ export function deleteAiProcessorLink(linkId: string) {
 
 export function runAiProcessor(
   processorId: string,
-  input: { input?: string; context?: Record<string, unknown> }
+  input: {
+    input?: string;
+    context?: Record<string, unknown>;
+    widgetSnapshots?: Record<string, unknown>;
+  }
 ) {
   return request<{
     processor: import("./types").AiProcessor;
     output: { concatenated: string; byAgent: Record<string, string> };
   }>(`/api/v1/ai-processors/${processorId}/run`, {
+    method: "POST",
+    body: JSON.stringify(input)
+  });
+}
+
+export function getAiProcessorBySlug(slug: string) {
+  return request<{ processor: import("./types").AiProcessor }>(
+    `/api/v1/aiproc/${slug}`
+  );
+}
+
+export function runAiProcessorBySlug(
+  slug: string,
+  input: {
+    input?: string;
+    context?: Record<string, unknown>;
+    widgetSnapshots?: Record<string, unknown>;
+  }
+) {
+  return request<{
+    processor: import("./types").AiProcessor;
+    output: { concatenated: string; byAgent: Record<string, string> };
+  }>(`/api/v1/aiproc/${slug}/run`, {
     method: "POST",
     body: JSON.stringify(input)
   });

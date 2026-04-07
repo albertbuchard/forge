@@ -1,6 +1,7 @@
 import Fastify from "fastify";
 import cors from "@fastify/cors";
 import multipart from "@fastify/multipart";
+import { CronExpressionParser } from "cron-parser";
 import { ZodError } from "zod";
 import {
   configureDatabase,
@@ -33,6 +34,8 @@ import {
   deleteAiProcessor,
   deleteAiProcessorLink,
   getAiProcessorById,
+  getAiProcessorBySlug,
+  listAiProcessors,
   getSurfaceProcessorGraph,
   runAiProcessor,
   updateAiProcessor
@@ -53,6 +56,11 @@ import {
   listGoals,
   updateGoal
 } from "./repositories/goals.js";
+import {
+  getSurfaceLayout,
+  resetSurfaceLayout,
+  saveSurfaceLayout
+} from "./repositories/surface-layouts.js";
 import {
   createHabit,
   createHabitCheckIn,
@@ -379,6 +387,7 @@ import {
   createAgentTokenSchema,
   createAiProcessorLinkSchema,
   createAiProcessorSchema,
+  writeSurfaceLayoutSchema,
   upsertAiModelConnectionSchema,
   testAiModelConnectionSchema,
   submitOpenAiCodexOauthManualCodeSchema,
@@ -4476,8 +4485,50 @@ export async function buildServer(
     }
   }, DIAGNOSTIC_LOG_RETENTION_SWEEP_INTERVAL_MS);
   diagnosticRetentionTimer.unref?.();
+  const activeCronRuns = new Set<string>();
+  const cronSchedulerTimer = setInterval(() => {
+    const now = new Date();
+    for (const processor of listAiProcessors()) {
+      if (
+        processor.triggerMode !== "cron" ||
+        !processor.endpointEnabled ||
+        !processor.cronExpression.trim() ||
+        activeCronRuns.has(processor.id)
+      ) {
+        continue;
+      }
+      try {
+        const interval = CronExpressionParser.parse(processor.cronExpression, {
+          currentDate:
+            processor.lastRunAt && Number.isFinite(Date.parse(processor.lastRunAt))
+              ? processor.lastRunAt
+              : new Date(now.getTime() - 60_000).toISOString()
+        });
+        const nextDueAt = interval.next().toDate();
+        if (nextDueAt.getTime() > now.getTime()) {
+          continue;
+        }
+        activeCronRuns.add(processor.id);
+        void runAiProcessor(
+          processor.id,
+          { input: "", context: {}, widgetSnapshots: {} },
+          {
+            llm: managers.llm,
+            secrets: managers.secrets
+          },
+          { trigger: "cron" }
+        ).finally(() => {
+          activeCronRuns.delete(processor.id);
+        });
+      } catch {
+        continue;
+      }
+    }
+  }, 30_000);
+  cronSchedulerTimer.unref?.();
   app.addHook("onClose", async () => {
     clearInterval(diagnosticRetentionTimer);
+    clearInterval(cronSchedulerTimer);
     taskRunWatchdog?.stop();
     await managers.backgroundJobs.stop();
   });
@@ -8826,6 +8877,38 @@ export async function buildServer(
       )
     };
   });
+  app.get("/api/v1/surfaces/:surfaceId/layout", async (request) => {
+    requireScopedAccess(request.headers as Record<string, unknown>, ["read"], {
+      route: "/api/v1/surfaces/:surfaceId/layout"
+    });
+    return {
+      layout: getSurfaceLayout(
+        (request.params as { surfaceId: string }).surfaceId
+      )
+    };
+  });
+  app.put("/api/v1/surfaces/:surfaceId/layout", async (request) => {
+    requireScopedAccess(request.headers as Record<string, unknown>, ["write"], {
+      route: "/api/v1/surfaces/:surfaceId/layout"
+    });
+    const surfaceId = (request.params as { surfaceId: string }).surfaceId;
+    return {
+      layout: saveSurfaceLayout(
+        surfaceId,
+        writeSurfaceLayoutSchema.parse(request.body ?? {})
+      )
+    };
+  });
+  app.post("/api/v1/surfaces/:surfaceId/layout/reset", async (request) => {
+    requireScopedAccess(request.headers as Record<string, unknown>, ["write"], {
+      route: "/api/v1/surfaces/:surfaceId/layout/reset"
+    });
+    return {
+      layout: resetSurfaceLayout(
+        (request.params as { surfaceId: string }).surfaceId
+      )
+    };
+  });
   app.post("/api/v1/surfaces/:surfaceId/ai-processors", async (request, reply) => {
     requireScopedAccess(request.headers as Record<string, unknown>, ["write"], {
       route: "/api/v1/surfaces/:surfaceId/ai-processors"
@@ -8901,25 +8984,30 @@ export async function buildServer(
       {
         llm: managers.llm,
         secrets: managers.secrets
-      }
+      },
+      { trigger: "manual" }
     );
   });
-  app.get("/api/v1/aiproc/:id", async (request, reply) => {
+  app.get("/api/v1/aiproc/:slug", async (request, reply) => {
     requireScopedAccess(request.headers as Record<string, unknown>, ["read"], {
-      route: "/api/v1/aiproc/:id"
+      route: "/api/v1/aiproc/:slug"
     });
-    const processor = getAiProcessorById((request.params as { id: string }).id);
+    const processor = getAiProcessorBySlug(
+      (request.params as { slug: string }).slug
+    );
     if (!processor) {
       reply.code(404);
       return { error: "AI processor not found" };
     }
     return { processor };
   });
-  app.post("/api/v1/aiproc/:id/run", async (request, reply) => {
+  app.post("/api/v1/aiproc/:slug/run", async (request, reply) => {
     requireScopedAccess(request.headers as Record<string, unknown>, ["write"], {
-      route: "/api/v1/aiproc/:id/run"
+      route: "/api/v1/aiproc/:slug/run"
     });
-    const processor = getAiProcessorById((request.params as { id: string }).id);
+    const processor = getAiProcessorBySlug(
+      (request.params as { slug: string }).slug
+    );
     if (!processor) {
       reply.code(404);
       return { error: "AI processor not found" };
@@ -8930,7 +9018,8 @@ export async function buildServer(
       {
         llm: managers.llm,
         secrets: managers.secrets
-      }
+      },
+      { trigger: "route" }
     );
   });
   app.post("/api/v1/settings/tokens", async (request, reply) => {

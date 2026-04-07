@@ -1,266 +1,318 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
-  closestCenter,
-  DndContext,
-  PointerSensor,
-  useSensor,
-  useSensors,
-  type DragEndEvent
-} from "@dnd-kit/core";
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ComponentType,
+  type ReactNode
+} from "react";
+import { useMutation, useQuery } from "@tanstack/react-query";
+import GridLayoutModule from "react-grid-layout";
+import "react-grid-layout/css/styles.css";
+import "react-resizable/css/styles.css";
 import {
-  SortableContext,
-  arrayMove,
-  rectSortingStrategy,
-  useSortable
-} from "@dnd-kit/sortable";
-import { CSS } from "@dnd-kit/utilities";
-import {
-  GripVertical,
+  Eye,
+  EyeOff,
   LayoutGrid,
-  Minus,
-  Plus,
   RotateCcw,
-  Share2,
   Settings2,
+  Share2,
+  Type,
   X
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { getSurfaceLayout, resetSurfaceLayout, saveSurfaceLayout } from "@/lib/api";
 import {
-  mergeSurfaceLayout,
-  readSurfaceLayout,
-  writeSurfaceLayout,
-  type SurfaceLayoutItem
+  buildDefaultSurfaceLayoutPayload,
+  mergeSurfaceLayoutPayload,
+  readCachedSurfaceLayout,
+  SURFACE_BREAKPOINTS,
+  SURFACE_COLUMNS,
+  writeCachedSurfaceLayout,
+  type SurfaceBreakpointKey,
+  type SurfaceWidgetLayoutDefinition
 } from "@/lib/surface-layout";
+import type {
+  SurfaceLayoutBreakpointItem,
+  SurfaceLayoutBreakpoints,
+  SurfaceLayoutPayload,
+  SurfaceWidgetDensity,
+  SurfaceWidgetPreferences
+} from "@/lib/types";
 import { cn } from "@/lib/utils";
 
-export type SurfaceWidgetDefinition = {
-  id: string;
+type GridLayoutItem = {
+  i: string;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  minW?: number;
+  maxW?: number;
+  minH?: number;
+  maxH?: number;
+};
+
+type GridLayoutMap = Record<string, GridLayoutItem[]>;
+
+const ReactGridLayoutCompat = GridLayoutModule as unknown as {
+  Responsive: ComponentType<Record<string, unknown>>;
+};
+const ResponsiveGridLayout = ReactGridLayoutCompat.Responsive as ComponentType<
+  Record<string, unknown>
+>;
+const SAVE_DEBOUNCE_MS = 500;
+
+export type SurfaceWidgetDefinition = SurfaceWidgetLayoutDefinition & {
   title: string;
   description?: string;
   isProcessor?: boolean;
+  removable?: boolean;
   processorCapability?: {
     label: string;
     mode: "content" | "tool" | "mcp" | "processor";
     metadata?: Record<string, unknown>;
   };
-  defaultWidth: number;
-  defaultHeight: number;
-  defaultHidden?: boolean;
-  minWidth?: number;
-  maxWidth?: number;
-  minHeight?: number;
-  maxHeight?: number;
-  removable?: boolean;
   render: (context: {
     compact: boolean;
     width: number;
     height: number;
     editing: boolean;
+    density: SurfaceWidgetDensity;
+    preferences: SurfaceWidgetPreferences;
   }) => ReactNode;
 };
 
-function useResponsiveColumns() {
-  const [columns, setColumns] = useState(() => {
-    if (typeof window === "undefined") {
-      return 12;
-    }
-    if (window.innerWidth < 640) {
-      return 2;
-    }
-    if (window.innerWidth < 1024) {
-      return 6;
-    }
-    return 12;
-  });
-
-  useEffect(() => {
-    const update = () => {
-      if (window.innerWidth < 640) {
-        setColumns(2);
-        return;
-      }
-      if (window.innerWidth < 1024) {
-        setColumns(6);
-        return;
-      }
-      setColumns(12);
-    };
-
-    update();
-    window.addEventListener("resize", update);
-    return () => window.removeEventListener("resize", update);
-  }, []);
-
-  return columns;
+function toLayouts(input: SurfaceLayoutBreakpoints): GridLayoutMap {
+  return {
+    lg: input.lg.map((item) => ({ ...item })),
+    md: input.md.map((item) => ({ ...item })),
+    sm: input.sm.map((item) => ({ ...item })),
+    xs: input.xs.map((item) => ({ ...item })),
+    xxs: input.xxs.map((item) => ({ ...item }))
+  };
 }
 
-function SortableWidget({
+function fromLayouts(
+  layouts: GridLayoutMap,
+  fallback: SurfaceLayoutBreakpoints
+) {
+  const normalize = (
+    items: GridLayoutItem[] | undefined,
+    breakpoint: SurfaceBreakpointKey
+  ): SurfaceLayoutBreakpointItem[] =>
+    (items ?? fallback[breakpoint]).map((item) => ({
+      i: item.i,
+      x: item.x,
+      y: item.y,
+      w: item.w,
+      h: item.h,
+      minW: item.minW,
+      maxW: item.maxW,
+      minH: item.minH,
+      maxH: item.maxH
+    }));
+
+  return {
+    lg: normalize(layouts.lg, "lg"),
+    md: normalize(layouts.md, "md"),
+    sm: normalize(layouts.sm, "sm"),
+    xs: normalize(layouts.xs, "xs"),
+    xxs: normalize(layouts.xxs, "xxs")
+  } satisfies SurfaceLayoutBreakpoints;
+}
+
+function summarizeHiddenWidgets(
+  widgets: SurfaceWidgetDefinition[],
+  preferences: Record<string, SurfaceWidgetPreferences>
+) {
+  return widgets.filter((widget) => preferences[widget.id]?.hidden);
+}
+
+function widgetSizeForBreakpoint(
+  layouts: SurfaceLayoutBreakpoints,
+  breakpoint: SurfaceBreakpointKey,
+  widgetId: string
+) {
+  const item = layouts[breakpoint].find((entry) => entry.i === widgetId);
+  return {
+    width: item?.w ?? 4,
+    height: item?.h ?? 3
+  };
+}
+
+function isCompactWidget(
+  size: { width: number; height: number },
+  density: SurfaceWidgetDensity
+) {
+  if (density === "dense") {
+    return true;
+  }
+  if (density === "comfortable") {
+    return false;
+  }
+  return size.width <= 4 || size.height <= 2;
+}
+
+function SurfaceWidgetCard({
   definition,
-  item,
+  preferences,
+  size,
   editing,
-  columns,
-  onResize,
-  onHide,
-  onHandleClick,
   selected,
+  menuOpen,
   linkedDescriptions,
+  onToggleMenu,
+  onToggleHandle,
+  onHide,
+  onShowTitle,
+  onShowDescription,
+  onChangeDensity,
   children
 }: {
   definition: SurfaceWidgetDefinition;
-  item: SurfaceLayoutItem;
+  preferences: SurfaceWidgetPreferences;
+  size: { width: number; height: number };
   editing: boolean;
-  columns: number;
-  onResize: (
-    id: string,
-    patch: Partial<Pick<SurfaceLayoutItem, "width" | "height">>
-  ) => void;
-  onHide: (id: string) => void;
-  onHandleClick?: (definition: SurfaceWidgetDefinition) => void;
   selected?: boolean;
+  menuOpen: boolean;
   linkedDescriptions?: string[];
+  onToggleMenu: () => void;
+  onToggleHandle?: () => void;
+  onHide: () => void;
+  onShowTitle: () => void;
+  onShowDescription: () => void;
+  onChangeDensity: (density: SurfaceWidgetDensity) => void;
   children: ReactNode;
 }) {
-  const {
-    attributes,
-    listeners,
-    setNodeRef,
-    transform,
-    transition,
-    isDragging
-  } = useSortable({
-    id: item.id,
-    disabled: !editing
-  });
-
-  const style = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-    gridColumn: `span ${Math.min(item.width, columns)} / span ${Math.min(item.width, columns)}`,
-    minHeight: `${Math.max(10, item.height * 8)}rem`
-  };
-
-  const compact = item.width <= Math.min(4, columns) || item.height <= 1;
-  const canHide = definition.removable !== false;
+  const compact = isCompactWidget(size, preferences.density);
+  const chromePadding =
+    preferences.density === "dense"
+      ? "p-2.5"
+      : preferences.density === "comfortable"
+        ? "p-5"
+        : "p-4";
 
   return (
-    <div
-      ref={setNodeRef}
-      style={style}
-      className={cn("min-w-0", isDragging && "z-20 opacity-90")}
+    <Card
+      className={cn(
+        "surface-grid-card surface-grid-draggable flex h-full min-w-0 flex-col gap-3 overflow-hidden transition",
+        chromePadding,
+        editing && "cursor-move",
+        selected && "ring-1 ring-[var(--primary)]/55"
+      )}
     >
-      <Card
-        className={cn(
-          "flex h-full min-w-0 flex-col gap-3 overflow-hidden p-4",
-          selected && "ring-1 ring-[var(--primary)]/50"
-        )}
-      >
-        <div className="flex min-w-0 items-start justify-between gap-3">
-          <div className="min-w-0">
-            <div className="truncate text-[0.72rem] font-semibold uppercase tracking-[0.16em] text-white/38">
+      <div className="flex min-w-0 items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          {preferences.titleVisible ? (
+            <div className="truncate text-[0.72rem] font-semibold uppercase tracking-[0.16em] text-white/40">
               {definition.title}
             </div>
-            {definition.description && !compact ? (
-              <div className="mt-1 text-[12px] leading-5 text-white/50">
-                {definition.description}
-              </div>
-            ) : null}
-          </div>
-          {editing ? (
-            <div className="flex shrink-0 items-center gap-1">
-              {onHandleClick ? (
-                <button
-                  type="button"
-                  className={cn(
-                    "inline-flex size-8 items-center justify-center rounded-full bg-white/[0.05] text-white/58 transition hover:bg-white/[0.08] hover:text-white",
-                    selected && "bg-[var(--primary)]/[0.16] text-[var(--primary)]"
-                  )}
-                  onClick={() => onHandleClick(definition)}
-                  aria-label={`Connect ${definition.title}`}
-                >
-                  <Share2 className="size-3.5" />
-                </button>
-              ) : null}
-              <button
-                type="button"
-                className="inline-flex size-8 items-center justify-center rounded-full bg-white/[0.05] text-white/58 transition hover:bg-white/[0.08] hover:text-white"
-                onClick={() =>
-                  onResize(item.id, {
-                    width: Math.max(definition.minWidth ?? 2, item.width - 1)
-                  })
-                }
-                aria-label={`Shrink ${definition.title}`}
-              >
-                <Minus className="size-3.5" />
-              </button>
-              <button
-                type="button"
-                className="inline-flex size-8 items-center justify-center rounded-full bg-white/[0.05] text-white/58 transition hover:bg-white/[0.08] hover:text-white"
-                onClick={() =>
-                  onResize(item.id, {
-                    width: Math.min(definition.maxWidth ?? 12, item.width + 1)
-                  })
-                }
-                aria-label={`Grow ${definition.title}`}
-              >
-                <Plus className="size-3.5" />
-              </button>
-              <button
-                type="button"
-                className="inline-flex size-8 items-center justify-center rounded-full bg-white/[0.05] text-white/58 transition hover:bg-white/[0.08] hover:text-white"
-                onClick={() =>
-                  onResize(item.id, {
-                    height: Math.max(definition.minHeight ?? 1, item.height - 1)
-                  })
-                }
-                aria-label={`Reduce height for ${definition.title}`}
-              >
-                <Minus className="size-3.5 rotate-90" />
-              </button>
-              <button
-                type="button"
-                className="inline-flex size-8 items-center justify-center rounded-full bg-white/[0.05] text-white/58 transition hover:bg-white/[0.08] hover:text-white"
-                onClick={() =>
-                  onResize(item.id, {
-                    height: Math.min(definition.maxHeight ?? 6, item.height + 1)
-                  })
-                }
-                aria-label={`Increase height for ${definition.title}`}
-              >
-                <Plus className="size-3.5 rotate-90" />
-              </button>
-              {canHide ? (
-                <button
-                  type="button"
-                  className="inline-flex size-8 items-center justify-center rounded-full bg-white/[0.05] text-white/58 transition hover:bg-white/[0.08] hover:text-white"
-                  onClick={() => onHide(item.id)}
-                  aria-label={`Hide ${definition.title}`}
-                >
-                  <X className="size-3.5" />
-                </button>
-              ) : null}
-              <button
-                type="button"
-                className="inline-flex size-8 cursor-grab items-center justify-center rounded-full bg-white/[0.05] text-white/58 transition hover:bg-white/[0.08] hover:text-white active:cursor-grabbing"
-                aria-label={`Move ${definition.title}`}
-                {...attributes}
-                {...listeners}
-              >
-                <GripVertical className="size-3.5" />
-              </button>
+          ) : null}
+          {preferences.descriptionVisible && definition.description && !compact ? (
+            <div className="mt-1 text-[12px] leading-5 text-white/52">
+              {definition.description}
             </div>
           ) : null}
         </div>
-        {linkedDescriptions && linkedDescriptions.length > 0 ? (
-          <div className="grid gap-2 rounded-[18px] bg-white/[0.03] p-3 text-[12px] leading-5 text-white/56">
-            {linkedDescriptions.map((line) => (
-              <div key={line}>{line}</div>
-            ))}
+        {editing ? (
+          <div className="surface-grid-toolbar flex shrink-0 items-center gap-1">
+            {onToggleHandle ? (
+              <button
+                type="button"
+                className={cn(
+                  "surface-grid-action inline-flex size-8 items-center justify-center rounded-full bg-white/[0.05] text-white/58 transition hover:bg-white/[0.08] hover:text-white",
+                  selected && "bg-[var(--primary)]/[0.14] text-[var(--primary)]"
+                )}
+                onClick={onToggleHandle}
+                aria-label={`Connect ${definition.title}`}
+              >
+                <Share2 className="size-3.5" />
+              </button>
+            ) : null}
+            <button
+              type="button"
+              className={cn(
+                "surface-grid-action inline-flex size-8 items-center justify-center rounded-full bg-white/[0.05] text-white/58 transition hover:bg-white/[0.08] hover:text-white",
+                menuOpen && "bg-white/[0.1] text-white"
+              )}
+              onClick={onToggleMenu}
+              aria-label={`Open layout options for ${definition.title}`}
+            >
+              <Settings2 className="size-3.5" />
+            </button>
           </div>
         ) : null}
-        <div className="min-h-0 flex-1">{children}</div>
-      </Card>
-    </div>
+      </div>
+      {menuOpen && editing ? (
+        <div className="surface-grid-toolbar grid gap-2 rounded-[18px] border border-white/8 bg-black/20 p-3 text-[12px] text-white/70">
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              className="surface-grid-action inline-flex items-center gap-2 rounded-full bg-white/[0.06] px-3 py-2 transition hover:bg-white/[0.1]"
+              onClick={onShowTitle}
+            >
+              {preferences.titleVisible ? (
+                <EyeOff className="size-3.5" />
+              ) : (
+                <Type className="size-3.5" />
+              )}
+              {preferences.titleVisible ? "Hide title" : "Show title"}
+            </button>
+            <button
+              type="button"
+              className="surface-grid-action inline-flex items-center gap-2 rounded-full bg-white/[0.06] px-3 py-2 transition hover:bg-white/[0.1]"
+              onClick={onShowDescription}
+            >
+              {preferences.descriptionVisible ? (
+                <EyeOff className="size-3.5" />
+              ) : (
+                <Eye className="size-3.5" />
+              )}
+              {preferences.descriptionVisible
+                ? "Hide description"
+                : "Show description"}
+            </button>
+            {definition.removable !== false ? (
+              <button
+                type="button"
+                className="surface-grid-action inline-flex items-center gap-2 rounded-full bg-white/[0.06] px-3 py-2 transition hover:bg-white/[0.1]"
+                onClick={onHide}
+              >
+                <X className="size-3.5" />
+                Hide widget
+              </button>
+            ) : null}
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {(["dense", "compact", "comfortable"] as const).map((density) => (
+              <button
+                key={density}
+                type="button"
+                className={cn(
+                  "surface-grid-action rounded-full px-3 py-2 capitalize transition",
+                  preferences.density === density
+                    ? "bg-[var(--primary)] text-slate-950"
+                    : "bg-white/[0.06] text-white/72 hover:bg-white/[0.1]"
+                )}
+                onClick={() => onChangeDensity(density)}
+              >
+                {density}
+              </button>
+            ))}
+          </div>
+        </div>
+      ) : null}
+      {linkedDescriptions && linkedDescriptions.length > 0 ? (
+        <div className="grid gap-2 rounded-[18px] bg-white/[0.03] p-3 text-[12px] leading-5 text-white/56">
+          {linkedDescriptions.map((line) => (
+            <div key={line}>{line}</div>
+          ))}
+        </div>
+      ) : null}
+      <div className="min-h-0 flex-1">{children}</div>
+    </Card>
   );
 }
 
@@ -281,202 +333,281 @@ export function EditableSurface({
   linkedDescriptionsByWidgetId?: Record<string, string[]>;
   onWidgetHandleClick?: (definition: SurfaceWidgetDefinition) => void;
 }) {
-  const columns = useResponsiveColumns();
-  const defaults = useMemo<SurfaceLayoutItem[]>(
-    () =>
-      widgets.map((widget) => ({
-        id: widget.id,
-        width: widget.defaultWidth,
-        height: widget.defaultHeight,
-        hidden: widget.defaultHidden ?? false
-      })),
-    [widgets]
+  const defaults = useMemo(
+    () => buildDefaultSurfaceLayoutPayload(surfaceId, widgets),
+    [surfaceId, widgets]
   );
   const [editing, setEditing] = useState(defaultEditing);
-  const [layout, setLayout] = useState<SurfaceLayoutItem[]>(() =>
-    readSurfaceLayout(surfaceId, defaults)
+  const [breakpoint, setBreakpoint] = useState<SurfaceBreakpointKey>("lg");
+  const [layoutPayload, setLayoutPayload] = useState<SurfaceLayoutPayload>(() =>
+    mergeSurfaceLayoutPayload(
+      surfaceId,
+      widgets,
+      readCachedSurfaceLayout(surfaceId) ?? defaults
+    )
   );
-  const hydratedRef = useRef(false);
+  const [menuWidgetId, setMenuWidgetId] = useState<string | null>(null);
+  const [containerWidth, setContainerWidth] = useState(1280);
+  const saveTimerRef = useRef<number | null>(null);
+  const hydrationCompleteRef = useRef(false);
+  const containerRef = useRef<HTMLDivElement | null>(null);
+
+  const layoutQuery = useQuery({
+    queryKey: ["forge-surface-layout", surfaceId],
+    queryFn: () => getSurfaceLayout(surfaceId)
+  });
+
+  const saveMutation = useMutation({
+    mutationFn: (payload: SurfaceLayoutPayload) =>
+      saveSurfaceLayout(surfaceId, {
+        layouts: payload.layouts,
+        widgets: payload.widgets
+      })
+  });
+
+  const resetMutation = useMutation({
+    mutationFn: () => resetSurfaceLayout(surfaceId)
+  });
 
   useEffect(() => {
-    setLayout((current) => mergeSurfaceLayout(current, defaults));
-  }, [defaults]);
-
-  useEffect(() => {
-    if (!hydratedRef.current) {
-      hydratedRef.current = true;
-      return;
-    }
-    writeSurfaceLayout(surfaceId, layout);
-  }, [layout, surfaceId]);
-
-  const sensors = useSensors(
-    useSensor(PointerSensor, {
-      activationConstraint: { distance: 8 }
-    })
-  );
-
-  const visibleLayout = layout.filter((item) => !item.hidden);
-  const hiddenLayout = layout.filter((item) => item.hidden);
-  const widgetMap = new Map(widgets.map((widget) => [widget.id, widget]));
-
-  function updateItem(
-    id: string,
-    patch: Partial<Pick<SurfaceLayoutItem, "width" | "height" | "hidden">>
-  ) {
-    setLayout((current) =>
-      current.map((item) =>
-        item.id === id
-          ? {
-              ...item,
-              ...patch
-            }
-          : item
-      )
+    const merged = mergeSurfaceLayoutPayload(
+      surfaceId,
+      widgets,
+      layoutQuery.data?.layout ?? readCachedSurfaceLayout(surfaceId) ?? defaults
     );
-  }
+    setLayoutPayload(merged);
+    writeCachedSurfaceLayout(merged);
+    hydrationCompleteRef.current = true;
+  }, [defaults, layoutQuery.data?.layout, surfaceId, widgets]);
 
-  function resetLayout() {
-    setLayout(defaults);
-  }
-
-  function handleDragEnd(event: DragEndEvent) {
-    const { active, over } = event;
-    if (!over || active.id === over.id) {
+  useEffect(() => {
+    const element = containerRef.current;
+    if (!element || typeof ResizeObserver === "undefined") {
       return;
     }
-
-    setLayout((current) => {
-      const visible = current.filter((item) => !item.hidden);
-      const hidden = current.filter((item) => item.hidden);
-      const oldIndex = visible.findIndex((item) => item.id === active.id);
-      const newIndex = visible.findIndex((item) => item.id === over.id);
-      if (oldIndex === -1 || newIndex === -1) {
-        return current;
-      }
-      return [...arrayMove(visible, oldIndex, newIndex), ...hidden];
+    const observer = new ResizeObserver((entries) => {
+      const width = entries[0]?.contentRect.width ?? element.clientWidth;
+      setContainerWidth(Math.max(320, Math.round(width)));
     });
+    observer.observe(element);
+    setContainerWidth(Math.max(320, Math.round(element.clientWidth || 1280)));
+    return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => {
+    if (!hydrationCompleteRef.current) {
+      return;
+    }
+    writeCachedSurfaceLayout(layoutPayload);
+    if (saveTimerRef.current !== null) {
+      window.clearTimeout(saveTimerRef.current);
+    }
+    saveTimerRef.current = window.setTimeout(() => {
+      void saveMutation.mutateAsync(layoutPayload);
+    }, SAVE_DEBOUNCE_MS);
+
+    return () => {
+      if (saveTimerRef.current !== null) {
+        window.clearTimeout(saveTimerRef.current);
+      }
+    };
+  }, [layoutPayload, saveMutation]);
+
+  const widgetById = useMemo(
+    () => new Map(widgets.map((widget) => [widget.id, widget])),
+    [widgets]
+  );
+  const hiddenWidgets = summarizeHiddenWidgets(widgets, layoutPayload.widgets);
+  const visibleWidgetIds = new Set(
+    widgets
+      .filter((widget) => !layoutPayload.widgets[widget.id]?.hidden)
+      .map((widget) => widget.id)
+  );
+  const visibleLayouts = useMemo(
+    () =>
+      ({
+        lg: layoutPayload.layouts.lg.filter((item) => visibleWidgetIds.has(item.i)),
+        md: layoutPayload.layouts.md.filter((item) => visibleWidgetIds.has(item.i)),
+        sm: layoutPayload.layouts.sm.filter((item) => visibleWidgetIds.has(item.i)),
+        xs: layoutPayload.layouts.xs.filter((item) => visibleWidgetIds.has(item.i)),
+        xxs: layoutPayload.layouts.xxs.filter((item) => visibleWidgetIds.has(item.i))
+      }) satisfies SurfaceLayoutBreakpoints,
+    [layoutPayload.layouts, visibleWidgetIds]
+  );
+
+  function patchWidgetPreferences(
+    widgetId: string,
+    patch: Partial<SurfaceWidgetPreferences>
+  ) {
+    setLayoutPayload((current) => ({
+      ...current,
+      widgets: {
+        ...current.widgets,
+        [widgetId]: {
+          ...current.widgets[widgetId],
+          ...patch
+        }
+      }
+    }));
+  }
+
+  function handleLayoutChange(
+    _currentLayout: GridLayoutItem[],
+    allLayouts: GridLayoutMap
+  ) {
+    setLayoutPayload((current) => ({
+      ...current,
+      layouts: fromLayouts(allLayouts, current.layouts)
+    }));
+  }
+
+  function handleReset() {
+    const next = buildDefaultSurfaceLayoutPayload(surfaceId, widgets);
+    setLayoutPayload(next);
+    writeCachedSurfaceLayout(next);
+    void resetMutation.mutateAsync();
   }
 
   return (
-    <section className="grid min-w-0 gap-4">
+    <div className="grid gap-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="inline-flex items-center gap-2 rounded-full bg-white/[0.04] px-3 py-2 text-[12px] uppercase tracking-[0.16em] text-white/48">
+          <LayoutGrid className="size-3.5" />
+          Surface grid
+        </div>
         <div className="flex flex-wrap items-center gap-2">
+          {actions}
+          {editing ? (
+            <div className="text-[12px] text-white/52">
+              Drag any card. Resize from edges or corners. Widget chrome is optional per card.
+            </div>
+          ) : null}
           <Button
             type="button"
-            variant={editing ? "primary" : "secondary"}
             size="sm"
+            variant={editing ? "primary" : "secondary"}
             onClick={() => setEditing((current) => !current)}
           >
-            <Settings2 className="size-4" />
+            <LayoutGrid className="size-4" />
             {editing ? "Done editing" : "Edit layout"}
           </Button>
-          {editing ? (
-            <Button
-              type="button"
-              variant="secondary"
-              size="sm"
-              onClick={resetLayout}
-            >
-              <RotateCcw className="size-4" />
-              Reset
-            </Button>
-          ) : null}
+          <Button
+            type="button"
+            size="sm"
+            variant="secondary"
+            onClick={handleReset}
+          >
+            <RotateCcw className="size-4" />
+            Reset layout
+          </Button>
         </div>
-        {actions}
       </div>
 
-      {editing ? (
-        <div className="rounded-[22px] border border-dashed border-white/10 bg-white/[0.03] p-3 text-[12px] leading-5 text-white/52">
-          Drag cards to reorder them. Use the width and height controls to make
-          a card denser or more spacious. Hidden widgets stay available below as
-          empty slots you can add back later.
-        </div>
-      ) : null}
-
-      <DndContext
-        sensors={sensors}
-        collisionDetection={closestCenter}
-        onDragEnd={handleDragEnd}
-      >
-        <SortableContext
-          items={visibleLayout.map((item) => item.id)}
-          strategy={rectSortingStrategy}
+      <div ref={containerRef}>
+        <ResponsiveGridLayout
+          width={containerWidth}
+          className="surface-grid-layout"
+          breakpoints={SURFACE_BREAKPOINTS}
+          cols={SURFACE_COLUMNS}
+          rowHeight={56}
+          margin={[16, 16]}
+          containerPadding={[0, 0]}
+          layouts={toLayouts(visibleLayouts)}
+          isDraggable={editing}
+          isResizable={editing}
+          resizeHandles={["s", "w", "e", "n", "sw", "nw", "se", "ne"]}
+          draggableCancel=".surface-grid-toolbar,button,a,input,textarea,select,label,[data-no-drag='true']"
+          onLayoutChange={handleLayoutChange}
+          onBreakpointChange={(nextBreakpoint: string) =>
+            setBreakpoint(nextBreakpoint as SurfaceBreakpointKey)
+          }
         >
-          <div
-            className="grid min-w-0 gap-4"
-            style={{
-              gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`
-            }}
-          >
-            {visibleLayout.map((item) => {
-              const definition = widgetMap.get(item.id);
-              if (!definition) {
-                return null;
-              }
+          {widgets
+            .filter((widget) => visibleWidgetIds.has(widget.id))
+            .map((widget) => {
+              const preferences = layoutPayload.widgets[widget.id] ?? {
+                hidden: false,
+                titleVisible: true,
+                descriptionVisible: true,
+                density: "compact" as const
+              };
+              const size = widgetSizeForBreakpoint(
+                visibleLayouts,
+                breakpoint,
+                widget.id
+              );
+              const compact = isCompactWidget(size, preferences.density);
               return (
-                <SortableWidget
-                  key={item.id}
-                  definition={definition}
-                  item={item}
-                  editing={editing}
-                  columns={columns}
-                  onResize={updateItem}
-                  onHide={(id) => updateItem(id, { hidden: true })}
-                  onHandleClick={onWidgetHandleClick}
-                  selected={selectedWidgetId === item.id}
-                  linkedDescriptions={linkedDescriptionsByWidgetId?.[item.id]}
-                >
-                  {definition.render({
-                    compact:
-                      item.width <= Math.min(4, columns) || item.height <= 1,
-                    width: item.width,
-                    height: item.height,
-                    editing
-                  })}
-                </SortableWidget>
+                <div key={widget.id}>
+                  <SurfaceWidgetCard
+                    definition={widget}
+                    preferences={preferences}
+                    size={size}
+                    editing={editing}
+                    selected={selectedWidgetId === widget.id}
+                    menuOpen={menuWidgetId === widget.id}
+                    linkedDescriptions={linkedDescriptionsByWidgetId?.[widget.id]}
+                    onToggleMenu={() =>
+                      setMenuWidgetId((current) =>
+                        current === widget.id ? null : widget.id
+                      )
+                    }
+                    onToggleHandle={
+                      onWidgetHandleClick
+                        ? () => onWidgetHandleClick(widget)
+                        : undefined
+                    }
+                    onHide={() =>
+                      patchWidgetPreferences(widget.id, { hidden: true })
+                    }
+                    onShowTitle={() =>
+                      patchWidgetPreferences(widget.id, {
+                        titleVisible: !preferences.titleVisible
+                      })
+                    }
+                    onShowDescription={() =>
+                      patchWidgetPreferences(widget.id, {
+                        descriptionVisible: !preferences.descriptionVisible
+                      })
+                    }
+                    onChangeDensity={(density) =>
+                      patchWidgetPreferences(widget.id, { density })
+                    }
+                  >
+                    {widget.render({
+                      compact,
+                      width: size.width,
+                      height: size.height,
+                      editing,
+                      density: preferences.density,
+                      preferences
+                    })}
+                  </SurfaceWidgetCard>
+                </div>
               );
             })}
-          </div>
-        </SortableContext>
-      </DndContext>
+        </ResponsiveGridLayout>
+      </div>
 
-      {editing && hiddenLayout.length > 0 ? (
+      {hiddenWidgets.length > 0 ? (
         <div className="grid gap-3 rounded-[24px] border border-white/8 bg-white/[0.03] p-4">
-          <div className="flex items-center gap-2 text-[0.72rem] font-semibold uppercase tracking-[0.16em] text-white/38">
-            <LayoutGrid className="size-4" />
-            Empty slots
+          <div className="text-[12px] uppercase tracking-[0.16em] text-white/40">
+            Hidden widgets
           </div>
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-            {hiddenLayout.map((item) => {
-              const definition = widgetMap.get(item.id);
-              if (!definition) {
-                return null;
-              }
-              return (
-                <button
-                  key={item.id}
-                  type="button"
-                  className="flex min-w-0 items-start justify-between gap-3 rounded-[22px] border border-dashed border-white/12 bg-[rgba(12,18,31,0.7)] px-4 py-4 text-left transition hover:border-[rgba(192,193,255,0.3)] hover:bg-white/[0.05]"
-                  onClick={() => updateItem(item.id, { hidden: false })}
-                >
-                  <span className="min-w-0">
-                    <span className="block truncate text-sm font-semibold text-white">
-                      {definition.title}
-                    </span>
-                    {definition.description ? (
-                      <span className="mt-1 block text-[12px] leading-5 text-white/52">
-                        {definition.description}
-                      </span>
-                    ) : null}
-                  </span>
-                  <Plus className="mt-0.5 size-4 shrink-0 text-[var(--primary)]" />
-                </button>
-              );
-            })}
+          <div className="flex flex-wrap gap-2">
+            {hiddenWidgets.map((widget) => (
+              <button
+                key={widget.id}
+                type="button"
+                className="rounded-full bg-white/[0.06] px-3 py-2 text-sm text-white/76 transition hover:bg-white/[0.1] hover:text-white"
+                onClick={() => patchWidgetPreferences(widget.id, { hidden: false })}
+              >
+                {widget.title}
+              </button>
+            ))}
           </div>
         </div>
       ) : null}
-    </section>
+    </div>
   );
 }

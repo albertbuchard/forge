@@ -1,6 +1,6 @@
+import { AiSurfaceWorkspace } from "@/components/customization/ai-surface-workspace";
 import { Link } from "react-router-dom";
 import {
-  EditableSurface,
   type SurfaceWidgetDefinition
 } from "@/components/customization/editable-surface";
 import {
@@ -466,5 +466,5 @@ export function OverviewPage() {
     }
   ];
 
-  return <EditableSurface surfaceId="overview" widgets={widgets} />;
+  return <AiSurfaceWorkspace surfaceId="overview" baseWidgets={widgets} />;
 }

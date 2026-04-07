@@ -361,6 +361,50 @@ select {
   font: inherit;
 }
 
+.surface-grid-layout {
+  position: relative;
+}
+
+.surface-grid-layout > .react-grid-item {
+  transition:
+    transform var(--motion-medium) var(--ease-standard),
+    width var(--motion-medium) var(--ease-standard),
+    height var(--motion-medium) var(--ease-standard);
+}
+
+.surface-grid-layout > .react-grid-item.react-grid-placeholder {
+  border-radius: 24px;
+  background:
+    linear-gradient(180deg, rgba(192, 193, 255, 0.18), rgba(78, 222, 163, 0.12)),
+    rgba(255, 255, 255, 0.04);
+  border: 1px dashed rgba(192, 193, 255, 0.3);
+}
+
+.surface-grid-card {
+  background: var(--card-gradient);
+  box-shadow: var(--card-shadow);
+}
+
+.surface-grid-card:hover {
+  box-shadow: var(--card-shadow-hover);
+}
+
+.surface-grid-layout .react-resizable-handle {
+  width: 14px;
+  height: 14px;
+  opacity: 0;
+  transition: opacity var(--motion-fast) var(--ease-standard);
+}
+
+.surface-grid-layout .react-grid-item:hover .react-resizable-handle,
+.surface-grid-layout .react-grid-item.react-resizable-resizing .react-resizable-handle {
+  opacity: 1;
+}
+
+.surface-grid-layout .react-resizable-handle::after {
+  border-color: rgba(192, 193, 255, 0.58);
+}
+
 select {
   appearance: none;
 }
