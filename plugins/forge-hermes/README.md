@@ -46,7 +46,7 @@ If you want editable package mode while developing from this repo:
 ## Runtime behavior
 
 - defaults to `FORGE_ORIGIN=http://127.0.0.1` and `FORGE_PORT=4317`
-- defaults `FORGE_ACTOR_LABEL` to `hermes`
+- defaults `FORGE_ACTOR_LABEL` to `aurel (hermes)`
 - defaults `FORGE_DATA_ROOT` to `~/.hermes/forge`
 - supports `FORGE_API_TOKEN` for remote or explicitly scoped access
 - supports `FORGE_DATA_ROOT` when you want Forge to use a specific local data folder
@@ -64,7 +64,7 @@ If you want Hermes to share the same Forge users and records:
 - use the same `FORGE_ORIGIN`
 - use the same `FORGE_PORT`
 - use the same `FORGE_DATA_ROOT` for local shared storage
-- give Hermes its own `FORGE_ACTOR_LABEL`
+- give Hermes its own `FORGE_ACTOR_LABEL`, ideally a human-readable label such as `Albert (hermes)`
 
 Forge's ownership model is explicit:
 
@@ -83,8 +83,11 @@ Hermes can now:
 
 - read the full workspace with `forge_get_preferences_workspace`
 - start the comparison flow with `forge_start_preferences_game`
-- manage concept lists with the catalog and catalog-item tools
-- create and merge contextual profiles with the context tools
+- create, update, and delete `preference_catalog`, `preference_catalog_item`,
+  `preference_context`, and `preference_item` through the same batch entity
+  routes as other Forge entities
+- merge contextual profiles with the dedicated action route when two contexts
+  should collapse into one
 - enqueue Forge entities directly into a preference domain
 - submit pairwise judgments and direct signals
 - override inferred scores when the user wants an explicit correction

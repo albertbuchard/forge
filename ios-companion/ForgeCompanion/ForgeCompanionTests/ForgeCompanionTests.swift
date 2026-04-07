@@ -39,6 +39,58 @@ final class ForgeCompanionTests: XCTestCase {
         )
     }
 
+    func testWatchBootstrapDecodesCompactHabitPayload() throws {
+        let json = """
+        {
+          "generatedAt": "2026-04-07T10:00:00Z",
+          "habits": [
+            {
+              "id": "habit_1",
+              "title": "Morning planning",
+              "polarity": "positive",
+              "frequency": "daily",
+              "targetCount": 1,
+              "weekDays": [],
+              "streakCount": 3,
+              "dueToday": true,
+              "cadenceLabel": "1x daily",
+              "alignedActionLabel": "Done",
+              "unalignedActionLabel": "Missed",
+              "currentPeriodStatus": "unknown",
+              "last7History": [
+                { "id": "1", "label": "S", "periodKey": "2026-04-01", "current": false, "state": "aligned" },
+                { "id": "2", "label": "M", "periodKey": "2026-04-02", "current": false, "state": "aligned" },
+                { "id": "3", "label": "T", "periodKey": "2026-04-03", "current": false, "state": "unknown" },
+                { "id": "4", "label": "W", "periodKey": "2026-04-04", "current": false, "state": "aligned" },
+                { "id": "5", "label": "T", "periodKey": "2026-04-05", "current": false, "state": "aligned" },
+                { "id": "6", "label": "F", "periodKey": "2026-04-06", "current": false, "state": "unknown" },
+                { "id": "7", "label": "S", "periodKey": "2026-04-07", "current": true, "state": "unknown" }
+              ]
+            }
+          ],
+          "checkInOptions": {
+            "activities": ["Working"],
+            "emotions": ["Focused"],
+            "triggers": ["Conflict"],
+            "placeCategories": ["Home"],
+            "routinePrompts": ["Medication taken?"],
+            "recentPeople": ["Julien"]
+          },
+          "pendingPrompts": []
+        }
+        """
+
+        let bootstrap = try JSONDecoder().decode(
+            ForgeWatchBootstrap.self,
+            from: Data(json.utf8)
+        )
+
+        XCTAssertEqual(bootstrap.habits.count, 1)
+        XCTAssertEqual(bootstrap.habits.first?.alignedActionLabel, "Done")
+        XCTAssertEqual(bootstrap.habits.first?.last7History.count, 7)
+        XCTAssertEqual(bootstrap.checkInOptions.recentPeople.first, "Julien")
+    }
+
     override func setUpWithError() throws {
         // Put setup code here. This method is called before the invocation of each test method in the class.
     }
@@ -46,20 +98,4 @@ final class ForgeCompanionTests: XCTestCase {
     override func tearDownWithError() throws {
         // Put teardown code here. This method is called after the invocation of each test method in the class.
     }
-
-    func testExample() throws {
-        // This is an example of a functional test case.
-        // Use XCTAssert and related functions to verify your tests produce the correct results.
-        // Any test you write for XCTest can be annotated as throws and async.
-        // Mark your test throws to produce an unexpected failure when your test encounters an uncaught error.
-        // Mark your test async to allow awaiting for asynchronous code to complete. Check the results with assertions afterwards.
-    }
-
-    func testPerformanceExample() throws {
-        // This is an example of a performance test case.
-        self.measure {
-            // Put the code you want to measure the time of here.
-        }
-    }
-
 }

@@ -4,6 +4,11 @@
 
 This file governs the `projects/forge` subtree and supplements the root `AGENTS.md`.
 
+## Branch rule
+
+All Forge work must happen on `main` unless Albert explicitly asks for a different branch.
+Do not create, switch to, or keep working on feature branches by default.
+
 ## Post-change verification (mandatory)
 
 After every code change to Forge:

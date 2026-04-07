@@ -3368,6 +3368,7 @@
           "notifications",
           "execution",
           "themePreference",
+          "customTheme",
           "localePreference",
           "security",
           "agents",
@@ -3422,7 +3423,61 @@
             "enum": [
               "obsidian",
               "solar",
+              "aurora",
+              "ember",
+              "custom",
               "system"
+            ]
+          },
+          "customTheme": {
+            "anyOf": [
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "label",
+                  "primary",
+                  "secondary",
+                  "tertiary",
+                  "canvas",
+                  "panel",
+                  "panelHigh",
+                  "panelLow",
+                  "ink"
+                ],
+                "properties": {
+                  "label": {
+                    "type": "string"
+                  },
+                  "primary": {
+                    "type": "string"
+                  },
+                  "secondary": {
+                    "type": "string"
+                  },
+                  "tertiary": {
+                    "type": "string"
+                  },
+                  "canvas": {
+                    "type": "string"
+                  },
+                  "panel": {
+                    "type": "string"
+                  },
+                  "panelHigh": {
+                    "type": "string"
+                  },
+                  "panelLow": {
+                    "type": "string"
+                  },
+                  "ink": {
+                    "type": "string"
+                  }
+                }
+              },
+              {
+                "type": "null"
+              }
             ]
           },
           "localePreference": {
@@ -3830,7 +3885,61 @@
             "enum": [
               "obsidian",
               "solar",
+              "aurora",
+              "ember",
+              "custom",
               "system"
+            ]
+          },
+          "customTheme": {
+            "anyOf": [
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "label",
+                  "primary",
+                  "secondary",
+                  "tertiary",
+                  "canvas",
+                  "panel",
+                  "panelHigh",
+                  "panelLow",
+                  "ink"
+                ],
+                "properties": {
+                  "label": {
+                    "type": "string"
+                  },
+                  "primary": {
+                    "type": "string"
+                  },
+                  "secondary": {
+                    "type": "string"
+                  },
+                  "tertiary": {
+                    "type": "string"
+                  },
+                  "canvas": {
+                    "type": "string"
+                  },
+                  "panel": {
+                    "type": "string"
+                  },
+                  "panelHigh": {
+                    "type": "string"
+                  },
+                  "panelLow": {
+                    "type": "string"
+                  },
+                  "ink": {
+                    "type": "string"
+                  }
+                }
+              },
+              {
+                "type": "null"
+              }
             ]
           },
           "localePreference": {
@@ -8842,6 +8951,547 @@
           "Preferences"
         ],
         "operationId": "patchpreferences_items_id_score"
+      }
+    },
+    "/api/v1/psyche/questionnaires": {
+      "get": {
+        "summary": "List questionnaire instruments available in the Psyche library",
+        "responses": {
+          "200": {
+            "description": "Questionnaire instrument collection",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "instruments"
+                  ],
+                  "properties": {
+                    "instruments": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "additionalProperties": true
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "tags": [
+          "Questionnaires",
+          "Psyche"
+        ],
+        "operationId": "getpsyche_questionnaires"
+      },
+      "post": {
+        "summary": "Create a custom questionnaire instrument",
+        "responses": {
+          "201": {
+            "description": "Created questionnaire instrument",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "instrument"
+                  ],
+                  "properties": {
+                    "instrument": {
+                      "type": "object",
+                      "additionalProperties": true
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "tags": [
+          "Questionnaires",
+          "Psyche"
+        ],
+        "operationId": "postpsyche_questionnaires"
+      }
+    },
+    "/api/v1/psyche/questionnaires/{id}": {
+      "get": {
+        "summary": "Get one questionnaire instrument with version and history detail",
+        "responses": {
+          "200": {
+            "description": "Questionnaire instrument detail",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "instrument"
+                  ],
+                  "properties": {
+                    "instrument": {
+                      "type": "object",
+                      "additionalProperties": true
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "tags": [
+          "Questionnaires",
+          "Psyche"
+        ],
+        "operationId": "getpsyche_questionnaires_id"
+      }
+    },
+    "/api/v1/psyche/questionnaires/{id}/clone": {
+      "post": {
+        "summary": "Clone a questionnaire instrument into a new draftable custom copy",
+        "responses": {
+          "201": {
+            "description": "Cloned questionnaire instrument",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "instrument"
+                  ],
+                  "properties": {
+                    "instrument": {
+                      "type": "object",
+                      "additionalProperties": true
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "tags": [
+          "Questionnaires",
+          "Psyche"
+        ],
+        "operationId": "postpsyche_questionnaires_id_clone"
+      }
+    },
+    "/api/v1/psyche/questionnaires/{id}/draft": {
+      "post": {
+        "summary": "Ensure a draft questionnaire version exists",
+        "responses": {
+          "200": {
+            "description": "Questionnaire instrument with ensured draft",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "instrument"
+                  ],
+                  "properties": {
+                    "instrument": {
+                      "type": "object",
+                      "additionalProperties": true
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "tags": [
+          "Questionnaires",
+          "Psyche"
+        ],
+        "operationId": "postpsyche_questionnaires_id_draft"
+      },
+      "patch": {
+        "summary": "Update the current questionnaire draft version",
+        "responses": {
+          "200": {
+            "description": "Questionnaire instrument with updated draft",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "instrument"
+                  ],
+                  "properties": {
+                    "instrument": {
+                      "type": "object",
+                      "additionalProperties": true
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "tags": [
+          "Questionnaires",
+          "Psyche"
+        ],
+        "operationId": "patchpsyche_questionnaires_id_draft"
+      }
+    },
+    "/api/v1/psyche/questionnaires/{id}/publish": {
+      "post": {
+        "summary": "Publish the current questionnaire draft as a new version",
+        "responses": {
+          "200": {
+            "description": "Published questionnaire instrument",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "instrument"
+                  ],
+                  "properties": {
+                    "instrument": {
+                      "type": "object",
+                      "additionalProperties": true
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "tags": [
+          "Questionnaires",
+          "Psyche"
+        ],
+        "operationId": "postpsyche_questionnaires_id_publish"
+      }
+    },
+    "/api/v1/psyche/questionnaires/{id}/runs": {
+      "post": {
+        "summary": "Start a questionnaire run for one user and instrument version",
+        "responses": {
+          "201": {
+            "description": "Started questionnaire run",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "run",
+                    "instrument",
+                    "version",
+                    "answers",
+                    "scores",
+                    "history"
+                  ],
+                  "properties": {
+                    "run": {
+                      "type": "object",
+                      "additionalProperties": true
+                    },
+                    "instrument": {
+                      "type": "object",
+                      "additionalProperties": true
+                    },
+                    "version": {
+                      "type": "object",
+                      "additionalProperties": true
+                    },
+                    "answers": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "additionalProperties": true
+                      }
+                    },
+                    "scores": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "additionalProperties": true
+                      }
+                    },
+                    "history": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "additionalProperties": true
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "tags": [
+          "Questionnaires",
+          "Psyche"
+        ],
+        "operationId": "postpsyche_questionnaires_id_runs"
+      }
+    },
+    "/api/v1/psyche/questionnaire-runs/{id}": {
+      "get": {
+        "summary": "Get one questionnaire run with answers, scores, and version detail",
+        "responses": {
+          "200": {
+            "description": "Questionnaire run detail",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "run",
+                    "instrument",
+                    "version",
+                    "answers",
+                    "scores",
+                    "history"
+                  ],
+                  "properties": {
+                    "run": {
+                      "type": "object",
+                      "additionalProperties": true
+                    },
+                    "instrument": {
+                      "type": "object",
+                      "additionalProperties": true
+                    },
+                    "version": {
+                      "type": "object",
+                      "additionalProperties": true
+                    },
+                    "answers": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "additionalProperties": true
+                      }
+                    },
+                    "scores": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "additionalProperties": true
+                      }
+                    },
+                    "history": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "additionalProperties": true
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "tags": [
+          "Questionnaires",
+          "Psyche"
+        ],
+        "operationId": "getpsyche_questionnaire_runs_id"
+      },
+      "patch": {
+        "summary": "Update an in-progress questionnaire run",
+        "responses": {
+          "200": {
+            "description": "Updated questionnaire run",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "run",
+                    "instrument",
+                    "version",
+                    "answers",
+                    "scores",
+                    "history"
+                  ],
+                  "properties": {
+                    "run": {
+                      "type": "object",
+                      "additionalProperties": true
+                    },
+                    "instrument": {
+                      "type": "object",
+                      "additionalProperties": true
+                    },
+                    "version": {
+                      "type": "object",
+                      "additionalProperties": true
+                    },
+                    "answers": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "additionalProperties": true
+                      }
+                    },
+                    "scores": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "additionalProperties": true
+                      }
+                    },
+                    "history": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "additionalProperties": true
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "tags": [
+          "Questionnaires",
+          "Psyche"
+        ],
+        "operationId": "patchpsyche_questionnaire_runs_id"
+      }
+    },
+    "/api/v1/psyche/questionnaire-runs/{id}/complete": {
+      "post": {
+        "summary": "Complete a questionnaire run and persist its final scores",
+        "responses": {
+          "200": {
+            "description": "Completed questionnaire run",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "run",
+                    "instrument",
+                    "version",
+                    "answers",
+                    "scores",
+                    "history"
+                  ],
+                  "properties": {
+                    "run": {
+                      "type": "object",
+                      "additionalProperties": true
+                    },
+                    "instrument": {
+                      "type": "object",
+                      "additionalProperties": true
+                    },
+                    "version": {
+                      "type": "object",
+                      "additionalProperties": true
+                    },
+                    "answers": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "additionalProperties": true
+                      }
+                    },
+                    "scores": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "additionalProperties": true
+                      }
+                    },
+                    "history": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "additionalProperties": true
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "tags": [
+          "Questionnaires",
+          "Psyche"
+        ],
+        "operationId": "postpsyche_questionnaire_runs_id_complete"
+      }
+    },
+    "/api/v1/psyche/self-observation/calendar": {
+      "get": {
+        "summary": "Read self-observation notes arranged as a calendar-ready reflection surface",
+        "responses": {
+          "200": {
+            "description": "Self-observation calendar",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "calendar"
+                  ],
+                  "properties": {
+                    "calendar": {
+                      "type": "object",
+                      "additionalProperties": true
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "tags": [
+          "Questionnaires",
+          "Psyche"
+        ],
+        "operationId": "getpsyche_self_observation_calendar"
       }
     },
     "/api/v1/operator/overview": {

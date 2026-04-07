@@ -220,6 +220,7 @@ import {
 import {
   createUser,
   ensureSystemUsers,
+  getDefaultUser,
   getUserById,
   listUserAccessGrants,
   listUserOwnershipSummaries,
@@ -469,6 +470,7 @@ import {
   getSleepViewData,
   ingestMobileHealthSync,
   mobileHealthSyncSchema,
+  requireValidPairing,
   revokeAllCompanionPairingSessions,
   revokeAllCompanionPairingSessionsSchema,
   revokeCompanionPairingSession,
@@ -479,6 +481,32 @@ import {
   updateWorkoutMetadata,
   updateWorkoutMetadataSchema
 } from "./health.js";
+import {
+  createMovementPlace,
+  getMovementAllTimeSummary,
+  getMovementDayDetail,
+  getMovementMobileBootstrap,
+  getMovementSelectionAggregate,
+  getMovementSettings,
+  getMovementTripDetail,
+  getMovementMonthSummary,
+  listMovementPlaces,
+  movementMobileBootstrapSchema,
+  movementPlaceMutationSchema,
+  movementPlacePatchSchema,
+  movementSelectionAggregateSchema,
+  movementSettingsPatchSchema,
+  updateMovementPlace,
+  updateMovementSettings
+} from "./movement.js";
+import {
+  assertWatchReady,
+  buildWatchBootstrap,
+  ingestWatchCaptureBatch,
+  mobileWatchBootstrapSchema,
+  mobileWatchCaptureBatchSchema,
+  mobileWatchHabitCheckInSchema
+} from "./watch-mobile.js";
 
 const COMPATIBILITY_SUNSET = "transitional-node";
 
@@ -2880,7 +2908,8 @@ const AGENT_ONBOARDING_TOOL_INPUT_CATALOG = [
       "entityType alone is never enough; full data is required.",
       "Batch multiple related creates together when they come from one user ask.",
       "Goal, project, and task creates can include notes: [{ contentMarkdown, author?, tags?, destroyAt?, links? }] and Forge will auto-link those notes to the newly created entity.",
-      "The same batch create route also handles calendar_event, work_block_template, and task_timebox. Calendar-event creates still trigger downstream projection sync when a writable provider calendar is selected."
+      "The same batch create route also handles calendar_event, work_block_template, task_timebox, preference_catalog, preference_catalog_item, preference_context, preference_item, and questionnaire_instrument.",
+      "Calendar-event creates still trigger downstream projection sync when a writable provider calendar is selected."
     ],
     example:
       '{"operations":[{"entityType":"task","data":{"title":"Write the public release notes","projectId":"project_123","status":"focus","notes":[{"contentMarkdown":"Starting from the changelog draft and the last QA pass."}]},"clientRef":"task-1"}]}'
@@ -2903,7 +2932,7 @@ const AGENT_ONBOARDING_TOOL_INPUT_CATALOG = [
       "Project lifecycle is status-driven: patch project.status to active, paused, or completed instead of looking for separate suspend, restart, or finish routes.",
       "Setting project.status to completed finishes the project and auto-completes linked unfinished tasks through the normal task completion path.",
       "Task and project scheduling rules stay on these same entity patches. Update task.schedulingRules, task.plannedDurationSeconds, or project.schedulingRules here.",
-      "Use this same route to move or relink calendar_event records and to edit work_block_template or task_timebox records without switching to narrower calendar CRUD tools."
+      "Use this same route to move or relink calendar_event records, edit work_block_template or task_timebox records, and do normal field updates on preference_catalog, preference_catalog_item, preference_context, preference_item, and questionnaire_instrument."
     ],
     example:
       '{"operations":[{"entityType":"project","id":"project_123","patch":{"status":"completed"},"clientRef":"project-finish-1"}]}'
@@ -3435,6 +3464,12 @@ function buildAgentOnboardingPayload(request: {
         "A sleep session is a first-class health record with timing, sleep and bed duration, stage breakdown, recovery metrics, annotations, and Forge links back to planning or Psyche context.",
       workoutSession:
         "A workout session is a first-class sports record imported from HealthKit or generated from a habit. It holds workout type, timing, energy or distance when available, subjective effort, narrative context, and Forge links.",
+      preferences:
+        "Forge Preferences is the explicit taste-modeling domain. It has workspaces, contexts, concept libraries, direct items, pairwise judgments, direct signals, and inferred scores.",
+      questionnaire:
+        "Forge Psyche questionnaires are structured reusable instruments with provenance, scoring, draft and published versions, and user-owned answer runs.",
+      selfObservation:
+        "Forge self-observation is a dedicated Psyche calendar view backed by note records tagged Self-observation and timestamped by frontmatter.observedAt.",
       insight:
         "An agent-authored observation or recommendation grounded in Forge data.",
       calendar:
@@ -3487,6 +3522,95 @@ function buildAgentOnboardingPayload(request: {
       "Behavior patterns, behaviors, beliefs, modes, and trigger reports cross-link to describe one reflective model rather than isolated records.",
       "Insights can point at one entity, but they exist to capture interpretation or advice rather than raw work items."
     ],
+    entityRouteModel: {
+      batchCrudEntities: [
+        "goal",
+        "project",
+        "task",
+        "strategy",
+        "habit",
+        "tag",
+        "note",
+        "insight",
+        "calendar_event",
+        "work_block_template",
+        "task_timebox",
+        "psyche_value",
+        "behavior_pattern",
+        "behavior",
+        "belief_entry",
+        "mode_profile",
+        "mode_guide_session",
+        "event_type",
+        "emotion_definition",
+        "trigger_report",
+        "preference_catalog",
+        "preference_catalog_item",
+        "preference_context",
+        "preference_item",
+        "questionnaire_instrument"
+      ],
+      batchRoutes: {
+        search: "/api/v1/entities/search",
+        create: "/api/v1/entities/create",
+        update: "/api/v1/entities/update",
+        delete: "/api/v1/entities/delete",
+        restore: "/api/v1/entities/restore"
+      },
+      actionEntities: {
+        task_run: {
+          readModel: "/api/v1/operator/context",
+          actions: {
+            start: "/api/v1/tasks/:taskId/runs",
+            heartbeat: "/api/v1/task-runs/:id/heartbeat",
+            focus: "/api/v1/task-runs/:id/focus",
+            complete: "/api/v1/task-runs/:id/complete",
+            release: "/api/v1/task-runs/:id/release"
+          }
+        },
+        questionnaire_run: {
+          read: "/api/v1/psyche/questionnaire-runs/:id",
+          actions: {
+            start: "/api/v1/psyche/questionnaires/:id/runs",
+            update: "/api/v1/psyche/questionnaire-runs/:id",
+            complete: "/api/v1/psyche/questionnaire-runs/:id/complete"
+          }
+        },
+        preferences: {
+          workspace: "/api/v1/preferences/workspace",
+          actions: {
+            startGame: "/api/v1/preferences/game/start",
+            mergeContexts: "/api/v1/preferences/contexts/merge",
+            enqueueFromEntity: "/api/v1/preferences/items/from-entity",
+            submitJudgment: "/api/v1/preferences/judgments",
+            submitSignal: "/api/v1/preferences/signals",
+            overrideScore: "/api/v1/preferences/items/:id/score"
+          }
+        },
+        questionnaires: {
+          list: "/api/v1/psyche/questionnaires",
+          detail: "/api/v1/psyche/questionnaires/:id",
+          actions: {
+            clone: "/api/v1/psyche/questionnaires/:id/clone",
+            ensureDraft: "/api/v1/psyche/questionnaires/:id/draft",
+            publishDraft: "/api/v1/psyche/questionnaires/:id/publish"
+          }
+        },
+        selfObservation: {
+          read: "/api/v1/psyche/self-observation/calendar",
+          writeModel:
+            "Create or update a linked note with tag Self-observation and frontmatter.observedAt."
+        },
+        sleep_session: {
+          read: "/api/v1/health/sleep",
+          update: "/api/v1/health/sleep/:id"
+        },
+        workout_session: {
+          read: "/api/v1/health/fitness",
+          update: "/api/v1/health/workouts/:id"
+        }
+      }
+    },
     multiUserModel: {
       summary:
         "Forge is multi-user by default. Humans and bots share one entity graph, with explicit ownership on every record and directional relationship settings between every pair of users.",
@@ -3537,6 +3661,7 @@ function buildAgentOnboardingPayload(request: {
         ],
         configNotes: [
           "Localhost and Tailscale targets can usually use the operator-session path without a long-lived token.",
+          "Use a distinct actor label such as Albert (claw) so OpenClaw-originated work stays obvious in Forge provenance.",
           "Create each agent as a Forge bot user, then use userId or userIds in tool inputs whenever the agent should focus on one human, one bot, or a specific collaboration slice."
         ]
       },
@@ -3554,6 +3679,7 @@ function buildAgentOnboardingPayload(request: {
         ],
         configNotes: [
           "Hermes keeps its durable Forge config under ~/.hermes/forge/config.json.",
+          "Use a distinct actor label such as Albert (hermes) so Hermes-originated work stays obvious in Forge provenance.",
           "Hermes uses the same multi-user scoping rules and should pass userIds intentionally when working across humans and bots.",
           "The Forge relationship graph still decides whether Hermes may see, message, plan for, or affect another owner."
         ]
@@ -4789,6 +4915,105 @@ export async function buildServer(
       resolveScopedUserIds(request.query as Record<string, unknown>)
     )
   }));
+  app.get("/api/v1/movement/day", async (request) => {
+    const query = request.query as Record<string, unknown>;
+    return {
+      movement: getMovementDayDetail({
+        date: typeof query.date === "string" ? query.date : undefined,
+        userIds: resolveScopedUserIds(query)
+      })
+    };
+  });
+  app.get("/api/v1/movement/month", async (request) => {
+    const query = request.query as Record<string, unknown>;
+    return {
+      movement: getMovementMonthSummary({
+        month: typeof query.month === "string" ? query.month : undefined,
+        userIds: resolveScopedUserIds(query)
+      })
+    };
+  });
+  app.get("/api/v1/movement/all-time", async (request) => ({
+    movement: getMovementAllTimeSummary(
+      resolveScopedUserIds(request.query as Record<string, unknown>)
+    )
+  }));
+  app.get("/api/v1/movement/settings", async (request) => ({
+    settings: getMovementSettings(
+      resolveScopedUserIds(request.query as Record<string, unknown>)
+    )
+  }));
+  app.patch("/api/v1/movement/settings", async (request) => {
+    const auth = requireScopedAccess(
+      request.headers as Record<string, unknown>,
+      ["write"],
+      { route: "/api/v1/movement/settings" }
+    );
+    const userIds = resolveScopedUserIds(request.query as Record<string, unknown>);
+    return {
+      settings: updateMovementSettings(
+        userIds[0] ?? getDefaultUser().id,
+        movementSettingsPatchSchema.parse(request.body ?? {}),
+        toActivityContext(auth)
+      )
+    };
+  });
+  app.get("/api/v1/movement/places", async (request) => ({
+    places: listMovementPlaces(
+      resolveScopedUserIds(request.query as Record<string, unknown>)
+    )
+  }));
+  app.post("/api/v1/movement/places", async (request, reply) => {
+    const auth = requireScopedAccess(
+      request.headers as Record<string, unknown>,
+      ["write"],
+      { route: "/api/v1/movement/places" }
+    );
+    const userIds = resolveScopedUserIds(request.query as Record<string, unknown>);
+    reply.code(201);
+    return {
+      place: createMovementPlace(
+        {
+          ...movementPlaceMutationSchema.parse(request.body ?? {}),
+          userId: userIds[0] ?? getDefaultUser().id,
+          source: "user"
+        },
+        toActivityContext(auth)
+      )
+    };
+  });
+  app.patch("/api/v1/movement/places/:id", async (request, reply) => {
+    const auth = requireScopedAccess(
+      request.headers as Record<string, unknown>,
+      ["write"],
+      { route: "/api/v1/movement/places/:id" }
+    );
+    const { id } = request.params as { id: string };
+    const place = updateMovementPlace(
+      id,
+      movementPlacePatchSchema.parse(request.body ?? {}),
+      toActivityContext(auth)
+    );
+    if (!place) {
+      reply.code(404);
+      return { error: "Movement place not found" };
+    }
+    return { place };
+  });
+  app.get("/api/v1/movement/trips/:id", async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const movement = getMovementTripDetail(id);
+    if (!movement) {
+      reply.code(404);
+      return { error: "Movement trip not found" };
+    }
+    return { movement };
+  });
+  app.post("/api/v1/movement/selection", async (request) => ({
+    movement: getMovementSelectionAggregate(
+      movementSelectionAggregateSchema.parse(request.body ?? {})
+    )
+  }));
   app.post("/api/v1/health/pairing-sessions", async (request, reply) => {
     requireOperatorSession(request.headers as Record<string, unknown>, {
       route: "/api/v1/health/pairing-sessions"
@@ -4840,6 +5065,54 @@ export async function buildServer(
       verifyCompanionPairingSchema.parse(request.body ?? {})
     )
   }));
+  app.post("/api/v1/mobile/movement/bootstrap", async (request) => {
+    const parsed = movementMobileBootstrapSchema.parse(request.body ?? {});
+    const pairing = requireValidPairing(parsed.sessionId, parsed.pairingToken);
+    return {
+      movement: getMovementMobileBootstrap(pairing)
+    };
+  });
+  app.post("/api/v1/mobile/watch/bootstrap", async (request) => {
+    const parsed = mobileWatchBootstrapSchema.parse(request.body ?? {});
+    const pairing = requireValidPairing(parsed.sessionId, parsed.pairingToken);
+    assertWatchReady(pairing);
+    return {
+      watch: buildWatchBootstrap(pairing)
+    };
+  });
+  app.post("/api/v1/mobile/watch/habits/:id/check-ins", async (request, reply) => {
+    const parsed = mobileWatchHabitCheckInSchema.parse(request.body ?? {});
+    const pairing = requireValidPairing(parsed.sessionId, parsed.pairingToken);
+    assertWatchReady(pairing);
+    const { id } = request.params as { id: string };
+    const habit = createHabitCheckIn(
+      id,
+      {
+        dateKey: parsed.dateKey,
+        status: parsed.status,
+        note: parsed.note
+      },
+      { source: "system", actor: `watch:${parsed.dedupeKey}` }
+    );
+    if (!habit) {
+      reply.code(404);
+      return { error: "Habit not found" };
+    }
+    return {
+      habit,
+      metrics: buildXpMetricsPayload(),
+      watch: buildWatchBootstrap(pairing)
+    };
+  });
+  app.post("/api/v1/mobile/watch/capture-events:batch", async (request) => {
+    const parsed = mobileWatchCaptureBatchSchema.parse(request.body ?? {});
+    const pairing = requireValidPairing(parsed.sessionId, parsed.pairingToken);
+    assertWatchReady(pairing);
+    return {
+      receipt: ingestWatchCaptureBatch(pairing, parsed),
+      watch: buildWatchBootstrap(pairing)
+    };
+  });
   app.post("/api/v1/mobile/healthkit/sync", async (request) => ({
     sync: ingestMobileHealthSync(
       mobileHealthSyncSchema.parse(request.body ?? {})
@@ -8557,10 +8830,12 @@ export async function buildServer(
     requireScopedAccess(request.headers as Record<string, unknown>, ["write"], {
       route: "/api/v1/surfaces/:surfaceId/ai-processors"
     });
-    const body = (request.body ?? {}) as Record<string, unknown>;
-    const processor = createAiProcessor({
-      ...body,
+    const body = createAiProcessorSchema.parse({
+      ...(request.body as Record<string, unknown> ?? {}),
       surfaceId: (request.params as { surfaceId: string }).surfaceId
+    });
+    const processor = createAiProcessor({
+      ...body
     });
     reply.code(201);
     return { processor };

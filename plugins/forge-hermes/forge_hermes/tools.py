@@ -18,6 +18,7 @@ from .version import __version__
 PACKAGE_DIR = Path(__file__).resolve().parent
 NODE_RUNTIME_HELPER = PACKAGE_DIR / "scripts" / "ensure-runtime.mjs"
 SESSION_COOKIES: Dict[str, str] = {}
+DEFAULT_HERMES_ACTOR_LABEL = "aurel (hermes)"
 
 
 @dataclass
@@ -86,7 +87,7 @@ def _load_config() -> ForgeConfig:
     timeout_ms = max(1000, min(_read_int(os.environ.get("FORGE_TIMEOUT_MS") or file_config.get("timeoutMs"), 15000), 120000))
     data_root = _normalize_data_root(os.environ.get("FORGE_DATA_ROOT") or file_config.get("dataRoot"))
     api_token = (os.environ.get("FORGE_API_TOKEN") or str(file_config.get("apiToken") or "")).strip()
-    actor_label = (os.environ.get("FORGE_ACTOR_LABEL") or str(file_config.get("actorLabel") or "")).strip() or "hermes"
+    actor_label = (os.environ.get("FORGE_ACTOR_LABEL") or str(file_config.get("actorLabel") or "")).strip() or DEFAULT_HERMES_ACTOR_LABEL
     return ForgeConfig(
         origin=origin,
         port=port,

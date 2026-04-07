@@ -1,0 +1,754 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		0227317AAEFF79CB045458C5 /* solarized-light.json in Resources */ = {isa = PBXBuildFile; fileRef = 931C1688CBF05AF2C3B6080E /* solarized-light.json */; };
+		03AFAA4817ED63ACA34F81ED /* dracula-soft.json in Resources */ = {isa = PBXBuildFile; fileRef = 035C132374C9D43B33A66C2A /* dracula-soft.json */; };
+		03E97C443B503F4B425BA477 /* sentry-dark.json in Resources */ = {isa = PBXBuildFile; fileRef = 531C6E0D528DB5E283023813 /* sentry-dark.json */; };
+		0445303A7608423CB02C8C4D /* matrix-dark.json in Resources */ = {isa = PBXBuildFile; fileRef = 1005A9DDD08CA115B98915CD /* matrix-dark.json */; };
+		05617CAB71D3D6509C731200 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 9BCF8A15494B22091C3454E0 /* Assets.xcassets */; };
+		0DBA8E9802E4573EBDD196F2 /* SetupQRScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1E98D87B79F7D59EB7BE050 /* SetupQRScreen.swift */; };
+		10D32EA5151CCCA0D930309A /* github-light-high-contrast.json in Resources */ = {isa = PBXBuildFile; fileRef = A8C09BD2B766E68C8036C62F /* github-light-high-contrast.json */; };
+		1302906E6C5B857FFBDA0622 /* ForgeServerDiscovery.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6744ACE08894FD6E80A93E20 /* ForgeServerDiscovery.swift */; };
+		13773DF313E902316539F5B0 /* theme-manifest.json in Resources */ = {isa = PBXBuildFile; fileRef = 0D8459E84A99927586568C85 /* theme-manifest.json */; };
+		1392E1D7D281F3CCF8AB7D5F /* absolutely-dark.json in Resources */ = {isa = PBXBuildFile; fileRef = 42E438ADEB52E141BCC97A8A /* absolutely-dark.json */; };
+		1404D750C54C26D9A18F7CA9 /* MovementSettingsSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 08EBD4D7617D074D802191F9 /* MovementSettingsSheet.swift */; };
+		1715A52F0B312250703E4AB4 /* ForgeCompanionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E28B6BA5C905DCE11D19BAB /* ForgeCompanionTests.swift */; };
+		1E1BFFC7B198319E86FE36C2 /* laserwave.json in Resources */ = {isa = PBXBuildFile; fileRef = 614F684DCD7439CBE517781F /* laserwave.json */; };
+		26ED65ECF8BF191035801EDB /* CompanionSetupFlow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8C4DBC75E583E793AFD211DA /* CompanionSetupFlow.swift */; };
+		27DBD85ECF86A87CE8D3343A /* everforest-light.json in Resources */ = {isa = PBXBuildFile; fileRef = ECFCB9E9747A398BB683D03A /* everforest-light.json */; };
+		2B7E9F875C6C434F12CC72DB /* gruvbox-light-medium.json in Resources */ = {isa = PBXBuildFile; fileRef = 09996B4E7C1A6E7712E6E849 /* gruvbox-light-medium.json */; };
+		2BEF8CEAAE58F3C877EDF476 /* everforest-dark.json in Resources */ = {isa = PBXBuildFile; fileRef = C3AED35B770DBA83276E12AA /* everforest-dark.json */; };
+		2F9693D994D28E1845C0C8BD /* KeychainStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8D60D54BA88A829A976A748D /* KeychainStore.swift */; };
+		308C360498BEDB2AEE99FAA6 /* linear-light.json in Resources */ = {isa = PBXBuildFile; fileRef = E3B76E08C65327CC53268C13 /* linear-light.json */; };
+		3541414071DB333835804DD0 /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = 380A6F99669127337E7F423D /* Models.swift */; };
+		36FA7B26FC1BB408FE557252 /* github-dark-default.json in Resources */ = {isa = PBXBuildFile; fileRef = 2D5D444EBD2928C4200EFFB3 /* github-dark-default.json */; };
+		3913802EFB56937605A54F17 /* github-light-default.json in Resources */ = {isa = PBXBuildFile; fileRef = D4B23F5DA1C0B066CBA6DE29 /* github-light-default.json */; };
+		3B2906B447256EB6E67544C0 /* dark-plus-B1yOZ-Hy.json in Resources */ = {isa = PBXBuildFile; fileRef = F39EA07C16BAEB142D3A16AC /* dark-plus-B1yOZ-Hy.json */; };
+		3D090A820B1A741DF7BC9E15 /* vitesse-light.json in Resources */ = {isa = PBXBuildFile; fileRef = 3B059A1A692CD7F846C930B4 /* vitesse-light.json */; };
+		3D67F5A790D4A39FE0233EB5 /* tokyo-night.json in Resources */ = {isa = PBXBuildFile; fileRef = 4ADDDB7BAE6271CB4FA1772C /* tokyo-night.json */; };
+		3D87665C914A74E205FD8B67 /* ForgeSyncClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3C82396DEF68744B2F29AC3E /* ForgeSyncClient.swift */; };
+		3EC08C2374225916A24444C7 /* ForgeCompanionApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0C60F828383583C5869A72C /* ForgeCompanionApp.swift */; };
+		3FE0D1122718BDDF3B018740 /* codex-light.json in Resources */ = {isa = PBXBuildFile; fileRef = 0CF13A076E55AB584242A8E0 /* codex-light.json */; };
+		412134A75337D5B891B558C1 /* light-plus.json in Resources */ = {isa = PBXBuildFile; fileRef = 9DC04A62F879EC081DD9B1C2 /* light-plus.json */; };
+		4240F983DFEC69AF10D721E2 /* linear-dark.json in Resources */ = {isa = PBXBuildFile; fileRef = 2CC7F3FBDB3AB6F1E9907640 /* linear-dark.json */; };
+		4761750AE82C1B0E9B4E2A29 /* ForgeCompanionUITestsLaunchTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 204ACBF3D7D072C8FF7B03EE /* ForgeCompanionUITestsLaunchTests.swift */; };
+		491FF3A7EE4B40907C7B4228 /* slack-ochin-CRg.json in Resources */ = {isa = PBXBuildFile; fileRef = 81DCEAA8A6026E500E330F08 /* slack-ochin-CRg.json */; };
+		4E143E559E22EEF79E6624E6 /* monokai.json in Resources */ = {isa = PBXBuildFile; fileRef = A37BD2A849CB3A3CB7CC1887 /* monokai.json */; };
+		4F5D3B8E4938A9EC7DB00701 /* poimandres.json in Resources */ = {isa = PBXBuildFile; fileRef = 3076CB7081D75DAC68B4680B /* poimandres.json */; };
+		508CE5AA70E5B40A2F8245D4 /* one-dark-pro-D.json in Resources */ = {isa = PBXBuildFile; fileRef = 2B5416684CF5E8A56282B072 /* one-dark-pro-D.json */; };
+		51C1AE90A6D56C9DBC31ECAC /* oscurange-C.json in Resources */ = {isa = PBXBuildFile; fileRef = E6071ED7AED22914F8C84892 /* oscurange-C.json */; };
+		5226986F2DC8B80FBC76045B /* SetupManualScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = E8407EED652D1D871F0F8FE2 /* SetupManualScreen.swift */; };
+		568A0248DFBE6E8262408EA8 /* QRPairingScanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1DA35ED2DAA820FB81C14F6F /* QRPairingScanner.swift */; };
+		5726E121DD13E4296152ABB1 /* github-dark.json in Resources */ = {isa = PBXBuildFile; fileRef = D4FBC6718D5E1C6C8DFF3434 /* github-dark.json */; };
+		58DE7C8E7E0F1A8C56F586D7 /* notion-light.json in Resources */ = {isa = PBXBuildFile; fileRef = D165D61953834BA4A9B5B7EA /* notion-light.json */; };
+		5AFDD566E1D37AAC507EA148 /* nord.json in Resources */ = {isa = PBXBuildFile; fileRef = 4BD036F2034D09CD3C43723B /* nord.json */; };
+		5F27B32CC4CAAEF02511D2A9 /* github-light.json in Resources */ = {isa = PBXBuildFile; fileRef = 00069E942662D0F7ADD560B8 /* github-light.json */; };
+		625930CFFCC857D3E9DC7D95 /* catppuccin-macchiato.json in Resources */ = {isa = PBXBuildFile; fileRef = CFA45100E8F01A8700B0BAEA /* catppuccin-macchiato.json */; };
+		62F81192C64A3E631D4991E8 /* rose-pine-x.json in Resources */ = {isa = PBXBuildFile; fileRef = 1EF14A6D60A832B1F35F02E0 /* rose-pine-x.json */; };
+		6372299254B19EE0A0A44C29 /* material-theme-ocean.json in Resources */ = {isa = PBXBuildFile; fileRef = 0C74271E103D074375185B33 /* material-theme-ocean.json */; };
+		64471274341CD18D0172EDEA /* catppuccin-frappe.json in Resources */ = {isa = PBXBuildFile; fileRef = 538B218497F75CC70CF33FC0 /* catppuccin-frappe.json */; };
+		6852C3BD60F38A5302A9C635 /* gruvbox-light-soft.json in Resources */ = {isa = PBXBuildFile; fileRef = 9CCB4447E140D424F8B78668 /* gruvbox-light-soft.json */; };
+		6A15F3CD51D519FEDA55DFA1 /* PairedForgeScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9C75516EEA731CB6C306232D /* PairedForgeScreen.swift */; };
+		6B3F684077319404E5B1E35C /* codex-dark.json in Resources */ = {isa = PBXBuildFile; fileRef = 0A309FBB37A5CEC49FF9D63D /* codex-dark.json */; };
+		6BC488528D2F2DC091AFA119 /* kanagawa-wave.json in Resources */ = {isa = PBXBuildFile; fileRef = 7C755DB532CDC1D90A61F05B /* kanagawa-wave.json */; };
+		6BDD64791A29483720621099 /* absolutely-light.json in Resources */ = {isa = PBXBuildFile; fileRef = 9D38C3D772905A5D933179CC /* absolutely-light.json */; };
+		6C3483FD5BE4A4E7807933B3 /* ForgeCompanionUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9444DBDF98D11B27B530480D /* ForgeCompanionUITests.swift */; };
+		6F47281004EBEE4EB7B4819A /* material-theme-darker-D.json in Resources */ = {isa = PBXBuildFile; fileRef = 8EBE7B92A6304E555BCC1D6D /* material-theme-darker-D.json */; };
+		7199D595C418DCCA3D6B676F /* min-light.json in Resources */ = {isa = PBXBuildFile; fileRef = 264AFBEA5F101E41F8398200 /* min-light.json */; };
+		71CDF1994B6A1BE00A59739D /* vitesse-black.json in Resources */ = {isa = PBXBuildFile; fileRef = FAECD142BA900902838D1ED9 /* vitesse-black.json */; };
+		733CCED4CA1EF86A260E85F8 /* ForgeCompanion.xcodeproj in Resources */ = {isa = PBXBuildFile; fileRef = 4D7C7FE6C7255061B47B1B26 /* ForgeCompanion.xcodeproj */; };
+		7528B50367ED8CABF0EC748D /* material-theme-palenight.json in Resources */ = {isa = PBXBuildFile; fileRef = BF62B9557A1B4613CBF957E1 /* material-theme-palenight.json */; };
+		77EBA97A7E23D94B18F47FD3 /* kanagawa-dragon-VscOyZL-.json in Resources */ = {isa = PBXBuildFile; fileRef = CF000B2C502117967A5627CC /* kanagawa-dragon-VscOyZL-.json */; };
+		7C43F27B0637CA6DC1ED36D0 /* vesper.json in Resources */ = {isa = PBXBuildFile; fileRef = ECF5C2385C6DE828B455D6F9 /* vesper.json */; };
+		7E18F587204FB088B42A9258 /* snazzy-light.json in Resources */ = {isa = PBXBuildFile; fileRef = 4E10C43A6389AB957EE59EB2 /* snazzy-light.json */; };
+		8BE7264A99DC00BA6E213A31 /* CompanionBackgroundScheduler.swift in Sources */ = {isa = PBXBuildFile; fileRef = 782821863879F77D3FE4AACF /* CompanionBackgroundScheduler.swift */; };
+		8D5526E749C17258C46ADAE3 /* vitesse-dark.json in Resources */ = {isa = PBXBuildFile; fileRef = F6B88D3C0ABB7A376D9C5D72 /* vitesse-dark.json */; };
+		8D57AED7B8A3C5018050486A /* dracula.json in Resources */ = {isa = PBXBuildFile; fileRef = FDA8323EC0C4C2A1C8CF27C8 /* dracula.json */; };
+		91596CB430E9320345547B49 /* material-theme.json in Resources */ = {isa = PBXBuildFile; fileRef = 386D634BBCBEDCACF819E1C7 /* material-theme.json */; };
+		933D75EFBAE8E5A5A1A1B2FE /* HealthSyncStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 14B9DCF4EDFA56DC1C9C34E5 /* HealthSyncStore.swift */; };
+		933F55BB4A50DDD5E5D3C6B7 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 12FA6272CC36ACFD7A30796C /* ContentView.swift */; };
+		93E26877DE032468BBC1083F /* CompanionAppModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 02F562FCE196BF8DFF433C4D /* CompanionAppModel.swift */; };
+		9443AA4637A7D89D920930C3 /* night-owl.json in Resources */ = {isa = PBXBuildFile; fileRef = 74AAF176DB3A50947565C8DB /* night-owl.json */; };
+		98D12E711818537ED8008792 /* pierre-light.json in Resources */ = {isa = PBXBuildFile; fileRef = 7722BB232F2591E783897FE5 /* pierre-light.json */; };
+		9B04372A972BC8B9216912F6 /* SetupDiscoveryScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 02747A05B1BAE9D2DD5482AC /* SetupDiscoveryScreen.swift */; };
+		9CA792CE74889A54A7706FCD /* rose-pine-moon.json in Resources */ = {isa = PBXBuildFile; fileRef = 68B0BA20F081DEF3A8AB9E4D /* rose-pine-moon.json */; };
+		9D8A53F33998634B81EDD539 /* min-dark-.json in Resources */ = {isa = PBXBuildFile; fileRef = BAD9F69C52F56086F7ADEB43 /* min-dark-.json */; };
+		9EB9D620252C9FFA37283BDE /* slack-dark.json in Resources */ = {isa = PBXBuildFile; fileRef = 535C50F607154AF5F1CC676E /* slack-dark.json */; };
+		A343517C7661513250C6D4EC /* rose-pine-dawn.json in Resources */ = {isa = PBXBuildFile; fileRef = DDCF2EB020AF5BFDA667438D /* rose-pine-dawn.json */; };
+		A80D2B859439B0825E66E022 /* github-dark-high-contrast.json in Resources */ = {isa = PBXBuildFile; fileRef = A54E8D248436BF9943B06E4B /* github-dark-high-contrast.json */; };
+		ABE4CF57EFBDF59FAF99F8D2 /* ayu-dark.json in Resources */ = {isa = PBXBuildFile; fileRef = D5A2A15C2DA637E11E0DB4F0 /* ayu-dark.json */; };
+		B2AE7F49D418F0085F721591 /* SetupHealthScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = E4BB895B44CA6A00E73F33E3 /* SetupHealthScreen.swift */; };
+		B81D7C2C81DFC719EF398AD3 /* github-dark-dimmed.json in Resources */ = {isa = PBXBuildFile; fileRef = 5C515EA047FDC5D67CD9EE50 /* github-dark-dimmed.json */; };
+		BD876E60BE14F6A797C84400 /* one-light.json in Resources */ = {isa = PBXBuildFile; fileRef = F6709AA3A25DACA04C92A857 /* one-light.json */; };
+		BE486F24A130A943D3FE9027 /* gruvbox-dark-soft.json in Resources */ = {isa = PBXBuildFile; fileRef = 9D98EE56C9FB7CB850652DC0 /* gruvbox-dark-soft.json */; };
+		BF197596092DC5DC1F267097 /* material-theme-lighter.json in Resources */ = {isa = PBXBuildFile; fileRef = 747CC75D80A33FD1EE1816DD /* material-theme-lighter.json */; };
+		BFAFDC9F95066281EEBE2684 /* gruvbox-light-hard.json in Resources */ = {isa = PBXBuildFile; fileRef = BF8DF423EDFBC4326669D5CA /* gruvbox-light-hard.json */; };
+		C0DFB72DB00CBB425186E62C /* catppuccin-mocha-Ry8aD-5u.json in Resources */ = {isa = PBXBuildFile; fileRef = BFCC2081AE4F187A2146D07C /* catppuccin-mocha-Ry8aD-5u.json */; };
+		C319150C5478E648D4176E66 /* proof-light.json in Resources */ = {isa = PBXBuildFile; fileRef = 57B60BAC19F63C0C6255CBCB /* proof-light.json */; };
+		C58DDA0831D060D30080083B /* QRScannerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 30619511D8D70CF1FCF54F2D /* QRScannerView.swift */; };
+		C7BA24AFF59FA87F87208B89 /* CompanionStyle.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36F5DD9FF11BDCC355FA72F2 /* CompanionStyle.swift */; };
+		C8C5E1C364A356DC76EE29AE /* DebugLog.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA3E9377FB559DF9D96F0B66 /* DebugLog.swift */; };
+		C90E12FA8ECDFF7214CC508F /* temple-dark.json in Resources */ = {isa = PBXBuildFile; fileRef = FA1B604B998B86390064CF35 /* temple-dark.json */; };
+		C96EFA56873BDC26889347CC /* gruvbox-dark-medium.json in Resources */ = {isa = PBXBuildFile; fileRef = BC92CA266C72E6406B835FA3 /* gruvbox-dark-medium.json */; };
+		D30E0C78A192CED8023D800A /* gruvbox-dark-hard.json in Resources */ = {isa = PBXBuildFile; fileRef = FE9C87EF5FB8A7DB2C32DD1C /* gruvbox-dark-hard.json */; };
+		D97740F51A55BD2C209152EA /* CompanionAppRoot.swift in Sources */ = {isa = PBXBuildFile; fileRef = F69B66D6F7F82EB52A3919E8 /* CompanionAppRoot.swift */; };
+		DCF024831CB9AF1AAA1163DA /* solarized-dark.json in Resources */ = {isa = PBXBuildFile; fileRef = 1FB0EFB4E598D990B93161A0 /* solarized-dark.json */; };
+		DF8BB02CBD011B2791C2230B /* kanagawa-lotus.json in Resources */ = {isa = PBXBuildFile; fileRef = EBD0158F009FFC7E8131E3CC /* kanagawa-lotus.json */; };
+		E096F9786A99E795443E7B37 /* ForgeWebView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DFCF38F8FCB2A92AE73956DE /* ForgeWebView.swift */; };
+		E41D1D4C96979669855BA3FD /* houston.json in Resources */ = {isa = PBXBuildFile; fileRef = 7B39A2584C9B905E4C668F99 /* houston.json */; };
+		E571A37B09D04331EA6E41E4 /* MovementSyncStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = D7FC387296843249FB11B85F /* MovementSyncStore.swift */; };
+		E656D85B73AF061F8BD9A495 /* notion-dark-BTRKJ-yg.json in Resources */ = {isa = PBXBuildFile; fileRef = 2E85C7B6AEB2CFF03D21995D /* notion-dark-BTRKJ-yg.json */; };
+		E75A1D098B581E024AD5C477 /* UnpairedHeroScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA102D16EEB2213C7AF8BD49 /* UnpairedHeroScreen.swift */; };
+		E8B52695891EA26FECAE8A14 /* CompanionMenuSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2B54234F4A43D98698E8FE5 /* CompanionMenuSheet.swift */; };
+		ECD043E0D14E9E4AB3B49F49 /* catppuccin-latte-Bd1wq-gC.json in Resources */ = {isa = PBXBuildFile; fileRef = 11EA3517B34D36E74E130986 /* catppuccin-latte-Bd1wq-gC.json */; };
+		ED7C20FBE80C021E993B0E04 /* pierre-dark.json in Resources */ = {isa = PBXBuildFile; fileRef = D466EC844AFD47609DF52240 /* pierre-dark.json */; };
+		FD1D7EF37F9DFD15336D6B16 /* lobster-dark-dxSKfHK-.json in Resources */ = {isa = PBXBuildFile; fileRef = 5E5E8C99FB3252A49E1CCA26 /* lobster-dark-dxSKfHK-.json */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		00069E942662D0F7ADD560B8 /* github-light.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "github-light.json"; sourceTree = "<group>"; };
+		02747A05B1BAE9D2DD5482AC /* SetupDiscoveryScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SetupDiscoveryScreen.swift; sourceTree = "<group>"; };
+		02F562FCE196BF8DFF433C4D /* CompanionAppModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompanionAppModel.swift; sourceTree = "<group>"; };
+		035C132374C9D43B33A66C2A /* dracula-soft.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "dracula-soft.json"; sourceTree = "<group>"; };
+		08EBD4D7617D074D802191F9 /* MovementSettingsSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MovementSettingsSheet.swift; sourceTree = "<group>"; };
+		09996B4E7C1A6E7712E6E849 /* gruvbox-light-medium.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "gruvbox-light-medium.json"; sourceTree = "<group>"; };
+		0A309FBB37A5CEC49FF9D63D /* codex-dark.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "codex-dark.json"; sourceTree = "<group>"; };
+		0C74271E103D074375185B33 /* material-theme-ocean.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "material-theme-ocean.json"; sourceTree = "<group>"; };
+		0CF13A076E55AB584242A8E0 /* codex-light.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "codex-light.json"; sourceTree = "<group>"; };
+		0D8459E84A99927586568C85 /* theme-manifest.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "theme-manifest.json"; sourceTree = "<group>"; };
+		1005A9DDD08CA115B98915CD /* matrix-dark.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "matrix-dark.json"; sourceTree = "<group>"; };
+		11EA3517B34D36E74E130986 /* catppuccin-latte-Bd1wq-gC.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "catppuccin-latte-Bd1wq-gC.json"; sourceTree = "<group>"; };
+		12FA6272CC36ACFD7A30796C /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		14B9DCF4EDFA56DC1C9C34E5 /* HealthSyncStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HealthSyncStore.swift; sourceTree = "<group>"; };
+		1DA35ED2DAA820FB81C14F6F /* QRPairingScanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QRPairingScanner.swift; sourceTree = "<group>"; };
+		1EF14A6D60A832B1F35F02E0 /* rose-pine-x.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "rose-pine-x.json"; sourceTree = "<group>"; };
+		1FB0EFB4E598D990B93161A0 /* solarized-dark.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "solarized-dark.json"; sourceTree = "<group>"; };
+		204ACBF3D7D072C8FF7B03EE /* ForgeCompanionUITestsLaunchTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ForgeCompanionUITestsLaunchTests.swift; sourceTree = "<group>"; };
+		264AFBEA5F101E41F8398200 /* min-light.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "min-light.json"; sourceTree = "<group>"; };
+		2B5416684CF5E8A56282B072 /* one-dark-pro-D.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "one-dark-pro-D.json"; sourceTree = "<group>"; };
+		2CC7F3FBDB3AB6F1E9907640 /* linear-dark.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "linear-dark.json"; sourceTree = "<group>"; };
+		2D5D444EBD2928C4200EFFB3 /* github-dark-default.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "github-dark-default.json"; sourceTree = "<group>"; };
+		2E85C7B6AEB2CFF03D21995D /* notion-dark-BTRKJ-yg.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "notion-dark-BTRKJ-yg.json"; sourceTree = "<group>"; };
+		30619511D8D70CF1FCF54F2D /* QRScannerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QRScannerView.swift; sourceTree = "<group>"; };
+		3076CB7081D75DAC68B4680B /* poimandres.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = poimandres.json; sourceTree = "<group>"; };
+		36F5DD9FF11BDCC355FA72F2 /* CompanionStyle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompanionStyle.swift; sourceTree = "<group>"; };
+		380A6F99669127337E7F423D /* Models.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models.swift; sourceTree = "<group>"; };
+		386D634BBCBEDCACF819E1C7 /* material-theme.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "material-theme.json"; sourceTree = "<group>"; };
+		3B059A1A692CD7F846C930B4 /* vitesse-light.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "vitesse-light.json"; sourceTree = "<group>"; };
+		3C82396DEF68744B2F29AC3E /* ForgeSyncClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ForgeSyncClient.swift; sourceTree = "<group>"; };
+		42E438ADEB52E141BCC97A8A /* absolutely-dark.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "absolutely-dark.json"; sourceTree = "<group>"; };
+		4ADDDB7BAE6271CB4FA1772C /* tokyo-night.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "tokyo-night.json"; sourceTree = "<group>"; };
+		4BD036F2034D09CD3C43723B /* nord.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = nord.json; sourceTree = "<group>"; };
+		4D7C7FE6C7255061B47B1B26 /* ForgeCompanion.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; path = ForgeCompanion.xcodeproj; sourceTree = "<group>"; };
+		4DAF0C8E8C800CFBC5854095 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		4E10C43A6389AB957EE59EB2 /* snazzy-light.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "snazzy-light.json"; sourceTree = "<group>"; };
+		531C6E0D528DB5E283023813 /* sentry-dark.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "sentry-dark.json"; sourceTree = "<group>"; };
+		535C50F607154AF5F1CC676E /* slack-dark.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "slack-dark.json"; sourceTree = "<group>"; };
+		538B218497F75CC70CF33FC0 /* catppuccin-frappe.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "catppuccin-frappe.json"; sourceTree = "<group>"; };
+		57B60BAC19F63C0C6255CBCB /* proof-light.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "proof-light.json"; sourceTree = "<group>"; };
+		5C515EA047FDC5D67CD9EE50 /* github-dark-dimmed.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "github-dark-dimmed.json"; sourceTree = "<group>"; };
+		5E28B6BA5C905DCE11D19BAB /* ForgeCompanionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ForgeCompanionTests.swift; sourceTree = "<group>"; };
+		5E5E8C99FB3252A49E1CCA26 /* lobster-dark-dxSKfHK-.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "lobster-dark-dxSKfHK-.json"; sourceTree = "<group>"; };
+		614F684DCD7439CBE517781F /* laserwave.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = laserwave.json; sourceTree = "<group>"; };
+		6744ACE08894FD6E80A93E20 /* ForgeServerDiscovery.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ForgeServerDiscovery.swift; sourceTree = "<group>"; };
+		68B0BA20F081DEF3A8AB9E4D /* rose-pine-moon.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "rose-pine-moon.json"; sourceTree = "<group>"; };
+		747CC75D80A33FD1EE1816DD /* material-theme-lighter.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "material-theme-lighter.json"; sourceTree = "<group>"; };
+		74AAF176DB3A50947565C8DB /* night-owl.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "night-owl.json"; sourceTree = "<group>"; };
+		7722BB232F2591E783897FE5 /* pierre-light.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "pierre-light.json"; sourceTree = "<group>"; };
+		782821863879F77D3FE4AACF /* CompanionBackgroundScheduler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompanionBackgroundScheduler.swift; sourceTree = "<group>"; };
+		7B39A2584C9B905E4C668F99 /* houston.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = houston.json; sourceTree = "<group>"; };
+		7C755DB532CDC1D90A61F05B /* kanagawa-wave.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "kanagawa-wave.json"; sourceTree = "<group>"; };
+		81DCEAA8A6026E500E330F08 /* slack-ochin-CRg.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "slack-ochin-CRg.json"; sourceTree = "<group>"; };
+		8C4DBC75E583E793AFD211DA /* CompanionSetupFlow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompanionSetupFlow.swift; sourceTree = "<group>"; };
+		8D60D54BA88A829A976A748D /* KeychainStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainStore.swift; sourceTree = "<group>"; };
+		8EBE7B92A6304E555BCC1D6D /* material-theme-darker-D.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "material-theme-darker-D.json"; sourceTree = "<group>"; };
+		931C1688CBF05AF2C3B6080E /* solarized-light.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "solarized-light.json"; sourceTree = "<group>"; };
+		9444DBDF98D11B27B530480D /* ForgeCompanionUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ForgeCompanionUITests.swift; sourceTree = "<group>"; };
+		9BCF8A15494B22091C3454E0 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		9C75516EEA731CB6C306232D /* PairedForgeScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PairedForgeScreen.swift; sourceTree = "<group>"; };
+		9CCB4447E140D424F8B78668 /* gruvbox-light-soft.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "gruvbox-light-soft.json"; sourceTree = "<group>"; };
+		9D38C3D772905A5D933179CC /* absolutely-light.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "absolutely-light.json"; sourceTree = "<group>"; };
+		9D98EE56C9FB7CB850652DC0 /* gruvbox-dark-soft.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "gruvbox-dark-soft.json"; sourceTree = "<group>"; };
+		9DC04A62F879EC081DD9B1C2 /* light-plus.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "light-plus.json"; sourceTree = "<group>"; };
+		A37BD2A849CB3A3CB7CC1887 /* monokai.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = monokai.json; sourceTree = "<group>"; };
+		A54E8D248436BF9943B06E4B /* github-dark-high-contrast.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "github-dark-high-contrast.json"; sourceTree = "<group>"; };
+		A8C09BD2B766E68C8036C62F /* github-light-high-contrast.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "github-light-high-contrast.json"; sourceTree = "<group>"; };
+		ACEB1A921AA1A77453B0A927 /* ForgeCompanion.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = ForgeCompanion.entitlements; sourceTree = "<group>"; };
+		B1E98D87B79F7D59EB7BE050 /* SetupQRScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SetupQRScreen.swift; sourceTree = "<group>"; };
+		BAD9F69C52F56086F7ADEB43 /* min-dark-.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "min-dark-.json"; sourceTree = "<group>"; };
+		BC92CA266C72E6406B835FA3 /* gruvbox-dark-medium.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "gruvbox-dark-medium.json"; sourceTree = "<group>"; };
+		BF62B9557A1B4613CBF957E1 /* material-theme-palenight.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "material-theme-palenight.json"; sourceTree = "<group>"; };
+		BF8DF423EDFBC4326669D5CA /* gruvbox-light-hard.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "gruvbox-light-hard.json"; sourceTree = "<group>"; };
+		BFCC2081AE4F187A2146D07C /* catppuccin-mocha-Ry8aD-5u.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "catppuccin-mocha-Ry8aD-5u.json"; sourceTree = "<group>"; };
+		C1A9435D3CAA407E2081FE14 /* ForgeCompanion.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = ForgeCompanion.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		C3AED35B770DBA83276E12AA /* everforest-dark.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "everforest-dark.json"; sourceTree = "<group>"; };
+		CA102D16EEB2213C7AF8BD49 /* UnpairedHeroScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UnpairedHeroScreen.swift; sourceTree = "<group>"; };
+		CF000B2C502117967A5627CC /* kanagawa-dragon-VscOyZL-.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "kanagawa-dragon-VscOyZL-.json"; sourceTree = "<group>"; };
+		CFA45100E8F01A8700B0BAEA /* catppuccin-macchiato.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "catppuccin-macchiato.json"; sourceTree = "<group>"; };
+		D165D61953834BA4A9B5B7EA /* notion-light.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "notion-light.json"; sourceTree = "<group>"; };
+		D466EC844AFD47609DF52240 /* pierre-dark.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "pierre-dark.json"; sourceTree = "<group>"; };
+		D4B23F5DA1C0B066CBA6DE29 /* github-light-default.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "github-light-default.json"; sourceTree = "<group>"; };
+		D4FBC6718D5E1C6C8DFF3434 /* github-dark.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "github-dark.json"; sourceTree = "<group>"; };
+		D5A2A15C2DA637E11E0DB4F0 /* ayu-dark.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "ayu-dark.json"; sourceTree = "<group>"; };
+		D7FC387296843249FB11B85F /* MovementSyncStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MovementSyncStore.swift; sourceTree = "<group>"; };
+		DA3E9377FB559DF9D96F0B66 /* DebugLog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DebugLog.swift; sourceTree = "<group>"; };
+		DDCF2EB020AF5BFDA667438D /* rose-pine-dawn.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "rose-pine-dawn.json"; sourceTree = "<group>"; };
+		DFCF38F8FCB2A92AE73956DE /* ForgeWebView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ForgeWebView.swift; sourceTree = "<group>"; };
+		E0C60F828383583C5869A72C /* ForgeCompanionApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ForgeCompanionApp.swift; sourceTree = "<group>"; };
+		E2B54234F4A43D98698E8FE5 /* CompanionMenuSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompanionMenuSheet.swift; sourceTree = "<group>"; };
+		E3B76E08C65327CC53268C13 /* linear-light.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "linear-light.json"; sourceTree = "<group>"; };
+		E4BB895B44CA6A00E73F33E3 /* SetupHealthScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SetupHealthScreen.swift; sourceTree = "<group>"; };
+		E6071ED7AED22914F8C84892 /* oscurange-C.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "oscurange-C.json"; sourceTree = "<group>"; };
+		E8407EED652D1D871F0F8FE2 /* SetupManualScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SetupManualScreen.swift; sourceTree = "<group>"; };
+		EBD0158F009FFC7E8131E3CC /* kanagawa-lotus.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "kanagawa-lotus.json"; sourceTree = "<group>"; };
+		ECF5C2385C6DE828B455D6F9 /* vesper.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = vesper.json; sourceTree = "<group>"; };
+		ECFCB9E9747A398BB683D03A /* everforest-light.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "everforest-light.json"; sourceTree = "<group>"; };
+		F39EA07C16BAEB142D3A16AC /* dark-plus-B1yOZ-Hy.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "dark-plus-B1yOZ-Hy.json"; sourceTree = "<group>"; };
+		F6709AA3A25DACA04C92A857 /* one-light.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "one-light.json"; sourceTree = "<group>"; };
+		F69B66D6F7F82EB52A3919E8 /* CompanionAppRoot.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompanionAppRoot.swift; sourceTree = "<group>"; };
+		F6B88D3C0ABB7A376D9C5D72 /* vitesse-dark.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "vitesse-dark.json"; sourceTree = "<group>"; };
+		FA1B604B998B86390064CF35 /* temple-dark.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "temple-dark.json"; sourceTree = "<group>"; };
+		FAECD142BA900902838D1ED9 /* vitesse-black.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "vitesse-black.json"; sourceTree = "<group>"; };
+		FDA8323EC0C4C2A1C8CF27C8 /* dracula.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = dracula.json; sourceTree = "<group>"; };
+		FE9C87EF5FB8A7DB2C32DD1C /* gruvbox-dark-hard.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "gruvbox-dark-hard.json"; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXGroup section */
+		203CB8C202E2975AE264ADCD /* ForgeCompanionUITests */ = {
+			isa = PBXGroup;
+			children = (
+				9444DBDF98D11B27B530480D /* ForgeCompanionUITests.swift */,
+				204ACBF3D7D072C8FF7B03EE /* ForgeCompanionUITestsLaunchTests.swift */,
+			);
+			path = ForgeCompanionUITests;
+			sourceTree = "<group>";
+		};
+		2EC5B307B0F081E32DA4D076 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				C1A9435D3CAA407E2081FE14 /* ForgeCompanion.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		5166D7C9B1D84CC20D21DCCF /* ForgeCompanion */ = {
+			isa = PBXGroup;
+			children = (
+				9BCF8A15494B22091C3454E0 /* Assets.xcassets */,
+				02F562FCE196BF8DFF433C4D /* CompanionAppModel.swift */,
+				F69B66D6F7F82EB52A3919E8 /* CompanionAppRoot.swift */,
+				782821863879F77D3FE4AACF /* CompanionBackgroundScheduler.swift */,
+				E2B54234F4A43D98698E8FE5 /* CompanionMenuSheet.swift */,
+				8C4DBC75E583E793AFD211DA /* CompanionSetupFlow.swift */,
+				36F5DD9FF11BDCC355FA72F2 /* CompanionStyle.swift */,
+				12FA6272CC36ACFD7A30796C /* ContentView.swift */,
+				DA3E9377FB559DF9D96F0B66 /* DebugLog.swift */,
+				ACEB1A921AA1A77453B0A927 /* ForgeCompanion.entitlements */,
+				E0C60F828383583C5869A72C /* ForgeCompanionApp.swift */,
+				6744ACE08894FD6E80A93E20 /* ForgeServerDiscovery.swift */,
+				3C82396DEF68744B2F29AC3E /* ForgeSyncClient.swift */,
+				DFCF38F8FCB2A92AE73956DE /* ForgeWebView.swift */,
+				14B9DCF4EDFA56DC1C9C34E5 /* HealthSyncStore.swift */,
+				8D60D54BA88A829A976A748D /* KeychainStore.swift */,
+				380A6F99669127337E7F423D /* Models.swift */,
+				08EBD4D7617D074D802191F9 /* MovementSettingsSheet.swift */,
+				D7FC387296843249FB11B85F /* MovementSyncStore.swift */,
+				9C75516EEA731CB6C306232D /* PairedForgeScreen.swift */,
+				1DA35ED2DAA820FB81C14F6F /* QRPairingScanner.swift */,
+				30619511D8D70CF1FCF54F2D /* QRScannerView.swift */,
+				02747A05B1BAE9D2DD5482AC /* SetupDiscoveryScreen.swift */,
+				E4BB895B44CA6A00E73F33E3 /* SetupHealthScreen.swift */,
+				E8407EED652D1D871F0F8FE2 /* SetupManualScreen.swift */,
+				B1E98D87B79F7D59EB7BE050 /* SetupQRScreen.swift */,
+				CA102D16EEB2213C7AF8BD49 /* UnpairedHeroScreen.swift */,
+				638AA970DB27EABAD7D99A00 /* Resources */,
+			);
+			path = ForgeCompanion;
+			sourceTree = "<group>";
+		};
+		603E0416E006CBDCF388E41B /* Themes */ = {
+			isa = PBXGroup;
+			children = (
+				42E438ADEB52E141BCC97A8A /* absolutely-dark.json */,
+				9D38C3D772905A5D933179CC /* absolutely-light.json */,
+				D5A2A15C2DA637E11E0DB4F0 /* ayu-dark.json */,
+				538B218497F75CC70CF33FC0 /* catppuccin-frappe.json */,
+				11EA3517B34D36E74E130986 /* catppuccin-latte-Bd1wq-gC.json */,
+				CFA45100E8F01A8700B0BAEA /* catppuccin-macchiato.json */,
+				BFCC2081AE4F187A2146D07C /* catppuccin-mocha-Ry8aD-5u.json */,
+				0A309FBB37A5CEC49FF9D63D /* codex-dark.json */,
+				0CF13A076E55AB584242A8E0 /* codex-light.json */,
+				F39EA07C16BAEB142D3A16AC /* dark-plus-B1yOZ-Hy.json */,
+				035C132374C9D43B33A66C2A /* dracula-soft.json */,
+				FDA8323EC0C4C2A1C8CF27C8 /* dracula.json */,
+				C3AED35B770DBA83276E12AA /* everforest-dark.json */,
+				ECFCB9E9747A398BB683D03A /* everforest-light.json */,
+				2D5D444EBD2928C4200EFFB3 /* github-dark-default.json */,
+				5C515EA047FDC5D67CD9EE50 /* github-dark-dimmed.json */,
+				A54E8D248436BF9943B06E4B /* github-dark-high-contrast.json */,
+				D4FBC6718D5E1C6C8DFF3434 /* github-dark.json */,
+				D4B23F5DA1C0B066CBA6DE29 /* github-light-default.json */,
+				A8C09BD2B766E68C8036C62F /* github-light-high-contrast.json */,
+				00069E942662D0F7ADD560B8 /* github-light.json */,
+				FE9C87EF5FB8A7DB2C32DD1C /* gruvbox-dark-hard.json */,
+				BC92CA266C72E6406B835FA3 /* gruvbox-dark-medium.json */,
+				9D98EE56C9FB7CB850652DC0 /* gruvbox-dark-soft.json */,
+				BF8DF423EDFBC4326669D5CA /* gruvbox-light-hard.json */,
+				09996B4E7C1A6E7712E6E849 /* gruvbox-light-medium.json */,
+				9CCB4447E140D424F8B78668 /* gruvbox-light-soft.json */,
+				7B39A2584C9B905E4C668F99 /* houston.json */,
+				CF000B2C502117967A5627CC /* kanagawa-dragon-VscOyZL-.json */,
+				EBD0158F009FFC7E8131E3CC /* kanagawa-lotus.json */,
+				7C755DB532CDC1D90A61F05B /* kanagawa-wave.json */,
+				614F684DCD7439CBE517781F /* laserwave.json */,
+				9DC04A62F879EC081DD9B1C2 /* light-plus.json */,
+				2CC7F3FBDB3AB6F1E9907640 /* linear-dark.json */,
+				E3B76E08C65327CC53268C13 /* linear-light.json */,
+				5E5E8C99FB3252A49E1CCA26 /* lobster-dark-dxSKfHK-.json */,
+				8EBE7B92A6304E555BCC1D6D /* material-theme-darker-D.json */,
+				747CC75D80A33FD1EE1816DD /* material-theme-lighter.json */,
+				0C74271E103D074375185B33 /* material-theme-ocean.json */,
+				BF62B9557A1B4613CBF957E1 /* material-theme-palenight.json */,
+				386D634BBCBEDCACF819E1C7 /* material-theme.json */,
+				1005A9DDD08CA115B98915CD /* matrix-dark.json */,
+				BAD9F69C52F56086F7ADEB43 /* min-dark-.json */,
+				264AFBEA5F101E41F8398200 /* min-light.json */,
+				A37BD2A849CB3A3CB7CC1887 /* monokai.json */,
+				74AAF176DB3A50947565C8DB /* night-owl.json */,
+				4BD036F2034D09CD3C43723B /* nord.json */,
+				2E85C7B6AEB2CFF03D21995D /* notion-dark-BTRKJ-yg.json */,
+				D165D61953834BA4A9B5B7EA /* notion-light.json */,
+				2B5416684CF5E8A56282B072 /* one-dark-pro-D.json */,
+				F6709AA3A25DACA04C92A857 /* one-light.json */,
+				E6071ED7AED22914F8C84892 /* oscurange-C.json */,
+				D466EC844AFD47609DF52240 /* pierre-dark.json */,
+				7722BB232F2591E783897FE5 /* pierre-light.json */,
+				3076CB7081D75DAC68B4680B /* poimandres.json */,
+				57B60BAC19F63C0C6255CBCB /* proof-light.json */,
+				DDCF2EB020AF5BFDA667438D /* rose-pine-dawn.json */,
+				68B0BA20F081DEF3A8AB9E4D /* rose-pine-moon.json */,
+				1EF14A6D60A832B1F35F02E0 /* rose-pine-x.json */,
+				531C6E0D528DB5E283023813 /* sentry-dark.json */,
+				535C50F607154AF5F1CC676E /* slack-dark.json */,
+				81DCEAA8A6026E500E330F08 /* slack-ochin-CRg.json */,
+				4E10C43A6389AB957EE59EB2 /* snazzy-light.json */,
+				1FB0EFB4E598D990B93161A0 /* solarized-dark.json */,
+				931C1688CBF05AF2C3B6080E /* solarized-light.json */,
+				FA1B604B998B86390064CF35 /* temple-dark.json */,
+				0D8459E84A99927586568C85 /* theme-manifest.json */,
+				4ADDDB7BAE6271CB4FA1772C /* tokyo-night.json */,
+				ECF5C2385C6DE828B455D6F9 /* vesper.json */,
+				FAECD142BA900902838D1ED9 /* vitesse-black.json */,
+				F6B88D3C0ABB7A376D9C5D72 /* vitesse-dark.json */,
+				3B059A1A692CD7F846C930B4 /* vitesse-light.json */,
+			);
+			path = Themes;
+			sourceTree = "<group>";
+		};
+		638AA970DB27EABAD7D99A00 /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				603E0416E006CBDCF388E41B /* Themes */,
+			);
+			path = Resources;
+			sourceTree = "<group>";
+		};
+		6731BAF5E5A28D30558D535E /* ForgeCompanion */ = {
+			isa = PBXGroup;
+			children = (
+				4D7C7FE6C7255061B47B1B26 /* ForgeCompanion.xcodeproj */,
+				4DAF0C8E8C800CFBC5854095 /* Info.plist */,
+				5166D7C9B1D84CC20D21DCCF /* ForgeCompanion */,
+				F8DDC28AF82E078C4DFB7D7C /* ForgeCompanionTests */,
+				203CB8C202E2975AE264ADCD /* ForgeCompanionUITests */,
+			);
+			path = ForgeCompanion;
+			sourceTree = "<group>";
+		};
+		DEADB038720040B65D496C71 = {
+			isa = PBXGroup;
+			children = (
+				6731BAF5E5A28D30558D535E /* ForgeCompanion */,
+				2EC5B307B0F081E32DA4D076 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		F8DDC28AF82E078C4DFB7D7C /* ForgeCompanionTests */ = {
+			isa = PBXGroup;
+			children = (
+				5E28B6BA5C905DCE11D19BAB /* ForgeCompanionTests.swift */,
+			);
+			path = ForgeCompanionTests;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		A3D7B3F69A15FB337E820D99 /* ForgeCompanion */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 4B6A8665FA9D46B6EF70435A /* Build configuration list for PBXNativeTarget "ForgeCompanion" */;
+			buildPhases = (
+				8A44D08DB737DE4FD062D54F /* Sources */,
+				CCF67C05D25DFD6505CD9782 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = ForgeCompanion;
+			packageProductDependencies = (
+			);
+			productName = ForgeCompanion;
+			productReference = C1A9435D3CAA407E2081FE14 /* ForgeCompanion.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		4F8558956D3C63F60D8E5542 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 1430;
+				TargetAttributes = {
+					A3D7B3F69A15FB337E820D99 = {
+						ProvisioningStyle = Automatic;
+					};
+				};
+			};
+			buildConfigurationList = 5AC7C94E2C67EB2A0C397B50 /* Build configuration list for PBXProject "ForgeCompanion" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				en,
+			);
+			mainGroup = DEADB038720040B65D496C71;
+			minimizedProjectReferenceProxies = 1;
+			preferredProjectObjectVersion = 77;
+			productRefGroup = 2EC5B307B0F081E32DA4D076 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				A3D7B3F69A15FB337E820D99 /* ForgeCompanion */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		CCF67C05D25DFD6505CD9782 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				05617CAB71D3D6509C731200 /* Assets.xcassets in Resources */,
+				733CCED4CA1EF86A260E85F8 /* ForgeCompanion.xcodeproj in Resources */,
+				1392E1D7D281F3CCF8AB7D5F /* absolutely-dark.json in Resources */,
+				6BDD64791A29483720621099 /* absolutely-light.json in Resources */,
+				ABE4CF57EFBDF59FAF99F8D2 /* ayu-dark.json in Resources */,
+				64471274341CD18D0172EDEA /* catppuccin-frappe.json in Resources */,
+				ECD043E0D14E9E4AB3B49F49 /* catppuccin-latte-Bd1wq-gC.json in Resources */,
+				625930CFFCC857D3E9DC7D95 /* catppuccin-macchiato.json in Resources */,
+				C0DFB72DB00CBB425186E62C /* catppuccin-mocha-Ry8aD-5u.json in Resources */,
+				6B3F684077319404E5B1E35C /* codex-dark.json in Resources */,
+				3FE0D1122718BDDF3B018740 /* codex-light.json in Resources */,
+				3B2906B447256EB6E67544C0 /* dark-plus-B1yOZ-Hy.json in Resources */,
+				03AFAA4817ED63ACA34F81ED /* dracula-soft.json in Resources */,
+				8D57AED7B8A3C5018050486A /* dracula.json in Resources */,
+				2BEF8CEAAE58F3C877EDF476 /* everforest-dark.json in Resources */,
+				27DBD85ECF86A87CE8D3343A /* everforest-light.json in Resources */,
+				36FA7B26FC1BB408FE557252 /* github-dark-default.json in Resources */,
+				B81D7C2C81DFC719EF398AD3 /* github-dark-dimmed.json in Resources */,
+				A80D2B859439B0825E66E022 /* github-dark-high-contrast.json in Resources */,
+				5726E121DD13E4296152ABB1 /* github-dark.json in Resources */,
+				3913802EFB56937605A54F17 /* github-light-default.json in Resources */,
+				10D32EA5151CCCA0D930309A /* github-light-high-contrast.json in Resources */,
+				5F27B32CC4CAAEF02511D2A9 /* github-light.json in Resources */,
+				D30E0C78A192CED8023D800A /* gruvbox-dark-hard.json in Resources */,
+				C96EFA56873BDC26889347CC /* gruvbox-dark-medium.json in Resources */,
+				BE486F24A130A943D3FE9027 /* gruvbox-dark-soft.json in Resources */,
+				BFAFDC9F95066281EEBE2684 /* gruvbox-light-hard.json in Resources */,
+				2B7E9F875C6C434F12CC72DB /* gruvbox-light-medium.json in Resources */,
+				6852C3BD60F38A5302A9C635 /* gruvbox-light-soft.json in Resources */,
+				E41D1D4C96979669855BA3FD /* houston.json in Resources */,
+				77EBA97A7E23D94B18F47FD3 /* kanagawa-dragon-VscOyZL-.json in Resources */,
+				DF8BB02CBD011B2791C2230B /* kanagawa-lotus.json in Resources */,
+				6BC488528D2F2DC091AFA119 /* kanagawa-wave.json in Resources */,
+				1E1BFFC7B198319E86FE36C2 /* laserwave.json in Resources */,
+				412134A75337D5B891B558C1 /* light-plus.json in Resources */,
+				4240F983DFEC69AF10D721E2 /* linear-dark.json in Resources */,
+				308C360498BEDB2AEE99FAA6 /* linear-light.json in Resources */,
+				FD1D7EF37F9DFD15336D6B16 /* lobster-dark-dxSKfHK-.json in Resources */,
+				6F47281004EBEE4EB7B4819A /* material-theme-darker-D.json in Resources */,
+				BF197596092DC5DC1F267097 /* material-theme-lighter.json in Resources */,
+				6372299254B19EE0A0A44C29 /* material-theme-ocean.json in Resources */,
+				7528B50367ED8CABF0EC748D /* material-theme-palenight.json in Resources */,
+				91596CB430E9320345547B49 /* material-theme.json in Resources */,
+				0445303A7608423CB02C8C4D /* matrix-dark.json in Resources */,
+				9D8A53F33998634B81EDD539 /* min-dark-.json in Resources */,
+				7199D595C418DCCA3D6B676F /* min-light.json in Resources */,
+				4E143E559E22EEF79E6624E6 /* monokai.json in Resources */,
+				9443AA4637A7D89D920930C3 /* night-owl.json in Resources */,
+				5AFDD566E1D37AAC507EA148 /* nord.json in Resources */,
+				E656D85B73AF061F8BD9A495 /* notion-dark-BTRKJ-yg.json in Resources */,
+				58DE7C8E7E0F1A8C56F586D7 /* notion-light.json in Resources */,
+				508CE5AA70E5B40A2F8245D4 /* one-dark-pro-D.json in Resources */,
+				BD876E60BE14F6A797C84400 /* one-light.json in Resources */,
+				51C1AE90A6D56C9DBC31ECAC /* oscurange-C.json in Resources */,
+				ED7C20FBE80C021E993B0E04 /* pierre-dark.json in Resources */,
+				98D12E711818537ED8008792 /* pierre-light.json in Resources */,
+				4F5D3B8E4938A9EC7DB00701 /* poimandres.json in Resources */,
+				C319150C5478E648D4176E66 /* proof-light.json in Resources */,
+				A343517C7661513250C6D4EC /* rose-pine-dawn.json in Resources */,
+				9CA792CE74889A54A7706FCD /* rose-pine-moon.json in Resources */,
+				62F81192C64A3E631D4991E8 /* rose-pine-x.json in Resources */,
+				03E97C443B503F4B425BA477 /* sentry-dark.json in Resources */,
+				9EB9D620252C9FFA37283BDE /* slack-dark.json in Resources */,
+				491FF3A7EE4B40907C7B4228 /* slack-ochin-CRg.json in Resources */,
+				7E18F587204FB088B42A9258 /* snazzy-light.json in Resources */,
+				DCF024831CB9AF1AAA1163DA /* solarized-dark.json in Resources */,
+				0227317AAEFF79CB045458C5 /* solarized-light.json in Resources */,
+				C90E12FA8ECDFF7214CC508F /* temple-dark.json in Resources */,
+				13773DF313E902316539F5B0 /* theme-manifest.json in Resources */,
+				3D67F5A790D4A39FE0233EB5 /* tokyo-night.json in Resources */,
+				7C43F27B0637CA6DC1ED36D0 /* vesper.json in Resources */,
+				71CDF1994B6A1BE00A59739D /* vitesse-black.json in Resources */,
+				8D5526E749C17258C46ADAE3 /* vitesse-dark.json in Resources */,
+				3D090A820B1A741DF7BC9E15 /* vitesse-light.json in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		8A44D08DB737DE4FD062D54F /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				93E26877DE032468BBC1083F /* CompanionAppModel.swift in Sources */,
+				D97740F51A55BD2C209152EA /* CompanionAppRoot.swift in Sources */,
+				8BE7264A99DC00BA6E213A31 /* CompanionBackgroundScheduler.swift in Sources */,
+				E8B52695891EA26FECAE8A14 /* CompanionMenuSheet.swift in Sources */,
+				26ED65ECF8BF191035801EDB /* CompanionSetupFlow.swift in Sources */,
+				C7BA24AFF59FA87F87208B89 /* CompanionStyle.swift in Sources */,
+				933F55BB4A50DDD5E5D3C6B7 /* ContentView.swift in Sources */,
+				C8C5E1C364A356DC76EE29AE /* DebugLog.swift in Sources */,
+				3EC08C2374225916A24444C7 /* ForgeCompanionApp.swift in Sources */,
+				1715A52F0B312250703E4AB4 /* ForgeCompanionTests.swift in Sources */,
+				6C3483FD5BE4A4E7807933B3 /* ForgeCompanionUITests.swift in Sources */,
+				4761750AE82C1B0E9B4E2A29 /* ForgeCompanionUITestsLaunchTests.swift in Sources */,
+				1302906E6C5B857FFBDA0622 /* ForgeServerDiscovery.swift in Sources */,
+				3D87665C914A74E205FD8B67 /* ForgeSyncClient.swift in Sources */,
+				E096F9786A99E795443E7B37 /* ForgeWebView.swift in Sources */,
+				933D75EFBAE8E5A5A1A1B2FE /* HealthSyncStore.swift in Sources */,
+				2F9693D994D28E1845C0C8BD /* KeychainStore.swift in Sources */,
+				3541414071DB333835804DD0 /* Models.swift in Sources */,
+				1404D750C54C26D9A18F7CA9 /* MovementSettingsSheet.swift in Sources */,
+				E571A37B09D04331EA6E41E4 /* MovementSyncStore.swift in Sources */,
+				6A15F3CD51D519FEDA55DFA1 /* PairedForgeScreen.swift in Sources */,
+				568A0248DFBE6E8262408EA8 /* QRPairingScanner.swift in Sources */,
+				C58DDA0831D060D30080083B /* QRScannerView.swift in Sources */,
+				9B04372A972BC8B9216912F6 /* SetupDiscoveryScreen.swift in Sources */,
+				B2AE7F49D418F0085F721591 /* SetupHealthScreen.swift in Sources */,
+				5226986F2DC8B80FBC76045B /* SetupManualScreen.swift in Sources */,
+				0DBA8E9802E4573EBDD196F2 /* SetupQRScreen.swift in Sources */,
+				E75A1D098B581E024AD5C477 /* UnpairedHeroScreen.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		2877BA24F6AEA51F7CB2920F /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+		69A19A3B9611C926DD08C0CB /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = ForgeCompanion/ForgeCompanion/ForgeCompanion.entitlements;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CODE_SIGN_STYLE = Automatic;
+				INFOPLIST_FILE = ForgeCompanion/Info.plist;
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = (
+					UIInterfaceOrientationPortrait,
+				);
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.aurel.forgecompanion;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		A2632B19B9211EC8652E0D65 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = ForgeCompanion/ForgeCompanion/ForgeCompanion.entitlements;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CODE_SIGN_STYLE = Automatic;
+				INFOPLIST_FILE = ForgeCompanion/Info.plist;
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = (
+					UIInterfaceOrientationPortrait,
+				);
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.aurel.forgecompanion;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		E00C9304447EA1CC9D981AB6 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		4B6A8665FA9D46B6EF70435A /* Build configuration list for PBXNativeTarget "ForgeCompanion" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A2632B19B9211EC8652E0D65 /* Debug */,
+				69A19A3B9611C926DD08C0CB /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		5AC7C94E2C67EB2A0C397B50 /* Build configuration list for PBXProject "ForgeCompanion" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				E00C9304447EA1CC9D981AB6 /* Debug */,
+				2877BA24F6AEA51F7CB2920F /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = 4F8558956D3C63F60D8E5542 /* Project object */;
+}

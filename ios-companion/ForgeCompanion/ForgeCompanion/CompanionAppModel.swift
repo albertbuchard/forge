@@ -166,14 +166,21 @@ final class CompanionAppModel: ObservableObject {
     }
 
     let healthStore = HealthSyncStore()
+    let movementStore = MovementSyncStore()
     let syncClient = ForgeSyncClient()
+    let watchSessionManager: WatchSessionManager
     let qrScanner = QRPairingScanner()
     let backgroundScheduler = CompanionBackgroundScheduler()
     let discoveryService = ForgeServerDiscovery()
     private let keychain = KeychainStore(service: "com.aurel.forgecompanion")
 
     init() {
+        watchSessionManager = WatchSessionManager(syncClient: syncClient)
         companionDebugLog("CompanionAppModel", "init start")
+        watchSessionManager.configure { [weak self] in
+            self?.pairing
+        }
+        watchSessionManager.activate()
         restorePairing()
         restoreCachedState()
         backgroundScheduler.register { [weak self] in
@@ -188,7 +195,9 @@ final class CompanionAppModel: ObservableObject {
         Task {
             companionDebugLog("CompanionAppModel", "startup task begin")
             await attemptLocalSimulatorBootstrapIfNeeded()
+            await refreshMovementBootstrap()
             await refreshHealthAccessStatus()
+            await refreshWatchBootstrap(reason: "startup")
             refreshSyncState()
             await attemptAutomaticSimulatorSyncIfPossible()
             companionDebugLog("CompanionAppModel", "startup task complete")
@@ -228,7 +237,9 @@ final class CompanionAppModel: ObservableObject {
             "verifyAndConnect verifyPairing success session=\(normalizedPayload.sessionId)"
         )
         completeConnection(with: normalizedPayload, message: "Connected to Forge")
+        await refreshMovementBootstrap()
         await refreshHealthAccessStatus()
+        await refreshWatchBootstrap(reason: "pairing")
         refreshSyncState()
         companionDebugLog("CompanionAppModel", "verifyAndConnect complete")
     }
@@ -245,6 +256,9 @@ final class CompanionAppModel: ObservableObject {
         healthPermissionPromptDeferred = false
         keychain.delete(forKey: StorageKeys.pairingPayload)
         UserDefaults.standard.removeObject(forKey: StorageKeys.deferredHealthPrompt)
+        Task {
+            await refreshWatchBootstrap(reason: "disconnect")
+        }
         companionDebugLog("CompanionAppModel", "disconnect complete")
     }
 
@@ -273,6 +287,11 @@ final class CompanionAppModel: ObservableObject {
             latestError = error.localizedDescription
             syncState = .error
         }
+    }
+
+    func requestMovementPermissions() {
+        companionDebugLog("CompanionAppModel", "requestMovementPermissions")
+        movementStore.requestLocationAuthorization()
     }
 
     func runManualSync() async {
@@ -566,29 +585,36 @@ final class CompanionAppModel: ObservableObject {
         guard let pairing else { return false }
         syncState = .syncing
         do {
+            let movementPayload = movementStore.buildMovementPayload()
             let payload = try await healthStore.buildSyncPayload(
                 pairing: pairing,
                 healthKitAuthorized: healthAuthorizationGranted,
-                lastSuccessfulSyncAt: lastSuccessfulSyncAt
+                lastSuccessfulSyncAt: lastSuccessfulSyncAt,
+                movementPayload: movementPayload
             )
             let receipt = try await syncClient.pushHealthSync(
                 payload: payload,
                 apiBaseUrl: pairing.apiBaseUrl
             )
+            movementStore.mergeBootstrap(receipt.movement)
             let report = SyncReport(
                 syncedAt: Date.now,
                 sleepSessions: receipt.imported.sleepSessions,
                 workouts: receipt.imported.workouts,
                 createdCount: receipt.imported.createdCount,
                 updatedCount: receipt.imported.updatedCount,
-                mergedCount: receipt.imported.mergedCount
+                mergedCount: receipt.imported.mergedCount,
+                movementStays: receipt.imported.movementStays ?? 0,
+                movementTrips: receipt.imported.movementTrips ?? 0,
+                movementKnownPlaces: receipt.imported.movementKnownPlaces ?? 0
             )
             latestSyncReport = report
             persistSyncState(report: report)
             lastSyncMessage =
-                "Synced \(receipt.imported.sleepSessions) sleep and \(receipt.imported.workouts) workouts via \(trigger)"
+                "Synced \(receipt.imported.sleepSessions) sleep, \(receipt.imported.workouts) workouts, and \(receipt.imported.movementTrips ?? 0) trips via \(trigger)"
             latestError = nil
             await refreshHealthAccessStatus()
+            await refreshWatchBootstrap(reason: trigger)
             refreshSyncState()
             backgroundScheduler.schedule()
             companionDebugLog(
@@ -604,6 +630,20 @@ final class CompanionAppModel: ObservableObject {
             latestError = error.localizedDescription
             syncState = .error
             return false
+        }
+    }
+
+    private func refreshMovementBootstrap() async {
+        guard let pairing else { return }
+        do {
+            let movement = try await syncClient.fetchMovementBootstrap(payload: pairing)
+            movementStore.mergeBootstrap(movement)
+            await refreshWatchBootstrap(reason: "movement refresh")
+        } catch {
+            companionDebugLog(
+                "CompanionAppModel",
+                "refreshMovementBootstrap failed error=\(error.localizedDescription)"
+            )
         }
     }
 
@@ -648,6 +688,16 @@ final class CompanionAppModel: ObservableObject {
         case .notSet:
             return "HealthKit not set"
         }
+    }
+
+    var movementAccessLabel: String {
+        if movementStore.trackingEnabled == false {
+            return "Movement tracking off"
+        }
+        return movementStore.locationPermissionStatus.replacingOccurrences(
+            of: "_",
+            with: " "
+        )
     }
 
     var syncStateLabel: String {
@@ -696,7 +746,15 @@ final class CompanionAppModel: ObservableObject {
         guard let report = latestSyncReport else {
             return "No sync yet"
         }
-        return "\(report.sleepSessions) sleep, \(report.workouts) workouts"
+        return "\(report.sleepSessions) sleep, \(report.workouts) workouts, \(report.movementTrips) trips"
+    }
+
+    var watchSyncLabel: String {
+        watchSessionManager.lastStatusMessage
+    }
+
+    private func refreshWatchBootstrap(reason: String) async {
+        await watchSessionManager.refreshBootstrapIfPossible(reason: reason)
     }
 }
 
@@ -707,6 +765,21 @@ private struct PersistedSyncReport: Codable {
     let createdCount: Int
     let updatedCount: Int
     let mergedCount: Int
+    let movementStays: Int
+    let movementTrips: Int
+    let movementKnownPlaces: Int
+
+    private enum CodingKeys: String, CodingKey {
+        case syncedAt
+        case sleepSessions
+        case workouts
+        case createdCount
+        case updatedCount
+        case mergedCount
+        case movementStays
+        case movementTrips
+        case movementKnownPlaces
+    }
 
     init(report: SyncReport) {
         syncedAt = report.syncedAt
@@ -715,6 +788,22 @@ private struct PersistedSyncReport: Codable {
         createdCount = report.createdCount
         updatedCount = report.updatedCount
         mergedCount = report.mergedCount
+        movementStays = report.movementStays
+        movementTrips = report.movementTrips
+        movementKnownPlaces = report.movementKnownPlaces
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        syncedAt = try container.decode(Date.self, forKey: .syncedAt)
+        sleepSessions = try container.decode(Int.self, forKey: .sleepSessions)
+        workouts = try container.decode(Int.self, forKey: .workouts)
+        createdCount = try container.decode(Int.self, forKey: .createdCount)
+        updatedCount = try container.decode(Int.self, forKey: .updatedCount)
+        mergedCount = try container.decode(Int.self, forKey: .mergedCount)
+        movementStays = try container.decodeIfPresent(Int.self, forKey: .movementStays) ?? 0
+        movementTrips = try container.decodeIfPresent(Int.self, forKey: .movementTrips) ?? 0
+        movementKnownPlaces = try container.decodeIfPresent(Int.self, forKey: .movementKnownPlaces) ?? 0
     }
 
     var asSyncReport: SyncReport {
@@ -724,7 +813,10 @@ private struct PersistedSyncReport: Codable {
             workouts: workouts,
             createdCount: createdCount,
             updatedCount: updatedCount,
-            mergedCount: mergedCount
+            mergedCount: mergedCount,
+            movementStays: movementStays,
+            movementTrips: movementTrips,
+            movementKnownPlaces: movementKnownPlaces
         )
     }
 }

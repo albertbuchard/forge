@@ -57,6 +57,14 @@ const optionalNullableString = () =>
   Type.Optional(Type.Union([Type.String(), Type.Null()]));
 const optionalDeleteMode = () =>
   Type.Optional(Type.Union([Type.Literal("soft"), Type.Literal("hard")]));
+const optionalBoolean = () => Type.Optional(Type.Boolean());
+const optionalInteger = (minimum?: number, maximum?: number) =>
+  Type.Optional(
+    Type.Integer({
+      ...(typeof minimum === "number" ? { minimum } : {}),
+      ...(typeof maximum === "number" ? { maximum } : {})
+    })
+  );
 const healthLinkInputSchema = () =>
   Type.Object({
     entityType: Type.String({ minLength: 1 }),
@@ -658,6 +666,353 @@ export function registerForgePluginTools(
     }
   });
 
+  registerReadTool(api, config, {
+    name: "forge_get_preferences_workspace",
+    label: "Forge Preferences Workspace",
+    description:
+      "Read Forge's current preference model for one user and domain, including the summary-first landing view, next comparison pair, concept libraries, map, table, and history.",
+    parameters: Type.Object({
+      userId: optionalString(),
+      domain: optionalString(),
+      contextId: optionalString()
+    }),
+    path: (params) =>
+      withQueryParams("/api/v1/preferences/workspace", params, [
+        "userId",
+        "domain",
+        "contextId"
+      ])
+  });
+
+  registerWriteTool(api, config, {
+    name: "forge_start_preferences_game",
+    label: "Forge Start Preferences Game",
+    description:
+      "Start the Forge comparison game for one preference domain or context and return the next pair of items to compare.",
+    parameters: Type.Object({
+      userId: Type.String({ minLength: 1 }),
+      domain: Type.String({ minLength: 1 }),
+      contextId: optionalString()
+    }),
+    method: "POST",
+    path: "/api/v1/preferences/game/start"
+  });
+
+  registerWriteTool(api, config, {
+    name: "forge_merge_preferences_contexts",
+    label: "Forge Merge Preferences Contexts",
+    description:
+      "Merge one or more preference contexts into a target context.",
+    parameters: Type.Object({
+      targetContextId: Type.String({ minLength: 1 }),
+      sourceContextIds: Type.Array(Type.String({ minLength: 1 }))
+    }),
+    method: "POST",
+    path: "/api/v1/preferences/contexts/merge"
+  });
+
+  registerWriteTool(api, config, {
+    name: "forge_enqueue_preferences_item_from_entity",
+    label: "Forge Enqueue Preferences Item From Entity",
+    description:
+      "Queue an existing Forge entity into a preference domain so it can appear in the comparison game.",
+    parameters: Type.Object({
+      userId: Type.String({ minLength: 1 }),
+      domain: Type.String({ minLength: 1 }),
+      entityType: Type.String({ minLength: 1 }),
+      entityId: Type.String({ minLength: 1 })
+    }),
+    method: "POST",
+    path: "/api/v1/preferences/items/from-entity"
+  });
+
+  registerWriteTool(api, config, {
+    name: "forge_submit_preferences_judgment",
+    label: "Forge Submit Preferences Judgment",
+    description:
+      "Record one pairwise preference outcome such as left, right, tie, or skip.",
+    parameters: Type.Object({
+      profileId: Type.String({ minLength: 1 }),
+      contextId: Type.String({ minLength: 1 }),
+      userId: Type.String({ minLength: 1 }),
+      leftItemId: Type.String({ minLength: 1 }),
+      rightItemId: Type.String({ minLength: 1 }),
+      outcome: Type.String({ minLength: 1 }),
+      strength: Type.Optional(Type.Number({ minimum: 0.5, maximum: 2 })),
+      responseTimeMs: Type.Optional(
+        Type.Union([Type.Integer({ minimum: 0 }), Type.Null()])
+      ),
+      source: optionalString(),
+      reasonTags: Type.Optional(Type.Array(Type.String()))
+    }),
+    method: "POST",
+    path: "/api/v1/preferences/judgments"
+  });
+
+  registerWriteTool(api, config, {
+    name: "forge_submit_preferences_signal",
+    label: "Forge Submit Preferences Signal",
+    description:
+      "Record a direct non-pairwise preference signal such as favorite, veto, must-have, bookmark, neutral, or compare-later.",
+    parameters: Type.Object({
+      profileId: Type.String({ minLength: 1 }),
+      contextId: Type.String({ minLength: 1 }),
+      userId: Type.String({ minLength: 1 }),
+      itemId: Type.String({ minLength: 1 }),
+      signalType: Type.String({ minLength: 1 }),
+      strength: Type.Optional(Type.Number({ minimum: 0.5, maximum: 2 })),
+      source: optionalString()
+    }),
+    method: "POST",
+    path: "/api/v1/preferences/signals"
+  });
+
+  api.registerTool({
+    name: "forge_update_preferences_score",
+    label: "Forge Update Preferences Score",
+    description:
+      "Override or protect the inferred state of one preference item when the user wants explicit correction.",
+    parameters: Type.Object({
+      itemId: Type.String({ minLength: 1 }),
+      manualStatus: optionalNullableString(),
+      manualScore: Type.Optional(Type.Union([Type.Number(), Type.Null()])),
+      confidenceLock: Type.Optional(
+        Type.Union([Type.Number({ minimum: 0, maximum: 1 }), Type.Null()])
+      ),
+      bookmarked: Type.Optional(Type.Boolean()),
+      compareLater: Type.Optional(Type.Boolean()),
+      frozen: Type.Optional(Type.Boolean())
+    }),
+    async execute(_toolCallId, params) {
+      const typed = params as Record<string, unknown>;
+      return jsonResult(
+        await runWrite(config, {
+          method: "PATCH",
+          path: `/api/v1/preferences/items/${typed.itemId as string}/score`,
+          body: {
+            manualStatus: typed.manualStatus,
+            manualScore: typed.manualScore,
+            confidenceLock: typed.confidenceLock,
+            bookmarked: typed.bookmarked,
+            compareLater: typed.compareLater,
+            frozen: typed.frozen
+          }
+        })
+      );
+    }
+  });
+
+  registerReadTool(api, config, {
+    name: "forge_list_questionnaires",
+    label: "Forge List Questionnaires",
+    description:
+      "List the Psyche questionnaire library across the selected user scope.",
+    parameters: scopedReadSchema,
+    path: (params) =>
+      withUserIds(
+        "/api/v1/psyche/questionnaires",
+        params.userIds as string[] | undefined
+      )
+  });
+
+  api.registerTool({
+    name: "forge_get_questionnaire",
+    label: "Forge Get Questionnaire",
+    description:
+      "Read one Psyche questionnaire instrument with versions and scoring detail.",
+    parameters: Type.Object({
+      questionnaireId: Type.String({ minLength: 1 }),
+      userIds: Type.Optional(Type.Array(Type.String()))
+    }),
+    async execute(_toolCallId, params) {
+      const typed = params as Record<string, unknown>;
+      return jsonResult(
+        await runRead(
+          config,
+          withQueryParams(
+            `/api/v1/psyche/questionnaires/${typed.questionnaireId as string}`,
+            typed,
+            ["userIds"]
+          )
+        )
+      );
+    }
+  });
+
+  api.registerTool({
+    name: "forge_clone_questionnaire",
+    label: "Forge Clone Questionnaire",
+    description:
+      "Clone one Psyche questionnaire instrument into a new user-owned copy.",
+    parameters: Type.Object({
+      questionnaireId: Type.String({ minLength: 1 }),
+      userId: optionalNullableString()
+    }),
+    async execute(_toolCallId, params) {
+      const typed = params as Record<string, unknown>;
+      return jsonResult(
+        await runWrite(config, {
+          method: "POST",
+          path: `/api/v1/psyche/questionnaires/${typed.questionnaireId as string}/clone`,
+          body: { userId: typed.userId }
+        })
+      );
+    }
+  });
+
+  api.registerTool({
+    name: "forge_ensure_questionnaire_draft",
+    label: "Forge Ensure Questionnaire Draft",
+    description:
+      "Create or return the editable draft version for one questionnaire instrument.",
+    parameters: Type.Object({
+      questionnaireId: Type.String({ minLength: 1 })
+    }),
+    async execute(_toolCallId, params) {
+      const typed = params as Record<string, unknown>;
+      return jsonResult(
+        await runWrite(config, {
+          method: "POST",
+          path: `/api/v1/psyche/questionnaires/${typed.questionnaireId as string}/draft`
+        })
+      );
+    }
+  });
+
+  api.registerTool({
+    name: "forge_publish_questionnaire_draft",
+    label: "Forge Publish Questionnaire Draft",
+    description:
+      "Publish the current questionnaire draft as the live readable version.",
+    parameters: Type.Object({
+      questionnaireId: Type.String({ minLength: 1 }),
+      label: optionalString()
+    }),
+    async execute(_toolCallId, params) {
+      const typed = params as Record<string, unknown>;
+      return jsonResult(
+        await runWrite(config, {
+          method: "POST",
+          path: `/api/v1/psyche/questionnaires/${typed.questionnaireId as string}/publish`,
+          body: { label: typed.label }
+        })
+      );
+    }
+  });
+
+  api.registerTool({
+    name: "forge_start_questionnaire_run",
+    label: "Forge Start Questionnaire Run",
+    description:
+      "Start one questionnaire answer session for a specific user.",
+    parameters: Type.Object({
+      questionnaireId: Type.String({ minLength: 1 }),
+      userId: Type.String({ minLength: 1 }),
+      author: optionalString()
+    }),
+    async execute(_toolCallId, params) {
+      const typed = params as Record<string, unknown>;
+      return jsonResult(
+        await runWrite(config, {
+          method: "POST",
+          path: `/api/v1/psyche/questionnaires/${typed.questionnaireId as string}/runs`,
+          body: {
+            userId: typed.userId,
+            author: typed.author
+          }
+        })
+      );
+    }
+  });
+
+  api.registerTool({
+    name: "forge_get_questionnaire_run",
+    label: "Forge Get Questionnaire Run",
+    description:
+      "Read one questionnaire run with answers, scores, and completion state.",
+    parameters: Type.Object({
+      runId: Type.String({ minLength: 1 }),
+      userIds: Type.Optional(Type.Array(Type.String()))
+    }),
+    async execute(_toolCallId, params) {
+      const typed = params as Record<string, unknown>;
+      return jsonResult(
+        await runRead(
+          config,
+          withQueryParams(
+            `/api/v1/psyche/questionnaire-runs/${typed.runId as string}`,
+            typed,
+            ["userIds"]
+          )
+        )
+      );
+    }
+  });
+
+  api.registerTool({
+    name: "forge_update_questionnaire_run",
+    label: "Forge Update Questionnaire Run",
+    description:
+      "Patch one questionnaire run while the answers are still being filled.",
+    parameters: Type.Object({
+      runId: Type.String({ minLength: 1 }),
+      answers: Type.Optional(Type.Record(Type.String(), Type.Any())),
+      status: optionalString(),
+      notes: optionalString()
+    }),
+    async execute(_toolCallId, params) {
+      const typed = params as Record<string, unknown>;
+      return jsonResult(
+        await runWrite(config, {
+          method: "PATCH",
+          path: `/api/v1/psyche/questionnaire-runs/${typed.runId as string}`,
+          body: {
+            answers: typed.answers,
+            status: typed.status,
+            notes: typed.notes
+          }
+        })
+      );
+    }
+  });
+
+  api.registerTool({
+    name: "forge_complete_questionnaire_run",
+    label: "Forge Complete Questionnaire Run",
+    description:
+      "Complete one questionnaire run and finalize its scoring pass.",
+    parameters: Type.Object({
+      runId: Type.String({ minLength: 1 })
+    }),
+    async execute(_toolCallId, params) {
+      const typed = params as Record<string, unknown>;
+      return jsonResult(
+        await runWrite(config, {
+          method: "POST",
+          path: `/api/v1/psyche/questionnaire-runs/${typed.runId as string}/complete`
+        })
+      );
+    }
+  });
+
+  registerReadTool(api, config, {
+    name: "forge_get_self_observation_calendar",
+    label: "Forge Self Observation Calendar",
+    description:
+      "Read the Psyche self-observation calendar with note-backed observations, linked patterns, linked reports, and available tags.",
+    parameters: Type.Object({
+      from: optionalString(),
+      to: optionalString(),
+      userIds: Type.Optional(Type.Array(Type.String()))
+    }),
+    path: (params) =>
+      withQueryParams("/api/v1/psyche/self-observation/calendar", params, [
+        "from",
+        "to",
+        "userIds"
+      ])
+  });
+
   registerWriteTool(api, config, {
     name: "forge_search_entities",
     label: "Search Forge Entities",
@@ -691,7 +1046,7 @@ export function registerForgePluginTools(
     name: "forge_create_entities",
     label: "Create Forge Entities",
     description:
-      "Create one or more Forge entities through the ordered batch workflow. Pass `operations` as an array. Each operation must include `entityType` and full `data`. This is the preferred create path for planning, Psyche, and calendar records including calendar_event, work_block_template, and task_timebox.",
+      "Create one or more Forge entities through the ordered batch workflow. Pass `operations` as an array. Each operation must include `entityType` and full `data`. This is the preferred create path for planning, Psyche, calendar, preferences basic CRUD, and questionnaire_instrument records.",
     parameters: Type.Object({
       atomic: Type.Optional(Type.Boolean()),
       operations: Type.Array(
@@ -710,7 +1065,7 @@ export function registerForgePluginTools(
     name: "forge_update_entities",
     label: "Update Forge Entities",
     description:
-      "Update one or more Forge entities through the ordered batch workflow. Pass `operations` as an array. Each operation must include `entityType`, `id`, and `patch`. This is the preferred update path for calendar_event, work_block_template, and task_timebox too; Forge runs calendar sync side effects downstream.",
+      "Update one or more Forge entities through the ordered batch workflow. Pass `operations` as an array. Each operation must include `entityType`, `id`, and `patch`. This is the preferred update path for calendar_event, work_block_template, task_timebox, preferences basic CRUD entities, and questionnaire_instrument too.",
     parameters: Type.Object({
       atomic: Type.Optional(Type.Boolean()),
       operations: Type.Array(
@@ -730,7 +1085,7 @@ export function registerForgePluginTools(
     name: "forge_delete_entities",
     label: "Delete Forge Entities",
     description:
-      "Delete Forge entities in one batch request. Pass `operations` as an array with `entityType` and `id`. Delete defaults to soft mode unless hard is requested explicitly. Calendar-domain deletes still run their downstream removal logic, including remote calendar projection cleanup for calendar_event.",
+      "Delete Forge entities in one batch request. Pass `operations` as an array with `entityType` and `id`. Delete defaults to soft mode unless hard is requested explicitly. Some entities such as calendar-domain records, preference CRUD entities, and questionnaire_instrument delete immediately by design.",
     parameters: Type.Object({
       atomic: Type.Optional(Type.Boolean()),
       operations: Type.Array(

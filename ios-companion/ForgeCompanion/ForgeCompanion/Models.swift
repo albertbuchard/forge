@@ -100,12 +100,106 @@ struct CompanionSyncPayload: Codable {
         let annotations: WorkoutAnnotations
     }
 
+    struct MovementKnownPlace: Codable, Identifiable, Hashable {
+        let id: String
+        let externalUid: String
+        let label: String
+        let aliases: [String]
+        let latitude: Double
+        let longitude: Double
+        let radiusMeters: Double
+        let categoryTags: [String]
+        let visibility: String
+        let wikiNoteId: String?
+        let metadata: [String: String]
+    }
+
+    struct MovementSettings: Codable {
+        let trackingEnabled: Bool
+        let publishMode: String
+        let retentionMode: String
+        let locationPermissionStatus: String
+        let motionPermissionStatus: String
+        let backgroundTrackingReady: Bool
+        let metadata: [String: String]
+    }
+
+    struct MovementStay: Codable {
+        let externalUid: String
+        let label: String
+        let status: String
+        let classification: String
+        let startedAt: String
+        let endedAt: String
+        let centerLatitude: Double
+        let centerLongitude: Double
+        let radiusMeters: Double
+        let sampleCount: Int
+        let placeExternalUid: String
+        let placeLabel: String
+        let tags: [String]
+        let metadata: [String: String]
+    }
+
+    struct MovementTripPoint: Codable {
+        let recordedAt: String
+        let latitude: Double
+        let longitude: Double
+        let accuracyMeters: Double?
+        let altitudeMeters: Double?
+        let speedMps: Double?
+        let isStopAnchor: Bool
+    }
+
+    struct MovementTripStop: Codable {
+        let externalUid: String
+        let label: String
+        let startedAt: String
+        let endedAt: String
+        let latitude: Double
+        let longitude: Double
+        let radiusMeters: Double
+        let placeExternalUid: String
+        let metadata: [String: String]
+    }
+
+    struct MovementTrip: Codable {
+        let externalUid: String
+        let label: String
+        let status: String
+        let travelMode: String
+        let activityType: String
+        let startedAt: String
+        let endedAt: String
+        let startPlaceExternalUid: String
+        let endPlaceExternalUid: String
+        let distanceMeters: Double
+        let movingSeconds: Int
+        let idleSeconds: Int
+        let averageSpeedMps: Double?
+        let maxSpeedMps: Double?
+        let caloriesKcal: Double?
+        let expectedMet: Double?
+        let tags: [String]
+        let metadata: [String: String]
+        let points: [MovementTripPoint]
+        let stops: [MovementTripStop]
+    }
+
+    struct MovementPayload: Codable {
+        let settings: MovementSettings
+        let knownPlaces: [MovementKnownPlace]
+        let stays: [MovementStay]
+        let trips: [MovementTrip]
+    }
+
     let sessionId: String
     let pairingToken: String
     let device: Device
     let permissions: Permissions
     let sleepSessions: [SleepSession]
     let workouts: [WorkoutSession]
+    let movement: MovementPayload
 }
 
 struct SyncReceipt: Decodable {
@@ -115,9 +209,38 @@ struct SyncReceipt: Decodable {
         let createdCount: Int
         let updatedCount: Int
         let mergedCount: Int
+        let movementStays: Int?
+        let movementTrips: Int?
+        let movementKnownPlaces: Int?
+    }
+
+    struct MovementBootstrapEnvelope: Decodable {
+        struct Settings: Decodable {
+            let trackingEnabled: Bool
+            let publishMode: String
+            let retentionMode: String
+            let locationPermissionStatus: String
+            let motionPermissionStatus: String
+            let backgroundTrackingReady: Bool
+        }
+
+        struct Place: Decodable, Identifiable {
+            let id: String
+            let externalUid: String
+            let label: String
+            let aliases: [String]
+            let latitude: Double
+            let longitude: Double
+            let radiusMeters: Double
+            let categoryTags: [String]
+        }
+
+        let settings: Settings
+        let places: [Place]
     }
 
     let imported: ImportedCounts
+    let movement: MovementBootstrapEnvelope?
 }
 
 struct SyncReport {
@@ -127,6 +250,9 @@ struct SyncReport {
     let createdCount: Int
     let updatedCount: Int
     let mergedCount: Int
+    let movementStays: Int
+    let movementTrips: Int
+    let movementKnownPlaces: Int
 }
 
 enum HealthAccessStatus: String, Codable {

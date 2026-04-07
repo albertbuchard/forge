@@ -88,5 +88,13 @@ export function filterOwnedEntities(entityType, entities, userIds) {
         return decorated;
     }
     const allowed = new Set(userIds);
-    return decorated.filter((entity) => entity.userId !== null && allowed.has(entity.userId));
+    return decorated.filter((entity) => {
+        if (entity.userId !== null && allowed.has(entity.userId)) {
+            return true;
+        }
+        const embeddedUserId = "userId" in entity && typeof entity.userId === "string"
+            ? entity.userId
+            : null;
+        return embeddedUserId !== null && allowed.has(embeddedUserId);
+    });
 }

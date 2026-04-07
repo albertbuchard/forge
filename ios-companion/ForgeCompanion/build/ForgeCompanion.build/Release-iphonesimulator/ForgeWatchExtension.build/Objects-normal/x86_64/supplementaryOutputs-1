@@ -1,0 +1,12 @@
+{
+  "/Users/omarclaw/Documents/aurel-monorepo/projects/forge/ios-companion/ForgeCompanion/ForgeWatch/AppIntent.swift" : {
+    "abi-baseline-json" : "/Users/omarclaw/Documents/aurel-monorepo/projects/forge/ios-companion/ForgeCompanion/build/ForgeCompanion.build/Release-iphonesimulator/ForgeWatchExtension.build/Objects-normal/x86_64/ForgeWatchExtension.abi.json",
+    "const-values" : "/Users/omarclaw/Documents/aurel-monorepo/projects/forge/ios-companion/ForgeCompanion/build/ForgeCompanion.build/Release-iphonesimulator/ForgeWatchExtension.build/Objects-normal/x86_64/ForgeWatchExtension-primary.swiftconstvalues",
+    "dependencies" : "/Users/omarclaw/Documents/aurel-monorepo/projects/forge/ios-companion/ForgeCompanion/build/ForgeCompanion.build/Release-iphonesimulator/ForgeWatchExtension.build/Objects-normal/x86_64/ForgeWatchExtension-primary.d",
+    "diagnostics" : "/Users/omarclaw/Documents/aurel-monorepo/projects/forge/ios-companion/ForgeCompanion/build/ForgeCompanion.build/Release-iphonesimulator/ForgeWatchExtension.build/Objects-normal/x86_64/ForgeWatchExtension-primary.dia",
+    "objc-header" : "/Users/omarclaw/Documents/aurel-monorepo/projects/forge/ios-companion/ForgeCompanion/build/ForgeCompanion.build/Release-iphonesimulator/ForgeWatchExtension.build/Objects-normal/x86_64/ForgeWatchExtension-Swift.h",
+    "swiftdoc" : "/Users/omarclaw/Documents/aurel-monorepo/projects/forge/ios-companion/ForgeCompanion/build/ForgeCompanion.build/Release-iphonesimulator/ForgeWatchExtension.build/Objects-normal/x86_64/ForgeWatchExtension.swiftdoc",
+    "swiftmodule" : "/Users/omarclaw/Documents/aurel-monorepo/projects/forge/ios-companion/ForgeCompanion/build/ForgeCompanion.build/Release-iphonesimulator/ForgeWatchExtension.build/Objects-normal/x86_64/ForgeWatchExtension.swiftmodule",
+    "swiftsourceinfo" : "/Users/omarclaw/Documents/aurel-monorepo/projects/forge/ios-companion/ForgeCompanion/build/ForgeCompanion.build/Release-iphonesimulator/ForgeWatchExtension.build/Objects-normal/x86_64/ForgeWatchExtension.swiftsourceinfo"
+  }
+}

@@ -62,6 +62,23 @@ describe("forge skill playbook parity", () => {
     expect(codexSkill).toMatch(/follow-up lane/i);
   });
 
+  it("keeps the agent-facing skills explicit about preferences, questionnaires, self-observation, and health surfaces", () => {
+    const openclawSkill = readRepoFile("skills/forge-openclaw/SKILL.md");
+    const hermesSkill = readRepoFile("plugins/forge-hermes/forge_hermes/skill.md");
+
+    expect(openclawSkill).toMatch(/forge_get_preferences_workspace/);
+    expect(openclawSkill).toMatch(/forge_start_preferences_game/);
+    expect(openclawSkill).toMatch(/forge_list_questionnaires/);
+    expect(openclawSkill).toMatch(/forge_get_self_observation_calendar/);
+    expect(openclawSkill).toMatch(/Self-observation/);
+    expect(openclawSkill).toMatch(/sleep_session/i);
+    expect(openclawSkill).toMatch(/workout_session/i);
+
+    expect(hermesSkill).toMatch(/high-level batch routes for basic Preferences CRUD/i);
+    expect(hermesSkill).toMatch(/high-level batch routes for basic questionnaire CRUD/i);
+    expect(hermesSkill).toMatch(/Self-observation is note-backed/i);
+  });
+
   it("keeps the canonical playbooks focused on guided, one-lane questioning", () => {
     const entityPlaybook = readRepoFile("skills/forge-openclaw/entity_conversation_playbooks.md");
     const psychePlaybook = readRepoFile("skills/forge-openclaw/psyche_entity_playbooks.md");
@@ -92,5 +109,99 @@ describe("forge skill playbook parity", () => {
     expect(psychePlaybook).not.toMatch(/disappearing like that/i);
     expect(psychePlaybook).not.toMatch(/send the long message/i);
     expect(psychePlaybook).not.toMatch(/polished and unreachable/i);
+  });
+
+  it("covers representative user requests for preferences, questionnaires, self-observation, calendar, and health work", () => {
+    const openclawSkill = readRepoFile("skills/forge-openclaw/SKILL.md");
+    const hermesSkill = readRepoFile("plugins/forge-hermes/forge_hermes/skill.md");
+    const entityPlaybook = readRepoFile("skills/forge-openclaw/entity_conversation_playbooks.md");
+    const psychePlaybook = readRepoFile("skills/forge-openclaw/psyche_entity_playbooks.md");
+
+    const fakeRequests = [
+      {
+        request:
+          "Start the preference game for restaurants and learn what food I like.",
+        required: [
+          /forge_get_preferences_workspace/,
+          /forge_start_preferences_game/,
+          /batch routes for basic Preferences CRUD/i
+        ],
+        questioning: [/Ask only for what is missing or unclear/i]
+      },
+      {
+        request:
+          "Create a custom questionnaire draft for my weekly self-check and publish it later.",
+        required: [
+          /questionnaire_instrument/,
+          /forge_ensure_questionnaire_draft/,
+          /forge_publish_questionnaire_draft/,
+          /batch routes for basic questionnaire CRUD/i
+        ],
+        questioning: [/Ask only for what is missing or unclear/i]
+      },
+      {
+        request:
+          "Log a self-observation from today about the withdrawal loop after my meeting.",
+        required: [
+          /forge_get_self_observation_calendar/,
+          /Self-observation is note-backed/i,
+          /frontmatter\.observedAt/,
+          /Self-observation/
+        ],
+        questioning: [
+          /ask one orienting question first/i,
+          /one concrete-example question/i
+        ]
+      },
+      {
+        request:
+          "Put a calendar event on Friday and sync it to my writable calendar.",
+        required: [
+          /forge_get_calendar_overview/,
+          /forge_connect_calendar_provider/,
+          /forge_sync_calendar_connection/,
+          /entityType: "calendar_event"/
+        ],
+        questioning: [/For straightforward logistical entities such as tasks, calendar events/i]
+      },
+      {
+        request:
+          "Review my sleep and workout logs, then attach a note about how I felt.",
+        required: [
+          /forge_get_sleep_overview/,
+          /forge_get_sports_overview/,
+          /forge_update_sleep_session/,
+          /forge_update_workout_session/,
+          /sleep_session/i,
+          /workout_session/i
+        ],
+        questioning: [/ask only for what is missing or unclear/i]
+      }
+    ];
+
+    for (const scenario of fakeRequests) {
+      for (const pattern of scenario.required) {
+        const matched =
+          pattern.test(openclawSkill) ||
+          pattern.test(hermesSkill) ||
+          pattern.test(entityPlaybook) ||
+          pattern.test(psychePlaybook);
+        expect(
+          matched,
+          `Expected coverage for fake request: ${scenario.request} via pattern ${pattern}`
+        ).toBe(true);
+      }
+      for (const pattern of scenario.questioning) {
+        const matched =
+          pattern.test(entityPlaybook) ||
+          pattern.test(psychePlaybook) ||
+          pattern.test(openclawSkill) ||
+          pattern.test(hermesSkill);
+        expect(
+          matched,
+          `Expected questioning guidance for fake request: ${scenario.request} via pattern ${pattern}`
+        ).toBe(true);
+      }
+    }
   });
 });

@@ -798,6 +798,697 @@ test("mobile health sync builds richer summaries and reconciles habit-generated 
   }
 });
 
+test("movement sync stores places, stays, trips, and serves the movement workspace routes", async () => {
+  const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-movement-"));
+  const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
+
+  try {
+    const operatorCookie = await issueOperatorSessionCookie(app);
+
+    const pairingResponse = await app.inject({
+      method: "POST",
+      url: "/api/v1/health/pairing-sessions",
+      headers: {
+        cookie: operatorCookie,
+        host: "127.0.0.1:4317"
+      },
+      payload: {
+        userId: "user_operator"
+      }
+    });
+    assert.equal(pairingResponse.statusCode, 201);
+    const qrPayload = (
+      pairingResponse.json() as {
+        qrPayload: {
+          sessionId: string;
+          pairingToken: string;
+        };
+      }
+    ).qrPayload;
+
+    const syncResponse = await app.inject({
+      method: "POST",
+      url: "/api/v1/mobile/healthkit/sync",
+      payload: {
+        sessionId: qrPayload.sessionId,
+        pairingToken: qrPayload.pairingToken,
+        device: {
+          name: "Omar iPhone",
+          platform: "ios",
+          appVersion: "1.0",
+          sourceDevice: "iPhone"
+        },
+        permissions: {
+          healthKitAuthorized: true,
+          backgroundRefreshEnabled: true,
+          motionReady: true,
+          locationReady: true
+        },
+        sleepSessions: [],
+        workouts: [],
+        movement: {
+          settings: {
+            trackingEnabled: true,
+            publishMode: "auto_publish",
+            retentionMode: "aggregates_only",
+            locationPermissionStatus: "always",
+            motionPermissionStatus: "ready",
+            backgroundTrackingReady: true,
+            metadata: {}
+          },
+          knownPlaces: [
+            {
+              externalUid: "place_home",
+              label: "Home",
+              aliases: ["Flat"],
+              latitude: 46.5191,
+              longitude: 6.6323,
+              radiusMeters: 120,
+              categoryTags: ["home"],
+              visibility: "shared",
+              wikiNoteId: null,
+              linkedEntities: [],
+              linkedPeople: [],
+              metadata: {}
+            },
+            {
+              externalUid: "place_grocery",
+              label: "Corner Grocery",
+              aliases: [],
+              latitude: 46.5214,
+              longitude: 6.6407,
+              radiusMeters: 90,
+              categoryTags: ["grocery"],
+              visibility: "shared",
+              wikiNoteId: null,
+              linkedEntities: [],
+              linkedPeople: [],
+              metadata: {}
+            }
+          ],
+          stays: [
+            {
+              externalUid: "stay_home_morning",
+              label: "Home",
+              status: "completed",
+              classification: "stationary",
+              startedAt: "2026-04-06T07:00:00.000Z",
+              endedAt: "2026-04-06T08:00:00.000Z",
+              centerLatitude: 46.5191,
+              centerLongitude: 6.6323,
+              radiusMeters: 100,
+              sampleCount: 10,
+              placeExternalUid: "place_home",
+              placeLabel: "Home",
+              tags: ["home"],
+              metadata: {}
+            }
+          ],
+          trips: [
+            {
+              externalUid: "trip_home_grocery",
+              label: "Home to grocery",
+              status: "completed",
+              travelMode: "travel",
+              activityType: "walking",
+              startedAt: "2026-04-06T08:00:00.000Z",
+              endedAt: "2026-04-06T08:20:00.000Z",
+              startPlaceExternalUid: "place_home",
+              endPlaceExternalUid: "place_grocery",
+              distanceMeters: 2100,
+              movingSeconds: 900,
+              idleSeconds: 120,
+              averageSpeedMps: 1.9,
+              maxSpeedMps: 2.5,
+              caloriesKcal: 120,
+              expectedMet: 3.2,
+              tags: ["grocery"],
+              linkedEntities: [],
+              linkedPeople: [],
+              metadata: {},
+              points: [
+                {
+                  recordedAt: "2026-04-06T08:00:00.000Z",
+                  latitude: 46.5191,
+                  longitude: 6.6323,
+                  accuracyMeters: 8,
+                  altitudeMeters: null,
+                  speedMps: 1.2,
+                  isStopAnchor: false
+                },
+                {
+                  recordedAt: "2026-04-06T08:10:00.000Z",
+                  latitude: 46.5201,
+                  longitude: 6.6361,
+                  accuracyMeters: 8,
+                  altitudeMeters: null,
+                  speedMps: 1.8,
+                  isStopAnchor: false
+                },
+                {
+                  recordedAt: "2026-04-06T08:20:00.000Z",
+                  latitude: 46.5214,
+                  longitude: 6.6407,
+                  accuracyMeters: 8,
+                  altitudeMeters: null,
+                  speedMps: 1.4,
+                  isStopAnchor: true
+                }
+              ],
+              stops: [
+                {
+                  externalUid: "stop_wait_crossing",
+                  label: "Crossing",
+                  startedAt: "2026-04-06T08:08:00.000Z",
+                  endedAt: "2026-04-06T08:12:00.000Z",
+                  latitude: 46.5201,
+                  longitude: 6.6361,
+                  radiusMeters: 40,
+                  placeExternalUid: "",
+                  metadata: {}
+                }
+              ]
+            }
+          ]
+        }
+      }
+    });
+    assert.equal(syncResponse.statusCode, 200);
+
+    const dayResponse = await app.inject({
+      method: "GET",
+      url: "/api/v1/movement/day?date=2026-04-06"
+    });
+    assert.equal(dayResponse.statusCode, 200);
+    const day = (dayResponse.json() as {
+      movement: {
+        summary: { tripCount: number; stayCount: number };
+        places: Array<{ label: string }>;
+        trips: Array<{ id: string; distanceMeters: number }>;
+      };
+    }).movement;
+    assert.equal(day.summary.tripCount, 1);
+    assert.equal(day.summary.stayCount, 1);
+    assert.ok(day.places.some((place) => place.label === "Home"));
+
+    const tripResponse = await app.inject({
+      method: "GET",
+      url: `/api/v1/movement/trips/${day.trips[0]!.id}`
+    });
+    assert.equal(tripResponse.statusCode, 200);
+
+    const allTimeResponse = await app.inject({
+      method: "GET",
+      url: "/api/v1/movement/all-time"
+    });
+    assert.equal(allTimeResponse.statusCode, 200);
+    const allTime = (allTimeResponse.json() as { movement: { summary: { tripCount: number; knownPlaceCount: number } } }).movement;
+    assert.equal(allTime.summary.tripCount, 1);
+    assert.equal(allTime.summary.knownPlaceCount, 2);
+  } finally {
+    await app.close();
+    closeDatabase();
+    await rm(rootDir, { recursive: true, force: true });
+  }
+});
+
+test("watch bootstrap serves compact habit state and watch habit check-ins preserve canonical streak semantics", async () => {
+  const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-watch-bootstrap-"));
+  const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
+
+  try {
+    const operatorCookie = await issueOperatorSessionCookie(app);
+
+    const positiveHabitResponse = await app.inject({
+      method: "POST",
+      url: "/api/v1/habits",
+      headers: { cookie: operatorCookie },
+      payload: {
+        title: "Morning planning",
+        description: "Open the day clearly.",
+        status: "active",
+        polarity: "positive",
+        frequency: "daily",
+        targetCount: 1,
+        weekDays: [],
+        linkedGoalIds: [],
+        linkedProjectIds: [],
+        linkedTaskIds: [],
+        linkedValueIds: [],
+        linkedPatternIds: [],
+        linkedBehaviorIds: [],
+        linkedBeliefIds: [],
+        linkedModeIds: [],
+        linkedReportIds: [],
+        linkedBehaviorId: null,
+        rewardXp: 12,
+        penaltyXp: 8,
+        generatedHealthEventTemplate: {
+          enabled: false,
+          workoutType: "walk",
+          title: "",
+          durationMinutes: 30,
+          xpReward: 0,
+          tags: [],
+          links: [],
+          notesTemplate: ""
+        }
+      }
+    });
+    assert.equal(positiveHabitResponse.statusCode, 201);
+    const positiveHabitId = (
+      positiveHabitResponse.json() as { habit: { id: string } }
+    ).habit.id;
+
+    const negativeHabitResponse = await app.inject({
+      method: "POST",
+      url: "/api/v1/habits",
+      headers: { cookie: operatorCookie },
+      payload: {
+        title: "Doomscrolling",
+        description: "Do not sink into reactive scrolling.",
+        status: "active",
+        polarity: "negative",
+        frequency: "daily",
+        targetCount: 1,
+        weekDays: [],
+        linkedGoalIds: [],
+        linkedProjectIds: [],
+        linkedTaskIds: [],
+        linkedValueIds: [],
+        linkedPatternIds: [],
+        linkedBehaviorIds: [],
+        linkedBeliefIds: [],
+        linkedModeIds: [],
+        linkedReportIds: [],
+        linkedBehaviorId: null,
+        rewardXp: 12,
+        penaltyXp: 8,
+        generatedHealthEventTemplate: {
+          enabled: false,
+          workoutType: "walk",
+          title: "",
+          durationMinutes: 30,
+          xpReward: 0,
+          tags: [],
+          links: [],
+          notesTemplate: ""
+        }
+      }
+    });
+    assert.equal(negativeHabitResponse.statusCode, 201);
+    const negativeHabitId = (
+      negativeHabitResponse.json() as { habit: { id: string } }
+    ).habit.id;
+
+    const pairingResponse = await app.inject({
+      method: "POST",
+      url: "/api/v1/health/pairing-sessions",
+      headers: {
+        cookie: operatorCookie,
+        host: "127.0.0.1:4317"
+      },
+      payload: {
+        userId: "user_operator",
+        capabilities: ["watch-ready"]
+      }
+    });
+    assert.equal(pairingResponse.statusCode, 201);
+    const qrPayload = (
+      pairingResponse.json() as {
+        qrPayload: { sessionId: string; pairingToken: string };
+      }
+    ).qrPayload;
+
+    const bootstrapResponse = await app.inject({
+      method: "POST",
+      url: "/api/v1/mobile/watch/bootstrap",
+      payload: {
+        sessionId: qrPayload.sessionId,
+        pairingToken: qrPayload.pairingToken
+      }
+    });
+    assert.equal(bootstrapResponse.statusCode, 200);
+    const initialBootstrap = (
+      bootstrapResponse.json() as {
+        watch: {
+          habits: Array<{
+            id: string;
+            dueToday: boolean;
+            alignedActionLabel: string;
+            unalignedActionLabel: string;
+            last7History: Array<{ current: boolean; state: string }>;
+          }>;
+        };
+      }
+    ).watch;
+    assert.ok(initialBootstrap.habits.length >= 2);
+    assert.equal(initialBootstrap.habits[0]?.dueToday, true);
+    assert.equal(
+      initialBootstrap.habits.find((habit) => habit.id === positiveHabitId)
+        ?.alignedActionLabel,
+      "Done"
+    );
+    assert.equal(
+      initialBootstrap.habits.find((habit) => habit.id === negativeHabitId)
+        ?.alignedActionLabel,
+      "Resisted"
+    );
+
+    const positiveCheckInResponse = await app.inject({
+      method: "POST",
+      url: `/api/v1/mobile/watch/habits/${positiveHabitId}/check-ins`,
+      payload: {
+        sessionId: qrPayload.sessionId,
+        pairingToken: qrPayload.pairingToken,
+        dedupeKey: "watch-positive-1",
+        dateKey: "2026-04-07",
+        status: "done",
+        note: "Checked in from the watch."
+      }
+    });
+    assert.equal(positiveCheckInResponse.statusCode, 200);
+    const positiveCheckIn = positiveCheckInResponse.json() as {
+      habit: { streakCount: number; lastCheckInStatus: string | null };
+      watch: {
+        habits: Array<{
+          id: string;
+          currentPeriodStatus: string;
+          last7History: Array<{ current: boolean; state: string }>;
+        }>;
+      };
+    };
+    assert.equal(positiveCheckIn.habit.lastCheckInStatus, "done");
+    assert.equal(positiveCheckIn.habit.streakCount, 1);
+    assert.equal(
+      positiveCheckIn.watch.habits.find((habit) => habit.id === positiveHabitId)
+        ?.currentPeriodStatus,
+      "aligned"
+    );
+
+    const negativeCheckInResponse = await app.inject({
+      method: "POST",
+      url: `/api/v1/mobile/watch/habits/${negativeHabitId}/check-ins`,
+      payload: {
+        sessionId: qrPayload.sessionId,
+        pairingToken: qrPayload.pairingToken,
+        dedupeKey: "watch-negative-1",
+        dateKey: "2026-04-07",
+        status: "missed",
+        note: "Resisted on the watch."
+      }
+    });
+    assert.equal(negativeCheckInResponse.statusCode, 200);
+
+    const habitsResponse = await app.inject({
+      method: "GET",
+      url: "/api/v1/habits",
+      headers: { cookie: operatorCookie }
+    });
+    assert.equal(habitsResponse.statusCode, 200);
+    const habits = (habitsResponse.json() as {
+      habits: Array<{
+        id: string;
+        streakCount: number;
+        lastCheckInStatus: string | null;
+        dueToday: boolean;
+      }>;
+    }).habits;
+    assert.equal(
+      habits.find((habit) => habit.id === positiveHabitId)?.streakCount,
+      1
+    );
+    assert.equal(
+      habits.find((habit) => habit.id === negativeHabitId)?.lastCheckInStatus,
+      "missed"
+    );
+    assert.equal(
+      habits.find((habit) => habit.id === negativeHabitId)?.dueToday,
+      false
+    );
+  } finally {
+    await app.close();
+    closeDatabase();
+    await rm(rootDir, { recursive: true, force: true });
+  }
+});
+
+test("watch capture batch stores raw events, dedupes repeats, and projects exact-target updates", async () => {
+  const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-watch-capture-"));
+  const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
+
+  try {
+    const operatorCookie = await issueOperatorSessionCookie(app);
+
+    const pairingResponse = await app.inject({
+      method: "POST",
+      url: "/api/v1/health/pairing-sessions",
+      headers: {
+        cookie: operatorCookie,
+        host: "127.0.0.1:4317"
+      },
+      payload: {
+        userId: "user_operator",
+        capabilities: ["watch-ready", "location-ready"]
+      }
+    });
+    assert.equal(pairingResponse.statusCode, 201);
+    const qrPayload = (
+      pairingResponse.json() as {
+        qrPayload: { sessionId: string; pairingToken: string };
+      }
+    ).qrPayload;
+
+    const syncResponse = await app.inject({
+      method: "POST",
+      url: "/api/v1/mobile/healthkit/sync",
+      payload: {
+        sessionId: qrPayload.sessionId,
+        pairingToken: qrPayload.pairingToken,
+        device: {
+          name: "Omar iPhone",
+          platform: "ios",
+          appVersion: "1.0",
+          sourceDevice: "iPhone"
+        },
+        permissions: {
+          healthKitAuthorized: true,
+          backgroundRefreshEnabled: true,
+          motionReady: true,
+          locationReady: true
+        },
+        sleepSessions: [],
+        workouts: [
+          {
+            externalUid: "watch-workout-1",
+            workoutType: "walk",
+            startedAt: "2026-04-07T07:15:00.000Z",
+            endedAt: "2026-04-07T07:55:00.000Z",
+            activeEnergyKcal: 210,
+            totalEnergyKcal: 230,
+            distanceMeters: 3800,
+            stepCount: 4800,
+            exerciseMinutes: 40,
+            averageHeartRate: 116,
+            maxHeartRate: 138,
+            sourceDevice: "Apple Watch",
+            links: [],
+            annotations: {}
+          }
+        ],
+        movement: {
+          settings: {
+            trackingEnabled: true,
+            publishMode: "auto_publish",
+            retentionMode: "aggregates_only",
+            locationPermissionStatus: "always",
+            motionPermissionStatus: "ready",
+            backgroundTrackingReady: true,
+            metadata: {}
+          },
+          knownPlaces: [
+            {
+              externalUid: "watch_place_unknown",
+              label: "Unknown corner",
+              aliases: [],
+              latitude: 46.5191,
+              longitude: 6.6323,
+              radiusMeters: 90,
+              categoryTags: [],
+              visibility: "shared",
+              wikiNoteId: null,
+              linkedEntities: [],
+              linkedPeople: [],
+              metadata: {}
+            }
+          ],
+          stays: [],
+          trips: []
+        }
+      }
+    });
+    assert.equal(syncResponse.statusCode, 200);
+
+    const movementBootstrap = await app.inject({
+      method: "POST",
+      url: "/api/v1/mobile/movement/bootstrap",
+      payload: {
+        sessionId: qrPayload.sessionId,
+        pairingToken: qrPayload.pairingToken
+      }
+    });
+    assert.equal(movementBootstrap.statusCode, 200);
+    const placeId = (
+      movementBootstrap.json() as {
+        movement: { places: Array<{ id: string; label: string }> };
+      }
+    ).movement.places[0]?.id;
+    assert.ok(placeId);
+
+    const fitnessResponse = await app.inject({
+      method: "GET",
+      url: "/api/v1/health/fitness"
+    });
+    assert.equal(fitnessResponse.statusCode, 200);
+    const workoutId = (
+      fitnessResponse.json() as {
+        fitness: {
+          sessions: Array<{ id: string; subjectiveEffort: number | null }>;
+        };
+      }
+    ).fitness.sessions[0]?.id;
+    assert.ok(workoutId);
+
+    const captureResponse = await app.inject({
+      method: "POST",
+      url: "/api/v1/mobile/watch/capture-events:batch",
+      payload: {
+        sessionId: qrPayload.sessionId,
+        pairingToken: qrPayload.pairingToken,
+        device: {
+          name: "Omar Watch",
+          platform: "watchos",
+          appVersion: "1.0",
+          sourceDevice: "Apple Watch"
+        },
+        events: [
+          {
+            dedupeKey: "watch-place-1",
+            eventType: "place_label",
+            recordedAt: "2026-04-07T08:00:00.000Z",
+            linkedContext: {
+              placeId
+            },
+            payload: {
+              label: "Lake walk corner",
+              category: "Nature"
+            }
+          },
+          {
+            dedupeKey: "watch-workout-1",
+            eventType: "workout_annotation",
+            recordedAt: "2026-04-07T08:01:00.000Z",
+            linkedContext: {
+              workoutId
+            },
+            payload: {
+              subjectiveEffort: 6,
+              moodAfter: "restorative",
+              tags: ["watch", "recovery"]
+            }
+          }
+        ]
+      }
+    });
+    assert.equal(captureResponse.statusCode, 200);
+    const captureBody = captureResponse.json() as {
+      receipt: {
+        receivedCount: number;
+        storedCount: number;
+        duplicateCount: number;
+        projectedCount: number;
+      };
+    };
+    assert.equal(captureBody.receipt.receivedCount, 2);
+    assert.equal(captureBody.receipt.storedCount, 2);
+    assert.equal(captureBody.receipt.duplicateCount, 0);
+    assert.equal(captureBody.receipt.projectedCount, 2);
+
+    const placesResponse = await app.inject({
+      method: "GET",
+      url: "/api/v1/movement/places"
+    });
+    assert.equal(placesResponse.statusCode, 200);
+    const updatedPlace = (
+      placesResponse.json() as {
+        places: Array<{ id: string; label: string; categoryTags: string[] }>;
+      }
+    ).places.find((place) => place.id === placeId);
+    assert.equal(updatedPlace?.label, "Lake walk corner");
+    assert.ok(updatedPlace?.categoryTags.includes("nature"));
+
+    const updatedFitnessResponse = await app.inject({
+      method: "GET",
+      url: "/api/v1/health/fitness"
+    });
+    assert.equal(updatedFitnessResponse.statusCode, 200);
+    const updatedWorkout = (
+      updatedFitnessResponse.json() as {
+        fitness: {
+          sessions: Array<{
+            id: string;
+            subjectiveEffort: number | null;
+            moodAfter: string;
+            tags: string[];
+          }>;
+        };
+      }
+    ).fitness.sessions.find((session) => session.id === workoutId);
+    assert.equal(updatedWorkout?.subjectiveEffort, 6);
+    assert.equal(updatedWorkout?.moodAfter, "restorative");
+    assert.ok(updatedWorkout?.tags.includes("watch"));
+
+    const duplicateResponse = await app.inject({
+      method: "POST",
+      url: "/api/v1/mobile/watch/capture-events:batch",
+      payload: {
+        sessionId: qrPayload.sessionId,
+        pairingToken: qrPayload.pairingToken,
+        device: {
+          name: "Omar Watch",
+          platform: "watchos",
+          appVersion: "1.0",
+          sourceDevice: "Apple Watch"
+        },
+        events: [
+          {
+            dedupeKey: "watch-place-1",
+            eventType: "place_label",
+            recordedAt: "2026-04-07T08:00:00.000Z",
+            linkedContext: {
+              placeId
+            },
+            payload: {
+              label: "Lake walk corner",
+              category: "Nature"
+            }
+          }
+        ]
+      }
+    });
+    assert.equal(duplicateResponse.statusCode, 200);
+    const duplicateBody = duplicateResponse.json() as {
+      receipt: { storedCount: number; duplicateCount: number };
+    };
+    assert.equal(duplicateBody.receipt.storedCount, 0);
+    assert.equal(duplicateBody.receipt.duplicateCount, 1);
+  } finally {
+    await app.close();
+    closeDatabase();
+    await rm(rootDir, { recursive: true, force: true });
+  }
+});
+
 test("strategy lock rejects drafts that are missing targets or narrative", async () => {
   const rootDir = await mkdtemp(
     path.join(os.tmpdir(), "forge-strategy-lock-guard-")
@@ -8210,8 +8901,13 @@ test("CRUD capability matrix keeps user-facing delete/bin entities explicit", ()
     "mode_guide_session",
     "mode_profile",
     "note",
+    "preference_catalog",
+    "preference_catalog_item",
+    "preference_context",
+    "preference_item",
     "project",
     "psyche_value",
+    "questionnaire_instrument",
     "strategy",
     "tag",
     "task",
@@ -8226,6 +8922,11 @@ test("CRUD capability matrix keeps user-facing delete/bin entities explicit", ()
     .sort();
   assert.deepEqual(immediateDeleteTypes, [
     "calendar_event",
+    "preference_catalog",
+    "preference_catalog_item",
+    "preference_context",
+    "preference_item",
+    "questionnaire_instrument",
     "task_timebox",
     "work_block_template"
   ]);

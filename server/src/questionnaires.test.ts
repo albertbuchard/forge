@@ -112,7 +112,7 @@ test("completing a PHQ-9 run stores answers, score rows, and history", async () 
     });
     assert.equal(completeResponse.statusCode, 200);
     const completed = completeResponse.json() as {
-      run: { status: string; completedAt: string | null };
+      run: { status: string; completedAt: string | null; versionId: string };
       scores: Array<{ scoreKey: string; valueNumeric: number | null; bandLabel: string }>;
       answers: Array<{ itemId: string }>;
       history: Array<{ runId: string; primaryScore: number | null; bandLabel: string }>;

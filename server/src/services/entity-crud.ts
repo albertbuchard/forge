@@ -20,6 +20,28 @@ import {
 import { createNote, deleteNote, getNoteById, listNotes, unlinkNotesForEntity, updateNote } from "../repositories/notes.js";
 import { clearEntityOwner, filterOwnedEntities } from "../repositories/entity-ownership.js";
 import {
+  createPreferenceCatalog,
+  createPreferenceCatalogItem,
+  createPreferenceContext,
+  createPreferenceItem,
+  deletePreferenceCatalog,
+  deletePreferenceCatalogItem,
+  deletePreferenceContext,
+  deletePreferenceItem,
+  getPreferenceCatalogById,
+  getPreferenceCatalogItemById,
+  getPreferenceContextById,
+  getPreferenceItemById,
+  listPreferenceCatalogItems,
+  listPreferenceCatalogs,
+  listPreferenceContexts,
+  listPreferenceItems,
+  updatePreferenceCatalog,
+  updatePreferenceCatalogItem,
+  updatePreferenceContext,
+  updatePreferenceItem
+} from "../repositories/preferences.js";
+import {
   createBehaviorPatternSchema,
   createBehaviorSchema,
   createBeliefEntrySchema,
@@ -51,6 +73,14 @@ import {
 } from "../repositories/deleted-entities.js";
 import { createGoal, deleteGoal, getGoalById, listGoals, updateGoal } from "../repositories/goals.js";
 import { createHabit, deleteHabit, getHabitById, listHabits, updateHabit } from "../repositories/habits.js";
+import {
+  createQuestionnaireInstrument,
+  deleteQuestionnaireInstrument,
+  getQuestionnaireInstrumentEntityById,
+  listQuestionnaireInstrumentEntities,
+  updateQuestionnaireInstrument,
+  updateQuestionnaireInstrumentSchema
+} from "../repositories/questionnaires.js";
 import {
   createBehavior,
   createBehaviorPattern,
@@ -138,6 +168,17 @@ import {
   updateTaskSchema,
   updateWorkBlockTemplateSchema
 } from "../types.js";
+import {
+  createPreferenceCatalogItemSchema,
+  createPreferenceCatalogSchema,
+  createPreferenceContextSchema,
+  createPreferenceItemSchema,
+  updatePreferenceCatalogItemSchema,
+  updatePreferenceCatalogSchema,
+  updatePreferenceContextSchema,
+  updatePreferenceItemSchema
+} from "../preferences-types.js";
+import { createQuestionnaireInstrumentSchema } from "../questionnaire-types.js";
 
 const ENTITY_CALENDAR_LIST_RANGE = {
   from: "1970-01-01T00:00:00.000Z",
@@ -407,6 +448,63 @@ const CRUD_ENTITY_CAPABILITIES: Record<CrudEntityType, CrudEntityCapability> = {
     create: (data, context) => createTriggerReport(data as never, context) as Record<string, unknown>,
     update: (id, patch, context) => updateTriggerReport(id, patch as never, context) as Record<string, unknown> | undefined,
     hardDelete: (id, context) => deleteTriggerReport(id, context) as Record<string, unknown> | undefined
+  },
+  preference_catalog: {
+    entityType: "preference_catalog",
+    routeBase: "/api/v1/preferences/catalogs",
+    deleteMode: "immediate",
+    inBin: false,
+    list: () => listPreferenceCatalogs() as Array<Record<string, unknown>>,
+    get: (id) => getPreferenceCatalogById(id) as Record<string, unknown> | undefined,
+    create: (data) => createPreferenceCatalog(data as never) as Record<string, unknown>,
+    update: (id, patch) => updatePreferenceCatalog(id, patch as never) as Record<string, unknown> | undefined,
+    hardDelete: (id) => deletePreferenceCatalog(id) as Record<string, unknown> | undefined
+  },
+  preference_catalog_item: {
+    entityType: "preference_catalog_item",
+    routeBase: "/api/v1/preferences/catalog-items",
+    deleteMode: "immediate",
+    inBin: false,
+    list: () => listPreferenceCatalogItems() as Array<Record<string, unknown>>,
+    get: (id) => getPreferenceCatalogItemById(id) as Record<string, unknown> | undefined,
+    create: (data) => createPreferenceCatalogItem(data as never) as Record<string, unknown>,
+    update: (id, patch) => updatePreferenceCatalogItem(id, patch as never) as Record<string, unknown> | undefined,
+    hardDelete: (id) => deletePreferenceCatalogItem(id) as Record<string, unknown> | undefined
+  },
+  preference_context: {
+    entityType: "preference_context",
+    routeBase: "/api/v1/preferences/contexts",
+    deleteMode: "immediate",
+    inBin: false,
+    list: () => listPreferenceContexts() as Array<Record<string, unknown>>,
+    get: (id) => getPreferenceContextById(id) as Record<string, unknown> | undefined,
+    create: (data) => createPreferenceContext(data as never) as Record<string, unknown>,
+    update: (id, patch) => updatePreferenceContext(id, patch as never) as Record<string, unknown> | undefined,
+    hardDelete: (id) => deletePreferenceContext(id) as Record<string, unknown> | undefined
+  },
+  preference_item: {
+    entityType: "preference_item",
+    routeBase: "/api/v1/preferences/items",
+    deleteMode: "immediate",
+    inBin: false,
+    list: () => listPreferenceItems() as Array<Record<string, unknown>>,
+    get: (id) => getPreferenceItemById(id) as Record<string, unknown> | undefined,
+    create: (data) => createPreferenceItem(data as never) as Record<string, unknown>,
+    update: (id, patch) => updatePreferenceItem(id, patch as never) as Record<string, unknown> | undefined,
+    hardDelete: (id) => deletePreferenceItem(id) as Record<string, unknown> | undefined
+  },
+  questionnaire_instrument: {
+    entityType: "questionnaire_instrument",
+    routeBase: "/api/v1/psyche/questionnaires",
+    deleteMode: "immediate",
+    inBin: false,
+    list: () => listQuestionnaireInstrumentEntities() as Array<Record<string, unknown>>,
+    get: (id) => getQuestionnaireInstrumentEntityById(id) as Record<string, unknown> | undefined,
+    create: (data, context) =>
+      createQuestionnaireInstrument(data as never, context)
+        .instrument as Record<string, unknown>,
+    update: (id, patch, context) => updateQuestionnaireInstrument(id, patch as never, context) as Record<string, unknown> | undefined,
+    hardDelete: (id, context) => deleteQuestionnaireInstrument(id, context) as Record<string, unknown> | undefined
   }
 };
 
@@ -444,7 +542,12 @@ const CREATE_ENTITY_SCHEMAS: Record<CrudEntityType, { parse: (value: unknown) =>
   mode_guide_session: createModeGuideSessionSchema,
   event_type: createEventTypeSchema,
   emotion_definition: createEmotionDefinitionSchema,
-  trigger_report: createTriggerReportSchema
+  trigger_report: createTriggerReportSchema,
+  preference_catalog: createPreferenceCatalogSchema,
+  preference_catalog_item: createPreferenceCatalogItemSchema,
+  preference_context: createPreferenceContextSchema,
+  preference_item: createPreferenceItemSchema,
+  questionnaire_instrument: createQuestionnaireInstrumentSchema
 };
 
 const UPDATE_ENTITY_SCHEMAS: Record<CrudEntityType, { parse: (value: unknown) => Record<string, unknown> }> = {
@@ -467,7 +570,12 @@ const UPDATE_ENTITY_SCHEMAS: Record<CrudEntityType, { parse: (value: unknown) =>
   mode_guide_session: updateModeGuideSessionSchema,
   event_type: updateEventTypeSchema,
   emotion_definition: updateEmotionDefinitionSchema,
-  trigger_report: updateTriggerReportSchema
+  trigger_report: updateTriggerReportSchema,
+  preference_catalog: updatePreferenceCatalogSchema,
+  preference_catalog_item: updatePreferenceCatalogItemSchema,
+  preference_context: updatePreferenceContextSchema,
+  preference_item: updatePreferenceItemSchema,
+  questionnaire_instrument: updateQuestionnaireInstrumentSchema
 };
 
 function parseCreateInput(entityType: CrudEntityType, data: Record<string, unknown>) {
@@ -704,6 +812,17 @@ function matchesLinkedTo(entityType: CrudEntityType, entity: Record<string, unkn
         (linkedTo.entityType === "belief_entry" && Array.isArray(entity.linkedBeliefIds) && entity.linkedBeliefIds.includes(linkedTo.id)) ||
         (linkedTo.entityType === "mode_profile" && Array.isArray(entity.linkedModeIds) && entity.linkedModeIds.includes(linkedTo.id))
       );
+    case "preference_catalog_item":
+      return linkedTo.entityType === "preference_catalog" && entity.catalogId === linkedTo.id;
+    case "preference_item":
+      return (
+        typeof entity.sourceEntityType === "string" &&
+        typeof entity.sourceEntityId === "string" &&
+        entity.sourceEntityType === linkedTo.entityType &&
+        entity.sourceEntityId === linkedTo.id
+      );
+    case "questionnaire_instrument":
+      return false;
     default:
       return false;
   }

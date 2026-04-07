@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>BGTaskSchedulerPermittedIdentifiers</key>
+	<array>
+		<string>com.aurel.forgecompanion.health-sync</string>
+	</array>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>$(DEVELOPMENT_LANGUAGE)</string>
+	<key>CFBundleDisplayName</key>
+	<string>Forge Companion</string>
+	<key>CFBundleExecutable</key>
+	<string>$(EXECUTABLE_NAME)</string>
+	<key>CFBundleIdentifier</key>
+	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleName</key>
+	<string>$(PRODUCT_NAME)</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>1.0</string>
+	<key>CFBundleVersion</key>
+	<string>1</string>
+	<key>LSApplicationQueriesSchemes</key>
+	<array>
+		<string>tailscale</string>
+	</array>
+	<key>NSBonjourServices</key>
+	<array>
+		<string>_forge._tcp</string>
+	</array>
+	<key>NSCameraUsageDescription</key>
+	<string>Forge Companion uses the camera to scan the pairing QR code from Forge Settings.</string>
+	<key>NSHealthShareUsageDescription</key>
+	<string>Forge Companion reads Health data to sync sleep, workouts, and recovery into Forge.</string>
+	<key>NSHealthUpdateUsageDescription</key>
+	<string>Forge Companion may write reconciliation metadata in future milestones.</string>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>Forge Companion scans your local network to find Forge runtimes during setup.</string>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>Forge Companion uses background location to detect stays, trips, and stops so Forge can build a truthful movement timeline even when the app is not open.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Forge Companion uses location to detect stays, trips, and meaningful places for reflective movement history in Forge.</string>
+	<key>UIApplicationSceneManifest</key>
+	<dict>
+		<key>UIApplicationSupportsMultipleScenes</key>
+		<false/>
+	</dict>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>fetch</string>
+		<string>location</string>
+	</array>
+	<key>UISupportedInterfaceOrientations</key>
+	<array>
+		<string>UIInterfaceOrientationPortrait</string>
+	</array>
+</dict>
+</plist>

@@ -280,6 +280,18 @@ export const FORGE_PLUGIN_ROUTE_GROUPS: RouteGroup[] = [
     target: (_match: RegExpMatchArray, url: URL) =>
       passthroughSearch("/api/v1/health/fitness", url)
   }),
+  exact("/forge/v1/preferences/workspace", {
+    method: "GET",
+    upstreamPath: "/api/v1/preferences/workspace",
+    target: (_match: RegExpMatchArray, url: URL) =>
+      passthroughSearch("/api/v1/preferences/workspace", url)
+  }),
+  exact("/forge/v1/psyche/self-observation/calendar", {
+    method: "GET",
+    upstreamPath: "/api/v1/psyche/self-observation/calendar",
+    target: (_match: RegExpMatchArray, url: URL) =>
+      passthroughSearch("/api/v1/psyche/self-observation/calendar", url)
+  }),
   exact("/forge/v1/operator/log-work", {
     method: "POST",
     upstreamPath: "/api/v1/operator/log-work",
@@ -304,6 +316,259 @@ export const FORGE_PLUGIN_ROUTE_GROUPS: RouteGroup[] = [
     target: (_match: RegExpMatchArray, url: URL) =>
       passthroughSearch("/api/v1/insights", url)
   }),
+  {
+    path: "/forge/v1/preferences",
+    match: "prefix",
+    operations: [
+      {
+        method: "POST",
+        pattern: /^\/forge\/v1\/preferences\/game\/start$/,
+        upstreamPath: "/api/v1/preferences/game/start",
+        requestBody: "json",
+        requiresToken: true,
+        target: (_match: RegExpMatchArray, url: URL) =>
+          passthroughSearch("/api/v1/preferences/game/start", url)
+      },
+      {
+        method: "POST",
+        pattern: /^\/forge\/v1\/preferences\/catalogs$/,
+        upstreamPath: "/api/v1/preferences/catalogs",
+        requestBody: "json",
+        requiresToken: true,
+        target: (_match: RegExpMatchArray, url: URL) =>
+          passthroughSearch("/api/v1/preferences/catalogs", url)
+      },
+      {
+        method: "PATCH",
+        pattern: /^\/forge\/v1\/preferences\/catalogs\/([^/]+)$/,
+        upstreamPath: "/api/v1/preferences/catalogs/:id",
+        requestBody: "json",
+        requiresToken: true,
+        target: (match: RegExpMatchArray, url: URL) =>
+          passthroughSearch(`/api/v1/preferences/catalogs/${match[1]}`, url)
+      },
+      {
+        method: "DELETE",
+        pattern: /^\/forge\/v1\/preferences\/catalogs\/([^/]+)$/,
+        upstreamPath: "/api/v1/preferences/catalogs/:id",
+        requiresToken: true,
+        target: (match: RegExpMatchArray, url: URL) =>
+          passthroughSearch(`/api/v1/preferences/catalogs/${match[1]}`, url)
+      },
+      {
+        method: "POST",
+        pattern: /^\/forge\/v1\/preferences\/catalog-items$/,
+        upstreamPath: "/api/v1/preferences/catalog-items",
+        requestBody: "json",
+        requiresToken: true,
+        target: (_match: RegExpMatchArray, url: URL) =>
+          passthroughSearch("/api/v1/preferences/catalog-items", url)
+      },
+      {
+        method: "PATCH",
+        pattern: /^\/forge\/v1\/preferences\/catalog-items\/([^/]+)$/,
+        upstreamPath: "/api/v1/preferences/catalog-items/:id",
+        requestBody: "json",
+        requiresToken: true,
+        target: (match: RegExpMatchArray, url: URL) =>
+          passthroughSearch(`/api/v1/preferences/catalog-items/${match[1]}`, url)
+      },
+      {
+        method: "DELETE",
+        pattern: /^\/forge\/v1\/preferences\/catalog-items\/([^/]+)$/,
+        upstreamPath: "/api/v1/preferences/catalog-items/:id",
+        requiresToken: true,
+        target: (match: RegExpMatchArray, url: URL) =>
+          passthroughSearch(`/api/v1/preferences/catalog-items/${match[1]}`, url)
+      },
+      {
+        method: "POST",
+        pattern: /^\/forge\/v1\/preferences\/contexts$/,
+        upstreamPath: "/api/v1/preferences/contexts",
+        requestBody: "json",
+        requiresToken: true,
+        target: (_match: RegExpMatchArray, url: URL) =>
+          passthroughSearch("/api/v1/preferences/contexts", url)
+      },
+      {
+        method: "PATCH",
+        pattern: /^\/forge\/v1\/preferences\/contexts\/([^/]+)$/,
+        upstreamPath: "/api/v1/preferences/contexts/:id",
+        requestBody: "json",
+        requiresToken: true,
+        target: (match: RegExpMatchArray, url: URL) =>
+          passthroughSearch(`/api/v1/preferences/contexts/${match[1]}`, url)
+      },
+      {
+        method: "POST",
+        pattern: /^\/forge\/v1\/preferences\/contexts\/merge$/,
+        upstreamPath: "/api/v1/preferences/contexts/merge",
+        requestBody: "json",
+        requiresToken: true,
+        target: (_match: RegExpMatchArray, url: URL) =>
+          passthroughSearch("/api/v1/preferences/contexts/merge", url)
+      },
+      {
+        method: "POST",
+        pattern: /^\/forge\/v1\/preferences\/items$/,
+        upstreamPath: "/api/v1/preferences/items",
+        requestBody: "json",
+        requiresToken: true,
+        target: (_match: RegExpMatchArray, url: URL) =>
+          passthroughSearch("/api/v1/preferences/items", url)
+      },
+      {
+        method: "PATCH",
+        pattern: /^\/forge\/v1\/preferences\/items\/([^/]+)$/,
+        upstreamPath: "/api/v1/preferences/items/:id",
+        requestBody: "json",
+        requiresToken: true,
+        target: (match: RegExpMatchArray, url: URL) =>
+          passthroughSearch(`/api/v1/preferences/items/${match[1]}`, url)
+      },
+      {
+        method: "POST",
+        pattern: /^\/forge\/v1\/preferences\/items\/from-entity$/,
+        upstreamPath: "/api/v1/preferences/items/from-entity",
+        requestBody: "json",
+        requiresToken: true,
+        target: (_match: RegExpMatchArray, url: URL) =>
+          passthroughSearch("/api/v1/preferences/items/from-entity", url)
+      },
+      {
+        method: "POST",
+        pattern: /^\/forge\/v1\/preferences\/judgments$/,
+        upstreamPath: "/api/v1/preferences/judgments",
+        requestBody: "json",
+        requiresToken: true,
+        target: (_match: RegExpMatchArray, url: URL) =>
+          passthroughSearch("/api/v1/preferences/judgments", url)
+      },
+      {
+        method: "POST",
+        pattern: /^\/forge\/v1\/preferences\/signals$/,
+        upstreamPath: "/api/v1/preferences/signals",
+        requestBody: "json",
+        requiresToken: true,
+        target: (_match: RegExpMatchArray, url: URL) =>
+          passthroughSearch("/api/v1/preferences/signals", url)
+      },
+      {
+        method: "PATCH",
+        pattern: /^\/forge\/v1\/preferences\/items\/([^/]+)\/score$/,
+        upstreamPath: "/api/v1/preferences/items/:id/score",
+        requestBody: "json",
+        requiresToken: true,
+        target: (match: RegExpMatchArray, url: URL) =>
+          passthroughSearch(`/api/v1/preferences/items/${match[1]}/score`, url)
+      }
+    ]
+  },
+  {
+    path: "/forge/v1/psyche/questionnaires",
+    match: "prefix",
+    operations: [
+      {
+        method: "GET",
+        pattern: /^\/forge\/v1\/psyche\/questionnaires$/,
+        upstreamPath: "/api/v1/psyche/questionnaires",
+        target: (_match: RegExpMatchArray, url: URL) =>
+          passthroughSearch("/api/v1/psyche/questionnaires", url)
+      },
+      {
+        method: "POST",
+        pattern: /^\/forge\/v1\/psyche\/questionnaires$/,
+        upstreamPath: "/api/v1/psyche/questionnaires",
+        requestBody: "json",
+        requiresToken: true,
+        target: (_match: RegExpMatchArray, url: URL) =>
+          passthroughSearch("/api/v1/psyche/questionnaires", url)
+      },
+      {
+        method: "GET",
+        pattern: /^\/forge\/v1\/psyche\/questionnaires\/([^/]+)$/,
+        upstreamPath: "/api/v1/psyche/questionnaires/:id",
+        target: (match: RegExpMatchArray, url: URL) =>
+          passthroughSearch(`/api/v1/psyche/questionnaires/${match[1]}`, url)
+      },
+      {
+        method: "POST",
+        pattern: /^\/forge\/v1\/psyche\/questionnaires\/([^/]+)\/clone$/,
+        upstreamPath: "/api/v1/psyche/questionnaires/:id/clone",
+        requestBody: "json",
+        requiresToken: true,
+        target: (match: RegExpMatchArray, url: URL) =>
+          passthroughSearch(`/api/v1/psyche/questionnaires/${match[1]}/clone`, url)
+      },
+      {
+        method: "POST",
+        pattern: /^\/forge\/v1\/psyche\/questionnaires\/([^/]+)\/draft$/,
+        upstreamPath: "/api/v1/psyche/questionnaires/:id/draft",
+        requestBody: "json",
+        requiresToken: true,
+        target: (match: RegExpMatchArray, url: URL) =>
+          passthroughSearch(`/api/v1/psyche/questionnaires/${match[1]}/draft`, url)
+      },
+      {
+        method: "PATCH",
+        pattern: /^\/forge\/v1\/psyche\/questionnaires\/([^/]+)\/draft$/,
+        upstreamPath: "/api/v1/psyche/questionnaires/:id/draft",
+        requestBody: "json",
+        requiresToken: true,
+        target: (match: RegExpMatchArray, url: URL) =>
+          passthroughSearch(`/api/v1/psyche/questionnaires/${match[1]}/draft`, url)
+      },
+      {
+        method: "POST",
+        pattern: /^\/forge\/v1\/psyche\/questionnaires\/([^/]+)\/publish$/,
+        upstreamPath: "/api/v1/psyche/questionnaires/:id/publish",
+        requestBody: "json",
+        requiresToken: true,
+        target: (match: RegExpMatchArray, url: URL) =>
+          passthroughSearch(`/api/v1/psyche/questionnaires/${match[1]}/publish`, url)
+      },
+      {
+        method: "POST",
+        pattern: /^\/forge\/v1\/psyche\/questionnaires\/([^/]+)\/runs$/,
+        upstreamPath: "/api/v1/psyche/questionnaires/:id/runs",
+        requestBody: "json",
+        requiresToken: true,
+        target: (match: RegExpMatchArray, url: URL) =>
+          passthroughSearch(`/api/v1/psyche/questionnaires/${match[1]}/runs`, url)
+      }
+    ]
+  },
+  {
+    path: "/forge/v1/psyche/questionnaire-runs",
+    match: "prefix",
+    operations: [
+      {
+        method: "GET",
+        pattern: /^\/forge\/v1\/psyche\/questionnaire-runs\/([^/]+)$/,
+        upstreamPath: "/api/v1/psyche/questionnaire-runs/:id",
+        target: (match: RegExpMatchArray, url: URL) =>
+          passthroughSearch(`/api/v1/psyche/questionnaire-runs/${match[1]}`, url)
+      },
+      {
+        method: "PATCH",
+        pattern: /^\/forge\/v1\/psyche\/questionnaire-runs\/([^/]+)$/,
+        upstreamPath: "/api/v1/psyche/questionnaire-runs/:id",
+        requestBody: "json",
+        requiresToken: true,
+        target: (match: RegExpMatchArray, url: URL) =>
+          passthroughSearch(`/api/v1/psyche/questionnaire-runs/${match[1]}`, url)
+      },
+      {
+        method: "POST",
+        pattern: /^\/forge\/v1\/psyche\/questionnaire-runs\/([^/]+)\/complete$/,
+        upstreamPath: "/api/v1/psyche/questionnaire-runs/:id/complete",
+        requestBody: "json",
+        requiresToken: true,
+        target: (match: RegExpMatchArray, url: URL) =>
+          passthroughSearch(`/api/v1/psyche/questionnaire-runs/${match[1]}/complete`, url)
+      }
+    ]
+  },
   {
     path: "/forge/v1/wiki/pages",
     match: "prefix",

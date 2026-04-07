@@ -61,6 +61,12 @@ LLMs for the inference loop. That preference system must now be arrival-first: s
 what Forge knows before asking for setup work, admit clearly when evidence is still
 thin, and launch comparison rounds through one simple Start the game flow that chooses
 a domain or concept area and then auto-populates the candidates.
+Tenth, it must support Movement as a first-class domain across the backend, web app,
+and iPhone companion. Forge should be able to passively detect stays, trips, stops,
+and known places with explicit permission onboarding, publish those movement records as
+structured evidence rather than opaque GPS blobs, and let the user review their
+mobility through day, month, and all-time views that connect movement to notes, work,
+health, and Psyche context.
 
 ## Product Concepts That Must Be Explained Clearly
 
@@ -210,6 +216,25 @@ heart-rate context when available, subjective annotations, provenance, and links
 to Forge and Psyche records. Imported HealthKit workouts and habit-generated workouts
 must reconcile rather than piling up as duplicate sessions.
 
+Movement places are now first-class Forge records shared between the iPhone companion
+and the web app. A place records a label, aliases, coordinates, radius, semantic tags
+such as `home`, `workplace`, `grocery`, or `nature`, optional wiki linkage, and
+optional links to people or other Forge entities. Places are the canonical anchors for
+movement reasoning; wiki frontmatter can mirror that metadata, but the place record is
+the system of record.
+
+Movement stays are first-class Forge records representing a span of time spent at one
+place or inside one stationary cluster. A stay records start and end time, center
+coordinates, effective place match, stationary classification, timing and duration
+metrics, optional published evidence note, and provenance from the companion sync.
+
+Movement trips are first-class Forge records representing motion between places. A trip
+records start and end, distance, moving and idle time, travel mode, activity type,
+speed and MET summaries, optional calorie estimate, simplified trajectory data, stop
+anchors, labels, tags, linked entities, linked people, and optional published evidence
+note. Trips may also create bounded XP rewards and may produce a workout candidate when
+that would not duplicate an existing imported workout.
+
 Rewards are the structured XP outcomes attached to meaningful behavior. Starting work,
 sustaining work, completing work, and preserving momentum should all create explainable
 reward events. XP is not decoration. It is a legible reward ledger that should always
@@ -321,8 +346,11 @@ to be a broken or compressed version of desktop. If a surface contains dense dat
 mobile version must intentionally reorganize it rather than letting it overflow.
 That same requirement now applies to the companion architecture: the iOS app is not a
 web wrapper. It is a native SwiftUI and Apple-framework surface designed around phone
-permissions, background sync, and future watch or location capabilities, while the main
-Forge web runtime remains the primary reflective workspace.
+permissions, background sync, location capture, and watch sync, while the main Forge
+web runtime remains the primary reflective workspace. The watch companion is now part
+of that contract too. It is not allowed to become a tiny second Forge client. Its job
+is to act as a micro-capture layer for habits, state check-ins, prompt confirmations,
+and short semantic annotations that would otherwise never make it into the system.
 
 Multi-user behavior is also part of the contract. The main list routes, snapshot
 payloads, entity detail routes, and search routes must all understand explicit user
@@ -397,6 +425,12 @@ definitions, version records, runs, answer rows, and score rows live in migratio
 SQLite tables. Scoring is not freeform code execution: the server evaluates a safe JSON
 AST that can express arithmetic, item references, score references, filtered counts,
 conditional logic, and dependent subscores while keeping the runtime auditable.
+The Apple companion stack is now explicit too. Forge ships a native SwiftUI iOS
+companion and a paired SwiftUI watchOS companion under `ios-companion/`, bridged with
+WatchConnectivity and using WidgetKit plus App Intents for watch launch surfaces. The
+iPhone app owns pairing-session credentials, mobile API calls, retries, and bootstrap
+publication. The watch stays stateless with respect to Forge auth and only queues fast
+habit, check-in, prompt, and note-capture actions for the phone to forward.
 
 Forge also has a long-term canonical desktop architecture that remains binding even
 while the current Node bridge is in place. That canonical architecture is Tauri 2 with

@@ -23,6 +23,8 @@ const RESERVED_RESPONSE_TOKENS = 140_000;
 const APPROX_CHARS_PER_TOKEN = 4;
 const REQUEST_TIMEOUT_MS = 90_000;
 const BACKGROUND_POLL_INTERVAL_MS = 2_000;
+const DEFAULT_CODEX_BASE_URL = "https://chatgpt.com/backend-api";
+const CODEX_JWT_CLAIM_PATH = "https://api.openai.com/auth";
 function closedObject(properties) {
     return {
         type: "object",
@@ -172,6 +174,67 @@ function readVerbosity(profile) {
         ? profile.metadata.verbosity
         : null;
 }
+function isCodexProfile(profile) {
+    return profile.provider === "openai-codex";
+}
+function normalizeBaseUrl(profile) {
+    const trimmed = profile.baseUrl.trim();
+    if (trimmed.length > 0) {
+        return trimmed.replace(/\/$/, "");
+    }
+    return isCodexProfile(profile)
+        ? DEFAULT_CODEX_BASE_URL
+        : "https://api.openai.com/v1";
+}
+function buildResponsesUrl(profile, responseId) {
+    const baseUrl = normalizeBaseUrl(profile);
+    const root = isCodexProfile(profile)
+        ? baseUrl.endsWith("/codex/responses")
+            ? baseUrl
+            : baseUrl.endsWith("/codex")
+                ? `${baseUrl}/responses`
+                : `${baseUrl}/codex/responses`
+        : baseUrl.endsWith("/responses")
+            ? baseUrl
+            : `${baseUrl}/responses`;
+    return responseId ? `${root}/${responseId}` : root;
+}
+function extractCodexAccountId(accessToken) {
+    try {
+        const parts = accessToken.split(".");
+        if (parts.length !== 3) {
+            throw new Error("Invalid token");
+        }
+        const payload = JSON.parse(Buffer.from(parts[1], "base64url").toString("utf8"));
+        const auth = payload[CODEX_JWT_CLAIM_PATH];
+        if (!auth || typeof auth !== "object") {
+            throw new Error("Missing auth claim");
+        }
+        const accountId = auth.chatgpt_account_id;
+        if (typeof accountId !== "string" || accountId.trim().length === 0) {
+            throw new Error("Missing account id");
+        }
+        return accountId;
+    }
+    catch {
+        throw new Error("Failed to extract accountId from OpenAI Codex token.");
+    }
+}
+function buildRequestHeaders(profile, apiKey, options = {}) {
+    const headers = {
+        authorization: `Bearer ${apiKey}`
+    };
+    if (options.includeJsonContentType) {
+        headers["content-type"] = "application/json";
+    }
+    if (!isCodexProfile(profile)) {
+        return headers;
+    }
+    headers["OpenAI-Beta"] = "responses=experimental";
+    headers.originator = "pi";
+    headers["chatgpt-account-id"] = extractCodexAccountId(apiKey);
+    return headers;
+}
 function buildReasoningConfiguration(profile) {
     const effort = readReasoningEffort(profile);
     return effort ? { effort } : undefined;
@@ -268,7 +331,13 @@ function normalizeResult(content, input) {
     }
 }
 export class OpenAiResponsesProvider {
-    providerNames = ["openai", "openai-responses", "openai-compatible"];
+    providerNames = [
+        "openai",
+        "openai-api",
+        "openai-codex",
+        "openai-responses",
+        "openai-compatible"
+    ];
     async testConnection({ apiKey, profile, logger }) {
         emitDiagnostic(logger, {
             level: "info",
@@ -283,12 +352,11 @@ export class OpenAiResponsesProvider {
         });
         let response;
         try {
-            response = await fetch(`${profile.baseUrl.replace(/\/$/, "")}/responses`, {
+            response = await fetch(buildResponsesUrl(profile), {
                 method: "POST",
-                headers: {
-                    "content-type": "application/json",
-                    authorization: `Bearer ${apiKey}`
-                },
+                headers: buildRequestHeaders(profile, apiKey, {
+                    includeJsonContentType: true
+                }),
                 body: JSON.stringify({
                     model: profile.model,
                     input: "Reply with the single word ok.",
@@ -351,6 +419,53 @@ export class OpenAiResponsesProvider {
         });
         return {
             outputPreview: parseOutputText(payload)?.trim() || "ok"
+        };
+    }
+    async runText({ apiKey, profile, systemPrompt, prompt, logger }) {
+        emitDiagnostic(logger, {
+            level: "info",
+            message: "Running OpenAI text prompt.",
+            details: {
+                scope: "ai_processor",
+                eventKey: "prompt_run_start",
+                provider: profile.provider,
+                baseUrl: profile.baseUrl,
+                model: profile.model
+            }
+        });
+        const response = await fetch(buildResponsesUrl(profile), {
+            method: "POST",
+            headers: buildRequestHeaders(profile, apiKey, {
+                includeJsonContentType: true
+            }),
+            body: JSON.stringify({
+                model: profile.model,
+                input: [
+                    ...(systemPrompt?.trim()
+                        ? [
+                            {
+                                role: "system",
+                                content: [{ type: "input_text", text: systemPrompt.trim() }]
+                            }
+                        ]
+                        : []),
+                    {
+                        role: "user",
+                        content: [{ type: "input_text", text: prompt }]
+                    }
+                ],
+                reasoning: buildReasoningConfiguration(profile),
+                text: buildTextConfiguration({ profile }),
+                max_output_tokens: 1200
+            })
+        });
+        if (!response.ok) {
+            const message = await response.text();
+            throw new Error(`OpenAI text prompt failed (${response.status})${message ? `: ${message}` : ""}`);
+        }
+        const payload = await readJsonPayload(response);
+        return {
+            outputText: parseOutputText(payload)?.trim() || ""
         };
     }
     async compile({ apiKey, profile, input, resumeResponseId, logger }) {
@@ -517,11 +632,9 @@ export class OpenAiResponsesProvider {
                     responseId
                 }
             });
-            const resumeResponse = await fetch(`${profile.baseUrl.replace(/\/$/, "")}/responses/${responseId}`, {
+            const resumeResponse = await fetch(buildResponsesUrl(profile, responseId), {
                 method: "GET",
-                headers: {
-                    authorization: `Bearer ${apiKey}`
-                },
+                headers: buildRequestHeaders(profile, apiKey),
                 signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS)
             });
             if (!resumeResponse.ok) {
@@ -547,12 +660,11 @@ export class OpenAiResponsesProvider {
         else {
             let createResponse;
             try {
-                createResponse = await fetch(`${profile.baseUrl.replace(/\/$/, "")}/responses`, {
+                createResponse = await fetch(buildResponsesUrl(profile), {
                     method: "POST",
-                    headers: {
-                        "content-type": "application/json",
-                        authorization: `Bearer ${apiKey}`
-                    },
+                    headers: buildRequestHeaders(profile, apiKey, {
+                        includeJsonContentType: true
+                    }),
                     body: JSON.stringify({
                         model: profile.model,
                         input: inputs,
@@ -646,11 +758,9 @@ export class OpenAiResponsesProvider {
         while (!isTerminalBackgroundStatus(readResponseStatus(payload))) {
             await new Promise((resolve) => setTimeout(resolve, BACKGROUND_POLL_INTERVAL_MS));
             try {
-                const pollResponse = await fetch(`${profile.baseUrl.replace(/\/$/, "")}/responses/${responseId}`, {
+                const pollResponse = await fetch(buildResponsesUrl(profile, responseId), {
                     method: "GET",
-                    headers: {
-                        authorization: `Bearer ${apiKey}`
-                    },
+                    headers: buildRequestHeaders(profile, apiKey),
                     signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS)
                 });
                 if (!pollResponse.ok) {

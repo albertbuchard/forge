@@ -1,6 +1,6 @@
 ---
 name: forge-openclaw
-description: use when the user wants to save, search, update, review, start, stop, reward, explain, or compare Forge records, or when the conversation is clearly about a Forge entity such as a goal, project, strategy, task, habit, note, calendar_event, work_block_template, task_timebox, task_run, insight, preference item, preference context, preference catalog, psyche_value, behavior_pattern, behavior, belief_entry, mode_profile, mode_guide_session, trigger_report, event_type, or emotion_definition. identify the exact Forge object, keep the main conversation natural, guide psyche intake with active listening before storing it, and for psyche issues that need understanding first usually begin with one exploratory question before any formulation or save suggestion.
+description: use when the user wants to save, search, update, review, start, stop, reward, explain, compare, or run Forge records, or when the conversation is clearly about a Forge entity such as a goal, project, strategy, task, habit, note, calendar_event, work_block_template, task_timebox, task_run, insight, preference item, preference context, preference catalog, questionnaire instrument, questionnaire run, self observation, psyche_value, behavior_pattern, behavior, belief_entry, mode_profile, mode_guide_session, trigger_report, event_type, emotion_definition, sleep_session, or workout_session. identify the exact Forge object, keep the main conversation natural, guide psyche intake with active listening before storing it, and for psyche issues that need understanding first usually begin with one exploratory question before any formulation or save suggestion.
 ---
 
 Forge is the user's structured system for planning work, doing work, reflecting on patterns, and keeping a truthful record of what is happening. Use it when the user is clearly working inside that system, or when they are describing something that naturally belongs there and would benefit from being stored, updated, reviewed, or acted on in Forge. Keep the conversation natural first. Do not turn every message into intake. When a real Forge entity is clearly present, name the exact entity type plainly, help with the substance of the conversation, and then offer Forge once, lightly, if storing it would genuinely help.
@@ -466,3 +466,12 @@ When the user asks which Forge tools are available, list exactly these tools:
 `forge_create_work_block_template`
 `forge_recommend_task_timeboxes`
 `forge_create_task_timebox`
+
+Additional first-class surfaces:
+
+- Use the high-level batch routes for basic Preferences CRUD. `preference_catalog`, `preference_catalog_item`, `preference_context`, and `preference_item` all go through `forge_create_entities`, `forge_update_entities`, and `forge_delete_entities`.
+- Use the high-level batch routes for basic questionnaire CRUD too. `questionnaire_instrument` goes through `forge_create_entities`, `forge_update_entities`, and `forge_delete_entities`.
+- Keep the dedicated Preferences tools only for real preference actions and read models: `forge_get_preferences_workspace`, `forge_start_preferences_game`, `forge_merge_preferences_contexts`, `forge_enqueue_preferences_item_from_entity`, `forge_submit_preferences_judgment`, `forge_submit_preferences_signal`, and `forge_update_preferences_score`.
+- Keep the dedicated questionnaire tools only for real flow actions and read models: `forge_list_questionnaires`, `forge_get_questionnaire`, `forge_clone_questionnaire`, `forge_ensure_questionnaire_draft`, `forge_publish_questionnaire_draft`, `forge_start_questionnaire_run`, `forge_get_questionnaire_run`, `forge_update_questionnaire_run`, and `forge_complete_questionnaire_run`.
+- Self-observation is note-backed. Read the calendar through `forge_get_self_observation_calendar`, but create or update the stored observation as a `note` tagged `Self-observation` with `frontmatter.observedAt` and links to the relevant `behavior_pattern`, `trigger_report`, or other Forge records.
+- `sleep_session` and `workout_session` are first-class health records. Review them through the dedicated health tools instead of treating them like loose notes.

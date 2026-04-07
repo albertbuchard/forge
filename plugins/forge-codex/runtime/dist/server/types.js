@@ -93,6 +93,12 @@ export const activityEntityTypeSchema = z.enum([
     "mode_profile",
     "mode_guide_session",
     "trigger_report",
+    "preference_catalog",
+    "preference_catalog_item",
+    "preference_context",
+    "preference_item",
+    "questionnaire_instrument",
+    "questionnaire_run",
     "note",
     "event_type",
     "emotion_definition",
@@ -199,7 +205,12 @@ export const crudEntityTypeSchema = z.enum([
     "mode_guide_session",
     "event_type",
     "emotion_definition",
-    "trigger_report"
+    "trigger_report",
+    "preference_catalog",
+    "preference_catalog_item",
+    "preference_context",
+    "preference_item",
+    "questionnaire_instrument"
 ]);
 export const rewardableEntityTypeSchema = z.enum([
     "system",
@@ -1195,7 +1206,29 @@ export const notificationPreferencesSchema = z.object({
     dailyQuestReminders: z.boolean(),
     achievementCelebrations: z.boolean()
 });
-export const themePreferenceSchema = z.enum(["obsidian", "solar", "system"]);
+const hexColorSchema = z
+    .string()
+    .trim()
+    .regex(/^#[0-9a-fA-F]{6}$/, "Use a 6-digit hex color");
+export const themePreferenceSchema = z.enum([
+    "obsidian",
+    "solar",
+    "aurora",
+    "ember",
+    "custom",
+    "system"
+]);
+export const customThemeSchema = z.object({
+    label: z.string().trim().min(1).max(40),
+    primary: hexColorSchema,
+    secondary: hexColorSchema,
+    tertiary: hexColorSchema,
+    canvas: hexColorSchema,
+    panel: hexColorSchema,
+    panelHigh: hexColorSchema,
+    panelLow: hexColorSchema,
+    ink: hexColorSchema
+});
 export const executionSettingsSchema = z.object({
     maxActiveTasks: z.number().int().min(1).max(8),
     timeAccountingMode: timeAccountingModeSchema
@@ -1210,6 +1243,141 @@ export const microsoftCalendarAuthSettingsSchema = z.object({
     isConfigured: z.boolean(),
     isReadyForSignIn: z.boolean(),
     setupMessage: z.string()
+});
+export const aiModelProviderSchema = z.enum([
+    "openai-api",
+    "openai-codex",
+    "openai-compatible"
+]);
+export const aiModelAuthModeSchema = z.enum(["api_key", "oauth"]);
+export const aiModelConnectionStatusSchema = z.enum([
+    "connected",
+    "needs_attention"
+]);
+export const aiModelConnectionSchema = z.object({
+    id: z.string(),
+    label: z.string(),
+    provider: aiModelProviderSchema,
+    authMode: aiModelAuthModeSchema,
+    baseUrl: z.string(),
+    model: z.string(),
+    accountLabel: z.string().nullable(),
+    enabled: z.boolean(),
+    status: aiModelConnectionStatusSchema,
+    hasStoredCredential: z.boolean(),
+    usesOAuth: z.boolean(),
+    supportsCustomBaseUrl: z.boolean(),
+    agentId: z.string(),
+    agentLabel: z.string(),
+    createdAt: z.string(),
+    updatedAt: z.string()
+});
+export const forgeAgentModelSlotSchema = z.object({
+    connectionId: z.string().nullable(),
+    connectionLabel: z.string().nullable(),
+    provider: aiModelProviderSchema.nullable(),
+    baseUrl: z.string().nullable(),
+    model: z.string()
+});
+export const modelSettingsPayloadSchema = z.object({
+    forgeAgent: z.object({
+        basicChat: forgeAgentModelSlotSchema,
+        wiki: forgeAgentModelSlotSchema
+    }),
+    connections: z.array(aiModelConnectionSchema),
+    oauth: z.object({
+        openAiCodex: z.object({
+            authorizeUrl: z.string(),
+            callbackUrl: z.string(),
+            setupMessage: z.string()
+        })
+    })
+});
+export const aiProcessorTriggerModeSchema = z.enum([
+    "manual",
+    "route",
+    "cron"
+]);
+export const aiProcessorCapabilityModeSchema = z.enum([
+    "content",
+    "tool",
+    "mcp",
+    "processor"
+]);
+export const aiProcessorAccessModeSchema = z.enum([
+    "read",
+    "write",
+    "read_write",
+    "exec"
+]);
+export const aiProcessorMachineAccessSchema = z.object({
+    read: z.boolean().default(false),
+    write: z.boolean().default(false),
+    exec: z.boolean().default(false)
+});
+export const aiProcessorToolSchema = z.object({
+    key: nonEmptyTrimmedString,
+    label: nonEmptyTrimmedString,
+    description: trimmedString.default(""),
+    endpoint: trimmedString.default(""),
+    mode: aiProcessorCapabilityModeSchema.default("tool")
+});
+export const aiProcessorSchema = z.object({
+    id: z.string(),
+    surfaceId: z.string(),
+    title: z.string(),
+    promptFlow: z.string(),
+    contextInput: z.string(),
+    toolConfig: z.array(aiProcessorToolSchema),
+    agentIds: z.array(z.string()),
+    triggerMode: aiProcessorTriggerModeSchema,
+    cronExpression: z.string(),
+    machineAccess: aiProcessorMachineAccessSchema,
+    endpointEnabled: z.boolean(),
+    lastRunAt: z.string().nullable(),
+    lastRunStatus: z.enum(["idle", "running", "completed", "failed"]).nullable(),
+    lastRunOutput: z
+        .object({
+        concatenated: z.string(),
+        byAgent: z.record(z.string(), z.string())
+    })
+        .nullable(),
+    createdAt: z.string(),
+    updatedAt: z.string()
+});
+export const aiProcessorLinkSchema = z.object({
+    id: z.string(),
+    surfaceId: z.string(),
+    sourceWidgetId: z.string(),
+    targetProcessorId: z.string(),
+    accessMode: aiProcessorAccessModeSchema,
+    capabilityMode: aiProcessorCapabilityModeSchema,
+    metadata: z.record(z.string(), z.unknown()),
+    createdAt: z.string(),
+    updatedAt: z.string()
+});
+export const surfaceProcessorGraphPayloadSchema = z.object({
+    surfaceId: z.string(),
+    processors: z.array(aiProcessorSchema),
+    links: z.array(aiProcessorLinkSchema)
+});
+export const openAiCodexOauthSessionSchema = z.object({
+    id: z.string(),
+    status: z.enum([
+        "starting",
+        "awaiting_browser",
+        "awaiting_manual_input",
+        "authorized",
+        "error",
+        "consumed",
+        "expired"
+    ]),
+    authUrl: z.string().nullable(),
+    accountLabel: z.string().nullable(),
+    error: z.string().nullable(),
+    createdAt: z.string(),
+    expiresAt: z.string(),
+    credentialExpiresAt: z.string().nullable()
 });
 export const agentTokenSummarySchema = z.object({
     id: z.string(),
@@ -1440,6 +1608,7 @@ export const settingsPayloadSchema = z.object({
     notifications: notificationPreferencesSchema,
     execution: executionSettingsSchema,
     themePreference: themePreferenceSchema,
+    customTheme: customThemeSchema.nullable(),
     localePreference: appLocaleSchema,
     security: z.object({
         integrityScore: z.number().int().min(0).max(100),
@@ -1452,6 +1621,7 @@ export const settingsPayloadSchema = z.object({
     calendarProviders: z.object({
         microsoft: microsoftCalendarAuthSettingsSchema
     }),
+    modelSettings: modelSettingsPayloadSchema,
     agents: z.array(agentIdentitySchema),
     agentTokens: z.array(agentTokenSummarySchema)
 });
@@ -2243,6 +2413,7 @@ export const updateSettingsSchema = z.object({
     notifications: notificationPreferencesSchema.partial().optional(),
     execution: executionSettingsSchema.partial().optional(),
     themePreference: themePreferenceSchema.optional(),
+    customTheme: customThemeSchema.nullable().optional(),
     localePreference: appLocaleSchema.optional(),
     security: z
         .object({
@@ -2259,7 +2430,117 @@ export const updateSettingsSchema = z.object({
         })
             .optional()
     })
+        .optional(),
+    modelSettings: z
+        .object({
+        forgeAgent: z
+            .object({
+            basicChat: z
+                .object({
+                connectionId: trimmedString.nullable().optional(),
+                model: trimmedString.optional()
+            })
+                .optional(),
+            wiki: z
+                .object({
+                connectionId: trimmedString.nullable().optional(),
+                model: trimmedString.optional()
+            })
+                .optional()
+        })
+            .optional()
+    })
         .optional()
+});
+export const upsertAiModelConnectionSchema = z
+    .object({
+    id: trimmedString.optional(),
+    label: nonEmptyTrimmedString,
+    provider: aiModelProviderSchema,
+    authMode: aiModelAuthModeSchema.optional(),
+    baseUrl: trimmedString.optional(),
+    model: nonEmptyTrimmedString,
+    apiKey: trimmedString.optional(),
+    oauthSessionId: trimmedString.optional(),
+    enabled: z.boolean().default(true)
+})
+    .superRefine((value, context) => {
+    const authMode = value.authMode ??
+        (value.provider === "openai-codex" ? "oauth" : "api_key");
+    if (value.provider === "openai-codex" && authMode !== "oauth") {
+        context.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ["authMode"],
+            message: "OpenAI Codex connections must use OAuth."
+        });
+    }
+    if (authMode === "api_key" &&
+        !value.id?.trim() &&
+        !value.apiKey?.trim()) {
+        context.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ["apiKey"],
+            message: "API key is required for a new API-backed connection."
+        });
+    }
+    if (authMode === "oauth" &&
+        !value.id?.trim() &&
+        !value.oauthSessionId?.trim()) {
+        context.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ["oauthSessionId"],
+            message: "OAuth session is required for a new OAuth-backed connection."
+        });
+    }
+});
+export const testAiModelConnectionSchema = z.object({
+    connectionId: trimmedString.optional(),
+    provider: aiModelProviderSchema.optional(),
+    baseUrl: trimmedString.optional(),
+    model: nonEmptyTrimmedString,
+    apiKey: trimmedString.optional()
+});
+export const submitOpenAiCodexOauthManualCodeSchema = z.object({
+    codeOrUrl: nonEmptyTrimmedString
+});
+export const createAiProcessorSchema = z.object({
+    surfaceId: nonEmptyTrimmedString,
+    title: nonEmptyTrimmedString,
+    promptFlow: trimmedString.default(""),
+    contextInput: trimmedString.default(""),
+    toolConfig: z.array(aiProcessorToolSchema).default([]),
+    agentIds: z.array(z.string().trim().min(1)).default([]),
+    triggerMode: aiProcessorTriggerModeSchema.default("manual"),
+    cronExpression: trimmedString.default(""),
+    machineAccess: aiProcessorMachineAccessSchema.default({
+        read: false,
+        write: false,
+        exec: false
+    }),
+    endpointEnabled: z.boolean().default(true)
+});
+export const updateAiProcessorSchema = z.object({
+    title: nonEmptyTrimmedString.optional(),
+    promptFlow: trimmedString.optional(),
+    contextInput: trimmedString.optional(),
+    toolConfig: z.array(aiProcessorToolSchema).optional(),
+    agentIds: z.array(z.string().trim().min(1)).optional(),
+    triggerMode: aiProcessorTriggerModeSchema.optional(),
+    cronExpression: trimmedString.optional(),
+    machineAccess: aiProcessorMachineAccessSchema.partial().optional(),
+    endpointEnabled: z.boolean().optional()
+});
+export const createAiProcessorLinkSchema = z.object({
+    surfaceId: nonEmptyTrimmedString,
+    sourceWidgetId: nonEmptyTrimmedString,
+    targetProcessorId: nonEmptyTrimmedString,
+    accessMode: aiProcessorAccessModeSchema.default("read"),
+    capabilityMode: aiProcessorCapabilityModeSchema.default("content"),
+    metadata: z.record(z.string(), z.unknown()).default({})
+});
+export const runAiProcessorSchema = z.object({
+    input: trimmedString.default(""),
+    context: z.record(z.string(), z.unknown()).default({})
 });
 export const createAgentTokenSchema = z.object({
     label: nonEmptyTrimmedString,

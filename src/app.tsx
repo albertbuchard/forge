@@ -12,6 +12,7 @@ import { GoalsPage } from "@/pages/goals-page";
 import { HabitsPage } from "@/pages/habits-page";
 import { InsightsPage } from "@/pages/insights-page";
 import { KanbanPage } from "@/pages/kanban-page";
+import { MovementPage } from "@/pages/movement-page";
 import { NotesPage } from "@/pages/notes-page";
 import { OverviewPage } from "@/pages/overview-page";
 import { ProjectDetailPage } from "@/pages/project-detail-page";
@@ -145,6 +146,7 @@ export function App() {
             element={<Navigate to="/projects" replace />}
           />
           <Route path="calendar" element={<CalendarPage />} />
+          <Route path="movement" element={<MovementPage />} />
           <Route path="sleep" element={<SleepPage />} />
           <Route path="sports" element={<SportsPage />} />
           <Route path="psyche" element={<PsychePage />} />

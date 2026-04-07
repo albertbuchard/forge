@@ -10,6 +10,7 @@ export const FORGE_PLUGIN_NAME = "Forge";
 export const FORGE_PLUGIN_DESCRIPTION = "Curated OpenClaw adapter for the Forge collaboration API, UI entrypoint, and localhost auto-start runtime.";
 export const DEFAULT_FORGE_ORIGIN = "http://127.0.0.1";
 export const DEFAULT_FORGE_PORT = 4317;
+export const DEFAULT_OPENCLAW_ACTOR_LABEL = "aurel (claw)";
 const LOCAL_HOSTNAMES = new Set(["127.0.0.1", "localhost", "::1"]);
 function normalizeString(value, fallback) {
     return typeof value === "string" && value.trim().length > 0 ? value.trim() : fallback;
@@ -88,7 +89,7 @@ export function resolveForgePluginConfig(pluginConfig) {
         portSource: hasConfiguredPort ? "configured" : preferredPort !== null ? "preferred" : "default",
         dataRoot: normalizeDataRoot(raw.dataRoot),
         apiToken: typeof raw.apiToken === "string" ? raw.apiToken.trim() : "",
-        actorLabel: normalizeString(raw.actorLabel, "aurel"),
+        actorLabel: normalizeString(raw.actorLabel, DEFAULT_OPENCLAW_ACTOR_LABEL),
         timeoutMs: normalizeTimeout(raw.timeoutMs, 15_000)
     };
 }
@@ -124,7 +125,7 @@ export const forgePluginConfigSchema = {
             },
             actorLabel: {
                 type: "string",
-                default: "aurel",
+                default: DEFAULT_OPENCLAW_ACTOR_LABEL,
                 description: "Actor label recorded in Forge provenance headers."
             },
             timeoutMs: {
@@ -161,8 +162,8 @@ export const forgePluginConfigSchema = {
         },
         actorLabel: {
             label: "Actor Label",
-            help: "Recorded in Forge provenance headers for plugin-originated writes.",
-            placeholder: "aurel"
+            help: "Recorded in Forge provenance headers for plugin-originated writes. Use a distinct OpenClaw label such as <name> (claw).",
+            placeholder: DEFAULT_OPENCLAW_ACTOR_LABEL
         },
         timeoutMs: {
             label: "Request Timeout (ms)",

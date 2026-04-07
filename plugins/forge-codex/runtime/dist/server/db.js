@@ -3,6 +3,7 @@ import { mkdir, readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { DatabaseSync } from "node:sqlite";
+import { ensureQuestionnaireSeeds } from "./repositories/questionnaires.js";
 function nowIso() {
     return new Date().toISOString();
 }
@@ -319,6 +320,7 @@ export async function initializeDatabase() {
     if (seedDemoDataEnabled) {
         seedData();
     }
+    ensureQuestionnaireSeeds();
 }
 export function configureDatabaseSeeding(enabled) {
     seedDemoDataEnabled = enabled;

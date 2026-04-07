@@ -444,6 +444,53 @@ function listStoredScores(contextId) {
        WHERE context_id = ?`)
         .all(contextId);
 }
+export function listPreferenceContexts() {
+    return getDatabase()
+        .prepare(`SELECT id, profile_id, name, description, share_mode, active, is_default, decay_days, created_at, updated_at
+       FROM preference_contexts
+       ORDER BY created_at ASC`)
+        .all().map(mapContext);
+}
+export function getPreferenceContextById(contextId) {
+    return readContext(contextId) ?? undefined;
+}
+export function listPreferenceItems() {
+    return getDatabase()
+        .prepare(`SELECT id, profile_id, label, description, tags_json, feature_weights_json, source_entity_type, source_entity_id, metadata_json, created_at, updated_at
+       FROM preference_items
+       ORDER BY created_at ASC`)
+        .all().map(mapItem);
+}
+export function getPreferenceItemById(itemId) {
+    return getItemById(itemId) ?? undefined;
+}
+export function listPreferenceCatalogs() {
+    return getDatabase()
+        .prepare(`SELECT id, profile_id, domain, slug, title, description, source, archived, created_at, updated_at
+       FROM preference_catalogs
+       WHERE archived = 0
+       ORDER BY created_at ASC`)
+        .all()
+        .filter((row) => row.archived === 0)
+        .map((row) => readCatalog(row.id))
+        .filter((catalog) => catalog !== null);
+}
+export function getPreferenceCatalogById(catalogId) {
+    return readCatalog(catalogId) ?? undefined;
+}
+export function listPreferenceCatalogItems() {
+    return getDatabase()
+        .prepare(`SELECT id, catalog_id, label, description, tags_json, feature_weights_json, position, archived, created_at, updated_at
+       FROM preference_catalog_items
+       WHERE archived = 0
+       ORDER BY catalog_id ASC, position ASC, created_at ASC`)
+        .all()
+        .filter((row) => row.archived === 0)
+        .map(mapCatalogItem);
+}
+export function getPreferenceCatalogItemById(catalogItemId) {
+    return readCatalogItem(catalogItemId) ?? undefined;
+}
 function listStoredDimensions(contextId) {
     return getDatabase()
         .prepare(`SELECT id, profile_id, context_id, dimension_id, leaning, confidence, movement, context_sensitivity, evidence_count, updated_at
@@ -1535,6 +1582,55 @@ export function updatePreferenceContext(contextId, patch) {
     }
     return updated;
 }
+export function deletePreferenceContext(contextId) {
+    const current = readContext(contextId);
+    if (!current) {
+        throw new HttpError(404, "preferences_context_not_found", `Preference context ${contextId} was not found.`);
+    }
+    const remainingContexts = listContexts(current.profileId).filter((entry) => entry.id !== contextId);
+    if (remainingContexts.length === 0) {
+        throw new HttpError(400, "preferences_context_last_remaining", "A preference profile must keep at least one context.");
+    }
+    const replacementDefault = remainingContexts.find((entry) => entry.isDefault) ?? remainingContexts[0];
+    const timestamp = nowIso();
+    runInTransaction(() => {
+        getDatabase()
+            .prepare(`DELETE FROM pairwise_judgments WHERE context_id = ?`)
+            .run(contextId);
+        getDatabase()
+            .prepare(`DELETE FROM absolute_signals WHERE context_id = ?`)
+            .run(contextId);
+        getDatabase()
+            .prepare(`DELETE FROM preference_item_scores WHERE context_id = ?`)
+            .run(contextId);
+        getDatabase()
+            .prepare(`DELETE FROM preference_dimension_summaries WHERE context_id = ?`)
+            .run(contextId);
+        getDatabase()
+            .prepare(`DELETE FROM preference_snapshots WHERE context_id = ?`)
+            .run(contextId);
+        getDatabase()
+            .prepare(`DELETE FROM preference_contexts WHERE id = ?`)
+            .run(contextId);
+        if (current.isDefault) {
+            getDatabase()
+                .prepare(`UPDATE preference_contexts
+           SET is_default = CASE WHEN id = ? THEN 1 ELSE 0 END, updated_at = ?
+           WHERE profile_id = ?`)
+                .run(replacementDefault.id, timestamp, current.profileId);
+            getDatabase()
+                .prepare(`UPDATE preference_profiles
+           SET default_context_id = ?, updated_at = ?
+           WHERE id = ?`)
+                .run(replacementDefault.id, timestamp, current.profileId);
+        }
+    });
+    const profile = readProfileById(current.profileId);
+    if (profile) {
+        recomputeContext(profile, replacementDefault);
+    }
+    return current;
+}
 export function mergePreferenceContexts(input) {
     const parsed = mergePreferenceContextsSchema.parse(input);
     const source = readContext(parsed.sourceContextId);
@@ -1660,6 +1756,34 @@ export function updatePreferenceItem(itemId, patch) {
         }
     }
     return updated;
+}
+export function deletePreferenceItem(itemId) {
+    const current = getItemById(itemId);
+    if (!current) {
+        throw new HttpError(404, "preferences_item_not_found", `Preference item ${itemId} was not found.`);
+    }
+    runInTransaction(() => {
+        getDatabase()
+            .prepare(`DELETE FROM pairwise_judgments
+         WHERE left_item_id = ? OR right_item_id = ?`)
+            .run(itemId, itemId);
+        getDatabase()
+            .prepare(`DELETE FROM absolute_signals WHERE item_id = ?`)
+            .run(itemId);
+        getDatabase()
+            .prepare(`DELETE FROM preference_item_scores WHERE item_id = ?`)
+            .run(itemId);
+        getDatabase()
+            .prepare(`DELETE FROM preference_items WHERE id = ?`)
+            .run(itemId);
+    });
+    const profile = readProfileById(current.profileId);
+    if (profile) {
+        for (const context of listContexts(profile.id).filter((entry) => entry.active)) {
+            recomputeContext(profile, context);
+        }
+    }
+    return current;
 }
 export function createPreferenceItemFromEntity(input) {
     const parsed = enqueueEntityPreferenceItemSchema.parse(input);

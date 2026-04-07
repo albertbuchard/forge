@@ -77,6 +77,15 @@ Morning Sport Routine or Evening Mobility should be able to create a structured 
 or recovery session in Forge when completed, with source attribution showing that the
 record came from a habit first and may later reconcile with a HealthKit import.
 
+Forge also needs a first-class Movement workspace. Movement is not a hidden HealthKit
+detail screen or a dump of raw GPS points. It is the place where the user should be
+able to understand where they stayed, where they travelled, how long they were idle,
+how much distance and energy they accumulated, and how that context related to notes,
+work, Psyche records, and other life evidence. The iPhone companion should explicitly
+ask for passive location permission, detect stays and trips with a truthful
+change-detection model, and sync structured place, stay, stop, and trip records back
+into Forge.
+
 ## What The Main Views Are Supposed To Do
 
 The Overview page is the user's high-level control room. It should summarize the state
@@ -214,6 +223,17 @@ back to projects, values, routines, Psyche patterns, and sleep outcomes. Importe
 HealthKit workouts and habit-generated sessions should feel like one coherent Forge
 record model with visible provenance.
 
+The Movement page should be a top-level workspace in the main navigation. Its default
+day view should show one compact horizontal strip from midnight to midnight, with
+alternating stay and trip segments that remain legible even on mobile. Selecting one or
+many segments should reveal aggregate metrics such as duration, distance, calories,
+speed, work tracked, linked notes, and linked Psyche or people context. Trip detail
+should default to a stylized curved trajectory view, with an exact map as a secondary
+toggle for recent trips. The month view should offer metric-switching charts, and the
+all-time view should summarize place distribution, movement patterns, country or city
+breadth, and meaningful outside-the-home behavior in a visually serious way that
+matches Forge's theme.
+
 The Project detail page should be board-first and action-first. The main task board for
 the project should dominate the page, because that is the work surface. Project status,
 progress, tracked-time summary, signed work-adjustment controls, and evidence should
@@ -257,6 +277,11 @@ metadata should be authored inside markdown through directive blocks such as
 the same Markdown-first authoring model. The Wiki settings surface should let the user
 manage spaces, parse profiles, embedding profiles, vault sync, and reindexing without
 dropping to the filesystem.
+Wiki pages must also be able to mirror structured place metadata for movement-aware
+records. A location page can carry coordinates, radius, and location tags in
+frontmatter, but the Forge place record remains canonical and the wiki metadata exists
+to make that place legible inside the knowledge system rather than to replace the
+shared movement model.
 
 Auto-ingest belongs inside that wiki operating model. Forge should accept raw text, URL,
 and local-path sources immediately and be ready to expand toward multimodal document,
@@ -483,11 +508,21 @@ event-source mappings, and event links all live in the local database and are th
 reconciled outward to connected providers.
 Forge now also includes a native iOS companion scaffold in `ios-companion/`, built with
 SwiftUI on iOS 17+, using HealthKit for sleep and workout access, BackgroundTasks for
-refresh hooks, AVFoundation for QR scanning, Core Location as a future-ready capability,
-and WatchConnectivity as the intended watch bridge. The iOS companion talks to the same
-Fastify runtime through pairing-session tokens and dedicated mobile health sync routes,
-while imported sleep and workout records are stored in Forge-owned SQLite tables with
+refresh hooks, AVFoundation for QR scanning, Core Location for movement capture, and a
+paired SwiftUI watchOS companion bridged through WatchConnectivity. WidgetKit and App
+Intents provide the watch-facing complications, Smart Stack entry points, and quick
+controls. The iPhone companion talks to the same Fastify runtime through pairing-session
+tokens and dedicated mobile health and watch routes, while imported sleep, workout,
+movement, and watch-capture records are stored in Forge-owned SQLite tables with
 provenance, derived metrics, annotations, and reconciliation support.
+
+The watch product surface is intentionally narrower than the phone. It should open fast,
+show Habits, Check In, Mark Moment, and Prompt Inbox as the primary launch surfaces,
+and let the user answer in one to three taps what would otherwise be lost. Habit cards
+must show the centered streak with a seven-segment ring built from recent daily or
+weekly truth, while prompts should focus on semantic confirmation such as place labels,
+trip purpose, workout context, routine adherence, or short reflective captures. The
+watch is not supposed to browse Forge, edit deep entities, or duplicate the web app.
 
 That live runtime must now carry a first-class `users` table plus user-aware ownership
 columns on the core user-authored entities. Search, snapshot assembly, detail views,

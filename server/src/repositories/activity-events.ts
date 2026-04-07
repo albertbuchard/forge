@@ -24,7 +24,7 @@ type ActivityEventRow = {
   created_at: string;
 };
 
-type ActivityMetadataValue = string | number | boolean | null;
+type ActivityMetadataValue = unknown;
 
 export type ActivityEventInput = {
   entityType: ActivityEntityType;

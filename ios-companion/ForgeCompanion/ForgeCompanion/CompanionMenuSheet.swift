@@ -5,6 +5,7 @@ struct CompanionMenuSheet: View {
 
     let reopenSetup: () -> Void
     let reloadForge: () -> Void
+    let openMovementSettings: () -> Void
     let closeMenu: () -> Void
 
     @State private var syncing = false
@@ -25,6 +26,8 @@ struct CompanionMenuSheet: View {
             VStack(alignment: .leading, spacing: 8) {
                 statusRow("Connection", appModel.syncStateLabel)
                 statusRow("Health", appModel.healthAccessLabel)
+                statusRow("Movement", appModel.movementAccessLabel)
+                statusRow("Watch", appModel.watchSyncLabel)
                 statusRow("Last sync", appModel.latestImportSummary)
             }
 
@@ -50,6 +53,15 @@ struct CompanionMenuSheet: View {
                 }
                 .buttonStyle(CompanionGhostButtonStyle())
                 .disabled(syncing || requestingHealth)
+
+                Button("Movement settings") {
+                    companionDebugLog("CompanionMenuSheet", "tap Movement settings")
+                    closeMenu()
+                    DispatchQueue.main.async {
+                        openMovementSettings()
+                    }
+                }
+                .buttonStyle(CompanionGhostButtonStyle())
 
                 Button("Reload Forge") {
                     companionDebugLog("CompanionMenuSheet", "tap Reload Forge")

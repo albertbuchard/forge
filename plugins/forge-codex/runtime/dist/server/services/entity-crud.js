@@ -3,16 +3,20 @@ import { createInsight, deleteInsight, getInsightById, listInsights, updateInsig
 import { createCalendarEvent, createTaskTimebox, createWorkBlockTemplate, deleteCalendarEvent, deleteTaskTimebox, deleteWorkBlockTemplate, getCalendarEventById, getTaskTimeboxById, getWorkBlockTemplateById, listCalendarEvents, listTaskTimeboxes, listWorkBlockTemplates, updateCalendarEvent, updateTaskTimebox, updateWorkBlockTemplate } from "../repositories/calendar.js";
 import { createNote, deleteNote, getNoteById, listNotes, unlinkNotesForEntity, updateNote } from "../repositories/notes.js";
 import { clearEntityOwner, filterOwnedEntities } from "../repositories/entity-ownership.js";
+import { createPreferenceCatalog, createPreferenceCatalogItem, createPreferenceContext, createPreferenceItem, deletePreferenceCatalog, deletePreferenceCatalogItem, deletePreferenceContext, deletePreferenceItem, getPreferenceCatalogById, getPreferenceCatalogItemById, getPreferenceContextById, getPreferenceItemById, listPreferenceCatalogItems, listPreferenceCatalogs, listPreferenceContexts, listPreferenceItems, updatePreferenceCatalog, updatePreferenceCatalogItem, updatePreferenceContext, updatePreferenceItem } from "../repositories/preferences.js";
 import { createBehaviorPatternSchema, createBehaviorSchema, createBeliefEntrySchema, createEmotionDefinitionSchema, createEventTypeSchema, createModeGuideSessionSchema, createModeProfileSchema, createPsycheValueSchema, createTriggerReportSchema, updateBehaviorPatternSchema, updateBehaviorSchema, updateBeliefEntrySchema, updateEmotionDefinitionSchema, updateEventTypeSchema, updateModeGuideSessionSchema, updateModeProfileSchema, updatePsycheValueSchema, updateTriggerReportSchema } from "../psyche-types.js";
 import { buildSettingsBinPayload, cascadeSoftDeleteAnchoredCollaboration, clearDeletedEntityRecord, getDeletedEntityRecord, listDeletedEntities, restoreAnchoredCollaboration, restoreDeletedEntityRecord, upsertDeletedEntityRecord } from "../repositories/deleted-entities.js";
 import { createGoal, deleteGoal, getGoalById, listGoals, updateGoal } from "../repositories/goals.js";
 import { createHabit, deleteHabit, getHabitById, listHabits, updateHabit } from "../repositories/habits.js";
+import { createQuestionnaireInstrument, deleteQuestionnaireInstrument, getQuestionnaireInstrumentEntityById, listQuestionnaireInstrumentEntities, updateQuestionnaireInstrument, updateQuestionnaireInstrumentSchema } from "../repositories/questionnaires.js";
 import { createBehavior, createBehaviorPattern, createBeliefEntry, createEmotionDefinition, createEventType, createModeGuideSession, createModeProfile, createPsycheValue, createTriggerReport, deleteBehavior, deleteBehaviorPattern, deleteBeliefEntry, deleteEmotionDefinition, deleteEventType, deleteModeGuideSession, deleteModeProfile, deletePsycheValue, deleteTriggerReport, getBehaviorById, getBehaviorPatternById, getBeliefEntryById, getEmotionDefinitionById, getEventTypeById, getModeGuideSessionById, getModeProfileById, getPsycheValueById, getTriggerReportById, listBehaviors, listBehaviorPatterns, listBeliefEntries, listEmotionDefinitions, listEventTypes, listModeGuideSessions, listModeProfiles, listPsycheValues, listTriggerReports, updateBehavior, updateBehaviorPattern, updateBeliefEntry, updateEmotionDefinition, updateEventType, updateModeGuideSession, updateModeProfile, updatePsycheValue, updateTriggerReport } from "../repositories/psyche.js";
 import { createProject, deleteProject, getProjectById, listProjects, updateProject } from "../repositories/projects.js";
 import { createStrategy, deleteStrategy, getStrategyById, listStrategies, updateStrategy } from "../repositories/strategies.js";
 import { createTag, deleteTag, getTagById, listTags, updateTag } from "../repositories/tags.js";
 import { createTask, deleteTask, getTaskById, listTasks, updateTask } from "../repositories/tasks.js";
 import { createCalendarEventSchema, createGoalSchema, createHabitSchema, createInsightSchema, createNoteSchema, createProjectSchema, createStrategySchema, createTaskTimeboxSchema, createTagSchema, createTaskSchema, createWorkBlockTemplateSchema, updateCalendarEventSchema, updateGoalSchema, updateHabitSchema, updateInsightSchema, updateNoteSchema, updateProjectSchema, updateStrategySchema, updateTaskTimeboxSchema, updateTagSchema, updateTaskSchema, updateWorkBlockTemplateSchema } from "../types.js";
+import { createPreferenceCatalogItemSchema, createPreferenceCatalogSchema, createPreferenceContextSchema, createPreferenceItemSchema, updatePreferenceCatalogItemSchema, updatePreferenceCatalogSchema, updatePreferenceContextSchema, updatePreferenceItemSchema } from "../preferences-types.js";
+import { createQuestionnaireInstrumentSchema } from "../questionnaire-types.js";
 const ENTITY_CALENDAR_LIST_RANGE = {
     from: "1970-01-01T00:00:00.000Z",
     to: "2100-01-01T00:00:00.000Z"
@@ -249,6 +253,62 @@ const CRUD_ENTITY_CAPABILITIES = {
         create: (data, context) => createTriggerReport(data, context),
         update: (id, patch, context) => updateTriggerReport(id, patch, context),
         hardDelete: (id, context) => deleteTriggerReport(id, context)
+    },
+    preference_catalog: {
+        entityType: "preference_catalog",
+        routeBase: "/api/v1/preferences/catalogs",
+        deleteMode: "immediate",
+        inBin: false,
+        list: () => listPreferenceCatalogs(),
+        get: (id) => getPreferenceCatalogById(id),
+        create: (data) => createPreferenceCatalog(data),
+        update: (id, patch) => updatePreferenceCatalog(id, patch),
+        hardDelete: (id) => deletePreferenceCatalog(id)
+    },
+    preference_catalog_item: {
+        entityType: "preference_catalog_item",
+        routeBase: "/api/v1/preferences/catalog-items",
+        deleteMode: "immediate",
+        inBin: false,
+        list: () => listPreferenceCatalogItems(),
+        get: (id) => getPreferenceCatalogItemById(id),
+        create: (data) => createPreferenceCatalogItem(data),
+        update: (id, patch) => updatePreferenceCatalogItem(id, patch),
+        hardDelete: (id) => deletePreferenceCatalogItem(id)
+    },
+    preference_context: {
+        entityType: "preference_context",
+        routeBase: "/api/v1/preferences/contexts",
+        deleteMode: "immediate",
+        inBin: false,
+        list: () => listPreferenceContexts(),
+        get: (id) => getPreferenceContextById(id),
+        create: (data) => createPreferenceContext(data),
+        update: (id, patch) => updatePreferenceContext(id, patch),
+        hardDelete: (id) => deletePreferenceContext(id)
+    },
+    preference_item: {
+        entityType: "preference_item",
+        routeBase: "/api/v1/preferences/items",
+        deleteMode: "immediate",
+        inBin: false,
+        list: () => listPreferenceItems(),
+        get: (id) => getPreferenceItemById(id),
+        create: (data) => createPreferenceItem(data),
+        update: (id, patch) => updatePreferenceItem(id, patch),
+        hardDelete: (id) => deletePreferenceItem(id)
+    },
+    questionnaire_instrument: {
+        entityType: "questionnaire_instrument",
+        routeBase: "/api/v1/psyche/questionnaires",
+        deleteMode: "immediate",
+        inBin: false,
+        list: () => listQuestionnaireInstrumentEntities(),
+        get: (id) => getQuestionnaireInstrumentEntityById(id),
+        create: (data, context) => createQuestionnaireInstrument(data, context)
+            .instrument,
+        update: (id, patch, context) => updateQuestionnaireInstrument(id, patch, context),
+        hardDelete: (id, context) => deleteQuestionnaireInstrument(id, context)
     }
 };
 export function getCrudEntityCapabilityMatrix() {
@@ -283,7 +343,12 @@ const CREATE_ENTITY_SCHEMAS = {
     mode_guide_session: createModeGuideSessionSchema,
     event_type: createEventTypeSchema,
     emotion_definition: createEmotionDefinitionSchema,
-    trigger_report: createTriggerReportSchema
+    trigger_report: createTriggerReportSchema,
+    preference_catalog: createPreferenceCatalogSchema,
+    preference_catalog_item: createPreferenceCatalogItemSchema,
+    preference_context: createPreferenceContextSchema,
+    preference_item: createPreferenceItemSchema,
+    questionnaire_instrument: createQuestionnaireInstrumentSchema
 };
 const UPDATE_ENTITY_SCHEMAS = {
     goal: updateGoalSchema,
@@ -305,7 +370,12 @@ const UPDATE_ENTITY_SCHEMAS = {
     mode_guide_session: updateModeGuideSessionSchema,
     event_type: updateEventTypeSchema,
     emotion_definition: updateEmotionDefinitionSchema,
-    trigger_report: updateTriggerReportSchema
+    trigger_report: updateTriggerReportSchema,
+    preference_catalog: updatePreferenceCatalogSchema,
+    preference_catalog_item: updatePreferenceCatalogItemSchema,
+    preference_context: updatePreferenceContextSchema,
+    preference_item: updatePreferenceItemSchema,
+    questionnaire_instrument: updateQuestionnaireInstrumentSchema
 };
 function parseCreateInput(entityType, data) {
     return CREATE_ENTITY_SCHEMAS[entityType].parse(data);
@@ -476,6 +546,15 @@ function matchesLinkedTo(entityType, entity, linkedTo) {
                 (linkedTo.entityType === "behavior" && Array.isArray(entity.linkedBehaviorIds) && entity.linkedBehaviorIds.includes(linkedTo.id)) ||
                 (linkedTo.entityType === "belief_entry" && Array.isArray(entity.linkedBeliefIds) && entity.linkedBeliefIds.includes(linkedTo.id)) ||
                 (linkedTo.entityType === "mode_profile" && Array.isArray(entity.linkedModeIds) && entity.linkedModeIds.includes(linkedTo.id)));
+        case "preference_catalog_item":
+            return linkedTo.entityType === "preference_catalog" && entity.catalogId === linkedTo.id;
+        case "preference_item":
+            return (typeof entity.sourceEntityType === "string" &&
+                typeof entity.sourceEntityId === "string" &&
+                entity.sourceEntityType === linkedTo.entityType &&
+                entity.sourceEntityId === linkedTo.id);
+        case "questionnaire_instrument":
+            return false;
         default:
             return false;
     }

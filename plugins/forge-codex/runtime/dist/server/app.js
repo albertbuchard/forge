@@ -6,6 +6,7 @@ import { configureDatabase, configureDatabaseSeeding, runInTransaction } from ".
 import { HttpError, isHttpError } from "./errors.js";
 import { listActivityEvents, listActivityEventsForTask, recordActivityEvent, removeActivityEvent } from "./repositories/activity-events.js";
 import { approveApprovalRequest, createAgentAction, createInsight, createInsightFeedback, deleteInsight, getInsightById, listAgentActions, listApprovalRequests, listInsights, rejectApprovalRequest, updateInsight } from "./repositories/collaboration.js";
+import { createAiProcessor, createAiProcessorLink, deleteAiProcessor, deleteAiProcessorLink, getAiProcessorById, getSurfaceProcessorGraph, runAiProcessor, updateAiProcessor } from "./repositories/ai-processors.js";
 import { listEventLog } from "./repositories/event-log.js";
 import { createDiagnosticMessage, DIAGNOSTIC_LOG_RETENTION_SWEEP_INTERVAL_MS, enforceDiagnosticLogRetention, listDiagnosticLogs, normalizeDiagnosticSource, recordDiagnosticLog, serializeDiagnosticError } from "./repositories/diagnostic-logs.js";
 import { createGoal, getGoalById, listGoals, updateGoal } from "./repositories/goals.js";
@@ -15,11 +16,13 @@ import { buildNotesSummaryByEntity, createNote, getNoteById, listNotes, updateNo
 import { createWikiIngestJobSchema, createUploadedWikiIngestJob, createWikiSpace, createWikiSpaceSchema, deleteWikiIngestJob, deleteWikiProfile, getWikiHealth, getWikiIngestJob, getWikiHomePageDetail, getWikiPageDetail, getWikiPageDetailBySlug, getWikiSettingsPayload, ingestWikiSource, listWikiIngestJobs, listWikiLlmProfiles, listWikiPageTree, listWikiPages, listWikiSpaces, processWikiIngestJob, reindexWikiEmbeddings, reindexWikiEmbeddingsSchema, rerunWikiIngestJob, reviewWikiIngestJob, reviewWikiIngestJobSchema, searchWikiPages, syncWikiVaultFromDisk, syncWikiVaultSchema, testWikiLlmProfileSchema, upsertWikiEmbeddingProfile, upsertWikiEmbeddingProfileSchema, upsertWikiLlmProfile, upsertWikiLlmProfileSchema, wikiSearchQuerySchema } from "./repositories/wiki-memory.js";
 import { filterOwnedEntities, setEntityOwner } from "./repositories/entity-ownership.js";
 import { createBehavior, createBehaviorPattern, createBeliefEntry, createEmotionDefinition, createEventType, createModeGuideSession, createModeProfile, createPsycheValue, createTriggerReport, getBehaviorById, getBehaviorPatternById, getBeliefEntryById, getEmotionDefinitionById, getEventTypeById, getModeGuideSessionById, getModeProfileById, getPsycheValueById, getTriggerReportById, listBehaviors, listBehaviorPatterns, listBeliefEntries, listEmotionDefinitions, listEventTypes, listModeGuideSessions, listModeProfiles, listPsycheValues, listSchemaCatalog, listTriggerReports, updateBehavior, updateBehaviorPattern, updateBeliefEntry, updateEmotionDefinition, updateEventType, updateModeGuideSession, updateModeProfile, updatePsycheValue, updateTriggerReport } from "./repositories/psyche.js";
+import { cloneQuestionnaireInstrument, completeQuestionnaireRun, createQuestionnaireInstrument, ensureQuestionnaireDraftVersion, getQuestionnaireInstrumentDetail, getQuestionnaireRunDetail, listQuestionnaireInstruments, publishQuestionnaireDraftVersion, startQuestionnaireRun, updateQuestionnaireDraftVersion, updateQuestionnaireRun } from "./repositories/questionnaires.js";
 import { createProject, updateProject } from "./repositories/projects.js";
 import { createPreferenceCatalog, createPreferenceCatalogItem, createPreferenceContext, createPreferenceItem, createPreferenceItemFromEntity, deletePreferenceCatalog, deletePreferenceCatalogItem, getPreferenceWorkspace, mergePreferenceContexts, startPreferenceGame, submitAbsoluteSignal, submitPairwiseJudgment, updatePreferenceCatalog, updatePreferenceCatalogItem, updatePreferenceContext, updatePreferenceItem, updatePreferenceScore } from "./repositories/preferences.js";
 import { createStrategy, getStrategyById, listStrategies, updateStrategy } from "./repositories/strategies.js";
 import { createManualRewardGrant, getDailyAmbientXp, getRewardRuleById, listRewardLedger, listRewardRules, recordWorkAdjustmentReward, recordSessionEvent, updateRewardRule } from "./repositories/rewards.js";
 import { listAgentIdentities, getSettings, isPsycheAuthRequired, updateSettings, verifyAgentToken } from "./repositories/settings.js";
+import { deleteAiModelConnection, getAiModelConnectionById, readModelConnectionCredential, upsertAiModelConnection } from "./repositories/model-settings.js";
 import { createTag, getTagById, listTags, updateTag } from "./repositories/tags.js";
 import { createUser, ensureSystemUsers, getUserById, listUserAccessGrants, listUserOwnershipSummaries, listUserXpSummaries, listUsers, resolveUserForMutation, updateUserAccessGrant, updateUser } from "./repositories/users.js";
 import { claimTaskRun, completeTaskRun, focusTaskRun, heartbeatTaskRun, listTaskRuns, recoverTimedOutTaskRuns, releaseTaskRun } from "./repositories/task-runs.js";
@@ -39,9 +42,11 @@ import { finalizeWeeklyReviewClosure } from "./repositories/weekly-reviews.js";
 import { createTaskRunWatchdog } from "./services/task-run-watchdog.js";
 import { suggestTags } from "./services/tagging.js";
 import { CalendarConnectionConflictError, completeMicrosoftCalendarOauth, createCalendarConnection, deleteCalendarEventProjection, discoverCalendarConnection, discoverExistingCalendarConnection, getMicrosoftCalendarOauthSession, listConnectedCalendarConnections, removeCalendarConnection, pushCalendarEventUpdate, readCalendarOverview, syncCalendarConnection, startMicrosoftCalendarOauth, testMicrosoftCalendarOauthConfiguration, listCalendarProviderMetadata, updateCalendarConnectionSelection } from "./services/calendar-runtime.js";
+import { consumeOpenAiCodexOauthCredentials, getOpenAiCodexOauthSession, startOpenAiCodexOauthSession, submitOpenAiCodexOauthManualInput } from "./services/openai-codex-oauth.js";
 import { PSYCHE_ENTITY_TYPES, createBehaviorSchema, createBeliefEntrySchema, createBehaviorPatternSchema, createEmotionDefinitionSchema, createEventTypeSchema, createModeGuideSessionSchema, createModeProfileSchema, createPsycheValueSchema, createTriggerReportSchema, updateBehaviorSchema, updateBeliefEntrySchema, updateBehaviorPatternSchema, updateEmotionDefinitionSchema, updateEventTypeSchema, updateModeGuideSessionSchema, updateModeProfileSchema, updatePsycheValueSchema, updateTriggerReportSchema } from "./psyche-types.js";
+import { createQuestionnaireInstrumentSchema, publishQuestionnaireVersionSchema, startQuestionnaireRunSchema, updateQuestionnaireRunSchema, updateQuestionnaireVersionSchema } from "./questionnaire-types.js";
 import { createPreferenceCatalogItemSchema, createPreferenceCatalogSchema, createPreferenceContextSchema, createPreferenceItemSchema, enqueueEntityPreferenceItemSchema, mergePreferenceContextsSchema, preferenceWorkspaceQuerySchema, startPreferenceGameSchema, submitAbsoluteSignalSchema, submitPairwiseJudgmentSchema, updatePreferenceCatalogItemSchema, updatePreferenceCatalogSchema, updatePreferenceContextSchema, updatePreferenceItemSchema, updatePreferenceScoreSchema } from "./preferences-types.js";
-import { activityListQuerySchema, activitySourceSchema, createAgentActionSchema, createAgentTokenSchema, batchCreateEntitiesSchema, batchDeleteEntitiesSchema, batchRestoreEntitiesSchema, batchSearchEntitiesSchema, batchUpdateEntitiesSchema, createGoalSchema, createInsightFeedbackSchema, createInsightSchema, createStrategySchema, createUserSchema, createNoteSchema, createProjectSchema, createManualRewardGrantSchema, createCalendarEventSchema, createHabitCheckInSchema, createCalendarConnectionSchema, createDiagnosticLogSchema, discoverCalendarConnectionSchema, startMicrosoftCalendarOauthSchema, testMicrosoftCalendarOauthConfigurationSchema, createHabitSchema, createTaskTimeboxSchema, createWorkBlockTemplateSchema, createSessionEventSchema, createWorkAdjustmentSchema, createTagSchema, calendarOverviewQuerySchema, notesListQuerySchema, updateTagSchema, createTaskSchema, diagnosticLogListQuerySchema, eventsListQuerySchema, operatorLogWorkSchema, projectBoardPayloadSchema, projectListQuerySchema, entityDeleteQuerySchema, removeActivityEventSchema, resolveApprovalRequestSchema, rewardsLedgerQuerySchema, habitListQuerySchema, taskContextPayloadSchema, taskRunClaimSchema, taskRunFocusSchema, taskRunFinishSchema, taskRunHeartbeatSchema, taskRunListQuerySchema, taskListQuerySchema, tagSuggestionRequestSchema, uncompleteTaskSchema, updateSettingsSchema, updateGoalSchema, updateHabitSchema, updateInsightSchema, updateStrategySchema, updateUserSchema, updateCalendarConnectionSchema, updateCalendarEventSchema, updateNoteSchema, updateProjectSchema, updateRewardRuleSchema, updateTaskTimeboxSchema, updateTaskSchema, updateUserAccessGrantSchema, updateWorkBlockTemplateSchema, workAdjustmentResultSchema, finalizeWeeklyReviewResultSchema, goalListQuerySchema, recommendTaskTimeboxesSchema, strategyListQuerySchema } from "./types.js";
+import { activityListQuerySchema, activitySourceSchema, createAgentActionSchema, createAgentTokenSchema, createAiProcessorLinkSchema, createAiProcessorSchema, upsertAiModelConnectionSchema, testAiModelConnectionSchema, submitOpenAiCodexOauthManualCodeSchema, batchCreateEntitiesSchema, batchDeleteEntitiesSchema, batchRestoreEntitiesSchema, batchSearchEntitiesSchema, batchUpdateEntitiesSchema, createGoalSchema, createInsightFeedbackSchema, createInsightSchema, createStrategySchema, createUserSchema, createNoteSchema, createProjectSchema, createManualRewardGrantSchema, createCalendarEventSchema, createHabitCheckInSchema, createCalendarConnectionSchema, createDiagnosticLogSchema, discoverCalendarConnectionSchema, startMicrosoftCalendarOauthSchema, testMicrosoftCalendarOauthConfigurationSchema, createHabitSchema, createTaskTimeboxSchema, createWorkBlockTemplateSchema, createSessionEventSchema, createWorkAdjustmentSchema, createTagSchema, calendarOverviewQuerySchema, notesListQuerySchema, updateTagSchema, createTaskSchema, diagnosticLogListQuerySchema, eventsListQuerySchema, operatorLogWorkSchema, projectBoardPayloadSchema, projectListQuerySchema, entityDeleteQuerySchema, removeActivityEventSchema, resolveApprovalRequestSchema, rewardsLedgerQuerySchema, habitListQuerySchema, taskContextPayloadSchema, taskRunClaimSchema, taskRunFocusSchema, taskRunFinishSchema, taskRunHeartbeatSchema, taskRunListQuerySchema, taskListQuerySchema, tagSuggestionRequestSchema, uncompleteTaskSchema, updateSettingsSchema, updateGoalSchema, updateHabitSchema, updateInsightSchema, updateStrategySchema, updateUserSchema, updateCalendarConnectionSchema, updateCalendarEventSchema, updateNoteSchema, updateProjectSchema, updateRewardRuleSchema, updateTaskTimeboxSchema, updateTaskSchema, updateUserAccessGrantSchema, updateWorkBlockTemplateSchema, updateAiProcessorSchema, runAiProcessorSchema, workAdjustmentResultSchema, finalizeWeeklyReviewResultSchema, goalListQuerySchema, recommendTaskTimeboxesSchema, strategyListQuerySchema } from "./types.js";
 import { buildOpenApiDocument } from "./openapi.js";
 import { registerWebRoutes } from "./web.js";
 import { createManagerRuntime } from "./managers/runtime.js";
@@ -1882,13 +1887,15 @@ const AGENT_ONBOARDING_CONVERSATION_RULES = [
     "Ask only for what is missing or unclear instead of walking the user through every optional field.",
     "Use a progression of concrete example or intent, working name, purpose or meaning, placement in Forge, operational details, and linked context.",
     "Ask one to three focused questions at a time. One is usually best when the user is uncertain or emotionally loaded.",
+    "If the user already answered the normal opening question, do not repeat it. Move to the next missing clarification.",
+    "Do not over-therapize logistical entities. For tasks, calendar events, work blocks, timeboxes, and task runs, one brief confirming sentence plus one question is usually enough.",
     "Before saving, briefly summarize the working formulation in the user's own language when that would reduce ambiguity.",
     "When updating an entity, start with what is changing, what should stay true, and what prompted the update now."
 ];
 const AGENT_ONBOARDING_ENTITY_CONVERSATION_PLAYBOOKS = [
     {
         focus: "goal",
-        openingQuestion: "What direction are you trying to hold onto here?",
+        openingQuestion: "What direction here feels important enough that you want to keep it in view?",
         coachingGoal: "Clarify the direction and why it matters, not just produce a title.",
         askSequence: [
             "Ask what direction or outcome the user wants to keep in view.",
@@ -1899,12 +1906,13 @@ const AGENT_ONBOARDING_ENTITY_CONVERSATION_PLAYBOOKS = [
     },
     {
         focus: "project",
-        openingQuestion: "If this becomes a project, what would you want it to be called and what should it accomplish?",
+        openingQuestion: "If this became a real project, what would you be trying to make true?",
         coachingGoal: "Turn an intention into a bounded workstream with a clear outcome.",
         askSequence: [
-            "Ask what this piece of work should be called.",
+            "Ask what this piece of work is trying to make true.",
             "Ask what outcome would make the project feel real or complete for now.",
             "Ask which goal it belongs under.",
+            "Land on a working name once the scope is clear.",
             "Clarify status, owner, and notes only after the scope is clear."
         ]
     },
@@ -1931,18 +1939,18 @@ const AGENT_ONBOARDING_ENTITY_CONVERSATION_PLAYBOOKS = [
     },
     {
         focus: "habit",
-        openingQuestion: "What is the recurring behavior you want Forge to keep track of?",
+        openingQuestion: "What recurring move are you trying to strengthen or loosen?",
         coachingGoal: "Define the recurring behavior and cadence clearly enough for honest later check-ins.",
         askSequence: [
             "Ask what the recurring behavior is in plain language.",
             "Ask whether doing it is aligned or a slip.",
-            "Ask about cadence and what counts as success in practice.",
+            "Ask about cadence and what counts as an honest check-in in practice.",
             "Ask about links only if they will help later review."
         ]
     },
     {
         focus: "note",
-        openingQuestion: "What do you want this note to preserve, and what should it stay attached to?",
+        openingQuestion: "What feels important to preserve from this?",
         coachingGoal: "Preserve the useful context and link it to the right places without turning the note into a dump.",
         askSequence: [
             "Ask what the note needs to preserve.",
@@ -1995,7 +2003,7 @@ const AGENT_ONBOARDING_ENTITY_CONVERSATION_PLAYBOOKS = [
     },
     {
         focus: "event_type",
-        openingQuestion: "What kind of incident should this category stand for?",
+        openingQuestion: "When this kind of moment happens, what would you want to call it so future reports stay consistent?",
         coachingGoal: "Create a reusable incident category that will actually help future reports stay consistent.",
         askSequence: [
             "Ask what category the label should capture.",
@@ -2005,7 +2013,7 @@ const AGENT_ONBOARDING_ENTITY_CONVERSATION_PLAYBOOKS = [
     },
     {
         focus: "emotion_definition",
-        openingQuestion: "What emotion label do you want to keep reusable in Forge?",
+        openingQuestion: "What emotion do you want Forge to help you name clearly and reuse later?",
         coachingGoal: "Create a reusable emotion label with enough clarity to use consistently later.",
         askSequence: [
             "Ask what emotion label the user wants to preserve.",
@@ -2087,7 +2095,8 @@ const AGENT_ONBOARDING_PSYCHE_PLAYBOOKS = [
             "A pattern is usually the best Psyche container for functional analysis.",
             "If the user is describing one specific episode rather than a repeated loop, prefer a trigger report.",
             "Reflect before the next question, and avoid interrogating through the schema fields in order.",
-            "If the user asks to understand the loop first, do not lead with a finished working diagnosis or title before asking at least one clarifying question."
+            "If the user asks to understand the loop first, do not lead with a finished working diagnosis or title before asking at least one clarifying question.",
+            "Before you ask how to change the loop, ask what it is protecting, preventing, or managing for the user."
         ]
     },
     {
@@ -2128,7 +2137,8 @@ const AGENT_ONBOARDING_PSYCHE_PLAYBOOKS = [
         notes: [
             "Keep the user close to observable behavior rather than jumping straight to labels.",
             "When the behavior clearly belongs inside a larger loop, suggest linking or also mapping the related behavior_pattern.",
-            "If the user asks for understanding before storage, ask about the recent example and function of the move before classifying it."
+            "If the user asks for understanding before storage, ask about the recent example and function of the move before classifying it.",
+            "Ask what the move is trying to do for the user before moving into replacement planning."
         ]
     },
     {
@@ -2158,6 +2168,7 @@ const AGENT_ONBOARDING_PSYCHE_PLAYBOOKS = [
         ],
         exampleQuestions: [
             "If we turned that reaction into one sentence, what would it sound like?",
+            "When that reaction hits, what does it start telling you?",
             "Is it more of an always/never belief, or an if-then rule?",
             "How true does it feel right now from 0 to 100?",
             "What seems to support it, and what weakens it?",
@@ -2167,7 +2178,8 @@ const AGENT_ONBOARDING_PSYCHE_PLAYBOOKS = [
         notes: [
             "Schema catalog entries are reference concepts; belief_entry is the user-owned record.",
             "If no schema catalog match is known, omit schemaId rather than inventing one.",
-            "Do not argue the user out of the belief. Reflect it, understand its function, and then collaboratively test for flexibility."
+            "Do not argue the user out of the belief. Reflect it, understand its function, and then collaboratively test for flexibility.",
+            "When the wording is nearly there, ask whether it feels true enough before you move into confidence, evidence, or alternative-belief details."
         ]
     },
     {
@@ -2200,6 +2212,7 @@ const AGENT_ONBOARDING_PSYCHE_PLAYBOOKS = [
         ],
         exampleQuestions: [
             "When this part shows up, what is it like from the inside?",
+            "When this part takes over, what is it trying to protect?",
             "What kind of part does this feel like: coping, child, critic-parent, healthy-adult, or happy-child?",
             "If you gave this mode a name, what would it be?",
             "What is it afraid would happen if it stopped doing its job?",
@@ -2228,6 +2241,7 @@ const AGENT_ONBOARDING_PSYCHE_PLAYBOOKS = [
         highValueOptionalFields: [],
         exampleQuestions: [
             "What just happened that brought this up right now?",
+            "What just happened before this part came online?",
             "If this part had a voice, what would it be saying?",
             "What is it trying to protect you from?",
             "What does it seem to need from you or from someone else?",
@@ -2323,7 +2337,8 @@ const AGENT_ONBOARDING_TOOL_INPUT_CATALOG = [
             "entityType alone is never enough; full data is required.",
             "Batch multiple related creates together when they come from one user ask.",
             "Goal, project, and task creates can include notes: [{ contentMarkdown, author?, tags?, destroyAt?, links? }] and Forge will auto-link those notes to the newly created entity.",
-            "The same batch create route also handles calendar_event, work_block_template, and task_timebox. Calendar-event creates still trigger downstream projection sync when a writable provider calendar is selected."
+            "The same batch create route also handles calendar_event, work_block_template, task_timebox, preference_catalog, preference_catalog_item, preference_context, preference_item, and questionnaire_instrument.",
+            "Calendar-event creates still trigger downstream projection sync when a writable provider calendar is selected."
         ],
         example: '{"operations":[{"entityType":"task","data":{"title":"Write the public release notes","projectId":"project_123","status":"focus","notes":[{"contentMarkdown":"Starting from the changelog draft and the last QA pass."}]},"clientRef":"task-1"}]}'
     },
@@ -2343,7 +2358,7 @@ const AGENT_ONBOARDING_TOOL_INPUT_CATALOG = [
             "Project lifecycle is status-driven: patch project.status to active, paused, or completed instead of looking for separate suspend, restart, or finish routes.",
             "Setting project.status to completed finishes the project and auto-completes linked unfinished tasks through the normal task completion path.",
             "Task and project scheduling rules stay on these same entity patches. Update task.schedulingRules, task.plannedDurationSeconds, or project.schedulingRules here.",
-            "Use this same route to move or relink calendar_event records and to edit work_block_template or task_timebox records without switching to narrower calendar CRUD tools."
+            "Use this same route to move or relink calendar_event records, edit work_block_template or task_timebox records, and do normal field updates on preference_catalog, preference_catalog_item, preference_context, preference_item, and questionnaire_instrument."
         ],
         example: '{"operations":[{"entityType":"project","id":"project_123","patch":{"status":"completed"},"clientRef":"project-finish-1"}]}'
     },
@@ -2778,6 +2793,9 @@ function buildAgentOnboardingPayload(request) {
             wiki: "Forge Wiki is the file-first memory layer: local Markdown pages plus media, backlinks, optional embeddings, explicit spaces, and structured links back to Forge entities.",
             sleepSession: "A sleep session is a first-class health record with timing, sleep and bed duration, stage breakdown, recovery metrics, annotations, and Forge links back to planning or Psyche context.",
             workoutSession: "A workout session is a first-class sports record imported from HealthKit or generated from a habit. It holds workout type, timing, energy or distance when available, subjective effort, narrative context, and Forge links.",
+            preferences: "Forge Preferences is the explicit taste-modeling domain. It has workspaces, contexts, concept libraries, direct items, pairwise judgments, direct signals, and inferred scores.",
+            questionnaire: "Forge Psyche questionnaires are structured reusable instruments with provenance, scoring, draft and published versions, and user-owned answer runs.",
+            selfObservation: "Forge self-observation is a dedicated Psyche calendar view backed by note records tagged Self-observation and timestamped by frontmatter.observedAt.",
             insight: "An agent-authored observation or recommendation grounded in Forge data.",
             calendar: "A connected calendar source mirrored into Forge. Calendar state combines provider events, recurring work blocks, and task timeboxes.",
             workBlock: "A recurring half-day or custom time window such as Main Activity, Secondary Activity, Third Activity, Rest, Holiday, or Custom. Work blocks can allow or block work by default, can define active date bounds, and remain editable through the calendar surface.",
@@ -2815,6 +2833,94 @@ function buildAgentOnboardingPayload(request) {
             "Behavior patterns, behaviors, beliefs, modes, and trigger reports cross-link to describe one reflective model rather than isolated records.",
             "Insights can point at one entity, but they exist to capture interpretation or advice rather than raw work items."
         ],
+        entityRouteModel: {
+            batchCrudEntities: [
+                "goal",
+                "project",
+                "task",
+                "strategy",
+                "habit",
+                "tag",
+                "note",
+                "insight",
+                "calendar_event",
+                "work_block_template",
+                "task_timebox",
+                "psyche_value",
+                "behavior_pattern",
+                "behavior",
+                "belief_entry",
+                "mode_profile",
+                "mode_guide_session",
+                "event_type",
+                "emotion_definition",
+                "trigger_report",
+                "preference_catalog",
+                "preference_catalog_item",
+                "preference_context",
+                "preference_item",
+                "questionnaire_instrument"
+            ],
+            batchRoutes: {
+                search: "/api/v1/entities/search",
+                create: "/api/v1/entities/create",
+                update: "/api/v1/entities/update",
+                delete: "/api/v1/entities/delete",
+                restore: "/api/v1/entities/restore"
+            },
+            actionEntities: {
+                task_run: {
+                    readModel: "/api/v1/operator/context",
+                    actions: {
+                        start: "/api/v1/tasks/:taskId/runs",
+                        heartbeat: "/api/v1/task-runs/:id/heartbeat",
+                        focus: "/api/v1/task-runs/:id/focus",
+                        complete: "/api/v1/task-runs/:id/complete",
+                        release: "/api/v1/task-runs/:id/release"
+                    }
+                },
+                questionnaire_run: {
+                    read: "/api/v1/psyche/questionnaire-runs/:id",
+                    actions: {
+                        start: "/api/v1/psyche/questionnaires/:id/runs",
+                        update: "/api/v1/psyche/questionnaire-runs/:id",
+                        complete: "/api/v1/psyche/questionnaire-runs/:id/complete"
+                    }
+                },
+                preferences: {
+                    workspace: "/api/v1/preferences/workspace",
+                    actions: {
+                        startGame: "/api/v1/preferences/game/start",
+                        mergeContexts: "/api/v1/preferences/contexts/merge",
+                        enqueueFromEntity: "/api/v1/preferences/items/from-entity",
+                        submitJudgment: "/api/v1/preferences/judgments",
+                        submitSignal: "/api/v1/preferences/signals",
+                        overrideScore: "/api/v1/preferences/items/:id/score"
+                    }
+                },
+                questionnaires: {
+                    list: "/api/v1/psyche/questionnaires",
+                    detail: "/api/v1/psyche/questionnaires/:id",
+                    actions: {
+                        clone: "/api/v1/psyche/questionnaires/:id/clone",
+                        ensureDraft: "/api/v1/psyche/questionnaires/:id/draft",
+                        publishDraft: "/api/v1/psyche/questionnaires/:id/publish"
+                    }
+                },
+                selfObservation: {
+                    read: "/api/v1/psyche/self-observation/calendar",
+                    writeModel: "Create or update a linked note with tag Self-observation and frontmatter.observedAt."
+                },
+                sleep_session: {
+                    read: "/api/v1/health/sleep",
+                    update: "/api/v1/health/sleep/:id"
+                },
+                workout_session: {
+                    read: "/api/v1/health/fitness",
+                    update: "/api/v1/health/workouts/:id"
+                }
+            }
+        },
         multiUserModel: {
             summary: "Forge is multi-user by default. Humans and bots share one entity graph, with explicit ownership on every record and directional relationship settings between every pair of users.",
             defaultUserScopeBehavior: "If no user scope is provided, Forge returns all visible users. Use userId or repeated userIds when an agent should focus on one owner namespace or on a specific human/bot slice.",
@@ -2859,6 +2965,7 @@ function buildAgentOnboardingPayload(request) {
                 ],
                 configNotes: [
                     "Localhost and Tailscale targets can usually use the operator-session path without a long-lived token.",
+                    "Use a distinct actor label such as Albert (claw) so OpenClaw-originated work stays obvious in Forge provenance.",
                     "Create each agent as a Forge bot user, then use userId or userIds in tool inputs whenever the agent should focus on one human, one bot, or a specific collaboration slice."
                 ]
             },
@@ -2876,6 +2983,7 @@ function buildAgentOnboardingPayload(request) {
                 ],
                 configNotes: [
                     "Hermes keeps its durable Forge config under ~/.hermes/forge/config.json.",
+                    "Use a distinct actor label such as Albert (hermes) so Hermes-originated work stays obvious in Forge provenance.",
                     "Hermes uses the same multi-user scoping rules and should pass userIds intentionally when working across humans and bots.",
                     "The Forge relationship graph still decides whether Hermes may see, message, plan for, or affect another owner."
                 ]
@@ -3948,6 +4056,72 @@ export async function buildServer(options = {}) {
         requirePsycheScopedAccess(request.headers, ["psyche.read"], { route: "/api/v1/psyche/overview" });
         const userIds = resolveScopedUserIds(request.query);
         return { overview: getPsycheOverview(userIds) };
+    });
+    app.get("/api/v1/psyche/questionnaires", async (request) => {
+        requirePsycheScopedAccess(request.headers, ["psyche.read"], { route: "/api/v1/psyche/questionnaires" });
+        const userIds = resolveScopedUserIds(request.query);
+        return listQuestionnaireInstruments({ userIds });
+    });
+    app.post("/api/v1/psyche/questionnaires", async (request, reply) => {
+        const auth = requirePsycheScopedAccess(request.headers, ["psyche.write"], { route: "/api/v1/psyche/questionnaires" });
+        const result = createQuestionnaireInstrument(createQuestionnaireInstrumentSchema.parse(request.body ?? {}), toActivityContext(auth));
+        reply.code(201);
+        return result;
+    });
+    app.get("/api/v1/psyche/questionnaires/:id", async (request) => {
+        requirePsycheScopedAccess(request.headers, ["psyche.read"], { route: "/api/v1/psyche/questionnaires/:id" });
+        const { id } = request.params;
+        const userIds = resolveScopedUserIds(request.query);
+        return getQuestionnaireInstrumentDetail(id, { userIds });
+    });
+    app.post("/api/v1/psyche/questionnaires/:id/clone", async (request, reply) => {
+        const auth = requirePsycheScopedAccess(request.headers, ["psyche.write"], { route: "/api/v1/psyche/questionnaires/:id/clone" });
+        const { id } = request.params;
+        const body = (request.body ?? {});
+        const userId = typeof body.userId === "string" && body.userId.trim().length > 0
+            ? body.userId.trim()
+            : null;
+        const result = cloneQuestionnaireInstrument(id, { userId }, toActivityContext(auth));
+        reply.code(201);
+        return result;
+    });
+    app.post("/api/v1/psyche/questionnaires/:id/draft", async (request) => {
+        const auth = requirePsycheScopedAccess(request.headers, ["psyche.write"], { route: "/api/v1/psyche/questionnaires/:id/draft" });
+        const { id } = request.params;
+        return ensureQuestionnaireDraftVersion(id, toActivityContext(auth));
+    });
+    app.patch("/api/v1/psyche/questionnaires/:id/draft", async (request) => {
+        const auth = requirePsycheScopedAccess(request.headers, ["psyche.write"], { route: "/api/v1/psyche/questionnaires/:id/draft" });
+        const { id } = request.params;
+        return updateQuestionnaireDraftVersion(id, updateQuestionnaireVersionSchema.parse(request.body ?? {}), toActivityContext(auth));
+    });
+    app.post("/api/v1/psyche/questionnaires/:id/publish", async (request) => {
+        const auth = requirePsycheScopedAccess(request.headers, ["psyche.write"], { route: "/api/v1/psyche/questionnaires/:id/publish" });
+        const { id } = request.params;
+        return publishQuestionnaireDraftVersion(id, publishQuestionnaireVersionSchema.parse(request.body ?? {}), toActivityContext(auth));
+    });
+    app.post("/api/v1/psyche/questionnaires/:id/runs", async (request, reply) => {
+        const auth = requirePsycheScopedAccess(request.headers, ["psyche.write", "psyche.read"], { route: "/api/v1/psyche/questionnaires/:id/runs" });
+        const { id } = request.params;
+        const result = startQuestionnaireRun(id, startQuestionnaireRunSchema.parse(request.body ?? {}), toActivityContext(auth));
+        reply.code(201);
+        return result;
+    });
+    app.get("/api/v1/psyche/questionnaire-runs/:id", async (request) => {
+        requirePsycheScopedAccess(request.headers, ["psyche.read"], { route: "/api/v1/psyche/questionnaire-runs/:id" });
+        const { id } = request.params;
+        const userIds = resolveScopedUserIds(request.query);
+        return getQuestionnaireRunDetail(id, { userIds });
+    });
+    app.patch("/api/v1/psyche/questionnaire-runs/:id", async (request) => {
+        const auth = requirePsycheScopedAccess(request.headers, ["psyche.write"], { route: "/api/v1/psyche/questionnaire-runs/:id" });
+        const { id } = request.params;
+        return updateQuestionnaireRun(id, updateQuestionnaireRunSchema.parse(request.body ?? {}), toActivityContext(auth));
+    });
+    app.post("/api/v1/psyche/questionnaire-runs/:id/complete", async (request) => {
+        const auth = requirePsycheScopedAccess(request.headers, ["psyche.write"], { route: "/api/v1/psyche/questionnaire-runs/:id/complete" });
+        const { id } = request.params;
+        return completeQuestionnaireRun(id, toActivityContext(auth));
     });
     app.get("/api/v1/psyche/self-observation/calendar", async (request) => {
         requirePsycheScopedAccess(request.headers, ["psyche.read"], { route: "/api/v1/psyche/self-observation/calendar" });
@@ -6264,8 +6438,218 @@ export async function buildServer(options = {}) {
     app.patch("/api/v1/settings", async (request) => {
         const auth = requireScopedAccess(request.headers, ["write"], { route: "/api/v1/settings" });
         return {
-            settings: updateSettings(updateSettingsSchema.parse(request.body ?? {}), toActivityContext(auth))
+            settings: updateSettings(updateSettingsSchema.parse(request.body ?? {}), {
+                activity: toActivityContext(auth),
+                secrets: managers.secrets
+            })
         };
+    });
+    app.post("/api/v1/settings/models/connections", async (request, reply) => {
+        requireScopedAccess(request.headers, ["write"], {
+            route: "/api/v1/settings/models/connections"
+        });
+        const parsed = upsertAiModelConnectionSchema.parse(request.body ?? {});
+        const oauthCredential = parsed.oauthSessionId?.trim()
+            ? consumeOpenAiCodexOauthCredentials(parsed.oauthSessionId.trim())
+            : null;
+        const connection = upsertAiModelConnection(parsed, managers.secrets, {
+            oauthCredential
+        });
+        const currentSettings = getSettings();
+        const selectedWikiConnectionId = currentSettings.modelSettings.forgeAgent.wiki.connectionId;
+        if (selectedWikiConnectionId === connection.id) {
+            updateSettings({
+                modelSettings: {
+                    forgeAgent: {
+                        wiki: {
+                            connectionId: connection.id,
+                            model: parsed.model
+                        }
+                    }
+                }
+            }, { secrets: managers.secrets });
+        }
+        reply.code(201);
+        return { connection };
+    });
+    app.delete("/api/v1/settings/models/connections/:id", async (request, reply) => {
+        requireScopedAccess(request.headers, ["write"], { route: "/api/v1/settings/models/connections/:id" });
+        const deletedId = deleteAiModelConnection(request.params.id, managers.secrets);
+        if (!deletedId) {
+            reply.code(404);
+            return { error: "AI model connection not found" };
+        }
+        return { deletedId };
+    });
+    app.post("/api/v1/settings/models/connections/test", async (request, reply) => {
+        requireScopedAccess(request.headers, ["write"], { route: "/api/v1/settings/models/connections/test" });
+        const parsed = testAiModelConnectionSchema.parse(request.body ?? {});
+        const existing = parsed.connectionId
+            ? getAiModelConnectionById(parsed.connectionId)
+            : null;
+        const credential = parsed.connectionId
+            ? readModelConnectionCredential(parsed.connectionId, managers.secrets)
+            : null;
+        const explicitApiKey = parsed.apiKey?.trim() ||
+            (credential?.kind === "api_key"
+                ? credential.apiKey
+                : credential?.kind === "oauth"
+                    ? credential.access
+                    : null);
+        const result = await managers.llm.testWikiConnection({
+            provider: parsed.provider ?? existing?.provider ?? "openai-api",
+            baseUrl: parsed.baseUrl?.trim() ||
+                existing?.baseUrl ||
+                "https://api.openai.com/v1",
+            model: parsed.model,
+            systemPrompt: "",
+            secretId: null,
+            metadata: {}
+        }, explicitApiKey, ({ level, message, details = {} }) => {
+            recordDiagnosticLog({
+                level,
+                source: normalizeDiagnosticSource(request.headers["x-forge-source"]),
+                scope: typeof details.scope === "string" ? details.scope : "model_settings",
+                eventKey: typeof details.eventKey === "string"
+                    ? details.eventKey
+                    : "model_connection_test",
+                message,
+                route: "/api/v1/settings/models/connections/test",
+                functionName: "testModelConnection",
+                details
+            });
+        });
+        reply.code(200);
+        return { result };
+    });
+    app.post("/api/v1/settings/models/oauth/openai-codex/start", async (request) => {
+        requireScopedAccess(request.headers, ["write"], {
+            route: "/api/v1/settings/models/oauth/openai-codex/start"
+        });
+        return { session: await startOpenAiCodexOauthSession() };
+    });
+    app.get("/api/v1/settings/models/oauth/openai-codex/session/:id", async (request, reply) => {
+        requireScopedAccess(request.headers, ["write"], { route: "/api/v1/settings/models/oauth/openai-codex/session/:id" });
+        try {
+            return {
+                session: getOpenAiCodexOauthSession(request.params.id)
+            };
+        }
+        catch (error) {
+            if (error instanceof Error &&
+                error.message.startsWith("Unknown OpenAI Codex OAuth session")) {
+                reply.code(404);
+                return { error: "OpenAI Codex OAuth session not found" };
+            }
+            throw error;
+        }
+    });
+    app.post("/api/v1/settings/models/oauth/openai-codex/session/:id/manual", async (request) => {
+        requireScopedAccess(request.headers, ["write"], { route: "/api/v1/settings/models/oauth/openai-codex/session/:id/manual" });
+        return {
+            session: submitOpenAiCodexOauthManualInput(request.params.id, submitOpenAiCodexOauthManualCodeSchema.parse(request.body ?? {})
+                .codeOrUrl)
+        };
+    });
+    app.get("/api/v1/surfaces/:surfaceId/ai-processors", async (request) => {
+        requireScopedAccess(request.headers, ["read"], {
+            route: "/api/v1/surfaces/:surfaceId/ai-processors"
+        });
+        return {
+            graph: getSurfaceProcessorGraph(request.params.surfaceId)
+        };
+    });
+    app.post("/api/v1/surfaces/:surfaceId/ai-processors", async (request, reply) => {
+        requireScopedAccess(request.headers, ["write"], {
+            route: "/api/v1/surfaces/:surfaceId/ai-processors"
+        });
+        const body = createAiProcessorSchema.parse(request.body ?? {});
+        const processor = createAiProcessor({
+            ...body,
+            surfaceId: request.params.surfaceId
+        });
+        reply.code(201);
+        return { processor };
+    });
+    app.patch("/api/v1/ai-processors/:id", async (request, reply) => {
+        requireScopedAccess(request.headers, ["write"], {
+            route: "/api/v1/ai-processors/:id"
+        });
+        const processor = updateAiProcessor(request.params.id, updateAiProcessorSchema.parse(request.body ?? {}));
+        if (!processor) {
+            reply.code(404);
+            return { error: "AI processor not found" };
+        }
+        return { processor };
+    });
+    app.delete("/api/v1/ai-processors/:id", async (request, reply) => {
+        requireScopedAccess(request.headers, ["write"], {
+            route: "/api/v1/ai-processors/:id"
+        });
+        const processor = deleteAiProcessor(request.params.id);
+        if (!processor) {
+            reply.code(404);
+            return { error: "AI processor not found" };
+        }
+        return { processor };
+    });
+    app.post("/api/v1/ai-processor-links", async (request, reply) => {
+        requireScopedAccess(request.headers, ["write"], {
+            route: "/api/v1/ai-processor-links"
+        });
+        const link = createAiProcessorLink(createAiProcessorLinkSchema.parse(request.body ?? {}));
+        reply.code(201);
+        return { link };
+    });
+    app.delete("/api/v1/ai-processor-links/:id", async (request, reply) => {
+        requireScopedAccess(request.headers, ["write"], {
+            route: "/api/v1/ai-processor-links/:id"
+        });
+        const link = deleteAiProcessorLink(request.params.id);
+        if (!link) {
+            reply.code(404);
+            return { error: "AI processor link not found" };
+        }
+        return { link };
+    });
+    app.post("/api/v1/ai-processors/:id/run", async (request, reply) => {
+        requireScopedAccess(request.headers, ["write"], {
+            route: "/api/v1/ai-processors/:id/run"
+        });
+        const processor = getAiProcessorById(request.params.id);
+        if (!processor) {
+            reply.code(404);
+            return { error: "AI processor not found" };
+        }
+        return await runAiProcessor(processor.id, runAiProcessorSchema.parse(request.body ?? {}), {
+            llm: managers.llm,
+            secrets: managers.secrets
+        });
+    });
+    app.get("/api/v1/aiproc/:id", async (request, reply) => {
+        requireScopedAccess(request.headers, ["read"], {
+            route: "/api/v1/aiproc/:id"
+        });
+        const processor = getAiProcessorById(request.params.id);
+        if (!processor) {
+            reply.code(404);
+            return { error: "AI processor not found" };
+        }
+        return { processor };
+    });
+    app.post("/api/v1/aiproc/:id/run", async (request, reply) => {
+        requireScopedAccess(request.headers, ["write"], {
+            route: "/api/v1/aiproc/:id/run"
+        });
+        const processor = getAiProcessorById(request.params.id);
+        if (!processor) {
+            reply.code(404);
+            return { error: "AI processor not found" };
+        }
+        return await runAiProcessor(processor.id, runAiProcessorSchema.parse(request.body ?? {}), {
+            llm: managers.llm,
+            secrets: managers.secrets
+        });
     });
     app.post("/api/v1/settings/tokens", async (request, reply) => {
         const auth = requireOperatorSession(request.headers, { route: "/api/v1/settings/tokens" });

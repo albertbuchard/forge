@@ -1,3 +1,4 @@
+import { z } from "zod";
 import { randomUUID } from "node:crypto";
 import { getDatabase, runInTransaction } from "../db.js";
 import { HttpError } from "../errors.js";
@@ -8,10 +9,10 @@ import {
 } from "../questionnaire-flow.js";
 import {
   createQuestionnaireInstrumentSchema,
+  questionnaireInstrumentSummarySchema,
   publishQuestionnaireVersionSchema,
   questionnaireDefinitionSchema,
   questionnaireInstrumentDetailSchema,
-  questionnaireInstrumentSummarySchema,
   questionnaireRunDetailSchema,
   questionnaireRunSchema,
   questionnaireRunScoreSchema,
@@ -685,7 +686,7 @@ function buildCompletionNoteContent(options: {
     .map((item) => {
       const answer = answerRowsByItemId.get(item.id);
       const label =
-        answer?.valueText ||
+        answer?.value_text ||
         item.options.find((option) => option.key === answer?.option_key)?.label ||
         "No answer";
       const numeric =
@@ -1074,6 +1075,100 @@ export function createQuestionnaireInstrument(
     });
 
     return getQuestionnaireInstrumentDetail(instrumentId);
+  });
+}
+
+export const updateQuestionnaireInstrumentSchema = createQuestionnaireInstrumentSchema
+  .omit({ versionLabel: true })
+  .partial();
+
+export type UpdateQuestionnaireInstrumentInput = z.infer<
+  typeof updateQuestionnaireInstrumentSchema
+>;
+
+export function listQuestionnaireInstrumentEntities(options: { userIds?: string[] } = {}) {
+  return listQuestionnaireInstruments(options).instruments;
+}
+
+export function getQuestionnaireInstrumentEntityById(
+  instrumentId: string,
+  options: { userIds?: string[] } = {}
+) {
+  return getQuestionnaireInstrumentDetail(instrumentId, options).instrument;
+}
+
+export function updateQuestionnaireInstrument(
+  instrumentId: string,
+  patch: UpdateQuestionnaireInstrumentInput,
+  context: QuestionnaireContext
+) {
+  const parsed = updateQuestionnaireInstrumentSchema.parse(patch);
+  const detail = getQuestionnaireInstrumentDetail(instrumentId);
+  const currentVersion =
+    detail.instrument.draftVersion ??
+    detail.instrument.currentVersion;
+  if (!currentVersion) {
+    throw createHttpError({
+      statusCode: 404,
+      code: "questionnaire_version_missing",
+      message: "No questionnaire version is available for this instrument."
+    });
+  }
+  return updateQuestionnaireDraftVersion(
+    instrumentId,
+    {
+      title: parsed.title ?? detail.instrument.title,
+      subtitle: parsed.subtitle ?? detail.instrument.subtitle,
+      description: parsed.description ?? detail.instrument.description,
+      aliases: parsed.aliases ?? detail.instrument.aliases,
+      symptomDomains: parsed.symptomDomains ?? detail.instrument.symptomDomains,
+      tags: parsed.tags ?? detail.instrument.tags,
+      sourceClass: parsed.sourceClass ?? detail.instrument.sourceClass,
+      availability: parsed.availability ?? detail.instrument.availability,
+      isSelfReport: parsed.isSelfReport ?? detail.instrument.isSelfReport,
+      label: currentVersion.label,
+      definition: parsed.definition ?? currentVersion.definition,
+      scoring: parsed.scoring ?? currentVersion.scoring,
+      provenance: parsed.provenance ?? currentVersion.provenance
+    },
+    context
+  ).instrument;
+}
+
+export function deleteQuestionnaireInstrument(
+  instrumentId: string,
+  context: QuestionnaireContext
+) {
+  return runInTransaction(() => {
+    const row = getInstrumentRow(instrumentId);
+    if (!row) {
+      throw createHttpError({
+        statusCode: 404,
+        code: "questionnaire_not_found",
+        message: "Questionnaire instrument not found."
+      });
+    }
+    assertEditableInstrument(row);
+    const detail = getQuestionnaireInstrumentDetail(instrumentId);
+    getDatabase()
+      .prepare(
+        `
+          UPDATE questionnaire_instruments
+          SET status = 'archived', updated_at = ?
+          WHERE id = ?
+        `
+      )
+      .run(nowIso(), instrumentId);
+    recordActivityEvent({
+      entityType: "questionnaire_instrument",
+      entityId: instrumentId,
+      eventType: "questionnaire_archived",
+      title: `Questionnaire archived: ${row.title}`,
+      description: "A questionnaire instrument was archived.",
+      actor: context.actor ?? null,
+      source: context.source
+    });
+    return detail.instrument;
   });
 }
 
@@ -1646,6 +1741,8 @@ export function completeQuestionnaireRun(runId: string, context: QuestionnaireCo
         {
           kind: "evidence",
           title: `${instrument.title} self observation`,
+          aliases: [],
+          indexOrder: 0,
           summary:
             primaryScore !== undefined
               ? `${primaryScore.label}: ${formatScoreForNote(primaryScore)}`
@@ -1654,12 +1751,15 @@ export function completeQuestionnaireRun(runId: string, context: QuestionnaireCo
           author: context.actor ?? "Questionnaire",
           links: [],
           tags: [SELF_OBSERVATION_TAG],
+          destroyAt: null,
+          sourcePath: "",
           frontmatter: {
             observedAt: now,
             questionnaireInstrumentId: instrument.id,
             questionnaireRunId: runId,
             questionnaireVersionId: run.version_id
           },
+          revisionHash: "",
           userId: run.user_id
         },
         context

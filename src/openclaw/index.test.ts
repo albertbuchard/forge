@@ -158,7 +158,7 @@ describe("forge openclaw plugin", () => {
         portSource: "default",
         dataRoot: "",
         apiToken: "",
-        actorLabel: "aurel",
+        actorLabel: "aurel (claw)",
         timeoutMs: 15000
       });
     } finally {
@@ -193,7 +193,7 @@ describe("forge openclaw plugin", () => {
       portSource: "preferred",
       dataRoot: "",
       apiToken: "",
-      actorLabel: "aurel",
+      actorLabel: "aurel (claw)",
       timeoutMs: 15000
     });
 
@@ -211,7 +211,7 @@ describe("forge openclaw plugin", () => {
         port: 4317,
         dataRoot: "/tmp/forge-data",
         apiToken: "fg_live_test",
-        actorLabel: "aurel"
+        actorLabel: "aurel (claw)"
       },
       registerHttpRoute(route) {
         routes.push(route);
@@ -249,9 +249,14 @@ describe("forge openclaw plugin", () => {
       "/forge/v1/wiki/health",
       "/forge/v1/health/sleep",
       "/forge/v1/health/fitness",
+      "/forge/v1/preferences/workspace",
+      "/forge/v1/psyche/self-observation/calendar",
       "/forge/v1/operator/log-work",
       "/forge/v1/work-adjustments",
       "/forge/v1/insights",
+      "/forge/v1/preferences",
+      "/forge/v1/psyche/questionnaires",
+      "/forge/v1/psyche/questionnaire-runs",
       "/forge/v1/wiki/pages",
       "/forge/v1/wiki",
       "/forge/v1/health",
@@ -273,19 +278,27 @@ describe("forge openclaw plugin", () => {
     const toolNames = tools.map((tool) => tool.name).sort();
     expect(toolNames).toEqual([
       "forge_adjust_work_minutes",
+      "forge_clone_questionnaire",
+      "forge_complete_questionnaire_run",
       "forge_complete_task_run",
       "forge_connect_calendar_provider",
       "forge_create_entities",
       "forge_create_task_timebox",
       "forge_create_work_block_template",
       "forge_delete_entities",
+      "forge_enqueue_preferences_item_from_entity",
+      "forge_ensure_questionnaire_draft",
       "forge_focus_task_run",
       "forge_get_agent_onboarding",
       "forge_get_calendar_overview",
       "forge_get_current_work",
       "forge_get_operator_context",
       "forge_get_operator_overview",
+      "forge_get_preferences_workspace",
       "forge_get_psyche_overview",
+      "forge_get_questionnaire",
+      "forge_get_questionnaire_run",
+      "forge_get_self_observation_calendar",
       "forge_get_sleep_overview",
       "forge_get_sports_overview",
       "forge_get_ui_entrypoint",
@@ -298,19 +311,28 @@ describe("forge openclaw plugin", () => {
       "forge_grant_reward_bonus",
       "forge_heartbeat_task_run",
       "forge_ingest_wiki_source",
+      "forge_list_questionnaires",
       "forge_list_wiki_pages",
       "forge_log_work",
+      "forge_merge_preferences_contexts",
       "forge_post_insight",
+      "forge_publish_questionnaire_draft",
       "forge_recommend_task_timeboxes",
       "forge_reindex_wiki_embeddings",
       "forge_release_task_run",
       "forge_restore_entities",
       "forge_search_entities",
       "forge_search_wiki",
+      "forge_start_preferences_game",
+      "forge_start_questionnaire_run",
       "forge_start_task_run",
+      "forge_submit_preferences_judgment",
+      "forge_submit_preferences_signal",
       "forge_sync_calendar_connection",
       "forge_sync_wiki_vault",
       "forge_update_entities",
+      "forge_update_preferences_score",
+      "forge_update_questionnaire_run",
       "forge_update_sleep_session",
       "forge_update_workout_session",
       "forge_upsert_wiki_page"

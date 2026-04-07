@@ -4604,6 +4604,332 @@ export function buildOpenApiDocument() {
           }
         }
       },
+      "/api/v1/psyche/questionnaires": {
+        get: {
+          summary: "List questionnaire instruments available in the Psyche library",
+          responses: {
+            "200": jsonResponse(
+              {
+                type: "object",
+                required: ["instruments"],
+                properties: {
+                  instruments: arrayOf({
+                    type: "object",
+                    additionalProperties: true
+                  })
+                }
+              },
+              "Questionnaire instrument collection"
+            ),
+            default: { $ref: "#/components/responses/Error" }
+          }
+        },
+        post: {
+          summary: "Create a custom questionnaire instrument",
+          responses: {
+            "201": jsonResponse(
+              {
+                type: "object",
+                required: ["instrument"],
+                properties: {
+                  instrument: {
+                    type: "object",
+                    additionalProperties: true
+                  }
+                }
+              },
+              "Created questionnaire instrument"
+            ),
+            default: { $ref: "#/components/responses/Error" }
+          }
+        }
+      },
+      "/api/v1/psyche/questionnaires/{id}": {
+        get: {
+          summary: "Get one questionnaire instrument with version and history detail",
+          responses: {
+            "200": jsonResponse(
+              {
+                type: "object",
+                required: ["instrument"],
+                properties: {
+                  instrument: {
+                    type: "object",
+                    additionalProperties: true
+                  }
+                }
+              },
+              "Questionnaire instrument detail"
+            ),
+            default: { $ref: "#/components/responses/Error" }
+          }
+        }
+      },
+      "/api/v1/psyche/questionnaires/{id}/clone": {
+        post: {
+          summary: "Clone a questionnaire instrument into a new draftable custom copy",
+          responses: {
+            "201": jsonResponse(
+              {
+                type: "object",
+                required: ["instrument"],
+                properties: {
+                  instrument: {
+                    type: "object",
+                    additionalProperties: true
+                  }
+                }
+              },
+              "Cloned questionnaire instrument"
+            ),
+            default: { $ref: "#/components/responses/Error" }
+          }
+        }
+      },
+      "/api/v1/psyche/questionnaires/{id}/draft": {
+        post: {
+          summary: "Ensure a draft questionnaire version exists",
+          responses: {
+            "200": jsonResponse(
+              {
+                type: "object",
+                required: ["instrument"],
+                properties: {
+                  instrument: {
+                    type: "object",
+                    additionalProperties: true
+                  }
+                }
+              },
+              "Questionnaire instrument with ensured draft"
+            ),
+            default: { $ref: "#/components/responses/Error" }
+          }
+        },
+        patch: {
+          summary: "Update the current questionnaire draft version",
+          responses: {
+            "200": jsonResponse(
+              {
+                type: "object",
+                required: ["instrument"],
+                properties: {
+                  instrument: {
+                    type: "object",
+                    additionalProperties: true
+                  }
+                }
+              },
+              "Questionnaire instrument with updated draft"
+            ),
+            default: { $ref: "#/components/responses/Error" }
+          }
+        }
+      },
+      "/api/v1/psyche/questionnaires/{id}/publish": {
+        post: {
+          summary: "Publish the current questionnaire draft as a new version",
+          responses: {
+            "200": jsonResponse(
+              {
+                type: "object",
+                required: ["instrument"],
+                properties: {
+                  instrument: {
+                    type: "object",
+                    additionalProperties: true
+                  }
+                }
+              },
+              "Published questionnaire instrument"
+            ),
+            default: { $ref: "#/components/responses/Error" }
+          }
+        }
+      },
+      "/api/v1/psyche/questionnaires/{id}/runs": {
+        post: {
+          summary: "Start a questionnaire run for one user and instrument version",
+          responses: {
+            "201": jsonResponse(
+              {
+                type: "object",
+                required: ["run", "instrument", "version", "answers", "scores", "history"],
+                properties: {
+                  run: {
+                    type: "object",
+                    additionalProperties: true
+                  },
+                  instrument: {
+                    type: "object",
+                    additionalProperties: true
+                  },
+                  version: {
+                    type: "object",
+                    additionalProperties: true
+                  },
+                  answers: arrayOf({
+                    type: "object",
+                    additionalProperties: true
+                  }),
+                  scores: arrayOf({
+                    type: "object",
+                    additionalProperties: true
+                  }),
+                  history: arrayOf({
+                    type: "object",
+                    additionalProperties: true
+                  })
+                }
+              },
+              "Started questionnaire run"
+            ),
+            default: { $ref: "#/components/responses/Error" }
+          }
+        }
+      },
+      "/api/v1/psyche/questionnaire-runs/{id}": {
+        get: {
+          summary: "Get one questionnaire run with answers, scores, and version detail",
+          responses: {
+            "200": jsonResponse(
+              {
+                type: "object",
+                required: ["run", "instrument", "version", "answers", "scores", "history"],
+                properties: {
+                  run: {
+                    type: "object",
+                    additionalProperties: true
+                  },
+                  instrument: {
+                    type: "object",
+                    additionalProperties: true
+                  },
+                  version: {
+                    type: "object",
+                    additionalProperties: true
+                  },
+                  answers: arrayOf({
+                    type: "object",
+                    additionalProperties: true
+                  }),
+                  scores: arrayOf({
+                    type: "object",
+                    additionalProperties: true
+                  }),
+                  history: arrayOf({
+                    type: "object",
+                    additionalProperties: true
+                  })
+                }
+              },
+              "Questionnaire run detail"
+            ),
+            default: { $ref: "#/components/responses/Error" }
+          }
+        },
+        patch: {
+          summary: "Update an in-progress questionnaire run",
+          responses: {
+            "200": jsonResponse(
+              {
+                type: "object",
+                required: ["run", "instrument", "version", "answers", "scores", "history"],
+                properties: {
+                  run: {
+                    type: "object",
+                    additionalProperties: true
+                  },
+                  instrument: {
+                    type: "object",
+                    additionalProperties: true
+                  },
+                  version: {
+                    type: "object",
+                    additionalProperties: true
+                  },
+                  answers: arrayOf({
+                    type: "object",
+                    additionalProperties: true
+                  }),
+                  scores: arrayOf({
+                    type: "object",
+                    additionalProperties: true
+                  }),
+                  history: arrayOf({
+                    type: "object",
+                    additionalProperties: true
+                  })
+                }
+              },
+              "Updated questionnaire run"
+            ),
+            default: { $ref: "#/components/responses/Error" }
+          }
+        }
+      },
+      "/api/v1/psyche/questionnaire-runs/{id}/complete": {
+        post: {
+          summary: "Complete a questionnaire run and persist its final scores",
+          responses: {
+            "200": jsonResponse(
+              {
+                type: "object",
+                required: ["run", "instrument", "version", "answers", "scores", "history"],
+                properties: {
+                  run: {
+                    type: "object",
+                    additionalProperties: true
+                  },
+                  instrument: {
+                    type: "object",
+                    additionalProperties: true
+                  },
+                  version: {
+                    type: "object",
+                    additionalProperties: true
+                  },
+                  answers: arrayOf({
+                    type: "object",
+                    additionalProperties: true
+                  }),
+                  scores: arrayOf({
+                    type: "object",
+                    additionalProperties: true
+                  }),
+                  history: arrayOf({
+                    type: "object",
+                    additionalProperties: true
+                  })
+                }
+              },
+              "Completed questionnaire run"
+            ),
+            default: { $ref: "#/components/responses/Error" }
+          }
+        }
+      },
+      "/api/v1/psyche/self-observation/calendar": {
+        get: {
+          summary: "Read self-observation notes arranged as a calendar-ready reflection surface",
+          responses: {
+            "200": jsonResponse(
+              {
+                type: "object",
+                required: ["calendar"],
+                properties: {
+                  calendar: {
+                    type: "object",
+                    additionalProperties: true
+                  }
+                }
+              },
+              "Self-observation calendar"
+            ),
+            default: { $ref: "#/components/responses/Error" }
+          }
+        }
+      },
       "/api/v1/operator/overview": {
         get: {
           summary:

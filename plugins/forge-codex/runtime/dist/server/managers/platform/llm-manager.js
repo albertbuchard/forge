@@ -1,5 +1,6 @@
 import { AbstractManager } from "../base.js";
-import { readEncryptedSecret } from "../../repositories/calendar.js";
+import { refreshOpenAICodexToken } from "@mariozechner/pi-ai/oauth";
+import { readEncryptedSecret, storeEncryptedSecret } from "../../repositories/calendar.js";
 function emitDiagnostic(logger, input) {
     logger?.(input);
 }
@@ -32,7 +33,7 @@ export class LlmManager extends AbstractManager {
             });
             return null;
         }
-        const apiKey = this.readApiKey(profile.secretId);
+        const apiKey = await this.readApiKey(profile.secretId);
         if (!apiKey) {
             emitDiagnostic(logger, {
                 level: "error",
@@ -72,7 +73,7 @@ export class LlmManager extends AbstractManager {
             });
             throw new Error("Unsupported LLM provider.");
         }
-        const apiKey = explicitApiKey?.trim() || this.readApiKey(profile.secretId);
+        const apiKey = explicitApiKey?.trim() || (await this.readApiKey(profile.secretId));
         if (!apiKey) {
             emitDiagnostic(logger, {
                 level: "error",
@@ -107,12 +108,29 @@ export class LlmManager extends AbstractManager {
             outputPreview: result.outputPreview
         };
     }
+    async runTextPrompt(profile, input, logger) {
+        const provider = this.resolveProvider(profile.provider);
+        if (!provider?.runText) {
+            throw new Error("This LLM provider does not support text prompt execution.");
+        }
+        const apiKey = input.explicitApiKey?.trim() || (await this.readApiKey(profile.secretId));
+        if (!apiKey) {
+            throw new Error("Missing provider credential for prompt execution.");
+        }
+        return await provider.runText({
+            apiKey,
+            profile,
+            systemPrompt: input.systemPrompt,
+            prompt: input.prompt,
+            logger
+        });
+    }
     resolveProvider(providerName) {
         return (this.providers.get(providerName) ??
             this.providers.get("openai-responses") ??
             null);
     }
-    readApiKey(secretId) {
+    async readApiKey(secretId) {
         if (!secretId) {
             return null;
         }
@@ -121,6 +139,24 @@ export class LlmManager extends AbstractManager {
             return null;
         }
         const payload = this.secretsManager.openJson(cipherText);
+        if (payload.kind === "oauth" &&
+            payload.provider === "openai-codex" &&
+            typeof payload.refresh === "string") {
+            let access = payload.access?.trim() || null;
+            const expires = typeof payload.expires === "number" ? payload.expires : Date.now();
+            if (!access || expires <= Date.now() + 60_000) {
+                const refreshed = await refreshOpenAICodexToken(payload.refresh);
+                const nextPayload = {
+                    ...payload,
+                    access: refreshed.access,
+                    refresh: refreshed.refresh,
+                    expires: refreshed.expires
+                };
+                storeEncryptedSecret(secretId, this.secretsManager.sealJson(nextPayload), "Refreshed OpenAI Codex OAuth credential");
+                access = refreshed.access;
+            }
+            return access;
+        }
         return payload.apiKey?.trim() || null;
     }
 }

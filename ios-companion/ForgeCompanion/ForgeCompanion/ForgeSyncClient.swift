@@ -27,8 +27,59 @@ struct ForgeSyncClient {
         let device: CompanionSyncPayload.Device
     }
 
+    private struct MovementBootstrapRequest: Encodable {
+        let sessionId: String
+        let pairingToken: String
+    }
+
     private struct SyncEnvelope: Decodable {
         let sync: SyncReceipt
+    }
+
+    private struct MovementBootstrapEnvelope: Decodable {
+        let movement: SyncReceipt.MovementBootstrapEnvelope
+    }
+
+    private struct WatchBootstrapRequest: Encodable {
+        let sessionId: String
+        let pairingToken: String
+    }
+
+    private struct WatchBootstrapEnvelope: Decodable {
+        let watch: ForgeWatchBootstrap
+    }
+
+    private struct WatchHabitCheckInRequest: Encodable {
+        let sessionId: String
+        let pairingToken: String
+        let dedupeKey: String
+        let dateKey: String
+        let status: String
+        let note: String
+    }
+
+    private struct WatchHabitCheckInEnvelope: Decodable {
+        let watch: ForgeWatchBootstrap
+    }
+
+    private struct WatchCaptureBatchRequest: Encodable {
+        struct Event: Encodable {
+            let dedupeKey: String
+            let eventType: String
+            let recordedAt: String
+            let promptId: String?
+            let linkedContext: ForgeWatchLinkedContext
+            let payload: [String: String]
+        }
+
+        let sessionId: String
+        let pairingToken: String
+        let device: ForgeWatchDeviceDescriptor
+        let events: [Event]
+    }
+
+    private struct WatchCaptureBatchEnvelope: Decodable {
+        let watch: ForgeWatchBootstrap
     }
 
     private struct ErrorEnvelope: Decodable {
@@ -99,7 +150,7 @@ struct ForgeSyncClient {
     func pushHealthSync(payload: CompanionSyncPayload, apiBaseUrl: String) async throws -> SyncReceipt {
         companionDebugLog(
             "ForgeSyncClient",
-            "pushHealthSync start session=\(payload.sessionId) apiBaseUrl=\(apiBaseUrl) sleep=\(payload.sleepSessions.count) workouts=\(payload.workouts.count)"
+            "pushHealthSync start session=\(payload.sessionId) apiBaseUrl=\(apiBaseUrl) sleep=\(payload.sleepSessions.count) workouts=\(payload.workouts.count) stays=\(payload.movement.stays.count) trips=\(payload.movement.trips.count)"
         )
         let envelope: SyncEnvelope = try await sendRequest(
             path: "/mobile/healthkit/sync",
@@ -111,6 +162,110 @@ struct ForgeSyncClient {
             "pushHealthSync success created=\(envelope.sync.imported.createdCount) updated=\(envelope.sync.imported.updatedCount) merged=\(envelope.sync.imported.mergedCount)"
         )
         return envelope.sync
+    }
+
+    func fetchMovementBootstrap(payload: PairingPayload) async throws -> SyncReceipt.MovementBootstrapEnvelope {
+        companionDebugLog(
+            "ForgeSyncClient",
+            "fetchMovementBootstrap start session=\(payload.sessionId)"
+        )
+        let envelope: MovementBootstrapEnvelope = try await sendRequest(
+            path: "/mobile/movement/bootstrap",
+            apiBaseUrl: payload.apiBaseUrl,
+            body: MovementBootstrapRequest(
+                sessionId: payload.sessionId,
+                pairingToken: payload.pairingToken
+            )
+        )
+        companionDebugLog(
+            "ForgeSyncClient",
+            "fetchMovementBootstrap success places=\(envelope.movement.places.count)"
+        )
+        return envelope.movement
+    }
+
+    func fetchWatchBootstrap(payload: PairingPayload) async throws -> ForgeWatchBootstrap {
+        companionDebugLog(
+            "ForgeSyncClient",
+            "fetchWatchBootstrap start session=\(payload.sessionId)"
+        )
+        let envelope: WatchBootstrapEnvelope = try await sendRequest(
+            path: "/mobile/watch/bootstrap",
+            apiBaseUrl: payload.apiBaseUrl,
+            body: WatchBootstrapRequest(
+                sessionId: payload.sessionId,
+                pairingToken: payload.pairingToken
+            )
+        )
+        companionDebugLog(
+            "ForgeSyncClient",
+            "fetchWatchBootstrap success habits=\(envelope.watch.habits.count) prompts=\(envelope.watch.pendingPrompts.count)"
+        )
+        return envelope.watch
+    }
+
+    func submitWatchHabitCheckIn(
+        envelopeId: String,
+        action: ForgeWatchHabitCheckInAction,
+        pairing: PairingPayload
+    ) async throws -> ForgeWatchBootstrap {
+        companionDebugLog(
+            "ForgeSyncClient",
+            "submitWatchHabitCheckIn start action=\(envelopeId) habit=\(action.habitId) status=\(action.status)"
+        )
+        let envelope: WatchHabitCheckInEnvelope = try await sendRequest(
+            path: "/mobile/watch/habits/\(action.habitId)/check-ins",
+            apiBaseUrl: pairing.apiBaseUrl,
+            body: WatchHabitCheckInRequest(
+                sessionId: pairing.sessionId,
+                pairingToken: pairing.pairingToken,
+                dedupeKey: envelopeId,
+                dateKey: action.dateKey,
+                status: action.status,
+                note: action.note
+            )
+        )
+        companionDebugLog(
+            "ForgeSyncClient",
+            "submitWatchHabitCheckIn success action=\(envelopeId)"
+        )
+        return envelope.watch
+    }
+
+    func submitWatchCaptureBatch(
+        envelopeId: String,
+        device: ForgeWatchDeviceDescriptor,
+        actions: [ForgeWatchCaptureEventAction],
+        pairing: PairingPayload
+    ) async throws -> ForgeWatchBootstrap {
+        companionDebugLog(
+            "ForgeSyncClient",
+            "submitWatchCaptureBatch start action=\(envelopeId) events=\(actions.count)"
+        )
+        let envelope: WatchCaptureBatchEnvelope = try await sendRequest(
+            path: "/mobile/watch/capture-events:batch",
+            apiBaseUrl: pairing.apiBaseUrl,
+            body: WatchCaptureBatchRequest(
+                sessionId: pairing.sessionId,
+                pairingToken: pairing.pairingToken,
+                device: device,
+                events: actions.map { action in
+                    WatchCaptureBatchRequest.Event(
+                        dedupeKey: envelopeId,
+                        eventType: action.eventType,
+                        recordedAt: action.recordedAt,
+                        promptId: action.promptId,
+                        linkedContext: action.linkedContext,
+                        payload: action.payload
+                    )
+                }
+            )
+        )
+        companionDebugLog(
+            "ForgeSyncClient",
+            "submitWatchCaptureBatch success action=\(envelopeId)"
+        )
+        return envelope.watch
     }
 
     private func sendRequest<Body: Encodable, Response: Decodable>(

@@ -35,6 +35,7 @@ import {
   GripVertical,
   LayoutDashboard,
   LayoutGrid,
+  Map,
   Moon,
   NotebookPen,
   Radar,
@@ -199,6 +200,13 @@ const PRIMARY_ROUTES: ShellRouteDefinition[] = [
     labelKey: "common.routeLabels.calendar",
     detailKey: "common.routeDetails.calendar",
     icon: CalendarDays
+  },
+  {
+    id: "movement",
+    to: "/movement",
+    labelKey: "common.routeLabels.movement",
+    detailKey: "common.routeDetails.movement",
+    icon: Map
   },
   {
     id: "sleep",

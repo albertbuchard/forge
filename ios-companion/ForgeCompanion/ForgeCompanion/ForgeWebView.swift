@@ -35,17 +35,13 @@ struct ForgeWebView: UIViewRepresentable {
             document.documentElement.style.setProperty('--forge-visual-viewport-bottom', bottomPx);
             document.documentElement.style.setProperty('--forge-safe-area-top', topPx);
             document.documentElement.style.setProperty('--forge-safe-area-bottom', bottomPx);
-            document.documentElement.style.height = heightPx;
-            document.documentElement.style.minHeight = heightPx;
             document.documentElement.style.background = '#0B1326';
-            document.body.style.height = heightPx;
             document.body.style.minHeight = heightPx;
             document.body.style.margin = '0';
             document.body.style.background = '#0B1326';
 
             const root = document.getElementById('root');
             if (root) {
-                root.style.height = heightPx;
                 root.style.minHeight = heightPx;
                 root.style.background = '#0B1326';
             }
@@ -78,7 +74,8 @@ struct ForgeWebView: UIViewRepresentable {
         webView.backgroundColor = UIColor(red: 11 / 255, green: 19 / 255, blue: 38 / 255, alpha: 1)
         webView.scrollView.backgroundColor = UIColor(red: 11 / 255, green: 19 / 255, blue: 38 / 255, alpha: 1)
         webView.scrollView.contentInsetAdjustmentBehavior = .never
-        webView.scrollView.bounces = false
+        webView.scrollView.bounces = true
+        webView.scrollView.alwaysBounceVertical = true
         webView.onLayout = { [weak coordinator = context.coordinator, weak webView] bounds, safeAreaInsets in
             guard let webView else { return }
             coordinator?.applyNativeBounds(bounds, safeAreaInsets: safeAreaInsets, to: webView)

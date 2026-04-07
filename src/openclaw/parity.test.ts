@@ -31,6 +31,14 @@ describe("forge plugin route parity", () => {
     expect(report.mirrored).toContain("PATCH /api/v1/health/sleep/:id");
     expect(report.mirrored).toContain("GET /api/v1/health/fitness");
     expect(report.mirrored).toContain("PATCH /api/v1/health/workouts/:id");
+    expect(report.mirrored).toContain("GET /api/v1/preferences/workspace");
+    expect(report.mirrored).toContain("POST /api/v1/preferences/game/start");
+    expect(report.mirrored).toContain("POST /api/v1/preferences/catalogs");
+    expect(report.mirrored).toContain("PATCH /api/v1/preferences/items/:id/score");
+    expect(report.mirrored).toContain("GET /api/v1/psyche/questionnaires");
+    expect(report.mirrored).toContain("POST /api/v1/psyche/questionnaires/:id/runs");
+    expect(report.mirrored).toContain("GET /api/v1/psyche/questionnaire-runs/:id");
+    expect(report.mirrored).toContain("GET /api/v1/psyche/self-observation/calendar");
     expect(report.mirrored).toContain("POST /api/v1/entities/search");
     expect(report.mirrored).toContain("POST /api/v1/entities/create");
     expect(report.mirrored).toContain("POST /api/v1/entities/update");
@@ -50,6 +58,9 @@ describe("forge plugin route parity", () => {
     expect(supported.has("POST /api/v1/wiki/ingest-jobs")).toBe(true);
     expect(supported.has("GET /api/v1/health/sleep")).toBe(true);
     expect(supported.has("GET /api/v1/health/fitness")).toBe(true);
+    expect(supported.has("GET /api/v1/preferences/workspace")).toBe(true);
+    expect(supported.has("GET /api/v1/psyche/questionnaires")).toBe(true);
+    expect(supported.has("GET /api/v1/psyche/self-observation/calendar")).toBe(true);
     expect(supported.has("POST /api/v1/entities/search")).toBe(true);
     expect(supported.has("POST /api/v1/work-adjustments")).toBe(true);
     expect(supported.has("POST /api/v1/insights")).toBe(true);

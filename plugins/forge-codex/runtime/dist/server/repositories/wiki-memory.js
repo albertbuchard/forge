@@ -274,6 +274,7 @@ export const upsertWikiLlmProfileSchema = z.object({
     baseUrl: z.string().trim().default("https://api.openai.com/v1"),
     model: z.string().trim().min(1),
     apiKey: z.string().trim().optional(),
+    secretId: z.string().trim().nullable().optional(),
     systemPrompt: z.string().trim().default(""),
     reasoningEffort: wikiLlmReasoningEffortSchema.optional(),
     verbosity: wikiLlmVerbositySchema.optional(),
@@ -2059,7 +2060,9 @@ export function upsertWikiLlmProfile(input, secrets) {
     const now = nowIso();
     const id = parsed.id?.trim() ||
         `wiki_llm_${randomUUID().replaceAll("-", "").slice(0, 10)}`;
-    let secretId = listWikiLlmProfiles().find((entry) => entry.id === id)?.secretId ?? null;
+    let secretId = parsed.secretId ??
+        listWikiLlmProfiles().find((entry) => entry.id === id)?.secretId ??
+        null;
     if (parsed.apiKey?.trim()) {
         secretId =
             secretId ??

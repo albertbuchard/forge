@@ -22,21 +22,21 @@ provides_tools:
   - forge_update_workout_session
   - forge_get_preferences_workspace
   - forge_start_preferences_game
-  - forge_create_preferences_catalog
-  - forge_update_preferences_catalog
-  - forge_delete_preferences_catalog
-  - forge_create_preferences_catalog_item
-  - forge_update_preferences_catalog_item
-  - forge_delete_preferences_catalog_item
-  - forge_create_preferences_context
-  - forge_update_preferences_context
   - forge_merge_preferences_contexts
-  - forge_create_preferences_item
-  - forge_update_preferences_item
   - forge_enqueue_preferences_item_from_entity
   - forge_submit_preferences_judgment
   - forge_submit_preferences_signal
   - forge_update_preferences_score
+  - forge_list_questionnaires
+  - forge_get_questionnaire
+  - forge_clone_questionnaire
+  - forge_ensure_questionnaire_draft
+  - forge_publish_questionnaire_draft
+  - forge_start_questionnaire_run
+  - forge_get_questionnaire_run
+  - forge_update_questionnaire_run
+  - forge_complete_questionnaire_run
+  - forge_get_self_observation_calendar
   - forge_get_ui_entrypoint
   - forge_get_psyche_overview
   - forge_get_xp_metrics

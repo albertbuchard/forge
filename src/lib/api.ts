@@ -60,6 +60,13 @@ import type {
   RewardRule,
   SettingsPayload,
   SettingsBinPayload,
+  MovementAllTimeData,
+  MovementDayData,
+  MovementKnownPlace,
+  MovementMonthData,
+  MovementSelectionAggregate,
+  MovementSettingsPayload,
+  MovementTripDetailData,
   Strategy,
   Tag,
   Task,
@@ -2469,6 +2476,129 @@ export function getFitnessView(userIds?: string[] | unknown) {
   const suffix = search.size > 0 ? `?${search.toString()}` : "";
   return request<{ fitness: FitnessViewData }>(
     `/api/v1/health/fitness${suffix}`
+  );
+}
+
+export function getMovementDay(input?: {
+  date?: string;
+  userIds?: string[] | unknown;
+}) {
+  const search = new URLSearchParams();
+  if (input?.date) {
+    search.set("date", input.date);
+  }
+  appendUserIds(search, coerceUserIds(input?.userIds));
+  const suffix = search.size > 0 ? `?${search.toString()}` : "";
+  return request<{ movement: MovementDayData }>(`/api/v1/movement/day${suffix}`);
+}
+
+export function getMovementMonth(input?: {
+  month?: string;
+  userIds?: string[] | unknown;
+}) {
+  const search = new URLSearchParams();
+  if (input?.month) {
+    search.set("month", input.month);
+  }
+  appendUserIds(search, coerceUserIds(input?.userIds));
+  const suffix = search.size > 0 ? `?${search.toString()}` : "";
+  return request<{ movement: MovementMonthData }>(
+    `/api/v1/movement/month${suffix}`
+  );
+}
+
+export function getMovementAllTime(userIds?: string[] | unknown) {
+  const search = new URLSearchParams();
+  appendUserIds(search, coerceUserIds(userIds));
+  const suffix = search.size > 0 ? `?${search.toString()}` : "";
+  return request<{ movement: MovementAllTimeData }>(
+    `/api/v1/movement/all-time${suffix}`
+  );
+}
+
+export function getMovementSettings(userIds?: string[] | unknown) {
+  const search = new URLSearchParams();
+  appendUserIds(search, coerceUserIds(userIds));
+  const suffix = search.size > 0 ? `?${search.toString()}` : "";
+  return request<{ settings: MovementSettingsPayload }>(
+    `/api/v1/movement/settings${suffix}`
+  );
+}
+
+export function patchMovementSettings(
+  patch: Partial<MovementSettingsPayload>,
+  userIds?: string[] | unknown
+) {
+  const search = new URLSearchParams();
+  appendUserIds(search, coerceUserIds(userIds));
+  const suffix = search.size > 0 ? `?${search.toString()}` : "";
+  return request<{ settings: MovementSettingsPayload }>(
+    `/api/v1/movement/settings${suffix}`,
+    {
+      method: "PATCH",
+      body: JSON.stringify(patch)
+    }
+  );
+}
+
+export function listMovementPlaces(userIds?: string[] | unknown) {
+  const search = new URLSearchParams();
+  appendUserIds(search, coerceUserIds(userIds));
+  const suffix = search.size > 0 ? `?${search.toString()}` : "";
+  return request<{ places: MovementKnownPlace[] }>(
+    `/api/v1/movement/places${suffix}`
+  );
+}
+
+export function createMovementPlace(
+  input: Partial<MovementKnownPlace> & {
+    label: string;
+    latitude: number;
+    longitude: number;
+  },
+  userIds?: string[] | unknown
+) {
+  const search = new URLSearchParams();
+  appendUserIds(search, coerceUserIds(userIds));
+  const suffix = search.size > 0 ? `?${search.toString()}` : "";
+  return request<{ place: MovementKnownPlace }>(`/api/v1/movement/places${suffix}`, {
+    method: "POST",
+    body: JSON.stringify(input)
+  });
+}
+
+export function patchMovementPlace(
+  placeId: string,
+  patch: Partial<MovementKnownPlace>
+) {
+  return request<{ place: MovementKnownPlace }>(
+    `/api/v1/movement/places/${placeId}`,
+    {
+      method: "PATCH",
+      body: JSON.stringify(patch)
+    }
+  );
+}
+
+export function getMovementTripDetail(tripId: string) {
+  return request<{ movement: MovementTripDetailData }>(
+    `/api/v1/movement/trips/${tripId}`
+  );
+}
+
+export function getMovementSelectionAggregate(input: {
+  stayIds?: string[];
+  tripIds?: string[];
+  startedAt?: string;
+  endedAt?: string;
+  userIds?: string[];
+}) {
+  return request<{ movement: MovementSelectionAggregate }>(
+    "/api/v1/movement/selection",
+    {
+      method: "POST",
+      body: JSON.stringify(input)
+    }
   );
 }
 

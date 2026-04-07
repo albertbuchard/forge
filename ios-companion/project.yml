@@ -1,42 +1,78 @@
 name: ForgeCompanion
 options:
-  bundleIdPrefix: com.aurel
+  bundleIdPrefix: com.albertbuchard
 targets:
   ForgeCompanion:
     type: application
     platform: iOS
     deploymentTarget: "17.0"
     sources:
-      - ForgeCompanion
-    resources:
-      - ForgeCompanion/Resources
+      - ForgeCompanion/ForgeCompanion
+    dependencies:
+      - target: ForgeWatch Watch App
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.aurel.forgecompanion
-        CODE_SIGN_ENTITLEMENTS: ForgeCompanion/ForgeCompanion.entitlements
+        PRODUCT_BUNDLE_IDENTIFIER: com.albertbuchard.ForgeCompanion
+        CODE_SIGN_ENTITLEMENTS: ForgeCompanion/ForgeCompanion/ForgeCompanion.entitlements
         INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
         INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone:
           - UIInterfaceOrientationPortrait
         CODE_SIGN_STYLE: Automatic
+        DEVELOPMENT_TEAM: KZ65F7924F
     info:
-      path: ForgeCompanion/Info.plist
+      path: ForgeCompanion/ForgeCompanion/Info.plist
       properties:
         CFBundleDisplayName: Forge Companion
         BGTaskSchedulerPermittedIdentifiers:
-          - com.aurel.forgecompanion.health-sync
+          - com.albertbuchard.ForgeCompanion.health-sync
         NSCameraUsageDescription: Forge Companion uses the camera to scan the pairing QR code from Forge Settings.
         NSHealthShareUsageDescription: Forge Companion reads Health data to sync sleep, workouts, and recovery into Forge.
         NSHealthUpdateUsageDescription: Forge Companion may write reconciliation metadata in future milestones.
         NSLocalNetworkUsageDescription: Forge Companion scans your local network to find Forge runtimes during setup.
-        NSLocationWhenInUseUsageDescription: Forge Companion will use location in a later milestone for context-aware planning and place linking.
+        NSLocationWhenInUseUsageDescription: Forge Companion uses location to detect stays, trips, and meaningful places for reflective movement history in Forge.
+        NSLocationAlwaysAndWhenInUseUsageDescription: Forge Companion uses background location to detect stays, trips, and stops so Forge can build a truthful movement timeline even when the app is not open.
         NSBonjourServices:
           - _forge._tcp
         LSApplicationQueriesSchemes:
           - tailscale
         UIBackgroundModes:
           - fetch
+          - location
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
         UIApplicationSceneManifest:
           UIApplicationSupportsMultipleScenes: false
-    dependencies: []
+  ForgeWatch Watch App:
+    type: application.watchapp2
+    platform: watchOS
+    sources:
+      - ForgeCompanion/ForgeWatch Watch App
+    dependencies:
+      - target: ForgeWatchExtension
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.albertbuchard.ForgeCompanion.watchkitapp
+        CODE_SIGN_ENTITLEMENTS: ForgeCompanion/ForgeWatch Watch App/ForgeWatch Watch App.entitlements
+        CODE_SIGN_STYLE: Automatic
+        DEVELOPMENT_TEAM: KZ65F7924F
+  ForgeWatchExtension:
+    type: app-extension
+    platform: watchOS
+    sources:
+      - ForgeCompanion/ForgeWatch
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.albertbuchard.ForgeCompanion.watchkitapp.ForgeWatch
+        CODE_SIGN_ENTITLEMENTS: ForgeCompanion/ForgeWatchExtension.entitlements
+        INFOPLIST_FILE: ForgeCompanion/ForgeWatch/Info.plist
+        CODE_SIGN_STYLE: Automatic
+        DEVELOPMENT_TEAM: KZ65F7924F
+    info:
+      path: ForgeCompanion/ForgeWatch/Info.plist
+      properties:
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension
+    dependencies:
+      - sdk: WidgetKit.framework
+      - sdk: AppIntents.framework
+      - sdk: WatchConnectivity.framework

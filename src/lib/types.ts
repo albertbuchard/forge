@@ -552,7 +552,7 @@ export interface ActivityEvent extends OwnedEntity {
   description: string;
   actor: string | null;
   source: string;
-  metadata: Record<string, string | number | boolean | null>;
+  metadata: Record<string, unknown>;
   createdAt: string;
 }
 
@@ -923,6 +923,9 @@ export interface CompanionOverviewPayload {
     linkedWorkouts: number;
     habitGeneratedWorkouts: number;
     reconciledWorkouts: number;
+    movementKnownPlaces: number;
+    movementStays: number;
+    movementTrips: number;
   };
   permissions: {
     healthKitAuthorized: boolean;
@@ -1093,6 +1096,272 @@ export interface FitnessViewData {
     energyKcal: number;
   }>;
   sessions: WorkoutSessionRecord[];
+}
+
+export type MovementPublishMode =
+  | "auto_publish"
+  | "draft_review"
+  | "no_publish";
+
+export interface MovementKnownPlace {
+  id: string;
+  externalUid: string;
+  userId: string;
+  label: string;
+  aliases: string[];
+  latitude: number;
+  longitude: number;
+  radiusMeters: number;
+  categoryTags: string[];
+  visibility: "personal" | "shared";
+  wikiNoteId: string | null;
+  linkedEntities: Array<{
+    entityType: string;
+    entityId: string;
+    label: string;
+  }>;
+  linkedPeople: Array<{
+    noteId?: string;
+    label: string;
+  }>;
+  metadata: Record<string, unknown>;
+  source: string;
+  createdAt: string;
+  updatedAt: string;
+  wikiNote: {
+    id: string;
+    title: string;
+    slug: string;
+  } | null;
+}
+
+export interface MovementSettingsPayload {
+  userId: string;
+  trackingEnabled: boolean;
+  publishMode: MovementPublishMode;
+  retentionMode: "aggregates_only" | "keep_recent_raw";
+  locationPermissionStatus: string;
+  motionPermissionStatus: string;
+  backgroundTrackingReady: boolean;
+  lastCompanionSyncAt: string | null;
+  metadata: Record<string, unknown>;
+  createdAt: string;
+  updatedAt: string;
+  knownPlaceCount: number;
+}
+
+export interface MovementStayRecord {
+  id: string;
+  externalUid: string;
+  pairingSessionId: string | null;
+  userId: string;
+  placeId: string | null;
+  label: string;
+  status: string;
+  classification: string;
+  startedAt: string;
+  endedAt: string;
+  durationSeconds: number;
+  centerLatitude: number;
+  centerLongitude: number;
+  radiusMeters: number;
+  sampleCount: number;
+  weather: Record<string, unknown>;
+  metrics: Record<string, unknown>;
+  metadata: Record<string, unknown>;
+  publishedNoteId: string | null;
+  createdAt: string;
+  updatedAt: string;
+  place: MovementKnownPlace | null;
+  note: {
+    id: string;
+    title: string;
+    slug: string;
+  } | null;
+}
+
+export interface MovementTripPointRecord {
+  id: string;
+  recordedAt: string;
+  latitude: number;
+  longitude: number;
+  accuracyMeters: number | null;
+  altitudeMeters: number | null;
+  speedMps: number | null;
+  isStopAnchor: boolean;
+}
+
+export interface MovementTripStopRecord {
+  id: string;
+  externalUid: string;
+  sequenceIndex: number;
+  label: string;
+  placeId: string | null;
+  startedAt: string;
+  endedAt: string;
+  durationSeconds: number;
+  latitude: number;
+  longitude: number;
+  radiusMeters: number;
+  metadata: Record<string, unknown>;
+  place: MovementKnownPlace | null;
+}
+
+export interface MovementTripRecord {
+  id: string;
+  externalUid: string;
+  pairingSessionId: string | null;
+  userId: string;
+  startPlaceId: string | null;
+  endPlaceId: string | null;
+  label: string;
+  status: string;
+  travelMode: string;
+  activityType: string;
+  startedAt: string;
+  endedAt: string;
+  durationSeconds: number;
+  distanceMeters: number;
+  movingSeconds: number;
+  idleSeconds: number;
+  averageSpeedMps: number | null;
+  maxSpeedMps: number | null;
+  caloriesKcal: number | null;
+  expectedMet: number | null;
+  weather: Record<string, unknown>;
+  tags: string[];
+  linkedEntities: Array<{
+    entityType: string;
+    entityId: string;
+    label: string;
+  }>;
+  linkedPeople: Array<{
+    noteId?: string;
+    label: string;
+  }>;
+  metadata: Record<string, unknown>;
+  publishedNoteId: string | null;
+  createdAt: string;
+  updatedAt: string;
+  startPlace: MovementKnownPlace | null;
+  endPlace: MovementKnownPlace | null;
+  points: MovementTripPointRecord[];
+  stops: MovementTripStopRecord[];
+  note: {
+    id: string;
+    title: string;
+    slug: string;
+  } | null;
+}
+
+export interface MovementSelectionAggregate {
+  startedAt: string;
+  endedAt: string;
+  durationSeconds: number;
+  distanceMeters: number;
+  caloriesKcal: number;
+  averageSpeedMps: number;
+  stayCount: number;
+  tripCount: number;
+  noteCount: number;
+  taskRunCount: number;
+  trackedWorkSeconds: number;
+  placeLabels: string[];
+  tags: string[];
+}
+
+export interface MovementDayData {
+  date: string;
+  settings: MovementSettingsPayload;
+  summary: {
+    totalDistanceMeters: number;
+    totalMovingSeconds: number;
+    totalIdleSeconds: number;
+    tripCount: number;
+    stayCount: number;
+    knownPlaceCount: number;
+    caloriesKcal: number;
+    averageSpeedMps: number;
+  };
+  segments: Array<{
+    id: string;
+    kind: "stay" | "trip";
+    startedAt: string;
+    endedAt: string;
+    durationSeconds: number;
+    label: string;
+    subtitle: string;
+    distanceMeters: number;
+    averageSpeedMps: number;
+    colorTone: string;
+    noteCount: number;
+  }>;
+  stays: MovementStayRecord[];
+  trips: MovementTripRecord[];
+  places: MovementKnownPlace[];
+  selectionAggregate: MovementSelectionAggregate;
+}
+
+export interface MovementMonthData {
+  month: string;
+  days: Array<{
+    dateKey: string;
+    distanceMeters: number;
+    movingSeconds: number;
+    idleSeconds: number;
+    caloriesKcal: number;
+    tripCount: number;
+    stayCount: number;
+    averageExpectedMet: number;
+  }>;
+  totals: {
+    distanceMeters: number;
+    movingSeconds: number;
+    idleSeconds: number;
+    tripCount: number;
+    stayCount: number;
+  };
+}
+
+export interface MovementAllTimeData {
+  summary: {
+    knownPlaceCount: number;
+    stayCount: number;
+    tripCount: number;
+    totalDistanceMeters: number;
+    totalMovingSeconds: number;
+    totalIdleSeconds: number;
+    visitedCountries: number;
+  };
+  categoryBreakdown: Array<{
+    tag: string;
+    count: number;
+  }>;
+  recentTrips: Array<{
+    id: string;
+    label: string;
+    startedAt: string;
+    distanceMeters: number;
+    activityType: string;
+  }>;
+}
+
+export interface MovementTripDetailData {
+  trip: MovementTripRecord;
+  stylizedPath: {
+    curve: Array<{
+      x: number;
+      y: number;
+    }>;
+    startLabel: string;
+    endLabel: string;
+    stops: Array<{
+      id: string;
+      label: string;
+      durationSeconds: number;
+    }>;
+  };
+  selectionAggregate: MovementSelectionAggregate;
 }
 
 export interface TaskRunClaimInput {

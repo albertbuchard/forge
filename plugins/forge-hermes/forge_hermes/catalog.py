@@ -674,149 +674,6 @@ TOOL_CATALOG: List[ToolSpec] = [
         "write": True,
     },
     {
-        "name": "forge_create_preferences_catalog",
-        "description": "Create a new editable concept list inside Forge Preferences for one user and domain.",
-        "parameters": object_schema(
-            {
-                "userId": {"type": "string", "minLength": 1},
-                "domain": {"enum": PREFERENCE_DOMAINS},
-                "title": {"type": "string", "minLength": 1},
-                "description": optional_string("Optional catalog description."),
-                "slug": optional_string("Optional stable slug."),
-            },
-            required=["userId", "domain", "title"],
-        ),
-        "method": "POST",
-        "path": "/api/v1/preferences/catalogs",
-        "write": True,
-    },
-    {
-        "name": "forge_update_preferences_catalog",
-        "description": "Rename or revise an existing Forge Preferences concept list.",
-        "parameters": object_schema(
-            {
-                "catalogId": {"type": "string", "minLength": 1},
-                "title": optional_string("Optional new title."),
-                "description": optional_string("Optional new description."),
-                "slug": optional_string("Optional new slug."),
-            },
-            required=["catalogId"],
-        ),
-        "method": "PATCH",
-        "path_builder": preference_catalog_path,
-        "body_builder": lambda args, _config: {
-            key: value for key, value in args.items() if key != "catalogId"
-        },
-        "write": True,
-    },
-    {
-        "name": "forge_delete_preferences_catalog",
-        "description": "Archive a Forge Preferences concept list and its editable item surface.",
-        "parameters": object_schema(
-            {
-                "catalogId": {"type": "string", "minLength": 1},
-            },
-            required=["catalogId"],
-        ),
-        "method": "DELETE",
-        "path_builder": preference_catalog_path,
-        "write": True,
-    },
-    {
-        "name": "forge_create_preferences_catalog_item",
-        "description": "Add a concept to an editable Forge Preferences list.",
-        "parameters": object_schema(
-            {
-                "catalogId": {"type": "string", "minLength": 1},
-                "label": {"type": "string", "minLength": 1},
-                "description": optional_string("Optional concept description."),
-                "tags": array_schema({"type": "string"}, "Optional concept tags."),
-                "featureWeights": PREFERENCE_FEATURE_WEIGHTS,
-                "position": {"type": "integer", "minimum": 0},
-            },
-            required=["catalogId", "label"],
-        ),
-        "method": "POST",
-        "path": "/api/v1/preferences/catalog-items",
-        "write": True,
-    },
-    {
-        "name": "forge_update_preferences_catalog_item",
-        "description": "Edit one concept inside a Forge Preferences list.",
-        "parameters": object_schema(
-            {
-                "itemId": {"type": "string", "minLength": 1},
-                "label": optional_string("Optional new label."),
-                "description": optional_string("Optional new description."),
-                "tags": array_schema({"type": "string"}, "Optional concept tags."),
-                "featureWeights": PREFERENCE_FEATURE_WEIGHTS,
-                "position": {"type": "integer", "minimum": 0},
-            },
-            required=["itemId"],
-        ),
-        "method": "PATCH",
-        "path_builder": preference_catalog_item_path,
-        "body_builder": lambda args, _config: {
-            key: value for key, value in args.items() if key != "itemId"
-        },
-        "write": True,
-    },
-    {
-        "name": "forge_delete_preferences_catalog_item",
-        "description": "Archive one concept from a Forge Preferences list.",
-        "parameters": object_schema(
-            {
-                "itemId": {"type": "string", "minLength": 1},
-            },
-            required=["itemId"],
-        ),
-        "method": "DELETE",
-        "path_builder": preference_catalog_item_path,
-        "write": True,
-    },
-    {
-        "name": "forge_create_preferences_context",
-        "description": "Create a contextual preference profile slice such as work, personal, discovery, or deep research.",
-        "parameters": object_schema(
-            {
-                "userId": {"type": "string", "minLength": 1},
-                "domain": {"enum": PREFERENCE_DOMAINS},
-                "name": {"type": "string", "minLength": 1},
-                "description": optional_string("Optional context description."),
-                "shareMode": {"enum": PREFERENCE_CONTEXT_SHARE_MODES},
-                "active": {"type": "boolean"},
-                "isDefault": {"type": "boolean"},
-                "decayDays": {"type": "integer", "minimum": 7, "maximum": 365},
-            },
-            required=["userId", "domain", "name"],
-        ),
-        "method": "POST",
-        "path": "/api/v1/preferences/contexts",
-        "write": True,
-    },
-    {
-        "name": "forge_update_preferences_context",
-        "description": "Edit a Forge Preferences context without changing its owning user or domain.",
-        "parameters": object_schema(
-            {
-                "contextId": {"type": "string", "minLength": 1},
-                "name": optional_string("Optional new context name."),
-                "description": optional_string("Optional new description."),
-                "shareMode": {"enum": PREFERENCE_CONTEXT_SHARE_MODES},
-                "active": {"type": "boolean"},
-                "isDefault": {"type": "boolean"},
-                "decayDays": {"type": "integer", "minimum": 7, "maximum": 365},
-            },
-            required=["contextId"],
-        ),
-        "method": "PATCH",
-        "path_builder": preference_context_path,
-        "body_builder": lambda args, _config: {
-            key: value for key, value in args.items() if key != "contextId"
-        },
-        "write": True,
-    },
-    {
         "name": "forge_merge_preferences_contexts",
         "description": "Merge one Forge Preferences context into another when the distinction is no longer useful.",
         "parameters": object_schema(
@@ -828,52 +685,6 @@ TOOL_CATALOG: List[ToolSpec] = [
         ),
         "method": "POST",
         "path": "/api/v1/preferences/contexts/merge",
-        "write": True,
-    },
-    {
-        "name": "forge_create_preferences_item",
-        "description": "Create a direct preference item inside Forge when it does not already exist as a Forge entity or catalog concept.",
-        "parameters": object_schema(
-            {
-                "userId": {"type": "string", "minLength": 1},
-                "domain": {"enum": PREFERENCE_DOMAINS},
-                "label": {"type": "string", "minLength": 1},
-                "description": optional_string("Optional item description."),
-                "tags": array_schema({"type": "string"}, "Optional item tags."),
-                "featureWeights": PREFERENCE_FEATURE_WEIGHTS,
-                "sourceEntityType": optional_nullable_string("Optional source Forge entity type."),
-                "sourceEntityId": optional_nullable_string("Optional source Forge entity id."),
-                "metadata": {"type": "object"},
-                "queueForCompare": {"type": "boolean"},
-            },
-            required=["userId", "domain", "label"],
-        ),
-        "method": "POST",
-        "path": "/api/v1/preferences/items",
-        "write": True,
-    },
-    {
-        "name": "forge_update_preferences_item",
-        "description": "Edit a Forge Preferences item without changing its owning user or domain.",
-        "parameters": object_schema(
-            {
-                "itemId": {"type": "string", "minLength": 1},
-                "label": optional_string("Optional new label."),
-                "description": optional_string("Optional new description."),
-                "tags": array_schema({"type": "string"}, "Optional item tags."),
-                "featureWeights": PREFERENCE_FEATURE_WEIGHTS,
-                "sourceEntityType": optional_nullable_string("Optional source Forge entity type."),
-                "sourceEntityId": optional_nullable_string("Optional source Forge entity id."),
-                "metadata": {"type": "object"},
-                "queueForCompare": {"type": "boolean"},
-            },
-            required=["itemId"],
-        ),
-        "method": "PATCH",
-        "path_builder": preference_item_path,
-        "body_builder": lambda args, _config: {
-            key: value for key, value in args.items() if key != "itemId"
-        },
         "write": True,
     },
     {
@@ -980,6 +791,162 @@ TOOL_CATALOG: List[ToolSpec] = [
         "write": True,
     },
     {
+        "name": "forge_list_questionnaires",
+        "description": "List the Psyche questionnaire library across the selected user scope.",
+        "parameters": scoped_read_schema(),
+        "method": "GET",
+        "path_builder": lambda args: with_query("/api/v1/psyche/questionnaires", args, ["userIds"]),
+    },
+    {
+        "name": "forge_get_questionnaire",
+        "description": "Read one Psyche questionnaire instrument with versions and scoring detail.",
+        "parameters": object_schema(
+            {
+                "questionnaireId": {"type": "string", "minLength": 1},
+                "userIds": array_schema({"type": "string"}, "Optional Forge user ids."),
+            },
+            required=["questionnaireId"],
+        ),
+        "method": "GET",
+        "path_builder": lambda args: with_query(
+            f"/api/v1/psyche/questionnaires/{args['questionnaireId']}",
+            args,
+            ["userIds"],
+        ),
+    },
+    {
+        "name": "forge_clone_questionnaire",
+        "description": "Clone one Psyche questionnaire instrument into a new user-owned copy.",
+        "parameters": object_schema(
+            {
+                "questionnaireId": {"type": "string", "minLength": 1},
+                "userId": optional_nullable_string("Optional owner user id for the cloned copy."),
+            },
+            required=["questionnaireId"],
+        ),
+        "method": "POST",
+        "path_builder": lambda args: f"/api/v1/psyche/questionnaires/{args['questionnaireId']}/clone",
+        "body_builder": lambda args, _config: {"userId": args.get("userId")},
+        "write": True,
+    },
+    {
+        "name": "forge_ensure_questionnaire_draft",
+        "description": "Create or return the editable draft version for one questionnaire instrument.",
+        "parameters": object_schema(
+            {
+                "questionnaireId": {"type": "string", "minLength": 1},
+            },
+            required=["questionnaireId"],
+        ),
+        "method": "POST",
+        "path_builder": lambda args: f"/api/v1/psyche/questionnaires/{args['questionnaireId']}/draft",
+        "write": True,
+    },
+    {
+        "name": "forge_publish_questionnaire_draft",
+        "description": "Publish the current questionnaire draft as the live readable version.",
+        "parameters": object_schema(
+            {
+                "questionnaireId": {"type": "string", "minLength": 1},
+                "label": optional_string("Optional published version label."),
+            },
+            required=["questionnaireId"],
+        ),
+        "method": "POST",
+        "path_builder": lambda args: f"/api/v1/psyche/questionnaires/{args['questionnaireId']}/publish",
+        "body_builder": lambda args, _config: {"label": args.get("label")},
+        "write": True,
+    },
+    {
+        "name": "forge_start_questionnaire_run",
+        "description": "Start one questionnaire answer session for a specific user.",
+        "parameters": object_schema(
+            {
+                "questionnaireId": {"type": "string", "minLength": 1},
+                "userId": {"type": "string", "minLength": 1},
+                "versionId": optional_nullable_string("Optional questionnaire version id."),
+            },
+            required=["questionnaireId", "userId"],
+        ),
+        "method": "POST",
+        "path_builder": lambda args: f"/api/v1/psyche/questionnaires/{args['questionnaireId']}/runs",
+        "body_builder": lambda args, _config: {
+            "userId": args.get("userId"),
+            "versionId": args.get("versionId"),
+        },
+        "write": True,
+    },
+    {
+        "name": "forge_get_questionnaire_run",
+        "description": "Read one questionnaire run with answers, score results, and linked instrument detail.",
+        "parameters": object_schema(
+            {
+                "runId": {"type": "string", "minLength": 1},
+                "userIds": array_schema({"type": "string"}, "Optional Forge user ids."),
+            },
+            required=["runId"],
+        ),
+        "method": "GET",
+        "path_builder": lambda args: with_query(
+            f"/api/v1/psyche/questionnaire-runs/{args['runId']}",
+            args,
+            ["userIds"],
+        ),
+    },
+    {
+        "name": "forge_update_questionnaire_run",
+        "description": "Save draft answers or progress on an in-progress questionnaire run.",
+        "parameters": object_schema(
+            {
+                "runId": {"type": "string", "minLength": 1},
+                "answers": array_schema({"type": "object"}, "Optional questionnaire answers."),
+                "progressIndex": {
+                    "anyOf": [
+                        {"type": "integer", "minimum": 0},
+                        {"type": "null"},
+                    ]
+                },
+            },
+            required=["runId"],
+        ),
+        "method": "PATCH",
+        "path_builder": lambda args: f"/api/v1/psyche/questionnaire-runs/{args['runId']}",
+        "body_builder": lambda args, _config: {
+            key: value for key, value in args.items() if key != "runId"
+        },
+        "write": True,
+    },
+    {
+        "name": "forge_complete_questionnaire_run",
+        "description": "Complete a questionnaire run, score it, and persist the note-backed self-observation output.",
+        "parameters": object_schema(
+            {
+                "runId": {"type": "string", "minLength": 1},
+            },
+            required=["runId"],
+        ),
+        "method": "POST",
+        "path_builder": lambda args: f"/api/v1/psyche/questionnaire-runs/{args['runId']}/complete",
+        "write": True,
+    },
+    {
+        "name": "forge_get_self_observation_calendar",
+        "description": "Read the Psyche self-observation calendar with note-backed observations, linked patterns, linked reports, and available tags.",
+        "parameters": object_schema(
+            {
+                "userIds": array_schema({"type": "string"}, "Optional Forge user ids."),
+                "from": optional_string("Optional ISO start timestamp."),
+                "to": optional_string("Optional ISO end timestamp."),
+            }
+        ),
+        "method": "GET",
+        "path_builder": lambda args: with_query(
+            "/api/v1/psyche/self-observation/calendar",
+            args,
+            ["userIds", "from", "to"],
+        ),
+    },
+    {
         "name": "forge_get_ui_entrypoint",
         "description": "Get the live Forge web UI URL and plugin redirect route. Use this only when visual review or editing is genuinely easier, not as a substitute for normal batch entity creation or updates.",
         "parameters": object_schema({}),
@@ -1027,7 +994,7 @@ TOOL_CATALOG: List[ToolSpec] = [
     },
     {
         "name": "forge_create_entities",
-        "description": "Create one or more Forge entities through the ordered batch workflow. Pass operations as an array. Each operation must include entityType and full data. This is the preferred create path for planning, Psyche, and calendar records including calendar_event, work_block_template, and task_timebox.",
+        "description": "Create one or more Forge entities through the ordered batch workflow. Pass operations as an array. Each operation must include entityType and full data. This is the preferred create path for planning, Psyche, calendar, preferences basic CRUD, and questionnaire_instrument records.",
         "parameters": object_schema(
             {
                 "atomic": {"type": "boolean"},
@@ -1041,7 +1008,7 @@ TOOL_CATALOG: List[ToolSpec] = [
     },
     {
         "name": "forge_update_entities",
-        "description": "Update one or more Forge entities through the ordered batch workflow. Pass operations as an array. Each operation must include entityType, id, and patch. This is the preferred update path for calendar_event, work_block_template, and task_timebox too; Forge runs calendar sync side effects downstream.",
+        "description": "Update one or more Forge entities through the ordered batch workflow. Pass operations as an array. Each operation must include entityType, id, and patch. This is the preferred update path for calendar_event, work_block_template, task_timebox, preferences basic CRUD entities, and questionnaire_instrument too.",
         "parameters": object_schema(
             {
                 "atomic": {"type": "boolean"},
@@ -1055,7 +1022,7 @@ TOOL_CATALOG: List[ToolSpec] = [
     },
     {
         "name": "forge_delete_entities",
-        "description": "Delete Forge entities in one batch request. Pass operations as an array with entityType and id. Delete defaults to soft mode unless hard is requested explicitly. Calendar-domain deletes still run their downstream removal logic, including remote calendar projection cleanup for calendar_event.",
+        "description": "Delete Forge entities in one batch request. Pass operations as an array with entityType and id. Delete defaults to soft mode unless hard is requested explicitly. Some entities such as calendar-domain records, preference CRUD entities, and questionnaire_instrument delete immediately by design.",
         "parameters": object_schema(
             {
                 "atomic": {"type": "boolean"},

@@ -155,6 +155,15 @@ export function filterOwnedEntities<T extends { id: string }>(
   }
   const allowed = new Set(userIds);
   return decorated.filter(
-    (entity) => entity.userId !== null && allowed.has(entity.userId)
+    (entity) => {
+      if (entity.userId !== null && allowed.has(entity.userId)) {
+        return true;
+      }
+      const embeddedUserId =
+        "userId" in entity && typeof entity.userId === "string"
+          ? entity.userId
+          : null;
+      return embeddedUserId !== null && allowed.has(embeddedUserId);
+    }
   );
 }

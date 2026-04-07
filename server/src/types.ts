@@ -94,6 +94,10 @@ export const activityEntityTypeSchema = z.enum([
   "mode_profile",
   "mode_guide_session",
   "trigger_report",
+  "preference_catalog",
+  "preference_catalog_item",
+  "preference_context",
+  "preference_item",
   "questionnaire_instrument",
   "questionnaire_run",
   "note",
@@ -202,7 +206,12 @@ export const crudEntityTypeSchema = z.enum([
   "mode_guide_session",
   "event_type",
   "emotion_definition",
-  "trigger_report"
+  "trigger_report",
+  "preference_catalog",
+  "preference_catalog_item",
+  "preference_context",
+  "preference_item",
+  "questionnaire_instrument"
 ]);
 export const rewardableEntityTypeSchema = z.enum([
   "system",
@@ -943,10 +952,7 @@ export const activityEventSchema = z.object({
   description: z.string(),
   actor: z.string().nullable(),
   source: activitySourceSchema,
-  metadata: z.record(
-    z.string(),
-    z.union([z.string(), z.number(), z.boolean(), z.null()])
-  ),
+  metadata: z.record(z.string(), z.unknown()),
   createdAt: z.string(),
   ...ownershipShape
 });

@@ -75,7 +75,8 @@ actor HealthSyncStore {
     func buildSyncPayload(
         pairing: PairingPayload,
         healthKitAuthorized: Bool,
-        lastSuccessfulSyncAt: Date?
+        lastSuccessfulSyncAt: Date?,
+        movementPayload: CompanionSyncPayload.MovementPayload
     ) async throws -> CompanionSyncPayload {
         let endDate = Date()
         let fullWindowStart = Calendar.current.date(byAdding: .day, value: -syncWindowDays, to: endDate)
@@ -104,15 +105,17 @@ actor HealthSyncStore {
             permissions: .init(
                 healthKitAuthorized: healthKitAuthorized,
                 backgroundRefreshEnabled: backgroundRefreshEnabled,
-                motionReady: false,
-                locationReady: false
+                motionReady: movementPayload.settings.motionPermissionStatus == "ready",
+                locationReady: movementPayload.settings.locationPermissionStatus == "always"
+                    || movementPayload.settings.locationPermissionStatus == "when_in_use"
             ),
             sleepSessions: try await sleepSessions,
-            workouts: try await workouts
+            workouts: try await workouts,
+            movement: movementPayload
         )
         companionDebugLog(
             "HealthSyncStore",
-            "buildSyncPayload success sleep=\(payload.sleepSessions.count) workouts=\(payload.workouts.count) backgroundRefresh=\(backgroundRefreshEnabled)"
+            "buildSyncPayload success sleep=\(payload.sleepSessions.count) workouts=\(payload.workouts.count) trips=\(payload.movement.trips.count) stays=\(payload.movement.stays.count) backgroundRefresh=\(backgroundRefreshEnabled)"
         )
         return payload
     }

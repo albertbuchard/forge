@@ -241,11 +241,12 @@ test("wiki ingest uses background polling and keeps large but valid source text 
 test("OpenAI Codex connection tests use the ChatGPT Codex backend and headers", async () => {
   const provider = new OpenAiResponsesProvider();
   const originalFetch = globalThis.fetch;
-  let capturedRequest: {
+  type CapturedRequest = {
     url: string;
     headers: Headers;
     body: Record<string, unknown>;
-  } | null = null;
+  };
+  let capturedRequest: CapturedRequest | undefined;
 
   const jwtPayload = Buffer.from(
     JSON.stringify({
@@ -294,23 +295,26 @@ test("OpenAI Codex connection tests use the ChatGPT Codex backend and headers", 
     globalThis.fetch = originalFetch;
   }
 
-  assert.ok(capturedRequest);
+  if (!capturedRequest) {
+    throw new Error("Expected Codex test connection to issue one HTTP request.");
+  }
+  const request = capturedRequest;
   assert.equal(
-    capturedRequest.url,
+    request.url,
     "https://chatgpt.com/backend-api/codex/responses"
   );
   assert.equal(
-    capturedRequest.headers.get("authorization"),
+    request.headers.get("authorization"),
     `Bearer ${oauthAccessToken}`
   );
   assert.equal(
-    capturedRequest.headers.get("chatgpt-account-id"),
+    request.headers.get("chatgpt-account-id"),
     "acct_codex_123"
   );
-  assert.equal(capturedRequest.headers.get("originator"), "pi");
+  assert.equal(request.headers.get("originator"), "pi");
   assert.equal(
-    capturedRequest.headers.get("OpenAI-Beta"),
+    request.headers.get("OpenAI-Beta"),
     "responses=experimental"
   );
-  assert.equal(capturedRequest.body.model, "gpt-5.4-mini");
+  assert.equal(request.body.model, "gpt-5.4-mini");
 });

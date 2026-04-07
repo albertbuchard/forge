@@ -1,0 +1,26 @@
+{
+  "" : {
+    "const-values" : "/Users/omarclaw/Documents/aurel-monorepo/projects/forge/ios-companion/ForgeCompanion/build/ForgeCompanion.build/Release-iphonesimulator/ForgeWatch Watch App.build/Objects-normal/arm64/ForgeWatch Watch App-primary.swiftconstvalues",
+    "dependencies" : "/Users/omarclaw/Documents/aurel-monorepo/projects/forge/ios-companion/ForgeCompanion/build/ForgeCompanion.build/Release-iphonesimulator/ForgeWatch Watch App.build/Objects-normal/arm64/ForgeWatch Watch App-primary.d",
+    "diagnostics" : "/Users/omarclaw/Documents/aurel-monorepo/projects/forge/ios-companion/ForgeCompanion/build/ForgeCompanion.build/Release-iphonesimulator/ForgeWatch Watch App.build/Objects-normal/arm64/ForgeWatch Watch App-primary.dia",
+    "emit-module-dependencies" : "/Users/omarclaw/Documents/aurel-monorepo/projects/forge/ios-companion/ForgeCompanion/build/ForgeCompanion.build/Release-iphonesimulator/ForgeWatch Watch App.build/Objects-normal/arm64/ForgeWatch Watch App-primary-emit-module.d",
+    "emit-module-diagnostics" : "/Users/omarclaw/Documents/aurel-monorepo/projects/forge/ios-companion/ForgeCompanion/build/ForgeCompanion.build/Release-iphonesimulator/ForgeWatch Watch App.build/Objects-normal/arm64/ForgeWatch Watch App-primary-emit-module.dia",
+    "pch" : "/Users/omarclaw/Documents/aurel-monorepo/projects/forge/ios-companion/ForgeCompanion/build/ForgeCompanion.build/Release-iphonesimulator/ForgeWatch Watch App.build/Objects-normal/arm64/ForgeWatch Watch App-primary-Bridging-header.pch",
+    "swift-dependencies" : "/Users/omarclaw/Documents/aurel-monorepo/projects/forge/ios-companion/ForgeCompanion/build/ForgeCompanion.build/Release-iphonesimulator/ForgeWatch Watch App.build/Objects-normal/arm64/ForgeWatch Watch App-primary.swiftdeps"
+  },
+  "/Users/omarclaw/Documents/aurel-monorepo/projects/forge/ios-companion/ForgeCompanion/ForgeWatch Watch App/ContentView.swift" : {
+    "index-unit-output-path" : "/ForgeCompanion.build/Release-iphonesimulator/ForgeWatch Watch App.build/Objects-normal/arm64/ContentView.o",
+    "llvm-bc" : "/Users/omarclaw/Documents/aurel-monorepo/projects/forge/ios-companion/ForgeCompanion/build/ForgeCompanion.build/Release-iphonesimulator/ForgeWatch Watch App.build/Objects-normal/arm64/ContentView.bc",
+    "object" : "/Users/omarclaw/Documents/aurel-monorepo/projects/forge/ios-companion/ForgeCompanion/build/ForgeCompanion.build/Release-iphonesimulator/ForgeWatch Watch App.build/Objects-normal/arm64/ContentView.o"
+  },
+  "/Users/omarclaw/Documents/aurel-monorepo/projects/forge/ios-companion/ForgeCompanion/ForgeWatch Watch App/ForgeWatchApp.swift" : {
+    "index-unit-output-path" : "/ForgeCompanion.build/Release-iphonesimulator/ForgeWatch Watch App.build/Objects-normal/arm64/ForgeWatchApp.o",
+    "llvm-bc" : "/Users/omarclaw/Documents/aurel-monorepo/projects/forge/ios-companion/ForgeCompanion/build/ForgeCompanion.build/Release-iphonesimulator/ForgeWatch Watch App.build/Objects-normal/arm64/ForgeWatchApp.bc",
+    "object" : "/Users/omarclaw/Documents/aurel-monorepo/projects/forge/ios-companion/ForgeCompanion/build/ForgeCompanion.build/Release-iphonesimulator/ForgeWatch Watch App.build/Objects-normal/arm64/ForgeWatchApp.o"
+  },
+  "/Users/omarclaw/Documents/aurel-monorepo/projects/forge/ios-companion/ForgeCompanion/build/ForgeCompanion.build/Release-iphonesimulator/ForgeWatch Watch App.build/DerivedSources/GeneratedAssetSymbols.swift" : {
+    "index-unit-output-path" : "/ForgeCompanion.build/Release-iphonesimulator/ForgeWatch Watch App.build/Objects-normal/arm64/GeneratedAssetSymbols.o",
+    "llvm-bc" : "/Users/omarclaw/Documents/aurel-monorepo/projects/forge/ios-companion/ForgeCompanion/build/ForgeCompanion.build/Release-iphonesimulator/ForgeWatch Watch App.build/Objects-normal/arm64/GeneratedAssetSymbols.bc",
+    "object" : "/Users/omarclaw/Documents/aurel-monorepo/projects/forge/ios-companion/ForgeCompanion/build/ForgeCompanion.build/Release-iphonesimulator/ForgeWatch Watch App.build/Objects-normal/arm64/GeneratedAssetSymbols.o"
+  }
+}

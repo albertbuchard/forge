@@ -2,7 +2,8 @@ import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { getDatabase, runInTransaction } from "../db.js";
 import { recordActivityEvent } from "./activity-events.js";
 import { recordEventLog } from "./event-log.js";
-import { createAgentTokenSchema, agentIdentitySchema, settingsPayloadSchema, updateSettingsSchema } from "../types.js";
+import { buildConnectionAgentIdentity, FORGE_DEFAULT_AGENT_ID, listAiModelConnections, syncForgeManagedWikiProfile } from "./model-settings.js";
+import { createAgentTokenSchema, agentIdentitySchema, customThemeSchema, settingsPayloadSchema, updateSettingsSchema } from "../types.js";
 function boolFromInt(value) {
     return value === 1;
 }
@@ -24,8 +25,24 @@ function normalizeMicrosoftRedirectUri(value) {
     const trimmed = value?.trim();
     return trimmed && trimmed.length > 0 ? trimmed : defaultMicrosoftRedirectUri();
 }
+function normalizeModelConnectionId(value) {
+    const trimmed = value?.trim();
+    return trimmed && trimmed.length > 0 ? trimmed : "";
+}
 function buildTokenSecret() {
     return `fg_live_${randomBytes(18).toString("hex")}`;
+}
+function parseCustomThemeJson(raw) {
+    const trimmed = raw?.trim();
+    if (!trimmed) {
+        return null;
+    }
+    try {
+        return customThemeSchema.parse(JSON.parse(trimmed));
+    }
+    catch {
+        return null;
+    }
 }
 function mapAgent(row) {
     return agentIdentitySchema.parse({
@@ -118,9 +135,10 @@ function readSettingsRow() {
     ensureSettingsRow();
     return getDatabase()
         .prepare(`SELECT
-        operator_name, operator_email, operator_title, theme_preference, locale_preference,
+        operator_name, operator_email, operator_title, theme_preference, custom_theme_json, locale_preference,
         goal_drift_alerts, daily_quest_reminders, achievement_celebrations, max_active_tasks, time_accounting_mode,
-        integrity_score, last_audit_at, psyche_auth_required, microsoft_client_id, microsoft_tenant_id, microsoft_redirect_uri, created_at, updated_at
+        integrity_score, last_audit_at, psyche_auth_required, microsoft_client_id, microsoft_tenant_id, microsoft_redirect_uri,
+        forge_basic_chat_connection_id, forge_basic_chat_model, forge_wiki_connection_id, forge_wiki_model, created_at, updated_at
        FROM app_settings
        WHERE id = 1`)
         .get();
@@ -167,7 +185,23 @@ export function listAgentIdentities() {
        GROUP BY agent_identities.id
        ORDER BY agent_identities.created_at DESC`)
         .all();
-    return rows.map(mapAgent);
+    const manualAgents = rows.map(mapAgent);
+    const modelAgents = listAiModelConnections().map(buildConnectionAgentIdentity);
+    const settings = readSettingsRow();
+    const forgeAgent = agentIdentitySchema.parse({
+        id: FORGE_DEFAULT_AGENT_ID,
+        label: "Forge Agent",
+        agentType: "forge_default",
+        trustLevel: "trusted",
+        autonomyMode: "approval_required",
+        approvalMode: "approval_by_default",
+        description: "Built-in Forge operator agent. Owns Forge-native task flows, prompts, and orchestration.",
+        tokenCount: 0,
+        activeTokenCount: 0,
+        createdAt: settings.created_at,
+        updatedAt: settings.updated_at
+    });
+    return [forgeAgent, ...modelAgents, ...manualAgents];
 }
 export function isPsycheAuthRequired() {
     ensureSettingsRow();
@@ -178,9 +212,15 @@ export function isPsycheAuthRequired() {
 }
 export function getSettings() {
     const row = readSettingsRow();
+    const connections = listAiModelConnections();
     const microsoftClientId = row.microsoft_client_id?.trim() ?? "";
     const microsoftTenantId = normalizeMicrosoftTenantId(row.microsoft_tenant_id);
     const microsoftRedirectUri = normalizeMicrosoftRedirectUri(row.microsoft_redirect_uri);
+    const basicChatConnectionId = normalizeModelConnectionId(row.forge_basic_chat_connection_id);
+    const wikiConnectionId = normalizeModelConnectionId(row.forge_wiki_connection_id);
+    const basicChatConnection = connections.find((entry) => entry.id === basicChatConnectionId) ?? null;
+    const wikiConnection = connections.find((entry) => entry.id === wikiConnectionId) ?? null;
+    const customTheme = parseCustomThemeJson(row.custom_theme_json);
     return settingsPayloadSchema.parse({
         profile: {
             operatorName: row.operator_name,
@@ -197,6 +237,7 @@ export function getSettings() {
             timeAccountingMode: row.time_accounting_mode
         },
         themePreference: row.theme_preference,
+        customTheme,
         localePreference: row.locale_preference,
         security: {
             integrityScore: row.integrity_score,
@@ -221,11 +262,37 @@ export function getSettings() {
                     : "Save the Microsoft client ID and the Forge callback redirect URI here before you try to sign in."
             }
         },
+        modelSettings: {
+            forgeAgent: {
+                basicChat: {
+                    connectionId: basicChatConnection?.id ?? null,
+                    connectionLabel: basicChatConnection?.label ?? null,
+                    provider: basicChatConnection?.provider ?? null,
+                    baseUrl: basicChatConnection?.baseUrl ?? null,
+                    model: row.forge_basic_chat_model?.trim() || basicChatConnection?.model || "gpt-5.4-mini"
+                },
+                wiki: {
+                    connectionId: wikiConnection?.id ?? null,
+                    connectionLabel: wikiConnection?.label ?? null,
+                    provider: wikiConnection?.provider ?? null,
+                    baseUrl: wikiConnection?.baseUrl ?? null,
+                    model: row.forge_wiki_model?.trim() || wikiConnection?.model || "gpt-5.4-mini"
+                }
+            },
+            connections,
+            oauth: {
+                openAiCodex: {
+                    authorizeUrl: "https://auth.openai.com/oauth/authorize",
+                    callbackUrl: "http://127.0.0.1:1455/auth/callback",
+                    setupMessage: "Forge mirrors OpenClaw's local OpenAI Codex PKCE flow. The browser returns to localhost:1455, and Forge can also accept a pasted redirect URL when the callback cannot bind."
+                }
+            }
+        },
         agents: listAgentIdentities(),
         agentTokens: listAgentTokens()
     });
 }
-export function updateSettings(input, activity) {
+export function updateSettings(input, options = {}) {
     const parsed = updateSettingsSchema.parse(input);
     return runInTransaction(() => {
         const current = getSettings();
@@ -246,6 +313,7 @@ export function updateSettings(input, activity) {
                 timeAccountingMode: parsed.execution?.timeAccountingMode ?? current.execution.timeAccountingMode
             },
             themePreference: parsed.themePreference ?? current.themePreference,
+            customTheme: parsed.customTheme === undefined ? (current.customTheme ?? null) : parsed.customTheme,
             localePreference: parsed.localePreference ?? current.localePreference,
             psycheAuthRequired: parsed.security?.psycheAuthRequired ?? current.security.psycheAuthRequired,
             calendarProviders: {
@@ -257,33 +325,61 @@ export function updateSettings(input, activity) {
                     redirectUri: normalizeMicrosoftRedirectUri(parsed.calendarProviders?.microsoft?.redirectUri ??
                         current.calendarProviders.microsoft.redirectUri)
                 }
+            },
+            modelSettings: {
+                forgeAgent: {
+                    basicChat: {
+                        connectionId: parsed.modelSettings?.forgeAgent?.basicChat?.connectionId !==
+                            undefined
+                            ? normalizeModelConnectionId(parsed.modelSettings.forgeAgent.basicChat.connectionId)
+                            : current.modelSettings.forgeAgent.basicChat.connectionId ?? "",
+                        model: parsed.modelSettings?.forgeAgent?.basicChat?.model?.trim() ||
+                            current.modelSettings.forgeAgent.basicChat.model
+                    },
+                    wiki: {
+                        connectionId: parsed.modelSettings?.forgeAgent?.wiki?.connectionId !== undefined
+                            ? normalizeModelConnectionId(parsed.modelSettings.forgeAgent.wiki.connectionId)
+                            : current.modelSettings.forgeAgent.wiki.connectionId ?? "",
+                        model: parsed.modelSettings?.forgeAgent?.wiki?.model?.trim() ||
+                            current.modelSettings.forgeAgent.wiki.model
+                    }
+                }
             }
         };
         getDatabase()
             .prepare(`UPDATE app_settings
-         SET operator_name = ?, operator_email = ?, operator_title = ?, theme_preference = ?, locale_preference = ?,
+         SET operator_name = ?, operator_email = ?, operator_title = ?, theme_preference = ?, custom_theme_json = ?, locale_preference = ?,
              goal_drift_alerts = ?, daily_quest_reminders = ?, achievement_celebrations = ?, max_active_tasks = ?, time_accounting_mode = ?,
-             psyche_auth_required = ?, microsoft_client_id = ?, microsoft_tenant_id = ?, microsoft_redirect_uri = ?, updated_at = ?
+             psyche_auth_required = ?, microsoft_client_id = ?, microsoft_tenant_id = ?, microsoft_redirect_uri = ?,
+             forge_basic_chat_connection_id = ?, forge_basic_chat_model = ?, forge_wiki_connection_id = ?, forge_wiki_model = ?, updated_at = ?
          WHERE id = 1`)
-            .run(next.profile.operatorName, next.profile.operatorEmail, next.profile.operatorTitle, next.themePreference, next.localePreference, toInt(next.notifications.goalDriftAlerts), toInt(next.notifications.dailyQuestReminders), toInt(next.notifications.achievementCelebrations), next.execution.maxActiveTasks, next.execution.timeAccountingMode, toInt(next.psycheAuthRequired), next.calendarProviders.microsoft.clientId, next.calendarProviders.microsoft.tenantId, next.calendarProviders.microsoft.redirectUri, now);
-        if (activity) {
+            .run(next.profile.operatorName, next.profile.operatorEmail, next.profile.operatorTitle, next.themePreference, next.customTheme ? JSON.stringify(next.customTheme) : "", next.localePreference, toInt(next.notifications.goalDriftAlerts), toInt(next.notifications.dailyQuestReminders), toInt(next.notifications.achievementCelebrations), next.execution.maxActiveTasks, next.execution.timeAccountingMode, toInt(next.psycheAuthRequired), next.calendarProviders.microsoft.clientId, next.calendarProviders.microsoft.tenantId, next.calendarProviders.microsoft.redirectUri, next.modelSettings.forgeAgent.basicChat.connectionId, next.modelSettings.forgeAgent.basicChat.model, next.modelSettings.forgeAgent.wiki.connectionId, next.modelSettings.forgeAgent.wiki.model, now);
+        if (options.secrets) {
+            syncForgeManagedWikiProfile(options.secrets);
+        }
+        if (options.activity) {
             recordActivityEvent({
                 entityType: "system",
                 entityId: "app_settings",
                 eventType: "settings_updated",
                 title: "Forge settings updated",
                 description: `Theme is now ${next.themePreference}. Language is ${next.localePreference}.`,
-                actor: activity.actor ?? null,
-                source: activity.source,
+                actor: options.activity.actor ?? null,
+                source: options.activity.source,
                 metadata: {
                     themePreference: next.themePreference,
+                    customThemeLabel: next.customTheme?.label ?? null,
                     localePreference: next.localePreference,
                     goalDriftAlerts: next.notifications.goalDriftAlerts,
                     dailyQuestReminders: next.notifications.dailyQuestReminders,
                     maxActiveTasks: next.execution.maxActiveTasks,
                     timeAccountingMode: next.execution.timeAccountingMode,
                     microsoftConfigured: next.calendarProviders.microsoft.clientId.trim().length > 0,
-                    microsoftTenantId: next.calendarProviders.microsoft.tenantId
+                    microsoftTenantId: next.calendarProviders.microsoft.tenantId,
+                    forgeBasicChatModel: next.modelSettings.forgeAgent.basicChat.model,
+                    forgeWikiModel: next.modelSettings.forgeAgent.wiki.model,
+                    forgeBasicChatConnectionId: next.modelSettings.forgeAgent.basicChat.connectionId || null,
+                    forgeWikiConnectionId: next.modelSettings.forgeAgent.wiki.connectionId || null
                 }
             });
         }
