@@ -32,7 +32,9 @@ import {
   Dumbbell,
   Flame,
   GitBranch,
+  GripVertical,
   LayoutDashboard,
+  LayoutGrid,
   Moon,
   NotebookPen,
   Radar,
@@ -58,6 +60,7 @@ import { CommandPalette } from "@/components/experience/command-palette";
 import { RouteTransitionFrame } from "@/components/experience/route-transition-frame";
 import { SheetScaffold } from "@/components/experience/sheet-scaffold";
 import { CreateMenu } from "@/components/create-menu";
+import { PSYCHE_SECTIONS } from "@/components/psyche/psyche-section-nav";
 import { StartWorkComposer } from "@/components/start-work-composer";
 import {
   TaskTimerRailProvider,
@@ -88,6 +91,7 @@ import {
 } from "@/lib/api";
 import { ForgeApiError } from "@/lib/api-error";
 import { I18nProvider, useI18n, type TranslationKey } from "@/lib/i18n";
+import { applyForgeThemeToDocument } from "@/lib/theme-system";
 import { cn } from "@/lib/utils";
 import type {
   GoalMutationInput,
@@ -136,116 +140,168 @@ type ShellContextValue = {
 
 const ShellContext = createContext<ShellContextValue | null>(null);
 
-const PRIMARY_ROUTES = [
+type ShellRouteDefinition = {
+  id: string;
+  to: string;
+  labelKey?: TranslationKey;
+  detailKey?: TranslationKey;
+  icon: typeof LayoutDashboard;
+  label?: string;
+  detail?: string;
+};
+
+const PRIMARY_ROUTES: ShellRouteDefinition[] = [
   {
+    id: "overview",
     to: "/overview",
     labelKey: "common.routeLabels.overview",
     detailKey: "common.routeDetails.overview",
     icon: LayoutDashboard
   },
   {
+    id: "goals",
     to: "/goals",
     labelKey: "common.routeLabels.goals",
     detailKey: "common.routeDetails.goals",
     icon: Target
   },
   {
+    id: "habits",
     to: "/habits",
     labelKey: "common.routeLabels.habits",
     detailKey: "common.routeDetails.habits",
     icon: Repeat
   },
   {
+    id: "projects",
     to: "/projects",
     labelKey: "common.routeLabels.projects",
     detailKey: "common.routeDetails.projects",
     icon: BriefcaseBusiness
   },
   {
+    id: "strategies",
     to: "/strategies",
     labelKey: "common.routeLabels.strategies",
     detailKey: "common.routeDetails.strategies",
     icon: GitBranch
   },
   {
+    id: "preferences",
     to: "/preferences",
     labelKey: "common.routeLabels.preferences",
     detailKey: "common.routeDetails.preferences",
     icon: SlidersHorizontal
   },
   {
+    id: "calendar",
     to: "/calendar",
     labelKey: "common.routeLabels.calendar",
     detailKey: "common.routeDetails.calendar",
     icon: CalendarDays
   },
   {
+    id: "sleep",
     to: "/sleep",
     labelKey: "common.routeLabels.sleep",
     detailKey: "common.routeDetails.sleep",
     icon: Moon
   },
   {
+    id: "sports",
     to: "/sports",
     labelKey: "common.routeLabels.sports",
     detailKey: "common.routeDetails.sports",
     icon: Dumbbell
   },
   {
+    id: "kanban",
     to: "/kanban",
     labelKey: "common.routeLabels.kanban",
     detailKey: "common.routeDetails.kanban",
     icon: Zap
   },
   {
+    id: "today",
     to: "/today",
     labelKey: "common.routeLabels.today",
     detailKey: "common.routeDetails.today",
     icon: Clock3
   },
   {
+    id: "notes",
     to: "/notes",
     labelKey: "common.routeLabels.notes",
     detailKey: "common.routeDetails.notes",
     icon: NotebookPen
   },
   {
+    id: "wiki",
     to: "/wiki",
     labelKey: "common.routeLabels.wiki",
     detailKey: "common.routeDetails.wiki",
     icon: BookCopy
   },
   {
+    id: "psyche",
     to: "/psyche",
     labelKey: "common.routeLabels.psyche",
     detailKey: "common.routeDetails.psyche",
     icon: BrainCircuit
   },
   {
+    id: "activity",
     to: "/activity",
     labelKey: "common.routeLabels.activity",
     detailKey: "common.routeDetails.activity",
     icon: ArrowUpRight
   },
   {
+    id: "insights",
     to: "/insights",
     labelKey: "common.routeLabels.insights",
     detailKey: "common.routeDetails.insights",
     icon: Radar
   },
   {
+    id: "review",
     to: "/review/weekly",
     labelKey: "common.routeLabels.review",
     detailKey: "common.routeDetails.review",
     icon: BarChart3
   },
   {
+    id: "settings",
     to: "/settings",
     labelKey: "common.routeLabels.settings",
     detailKey: "common.routeDetails.settings",
     icon: Settings
   }
-] as const;
+];
+
+const WORKBENCH_ROUTE: ShellRouteDefinition = {
+  id: "workbench",
+  to: "/workbench",
+  icon: LayoutGrid,
+  label: "Workbench",
+  detail: "Custom widgets and utility surface"
+};
+
+const PSYCHE_SHORTCUT_ROUTES: ShellRouteDefinition[] = PSYCHE_SECTIONS.filter(
+  (route) => route.to !== "/psyche"
+).map((route) => ({
+  id: `psyche:${route.to}`,
+  to: route.to,
+  icon: route.icon,
+  label: route.label,
+  detail: "Psyche shortcut"
+}));
+
+const NAV_ROUTE_REGISTRY: ShellRouteDefinition[] = [
+  ...PRIMARY_ROUTES,
+  WORKBENCH_ROUTE,
+  ...PSYCHE_SHORTCUT_ROUTES
+];
 
 const SHELL_NAV_ROUTES = PRIMARY_ROUTES.filter(
   (route) => route.to !== "/preferences" && route.to !== "/sleep"
@@ -273,6 +329,8 @@ const MOBILE_MORE_ROUTES = [
 ] as const;
 
 const USER_SCOPE_STORAGE_KEY = "forge.selected-user-ids";
+const DESKTOP_NAV_STORAGE_KEY = "forge.desktop-nav-layout";
+const MOBILE_NAV_STORAGE_KEY = "forge.mobile-nav-layout";
 
 function clamp(value: number, minimum: number, maximum: number) {
   return Math.min(Math.max(value, minimum), maximum);
@@ -397,6 +455,65 @@ function sameUserScope(left: string[], right: string[]) {
   const leftKey = [...left].sort().join("|");
   const rightKey = [...right].sort().join("|");
   return leftKey === rightKey;
+}
+
+function routeMatches(pathname: string, route: ShellRouteDefinition) {
+  if (route.to === "/psyche") {
+    return isPsycheRoute(pathname);
+  }
+  return pathname === route.to || pathname.startsWith(`${route.to}/`);
+}
+
+function getRouteLabel(
+  route: ShellRouteDefinition,
+  t: (key: TranslationKey) => string
+) {
+  return route.labelKey ? t(route.labelKey) : (route.label ?? route.to);
+}
+
+function getRouteDetail(
+  route: ShellRouteDefinition,
+  t: (key: TranslationKey) => string
+) {
+  if (route.detailKey) {
+    return t(route.detailKey);
+  }
+  return route.detail ?? route.to;
+}
+
+function readStoredNavIds(storageKey: string, defaults: string[]) {
+  if (typeof window === "undefined") {
+    return defaults;
+  }
+  try {
+    const raw = window.localStorage.getItem(storageKey);
+    if (!raw) {
+      return defaults;
+    }
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed)) {
+      return defaults;
+    }
+    const validIds = new Set(NAV_ROUTE_REGISTRY.map((route) => route.id));
+    const filtered = parsed.filter(
+      (entry): entry is string =>
+        typeof entry === "string" && validIds.has(entry)
+    );
+    return filtered.length > 0 ? filtered : defaults;
+  } catch {
+    return defaults;
+  }
+}
+
+function writeStoredNavIds(storageKey: string, ids: string[]) {
+  if (typeof window === "undefined") {
+    return;
+  }
+  try {
+    window.localStorage.setItem(storageKey, JSON.stringify(ids));
+  } catch {
+    return;
+  }
 }
 
 function getInitials(label: string) {
@@ -589,24 +706,21 @@ function UserScopeSelector({
 }
 
 function NavItem({
-  to,
-  labelKey,
-  icon: Icon,
+  route,
   compact = false
 }: {
-  to: string;
-  labelKey: TranslationKey;
-  icon: typeof LayoutDashboard;
+  route: ShellRouteDefinition;
   compact?: boolean;
 }) {
   const { t } = useI18n();
   const location = useLocation();
-  const label = t(labelKey);
-  const forceActive = to === "/psyche" && isPsycheRoute(location.pathname);
+  const label = getRouteLabel(route, t);
+  const Icon = route.icon;
+  const forceActive = routeMatches(location.pathname, route);
 
   return (
     <NavLink
-      to={to}
+      to={route.to}
       title={compact ? label : undefined}
       aria-label={label}
       className={({ isActive }) =>
@@ -623,9 +737,41 @@ function NavItem({
   );
 }
 
-function MobileBottomNav() {
+function MobileBottomNav({
+  routes,
+  onOpenEditor
+}: {
+  routes: ShellRouteDefinition[];
+  onOpenEditor?: () => void;
+}) {
   const [moreOpen, setMoreOpen] = useState(false);
   const { t } = useI18n();
+  const location = useLocation();
+  const holdTimerRef = useRef<number | null>(null);
+  const holdTriggeredRef = useRef(false);
+  const visibleRoutes = routes.slice(0, 4);
+  const moreRoutes = NAV_ROUTE_REGISTRY.filter(
+    (route) => !visibleRoutes.some((entry) => entry.id === route.id)
+  );
+
+  function startHold() {
+    holdTriggeredRef.current = false;
+    if (holdTimerRef.current !== null) {
+      window.clearTimeout(holdTimerRef.current);
+    }
+    holdTimerRef.current = window.setTimeout(() => {
+      holdTriggeredRef.current = true;
+      setMoreOpen(false);
+      onOpenEditor?.();
+    }, 520);
+  }
+
+  function endHold() {
+    if (holdTimerRef.current !== null) {
+      window.clearTimeout(holdTimerRef.current);
+      holdTimerRef.current = null;
+    }
+  }
 
   return (
     <>
@@ -642,26 +788,44 @@ function MobileBottomNav() {
         }}
       >
         <div className="grid grid-cols-5 gap-2">
-          {MOBILE_CORE_ROUTES.map((route) => (
+          {visibleRoutes.map((route) => (
             <NavLink
-              key={route.to}
+              key={route.id}
               to={route.to}
+              onPointerDown={startHold}
+              onPointerUp={endHold}
+              onPointerLeave={endHold}
+              onClick={(event) => {
+                if (holdTriggeredRef.current) {
+                  event.preventDefault();
+                  holdTriggeredRef.current = false;
+                }
+              }}
               className={({ isActive }) =>
                 `flex min-h-11 flex-col items-center justify-center gap-1 rounded-2xl px-2 py-2 text-[12px] ${
-                  isActive
+                  isActive || routeMatches(location.pathname, route)
                     ? "bg-white/[0.08] text-[var(--primary)]"
                     : "text-white/55"
                 }`
               }
             >
               <route.icon className="size-4" />
-              <span>{t(route.labelKey)}</span>
+              <span>{getRouteLabel(route, t)}</span>
             </NavLink>
           ))}
           <button
             type="button"
             className="flex min-h-11 flex-col items-center justify-center gap-1 rounded-2xl px-2 py-2 text-[12px] text-white/55"
-            onClick={() => setMoreOpen(true)}
+            onClick={() => {
+              if (holdTriggeredRef.current) {
+                holdTriggeredRef.current = false;
+                return;
+              }
+              setMoreOpen(true);
+            }}
+            onPointerDown={startHold}
+            onPointerUp={endHold}
+            onPointerLeave={endHold}
           >
             <Settings className="size-4" />
             <span>{t("common.shell.more")}</span>
@@ -676,15 +840,28 @@ function MobileBottomNav() {
         title={t("common.shell.moreRoutesTitle")}
         description={t("common.shell.moreRoutesDescription")}
       >
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <button
+            type="button"
+            className="inline-flex min-h-10 items-center gap-2 rounded-full bg-white/[0.05] px-3 py-2 text-sm text-white/72"
+            onClick={() => {
+              setMoreOpen(false);
+              onOpenEditor?.();
+            }}
+          >
+            <GripVertical className="size-4" />
+            Customize navigation
+          </button>
+        </div>
         <div className="grid gap-3">
-          {MOBILE_MORE_ROUTES.map((route) => (
+          {moreRoutes.map((route) => (
             <NavLink
-              key={route.to}
+              key={route.id}
               to={route.to}
               onClick={() => setMoreOpen(false)}
               className={({ isActive }) =>
                 `interactive-tap flex items-center justify-between rounded-[24px] px-4 py-4 ${
-                  isActive
+                  isActive || routeMatches(location.pathname, route)
                     ? "bg-white/[0.08] text-white"
                     : "bg-white/[0.04] text-white/70"
                 }`
@@ -694,10 +871,10 @@ function MobileBottomNav() {
                 <route.icon className="size-4 text-[var(--primary)]" />
                 <span>
                   <span className="block text-base font-medium">
-                    {t(route.labelKey)}
+                    {getRouteLabel(route, t)}
                   </span>
                   <span className="mt-1 block text-sm text-white/54">
-                    {t(route.detailKey)}
+                    {getRouteDetail(route, t)}
                   </span>
                 </span>
               </span>
@@ -707,6 +884,216 @@ function MobileBottomNav() {
         </div>
       </SheetScaffold>
     </>
+  );
+}
+
+function ShellNavEditor({
+  open,
+  onOpenChange,
+  desktopNavIds,
+  onDesktopNavIdsChange,
+  mobileNavIds,
+  onMobileNavIdsChange
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  desktopNavIds: string[];
+  onDesktopNavIdsChange: (ids: string[]) => void;
+  mobileNavIds: string[];
+  onMobileNavIdsChange: (ids: string[]) => void;
+}) {
+  const { t } = useI18n();
+  const desktopRoutes = desktopNavIds
+    .map((id) => NAV_ROUTE_REGISTRY.find((route) => route.id === id) ?? null)
+    .filter((route): route is ShellRouteDefinition => route !== null);
+  const mobileRoutes = mobileNavIds
+    .map((id) => NAV_ROUTE_REGISTRY.find((route) => route.id === id) ?? null)
+    .filter((route): route is ShellRouteDefinition => route !== null);
+  const availableRoutes = NAV_ROUTE_REGISTRY.filter(
+    (route) =>
+      !desktopNavIds.includes(route.id) || !mobileNavIds.includes(route.id)
+  );
+  const desktopSlotCount = 10;
+  const mobileSlotCount = 4;
+
+  function renderSlots(
+    ids: string[],
+    slotCount: number,
+    onChange: (ids: string[]) => void,
+    minimum: number,
+    prefix: string
+  ) {
+    return Array.from({ length: slotCount }, (_, index) => {
+      const id = ids[index] ?? null;
+      const route = id
+        ? (NAV_ROUTE_REGISTRY.find((entry) => entry.id === id) ?? null)
+        : null;
+
+      if (!route) {
+        return (
+          <div
+            key={`${prefix}-empty-${index}`}
+            className="flex min-h-16 items-center justify-between gap-3 rounded-[20px] border border-dashed border-white/12 bg-white/[0.02] px-4 py-3"
+          >
+            <div>
+              <div className="text-sm text-white/44">Empty slot</div>
+              <div className="text-[12px] text-white/30">
+                Add a route below to fill this slot
+              </div>
+            </div>
+            <div className="rounded-full bg-white/[0.05] px-2.5 py-1 text-[11px] text-white/46">
+              Slot {index + 1}
+            </div>
+          </div>
+        );
+      }
+
+      return (
+        <div
+          key={`${prefix}-${route.id}`}
+          className="flex min-h-16 items-center justify-between gap-3 rounded-[20px] bg-white/[0.04] px-4 py-3"
+        >
+          <span className="flex items-center gap-3">
+            <route.icon className="size-4 text-[var(--primary)]" />
+            <span className="text-sm text-white">
+              {getRouteLabel(route, t)}
+            </span>
+          </span>
+          <button
+            type="button"
+            className="rounded-full bg-white/[0.05] px-3 py-1.5 text-[12px] text-white/70"
+            onClick={() => removeFromList(ids, route.id, onChange, minimum)}
+          >
+            Remove
+          </button>
+        </div>
+      );
+    });
+  }
+
+  function addToList(
+    current: string[],
+    nextId: string,
+    onChange: (ids: string[]) => void,
+    maxItems?: number
+  ) {
+    if (current.includes(nextId)) {
+      return;
+    }
+    const next = [...current, nextId];
+    onChange(maxItems ? next.slice(0, maxItems) : next);
+  }
+
+  function removeFromList(
+    current: string[],
+    id: string,
+    onChange: (ids: string[]) => void,
+    minimum = 1
+  ) {
+    const next = current.filter((entry) => entry !== id);
+    if (next.length < minimum) {
+      return;
+    }
+    onChange(next);
+  }
+
+  return (
+    <SheetScaffold
+      open={open}
+      onOpenChange={onOpenChange}
+      eyebrow="Navigation"
+      title="Customize navigation"
+      description="Add or remove main routes, Psyche shortcuts, and the custom workbench surface."
+    >
+      <div className="grid gap-5">
+        <div className="grid gap-3">
+          <div className="text-[11px] uppercase tracking-[0.16em] text-white/38">
+            Desktop sidebar
+          </div>
+          <div className="grid gap-2">
+            {renderSlots(
+              desktopNavIds,
+              desktopSlotCount,
+              onDesktopNavIdsChange,
+              4,
+              "desktop"
+            )}
+          </div>
+        </div>
+        <div className="grid gap-3">
+          <div className="text-[11px] uppercase tracking-[0.16em] text-white/38">
+            Mobile bar
+          </div>
+          <div className="grid gap-2">
+            {renderSlots(
+              mobileNavIds,
+              mobileSlotCount,
+              onMobileNavIdsChange,
+              2,
+              "mobile"
+            )}
+          </div>
+        </div>
+        <div className="grid gap-3">
+          <div className="text-[11px] uppercase tracking-[0.16em] text-white/38">
+            Available routes
+          </div>
+          <div className="grid gap-2">
+            {availableRoutes.map((route) => (
+              <div
+                key={`available-${route.id}`}
+                className="flex items-center justify-between gap-3 rounded-[20px] bg-white/[0.03] px-4 py-3"
+              >
+                <span className="flex items-center gap-3">
+                  <route.icon className="size-4 text-[var(--primary)]" />
+                  <span>
+                    <span className="block text-sm text-white">
+                      {getRouteLabel(route, t)}
+                    </span>
+                    <span className="block text-[12px] text-white/48">
+                      {getRouteDetail(route, t)}
+                    </span>
+                  </span>
+                </span>
+                <div className="flex items-center gap-2">
+                  {!desktopNavIds.includes(route.id) ? (
+                    <button
+                      type="button"
+                      className="rounded-full bg-white/[0.05] px-3 py-1.5 text-[12px] text-white/70"
+                      onClick={() =>
+                        addToList(
+                          desktopNavIds,
+                          route.id,
+                          onDesktopNavIdsChange
+                        )
+                      }
+                    >
+                      Add to sidebar
+                    </button>
+                  ) : null}
+                  {!mobileNavIds.includes(route.id) ? (
+                    <button
+                      type="button"
+                      className="rounded-full bg-white/[0.05] px-3 py-1.5 text-[12px] text-white/70"
+                      onClick={() =>
+                        addToList(
+                          mobileNavIds,
+                          route.id,
+                          onMobileNavIdsChange,
+                          4
+                        )
+                      }
+                    >
+                      Add to mobile
+                    </button>
+                  ) : null}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </SheetScaffold>
   );
 }
 
@@ -727,7 +1114,14 @@ function ShellCommandButton({ onClick }: { onClick: () => void }) {
         tone="meta"
         className="ml-1 hidden bg-white/[0.06] text-white/52 xl:inline-flex"
       >
-        ⌘K
+        Shift Shift
+      </Badge>
+      <Badge
+        size="sm"
+        tone="meta"
+        className="hidden bg-white/[0.06] text-white/52 2xl:inline-flex"
+      >
+        Cmd K
       </Badge>
     </Button>
   );
@@ -783,13 +1177,29 @@ function ShellFrame({
   const shell = useForgeShell();
   const { t } = useI18n();
   const active =
-    PRIMARY_ROUTES.find((route) => location.pathname.startsWith(route.to)) ??
-    PRIMARY_ROUTES[0];
+    NAV_ROUTE_REGISTRY.find((route) =>
+      routeMatches(location.pathname, route)
+    ) ?? PRIMARY_ROUTES[0];
   const transitionKey = getRouteTransitionKey(location.pathname);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [backgroundActivityOpen, setBackgroundActivityOpen] = useState(false);
   const [collapseProgress, setCollapseProgress] = useState(0);
   const [navCollapsed, setNavCollapsed] = useState(false);
+  const [desktopNavIds, setDesktopNavIds] = useState<string[]>(() =>
+    readStoredNavIds(DESKTOP_NAV_STORAGE_KEY, [
+      ...SHELL_NAV_ROUTES.map((route) => route.id),
+      WORKBENCH_ROUTE.id
+    ])
+  );
+  const [mobileNavIds, setMobileNavIds] = useState<string[]>(() =>
+    readStoredNavIds(MOBILE_NAV_STORAGE_KEY, [
+      PRIMARY_ROUTES[0]!.id,
+      PRIMARY_ROUTES[10]!.id,
+      PRIMARY_ROUTES[9]!.id,
+      PRIMARY_ROUTES[13]!.id
+    ])
+  );
+  const [navEditorOpen, setNavEditorOpen] = useState(false);
   const autoCollapseAppliedRef = useRef(false);
   const preAutoCollapseRef = useRef(false);
   const skipNavPersistenceRef = useRef(false);
@@ -797,6 +1207,12 @@ function ShellFrame({
   const wikiSurface = isWikiRoute(location.pathname);
   const psycheSurface = isPsycheRoute(location.pathname);
   const autoCollapseSurface = wikiSurface || psycheSurface;
+  const desktopRoutes = desktopNavIds
+    .map((id) => NAV_ROUTE_REGISTRY.find((route) => route.id === id) ?? null)
+    .filter((route): route is ShellRouteDefinition => route !== null);
+  const mobileRoutes = mobileNavIds
+    .map((id) => NAV_ROUTE_REGISTRY.find((route) => route.id === id) ?? null)
+    .filter((route): route is ShellRouteDefinition => route !== null);
   const fetching = useIsFetching();
   const mutating = useIsMutating();
   const reduceMotion = useReducedMotion();
@@ -919,10 +1335,36 @@ function ShellFrame({
   }, [location.pathname, t]);
 
   useEffect(() => {
+    let lastStandaloneShiftAt = 0;
+
     const onKeyDown = (event: KeyboardEvent) => {
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
         event.preventDefault();
         setPaletteOpen((current) => !current);
+        lastStandaloneShiftAt = 0;
+        return;
+      }
+
+      if (
+        event.key === "Shift" &&
+        !event.metaKey &&
+        !event.ctrlKey &&
+        !event.altKey &&
+        !event.repeat
+      ) {
+        const now = window.performance.now();
+        if (now - lastStandaloneShiftAt <= 360) {
+          event.preventDefault();
+          setPaletteOpen(true);
+          lastStandaloneShiftAt = 0;
+          return;
+        }
+        lastStandaloneShiftAt = now;
+        return;
+      }
+
+      if (!event.metaKey && !event.ctrlKey && !event.altKey) {
+        lastStandaloneShiftAt = 0;
       }
     };
 
@@ -955,6 +1397,14 @@ function ShellFrame({
       return;
     }
   }, [navCollapsed]);
+
+  useEffect(() => {
+    writeStoredNavIds(DESKTOP_NAV_STORAGE_KEY, desktopNavIds);
+  }, [desktopNavIds]);
+
+  useEffect(() => {
+    writeStoredNavIds(MOBILE_NAV_STORAGE_KEY, mobileNavIds);
+  }, [mobileNavIds]);
 
   useEffect(() => {
     if (autoCollapseSurface) {
@@ -1028,6 +1478,7 @@ function ShellFrame({
         open={paletteOpen}
         onOpenChange={setPaletteOpen}
         snapshot={shell.snapshot}
+        selectedUserIds={shell.selectedUserIds}
       />
 
       <div
@@ -1095,15 +1546,23 @@ function ShellFrame({
             </Button>
           </div>
 
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            className={cn(
+              "mt-3",
+              navCollapsed ? "px-2.5" : "w-full justify-start px-3"
+            )}
+            onClick={() => setNavEditorOpen(true)}
+          >
+            <GripVertical className="size-4" />
+            {!navCollapsed ? "Customize nav" : null}
+          </Button>
+
           <div className={cn("grid gap-2", navCollapsed ? "mt-6" : "mt-8")}>
-            {SHELL_NAV_ROUTES.map((route) => (
-              <NavItem
-                key={route.to}
-                to={route.to}
-                labelKey={route.labelKey}
-                icon={route.icon}
-                compact={navCollapsed}
-              />
+            {desktopRoutes.map((route) => (
+              <NavItem key={route.id} route={route} compact={navCollapsed} />
             ))}
           </div>
 
@@ -1177,7 +1636,7 @@ function ShellFrame({
                     }}
                     transition={{ duration: 0.35, ease: "easeOut" }}
                   >
-                    {t(active.labelKey)}
+                    {getRouteLabel(active, t)}
                   </motion.div>
                   <div className="min-w-0 flex-1">
                     <TaskTimerRailBar
@@ -1336,7 +1795,7 @@ function ShellFrame({
                   )}
                   style={{ fontSize: `${mobileTitleSize}rem` }}
                 >
-                  {t(active.labelKey)}
+                  {getRouteLabel(active, t)}
                 </div>
                 <div className="min-w-0 flex-1">
                   <TaskTimerRailBar
@@ -1394,7 +1853,7 @@ function ShellFrame({
               transition={{ duration: 0.28, ease: "easeOut" }}
             >
               <div className="mt-2 text-[13px] leading-5 text-white/52">
-                {t(active.detailKey)}
+                {getRouteDetail(active, t)}
               </div>
             </motion.div>
             {!collapsed ? (
@@ -1455,7 +1914,19 @@ function ShellFrame({
             {children}
           </RouteTransitionFrame>
         </main>
-        <MobileBottomNav />
+        <MobileBottomNav
+          routes={mobileRoutes}
+          onOpenEditor={() => setNavEditorOpen(true)}
+        />
+
+        <ShellNavEditor
+          open={navEditorOpen}
+          onOpenChange={setNavEditorOpen}
+          desktopNavIds={desktopNavIds}
+          onDesktopNavIdsChange={setDesktopNavIds}
+          mobileNavIds={mobileNavIds}
+          onMobileNavIdsChange={setMobileNavIds}
+        />
       </div>
 
       <Dialog.Root
@@ -1668,6 +2139,41 @@ export function AppShell() {
       }
     };
   }, []);
+
+  useEffect(() => {
+    const settings = settingsQuery.data?.settings;
+    if (!settings) {
+      return;
+    }
+
+    const applyTheme = () => {
+      applyForgeThemeToDocument(
+        settings.themePreference,
+        settings.customTheme ?? null
+      );
+    };
+
+    applyTheme();
+
+    if (
+      settings.themePreference !== "system" ||
+      typeof window === "undefined" ||
+      typeof window.matchMedia !== "function"
+    ) {
+      return;
+    }
+
+    const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
+    const handleChange = () => applyTheme();
+
+    if (typeof mediaQuery.addEventListener === "function") {
+      mediaQuery.addEventListener("change", handleChange);
+      return () => mediaQuery.removeEventListener("change", handleChange);
+    }
+
+    mediaQuery.addListener(handleChange);
+    return () => mediaQuery.removeListener(handleChange);
+  }, [settingsQuery.data?.settings]);
 
   useEffect(() => {
     if (!operatorSessionQuery.isSuccess) {

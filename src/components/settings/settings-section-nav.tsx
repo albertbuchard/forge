@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { ArchiveRestore, BookCopy, Bot, CalendarDays, ScrollText, Settings2, Smartphone, Trophy, Users } from "lucide-react";
+import { ArchiveRestore, BookCopy, Bot, CalendarDays, Cpu, ScrollText, Settings2, Smartphone, Trophy, Users } from "lucide-react";
 import { NavLink, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -10,6 +10,7 @@ export const SETTINGS_SECTIONS = [
   { to: "/settings/users", label: "Users", icon: Users },
   { to: "/settings/calendar", label: "Calendar", icon: CalendarDays },
   { to: "/settings/mobile", label: "Mobile", icon: Smartphone },
+  { to: "/settings/models", label: "Models", icon: Cpu },
   { to: "/settings/agents", label: "Agents", icon: Bot },
   { to: "/settings/wiki", label: "Wiki", icon: BookCopy },
   { to: "/settings/logs", label: "Logs", icon: ScrollText },

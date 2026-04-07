@@ -286,6 +286,18 @@ developer-only panel. Calendar provider setup and connection health also belong 
 under a dedicated Calendar section, including a guided connection modal and a step-
 by-step setup guide that names the exact credentials and URLs Forge needs. Settings
 must be legible on mobile and desktop.
+Settings also needs a dedicated Models section that is separate from Wiki settings.
+That Models section owns Forge Agent model defaults, OpenAI API credentials, OpenAI
+Codex OAuth setup, local OpenAI-compatible endpoints, and the list of external AI
+connections that become first-class chat agents inside Forge. Forge Agent remains the
+default built-in system agent with separate Basic chat and Wiki model slots, while each
+saved connection such as OpenAI Codex OAuth or OpenAI API should surface as its own
+agent identity that page widgets and future AI processors can target directly.
+Theme controls also belong here as a first-class user-facing surface. Forge should ship
+multiple distinct visual themes rather than one default look, and Settings should let
+the user switch among those presets through clear preview cards. Forge should also let
+the user define a custom theme through a guided modal editor and direct JSON import so
+advanced users can carry their own palette without editing source files.
 Settings also needs a user-management surface. The product should be able to list human
 and bot users, create or edit them, show their labels and types clearly, and expose the
 current permissive sharing posture while leaving room for future policy controls.
@@ -316,6 +328,14 @@ into repeatable loops. The Reports page should capture observed events, incident
 reflections. The Psyche Report detail page should let the user inspect one report in
 full. The Goal Map page should visualize how goals connect to related entities through a
 graph that uses the same identity system as the rest of the app.
+The Psyche Questionnaires page should act as a rich assessment library, not a raw table.
+It should let the user browse seeded self-report instruments, search by title or alias,
+pin facet chips for domain and source class, open a detail surface with provenance and
+history, and move straight into a guided run or builder draft. The guided runner should
+feel immersive and focused, using single-question flow for short tools and grouped
+batched Likert flow for long inventories such as YSQ-R. Questionnaire results should
+stay longitudinal: raw answers, computed totals, subscores, bands, and prior run trend
+points should remain explorable over time on the detail and run-result surfaces.
 These Psyche surfaces and the matching agent tools should guide the user through
 active-listening exploration rather than dumping raw fields. Value work should clarify
 direction and committed action. Pattern work should slow down into a functional
@@ -452,6 +472,12 @@ assets are canonical files on the local filesystem, while Fastify and SQLite man
 metadata, backlinks, lexical search, embedding chunks, ingest jobs, and profile
 configuration. That file-over-app posture is a product requirement, not an implementation
 accident.
+Questionnaire delivery belongs in that same stack. The library, builder, runner, and
+history surfaces are React routes backed by Fastify endpoints and SQLite tables for
+questionnaire instruments, versions, runs, answers, and score rows. The scoring layer is
+a safe JSON-AST evaluator on the server, not freeform string execution in the browser,
+so mathematical score formulas, dependent subscores, and threshold labels remain
+inspectable and reproducible.
 than raw calendar-URL entry. The canonical event layer is local-first: Forge events,
 event-source mappings, and event links all live in the local database and are then
 reconciled outward to connected providers.

@@ -2074,8 +2074,34 @@ export function buildOpenApiDocument() {
       },
       themePreference: {
         type: "string",
-        enum: ["obsidian", "solar", "system"]
+        enum: ["obsidian", "solar", "aurora", "ember", "custom", "system"]
       },
+      customTheme: nullable({
+        type: "object",
+        additionalProperties: false,
+        required: [
+          "label",
+          "primary",
+          "secondary",
+          "tertiary",
+          "canvas",
+          "panel",
+          "panelHigh",
+          "panelLow",
+          "ink"
+        ],
+        properties: {
+          label: { type: "string" },
+          primary: { type: "string" },
+          secondary: { type: "string" },
+          tertiary: { type: "string" },
+          canvas: { type: "string" },
+          panel: { type: "string" },
+          panelHigh: { type: "string" },
+          panelLow: { type: "string" },
+          ink: { type: "string" }
+        }
+      }),
       localePreference: { type: "string", enum: ["en", "fr"] }
     }
   };
@@ -2544,6 +2570,7 @@ export function buildOpenApiDocument() {
       "notifications",
       "execution",
       "themePreference",
+      "customTheme",
       "localePreference",
       "security",
       "agents",
@@ -2577,8 +2604,34 @@ export function buildOpenApiDocument() {
       execution: { $ref: "#/components/schemas/ExecutionSettings" },
       themePreference: {
         type: "string",
-        enum: ["obsidian", "solar", "system"]
+        enum: ["obsidian", "solar", "aurora", "ember", "custom", "system"]
       },
+      customTheme: nullable({
+        type: "object",
+        additionalProperties: false,
+        required: [
+          "label",
+          "primary",
+          "secondary",
+          "tertiary",
+          "canvas",
+          "panel",
+          "panelHigh",
+          "panelLow",
+          "ink"
+        ],
+        properties: {
+          label: { type: "string" },
+          primary: { type: "string" },
+          secondary: { type: "string" },
+          tertiary: { type: "string" },
+          canvas: { type: "string" },
+          panel: { type: "string" },
+          panelHigh: { type: "string" },
+          panelLow: { type: "string" },
+          ink: { type: "string" }
+        }
+      }),
       localePreference: { type: "string", enum: ["en", "fr"] },
       security: {
         type: "object",

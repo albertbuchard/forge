@@ -2280,6 +2280,79 @@ export function getSettings() {
   return request<{ settings: SettingsPayload }>("/api/v1/settings");
 }
 
+export function saveAiModelConnection(input: {
+  id?: string;
+  label: string;
+  provider: import("./types").AiModelProvider;
+  authMode?: import("./types").AiModelAuthMode;
+  baseUrl?: string;
+  model: string;
+  apiKey?: string;
+  oauthSessionId?: string;
+  enabled?: boolean;
+}) {
+  return request<{ connection: import("./types").AiModelConnection }>(
+    "/api/v1/settings/models/connections",
+    {
+      method: "POST",
+      body: JSON.stringify(input)
+    }
+  );
+}
+
+export function deleteAiModelConnection(connectionId: string) {
+  return request<{ deletedId: string }>(
+    `/api/v1/settings/models/connections/${connectionId}`,
+    {
+      method: "DELETE"
+    }
+  );
+}
+
+export function testAiModelConnection(input: {
+  connectionId?: string;
+  provider?: import("./types").AiModelProvider;
+  baseUrl?: string;
+  model: string;
+  apiKey?: string;
+}) {
+  return request<{ result: WikiLlmConnectionTestResult }>(
+    "/api/v1/settings/models/connections/test",
+    {
+      method: "POST",
+      body: JSON.stringify(input)
+    }
+  );
+}
+
+export function startOpenAiCodexOauth() {
+  return request<{ session: import("./types").OpenAiCodexOauthSession }>(
+    "/api/v1/settings/models/oauth/openai-codex/start",
+    {
+      method: "POST"
+    }
+  );
+}
+
+export function getOpenAiCodexOauthSession(sessionId: string) {
+  return request<{ session: import("./types").OpenAiCodexOauthSession }>(
+    `/api/v1/settings/models/oauth/openai-codex/session/${sessionId}`
+  );
+}
+
+export function submitOpenAiCodexOauthManualCode(
+  sessionId: string,
+  codeOrUrl: string
+) {
+  return request<{ session: import("./types").OpenAiCodexOauthSession }>(
+    `/api/v1/settings/models/oauth/openai-codex/session/${sessionId}/manual`,
+    {
+      method: "POST",
+      body: JSON.stringify({ codeOrUrl })
+    }
+  );
+}
+
 export function getCompanionOverview(userIds?: string[] | unknown) {
   const search = new URLSearchParams();
   appendUserIds(search, coerceUserIds(userIds));
@@ -2678,6 +2751,7 @@ export function searchEntities(input: {
     ids?: string[];
     status?: string[];
     linkedTo?: { entityType: CrudEntityType; id: string };
+    userIds?: string[];
     includeDeleted?: boolean;
     limit?: number;
     clientRef?: string;

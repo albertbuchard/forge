@@ -3,15 +3,10 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ArrowUpRight,
   DatabaseZap,
-  KeyRound,
   LibraryBig,
-  PencilLine,
-  ShieldCheck,
-  Sparkles,
   Trash2
 } from "lucide-react";
-import { useSearchParams } from "react-router-dom";
-import { WikiLlmSetupModal } from "@/components/settings/wiki-llm-setup-modal";
+import { Link } from "react-router-dom";
 import { SettingsSectionNav } from "@/components/settings/settings-section-nav";
 import { PageHero } from "@/components/shell/page-hero";
 import { Badge } from "@/components/ui/badge";
@@ -25,16 +20,15 @@ import {
   createWikiEmbeddingProfile,
   createWikiSpace,
   deleteWikiProfile,
+  getSettings,
   getWikiSettings,
   reindexWiki,
   syncWikiVault
 } from "@/lib/api";
-import type { WikiLlmProfile } from "@/lib/types";
 import { summarizeWikiLlmProfile } from "@/lib/wiki-llm";
 
 export function SettingsWikiPage() {
   const queryClient = useQueryClient();
-  const [searchParams, setSearchParams] = useSearchParams();
   const [spaceLabel, setSpaceLabel] = useState("");
   const [spaceDescription, setSpaceDescription] = useState("");
   const [spaceVisibility, setSpaceVisibility] = useState<"personal" | "shared">(
@@ -50,15 +44,14 @@ export function SettingsWikiPage() {
   const [embeddingApiKey, setEmbeddingApiKey] = useState("");
   const [chunkSize, setChunkSize] = useState("1200");
   const [chunkOverlap, setChunkOverlap] = useState("200");
-  const [llmModalOpen, setLlmModalOpen] = useState(
-    searchParams.get("setupLlm") === "1"
-  );
-  const [editingLlmProfile, setEditingLlmProfile] =
-    useState<WikiLlmProfile | null>(null);
 
   const settingsQuery = useQuery({
     queryKey: ["forge-wiki-settings"],
     queryFn: getWikiSettings
+  });
+  const appSettingsQuery = useQuery({
+    queryKey: ["forge-settings"],
+    queryFn: getSettings
   });
 
   const invalidateSettings = async () => {
@@ -122,13 +115,6 @@ export function SettingsWikiPage() {
     onSuccess: invalidateSettings
   });
 
-  useEffect(() => {
-    if (searchParams.get("setupLlm") === "1") {
-      setEditingLlmProfile(null);
-      setLlmModalOpen(true);
-    }
-  }, [searchParams]);
-
   if (settingsQuery.isLoading) {
     return (
       <LoadingState
@@ -170,14 +156,7 @@ export function SettingsWikiPage() {
   const operatingModelTooltip =
     "Canonical knowledge lives as markdown and media files on disk, with Forge keeping a synced metadata, link, and search index on top. Text search and entity-linked search work without embeddings, while semantic search stays additive and profile-driven. Ingest jobs can create pages and media assets now, with room for richer OCR, transcription, and multimodal compilation later.";
 
-  const handleLlmModalChange = (open: boolean) => {
-    setLlmModalOpen(open);
-    if (!open) {
-      const next = new URLSearchParams(searchParams);
-      next.delete("setupLlm");
-      setSearchParams(next, { replace: true });
-    }
-  };
+  const forgeWikiSlot = appSettingsQuery.data?.settings.modelSettings.forgeAgent.wiki;
 
   return (
     <div className="mx-auto grid w-full max-w-[1440px] gap-5">
@@ -214,12 +193,12 @@ export function SettingsWikiPage() {
       <div className="grid gap-5">
         <Card className="grid gap-4">
           <div className="flex items-center gap-3">
-            <KeyRound className="size-4 text-[var(--secondary)]" />
             <div>
               <div className="text-sm text-white">Auto-ingest model</div>
               <div className="text-xs leading-5 text-white/50">
-                Set the OpenAI model that turns imported source material into
-                draft wiki pages and entity proposals before review.
+                Wiki ingest now reads its credentials and model slot from the
+                dedicated Models settings page instead of owning the OpenAI
+                setup flow here.
               </div>
             </div>
           </div>
@@ -232,23 +211,20 @@ export function SettingsWikiPage() {
                     Current profile
                   </div>
                   <div className="mt-2 text-xl font-semibold text-white">
-                    {activeLlmProfile?.label ?? "OpenAI not configured"}
+                    {forgeWikiSlot?.connectionLabel ?? activeLlmProfile?.label ?? "No external wiki model selected"}
                   </div>
                   <div className="mt-2 max-w-3xl text-sm leading-6 text-white/58">
-                    {activeLlmProfile
-                      ? "This profile is used by the wiki ingest flow when Forge turns uploads into draft pages and entities."
-                      : "Forge needs an OpenAI profile before auto-ingest can create structured draft pages instead of importing one raw dump page."}
+                    {forgeWikiSlot?.connectionLabel
+                      ? "Forge now resolves wiki ingest through the selected Models connection and syncs the managed wiki profile automatically."
+                      : "Pick a Models connection when you want Forge wiki ingest to run through the OpenAI API or a local compatible endpoint."}
                   </div>
                 </div>
-                <Button
-                  onClick={() => {
-                    setEditingLlmProfile(activeLlmProfile);
-                    setLlmModalOpen(true);
-                  }}
+                <Link
+                  to="/settings/models"
+                  className="inline-flex min-h-11 items-center rounded-[16px] bg-white/[0.08] px-4 py-3 text-sm text-white transition hover:bg-white/[0.12]"
                 >
-                  <Sparkles className="size-4" />
-                  {activeLlmProfile ? "Edit OpenAI" : "Set up OpenAI"}
-                </Button>
+                  Open model settings
+                </Link>
               </div>
 
               <div className="grid gap-3 lg:grid-cols-3">
@@ -257,30 +233,23 @@ export function SettingsWikiPage() {
                     Model
                   </div>
                   <div className="mt-2 text-white">
-                    {activeLlmSummary?.model ?? "Not set"}
+                    {forgeWikiSlot?.model ?? activeLlmSummary?.model ?? "Not set"}
                   </div>
                 </div>
                 <div className="rounded-[20px] border border-white/8 bg-white/[0.03] px-4 py-3">
                   <div className="text-[11px] uppercase tracking-[0.16em] text-white/40">
-                    Thinking
+                    Provider
                   </div>
                   <div className="mt-2 text-white">
-                    {activeLlmSummary?.reasoning ?? "Not set"}
+                    {forgeWikiSlot?.connectionLabel ?? "Not set"}
                   </div>
                 </div>
                 <div className="rounded-[20px] border border-white/8 bg-white/[0.03] px-4 py-3">
                   <div className="text-[11px] uppercase tracking-[0.16em] text-white/40">
-                    Key
+                    Endpoint
                   </div>
                   <div className="mt-2 flex items-center gap-2 text-white">
-                    {activeLlmSummary?.hasKey ? (
-                      <>
-                        <ShieldCheck className="size-4 text-emerald-300" />
-                        Saved
-                      </>
-                    ) : (
-                      "Missing"
-                    )}
+                    {forgeWikiSlot?.baseUrl ?? activeLlmProfile?.baseUrl ?? "Not set"}
                   </div>
                 </div>
               </div>
@@ -291,9 +260,10 @@ export function SettingsWikiPage() {
                 Supported controls
               </div>
               <div className="text-sm leading-6 text-white/58">
-                Forge exposes the current GPT-5.4 family with model choice,
-                reasoning effort, and verbosity on top of the OpenAI Responses
-                API.
+                OpenAI API and local compatible endpoints are configured under
+                Settings {"->"} Models. OpenAI Codex OAuth lives there as a chat
+                agent path, while Wiki keeps the file-backed memory controls here
+                and consumes the selected ingest model slot.
               </div>
               <div className="flex flex-wrap gap-2">
                 {["GPT-5.4", "GPT-5.4 mini", "GPT-5.4 nano"].map((label) => (
@@ -302,16 +272,13 @@ export function SettingsWikiPage() {
                   </Badge>
                 ))}
               </div>
-              <Button
-                variant="secondary"
-                onClick={() => {
-                  setEditingLlmProfile(activeLlmProfile);
-                  setLlmModalOpen(true);
-                }}
+              <Link
+                to="/settings/models"
+                className="inline-flex min-h-11 items-center rounded-[16px] bg-white/[0.08] px-4 py-3 text-sm text-white transition hover:bg-white/[0.12]"
               >
-                Open setup
-                <ArrowUpRight className="size-4" />
-              </Button>
+                Open model settings
+                <ArrowUpRight className="ml-2 size-4" />
+              </Link>
             </div>
           </div>
 
@@ -339,16 +306,6 @@ export function SettingsWikiPage() {
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        className="rounded-full p-2 text-white/48 transition hover:bg-white/[0.08] hover:text-white"
-                        onClick={() => {
-                          setEditingLlmProfile(profile);
-                          setLlmModalOpen(true);
-                        }}
-                      >
-                        <PencilLine className="size-4" />
-                      </button>
                       <button
                         type="button"
                         className="rounded-full p-2 text-white/48 transition hover:bg-white/[0.08] hover:text-white"
@@ -544,12 +501,6 @@ export function SettingsWikiPage() {
         </div>
       </div>
 
-      <WikiLlmSetupModal
-        open={llmModalOpen}
-        onOpenChange={handleLlmModalChange}
-        profile={editingLlmProfile}
-        onSaved={invalidateSettings}
-      />
     </div>
   );
 }

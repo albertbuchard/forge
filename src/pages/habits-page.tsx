@@ -19,6 +19,10 @@ import {
 } from "lucide-react";
 import { EntityNoteCountLink } from "@/components/notes/entity-note-count-link";
 import { NoteMarkdown } from "@/components/notes/note-markdown";
+import {
+  psycheFocusClass,
+  usePsycheFocusTarget
+} from "@/components/psyche/use-psyche-focus-target";
 import { PageHero } from "@/components/shell/page-hero";
 import { HabitDialog } from "@/components/habit-dialog";
 import { useForgeShell } from "@/components/shell/app-shell";
@@ -459,9 +463,12 @@ export function HabitsPage() {
   const [confirmingDeleteHabit, setConfirmingDeleteHabit] =
     useState<Habit | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const focusedHabitId = searchParams.get("focus");
   const selectedUserIds = coerceSelectedUserIds(shell.selectedUserIds);
   const defaultUserId = getSingleSelectedUserId(selectedUserIds);
   const habitsQueryKey = ["forge-habits", ...selectedUserIds];
+
+  usePsycheFocusTarget(focusedHabitId);
 
   const habitsQuery = useQuery({
     queryKey: habitsQueryKey,
@@ -770,8 +777,10 @@ export function HabitsPage() {
                 key={habit.id}
                 className={cn(
                   "relative flex h-full flex-col overflow-hidden",
-                  visualState.cardClass
+                  visualState.cardClass,
+                  psycheFocusClass(focusedHabitId === habit.id)
                 )}
+                data-psyche-focus-id={habit.id}
               >
                 <div
                   className={cn(

@@ -21,8 +21,12 @@
   --forge-safe-area-bottom: env(safe-area-inset-bottom, 0px);
   --forge-safe-area-left: env(safe-area-inset-left, 0px);
   --forge-mobile-nav-height: 4.75rem;
-  --forge-mobile-nav-clearance: calc(var(--forge-mobile-nav-height) + var(--forge-safe-area-bottom) + 1rem);
-  --forge-mobile-create-bottom: calc(var(--forge-mobile-nav-clearance) + 0.75rem);
+  --forge-mobile-nav-clearance: calc(
+    var(--forge-mobile-nav-height) + var(--forge-safe-area-bottom) + 1rem
+  );
+  --forge-mobile-create-bottom: calc(
+    var(--forge-mobile-nav-clearance) + 0.75rem
+  );
   --primary: #c0c1ff;
   --secondary: #4edea3;
   --tertiary: #ffb95f;
@@ -33,23 +37,36 @@
   --surface-glass: rgba(10, 16, 30, 0.82);
   --surface-psyche: rgba(17, 29, 32, 0.94);
   --surface-psyche-high: rgba(24, 41, 45, 0.96);
-  --hero-gradient: linear-gradient(180deg, rgba(17, 24, 44, 0.92), rgba(11, 18, 34, 0.92));
-  --card-gradient: linear-gradient(180deg, rgba(24, 31, 50, 0.95), rgba(17, 24, 40, 0.92));
+  --forge-body-ambient-primary: rgba(192, 193, 255, 0.18);
+  --forge-body-ambient-secondary: rgba(78, 222, 163, 0.12);
+  --forge-body-gradient-start: #111a31;
+  --forge-body-gradient-end: #09101f;
+  --forge-body-text: #eef2ff;
+  --hero-gradient: linear-gradient(
+    180deg,
+    rgba(17, 24, 44, 0.92),
+    rgba(11, 18, 34, 0.92)
+  );
+  --card-gradient: linear-gradient(
+    180deg,
+    rgba(24, 31, 50, 0.95),
+    rgba(17, 24, 40, 0.92)
+  );
   --card-shadow: 0 24px 60px rgba(3, 8, 18, 0.28);
   --card-shadow-hover: 0 32px 80px rgba(3, 8, 18, 0.36);
-  --radius-card: 28px;
-  --radius-hero: 32px;
-  --radius-control: 18px;
+  --radius-card: 24px;
+  --radius-hero: 28px;
+  --radius-control: 16px;
   --outline-ghost: rgba(70, 69, 85, 0.15);
   --ease-standard: cubic-bezier(0.2, 0.8, 0.2, 1);
   --motion-fast: 160ms;
   --motion-medium: 240ms;
   --motion-slow: 360ms;
   --font-size-display-hero: clamp(2.5rem, 5vw, 4.75rem);
-  --font-size-display-section: clamp(1.85rem, 3vw, 3rem);
-  --font-size-title-lg: clamp(1.35rem, 2vw, 1.85rem);
-  --font-size-title-md: 1.2rem;
-  --font-size-body-lg: 1.0625rem;
+  --font-size-display-section: clamp(1.65rem, 2.4vw, 2.45rem);
+  --font-size-title-lg: clamp(1.15rem, 1.5vw, 1.55rem);
+  --font-size-title-md: 1.02rem;
+  --font-size-body-lg: 1rem;
   --font-size-body: 0.9375rem;
   --font-size-meta: 0.75rem;
   --font-size-label: 0.75rem;
@@ -75,28 +92,124 @@ body {
   font-size: var(--font-size-body);
   line-height: 1.6;
   background:
-    radial-gradient(circle at top left, rgba(192, 193, 255, 0.18), transparent 28%),
-    radial-gradient(circle at 82% 16%, rgba(78, 222, 163, 0.12), transparent 24%),
-    linear-gradient(180deg, #111a31 0%, var(--surface) 52%, #09101f 100%);
-  color: #eef2ff;
+    radial-gradient(
+      circle at top left,
+      var(--forge-body-ambient-primary),
+      transparent 28%
+    ),
+    radial-gradient(
+      circle at 82% 16%,
+      var(--forge-body-ambient-secondary),
+      transparent 24%
+    ),
+    linear-gradient(
+      180deg,
+      var(--forge-body-gradient-start) 0%,
+      var(--surface) 52%,
+      var(--forge-body-gradient-end) 100%
+    );
+  color: var(--forge-body-text);
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   overflow-x: clip;
 }
 
+body.theme-forge-obsidian {
+  color-scheme: dark;
+}
+
 body.theme-forge-solar {
-  --primary: #f3d08b;
-  --secondary: #72d7b5;
-  --tertiary: #ff9c73;
-  --surface: #16111a;
-  --surface-low: #221a27;
-  --surface-panel: #2c2233;
-  --surface-high: #372b40;
-  --surface-glass: rgba(22, 17, 26, 0.84);
-  --surface-psyche: rgba(35, 27, 31, 0.92);
-  --surface-psyche-high: rgba(48, 37, 41, 0.96);
-  --hero-gradient: linear-gradient(180deg, rgba(44, 34, 51, 0.94), rgba(29, 23, 36, 0.96));
-  --card-gradient: linear-gradient(180deg, rgba(44, 34, 51, 0.96), rgba(34, 26, 39, 0.94));
+  --primary: #cba6f7;
+  --secondary: #94e2d5;
+  --tertiary: #fab387;
+  --surface: #1e1e2e;
+  --surface-low: #181825;
+  --surface-panel: #313244;
+  --surface-high: #45475a;
+  --surface-glass: rgba(30, 30, 46, 0.84);
+  --surface-psyche: rgba(37, 38, 58, 0.94);
+  --surface-psyche-high: rgba(49, 50, 68, 0.96);
+  --forge-body-ambient-primary: rgba(203, 166, 247, 0.18);
+  --forge-body-ambient-secondary: rgba(148, 226, 213, 0.12);
+  --forge-body-gradient-start: #24273a;
+  --forge-body-gradient-end: #11111b;
+  --forge-body-text: #cdd6f4;
+  --hero-gradient: linear-gradient(
+    180deg,
+    rgba(69, 71, 90, 0.95),
+    rgba(30, 30, 46, 0.96)
+  );
+  --card-gradient: linear-gradient(
+    180deg,
+    rgba(69, 71, 90, 0.96),
+    rgba(24, 24, 37, 0.94)
+  );
+  --card-shadow: 0 24px 60px rgba(17, 17, 27, 0.32);
+  --card-shadow-hover: 0 32px 80px rgba(17, 17, 27, 0.4);
+}
+
+body.theme-forge-aurora {
+  --primary: #88c0d0;
+  --secondary: #a3be8c;
+  --tertiary: #ebcb8b;
+  --surface: #2e3440;
+  --surface-low: #242933;
+  --surface-panel: #3b4252;
+  --surface-high: #434c5e;
+  --surface-glass: rgba(46, 52, 64, 0.84);
+  --surface-psyche: rgba(52, 60, 74, 0.94);
+  --surface-psyche-high: rgba(67, 76, 94, 0.96);
+  --forge-body-ambient-primary: rgba(136, 192, 208, 0.18);
+  --forge-body-ambient-secondary: rgba(163, 190, 140, 0.12);
+  --forge-body-gradient-start: #3b4252;
+  --forge-body-gradient-end: #2e3440;
+  --forge-body-text: #eceff4;
+  --hero-gradient: linear-gradient(
+    180deg,
+    rgba(67, 76, 94, 0.95),
+    rgba(46, 52, 64, 0.96)
+  );
+  --card-gradient: linear-gradient(
+    180deg,
+    rgba(76, 86, 106, 0.96),
+    rgba(36, 41, 51, 0.94)
+  );
+  --card-shadow: 0 24px 60px rgba(33, 38, 46, 0.3);
+  --card-shadow-hover: 0 32px 80px rgba(33, 38, 46, 0.38);
+}
+
+body.theme-forge-ember {
+  --primary: #bd93f9;
+  --secondary: #8be9fd;
+  --tertiary: #ff79c6;
+  --surface: #282a36;
+  --surface-low: #21222c;
+  --surface-panel: #343746;
+  --surface-high: #424450;
+  --surface-glass: rgba(40, 42, 54, 0.84);
+  --surface-psyche: rgba(52, 55, 70, 0.94);
+  --surface-psyche-high: rgba(66, 68, 80, 0.96);
+  --forge-body-ambient-primary: rgba(189, 147, 249, 0.18);
+  --forge-body-ambient-secondary: rgba(139, 233, 253, 0.12);
+  --forge-body-gradient-start: #343746;
+  --forge-body-gradient-end: #191a21;
+  --forge-body-text: #f8f8f2;
+  --hero-gradient: linear-gradient(
+    180deg,
+    rgba(66, 68, 80, 0.95),
+    rgba(40, 42, 54, 0.96)
+  );
+  --card-gradient: linear-gradient(
+    180deg,
+    rgba(66, 68, 80, 0.96),
+    rgba(33, 34, 44, 0.94)
+  );
+  --card-shadow: 0 24px 60px rgba(25, 26, 33, 0.32);
+  --card-shadow-hover: 0 32px 80px rgba(25, 26, 33, 0.4);
+}
+
+body.theme-forge-custom {
+  color-scheme: dark;
 }
 
 .font-display {
@@ -172,7 +285,12 @@ body.theme-forge-solar {
   content: "";
   position: absolute;
   inset: 0;
-  background: linear-gradient(120deg, transparent 0%, rgba(255, 255, 255, 0.04) 50%, transparent 100%);
+  background: linear-gradient(
+    120deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.04) 50%,
+    transparent 100%
+  );
   opacity: 0;
   transform: translateX(-30%);
   animation: forge-sheen 2.8s var(--ease-standard) infinite;
@@ -180,8 +298,16 @@ body.theme-forge-solar {
 
 .ambient-glow {
   background:
-    radial-gradient(circle at top right, rgba(192, 193, 255, 0.2), transparent 46%),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.02));
+    radial-gradient(
+      circle at top right,
+      rgba(192, 193, 255, 0.2),
+      transparent 46%
+    ),
+    linear-gradient(
+      180deg,
+      rgba(255, 255, 255, 0.06),
+      rgba(255, 255, 255, 0.02)
+    );
 }
 
 .shell-scope-trigger {

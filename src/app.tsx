@@ -26,6 +26,11 @@ import { PsycheGoalMapPage } from "@/pages/psyche-goal-map-page";
 import { PsycheModeGuidePage } from "@/pages/psyche-mode-guide-page";
 import { PsycheModesPage } from "@/pages/psyche-modes-page";
 import { PsychePatternsPage } from "@/pages/psyche-patterns-page";
+import { PsycheQuestionnaireBuilderPage } from "@/pages/psyche-questionnaire-builder-page";
+import { PsycheQuestionnaireDetailPage } from "@/pages/psyche-questionnaire-detail-page";
+import { PsycheQuestionnaireRunDetailPage } from "@/pages/psyche-questionnaire-run-detail-page";
+import { PsycheQuestionnaireRunPage } from "@/pages/psyche-questionnaire-run-page";
+import { PsycheQuestionnairesPage } from "@/pages/psyche-questionnaires-page";
 import { PsycheReportDetailPage } from "@/pages/psyche-report-detail-page";
 import { PsycheReportsPage } from "@/pages/psyche-reports-page";
 import { PsycheSelfObservationPage } from "@/pages/psyche-self-observation-page";
@@ -36,6 +41,7 @@ import { SettingsAgentsPage } from "@/pages/settings-agents-page";
 import { SettingsBinPage } from "@/pages/settings-bin-page";
 import { SettingsCalendarPage } from "@/pages/settings-calendar-page";
 import { SettingsMobilePage } from "@/pages/settings-mobile-page";
+import { SettingsModelsPage } from "@/pages/settings-models-page";
 import { SettingsLogsPage } from "@/pages/settings-logs-page";
 import { SettingsRewardsPage } from "@/pages/settings-rewards-page";
 import { SettingsUsersPage } from "@/pages/settings-users-page";
@@ -47,6 +53,7 @@ import { WikiPage } from "@/pages/wiki-page";
 import { WikiIngestHistoryPage } from "@/pages/wiki-ingest-history-page";
 import { WikiEditorPage } from "@/pages/wiki-editor-page";
 import { WeeklyReviewPage } from "@/pages/weekly-review-page";
+import { WorkbenchPage } from "@/pages/workbench-page";
 
 function DiagnosticsBootstrap() {
   const location = useLocation();
@@ -87,7 +94,10 @@ function DiagnosticsBootstrap() {
     window.addEventListener("unhandledrejection", handleUnhandledRejection);
     return () => {
       window.removeEventListener("error", handleError);
-      window.removeEventListener("unhandledrejection", handleUnhandledRejection);
+      window.removeEventListener(
+        "unhandledrejection",
+        handleUnhandledRejection
+      );
     };
   }, [location.hash, location.pathname, location.search]);
 
@@ -125,31 +135,74 @@ export function App() {
           <Route path="projects" element={<ProjectsPage />} />
           <Route path="projects/:projectId" element={<ProjectDetailPage />} />
           <Route path="strategies" element={<StrategiesPage />} />
-          <Route path="strategies/:strategyId" element={<StrategyDetailPage />} />
+          <Route
+            path="strategies/:strategyId"
+            element={<StrategyDetailPage />}
+          />
           <Route path="preferences" element={<PreferencesPage />} />
-          <Route path="campaigns" element={<Navigate to="/projects" replace />} />
+          <Route
+            path="campaigns"
+            element={<Navigate to="/projects" replace />}
+          />
           <Route path="calendar" element={<CalendarPage />} />
           <Route path="sleep" element={<SleepPage />} />
           <Route path="sports" element={<SportsPage />} />
           <Route path="psyche" element={<PsychePage />} />
           <Route path="psyche/values" element={<PsycheValuesPage />} />
           <Route path="psyche/patterns" element={<PsychePatternsPage />} />
-          <Route path="psyche/self-observation" element={<PsycheSelfObservationPage />} />
+          <Route
+            path="psyche/questionnaires"
+            element={<PsycheQuestionnairesPage />}
+          />
+          <Route
+            path="psyche/questionnaires/new"
+            element={<PsycheQuestionnaireBuilderPage />}
+          />
+          <Route
+            path="psyche/questionnaires/:instrumentId"
+            element={<PsycheQuestionnaireDetailPage />}
+          />
+          <Route
+            path="psyche/questionnaires/:instrumentId/edit"
+            element={<PsycheQuestionnaireBuilderPage />}
+          />
+          <Route
+            path="psyche/questionnaires/:instrumentId/take"
+            element={<PsycheQuestionnaireRunPage />}
+          />
+          <Route
+            path="psyche/questionnaire-runs/:runId"
+            element={<PsycheQuestionnaireRunDetailPage />}
+          />
+          <Route
+            path="psyche/self-observation"
+            element={<PsycheSelfObservationPage />}
+          />
           <Route path="psyche/behaviors" element={<PsycheBehaviorsPage />} />
           <Route path="psyche/reports" element={<PsycheReportsPage />} />
-          <Route path="psyche/reports/:reportId" element={<PsycheReportDetailPage />} />
+          <Route
+            path="psyche/reports/:reportId"
+            element={<PsycheReportDetailPage />}
+          />
           <Route path="psyche/goal-map" element={<PsycheGoalMapPage />} />
-          <Route path="psyche/schemas-beliefs" element={<PsycheSchemasBeliefsPage />} />
+          <Route
+            path="psyche/schemas-beliefs"
+            element={<PsycheSchemasBeliefsPage />}
+          />
           <Route path="psyche/modes" element={<PsycheModesPage />} />
           <Route path="psyche/modes/guide" element={<PsycheModeGuidePage />} />
           <Route path="kanban" element={<KanbanPage />} />
           <Route path="notes" element={<NotesPage />} />
           <Route path="wiki" element={<WikiPage />} />
-          <Route path="wiki/ingest-history" element={<WikiIngestHistoryPage />} />
+          <Route
+            path="wiki/ingest-history"
+            element={<WikiIngestHistoryPage />}
+          />
           <Route path="wiki/page/:slug" element={<WikiPage />} />
           <Route path="wiki/new" element={<WikiEditorPage />} />
           <Route path="wiki/edit/:pageId" element={<WikiEditorPage />} />
           <Route path="today" element={<TodayPage />} />
+          <Route path="workbench" element={<WorkbenchPage />} />
           <Route path="activity" element={<ActivityPage />} />
           <Route path="insights" element={<InsightsPage />} />
           <Route path="review/weekly" element={<WeeklyReviewPage />} />
@@ -157,6 +210,7 @@ export function App() {
           <Route path="settings/users" element={<SettingsUsersPage />} />
           <Route path="settings/calendar" element={<SettingsCalendarPage />} />
           <Route path="settings/mobile" element={<SettingsMobilePage />} />
+          <Route path="settings/models" element={<SettingsModelsPage />} />
           <Route path="settings/agents" element={<SettingsAgentsPage />} />
           <Route path="settings/rewards" element={<SettingsRewardsPage />} />
           <Route path="settings/wiki" element={<SettingsWikiPage />} />
