@@ -138,6 +138,19 @@ import {
   updatePsycheValue,
   updateTriggerReport
 } from "./repositories/psyche.js";
+import {
+  cloneQuestionnaireInstrument,
+  completeQuestionnaireRun,
+  createQuestionnaireInstrument,
+  ensureQuestionnaireDraftVersion,
+  getQuestionnaireInstrumentDetail,
+  getQuestionnaireRunDetail,
+  listQuestionnaireInstruments,
+  publishQuestionnaireDraftVersion,
+  startQuestionnaireRun,
+  updateQuestionnaireDraftVersion,
+  updateQuestionnaireRun
+} from "./repositories/questionnaires.js";
 import { createProject, updateProject } from "./repositories/projects.js";
 import {
   createPreferenceCatalog,
@@ -312,6 +325,13 @@ import {
   updatePsycheValueSchema,
   updateTriggerReportSchema
 } from "./psyche-types.js";
+import {
+  createQuestionnaireInstrumentSchema,
+  publishQuestionnaireVersionSchema,
+  startQuestionnaireRunSchema,
+  updateQuestionnaireRunSchema,
+  updateQuestionnaireVersionSchema
+} from "./questionnaire-types.js";
 import {
   createPreferenceCatalogItemSchema,
   createPreferenceCatalogSchema,
@@ -2334,6 +2354,8 @@ const AGENT_ONBOARDING_CONVERSATION_RULES = [
   "Ask only for what is missing or unclear instead of walking the user through every optional field.",
   "Use a progression of concrete example or intent, working name, purpose or meaning, placement in Forge, operational details, and linked context.",
   "Ask one to three focused questions at a time. One is usually best when the user is uncertain or emotionally loaded.",
+  "If the user already answered the normal opening question, do not repeat it. Move to the next missing clarification.",
+  "Do not over-therapize logistical entities. For tasks, calendar events, work blocks, timeboxes, and task runs, one brief confirming sentence plus one question is usually enough.",
   "Before saving, briefly summarize the working formulation in the user's own language when that would reduce ambiguity.",
   "When updating an entity, start with what is changing, what should stay true, and what prompted the update now."
 ] as const;
@@ -2341,7 +2363,8 @@ const AGENT_ONBOARDING_CONVERSATION_RULES = [
 const AGENT_ONBOARDING_ENTITY_CONVERSATION_PLAYBOOKS = [
   {
     focus: "goal",
-    openingQuestion: "What direction are you trying to hold onto here?",
+    openingQuestion:
+      "What direction here feels important enough that you want to keep it in view?",
     coachingGoal:
       "Clarify the direction and why it matters, not just produce a title.",
     askSequence: [
@@ -2354,13 +2377,14 @@ const AGENT_ONBOARDING_ENTITY_CONVERSATION_PLAYBOOKS = [
   {
     focus: "project",
     openingQuestion:
-      "If this becomes a project, what would you want it to be called and what should it accomplish?",
+      "If this became a real project, what would you be trying to make true?",
     coachingGoal:
       "Turn an intention into a bounded workstream with a clear outcome.",
     askSequence: [
-      "Ask what this piece of work should be called.",
+      "Ask what this piece of work is trying to make true.",
       "Ask what outcome would make the project feel real or complete for now.",
       "Ask which goal it belongs under.",
+      "Land on a working name once the scope is clear.",
       "Clarify status, owner, and notes only after the scope is clear."
     ]
   },
@@ -2392,20 +2416,19 @@ const AGENT_ONBOARDING_ENTITY_CONVERSATION_PLAYBOOKS = [
   {
     focus: "habit",
     openingQuestion:
-      "What is the recurring behavior you want Forge to keep track of?",
+      "What recurring move are you trying to strengthen or loosen?",
     coachingGoal:
       "Define the recurring behavior and cadence clearly enough for honest later check-ins.",
     askSequence: [
       "Ask what the recurring behavior is in plain language.",
       "Ask whether doing it is aligned or a slip.",
-      "Ask about cadence and what counts as success in practice.",
+      "Ask about cadence and what counts as an honest check-in in practice.",
       "Ask about links only if they will help later review."
     ]
   },
   {
     focus: "note",
-    openingQuestion:
-      "What do you want this note to preserve, and what should it stay attached to?",
+    openingQuestion: "What feels important to preserve from this?",
     coachingGoal:
       "Preserve the useful context and link it to the right places without turning the note into a dump.",
     askSequence: [
@@ -2467,7 +2490,8 @@ const AGENT_ONBOARDING_ENTITY_CONVERSATION_PLAYBOOKS = [
   },
   {
     focus: "event_type",
-    openingQuestion: "What kind of incident should this category stand for?",
+    openingQuestion:
+      "When this kind of moment happens, what would you want to call it so future reports stay consistent?",
     coachingGoal:
       "Create a reusable incident category that will actually help future reports stay consistent.",
     askSequence: [
@@ -2479,7 +2503,7 @@ const AGENT_ONBOARDING_ENTITY_CONVERSATION_PLAYBOOKS = [
   {
     focus: "emotion_definition",
     openingQuestion:
-      "What emotion label do you want to keep reusable in Forge?",
+      "What emotion do you want Forge to help you name clearly and reuse later?",
     coachingGoal:
       "Create a reusable emotion label with enough clarity to use consistently later.",
     askSequence: [
@@ -2567,7 +2591,8 @@ const AGENT_ONBOARDING_PSYCHE_PLAYBOOKS = [
       "A pattern is usually the best Psyche container for functional analysis.",
       "If the user is describing one specific episode rather than a repeated loop, prefer a trigger report.",
       "Reflect before the next question, and avoid interrogating through the schema fields in order.",
-      "If the user asks to understand the loop first, do not lead with a finished working diagnosis or title before asking at least one clarifying question."
+      "If the user asks to understand the loop first, do not lead with a finished working diagnosis or title before asking at least one clarifying question.",
+      "Before you ask how to change the loop, ask what it is protecting, preventing, or managing for the user."
     ]
   },
   {
@@ -2610,7 +2635,8 @@ const AGENT_ONBOARDING_PSYCHE_PLAYBOOKS = [
     notes: [
       "Keep the user close to observable behavior rather than jumping straight to labels.",
       "When the behavior clearly belongs inside a larger loop, suggest linking or also mapping the related behavior_pattern.",
-      "If the user asks for understanding before storage, ask about the recent example and function of the move before classifying it."
+      "If the user asks for understanding before storage, ask about the recent example and function of the move before classifying it.",
+      "Ask what the move is trying to do for the user before moving into replacement planning."
     ]
   },
   {
@@ -2642,6 +2668,7 @@ const AGENT_ONBOARDING_PSYCHE_PLAYBOOKS = [
     ],
     exampleQuestions: [
       "If we turned that reaction into one sentence, what would it sound like?",
+      "When that reaction hits, what does it start telling you?",
       "Is it more of an always/never belief, or an if-then rule?",
       "How true does it feel right now from 0 to 100?",
       "What seems to support it, and what weakens it?",
@@ -2651,7 +2678,8 @@ const AGENT_ONBOARDING_PSYCHE_PLAYBOOKS = [
     notes: [
       "Schema catalog entries are reference concepts; belief_entry is the user-owned record.",
       "If no schema catalog match is known, omit schemaId rather than inventing one.",
-      "Do not argue the user out of the belief. Reflect it, understand its function, and then collaboratively test for flexibility."
+      "Do not argue the user out of the belief. Reflect it, understand its function, and then collaboratively test for flexibility.",
+      "When the wording is nearly there, ask whether it feels true enough before you move into confidence, evidence, or alternative-belief details."
     ]
   },
   {
@@ -2686,6 +2714,7 @@ const AGENT_ONBOARDING_PSYCHE_PLAYBOOKS = [
     ],
     exampleQuestions: [
       "When this part shows up, what is it like from the inside?",
+      "When this part takes over, what is it trying to protect?",
       "What kind of part does this feel like: coping, child, critic-parent, healthy-adult, or happy-child?",
       "If you gave this mode a name, what would it be?",
       "What is it afraid would happen if it stopped doing its job?",
@@ -2716,6 +2745,7 @@ const AGENT_ONBOARDING_PSYCHE_PLAYBOOKS = [
     highValueOptionalFields: [],
     exampleQuestions: [
       "What just happened that brought this up right now?",
+      "What just happened before this part came online?",
       "If this part had a voice, what would it be saying?",
       "What is it trying to protect you from?",
       "What does it seem to need from you or from someone else?",
@@ -4859,6 +4889,142 @@ export async function buildServer(
       request.query as Record<string, unknown>
     );
     return { overview: getPsycheOverview(userIds) };
+  });
+  app.get("/api/v1/psyche/questionnaires", async (request) => {
+    requirePsycheScopedAccess(
+      request.headers as Record<string, unknown>,
+      ["psyche.read"],
+      { route: "/api/v1/psyche/questionnaires" }
+    );
+    const userIds = resolveScopedUserIds(
+      request.query as Record<string, unknown>
+    );
+    return listQuestionnaireInstruments({ userIds });
+  });
+  app.post("/api/v1/psyche/questionnaires", async (request, reply) => {
+    const auth = requirePsycheScopedAccess(
+      request.headers as Record<string, unknown>,
+      ["psyche.write"],
+      { route: "/api/v1/psyche/questionnaires" }
+    );
+    const result = createQuestionnaireInstrument(
+      createQuestionnaireInstrumentSchema.parse(request.body ?? {}),
+      toActivityContext(auth)
+    );
+    reply.code(201);
+    return result;
+  });
+  app.get("/api/v1/psyche/questionnaires/:id", async (request) => {
+    requirePsycheScopedAccess(
+      request.headers as Record<string, unknown>,
+      ["psyche.read"],
+      { route: "/api/v1/psyche/questionnaires/:id" }
+    );
+    const { id } = request.params as { id: string };
+    const userIds = resolveScopedUserIds(
+      request.query as Record<string, unknown>
+    );
+    return getQuestionnaireInstrumentDetail(id, { userIds });
+  });
+  app.post("/api/v1/psyche/questionnaires/:id/clone", async (request, reply) => {
+    const auth = requirePsycheScopedAccess(
+      request.headers as Record<string, unknown>,
+      ["psyche.write"],
+      { route: "/api/v1/psyche/questionnaires/:id/clone" }
+    );
+    const { id } = request.params as { id: string };
+    const body = (request.body ?? {}) as Record<string, unknown>;
+    const userId =
+      typeof body.userId === "string" && body.userId.trim().length > 0
+        ? body.userId.trim()
+        : null;
+    const result = cloneQuestionnaireInstrument(id, { userId }, toActivityContext(auth));
+    reply.code(201);
+    return result;
+  });
+  app.post("/api/v1/psyche/questionnaires/:id/draft", async (request) => {
+    const auth = requirePsycheScopedAccess(
+      request.headers as Record<string, unknown>,
+      ["psyche.write"],
+      { route: "/api/v1/psyche/questionnaires/:id/draft" }
+    );
+    const { id } = request.params as { id: string };
+    return ensureQuestionnaireDraftVersion(id, toActivityContext(auth));
+  });
+  app.patch("/api/v1/psyche/questionnaires/:id/draft", async (request) => {
+    const auth = requirePsycheScopedAccess(
+      request.headers as Record<string, unknown>,
+      ["psyche.write"],
+      { route: "/api/v1/psyche/questionnaires/:id/draft" }
+    );
+    const { id } = request.params as { id: string };
+    return updateQuestionnaireDraftVersion(
+      id,
+      updateQuestionnaireVersionSchema.parse(request.body ?? {}),
+      toActivityContext(auth)
+    );
+  });
+  app.post("/api/v1/psyche/questionnaires/:id/publish", async (request) => {
+    const auth = requirePsycheScopedAccess(
+      request.headers as Record<string, unknown>,
+      ["psyche.write"],
+      { route: "/api/v1/psyche/questionnaires/:id/publish" }
+    );
+    const { id } = request.params as { id: string };
+    return publishQuestionnaireDraftVersion(
+      id,
+      publishQuestionnaireVersionSchema.parse(request.body ?? {}),
+      toActivityContext(auth)
+    );
+  });
+  app.post("/api/v1/psyche/questionnaires/:id/runs", async (request, reply) => {
+    const auth = requirePsycheScopedAccess(
+      request.headers as Record<string, unknown>,
+      ["psyche.write", "psyche.read"],
+      { route: "/api/v1/psyche/questionnaires/:id/runs" }
+    );
+    const { id } = request.params as { id: string };
+    const result = startQuestionnaireRun(
+      id,
+      startQuestionnaireRunSchema.parse(request.body ?? {}),
+      toActivityContext(auth)
+    );
+    reply.code(201);
+    return result;
+  });
+  app.get("/api/v1/psyche/questionnaire-runs/:id", async (request) => {
+    requirePsycheScopedAccess(
+      request.headers as Record<string, unknown>,
+      ["psyche.read"],
+      { route: "/api/v1/psyche/questionnaire-runs/:id" }
+    );
+    const { id } = request.params as { id: string };
+    const userIds = resolveScopedUserIds(
+      request.query as Record<string, unknown>
+    );
+    return getQuestionnaireRunDetail(id, { userIds });
+  });
+  app.patch("/api/v1/psyche/questionnaire-runs/:id", async (request) => {
+    const auth = requirePsycheScopedAccess(
+      request.headers as Record<string, unknown>,
+      ["psyche.write"],
+      { route: "/api/v1/psyche/questionnaire-runs/:id" }
+    );
+    const { id } = request.params as { id: string };
+    return updateQuestionnaireRun(
+      id,
+      updateQuestionnaireRunSchema.parse(request.body ?? {}),
+      toActivityContext(auth)
+    );
+  });
+  app.post("/api/v1/psyche/questionnaire-runs/:id/complete", async (request) => {
+    const auth = requirePsycheScopedAccess(
+      request.headers as Record<string, unknown>,
+      ["psyche.write"],
+      { route: "/api/v1/psyche/questionnaire-runs/:id/complete" }
+    );
+    const { id } = request.params as { id: string };
+    return completeQuestionnaireRun(id, toActivityContext(auth));
   });
   app.get("/api/v1/psyche/self-observation/calendar", async (request) => {
     requirePsycheScopedAccess(
