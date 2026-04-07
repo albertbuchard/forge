@@ -3,11 +3,15 @@ import {
   useMemo,
   useRef,
   useState,
-  type ComponentType,
   type ReactNode
 } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import GridLayoutModule from "react-grid-layout";
+import {
+  Responsive as ResponsiveGridLayout,
+  type Layout as GridLayout,
+  type LayoutItem as GridLayoutItem,
+  type ResponsiveLayouts as GridLayoutMap
+} from "react-grid-layout/legacy";
 import "react-grid-layout/css/styles.css";
 import "react-resizable/css/styles.css";
 import {
@@ -42,26 +46,6 @@ import type {
 } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
-type GridLayoutItem = {
-  i: string;
-  x: number;
-  y: number;
-  w: number;
-  h: number;
-  minW?: number;
-  maxW?: number;
-  minH?: number;
-  maxH?: number;
-};
-
-type GridLayoutMap = Record<string, GridLayoutItem[]>;
-
-const ReactGridLayoutCompat = GridLayoutModule as unknown as {
-  Responsive: ComponentType<Record<string, unknown>>;
-};
-const ResponsiveGridLayout = ReactGridLayoutCompat.Responsive as ComponentType<
-  Record<string, unknown>
->;
 const SAVE_DEBOUNCE_MS = 500;
 
 export type SurfaceWidgetDefinition = SurfaceWidgetLayoutDefinition & {
@@ -95,11 +79,11 @@ function toLayouts(input: SurfaceLayoutBreakpoints): GridLayoutMap {
 }
 
 function fromLayouts(
-  layouts: GridLayoutMap,
+  layouts: Partial<GridLayoutMap>,
   fallback: SurfaceLayoutBreakpoints
 ) {
   const normalize = (
-    items: GridLayoutItem[] | undefined,
+    items: readonly GridLayoutItem[] | undefined,
     breakpoint: SurfaceBreakpointKey
   ): SurfaceLayoutBreakpointItem[] =>
     (items ?? fallback[breakpoint]).map((item) => ({
@@ -452,8 +436,8 @@ export function EditableSurface({
   }
 
   function handleLayoutChange(
-    _currentLayout: GridLayoutItem[],
-    allLayouts: GridLayoutMap
+    _currentLayout: GridLayout,
+    allLayouts: Partial<GridLayoutMap>
   ) {
     setLayoutPayload((current) => ({
       ...current,
