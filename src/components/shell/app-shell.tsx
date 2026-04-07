@@ -746,10 +746,31 @@ function MobileBottomNav({
   const [moreOpen, setMoreOpen] = useState(false);
   const { t } = useI18n();
   const location = useLocation();
+  const holdTimerRef = useRef<number | null>(null);
+  const holdTriggeredRef = useRef(false);
   const visibleRoutes = routes.slice(0, 4);
   const moreRoutes = NAV_ROUTE_REGISTRY.filter(
     (route) => !visibleRoutes.some((entry) => entry.id === route.id)
   );
+
+  function startHold() {
+    holdTriggeredRef.current = false;
+    if (holdTimerRef.current !== null) {
+      window.clearTimeout(holdTimerRef.current);
+    }
+    holdTimerRef.current = window.setTimeout(() => {
+      holdTriggeredRef.current = true;
+      setMoreOpen(false);
+      onOpenEditor?.();
+    }, 520);
+  }
+
+  function endHold() {
+    if (holdTimerRef.current !== null) {
+      window.clearTimeout(holdTimerRef.current);
+      holdTimerRef.current = null;
+    }
+  }
 
   return (
     <>
@@ -770,6 +791,15 @@ function MobileBottomNav({
             <NavLink
               key={route.id}
               to={route.to}
+              onPointerDown={startHold}
+              onPointerUp={endHold}
+              onPointerLeave={endHold}
+              onClick={(event) => {
+                if (holdTriggeredRef.current) {
+                  event.preventDefault();
+                  holdTriggeredRef.current = false;
+                }
+              }}
               className={({ isActive }) =>
                 `flex min-h-11 flex-col items-center justify-center gap-1 rounded-2xl px-2 py-2 text-[12px] ${
                   isActive || routeMatches(location.pathname, route)
@@ -785,7 +815,16 @@ function MobileBottomNav({
           <button
             type="button"
             className="flex min-h-11 flex-col items-center justify-center gap-1 rounded-2xl px-2 py-2 text-[12px] text-white/55"
-            onClick={() => setMoreOpen(true)}
+            onClick={() => {
+              if (holdTriggeredRef.current) {
+                holdTriggeredRef.current = false;
+                return;
+              }
+              setMoreOpen(true);
+            }}
+            onPointerDown={startHold}
+            onPointerUp={endHold}
+            onPointerLeave={endHold}
           >
             <Settings className="size-4" />
             <span>{t("common.shell.more")}</span>
@@ -873,6 +912,63 @@ function ShellNavEditor({
     (route) =>
       !desktopNavIds.includes(route.id) || !mobileNavIds.includes(route.id)
   );
+  const desktopSlotCount = 10;
+  const mobileSlotCount = 4;
+
+  function renderSlots(
+    ids: string[],
+    slotCount: number,
+    onChange: (ids: string[]) => void,
+    minimum: number,
+    prefix: string
+  ) {
+    return Array.from({ length: slotCount }, (_, index) => {
+      const id = ids[index] ?? null;
+      const route = id
+        ? (NAV_ROUTE_REGISTRY.find((entry) => entry.id === id) ?? null)
+        : null;
+
+      if (!route) {
+        return (
+          <div
+            key={`${prefix}-empty-${index}`}
+            className="flex min-h-16 items-center justify-between gap-3 rounded-[20px] border border-dashed border-white/12 bg-white/[0.02] px-4 py-3"
+          >
+            <div>
+              <div className="text-sm text-white/44">Empty slot</div>
+              <div className="text-[12px] text-white/30">
+                Add a route below to fill this slot
+              </div>
+            </div>
+            <div className="rounded-full bg-white/[0.05] px-2.5 py-1 text-[11px] text-white/46">
+              Slot {index + 1}
+            </div>
+          </div>
+        );
+      }
+
+      return (
+        <div
+          key={`${prefix}-${route.id}`}
+          className="flex min-h-16 items-center justify-between gap-3 rounded-[20px] bg-white/[0.04] px-4 py-3"
+        >
+          <span className="flex items-center gap-3">
+            <route.icon className="size-4 text-[var(--primary)]" />
+            <span className="text-sm text-white">
+              {getRouteLabel(route, t)}
+            </span>
+          </span>
+          <button
+            type="button"
+            className="rounded-full bg-white/[0.05] px-3 py-1.5 text-[12px] text-white/70"
+            onClick={() => removeFromList(ids, route.id, onChange, minimum)}
+          >
+            Remove
+          </button>
+        </div>
+      );
+    });
+  }
 
   function addToList(
     current: string[],
@@ -914,33 +1010,13 @@ function ShellNavEditor({
             Desktop sidebar
           </div>
           <div className="grid gap-2">
-            {desktopRoutes.map((route) => (
-              <div
-                key={`desktop-${route.id}`}
-                className="flex items-center justify-between gap-3 rounded-[20px] bg-white/[0.04] px-4 py-3"
-              >
-                <span className="flex items-center gap-3">
-                  <route.icon className="size-4 text-[var(--primary)]" />
-                  <span className="text-sm text-white">
-                    {getRouteLabel(route, t)}
-                  </span>
-                </span>
-                <button
-                  type="button"
-                  className="rounded-full bg-white/[0.05] px-3 py-1.5 text-[12px] text-white/70"
-                  onClick={() =>
-                    removeFromList(
-                      desktopNavIds,
-                      route.id,
-                      onDesktopNavIdsChange,
-                      4
-                    )
-                  }
-                >
-                  Remove
-                </button>
-              </div>
-            ))}
+            {renderSlots(
+              desktopNavIds,
+              desktopSlotCount,
+              onDesktopNavIdsChange,
+              4,
+              "desktop"
+            )}
           </div>
         </div>
         <div className="grid gap-3">
@@ -948,33 +1024,13 @@ function ShellNavEditor({
             Mobile bar
           </div>
           <div className="grid gap-2">
-            {mobileRoutes.map((route) => (
-              <div
-                key={`mobile-${route.id}`}
-                className="flex items-center justify-between gap-3 rounded-[20px] bg-white/[0.04] px-4 py-3"
-              >
-                <span className="flex items-center gap-3">
-                  <route.icon className="size-4 text-[var(--primary)]" />
-                  <span className="text-sm text-white">
-                    {getRouteLabel(route, t)}
-                  </span>
-                </span>
-                <button
-                  type="button"
-                  className="rounded-full bg-white/[0.05] px-3 py-1.5 text-[12px] text-white/70"
-                  onClick={() =>
-                    removeFromList(
-                      mobileNavIds,
-                      route.id,
-                      onMobileNavIdsChange,
-                      2
-                    )
-                  }
-                >
-                  Remove
-                </button>
-              </div>
-            ))}
+            {renderSlots(
+              mobileNavIds,
+              mobileSlotCount,
+              onMobileNavIdsChange,
+              2,
+              "mobile"
+            )}
           </div>
         </div>
         <div className="grid gap-3">
