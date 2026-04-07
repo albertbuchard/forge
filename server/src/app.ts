@@ -8557,8 +8557,9 @@ export async function buildServer(
     requireScopedAccess(request.headers as Record<string, unknown>, ["write"], {
       route: "/api/v1/surfaces/:surfaceId/ai-processors"
     });
+    const body = (request.body ?? {}) as Record<string, unknown>;
     const processor = createAiProcessor({
-      ...createAiProcessorSchema.parse(request.body ?? {}),
+      ...body,
       surfaceId: (request.params as { surfaceId: string }).surfaceId
     });
     reply.code(201);
