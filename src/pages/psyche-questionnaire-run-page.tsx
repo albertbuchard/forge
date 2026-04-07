@@ -12,6 +12,7 @@ import {
   patchQuestionnaireRun,
   startQuestionnaireRun
 } from "@/lib/api";
+import { getQuestionnaireVisibilityState } from "@/lib/questionnaire-flow";
 import type {
   QuestionnaireAnswerInput,
   QuestionnaireItem,
@@ -89,19 +90,50 @@ export function PsycheQuestionnaireRunPage() {
     [runDetail]
   );
 
-  const currentIndex = runDetail?.run.progressIndex ?? 0;
   const sections = runDetail?.version.definition.sections ?? [];
   const items = runDetail?.version.definition.items ?? [];
-  const currentSection =
-    sections[Math.min(currentIndex, Math.max(0, sections.length - 1))] ?? null;
+  const visibility = useMemo(
+    () =>
+      runDetail
+        ? getQuestionnaireVisibilityState(runDetail.version.definition, runDetail.answers)
+        : {
+            visibleItemIds: new Set<string>(),
+            visibleSectionIds: new Set<string>(),
+            visibleItemIdsBySection: new Map<string, string[]>()
+          },
+    [runDetail]
+  );
+  const visibleItems = useMemo(
+    () => items.filter((item) => visibility.visibleItemIds.has(item.id)),
+    [items, visibility]
+  );
+  const visibleSections = useMemo(
+    () =>
+      sections
+        .filter((section) => visibility.visibleSectionIds.has(section.id))
+        .map((section) => ({
+          ...section,
+          itemIds: visibility.visibleItemIdsBySection.get(section.id) ?? []
+        })),
+    [sections, visibility]
+  );
+  const progressCount =
+    runDetail?.version.definition.presentationMode === "single_question"
+      ? visibleItems.length
+      : visibleSections.length;
+  const currentIndex =
+    progressCount > 0
+      ? Math.min(runDetail?.run.progressIndex ?? 0, progressCount - 1)
+      : 0;
+  const currentSection = visibleSections[currentIndex] ?? null;
   const currentItem =
     runDetail?.version.definition.presentationMode === "single_question"
-      ? items[Math.min(currentIndex, Math.max(0, items.length - 1))] ?? null
+      ? visibleItems[currentIndex] ?? null
       : null;
   const requiredAnswered =
-    runDetail?.version.definition.items.every(
+    visibleItems.every(
       (item) => !item.required || answerMap.has(item.id)
-    ) ?? false;
+    );
 
   const persistProgressOnly = async (progressIndex: number) => {
     if (!runDetail) {
@@ -182,10 +214,6 @@ export function PsycheQuestionnaireRunPage() {
     );
   }
 
-  const progressCount =
-    runDetail.version.definition.presentationMode === "single_question"
-      ? runDetail.version.definition.items.length
-      : runDetail.version.definition.sections.length;
   const progress = progressCount > 0 ? ((currentIndex + 1) / progressCount) * 100 : 0;
 
   return (
@@ -274,11 +302,11 @@ export function PsycheQuestionnaireRunPage() {
                   Previous
                 </Button>
 
-                {currentIndex < items.length - 1 ? (
+                {currentIndex < visibleItems.length - 1 ? (
                   <Button
                     onClick={() =>
                       void persistProgressOnly(
-                        Math.min(items.length - 1, currentIndex + 1)
+                        Math.min(visibleItems.length - 1, currentIndex + 1)
                       )
                     }
                   >
@@ -317,7 +345,7 @@ export function PsycheQuestionnaireRunPage() {
 
               <div className="mt-6 grid gap-4">
                 {currentSection.itemIds.map((itemId) => {
-                  const item = items.find((entry) => entry.id === itemId);
+                  const item = visibleItems.find((entry) => entry.id === itemId);
                   if (!item) {
                     return null;
                   }
@@ -366,11 +394,11 @@ export function PsycheQuestionnaireRunPage() {
                   Previous section
                 </Button>
 
-                {currentIndex < sections.length - 1 ? (
+                {currentIndex < visibleSections.length - 1 ? (
                   <Button
                     onClick={() =>
                       void persistProgressOnly(
-                        Math.min(sections.length - 1, currentIndex + 1)
+                        Math.min(visibleSections.length - 1, currentIndex + 1)
                       )
                     }
                   >

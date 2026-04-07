@@ -14,6 +14,8 @@ intentional while still gathering enough structure to store the right record.
 - Ask one to three focused questions at a time. One is usually best when the user is
   unsure or emotionally loaded.
 - Reflect briefly before the next question when the user gives nuance that matters.
+- Especially for goals, habits, notes, and updates, reflect what the user is trying to
+  preserve, change, or make true before you ask for structure.
 - For emotionally meaningful planning records such as goals, habits, and notes, reflect
   the meaning first and then ask for the structure.
 - Do not read schema fields out loud unless the user explicitly wants a mechanical
@@ -23,6 +25,8 @@ intentional while still gathering enough structure to store the right record.
   in Forge -> operational details -> linked context.
 - If the user already gave a usable title, timing, or parent context, do not ask for it
   again just because the schema has that field.
+- If the user already answered the usual opening question, do not repeat the stock
+  opener. Move straight to the next missing clarification.
 - When the user says "save something about..." and the record is still fuzzy, help them
   sharpen what they are trying to preserve before you ask for the final Forge shape.
 - When the meaning is clearer than the wording, offer a tentative title or summary
@@ -37,13 +41,19 @@ intentional while still gathering enough structure to store the right record.
 ## Question design rules
 
 - Prefer one clean question over a stacked sentence with multiple asks.
+- For emotionally meaningful records, a strong turn is often:
+  short reflection -> one orienting question.
 - For straightforward logistical entities such as tasks, calendar events, work blocks,
   timeboxes, and task runs, use the fast path: confirm what is already clear and ask
   for only the one missing operational detail.
+- Do not over-warm or over-therapize logistical records. For those flows, one brief
+  confirming sentence plus one question is usually enough.
 - When you need two details, ask for the more meaning-bearing one first.
 - If the user sounds uncertain, ask for an example before an abstraction.
 - If the user sounds clear and decisive, confirm the working formulation and move to the
   one missing structural detail.
+- Once the record is clear enough to name, stop exploring broadly. Confirm the working
+  formulation and ask only for the final missing operational detail.
 - A good next question usually clarifies one of these:
   what this is,
   why it matters,
@@ -86,7 +96,7 @@ Ready to save when:
 
 Preferred opening question:
 
-- "What direction are you trying to hold onto here, in a way you would want future-you to keep seeing?"
+- "What direction here feels important enough that you want to keep it in view?"
 
 ## Project
 
@@ -94,10 +104,11 @@ Aim: turn an intention into a bounded workstream with a clear outcome.
 
 Arc:
 
-1. Ask what this piece of work should be called.
+1. Ask what this piece of work is trying to make true.
 2. Ask what outcome would make the project feel real or complete for now.
 3. Ask which goal it belongs under.
-4. Clarify status, owner, and notes only after the scope is clear.
+4. Land on a working name once the scope is clear.
+5. Clarify status, owner, and notes only after the scope is clear.
 
 Ready to save when:
 
@@ -107,7 +118,7 @@ Ready to save when:
 
 Preferred opening question:
 
-- "If this becomes a real project in Forge, what outcome would make it feel genuinely underway or complete?"
+- "If this became a real project, what would you be trying to make true?"
 
 ## Strategy
 
@@ -159,7 +170,7 @@ Arc:
 
 1. Ask what the recurring behavior is in plain language.
 2. Ask whether doing it is aligned or a slip.
-3. Ask about cadence and what counts as success in practice.
+3. Ask about cadence and what counts as an honest check-in in practice.
 4. Ask about links to goals, tasks, or Psyche entities only if that would help later review.
 
 Ready to save when:
@@ -170,7 +181,7 @@ Ready to save when:
 
 Preferred opening question:
 
-- "What is the recurring behavior you want Forge to keep track of?"
+- "What recurring move are you trying to strengthen or loosen?"
 
 ## Note
 
@@ -315,7 +326,7 @@ Ready to save when:
 
 Preferred opening question:
 
-- "What kind of incident should this category stand for?"
+- "When this kind of moment happens, what would you want to call it so future reports stay consistent?"
 
 ## Emotion Definition
 
@@ -334,4 +345,4 @@ Ready to save when:
 
 Preferred opening question:
 
-- "What emotion label do you want to keep reusable in Forge?"
+- "What emotion do you want Forge to help you name clearly and reuse later?"

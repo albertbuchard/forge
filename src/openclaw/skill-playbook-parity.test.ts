@@ -71,10 +71,26 @@ describe("forge skill playbook parity", () => {
     expect(entityPlaybook).toMatch(/Update loop/i);
     expect(entityPlaybook).toMatch(/Task Run/i);
     expect(entityPlaybook).toMatch(/offer a tentative title or summary/i);
+    expect(entityPlaybook).toMatch(/reflect what the user is trying to[\s\S]*preserve, change, or make true/i);
+    expect(entityPlaybook).toMatch(/short reflection -> one orienting question/i);
+    expect(entityPlaybook).toMatch(/what would you be trying to make true/i);
+    expect(entityPlaybook).toMatch(/already answered the usual opening question/i);
+    expect(entityPlaybook).toMatch(/stop exploring broadly/i);
+    expect(entityPlaybook).toMatch(/Do not over-warm or over-therapize logistical records/i);
 
     expect(psychePlaybook).toMatch(/Ask only one lane at a time/i);
     expect(psychePlaybook).toMatch(/Follow-up rhythm/i);
     expect(psychePlaybook).toMatch(/Before the next question, reflect back what you just heard/i);
     expect(psychePlaybook).toMatch(/formulation work/i);
+    expect(psychePlaybook).toMatch(/what the experience is[\s\S]*trying to[\s\S]*protect, prevent, or hold onto/i);
+    expect(psychePlaybook).toMatch(/choose the one that most[\s\S]*improves understanding/i);
+    expect(psychePlaybook).toMatch(/feels true enough/i);
+    expect(psychePlaybook).toMatch(/accuracy and steadiness/i);
+    expect(psychePlaybook).toMatch(/What happened the last time this pattern showed up/i);
+    expect(psychePlaybook).toMatch(/What did you find yourself doing the last time this move showed up/i);
+    expect(psychePlaybook).toMatch(/When that reaction hits, what does it start telling you/i);
+    expect(psychePlaybook).not.toMatch(/disappearing like that/i);
+    expect(psychePlaybook).not.toMatch(/send the long message/i);
+    expect(psychePlaybook).not.toMatch(/polished and unreachable/i);
   });
 });

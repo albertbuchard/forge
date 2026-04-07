@@ -49,6 +49,7 @@ function item(
     description: "",
     helperText: "",
     required: true,
+    visibility: null,
     tags: [],
     options,
     ...extra
@@ -76,6 +77,7 @@ function buildDefinition(options: {
       id: section.id,
       title: section.title,
       description: section.description ?? "",
+      visibility: null,
       itemIds: section.itemIds
     })),
     pageSize: options.pageSize ?? null
@@ -345,47 +347,56 @@ const AUDIT_ITEMS = [
   item(
     "audit_2",
     "How many drinks containing alcohol do you have on a typical day when you are drinking?",
-    AUDIT_QUANTITY_OPTIONS
+    AUDIT_QUANTITY_OPTIONS,
+    { visibility: { script: "audit_1 > 0" } }
   ),
   item(
     "audit_3",
     "How often do you have six or more drinks on one occasion?",
-    AUDIT_CONSEQUENCE_OPTIONS
+    AUDIT_CONSEQUENCE_OPTIONS,
+    { visibility: { script: "audit_1 > 0" } }
   ),
   item(
     "audit_4",
     "During the last year, how often have you found that you were not able to stop drinking once you had started?",
-    AUDIT_CONSEQUENCE_OPTIONS
+    AUDIT_CONSEQUENCE_OPTIONS,
+    { visibility: { script: "audit_1 > 0" } }
   ),
   item(
     "audit_5",
     "During the last year, how often have you failed to do what was normally expected from you because of drinking?",
-    AUDIT_CONSEQUENCE_OPTIONS
+    AUDIT_CONSEQUENCE_OPTIONS,
+    { visibility: { script: "audit_1 > 0" } }
   ),
   item(
     "audit_6",
     "During the last year, how often have you needed a first drink in the morning to get yourself going after a heavy drinking session?",
-    AUDIT_CONSEQUENCE_OPTIONS
+    AUDIT_CONSEQUENCE_OPTIONS,
+    { visibility: { script: "audit_1 > 0" } }
   ),
   item(
     "audit_7",
     "During the last year, how often have you had a feeling of guilt or remorse after drinking?",
-    AUDIT_CONSEQUENCE_OPTIONS
+    AUDIT_CONSEQUENCE_OPTIONS,
+    { visibility: { script: "audit_1 > 0" } }
   ),
   item(
     "audit_8",
     "During the last year, how often have you been unable to remember what happened the night before because of your drinking?",
-    AUDIT_CONSEQUENCE_OPTIONS
+    AUDIT_CONSEQUENCE_OPTIONS,
+    { visibility: { script: "audit_1 > 0" } }
   ),
   item(
     "audit_9",
     "Have you or someone else been injured because of your drinking?",
-    AUDIT_REFERRAL_OPTIONS
+    AUDIT_REFERRAL_OPTIONS,
+    { visibility: { script: "audit_1 > 0" } }
   ),
   item(
     "audit_10",
     "Has a relative or friend or a doctor or another health worker been concerned about your drinking or suggested you cut down?",
-    AUDIT_REFERRAL_OPTIONS
+    AUDIT_REFERRAL_OPTIONS,
+    { visibility: { script: "audit_1 > 0" } }
   )
 ];
 

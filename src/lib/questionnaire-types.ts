@@ -27,6 +27,10 @@ export interface QuestionnaireOption {
   description: string;
 }
 
+export interface QuestionnaireFlowRule {
+  script: string;
+}
+
 export interface QuestionnaireItem {
   id: string;
   prompt: string;
@@ -34,6 +38,7 @@ export interface QuestionnaireItem {
   description: string;
   helperText: string;
   required: boolean;
+  visibility: QuestionnaireFlowRule | null;
   options: QuestionnaireOption[];
   tags: string[];
 }
@@ -42,6 +47,7 @@ export interface QuestionnaireSection {
   id: string;
   title: string;
   description: string;
+  visibility: QuestionnaireFlowRule | null;
   itemIds: string[];
 }
 

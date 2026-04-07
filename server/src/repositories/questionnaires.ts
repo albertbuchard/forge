@@ -3,6 +3,10 @@ import { getDatabase, runInTransaction } from "../db.js";
 import { HttpError } from "../errors.js";
 import { getQuestionnaireSeeds } from "../questionnaire-seeds.js";
 import {
+  getQuestionnaireVisibilityState,
+  validateQuestionnaireFlow
+} from "../questionnaire-flow.js";
+import {
   createQuestionnaireInstrumentSchema,
   publishQuestionnaireVersionSchema,
   questionnaireDefinitionSchema,
@@ -29,6 +33,7 @@ import {
   type UpdateQuestionnaireVersionInput
 } from "../questionnaire-types.js";
 import { recordActivityEvent } from "./activity-events.js";
+import { createNote } from "./notes.js";
 import type { ActivitySource } from "../types.js";
 
 type QuestionnaireContext = {
@@ -117,6 +122,7 @@ type HistoryRow = {
 };
 
 const DEFAULT_CUSTOM_USER_ID = "user_operator";
+const SELF_OBSERVATION_TAG = "Self-observation";
 
 function nowIso() {
   return new Date().toISOString();
@@ -340,6 +346,10 @@ function mapSummary(row: InstrumentRow, versions: QuestionnaireVersion[], userId
     createdAt: row.created_at,
     updatedAt: row.updated_at
   });
+}
+
+function assertValidQuestionnaireDefinition(definition: QuestionnaireDefinition) {
+  validateQuestionnaireFlow(definition);
 }
 
 function getVersionRowsForInstrument(instrumentId: string) {
@@ -594,12 +604,15 @@ function collectDependentItemIds(expression: QuestionnaireScoreExpression): stri
 
 function resolveMissingPolicy(
   definition: QuestionnaireScoreDefinition,
-  answerMap: Map<string, number | null>
+  answerMap: Map<string, number | null>,
+  visibleItemIds?: Set<string>
 ) {
   const policy = definition.missingPolicy ?? { mode: "require_all" as const };
-  const itemIds = definition.dependsOnItemIds.length > 0
-    ? definition.dependsOnItemIds
-    : Array.from(new Set(collectDependentItemIds(definition.expression)));
+  const itemIds = (
+    definition.dependsOnItemIds.length > 0
+      ? definition.dependsOnItemIds
+      : Array.from(new Set(collectDependentItemIds(definition.expression)))
+  ).filter((itemId) => !visibleItemIds || visibleItemIds.has(itemId));
 
   if (itemIds.length === 0) {
     return false;
@@ -638,19 +651,88 @@ function resolveBand(
   };
 }
 
+function formatScoreForNote(score: {
+  label: string;
+  valueNumeric: number | null;
+  valueText: string | null;
+  bandLabel: string;
+}) {
+  const value =
+    score.valueText ??
+    (typeof score.valueNumeric === "number" ? String(score.valueNumeric) : "Not scored");
+  return score.bandLabel ? `${value} (${score.bandLabel})` : value;
+}
+
+function buildCompletionNoteContent(options: {
+  instrument: InstrumentRow;
+  version: QuestionnaireVersion;
+  answers: AnswerRow[];
+  scores: Array<{
+    label: string;
+    valueNumeric: number | null;
+    valueText: string | null;
+    bandLabel: string;
+  }>;
+  completedAt: string;
+}) {
+  const answerRowsByItemId = new Map(
+    options.answers.map((answer) => [answer.item_id, answer] as const)
+  );
+  const scoreLines = options.scores
+    .map((score) => `- ${score.label}: ${formatScoreForNote(score)}`)
+    .join("\n");
+  const answerLines = options.version.definition.items
+    .map((item) => {
+      const answer = answerRowsByItemId.get(item.id);
+      const label =
+        answer?.valueText ||
+        item.options.find((option) => option.key === answer?.option_key)?.label ||
+        "No answer";
+      const numeric =
+        typeof answer?.numeric_value === "number"
+          ? ` (${answer.numeric_value})`
+          : "";
+      return `- ${item.prompt}: ${label}${numeric}`;
+    })
+    .join("\n");
+
+  return [
+    `# ${options.instrument.title}`,
+    "",
+    `Completed at: ${options.completedAt}`,
+    options.version.label ? `Version: ${options.version.label}` : "",
+    "",
+    "## Scores",
+    scoreLines || "- No scores",
+    "",
+    "## Answers",
+    answerLines || "- No answers"
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
+
 function scoreRun(version: QuestionnaireVersion, answers: AnswerRow[]) {
+  const visibility = getQuestionnaireVisibilityState(version.definition, answers);
   const answerMap = new Map<string, number | null>();
   for (const item of version.definition.items) {
     answerMap.set(item.id, null);
   }
   for (const answer of answers) {
-    answerMap.set(answer.item_id, answer.numeric_value);
+    answerMap.set(
+      answer.item_id,
+      visibility.visibleItemIds.has(answer.item_id) ? answer.numeric_value : null
+    );
   }
 
   const scoreValueMap = new Map<string, number | string | boolean | null>();
 
   return version.scoring.scores.map((definition, index) => {
-    const blockedByMissing = resolveMissingPolicy(definition, answerMap);
+    const blockedByMissing = resolveMissingPolicy(
+      definition,
+      answerMap,
+      visibility.visibleItemIds
+    );
     let value: number | string | boolean | null = blockedByMissing
       ? null
       : evaluateExpression(definition.expression, answerMap, scoreValueMap);
@@ -789,6 +871,7 @@ export function ensureQuestionnaireSeeds() {
 
   runInTransaction(() => {
     for (const seed of getQuestionnaireSeeds()) {
+      assertValidQuestionnaireDefinition(seed.definition);
       const existing = database
         .prepare("SELECT id FROM questionnaire_instruments WHERE key = ?")
         .get(seed.key) as { id: string } | undefined;
@@ -908,6 +991,7 @@ export function createQuestionnaireInstrument(
   context: QuestionnaireContext
 ) {
   const parsed = createQuestionnaireInstrumentSchema.parse(input);
+  assertValidQuestionnaireDefinition(parsed.definition);
   return runInTransaction(() => {
     const database = getDatabase();
     const now = nowIso();
@@ -1085,6 +1169,7 @@ export function updateQuestionnaireDraftVersion(
   context: QuestionnaireContext
 ) {
   const parsed = updateQuestionnaireVersionSchema.parse(input);
+  assertValidQuestionnaireDefinition(parsed.definition);
   return runInTransaction(() => {
     const row = getInstrumentRow(instrumentId);
     if (!row) {
@@ -1474,8 +1559,14 @@ export function completeQuestionnaireRun(runId: string, context: QuestionnaireCo
     }
     const version = mapVersion(versionRow);
     const answers = listAnswerRows(runId);
-    const answerIds = new Set(answers.map((entry) => entry.item_id));
+    const visibility = getQuestionnaireVisibilityState(version.definition, answers);
+    const answerIds = new Set(
+      answers
+        .filter((entry) => visibility.visibleItemIds.has(entry.item_id))
+        .map((entry) => entry.item_id)
+    );
     const missingRequired = version.definition.items
+      .filter((entry) => visibility.visibleItemIds.has(entry.id))
       .filter((entry) => entry.required)
       .filter((entry) => !answerIds.has(entry.id))
       .map((entry) => entry.prompt);
@@ -1540,6 +1631,41 @@ export function completeQuestionnaireRun(runId: string, context: QuestionnaireCo
       .run(now, now, runId);
 
     const instrument = getInstrumentRow(run.instrument_id);
+    if (instrument) {
+      const contentMarkdown = buildCompletionNoteContent({
+        instrument,
+        version,
+        answers,
+        scores: scored,
+        completedAt: now
+      });
+      const primaryScore = scored.find(
+        (entry) => entry.valueNumeric !== null || entry.valueText !== null
+      );
+      createNote(
+        {
+          kind: "evidence",
+          title: `${instrument.title} self observation`,
+          summary:
+            primaryScore !== undefined
+              ? `${primaryScore.label}: ${formatScoreForNote(primaryScore)}`
+              : `${instrument.title} completed`,
+          contentMarkdown,
+          author: context.actor ?? "Questionnaire",
+          links: [],
+          tags: [SELF_OBSERVATION_TAG],
+          frontmatter: {
+            observedAt: now,
+            questionnaireInstrumentId: instrument.id,
+            questionnaireRunId: runId,
+            questionnaireVersionId: run.version_id
+          },
+          userId: run.user_id
+        },
+        context
+      );
+    }
+
     recordActivityEvent({
       entityType: "questionnaire_run",
       entityId: runId,

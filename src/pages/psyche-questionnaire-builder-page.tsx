@@ -60,6 +60,7 @@ const EMPTY_DEFINITION: QuestionnaireDefinition = {
       description: "",
       helperText: "",
       required: true,
+      visibility: null,
       tags: [],
       options: [
         { key: "0", label: "Not at all", value: 0, description: "" },
@@ -74,6 +75,7 @@ const EMPTY_DEFINITION: QuestionnaireDefinition = {
       id: "section_1",
       title: "Section 1",
       description: "",
+      visibility: null,
       itemIds: ["item_1"]
     }
   ],
@@ -450,14 +452,29 @@ export function PsycheQuestionnaireBuilderPage() {
           ) : null}
 
           {step === "structure" ? (
-            <label className="grid gap-2">
+            <div className="grid gap-2">
               <span className="text-sm text-white/72">Definition JSON</span>
+              <div className="text-sm leading-6 text-white/56">
+                Items and sections can declare
+                <code className="mx-1 rounded bg-white/[0.06] px-1.5 py-0.5 text-xs text-white">
+                  visibility.script
+                </code>
+                rules such as
+                <code className="mx-1 rounded bg-white/[0.06] px-1.5 py-0.5 text-xs text-white">
+                  audit_1 &gt; 0
+                </code>
+                or
+                <code className="mx-1 rounded bg-white/[0.06] px-1.5 py-0.5 text-xs text-white">
+                  answered(question_12) and option(question_12) == "yes"
+                </code>
+                .
+              </div>
               <textarea
                 value={state.definitionJson}
                 onChange={(event) => setState((current) => ({ ...current, definitionJson: event.target.value }))}
                 className="min-h-[32rem] rounded-[18px] border border-white/8 bg-white/[0.04] px-4 py-3 font-mono text-sm text-white outline-none"
               />
-            </label>
+            </div>
           ) : null}
 
           {step === "scoring" ? (

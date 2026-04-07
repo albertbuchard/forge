@@ -7,19 +7,41 @@ import { PsycheSelfObservationPage } from "@/pages/psyche-self-observation-page"
 
 const {
   useForgeShellMock,
+  navigateMock,
   getPsycheObservationCalendarMock,
   createNoteMock,
   patchNoteMock,
+  deleteNoteMock,
+  listPsycheValuesMock,
   listBehaviorPatternsMock,
+  listBehaviorsMock,
+  listBeliefsMock,
+  listModesMock,
   listTriggerReportsMock
 } = vi.hoisted(() => ({
   useForgeShellMock: vi.fn(),
+  navigateMock: vi.fn(),
   getPsycheObservationCalendarMock: vi.fn(),
   createNoteMock: vi.fn(),
   patchNoteMock: vi.fn(),
+  deleteNoteMock: vi.fn(),
+  listPsycheValuesMock: vi.fn(),
   listBehaviorPatternsMock: vi.fn(),
+  listBehaviorsMock: vi.fn(),
+  listBeliefsMock: vi.fn(),
+  listModesMock: vi.fn(),
   listTriggerReportsMock: vi.fn()
 }));
+
+vi.mock("react-router-dom", async () => {
+  const actual = await vi.importActual<typeof import("react-router-dom")>(
+    "react-router-dom"
+  );
+  return {
+    ...actual,
+    useNavigate: () => navigateMock
+  };
+});
 
 vi.mock("@/components/shell/app-shell", () => ({
   useForgeShell: useForgeShellMock
@@ -129,7 +151,12 @@ vi.mock("@/lib/api", () => ({
   getPsycheObservationCalendar: getPsycheObservationCalendarMock,
   createNote: createNoteMock,
   patchNote: patchNoteMock,
+  deleteNote: deleteNoteMock,
+  listPsycheValues: listPsycheValuesMock,
   listBehaviorPatterns: listBehaviorPatternsMock,
+  listBehaviors: listBehaviorsMock,
+  listBeliefs: listBeliefsMock,
+  listModes: listModesMock,
   listTriggerReports: listTriggerReportsMock
 }));
 
@@ -159,6 +186,7 @@ function createObservation(args: {
   author: string;
   tags: string[];
   userKind: "human" | "bot";
+  links?: Array<{ entityType: string; entityId: string; anchorKey: null }>;
 }) {
   return {
     id: args.id,
@@ -184,7 +212,7 @@ function createObservation(args: {
       lastSyncedAt: null,
       createdAt: args.observedAt,
       updatedAt: args.observedAt,
-      links: [],
+      links: args.links ?? [],
       tags: args.tags,
       destroyAt: null,
       userId: args.userKind === "human" ? "user_operator" : "user_forge_bot",
@@ -215,8 +243,15 @@ describe("PsycheSelfObservationPage", () => {
         contentPlain: "Notice the tension before the meeting.",
         observedAt: "2026-04-06T09:15:00.000Z",
         author: "Albert",
-        tags: ["focus"],
-        userKind: "human"
+        tags: ["Self-observation", "focus"],
+        userKind: "human",
+        links: [
+          {
+            entityType: "goal",
+            entityId: "goal_1",
+            anchorKey: null
+          }
+        ]
       }),
       createObservation({
         id: "note_bot",
@@ -253,7 +288,31 @@ describe("PsycheSelfObservationPage", () => {
             createdAt: "2026-04-06T08:00:00.000Z",
             updatedAt: "2026-04-06T08:00:00.000Z"
           }
-        ]
+        ],
+        goals: [
+          {
+            id: "goal_1",
+            title: "Calm nervous system",
+            description: "Stay regulated before difficult conversations.",
+            user: {
+              id: "user_operator",
+              kind: "human",
+              handle: "albert",
+              displayName: "Albert",
+              description: "",
+              accentColor: "#ffffff",
+              createdAt: "2026-04-06T08:00:00.000Z",
+              updatedAt: "2026-04-06T08:00:00.000Z"
+            }
+          }
+        ],
+        tasks: [],
+        strategies: [],
+        habits: [],
+        tags: [],
+        dashboard: {
+          projects: []
+        }
       }
     });
 
@@ -263,10 +322,11 @@ describe("PsycheSelfObservationPage", () => {
         from: "2026-04-06T00:00:00.000Z",
         to: "2026-04-13T00:00:00.000Z",
         observations,
-        availableTags: ["focus", "ops"]
+        availableTags: ["Self-observation", "focus", "ops"]
       }
     }));
 
+    listPsycheValuesMock.mockResolvedValue({ values: [] });
     listBehaviorPatternsMock.mockResolvedValue({
       patterns: [
         {
@@ -300,7 +360,9 @@ describe("PsycheSelfObservationPage", () => {
         }
       ]
     });
-
+    listBehaviorsMock.mockResolvedValue({ behaviors: [] });
+    listBeliefsMock.mockResolvedValue({ beliefs: [] });
+    listModesMock.mockResolvedValue({ modes: [] });
     listTriggerReportsMock.mockResolvedValue({
       reports: [
         {
@@ -362,7 +424,8 @@ describe("PsycheSelfObservationPage", () => {
           observedAt,
           author: String(input.author ?? ""),
           tags: (input.tags as string[]) ?? [],
-          userKind: "human"
+          userKind: "human",
+          links: ((input.links as Array<{ entityType: string; entityId: string; anchorKey: null }>) ?? [])
         })
       ];
       return { note: observations[observations.length - 1]!.note };
@@ -389,7 +452,14 @@ describe("PsycheSelfObservationPage", () => {
                 ((patch.userId as string | undefined) ?? entry.note.userId) ===
                 "user_forge_bot"
                   ? "bot"
-                  : "human"
+                  : "human",
+              links:
+                ((patch.links as Array<{ entityType: string; entityId: string; anchorKey: null }>) ??
+                  entry.note.links) as Array<{
+                  entityType: string;
+                  entityId: string;
+                  anchorKey: null;
+                }>
             })
           : entry
       );
@@ -397,6 +467,8 @@ describe("PsycheSelfObservationPage", () => {
         note: observations.find((entry) => entry.note.id === noteId)!.note
       };
     });
+
+    deleteNoteMock.mockResolvedValue({ note: observations[0]!.note });
   });
 
   afterEach(() => {
@@ -404,32 +476,28 @@ describe("PsycheSelfObservationPage", () => {
     vi.clearAllMocks();
   });
 
-  it("filters by human-owned notes, tag, and free-text author", async () => {
+  it("seeds the Self-observation tag filter by default and can clear it to reveal all notes", async () => {
     renderPage();
 
     expect(
       (await screen.findAllByText("Notice the tension before the meeting.")).length
     ).toBeGreaterThan(0);
-    expect(screen.getAllByText("Automated system note.").length).toBeGreaterThan(0);
+    expect(screen.queryAllByText("Automated system note.")).toHaveLength(0);
 
-    fireEvent.click(screen.getByRole("button", { name: "Human only" }));
+    fireEvent.click(screen.getAllByRole("button", { name: "Self-observation" })[0]!);
+
     await waitFor(() =>
-      expect(screen.queryAllByText("Automated system note.")).toHaveLength(0)
+      expect(screen.getAllByText("Automated system note.").length).toBeGreaterThan(0)
     );
-
-    fireEvent.click(screen.getByRole("button", { name: "focus" }));
-    fireEvent.change(screen.getByPlaceholderText("Filter by free-text author"), {
-      target: { value: "Albert" }
-    });
-
-    expect(screen.getAllByText("Notice the tension before the meeting.").length).toBeGreaterThan(0);
   });
 
-  it("creates a new observation in the selected slot", async () => {
+  it("creates a new observation with the default self-observation tag and linked records", async () => {
     renderPage();
     fireEvent.click(
       (await screen.findAllByRole("button", { name: "Add observation" }))[0]!
     );
+
+    expect(screen.getAllByText("Self-observation").length).toBeGreaterThan(0);
 
     fireEvent.change(screen.getByLabelText("Author"), {
       target: { value: "Albert" }
@@ -440,6 +508,7 @@ describe("PsycheSelfObservationPage", () => {
     fireEvent.click(screen.getAllByRole("button", { name: "focus" })[1]!);
     fireEvent.click(screen.getByRole("button", { name: "Withdrawal loop" }));
     fireEvent.click(screen.getByRole("button", { name: "Meeting spiral" }));
+    fireEvent.click(screen.getByRole("button", { name: "Calm nervous system" }));
     fireEvent.click(screen.getByRole("button", { name: "Save observation" }));
 
     await waitFor(() =>
@@ -447,9 +516,13 @@ describe("PsycheSelfObservationPage", () => {
         expect.objectContaining({
           contentMarkdown: "Wrote down the pressure before sending the message.",
           author: "Albert",
-          tags: ["focus"],
           userId: "user_operator",
+          tags: expect.arrayContaining(["Self-observation", "focus"]),
           links: expect.arrayContaining([
+            expect.objectContaining({
+              entityType: "goal",
+              entityId: "goal_1"
+            }),
             expect.objectContaining({
               entityType: "behavior_pattern",
               entityId: "pattern_1"
@@ -468,6 +541,42 @@ describe("PsycheSelfObservationPage", () => {
         screen.queryAllByText("Wrote down the pressure before sending the message.")
           .length
       ).toBeGreaterThan(0)
+    );
+  });
+
+  it("opens an existing observation in edit mode and lets it be deleted", async () => {
+    renderPage();
+
+    fireEvent.click(
+      (await screen.findAllByText("Notice the tension before the meeting."))[0]!
+    );
+
+    expect(await screen.findByText("Edit observation")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Delete observation" }));
+
+    await waitFor(() =>
+      expect(deleteNoteMock).toHaveBeenCalledWith("note_human")
+    );
+  });
+
+  it("saves before opening the pattern flow from an observation", async () => {
+    renderPage();
+    fireEvent.click(
+      (await screen.findAllByRole("button", { name: "Add observation" }))[0]!
+    );
+
+    fireEvent.change(screen.getByLabelText("Observation note"), {
+      target: { value: "A fresh observation that should seed a pattern." }
+    });
+    fireEvent.click(
+      screen.getByRole("button", { name: "Create pattern from observation" })
+    );
+
+    await waitFor(() => expect(createNoteMock).toHaveBeenCalledTimes(1));
+    await waitFor(() =>
+      expect(navigateMock).toHaveBeenCalledWith(
+        "/psyche/patterns?create=1&sourceObservationNoteId=note_created&userId=user_operator"
+      )
     );
   });
 

@@ -25,7 +25,21 @@ import { getEntityNotesSummary } from "@/lib/note-helpers";
 import { behaviorPatternSchema, type BehaviorPatternInput } from "@/lib/psyche-schemas";
 import type { BehaviorPattern, BeliefEntry, ModeProfile, SchemaCatalogEntry } from "@/lib/psyche-types";
 import { findSchemaForLink, getSchemaFamilyLabel } from "@/lib/schema-visuals";
-import { createBehaviorPattern, createBelief, createMode, createPsycheValue, listBehaviorPatterns, listBehaviors, listBeliefs, listModes, listPsycheValues, listSchemaCatalog, patchBehaviorPattern } from "@/lib/api";
+import {
+  createBehaviorPattern,
+  createBelief,
+  createMode,
+  createPsycheValue,
+  getNote,
+  listBehaviorPatterns,
+  listBehaviors,
+  listBeliefs,
+  listModes,
+  listPsycheValues,
+  listSchemaCatalog,
+  patchBehaviorPattern,
+  patchNote
+} from "@/lib/api";
 import {
   buildOwnedEntitySearchText,
   formatOwnedEntityDescription,
@@ -33,6 +47,7 @@ import {
   formatOwnedEntityOptionLabel,
   getSingleSelectedUserId
 } from "@/lib/user-ownership";
+import type { NoteLink } from "@/lib/types";
 
 const DEFAULT_PATTERN_INPUT: BehaviorPatternInput = {
   title: "",
@@ -66,12 +81,33 @@ function patternToInput(pattern: BehaviorPattern): BehaviorPatternInput {
   };
 }
 
+function dedupeNoteLinks(links: NoteLink[]) {
+  const seen = new Set<string>();
+  return links.filter((link) => {
+    const key = `${link.entityType}:${link.entityId}:${link.anchorKey ?? ""}`;
+    if (seen.has(key)) {
+      return false;
+    }
+    seen.add(key);
+    return true;
+  });
+}
+
+function summarizeObservationSource(markdown: string) {
+  const text = markdown.replace(/\s+/g, " ").trim();
+  if (text.length <= 180) {
+    return text;
+  }
+  return `${text.slice(0, 177).trimEnd()}...`;
+}
+
 export function PsychePatternsPage() {
   const shell = useForgeShell();
   const queryClient = useQueryClient();
   const [searchParams, setSearchParams] = useSearchParams();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingPattern, setEditingPattern] = useState<BehaviorPattern | null>(null);
+  const [sourceObservationNoteId, setSourceObservationNoteId] = useState<string | null>(null);
   const [draft, setDraft] = useState<BehaviorPatternInput>(DEFAULT_PATTERN_INPUT);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const patternsQuery = useQuery({
@@ -109,15 +145,27 @@ export function PsychePatternsPage() {
   const focusedPatternId = searchParams.get("focus");
   const notesSummaryByEntity = shell.snapshot.dashboard.notesSummaryByEntity;
 
+  const sourceObservationQuery = useQuery({
+    enabled: sourceObservationNoteId !== null,
+    queryKey: ["forge-note", sourceObservationNoteId],
+    queryFn: () => getNote(sourceObservationNoteId!)
+  });
+
   usePsycheFocusTarget(focusedPatternId);
 
   useEffect(() => {
     if (searchParams.get("create") === "1") {
       setDialogOpen(true);
       setEditingPattern(null);
-      setDraft({ ...DEFAULT_PATTERN_INPUT, userId: defaultUserId });
+      setDraft({
+        ...DEFAULT_PATTERN_INPUT,
+        userId: searchParams.get("userId") ?? defaultUserId
+      });
+      setSourceObservationNoteId(searchParams.get("sourceObservationNoteId"));
       const next = new URLSearchParams(searchParams);
       next.delete("create");
+      next.delete("sourceObservationNoteId");
+      next.delete("userId");
       setSearchParams(next, { replace: true });
     }
   }, [defaultUserId, searchParams, setSearchParams]);
@@ -128,16 +176,37 @@ export function PsychePatternsPage() {
       if (editingPattern) {
         return patchBehaviorPattern(editingPattern.id, parsed);
       }
-      return createBehaviorPattern(parsed);
+      const result = await createBehaviorPattern(parsed);
+      if (sourceObservationNoteId) {
+        const sourceNote =
+          sourceObservationQuery.data?.note?.id === sourceObservationNoteId
+            ? sourceObservationQuery.data.note
+            : (await getNote(sourceObservationNoteId)).note;
+        await patchNote(sourceObservationNoteId, {
+          links: dedupeNoteLinks([
+            ...sourceNote.links,
+            {
+              entityType: "behavior_pattern",
+              entityId: result.pattern.id,
+              anchorKey: null
+            }
+          ])
+        });
+      }
+      return result;
     },
     onSuccess: async () => {
       setDialogOpen(false);
       setEditingPattern(null);
+      setSourceObservationNoteId(null);
       setDraft({ ...DEFAULT_PATTERN_INPUT, userId: defaultUserId });
       setSubmitError(null);
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["forge-psyche-patterns"] }),
-        queryClient.invalidateQueries({ queryKey: ["forge-psyche-overview"] })
+        queryClient.invalidateQueries({ queryKey: ["forge-psyche-overview"] }),
+        queryClient.invalidateQueries({ queryKey: ["forge-psyche-self-observation-calendar"] }),
+        queryClient.invalidateQueries({ queryKey: ["forge-snapshot"] }),
+        queryClient.invalidateQueries({ queryKey: ["notes-index"] })
       ]);
     }
   });
@@ -293,6 +362,23 @@ export function PsychePatternsPage() {
       description: "This should feel like a recognizable loop, not a diagnostic label.",
       render: (value, setValue) => (
         <>
+          {sourceObservationNoteId ? (
+            <div className="rounded-[22px] border border-[rgba(110,231,183,0.18)] bg-[rgba(110,231,183,0.08)] p-4">
+              <div className="text-[11px] uppercase tracking-[0.16em] text-[rgba(110,231,183,0.82)]">
+                Source observation
+              </div>
+              <div className="mt-2 text-sm leading-6 text-white/78">
+                {sourceObservationQuery.isLoading
+                  ? "Loading the saved observation note..."
+                  : sourceObservationQuery.data?.note
+                    ? summarizeObservationSource(
+                        sourceObservationQuery.data.note.contentPlain ||
+                          sourceObservationQuery.data.note.contentMarkdown
+                      )
+                    : "Forge will link this pattern back to the saved observation when you submit it."}
+              </div>
+            </div>
+          ) : null}
           <UserSelectField
             value={value.userId ?? null}
             users={shell.snapshot.users}
@@ -427,6 +513,7 @@ export function PsychePatternsPage() {
           <Button
             onClick={() => {
               setEditingPattern(null);
+              setSourceObservationNoteId(null);
               setDraft({ ...DEFAULT_PATTERN_INPUT, userId: defaultUserId });
               setDialogOpen(true);
             }}
@@ -447,6 +534,7 @@ export function PsychePatternsPage() {
           <Button
             onClick={() => {
               setEditingPattern(null);
+              setSourceObservationNoteId(null);
               setDraft({ ...DEFAULT_PATTERN_INPUT, userId: defaultUserId });
               setDialogOpen(true);
             }}
@@ -512,6 +600,7 @@ export function PsychePatternsPage() {
                         variant="secondary"
                         onClick={() => {
                           setEditingPattern(pattern);
+                          setSourceObservationNoteId(null);
                           setDraft(patternToInput(pattern));
                           setDialogOpen(true);
                         }}
@@ -572,10 +661,19 @@ export function PsychePatternsPage() {
 
       <QuestionFlowDialog
         open={dialogOpen}
-        onOpenChange={setDialogOpen}
+        onOpenChange={(open) => {
+          setDialogOpen(open);
+          if (!open && !editingPattern) {
+            setSourceObservationNoteId(null);
+          }
+        }}
         eyebrow="Behavior pattern"
         title={editingPattern ? "Refine pattern lane" : "Create pattern"}
-        description="Pattern capture should feel like mapping a loop, not filling an admin form."
+        description={
+          sourceObservationNoteId && !editingPattern
+            ? "This pattern is being created from a saved observation. Submitting the dialog will link the new pattern back to that observation note."
+            : "Pattern capture should feel like mapping a loop, not filling an admin form."
+        }
         value={draft}
         onChange={setDraft}
         steps={steps}

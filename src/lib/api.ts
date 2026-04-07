@@ -1134,6 +1134,10 @@ export function createNote(input: {
   });
 }
 
+export function getNote(noteId: string) {
+  return request<{ note: Note }>(`/api/v1/notes/${noteId}`);
+}
+
 export function patchNote(
   noteId: string,
   patch: {

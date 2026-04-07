@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { buildServer } from "./app.js";
-import { closeDatabase } from "./db.js";
+import { closeDatabase, getDatabase } from "./db.js";
 
 async function issueOperatorSessionCookie(
   app: Awaited<ReturnType<typeof buildServer>>
@@ -129,6 +129,109 @@ test("completing a PHQ-9 run stores answers, score rows, and history", async () 
     );
     assert.equal(completed.history[0]?.runId, started.run.id);
     assert.equal(completed.history[0]?.primaryScore, 27);
+
+    const noteRow = getDatabase()
+      .prepare(
+        `
+          SELECT title, tags_json, frontmatter_json
+          FROM notes
+          WHERE json_extract(frontmatter_json, '$.questionnaireRunId') = ?
+          LIMIT 1
+        `
+      )
+      .get(started.run.id) as
+      | {
+          title: string;
+          tags_json: string;
+          frontmatter_json: string;
+        }
+      | undefined;
+    assert.ok(noteRow);
+    assert.match(noteRow.title, /PHQ-9/i);
+    assert.deepEqual(JSON.parse(noteRow.tags_json), ["Self-observation"]);
+    const frontmatter = JSON.parse(noteRow.frontmatter_json) as Record<string, unknown>;
+    assert.equal(frontmatter.questionnaireRunId, started.run.id);
+    assert.equal(frontmatter.questionnaireVersionId, completed.run.versionId);
+    assert.ok(typeof frontmatter.observedAt === "string");
+  } finally {
+    await app.close();
+    closeDatabase();
+    await rm(rootDir, { recursive: true, force: true });
+  }
+});
+
+test("AUDIT hides downstream alcohol questions when drinking frequency is never", async () => {
+  const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-questionnaire-audit-flow-"));
+  const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
+
+  try {
+    const operatorCookie = await issueOperatorSessionCookie(app);
+    const libraryResponse = await app.inject({
+      method: "GET",
+      url: "/api/v1/psyche/questionnaires"
+    });
+    const library = libraryResponse.json() as {
+      instruments: Array<{ id: string; key: string }>;
+    };
+    const audit = library.instruments.find((instrument) => instrument.key === "audit");
+    assert.ok(audit);
+
+    const startResponse = await app.inject({
+      method: "POST",
+      url: `/api/v1/psyche/questionnaires/${audit!.id}/runs`,
+      headers: {
+        cookie: operatorCookie
+      },
+      payload: {
+        userId: "user_operator"
+      }
+    });
+    assert.equal(startResponse.statusCode, 201);
+    const started = startResponse.json() as {
+      run: { id: string };
+      version: { definition: { items: Array<{ id: string }> } };
+    };
+    assert.equal(started.version.definition.items.length, 10);
+
+    const patchResponse = await app.inject({
+      method: "PATCH",
+      url: `/api/v1/psyche/questionnaire-runs/${started.run.id}`,
+      headers: {
+        cookie: operatorCookie
+      },
+      payload: {
+        answers: [
+          {
+            itemId: "audit_1",
+            optionKey: "never",
+            valueText: "Never",
+            numericValue: 0,
+            answer: { label: "Never", value: 0 }
+          }
+        ],
+        progressIndex: 0
+      }
+    });
+    assert.equal(patchResponse.statusCode, 200);
+
+    const completeResponse = await app.inject({
+      method: "POST",
+      url: `/api/v1/psyche/questionnaire-runs/${started.run.id}/complete`,
+      headers: {
+        cookie: operatorCookie
+      },
+      payload: {}
+    });
+    assert.equal(completeResponse.statusCode, 200);
+    const completed = completeResponse.json() as {
+      run: { status: string };
+      scores: Array<{ scoreKey: string; valueNumeric: number | null; bandLabel: string }>;
+    };
+    assert.equal(completed.run.status, "completed");
+    assert.deepEqual(
+      completed.scores.map((score) => [score.scoreKey, score.valueNumeric, score.bandLabel]),
+      [["audit_total", 0, "Zone I · Low risk"]]
+    );
   } finally {
     await app.close();
     closeDatabase();

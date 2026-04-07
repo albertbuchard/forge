@@ -70,6 +70,10 @@ export const questionnaireOptionSchema = z.object({
   description: trimmedString.default("")
 });
 
+export const questionnaireFlowRuleSchema = z.object({
+  script: nonEmptyTrimmedString
+});
+
 export const questionnaireItemSchema = z.object({
   id: nonEmptyTrimmedString,
   prompt: nonEmptyTrimmedString,
@@ -77,6 +81,7 @@ export const questionnaireItemSchema = z.object({
   description: trimmedString.default(""),
   helperText: trimmedString.default(""),
   required: z.boolean().default(true),
+  visibility: questionnaireFlowRuleSchema.nullable().default(null),
   options: z.array(questionnaireOptionSchema).min(1),
   tags: stringArraySchema.default([])
 });
@@ -85,6 +90,7 @@ export const questionnaireSectionSchema = z.object({
   id: nonEmptyTrimmedString,
   title: nonEmptyTrimmedString,
   description: trimmedString.default(""),
+  visibility: questionnaireFlowRuleSchema.nullable().default(null),
   itemIds: stringArraySchema.min(1)
 });
 
@@ -425,6 +431,7 @@ export const publishQuestionnaireVersionSchema = z.object({
 });
 
 export type QuestionnaireOption = z.infer<typeof questionnaireOptionSchema>;
+export type QuestionnaireFlowRule = z.infer<typeof questionnaireFlowRuleSchema>;
 export type QuestionnaireItem = z.infer<typeof questionnaireItemSchema>;
 export type QuestionnaireSection = z.infer<typeof questionnaireSectionSchema>;
 export type QuestionnaireDefinition = z.infer<typeof questionnaireDefinitionSchema>;

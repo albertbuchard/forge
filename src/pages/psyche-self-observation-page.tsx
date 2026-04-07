@@ -1,40 +1,89 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowUpRight, Plus, Sparkles, StickyNote } from "lucide-react";
+import {
+  ArrowUpRight,
+  Plus,
+  Sparkles,
+  StickyNote,
+  Trash2
+} from "lucide-react";
 import { useNavigate } from "react-router-dom";
-import { EntityLinkMultiSelect, type EntityLinkOption } from "@/components/psyche/entity-link-multiselect";
-import { PsycheSectionNav } from "@/components/psyche/psyche-section-nav";
+import {
+  EntityLinkMultiSelect,
+  type EntityLinkOption
+} from "@/components/psyche/entity-link-multiselect";
 import { NoteTagsInput } from "@/components/notes/note-tags-input";
 import { SurfaceSkeleton } from "@/components/experience/surface-skeleton";
 import { SheetScaffold } from "@/components/experience/sheet-scaffold";
+import { PsycheSectionNav } from "@/components/psyche/psyche-section-nav";
 import { useForgeShell } from "@/components/shell/app-shell";
 import { PageHero } from "@/components/shell/page-hero";
-import { EntityBadge } from "@/components/ui/entity-badge";
+import { CalendarWeekToolbar } from "@/components/calendar/calendar-week-toolbar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { ErrorState } from "@/components/ui/page-state";
 import { Textarea } from "@/components/ui/textarea";
+import { EntityBadge } from "@/components/ui/entity-badge";
 import { UserBadge } from "@/components/ui/user-badge";
 import { UserSelectField } from "@/components/ui/user-select-field";
-import { CalendarWeekToolbar } from "@/components/calendar/calendar-week-toolbar";
 import {
   createNote,
+  deleteNote,
   getPsycheObservationCalendar,
+  listBehaviors,
   listBehaviorPatterns,
+  listBeliefs,
+  listModes,
+  listPsycheValues,
   listTriggerReports,
   patchNote
 } from "@/lib/api";
-import { addDays, buildWeekDays, formatHourLabel, formatWeekday, startOfWeek } from "@/lib/calendar-ui";
-import { parseDateTimeLocalToIso } from "@/lib/note-memory-tags";
-import type { Note } from "@/lib/types";
-import type { BehaviorPattern, PsycheObservationEntry, TriggerReport } from "@/lib/psyche-types";
 import {
+  addDays,
+  buildWeekDays,
+  formatHourLabel,
+  formatWeekday,
+  startOfWeek
+} from "@/lib/calendar-ui";
+import {
+  normalizeNoteTags,
+  parseDateTimeLocalToIso
+} from "@/lib/note-memory-tags";
+import { formatEntityTypeLabel } from "@/lib/note-helpers";
+import type {
+  Behavior,
+  BehaviorPattern,
+  BeliefEntry,
+  ModeProfile,
+  PsycheObservationEntry,
+  PsycheValue,
+  TriggerReport
+} from "@/lib/psyche-types";
+import type { CrudEntityType, Note, NoteLink } from "@/lib/types";
+import {
+  buildOwnedEntitySearchText,
+  formatOwnedEntityDescription,
   formatOwnerSelectDefaultLabel,
   formatUserSummaryLine,
   getSingleSelectedUserId
 } from "@/lib/user-ownership";
+
+const SELF_OBSERVATION_TAG = "Self-observation";
+
+const LINKABLE_ENTITY_TYPES = new Set<CrudEntityType>([
+  "goal",
+  "project",
+  "task",
+  "strategy",
+  "habit",
+  "tag",
+  "psyche_value",
+  "behavior",
+  "belief_entry",
+  "mode_profile"
+]);
 
 type ObservationDraft = {
   noteId: string | null;
@@ -45,7 +94,7 @@ type ObservationDraft = {
   observedAtInput: string;
   linkedPatternIds: string[];
   linkedTriggerReportId: string | null;
-  preservedLinks: Note["links"];
+  linkedEntityValues: string[];
 };
 
 const EMPTY_DRAFT: ObservationDraft = {
@@ -57,8 +106,51 @@ const EMPTY_DRAFT: ObservationDraft = {
   observedAtInput: "",
   linkedPatternIds: [],
   linkedTriggerReportId: null,
-  preservedLinks: []
+  linkedEntityValues: []
 };
+
+function seedObservationTags(tags: string[] = []) {
+  return normalizeNoteTags([SELF_OBSERVATION_TAG, ...tags]);
+}
+
+function encodeLinkedValue(entityType: CrudEntityType, entityId: string) {
+  return `${entityType}:${entityId}`;
+}
+
+function decodeLinkedValue(
+  value: string
+): { entityType: CrudEntityType; entityId: string } | null {
+  const separatorIndex = value.indexOf(":");
+  if (separatorIndex <= 0 || separatorIndex >= value.length - 1) {
+    return null;
+  }
+  const entityType = value.slice(0, separatorIndex);
+  if (!LINKABLE_ENTITY_TYPES.has(entityType as CrudEntityType)) {
+    return null;
+  }
+  return {
+    entityType: entityType as CrudEntityType,
+    entityId: value.slice(separatorIndex + 1)
+  };
+}
+
+function isLinkedEntityRef(
+  value: { entityType: CrudEntityType; entityId: string } | null
+): value is { entityType: CrudEntityType; entityId: string } {
+  return value !== null;
+}
+
+function dedupeNoteLinks(links: NoteLink[]) {
+  const seen = new Set<string>();
+  return links.filter((link) => {
+    const key = `${link.entityType}:${link.entityId}:${link.anchorKey ?? ""}`;
+    if (seen.has(key)) {
+      return false;
+    }
+    seen.add(key);
+    return true;
+  });
+}
 
 function formatLocalDateTimeInput(value: string) {
   const date = new Date(value);
@@ -98,12 +190,7 @@ function summarizeNote(note: Note) {
 function moveObservedAtToSlot(sourceIso: string, day: Date, hour: number) {
   const source = new Date(sourceIso);
   const next = new Date(day);
-  next.setHours(
-    hour,
-    Number.isNaN(source.getTime()) ? 0 : source.getMinutes(),
-    0,
-    0
-  );
+  next.setHours(hour, Number.isNaN(source.getTime()) ? 0 : source.getMinutes(), 0, 0);
   return next.toISOString();
 }
 
@@ -112,25 +199,30 @@ function buildDraftFromObservation(
   defaultUserId: string | null
 ): ObservationDraft {
   if (!observation) {
-    return { ...EMPTY_DRAFT, userId: defaultUserId };
+    return {
+      ...EMPTY_DRAFT,
+      tags: seedObservationTags(),
+      userId: defaultUserId
+    };
   }
-
-  const preservedLinks = observation.note.links.filter(
-    (link) =>
-      link.entityType !== "behavior_pattern" &&
-      link.entityType !== "trigger_report"
-  );
 
   return {
     noteId: observation.note.id,
     contentMarkdown: observation.note.contentMarkdown,
     author: observation.note.author ?? "",
-    tags: observation.note.tags ?? [],
+    tags: normalizeNoteTags(observation.note.tags ?? []),
     userId: observation.note.userId ?? defaultUserId,
     observedAtInput: formatLocalDateTimeInput(observation.observedAt),
     linkedPatternIds: observation.linkedPatterns.map((pattern) => pattern.id),
     linkedTriggerReportId: observation.linkedReports[0]?.id ?? null,
-    preservedLinks
+    linkedEntityValues: observation.note.links
+      .filter(
+        (link) =>
+          link.entityType !== "behavior_pattern" &&
+          link.entityType !== "trigger_report" &&
+          LINKABLE_ENTITY_TYPES.has(link.entityType)
+      )
+      .map((link) => encodeLinkedValue(link.entityType, link.entityId))
   };
 }
 
@@ -154,6 +246,217 @@ function buildReportOptions(reports: TriggerReport[]) {
   })) satisfies EntityLinkOption[];
 }
 
+function buildGenericLinkOptions({
+  goals,
+  projects,
+  tasks,
+  strategies,
+  habits,
+  tags,
+  values,
+  behaviors,
+  beliefs,
+  modes
+}: {
+  goals: Array<{
+    id: string;
+    title: string;
+    description?: string | null;
+    user?: Note["user"];
+  }>;
+  projects: Array<{
+    id: string;
+    title: string;
+    description?: string | null;
+    user?: Note["user"];
+  }>;
+  tasks: Array<{
+    id: string;
+    title: string;
+    description?: string | null;
+    owner?: string | null;
+    user?: Note["user"];
+  }>;
+  strategies: Array<{
+    id: string;
+    title: string;
+    overview?: string | null;
+    endStateDescription?: string | null;
+    user?: Note["user"];
+  }>;
+  habits: Array<{
+    id: string;
+    title: string;
+    description?: string | null;
+    user?: Note["user"];
+  }>;
+  tags: Array<{
+    id: string;
+    name: string;
+    kind?: string | null;
+    description?: string | null;
+    user?: Note["user"];
+  }>;
+  values: PsycheValue[];
+  behaviors: Behavior[];
+  beliefs: BeliefEntry[];
+  modes: ModeProfile[];
+}) {
+  const options = [
+    ...goals.map((goal) => ({
+      value: encodeLinkedValue("goal", goal.id),
+      label: goal.title,
+      description: formatOwnedEntityDescription(goal.description, goal.user, "Goal"),
+      searchText: buildOwnedEntitySearchText(
+        [goal.title, goal.description ?? ""],
+        goal
+      ),
+      kind: "goal"
+    })),
+    ...projects.map((project) => ({
+      value: encodeLinkedValue("project", project.id),
+      label: project.title,
+      description: formatOwnedEntityDescription(
+        project.description,
+        project.user,
+        "Project"
+      ),
+      searchText: buildOwnedEntitySearchText(
+        [project.title, project.description ?? ""],
+        project
+      ),
+      kind: "project"
+    })),
+    ...tasks.map((task) => ({
+      value: encodeLinkedValue("task", task.id),
+      label: task.title,
+      description: formatOwnedEntityDescription(
+        task.description,
+        task.user,
+        task.owner ?? undefined
+      ),
+      searchText: buildOwnedEntitySearchText(
+        [task.title, task.description ?? "", task.owner ?? ""],
+        task
+      ),
+      kind: "task"
+    })),
+    ...strategies.map((strategy) => ({
+      value: encodeLinkedValue("strategy", strategy.id),
+      label: strategy.title,
+      description: formatOwnedEntityDescription(
+        strategy.overview,
+        strategy.user,
+        "Strategy"
+      ),
+      searchText: buildOwnedEntitySearchText(
+        [strategy.title, strategy.overview ?? "", strategy.endStateDescription ?? ""],
+        strategy
+      ),
+      kind: "strategy"
+    })),
+    ...habits.map((habit) => ({
+      value: encodeLinkedValue("habit", habit.id),
+      label: habit.title,
+      description: formatOwnedEntityDescription(habit.description, habit.user, "Habit"),
+      searchText: buildOwnedEntitySearchText(
+        [habit.title, habit.description ?? ""],
+        habit
+      ),
+      kind: "habit"
+    })),
+    ...tags.map((tag) => ({
+      value: encodeLinkedValue("tag", tag.id),
+      label: tag.name,
+      description: formatOwnedEntityDescription(
+        tag.description,
+        tag.user,
+        tag.kind ?? undefined
+      ),
+      searchText: buildOwnedEntitySearchText(
+        [tag.name, tag.kind ?? "", tag.description ?? ""],
+        tag
+      )
+    })),
+    ...values.map((value) => ({
+      value: encodeLinkedValue("psyche_value", value.id),
+      label: value.title,
+      description: formatOwnedEntityDescription(
+        value.description,
+        value.user,
+        "Psyche value"
+      ),
+      searchText: buildOwnedEntitySearchText(
+        [value.title, value.description, value.valuedDirection],
+        value
+      ),
+      kind: "value"
+    })),
+    ...behaviors.map((behavior) => ({
+      value: encodeLinkedValue("behavior", behavior.id),
+      label: behavior.title,
+      description: formatOwnedEntityDescription(
+        behavior.description,
+        behavior.user,
+        "Behavior"
+      ),
+      searchText: buildOwnedEntitySearchText(
+        [behavior.title, behavior.description, behavior.kind],
+        behavior
+      ),
+      kind: "behavior"
+    })),
+    ...beliefs.map((belief) => ({
+      value: encodeLinkedValue("belief_entry", belief.id),
+      label: belief.statement,
+      description: formatOwnedEntityDescription(
+        belief.flexibleAlternative || belief.originNote,
+        belief.user,
+        "Belief"
+      ),
+      searchText: buildOwnedEntitySearchText(
+        [belief.statement, belief.flexibleAlternative, belief.originNote],
+        belief
+      ),
+      kind: "belief"
+    })),
+    ...modes.map((mode) => ({
+      value: encodeLinkedValue("mode_profile", mode.id),
+      label: mode.title,
+      description: formatOwnedEntityDescription(
+        mode.archetype || mode.family,
+        mode.user,
+        "Mode"
+      ),
+      searchText: buildOwnedEntitySearchText(
+        [mode.title, mode.archetype, mode.family, mode.persona],
+        mode
+      ),
+      kind: "mode"
+    }))
+  ] satisfies EntityLinkOption[];
+
+  return [...options].sort((left, right) => left.label.localeCompare(right.label));
+}
+
+function renderOtherLinkBadges(observation: PsycheObservationEntry) {
+  return observation.note.links
+    .filter(
+      (link) =>
+        link.entityType !== "behavior_pattern" &&
+        link.entityType !== "trigger_report"
+    )
+    .slice(0, 2)
+    .map((link) => (
+      <Badge
+        key={`${observation.note.id}-${link.entityType}-${link.entityId}`}
+        className="bg-white/[0.08] text-white/68"
+      >
+        {formatEntityTypeLabel(link.entityType)}
+      </Badge>
+    ));
+}
+
 export function PsycheSelfObservationPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -163,15 +466,20 @@ export function PsycheSelfObservationPage() {
     : [];
   const defaultUserId = getSingleSelectedUserId(selectedUserIds);
   const [weekStart, setWeekStart] = useState(() => startOfWeek());
-  const [selectedTags, setSelectedTags] = useState<string[]>([]);
+  const [selectedTags, setSelectedTags] = useState<string[]>([
+    SELF_OBSERVATION_TAG
+  ]);
   const [authorFilter, setAuthorFilter] = useState("");
   const [onlyHumanOwned, setOnlyHumanOwned] = useState(false);
   const [sheetOpen, setSheetOpen] = useState(false);
   const [draft, setDraft] = useState<ObservationDraft>({
     ...EMPTY_DRAFT,
+    tags: seedObservationTags(),
     userId: defaultUserId
   });
-  const [draggedObservationId, setDraggedObservationId] = useState<string | null>(null);
+  const [draggedObservationId, setDraggedObservationId] = useState<string | null>(
+    null
+  );
 
   const weekEnd = useMemo(() => addDays(weekStart, 7), [weekStart]);
   const days = useMemo(() => buildWeekDays(weekStart), [weekStart]);
@@ -190,9 +498,25 @@ export function PsycheSelfObservationPage() {
         userIds: selectedUserIds
       })
   });
+  const valuesQuery = useQuery({
+    queryKey: ["forge-psyche-values", ...selectedUserIds],
+    queryFn: () => listPsycheValues(selectedUserIds)
+  });
   const patternsQuery = useQuery({
     queryKey: ["forge-psyche-patterns", ...selectedUserIds],
     queryFn: () => listBehaviorPatterns(selectedUserIds)
+  });
+  const behaviorsQuery = useQuery({
+    queryKey: ["forge-psyche-behaviors", ...selectedUserIds],
+    queryFn: () => listBehaviors(selectedUserIds)
+  });
+  const beliefsQuery = useQuery({
+    queryKey: ["forge-psyche-beliefs", ...selectedUserIds],
+    queryFn: () => listBeliefs(selectedUserIds)
+  });
+  const modesQuery = useQuery({
+    queryKey: ["forge-psyche-modes", ...selectedUserIds],
+    queryFn: () => listModes(selectedUserIds)
   });
   const reportsQuery = useQuery({
     queryKey: ["forge-psyche-reports", ...selectedUserIds],
@@ -203,8 +527,15 @@ export function PsycheSelfObservationPage() {
     mutationFn: async (value: ObservationDraft) => {
       const observedAt =
         parseDateTimeLocalToIso(value.observedAtInput) ?? new Date().toISOString();
-      const links = [
-        ...value.preservedLinks,
+      const links = dedupeNoteLinks([
+        ...value.linkedEntityValues
+          .map((entry) => decodeLinkedValue(entry))
+          .filter(isLinkedEntityRef)
+          .map((entry) => ({
+            entityType: entry.entityType,
+            entityId: entry.entityId,
+            anchorKey: null
+          })),
         ...value.linkedPatternIds.map((patternId) => ({
           entityType: "behavior_pattern" as const,
           entityId: patternId,
@@ -219,13 +550,13 @@ export function PsycheSelfObservationPage() {
               }
             ]
           : [])
-      ];
+      ]);
 
       if (value.noteId) {
         return patchNote(value.noteId, {
           contentMarkdown: value.contentMarkdown.trim(),
           author: value.author.trim() || null,
-          tags: value.tags,
+          tags: normalizeNoteTags(value.tags),
           userId: value.userId,
           frontmatter: {
             observedAt
@@ -237,7 +568,7 @@ export function PsycheSelfObservationPage() {
       return createNote({
         contentMarkdown: value.contentMarkdown.trim(),
         author: value.author.trim() || null,
-        tags: value.tags,
+        tags: normalizeNoteTags(value.tags),
         userId: value.userId,
         frontmatter: {
           observedAt
@@ -247,7 +578,11 @@ export function PsycheSelfObservationPage() {
     },
     onSuccess: async () => {
       setSheetOpen(false);
-      setDraft({ ...EMPTY_DRAFT, userId: defaultUserId });
+      setDraft({
+        ...EMPTY_DRAFT,
+        tags: seedObservationTags(),
+        userId: defaultUserId
+      });
       await Promise.all([
         queryClient.invalidateQueries({
           queryKey: ["forge-psyche-self-observation-calendar"]
@@ -273,7 +608,35 @@ export function PsycheSelfObservationPage() {
     }
   });
 
-  const availableTags = observationQuery.data?.calendar.availableTags ?? [];
+  const deleteObservationMutation = useMutation({
+    mutationFn: (noteId: string) => deleteNote(noteId),
+    onSuccess: async (_result, noteId) => {
+      if (draft.noteId === noteId) {
+        setSheetOpen(false);
+        setDraft({
+          ...EMPTY_DRAFT,
+          tags: seedObservationTags(),
+          userId: defaultUserId
+        });
+      }
+      await Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: ["forge-psyche-self-observation-calendar"]
+        }),
+        queryClient.invalidateQueries({ queryKey: ["forge-snapshot"] }),
+        queryClient.invalidateQueries({ queryKey: ["forge-psyche-overview"] })
+      ]);
+    }
+  });
+
+  const availableTags = useMemo(
+    () =>
+      normalizeNoteTags([
+        SELF_OBSERVATION_TAG,
+        ...(observationQuery.data?.calendar.availableTags ?? [])
+      ]),
+    [observationQuery.data?.calendar.availableTags]
+  );
   const patternOptions = useMemo(
     () => buildPatternOptions(patternsQuery.data?.patterns ?? []),
     [patternsQuery.data?.patterns]
@@ -281,6 +644,33 @@ export function PsycheSelfObservationPage() {
   const reportOptions = useMemo(
     () => buildReportOptions(reportsQuery.data?.reports ?? []),
     [reportsQuery.data?.reports]
+  );
+  const genericLinkOptions = useMemo(
+    () =>
+      buildGenericLinkOptions({
+        goals: shell.snapshot.goals,
+        projects: shell.snapshot.dashboard.projects,
+        tasks: shell.snapshot.tasks,
+        strategies: shell.snapshot.strategies,
+        habits: shell.snapshot.habits,
+        tags: shell.snapshot.tags,
+        values: valuesQuery.data?.values ?? [],
+        behaviors: behaviorsQuery.data?.behaviors ?? [],
+        beliefs: beliefsQuery.data?.beliefs ?? [],
+        modes: modesQuery.data?.modes ?? []
+      }),
+    [
+      behaviorsQuery.data?.behaviors,
+      beliefsQuery.data?.beliefs,
+      modesQuery.data?.modes,
+      shell.snapshot.dashboard.projects,
+      shell.snapshot.goals,
+      shell.snapshot.habits,
+      shell.snapshot.strategies,
+      shell.snapshot.tags,
+      shell.snapshot.tasks,
+      valuesQuery.data?.values
+    ]
   );
   const scopeUsers = shell.snapshot.users.filter((user) =>
     selectedUserIds.includes(user.id)
@@ -340,14 +730,19 @@ export function PsycheSelfObservationPage() {
     return map;
   }, [visibleObservations]);
 
-  const openComposerForSlot = (day: Date, hour: number) => {
-    const seed = new Date(day);
-    seed.setHours(hour, 0, 0, 0);
+  const resetDraft = (seedDate?: Date) => {
     setDraft({
       ...EMPTY_DRAFT,
       userId: defaultUserId,
-      observedAtInput: formatLocalDateTimeInput(seed.toISOString())
+      tags: seedObservationTags(),
+      observedAtInput: seedDate ? formatLocalDateTimeInput(seedDate.toISOString()) : ""
     });
+  };
+
+  const openComposerForSlot = (day: Date, hour: number) => {
+    const seed = new Date(day);
+    seed.setHours(hour, 0, 0, 0);
+    resetDraft(seed);
     setSheetOpen(true);
   };
 
@@ -370,6 +765,17 @@ export function PsycheSelfObservationPage() {
     });
   };
 
+  const handleCreatePatternFromObservation = async () => {
+    const result = await saveObservationMutation.mutateAsync(draft);
+    const search = new URLSearchParams();
+    search.set("create", "1");
+    search.set("sourceObservationNoteId", result.note.id);
+    if (result.note.userId) {
+      search.set("userId", result.note.userId);
+    }
+    navigate(`/psyche/patterns?${search.toString()}`);
+  };
+
   if (observationQuery.isLoading) {
     return <SurfaceSkeleton />;
   }
@@ -389,7 +795,7 @@ export function PsycheSelfObservationPage() {
       <PageHero
         title="Self Observation"
         titleText="Self Observation"
-        description="Map notes onto the real week by hour, then link the pattern and trigger report that belong to that moment."
+        description="Map notes onto the real week by hour, then link the pattern, trigger report, and any other Forge records that belong to that moment."
         badge={`${visibleObservations.length} visible`}
         actions={
           <Button
@@ -485,12 +891,10 @@ export function PsycheSelfObservationPage() {
                   const slotKey = `${dayKey}:${hour}`;
                   const slotObservations = observationsBySlot.get(slotKey) ?? [];
                   return (
-                    <button
+                    <div
                       key={slotKey}
-                      type="button"
                       data-self-observation-slot={slotKey}
-                      className="min-h-[7rem] border-r border-white/6 px-2 py-2 text-left align-top last:border-r-0"
-                      onClick={() => openComposerForSlot(day, hour)}
+                      className="min-h-[7rem] border-r border-white/6 px-2 py-2 last:border-r-0"
                       onDragOver={(event) => event.preventDefault()}
                       onDrop={(event) => {
                         event.preventDefault();
@@ -511,8 +915,21 @@ export function PsycheSelfObservationPage() {
                       }}
                     >
                       <div className="grid gap-2">
+                        {slotObservations.length > 0 ? (
+                          <div className="flex justify-end">
+                            <button
+                              type="button"
+                              className="inline-flex items-center gap-1 rounded-full border border-white/8 bg-white/[0.04] px-2 py-1 text-[11px] text-white/58 transition hover:bg-white/[0.08] hover:text-white"
+                              onClick={() => openComposerForSlot(day, hour)}
+                            >
+                              <Plus className="size-3.5" />
+                              Add
+                            </button>
+                          </div>
+                        ) : null}
+
                         {slotObservations.map((observation) => (
-                          <article
+                          <div
                             key={observation.id}
                             draggable
                             data-self-observation-card={observation.note.id}
@@ -523,63 +940,85 @@ export function PsycheSelfObservationPage() {
                                 observation.note.id
                               );
                             }}
-                            onClick={(event) => {
-                              event.stopPropagation();
-                              openComposerForObservation(observation);
-                            }}
+                            onDragEnd={() => setDraggedObservationId(null)}
                             className="rounded-[22px] border border-white/10 bg-[rgba(110,231,183,0.08)] p-3 text-white transition hover:border-white/18 hover:bg-[rgba(110,231,183,0.12)]"
                           >
-                            <div className="flex flex-wrap items-start justify-between gap-2">
-                              <div className="text-xs uppercase tracking-[0.16em] text-[rgba(110,231,183,0.82)]">
-                                {formatClock(observation.observedAt)}
-                              </div>
-                              <UserBadge user={observation.note.user} compact />
+                            <div className="flex items-start justify-between gap-2">
+                              <button
+                                type="button"
+                                className="min-w-0 flex-1 text-left"
+                                onClick={() => openComposerForObservation(observation)}
+                              >
+                                <div className="flex flex-wrap items-start justify-between gap-2">
+                                  <div className="text-xs uppercase tracking-[0.16em] text-[rgba(110,231,183,0.82)]">
+                                    {formatClock(observation.observedAt)}
+                                  </div>
+                                  <UserBadge user={observation.note.user} compact />
+                                </div>
+                                <div className="mt-2 line-clamp-3 text-sm leading-6 text-white/78">
+                                  {summarizeNote(observation.note)}
+                                </div>
+                                <div className="mt-3 flex flex-wrap gap-1.5">
+                                  {observation.note.author ? (
+                                    <Badge className="bg-white/[0.08] text-white/72">
+                                      {observation.note.author}
+                                    </Badge>
+                                  ) : null}
+                                  {(observation.note.tags ?? []).slice(0, 2).map((tag) => (
+                                    <Badge
+                                      key={`${observation.id}-${tag}`}
+                                      className="bg-cyan-400/10 text-cyan-50"
+                                    >
+                                      {tag}
+                                    </Badge>
+                                  ))}
+                                  {renderOtherLinkBadges(observation)}
+                                  {observation.linkedPatterns.slice(0, 2).map((pattern) => (
+                                    <EntityBadge
+                                      key={pattern.id}
+                                      kind="pattern"
+                                      label={pattern.title}
+                                      compact
+                                      gradient={false}
+                                    />
+                                  ))}
+                                  {observation.linkedReports.slice(0, 1).map((report) => (
+                                    <EntityBadge
+                                      key={report.id}
+                                      kind="report"
+                                      label={report.title}
+                                      compact
+                                      gradient={false}
+                                    />
+                                  ))}
+                                </div>
+                              </button>
+                              <button
+                                type="button"
+                                className="rounded-full border border-white/8 bg-white/[0.04] p-2 text-white/54 transition hover:bg-rose-500/18 hover:text-rose-100"
+                                aria-label={`Delete observation ${observation.note.id}`}
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  void deleteObservationMutation.mutateAsync(observation.note.id);
+                                }}
+                              >
+                                <Trash2 className="size-3.5" />
+                              </button>
                             </div>
-                            <div className="mt-2 line-clamp-3 text-sm leading-6 text-white/78">
-                              {summarizeNote(observation.note)}
-                            </div>
-                            <div className="mt-3 flex flex-wrap gap-1.5">
-                              {observation.note.author ? (
-                                <Badge className="bg-white/[0.08] text-white/72">
-                                  {observation.note.author}
-                                </Badge>
-                              ) : null}
-                              {(observation.note.tags ?? []).slice(0, 2).map((tag) => (
-                                <Badge
-                                  key={`${observation.id}-${tag}`}
-                                  className="bg-cyan-400/10 text-cyan-50"
-                                >
-                                  {tag}
-                                </Badge>
-                              ))}
-                              {observation.linkedPatterns.slice(0, 2).map((pattern) => (
-                                <EntityBadge
-                                  key={pattern.id}
-                                  kind="pattern"
-                                  label={pattern.title}
-                                  compact
-                                  gradient={false}
-                                />
-                              ))}
-                              {observation.linkedReports.slice(0, 1).map((report) => (
-                                <EntityBadge
-                                  key={report.id}
-                                  kind="report"
-                                  label={report.title}
-                                  compact
-                                  gradient={false}
-                                />
-                              ))}
-                            </div>
-                          </article>
-                        ))}
-                        {slotObservations.length === 0 ? (
-                          <div className="rounded-[18px] border border-dashed border-white/8 px-3 py-4 text-sm text-white/34">
-                            Add observation
                           </div>
+                        ))}
+
+                        {slotObservations.length === 0 ? (
+                          <button
+                            type="button"
+                            className="rounded-[18px] border border-dashed border-white/8 px-3 py-4 text-left text-sm text-white/34 transition hover:border-white/16 hover:text-white/56"
+                            onClick={() => openComposerForSlot(day, hour)}
+                          >
+                            Add observation
+                          </button>
                         ) : null}
                       </div>
-                    </button>
+                    </div>
                   );
                 })}
               </div>
@@ -616,45 +1055,86 @@ export function PsycheSelfObservationPage() {
                     const slotKey = `${dayKey}:${hour}`;
                     const slotObservations = observationsBySlot.get(slotKey) ?? [];
                     return (
-                      <button
+                      <div
                         key={slotKey}
-                        type="button"
                         data-self-observation-slot-mobile={slotKey}
-                        className="rounded-[18px] border border-white/6 bg-white/[0.03] px-3 py-3 text-left"
-                        onClick={() => openComposerForSlot(day, hour)}
+                        className="rounded-[18px] border border-white/6 bg-white/[0.03] px-3 py-3"
                       >
-                        <div className="text-xs uppercase tracking-[0.16em] text-white/34">
-                          {formatHourLabel(hour)}
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="text-xs uppercase tracking-[0.16em] text-white/34">
+                            {formatHourLabel(hour)}
+                          </div>
+                          <button
+                            type="button"
+                            className="inline-flex items-center gap-1 rounded-full border border-white/8 bg-white/[0.04] px-2 py-1 text-[11px] text-white/58 transition hover:bg-white/[0.08] hover:text-white"
+                            onClick={() => openComposerForSlot(day, hour)}
+                          >
+                            <Plus className="size-3.5" />
+                            Add
+                          </button>
                         </div>
                         <div className="mt-2 grid gap-2">
                           {slotObservations.length === 0 ? (
-                            <div className="text-sm text-white/38">Add observation</div>
+                            <button
+                              type="button"
+                              className="rounded-[16px] border border-dashed border-white/8 px-3 py-3 text-left text-sm text-white/38 transition hover:border-white/16 hover:text-white/56"
+                              onClick={() => openComposerForSlot(day, hour)}
+                            >
+                              Add observation
+                            </button>
                           ) : (
                             slotObservations.map((observation) => (
                               <div
                                 key={observation.id}
                                 className="rounded-[16px] bg-[rgba(110,231,183,0.1)] p-3"
                               >
-                                <div className="flex flex-wrap items-center gap-2">
-                                  <UserBadge user={observation.note.user} compact />
-                                  {observation.linkedPatterns.slice(0, 1).map((pattern) => (
-                                    <EntityBadge
-                                      key={pattern.id}
-                                      kind="pattern"
-                                      label={pattern.title}
-                                      compact
-                                      gradient={false}
-                                    />
-                                  ))}
-                                </div>
-                                <div className="mt-2 text-sm leading-6 text-white/78">
-                                  {summarizeNote(observation.note)}
+                                <div className="flex items-start justify-between gap-2">
+                                  <button
+                                    type="button"
+                                    className="min-w-0 flex-1 text-left"
+                                    onClick={() => openComposerForObservation(observation)}
+                                  >
+                                    <div className="flex flex-wrap items-center gap-2">
+                                      <UserBadge user={observation.note.user} compact />
+                                      {observation.linkedPatterns.slice(0, 1).map((pattern) => (
+                                        <EntityBadge
+                                          key={pattern.id}
+                                          kind="pattern"
+                                          label={pattern.title}
+                                          compact
+                                          gradient={false}
+                                        />
+                                      ))}
+                                      {observation.linkedReports.slice(0, 1).map((report) => (
+                                        <EntityBadge
+                                          key={report.id}
+                                          kind="report"
+                                          label={report.title}
+                                          compact
+                                          gradient={false}
+                                        />
+                                      ))}
+                                    </div>
+                                    <div className="mt-2 text-sm leading-6 text-white/78">
+                                      {summarizeNote(observation.note)}
+                                    </div>
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="rounded-full border border-white/8 bg-white/[0.04] p-2 text-white/54 transition hover:bg-rose-500/18 hover:text-rose-100"
+                                    aria-label={`Delete observation ${observation.note.id}`}
+                                    onClick={() =>
+                                      void deleteObservationMutation.mutateAsync(observation.note.id)
+                                    }
+                                  >
+                                    <Trash2 className="size-3.5" />
+                                  </button>
                                 </div>
                               </div>
                             ))
                           )}
                         </div>
-                      </button>
+                      </div>
                     );
                   })}
                 </div>
@@ -669,7 +1149,7 @@ export function PsycheSelfObservationPage() {
         onOpenChange={setSheetOpen}
         eyebrow="Self Observation"
         title={draft.noteId ? "Edit observation" : "Add observation"}
-        description="Capture the note, set the exact observation time, then attach the pattern and trigger report that belong to that moment."
+        description="Capture the note, set the exact observation time, then attach the pattern, trigger report, and any other Forge records that belong to that moment."
       >
         <div className="grid gap-4">
           <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
@@ -734,7 +1214,21 @@ export function PsycheSelfObservationPage() {
 
           <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
             <div className="grid gap-2">
-              <div className="text-sm font-medium text-white">Linked patterns</div>
+              <div className="flex items-center justify-between gap-3">
+                <div className="text-sm font-medium text-white">Linked patterns</div>
+                <button
+                  type="button"
+                  className="inline-flex items-center gap-2 rounded-full bg-white/[0.06] px-3 py-1.5 text-xs text-white/72 transition hover:bg-white/[0.1] hover:text-white"
+                  onClick={() => void handleCreatePatternFromObservation()}
+                  disabled={
+                    saveObservationMutation.isPending ||
+                    draft.contentMarkdown.trim().length === 0
+                  }
+                >
+                  <Sparkles className="size-3.5" />
+                  Create pattern from observation
+                </button>
+              </div>
               <EntityLinkMultiSelect
                 options={patternOptions}
                 selectedValues={draft.linkedPatternIds}
@@ -748,9 +1242,7 @@ export function PsycheSelfObservationPage() {
 
             <div className="grid gap-2">
               <div className="flex items-center justify-between gap-3">
-                <div className="text-sm font-medium text-white">
-                  Trigger report
-                </div>
+                <div className="text-sm font-medium text-white">Trigger report</div>
                 <button
                   type="button"
                   className="inline-flex items-center gap-2 rounded-full bg-white/[0.06] px-3 py-1.5 text-xs text-white/72 transition hover:bg-white/[0.1] hover:text-white"
@@ -790,31 +1282,59 @@ export function PsycheSelfObservationPage() {
             </div>
           </div>
 
+          <div className="grid gap-2">
+            <div className="text-sm font-medium text-white">Linked records</div>
+            <EntityLinkMultiSelect
+              options={genericLinkOptions}
+              selectedValues={draft.linkedEntityValues}
+              onChange={(linkedEntityValues) =>
+                setDraft((current) => ({ ...current, linkedEntityValues }))
+              }
+              placeholder="Link goals, projects, tasks, values, beliefs, modes, or other Forge records"
+              emptyMessage="No linked records in scope yet."
+            />
+          </div>
+
           <div className="rounded-[22px] border border-white/8 bg-white/[0.03] px-4 py-4">
             <div className="flex flex-wrap items-center gap-2 text-sm text-white/70">
               <StickyNote className="size-4 text-[var(--tertiary)]" />
               Cards appear in the hourly week grid at the exact observation time.
             </div>
             <div className="mt-2 text-sm leading-6 text-white/52">
-              Move them later by drag-and-drop or edit the timestamp directly
-              here when the observation belonged to a different hour than the
-              note creation moment.
+              Move them later by drag-and-drop, edit the timestamp directly here,
+              or delete them from the card itself when the observation should not
+              stay on the calendar.
             </div>
           </div>
 
           <div className="flex flex-wrap justify-between gap-3">
-            {draft.linkedTriggerReportId ? (
-              <button
-                type="button"
-                className="inline-flex items-center gap-2 rounded-full bg-white/[0.06] px-3 py-2 text-sm text-white/72 transition hover:bg-white/[0.1] hover:text-white"
-                onClick={() => navigate(`/psyche/reports/${draft.linkedTriggerReportId}`)}
-              >
-                <ArrowUpRight className="size-4" />
-                Open linked report
-              </button>
-            ) : (
-              <span />
-            )}
+            <div className="flex flex-wrap gap-2">
+              {draft.noteId ? (
+                <Button
+                  variant="secondary"
+                  pending={deleteObservationMutation.isPending}
+                  pendingLabel="Deleting"
+                  onClick={() =>
+                    draft.noteId
+                      ? void deleteObservationMutation.mutateAsync(draft.noteId)
+                      : undefined
+                  }
+                >
+                  <Trash2 className="size-4" />
+                  Delete observation
+                </Button>
+              ) : null}
+              {draft.linkedTriggerReportId ? (
+                <button
+                  type="button"
+                  className="inline-flex items-center gap-2 rounded-full bg-white/[0.06] px-3 py-2 text-sm text-white/72 transition hover:bg-white/[0.1] hover:text-white"
+                  onClick={() => navigate(`/psyche/reports/${draft.linkedTriggerReportId}`)}
+                >
+                  <ArrowUpRight className="size-4" />
+                  Open linked report
+                </button>
+              ) : null}
+            </div>
             <div className="flex flex-wrap gap-2">
               <Button variant="secondary" onClick={() => setSheetOpen(false)}>
                 Cancel
