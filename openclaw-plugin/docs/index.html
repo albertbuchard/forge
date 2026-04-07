@@ -45,10 +45,10 @@
             <p class="eyebrow">Getting Started</p>
             <h1>Run Forge locally or through its agent adapters.</h1>
             <p class="lede">
-              Forge is a local-first system for goals, projects, tasks, task runs,
-              notes, wiki pages, calendar planning, preferences, health records,
-              and Psyche data. This docs site is the engineering reference for the
-              runtime, repository, integrations, and API.
+              Forge is a local-first system for goals, projects, tasks, task
+              runs, notes, wiki pages, calendar planning, preferences, health
+              records, and Psyche data. This docs site is the engineering
+              reference for the runtime, repository, integrations, and API.
             </p>
             <div class="pill-row">
               <span class="pill">React 19 + Vite 6</span>
@@ -56,7 +56,9 @@
               <span class="pill">SQLite + file-backed wiki</span>
             </div>
             <div class="hero-actions" style="margin-top: 18px">
-              <a class="button primary" href="./development.html#local-development"
+              <a
+                class="button primary"
+                href="./development.html#local-development"
                 >Local development</a
               >
               <a class="button" href="./api/">Open API reference</a>
@@ -102,7 +104,9 @@
           <div class="card-grid three">
             <article class="card">
               <h3>OpenClaw plugin</h3>
-              <p>Use the published plugin when OpenClaw is the main host runtime.</p>
+              <p>
+                Use the published plugin when OpenClaw is the main host runtime.
+              </p>
               <pre><code>openclaw plugins install forge-openclaw-plugin
 openclaw plugins enable forge-openclaw-plugin
 openclaw gateway restart
@@ -110,13 +114,18 @@ openclaw forge health</code></pre>
             </article>
             <article class="card">
               <h3>Hermes plugin</h3>
-              <p>Use the Python plugin when Hermes is the main agent runtime.</p>
+              <p>
+                Use the Python plugin when Hermes is the main agent runtime.
+              </p>
               <pre><code>~/.hermes/hermes-agent/venv/bin/python -m ensurepip --upgrade
 ~/.hermes/hermes-agent/venv/bin/python -m pip install --upgrade ./plugins/forge-hermes</code></pre>
             </article>
             <article class="card">
               <h3>Standalone repo runtime</h3>
-              <p>Use the repo directly when you need the full Forge app and API locally.</p>
+              <p>
+                Use the repo directly when you need the full Forge app and API
+                locally.
+              </p>
               <pre><code>npm install
 npm run dev</code></pre>
             </article>
@@ -132,8 +141,8 @@ npm run dev</code></pre>
             <article class="card">
               <h3><a href="./engineering.html">Engineering reference</a></h3>
               <p>
-                Production stack, runtime addresses, storage model, route families,
-                repository layout, and package boundaries.
+                Production stack, runtime addresses, storage model, route
+                families, repository layout, and package boundaries.
               </p>
             </article>
             <article class="card">
@@ -153,8 +162,9 @@ npm run dev</code></pre>
             <article class="card">
               <h3><a href="./api/">API reference</a></h3>
               <p>
-                Rendered OpenAPI reference from the same generated Forge spec served
-                by the runtime.
+                Interactive API explorer with route descriptions, typed
+                payloads, live Try it out support, and the downloadable
+                generated spec.
               </p>
             </article>
           </div>
@@ -177,12 +187,16 @@ npm run dev</code></pre>
               <tr>
                 <td>Web UI</td>
                 <td>React 19, TypeScript 5.8, Vite 6, Tailwind CSS 4</td>
-                <td>Served under <code>/forge/</code> in production and local dev.</td>
+                <td>
+                  Served under <code>/forge/</code> in production and local dev.
+                </td>
               </tr>
               <tr>
                 <td>Backend</td>
                 <td>Fastify 5, TypeScript, OpenAPI 3.1</td>
-                <td>Spec is generated from <code>server/src/openapi.ts</code>.</td>
+                <td>
+                  Spec is generated from <code>server/src/openapi.ts</code>.
+                </td>
               </tr>
               <tr>
                 <td>Storage</td>
@@ -197,7 +211,9 @@ npm run dev</code></pre>
               <tr>
                 <td>Docs</td>
                 <td>GitHub Pages static site + rendered OpenAPI reference</td>
-                <td>The Pages artifact includes this site and the generated spec.</td>
+                <td>
+                  The Pages artifact includes this site and the generated spec.
+                </td>
               </tr>
             </tbody>
           </table>
@@ -233,9 +249,9 @@ API docs: /forge/api/</code></pre>
               alt="Forge overview dashboard"
             />
             <figcaption>
-              Forge keeps execution, planning, memory, health, and Psyche records in
-              one runtime. Use the UI when the work is visual; use the API or agent
-              adapters when the work is operational.
+              Forge keeps execution, planning, memory, health, and Psyche
+              records in one runtime. Use the UI when the work is visual; use
+              the API or agent adapters when the work is operational.
             </figcaption>
           </figure>
         </section>
