@@ -4,6 +4,7 @@ import path from "node:path";
 import { buildForgeBaseUrl, buildForgeWebAppUrl, type ForgePluginConfig } from "./api-client.js";
 import { primeForgeRuntime } from "./local-runtime.js";
 import { registerForgePluginCli, registerForgePluginRoutes } from "./routes.js";
+import { registerForgeSessionBootstrapHook } from "./session-bootstrap.js";
 import { registerForgePluginTools } from "./tools.js";
 import type { ForgePluginConfigSchema, ForgePluginRegistrationApi } from "./plugin-sdk-types.js";
 
@@ -189,6 +190,7 @@ export const forgePluginConfigSchema: ForgePluginConfigSchema = {
 export function registerForgePlugin(api: ForgePluginRegistrationApi) {
   const config = resolveForgePluginConfig(api.pluginConfig);
   primeForgeRuntime(config);
+  registerForgeSessionBootstrapHook(api, config);
   registerForgePluginRoutes(api, config);
   registerForgePluginCli(api, config);
   registerForgePluginTools(api, config);

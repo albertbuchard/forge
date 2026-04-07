@@ -83,6 +83,15 @@ type ToolCall = {
   name?: string;
 };
 
+type HookCall = {
+  events: string | string[];
+  options?: {
+    name?: string;
+    description?: string;
+    register?: boolean;
+  };
+};
+
 type MockCommand = {
   name: string;
   children: MockCommand[];
@@ -203,6 +212,7 @@ describe("forge openclaw plugin", () => {
   it("registers the curated Forge route groups, tools, and CLI commands", () => {
     const routes: RouteCall[] = [];
     const tools: ToolCall[] = [];
+    const hooks: HookCall[] = [];
     const program = createCommand("root");
 
     registerForgePlugin({
@@ -221,6 +231,9 @@ describe("forge openclaw plugin", () => {
           typeof tool === "function" ? { name: "factory" } : { name: tool.name }
         );
       },
+      registerHook(events, _handler, options) {
+        hooks.push({ events, options });
+      },
       registerCli(registrar) {
         registrar({
           program: program as never,
@@ -236,6 +249,16 @@ describe("forge openclaw plugin", () => {
     });
 
     expect(routes).toHaveLength(FORGE_PLUGIN_ROUTE_GROUPS.length);
+    expect(hooks).toEqual([
+      {
+        events: "agent:bootstrap",
+        options: {
+          name: "forge-session-bootstrap",
+          description:
+            "Inject a live Forge workspace summary and People wiki snapshots into agent bootstrap context."
+        }
+      }
+    ]);
     expect(routes.map((route) => route.path)).toEqual([
       "/forge/v1/health",
       "/forge/v1/operator/overview",

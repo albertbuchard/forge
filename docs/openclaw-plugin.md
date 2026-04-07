@@ -2,6 +2,29 @@
 
 Forge ships a native OpenClaw plugin add-on with a deliberately small public surface.
 
+## Session Bootstrap
+
+Forge now injects a live session-start bootstrap block into each newly created
+OpenClaw agent session through the plugin's `agent:bootstrap` hook. This is a
+session bootstrap, not a per-reply prompt mutation.
+
+The injected block includes:
+
+- the current Forge operator snapshot
+- current goals, projects, strategies, tasks, and habits
+- all wiki pages under the `People` branch, with each page title plus the first
+  100 characters of its page text
+- a short instruction telling the agent to use the Forge skill/tools when it
+  needs more detail about any listed Forge entity or person page
+
+Implementation note:
+
+- Forge uses the internal hook route `registerHook("agent:bootstrap", ...)`
+  because that event can append a synthetic bootstrap file before the first
+  model turn of a new session
+- this is more precise for session-start context than relying on legacy
+  `before_agent_start`, which OpenClaw still supports but documents as legacy
+
 ## Open the UI
 
 If the user wants the actual Forge app, tell them they can either:

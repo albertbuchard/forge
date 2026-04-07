@@ -1,6 +1,7 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { TSchema } from "@sinclair/typebox";
 import type { AgentToolResult } from "@mariozechner/pi-agent-core";
+import type { InternalHookEvent } from "openclaw/plugin-sdk/hook-runtime";
 
 export type ForgePluginConfigSchema = {
   parse(value: unknown): unknown;
@@ -50,8 +51,19 @@ export type ForgeCliRegistrarContext = {
 
 export type ForgePluginRegistrationApi = {
   pluginConfig?: unknown;
+  logger?: {
+    info?(message: string): void;
+    warn?(message: string): void;
+    error?(message: string): void;
+    debug?(message: string): void;
+  };
   registerHttpRoute(route: ForgeRegisteredHttpRoute): void;
   registerTool(tool: ForgeRegisteredTool, options?: { optional?: boolean }): void;
+  registerHook?(
+    events: string | string[],
+    handler: (event: InternalHookEvent) => Promise<void> | void,
+    options?: { name?: string; description?: string; register?: boolean }
+  ): void;
   registerCli?(registrar: (context: ForgeCliRegistrarContext) => void, options?: { commands?: string[] }): void;
 };
 
