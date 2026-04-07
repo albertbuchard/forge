@@ -246,6 +246,11 @@ export const rewardRuleFamilySchema = z.enum([
     "ambient"
 ]);
 export const appLocaleSchema = z.enum(["en", "fr"]);
+export const surfaceWidgetDensitySchema = z.enum([
+    "dense",
+    "compact",
+    "comfortable"
+]);
 const trimmedString = z.string().trim();
 const nonEmptyTrimmedString = trimmedString.min(1);
 const rewardConfigValueSchema = z.union([
@@ -887,7 +892,7 @@ export const activityEventSchema = z.object({
     description: z.string(),
     actor: z.string().nullable(),
     source: activitySourceSchema,
-    metadata: z.record(z.string(), z.union([z.string(), z.number(), z.boolean(), z.null()])),
+    metadata: z.record(z.string(), z.unknown()),
     createdAt: z.string(),
     ...ownershipShape
 });
@@ -1315,6 +1320,11 @@ export const aiProcessorMachineAccessSchema = z.object({
     write: z.boolean().default(false),
     exec: z.boolean().default(false)
 });
+export const aiProcessorAgentConfigSchema = z.object({
+    agentId: nonEmptyTrimmedString,
+    connectionId: trimmedString.nullable().default(null),
+    model: trimmedString.default("")
+});
 export const aiProcessorToolSchema = z.object({
     key: nonEmptyTrimmedString,
     label: nonEmptyTrimmedString,
@@ -1322,14 +1332,50 @@ export const aiProcessorToolSchema = z.object({
     endpoint: trimmedString.default(""),
     mode: aiProcessorCapabilityModeSchema.default("tool")
 });
+export const surfaceLayoutBreakpointItemSchema = z.object({
+    i: nonEmptyTrimmedString,
+    x: z.number().int().min(0),
+    y: z.number().int().min(0),
+    w: z.number().int().min(1).max(24),
+    h: z.number().int().min(1).max(24),
+    minW: z.number().int().min(1).max(24).optional(),
+    maxW: z.number().int().min(1).max(24).optional(),
+    minH: z.number().int().min(1).max(24).optional(),
+    maxH: z.number().int().min(1).max(24).optional()
+});
+export const surfaceLayoutBreakpointsSchema = z.object({
+    lg: z.array(surfaceLayoutBreakpointItemSchema).default([]),
+    md: z.array(surfaceLayoutBreakpointItemSchema).default([]),
+    sm: z.array(surfaceLayoutBreakpointItemSchema).default([]),
+    xs: z.array(surfaceLayoutBreakpointItemSchema).default([]),
+    xxs: z.array(surfaceLayoutBreakpointItemSchema).default([])
+});
+export const surfaceWidgetPreferencesSchema = z.object({
+    hidden: z.boolean().default(false),
+    titleVisible: z.boolean().default(true),
+    descriptionVisible: z.boolean().default(true),
+    density: surfaceWidgetDensitySchema.default("compact")
+});
+export const surfaceLayoutPayloadSchema = z.object({
+    surfaceId: nonEmptyTrimmedString,
+    layouts: surfaceLayoutBreakpointsSchema,
+    widgets: z.record(z.string(), surfaceWidgetPreferencesSchema).default({}),
+    updatedAt: z.string()
+});
+export const writeSurfaceLayoutSchema = z.object({
+    layouts: surfaceLayoutBreakpointsSchema,
+    widgets: z.record(z.string(), surfaceWidgetPreferencesSchema).default({})
+});
 export const aiProcessorSchema = z.object({
     id: z.string(),
+    slug: z.string(),
     surfaceId: z.string(),
     title: z.string(),
     promptFlow: z.string(),
     contextInput: z.string(),
     toolConfig: z.array(aiProcessorToolSchema),
     agentIds: z.array(z.string()),
+    agentConfigs: z.array(aiProcessorAgentConfigSchema),
     triggerMode: aiProcessorTriggerModeSchema,
     cronExpression: z.string(),
     machineAccess: aiProcessorMachineAccessSchema,
@@ -1342,6 +1388,21 @@ export const aiProcessorSchema = z.object({
         byAgent: z.record(z.string(), z.string())
     })
         .nullable(),
+    runHistory: z.array(z.object({
+        id: z.string(),
+        trigger: z.enum(["manual", "route", "cron"]),
+        startedAt: z.string(),
+        completedAt: z.string().nullable(),
+        status: z.enum(["running", "completed", "failed"]),
+        input: z.string(),
+        output: z
+            .object({
+            concatenated: z.string(),
+            byAgent: z.record(z.string(), z.string())
+        })
+            .nullable(),
+        error: z.string().nullable()
+    })),
     createdAt: z.string(),
     updatedAt: z.string()
 });
@@ -2510,6 +2571,7 @@ export const createAiProcessorSchema = z.object({
     contextInput: trimmedString.default(""),
     toolConfig: z.array(aiProcessorToolSchema).default([]),
     agentIds: z.array(z.string().trim().min(1)).default([]),
+    agentConfigs: z.array(aiProcessorAgentConfigSchema).default([]),
     triggerMode: aiProcessorTriggerModeSchema.default("manual"),
     cronExpression: trimmedString.default(""),
     machineAccess: aiProcessorMachineAccessSchema.default({
@@ -2525,6 +2587,7 @@ export const updateAiProcessorSchema = z.object({
     contextInput: trimmedString.optional(),
     toolConfig: z.array(aiProcessorToolSchema).optional(),
     agentIds: z.array(z.string().trim().min(1)).optional(),
+    agentConfigs: z.array(aiProcessorAgentConfigSchema).optional(),
     triggerMode: aiProcessorTriggerModeSchema.optional(),
     cronExpression: trimmedString.optional(),
     machineAccess: aiProcessorMachineAccessSchema.partial().optional(),
@@ -2540,7 +2603,8 @@ export const createAiProcessorLinkSchema = z.object({
 });
 export const runAiProcessorSchema = z.object({
     input: trimmedString.default(""),
-    context: z.record(z.string(), z.unknown()).default({})
+    context: z.record(z.string(), z.unknown()).default({}),
+    widgetSnapshots: z.record(z.string(), z.unknown()).default({})
 });
 export const createAgentTokenSchema = z.object({
     label: nonEmptyTrimmedString,

@@ -5000,10 +5000,12 @@ export async function buildServer(
       ["write"],
       { route: "/api/v1/movement/settings" }
     );
-    const userIds = resolveScopedUserIds(request.query as Record<string, unknown>);
+    const userId =
+      resolveScopedUserIds(request.query as Record<string, unknown>)?.[0] ??
+      getDefaultUser().id;
     return {
       settings: updateMovementSettings(
-        userIds[0] ?? getDefaultUser().id,
+        userId,
         movementSettingsPatchSchema.parse(request.body ?? {}),
         toActivityContext(auth)
       )
@@ -5020,13 +5022,15 @@ export async function buildServer(
       ["write"],
       { route: "/api/v1/movement/places" }
     );
-    const userIds = resolveScopedUserIds(request.query as Record<string, unknown>);
+    const userId =
+      resolveScopedUserIds(request.query as Record<string, unknown>)?.[0] ??
+      getDefaultUser().id;
     reply.code(201);
     return {
       place: createMovementPlace(
         {
           ...movementPlaceMutationSchema.parse(request.body ?? {}),
-          userId: userIds[0] ?? getDefaultUser().id,
+          userId,
           source: "user"
         },
         toActivityContext(auth)

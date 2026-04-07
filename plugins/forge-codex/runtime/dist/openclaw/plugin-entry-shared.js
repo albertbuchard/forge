@@ -4,6 +4,7 @@ import path from "node:path";
 import { buildForgeBaseUrl, buildForgeWebAppUrl } from "./api-client.js";
 import { primeForgeRuntime } from "./local-runtime.js";
 import { registerForgePluginCli, registerForgePluginRoutes } from "./routes.js";
+import { registerForgeSessionBootstrapHook } from "./session-bootstrap.js";
 import { registerForgePluginTools } from "./tools.js";
 export const FORGE_PLUGIN_ID = "forge-openclaw-plugin";
 export const FORGE_PLUGIN_NAME = "Forge";
@@ -175,6 +176,7 @@ export const forgePluginConfigSchema = {
 export function registerForgePlugin(api) {
     const config = resolveForgePluginConfig(api.pluginConfig);
     primeForgeRuntime(config);
+    registerForgeSessionBootstrapHook(api, config);
     registerForgePluginRoutes(api, config);
     registerForgePluginCli(api, config);
     registerForgePluginTools(api, config);

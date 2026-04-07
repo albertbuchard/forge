@@ -22,7 +22,7 @@ const movementRetentionModeSchema = z.enum([
 
 const movementVisibilitySchema = z.enum(["personal", "shared"]);
 
-const movementCategoryTagSchema = z.enum([
+export const movementCategoryTags = [
   "home",
   "workplace",
   "school",
@@ -35,7 +35,9 @@ const movementCategoryTagSchema = z.enum([
   "social",
   "travel",
   "other"
-]);
+] as const;
+
+export const movementCategoryTagSchema = z.enum(movementCategoryTags);
 
 const linkedEntitySchema = z.object({
   entityType: z.string().trim().min(1),
@@ -799,12 +801,22 @@ function createMovementNote(input: {
     {
       kind: "evidence",
       title: input.title,
+      slug: "",
+      summary: "",
       contentMarkdown: input.contentMarkdown,
       spaceId,
+      parentSlug: null,
+      indexOrder: 0,
+      showInIndex: false,
+      aliases: [],
       userId: input.userId,
+      author: null,
       links: [],
       tags: input.tags,
-      frontmatter: input.frontmatter
+      destroyAt: null,
+      sourcePath: "",
+      frontmatter: input.frontmatter,
+      revisionHash: ""
     },
     { actor: "Movement sync", source: "system" }
   );
@@ -907,7 +919,8 @@ function awardMovementXp(input: {
       entityId: input.entityId,
       deltaXp,
       reasonTitle: input.title,
-      reasonSummary: `Movement activity reward for ${input.categoryTags.join(", ") || "general mobility"}.`
+      reasonSummary: `Movement activity reward for ${input.categoryTags.join(", ") || "general mobility"}.`,
+      metadata: {}
     },
     { actor: "Movement sync", source: "system" }
   );
@@ -1610,7 +1623,7 @@ export function updateMovementSettings(
       "Movement tracking behavior changed for the current Forge user.",
     actor: context.actor ?? null,
     source: context.source,
-    metadata: settings
+    metadata: settings ?? undefined
   });
   return settings;
 }
@@ -1637,8 +1650,8 @@ function computeSelectionAggregate(input: {
     overlapSeconds(
       input.startedAt,
       input.endedAt,
-      run.startedAt,
-      run.endedAt ?? run.updatedAt
+      run.claimedAt,
+      run.completedAt ?? run.updatedAt
     ) > 0
   );
   const publishedNotes = [
@@ -1688,8 +1701,8 @@ function computeSelectionAggregate(input: {
     noteCount: publishedNotes.length,
     taskRunCount: relevantTaskRuns.length,
     trackedWorkSeconds: relevantTaskRuns.reduce((sum, run) => {
-      const end = run.endedAt ?? run.updatedAt;
-      return sum + overlapSeconds(input.startedAt, input.endedAt, run.startedAt, end);
+      const end = run.completedAt ?? run.updatedAt;
+      return sum + overlapSeconds(input.startedAt, input.endedAt, run.claimedAt, end);
     }, 0),
     placeLabels,
     tags

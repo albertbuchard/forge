@@ -1,8 +1,15 @@
 import { randomUUID } from "node:crypto";
+import { readFile, writeFile } from "node:fs/promises";
+import { promisify } from "node:util";
+import { execFile as execFileCallback } from "node:child_process";
+import path from "node:path";
 import { getDatabase } from "../db.js";
 import { aiProcessorLinkSchema, aiProcessorSchema, createAiProcessorLinkSchema, createAiProcessorSchema, runAiProcessorSchema, surfaceProcessorGraphPayloadSchema, updateAiProcessorSchema } from "../types.js";
 import { FORGE_DEFAULT_AGENT_ID, getAiModelConnectionById, listAiModelConnections, readModelConnectionCredential } from "./model-settings.js";
 import { getSettings } from "./settings.js";
+const MAX_RUN_HISTORY = 12;
+const MAX_TOOL_STEPS = 6;
+const execFile = promisify(execFileCallback);
 function parseJson(value, fallback) {
     try {
         return value ? JSON.parse(value) : fallback;
@@ -11,15 +18,152 @@ function parseJson(value, fallback) {
         return fallback;
     }
 }
+function slugifySegment(value) {
+    const normalized = value
+        .trim()
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-+|-+$/g, "");
+    return normalized || "processor";
+}
+function buildProcessorSlug(title, id) {
+    return `${slugifySegment(title)}-${id.slice(-6)}`;
+}
+function processorWidgetId(processorId) {
+    return `aiproc:${processorId}`;
+}
+function processorIdFromNodeId(nodeId) {
+    return nodeId.startsWith("aiproc:") ? nodeId.slice("aiproc:".length) : null;
+}
+function resolveAllowedPath(inputPath) {
+    const candidate = path.resolve(process.cwd(), inputPath);
+    const workspaceRoot = process.cwd();
+    if (candidate !== workspaceRoot &&
+        !candidate.startsWith(`${workspaceRoot}${path.sep}`)) {
+        throw new Error("Machine access is restricted to the Forge workspace root.");
+    }
+    return candidate;
+}
+function tryParseStructuredAgentResponse(value) {
+    try {
+        return JSON.parse(value);
+    }
+    catch {
+        return null;
+    }
+}
+async function executeMachineTool(processor, tool, args) {
+    if (tool === "machine_read_file") {
+        if (!processor.machineAccess.read) {
+            throw new Error("Read access is disabled for this processor.");
+        }
+        const targetPath = typeof args.path === "string" ? resolveAllowedPath(args.path) : null;
+        if (!targetPath) {
+            throw new Error("machine_read_file requires a string path.");
+        }
+        const content = await readFile(targetPath, "utf8");
+        return {
+            path: targetPath,
+            content
+        };
+    }
+    if (tool === "machine_write_file") {
+        if (!processor.machineAccess.write) {
+            throw new Error("Write access is disabled for this processor.");
+        }
+        const targetPath = typeof args.path === "string" ? resolveAllowedPath(args.path) : null;
+        if (!targetPath) {
+            throw new Error("machine_write_file requires a string path.");
+        }
+        if (typeof args.content !== "string") {
+            throw new Error("machine_write_file requires string content.");
+        }
+        await writeFile(targetPath, args.content, "utf8");
+        return {
+            path: targetPath,
+            bytesWritten: Buffer.byteLength(args.content, "utf8")
+        };
+    }
+    if (!processor.machineAccess.exec) {
+        throw new Error("Exec access is disabled for this processor.");
+    }
+    if (typeof args.command !== "string" || args.command.trim().length === 0) {
+        throw new Error("machine_exec requires a command string.");
+    }
+    const cwd = typeof args.cwd === "string" && args.cwd.trim().length > 0
+        ? resolveAllowedPath(args.cwd)
+        : process.cwd();
+    const result = await execFile("zsh", ["-lc", args.command], {
+        cwd,
+        timeout: 15_000,
+        maxBuffer: 256_000
+    });
+    return {
+        cwd,
+        stdout: result.stdout.trim(),
+        stderr: result.stderr.trim()
+    };
+}
+async function runProcessorAgent(processor, agent, fullPrompt, services) {
+    if (!agent.profile) {
+        return "No model connection is configured for this agent yet.";
+    }
+    const toolNames = [
+        processor.machineAccess.read ? "machine_read_file(path)" : null,
+        processor.machineAccess.write
+            ? "machine_write_file(path, content)"
+            : null,
+        processor.machineAccess.exec ? "machine_exec(command, cwd?)" : null
+    ].filter(Boolean);
+    if (toolNames.length === 0) {
+        const result = await services.llm.runTextPrompt(agent.profile, {
+            explicitApiKey: agent.explicitApiKey,
+            systemPrompt: "You are an AI processor inside Forge. Follow the prompt flow exactly, use the linked context carefully, and return only the final output for your assigned agent.",
+            prompt: fullPrompt
+        });
+        return result.outputText.trim();
+    }
+    const transcript = [];
+    for (let step = 0; step < MAX_TOOL_STEPS; step += 1) {
+        const result = await services.llm.runTextPrompt(agent.profile, {
+            explicitApiKey: agent.explicitApiKey,
+            systemPrompt: [
+                "You are an AI processor inside Forge.",
+                "You may use machine tools when they are enabled.",
+                `Available tools: ${toolNames.join(", ")}.`,
+                "Return strict JSON only.",
+                'For a final answer, return {"action":"final","text":"..."}',
+                'To call a tool, return {"action":"tool","tool":"machine_exec","args":{...}}'
+            ].join(" "),
+            prompt: [
+                fullPrompt,
+                transcript.length > 0
+                    ? `Tool transcript:\n${transcript.join("\n\n")}`
+                    : ""
+            ]
+                .filter(Boolean)
+                .join("\n\n")
+        });
+        const structured = tryParseStructuredAgentResponse(result.outputText.trim());
+        if (!structured || structured.action === "final") {
+            return structured?.text?.trim() || result.outputText.trim();
+        }
+        const toolResult = await executeMachineTool(processor, structured.tool, structured.args);
+        transcript.push(`Tool call ${structured.tool}: ${JSON.stringify(structured.args)}`, `Tool result: ${JSON.stringify(toolResult)}`);
+    }
+    return "Processor stopped after reaching the maximum tool step count.";
+}
 function mapProcessor(row) {
     return aiProcessorSchema.parse({
         id: row.id,
+        slug: row.slug,
         surfaceId: row.surface_id,
         title: row.title,
         promptFlow: row.prompt_flow,
         contextInput: row.context_input,
         toolConfig: parseJson(row.tool_config_json, []),
         agentIds: parseJson(row.agent_ids_json, []),
+        agentConfigs: parseJson(row.agent_config_json, []),
         triggerMode: row.trigger_mode,
         cronExpression: row.cron_expression,
         machineAccess: parseJson(row.machine_access_json, {
@@ -31,6 +175,7 @@ function mapProcessor(row) {
         lastRunAt: row.last_run_at,
         lastRunStatus: row.last_run_status,
         lastRunOutput: parseJson(row.last_run_output_json, null),
+        runHistory: parseJson(row.run_history_json, []),
         createdAt: row.created_at,
         updatedAt: row.updated_at
     });
@@ -64,6 +209,12 @@ export function getAiProcessorById(processorId) {
         .get(processorId);
     return row ? mapProcessor(row) : null;
 }
+export function getAiProcessorBySlug(slug) {
+    const row = getDatabase()
+        .prepare(`SELECT * FROM ai_processors WHERE slug = ?`)
+        .get(slug);
+    return row ? mapProcessor(row) : null;
+}
 export function listAiProcessorLinks(surfaceId) {
     const rows = surfaceId
         ? (getDatabase()
@@ -85,11 +236,12 @@ export function createAiProcessor(input) {
     const parsed = createAiProcessorSchema.parse(input);
     const now = new Date().toISOString();
     const id = `aip_${randomUUID().replaceAll("-", "").slice(0, 10)}`;
+    const slug = buildProcessorSlug(parsed.title, id);
     getDatabase()
         .prepare(`INSERT INTO ai_processors (
-        id, surface_id, title, prompt_flow, context_input, tool_config_json, agent_ids_json, trigger_mode, cron_expression, machine_access_json, endpoint_enabled, last_run_at, last_run_status, last_run_output_json, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-        .run(id, parsed.surfaceId, parsed.title, parsed.promptFlow, parsed.contextInput, JSON.stringify(parsed.toolConfig), JSON.stringify(parsed.agentIds), parsed.triggerMode, parsed.cronExpression, JSON.stringify(parsed.machineAccess), parsed.endpointEnabled ? 1 : 0, null, "idle", null, now, now);
+        id, slug, surface_id, title, prompt_flow, context_input, tool_config_json, agent_ids_json, agent_config_json, trigger_mode, cron_expression, machine_access_json, endpoint_enabled, last_run_at, last_run_status, last_run_output_json, run_history_json, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+        .run(id, slug, parsed.surfaceId, parsed.title, parsed.promptFlow, parsed.contextInput, JSON.stringify(parsed.toolConfig), JSON.stringify(parsed.agentIds), JSON.stringify(parsed.agentConfigs), parsed.triggerMode, parsed.cronExpression, JSON.stringify(parsed.machineAccess), parsed.endpointEnabled ? 1 : 0, null, "idle", null, "[]", now, now);
     return getAiProcessorById(id);
 }
 export function updateAiProcessor(processorId, patch) {
@@ -101,6 +253,9 @@ export function updateAiProcessor(processorId, patch) {
     const next = {
         ...current,
         ...parsed,
+        slug: parsed.title && parsed.title !== current.title
+            ? buildProcessorSlug(parsed.title, current.id)
+            : current.slug,
         machineAccess: {
             ...current.machineAccess,
             ...(parsed.machineAccess ?? {})
@@ -109,9 +264,9 @@ export function updateAiProcessor(processorId, patch) {
     const now = new Date().toISOString();
     getDatabase()
         .prepare(`UPDATE ai_processors
-       SET title = ?, prompt_flow = ?, context_input = ?, tool_config_json = ?, agent_ids_json = ?, trigger_mode = ?, cron_expression = ?, machine_access_json = ?, endpoint_enabled = ?, updated_at = ?
+       SET slug = ?, title = ?, prompt_flow = ?, context_input = ?, tool_config_json = ?, agent_ids_json = ?, agent_config_json = ?, trigger_mode = ?, cron_expression = ?, machine_access_json = ?, endpoint_enabled = ?, updated_at = ?
        WHERE id = ?`)
-        .run(next.title, next.promptFlow, next.contextInput, JSON.stringify(next.toolConfig), JSON.stringify(next.agentIds), next.triggerMode, next.cronExpression, JSON.stringify(next.machineAccess), next.endpointEnabled ? 1 : 0, now, processorId);
+        .run(next.slug, next.title, next.promptFlow, next.contextInput, JSON.stringify(next.toolConfig), JSON.stringify(next.agentIds), JSON.stringify(next.agentConfigs), next.triggerMode, next.cronExpression, JSON.stringify(next.machineAccess), next.endpointEnabled ? 1 : 0, now, processorId);
     return getAiProcessorById(processorId);
 }
 export function deleteAiProcessor(processorId) {
@@ -122,8 +277,47 @@ export function deleteAiProcessor(processorId) {
     getDatabase().prepare(`DELETE FROM ai_processors WHERE id = ?`).run(processorId);
     return current;
 }
+function assertProcessorGraphEdgeIsValid(input) {
+    const sourceProcessorId = processorIdFromNodeId(input.sourceWidgetId);
+    if (!sourceProcessorId) {
+        return;
+    }
+    if (sourceProcessorId === input.targetProcessorId) {
+        throw new Error("AI processor links cannot point a processor to itself.");
+    }
+    const links = listAiProcessorLinks(input.surfaceId);
+    const adjacency = new Map();
+    for (const link of links) {
+        const upstreamProcessorId = processorIdFromNodeId(link.sourceWidgetId);
+        if (!upstreamProcessorId) {
+            continue;
+        }
+        const current = adjacency.get(upstreamProcessorId) ?? new Set();
+        current.add(link.targetProcessorId);
+        adjacency.set(upstreamProcessorId, current);
+    }
+    const nextTargets = adjacency.get(sourceProcessorId) ?? new Set();
+    nextTargets.add(input.targetProcessorId);
+    adjacency.set(sourceProcessorId, nextTargets);
+    const seen = new Set();
+    const stack = [input.targetProcessorId];
+    while (stack.length > 0) {
+        const current = stack.pop();
+        if (current === sourceProcessorId) {
+            throw new Error("This link would create a processor cycle.");
+        }
+        if (seen.has(current)) {
+            continue;
+        }
+        seen.add(current);
+        for (const next of adjacency.get(current) ?? []) {
+            stack.push(next);
+        }
+    }
+}
 export function createAiProcessorLink(input) {
     const parsed = createAiProcessorLinkSchema.parse(input);
+    assertProcessorGraphEdgeIsValid(parsed);
     const existing = listAiProcessorLinks(parsed.surfaceId).find((link) => link.sourceWidgetId === parsed.sourceWidgetId &&
         link.targetProcessorId === parsed.targetProcessorId);
     const now = new Date().toISOString();
@@ -151,12 +345,20 @@ export function deleteAiProcessorLink(linkId) {
 function resolveProcessorAgentProfiles(processor, secrets) {
     const allConnections = listAiModelConnections();
     const requestedAgentIds = processor.agentIds.length > 0 ? processor.agentIds : [FORGE_DEFAULT_AGENT_ID];
+    const configByAgentId = new Map(processor.agentConfigs.map((config) => [config.agentId, config]));
     const settings = getSettings();
     return requestedAgentIds.map((agentId) => {
-        let connection = allConnections.find((entry) => entry.agentId === agentId) ?? null;
+        const override = configByAgentId.get(agentId) ?? null;
+        let connection = (override?.connectionId
+            ? getAiModelConnectionById(override.connectionId)
+            : null) ??
+            allConnections.find((entry) => entry.agentId === agentId) ??
+            null;
         if (agentId === FORGE_DEFAULT_AGENT_ID) {
             const selected = settings.modelSettings.forgeAgent.basicChat.connectionId;
-            connection = selected ? getAiModelConnectionById(selected) : null;
+            connection =
+                (override?.connectionId ? connection : null) ??
+                    (selected ? getAiModelConnectionById(selected) : null);
         }
         if (!connection) {
             return {
@@ -180,7 +382,7 @@ function resolveProcessorAgentProfiles(processor, secrets) {
             profile: {
                 provider: connection.provider,
                 baseUrl: connection.baseUrl,
-                model: connection.model,
+                model: override?.model?.trim() || connection.model,
                 systemPrompt: "",
                 secretId: null,
                 metadata: {}
@@ -189,65 +391,157 @@ function resolveProcessorAgentProfiles(processor, secrets) {
         };
     });
 }
-export async function runAiProcessor(processorId, input, services) {
+function writeProcessorRunState(processor, input) {
+    const nextHistory = [
+        input.runEntry,
+        ...processor.runHistory.filter((entry) => entry.id !== input.runEntry.id)
+    ].slice(0, MAX_RUN_HISTORY);
+    getDatabase()
+        .prepare(`UPDATE ai_processors
+       SET last_run_at = ?, last_run_status = ?, last_run_output_json = ?, run_history_json = ?, updated_at = ?
+       WHERE id = ?`)
+        .run(input.lastRunAt, input.lastRunStatus, input.lastRunOutput ? JSON.stringify(input.lastRunOutput) : null, JSON.stringify(nextHistory), new Date().toISOString(), processor.id);
+}
+async function executeAiProcessor(processorId, input, services, state) {
+    if (state.cache.has(processorId)) {
+        return state.cache.get(processorId);
+    }
+    if (state.active.has(processorId)) {
+        throw new Error("Processor graph contains a cycle.");
+    }
     const processor = getAiProcessorById(processorId);
     if (!processor) {
         throw new Error("AI processor not found.");
     }
+    state.active.add(processorId);
     const parsed = runAiProcessorSchema.parse(input);
-    const links = listAiProcessorLinks(processor.surfaceId).filter((link) => link.targetProcessorId === processor.id);
-    const linkedContext = links
-        .map((link) => `Linked widget ${link.sourceWidgetId} offers ${link.capabilityMode} access (${link.accessMode}). Metadata: ${JSON.stringify(link.metadata)}`)
-        .join("\n");
-    const fullPrompt = [
-        processor.promptFlow.trim(),
-        processor.contextInput.trim()
-            ? `Processor context:\n${processor.contextInput.trim()}`
-            : "",
-        linkedContext ? `Linked capabilities:\n${linkedContext}` : "",
-        parsed.input.trim() ? `Runtime input:\n${parsed.input.trim()}` : "",
-        Object.keys(parsed.context).length > 0
-            ? `Structured context:\n${JSON.stringify(parsed.context, null, 2)}`
-            : ""
-    ]
-        .filter(Boolean)
-        .join("\n\n");
-    const now = new Date().toISOString();
-    getDatabase()
-        .prepare(`UPDATE ai_processors SET last_run_at = ?, last_run_status = ?, updated_at = ? WHERE id = ?`)
-        .run(now, "running", now, processor.id);
-    const agents = resolveProcessorAgentProfiles(processor, services.secrets);
-    const outputsByAgent = {};
-    await Promise.all(agents.map(async (agent) => {
-        if (!agent.profile) {
-            outputsByAgent[agent.agentLabel] =
-                "No model connection is configured for this agent yet.";
-            return;
+    const runEntryId = `air_${randomUUID().replaceAll("-", "").slice(0, 10)}`;
+    const runStartedAt = new Date().toISOString();
+    writeProcessorRunState(processor, {
+        lastRunAt: runStartedAt,
+        lastRunStatus: "running",
+        lastRunOutput: processor.lastRunOutput,
+        runEntry: {
+            id: runEntryId,
+            trigger: state.trigger,
+            startedAt: runStartedAt,
+            completedAt: null,
+            status: "running",
+            input: parsed.input,
+            output: null,
+            error: null
         }
-        const result = await services.llm.runTextPrompt(agent.profile, {
-            explicitApiKey: agent.explicitApiKey,
-            systemPrompt: "You are an AI processor widget inside Forge. Follow the given prompt flow and return the final output only.",
-            prompt: fullPrompt
-        });
-        outputsByAgent[agent.agentLabel] = result.outputText.trim();
-    }));
-    const concatenated = Object.entries(outputsByAgent)
-        .map(([agentLabel, output]) => `${agentLabel}\n${output}`.trim())
-        .join("\n\n");
-    const finalNow = new Date().toISOString();
-    getDatabase()
-        .prepare(`UPDATE ai_processors
-       SET last_run_at = ?, last_run_status = ?, last_run_output_json = ?, updated_at = ?
-       WHERE id = ?`)
-        .run(finalNow, "completed", JSON.stringify({
-        concatenated,
-        byAgent: outputsByAgent
-    }), finalNow, processor.id);
-    return {
-        processor: getAiProcessorById(processor.id),
-        output: {
-            concatenated,
+    });
+    try {
+        const links = listAiProcessorLinks(processor.surfaceId).filter((link) => link.targetProcessorId === processor.id);
+        const upstreamOutputs = [];
+        const linkedContext = [];
+        for (const link of links) {
+            const sourceProcessorId = processorIdFromNodeId(link.sourceWidgetId);
+            if (sourceProcessorId) {
+                const upstream = await executeAiProcessor(sourceProcessorId, {
+                    input: parsed.input,
+                    context: parsed.context,
+                    widgetSnapshots: parsed.widgetSnapshots
+                }, services, state);
+                upstreamOutputs.push({
+                    processorId: sourceProcessorId,
+                    title: upstream.processor.title,
+                    output: upstream.output
+                });
+                linkedContext.push(`Upstream processor ${upstream.processor.title} provided ${link.capabilityMode} access (${link.accessMode}).`);
+                continue;
+            }
+            const snapshot = parsed.widgetSnapshots[link.sourceWidgetId];
+            linkedContext.push([
+                `Linked widget ${link.sourceWidgetId} offers ${link.capabilityMode} access (${link.accessMode}).`,
+                snapshot !== undefined
+                    ? `Snapshot: ${JSON.stringify(snapshot)}`
+                    : `Metadata: ${JSON.stringify(link.metadata)}`
+            ].join(" "));
+        }
+        const fullPrompt = [
+            processor.promptFlow.trim(),
+            processor.contextInput.trim()
+                ? `Processor context:\n${processor.contextInput.trim()}`
+                : "",
+            linkedContext.length > 0
+                ? `Linked capabilities:\n${linkedContext.join("\n")}`
+                : "",
+            upstreamOutputs.length > 0
+                ? `Upstream processor outputs:\n${upstreamOutputs
+                    .map((entry) => `${entry.title} (${entry.processorId})\n${entry.output.concatenated}`)
+                    .join("\n\n")}`
+                : "",
+            parsed.input.trim() ? `Runtime input:\n${parsed.input.trim()}` : "",
+            Object.keys(parsed.context).length > 0
+                ? `Structured context:\n${JSON.stringify(parsed.context, null, 2)}`
+                : ""
+        ]
+            .filter(Boolean)
+            .join("\n\n");
+        const agents = resolveProcessorAgentProfiles(processor, services.secrets);
+        const outputsByAgent = {};
+        await Promise.all(agents.map(async (agent) => {
+            outputsByAgent[agent.agentLabel] = await runProcessorAgent(processor, agent, fullPrompt, {
+                llm: services.llm
+            });
+        }));
+        const output = {
+            concatenated: Object.entries(outputsByAgent)
+                .map(([agentLabel, text]) => `${agentLabel}\n${text}`.trim())
+                .join("\n\n"),
             byAgent: outputsByAgent
-        }
-    };
+        };
+        const completedAt = new Date().toISOString();
+        writeProcessorRunState(processor, {
+            lastRunAt: completedAt,
+            lastRunStatus: "completed",
+            lastRunOutput: output,
+            runEntry: {
+                id: runEntryId,
+                trigger: state.trigger,
+                startedAt: runStartedAt,
+                completedAt,
+                status: "completed",
+                input: parsed.input,
+                output,
+                error: null
+            }
+        });
+        const result = {
+            processor: getAiProcessorById(processor.id),
+            output
+        };
+        state.cache.set(processorId, result);
+        state.active.delete(processorId);
+        return result;
+    }
+    catch (error) {
+        const failedAt = new Date().toISOString();
+        writeProcessorRunState(processor, {
+            lastRunAt: failedAt,
+            lastRunStatus: "failed",
+            lastRunOutput: processor.lastRunOutput,
+            runEntry: {
+                id: runEntryId,
+                trigger: state.trigger,
+                startedAt: runStartedAt,
+                completedAt: failedAt,
+                status: "failed",
+                input: parsed.input,
+                output: null,
+                error: error instanceof Error ? error.message : "Processor run failed."
+            }
+        });
+        state.active.delete(processorId);
+        throw error;
+    }
+}
+export async function runAiProcessor(processorId, input, services, options = {}) {
+    return await executeAiProcessor(processorId, input, services, {
+        cache: new Map(),
+        active: new Set(),
+        trigger: options.trigger ?? "manual"
+    });
 }

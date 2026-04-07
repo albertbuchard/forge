@@ -1,15 +1,17 @@
 import Fastify from "fastify";
 import cors from "@fastify/cors";
 import multipart from "@fastify/multipart";
+import { CronExpressionParser } from "cron-parser";
 import { ZodError } from "zod";
 import { configureDatabase, configureDatabaseSeeding, runInTransaction } from "./db.js";
 import { HttpError, isHttpError } from "./errors.js";
 import { listActivityEvents, listActivityEventsForTask, recordActivityEvent, removeActivityEvent } from "./repositories/activity-events.js";
 import { approveApprovalRequest, createAgentAction, createInsight, createInsightFeedback, deleteInsight, getInsightById, listAgentActions, listApprovalRequests, listInsights, rejectApprovalRequest, updateInsight } from "./repositories/collaboration.js";
-import { createAiProcessor, createAiProcessorLink, deleteAiProcessor, deleteAiProcessorLink, getAiProcessorById, getSurfaceProcessorGraph, runAiProcessor, updateAiProcessor } from "./repositories/ai-processors.js";
+import { createAiProcessor, createAiProcessorLink, deleteAiProcessor, deleteAiProcessorLink, getAiProcessorById, getAiProcessorBySlug, listAiProcessors, getSurfaceProcessorGraph, runAiProcessor, updateAiProcessor } from "./repositories/ai-processors.js";
 import { listEventLog } from "./repositories/event-log.js";
 import { createDiagnosticMessage, DIAGNOSTIC_LOG_RETENTION_SWEEP_INTERVAL_MS, enforceDiagnosticLogRetention, listDiagnosticLogs, normalizeDiagnosticSource, recordDiagnosticLog, serializeDiagnosticError } from "./repositories/diagnostic-logs.js";
 import { createGoal, getGoalById, listGoals, updateGoal } from "./repositories/goals.js";
+import { getSurfaceLayout, resetSurfaceLayout, saveSurfaceLayout } from "./repositories/surface-layouts.js";
 import { createHabit, createHabitCheckIn, deleteHabitCheckIn, getHabitById, listHabits, updateHabit } from "./repositories/habits.js";
 import { listDomains } from "./repositories/domains.js";
 import { buildNotesSummaryByEntity, createNote, getNoteById, listNotes, updateNote } from "./repositories/notes.js";
@@ -24,7 +26,7 @@ import { createManualRewardGrant, getDailyAmbientXp, getRewardRuleById, listRewa
 import { listAgentIdentities, getSettings, isPsycheAuthRequired, updateSettings, verifyAgentToken } from "./repositories/settings.js";
 import { deleteAiModelConnection, getAiModelConnectionById, readModelConnectionCredential, upsertAiModelConnection } from "./repositories/model-settings.js";
 import { createTag, getTagById, listTags, updateTag } from "./repositories/tags.js";
-import { createUser, ensureSystemUsers, getUserById, listUserAccessGrants, listUserOwnershipSummaries, listUserXpSummaries, listUsers, resolveUserForMutation, updateUserAccessGrant, updateUser } from "./repositories/users.js";
+import { createUser, ensureSystemUsers, getDefaultUser, getUserById, listUserAccessGrants, listUserOwnershipSummaries, listUserXpSummaries, listUsers, resolveUserForMutation, updateUserAccessGrant, updateUser } from "./repositories/users.js";
 import { claimTaskRun, completeTaskRun, focusTaskRun, heartbeatTaskRun, listTaskRuns, recoverTimedOutTaskRuns, releaseTaskRun } from "./repositories/task-runs.js";
 import { createTask, createTaskWithIdempotency, getTaskById, listTasks, uncompleteTask, updateTask } from "./repositories/tasks.js";
 import { createWorkAdjustment } from "./repositories/work-adjustments.js";
@@ -46,12 +48,14 @@ import { consumeOpenAiCodexOauthCredentials, getOpenAiCodexOauthSession, startOp
 import { PSYCHE_ENTITY_TYPES, createBehaviorSchema, createBeliefEntrySchema, createBehaviorPatternSchema, createEmotionDefinitionSchema, createEventTypeSchema, createModeGuideSessionSchema, createModeProfileSchema, createPsycheValueSchema, createTriggerReportSchema, updateBehaviorSchema, updateBeliefEntrySchema, updateBehaviorPatternSchema, updateEmotionDefinitionSchema, updateEventTypeSchema, updateModeGuideSessionSchema, updateModeProfileSchema, updatePsycheValueSchema, updateTriggerReportSchema } from "./psyche-types.js";
 import { createQuestionnaireInstrumentSchema, publishQuestionnaireVersionSchema, startQuestionnaireRunSchema, updateQuestionnaireRunSchema, updateQuestionnaireVersionSchema } from "./questionnaire-types.js";
 import { createPreferenceCatalogItemSchema, createPreferenceCatalogSchema, createPreferenceContextSchema, createPreferenceItemSchema, enqueueEntityPreferenceItemSchema, mergePreferenceContextsSchema, preferenceWorkspaceQuerySchema, startPreferenceGameSchema, submitAbsoluteSignalSchema, submitPairwiseJudgmentSchema, updatePreferenceCatalogItemSchema, updatePreferenceCatalogSchema, updatePreferenceContextSchema, updatePreferenceItemSchema, updatePreferenceScoreSchema } from "./preferences-types.js";
-import { activityListQuerySchema, activitySourceSchema, createAgentActionSchema, createAgentTokenSchema, createAiProcessorLinkSchema, createAiProcessorSchema, upsertAiModelConnectionSchema, testAiModelConnectionSchema, submitOpenAiCodexOauthManualCodeSchema, batchCreateEntitiesSchema, batchDeleteEntitiesSchema, batchRestoreEntitiesSchema, batchSearchEntitiesSchema, batchUpdateEntitiesSchema, createGoalSchema, createInsightFeedbackSchema, createInsightSchema, createStrategySchema, createUserSchema, createNoteSchema, createProjectSchema, createManualRewardGrantSchema, createCalendarEventSchema, createHabitCheckInSchema, createCalendarConnectionSchema, createDiagnosticLogSchema, discoverCalendarConnectionSchema, startMicrosoftCalendarOauthSchema, testMicrosoftCalendarOauthConfigurationSchema, createHabitSchema, createTaskTimeboxSchema, createWorkBlockTemplateSchema, createSessionEventSchema, createWorkAdjustmentSchema, createTagSchema, calendarOverviewQuerySchema, notesListQuerySchema, updateTagSchema, createTaskSchema, diagnosticLogListQuerySchema, eventsListQuerySchema, operatorLogWorkSchema, projectBoardPayloadSchema, projectListQuerySchema, entityDeleteQuerySchema, removeActivityEventSchema, resolveApprovalRequestSchema, rewardsLedgerQuerySchema, habitListQuerySchema, taskContextPayloadSchema, taskRunClaimSchema, taskRunFocusSchema, taskRunFinishSchema, taskRunHeartbeatSchema, taskRunListQuerySchema, taskListQuerySchema, tagSuggestionRequestSchema, uncompleteTaskSchema, updateSettingsSchema, updateGoalSchema, updateHabitSchema, updateInsightSchema, updateStrategySchema, updateUserSchema, updateCalendarConnectionSchema, updateCalendarEventSchema, updateNoteSchema, updateProjectSchema, updateRewardRuleSchema, updateTaskTimeboxSchema, updateTaskSchema, updateUserAccessGrantSchema, updateWorkBlockTemplateSchema, updateAiProcessorSchema, runAiProcessorSchema, workAdjustmentResultSchema, finalizeWeeklyReviewResultSchema, goalListQuerySchema, recommendTaskTimeboxesSchema, strategyListQuerySchema } from "./types.js";
+import { activityListQuerySchema, activitySourceSchema, createAgentActionSchema, createAgentTokenSchema, createAiProcessorLinkSchema, createAiProcessorSchema, writeSurfaceLayoutSchema, upsertAiModelConnectionSchema, testAiModelConnectionSchema, submitOpenAiCodexOauthManualCodeSchema, batchCreateEntitiesSchema, batchDeleteEntitiesSchema, batchRestoreEntitiesSchema, batchSearchEntitiesSchema, batchUpdateEntitiesSchema, createGoalSchema, createInsightFeedbackSchema, createInsightSchema, createStrategySchema, createUserSchema, createNoteSchema, createProjectSchema, createManualRewardGrantSchema, createCalendarEventSchema, createHabitCheckInSchema, createCalendarConnectionSchema, createDiagnosticLogSchema, discoverCalendarConnectionSchema, startMicrosoftCalendarOauthSchema, testMicrosoftCalendarOauthConfigurationSchema, createHabitSchema, createTaskTimeboxSchema, createWorkBlockTemplateSchema, createSessionEventSchema, createWorkAdjustmentSchema, createTagSchema, calendarOverviewQuerySchema, notesListQuerySchema, updateTagSchema, createTaskSchema, diagnosticLogListQuerySchema, eventsListQuerySchema, operatorLogWorkSchema, projectBoardPayloadSchema, projectListQuerySchema, entityDeleteQuerySchema, removeActivityEventSchema, resolveApprovalRequestSchema, rewardsLedgerQuerySchema, habitListQuerySchema, taskContextPayloadSchema, taskRunClaimSchema, taskRunFocusSchema, taskRunFinishSchema, taskRunHeartbeatSchema, taskRunListQuerySchema, taskListQuerySchema, tagSuggestionRequestSchema, uncompleteTaskSchema, updateSettingsSchema, updateGoalSchema, updateHabitSchema, updateInsightSchema, updateStrategySchema, updateUserSchema, updateCalendarConnectionSchema, updateCalendarEventSchema, updateNoteSchema, updateProjectSchema, updateRewardRuleSchema, updateTaskTimeboxSchema, updateTaskSchema, updateUserAccessGrantSchema, updateWorkBlockTemplateSchema, updateAiProcessorSchema, runAiProcessorSchema, workAdjustmentResultSchema, finalizeWeeklyReviewResultSchema, goalListQuerySchema, recommendTaskTimeboxesSchema, strategyListQuerySchema } from "./types.js";
 import { buildOpenApiDocument } from "./openapi.js";
 import { registerWebRoutes } from "./web.js";
 import { createManagerRuntime } from "./managers/runtime.js";
 import { isManagerError } from "./managers/type-guards.js";
-import { createCompanionPairingSession, createCompanionPairingSessionSchema, getCompanionOverview, getFitnessViewData, getSleepViewData, ingestMobileHealthSync, mobileHealthSyncSchema, revokeAllCompanionPairingSessions, revokeAllCompanionPairingSessionsSchema, revokeCompanionPairingSession, verifyCompanionPairing, verifyCompanionPairingSchema, updateSleepMetadata, updateSleepMetadataSchema, updateWorkoutMetadata, updateWorkoutMetadataSchema } from "./health.js";
+import { createCompanionPairingSession, createCompanionPairingSessionSchema, getCompanionOverview, getFitnessViewData, getSleepViewData, ingestMobileHealthSync, mobileHealthSyncSchema, requireValidPairing, revokeAllCompanionPairingSessions, revokeAllCompanionPairingSessionsSchema, revokeCompanionPairingSession, verifyCompanionPairing, verifyCompanionPairingSchema, updateSleepMetadata, updateSleepMetadataSchema, updateWorkoutMetadata, updateWorkoutMetadataSchema } from "./health.js";
+import { createMovementPlace, getMovementAllTimeSummary, getMovementDayDetail, getMovementMobileBootstrap, getMovementSelectionAggregate, getMovementSettings, getMovementTripDetail, getMovementMonthSummary, listMovementPlaces, movementMobileBootstrapSchema, movementPlaceMutationSchema, movementPlacePatchSchema, movementSelectionAggregateSchema, movementSettingsPatchSchema, updateMovementPlace, updateMovementSettings } from "./movement.js";
+import { assertWatchReady, buildWatchBootstrap, ingestWatchCaptureBatch, mobileWatchBootstrapSchema, mobileWatchCaptureBatchSchema, mobileWatchHabitCheckInSchema } from "./watch-mobile.js";
 const COMPATIBILITY_SUNSET = "transitional-node";
 function markCompatibilityRoute(reply) {
     reply.header("Deprecation", "true");
@@ -3637,8 +3641,43 @@ export async function buildServer(options = {}) {
         }
     }, DIAGNOSTIC_LOG_RETENTION_SWEEP_INTERVAL_MS);
     diagnosticRetentionTimer.unref?.();
+    const activeCronRuns = new Set();
+    const cronSchedulerTimer = setInterval(() => {
+        const now = new Date();
+        for (const processor of listAiProcessors()) {
+            if (processor.triggerMode !== "cron" ||
+                !processor.endpointEnabled ||
+                !processor.cronExpression.trim() ||
+                activeCronRuns.has(processor.id)) {
+                continue;
+            }
+            try {
+                const interval = CronExpressionParser.parse(processor.cronExpression, {
+                    currentDate: processor.lastRunAt && Number.isFinite(Date.parse(processor.lastRunAt))
+                        ? processor.lastRunAt
+                        : new Date(now.getTime() - 60_000).toISOString()
+                });
+                const nextDueAt = interval.next().toDate();
+                if (nextDueAt.getTime() > now.getTime()) {
+                    continue;
+                }
+                activeCronRuns.add(processor.id);
+                void runAiProcessor(processor.id, { input: "", context: {}, widgetSnapshots: {} }, {
+                    llm: managers.llm,
+                    secrets: managers.secrets
+                }, { trigger: "cron" }).finally(() => {
+                    activeCronRuns.delete(processor.id);
+                });
+            }
+            catch {
+                continue;
+            }
+        }
+    }, 30_000);
+    cronSchedulerTimer.unref?.();
     app.addHook("onClose", async () => {
         clearInterval(diagnosticRetentionTimer);
+        clearInterval(cronSchedulerTimer);
         taskRunWatchdog?.stop();
         await managers.backgroundJobs.stop();
     });
@@ -3967,6 +4006,76 @@ export async function buildServer(options = {}) {
     app.get("/api/v1/health/fitness", async (request) => ({
         fitness: getFitnessViewData(resolveScopedUserIds(request.query))
     }));
+    app.get("/api/v1/movement/day", async (request) => {
+        const query = request.query;
+        return {
+            movement: getMovementDayDetail({
+                date: typeof query.date === "string" ? query.date : undefined,
+                userIds: resolveScopedUserIds(query)
+            })
+        };
+    });
+    app.get("/api/v1/movement/month", async (request) => {
+        const query = request.query;
+        return {
+            movement: getMovementMonthSummary({
+                month: typeof query.month === "string" ? query.month : undefined,
+                userIds: resolveScopedUserIds(query)
+            })
+        };
+    });
+    app.get("/api/v1/movement/all-time", async (request) => ({
+        movement: getMovementAllTimeSummary(resolveScopedUserIds(request.query))
+    }));
+    app.get("/api/v1/movement/settings", async (request) => ({
+        settings: getMovementSettings(resolveScopedUserIds(request.query))
+    }));
+    app.patch("/api/v1/movement/settings", async (request) => {
+        const auth = requireScopedAccess(request.headers, ["write"], { route: "/api/v1/movement/settings" });
+        const userId = resolveScopedUserIds(request.query)?.[0] ??
+            getDefaultUser().id;
+        return {
+            settings: updateMovementSettings(userId, movementSettingsPatchSchema.parse(request.body ?? {}), toActivityContext(auth))
+        };
+    });
+    app.get("/api/v1/movement/places", async (request) => ({
+        places: listMovementPlaces(resolveScopedUserIds(request.query))
+    }));
+    app.post("/api/v1/movement/places", async (request, reply) => {
+        const auth = requireScopedAccess(request.headers, ["write"], { route: "/api/v1/movement/places" });
+        const userId = resolveScopedUserIds(request.query)?.[0] ??
+            getDefaultUser().id;
+        reply.code(201);
+        return {
+            place: createMovementPlace({
+                ...movementPlaceMutationSchema.parse(request.body ?? {}),
+                userId,
+                source: "user"
+            }, toActivityContext(auth))
+        };
+    });
+    app.patch("/api/v1/movement/places/:id", async (request, reply) => {
+        const auth = requireScopedAccess(request.headers, ["write"], { route: "/api/v1/movement/places/:id" });
+        const { id } = request.params;
+        const place = updateMovementPlace(id, movementPlacePatchSchema.parse(request.body ?? {}), toActivityContext(auth));
+        if (!place) {
+            reply.code(404);
+            return { error: "Movement place not found" };
+        }
+        return { place };
+    });
+    app.get("/api/v1/movement/trips/:id", async (request, reply) => {
+        const { id } = request.params;
+        const movement = getMovementTripDetail(id);
+        if (!movement) {
+            reply.code(404);
+            return { error: "Movement trip not found" };
+        }
+        return { movement };
+    });
+    app.post("/api/v1/movement/selection", async (request) => ({
+        movement: getMovementSelectionAggregate(movementSelectionAggregateSchema.parse(request.body ?? {}))
+    }));
     app.post("/api/v1/health/pairing-sessions", async (request, reply) => {
         requireOperatorSession(request.headers, {
             route: "/api/v1/health/pairing-sessions"
@@ -4004,6 +4113,50 @@ export async function buildServer(options = {}) {
     app.post("/api/v1/mobile/pairing/verify", async (request) => ({
         pairing: verifyCompanionPairing(verifyCompanionPairingSchema.parse(request.body ?? {}))
     }));
+    app.post("/api/v1/mobile/movement/bootstrap", async (request) => {
+        const parsed = movementMobileBootstrapSchema.parse(request.body ?? {});
+        const pairing = requireValidPairing(parsed.sessionId, parsed.pairingToken);
+        return {
+            movement: getMovementMobileBootstrap(pairing)
+        };
+    });
+    app.post("/api/v1/mobile/watch/bootstrap", async (request) => {
+        const parsed = mobileWatchBootstrapSchema.parse(request.body ?? {});
+        const pairing = requireValidPairing(parsed.sessionId, parsed.pairingToken);
+        assertWatchReady(pairing);
+        return {
+            watch: buildWatchBootstrap(pairing)
+        };
+    });
+    app.post("/api/v1/mobile/watch/habits/:id/check-ins", async (request, reply) => {
+        const parsed = mobileWatchHabitCheckInSchema.parse(request.body ?? {});
+        const pairing = requireValidPairing(parsed.sessionId, parsed.pairingToken);
+        assertWatchReady(pairing);
+        const { id } = request.params;
+        const habit = createHabitCheckIn(id, {
+            dateKey: parsed.dateKey,
+            status: parsed.status,
+            note: parsed.note
+        }, { source: "system", actor: `watch:${parsed.dedupeKey}` });
+        if (!habit) {
+            reply.code(404);
+            return { error: "Habit not found" };
+        }
+        return {
+            habit,
+            metrics: buildXpMetricsPayload(),
+            watch: buildWatchBootstrap(pairing)
+        };
+    });
+    app.post("/api/v1/mobile/watch/capture-events:batch", async (request) => {
+        const parsed = mobileWatchCaptureBatchSchema.parse(request.body ?? {});
+        const pairing = requireValidPairing(parsed.sessionId, parsed.pairingToken);
+        assertWatchReady(pairing);
+        return {
+            receipt: ingestWatchCaptureBatch(pairing, parsed),
+            watch: buildWatchBootstrap(pairing)
+        };
+    });
     app.post("/api/v1/mobile/healthkit/sync", async (request) => ({
         sync: ingestMobileHealthSync(mobileHealthSyncSchema.parse(request.body ?? {}))
     }));
@@ -6559,14 +6712,41 @@ export async function buildServer(options = {}) {
             graph: getSurfaceProcessorGraph(request.params.surfaceId)
         };
     });
+    app.get("/api/v1/surfaces/:surfaceId/layout", async (request) => {
+        requireScopedAccess(request.headers, ["read"], {
+            route: "/api/v1/surfaces/:surfaceId/layout"
+        });
+        return {
+            layout: getSurfaceLayout(request.params.surfaceId)
+        };
+    });
+    app.put("/api/v1/surfaces/:surfaceId/layout", async (request) => {
+        requireScopedAccess(request.headers, ["write"], {
+            route: "/api/v1/surfaces/:surfaceId/layout"
+        });
+        const surfaceId = request.params.surfaceId;
+        return {
+            layout: saveSurfaceLayout(surfaceId, writeSurfaceLayoutSchema.parse(request.body ?? {}))
+        };
+    });
+    app.post("/api/v1/surfaces/:surfaceId/layout/reset", async (request) => {
+        requireScopedAccess(request.headers, ["write"], {
+            route: "/api/v1/surfaces/:surfaceId/layout/reset"
+        });
+        return {
+            layout: resetSurfaceLayout(request.params.surfaceId)
+        };
+    });
     app.post("/api/v1/surfaces/:surfaceId/ai-processors", async (request, reply) => {
         requireScopedAccess(request.headers, ["write"], {
             route: "/api/v1/surfaces/:surfaceId/ai-processors"
         });
-        const body = createAiProcessorSchema.parse(request.body ?? {});
-        const processor = createAiProcessor({
-            ...body,
+        const body = createAiProcessorSchema.parse({
+            ...(request.body ?? {}),
             surfaceId: request.params.surfaceId
+        });
+        const processor = createAiProcessor({
+            ...body
         });
         reply.code(201);
         return { processor };
@@ -6624,24 +6804,24 @@ export async function buildServer(options = {}) {
         return await runAiProcessor(processor.id, runAiProcessorSchema.parse(request.body ?? {}), {
             llm: managers.llm,
             secrets: managers.secrets
-        });
+        }, { trigger: "manual" });
     });
-    app.get("/api/v1/aiproc/:id", async (request, reply) => {
+    app.get("/api/v1/aiproc/:slug", async (request, reply) => {
         requireScopedAccess(request.headers, ["read"], {
-            route: "/api/v1/aiproc/:id"
+            route: "/api/v1/aiproc/:slug"
         });
-        const processor = getAiProcessorById(request.params.id);
+        const processor = getAiProcessorBySlug(request.params.slug);
         if (!processor) {
             reply.code(404);
             return { error: "AI processor not found" };
         }
         return { processor };
     });
-    app.post("/api/v1/aiproc/:id/run", async (request, reply) => {
+    app.post("/api/v1/aiproc/:slug/run", async (request, reply) => {
         requireScopedAccess(request.headers, ["write"], {
-            route: "/api/v1/aiproc/:id/run"
+            route: "/api/v1/aiproc/:slug/run"
         });
-        const processor = getAiProcessorById(request.params.id);
+        const processor = getAiProcessorBySlug(request.params.slug);
         if (!processor) {
             reply.code(404);
             return { error: "AI processor not found" };
@@ -6649,7 +6829,7 @@ export async function buildServer(options = {}) {
         return await runAiProcessor(processor.id, runAiProcessorSchema.parse(request.body ?? {}), {
             llm: managers.llm,
             secrets: managers.secrets
-        });
+        }, { trigger: "route" });
     });
     app.post("/api/v1/settings/tokens", async (request, reply) => {
         const auth = requireOperatorSession(request.headers, { route: "/api/v1/settings/tokens" });

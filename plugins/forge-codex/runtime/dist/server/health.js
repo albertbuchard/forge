@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { getDatabase, runInTransaction } from "./db.js";
 import { HttpError } from "./errors.js";
+import { getMovementMobileBootstrap, ingestMovementSync, movementSyncPayloadSchema } from "./movement.js";
 import { recordActivityEvent } from "./repositories/activity-events.js";
 import { recordHabitGeneratedWorkoutReward } from "./repositories/rewards.js";
 const healthLinkSchema = z.object({
@@ -119,7 +120,8 @@ export const mobileHealthSyncSchema = z.object({
         links: z.array(healthLinkSchema).default([]),
         annotations: workoutAnnotationSchema.partial().default({})
     }))
-        .default([])
+        .default([]),
+    movement: movementSyncPayloadSchema.default({})
 });
 export const verifyCompanionPairingSchema = z.object({
     sessionId: z.string().trim().min(1),
@@ -606,7 +608,7 @@ export function verifyCompanionPairing(payload) {
             .get(pairing.id))
     };
 }
-function requireValidPairing(sessionId, pairingToken) {
+export function requireValidPairing(sessionId, pairingToken) {
     const row = getDatabase()
         .prepare(`SELECT * FROM companion_pairing_sessions WHERE id = ?`)
         .get(sessionId);
@@ -838,6 +840,7 @@ export function ingestMobileHealthSync(payload) {
         let createdCount = 0;
         let updatedCount = 0;
         let mergedCount = 0;
+        const movementSync = ingestMovementSync(pairing, parsed.movement);
         for (const sleep of parsed.sleepSessions) {
             const result = insertOrUpdateSleepSession(pairing, sleep);
             if (result.mode === "created") {
@@ -879,8 +882,16 @@ export function ingestMobileHealthSync(payload) {
             .run(runId, pairing.id, pairing.user_id, parsed.device.sourceDevice, JSON.stringify({
             permissions: parsed.permissions,
             sleepSessions: parsed.sleepSessions.length,
-            workouts: parsed.workouts.length
-        }), parsed.sleepSessions.length + parsed.workouts.length, createdCount, updatedCount, mergedCount, now, now, now);
+            workouts: parsed.workouts.length,
+            movement: {
+                knownPlaces: parsed.movement.knownPlaces.length,
+                stays: parsed.movement.stays.length,
+                trips: parsed.movement.trips.length
+            }
+        }), parsed.sleepSessions.length +
+            parsed.workouts.length +
+            parsed.movement.stays.length +
+            parsed.movement.trips.length, createdCount + movementSync.createdCount, updatedCount + movementSync.updatedCount, mergedCount, now, now, now);
         recordActivityEvent({
             entityType: "system",
             entityId: pairing.id,
@@ -892,8 +903,10 @@ export function ingestMobileHealthSync(payload) {
             metadata: {
                 sleepSessions: parsed.sleepSessions.length,
                 workouts: parsed.workouts.length,
-                createdCount,
-                updatedCount,
+                movementStays: parsed.movement.stays.length,
+                movementTrips: parsed.movement.trips.length,
+                createdCount: createdCount + movementSync.createdCount,
+                updatedCount: updatedCount + movementSync.updatedCount,
                 mergedCount
             }
         });
@@ -904,10 +917,14 @@ export function ingestMobileHealthSync(payload) {
             imported: {
                 sleepSessions: parsed.sleepSessions.length,
                 workouts: parsed.workouts.length,
-                createdCount,
-                updatedCount,
-                mergedCount
-            }
+                createdCount: createdCount + movementSync.createdCount,
+                updatedCount: updatedCount + movementSync.updatedCount,
+                mergedCount,
+                movementStays: parsed.movement.stays.length,
+                movementTrips: parsed.movement.trips.length,
+                movementKnownPlaces: parsed.movement.knownPlaces.length
+            },
+            movement: getMovementMobileBootstrap(pairing)
         };
     });
 }
@@ -916,6 +933,14 @@ export function getCompanionOverview(userIds) {
     const importRuns = listHealthImportRunRows(userIds).map(mapHealthImportRun);
     const sleepSessions = listSleepRows(userIds).map(mapSleepSession);
     const workouts = listWorkoutRows(userIds).map(mapWorkoutSession);
+    const movementSummary = importRuns.reduce((totals, run) => {
+        const movement = safeJsonParse(JSON.stringify(run.payloadSummary.movement ?? {}), {}) ?? {};
+        return {
+            knownPlaces: totals.knownPlaces + (movement.knownPlaces ?? 0),
+            stays: totals.stays + (movement.stays ?? 0),
+            trips: totals.trips + (movement.trips ?? 0)
+        };
+    }, { knownPlaces: 0, stays: 0, trips: 0 });
     const activePairings = pairings.filter((pairing) => pairing.status !== "revoked");
     const recentPermissionStates = importRuns
         .map((run) => safeJsonParse(JSON.stringify(run.payloadSummary), {}))
@@ -951,7 +976,10 @@ export function getCompanionOverview(userIds) {
             }).length,
             linkedWorkouts: workouts.filter((session) => session.links.length > 0).length,
             habitGeneratedWorkouts: workouts.filter((session) => session.sourceType === "habit_generated").length,
-            reconciledWorkouts: workouts.filter((session) => session.reconciliationStatus === "merged").length
+            reconciledWorkouts: workouts.filter((session) => session.reconciliationStatus === "merged").length,
+            movementKnownPlaces: movementSummary.knownPlaces,
+            movementStays: movementSummary.stays,
+            movementTrips: movementSummary.trips
         },
         permissions: {
             healthKitAuthorized: recentPermissionStates.some((state) => state.healthKitAuthorized === true),

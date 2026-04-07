@@ -3,10 +3,15 @@ import { z } from "zod";
 import { getDatabase, runInTransaction } from "./db.js";
 import { HttpError } from "./errors.js";
 import { updateWorkoutMetadata } from "./health.js";
-import { listMovementPlaces, updateMovementPlace } from "./movement.js";
+import {
+  listMovementPlaces,
+  movementCategoryTags,
+  updateMovementPlace
+} from "./movement.js";
 import { listHabits } from "./repositories/habits.js";
 
 const watchCapability = "watch-ready";
+const movementCategoryTagSet = new Set<string>(movementCategoryTags);
 
 const watchHistoryStateSchema = z.enum(["aligned", "unaligned", "unknown"]);
 const watchPromptKindSchema = z.enum([
@@ -509,9 +514,17 @@ function projectionForStoredEvent(
       : typeof event.payload.category === "string"
         ? watchCategoryMap.get(event.payload.category) ?? []
         : [];
-    const categoryTags = categoryCandidate.filter(
-      (value): value is string => typeof value === "string" && value.trim().length > 0
-    );
+    const categoryTags = Array.from(
+      new Set(
+        categoryCandidate.flatMap((value) => {
+          if (typeof value !== "string") {
+            return [];
+          }
+          const trimmed = value.trim();
+          return trimmed && movementCategoryTagSet.has(trimmed) ? [trimmed] : [];
+        })
+      )
+    ) as Array<(typeof movementCategoryTags)[number]>;
     try {
       const place = updateMovementPlace(
         event.linkedContext.placeId,
