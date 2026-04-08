@@ -328,9 +328,9 @@ function ensurePublishedOutputs(connectorId: string, graph: AiConnector["graph"]
         outputId: "primary"
       })
     ].map((entry) => ({
-      id: entry.boxId.replace(/^connector-output:/, ""),
+      id: entry.id.replace(/^connector-output:/, ""),
       nodeId: "node_output",
-      label: entry.label,
+      label: entry.title,
       apiPath: `/api/v1/workbench/flows/${connectorId}/output`
     }));
   }
@@ -885,7 +885,13 @@ async function runModelNode(input: {
       : await executeForgeBoxTool(
           activeTools.find((tool) => tool.key === structured.tool)?.boxId ?? "",
           structured.tool,
-          structured.args
+          structured.args,
+          {
+            actor: {
+              userIds: null,
+              source: "agent"
+            }
+          }
         );
 
     transcript.push(
@@ -963,6 +969,30 @@ function buildOutputResult(
   });
 }
 
+function parseValueLiteral(
+  valueType: AiConnectorNode["data"]["valueType"],
+  valueLiteral: string
+) {
+  if (valueType === "null") {
+    return null;
+  }
+  if (valueType === "boolean") {
+    return valueLiteral.trim().toLowerCase() === "true";
+  }
+  if (valueType === "number") {
+    const parsed = Number(valueLiteral);
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+  if (valueType === "array" || valueType === "object") {
+    try {
+      return JSON.parse(valueLiteral || (valueType === "array" ? "[]" : "{}"));
+    } catch {
+      return valueType === "array" ? [] : {};
+    }
+  }
+  return valueLiteral;
+}
+
 function createConversationRecord(input: {
   connectorId: string;
   provider: string | null;
@@ -1034,15 +1064,41 @@ async function executeConnector(
 
     if (node.type === "box" || node.type === "box_input") {
       const boxId = node.data.boxId?.trim() || "";
+      const resolvedInputs = Object.fromEntries(
+        upstream.map(({ edge, selected }, index) => [
+          edge.targetHandle ?? edge.sourceHandle ?? `input_${index + 1}`,
+          selected.json ?? selected.text
+        ])
+      );
+      const resolvedParams =
+        node.data.paramValues && typeof node.data.paramValues === "object"
+          ? node.data.paramValues
+          : {};
       const providedSnapshot = boxId ? parsedInput.boxSnapshots[boxId] : null;
       const snapshot =
         providedSnapshot && typeof providedSnapshot === "object"
           ? {
-              ...resolveForgeBoxSnapshot(boxId),
+              ...resolveForgeBoxSnapshot(boxId, {
+                actor: {
+                  userIds: null,
+                  source: "agent"
+                }
+              }, {
+                inputs: resolvedInputs,
+                params: resolvedParams
+              }),
               contentJson: providedSnapshot as Record<string, unknown>
             }
           : boxId
-            ? resolveForgeBoxSnapshot(boxId)
+            ? resolveForgeBoxSnapshot(boxId, {
+                actor: {
+                  userIds: null,
+                  source: "agent"
+                }
+              }, {
+                inputs: resolvedInputs,
+                params: resolvedParams
+              })
             : {
                 boxId: "",
                 label: node.data.label,
@@ -1066,6 +1122,29 @@ async function executeConnector(
         })),
         conversationId: null,
         outputMap: buildOutputMap(snapshot.contentText, snapshot.contentJson, outputKeys),
+        logs: []
+      };
+    } else if (node.type === "value") {
+      const parsedValue = parseValueLiteral(
+        node.data.valueType ?? "string",
+        node.data.valueLiteral ?? ""
+      );
+      const jsonValue =
+        parsedValue && typeof parsedValue === "object" && !Array.isArray(parsedValue)
+          ? (parsedValue as Record<string, unknown>)
+          : null;
+      const textValue =
+        parsedValue === null
+          ? "null"
+          : typeof parsedValue === "string"
+            ? parsedValue
+            : JSON.stringify(parsedValue, null, 2);
+      resolved = {
+        text: textValue,
+        json: jsonValue,
+        tools: [],
+        conversationId: null,
+        outputMap: buildOutputMap(textValue, jsonValue, ["primary"]),
         logs: []
       };
     } else if (node.type === "user_input") {

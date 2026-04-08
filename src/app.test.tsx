@@ -2,8 +2,10 @@ import { cleanup, render, screen } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { Provider } from "react-redux";
 import { MemoryRouter, Outlet } from "react-router-dom";
 import { App } from "./app";
+import { createAppStore } from "@/store/store";
 
 afterEach(() => {
   cleanup();
@@ -33,11 +35,13 @@ function renderApp(initialEntry: string) {
     }
   });
   return render(
-    <QueryClientProvider client={queryClient}>
-      <MemoryRouter initialEntries={[initialEntry]}>
-        <App />
-      </MemoryRouter>
-    </QueryClientProvider>
+    <Provider store={createAppStore()}>
+      <QueryClientProvider client={queryClient}>
+        <MemoryRouter initialEntries={[initialEntry]}>
+          <App />
+        </MemoryRouter>
+      </QueryClientProvider>
+    </Provider>
   );
 }
 

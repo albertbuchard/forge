@@ -30,7 +30,8 @@ struct CompanionMenuSheet: View {
                 statusRow("Health", appModel.healthAccessLabel)
                 statusRow("Movement", appModel.movementAccessLabel)
                 statusRow("Watch", appModel.watchSyncLabel)
-                statusRow("Last sync", appModel.latestImportSummary)
+                statusRow("Last sync", appModel.lastSuccessfulSyncLabel)
+                statusRow("Last payload", appModel.latestImportSummary)
             }
 
             VStack(spacing: 10) {

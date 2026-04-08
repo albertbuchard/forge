@@ -299,7 +299,7 @@ export function ConnectorGraphEditor({
       return boxes;
     }
     return boxes.filter((box) =>
-      [box.label, box.description, box.category, box.routePath ?? "", box.surfaceId ?? ""]
+      [box.label ?? box.title, box.description, box.category, box.routePath ?? "", box.surfaceId ?? ""]
         .join(" ")
         .toLowerCase()
         .includes(normalized)
@@ -399,21 +399,21 @@ export function ConnectorGraphEditor({
             <div className="grid max-h-[28rem] gap-2 overflow-auto pr-1">
               {filteredBoxes.map((box) => (
                 <button
-                  key={box.boxId}
+                  key={box.boxId ?? box.id}
                   type="button"
                   className="rounded-[18px] border border-white/8 bg-white/[0.04] px-3 py-3 text-left transition hover:bg-white/[0.07]"
                   onClick={() =>
                     setNodes((current) => [
                       ...current,
-                      createNodeTemplate("box_input", box.label, current, {
+                      createNodeTemplate("box_input", box.label ?? box.title, current, {
                         description: box.description,
-                        boxId: box.boxId,
-                        enabledToolKeys: box.toolAdapters.map((tool) => tool.key)
+                        boxId: box.boxId ?? box.id,
+                        enabledToolKeys: (box.toolAdapters ?? box.tools ?? []).map((tool) => tool.key)
                       })
                     ])
                   }
                 >
-                  <div className="text-sm font-medium text-white">{box.label}</div>
+                  <div className="text-sm font-medium text-white">{box.label ?? box.title}</div>
                   <div className="mt-1 text-[12px] leading-5 text-white/50">
                     {box.description}
                   </div>
@@ -530,16 +530,18 @@ export function ConnectorGraphEditor({
                   <select
                     value={selectedNode.data.boxId ?? ""}
                     onChange={(event) => {
-                      const nextBox = boxes.find((box) => box.boxId === event.target.value);
+                      const nextBox = boxes.find(
+                        (box) => (box.boxId ?? box.id) === event.target.value
+                      );
                       updateSelectedNode((node) => ({
                         ...node,
                         data: {
                           ...node.data,
                           boxId: event.target.value,
-                          label: nextBox?.label ?? node.data.label,
+                          label: nextBox?.label ?? nextBox?.title ?? node.data.label,
                           description: nextBox?.description ?? node.data.description,
                           enabledToolKeys:
-                            nextBox?.toolAdapters.map((tool) => tool.key) ?? []
+                            (nextBox?.toolAdapters ?? nextBox?.tools ?? []).map((tool) => tool.key)
                         }
                       }));
                     }}
@@ -547,14 +549,22 @@ export function ConnectorGraphEditor({
                   >
                     <option value="">Select Forge box</option>
                     {boxes.map((box) => (
-                      <option key={box.boxId} value={box.boxId}>
-                        {box.label}
+                      <option key={box.boxId ?? box.id} value={box.boxId ?? box.id}>
+                        {box.label ?? box.title}
                       </option>
                     ))}
                   </select>
                   {selectedNode.data.boxId ? (
                     <div className="rounded-[16px] bg-white/[0.04] p-3 text-[12px] leading-5 text-white/62">
-                      {(boxes.find((box) => box.boxId === selectedNode.data.boxId)?.toolAdapters ?? []).map((tool) => (
+                      {(
+                        boxes.find(
+                          (box) => (box.boxId ?? box.id) === selectedNode.data.boxId
+                        )?.toolAdapters ??
+                        boxes.find(
+                          (box) => (box.boxId ?? box.id) === selectedNode.data.boxId
+                        )?.tools ??
+                        []
+                      ).map((tool) => (
                         <div key={tool.key}>{tool.key}</div>
                       ))}
                     </div>

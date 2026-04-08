@@ -1,24 +1,15 @@
-import boxDefinitions from "@/lib/workbench/box-definitions.json";
-import type {
-  ForgeBoxCatalogEntry,
-  ForgeBoxSnapshot
-} from "@/lib/types";
-
-export type WorkbenchMountedBox = {
-  boxId: string;
-  surfaceId: string | null;
-  routePath: string | null;
-  mountedAt: string;
-};
-
-const DEFINITIONS = boxDefinitions as ForgeBoxCatalogEntry[];
+import {
+  getWorkbenchNodeCatalog,
+  getWorkbenchNodeDefinition,
+  listWorkbenchNodeDefinitions
+} from "./registry.js";
 
 export function listWorkbenchBoxDefinitions() {
-  return DEFINITIONS;
+  return listWorkbenchNodeDefinitions();
 }
 
 export function getWorkbenchBoxDefinition(boxId: string) {
-  return DEFINITIONS.find((definition) => definition.boxId === boxId) ?? null;
+  return getWorkbenchNodeDefinition(boxId);
 }
 
 export function getWorkbenchBoxDefinitionForSurfaceWidget(
@@ -32,16 +23,6 @@ export function getWorkbenchBoxDefinitionForRouteMain(surfaceId: string) {
   return getWorkbenchBoxDefinition(`surface:${surfaceId}:main`);
 }
 
-export function buildFallbackWorkbenchSnapshot(
-  boxId: string,
-  label: string
-): ForgeBoxSnapshot {
-  return {
-    boxId,
-    label,
-    capturedAt: new Date().toISOString(),
-    contentText: `${label}\nThis box is registered but does not expose a specialized server snapshot yet.`,
-    contentJson: null,
-    tools: []
-  };
+export function listWorkbenchBoxCatalogEntries() {
+  return getWorkbenchNodeCatalog();
 }

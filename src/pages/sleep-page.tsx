@@ -4,10 +4,15 @@ import { useVirtualizer } from "@tanstack/react-virtual";
 import { ArrowRight, CalendarDays, MoonStar, Save } from "lucide-react";
 import { EntityLinkMultiSelect } from "@/components/psyche/entity-link-multiselect";
 import { PsycheSectionNav } from "@/components/psyche/psyche-section-nav";
+import { VirtualizedListSurface } from "@/components/primitives/virtualized-list-surface";
 import { FacetedTokenSearch, type FacetedTokenOption } from "@/components/search/faceted-token-search";
 import { useForgeShell } from "@/components/shell/app-shell";
 import { PageHero } from "@/components/shell/page-hero";
-import { WorkbenchSection } from "@/components/workbench/workbench-section";
+import {
+  SleepBrowserBox,
+  SleepPatternsBox,
+  SleepSummaryBox
+} from "@/components/workbench-boxes/health/health-boxes";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { SurfaceSkeleton } from "@/components/experience/surface-skeleton";
@@ -656,7 +661,7 @@ export function SleepPage() {
 
       <PsycheSectionNav />
 
-      <WorkbenchSection boxId="surface:sleep-index:summary" surfaceId="sleep-index">
+      <SleepSummaryBox>
         <section className="grid gap-4 lg:grid-cols-4">
         <Card>
           <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">
@@ -748,9 +753,9 @@ export function SleepPage() {
           </div>
         </Card>
         </section>
-      </WorkbenchSection>
+      </SleepSummaryBox>
 
-      <WorkbenchSection boxId="surface:sleep-index:patterns" surfaceId="sleep-index">
+      <SleepPatternsBox>
         <section className="grid gap-4 lg:grid-cols-[1.1fr_0.9fr]">
         <Card className="grid gap-4">
           <div className="flex items-center justify-between gap-3">
@@ -877,9 +882,9 @@ export function SleepPage() {
           </div>
         </Card>
         </section>
-      </WorkbenchSection>
+      </SleepPatternsBox>
 
-      <WorkbenchSection boxId="surface:sleep-index:browser" surfaceId="sleep-index">
+      <SleepBrowserBox>
         <section className="grid gap-4 xl:grid-cols-[minmax(0,25rem)_minmax(0,1fr)]">
         <FacetedTokenSearch
           title="Night browser"
@@ -894,110 +899,99 @@ export function SleepPage() {
           emptyStateMessage="Keep typing or pick a filter chip to narrow the sleep history."
         />
 
-        <Card className="grid gap-4">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">
-                Night history
-              </div>
-              <div className="mt-2 text-lg text-white">
-                Open a night to add reflection and links in a guided modal.
-              </div>
-            </div>
-            <Badge tone="meta">{resultSummary}</Badge>
-          </div>
-
-          <div
-            ref={listRef}
-            className="h-[34rem] overflow-y-auto rounded-[24px] border border-white/8 bg-white/[0.03]"
-          >
-            {filteredSessions.length === 0 ? (
+        <VirtualizedListSurface
+          title="Night history"
+          description="Open a night to add reflection and links in a guided modal."
+          summary={<Badge tone="meta">{resultSummary}</Badge>}
+          listRef={listRef}
+          emptyState={
+            filteredSessions.length === 0 ? (
               <div className="flex h-full items-center justify-center p-6 text-center text-sm leading-6 text-white/50">
                 No night matches the current search yet. Clear some filters or search by recovery state, device, or reflection text.
               </div>
-            ) : (
-              <div
-                className="relative w-full"
-                style={{ height: `${rowVirtualizer.getTotalSize()}px` }}
-              >
-                {rowVirtualizer.getVirtualItems().map((virtualRow) => {
-                  const session = filteredSessions[virtualRow.index]!;
-                  const hasReflection =
-                    ((typeof session.annotations.notes === "string" &&
-                      session.annotations.notes.trim().length > 0) ||
-                      (typeof session.annotations.qualitySummary === "string" &&
-                        session.annotations.qualitySummary.trim().length > 0) ||
-                      (Array.isArray(session.annotations.tags) &&
-                        session.annotations.tags.length > 0) ||
-                      session.links.length > 0);
-                  return (
-                    <div
-                      key={session.id}
-                      data-index={virtualRow.index}
-                      ref={rowVirtualizer.measureElement}
-                      className="absolute left-0 top-0 w-full px-3 py-2"
-                      style={{
-                        transform: `translateY(${virtualRow.start}px)`
-                      }}
-                    >
-                      <button
-                        type="button"
-                        className="grid w-full gap-3 rounded-[20px] border border-white/8 bg-white/[0.04] px-4 py-3 text-left transition hover:bg-white/[0.07]"
-                        onClick={() => {
-                          setSelectedSleepId(session.id);
-                          setEditorStep(0);
-                        }}
-                      >
-                        <div className="flex flex-wrap items-start justify-between gap-3">
-                          <div className="min-w-0">
-                            <div className="flex items-center gap-2 text-white">
-                              <MoonStar className="size-4 shrink-0 text-[var(--primary)]" />
-                              <span className="truncate text-base font-medium">
-                                {formatSleepWindow(session.startedAt, session.endedAt)}
-                              </span>
-                            </div>
-                            <div className="mt-2 flex items-center gap-2 text-sm text-white/56">
-                              <CalendarDays className="size-3.5 shrink-0" />
-                              <span className="truncate">
-                                {session.sourceType.replaceAll("_", " ")} · {session.sourceDevice}
-                              </span>
-                            </div>
-                          </div>
-                          <div className="inline-flex items-center gap-2 rounded-full bg-white/[0.05] px-3 py-1.5 text-xs text-white/70">
-                            <span>{hasReflection ? "Reflected" : "Needs reflection"}</span>
-                            <ArrowRight className="size-3.5" />
-                          </div>
+            ) : undefined
+          }
+        >
+          <div
+            className="relative w-full"
+            style={{ height: `${rowVirtualizer.getTotalSize()}px` }}
+          >
+            {rowVirtualizer.getVirtualItems().map((virtualRow) => {
+              const session = filteredSessions[virtualRow.index]!;
+              const hasReflection =
+                ((typeof session.annotations.notes === "string" &&
+                  session.annotations.notes.trim().length > 0) ||
+                  (typeof session.annotations.qualitySummary === "string" &&
+                    session.annotations.qualitySummary.trim().length > 0) ||
+                  (Array.isArray(session.annotations.tags) &&
+                    session.annotations.tags.length > 0) ||
+                  session.links.length > 0);
+              return (
+                <div
+                  key={session.id}
+                  data-index={virtualRow.index}
+                  ref={rowVirtualizer.measureElement}
+                  className="absolute left-0 top-0 w-full px-3 py-2"
+                  style={{
+                    transform: `translateY(${virtualRow.start}px)`
+                  }}
+                >
+                  <button
+                    type="button"
+                    className="grid w-full gap-3 rounded-[20px] border border-white/8 bg-white/[0.04] px-4 py-3 text-left transition hover:bg-white/[0.07]"
+                    onClick={() => {
+                      setSelectedSleepId(session.id);
+                      setEditorStep(0);
+                    }}
+                  >
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2 text-white">
+                          <MoonStar className="size-4 shrink-0 text-[var(--primary)]" />
+                          <span className="truncate text-base font-medium">
+                            {formatSleepWindow(session.startedAt, session.endedAt)}
+                          </span>
                         </div>
-                        <div className="flex flex-wrap gap-2">
-                          <Badge>{hoursLabel(session.asleepSeconds)} asleep</Badge>
-                          <Badge tone="meta">{hoursLabel(session.timeInBedSeconds)} in bed</Badge>
-                          <Badge tone="meta">Score {session.sleepScore ?? "n/a"}</Badge>
-                          <Badge tone="meta">
-                            Eff{" "}
-                            {percentLabel(
-                              typeof session.derived.efficiency === "number"
-                                ? session.derived.efficiency
-                                : session.timeInBedSeconds > 0
-                                  ? session.asleepSeconds / session.timeInBedSeconds
-                                  : 0
-                            )}
-                          </Badge>
-                          {typeof session.derived.recoveryState === "string" ? (
-                            <Badge tone="meta" className="capitalize">
-                              {session.derived.recoveryState}
-                            </Badge>
-                          ) : null}
+                        <div className="mt-2 flex items-center gap-2 text-sm text-white/56">
+                          <CalendarDays className="size-3.5 shrink-0" />
+                          <span className="truncate">
+                            {session.sourceType.replaceAll("_", " ")} · {session.sourceDevice}
+                          </span>
                         </div>
-                      </button>
+                      </div>
+                      <div className="inline-flex items-center gap-2 rounded-full bg-white/[0.05] px-3 py-1.5 text-xs text-white/70">
+                        <span>{hasReflection ? "Reflected" : "Needs reflection"}</span>
+                        <ArrowRight className="size-3.5" />
+                      </div>
                     </div>
-                  );
-                })}
-              </div>
-            )}
+                    <div className="flex flex-wrap gap-2">
+                      <Badge>{hoursLabel(session.asleepSeconds)} asleep</Badge>
+                      <Badge tone="meta">{hoursLabel(session.timeInBedSeconds)} in bed</Badge>
+                      <Badge tone="meta">Score {session.sleepScore ?? "n/a"}</Badge>
+                      <Badge tone="meta">
+                        Eff{" "}
+                        {percentLabel(
+                          typeof session.derived.efficiency === "number"
+                            ? session.derived.efficiency
+                            : session.timeInBedSeconds > 0
+                              ? session.asleepSeconds / session.timeInBedSeconds
+                              : 0
+                        )}
+                      </Badge>
+                      {typeof session.derived.recoveryState === "string" ? (
+                        <Badge tone="meta" className="capitalize">
+                          {session.derived.recoveryState}
+                        </Badge>
+                      ) : null}
+                    </div>
+                  </button>
+                </div>
+              );
+            })}
           </div>
-        </Card>
+        </VirtualizedListSurface>
         </section>
-      </WorkbenchSection>
+      </SleepBrowserBox>
 
       {activeSession && activeDraft ? (
         <SheetScaffold

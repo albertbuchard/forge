@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useParams } from "react-router-dom";
+import { useWorkbenchNodeCatalog } from "@/components/workbench/workbench-provider";
 import { WorkbenchFlowEditor } from "@/components/workbench/workbench-flow-editor";
 import { EmptyState, ErrorState, LoadingState } from "@/components/ui/page-state";
 import {
@@ -7,7 +8,6 @@ import {
   deleteWorkbenchFlow,
   getSettings,
   getWorkbenchFlow,
-  listWorkbenchBoxCatalog,
   runWorkbenchFlow,
   updateWorkbenchFlow
 } from "@/lib/api";
@@ -17,15 +17,12 @@ export function WorkbenchFlowPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const flowId = params.flowId ?? "";
+  const boxes = useWorkbenchNodeCatalog();
 
   const flowQuery = useQuery({
     queryKey: ["forge-workbench-flow", flowId],
     queryFn: () => getWorkbenchFlow(flowId),
     enabled: flowId.length > 0
-  });
-  const boxesQuery = useQuery({
-    queryKey: ["forge-workbench-boxes"],
-    queryFn: listWorkbenchBoxCatalog
   });
   const settingsQuery = useQuery({
     queryKey: ["forge-settings"],
@@ -62,7 +59,7 @@ export function WorkbenchFlowPage() {
     }
   });
 
-  if (flowQuery.isLoading || boxesQuery.isLoading || settingsQuery.isLoading) {
+  if (flowQuery.isLoading || settingsQuery.isLoading) {
     return (
       <LoadingState
         title="Loading flow"
@@ -72,12 +69,9 @@ export function WorkbenchFlowPage() {
   }
 
   if (
-    flowQuery.isError ||
-    boxesQuery.isError ||
-    settingsQuery.isError ||
-    !flowQuery.data
+    flowQuery.isError || settingsQuery.isError || !flowQuery.data
   ) {
-    if (!flowQuery.data && !flowQuery.isError && !boxesQuery.isError && !settingsQuery.isError) {
+    if (!flowQuery.data && !flowQuery.isError && !settingsQuery.isError) {
       return (
         <EmptyState
           eyebrow="Workbench"
@@ -89,7 +83,7 @@ export function WorkbenchFlowPage() {
     return (
       <ErrorState
         eyebrow="Workbench"
-        error={flowQuery.error ?? boxesQuery.error ?? settingsQuery.error ?? null}
+        error={flowQuery.error ?? settingsQuery.error ?? null}
       />
     );
   }
@@ -97,7 +91,7 @@ export function WorkbenchFlowPage() {
   return (
     <WorkbenchFlowEditor
       flow={flowQuery.data.flow}
-      boxes={boxesQuery.data!.boxes}
+      boxes={boxes}
       modelConnections={(settingsQuery.data!.settings.modelSettings.connections ?? []).map(
         (connection) => ({
           id: connection.id,

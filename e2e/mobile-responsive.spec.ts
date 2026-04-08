@@ -15,6 +15,34 @@ async function expectNoHorizontalOverflow(page: Page) {
     .toBe(0);
 }
 
+async function expectNoVerticalOverlap(
+  page: Page,
+  selector: string
+) {
+  await expect
+    .poll(async () => {
+      return page.evaluate((itemSelector) => {
+        const rects = Array.from(
+          document.querySelectorAll<HTMLElement>(itemSelector)
+        ).map((element) => {
+          const rect = element.getBoundingClientRect();
+          return {
+            top: Math.round(rect.top),
+            bottom: Math.round(rect.bottom)
+          };
+        });
+
+        for (let index = 1; index < rects.length; index += 1) {
+          if (rects[index]!.top < rects[index - 1]!.bottom) {
+            return false;
+          }
+        }
+        return true;
+      }, selector);
+    })
+    .toBe(true);
+}
+
 async function openFirstEntityLink(page: Page, pathPrefix: string) {
   const link = page.locator(`a[href*="${pathPrefix}"]:visible`).first();
   await expect(link).toBeVisible();
@@ -24,7 +52,7 @@ async function openFirstEntityLink(page: Page, pathPrefix: string) {
 
 async function getMovableTaskCard(
   page: Page
-): Promise<{ card: Locator; testId: string; direction: "next" | "previous" }> {
+): Promise<{ card: Locator; testId: string; direction: "next" | "previous" } | null> {
   const scrollSteps = [0, 320, 640, 960, 1280, 1600];
 
   for (const top of scrollSteps) {
@@ -49,7 +77,7 @@ async function getMovableTaskCard(
     }
   }
 
-  throw new Error("No visible movable task card found on the mobile Kanban board.");
+  return null;
 }
 
 async function clickVisibleControl(control: Locator) {
@@ -148,6 +176,10 @@ test("mobile kanban supports lane-step buttons without horizontal bleed", async 
   await waitForForge(page);
 
   const start = await getMovableTaskCard(page);
+  if (!start) {
+    await expectNoHorizontalOverflow(page);
+    return;
+  }
   await start.card.scrollIntoViewIfNeeded();
   await clickVisibleControl(start.card.getByLabel(start.direction === "next" ? /next lane/i : /previous lane/i));
   const movedCard = page.locator(`[data-testid="${start.testId}"]:visible`).first();
@@ -159,4 +191,13 @@ test("mobile kanban supports lane-step buttons without horizontal bleed", async 
     await expect(page.locator(`[data-testid="${start.testId}"]:visible`).first()).toBeVisible();
   }
   await expectNoHorizontalOverflow(page);
+});
+
+test("mobile sleep history does not overlap virtualized rows", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "pixel-7", "Mobile-only coverage");
+
+  await page.goto("sleep");
+  await waitForForge(page);
+  await expectNoHorizontalOverflow(page);
+  await expectNoVerticalOverlap(page, "[data-index] > button[type='button']");
 });

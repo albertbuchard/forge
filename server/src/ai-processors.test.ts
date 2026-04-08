@@ -21,7 +21,7 @@ async function issueOperatorSessionCookie(
   return `${cookie.name}=${cookie.value}`;
 }
 
-test("ai connectors can be created, run, and expose published outputs", async () => {
+test("workbench flows can be created, run, and expose published outputs", async () => {
   const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-ai-proc-"));
   const originalFetch = globalThis.fetch;
   const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
@@ -94,7 +94,7 @@ test("ai connectors can be created, run, and expose published outputs", async ()
 
     const connectorResponse = await app.inject({
       method: "POST",
-      url: "/api/v1/ai-connectors",
+      url: "/api/v1/workbench/flows",
       headers: {
         cookie: operatorCookie,
         host: "127.0.0.1:4317"
@@ -111,9 +111,9 @@ test("ai connectors can be created, run, and expose published outputs", async ()
               type: "box_input",
               position: { x: 80, y: 120 },
               data: {
-                label: "Overview priorities",
-                description: "Structured overview context",
-                boxId: "overview:priorities",
+                label: "Project search",
+                description: "Structured project search context",
+                boxId: "surface:projects:search-results",
                 enabledToolKeys: []
               }
             },
@@ -171,11 +171,11 @@ test("ai connectors can be created, run, and expose published outputs", async ()
     });
     assert.equal(connectorResponse.statusCode, 201);
     const connectorBody = connectorResponse.json() as {
-      connector: { id: string; slug: string; publishedOutputs: Array<{ id: string }> };
+      flow: { id: string; slug: string; publishedOutputs: Array<{ id: string }> };
     };
-    const connectorId = connectorBody.connector.id;
-    const connectorSlug = connectorBody.connector.slug;
-    assert.equal(connectorBody.connector.publishedOutputs.length, 1);
+    const connectorId = connectorBody.flow.id;
+    const connectorSlug = connectorBody.flow.slug;
+    assert.equal(connectorBody.flow.publishedOutputs.length, 1);
 
     const workbenchListResponse = await app.inject({
       method: "GET",
@@ -191,22 +191,6 @@ test("ai connectors can be created, run, and expose published outputs", async ()
     };
     assert.ok(workbenchListBody.flows.some((entry) => entry.id === connectorId));
 
-    const catalogResponse = await app.inject({
-      method: "GET",
-      url: "/api/v1/ai-connectors/catalog/boxes",
-      headers: {
-        cookie: operatorCookie,
-        host: "127.0.0.1:4317"
-      }
-    });
-    assert.equal(catalogResponse.statusCode, 200);
-    const catalogBody = catalogResponse.json() as {
-      boxes: Array<{ boxId: string }>;
-    };
-    assert.ok(
-      catalogBody.boxes.some((entry) => entry.boxId === "overview:priorities")
-    );
-
     const workbenchCatalogResponse = await app.inject({
       method: "GET",
       url: "/api/v1/workbench/catalog/boxes",
@@ -217,17 +201,17 @@ test("ai connectors can be created, run, and expose published outputs", async ()
     });
     assert.equal(workbenchCatalogResponse.statusCode, 200);
     const workbenchCatalogBody = workbenchCatalogResponse.json() as {
-      boxes: Array<{ boxId: string }>;
+      boxes: Array<{ id: string }>;
     };
     assert.ok(
       workbenchCatalogBody.boxes.some(
-        (entry) => entry.boxId === "surface:overview:quick-capture"
+        (entry) => entry.id === "surface:utility:quick-capture"
       )
     );
 
     const runResponse = await app.inject({
       method: "POST",
-      url: `/api/v1/ai-connectors/${connectorId}/run`,
+      url: `/api/v1/workbench/flows/${connectorId}/run`,
       headers: {
         cookie: operatorCookie,
         host: "127.0.0.1:4317"
@@ -238,10 +222,10 @@ test("ai connectors can be created, run, and expose published outputs", async ()
     });
     assert.equal(runResponse.statusCode, 200);
     const runBody = runResponse.json() as {
-      connector: { id: string };
+      flow: { id: string };
       run: { result: { primaryText: string } };
     };
-    assert.equal(runBody.connector.id, connectorId);
+    assert.equal(runBody.flow.id, connectorId);
     assert.match(runBody.run.result.primaryText, /processor-output/);
 
     const workbenchRunResponse = await app.inject({
@@ -284,7 +268,7 @@ test("ai connectors can be created, run, and expose published outputs", async ()
 
     const outputResponse = await app.inject({
       method: "GET",
-      url: `/api/v1/ai-connectors/${connectorId}/output`,
+      url: `/api/v1/workbench/flows/${connectorId}/output`,
       headers: {
         cookie: operatorCookie,
         host: "127.0.0.1:4317"
@@ -292,15 +276,15 @@ test("ai connectors can be created, run, and expose published outputs", async ()
     });
     assert.equal(outputResponse.statusCode, 200);
     const outputBody = outputResponse.json() as {
-      connector: { slug: string };
+      flow: { slug: string };
       output: { primaryText: string };
     };
-    assert.equal(outputBody.connector.slug, connectorSlug);
+    assert.equal(outputBody.flow.slug, connectorSlug);
     assert.match(outputBody.output.primaryText, /processor-output/);
 
     const runsResponse = await app.inject({
       method: "GET",
-      url: `/api/v1/ai-connectors/${connectorId}/runs`,
+      url: `/api/v1/workbench/flows/${connectorId}/runs`,
       headers: {
         cookie: operatorCookie,
         host: "127.0.0.1:4317"
@@ -313,16 +297,6 @@ test("ai connectors can be created, run, and expose published outputs", async ()
     assert.ok(runsBody.runs.length >= 2);
     assert.equal(runsBody.runs[0]?.status, "completed");
     assert.match(runsBody.runs[0]?.result.primaryText ?? "", /processor-output/);
-
-    const bySlugResponse = await app.inject({
-      method: "GET",
-      url: `/api/v1/ai-connectors/by-slug/${connectorSlug}`,
-      headers: {
-        cookie: operatorCookie,
-        host: "127.0.0.1:4317"
-      }
-    });
-    assert.equal(bySlugResponse.statusCode, 200);
 
     const workbenchBySlugResponse = await app.inject({
       method: "GET",

@@ -13,7 +13,6 @@ import {
   useIsFetching,
   useIsMutating,
   useMutation,
-  useQuery,
   useQueryClient
 } from "@tanstack/react-query";
 import {
@@ -81,11 +80,6 @@ import {
   createGoal,
   createProject,
   createTask,
-  ensureOperatorSession,
-  getForgeSnapshot,
-  getSettings,
-  heartbeatTaskRun,
-  listWikiIngestJobs,
   patchGoal,
   patchProject,
   patchTask,
@@ -95,8 +89,15 @@ import {
 } from "@/lib/api";
 import { ForgeApiError } from "@/lib/api-error";
 import { I18nProvider, useI18n, type TranslationKey } from "@/lib/i18n";
-import { applyForgeThemeToDocument } from "@/lib/theme-system";
 import { cn } from "@/lib/utils";
+import { isShellRouteReady } from "@/features/shell/route-readiness";
+import { selectPendingRtkRequestCount, selectSelectedUserIds } from "@/features/shell/selectors";
+import { useShellBackgroundActivity } from "@/features/shell/use-shell-background-activity";
+import { useShellCollapseController } from "@/features/shell/use-shell-collapse-controller";
+import { useShellRouteHandoff } from "@/features/shell/use-shell-route-handoff";
+import { useShellSessionTelemetry } from "@/features/shell/use-shell-session-telemetry";
+import { useShellTaskHeartbeat } from "@/features/shell/use-shell-task-heartbeat";
+import { useShellThemeController } from "@/features/shell/use-shell-theme-controller";
 import type {
   GoalMutationInput,
   ProjectMutationInput,
@@ -109,6 +110,25 @@ import type {
   UserSummary,
   WikiIngestJobPayload
 } from "@/lib/types";
+import {
+  useClaimTaskRunMutation,
+  useCompleteTaskRunMutation,
+  useCreateGoalMutation,
+  useCreateProjectMutation,
+  useCreateTaskMutation,
+  useFocusTaskRunMutation,
+  useGetOperatorSessionQuery,
+  useGetSettingsQuery,
+  useGetSnapshotQuery,
+  usePatchGoalMutation,
+  usePatchProjectMutation,
+  usePatchTaskStatusMutation,
+  useReleaseTaskRunMutation
+} from "@/store/api/forge-api";
+import {
+  setSelectedUserIds as setSelectedUserIdsAction
+} from "@/store/slices/shell-slice";
+import { useAppDispatch, useAppSelector } from "@/store/typed-hooks";
 
 type ShellContextValue = {
   snapshot: ForgeSnapshot;
@@ -616,9 +636,8 @@ function readStoredNavIds(storageKey: string, defaults: string[]) {
     const validIds = new Set(NAV_ROUTE_REGISTRY.map((route) => route.id));
     const filtered = parsed.filter(
       (entry): entry is string =>
-        typeof entry === "string" && validIds.has(entry === "connectors" ? "workbench" : entry)
-    ).map((entry) => (entry === "connectors" ? "workbench" : entry))
-    ;
+        typeof entry === "string" && validIds.has(entry)
+    );
     return filtered.length > 0 ? filtered : defaults;
   } catch {
     return defaults;
@@ -1305,7 +1324,6 @@ function ShellFrame({
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [backgroundActivityOpen, setBackgroundActivityOpen] = useState(false);
   const shellRootRef = useRef<HTMLDivElement | null>(null);
-  const collapseProgressRef = useRef(0);
   const [navCollapsed, setNavCollapsed] = useState(false);
   const [desktopNavIds, setDesktopNavIds] = useState<string[]>(() =>
     readStoredNavIds(DESKTOP_NAV_STORAGE_KEY, [
@@ -1337,17 +1355,18 @@ function ShellFrame({
     .filter((route): route is ShellRouteDefinition => route !== null);
   const fetching = useIsFetching();
   const mutating = useIsMutating();
-  const activityCount = fetching + mutating;
-  const ingestJobsQuery = useQuery({
-    queryKey: ["forge-background-wiki-ingest-jobs"],
-    queryFn: () => listWikiIngestJobs({ limit: 12 }),
-    refetchInterval: (query) => {
-      const jobs = query.state.data?.jobs ?? [];
-      return backgroundActivityOpen ||
-        jobs.some((job) => ["queued", "processing"].includes(job.job.status))
-        ? 2000
-        : false;
-    }
+  const pendingRtkRequests = useAppSelector(selectPendingRtkRequestCount);
+  const activityCount = fetching + mutating + pendingRtkRequests;
+  const {
+    activityLabel,
+    hasActiveIngestJobs,
+    ingestJobsQuery,
+    recentIngestJobs
+  } = useShellBackgroundActivity({
+    backgroundActivityOpen,
+    fetchingCount: fetching + pendingRtkRequests,
+    mutatingCount: mutating,
+    t
   });
   const sidebarMetrics = [
     {
@@ -1381,42 +1400,6 @@ function ShellFrame({
       icon: Activity
     }
   ] as const;
-  const activityLabel = (ingestJobsQuery.data?.jobs ?? []).some((job) =>
-    ["queued", "processing"].includes(job.job.status)
-  )
-    ? (() => {
-        const activeJobs = (ingestJobsQuery.data?.jobs ?? []).filter((job) =>
-          ["queued", "processing"].includes(job.job.status)
-        );
-        if (activeJobs.length === 1) {
-          return (
-            activeJobs[0]?.job.latestMessage ||
-            activeJobs[0]?.job.titleHint ||
-            "1 ingest running"
-          );
-        }
-        return `${activeJobs.length} ingest jobs running`;
-      })()
-    : mutating > 0
-      ? t(
-          mutating === 1
-            ? "common.shell.savingOne"
-            : "common.shell.savingOther",
-          { count: mutating }
-        )
-      : fetching > 0
-        ? t(
-            fetching === 1
-              ? "common.shell.refreshingOne"
-              : "common.shell.refreshingOther",
-            { count: fetching }
-          )
-        : t("common.shell.settled");
-  const recentIngestJobs = ingestJobsQuery.data?.jobs ?? [];
-  const hasActiveIngestJobs = recentIngestJobs.some((job) =>
-    ["queued", "processing"].includes(job.job.status)
-  );
-
   const railLinks = useMemo(() => {
     if (routeLocation.pathname.startsWith("/tasks/")) {
       return [
@@ -1549,35 +1532,7 @@ function ShellFrame({
     }
   }, [autoCollapseSurface, navCollapsed]);
 
-  useEffect(() => {
-    const updateCollapsed = () => {
-      const collapseDistance = window.innerWidth >= 1024 ? 124 : 96;
-      const scrollRoot =
-        document.scrollingElement ??
-        document.documentElement ??
-        document.body;
-      const maxScrollable = Math.max(
-        0,
-        scrollRoot.scrollHeight - window.innerHeight
-      );
-      const nextProgress =
-        maxScrollable < collapseDistance
-          ? 0
-          : clamp(readWindowScrollTop() / collapseDistance, 0, 1);
-      if (Math.abs(collapseProgressRef.current - nextProgress) < 0.001) {
-        return;
-      }
-      collapseProgressRef.current = nextProgress;
-      applyShellCollapseVariables(shellRootRef.current, nextProgress);
-    };
-    updateCollapsed();
-    window.addEventListener("scroll", updateCollapsed, { passive: true });
-    window.addEventListener("resize", updateCollapsed);
-    return () => {
-      window.removeEventListener("scroll", updateCollapsed);
-      window.removeEventListener("resize", updateCollapsed);
-    };
-  }, []);
+  useShellCollapseController(shellRootRef);
   const shellRootStyle = useMemo(
     () =>
       ({
@@ -2197,19 +2152,16 @@ function ShellFrame({
 
 export function AppShell() {
   useLiveEvents();
-  const sessionIdRef = useRef(
-    `forge_session_${Math.random().toString(36).slice(2, 10)}`
-  );
+  const dispatch = useAppDispatch();
   const xpTimerRef = useRef<number | null>(null);
   const previousXpRef = useRef<number | null>(null);
   const queryClient = useQueryClient();
   const routerLocation = useLocation();
   const routerLocationContext = useContext(UNSAFE_LocationContext);
   const outlet = useOutlet();
-  const fetching = useIsFetching();
-  const [selectedUserIds, setSelectedUserIds] = useState<string[]>(
-    readStoredSelectedUserIds
-  );
+  const tanstackFetching = useIsFetching();
+  const pendingRtkRequests = useAppSelector(selectPendingRtkRequestCount);
+  const selectedUserIds = useAppSelector(selectSelectedUserIds);
   const [startWorkOpen, setStartWorkOpen] = useState(false);
   const [startWorkDefaults, setStartWorkDefaults] = useState<{
     taskId?: string | null;
@@ -2221,43 +2173,36 @@ export function AppShell() {
     totalXp: number;
   } | null>(null);
   const routePathKey = `${routerLocation.pathname}${routerLocation.search}${routerLocation.hash}`;
-  const previousFetchingRef = useRef(fetching);
-  const handoffTimerRef = useRef<number | null>(null);
-  const [displayedRoute, setDisplayedRoute] = useState<{
-    key: string;
-    node: ReactNode;
-    location: RouterLocation;
-  }>({
-    key: routePathKey,
-    node: outlet,
-    location: routerLocation
+  const operatorSessionQuery = useGetOperatorSessionQuery();
+  const snapshotQuery = useGetSnapshotQuery(selectedUserIds, {
+    skip: !operatorSessionQuery.isSuccess
   });
-  const [pendingRoute, setPendingRoute] = useState<{
-    key: string;
-    node: ReactNode;
-    location: RouterLocation;
-    baselineFetching: number;
-  } | null>(null);
-  const operatorSessionQuery = useQuery({
-    queryKey: ["forge-shell-operator-session"],
-    queryFn: ensureOperatorSession,
-    retry: false,
-    staleTime: 5 * 60_000
+  const settingsQuery = useGetSettingsQuery(undefined, {
+    skip: !operatorSessionQuery.isSuccess
   });
-  const snapshotQuery = useQuery({
-    queryKey: ["forge-snapshot", ...selectedUserIds],
-    queryFn: () => getForgeSnapshot(selectedUserIds),
-    enabled: operatorSessionQuery.isSuccess
+  const routeReady = isShellRouteReady(routerLocation.pathname, {
+    bootstrapReady:
+      operatorSessionQuery.isSuccess &&
+      snapshotQuery.isSuccess &&
+      settingsQuery.isSuccess,
+    sleepReady: true
   });
-  const settingsQuery = useQuery({
-    queryKey: ["forge-settings"],
-    queryFn: getSettings,
-    enabled: operatorSessionQuery.isSuccess
+  const {
+    displayedRoute,
+    displayedLocationContext,
+    pendingRoute,
+    visibleLocation
+  } = useShellRouteHandoff({
+    routePathKey,
+    routerLocation,
+    outlet,
+    routerLocationContext,
+    externalFetching: tanstackFetching + pendingRtkRequests,
+    routeReady
   });
-
-  useEffect(() => {
-    writeStoredSelectedUserIds(selectedUserIds);
-  }, [selectedUserIds]);
+  const setSelectedUserIds = (userIds: string[]) => {
+    dispatch(setSelectedUserIdsAction(userIds));
+  };
 
   useEffect(() => {
     if (!operatorSessionQuery.isSuccess) {
@@ -2275,6 +2220,13 @@ export function AppShell() {
       }
     });
   }, [operatorSessionQuery.isSuccess, queryClient, selectedUserIds]);
+
+  useShellSessionTelemetry(operatorSessionQuery.isSuccess);
+  useShellTaskHeartbeat({
+    snapshot: snapshotQuery.data,
+    settings: settingsQuery.data?.settings
+  });
+  useShellThemeController(settingsQuery.data?.settings);
 
   useEffect(() => {
     const totalXp = snapshotQuery.data?.metrics.totalXp;
@@ -2311,212 +2263,26 @@ export function AppShell() {
     };
   }, []);
 
-  useEffect(() => {
-    const settings = settingsQuery.data?.settings;
-    if (!settings) {
-      return;
-    }
-
-    const applyTheme = () => {
-      applyForgeThemeToDocument(
-        settings.themePreference,
-        settings.customTheme ?? null
-      );
-    };
-
-    applyTheme();
-
-    if (
-      settings.themePreference !== "system" ||
-      typeof window === "undefined" ||
-      typeof window.matchMedia !== "function"
-    ) {
-      return;
-    }
-
-    const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
-    const handleChange = () => applyTheme();
-
-    if (typeof mediaQuery.addEventListener === "function") {
-      mediaQuery.addEventListener("change", handleChange);
-      return () => mediaQuery.removeEventListener("change", handleChange);
-    }
-
-    mediaQuery.addListener(handleChange);
-    return () => mediaQuery.removeListener(handleChange);
-  }, [settingsQuery.data?.settings]);
-
-  useEffect(() => {
-    if (!operatorSessionQuery.isSuccess) {
-      return;
-    }
-
-    let interacted = false;
-    let dwellSent = false;
-    let scrollSent = false;
-
-    const markInteraction = () => {
-      interacted = true;
-    };
-
-    const sendEvent = (
-      eventType: string,
-      metrics: Record<string, string | number | boolean | null>
-    ) =>
-      recordSessionEvent({
-        sessionId: sessionIdRef.current,
-        eventType,
-        metrics
-      }).catch(() => undefined);
-
-    void sendEvent("session_started", {
-      visible: document.visibilityState === "visible",
-      interacted: false
-    });
-
-    const dwellTimer = window.setTimeout(() => {
-      if (document.visibilityState === "visible" && interacted && !dwellSent) {
-        dwellSent = true;
-        void sendEvent("dwell_120_seconds", {
-          visible: true,
-          interacted: true
-        });
-      }
-    }, 120_000);
-
-    const onScroll = () => {
-      const denominator = Math.max(
-        1,
-        document.documentElement.scrollHeight - window.innerHeight
-      );
-      const progress = Math.round((window.scrollY / denominator) * 100);
-      if (progress >= 75 && interacted && !scrollSent) {
-        scrollSent = true;
-        void sendEvent("scroll_depth_75", {
-          visible: document.visibilityState === "visible",
-          interacted: true,
-          scrollDepth: progress
-        });
-      }
-    };
-
-    window.addEventListener("pointerdown", markInteraction);
-    window.addEventListener("keydown", markInteraction);
-    window.addEventListener("scroll", onScroll, { passive: true });
-
-    return () => {
-      window.clearTimeout(dwellTimer);
-      window.removeEventListener("pointerdown", markInteraction);
-      window.removeEventListener("keydown", markInteraction);
-      window.removeEventListener("scroll", onScroll);
-    };
-  }, [operatorSessionQuery.isSuccess]);
-
-  const createTaskMutation = useMutation({
-    mutationFn: (input: QuickTaskInput) => createTask(input),
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ["forge-snapshot"] });
-    }
-  });
-
-  const createGoalMutation = useMutation({
-    mutationFn: (input: GoalMutationInput) => createGoal(input),
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ["forge-snapshot"] });
-    }
-  });
-
-  const createProjectMutation = useMutation({
-    mutationFn: (input: ProjectMutationInput) => createProject(input),
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ["forge-snapshot"] });
-    }
-  });
-
-  const patchGoalMutation = useMutation({
-    mutationFn: ({
-      goalId,
-      patch
-    }: {
-      goalId: string;
-      patch: GoalMutationInput;
-    }) => patchGoal(goalId, patch),
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ["forge-snapshot"] });
-    }
-  });
-
-  const patchProjectMutation = useMutation({
-    mutationFn: ({
-      projectId,
-      patch
-    }: {
-      projectId: string;
-      patch: Partial<ProjectMutationInput>;
-    }) => patchProject(projectId, patch),
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ["forge-snapshot"] });
-    }
-  });
-
-  const patchTaskMutation = useMutation({
-    mutationFn: ({
-      taskId,
-      status
-    }: {
-      taskId: string;
-      status: "backlog" | "focus" | "in_progress" | "blocked" | "done";
-    }) => patchTask(taskId, { status }),
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ["forge-snapshot"] });
-    }
-  });
-  const claimTaskRunMutation = useMutation({
-    mutationFn: ({
-      taskId,
-      input
-    }: {
-      taskId: string;
-      input: Parameters<typeof claimTaskRun>[1];
-    }) => claimTaskRun(taskId, input),
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ["forge-snapshot"] });
-    }
-  });
-  const focusTaskRunMutation = useMutation({
-    mutationFn: (runId: string) => focusTaskRun(runId),
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ["forge-snapshot"] });
-    }
-  });
-  const releaseTaskRunMutation = useMutation({
-    mutationFn: ({
-      runId,
-      actor,
-      note
-    }: {
-      runId: string;
-      actor?: string;
-      note?: string;
-    }) => releaseTaskRun(runId, { actor, note: note ?? "" }),
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ["forge-snapshot"] });
-    }
-  });
-  const completeTaskRunMutation = useMutation({
-    mutationFn: ({
-      runId,
-      actor,
-      note
-    }: {
-      runId: string;
-      actor?: string;
-      note?: string;
-    }) => completeTaskRun(runId, { actor, note: note ?? "" }),
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ["forge-snapshot"] });
-    }
-  });
+  const [createTaskMutation, createTaskMutationState] = useCreateTaskMutation();
+  const [createGoalMutation, createGoalMutationState] = useCreateGoalMutation();
+  const [createProjectMutation, createProjectMutationState] =
+    useCreateProjectMutation();
+  const [patchGoalMutation, patchGoalMutationState] = usePatchGoalMutation();
+  const [patchProjectMutation, patchProjectMutationState] =
+    usePatchProjectMutation();
+  const [patchTaskMutation, patchTaskMutationState] =
+    usePatchTaskStatusMutation();
+  const [claimTaskRunMutation, claimTaskRunMutationState] =
+    useClaimTaskRunMutation();
+  const [focusTaskRunMutation, focusTaskRunMutationState] =
+    useFocusTaskRunMutation();
+  const [releaseTaskRunMutation, releaseTaskRunMutationState] =
+    useReleaseTaskRunMutation();
+  const [completeTaskRunMutation, completeTaskRunMutationState] =
+    useCompleteTaskRunMutation();
+  const refreshLegacySnapshotQueries = async () => {
+    await queryClient.invalidateQueries({ queryKey: ["forge-snapshot"] });
+  };
 
   const createAndStartTaskMutation = useMutation({
     mutationFn: async (input: {
@@ -2534,7 +2300,7 @@ export function AppShell() {
       }
       const operatorName =
         settingsQuery.data?.settings.profile.operatorName ?? "Albert";
-      const created = await createTask({
+      const created = await createTaskMutation({
         title: input.title,
         description: input.description,
         owner: operatorName,
@@ -2551,7 +2317,7 @@ export function AppShell() {
         points: 60,
         tagIds: [],
         notes: []
-      });
+      }).unwrap();
       const started = await startTaskRunWithOverride(created.task.id, {
         actor: operatorName,
         timerMode: input.timerMode,
@@ -2568,7 +2334,7 @@ export function AppShell() {
       return created.task;
     },
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ["forge-snapshot"] });
+      await refreshLegacySnapshotQueries();
     }
   });
 
@@ -2577,7 +2343,8 @@ export function AppShell() {
     input: Parameters<typeof claimTaskRun>[1]
   ) => {
     try {
-      await claimTaskRunMutation.mutateAsync({ taskId, input });
+      await claimTaskRunMutation({ taskId, input }).unwrap();
+      await refreshLegacySnapshotQueries();
       return true;
     } catch (error) {
       if (
@@ -2591,121 +2358,19 @@ export function AppShell() {
         if (!overrideReason || overrideReason.trim().length === 0) {
           return false;
         }
-        await claimTaskRunMutation.mutateAsync({
+        await claimTaskRunMutation({
           taskId,
           input: {
             ...input,
             overrideReason: overrideReason.trim()
           }
-        });
+        }).unwrap();
+        await refreshLegacySnapshotQueries();
         return true;
       }
       throw error;
     }
   };
-
-  useEffect(() => {
-    const snapshot = snapshotQuery.data;
-    if (!snapshot || snapshot.activeTaskRuns.length === 0) {
-      return;
-    }
-
-    const timer = window.setInterval(() => {
-      if (document.visibilityState !== "visible") {
-        return;
-      }
-      for (const run of snapshot.activeTaskRuns) {
-        void heartbeatTaskRun(run.id, {
-          actor: run.actor,
-          leaseTtlSeconds: run.leaseTtlSeconds,
-          note: run.note
-        }).catch(() => undefined);
-      }
-      void queryClient.invalidateQueries({ queryKey: ["forge-snapshot"] });
-    }, 30_000);
-
-    return () => window.clearInterval(timer);
-  }, [queryClient, snapshotQuery.data]);
-
-  useEffect(() => {
-    previousFetchingRef.current = fetching;
-  }, [fetching]);
-
-  useEffect(() => {
-    if (routePathKey === displayedRoute.key && pendingRoute === null) {
-      setDisplayedRoute((current) =>
-        current.node === outlet && current.location === routerLocation
-          ? current
-          : {
-              ...current,
-              node: outlet,
-              location: routerLocation
-            }
-      );
-      return;
-    }
-
-    if (routePathKey !== displayedRoute.key) {
-      setPendingRoute((current) => {
-        if (current?.key === routePathKey && current.node === outlet) {
-          return current;
-        }
-        return {
-          key: routePathKey,
-          node: outlet,
-          location: routerLocation,
-          baselineFetching: previousFetchingRef.current
-        };
-      });
-    }
-  }, [displayedRoute.key, outlet, pendingRoute, routePathKey, routerLocation]);
-
-  useEffect(() => {
-    if (!pendingRoute) {
-      if (handoffTimerRef.current !== null) {
-        window.clearTimeout(handoffTimerRef.current);
-        handoffTimerRef.current = null;
-      }
-      return;
-    }
-
-    if (fetching > pendingRoute.baselineFetching) {
-      if (handoffTimerRef.current !== null) {
-        window.clearTimeout(handoffTimerRef.current);
-        handoffTimerRef.current = null;
-      }
-      return;
-    }
-
-    if (handoffTimerRef.current !== null) {
-      return;
-    }
-
-    handoffTimerRef.current = window.setTimeout(() => {
-      setDisplayedRoute({
-        key: pendingRoute.key,
-        node: pendingRoute.node,
-        location: pendingRoute.location
-      });
-      setPendingRoute(null);
-      handoffTimerRef.current = null;
-    }, 140);
-
-    return () => {
-      if (handoffTimerRef.current !== null) {
-        window.clearTimeout(handoffTimerRef.current);
-        handoffTimerRef.current = null;
-      }
-    };
-  }, [fetching, pendingRoute]);
-
-  useEffect(() => {
-    return () => {
-      if (handoffTimerRef.current !== null) {
-        window.clearTimeout(handoffTimerRef.current);
-      }
-    };
-  }, []);
 
   if (
     operatorSessionQuery.isLoading ||
@@ -2729,11 +2394,7 @@ export function AppShell() {
         <ErrorState
           eyebrow="Forge operator session"
           error={operatorSessionQuery.error}
-          onRetry={() =>
-            void queryClient.invalidateQueries({
-              queryKey: ["forge-shell-operator-session"]
-            })
-          }
+          onRetry={() => void operatorSessionQuery.refetch()}
         />
       </div>
     );
@@ -2745,9 +2406,7 @@ export function AppShell() {
         <ErrorState
           eyebrow="Forge settings"
           error={settingsQuery.error}
-          onRetry={() =>
-            void queryClient.invalidateQueries({ queryKey: ["forge-settings"] })
-          }
+          onRetry={() => void settingsQuery.refetch()}
         />
       </div>
     );
@@ -2759,9 +2418,7 @@ export function AppShell() {
         <ErrorState
           eyebrow="Forge state"
           error={snapshotQuery.error}
-          onRetry={() =>
-            void queryClient.invalidateQueries({ queryKey: ["forge-snapshot"] })
-          }
+          onRetry={() => void snapshotQuery.refetch()}
         />
       </div>
     );
@@ -2772,10 +2429,11 @@ export function AppShell() {
     selectedUserIds,
     setSelectedUserIds,
     refresh: async () => {
-      await queryClient.invalidateQueries({ queryKey: ["forge-snapshot"] });
+      await Promise.all([snapshotQuery.refetch(), refreshLegacySnapshotQueries()]);
     },
     createTask: async (input) => {
-      await createTaskMutation.mutateAsync(input);
+      await createTaskMutation(input).unwrap();
+      await refreshLegacySnapshotQueries();
     },
     startTaskNow: async (taskId, options = {}) => {
       const operatorName = settingsQuery.data.settings.profile.operatorName;
@@ -2792,19 +2450,24 @@ export function AppShell() {
       });
     },
     createGoal: async (input) => {
-      await createGoalMutation.mutateAsync(input);
+      await createGoalMutation(input).unwrap();
+      await refreshLegacySnapshotQueries();
     },
     createProject: async (input) => {
-      await createProjectMutation.mutateAsync(input);
+      await createProjectMutation(input).unwrap();
+      await refreshLegacySnapshotQueries();
     },
     patchGoal: async (goalId, patch) => {
-      await patchGoalMutation.mutateAsync({ goalId, patch });
+      await patchGoalMutation({ goalId, patch }).unwrap();
+      await refreshLegacySnapshotQueries();
     },
     patchProject: async (projectId, patch) => {
-      await patchProjectMutation.mutateAsync({ projectId, patch });
+      await patchProjectMutation({ projectId, patch }).unwrap();
+      await refreshLegacySnapshotQueries();
     },
     patchTaskStatus: async (taskId, status) => {
-      await patchTaskMutation.mutateAsync({ taskId, status });
+      await patchTaskMutation({ taskId, status }).unwrap();
+      await refreshLegacySnapshotQueries();
     },
     openStartWork: (defaults = {}) => {
       setStartWorkDefaults(defaults);
@@ -2812,15 +2475,6 @@ export function AppShell() {
       setStartWorkOpen(true);
     }
   };
-  const visibleLocation = pendingRoute
-    ? displayedRoute.location
-    : routerLocation;
-  const displayedLocationContext = routerLocationContext
-    ? {
-        ...routerLocationContext,
-        location: displayedRoute.location
-      }
-    : null;
 
   return (
     <I18nProvider locale={settingsQuery.data.settings.localePreference}>
@@ -2830,13 +2484,13 @@ export function AppShell() {
             routeLocation={visibleLocation}
             settings={settingsQuery.data.settings}
             timerPending={
-              focusTaskRunMutation.isPending ||
-              releaseTaskRunMutation.isPending ||
-              completeTaskRunMutation.isPending
+              focusTaskRunMutationState.isLoading ||
+              releaseTaskRunMutationState.isLoading ||
+              completeTaskRunMutationState.isLoading
             }
             startWorkOpen={startWorkOpen}
             startWorkPending={
-              claimTaskRunMutation.isPending ||
+              claimTaskRunMutationState.isLoading ||
               createAndStartTaskMutation.isPending
             }
             startWorkError={startWorkError}
@@ -2888,27 +2542,34 @@ export function AppShell() {
               }
             }}
             onFocusRun={async (runId) => {
-              await focusTaskRunMutation.mutateAsync(runId);
+              await focusTaskRunMutation(runId).unwrap();
+              await refreshLegacySnapshotQueries();
             }}
             onPauseRun={async (runId) => {
               const run = snapshotQuery.data.activeTaskRuns.find(
                 (entry) => entry.id === runId
               );
-              await releaseTaskRunMutation.mutateAsync({
+              await releaseTaskRunMutation({
                 runId,
-                actor: run?.actor,
-                note: run?.note
-              });
+                input: {
+                  actor: run?.actor,
+                  note: run?.note ?? ""
+                }
+              }).unwrap();
+              await refreshLegacySnapshotQueries();
             }}
             onCompleteRun={async (runId) => {
               const run = snapshotQuery.data.activeTaskRuns.find(
                 (entry) => entry.id === runId
               );
-              await completeTaskRunMutation.mutateAsync({
+              await completeTaskRunMutation({
                 runId,
-                actor: run?.actor,
-                note: run?.note
-              });
+                input: {
+                  actor: run?.actor,
+                  note: run?.note ?? ""
+                }
+              }).unwrap();
+              await refreshLegacySnapshotQueries();
             }}
           >
             <div className="relative min-w-0">

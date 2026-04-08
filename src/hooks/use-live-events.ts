@@ -1,6 +1,8 @@
 import { useEffect } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { resolveForgePath } from "@/lib/runtime-paths";
+import { forgeApi } from "@/store/api/forge-api";
+import { appStore } from "@/store/store";
 
 export function useLiveEvents() {
   const queryClient = useQueryClient();
@@ -8,6 +10,16 @@ export function useLiveEvents() {
   useEffect(() => {
     const stream = new EventSource(resolveForgePath("/api/v1/events/stream"));
     const invalidate = () => {
+      appStore.dispatch(
+        forgeApi.util.invalidateTags([
+          "OperatorSession",
+          "Settings",
+          "Snapshot",
+          "Sleep",
+          "Psyche",
+          "WikiIngestJobs"
+        ])
+      );
       void Promise.all([
         queryClient.invalidateQueries({ queryKey: ["forge-snapshot"] }),
         queryClient.invalidateQueries({ queryKey: ["task-context"] })

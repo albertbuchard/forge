@@ -3,6 +3,11 @@ import HealthKit
 import UIKit
 
 actor HealthSyncStore {
+    struct BuildSyncPayloadResult {
+        let payload: CompanionSyncPayload
+        let healthDataDeferred: Bool
+    }
+
     private enum SleepBucket {
         case inBed
         case asleep
@@ -97,20 +102,35 @@ actor HealthSyncStore {
         healthKitAuthorized: Bool,
         lastSuccessfulSyncAt: Date?,
         movementPayload: CompanionSyncPayload.MovementPayload
-    ) async throws -> CompanionSyncPayload {
+    ) async throws -> BuildSyncPayloadResult {
         let endDate = Date()
         let fullWindowStart = Calendar.current.date(byAdding: .day, value: -syncWindowDays, to: endDate)
             ?? endDate.addingTimeInterval(-Double(syncWindowDays) * 24 * 60 * 60)
         let incrementalStart = lastSuccessfulSyncAt?.addingTimeInterval(-Double(incrementalLookbackHours) * 60 * 60)
         let startDate = max(fullWindowStart, incrementalStart ?? fullWindowStart)
+        let protectedDataAvailable = await isProtectedDataAvailable()
+        let canReadHealthData = healthKitAuthorized && protectedDataAvailable
         companionDebugLog(
             "HealthSyncStore",
-            "buildSyncPayload start session=\(pairing.sessionId) start=\(isoString(startDate)) end=\(isoString(endDate)) incremental=\(incrementalStart.map(isoString) ?? "nil")"
+            "buildSyncPayload start session=\(pairing.sessionId) start=\(isoString(startDate)) end=\(isoString(endDate)) incremental=\(incrementalStart.map(isoString) ?? "nil") protectedDataAvailable=\(protectedDataAvailable) canReadHealthData=\(canReadHealthData)"
         )
-        async let sleepSessions = fetchSleepSessions(startDate: startDate, endDate: endDate)
-        async let workouts = fetchWorkoutSessions(startDate: startDate, endDate: endDate)
         let backgroundRefreshEnabled = await MainActor.run {
             UIApplication.shared.backgroundRefreshStatus == .available
+        }
+        let sleepSessions: [CompanionSyncPayload.SleepSession]
+        let workouts: [CompanionSyncPayload.WorkoutSession]
+        if canReadHealthData {
+            async let fetchedSleepSessions = fetchSleepSessions(startDate: startDate, endDate: endDate)
+            async let fetchedWorkouts = fetchWorkoutSessions(startDate: startDate, endDate: endDate)
+            sleepSessions = try await fetchedSleepSessions
+            workouts = try await fetchedWorkouts
+        } else {
+            companionDebugLog(
+                "HealthSyncStore",
+                "buildSyncPayload deferring HealthKit reads because protected data is unavailable or authorization is missing"
+            )
+            sleepSessions = []
+            workouts = []
         }
 
         let payload = await CompanionSyncPayload(
@@ -129,15 +149,24 @@ actor HealthSyncStore {
                 locationReady: movementPayload.settings.locationPermissionStatus == "always"
                     || movementPayload.settings.locationPermissionStatus == "when_in_use"
             ),
-            sleepSessions: try await sleepSessions,
-            workouts: try await workouts,
+            sleepSessions: sleepSessions,
+            workouts: workouts,
             movement: movementPayload
         )
         companionDebugLog(
             "HealthSyncStore",
             "buildSyncPayload success sleep=\(payload.sleepSessions.count) workouts=\(payload.workouts.count) trips=\(payload.movement.trips.count) stays=\(payload.movement.stays.count) backgroundRefresh=\(backgroundRefreshEnabled)"
         )
-        return payload
+        return BuildSyncPayloadResult(
+            payload: payload,
+            healthDataDeferred: healthKitAuthorized && protectedDataAvailable == false
+        )
+    }
+
+    private func isProtectedDataAvailable() async -> Bool {
+        await MainActor.run {
+            UIApplication.shared.isProtectedDataAvailable
+        }
     }
 
     private func fetchSleepSessions(startDate: Date, endDate: Date) async throws -> [CompanionSyncPayload.SleepSession] {

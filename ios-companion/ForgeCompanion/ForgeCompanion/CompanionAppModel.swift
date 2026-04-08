@@ -216,7 +216,7 @@ final class CompanionAppModel: ObservableObject {
     let discoveryService = ForgeServerDiscovery()
     private let keychain = KeychainStore(service: "com.aurel.forgecompanion")
     private var cancellables: Set<AnyCancellable> = []
-    private var autoSyncTask: Task<Void, Never>?
+    private var autoSyncDebounceTask: Task<Void, Never>?
     private var lastAutoSyncAttemptAt: Date?
 
     init() {
@@ -250,6 +250,20 @@ final class CompanionAppModel: ObservableObject {
                 )
             }
             .store(in: &cancellables)
+        NotificationCenter.default.publisher(
+            for: UIApplication.protectedDataDidBecomeAvailableNotification
+        )
+        .receive(on: DispatchQueue.main)
+        .sink { [weak self] _ in
+            companionDebugLog("CompanionAppModel", "protected data became available")
+            self?.scheduleAutomaticSync(
+                reason: "device unlocked",
+                debounceNanoseconds: AutoSyncPolicy.immediateDebounceNanoseconds,
+                minimumInterval: 0,
+                force: true
+            )
+        }
+        .store(in: &cancellables)
         if let screenshotScenario {
             companionDebugLog(
                 "CompanionAppModel",
@@ -723,8 +737,8 @@ final class CompanionAppModel: ObservableObject {
         guard pairing != nil else {
             return
         }
-        autoSyncTask?.cancel()
-        autoSyncTask = Task { [weak self] in
+        autoSyncDebounceTask?.cancel()
+        autoSyncDebounceTask = Task { [weak self] in
             guard let self else { return }
             if debounceNanoseconds > 0 {
                 try? await Task.sleep(nanoseconds: debounceNanoseconds)
@@ -732,11 +746,14 @@ final class CompanionAppModel: ObservableObject {
             guard Task.isCancelled == false else {
                 return
             }
-            await self.performAutomaticSyncIfNeeded(
-                reason: reason,
-                minimumInterval: minimumInterval,
-                force: force
-            )
+            Task { [weak self] in
+                guard let self else { return }
+                await self.performAutomaticSyncIfNeeded(
+                    reason: reason,
+                    minimumInterval: minimumInterval,
+                    force: force
+                )
+            }
         }
     }
 
@@ -891,12 +908,13 @@ final class CompanionAppModel: ObservableObject {
         syncState = .syncing
         do {
             let movementPayload = movementStore.buildMovementPayload()
-            let payload = try await healthStore.buildSyncPayload(
+            let buildResult = try await healthStore.buildSyncPayload(
                 pairing: pairing,
                 healthKitAuthorized: healthAuthorizationGranted,
                 lastSuccessfulSyncAt: lastSuccessfulSyncAt,
                 movementPayload: movementPayload
             )
+            let payload = buildResult.payload
             let payloadSummary = buildPayloadSummary(from: payload)
             latestSyncPayloadSummary = payloadSummary
             let receipt = try await syncClient.pushHealthSync(
@@ -917,8 +935,13 @@ final class CompanionAppModel: ObservableObject {
             )
             latestSyncReport = report
             persistSyncState(report: report, payloadSummary: payloadSummary)
-            lastSyncMessage =
-                "Synced \(receipt.imported.sleepSessions) sleep, \(receipt.imported.workouts) workouts, and \(receipt.imported.movementTrips ?? 0) trips via \(trigger)"
+            if buildResult.healthDataDeferred {
+                lastSyncMessage =
+                    "Synced movement while HealthKit stayed locked. Health data will resume after unlock."
+            } else {
+                lastSyncMessage =
+                    "Synced \(receipt.imported.sleepSessions) sleep, \(receipt.imported.workouts) workouts, and \(receipt.imported.movementTrips ?? 0) trips via \(trigger)"
+            }
             latestError = nil
             await refreshHealthAccessStatus()
             await refreshWatchBootstrap(reason: trigger)
@@ -930,7 +953,26 @@ final class CompanionAppModel: ObservableObject {
             )
             return true
         } catch {
+            if error is CancellationError {
+                companionDebugLog(
+                    "CompanionAppModel",
+                    "performSync cancelled trigger=\(trigger)"
+                )
+                refreshSyncState()
+                return false
+            }
             let nsError = error as NSError
+            if nsError.localizedDescription == "Protected health data is inaccessible" {
+                companionDebugLog(
+                    "CompanionAppModel",
+                    "performSync deferred trigger=\(trigger) because protected data is inaccessible"
+                )
+                lastSyncMessage = "Waiting for device unlock to read HealthKit again"
+                latestError = nil
+                refreshSyncState()
+                backgroundScheduler.schedule()
+                return false
+            }
             let failureReason = nsError.userInfo[NSLocalizedFailureReasonErrorKey] as? String
             let combinedMessage = failureReason?.isEmpty == false
                 ? "\(error.localizedDescription): \(failureReason!)"
@@ -1071,6 +1113,15 @@ final class CompanionAppModel: ObservableObject {
             return "No sync yet"
         }
         return "\(report.sleepSessions) sleep, \(report.workouts) workouts, \(report.movementTrips) trips"
+    }
+
+    var lastSuccessfulSyncLabel: String {
+        guard let lastSuccessfulSyncAt else {
+            return "Never"
+        }
+        let formatter = RelativeDateTimeFormatter()
+        formatter.unitsStyle = .short
+        return formatter.localizedString(for: lastSuccessfulSyncAt, relativeTo: .now)
     }
 
     var watchSyncLabel: String {

@@ -4,6 +4,13 @@ import { AiSurfaceWorkspace } from "@/components/customization/ai-surface-worksp
 import {
   type SurfaceWidgetDefinition
 } from "@/components/customization/editable-surface";
+import { PillCluster } from "@/components/primitives/pill-cluster";
+import { SectionGrid } from "@/components/primitives/section-grid";
+import {
+  ProjectsHeroBox,
+  ProjectsSearchResultsBox,
+  ProjectsSummaryBox
+} from "@/components/workbench-boxes/projects/projects-boxes";
 import { PageHero } from "@/components/shell/page-hero";
 import { EntityNoteCountLink } from "@/components/notes/entity-note-count-link";
 import { ProjectCollectionFilters } from "@/components/projects/project-collection-filters";
@@ -413,7 +420,7 @@ export function ProjectsPage() {
   };
 
   const projectCards = (
-    <div className="grid gap-4 lg:grid-cols-2 2xl:grid-cols-3">
+    <SectionGrid columns="two" className="2xl:grid-cols-3">
       {visibleProjects.map((project) => {
         const projectNotes = getEntityNotesSummary(
           shell.snapshot.dashboard.notesSummaryByEntity,
@@ -470,13 +477,13 @@ export function ProjectsPage() {
             </p>
 
             {visibleTags.length > 0 ? (
-              <div className="mt-4 flex flex-wrap gap-2">
+              <PillCluster className="mt-4">
                 {visibleTags.map((tag) => (
                   <Badge key={tag.id} className="bg-white/[0.08] text-white/72">
                     {tag.name}
                   </Badge>
                 ))}
-              </div>
+              </PillCluster>
             ) : null}
 
             <div className="mt-4">
@@ -541,7 +548,7 @@ export function ProjectsPage() {
           </Card>
         );
       })}
-    </div>
+    </SectionGrid>
   );
 
   const customWidgets: SurfaceWidgetDefinition[] = [
@@ -556,20 +563,22 @@ export function ProjectsPage() {
       defaultTitleVisible: false,
       defaultDescriptionVisible: false,
       render: () => (
-        <PageHero
-          entityKind="project"
-          title={
-            <EntityName
-              kind="project"
-              label="Projects"
-              variant="heading"
-              size="lg"
-            />
-          }
-          titleText="Projects"
-          description="Projects are the concrete paths that move a life goal forward."
-          badge={`${shell.snapshot.dashboard.projects.length} total projects`}
-        />
+        <ProjectsHeroBox>
+          <PageHero
+            entityKind="project"
+            title={
+              <EntityName
+                kind="project"
+                label="Projects"
+                variant="heading"
+                size="lg"
+              />
+            }
+            titleText="Projects"
+            description="Projects are the concrete paths that move a life goal forward."
+            badge={`${shell.snapshot.dashboard.projects.length} total projects`}
+          />
+        </ProjectsHeroBox>
       )
     },
     {
@@ -580,7 +589,8 @@ export function ProjectsPage() {
       defaultHeight: 6,
       minWidth: 6,
       render: ({ compact }) => (
-        <div className="grid gap-4">
+        <ProjectsSearchResultsBox>
+          <div className="grid gap-4">
           <ProjectSearchBar
             query={searchQuery}
             onQueryChange={setSearchQuery}
@@ -631,7 +641,8 @@ export function ProjectsPage() {
           ) : (
             projectCards
           )}
-        </div>
+          </div>
+        </ProjectsSearchResultsBox>
       )
     },
     {
@@ -645,7 +656,8 @@ export function ProjectsPage() {
         const spotlight =
           visibleProjects[0] ?? shell.snapshot.dashboard.projects[0] ?? null;
         return (
-          <div className="grid gap-3">
+          <ProjectsSummaryBox>
+            <div className="grid gap-3">
             <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
               <Card className="p-4">
                 <div className="text-[11px] uppercase tracking-[0.16em] text-white/38">
@@ -680,7 +692,8 @@ export function ProjectsPage() {
                 </div>
               </Card>
             ) : null}
-          </div>
+            </div>
+          </ProjectsSummaryBox>
         );
       }
     }

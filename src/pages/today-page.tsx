@@ -17,6 +17,13 @@ import { DailyRunway } from "@/components/daily-runway";
 import { EntityNoteCountLink } from "@/components/notes/entity-note-count-link";
 import { useForgeShell } from "@/components/shell/app-shell";
 import { PageHero } from "@/components/shell/page-hero";
+import {
+  TodayCalendarBox,
+  TodayFocusBox,
+  TodayHeroBox,
+  TodayMetricsBox,
+  TodayRunwayBox
+} from "@/components/workbench-boxes/today/today-boxes";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/page-state";
@@ -152,15 +159,17 @@ export function TodayPage() {
       defaultTitleVisible: false,
       defaultDescriptionVisible: false,
       render: () => (
-        <PageHero
-          title="Today"
-          titleText="Today"
-          description={
-            directive?.description ??
-            "Start one real task, collect XP, and keep today's work moving."
-          }
-          badge={`${shell.snapshot.metrics.weeklyXp} weekly xp`}
-        />
+        <TodayHeroBox>
+          <PageHero
+            title="Today"
+            titleText="Today"
+            description={
+              directive?.description ??
+              "Start one real task, collect XP, and keep today's work moving."
+            }
+            badge={`${shell.snapshot.metrics.weeklyXp} weekly xp`}
+          />
+        </TodayHeroBox>
       )
     },
     {
@@ -172,7 +181,8 @@ export function TodayPage() {
       defaultHeight: 4,
       minWidth: 4,
       render: ({ compact }) => (
-        <div className="grid gap-3 sm:grid-cols-2">
+        <TodayMetricsBox>
+          <div className="grid gap-3 sm:grid-cols-2">
           <Card className="p-4">
             <div className="text-[11px] uppercase tracking-[0.16em] text-white/38">
               Weekly XP
@@ -230,7 +240,8 @@ export function TodayPage() {
                 "The next visible win comes from a task completion or aligned habit check-in."}
             </div>
           </Card>
-        </div>
+          </div>
+        </TodayMetricsBox>
       )
     },
     {
@@ -241,21 +252,23 @@ export function TodayPage() {
       defaultHeight: 6,
       minWidth: 5,
       render: () => (
-        <DailyRunway
-          tasks={shell.snapshot.overview.topTasks}
-          timeline={shell.snapshot.today.timeline}
-          goals={shell.snapshot.goals}
-          tags={shell.snapshot.tags}
-          notesSummaryByEntity={shell.snapshot.dashboard.notesSummaryByEntity}
-          selectedTaskId={directive?.id ?? null}
-          onSelectTask={(taskId) => navigate(`/tasks/${taskId}`)}
-          onStartTask={async (taskId) => {
-            await shell.startTaskNow(taskId);
-          }}
-          onMove={async (taskId, nextStatus) => {
-            await shell.patchTaskStatus(taskId, nextStatus);
-          }}
-        />
+        <TodayRunwayBox>
+          <DailyRunway
+            tasks={shell.snapshot.overview.topTasks}
+            timeline={shell.snapshot.today.timeline}
+            goals={shell.snapshot.goals}
+            tags={shell.snapshot.tags}
+            notesSummaryByEntity={shell.snapshot.dashboard.notesSummaryByEntity}
+            selectedTaskId={directive?.id ?? null}
+            onSelectTask={(taskId) => navigate(`/tasks/${taskId}`)}
+            onStartTask={async (taskId) => {
+              await shell.startTaskNow(taskId);
+            }}
+            onMove={async (taskId, nextStatus) => {
+              await shell.patchTaskStatus(taskId, nextStatus);
+            }}
+          />
+        </TodayRunwayBox>
       )
     },
     {
@@ -267,7 +280,8 @@ export function TodayPage() {
       defaultHeight: 5,
       minWidth: 4,
       render: ({ compact }) => (
-        <div className="grid gap-3">
+        <TodayCalendarBox>
+          <div className="grid gap-3">
           <div className="flex items-center justify-between gap-3">
             <div className="flex min-w-0 items-center gap-3">
               <div className="inline-flex size-10 shrink-0 items-center justify-center rounded-2xl bg-[var(--primary)]/14 text-[var(--primary)]">
@@ -331,7 +345,8 @@ export function TodayPage() {
               </button>
             ))
           )}
-        </div>
+          </div>
+        </TodayCalendarBox>
       )
     },
     {
@@ -343,7 +358,8 @@ export function TodayPage() {
       defaultHeight: 4,
       minWidth: 6,
       render: ({ compact }) => (
-        <div className="grid min-w-0 gap-4 xl:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)]">
+        <TodayFocusBox>
+          <div className="grid min-w-0 gap-4 xl:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)]">
           <div className="rounded-[20px] bg-white/[0.04] p-4">
             <div className="flex items-center justify-between gap-3">
               <div className="text-[11px] uppercase tracking-[0.16em] text-white/38">
@@ -426,7 +442,8 @@ export function TodayPage() {
               </div>
             </div>
           </div>
-        </div>
+          </div>
+        </TodayFocusBox>
       )
     },
     {

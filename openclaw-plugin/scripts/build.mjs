@@ -55,7 +55,7 @@ await rm(packageSkillDir, { recursive: true, force: true });
 await cp(repoSkillDir, packageSkillDir, { recursive: true, force: true });
 
 await run("npm", ["exec", "--", "tsc", "-p", "tsconfig.build.json"], packageRoot);
-await run("npm", ["exec", "--", "tsc", "-p", "../server/tsconfig.json", "--outDir", "./dist/server", "--rootDir", "../server/src"], packageRoot);
+await run("npm", ["exec", "--", "tsc", "-p", "../server/tsconfig.json", "--outDir", "./dist/server"], packageRoot);
 await removeCompiledTests(path.join(pluginDistDir, "server"));
 await run("npm", ["run", "build"], repoRoot);
 

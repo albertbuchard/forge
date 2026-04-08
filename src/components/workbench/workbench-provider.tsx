@@ -1,53 +1,38 @@
 import {
   createContext,
   useContext,
-  useEffect,
   useMemo,
-  useState,
   type ReactNode
 } from "react";
 import {
-  getWorkbenchBoxDefinition,
-  type WorkbenchMountedBox
-} from "@/lib/workbench/boxes";
+  getWorkbenchNodeCatalog,
+  getWorkbenchNodeDefinition,
+  listWorkbenchNodeDefinitions
+} from "@/lib/workbench/registry";
+import type { WorkbenchNodeDefinition } from "@/lib/workbench/nodes";
 
 type WorkbenchContextValue = {
-  mountedBoxes: WorkbenchMountedBox[];
-  registerBox: (input: {
-    boxId: string;
-    surfaceId?: string | null;
-    routePath?: string | null;
-  }) => () => void;
+  definitions: WorkbenchNodeDefinition[];
+  catalog: ReturnType<typeof getWorkbenchNodeCatalog>;
+  getDefinition: (nodeId: string) => WorkbenchNodeDefinition | null;
 };
 
 const WorkbenchContext = createContext<WorkbenchContextValue | null>(null);
+
 const FALLBACK_REGISTRY: WorkbenchContextValue = {
-  mountedBoxes: [],
-  registerBox: () => () => {}
+  definitions: listWorkbenchNodeDefinitions(),
+  catalog: getWorkbenchNodeCatalog(),
+  getDefinition: getWorkbenchNodeDefinition
 };
-let hasWarnedAboutMissingProvider = false;
 
 export function WorkbenchProvider({ children }: { children: ReactNode }) {
-  const [mountedBoxes, setMountedBoxes] = useState<WorkbenchMountedBox[]>([]);
-
   const value = useMemo<WorkbenchContextValue>(
     () => ({
-      mountedBoxes,
-      registerBox: ({ boxId, surfaceId = null, routePath = null }) => {
-        const mountedAt = new Date().toISOString();
-        setMountedBoxes((current) => {
-          const next = current.filter((entry) => entry.boxId !== boxId);
-          next.push({ boxId, surfaceId, routePath, mountedAt });
-          return next;
-        });
-        return () => {
-          setMountedBoxes((current) =>
-            current.filter((entry) => entry.boxId !== boxId)
-          );
-        };
-      }
+      definitions: listWorkbenchNodeDefinitions(),
+      catalog: getWorkbenchNodeCatalog(),
+      getDefinition: getWorkbenchNodeDefinition
     }),
-    [mountedBoxes]
+    []
   );
 
   return (
@@ -58,58 +43,28 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
 }
 
 export function useWorkbenchRegistry() {
-  const context = useContext(WorkbenchContext);
-  if (!context) {
-    if (
-      import.meta.env.DEV &&
-      import.meta.env.MODE !== "test" &&
-      !hasWarnedAboutMissingProvider
-    ) {
-      hasWarnedAboutMissingProvider = true;
-      console.warn(
-        "[Workbench] useWorkbenchRegistry was called outside WorkbenchProvider. Falling back to a no-op registry."
-      );
-    }
-    return FALLBACK_REGISTRY;
-  }
-  return context;
+  return useContext(WorkbenchContext) ?? FALLBACK_REGISTRY;
 }
 
-export function useWorkbenchBox(input: {
-  boxId: string;
-  surfaceId?: string | null;
-  routePath?: string | null;
-}) {
+export function useWorkbenchNodeCatalog() {
+  return useWorkbenchRegistry().catalog;
+}
+
+export function useWorkbenchNodeDefinition(nodeId: string | null | undefined) {
   const registry = useWorkbenchRegistry();
-  const definition = getWorkbenchBoxDefinition(input.boxId);
-
-  useEffect(() => {
-    const dispose = registry.registerBox(input);
-    return dispose;
-  }, [input.boxId, input.routePath, input.surfaceId, registry]);
-
-  useEffect(() => {
-    if (!definition && import.meta.env.DEV) {
-      console.warn(
-        `[Workbench] rendered box ${input.boxId} is not present in the shared Workbench box manifest.`
-      );
-    }
-  }, [definition, input.boxId]);
-
-  return definition;
+  if (!nodeId) {
+    return null;
+  }
+  return registry.getDefinition(nodeId);
 }
 
 export function WorkbenchBox({
-  boxId,
-  surfaceId = null,
-  routePath = null,
   children
 }: {
-  boxId: string;
+  children: ReactNode;
+  boxId?: string;
   surfaceId?: string | null;
   routePath?: string | null;
-  children: ReactNode;
 }) {
-  useWorkbenchBox({ boxId, surfaceId, routePath });
   return <>{children}</>;
 }

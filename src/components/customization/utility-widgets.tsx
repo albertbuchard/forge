@@ -9,8 +9,16 @@ import {
   Save,
   TimerReset
 } from "lucide-react";
-import { createNote, createWikiPage } from "@/lib/api";
-import { cn } from "@/lib/utils";
+import { createNote, createWikiPage } from "../../lib/api.js";
+import {
+  buildStaticWorkbenchExecution
+} from "../../lib/workbench/runtime.js";
+import type {
+  WorkbenchNodeExecutionInput,
+  WorkbenchRegisteredComponent
+} from "../../lib/workbench/nodes.js";
+import { cn } from "../../lib/utils.js";
+import { createGenericWorkbenchNodeView } from "../workbench-boxes/shared/generic-node-view.js";
 
 type WeatherSnapshot = {
   temperature: number;
@@ -368,3 +376,199 @@ export function QuickCaptureWidget({
     </div>
   );
 }
+
+const timeWidgetDefinition = {
+  id: "surface:utility:time",
+  surfaceId: "utility",
+  routePath: null,
+  title: "Clock",
+  icon: "timer",
+  description: "Live local time widget.",
+  category: "Utilities",
+  tags: ["utility", "clock"],
+  inputs: [],
+  params: [],
+  output: [{ key: "primary", label: "Current time", kind: "text" as const }],
+  tools: [],
+  NodeView: createGenericWorkbenchNodeView({
+    title: "Clock",
+    description: "Live local time widget.",
+    inputs: [],
+    params: [],
+    output: [{ key: "primary", label: "Current time", kind: "text" }],
+    tools: []
+  }),
+  WebView: TimeWidget as never,
+  execute: (input: Parameters<typeof buildStaticWorkbenchExecution>[0]) =>
+    buildStaticWorkbenchExecution(input, {
+      now: input.context.now
+    }, new Intl.DateTimeFormat(undefined, {
+      hour: "2-digit",
+      minute: "2-digit"
+    }).format(new Date(input.context.now)))
+};
+
+(
+  TimeWidget as WorkbenchRegisteredComponent<{ compact: boolean }>
+).workbench = timeWidgetDefinition;
+
+const calendarWidgetDefinition = {
+  id: "surface:utility:mini-calendar",
+  surfaceId: "utility",
+  routePath: null,
+  title: "Mini calendar",
+  icon: "calendar",
+  description: "Compact month calendar widget.",
+  category: "Utilities",
+  tags: ["utility", "calendar"],
+  inputs: [],
+  params: [],
+  output: [{ key: "primary", label: "Month view", kind: "object" as const }],
+  tools: [],
+  NodeView: createGenericWorkbenchNodeView({
+    title: "Mini calendar",
+    description: "Compact month calendar widget.",
+    inputs: [],
+    params: [],
+    output: [{ key: "primary", label: "Month view", kind: "object" }],
+    tools: []
+  }),
+  WebView: MiniCalendarWidget as never,
+  execute: (input: Parameters<typeof buildStaticWorkbenchExecution>[0]) =>
+    buildStaticWorkbenchExecution(input, {
+      now: input.context.now
+    }, "Compact month calendar")
+};
+
+(
+  MiniCalendarWidget as WorkbenchRegisteredComponent<{ compact: boolean }>
+).workbench = calendarWidgetDefinition;
+
+const spotifyWidgetDefinition = {
+  id: "surface:utility:spotify",
+  surfaceId: "utility",
+  routePath: null,
+  title: "Spotify",
+  icon: "music",
+  description: "Pinned music link widget.",
+  category: "Utilities",
+  tags: ["utility", "spotify"],
+  inputs: [
+    {
+      key: "surfaceId",
+      label: "Surface id",
+      kind: "text" as const,
+      required: false
+    }
+  ],
+  params: [],
+  output: [{ key: "primary", label: "Spotify link", kind: "text" as const }],
+  tools: [],
+  NodeView: createGenericWorkbenchNodeView({
+    title: "Spotify",
+    description: "Pinned music link widget.",
+    inputs: [{ key: "surfaceId", label: "Surface id", kind: "text" }],
+    params: [],
+    output: [{ key: "primary", label: "Spotify link", kind: "text" }],
+    tools: []
+  }),
+  WebView: SpotifyWidget as never,
+  execute: (input: Parameters<typeof buildStaticWorkbenchExecution>[0]) =>
+    buildStaticWorkbenchExecution(input, {
+      surfaceId: input.inputs.surfaceId ?? null
+    }, "Pinned Spotify link")
+};
+
+(
+  SpotifyWidget as WorkbenchRegisteredComponent<{ surfaceId: string }>
+).workbench = spotifyWidgetDefinition;
+
+const weatherWidgetDefinition = {
+  id: "surface:utility:weather",
+  surfaceId: "utility",
+  routePath: null,
+  title: "Weather",
+  icon: "weather",
+  description: "Location-aware weather widget.",
+  category: "Utilities",
+  tags: ["utility", "weather"],
+  inputs: [],
+  params: [],
+  output: [{ key: "primary", label: "Weather", kind: "object" as const }],
+  tools: [],
+  NodeView: createGenericWorkbenchNodeView({
+    title: "Weather",
+    description: "Location-aware weather widget.",
+    inputs: [],
+    params: [],
+    output: [{ key: "primary", label: "Weather", kind: "object" }],
+    tools: []
+  }),
+  WebView: WeatherWidget as never,
+  execute: (input: Parameters<typeof buildStaticWorkbenchExecution>[0]) =>
+    buildStaticWorkbenchExecution(input, null, "Weather widget")
+};
+
+(
+  WeatherWidget as WorkbenchRegisteredComponent<{ compact: boolean }>
+).workbench = weatherWidgetDefinition;
+
+const quickCaptureWidgetDefinition = {
+  id: "surface:utility:quick-capture",
+  surfaceId: "utility",
+  routePath: null,
+  title: "Quick capture",
+  icon: "capture",
+  description: "Draft a quick note or wiki page.",
+  category: "Capture",
+  tags: ["capture", "notes"],
+  inputs: [
+    {
+      key: "defaultUserId",
+      label: "Default user id",
+      kind: "text" as const,
+      required: false
+    }
+  ],
+  params: [],
+  output: [{ key: "primary", label: "Draft", kind: "content" as const }],
+  tools: [
+    {
+      key: "forge.create_note",
+      label: "Create note",
+      description: "Create a Forge evidence note from captured markdown.",
+      accessMode: "write" as const
+    }
+  ],
+  NodeView: createGenericWorkbenchNodeView({
+    title: "Quick capture",
+    description: "Draft a quick note or wiki page.",
+    inputs: [{ key: "defaultUserId", label: "Default user id", kind: "text" }],
+    params: [],
+    output: [{ key: "primary", label: "Draft", kind: "content" }],
+    tools: [
+      {
+        key: "forge.create_note",
+        label: "Create note",
+        description: "Create a Forge evidence note from captured markdown.",
+        accessMode: "write"
+      }
+    ]
+  }),
+  WebView: QuickCaptureWidget as never,
+  execute: (input: Parameters<typeof buildStaticWorkbenchExecution>[0]) =>
+    buildStaticWorkbenchExecution(
+      input,
+      {
+        defaultUserId: input.inputs.defaultUserId ?? null
+      },
+      "Quick capture can draft notes and wiki pages."
+    )
+};
+
+(
+  QuickCaptureWidget as WorkbenchRegisteredComponent<{
+    compact: boolean;
+    defaultUserId?: string | null;
+  }>
+).workbench = quickCaptureWidgetDefinition;

@@ -9,8 +9,6 @@ import {
 } from "@/lib/diagnostics";
 import { ActivityPage } from "@/pages/activity-page";
 import { CalendarPage } from "@/pages/calendar-page";
-import { ConnectorDetailPage } from "@/pages/connector-detail-page";
-import { ConnectorsPage } from "@/pages/connectors-page";
 import { GoalDetailPage } from "@/pages/goal-detail-page";
 import { GoalsPage } from "@/pages/goals-page";
 import { HabitsPage } from "@/pages/habits-page";
@@ -225,8 +223,6 @@ export function App() {
               <CalendarPage />
             )}
           />
-          <Route path="connectors" element={<ConnectorsPage />} />
-          <Route path="connectors/:connectorId" element={<ConnectorDetailPage />} />
           <Route
             path="movement"
             element={surface(

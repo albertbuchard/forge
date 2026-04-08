@@ -157,6 +157,7 @@ enum CompanionScreenshotFixtures {
         let groceryTripPoints = [
             MovementSyncStore.StoredTripPoint(
                 id: "trip_point_1",
+                externalUid: "trip_point_1",
                 recordedAt: referenceDate.addingTimeInterval(-60 * 60 * 4.78),
                 latitude: 46.52002,
                 longitude: 6.63350,
@@ -167,6 +168,7 @@ enum CompanionScreenshotFixtures {
             ),
             MovementSyncStore.StoredTripPoint(
                 id: "trip_point_2",
+                externalUid: "trip_point_2",
                 recordedAt: referenceDate.addingTimeInterval(-60 * 60 * 4.63),
                 latitude: 46.52054,
                 longitude: 6.63152,
@@ -177,6 +179,7 @@ enum CompanionScreenshotFixtures {
             ),
             MovementSyncStore.StoredTripPoint(
                 id: "trip_point_3",
+                externalUid: "trip_point_3",
                 recordedAt: referenceDate.addingTimeInterval(-60 * 60 * 4.45),
                 latitude: groceries.latitude,
                 longitude: groceries.longitude,
@@ -230,6 +233,7 @@ enum CompanionScreenshotFixtures {
         let homeTripPoints = [
             MovementSyncStore.StoredTripPoint(
                 id: "trip_home_point_1",
+                externalUid: "trip_home_point_1",
                 recordedAt: referenceDate.addingTimeInterval(-60 * 60 * 4.0),
                 latitude: groceries.latitude,
                 longitude: groceries.longitude,
@@ -240,6 +244,7 @@ enum CompanionScreenshotFixtures {
             ),
             MovementSyncStore.StoredTripPoint(
                 id: "trip_home_point_2",
+                externalUid: "trip_home_point_2",
                 recordedAt: referenceDate.addingTimeInterval(-60 * 60 * 3.82),
                 latitude: 46.52061,
                 longitude: 6.63190,
@@ -250,6 +255,7 @@ enum CompanionScreenshotFixtures {
             ),
             MovementSyncStore.StoredTripPoint(
                 id: "trip_home_point_3",
+                externalUid: "trip_home_point_3",
                 recordedAt: referenceDate.addingTimeInterval(-60 * 60 * 3.62),
                 latitude: home.latitude,
                 longitude: home.longitude,

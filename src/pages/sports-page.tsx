@@ -12,7 +12,11 @@ import { EntityLinkMultiSelect } from "@/components/psyche/entity-link-multisele
 import { FacetedTokenSearch, type FacetedTokenOption } from "@/components/search/faceted-token-search";
 import { useForgeShell } from "@/components/shell/app-shell";
 import { PageHero } from "@/components/shell/page-hero";
-import { WorkbenchSection } from "@/components/workbench/workbench-section";
+import {
+  SportsBrowserBox,
+  SportsCompositionBox,
+  SportsSummaryBox
+} from "@/components/workbench-boxes/health/health-boxes";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { SurfaceSkeleton } from "@/components/experience/surface-skeleton";
@@ -659,7 +663,7 @@ export function SportsPage() {
         badge={`${sessions.length} sessions`}
       />
 
-      <WorkbenchSection boxId="surface:sports-index:summary" surfaceId="sports-index">
+      <SportsSummaryBox>
         <section className="grid gap-4 lg:grid-cols-4">
         <Card>
           <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">
@@ -748,9 +752,9 @@ export function SportsPage() {
           </div>
         </Card>
         </section>
-      </WorkbenchSection>
+      </SportsSummaryBox>
 
-      <WorkbenchSection boxId="surface:sports-index:composition" surfaceId="sports-index">
+      <SportsCompositionBox>
         <section className="grid gap-4 lg:grid-cols-[1.05fr_0.95fr]">
         <Card className="grid gap-4">
           <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">
@@ -845,9 +849,9 @@ export function SportsPage() {
           </div>
         </Card>
         </section>
-      </WorkbenchSection>
+      </SportsCompositionBox>
 
-      <WorkbenchSection boxId="surface:sports-index:browser" surfaceId="sports-index">
+      <SportsBrowserBox>
         <section className="grid gap-4 xl:grid-cols-[minmax(0,25rem)_minmax(0,1fr)]">
         <FacetedTokenSearch
           title="Session browser"
@@ -962,7 +966,7 @@ export function SportsPage() {
           </div>
         </Card>
         </section>
-      </WorkbenchSection>
+      </SportsBrowserBox>
 
       {activeSession && activeDraft ? (
         <SheetScaffold

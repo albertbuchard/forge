@@ -17,7 +17,11 @@ import { NoteMarkdown } from "@/components/notes/note-markdown";
 import { NoteTagsInput } from "@/components/notes/note-tags-input";
 import { PageHero } from "@/components/shell/page-hero";
 import { useForgeShell } from "@/components/shell/app-shell";
-import { WorkbenchSection } from "@/components/workbench/workbench-section";
+import {
+  NoteComposerBox,
+  NoteFiltersBox,
+  NotesLibraryBox
+} from "@/components/workbench-boxes/notes/notes-boxes";
 import {
   FloatingActionMenu,
   type FloatingActionMenuItem
@@ -665,7 +669,7 @@ export function NotesPage() {
         }
       />
 
-      <WorkbenchSection boxId="surface:notes-index:filters" surfaceId="notes-index">
+      <NoteFiltersBox>
         <Card className="grid gap-4">
         <NoteFilterInput
           entityOptions={entityFilterOptions}
@@ -699,10 +703,10 @@ export function NotesPage() {
           />
         </div>
         </Card>
-      </WorkbenchSection>
+      </NoteFiltersBox>
 
       {composerOpen ? (
-        <WorkbenchSection boxId="surface:notes-index:composer" surfaceId="notes-index">
+        <NoteComposerBox>
           <Card className="grid gap-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
@@ -850,7 +854,7 @@ export function NotesPage() {
             </Button>
           </div>
           </Card>
-        </WorkbenchSection>
+        </NoteComposerBox>
       ) : null}
 
       {notesQuery.isLoading ? (
@@ -862,7 +866,7 @@ export function NotesPage() {
           description="Try broader linked-entity filters, remove a date bound, or add the first durable note from the button above."
         />
       ) : (
-        <WorkbenchSection boxId="surface:notes-index:library" surfaceId="notes-index">
+        <NotesLibraryBox>
           <div className="grid gap-3">
           {visibleNotes.map((note) => {
             const primaryLink = getPrimaryNavigableLink(note);
@@ -1119,7 +1123,7 @@ export function NotesPage() {
             );
           })}
           </div>
-        </WorkbenchSection>
+        </NotesLibraryBox>
       )}
 
       <FloatingActionMenu

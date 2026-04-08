@@ -33,6 +33,7 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
+import { useWorkbenchNodeDefinition } from "@/components/workbench/workbench-provider";
 import { FacetedTokenSearch, type FacetedTokenOption } from "@/components/search/faceted-token-search";
 import { Button } from "@/components/ui/button";
 import type {
@@ -68,6 +69,11 @@ function defaultPortsForNodeType(nodeType: AiConnectorNodeType): {
       return {
         inputs: [],
         outputs: [{ key: "primary", label: "User input", kind: "text" }]
+      };
+    case "value":
+      return {
+        inputs: [],
+        outputs: [{ key: "primary", label: "Value", kind: "content" }]
       };
     case "functor":
     case "chat":
@@ -124,6 +130,11 @@ function nodeTone(nodeType: AiConnectorNodeType) {
         icon: <Send className="size-4" />,
         badge: "output"
       };
+    case "value":
+      return {
+        icon: <ListTree className="size-4" />,
+        badge: "value"
+      };
     case "merge":
       return {
         icon: <GitMerge className="size-4" />,
@@ -157,18 +168,18 @@ function resolveNodePorts(
   boxId: string | null;
 } {
   if (node.type === "box" || node.type === "box_input") {
-    const box = boxes.find((entry) => entry.boxId === node.data.boxId);
+    const box = boxes.find((entry) => entry.id === node.data.boxId);
     return {
       inputs: box?.inputs ?? [],
       outputs:
-        box?.outputs?.length
-          ? box.outputs
+        box?.output?.length
+          ? box.output
           : [{ key: "primary", label: "Content", kind: "content" }],
       enabledToolKeys:
         node.data.enabledToolKeys?.length
           ? node.data.enabledToolKeys
-          : (box?.toolAdapters ?? []).map((tool) => tool.key),
-      boxId: box?.boxId ?? node.data.boxId ?? null
+          : (box?.tools ?? []).map((tool) => tool.key),
+      boxId: box?.id ?? node.data.boxId ?? null
     };
   }
   const defaults = defaultPortsForNodeType(node.type);
@@ -195,7 +206,9 @@ function graphNodeFromConnector(
       boxId: resolved.boxId,
       enabledToolKeys: resolved.enabledToolKeys,
       inputs: resolved.inputs,
-      outputs: resolved.outputs
+      outputs: resolved.outputs,
+      params: node.data.params ?? [],
+      paramValues: node.data.paramValues ?? {}
     }
   };
 }
@@ -228,8 +241,12 @@ function connectorNodeFromGraph(node: Node<WorkbenchGraphNodeData>): AiConnector
       enabledToolKeys: node.data.enabledToolKeys ?? [],
       inputs: node.data.inputs ?? [],
       outputs: node.data.outputs ?? [],
+      params: node.data.params ?? [],
+      paramValues: node.data.paramValues ?? {},
       template: node.data.template ?? "",
       selectedKey: node.data.selectedKey ?? "",
+      valueType: node.data.valueType ?? "string",
+      valueLiteral: node.data.valueLiteral ?? "",
       modelConfig: node.data.modelConfig
     }
   };
@@ -262,13 +279,15 @@ function buildNodeTemplate(
     data: {
       nodeType,
       label:
-        box?.label ??
+        box?.title ??
         (nodeType === "functor"
           ? "Functor"
           : nodeType === "chat"
             ? "Chat node"
             : nodeType === "output"
               ? "Output"
+              : nodeType === "value"
+                ? "Value"
               : nodeType === "template"
                 ? "Template"
                 : nodeType === "pick_key"
@@ -285,15 +304,19 @@ function buildNodeTemplate(
             : nodeType === "functor"
               ? "Single transformation node."
               : "Workbench node."),
-      boxId: box?.boxId ?? null,
-      enabledToolKeys: (box?.toolAdapters ?? []).map((tool) => tool.key),
+      boxId: box?.id ?? null,
+      enabledToolKeys: (box?.tools ?? []).map((tool) => tool.key),
       inputs: box?.inputs ?? defaults.inputs,
-      outputs: box?.outputs ?? defaults.outputs,
+      outputs: box?.output ?? defaults.outputs,
+      params: box?.params ?? [],
+      paramValues: {},
       prompt: "",
       promptTemplate: "",
       systemPrompt: "",
       template: "",
       selectedKey: "",
+      valueType: "string",
+      valueLiteral: "",
       outputKey: "primary",
       modelConfig: {
         connectionId: null,
@@ -362,8 +385,20 @@ function PortColumn({
 }
 
 function WorkbenchNodeCard(props: NodeProps<Node<WorkbenchGraphNodeData>>) {
+  const definition = useWorkbenchNodeDefinition(props.data.boxId ?? null);
   const [portsCollapsed, setPortsCollapsed] = useState(false);
   const tone = nodeTone(props.data.nodeType);
+  if (definition && props.data.nodeType === "box") {
+    const NodeView = definition.NodeView;
+    return (
+      <NodeView
+        nodeId={props.id}
+        inputs={undefined}
+        params={undefined}
+        compact={false}
+      />
+    );
+  }
   return (
     <div
       className={cn(
@@ -527,7 +562,7 @@ export function WorkbenchFlowEditor({
     return boxes.filter((box) => {
       const matchesQuery =
         normalizedQuery.length === 0 ||
-        [box.label, box.description, box.category, box.routePath ?? "", ...box.tags]
+        [box.title, box.description, box.category, box.routePath ?? "", ...box.tags]
           .join(" ")
           .toLowerCase()
           .includes(normalizedQuery);
@@ -549,11 +584,11 @@ export function WorkbenchFlowEditor({
   const availableToolOptions = useMemo(
     () =>
       boxes.flatMap((box) =>
-        box.toolAdapters.map((tool) => ({
+        box.tools.map((tool) => ({
           key: tool.key,
           label: tool.label,
           description: tool.description,
-          source: box.label
+          source: box.title
         }))
       ),
     [boxes]
@@ -712,6 +747,7 @@ export function WorkbenchFlowEditor({
           <div className="grid gap-2 sm:grid-cols-2">
             {[
               { type: "user_input", label: "User input", icon: <SquareTerminal className="size-4" /> },
+              { type: "value", label: "Value", icon: <ListTree className="size-4" /> },
               { type: "functor", label: "Functor", icon: <Sparkles className="size-4" /> },
               { type: "chat", label: "Chat", icon: <Bot className="size-4" /> },
               { type: "merge", label: "Merge", icon: <GitMerge className="size-4" /> },
@@ -752,7 +788,7 @@ export function WorkbenchFlowEditor({
           <div className="grid max-h-[18rem] gap-2 overflow-auto pr-1">
             {filteredBoxes.map((box) => (
               <button
-                key={box.boxId}
+                key={box.id}
                 type="button"
                 className="rounded-[20px] bg-white/[0.04] px-4 py-3 text-left transition hover:bg-white/[0.08]"
                 onClick={() => {
@@ -760,7 +796,7 @@ export function WorkbenchFlowEditor({
                   setAddNodeOpen(false);
                 }}
               >
-                <div className="text-sm font-medium text-white">{box.label}</div>
+                <div className="text-sm font-medium text-white">{box.title}</div>
                 <div className="mt-1 text-[12px] leading-5 text-white/50">
                   {box.description}
                 </div>
@@ -804,17 +840,18 @@ export function WorkbenchFlowEditor({
               <select
                 value={selectedNode.data.boxId ?? ""}
                 onChange={(event) => {
-                  const box = boxes.find((entry) => entry.boxId === event.target.value);
+                  const box = boxes.find((entry) => entry.id === event.target.value);
                   updateSelectedNode((node) => ({
                     ...node,
                     data: {
                       ...node.data,
                       boxId: event.target.value,
-                      label: box?.label ?? node.data.label,
+                      label: box?.title ?? node.data.label,
                       description: box?.description ?? node.data.description,
                       inputs: box?.inputs ?? [],
-                      outputs: box?.outputs ?? [],
-                      enabledToolKeys: (box?.toolAdapters ?? []).map((tool) => tool.key)
+                      outputs: box?.output ?? [],
+                      params: box?.params ?? [],
+                      enabledToolKeys: (box?.tools ?? []).map((tool) => tool.key)
                     }
                   }));
                 }}
@@ -822,12 +859,58 @@ export function WorkbenchFlowEditor({
               >
                 <option value="">Select Forge box</option>
                 {boxes.map((box) => (
-                  <option key={box.boxId} value={box.boxId}>
-                    {box.label}
+                  <option key={box.id} value={box.id}>
+                    {box.title}
                   </option>
                 ))}
               </select>
             ) : null}
+            {(selectedNode.data.params ?? []).map((param) => (
+              <div key={param.key} className="grid gap-2">
+                <div className="text-[11px] uppercase tracking-[0.18em] text-white/40">
+                  {param.label}
+                </div>
+                {param.kind === "boolean" ? (
+                  <label className="flex items-center gap-3 rounded-[18px] border border-white/10 bg-black/20 px-4 py-3 text-sm text-white">
+                    <input
+                      type="checkbox"
+                      checked={Boolean(selectedNode.data.paramValues?.[param.key])}
+                      onChange={(event) =>
+                        updateSelectedNode((node) => ({
+                          ...node,
+                          data: {
+                            ...node.data,
+                            paramValues: {
+                              ...(node.data.paramValues ?? {}),
+                              [param.key]: event.target.checked
+                            }
+                          }
+                        }))
+                      }
+                    />
+                    {param.description ?? "Enabled"}
+                  </label>
+                ) : (
+                  <input
+                    value={String(selectedNode.data.paramValues?.[param.key] ?? "")}
+                    onChange={(event) =>
+                      updateSelectedNode((node) => ({
+                        ...node,
+                        data: {
+                          ...node.data,
+                          paramValues: {
+                            ...(node.data.paramValues ?? {}),
+                            [param.key]: event.target.value
+                          }
+                        }
+                      }))
+                    }
+                    placeholder={param.description ?? param.label}
+                    className="rounded-[18px] border border-white/10 bg-black/20 px-4 py-3 text-sm text-white outline-none"
+                  />
+                )}
+              </div>
+            ))}
             {(selectedNode.data.nodeType === "functor" ||
               selectedNode.data.nodeType === "chat") ? (
               <>
@@ -1010,6 +1093,38 @@ export function WorkbenchFlowEditor({
                 placeholder="Published output key"
                 className="rounded-[18px] border border-white/10 bg-black/20 px-4 py-3 text-sm text-white outline-none"
               />
+            ) : null}
+            {selectedNode.data.nodeType === "value" ? (
+              <>
+                <select
+                  value={selectedNode.data.valueType ?? "string"}
+                  onChange={(event) =>
+                    updateSelectedNode((node) => ({
+                      ...node,
+                      data: { ...node.data, valueType: event.target.value as any }
+                    }))
+                  }
+                  className="rounded-[18px] border border-white/10 bg-black/20 px-4 py-3 text-sm text-white outline-none"
+                >
+                  {["string", "number", "boolean", "null", "array", "object"].map((kind) => (
+                    <option key={kind} value={kind}>
+                      {kind}
+                    </option>
+                  ))}
+                </select>
+                <textarea
+                  rows={4}
+                  value={selectedNode.data.valueLiteral ?? ""}
+                  onChange={(event) =>
+                    updateSelectedNode((node) => ({
+                      ...node,
+                      data: { ...node.data, valueLiteral: event.target.value }
+                    }))
+                  }
+                  placeholder="Value literal or JSON"
+                  className="rounded-[18px] border border-white/10 bg-black/20 px-4 py-3 text-sm text-white outline-none"
+                />
+              </>
             ) : null}
             <div className="flex flex-wrap justify-between gap-2 pt-2">
               <Button

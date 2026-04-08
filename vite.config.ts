@@ -54,10 +54,6 @@ export default defineConfig(({ command }) => {
               return undefined;
             }
 
-            if (id.includes("recharts") || id.includes("/d3-")) {
-              return "viz";
-            }
-
             if (id.includes("framer-motion") || id.includes("motion-dom") || id.includes("motion-utils")) {
               return "motion";
             }

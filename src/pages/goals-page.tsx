@@ -3,6 +3,8 @@ import { Link } from "react-router-dom";
 import { PageHero } from "@/components/shell/page-hero";
 import { EntityNoteCountLink } from "@/components/notes/entity-note-count-link";
 import { GoalStudio } from "@/components/goal-studio";
+import { CardHeaderRow } from "@/components/primitives/card-header-row";
+import { PillCluster } from "@/components/primitives/pill-cluster";
 import { ProjectCollectionFilters } from "@/components/projects/project-collection-filters";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -121,7 +123,7 @@ export function GoalsPage() {
               >
                 <div className="grid gap-4 xl:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)] xl:gap-5">
                   <div className="min-w-0">
-                    <div className="flex flex-wrap items-center gap-2">
+                    <PillCluster>
                       {goal.tags.slice(0, 3).map((tag) => (
                         <Badge
                           key={tag.id}
@@ -135,7 +137,7 @@ export function GoalsPage() {
                         {goal.horizon}
                       </Badge>
                       <UserBadge user={goal.user} compact />
-                    </div>
+                    </PillCluster>
                     <div className="mt-4">
                       <EntityName
                         kind="goal"
@@ -187,14 +189,15 @@ export function GoalsPage() {
                   </div>
 
                   <div className="min-w-0 rounded-[24px] bg-white/[0.04] p-4">
-                    <div className="flex items-center justify-between gap-3">
-                      <div className="min-w-0 flex-1 text-sm font-medium text-white sm:text-base">
-                        Projects carrying this direction
-                      </div>
-                      <div className="shrink-0 text-sm text-white/48">
-                        {linkedProjects.length}
-                      </div>
-                    </div>
+                    <CardHeaderRow
+                      title="Projects carrying this direction"
+                      meta={
+                        <div className="shrink-0 text-sm text-white/48">
+                          {linkedProjects.length}
+                        </div>
+                      }
+                      className="gap-2"
+                    />
                     {linkedProjects.length === 0 ? (
                       <div className="mt-4 text-sm leading-6 text-white/56">
                         {projectFilter === "active"

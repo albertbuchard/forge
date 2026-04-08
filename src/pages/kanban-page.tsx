@@ -1,10 +1,14 @@
 import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate } from "react-router-dom";
+import {
+  KanbanBoardBox,
+  KanbanFiltersBox,
+  KanbanSummaryBox
+} from "@/components/workbench-boxes/kanban/kanban-boxes";
 import { ExecutionBoard } from "@/components/execution-board";
 import { TaskDialog } from "@/components/task-dialog";
 import { PageHero } from "@/components/shell/page-hero";
-import { WorkbenchSection } from "@/components/workbench/workbench-section";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -143,7 +147,7 @@ export function KanbanPage() {
         }
       />
 
-      <WorkbenchSection boxId="surface:kanban-index:summary" surfaceId="kanban-index">
+      <KanbanSummaryBox>
         <Card className="min-w-0 overflow-hidden">
           <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="min-w-0">
@@ -171,9 +175,9 @@ export function KanbanPage() {
           </div>
           </div>
         </Card>
-      </WorkbenchSection>
+      </KanbanSummaryBox>
 
-      <WorkbenchSection boxId="surface:kanban-index:filters" surfaceId="kanban-index">
+      <KanbanFiltersBox>
         <Card className="min-w-0 overflow-hidden">
         <div className="type-label text-white/40">Filters</div>
         <div className="mt-3 flex flex-wrap items-center gap-2">
@@ -244,7 +248,7 @@ export function KanbanPage() {
           </button>
         </div>
         </Card>
-      </WorkbenchSection>
+      </KanbanFiltersBox>
 
       {filteredTasks.length === 0 ? (
         <EmptyState
@@ -258,7 +262,7 @@ export function KanbanPage() {
           }
         />
       ) : (
-        <WorkbenchSection boxId="surface:kanban-index:board" surfaceId="kanban-index">
+        <KanbanBoardBox>
           <ExecutionBoard
             tasks={filteredTasks}
             goals={shell.snapshot.goals}
@@ -299,7 +303,7 @@ export function KanbanPage() {
               setEditingTaskId(taskId);
             }}
           />
-        </WorkbenchSection>
+        </KanbanBoardBox>
       )}
 
       <TaskDialog
