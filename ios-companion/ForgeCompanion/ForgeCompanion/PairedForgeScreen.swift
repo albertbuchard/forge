@@ -12,6 +12,7 @@ struct PairedForgeScreen: View {
     @State private var movementSettingsVisible = false
     @State private var diagnosticsVisible = false
     @State private var lifeTimelineVisible = false
+    @State private var screenshotScenarioApplied = false
 
     var body: some View {
         GeometryReader { proxy in
@@ -21,7 +22,10 @@ struct PairedForgeScreen: View {
             ZStack(alignment: .topTrailing) {
                 CompanionStyle.background
 
-                if let url = appModel.forgeWebURL {
+                if appModel.screenshotScenario?.usesForgeCanvasPlaceholder == true {
+                    CompanionScreenshotForgeCanvas()
+                        .frame(width: proxy.size.width, height: proxy.size.height)
+                } else if let url = appModel.forgeWebURL {
                     ForgeWebView(
                         url: url,
                         reloadToken: reloadToken,
@@ -136,6 +140,21 @@ struct PairedForgeScreen: View {
             .environmentObject(appModel)
         }
         .onAppear {
+            if appModel.screenshotScenario != nil {
+                isLoading = false
+                webError = nil
+            }
+            if screenshotScenarioApplied == false, let screenshotScenario = appModel.screenshotScenario {
+                screenshotScenarioApplied = true
+                DispatchQueue.main.async {
+                    if screenshotScenario.autoOpensDiagnostics {
+                        diagnosticsVisible = true
+                    }
+                    if screenshotScenario.autoOpensLifeTimeline {
+                        lifeTimelineVisible = true
+                    }
+                }
+            }
             companionDebugLog(
                 "PairedForgeScreen",
                 "onAppear forgeWebURL=\(appModel.forgeWebURL?.absoluteString ?? "nil")"
@@ -192,6 +211,12 @@ private struct MovementLifeTimelineView: View {
                     ScrollViewReader { reader in
                         ScrollView(.vertical, showsIndicators: false) {
                             VStack(spacing: 0) {
+                                if let oldestTimelineItem {
+                                    MovementTimelineHistoryCap(item: oldestTimelineItem)
+                                        .padding(.top, proxy.safeAreaInsets.top + 12)
+                                        .padding(.bottom, 18)
+                                }
+
                                 Color.clear
                                     .frame(height: max(proxy.size.height * 0.42, 260))
 
@@ -263,6 +288,7 @@ private struct MovementLifeTimelineView: View {
                             }
                         }
                         .onAppear {
+                            appModel.movementStore.refreshDerivedTimelineState(referenceDate: Date())
                             if initialLoadComplete == false {
                                 Task {
                                     await loadInitialPage()
@@ -274,15 +300,15 @@ private struct MovementLifeTimelineView: View {
                             scrolledToCurrent = true
                             DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
                                 withAnimation(.easeInOut(duration: 0.45)) {
-                                    reader.scrollTo(MovementLifeTimelineItem.currentAnchorId, anchor: .center)
+                                    reader.scrollTo(initialScrollTargetId, anchor: .center)
                                 }
                             }
                         }
                     }
 
-                    VStack {
-                        HStack {
-                            Spacer()
+                        VStack {
+                            HStack {
+                                Spacer()
                             VStack(spacing: 4) {
                                 Text("VISIBLE DAY")
                                     .font(.system(size: 9, weight: .bold, design: .rounded))
@@ -302,11 +328,6 @@ private struct MovementLifeTimelineView: View {
                             Spacer()
                         }
                         .padding(.top, 12)
-
-                        if let oldestTimelineItem {
-                            MovementTimelineHistoryCap(item: oldestTimelineItem)
-                                .padding(.top, 10)
-                        }
 
                         Spacer()
                     }
@@ -368,10 +389,31 @@ private struct MovementLifeTimelineView: View {
         return nil
     }
 
+    private var localHistoricalItems: [MovementLifeTimelineItem] {
+        let activeStayId = appModel.movementStore.activeStay?.id
+        let activeTripId = appModel.movementStore.activeTrip?.id
+        let localStays = appModel.movementStore.storedStays
+            .filter { $0.id != activeStayId }
+            .compactMap(MovementLifeTimelineItem.init(localHistoryStay:))
+        let localTrips = appModel.movementStore.storedTrips
+            .filter { $0.id != activeTripId && $0.status != "invalid" }
+            .compactMap(MovementLifeTimelineItem.init(localHistoryTrip:))
+        return normalizedTimelineItems(localStays + localTrips)
+    }
+
     private var displayItems: [MovementLifeTimelineItem] {
-        var items = segments.compactMap(MovementLifeTimelineItem.init(remote:))
+        let remoteItems = normalizedTimelineItems(segments.compactMap(MovementLifeTimelineItem.init(remote:)))
+        var items = remoteItems.isEmpty ? localHistoricalItems : remoteItems
         if let liveOverlayItem {
+            if let last = items.last,
+               last.kind == liveOverlayItem.kind || liveOverlayItem.startedAtDate < last.endedAtDate
+            {
+                items.removeLast()
+            }
             items.append(liveOverlayItem)
+        } else if let promotedOngoingStay = promotedOngoingStayItem(from: items) {
+            items.removeLast()
+            items.append(promotedOngoingStay)
         } else {
             items.append(.currentAnchor)
         }
@@ -389,11 +431,54 @@ private struct MovementLifeTimelineView: View {
         return candidate.startedAtDate.formatted(Date.FormatStyle().day(.twoDigits).month(.twoDigits).year(.twoDigits))
     }
 
+    private var initialScrollTargetId: String {
+        displayItems.last?.id ?? MovementLifeTimelineItem.currentAnchorId
+    }
+
     private var oldestTimelineItem: MovementLifeTimelineItem? {
         displayItems.first(where: { $0.kind != .anchor })
     }
 
+    private func promotedOngoingStayItem(
+        from items: [MovementLifeTimelineItem]
+    ) -> MovementLifeTimelineItem? {
+        guard let last = items.last, last.kind == .stay else {
+            return nil
+        }
+        guard last.isCurrent == false else {
+            return last
+        }
+        let gap = Date().timeIntervalSince(last.endedAtDate)
+        guard gap >= 0, gap <= 6 * 60 * 60 else {
+            return nil
+        }
+        return last.promotedToCurrent(referenceDate: Date())
+    }
+
+    private func normalizedTimelineItems(_ items: [MovementLifeTimelineItem]) -> [MovementLifeTimelineItem] {
+        var normalized: [MovementLifeTimelineItem] = []
+        for item in items.sorted(by: { $0.startedAtDate < $1.startedAtDate }) {
+            guard item.kind != .anchor else {
+                continue
+            }
+            guard item.endedAtDate > item.startedAtDate else {
+                continue
+            }
+            if let previous = normalized.last {
+                if item.kind == previous.kind {
+                    continue
+                }
+                if item.startedAtDate < previous.endedAtDate {
+                    continue
+                }
+            }
+            normalized.append(item)
+        }
+        return normalized
+    }
+
     private func reload() async {
+        appModel.movementStore.refreshDerivedTimelineState(referenceDate: Date())
         nextCursor = nil
         hasMore = true
         segments = []
@@ -413,8 +498,19 @@ private struct MovementLifeTimelineView: View {
             loading = false
             initialLoadComplete = true
         }
-        guard let pairing = appModel.pairing else {
-            loadError = "Connect the companion to Forge to page historical movement. The live local overlay still shows your current stay or trip."
+        if appModel.screenshotScenario != nil {
+            segments = []
+            nextCursor = nil
+            hasMore = false
+            loadError = nil
+            return
+        }
+        let resolvedPairing = await appModel.ensureActivePairingIfPossible(reason: "life-timeline-initial") ?? appModel.pairing
+        guard let pairing = resolvedPairing else {
+            loadError = localHistoricalItems.isEmpty
+                ? "Connect the companion to Forge to page historical movement. The phone has no repaired local history cached yet."
+                : "Showing repaired local movement history from the phone. Reconnect to Forge to page older canonical segments."
+            hasMore = false
             return
         }
         do {
@@ -428,12 +524,49 @@ private struct MovementLifeTimelineView: View {
             hasMore = page.hasMore
             loadError = nil
         } catch {
-            loadError = error.localizedDescription
+            if error.localizedDescription.localizedCaseInsensitiveContains("pairing session expired"),
+               let renewedPairing = await appModel.ensureActivePairingIfPossible(
+                reason: "life-timeline-expired-session",
+                forceRenewal: true
+               )
+            {
+                do {
+                    let page = try await appModel.syncClient.fetchMovementTimeline(
+                        payload: renewedPairing,
+                        before: nil,
+                        limit: 36
+                    )
+                    segments = page.segments.reversed()
+                    nextCursor = page.nextCursor
+                    hasMore = page.hasMore
+                    loadError = nil
+                    return
+                } catch {
+                    loadError = localHistoricalItems.isEmpty
+                        ? error.localizedDescription
+                        : "Showing repaired local movement history while Forge reconnects. \(error.localizedDescription)"
+                    hasMore = false
+                    return
+                }
+            }
+            loadError = localHistoricalItems.isEmpty
+                ? error.localizedDescription
+                : "Showing repaired local movement history while Forge reconnects. \(error.localizedDescription)"
+            hasMore = false
         }
     }
 
     private func loadMoreIfNeeded() async {
-        guard loadingMore == false, loading == false, hasMore, let pairing = appModel.pairing else {
+        guard loadingMore == false, loading == false, hasMore else {
+            return
+        }
+        if appModel.screenshotScenario != nil {
+            hasMore = false
+            return
+        }
+        let resolvedPairing = await appModel.ensureActivePairingIfPossible(reason: "life-timeline-pagination") ?? appModel.pairing
+        guard let pairing = resolvedPairing else {
+            hasMore = false
             return
         }
         guard let nextCursor else {
@@ -454,7 +587,35 @@ private struct MovementLifeTimelineView: View {
             hasMore = page.hasMore
             loadError = nil
         } catch {
-            loadError = error.localizedDescription
+            if error.localizedDescription.localizedCaseInsensitiveContains("pairing session expired"),
+               let renewedPairing = await appModel.ensureActivePairingIfPossible(
+                reason: "life-timeline-pagination-expired",
+                forceRenewal: true
+               )
+            {
+                do {
+                    let page = try await appModel.syncClient.fetchMovementTimeline(
+                        payload: renewedPairing,
+                        before: nextCursor,
+                        limit: 32
+                    )
+                    segments = page.segments.reversed() + segments
+                    self.nextCursor = page.nextCursor
+                    hasMore = page.hasMore
+                    loadError = nil
+                    return
+                } catch {
+                    loadError = localHistoricalItems.isEmpty
+                        ? error.localizedDescription
+                        : "Showing repaired local movement history while Forge reconnects. \(error.localizedDescription)"
+                    hasMore = false
+                    return
+                }
+            }
+            loadError = localHistoricalItems.isEmpty
+                ? error.localizedDescription
+                : "Showing repaired local movement history while Forge reconnects. \(error.localizedDescription)"
+            hasMore = false
         }
     }
 
@@ -630,15 +791,15 @@ private struct MovementTimelineRow: View {
     }
 
     private var detailOnLeadingSide: Bool {
-        isSelected && item.detailSide == .leading
+        false
     }
 
     private var detailOnTrailingSide: Bool {
-        isSelected && item.detailSide == .trailing
+        isSelected
     }
 
     private var segmentWidth: CGFloat {
-        max(176, detailOnLeadingSide || detailOnTrailingSide ? width * 0.42 : width * 0.92)
+        max(176, detailOnTrailingSide ? width * 0.46 : width * 0.92)
     }
 
     private var detailWidth: CGFloat {
@@ -671,7 +832,12 @@ private struct MovementTimelineRow: View {
                 .font(.system(size: 12, weight: .medium, design: .rounded))
                 .foregroundStyle(CompanionStyle.textSecondary)
             detailRow("Started", item.startedAtDate.formatted(.dateTime.day().month(.abbreviated).year().hour().minute()))
-            detailRow("Ended", item.endedAtDate.formatted(.dateTime.day().month(.abbreviated).year().hour().minute()))
+            detailRow(
+                "Ended",
+                item.kind == .stay && item.isCurrent
+                    ? "Ongoing"
+                    : item.endedAtDate.formatted(.dateTime.day().month(.abbreviated).year().hour().minute())
+            )
             detailRow("Duration", item.durationLabel)
             if let placeLabel = item.placeLabel, placeLabel.isEmpty == false {
                 detailRow("Place", placeLabel)
@@ -740,7 +906,6 @@ private struct MovementTimelineStayShape: View {
 
     var body: some View {
         VStack(alignment: item.horizontalAlignment, spacing: 8) {
-            header
             RoundedRectangle(cornerRadius: 26, style: .continuous)
                 .fill(item.gradient)
                 .overlay(alignment: .top) {
@@ -761,14 +926,13 @@ private struct MovementTimelineStayShape: View {
                 }
                 .overlay(alignment: .bottomLeading) {
                     VStack(alignment: .leading, spacing: 4) {
-                        Text(item.title)
-                            .font(.system(size: 14, weight: .bold, design: .rounded))
-                            .foregroundStyle(CompanionStyle.textPrimary)
-                            .lineLimit(2)
-                        Text(item.subtitle)
+                        Text("STAY")
+                            .font(.system(size: 10, weight: .bold, design: .rounded))
+                            .foregroundStyle(CompanionStyle.textSecondary)
+                            .tracking(2)
+                        Text("\(item.startedAtDate.formatted(.dateTime.hour().minute())) → \(item.endedAtDate.formatted(.dateTime.hour().minute()))")
                             .font(.system(size: 11, weight: .medium, design: .rounded))
                             .foregroundStyle(CompanionStyle.textSecondary)
-                            .lineLimit(3)
                     }
                     .padding(16)
                 }
@@ -798,14 +962,8 @@ private struct MovementTimelineStayShape: View {
                 }
                 .frame(width: item.isCurrent ? 196 : 172, height: item.displayHeight)
         }
-        .frame(maxWidth: .infinity, alignment: item.isCurrent ? .center : item.laneSide == .left ? .leading : .trailing)
+        .frame(maxWidth: .infinity, alignment: .center)
         .id(item.isCurrent ? MovementLifeTimelineItem.currentAnchorId : item.id)
-    }
-
-    private var header: some View {
-        Text(item.timeHeader)
-            .font(.system(size: 10, weight: .medium, design: .rounded))
-            .foregroundStyle(CompanionStyle.textMuted)
     }
 }
 
@@ -814,11 +972,6 @@ private struct MovementTimelineTripShape: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(item.timeHeader)
-                .font(.system(size: 10, weight: .medium, design: .rounded))
-                .foregroundStyle(CompanionStyle.textMuted)
-                .frame(maxWidth: .infinity, alignment: item.isCurrent ? .center : item.laneSide == .left ? .leading : .trailing)
-
             ZStack {
                 MovementTimelineTimeLadder(
                     startedAt: item.startedAtDate,
@@ -843,16 +996,14 @@ private struct MovementTimelineTripShape: View {
                         )
                     VStack {
                         MovementTimelineTripEndpointCapsule(
-                            label: item.title,
-                            detail: "moving"
+                            emphasized: true
                         )
                         Spacer(minLength: 0)
                         MovementTimelineTripEndpointCapsule(
-                            label: item.placeLabel?.isEmpty == false ? item.placeLabel! : "Set current place",
-                            detail: "tap to label"
+                            emphasized: true
                         )
                     }
-                    .padding(.vertical, 6)
+                    .padding(.vertical, 12)
                 } else {
                     TripConnectorShape(
                         from: item.connectorFromLane,
@@ -869,35 +1020,33 @@ private struct MovementTimelineTripShape: View {
                     .frame(height: item.displayHeight)
                     VStack {
                         MovementTimelineTripEndpointCapsule(
-                            label: "Trip start",
-                            detail: item.timeHeader
+                            emphasized: false
                         )
                         Spacer(minLength: 0)
                         MovementTimelineTripEndpointCapsule(
-                            label: item.placeLabel?.isEmpty == false ? item.placeLabel! : "Trip end",
-                            detail: item.durationLabel
+                            emphasized: false
                         )
                     }
-                    .padding(.vertical, 6)
+                    .padding(.vertical, 12)
                 }
 
                 HStack {
-                    if item.laneSide == .right && item.isCurrent == false {
-                        Spacer()
-                    }
-
                     VStack(alignment: .leading, spacing: 5) {
-                        Text(item.title)
-                            .font(.system(size: 14, weight: .bold, design: .rounded))
-                            .foregroundStyle(CompanionStyle.textPrimary)
-                            .lineLimit(2)
-                        Text(item.subtitle)
-                            .font(.system(size: 11, weight: .medium, design: .rounded))
+                        Text("MOVE")
+                            .font(.system(size: 10, weight: .bold, design: .rounded))
                             .foregroundStyle(CompanionStyle.textSecondary)
-                            .lineLimit(3)
+                            .tracking(2)
                         Text(item.durationLabel)
                             .font(.system(size: 12, weight: .black, design: .rounded))
                             .foregroundStyle(CompanionStyle.accentStrong)
+                        if let distance = item.distanceMeters {
+                            Text("\(String(format: "%.1f", distance / 1000)) km")
+                                .font(.system(size: 11, weight: .medium, design: .rounded))
+                                .foregroundStyle(CompanionStyle.textSecondary)
+                        }
+                        Text("\(item.startedAtDate.formatted(.dateTime.hour().minute())) → \(item.endedAtDate.formatted(.dateTime.hour().minute()))")
+                            .font(.system(size: 10, weight: .medium, design: .rounded))
+                            .foregroundStyle(CompanionStyle.textMuted)
                     }
                     .padding(.horizontal, 14)
                     .padding(.vertical, 12)
@@ -908,44 +1057,30 @@ private struct MovementTimelineTripShape: View {
                     )
                     .frame(maxWidth: 184, alignment: .leading)
                     .offset(y: 10)
-
-                    if item.laneSide == .left && item.isCurrent == false {
-                        Spacer()
-                    }
                 }
-                .padding(.horizontal, item.isCurrent ? 0 : 8)
             }
             .frame(width: item.isCurrent ? 196 : 184, height: item.displayHeight, alignment: .topLeading)
         }
-        .frame(maxWidth: .infinity, alignment: item.isCurrent ? .center : item.laneSide == .left ? .leading : .trailing)
+        .frame(maxWidth: .infinity, alignment: .center)
         .id(item.isCurrent ? MovementLifeTimelineItem.currentAnchorId : item.id)
     }
 }
 
 private struct MovementTimelineTripEndpointCapsule: View {
-    let label: String
-    let detail: String
+    let emphasized: Bool
 
     var body: some View {
-        VStack(spacing: 2) {
-            Text(label)
-                .font(.system(size: 10, weight: .bold, design: .rounded))
-                .foregroundStyle(CompanionStyle.textPrimary)
-                .lineLimit(1)
-            Text(detail.uppercased())
-                .font(.system(size: 8, weight: .medium, design: .rounded))
-                .foregroundStyle(CompanionStyle.textMuted)
-                .tracking(1)
-                .lineLimit(1)
-        }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 8)
-        .background(Color.black.opacity(0.26), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .stroke(Color.white.opacity(0.08), lineWidth: 1)
-        )
-        .frame(maxWidth: 120)
+        RoundedRectangle(cornerRadius: 12, style: .continuous)
+            .fill(Color.black.opacity(0.26))
+            .frame(width: 32, height: 26)
+            .overlay(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .stroke(
+                        emphasized ? CompanionStyle.accentStrong.opacity(0.36) : Color.white.opacity(0.08),
+                        lineWidth: 1
+                    )
+            )
+            .shadow(color: Color.black.opacity(0.18), radius: 8, y: 3)
     }
 }
 
@@ -965,7 +1100,7 @@ private struct MovementTimelineTimeLadder: View {
                             .frame(height: 1)
                         Text(marker.label)
                             .font(.system(size: marker.isDate ? 9 : 8, weight: .thin, design: .rounded))
-                            .foregroundStyle(Color.white.opacity(marker.isDate ? 0.34 : 0.24))
+                            .foregroundStyle(Color.white.opacity(marker.isDate ? 0.26 : 0.12))
                     }
                     .offset(y: marker.y)
                 }
@@ -1141,18 +1276,10 @@ private struct TripConnectorShape: Shape {
     let to: MovementTimelineLaneSide
 
     func path(in rect: CGRect) -> Path {
-        let leftX = rect.minX + 24
-        let rightX = rect.maxX - 24
         let centerX = rect.midX
-        let startX = from == .left ? leftX : rightX
-        let endX = to == .left ? leftX : rightX
         var path = Path()
-        path.move(to: CGPoint(x: startX, y: rect.minY + 18))
-        path.addCurve(
-            to: CGPoint(x: endX, y: rect.maxY - 18),
-            control1: CGPoint(x: centerX, y: rect.minY + rect.height * 0.22),
-            control2: CGPoint(x: centerX, y: rect.minY + rect.height * 0.78)
-        )
+        path.move(to: CGPoint(x: centerX, y: rect.minY + 22))
+        path.addLine(to: CGPoint(x: centerX, y: rect.maxY - 22))
         return path
     }
 }
@@ -1439,6 +1566,60 @@ private struct MovementLifeTimelineItem: Identifiable, Hashable {
         )
     }
 
+    init?(localHistoryStay stay: MovementSyncStore.StoredStay) {
+        guard stay.endedAt > stay.startedAt else {
+            return nil
+        }
+        let title = stay.placeLabel.isEmpty ? stay.label : stay.placeLabel
+        self.init(
+            id: "local-stay-\(stay.id)",
+            source: .liveStay(
+                stay.id,
+                .init(latitude: stay.centerLatitude, longitude: stay.centerLongitude)
+            ),
+            kind: .stay,
+            title: title,
+            subtitle: stay.tags.isEmpty ? "Local stay history" : stay.tags.joined(separator: " · "),
+            placeLabel: stay.placeLabel,
+            tags: stay.tags,
+            syncSource: "local cache",
+            startedAtDate: stay.startedAt,
+            endedAtDate: stay.endedAt,
+            durationSeconds: max(60, Int(stay.endedAt.timeIntervalSince(stay.startedAt))),
+            laneSide: .left,
+            connectorFromLane: .left,
+            connectorToLane: .left,
+            distanceMeters: nil,
+            averageSpeedMps: nil,
+            isCurrent: false
+        )
+    }
+
+    init?(localHistoryTrip trip: MovementSyncStore.StoredTrip) {
+        guard trip.endedAt > trip.startedAt else {
+            return nil
+        }
+        self.init(
+            id: "local-trip-\(trip.id)",
+            source: .liveTrip(trip.id),
+            kind: .trip,
+            title: trip.label,
+            subtitle: trip.tags.isEmpty ? (trip.activityType.isEmpty ? "Local trip history" : trip.activityType) : trip.tags.joined(separator: " · "),
+            placeLabel: nil,
+            tags: trip.tags,
+            syncSource: "local cache",
+            startedAtDate: trip.startedAt,
+            endedAtDate: trip.endedAt,
+            durationSeconds: max(60, Int(trip.endedAt.timeIntervalSince(trip.startedAt))),
+            laneSide: .right,
+            connectorFromLane: .left,
+            connectorToLane: .right,
+            distanceMeters: trip.distanceMeters,
+            averageSpeedMps: trip.averageSpeedMps,
+            isCurrent: false
+        )
+    }
+
     var displayHeight: CGFloat {
         let maxDisplaySeconds = 6.0 * 60.0 * 60.0
         let minHeight: CGFloat = kind == .trip ? 90 : 72
@@ -1463,24 +1644,37 @@ private struct MovementLifeTimelineItem: Identifiable, Hashable {
     }
 
     var horizontalAlignment: HorizontalAlignment {
-        if isCurrent {
-            return .center
-        }
-        return laneSide == .left ? .leading : .trailing
+        .center
     }
 
     var detailSide: DetailSide {
-        if isCurrent {
-            return .trailing
-        }
-        return laneSide == .left ? .trailing : .leading
+        .trailing
     }
 
     var selectionOffset: CGFloat {
-        guard isCurrent == false else {
-            return 0
-        }
-        return laneSide == .left ? -34 : 34
+        -46
+    }
+
+    func promotedToCurrent(referenceDate: Date) -> MovementLifeTimelineItem {
+        MovementLifeTimelineItem(
+            id: id,
+            source: source,
+            kind: kind,
+            title: title,
+            subtitle: subtitle,
+            placeLabel: placeLabel,
+            tags: tags,
+            syncSource: syncSource,
+            startedAtDate: startedAtDate,
+            endedAtDate: max(referenceDate, endedAtDate),
+            durationSeconds: max(durationSeconds, Int(max(referenceDate, endedAtDate).timeIntervalSince(startedAtDate))),
+            laneSide: laneSide,
+            connectorFromLane: connectorFromLane,
+            connectorToLane: connectorToLane,
+            distanceMeters: distanceMeters,
+            averageSpeedMps: averageSpeedMps,
+            isCurrent: true
+        )
     }
 
     var gradient: LinearGradient {

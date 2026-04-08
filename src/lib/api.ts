@@ -2812,6 +2812,30 @@ export function patchMovementTrip(
   );
 }
 
+export function patchMovementTripPoint(
+  tripId: string,
+  pointId: string,
+  patch: Record<string, unknown>
+) {
+  return request<{
+    point: MovementTripDetailData["trip"]["points"][number];
+    trip: MovementTripDetailData["trip"];
+  }>(`/api/v1/movement/trips/${tripId}/points/${pointId}`, {
+    method: "PATCH",
+    body: JSON.stringify(patch)
+  });
+}
+
+export function deleteMovementTripPoint(tripId: string, pointId: string) {
+  return request<{
+    deletedPointId: string;
+    deletedPointExternalUid: string;
+    trip: MovementTripDetailData["trip"];
+  }>(`/api/v1/movement/trips/${tripId}/points/${pointId}`, {
+    method: "DELETE"
+  });
+}
+
 export function getMovementSelectionAggregate(input: {
   stayIds?: string[];
   tripIds?: string[];

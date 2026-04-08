@@ -34,9 +34,10 @@ import { cn } from "@/lib/utils";
 
 const TIMELINE_PAGE_SIZE = 24;
 const CENTER_PADDING = 420;
-const END_PADDING = 260;
 const GRID_ROW_HEIGHT = 64;
 const MAX_DISPLAY_SECONDS = 6 * 60 * 60;
+const FUTURE_GRID_HOURS = 1;
+const END_PADDING = GRID_ROW_HEIGHT * FUTURE_GRID_HOURS;
 
 type MovementLifeTimelineProps = {
   userIds?: string[];
@@ -232,19 +233,46 @@ function compressedMarkerFractions(durationSeconds: number) {
 
 function MovementTimelineViewportGrid({
   totalHeight,
-  latestEndedAt
+  latestEndedAt,
+  scrollTop,
+  viewportHeight
 }: {
   totalHeight: number;
   latestEndedAt: string;
+  scrollTop: number;
+  viewportHeight: number;
 }) {
   const lineCount = Math.max(10, Math.ceil(totalHeight / GRID_ROW_HEIGHT) + 2);
-  const anchorY = totalHeight - END_PADDING;
-  const latestDate = new Date(latestEndedAt);
+  const anchorY = Math.max(0, totalHeight - 1);
+  const latestDate = new Date(
+    new Date(latestEndedAt).getTime() + FUTURE_GRID_HOURS * 3_600_000
+  );
+  const overscan = GRID_ROW_HEIGHT * 6;
+  const visibleStart = Math.max(0, scrollTop - overscan);
+  const visibleEnd = Math.min(
+    totalHeight,
+    scrollTop + Math.max(viewportHeight, GRID_ROW_HEIGHT * 8) + overscan
+  );
+  const startIndex = Math.max(
+    0,
+    Math.floor((anchorY - visibleEnd) / GRID_ROW_HEIGHT)
+  );
+  const endIndex = Math.min(
+    lineCount - 1,
+    Math.ceil((anchorY - visibleStart) / GRID_ROW_HEIGHT)
+  );
+  const visibleIndices = Array.from(
+    { length: Math.max(0, endIndex - startIndex + 1) },
+    (_, offset) => startIndex + offset
+  );
 
   return (
-    <div className="pointer-events-none absolute inset-0 overflow-hidden rounded-[30px]">
+    <div
+      className="pointer-events-none absolute inset-x-0 top-0 overflow-hidden rounded-[30px]"
+      style={{ height: `${totalHeight}px` }}
+    >
       <div className="absolute inset-y-0 left-0 w-18 bg-[linear-gradient(90deg,rgba(7,12,22,0.96),rgba(7,12,22,0.42),transparent)]" />
-      {Array.from({ length: lineCount }).map((_, index) => {
+      {visibleIndices.map((index) => {
         const y = Math.max(0, anchorY - index * GRID_ROW_HEIGHT);
         const lineDate = new Date(latestDate.getTime() - index * 3_600_000);
         const isDateLine = lineDate.getHours() === 0;
@@ -392,7 +420,7 @@ function MovementTimelineHistoryCap({
   const label = knownLabel || "Beginning of time";
 
   return (
-    <div className="pointer-events-none absolute inset-x-0 top-6 z-10 flex justify-center px-6">
+    <div className="pointer-events-none flex justify-center px-6 py-4">
       <div className="relative w-[min(18rem,calc(100vw-6rem))] overflow-hidden rounded-[26px] border border-[rgba(152,208,255,0.2)] bg-[linear-gradient(180deg,rgba(98,130,238,0.14),rgba(18,34,79,0.14))] shadow-[0_20px_48px_rgba(3,8,20,0.3)]">
         <MovementStayHandle position="bottom" />
         <div className="relative z-10 px-5 py-4">
@@ -652,33 +680,25 @@ function MovementTimelineEditDialog({
 function MovementTripEndpointBox({
   side,
   vertical,
-  label,
-  detail
+  emphasized = false
 }: {
   side: "left" | "right" | "center";
   vertical: "top" | "bottom";
-  label: string;
-  detail: string;
+  emphasized?: boolean;
 }) {
   return (
     <div
       className={cn(
-        "absolute z-10 w-[min(10.8rem,32vw)] rounded-[18px] border border-white/10 bg-[linear-gradient(180deg,rgba(10,16,28,0.94),rgba(7,12,24,0.88))] px-3 py-2 shadow-[0_12px_30px_rgba(0,0,0,0.22)] backdrop-blur-sm",
+        "absolute z-10 h-7 w-8 rounded-[12px] border bg-[linear-gradient(180deg,rgba(10,16,28,0.94),rgba(7,12,24,0.88))] shadow-[0_12px_30px_rgba(0,0,0,0.22)] backdrop-blur-sm",
+        emphasized ? "border-[rgba(152,208,255,0.34)]" : "border-white/10",
         side === "left"
           ? "left-[8%]"
           : side === "right"
             ? "right-[8%]"
             : "left-1/2 -translate-x-1/2",
-        vertical === "top" ? "top-4" : "bottom-4"
+        vertical === "top" ? "top-0" : "bottom-0"
       )}
-    >
-      <div className="truncate text-xs font-semibold text-white/84">
-        {label}
-      </div>
-      <div className="mt-1 truncate font-label text-[9px] uppercase tracking-[0.18em] text-white/34">
-        {detail}
-      </div>
-    </div>
+    />
   );
 }
 
@@ -736,9 +756,6 @@ function MovementTimelineRow({
                 style={{ top: `${ratio * 100}%` }}
               >
                 <div className={cn("border-t", isDateLine ? "border-white/10" : "border-white/5")} />
-                <div className={cn("mt-1 pl-4 font-label text-[9px] tracking-[0.22em]", isDateLine ? "text-white/28" : "text-white/14")}>
-                  {isDateLine ? formatStickyDate(markerDate.toISOString()) : formatHourMarker(markerDate)}
-                </div>
               </div>
             );
           })}
@@ -756,14 +773,12 @@ function MovementTimelineRow({
                 <MovementTripEndpointBox
                   side="center"
                   vertical="top"
-                  label={tripEndpoints.start.label}
-                  detail={tripEndpoints.start.detail}
+                  emphasized
                 />
                 <MovementTripEndpointBox
                   side="center"
                   vertical="bottom"
-                  label={tripEndpoints.end.label}
-                  detail={tripEndpoints.end.detail}
+                  emphasized
                 />
               </>
             ) : null}
@@ -777,14 +792,14 @@ function MovementTimelineRow({
               type="button"
               onClick={onToggle}
               className={cn(
-                "group absolute top-1/2 max-w-[min(10rem,calc(100vw-9rem))] -translate-y-1/2 rounded-[18px] border border-white/8 bg-[linear-gradient(180deg,rgba(9,14,24,0.58),rgba(8,12,22,0.42))] px-3 py-2 text-left shadow-[0_12px_24px_rgba(0,0,0,0.14)] backdrop-blur-sm transition hover:border-white/14",
+                "group absolute top-1/2 max-w-[min(9rem,calc(100vw-9rem))] -translate-y-1/2 rounded-[18px] border border-white/8 bg-[linear-gradient(180deg,rgba(9,14,24,0.58),rgba(8,12,22,0.42))] px-3 py-2 text-left shadow-[0_12px_24px_rgba(0,0,0,0.14)] backdrop-blur-sm transition hover:border-white/14",
                 "left-1/2 -translate-x-1/2",
                 selected ? "ring-1 ring-[rgba(126,229,255,0.38)]" : ""
               )}
             >
               <div className="flex items-center justify-between gap-3">
                 <div className="font-label text-[10px] uppercase tracking-[0.18em] text-white/34">
-                  {compactTimeLabel(segment.startedAt)} → {compactTimeLabel(segment.endedAt)}
+                  Move
                 </div>
                 <div className="text-[11px] tracking-[0.18em] text-white/44">
                   {formatDurationLabel(segment.durationSeconds)}
@@ -799,6 +814,9 @@ function MovementTimelineRow({
                     {segment.trip.stops.length} stop{segment.trip.stops.length === 1 ? "" : "s"}
                   </Badge>
                 ) : null}
+              </div>
+              <div className="mt-2 font-label text-[9px] uppercase tracking-[0.22em] text-white/28">
+                {compactTimeLabel(segment.startedAt)} → {compactTimeLabel(segment.endedAt)}
               </div>
               {isWrapped ? (
                 <div className="mt-2 font-label text-[9px] uppercase tracking-[0.22em] text-white/28">
@@ -830,34 +848,16 @@ function MovementTimelineRow({
               <div className="relative z-10 flex h-full flex-col justify-between p-5">
                 <div className="flex items-center justify-between gap-3">
                   <Badge tone="signal" className="bg-white/10 text-white/82">
-                    {displaySegmentBadge(segment)}
+                    Stay
                   </Badge>
                   <div className="text-xs tracking-[0.18em] text-white/46">
                     {formatDurationLabel(segment.durationSeconds)}
                   </div>
                 </div>
-                <div className="mt-10">
-                  <div className="font-display text-[clamp(1.3rem,2.2vw,1.72rem)] tracking-[-0.05em] text-white">
-                    {displaySegmentTitle(segment)}
-                  </div>
-                  <div className="mt-2 max-w-[18rem] text-sm leading-6 text-white/62">
-                    {segment.subtitle}
-                  </div>
-                  <div className="mt-3 font-label text-[10px] uppercase tracking-[0.22em] text-white/34">
+                <div className="mt-auto pt-14">
+                  <div className="font-label text-[10px] uppercase tracking-[0.22em] text-white/34">
                     {compactTimeLabel(segment.startedAt)} → {compactTimeLabel(segment.endedAt)}
                   </div>
-                </div>
-                <div className="mt-6 flex flex-wrap gap-2">
-                  {(segment.tags.length > 0 ? segment.tags : [segment.syncSource])
-                    .slice(0, 3)
-                    .map((tag) => (
-                      <Badge
-                        key={`${segment.id}-${tag}`}
-                        className="bg-white/[0.08] text-white/74"
-                      >
-                        {tag}
-                      </Badge>
-                    ))}
                 </div>
                 {isWrapped ? (
                   <div className="mt-3 font-label text-[10px] uppercase tracking-[0.22em] text-white/32">
@@ -900,6 +900,16 @@ export function MovementLifeTimeline({ userIds = [] }: MovementLifeTimelineProps
   const [selectedSegmentId, setSelectedSegmentId] = useState<string | null>(null);
   const [draftById, setDraftById] = useState<Record<string, TimelineDraft>>({});
   const [editingSegmentId, setEditingSegmentId] = useState<string | null>(null);
+  const [scrollTop, setScrollTop] = useState(0);
+  const [viewportHeight, setViewportHeight] = useState(0);
+  const syncScrollMetrics = () => {
+    const element = scrollParentRef.current;
+    if (!element) {
+      return;
+    }
+    setScrollTop(element.scrollTop);
+    setViewportHeight(element.clientHeight);
+  };
 
   const timelineQuery = useInfiniteQuery({
     queryKey: ["forge-movement-life-timeline", ...userIds],
@@ -956,6 +966,9 @@ export function MovementLifeTimeline({ userIds = [] }: MovementLifeTimelineProps
         rowVirtualizer.scrollToIndex(segments.length - 1, {
           align: "center"
         });
+        requestAnimationFrame(() => {
+          syncScrollMetrics();
+        });
       });
       return;
     }
@@ -974,9 +987,23 @@ export function MovementLifeTimeline({ userIds = [] }: MovementLifeTimelineProps
         }
         const delta = rowVirtualizer.getTotalSize() - anchor.size;
         scrollElement.scrollTop += delta;
+        syncScrollMetrics();
       });
     }
   }, [rowVirtualizer, segments.length]);
+
+  useEffect(() => {
+    const element = scrollParentRef.current;
+    if (!element) {
+      return;
+    }
+    const updateViewport = () => {
+      syncScrollMetrics();
+    };
+    updateViewport();
+    window.addEventListener("resize", updateViewport);
+    return () => window.removeEventListener("resize", updateViewport);
+  }, []);
 
   useEffect(() => {
     if (!selectedSegmentId) {
@@ -1063,6 +1090,8 @@ export function MovementLifeTimeline({ userIds = [] }: MovementLifeTimelineProps
     if (!element) {
       return;
     }
+    setScrollTop(element.scrollTop);
+    setViewportHeight(element.clientHeight);
     if (!timelineQuery.hasNextPage || timelineQuery.isFetchingNextPage) {
       return;
     }
@@ -1104,6 +1133,11 @@ export function MovementLifeTimeline({ userIds = [] }: MovementLifeTimelineProps
   const editingDraft = editingSegment
     ? (draftById[editingSegment.id] ?? buildDraft(editingSegment))
     : null;
+  const contentHeight = Math.max(
+    rowVirtualizer.getTotalSize(),
+    viewportHeight > 0 ? viewportHeight + 260 : 960,
+    CENTER_PADDING + END_PADDING
+  );
   return (
     <section className="grid gap-4">
       <Card className="overflow-hidden rounded-[34px] border border-white/8 bg-[radial-gradient(circle_at_top,rgba(88,182,255,0.08),transparent_28%),linear-gradient(180deg,rgba(4,8,17,0.99),rgba(5,9,18,0.97))] p-4">
@@ -1127,20 +1161,18 @@ export function MovementLifeTimeline({ userIds = [] }: MovementLifeTimelineProps
           onScroll={handleScroll}
           className="relative h-[82vh] overflow-auto rounded-[30px] border border-white/8 bg-[linear-gradient(180deg,rgba(4,7,15,0.98),rgba(6,10,18,0.96))]"
         >
-          {segments.length > 0 ? (
-            <MovementTimelineViewportGrid
-              totalHeight={rowVirtualizer.getTotalSize()}
-              latestEndedAt={segments.at(-1)?.endedAt ?? new Date().toISOString()}
-            />
-          ) : null}
+          <MovementTimelineViewportGrid
+            totalHeight={contentHeight}
+            latestEndedAt={segments.at(-1)?.endedAt ?? new Date().toISOString()}
+            scrollTop={scrollTop}
+            viewportHeight={viewportHeight}
+          />
 
           <div
             className="relative"
-            style={{ height: `${rowVirtualizer.getTotalSize()}px` }}
+            style={{ height: `${contentHeight}px` }}
           >
-            {segments.length > 0 ? (
-              <MovementTimelineHistoryCap segment={segments[0] ?? null} />
-            ) : null}
+            <MovementTimelineHistoryCap segment={segments[0] ?? null} />
             {virtualRows.map((virtualRow) => {
               const segment = segments[virtualRow.index];
               if (!segment) {

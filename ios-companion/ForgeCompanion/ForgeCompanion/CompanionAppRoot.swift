@@ -2,6 +2,7 @@ import SwiftUI
 
 struct CompanionAppRoot: View {
     @EnvironmentObject private var appModel: CompanionAppModel
+    @Environment(\.scenePhase) private var scenePhase
 
     @State private var setupVisible = false
 
@@ -9,7 +10,10 @@ struct CompanionAppRoot: View {
         ZStack {
             CompanionStyle.background
 
-            if appModel.pairing == nil {
+            if appModel.screenshotScenario?.usesDirectSetupFlow == true {
+                CompanionSetupFlow(onFinish: {})
+                    .environmentObject(appModel)
+            } else if appModel.pairing == nil {
                 UnpairedHeroScreen {
                     setupVisible = true
                 }
@@ -37,6 +41,12 @@ struct CompanionAppRoot: View {
         }
         .onChange(of: appModel.pairing?.sessionId) { _, sessionId in
             companionDebugLog("CompanionAppRoot", "pairing session changed -> \(sessionId ?? "nil")")
+        }
+        .onChange(of: scenePhase) { _, nextPhase in
+            companionDebugLog("CompanionAppRoot", "scenePhase -> \(String(describing: nextPhase))")
+            if nextPhase == .active {
+                appModel.handleAppDidBecomeActive()
+            }
         }
     }
 }

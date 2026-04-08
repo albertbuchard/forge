@@ -944,6 +944,7 @@ test("movement sync stores places, stays, trips, and serves the movement workspa
               metadata: {},
               points: [
                 {
+                  externalUid: "trip_home_grocery_p0",
                   recordedAt: "2026-04-06T08:00:00.000Z",
                   latitude: 46.5191,
                   longitude: 6.6323,
@@ -953,6 +954,7 @@ test("movement sync stores places, stays, trips, and serves the movement workspa
                   isStopAnchor: false
                 },
                 {
+                  externalUid: "trip_home_grocery_p1",
                   recordedAt: "2026-04-06T08:10:00.000Z",
                   latitude: 46.5201,
                   longitude: 6.6361,
@@ -962,6 +964,7 @@ test("movement sync stores places, stays, trips, and serves the movement workspa
                   isStopAnchor: false
                 },
                 {
+                  externalUid: "trip_home_grocery_p2",
                   recordedAt: "2026-04-06T08:20:00.000Z",
                   latitude: 46.5214,
                   longitude: 6.6407,
@@ -1093,6 +1096,7 @@ test("movement sync stores places, stays, trips, and serves the movement workspa
               metadata: {},
               points: [
                 {
+                  externalUid: "trip_grocery_home_p0",
                   recordedAt: "2026-04-06T09:15:00.000Z",
                   latitude: 46.5214,
                   longitude: 6.6407,
@@ -1102,6 +1106,7 @@ test("movement sync stores places, stays, trips, and serves the movement workspa
                   isStopAnchor: false
                 },
                 {
+                  externalUid: "trip_grocery_home_p1",
                   recordedAt: "2026-04-06T09:35:00.000Z",
                   latitude: 46.5191,
                   longitude: 6.6323,
@@ -1128,7 +1133,12 @@ test("movement sync stores places, stays, trips, and serves the movement workspa
       movement: {
         summary: { tripCount: number; stayCount: number };
         places: Array<{ label: string }>;
-        trips: Array<{ id: string; distanceMeters: number }>;
+        trips: Array<{
+          id: string;
+          externalUid: string;
+          label: string;
+          distanceMeters: number;
+        }>;
         stays: Array<{ id: string; label: string }>;
       };
     }).movement;
@@ -1141,12 +1151,31 @@ test("movement sync stores places, stays, trips, and serves the movement workspa
     assert.ok(homePlace);
     const groceryStayId = day.stays.find((stay) => stay.label === "Corner Grocery")?.id;
     assert.ok(groceryStayId);
+    const outboundTripId = day.trips.find(
+      (trip) => trip.externalUid === "trip_home_grocery"
+    )?.id;
+    assert.ok(outboundTripId);
 
     const tripResponse = await app.inject({
       method: "GET",
-      url: `/api/v1/movement/trips/${day.trips[0]!.id}`
+      url: `/api/v1/movement/trips/${outboundTripId}`
     });
     assert.equal(tripResponse.statusCode, 200);
+    const tripDetail = (
+      tripResponse.json() as {
+        movement: {
+          trip: {
+            id: string;
+            externalUid: string;
+            points: Array<{
+              id: string;
+              externalUid: string;
+              latitude: number;
+            }>;
+          };
+        };
+      }
+    ).movement;
 
     const placesResponse = await app.inject({
       method: "GET",
@@ -1234,7 +1263,7 @@ test("movement sync stores places, stays, trips, and serves the movement workspa
 
     const patchTripResponse = await app.inject({
       method: "PATCH",
-      url: `/api/v1/movement/trips/${day.trips[0]!.id}`,
+      url: `/api/v1/movement/trips/${outboundTripId}`,
       headers: { cookie: operatorCookie },
       payload: {
         label: "Morning grocery walk",
@@ -1249,6 +1278,200 @@ test("movement sync stores places, stays, trips, and serves the movement workspa
     ).trip;
     assert.equal(patchedTrip.label, "Morning grocery walk");
     assert.ok(patchedTrip.tags.includes("custom-route"));
+
+    const pointPatchResponse = await app.inject({
+      method: "PATCH",
+      url: `/api/v1/movement/trips/${tripDetail.trip.id}/points/${tripDetail.trip.points[1]!.id}`,
+      headers: { cookie: operatorCookie },
+      payload: {
+        latitude: 46.5204,
+        isStopAnchor: true
+      }
+    });
+    assert.equal(pointPatchResponse.statusCode, 200);
+    const patchedPointTrip = (
+      pointPatchResponse.json() as {
+        trip: {
+          points: Array<{ id: string; externalUid: string }>;
+        };
+      }
+    ).trip;
+
+    const pointDeleteResponse = await app.inject({
+      method: "DELETE",
+      url: `/api/v1/movement/trips/${tripDetail.trip.id}/points/${
+        patchedPointTrip.points.find(
+          (point) => point.externalUid === "trip_home_grocery_p2"
+        )!.id
+      }`,
+      headers: { cookie: operatorCookie }
+    });
+    assert.equal(pointDeleteResponse.statusCode, 200);
+
+    const thirdSyncResponse = await app.inject({
+      method: "POST",
+      url: "/api/v1/mobile/healthkit/sync",
+      payload: {
+        sessionId: qrPayload.sessionId,
+        pairingToken: qrPayload.pairingToken,
+        device: {
+          name: "Omar iPhone",
+          platform: "ios",
+          appVersion: "1.0",
+          sourceDevice: "iPhone"
+        },
+        permissions: {
+          healthKitAuthorized: true,
+          backgroundRefreshEnabled: true,
+          motionReady: true,
+          locationReady: true
+        },
+        sleepSessions: [],
+        workouts: [],
+        movement: {
+          settings: {
+            trackingEnabled: true,
+            publishMode: "auto_publish",
+            retentionMode: "aggregates_only",
+            locationPermissionStatus: "always",
+            motionPermissionStatus: "ready",
+            backgroundTrackingReady: true,
+            metadata: {}
+          },
+          knownPlaces: [],
+          stays: [],
+          trips: [
+            {
+              externalUid: "trip_home_grocery",
+              label: "Home to grocery",
+              status: "completed",
+              travelMode: "travel",
+              activityType: "walking",
+              startedAt: "2026-04-06T08:00:00.000Z",
+              endedAt: "2026-04-06T08:20:00.000Z",
+              startPlaceExternalUid: "place_home",
+              endPlaceExternalUid: "place_grocery",
+              distanceMeters: 2100,
+              movingSeconds: 900,
+              idleSeconds: 120,
+              averageSpeedMps: 1.9,
+              maxSpeedMps: 2.5,
+              caloriesKcal: 120,
+              expectedMet: 3.2,
+              tags: ["grocery"],
+              linkedEntities: [],
+              linkedPeople: [],
+              metadata: {},
+              points: [
+                {
+                  externalUid: "trip_home_grocery_p0",
+                  recordedAt: "2026-04-06T08:00:00.000Z",
+                  latitude: 46.5191,
+                  longitude: 6.6323,
+                  accuracyMeters: 8,
+                  altitudeMeters: null,
+                  speedMps: 1.2,
+                  isStopAnchor: false
+                },
+                {
+                  externalUid: "trip_home_grocery_p1",
+                  recordedAt: "2026-04-06T08:10:00.000Z",
+                  latitude: 46.5201,
+                  longitude: 6.6361,
+                  accuracyMeters: 8,
+                  altitudeMeters: null,
+                  speedMps: 1.8,
+                  isStopAnchor: false
+                },
+                {
+                  externalUid: "trip_home_grocery_p2",
+                  recordedAt: "2026-04-06T08:20:00.000Z",
+                  latitude: 46.5214,
+                  longitude: 6.6407,
+                  accuracyMeters: 8,
+                  altitudeMeters: null,
+                  speedMps: 1.4,
+                  isStopAnchor: true
+                }
+              ],
+              stops: [
+                {
+                  externalUid: "stop_wait_crossing",
+                  label: "Crossing",
+                  startedAt: "2026-04-06T08:08:00.000Z",
+                  endedAt: "2026-04-06T08:12:00.000Z",
+                  latitude: 46.5201,
+                  longitude: 6.6361,
+                  radiusMeters: 40,
+                  placeExternalUid: "",
+                  metadata: {}
+                }
+              ]
+            }
+          ]
+        }
+      }
+    });
+    assert.equal(thirdSyncResponse.statusCode, 200);
+
+    const canonicalTripResponse = await app.inject({
+      method: "GET",
+      url: `/api/v1/movement/trips/${tripDetail.trip.id}`
+    });
+    assert.equal(canonicalTripResponse.statusCode, 200);
+    const canonicalTrip = (
+      canonicalTripResponse.json() as {
+        movement: {
+          trip: {
+            points: Array<{
+              externalUid: string;
+              latitude: number;
+              isStopAnchor: boolean;
+            }>;
+          };
+        };
+      }
+    ).movement.trip;
+    assert.equal(canonicalTrip.points.length, 2);
+    assert.equal(
+      canonicalTrip.points.find((point) => point.externalUid === "trip_home_grocery_p1")?.latitude,
+      46.5204
+    );
+    assert.equal(
+      canonicalTrip.points.find((point) => point.externalUid === "trip_home_grocery_p1")?.isStopAnchor,
+      true
+    );
+    assert.equal(
+      canonicalTrip.points.some((point) => point.externalUid === "trip_home_grocery_p2"),
+      false
+    );
+
+    const bootstrapAfterPointMutations = await app.inject({
+      method: "POST",
+      url: "/api/v1/mobile/movement/bootstrap",
+      payload: {
+        sessionId: qrPayload.sessionId,
+        pairingToken: qrPayload.pairingToken
+      }
+    });
+    assert.equal(bootstrapAfterPointMutations.statusCode, 200);
+    const bootstrapTripOverrides = (
+      bootstrapAfterPointMutations.json() as {
+        movement: {
+          tripOverrides: Array<{
+            externalUid: string;
+            points: Array<{ externalUid: string }>;
+          }>;
+        };
+      }
+    ).movement.tripOverrides;
+    assert.ok(
+      bootstrapTripOverrides.some(
+        (trip) =>
+          trip.externalUid === "trip_home_grocery" &&
+          trip.points.some((point) => point.externalUid === "trip_home_grocery_p1")
+      )
+    );
 
     const allTimeResponse = await app.inject({
       method: "GET",

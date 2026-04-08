@@ -160,6 +160,7 @@ struct CompanionSyncPayload: Codable {
     }
 
     struct MovementTripPoint: Codable {
+        let externalUid: String
         let recordedAt: String
         let latitude: Double
         let longitude: Double
@@ -253,6 +254,7 @@ struct SyncReceipt: Decodable {
             let categoryTags: [String]
         }
 
+        let tripOverrides: [ForgeMovementTimelineTrip]
         let settings: Settings
         let places: [Place]
     }
@@ -374,6 +376,7 @@ struct ForgeMovementTimelineNote: Decodable, Hashable {
 
 struct ForgeMovementTimelineTripPoint: Decodable, Hashable, Identifiable {
     let id: String
+    let externalUid: String
     let recordedAt: String
     let latitude: Double
     let longitude: Double

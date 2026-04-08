@@ -32,9 +32,10 @@
     "test:e2e": "playwright test",
     "test:server": "node --import tsx --test --test-concurrency=1 server/src/*.test.ts",
   "build:openclaw-plugin": "npm --prefix openclaw-plugin run build",
-  "release:ios-companion:validate": "bash ./ios-companion/scripts/publish-forge-companion.sh validate",
-  "release:ios-companion:testflight": "bash ./ios-companion/scripts/publish-forge-companion.sh testflight",
-  "release:ios-companion:app-store": "bash ./ios-companion/scripts/publish-forge-companion.sh app-store",
+    "release:ios-companion:validate": "bash ./ios-companion/scripts/publish-forge-companion.sh validate",
+    "release:ios-companion:testflight": "bash ./ios-companion/scripts/publish-forge-companion.sh testflight",
+    "release:ios-companion:app-store": "bash ./ios-companion/scripts/publish-forge-companion.sh app-store",
+    "media:ios-companion:screenshots": "bash ./ios-companion/scripts/capture-forge-companion-media.sh",
   "check:openclaw-plugin": "npm exec -- vitest run src/openclaw/parity.test.ts src/openclaw/index.test.ts src/openclaw/api-client.test.ts src/openclaw/manifest.test.ts",
     "lint": "eslint .",
     "format": "prettier --write ."

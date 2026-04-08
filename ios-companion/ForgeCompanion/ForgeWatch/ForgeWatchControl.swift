@@ -2,6 +2,7 @@ import AppIntents
 import SwiftUI
 import WidgetKit
 
+@available(iOS 18.0, *)
 struct ForgeWatchControl: ControlWidget {
     static let kind: String = "ForgeWatchControl"
 

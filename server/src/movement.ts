@@ -177,6 +177,7 @@ const movementStayInputSchema = z.object({
 });
 
 const movementTripPointInputSchema = z.object({
+  externalUid: z.string().trim().default(""),
   recordedAt: z.string().datetime(),
   latitude: z.number().finite(),
   longitude: z.number().finite(),
@@ -298,6 +299,15 @@ export const movementTripPatchSchema = z.object({
   tags: z.array(z.string().trim()).optional(),
   metadata: z.record(z.string(), z.unknown()).optional()
 });
+export const movementTripPointPatchSchema = z.object({
+  recordedAt: z.string().datetime().optional(),
+  latitude: z.number().finite().optional(),
+  longitude: z.number().finite().optional(),
+  accuracyMeters: z.number().nonnegative().nullable().optional(),
+  altitudeMeters: z.number().nullable().optional(),
+  speedMps: z.number().nonnegative().nullable().optional(),
+  isStopAnchor: z.boolean().optional()
+});
 export const movementMobileBootstrapSchema = z.object({
   sessionId: z.string().trim().min(1),
   pairingToken: z.string().trim().min(1)
@@ -403,6 +413,7 @@ type MovementTripRow = {
 type MovementTripPointRow = {
   id: string;
   trip_id: string;
+  external_uid: string;
   sequence_index: number;
   recorded_at: string;
   latitude: number;
@@ -432,6 +443,25 @@ type MovementTripStopRow = {
   updated_at: string;
 };
 
+type MovementTripPointTombstoneRow = {
+  id: string;
+  user_id: string;
+  trip_external_uid: string;
+  point_external_uid: string;
+  created_at: string;
+  updated_at: string;
+};
+
+type MovementTripPointOverrideRow = {
+  id: string;
+  user_id: string;
+  trip_external_uid: string;
+  point_external_uid: string;
+  point_json: string;
+  created_at: string;
+  updated_at: string;
+};
+
 type MovementSettingsRow = {
   user_id: string;
   tracking_enabled: number;
@@ -457,6 +487,340 @@ type MovementTimelineCursor = {
 
 function nowIso() {
   return new Date().toISOString();
+}
+
+function normalizeTripPointExternalUid(
+  tripExternalUid: string,
+  point: z.infer<typeof movementTripPointInputSchema>,
+  index: number
+) {
+  const explicit = point.externalUid.trim();
+  if (explicit.length > 0) {
+    return explicit;
+  }
+  return `${tripExternalUid}::${point.recordedAt}::${index}`;
+}
+
+function deriveTripMetricsFromPoints(
+  points: z.infer<typeof movementTripPointInputSchema>[],
+  current: Pick<
+    MovementTripRow,
+    | "started_at"
+    | "ended_at"
+    | "distance_meters"
+    | "moving_seconds"
+    | "idle_seconds"
+    | "average_speed_mps"
+    | "max_speed_mps"
+  >
+) {
+  if (points.length === 0) {
+    return {
+      startedAt: current.started_at,
+      endedAt: current.ended_at,
+      distanceMeters: 0,
+      movingSeconds: 0,
+      idleSeconds: 0,
+      averageSpeedMps: null,
+      maxSpeedMps: null
+    };
+  }
+
+  const sorted = [...points].sort(
+    (left, right) =>
+      Date.parse(left.recordedAt) - Date.parse(right.recordedAt)
+  );
+  let distanceMeters = 0;
+  let movingSeconds = 0;
+  let maxSpeedMps = 0;
+  const speedSamples: number[] = [];
+
+  for (let index = 1; index < sorted.length; index += 1) {
+    const previous = sorted[index - 1]!;
+    const next = sorted[index]!;
+    const elapsedSeconds = Math.max(
+      0,
+      Math.round(
+        (Date.parse(next.recordedAt) - Date.parse(previous.recordedAt)) / 1000
+      )
+    );
+    const segmentDistance = haversineDistanceMeters(
+      { latitude: previous.latitude, longitude: previous.longitude },
+      { latitude: next.latitude, longitude: next.longitude }
+    );
+    const inferredSpeed =
+      elapsedSeconds > 0 ? segmentDistance / elapsedSeconds : 0;
+
+    distanceMeters += segmentDistance;
+    movingSeconds += elapsedSeconds;
+    maxSpeedMps = Math.max(
+      maxSpeedMps,
+      previous.speedMps ?? 0,
+      next.speedMps ?? 0,
+      inferredSpeed
+    );
+    speedSamples.push(
+      ...(previous.speedMps != null ? [previous.speedMps] : []),
+      ...(next.speedMps != null ? [next.speedMps] : []),
+      ...(inferredSpeed > 0 ? [inferredSpeed] : [])
+    );
+  }
+
+  const startedAt = sorted[0]!.recordedAt;
+  const endedAt = sorted[sorted.length - 1]!.recordedAt;
+  const durationSeconds = Math.max(
+    0,
+    Math.round((Date.parse(endedAt) - Date.parse(startedAt)) / 1000)
+  );
+
+  return {
+    startedAt,
+    endedAt,
+    distanceMeters: round(distanceMeters, 2),
+    movingSeconds,
+    idleSeconds: Math.max(0, durationSeconds - movingSeconds),
+    averageSpeedMps:
+      speedSamples.length > 0
+        ? round(
+            speedSamples.reduce((sum, value) => sum + value, 0) /
+              speedSamples.length,
+            3
+          )
+        : null,
+    maxSpeedMps: maxSpeedMps > 0 ? round(maxSpeedMps, 3) : null
+  };
+}
+
+function listMovementTripPointTombstones(
+  userId: string,
+  tripExternalUid: string
+) {
+  return getDatabase()
+    .prepare(
+      `SELECT *
+       FROM movement_trip_point_tombstones
+       WHERE user_id = ?
+         AND trip_external_uid = ?`
+    )
+    .all(userId, tripExternalUid) as MovementTripPointTombstoneRow[];
+}
+
+function listMovementTripPointOverrides(
+  userId: string,
+  tripExternalUid: string
+) {
+  return getDatabase()
+    .prepare(
+      `SELECT *
+       FROM movement_trip_point_overrides
+       WHERE user_id = ?
+         AND trip_external_uid = ?`
+    )
+    .all(userId, tripExternalUid) as MovementTripPointOverrideRow[];
+}
+
+function applyTripPointSyncDirectives(input: {
+  userId: string;
+  tripExternalUid: string;
+  points: z.infer<typeof movementTripPointInputSchema>[];
+}) {
+  const tombstonedExternalUids = new Set(
+    listMovementTripPointTombstones(input.userId, input.tripExternalUid).map(
+      (row) => row.point_external_uid
+    )
+  );
+  const overridesByExternalUid = new Map(
+    listMovementTripPointOverrides(input.userId, input.tripExternalUid).map(
+      (row) => {
+        const parsed = safeJsonParse<
+          Partial<z.infer<typeof movementTripPointInputSchema>>
+        >(row.point_json, {});
+        return [row.point_external_uid, parsed] as const;
+      }
+    )
+  );
+
+  return input.points
+    .map((point, index) => ({
+      ...point,
+      externalUid: normalizeTripPointExternalUid(
+        input.tripExternalUid,
+        point,
+        index
+      )
+    }))
+    .filter((point) => !tombstonedExternalUids.has(point.externalUid))
+    .map((point) => {
+      const override = overridesByExternalUid.get(point.externalUid);
+      if (!override) {
+        return point;
+      }
+      return movementTripPointInputSchema.parse({
+        ...point,
+        ...override,
+        externalUid: point.externalUid
+      });
+    });
+}
+
+function mapTripStopRowToInput(stop: MovementTripStopRow) {
+  const place = stop.place_id
+    ? (getDatabase()
+        .prepare(
+          `SELECT external_uid
+           FROM movement_places
+           WHERE id = ?`
+        )
+        .get(stop.place_id) as { external_uid: string } | undefined)
+    : undefined;
+  return {
+    externalUid: stop.external_uid,
+    label: stop.label,
+    startedAt: stop.started_at,
+    endedAt: stop.ended_at,
+    latitude: stop.latitude,
+    longitude: stop.longitude,
+    radiusMeters: stop.radius_meters,
+    placeExternalUid: place?.external_uid ?? "",
+    metadata: safeJsonParse<Record<string, unknown>>(stop.metadata_json, {})
+  };
+}
+
+function replaceTripPoints(
+  tripId: string,
+  tripExternalUid: string,
+  points: z.infer<typeof movementTripPointInputSchema>[]
+) {
+  getDatabase()
+    .prepare(`DELETE FROM movement_trip_points WHERE trip_id = ?`)
+    .run(tripId);
+
+  const pointInsert = getDatabase().prepare(
+    `INSERT INTO movement_trip_points (
+       id, trip_id, external_uid, sequence_index, recorded_at, latitude, longitude,
+       accuracy_meters, altitude_meters, speed_mps, is_stop_anchor, created_at
+     )
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  );
+  const now = nowIso();
+
+  points.forEach((point, index) => {
+    const externalUid = normalizeTripPointExternalUid(tripExternalUid, point, index);
+    pointInsert.run(
+      `mtp_${randomUUID().replaceAll("-", "").slice(0, 10)}`,
+      tripId,
+      externalUid,
+      index,
+      point.recordedAt,
+      point.latitude,
+      point.longitude,
+      point.accuracyMeters,
+      point.altitudeMeters,
+      point.speedMps,
+      point.isStopAnchor ? 1 : 0,
+      now
+    );
+  });
+}
+
+function refreshTripDerivedFields(tripId: string) {
+  const trip = getDatabase()
+    .prepare(
+      `SELECT *
+       FROM movement_trips
+       WHERE id = ?`
+    )
+    .get(tripId) as MovementTripRow | undefined;
+  if (!trip) {
+    return undefined;
+  }
+  const points = listTripPoints([tripId]).map((point) => ({
+    externalUid: point.external_uid,
+    recordedAt: point.recorded_at,
+    latitude: point.latitude,
+    longitude: point.longitude,
+    accuracyMeters: point.accuracy_meters,
+    altitudeMeters: point.altitude_meters,
+    speedMps: point.speed_mps,
+    isStopAnchor: point.is_stop_anchor === 1
+  }));
+  const metrics = deriveTripMetricsFromPoints(points, trip);
+  const stops = listTripStops([tripId]);
+  const startPlace =
+    resolvePlaceForCoordinates(
+      trip.user_id,
+      points[0]
+        ? {
+            latitude: points[0].latitude,
+            longitude: points[0].longitude
+          }
+        : stops[0]
+          ? {
+              latitude: stops[0].latitude,
+              longitude: stops[0].longitude
+            }
+          : {
+              latitude: 0,
+              longitude: 0
+            }
+    ) ?? resolvePlaceRowById(trip.user_id, trip.start_place_id);
+  const endPlace =
+    resolvePlaceForCoordinates(
+      trip.user_id,
+      points[points.length - 1]
+        ? {
+            latitude: points[points.length - 1]!.latitude,
+            longitude: points[points.length - 1]!.longitude
+          }
+        : stops[stops.length - 1]
+          ? {
+              latitude: stops[stops.length - 1]!.latitude,
+              longitude: stops[stops.length - 1]!.longitude
+            }
+          : {
+              latitude: 0,
+              longitude: 0
+            }
+    ) ?? resolvePlaceRowById(trip.user_id, trip.end_place_id);
+  const expectedMet = inferExpectedMet(trip.activity_type, metrics.averageSpeedMps);
+  getDatabase()
+    .prepare(
+      `UPDATE movement_trips
+       SET start_place_id = ?,
+           end_place_id = ?,
+           started_at = ?,
+           ended_at = ?,
+           distance_meters = ?,
+           moving_seconds = ?,
+           idle_seconds = ?,
+           average_speed_mps = ?,
+           max_speed_mps = ?,
+           expected_met = ?,
+           updated_at = ?
+       WHERE id = ?`
+    )
+    .run(
+      startPlace?.id ?? null,
+      endPlace?.id ?? null,
+      metrics.startedAt,
+      metrics.endedAt,
+      metrics.distanceMeters,
+      metrics.movingSeconds,
+      metrics.idleSeconds,
+      metrics.averageSpeedMps,
+      metrics.maxSpeedMps,
+      expectedMet,
+      nowIso(),
+      tripId
+    );
+  reconcileMovementOverlapValidation(trip.user_id);
+  return getDatabase()
+    .prepare(
+      `SELECT *
+       FROM movement_trips
+       WHERE id = ?`
+    )
+    .get(tripId) as MovementTripRow;
 }
 
 function safeJsonParse<T>(value: string | null | undefined, fallback: T): T {
@@ -752,6 +1116,7 @@ function mapMovementTrip(
     endPlace: row.end_place_id ? placesById.get(row.end_place_id) ?? null : null,
     points: points.map((point) => ({
       id: point.id,
+      externalUid: point.external_uid,
       recordedAt: point.recorded_at,
       latitude: point.latitude,
       longitude: point.longitude,
@@ -1543,24 +1908,15 @@ function upsertMovementPlaceInternal(input: {
 
 function replaceTripChildren(
   tripId: string,
+  tripExternalUid: string,
   points: z.infer<typeof movementTripPointInputSchema>[],
   stops: z.infer<typeof movementTripStopInputSchema>[],
   userId: string
 ) {
-  getDatabase()
-    .prepare(`DELETE FROM movement_trip_points WHERE trip_id = ?`)
-    .run(tripId);
+  replaceTripPoints(tripId, tripExternalUid, points);
   getDatabase()
     .prepare(`DELETE FROM movement_trip_stops WHERE trip_id = ?`)
     .run(tripId);
-
-  const pointInsert = getDatabase().prepare(
-    `INSERT INTO movement_trip_points (
-       id, trip_id, sequence_index, recorded_at, latitude, longitude,
-       accuracy_meters, altitude_meters, speed_mps, is_stop_anchor, created_at
-     )
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-  );
   const stopInsert = getDatabase().prepare(
     `INSERT INTO movement_trip_stops (
        id, external_uid, trip_id, sequence_index, label, place_id,
@@ -1570,22 +1926,6 @@ function replaceTripChildren(
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   );
   const now = nowIso();
-
-  points.forEach((point, index) => {
-    pointInsert.run(
-      `mtp_${randomUUID().replaceAll("-", "").slice(0, 10)}`,
-      tripId,
-      index,
-      point.recordedAt,
-      point.latitude,
-      point.longitude,
-      point.accuracyMeters,
-      point.altitudeMeters,
-      point.speedMps,
-      point.isStopAnchor ? 1 : 0,
-      now
-    );
-  });
 
   stops.forEach((stop, index) => {
     const matchedPlace = resolvePlaceForCoordinates(
@@ -1752,8 +2092,13 @@ function upsertMovementTrip(
     )
     .get(pairing.user_id, parsed.externalUid) as MovementTripRow | undefined;
   const now = nowIso();
-  const firstPoint = parsed.points[0] ?? null;
-  const lastPoint = parsed.points[parsed.points.length - 1] ?? null;
+  const canonicalPoints = applyTripPointSyncDirectives({
+    userId: pairing.user_id,
+    tripExternalUid: parsed.externalUid,
+    points: parsed.points
+  });
+  const firstPoint = canonicalPoints[0] ?? null;
+  const lastPoint = canonicalPoints[canonicalPoints.length - 1] ?? null;
   const startPlace =
     resolvePlaceForCoordinates(
       pairing.user_id,
@@ -1792,8 +2137,21 @@ function upsertMovementTrip(
             },
       parsed.endPlaceExternalUid
     ) ?? undefined;
+  const derivedMetrics = deriveTripMetricsFromPoints(canonicalPoints, {
+    started_at: parsed.startedAt,
+    ended_at: parsed.endedAt,
+    distance_meters: parsed.distanceMeters,
+    moving_seconds: parsed.movingSeconds,
+    idle_seconds: parsed.idleSeconds,
+    average_speed_mps: parsed.averageSpeedMps,
+    max_speed_mps: parsed.maxSpeedMps
+  });
   const effectiveExpectedMet =
-    parsed.expectedMet ?? inferExpectedMet(parsed.activityType, parsed.averageSpeedMps);
+    parsed.expectedMet ??
+    inferExpectedMet(
+      parsed.activityType,
+      derivedMetrics.averageSpeedMps ?? parsed.averageSpeedMps
+    );
   const id = existing?.id ?? `mtr_${randomUUID().replaceAll("-", "").slice(0, 10)}`;
   getDatabase()
     .prepare(
@@ -1841,13 +2199,13 @@ function upsertMovementTrip(
       parsed.status,
       parsed.travelMode,
       parsed.activityType,
-      parsed.startedAt,
-      parsed.endedAt,
-      parsed.distanceMeters,
-      parsed.movingSeconds,
-      parsed.idleSeconds,
-      parsed.averageSpeedMps,
-      parsed.maxSpeedMps,
+      derivedMetrics.startedAt,
+      derivedMetrics.endedAt,
+      derivedMetrics.distanceMeters,
+      derivedMetrics.movingSeconds,
+      derivedMetrics.idleSeconds,
+      derivedMetrics.averageSpeedMps,
+      derivedMetrics.maxSpeedMps,
       parsed.caloriesKcal,
       effectiveExpectedMet,
       JSON.stringify({}),
@@ -1863,7 +2221,13 @@ function upsertMovementTrip(
   const fresh = getDatabase()
     .prepare(`SELECT * FROM movement_trips WHERE user_id = ? AND external_uid = ?`)
     .get(pairing.user_id, parsed.externalUid) as MovementTripRow;
-  replaceTripChildren(fresh.id, parsed.points, parsed.stops, pairing.user_id);
+  replaceTripChildren(
+    fresh.id,
+    parsed.externalUid,
+    canonicalPoints,
+    parsed.stops,
+    pairing.user_id
+  );
   reconcileMovementOverlapValidation(pairing.user_id);
   const refreshed = getDatabase()
     .prepare(`SELECT * FROM movement_trips WHERE id = ?`)
@@ -2590,6 +2954,263 @@ export function updateMovementTrip(
   return updated;
 }
 
+export function updateMovementTripPoint(
+  tripId: string,
+  pointId: string,
+  patch: z.input<typeof movementTripPointPatchSchema>,
+  context: ActivityContext,
+  options: { userId?: string } = {}
+) {
+  const trip = getDatabase()
+    .prepare(
+      `SELECT *
+       FROM movement_trips
+       WHERE id = ?`
+    )
+    .get(tripId) as MovementTripRow | undefined;
+  if (!trip) {
+    return undefined;
+  }
+  if (options.userId && trip.user_id !== options.userId) {
+    return undefined;
+  }
+  const point = getDatabase()
+    .prepare(
+      `SELECT *
+       FROM movement_trip_points
+       WHERE id = ?
+         AND trip_id = ?`
+    )
+    .get(pointId, tripId) as MovementTripPointRow | undefined;
+  if (!point) {
+    return undefined;
+  }
+  const parsed = movementTripPointPatchSchema.parse(patch);
+  const nextPoint = movementTripPointInputSchema.parse({
+    externalUid: point.external_uid,
+    recordedAt: parsed.recordedAt ?? point.recorded_at,
+    latitude: parsed.latitude ?? point.latitude,
+    longitude: parsed.longitude ?? point.longitude,
+    accuracyMeters:
+      parsed.accuracyMeters === undefined
+        ? point.accuracy_meters
+        : parsed.accuracyMeters,
+    altitudeMeters:
+      parsed.altitudeMeters === undefined
+        ? point.altitude_meters
+        : parsed.altitudeMeters,
+    speedMps:
+      parsed.speedMps === undefined ? point.speed_mps : parsed.speedMps,
+    isStopAnchor:
+      parsed.isStopAnchor === undefined
+        ? point.is_stop_anchor === 1
+        : parsed.isStopAnchor
+  });
+  const now = nowIso();
+  getDatabase()
+    .prepare(
+      `INSERT INTO movement_trip_point_overrides (
+         id, user_id, trip_external_uid, point_external_uid, point_json, created_at, updated_at
+       )
+       VALUES (?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(user_id, trip_external_uid, point_external_uid) DO UPDATE SET
+         point_json = excluded.point_json,
+         updated_at = excluded.updated_at`
+    )
+    .run(
+      `mtpo_${randomUUID().replaceAll("-", "").slice(0, 10)}`,
+      trip.user_id,
+      trip.external_uid,
+      point.external_uid,
+      JSON.stringify(nextPoint),
+      now,
+      now
+    );
+  getDatabase()
+    .prepare(
+      `DELETE FROM movement_trip_point_tombstones
+       WHERE user_id = ?
+         AND trip_external_uid = ?
+         AND point_external_uid = ?`
+    )
+    .run(trip.user_id, trip.external_uid, point.external_uid);
+
+  const currentPoints = listTripPoints([tripId]).map((row) => ({
+    externalUid: row.external_uid,
+    recordedAt: row.recorded_at,
+    latitude: row.latitude,
+    longitude: row.longitude,
+    accuracyMeters: row.accuracy_meters,
+    altitudeMeters: row.altitude_meters,
+    speedMps: row.speed_mps,
+    isStopAnchor: row.is_stop_anchor === 1
+  }));
+  const nextPoints = currentPoints
+    .map((current) =>
+      current.externalUid === point.external_uid ? nextPoint : current
+    )
+    .sort(
+      (left, right) =>
+        Date.parse(left.recordedAt) - Date.parse(right.recordedAt) ||
+        left.externalUid.localeCompare(right.externalUid)
+    );
+  replaceTripPoints(tripId, trip.external_uid, nextPoints);
+  const refreshedTrip = refreshTripDerivedFields(tripId);
+  if (!refreshedTrip) {
+    return undefined;
+  }
+  const refreshedPoints = listTripPoints([tripId]);
+  const updatedPoint = refreshedPoints.find(
+    (row) => row.external_uid === point.external_uid
+  );
+  if (!updatedPoint) {
+    return undefined;
+  }
+  const places = listMovementPlaceRows([trip.user_id]).map(mapMovementPlace);
+  const placesById = new Map(places.map((place) => [place.id, place] as const));
+  const mappedTrip = mapMovementTrip(
+    refreshedTrip,
+    placesById,
+    refreshedPoints,
+    listTripStops([tripId])
+  );
+  recordActivityEvent({
+    entityType: "system",
+    entityId: tripId,
+    eventType: "movement_trip_point_updated",
+    title: "Movement datapoint updated",
+    description: `Updated a raw movement datapoint inside ${refreshedTrip.label || "the selected trip"}.`,
+    actor: context.actor ?? null,
+    source: context.source,
+    metadata: {
+      tripId,
+      pointId: updatedPoint.id,
+      pointExternalUid: updatedPoint.external_uid
+    }
+  });
+  return {
+    point: {
+      id: updatedPoint.id,
+      externalUid: updatedPoint.external_uid,
+      recordedAt: updatedPoint.recorded_at,
+      latitude: updatedPoint.latitude,
+      longitude: updatedPoint.longitude,
+      accuracyMeters: updatedPoint.accuracy_meters,
+      altitudeMeters: updatedPoint.altitude_meters,
+      speedMps: updatedPoint.speed_mps,
+      isStopAnchor: updatedPoint.is_stop_anchor === 1
+    },
+    trip: mappedTrip
+  };
+}
+
+export function deleteMovementTripPoint(
+  tripId: string,
+  pointId: string,
+  context: ActivityContext,
+  options: { userId?: string } = {}
+) {
+  const trip = getDatabase()
+    .prepare(
+      `SELECT *
+       FROM movement_trips
+       WHERE id = ?`
+    )
+    .get(tripId) as MovementTripRow | undefined;
+  if (!trip) {
+    return undefined;
+  }
+  if (options.userId && trip.user_id !== options.userId) {
+    return undefined;
+  }
+  const point = getDatabase()
+    .prepare(
+      `SELECT *
+       FROM movement_trip_points
+       WHERE id = ?
+         AND trip_id = ?`
+    )
+    .get(pointId, tripId) as MovementTripPointRow | undefined;
+  if (!point) {
+    return undefined;
+  }
+  const now = nowIso();
+  getDatabase()
+    .prepare(
+      `INSERT INTO movement_trip_point_tombstones (
+         id, user_id, trip_external_uid, point_external_uid, created_at, updated_at
+       )
+       VALUES (?, ?, ?, ?, ?, ?)
+       ON CONFLICT(user_id, trip_external_uid, point_external_uid) DO UPDATE SET
+         updated_at = excluded.updated_at`
+    )
+    .run(
+      `mtpt_${randomUUID().replaceAll("-", "").slice(0, 10)}`,
+      trip.user_id,
+      trip.external_uid,
+      point.external_uid,
+      now,
+      now
+    );
+  getDatabase()
+    .prepare(
+      `DELETE FROM movement_trip_point_overrides
+       WHERE user_id = ?
+         AND trip_external_uid = ?
+         AND point_external_uid = ?`
+    )
+    .run(trip.user_id, trip.external_uid, point.external_uid);
+
+  const remainingPoints = listTripPoints([tripId])
+    .filter((row) => row.id !== pointId)
+    .map((row) => ({
+      externalUid: row.external_uid,
+      recordedAt: row.recorded_at,
+      latitude: row.latitude,
+      longitude: row.longitude,
+      accuracyMeters: row.accuracy_meters,
+      altitudeMeters: row.altitude_meters,
+      speedMps: row.speed_mps,
+      isStopAnchor: row.is_stop_anchor === 1
+    }))
+    .sort(
+      (left, right) =>
+        Date.parse(left.recordedAt) - Date.parse(right.recordedAt) ||
+        left.externalUid.localeCompare(right.externalUid)
+    );
+  replaceTripPoints(tripId, trip.external_uid, remainingPoints);
+  const refreshedTrip = refreshTripDerivedFields(tripId);
+  if (!refreshedTrip) {
+    return undefined;
+  }
+  const places = listMovementPlaceRows([trip.user_id]).map(mapMovementPlace);
+  const placesById = new Map(places.map((place) => [place.id, place] as const));
+  const mappedTrip = mapMovementTrip(
+    refreshedTrip,
+    placesById,
+    listTripPoints([tripId]),
+    listTripStops([tripId])
+  );
+  recordActivityEvent({
+    entityType: "system",
+    entityId: tripId,
+    eventType: "movement_trip_point_deleted",
+    title: "Movement datapoint deleted",
+    description: `Deleted a raw movement datapoint from ${refreshedTrip.label || "the selected trip"}.`,
+    actor: context.actor ?? null,
+    source: context.source,
+    metadata: {
+      tripId,
+      pointExternalUid: point.external_uid
+    }
+  });
+  return {
+    deletedPointId: pointId,
+    deletedPointExternalUid: point.external_uid,
+    trip: mappedTrip
+  };
+}
+
 export function getMovementSettings(userIds?: string[]) {
   const effectiveUserId = userIds?.[0] ?? getDefaultUser().id;
   const row = ensureMovementSettings(effectiveUserId);
@@ -3086,8 +3707,58 @@ export function getMovementSelectionAggregate(
 }
 
 export function getMovementMobileBootstrap(pairing: PairingSessionLike) {
+  const canonicalTripExternalUids = new Set<string>();
+  (
+    getDatabase()
+      .prepare(
+        `SELECT DISTINCT trip_external_uid
+         FROM movement_trip_point_tombstones
+         WHERE user_id = ?
+         UNION
+         SELECT DISTINCT trip_external_uid
+         FROM movement_trip_point_overrides
+         WHERE user_id = ?`
+      )
+      .all(pairing.user_id, pairing.user_id) as Array<{ trip_external_uid: string }>
+  ).forEach((row) => {
+    if (row.trip_external_uid.trim().length > 0) {
+      canonicalTripExternalUids.add(row.trip_external_uid);
+    }
+  });
+  const tripRows =
+    canonicalTripExternalUids.size > 0
+      ? (getDatabase()
+          .prepare(
+            `SELECT *
+             FROM movement_trips
+             WHERE user_id = ?
+               AND external_uid IN (${[...canonicalTripExternalUids]
+                 .map(() => "?")
+                 .join(",")})`
+          )
+          .all(pairing.user_id, ...canonicalTripExternalUids) as MovementTripRow[])
+      : [];
+  const placeRows = listMovementPlaceRows([pairing.user_id]);
+  const places = placeRows.map(mapMovementPlace);
+  const placesById = new Map(places.map((place) => [place.id, place] as const));
+  const pointsByTrip = new Map<string, MovementTripPointRow[]>();
+  listTripPoints(tripRows.map((row) => row.id)).forEach((point) => {
+    pointsByTrip.set(point.trip_id, [...(pointsByTrip.get(point.trip_id) ?? []), point]);
+  });
+  const stopsByTrip = new Map<string, MovementTripStopRow[]>();
+  listTripStops(tripRows.map((row) => row.id)).forEach((stop) => {
+    stopsByTrip.set(stop.trip_id, [...(stopsByTrip.get(stop.trip_id) ?? []), stop]);
+  });
   return {
     settings: getMovementSettings([pairing.user_id]),
-    places: listMovementPlaces([pairing.user_id])
+    places,
+    tripOverrides: tripRows.map((trip) =>
+      mapMovementTrip(
+        trip,
+        placesById,
+        pointsByTrip.get(trip.id) ?? [],
+        stopsByTrip.get(trip.id) ?? []
+      )
+    )
   };
 }

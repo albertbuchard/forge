@@ -1182,6 +1182,7 @@ export interface MovementStayRecord {
 
 export interface MovementTripPointRecord {
   id: string;
+  externalUid: string;
   recordedAt: string;
   latitude: number;
   longitude: number;

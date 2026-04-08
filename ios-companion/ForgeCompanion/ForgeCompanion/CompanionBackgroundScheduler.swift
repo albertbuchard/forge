@@ -37,7 +37,7 @@ final class CompanionBackgroundScheduler {
         return
 #else
         let request = BGAppRefreshTaskRequest(identifier: taskIdentifier)
-        request.earliestBeginDate = Date(timeIntervalSinceNow: 60 * 30)
+        request.earliestBeginDate = Date(timeIntervalSinceNow: 60 * 15)
         try? BGTaskScheduler.shared.submit(request)
 #endif
     }

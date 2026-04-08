@@ -12,6 +12,8 @@ import SwiftUI
 struct ForgeWatchBundle: WidgetBundle {
     var body: some Widget {
         ForgeWatch()
-        ForgeWatchControl()
+        if #available(iOS 18.0, *) {
+            ForgeWatchControl()
+        }
     }
 }

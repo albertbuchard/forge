@@ -527,11 +527,14 @@ import {
   movementStayPatchSchema,
   movementSettingsPatchSchema,
   movementTimelineQuerySchema,
+  movementTripPointPatchSchema,
   movementTripPatchSchema,
+  deleteMovementTripPoint,
   updateMovementPlace,
   updateMovementStay,
   updateMovementSettings,
-  updateMovementTrip
+  updateMovementTrip,
+  updateMovementTripPoint
 } from "./movement.js";
 import {
   assertWatchReady,
@@ -5126,6 +5129,39 @@ export async function buildServer(
       return { error: "Movement trip not found" };
     }
     return { trip };
+  });
+  app.patch("/api/v1/movement/trips/:id/points/:pointId", async (request, reply) => {
+    const auth = requireScopedAccess(
+      request.headers as Record<string, unknown>,
+      ["write"],
+      { route: "/api/v1/movement/trips/:id/points/:pointId" }
+    );
+    const { id, pointId } = request.params as { id: string; pointId: string };
+    const result = updateMovementTripPoint(
+      id,
+      pointId,
+      movementTripPointPatchSchema.parse(request.body ?? {}),
+      toActivityContext(auth)
+    );
+    if (!result) {
+      reply.code(404);
+      return { error: "Movement datapoint not found" };
+    }
+    return result;
+  });
+  app.delete("/api/v1/movement/trips/:id/points/:pointId", async (request, reply) => {
+    const auth = requireScopedAccess(
+      request.headers as Record<string, unknown>,
+      ["write"],
+      { route: "/api/v1/movement/trips/:id/points/:pointId" }
+    );
+    const { id, pointId } = request.params as { id: string; pointId: string };
+    const result = deleteMovementTripPoint(id, pointId, toActivityContext(auth));
+    if (!result) {
+      reply.code(404);
+      return { error: "Movement datapoint not found" };
+    }
+    return result;
   });
   app.get("/api/v1/movement/trips/:id", async (request, reply) => {
     const { id } = request.params as { id: string };

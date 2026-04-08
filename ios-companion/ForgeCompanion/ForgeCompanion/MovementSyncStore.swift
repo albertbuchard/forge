@@ -12,6 +12,7 @@ final class MovementSyncStore: NSObject, ObservableObject, CLLocationManagerDele
         static let tripMinimumSeconds: TimeInterval = 5 * 60
         static let tripMinimumDisplacementMeters: Double = 100
         static let stopMinimumSeconds: TimeInterval = 3 * 60
+        static let stayContinuityGapSeconds: TimeInterval = 6 * 60 * 60
     }
 
     struct StoredKnownPlace: Codable, Identifiable, Hashable {
@@ -47,6 +48,7 @@ final class MovementSyncStore: NSObject, ObservableObject, CLLocationManagerDele
 
     struct StoredTripPoint: Codable, Identifiable {
         let id: String
+        var externalUid: String
         var recordedAt: Date
         var latitude: Double
         var longitude: Double
@@ -54,6 +56,56 @@ final class MovementSyncStore: NSObject, ObservableObject, CLLocationManagerDele
         var altitudeMeters: Double?
         var speedMps: Double?
         var isStopAnchor: Bool
+
+        init(
+            id: String,
+            externalUid: String,
+            recordedAt: Date,
+            latitude: Double,
+            longitude: Double,
+            accuracyMeters: Double?,
+            altitudeMeters: Double?,
+            speedMps: Double?,
+            isStopAnchor: Bool
+        ) {
+            self.id = id
+            self.externalUid = externalUid
+            self.recordedAt = recordedAt
+            self.latitude = latitude
+            self.longitude = longitude
+            self.accuracyMeters = accuracyMeters
+            self.altitudeMeters = altitudeMeters
+            self.speedMps = speedMps
+            self.isStopAnchor = isStopAnchor
+        }
+
+        private enum CodingKeys: String, CodingKey {
+            case id
+            case externalUid
+            case recordedAt
+            case latitude
+            case longitude
+            case accuracyMeters
+            case altitudeMeters
+            case speedMps
+            case isStopAnchor
+        }
+
+        init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            let id = try container.decode(String.self, forKey: .id)
+            self.id = id
+            self.externalUid =
+                try container.decodeIfPresent(String.self, forKey: .externalUid)
+                ?? id
+            self.recordedAt = try container.decode(Date.self, forKey: .recordedAt)
+            self.latitude = try container.decode(Double.self, forKey: .latitude)
+            self.longitude = try container.decode(Double.self, forKey: .longitude)
+            self.accuracyMeters = try container.decodeIfPresent(Double.self, forKey: .accuracyMeters)
+            self.altitudeMeters = try container.decodeIfPresent(Double.self, forKey: .altitudeMeters)
+            self.speedMps = try container.decodeIfPresent(Double.self, forKey: .speedMps)
+            self.isStopAnchor = try container.decode(Bool.self, forKey: .isStopAnchor)
+        }
     }
 
     struct StoredTripStop: Codable, Identifiable {
@@ -133,18 +185,48 @@ final class MovementSyncStore: NSObject, ObservableObject, CLLocationManagerDele
     private var lastStopWindowStartedAt: Date?
     private var shouldEscalateToAlwaysAuthorization = false
     private var suspendedStayIdBeforeTrip: String?
+    private let testingMode: Bool
 
     override init() {
+        self.testingMode = false
         super.init()
         locationManager.delegate = self
         locationManager.desiredAccuracy = kCLLocationAccuracyNearestTenMeters
-        locationManager.distanceFilter = 8
+        locationManager.distanceFilter = 3
         locationManager.pausesLocationUpdatesAutomatically = false
         loadState()
         refreshPermissionState()
         startMotionUpdatesIfAvailable()
         applyTrackingState()
     }
+
+    #if DEBUG
+    init(testingState: PersistedState? = nil) {
+        self.testingMode = true
+        super.init()
+        if let testingState {
+            trackingEnabled = testingState.trackingEnabled
+            publishMode = testingState.publishMode
+            retentionMode = testingState.retentionMode
+            knownPlaces = testingState.knownPlaces
+            storedStays = testingState.stays
+            storedTrips = testingState.trips
+            currentStayId = storedStays.first(where: { $0.status == "active" })?.id
+            currentTripId = storedTrips.first(where: { $0.status == "active" })?.id
+            repairStoredTimelineState(referenceDate: Date())
+        } else {
+            trackingEnabled = false
+            publishMode = "auto_publish"
+            retentionMode = "aggregates_only"
+            knownPlaces = []
+            storedStays = []
+            storedTrips = []
+        }
+        locationPermissionStatus = "always"
+        motionPermissionStatus = "ready"
+        backgroundTrackingReady = true
+    }
+    #endif
 
     func setTrackingEnabled(_ enabled: Bool) {
         trackingEnabled = enabled
@@ -242,10 +324,14 @@ final class MovementSyncStore: NSObject, ObservableObject, CLLocationManagerDele
         } + knownPlaces.filter { localPlace in
             !remotePlaces.contains(where: { $0.externalUid == localPlace.externalUid })
         }
+        bootstrap.tripOverrides.forEach { trip in
+            reconcileCanonicalTrip(trip)
+        }
         persistState()
     }
 
     func buildMovementPayload() -> CompanionSyncPayload.MovementPayload {
+        refreshDerivedTimelineState(referenceDate: Date())
         pruneLongTermRawPointsIfNeeded()
         let syncableTrips = storedTrips.filter { trip in
             trip.status == "active" ? tripQualifies(trip) : true
@@ -317,6 +403,7 @@ final class MovementSyncStore: NSObject, ObservableObject, CLLocationManagerDele
                     metadata: trip.metadata,
                     points: trip.points.map { point in
                         .init(
+                            externalUid: point.externalUid,
                             recordedAt: isoString(point.recordedAt),
                             latitude: point.latitude,
                             longitude: point.longitude,
@@ -367,6 +454,18 @@ final class MovementSyncStore: NSObject, ObservableObject, CLLocationManagerDele
         return storedTrips.first(where: { $0.id == currentTripId })
     }
 
+    func refreshDerivedTimelineState(referenceDate: Date = Date()) {
+        repairStoredTimelineState(referenceDate: referenceDate)
+        if currentTripId != nil {
+            latestLocationSummary = "Current state: moving"
+        } else if currentStayId != nil {
+            latestLocationSummary = "Current state: staying"
+        } else {
+            latestLocationSummary = "Current state: unknown"
+        }
+        persistState()
+    }
+
     func reconcileCanonicalStay(_ stay: ForgeMovementTimelineStay) {
         guard let index = storedStays.firstIndex(where: { $0.id == stay.externalUid }) else {
             return
@@ -388,26 +487,82 @@ final class MovementSyncStore: NSObject, ObservableObject, CLLocationManagerDele
     }
 
     func reconcileCanonicalTrip(_ trip: ForgeMovementTimelineTrip) {
-        guard let index = storedTrips.firstIndex(where: { $0.id == trip.externalUid }) else {
-            return
+        let fallbackStart = isoFormatter.date(from: trip.startedAt) ?? Date()
+        let fallbackEnd = isoFormatter.date(from: trip.endedAt) ?? fallbackStart
+        let canonicalPoints = trip.points.map { point in
+            StoredTripPoint(
+                id: point.id,
+                externalUid: point.externalUid,
+                recordedAt: isoFormatter.date(from: point.recordedAt) ?? fallbackStart,
+                latitude: point.latitude,
+                longitude: point.longitude,
+                accuracyMeters: point.accuracyMeters,
+                altitudeMeters: point.altitudeMeters,
+                speedMps: point.speedMps,
+                isStopAnchor: point.isStopAnchor
+            )
         }
-        storedTrips[index].label = trip.label
-        storedTrips[index].status = trip.status
-        storedTrips[index].travelMode = trip.travelMode
-        storedTrips[index].activityType = trip.activityType
-        storedTrips[index].startedAt = isoFormatter.date(from: trip.startedAt) ?? storedTrips[index].startedAt
-        storedTrips[index].endedAt = isoFormatter.date(from: trip.endedAt) ?? storedTrips[index].endedAt
-        storedTrips[index].startPlaceExternalUid = trip.startPlace?.externalUid ?? storedTrips[index].startPlaceExternalUid
-        storedTrips[index].endPlaceExternalUid = trip.endPlace?.externalUid ?? storedTrips[index].endPlaceExternalUid
-        storedTrips[index].distanceMeters = trip.distanceMeters
-        storedTrips[index].movingSeconds = trip.movingSeconds
-        storedTrips[index].idleSeconds = trip.idleSeconds
-        storedTrips[index].averageSpeedMps = trip.averageSpeedMps
-        storedTrips[index].maxSpeedMps = trip.maxSpeedMps
-        storedTrips[index].caloriesKcal = trip.caloriesKcal
-        storedTrips[index].expectedMet = trip.expectedMet
-        storedTrips[index].tags = trip.tags
-        storedTrips[index].metadata = trip.metadata.values
+        let canonicalStops = trip.stops.map { stop in
+            StoredTripStop(
+                id: stop.id,
+                externalUid: stop.externalUid,
+                label: stop.label,
+                startedAt: isoFormatter.date(from: stop.startedAt) ?? fallbackStart,
+                endedAt: isoFormatter.date(from: stop.endedAt) ?? fallbackEnd,
+                latitude: stop.latitude,
+                longitude: stop.longitude,
+                radiusMeters: stop.radiusMeters,
+                placeExternalUid: stop.place?.externalUid ?? "",
+                metadata: stop.metadata.values
+            )
+        }
+        if let index = storedTrips.firstIndex(where: { $0.id == trip.externalUid }) {
+            storedTrips[index].label = trip.label
+            storedTrips[index].status = trip.status
+            storedTrips[index].travelMode = trip.travelMode
+            storedTrips[index].activityType = trip.activityType
+            storedTrips[index].startedAt = fallbackStart
+            storedTrips[index].endedAt = fallbackEnd
+            storedTrips[index].startPlaceExternalUid = trip.startPlace?.externalUid ?? storedTrips[index].startPlaceExternalUid
+            storedTrips[index].endPlaceExternalUid = trip.endPlace?.externalUid ?? storedTrips[index].endPlaceExternalUid
+            storedTrips[index].distanceMeters = trip.distanceMeters
+            storedTrips[index].movingSeconds = trip.movingSeconds
+            storedTrips[index].idleSeconds = trip.idleSeconds
+            storedTrips[index].averageSpeedMps = trip.averageSpeedMps
+            storedTrips[index].maxSpeedMps = trip.maxSpeedMps
+            storedTrips[index].caloriesKcal = trip.caloriesKcal
+            storedTrips[index].expectedMet = trip.expectedMet
+            storedTrips[index].tags = trip.tags
+            storedTrips[index].metadata = trip.metadata.values
+            storedTrips[index].points = canonicalPoints
+            storedTrips[index].stops = canonicalStops
+        } else {
+            storedTrips.insert(
+                StoredTrip(
+                    id: trip.externalUid,
+                    label: trip.label,
+                    status: trip.status,
+                    travelMode: trip.travelMode,
+                    activityType: trip.activityType,
+                    startedAt: fallbackStart,
+                    endedAt: fallbackEnd,
+                    startPlaceExternalUid: trip.startPlace?.externalUid ?? "",
+                    endPlaceExternalUid: trip.endPlace?.externalUid ?? "",
+                    distanceMeters: trip.distanceMeters,
+                    movingSeconds: trip.movingSeconds,
+                    idleSeconds: trip.idleSeconds,
+                    averageSpeedMps: trip.averageSpeedMps,
+                    maxSpeedMps: trip.maxSpeedMps,
+                    caloriesKcal: trip.caloriesKcal,
+                    expectedMet: trip.expectedMet,
+                    tags: trip.tags,
+                    metadata: trip.metadata.values,
+                    points: canonicalPoints,
+                    stops: canonicalStops
+                ),
+                at: 0
+            )
+        }
         persistState()
     }
 
@@ -467,8 +622,9 @@ final class MovementSyncStore: NSObject, ObservableObject, CLLocationManagerDele
 
     private func process(_ location: CLLocation) {
         guard trackingEnabled else { return }
+        repairStoredTimelineState(referenceDate: location.timestamp)
         let travelMode = shouldUseTravelMode(for: location)
-        let minimumInterval: TimeInterval = travelMode ? 1 : 30
+        let minimumInterval: TimeInterval = travelMode ? 1 : 15
         if
             let lastAcceptedLocationAt,
             location.timestamp.timeIntervalSince(lastAcceptedLocationAt) < minimumInterval
@@ -478,16 +634,15 @@ final class MovementSyncStore: NSObject, ObservableObject, CLLocationManagerDele
         lastAcceptedLocationAt = location.timestamp
         recentLocations.append(location)
         recentLocations = Array(recentLocations.suffix(10))
-        latestLocationSummary = travelMode
-            ? "Travelling near \(location.coordinate.latitude.formatted(.number.precision(.fractionLength(4)))), \(location.coordinate.longitude.formatted(.number.precision(.fractionLength(4))))"
-            : "Settled near \(location.coordinate.latitude.formatted(.number.precision(.fractionLength(4)))), \(location.coordinate.longitude.formatted(.number.precision(.fractionLength(4))))"
+        latestLocationSummary = travelMode ? "Current state: moving" : "Current state: staying"
 
         if travelMode {
             stationaryCandidateStartedAt = nil
             enterTravelMode(with: location)
         } else {
-            if stationaryCandidateStartedAt == nil {
-                stationaryCandidateStartedAt = location.timestamp
+            let stationaryReferenceDate = earliestStationaryReferenceDate(around: location) ?? location.timestamp
+            if stationaryCandidateStartedAt == nil || stationaryReferenceDate < stationaryCandidateStartedAt! {
+                stationaryCandidateStartedAt = stationaryReferenceDate
             }
             if let stationaryCandidateStartedAt,
                location.timestamp.timeIntervalSince(stationaryCandidateStartedAt) >= DetectionThresholds.stayConfirmationSeconds
@@ -501,6 +656,7 @@ final class MovementSyncStore: NSObject, ObservableObject, CLLocationManagerDele
                 enterStationaryMode(with: location)
             }
         }
+        repairStoredTimelineState(referenceDate: location.timestamp)
         persistState()
     }
 
@@ -652,10 +808,12 @@ final class MovementSyncStore: NSObject, ObservableObject, CLLocationManagerDele
         trip.endedAt = location.timestamp
         trip.points.append(point(from: location, isStopAnchor: true))
         if tripQualifies(trip) == false {
+            trip.status = "invalid"
+            trip.tags = Array(Set(trip.tags + ["invalid"]))
             storedTrips.remove(at: index)
             currentTripId = nil
             lastStopWindowStartedAt = nil
-            reviveSuspendedStayIfNeeded(with: location)
+            replaceInvalidTripWithStay(trip, at: location)
             return
         }
         trip.status = "completed"
@@ -715,6 +873,15 @@ final class MovementSyncStore: NSObject, ObservableObject, CLLocationManagerDele
             || latestActivity?.automotive == true
             || latestActivity?.cycling == true
         let clusterIsStationary = isStationaryCluster(around: location)
+        if clusterIsStationary {
+            return false
+        }
+        if let tripId = currentTripId,
+           let trip = storedTrips.first(where: { $0.id == tripId }),
+           tripHasCollapsedIntoStay(trip, currentLocation: location, referenceDate: location.timestamp)
+        {
+            return false
+        }
         if activitySuggestsTravel {
             return true
         }
@@ -740,6 +907,20 @@ final class MovementSyncStore: NSObject, ObservableObject, CLLocationManagerDele
         return cluster.allSatisfy { sample in
             sample.distance(from: location) <= DetectionThresholds.stayRadiusMeters
         }
+    }
+
+    private func earliestStationaryReferenceDate(around location: CLLocation) -> Date? {
+        let cluster = Array(recentLocations.suffix(10))
+        guard cluster.count >= 2 else {
+            return nil
+        }
+        let stationary = cluster.filter { sample in
+            sample.distance(from: location) <= DetectionThresholds.stayRadiusMeters
+        }
+        guard stationary.count >= 2 else {
+            return nil
+        }
+        return stationary.first?.timestamp
     }
 
     private func matchKnownPlace(for location: CLLocation) -> StoredKnownPlace? {
@@ -793,6 +974,7 @@ final class MovementSyncStore: NSObject, ObservableObject, CLLocationManagerDele
     private func point(from location: CLLocation, isStopAnchor: Bool) -> StoredTripPoint {
         StoredTripPoint(
             id: "point_\(UUID().uuidString.lowercased())",
+            externalUid: "ios-point-\(UUID().uuidString.lowercased())",
             recordedAt: location.timestamp,
             latitude: location.coordinate.latitude,
             longitude: location.coordinate.longitude,
@@ -848,6 +1030,311 @@ final class MovementSyncStore: NSObject, ObservableObject, CLLocationManagerDele
         currentStayId = stay.id
     }
 
+    private func tripHasCollapsedIntoStay(
+        _ trip: StoredTrip,
+        currentLocation: CLLocation,
+        referenceDate: Date
+    ) -> Bool {
+        guard
+            let startPoint = trip.points.first
+        else {
+            return false
+        }
+        let elapsedSinceTripStart = max(referenceDate.timeIntervalSince(trip.startedAt), currentLocation.timestamp.timeIntervalSince(trip.startedAt))
+        guard elapsedSinceTripStart >= DetectionThresholds.stayConfirmationSeconds else {
+            return false
+        }
+        let displacement = CLLocation(latitude: startPoint.latitude, longitude: startPoint.longitude)
+            .distance(from: currentLocation)
+        return displacement <= DetectionThresholds.tripMinimumDisplacementMeters
+    }
+
+    private func repairStoredTimelineState(referenceDate: Date) {
+        if let tripId = currentTripId,
+           let index = storedTrips.firstIndex(where: { $0.id == tripId })
+        {
+            let trip = storedTrips[index]
+            let lastLocation = recentLocations.last ?? trip.points.last.map {
+                CLLocation(latitude: $0.latitude, longitude: $0.longitude)
+            }
+            if let lastLocation,
+               tripHasCollapsedIntoStay(trip, currentLocation: lastLocation, referenceDate: referenceDate)
+            {
+                storedTrips.remove(at: index)
+                currentTripId = nil
+                lastStopWindowStartedAt = nil
+                replaceInvalidTripWithStay(trip, at: lastLocation)
+            } else if let lastLocation,
+                      let stationaryTailStartedAt = stationaryTailStart(for: trip, referenceDate: referenceDate)
+            {
+                finalizeTripIntoStay(
+                    tripIndex: index,
+                    stationaryStartedAt: stationaryTailStartedAt,
+                    currentLocation: lastLocation,
+                    referenceDate: referenceDate
+                )
+            }
+        }
+
+        repairMissingStayContinuity(referenceDate: referenceDate)
+
+        storedStays.sort { $0.startedAt > $1.startedAt }
+        storedTrips.sort { $0.startedAt > $1.startedAt }
+
+        storedStays = normalizedStays(from: storedStays)
+        storedTrips = normalizedTrips(from: storedTrips)
+
+        if let activeStayId = currentStayId,
+           storedStays.contains(where: { $0.id == activeStayId }) == false
+        {
+            currentStayId = storedStays.first(where: { $0.status == "active" })?.id
+        }
+        if let activeTripId = currentTripId,
+           storedTrips.contains(where: { $0.id == activeTripId }) == false
+        {
+            currentTripId = storedTrips.first(where: { $0.status == "active" })?.id
+        }
+
+        if let stayId = currentStayId,
+           let index = storedStays.firstIndex(where: { $0.id == stayId }),
+           storedStays[index].endedAt < referenceDate
+        {
+            storedStays[index].endedAt = referenceDate
+        }
+    }
+
+    private func repairMissingStayContinuity(referenceDate: Date) {
+        guard currentTripId == nil else {
+            return
+        }
+
+        if let stayId = currentStayId,
+           let index = storedStays.firstIndex(where: { $0.id == stayId })
+        {
+            storedStays[index].status = "active"
+            storedStays[index].endedAt = max(storedStays[index].endedAt, referenceDate)
+            return
+        }
+
+        let latestLocation = recentLocations.last
+        let latestStayIndex = storedStays.indices
+            .filter { storedStays[$0].endedAt <= referenceDate }
+            .max(by: { storedStays[$0].endedAt < storedStays[$1].endedAt })
+
+        if let latestStayIndex {
+            var stay = storedStays[latestStayIndex]
+            let gap = referenceDate.timeIntervalSince(stay.endedAt)
+            if gap <= DetectionThresholds.stayContinuityGapSeconds {
+                if let latestLocation {
+                    let stayCenter = CLLocation(latitude: stay.centerLatitude, longitude: stay.centerLongitude)
+                    guard stayCenter.distance(from: latestLocation) <= max(DetectionThresholds.stayRadiusMeters, stay.radiusMeters) else {
+                        return
+                    }
+                }
+                stay.status = "active"
+                stay.endedAt = referenceDate
+                storedStays[latestStayIndex] = stay
+                currentStayId = stay.id
+                return
+            }
+        }
+
+        let latestTripIndex = storedTrips.indices
+            .filter { storedTrips[$0].endedAt <= referenceDate }
+            .max(by: { storedTrips[$0].endedAt < storedTrips[$1].endedAt })
+        guard let latestTripIndex else {
+            return
+        }
+
+        let trip = storedTrips[latestTripIndex]
+        let gap = referenceDate.timeIntervalSince(trip.endedAt)
+        guard gap <= DetectionThresholds.stayContinuityGapSeconds else {
+            return
+        }
+
+        let anchorPoint = trip.points.last.map {
+            CLLocation(latitude: $0.latitude, longitude: $0.longitude)
+        } ?? recentLocations.last
+        guard let anchorPoint else {
+            return
+        }
+
+        if let latestLocation,
+           anchorPoint.distance(from: latestLocation) > DetectionThresholds.stayRadiusMeters
+        {
+            return
+        }
+
+        let matchedPlace = matchKnownPlace(for: anchorPoint)
+        let stay = StoredStay(
+            id: "stay_\(UUID().uuidString.lowercased())",
+            label: matchedPlace?.label ?? "Unlabeled stay",
+            status: "active",
+            classification: "passive",
+            startedAt: trip.endedAt,
+            endedAt: referenceDate,
+            centerLatitude: anchorPoint.coordinate.latitude,
+            centerLongitude: anchorPoint.coordinate.longitude,
+            radiusMeters: DetectionThresholds.stayRadiusMeters,
+            sampleCount: 1,
+            placeExternalUid: matchedPlace?.externalUid ?? "",
+            placeLabel: matchedPlace?.label ?? "",
+            tags: Array(Set((matchedPlace?.categoryTags ?? []) + ["movement", "stay", "gap_smoothed"])),
+            metadata: [
+                "derivedFrom": "missing_data_gap_repair",
+                "sourceTripId": trip.id
+            ]
+        )
+        storedStays.insert(stay, at: 0)
+        currentStayId = stay.id
+    }
+
+    private func normalizedStays(from stays: [StoredStay]) -> [StoredStay] {
+        var normalized: [StoredStay] = []
+        for stay in stays.sorted(by: { $0.startedAt < $1.startedAt }) {
+            guard stay.endedAt > stay.startedAt else {
+                continue
+            }
+            if let previous = normalized.last, stay.startedAt < previous.endedAt {
+                continue
+            }
+            normalized.append(stay)
+        }
+        return normalized.sorted(by: { $0.startedAt > $1.startedAt })
+    }
+
+    private func normalizedTrips(from trips: [StoredTrip]) -> [StoredTrip] {
+        var normalized: [StoredTrip] = []
+        for trip in trips.sorted(by: { $0.startedAt < $1.startedAt }) {
+            guard trip.endedAt > trip.startedAt else {
+                continue
+            }
+            if trip.status == "active" || trip.status == "completed" {
+                if tripQualifies(trip) == false {
+                    continue
+                }
+            }
+            if let previous = normalized.last, trip.startedAt < previous.endedAt {
+                continue
+            }
+            normalized.append(trip)
+        }
+        return normalized.sorted(by: { $0.startedAt > $1.startedAt })
+    }
+
+    private func stationaryTailStart(
+        for trip: StoredTrip,
+        referenceDate: Date
+    ) -> Date? {
+        guard let lastPoint = trip.points.last else {
+            return nil
+        }
+        let anchorLocation = CLLocation(
+            latitude: lastPoint.latitude,
+            longitude: lastPoint.longitude
+        )
+        var earliestStationaryPoint = lastPoint.recordedAt
+        for point in trip.points.reversed() {
+            let pointLocation = CLLocation(latitude: point.latitude, longitude: point.longitude)
+            if pointLocation.distance(from: anchorLocation) <= DetectionThresholds.stayRadiusMeters {
+                earliestStationaryPoint = point.recordedAt
+            } else {
+                break
+            }
+        }
+        guard referenceDate.timeIntervalSince(earliestStationaryPoint) >= DetectionThresholds.stayConfirmationSeconds else {
+            return nil
+        }
+        return earliestStationaryPoint
+    }
+
+    private func finalizeTripIntoStay(
+        tripIndex: Int,
+        stationaryStartedAt: Date,
+        currentLocation: CLLocation,
+        referenceDate: Date
+    ) {
+        guard storedTrips.indices.contains(tripIndex) else {
+            return
+        }
+
+        var trip = storedTrips[tripIndex]
+        trip.points = trip.points.filter { $0.recordedAt <= stationaryStartedAt }
+        trip.stops = trip.stops.filter { $0.startedAt < stationaryStartedAt }
+        trip.endedAt = max(trip.startedAt, stationaryStartedAt)
+        trip.status = "completed"
+
+        if tripQualifies(trip) == false {
+            storedTrips.remove(at: tripIndex)
+            currentTripId = nil
+            lastStopWindowStartedAt = nil
+            replaceInvalidTripWithStay(trip, at: currentLocation)
+            return
+        }
+
+        storedTrips[tripIndex] = trip
+        currentTripId = nil
+        lastStopWindowStartedAt = nil
+
+        let matchedPlace = matchKnownPlace(for: currentLocation)
+        let stay = StoredStay(
+            id: "stay_\(UUID().uuidString.lowercased())",
+            label: matchedPlace?.label ?? "Unlabeled stay",
+            status: "active",
+            classification: "passive",
+            startedAt: stationaryStartedAt,
+            endedAt: max(referenceDate, stationaryStartedAt),
+            centerLatitude: currentLocation.coordinate.latitude,
+            centerLongitude: currentLocation.coordinate.longitude,
+            radiusMeters: DetectionThresholds.stayRadiusMeters,
+            sampleCount: 1,
+            placeExternalUid: matchedPlace?.externalUid ?? "",
+            placeLabel: matchedPlace?.label ?? "",
+            tags: Array(Set((matchedPlace?.categoryTags ?? []) + ["movement", "stay", "repaired_from_trip"])),
+            metadata: [
+                "derivedFrom": "trip_stationary_tail_repair"
+            ]
+        )
+        currentStayId = stay.id
+        storedStays.insert(stay, at: 0)
+    }
+
+    private func replaceInvalidTripWithStay(_ trip: StoredTrip, at location: CLLocation) {
+        if suspendedStayIdBeforeTrip != nil {
+            reviveSuspendedStayIfNeeded(with: location)
+            return
+        }
+
+        let matchedPlace = matchKnownPlace(for: location)
+        let coordinates = trip.points + [point(from: location, isStopAnchor: true)]
+        let latitudeAverage =
+            coordinates.map(\.latitude).reduce(0, +) / Double(max(1, coordinates.count))
+        let longitudeAverage =
+            coordinates.map(\.longitude).reduce(0, +) / Double(max(1, coordinates.count))
+        let stay = StoredStay(
+            id: "stay_\(UUID().uuidString.lowercased())",
+            label: matchedPlace?.label ?? "Unlabeled stay",
+            status: "active",
+            classification: "passive",
+            startedAt: trip.startedAt,
+            endedAt: location.timestamp,
+            centerLatitude: latitudeAverage,
+            centerLongitude: longitudeAverage,
+            radiusMeters: DetectionThresholds.stayRadiusMeters,
+            sampleCount: max(1, coordinates.count),
+            placeExternalUid: matchedPlace?.externalUid ?? "",
+            placeLabel: matchedPlace?.label ?? "",
+            tags: Array(Set((matchedPlace?.categoryTags ?? []) + ["movement", "stay", "invalid_trip_replaced"])),
+            metadata: [
+                "derivedFrom": "invalid_trip",
+                "invalidTripReason": "under_duration_or_displacement_threshold"
+            ]
+        )
+        currentStayId = stay.id
+        storedStays.insert(stay, at: 0)
+        suspendedStayIdBeforeTrip = nil
+    }
+
     private func startMotionUpdatesIfAvailable() {
         guard CMMotionActivityManager.isActivityAvailable() else {
             motionPermissionStatus = "unavailable"
@@ -861,6 +1348,11 @@ final class MovementSyncStore: NSObject, ObservableObject, CLLocationManagerDele
     }
 
     private func refreshPermissionState() {
+        if testingMode {
+            locationPermissionStatus = "always"
+            backgroundTrackingReady = true
+            return
+        }
         switch locationManager.authorizationStatus {
         case .authorizedAlways:
             locationPermissionStatus = "always"
@@ -881,6 +1373,9 @@ final class MovementSyncStore: NSObject, ObservableObject, CLLocationManagerDele
     }
 
     private func applyTrackingState() {
+        if testingMode {
+            return
+        }
         updateBackgroundLocationConfiguration()
         guard trackingEnabled else {
             locationManager.stopUpdatingLocation()
@@ -899,6 +1394,9 @@ final class MovementSyncStore: NSObject, ObservableObject, CLLocationManagerDele
     }
 
     private func updateBackgroundLocationConfiguration() {
+        if testingMode {
+            return
+        }
         #if targetEnvironment(simulator)
         if locationManager.allowsBackgroundLocationUpdates {
             locationManager.allowsBackgroundLocationUpdates = false
@@ -941,6 +1439,9 @@ final class MovementSyncStore: NSObject, ObservableObject, CLLocationManagerDele
     }
 
     private func loadState() {
+        if testingMode {
+            return
+        }
         guard
             let data = UserDefaults.standard.data(forKey: StorageKeys.movementState),
             let decoded = try? JSONDecoder().decode(PersistedState.self, from: data)
@@ -955,9 +1456,13 @@ final class MovementSyncStore: NSObject, ObservableObject, CLLocationManagerDele
         storedTrips = decoded.trips
         currentStayId = storedStays.first(where: { $0.status == "active" })?.id
         currentTripId = storedTrips.first(where: { $0.status == "active" })?.id
+        repairStoredTimelineState(referenceDate: Date())
     }
 
     private func persistState() {
+        if testingMode {
+            return
+        }
         let state = PersistedState(
             trackingEnabled: trackingEnabled,
             publishMode: publishMode,
@@ -981,4 +1486,38 @@ final class MovementSyncStore: NSObject, ObservableObject, CLLocationManagerDele
         }
         UIApplication.shared.open(url)
     }
+
+    #if DEBUG
+    struct DebugSnapshot {
+        let activeStay: StoredStay?
+        let activeTrip: StoredTrip?
+        let stays: [StoredStay]
+        let trips: [StoredTrip]
+        let latestLocationSummary: String
+    }
+
+    func debugSetTrackingEnabled(_ enabled: Bool) {
+        trackingEnabled = enabled
+    }
+
+    func debugProcessLocations(_ locations: [CLLocation]) {
+        for location in locations {
+            process(location)
+        }
+    }
+
+    func debugRepair(referenceDate: Date = Date()) {
+        repairStoredTimelineState(referenceDate: referenceDate)
+    }
+
+    func debugSnapshot() -> DebugSnapshot {
+        DebugSnapshot(
+            activeStay: activeStay,
+            activeTrip: activeTrip,
+            stays: storedStays,
+            trips: storedTrips,
+            latestLocationSummary: latestLocationSummary
+        )
+    }
+    #endif
 }

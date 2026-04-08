@@ -99,6 +99,14 @@ enum CompanionPairingURLResolver {
 
 @MainActor
 final class CompanionAppModel: ObservableObject {
+    private enum AutoSyncPolicy {
+        static let movementDebounceNanoseconds: UInt64 = 12_000_000_000
+        static let immediateDebounceNanoseconds: UInt64 = 1_500_000_000
+        static let foregroundMinimumInterval: TimeInterval = 5 * 60
+        static let movementMinimumInterval: TimeInterval = 3 * 60
+        static let pairingMinimumInterval: TimeInterval = 15
+    }
+
     private struct SimulatorPairingResponse: Decodable {
         let qrPayload: PairingPayload
     }
@@ -198,18 +206,58 @@ final class CompanionAppModel: ObservableObject {
         }
     }
 
-    let healthStore = HealthSyncStore()
-    let movementStore = MovementSyncStore()
-    let syncClient = ForgeSyncClient()
+    let screenshotScenario: CompanionScreenshotScenario?
+    let healthStore: HealthSyncStore
+    let movementStore: MovementSyncStore
+    let syncClient: ForgeSyncClient
     let watchSessionManager: WatchSessionManager
     let qrScanner = QRPairingScanner()
     let backgroundScheduler = CompanionBackgroundScheduler()
     let discoveryService = ForgeServerDiscovery()
     private let keychain = KeychainStore(service: "com.aurel.forgecompanion")
+    private var cancellables: Set<AnyCancellable> = []
+    private var autoSyncTask: Task<Void, Never>?
+    private var lastAutoSyncAttemptAt: Date?
 
     init() {
+        let screenshotScenario = CompanionScreenshotScenario.current
+        self.screenshotScenario = screenshotScenario
+        let healthStore = HealthSyncStore()
+        self.healthStore = healthStore
+#if DEBUG
+        if let screenshotScenario, screenshotScenario != .pairing {
+            self.movementStore = MovementSyncStore(
+                testingState: CompanionScreenshotFixtures.movementState()
+            )
+        } else {
+            self.movementStore = MovementSyncStore()
+        }
+#else
+        self.movementStore = MovementSyncStore()
+#endif
+        let syncClient = ForgeSyncClient()
+        self.syncClient = syncClient
         watchSessionManager = WatchSessionManager(syncClient: syncClient)
         companionDebugLog("CompanionAppModel", "init start")
+        movementStore.objectWillChange
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] in
+                self?.objectWillChange.send()
+                self?.scheduleAutomaticSync(
+                    reason: "movement change",
+                    debounceNanoseconds: AutoSyncPolicy.movementDebounceNanoseconds,
+                    minimumInterval: AutoSyncPolicy.movementMinimumInterval
+                )
+            }
+            .store(in: &cancellables)
+        if let screenshotScenario {
+            companionDebugLog(
+                "CompanionAppModel",
+                "init screenshot scenario=\(screenshotScenario.rawValue)"
+            )
+            configureScreenshotScenario(screenshotScenario)
+            return
+        }
         watchSessionManager.configure { [weak self] in
             self?.pairing
         }
@@ -228,10 +276,16 @@ final class CompanionAppModel: ObservableObject {
         Task {
             companionDebugLog("CompanionAppModel", "startup task begin")
             await attemptLocalSimulatorBootstrapIfNeeded()
+            _ = await ensureActivePairingIfPossible(reason: "startup")
             await refreshMovementBootstrap()
             await refreshHealthAccessStatus()
             await refreshWatchBootstrap(reason: "startup")
             refreshSyncState()
+            scheduleAutomaticSync(
+                reason: "startup",
+                debounceNanoseconds: AutoSyncPolicy.immediateDebounceNanoseconds,
+                minimumInterval: AutoSyncPolicy.foregroundMinimumInterval
+            )
             await attemptAutomaticSimulatorSyncIfPossible()
             companionDebugLog("CompanionAppModel", "startup task complete")
         }
@@ -276,6 +330,12 @@ final class CompanionAppModel: ObservableObject {
         await refreshHealthAccessStatus()
         await refreshWatchBootstrap(reason: "pairing")
         refreshSyncState()
+        scheduleAutomaticSync(
+            reason: "pairing completed",
+            debounceNanoseconds: AutoSyncPolicy.immediateDebounceNanoseconds,
+            minimumInterval: AutoSyncPolicy.pairingMinimumInterval,
+            force: true
+        )
         companionDebugLog("CompanionAppModel", "verifyAndConnect complete")
     }
 
@@ -319,6 +379,12 @@ final class CompanionAppModel: ObservableObject {
             if healthAccessStatus != .notSet {
                 healthPermissionPromptDeferred = false
                 UserDefaults.standard.set(false, forKey: StorageKeys.deferredHealthPrompt)
+                scheduleAutomaticSync(
+                    reason: "health permission granted",
+                    debounceNanoseconds: AutoSyncPolicy.immediateDebounceNanoseconds,
+                    minimumInterval: 0,
+                    force: true
+                )
             }
             latestError = nil
         } catch {
@@ -337,6 +403,12 @@ final class CompanionAppModel: ObservableObject {
         movementStore.requestLocationAuthorization()
         movementPermissionPromptDeferred = false
         UserDefaults.standard.set(false, forKey: StorageKeys.movementPromptDeferred)
+        scheduleAutomaticSync(
+            reason: "movement permission requested",
+            debounceNanoseconds: AutoSyncPolicy.immediateDebounceNanoseconds,
+            minimumInterval: 0,
+            force: true
+        )
     }
 
     func requestRecommendedPermissions() async {
@@ -347,6 +419,15 @@ final class CompanionAppModel: ObservableObject {
     func runManualSync() async {
         companionDebugLog("CompanionAppModel", "runManualSync start")
         _ = await performSync(trigger: "manual")
+    }
+
+    func handleAppDidBecomeActive() {
+        companionDebugLog("CompanionAppModel", "handleAppDidBecomeActive")
+        scheduleAutomaticSync(
+            reason: "app became active",
+            debounceNanoseconds: AutoSyncPolicy.immediateDebounceNanoseconds,
+            minimumInterval: AutoSyncPolicy.foregroundMinimumInterval
+        )
     }
 
     func discoverForgeServers() async {
@@ -389,6 +470,41 @@ final class CompanionAppModel: ObservableObject {
         )
         lastSyncMessage = "Connected to \(server.name)"
         companionDebugLog("CompanionAppModel", "bootstrapPairing complete")
+    }
+
+    func ensureActivePairingIfPossible(
+        reason: String,
+        forceRenewal: Bool = false
+    ) async -> PairingPayload? {
+        guard let pairing else {
+            return nil
+        }
+        let normalized = normalizedPairingPayload(pairing)
+        if normalized.sessionId != pairing.sessionId
+            || normalized.apiBaseUrl != pairing.apiBaseUrl
+            || normalized.uiBaseUrl != pairing.uiBaseUrl
+        {
+            self.pairing = normalized
+            persistPairing()
+        }
+        guard forceRenewal || pairingNeedsRenewal(normalized) else {
+            return normalized
+        }
+
+        companionDebugLog(
+            "CompanionAppModel",
+            "ensureActivePairingIfPossible renewing reason=\(reason) session=\(normalized.sessionId)"
+        )
+        do {
+            let renewed = try await renewPairingSession(from: normalized, reason: reason)
+            return renewed
+        } catch {
+            companionDebugLog(
+                "CompanionAppModel",
+                "ensureActivePairingIfPossible renewal failed reason=\(reason) error=\(error.localizedDescription)"
+            )
+            return nil
+        }
     }
 
     private func persistPairing() {
@@ -477,6 +593,42 @@ final class CompanionAppModel: ObservableObject {
         }
     }
 
+    private func configureScreenshotScenario(_ scenario: CompanionScreenshotScenario) {
+        discoveredServers = CompanionScreenshotFixtures.discoveredServers()
+        discoveredTailscaleDevices = CompanionScreenshotFixtures.tailscaleDevices()
+        discoveryInFlight = false
+        discoveryMessage = "Found 2 Forge runtimes ready for pairing."
+        tailscaleDiscoveryMessage = "2 Tailscale devices online. Forge is reachable through the tailnet."
+        healthPermissionPromptDeferred = false
+        movementPermissionPromptDeferred = false
+        latestError = nil
+        lastAutoSyncAttemptAt = CompanionScreenshotFixtures.referenceDate.addingTimeInterval(-120)
+#if DEBUG
+        CompanionScreenshotFixtures.seedLogs()
+#endif
+
+        switch scenario {
+        case .pairing:
+            pairing = nil
+            syncState = .disconnected
+            lastSyncMessage = "Choose your Forge runtime"
+            healthAuthorizationGranted = false
+            healthAccessStatus = .notSet
+            lastSuccessfulSyncAt = nil
+            latestSyncReport = nil
+            latestSyncPayloadSummary = nil
+        case .home, .lifeTimeline, .diagnostics:
+            pairing = normalizedPairingPayload(CompanionScreenshotFixtures.pairingPayload())
+            syncState = .healthy
+            lastSyncMessage = "Everything is syncing automatically"
+            healthAuthorizationGranted = true
+            healthAccessStatus = .fullAccess
+            lastSuccessfulSyncAt = CompanionScreenshotFixtures.referenceDate.addingTimeInterval(-4 * 60)
+            latestSyncReport = CompanionScreenshotFixtures.syncReport()
+            latestSyncPayloadSummary = CompanionScreenshotFixtures.syncPayloadSummary()
+        }
+    }
+
     func refreshHealthAccessStatus() async {
         companionDebugLog("CompanionAppModel", "refreshHealthAccessStatus start")
         let status = await healthStore.accessStatus(previousStoredStatus: healthAccessStatus)
@@ -544,6 +696,9 @@ final class CompanionAppModel: ObservableObject {
             "completeConnection start session=\(payload.sessionId) apiBaseUrl=\(payload.apiBaseUrl)"
         )
         pairing = normalizedPairingPayload(payload, preferredUiBaseUrl: preferredUiBaseUrl)
+        if movementStore.trackingEnabled == false {
+            movementStore.setTrackingEnabled(true)
+        }
         healthPermissionPromptDeferred = false
         movementPermissionPromptDeferred = false
         UserDefaults.standard.set(false, forKey: StorageKeys.deferredHealthPrompt)
@@ -557,6 +712,71 @@ final class CompanionAppModel: ObservableObject {
             refreshSyncState()
         }
         companionDebugLog("CompanionAppModel", "completeConnection scheduled follow-up refresh")
+    }
+
+    private func scheduleAutomaticSync(
+        reason: String,
+        debounceNanoseconds: UInt64,
+        minimumInterval: TimeInterval,
+        force: Bool = false
+    ) {
+        guard pairing != nil else {
+            return
+        }
+        autoSyncTask?.cancel()
+        autoSyncTask = Task { [weak self] in
+            guard let self else { return }
+            if debounceNanoseconds > 0 {
+                try? await Task.sleep(nanoseconds: debounceNanoseconds)
+            }
+            guard Task.isCancelled == false else {
+                return
+            }
+            await self.performAutomaticSyncIfNeeded(
+                reason: reason,
+                minimumInterval: minimumInterval,
+                force: force
+            )
+        }
+    }
+
+    private func performAutomaticSyncIfNeeded(
+        reason: String,
+        minimumInterval: TimeInterval,
+        force: Bool
+    ) async {
+        guard pairing != nil else {
+            return
+        }
+        guard syncState != .syncing else {
+            return
+        }
+        guard healthAccessStatus != .notSet else {
+            companionDebugLog(
+                "CompanionAppModel",
+                "performAutomaticSyncIfNeeded skipped reason=\(reason) healthAccessStatus=not_set"
+            )
+            return
+        }
+        let referenceDate = Date()
+        if force == false {
+            if let lastAutoSyncAttemptAt,
+               referenceDate.timeIntervalSince(lastAutoSyncAttemptAt) < minimumInterval
+            {
+                return
+            }
+            if let lastSuccessfulSyncAt,
+               referenceDate.timeIntervalSince(lastSuccessfulSyncAt) < minimumInterval
+            {
+                return
+            }
+        }
+        lastAutoSyncAttemptAt = referenceDate
+        companionDebugLog(
+            "CompanionAppModel",
+            "performAutomaticSyncIfNeeded triggering reason=\(reason)"
+        )
+        _ = await performSync(trigger: "auto \(reason)")
     }
 
     private func normalizedPairingPayload(
@@ -664,7 +884,10 @@ final class CompanionAppModel: ObservableObject {
 
     private func performSync(trigger: String) async -> Bool {
         companionDebugLog("CompanionAppModel", "performSync start trigger=\(trigger)")
-        guard let pairing else { return false }
+        let resolvedPairing = await ensureActivePairingIfPossible(reason: "sync-\(trigger)") ?? self.pairing
+        guard let pairing = resolvedPairing else {
+            return false
+        }
         syncState = .syncing
         do {
             let movementPayload = movementStore.buildMovementPayload()
@@ -723,7 +946,10 @@ final class CompanionAppModel: ObservableObject {
     }
 
     private func refreshMovementBootstrap() async {
-        guard let pairing else { return }
+        let resolvedPairing = await ensureActivePairingIfPossible(reason: "movement-bootstrap") ?? self.pairing
+        guard let pairing = resolvedPairing else {
+            return
+        }
         do {
             let movement = try await syncClient.fetchMovementBootstrap(payload: pairing)
             movementStore.mergeBootstrap(movement)
@@ -911,6 +1137,126 @@ final class CompanionAppModel: ObservableObject {
             movementTripPoints: payload.movement.trips.reduce(0) { $0 + $1.points.count },
             movementTripStops: payload.movement.trips.reduce(0) { $0 + $1.stops.count },
             rawHeartRateDatapointsSynced: 0
+        )
+    }
+
+    private func pairingNeedsRenewal(_ payload: PairingPayload) -> Bool {
+        guard let expirationDate = parsePairingExpirationDate(payload.expiresAt) else {
+            return false
+        }
+        return expirationDate.timeIntervalSinceNow <= 5 * 60
+    }
+
+    private func parsePairingExpirationDate(_ rawValue: String) -> Date? {
+        if let date = ISO8601DateFormatter().date(from: rawValue) {
+            return date
+        }
+        let fractionalFormatter = ISO8601DateFormatter()
+        fractionalFormatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return fractionalFormatter.date(from: rawValue)
+    }
+
+    private func renewPairingSession(
+        from payload: PairingPayload,
+        reason: String
+    ) async throws -> PairingPayload {
+        guard let server = await preferredAutomaticPairingServer(for: payload) else {
+            throw NSError(
+                domain: "CompanionAppModel",
+                code: 1,
+                userInfo: [
+                    NSLocalizedDescriptionKey: "No trusted Forge target was available to renew the pairing automatically."
+                ]
+            )
+        }
+
+        companionDebugLog(
+            "CompanionAppModel",
+            "renewPairingSession start reason=\(reason) server=\(server.host)"
+        )
+        let renewedPayload = try await syncClient.bootstrapPairingSession(
+            baseUrl: server.apiBaseUrl,
+            label: UIDevice.current.name,
+            capabilities: SimulatorLocalForge.capabilities
+        )
+        let normalizedRenewedPayload = normalizedPairingPayload(
+            renewedPayload,
+            preferredUiBaseUrl: server.uiBaseUrl,
+            preferredApiBaseUrl: server.apiBaseUrl
+        )
+        try await syncClient.verifyPairing(
+            payload: normalizedRenewedPayload,
+            apiBaseUrl: normalizedRenewedPayload.apiBaseUrl
+        )
+        completeConnection(
+            with: normalizedRenewedPayload,
+            preferredUiBaseUrl: server.uiBaseUrl,
+            message: "Reconnected to Forge"
+        )
+        lastSyncMessage = "Reconnected to \(server.name)"
+        latestError = nil
+        companionDebugLog(
+            "CompanionAppModel",
+            "renewPairingSession success reason=\(reason) session=\(normalizedRenewedPayload.sessionId)"
+        )
+        return normalizedRenewedPayload
+    }
+
+    private func preferredAutomaticPairingServer(
+        for payload: PairingPayload
+    ) async -> DiscoveredForgeServer? {
+        let normalizedPayload = normalizedPairingPayload(payload)
+        let normalizedApiHost = URL(string: normalizedPayload.apiBaseUrl)?.host?.lowercased()
+        let normalizedUiHost = URL(string: normalizedPayload.uiBaseUrl ?? "")?.host?.lowercased()
+
+        func matches(_ server: DiscoveredForgeServer) -> Bool {
+            let serverHost = server.host.lowercased()
+            return serverHost == normalizedApiHost || serverHost == normalizedUiHost
+        }
+
+        if let directStoredTarget = automaticBootstrapTarget(from: normalizedPayload) {
+            return directStoredTarget
+        }
+
+        if let discoveredMatch = discoveredServers.first(where: { $0.canBootstrapPairing && matches($0) }) {
+            return discoveredMatch
+        }
+
+        let report = await discoveryService.discoverEnvironment()
+        discoveredServers = report.servers
+        discoveredTailscaleDevices = report.tailscaleDevices
+        tailscaleDiscoveryMessage = report.tailscaleStatusMessage
+
+        if let discoveredMatch = report.servers.first(where: { $0.canBootstrapPairing && matches($0) }) {
+            return discoveredMatch
+        }
+
+        if normalizedApiHost?.contains(".ts.net") == true {
+            return report.servers.first(where: { $0.source == .tailscale && $0.canBootstrapPairing })
+        }
+
+        return report.servers.first(where: \.canBootstrapPairing)
+    }
+
+    private func automaticBootstrapTarget(from payload: PairingPayload) -> DiscoveredForgeServer? {
+        guard
+            let apiUrl = URL(string: payload.apiBaseUrl),
+            let host = apiUrl.host?.lowercased(),
+            host.contains(".ts.net")
+        else {
+            return nil
+        }
+
+        let uiBaseUrl = payload.uiBaseUrl ?? CompanionPairingURLResolver.deriveUiBaseUrl(from: payload.apiBaseUrl)
+        return DiscoveredForgeServer(
+            id: "stored-ts-\(host)",
+            name: host,
+            host: host,
+            apiBaseUrl: payload.apiBaseUrl,
+            uiBaseUrl: uiBaseUrl,
+            source: .tailscale,
+            canBootstrapPairing: true,
+            detail: "Stored trusted Tailscale Forge target"
         )
     }
 }

@@ -1,14 +1,13 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import * as Dialog from "@radix-ui/react-dialog";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useVirtualizer } from "@tanstack/react-virtual";
 import {
-  BarChart3,
   Clock3,
-  Mountain,
-  PencilLine,
   Route,
-  Sparkles,
-  Waves,
+  Save,
+  PencilLine,
+  Trash2,
   X
 } from "lucide-react";
 import {
@@ -20,17 +19,21 @@ import {
   XAxis,
   YAxis
 } from "recharts";
+import { SheetScaffold } from "@/components/experience/sheet-scaffold";
+import { FacetedTokenSearch, type FacetedTokenOption } from "@/components/search/faceted-token-search";
 import { useForgeShell } from "@/components/shell/app-shell";
 import { PageHero } from "@/components/shell/page-hero";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { InfoTooltip } from "@/components/ui/info-tooltip";
 import { ErrorState } from "@/components/ui/page-state";
 import { Input } from "@/components/ui/input";
 import { SurfaceSkeleton } from "@/components/experience/surface-skeleton";
 import { MovementLifeTimeline } from "@/components/movement/movement-life-timeline";
 import {
   createMovementPlace,
+  deleteMovementTripPoint,
   getMovementAllTime,
   getMovementDay,
   getMovementMonth,
@@ -38,6 +41,7 @@ import {
   getMovementTripDetail,
   getMovementSettings,
   listMovementPlaces,
+  patchMovementTripPoint,
   patchMovementPlace,
   patchMovementSettings
 } from "@/lib/api";
@@ -46,6 +50,15 @@ import type { MovementKnownPlace, MovementTripPointRecord } from "@/lib/types";
 
 type MovementViewMode = "life" | "day" | "month" | "all_time";
 type MonthMetric = "distanceMeters" | "movingSeconds" | "idleSeconds" | "caloriesKcal";
+type MovementPointDraft = {
+  recordedAt: string;
+  latitude: string;
+  longitude: string;
+  accuracyMeters: string;
+  altitudeMeters: string;
+  speedMps: string;
+  isStopAnchor: boolean;
+};
 
 function formatDateLabel(value: string) {
   return new Intl.DateTimeFormat(undefined, {
@@ -87,6 +100,145 @@ function metricLabel(metric: MonthMetric, value: number) {
   return durationLabel(value);
 }
 
+function normalize(text: string) {
+  return text.trim().toLowerCase();
+}
+
+function pointTimeBucket(recordedAt: string) {
+  const hour = new Date(recordedAt).getHours();
+  if (hour < 6) {
+    return "night";
+  }
+  if (hour < 12) {
+    return "morning";
+  }
+  if (hour < 18) {
+    return "afternoon";
+  }
+  return "evening";
+}
+
+function formatPointTimestamp(recordedAt: string) {
+  return new Intl.DateTimeFormat(undefined, {
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit"
+  }).format(new Date(recordedAt));
+}
+
+function toLocalDateTimeInput(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return "";
+  }
+  const local = new Date(date.getTime() - date.getTimezoneOffset() * 60_000);
+  return local.toISOString().slice(0, 16);
+}
+
+function fromLocalDateTimeInput(value: string) {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return null;
+  }
+  const date = new Date(trimmed);
+  if (Number.isNaN(date.getTime())) {
+    return null;
+  }
+  return date.toISOString();
+}
+
+function buildPointDraft(point: MovementTripPointRecord): MovementPointDraft {
+  return {
+    recordedAt: toLocalDateTimeInput(point.recordedAt),
+    latitude: String(point.latitude),
+    longitude: String(point.longitude),
+    accuracyMeters: point.accuracyMeters != null ? String(point.accuracyMeters) : "",
+    altitudeMeters: point.altitudeMeters != null ? String(point.altitudeMeters) : "",
+    speedMps: point.speedMps != null ? String(point.speedMps) : "",
+    isStopAnchor: point.isStopAnchor
+  };
+}
+
+function buildMovementPointSearchText(point: MovementTripPointRecord) {
+  return normalize(
+    [
+      formatPointTimestamp(point.recordedAt),
+      point.externalUid,
+      point.isStopAnchor ? "stop anchor stop" : "path trace point",
+      point.accuracyMeters != null ? `${Math.round(point.accuracyMeters)} meters accuracy` : "",
+      pointTimeBucket(point.recordedAt)
+    ].join(" ")
+  );
+}
+
+function createMovementPointFilterOptions(
+  points: MovementTripPointRecord[]
+): FacetedTokenOption[] {
+  const options = new Map<string, FacetedTokenOption>();
+  options.set("anchor:stop", {
+    id: "anchor:stop",
+    label: "Stop anchors",
+    description: "Only the canonical pause anchors",
+    badge: <Badge tone="meta">Stop anchors</Badge>
+  });
+  options.set("anchor:path", {
+    id: "anchor:path",
+    label: "Path points",
+    description: "Non-anchor trace points",
+    badge: <Badge tone="meta">Path points</Badge>
+  });
+  options.set("accuracy:precise", {
+    id: "accuracy:precise",
+    label: "Precise",
+    description: "GPS accuracy below 20m",
+    badge: <Badge tone="meta">Precise</Badge>
+  });
+  options.set("accuracy:loose", {
+    id: "accuracy:loose",
+    label: "Loose accuracy",
+    description: "GPS accuracy at or above 20m",
+    badge: <Badge tone="meta">Loose accuracy</Badge>
+  });
+  points.forEach((point) => {
+    const bucket = pointTimeBucket(point.recordedAt);
+    if (!options.has(`time:${bucket}`)) {
+      options.set(`time:${bucket}`, {
+        id: `time:${bucket}`,
+        label: bucket,
+        description: "Recorded during this time band",
+        badge: <Badge tone="meta" className="capitalize">{bucket}</Badge>
+      });
+    }
+  });
+  return [...options.values()];
+}
+
+function matchesMovementPointFilters(
+  point: MovementTripPointRecord,
+  selectedFilterIds: string[]
+) {
+  return selectedFilterIds.every((filterId) => {
+    if (filterId === "anchor:stop") {
+      return point.isStopAnchor;
+    }
+    if (filterId === "anchor:path") {
+      return !point.isStopAnchor;
+    }
+    if (filterId === "accuracy:precise") {
+      return point.accuracyMeters != null && point.accuracyMeters < 20;
+    }
+    if (filterId === "accuracy:loose") {
+      return point.accuracyMeters == null || point.accuracyMeters >= 20;
+    }
+    if (filterId.startsWith("time:")) {
+      return pointTimeBucket(point.recordedAt) === filterId.slice("time:".length);
+    }
+    return true;
+  });
+}
+
 function normalizeExactPath(points: MovementTripPointRecord[]) {
   if (points.length === 0) {
     return [];
@@ -122,8 +274,11 @@ function StylizedTripCard({
     <Card className="overflow-hidden rounded-[30px] border border-white/10 bg-[radial-gradient(circle_at_top,rgba(114,204,255,0.18),transparent_44%),linear-gradient(180deg,rgba(6,11,26,0.98),rgba(8,14,28,0.92))] p-5">
       <div className="flex items-center justify-between gap-3">
         <div>
-          <div className="font-label text-[11px] uppercase tracking-[0.2em] text-white/42">
-            Stylized trajectory
+          <div className="flex items-center gap-2">
+            <div className="font-label text-[11px] uppercase tracking-[0.2em] text-white/42">
+              Stylized trajectory
+            </div>
+            <InfoTooltip content="This graph is a softened trip trace. It emphasizes rhythm, stops, and endpoints instead of raw GPS jitter." />
           </div>
           <div className="mt-2 text-sm text-white/64">
             A softened path that prioritizes rhythm, stops, and landmarks over raw map noise.
@@ -181,8 +336,11 @@ function ExactTripCard({ points }: { points: MovementTripPointRecord[] }) {
 
   return (
     <Card className="rounded-[30px] border border-white/10 bg-[linear-gradient(180deg,rgba(8,13,25,0.95),rgba(10,17,30,0.88))] p-5">
-      <div className="font-label text-[11px] uppercase tracking-[0.2em] text-white/42">
-        Exact path
+      <div className="flex items-center gap-2">
+        <div className="font-label text-[11px] uppercase tracking-[0.2em] text-white/42">
+          Exact path
+        </div>
+        <InfoTooltip content="This keeps the recent raw location points. Use it when you want the literal recorded trace instead of the cleaned movement graph." />
       </div>
       <div className="mt-2 text-sm text-white/62">
         Recent raw points preserved by the companion before long-term simplification.
@@ -208,6 +366,141 @@ function ExactTripCard({ points }: { points: MovementTripPointRecord[] }) {
             />
           ))}
         </svg>
+      </div>
+    </Card>
+  );
+}
+
+function MovementPointEditor({
+  point,
+  draft,
+  saving,
+  deleting,
+  onDraftChange,
+  onSave,
+  onDelete
+}: {
+  point: MovementTripPointRecord;
+  draft: MovementPointDraft;
+  saving: boolean;
+  deleting: boolean;
+  onDraftChange: (patch: Partial<MovementPointDraft>) => void;
+  onSave: () => void;
+  onDelete: () => void;
+}) {
+  return (
+    <Card className="grid gap-4 rounded-[28px] border border-white/8 bg-[linear-gradient(180deg,rgba(12,18,32,0.98),rgba(8,13,24,0.98))] p-5">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <div className="font-label text-[11px] uppercase tracking-[0.2em] text-white/42">
+            Datapoint editor
+          </div>
+          <div className="mt-2 text-lg text-white">
+            {formatPointTimestamp(point.recordedAt)}
+          </div>
+          <div className="mt-2 text-sm text-white/58">
+            Editing here changes the canonical trip path in Forge. Deleting the point also tombstones it so the companion will not re-upload it on the next sync.
+          </div>
+        </div>
+        <Badge tone={point.isStopAnchor ? "signal" : "meta"}>
+          {point.isStopAnchor ? "Stop anchor" : "Path point"}
+        </Badge>
+      </div>
+
+      <div className="grid gap-4 sm:grid-cols-2">
+        <div className="grid gap-2">
+          <div className="text-xs uppercase tracking-[0.16em] text-white/40">
+            Recorded at
+          </div>
+          <Input
+            type="datetime-local"
+            value={draft.recordedAt}
+            onChange={(event) => onDraftChange({ recordedAt: event.target.value })}
+          />
+        </div>
+        <div className="grid gap-2">
+          <div className="text-xs uppercase tracking-[0.16em] text-white/40">
+            Speed (m/s)
+          </div>
+          <Input
+            value={draft.speedMps}
+            onChange={(event) => onDraftChange({ speedMps: event.target.value })}
+            placeholder="Optional"
+          />
+        </div>
+        <div className="grid gap-2">
+          <div className="text-xs uppercase tracking-[0.16em] text-white/40">
+            Latitude
+          </div>
+          <Input
+            value={draft.latitude}
+            onChange={(event) => onDraftChange({ latitude: event.target.value })}
+          />
+        </div>
+        <div className="grid gap-2">
+          <div className="text-xs uppercase tracking-[0.16em] text-white/40">
+            Longitude
+          </div>
+          <Input
+            value={draft.longitude}
+            onChange={(event) => onDraftChange({ longitude: event.target.value })}
+          />
+        </div>
+        <div className="grid gap-2">
+          <div className="text-xs uppercase tracking-[0.16em] text-white/40">
+            Accuracy (m)
+          </div>
+          <Input
+            value={draft.accuracyMeters}
+            onChange={(event) => onDraftChange({ accuracyMeters: event.target.value })}
+            placeholder="Optional"
+          />
+        </div>
+        <div className="grid gap-2">
+          <div className="text-xs uppercase tracking-[0.16em] text-white/40">
+            Altitude (m)
+          </div>
+          <Input
+            value={draft.altitudeMeters}
+            onChange={(event) => onDraftChange({ altitudeMeters: event.target.value })}
+            placeholder="Optional"
+          />
+        </div>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-3">
+        <Button
+          variant="ghost"
+          className={cn(
+            "h-10 rounded-full border px-4",
+            draft.isStopAnchor
+              ? "border-[var(--primary)] bg-[var(--primary)]/16 text-white"
+              : "border-white/10 bg-white/[0.04] text-white/64"
+          )}
+          onClick={() => onDraftChange({ isStopAnchor: !draft.isStopAnchor })}
+        >
+          <Route className="mr-2 size-4" />
+          {draft.isStopAnchor ? "Stop anchor" : "Path point"}
+        </Button>
+        <div className="text-sm text-white/50">
+          External id: <span className="text-white/72">{point.externalUid}</span>
+        </div>
+      </div>
+
+      <div className="flex flex-wrap justify-between gap-3 border-t border-white/8 pt-4">
+        <Button
+          variant="ghost"
+          className="h-10 rounded-full border border-[rgba(255,122,122,0.26)] bg-[rgba(255,122,122,0.08)] px-4 text-[rgba(255,198,198,0.94)] hover:bg-[rgba(255,122,122,0.14)]"
+          onClick={onDelete}
+          disabled={deleting || saving}
+        >
+          <Trash2 className="mr-2 size-4" />
+          {deleting ? "Deleting…" : "Delete datapoint"}
+        </Button>
+        <Button onClick={onSave} disabled={saving || deleting}>
+          <Save className="mr-2 size-4" />
+          {saving ? "Saving…" : "Save datapoint"}
+        </Button>
       </div>
     </Card>
   );
@@ -374,6 +667,11 @@ export function MovementPage() {
   );
   const [selectedTripId, setSelectedTripId] = useState<string | null>(null);
   const [showExactPath, setShowExactPath] = useState(false);
+  const [dataModalOpen, setDataModalOpen] = useState(false);
+  const [pointQuery, setPointQuery] = useState("");
+  const [selectedPointFilterIds, setSelectedPointFilterIds] = useState<string[]>([]);
+  const [selectedPointId, setSelectedPointId] = useState<string | null>(null);
+  const [pointDraft, setPointDraft] = useState<MovementPointDraft | null>(null);
   const [selectedSegmentIds, setSelectedSegmentIds] = useState<{
     stayIds: string[];
     tripIds: string[];
@@ -382,6 +680,7 @@ export function MovementPage() {
   const [editingPlace, setEditingPlace] = useState<MovementKnownPlace | null>(null);
   const [placeSearch, setPlaceSearch] = useState("");
   const [monthMetric, setMonthMetric] = useState<MonthMetric>("distanceMeters");
+  const pointListRef = useRef<HTMLDivElement | null>(null);
 
   const movementDayQuery = useQuery({
     queryKey: ["forge-movement-day", targetDate, ...selectedUserIds],
@@ -461,6 +760,37 @@ export function MovementPage() {
     }
   });
 
+  const pointMutation = useMutation({
+    mutationFn: async (input: {
+      tripId: string;
+      pointId: string;
+      patch: Record<string, unknown>;
+    }) => patchMovementTripPoint(input.tripId, input.pointId, input.patch),
+    onSuccess: async (_, variables) => {
+      await queryClient.invalidateQueries({
+        queryKey: ["forge-movement-trip", variables.tripId]
+      });
+      await queryClient.invalidateQueries({ queryKey: ["forge-movement-day"] });
+      await queryClient.invalidateQueries({ queryKey: ["forge-movement-month"] });
+      await queryClient.invalidateQueries({ queryKey: ["forge-movement-all-time"] });
+      await queryClient.invalidateQueries({ queryKey: ["forge-movement-selection"] });
+    }
+  });
+
+  const deletePointMutation = useMutation({
+    mutationFn: async (input: { tripId: string; pointId: string }) =>
+      deleteMovementTripPoint(input.tripId, input.pointId),
+    onSuccess: async (_, variables) => {
+      await queryClient.invalidateQueries({
+        queryKey: ["forge-movement-trip", variables.tripId]
+      });
+      await queryClient.invalidateQueries({ queryKey: ["forge-movement-day"] });
+      await queryClient.invalidateQueries({ queryKey: ["forge-movement-month"] });
+      await queryClient.invalidateQueries({ queryKey: ["forge-movement-all-time"] });
+      await queryClient.invalidateQueries({ queryKey: ["forge-movement-selection"] });
+    }
+  });
+
   const filteredPlaces = useMemo(() => {
     const items = placesQuery.data ?? [];
     const normalizedSearch = placeSearch.trim().toLowerCase();
@@ -478,6 +808,76 @@ export function MovementPage() {
       return haystack.includes(normalizedSearch);
     });
   }, [placeSearch, placesQuery.data]);
+
+  const pointFilterOptions = useMemo(
+    () =>
+      createMovementPointFilterOptions(selectedTripQuery.data?.trip.points ?? []),
+    [selectedTripQuery.data?.trip.points]
+  );
+  const filteredPoints = useMemo(() => {
+    const points = selectedTripQuery.data?.trip.points ?? [];
+    const normalizedQuery = normalize(pointQuery);
+    return [...points]
+      .sort(
+        (left, right) =>
+          new Date(right.recordedAt).getTime() -
+          new Date(left.recordedAt).getTime()
+      )
+      .filter((point) => {
+        const matchesQuery =
+          normalizedQuery.length === 0 ||
+          buildMovementPointSearchText(point).includes(normalizedQuery);
+        return (
+          matchesQuery &&
+          matchesMovementPointFilters(point, selectedPointFilterIds)
+        );
+      });
+  }, [pointQuery, selectedPointFilterIds, selectedTripQuery.data?.trip.points]);
+  const pointResultSummary = useMemo(() => {
+    const total = selectedTripQuery.data?.trip.points.length ?? 0;
+    if (total === 0) {
+      return "No raw datapoints on this trip yet.";
+    }
+    if (filteredPoints.length === total && pointQuery.trim().length === 0 && selectedPointFilterIds.length === 0) {
+      return `${total} datapoints visible`;
+    }
+    return `${filteredPoints.length} of ${total} datapoints visible`;
+  }, [filteredPoints.length, pointQuery, selectedPointFilterIds.length, selectedTripQuery.data?.trip.points.length]);
+
+  const rowVirtualizer = useVirtualizer({
+    count: filteredPoints.length,
+    getScrollElement: () => pointListRef.current,
+    estimateSize: () => 96,
+    overscan: 8
+  });
+
+  const activePoint =
+    filteredPoints.find((point) => point.id === selectedPointId) ??
+    selectedTripQuery.data?.trip.points.find((point) => point.id === selectedPointId) ??
+    filteredPoints[0] ??
+    selectedTripQuery.data?.trip.points[0] ??
+    null;
+
+  useEffect(() => {
+    if (!dataModalOpen) {
+      return;
+    }
+    if (!activePoint) {
+      setSelectedPointId(null);
+      setPointDraft(null);
+      return;
+    }
+    setSelectedPointId(activePoint.id);
+    setPointDraft(buildPointDraft(activePoint));
+  }, [activePoint, dataModalOpen]);
+
+  useEffect(() => {
+    setPointQuery("");
+    setSelectedPointFilterIds([]);
+    setSelectedPointId(null);
+    setPointDraft(null);
+    setDataModalOpen(false);
+  }, [selectedTripId]);
 
   if (
     movementDayQuery.isLoading ||
@@ -573,8 +973,11 @@ export function MovementPage() {
         <Card className="overflow-hidden rounded-[30px] border border-white/8 bg-[radial-gradient(circle_at_top_left,rgba(107,214,255,0.16),transparent_42%),linear-gradient(180deg,rgba(10,18,35,0.98),rgba(9,15,28,0.92))]">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
-              <div className="font-label text-[11px] uppercase tracking-[0.2em] text-white/42">
-                Movement operating mode
+              <div className="flex items-center gap-2">
+                <div className="font-label text-[11px] uppercase tracking-[0.2em] text-white/42">
+                  Movement operating mode
+                </div>
+                <InfoTooltip content="This is the passive capture state of the movement system: whether tracking is running, how much is published into Forge, and how aggressive retention is." />
               </div>
               <div className="mt-2 text-[clamp(1.05rem,1.8vw,1.35rem)] text-white">
                 Background stays and trips as structured life evidence
@@ -640,8 +1043,11 @@ export function MovementPage() {
         </Card>
 
         <Card className="rounded-[30px] border border-white/8 bg-[linear-gradient(180deg,rgba(10,17,31,0.96),rgba(8,13,24,0.92))] p-5">
-          <div className="font-label text-[11px] uppercase tracking-[0.2em] text-white/42">
-            Selection aggregate
+          <div className="flex items-center gap-2">
+            <div className="font-label text-[11px] uppercase tracking-[0.2em] text-white/42">
+              Selection aggregate
+            </div>
+            <InfoTooltip content="When you select stays or trips, Forge totals their span, distance, work overlap, notes, and places here." />
           </div>
           <div className="mt-2 text-sm text-white/56">
             Select any combination of stays and trips to sum movement, time, and work evidence.
@@ -691,7 +1097,17 @@ export function MovementPage() {
       </section>
 
       {viewMode === "life" ? (
-        <MovementLifeTimeline userIds={selectedUserIds} />
+        <section className="grid gap-3">
+          <div className="flex items-center justify-between gap-3 px-1">
+            <div className="flex items-center gap-2">
+              <div className="font-label text-[11px] uppercase tracking-[0.2em] text-white/38">
+                Life graph
+              </div>
+              <InfoTooltip content="This graph shows the movement road of your life: stays are blocks, moves connect them, and the hour/day lines live in the background. Click a segment for details, then use edit when you want to correct it." />
+            </div>
+          </div>
+          <MovementLifeTimeline userIds={selectedUserIds} />
+        </section>
       ) : null}
 
       {viewMode === "day" ? (
@@ -699,8 +1115,11 @@ export function MovementPage() {
           <Card className="rounded-[30px] border border-white/8 bg-[linear-gradient(180deg,rgba(10,17,31,0.96),rgba(7,12,22,0.92))] p-5">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
-                <div className="font-label text-[11px] uppercase tracking-[0.2em] text-white/42">
-                  Day strip
+                <div className="flex items-center gap-2">
+                  <div className="font-label text-[11px] uppercase tracking-[0.2em] text-white/42">
+                    Day strip
+                  </div>
+                  <InfoTooltip content="A compressed 24-hour strip. Each segment keeps its true order and duration, but the whole day stays navigable on one line." />
                 </div>
                 <div className="mt-2 text-sm text-white/58">
                   A single-row timeline from 00:00 to 24:00, always compressed into one navigable strip.
@@ -809,13 +1228,22 @@ export function MovementPage() {
                   <div className="font-label text-[11px] uppercase tracking-[0.2em] text-white/42">
                     Selected trip
                   </div>
-                  <Button
-                    variant="ghost"
-                    className="h-9 rounded-full border border-white/10 bg-white/[0.04] px-4"
-                    onClick={() => setShowExactPath((current) => !current)}
-                  >
-                    {showExactPath ? "Stylized graph" : "Exact path"}
-                  </Button>
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      variant="ghost"
+                      className="h-9 rounded-full border border-white/10 bg-white/[0.04] px-4"
+                      onClick={() => setDataModalOpen(true)}
+                    >
+                      View data
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      className="h-9 rounded-full border border-white/10 bg-white/[0.04] px-4"
+                      onClick={() => setShowExactPath((current) => !current)}
+                    >
+                      {showExactPath ? "Stylized graph" : "Exact path"}
+                    </Button>
+                  </div>
                 </div>
                 {showExactPath ? (
                   <ExactTripCard points={selectedTripQuery.data.trip.points} />
@@ -864,8 +1292,11 @@ export function MovementPage() {
           <Card className="rounded-[30px] border border-white/8 bg-[linear-gradient(180deg,rgba(9,15,28,0.97),rgba(8,13,24,0.92))] p-5">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
-                <div className="font-label text-[11px] uppercase tracking-[0.2em] text-white/42">
-                  Month view
+                <div className="flex items-center gap-2">
+                  <div className="font-label text-[11px] uppercase tracking-[0.2em] text-white/42">
+                    Month view
+                  </div>
+                  <InfoTooltip content="This chart stays quantitative. Switch the metric to compare daily distance, moving time, idle time, or calories across the month." />
                 </div>
                 <div className="mt-2 text-sm text-white/58">
                   Switch the Y-axis between motion, idle time, and energy without losing the same monthly frame.
@@ -1058,8 +1489,11 @@ export function MovementPage() {
         <Card className="rounded-[30px] border border-white/8 bg-[linear-gradient(180deg,rgba(8,14,28,0.96),rgba(9,15,28,0.92))] p-5">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
-              <div className="font-label text-[11px] uppercase tracking-[0.2em] text-white/42">
-                Known places
+              <div className="flex items-center gap-2">
+                <div className="font-label text-[11px] uppercase tracking-[0.2em] text-white/42">
+                  Known places
+                </div>
+                <InfoTooltip content="Known places turn raw stationary spans into named contexts like home, work, gym, nature, or any custom place tag you want Forge to remember." />
               </div>
               <div className="mt-2 text-sm text-white/58">
                 These landmarks anchor stays, travel XP, and contextual reasoning in both Forge and the companion. Seeded tags like home, workplace, gym, holiday, grocery, or nature matter for downstream calculations, but place tags stay open-ended.
@@ -1113,60 +1547,220 @@ export function MovementPage() {
         </Card>
 
         <Card className="rounded-[30px] border border-white/8 bg-[linear-gradient(180deg,rgba(10,17,31,0.96),rgba(8,13,24,0.92))] p-5">
-          <div className="font-label text-[11px] uppercase tracking-[0.2em] text-white/42">
-            Why this matters
+          <div className="flex items-center gap-2">
+            <div className="font-label text-[11px] uppercase tracking-[0.2em] text-white/42">
+              Movement help
+            </div>
+            <InfoTooltip content="Most movement surfaces on this page have help buttons. Use them to understand the graph, the day strip, the month chart, and the place system without keeping a large prose block on screen." />
           </div>
-          <div className="mt-4 grid gap-3">
-            {[
-              {
-                icon: Route,
-                title: "Trips become evidence",
-                body: "Every movement block can publish notes, labels, people links, and travel tags instead of disappearing as raw telemetry."
-              },
-              {
-                icon: Clock3,
-                title: "Places become time containers",
-                body: "Idle spans at home, work, nature, or social spots become visible operating context rather than vague memory."
-              },
-              {
-                icon: BarChart3,
-                title: "Month and all-time views stay quantitative",
-                body: "Distance, idle time, expected MET, and work overlap can all be inspected without collapsing into a generic health dashboard."
-              },
-              {
-                icon: Mountain,
-                title: "XP rewards can follow real life",
-                body: "Commuting stays modest, social and nature movement earn more, and holidays or new-country movement can stand out."
-              },
-              {
-                icon: Waves,
-                title: "The graph stays primary",
-                body: "The stylized trip view leads, while exact point playback remains available when you want the raw trace."
-              },
-              {
-                icon: Sparkles,
-                title: "The companion remains deliberate",
-                body: "Known places, publish mode, and passive tracking can all be tuned without leaking low-quality points forever."
-              }
-            ].map((item) => (
-              <div
-                key={item.title}
-                className="rounded-[22px] border border-white/8 bg-white/[0.03] p-4"
-              >
-                <div className="flex items-center gap-3 text-white">
-                  <div className="rounded-full border border-white/8 bg-white/[0.05] p-2">
-                    <item.icon className="size-4 text-[var(--primary)]" />
-                  </div>
-                  <div className="text-sm font-semibold">{item.title}</div>
-                </div>
-                <div className="mt-2 text-sm leading-6 text-white/56">
-                  {item.body}
-                </div>
-              </div>
-            ))}
+          <div className="mt-3 text-sm leading-6 text-white/58">
+            Use the small help icons across this page for graph explanations, timeline semantics, and metric meanings.
+          </div>
+          <div className="mt-4 flex flex-wrap gap-2">
+            <Badge className="bg-white/[0.06] text-white/74">Life graph</Badge>
+            <Badge className="bg-white/[0.06] text-white/74">Day strip</Badge>
+            <Badge className="bg-white/[0.06] text-white/74">Month chart</Badge>
+            <Badge className="bg-white/[0.06] text-white/74">Known places</Badge>
+            <Badge className="bg-white/[0.06] text-white/74">Selection aggregate</Badge>
           </div>
         </Card>
       </section>
+
+      {selectedTripQuery.data ? (
+        <SheetScaffold
+          open={dataModalOpen}
+          onOpenChange={(open) => {
+            setDataModalOpen(open);
+            if (!open) {
+              setPointQuery("");
+              setSelectedPointFilterIds([]);
+              setSelectedPointId(null);
+              setPointDraft(null);
+            }
+          }}
+          eyebrow="Movement data"
+          title={selectedTripQuery.data.trip.label || "Trip datapoints"}
+          description="Inspect the raw datapoints behind this trip, search them with time and quality filters, then edit or tombstone them without letting the companion re-upload the stale version."
+        >
+          <div className="grid gap-4 xl:grid-cols-[minmax(0,24rem)_minmax(0,1fr)]">
+            <div className="grid gap-4">
+              <FacetedTokenSearch
+                title="Datapoint browser"
+                description="Search raw points by time band, anchor status, or accuracy before opening the point editor."
+                query={pointQuery}
+                onQueryChange={setPointQuery}
+                options={pointFilterOptions}
+                selectedOptionIds={selectedPointFilterIds}
+                onSelectedOptionIdsChange={setSelectedPointFilterIds}
+                resultSummary={pointResultSummary}
+                placeholder="Search timestamps, accuracy, point ids, or filter chips"
+                emptyStateMessage="Keep typing or pick a time/quality chip to narrow the trip datapoints."
+              />
+
+              <Card className="grid gap-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">
+                      Raw datapoints
+                    </div>
+                    <div className="mt-2 text-lg text-white">
+                      Open a point to correct or delete it.
+                    </div>
+                  </div>
+                  <Badge tone="meta">{pointResultSummary}</Badge>
+                </div>
+
+                <div
+                  ref={pointListRef}
+                  className="h-[34rem] overflow-y-auto rounded-[24px] border border-white/8 bg-white/[0.03]"
+                >
+                  {filteredPoints.length === 0 ? (
+                    <div className="flex h-full items-center justify-center p-6 text-center text-sm leading-6 text-white/50">
+                      No datapoint matches the current search. Clear some filters or search by time, anchor type, or accuracy.
+                    </div>
+                  ) : (
+                    <div
+                      className="relative w-full"
+                      style={{ height: `${rowVirtualizer.getTotalSize()}px` }}
+                    >
+                      {rowVirtualizer.getVirtualItems().map((virtualRow) => {
+                        const point = filteredPoints[virtualRow.index]!;
+                        return (
+                          <div
+                            key={point.id}
+                            className="absolute left-0 top-0 w-full px-3 py-2"
+                            style={{
+                              transform: `translateY(${virtualRow.start}px)`
+                            }}
+                          >
+                            <button
+                              type="button"
+                              className={cn(
+                                "grid w-full gap-3 rounded-[20px] border px-4 py-3 text-left transition",
+                                selectedPointId === point.id
+                                  ? "border-[rgba(171,232,255,0.34)] bg-[rgba(171,232,255,0.12)]"
+                                  : "border-white/8 bg-white/[0.04] hover:bg-white/[0.07]"
+                              )}
+                              onClick={() => {
+                                setSelectedPointId(point.id);
+                                setPointDraft(buildPointDraft(point));
+                              }}
+                            >
+                              <div className="flex items-start justify-between gap-3">
+                                <div className="min-w-0">
+                                  <div className="flex items-center gap-2 text-white">
+                                    <Clock3 className="size-4 shrink-0 text-[var(--primary)]" />
+                                    <span className="truncate text-base font-medium">
+                                      {formatPointTimestamp(point.recordedAt)}
+                                    </span>
+                                  </div>
+                                  <div className="mt-2 text-sm text-white/56">
+                                    {point.latitude.toFixed(5)}, {point.longitude.toFixed(5)}
+                                  </div>
+                                </div>
+                                <Badge tone={point.isStopAnchor ? "signal" : "meta"}>
+                                  {point.isStopAnchor ? "Stop anchor" : "Path point"}
+                                </Badge>
+                              </div>
+                              <div className="flex flex-wrap gap-2">
+                                <Badge tone="meta" className="capitalize">
+                                  {pointTimeBucket(point.recordedAt)}
+                                </Badge>
+                                {point.accuracyMeters != null ? (
+                                  <Badge tone="meta">
+                                    {Math.round(point.accuracyMeters)} m accuracy
+                                  </Badge>
+                                ) : null}
+                                {point.speedMps != null ? (
+                                  <Badge tone="meta">
+                                    {point.speedMps.toFixed(1)} m/s
+                                  </Badge>
+                                ) : null}
+                              </div>
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              </Card>
+            </div>
+
+            {activePoint && pointDraft ? (
+              <MovementPointEditor
+                point={activePoint}
+                draft={pointDraft}
+                saving={
+                  pointMutation.isPending &&
+                  pointMutation.variables?.pointId === activePoint.id
+                }
+                deleting={
+                  deletePointMutation.isPending &&
+                  deletePointMutation.variables?.pointId === activePoint.id
+                }
+                onDraftChange={(patch) =>
+                  setPointDraft((current) =>
+                    current ? { ...current, ...patch } : current
+                  )
+                }
+                onSave={() => {
+                  if (!selectedTripId || !pointDraft) {
+                    return;
+                  }
+                  const recordedAt = fromLocalDateTimeInput(pointDraft.recordedAt);
+                  if (!recordedAt) {
+                    return;
+                  }
+                  void pointMutation.mutateAsync({
+                    tripId: selectedTripId,
+                    pointId: activePoint.id,
+                    patch: {
+                      recordedAt,
+                      latitude: Number(pointDraft.latitude),
+                      longitude: Number(pointDraft.longitude),
+                      accuracyMeters:
+                        pointDraft.accuracyMeters.trim().length > 0
+                          ? Number(pointDraft.accuracyMeters)
+                          : null,
+                      altitudeMeters:
+                        pointDraft.altitudeMeters.trim().length > 0
+                          ? Number(pointDraft.altitudeMeters)
+                          : null,
+                      speedMps:
+                        pointDraft.speedMps.trim().length > 0
+                          ? Number(pointDraft.speedMps)
+                          : null,
+                      isStopAnchor: pointDraft.isStopAnchor
+                    }
+                  });
+                }}
+                onDelete={() => {
+                  if (!selectedTripId) {
+                    return;
+                  }
+                  const nextPoint =
+                    filteredPoints.find((point) => point.id !== activePoint.id) ??
+                    selectedTripQuery.data?.trip.points.find(
+                      (point) => point.id !== activePoint.id
+                    ) ??
+                    null;
+                  setSelectedPointId(nextPoint?.id ?? null);
+                  setPointDraft(nextPoint ? buildPointDraft(nextPoint) : null);
+                  void deletePointMutation.mutateAsync({
+                    tripId: selectedTripId,
+                    pointId: activePoint.id
+                  });
+                }}
+              />
+            ) : (
+              <Card className="rounded-[28px] border border-dashed border-white/12 bg-white/[0.03] p-6 text-white/56">
+                Pick a datapoint to edit or delete it. The canonical change will flow back to the companion on the next sync.
+              </Card>
+            )}
+          </div>
+        </SheetScaffold>
+      ) : null}
 
       <PlaceEditorDialog
         open={placeEditorOpen}

@@ -30,7 +30,7 @@ struct SetupDiscoveryScreen: View {
             companionDebugLog("SetupDiscoveryScreen", "connectingServerId -> \(nextValue ?? "nil")")
         }
         .task {
-            if appModel.discoveredServers.isEmpty && !appModel.discoveryInFlight {
+            if appModel.screenshotScenario == nil && appModel.discoveredServers.isEmpty && !appModel.discoveryInFlight {
                 companionDebugLog("SetupDiscoveryScreen", "task auto discover start")
                 await appModel.discoverForgeServers()
             }
