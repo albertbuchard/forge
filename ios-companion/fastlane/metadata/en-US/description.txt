@@ -1,0 +1,8 @@
+Forge Companion is the native iPhone bridge for Forge. It pairs with your Forge runtime,
+requests Apple permissions directly, imports HealthKit sleep and workouts, passively
+captures movement history, and keeps your reflected life data synced back into Forge.
+
+The companion is designed to stay low-friction. After pairing, it should handle sync,
+movement capture, and HealthKit import quietly in the background while still letting you
+review movement timelines, sync health data manually when needed, and open the full Forge
+experience from the phone.

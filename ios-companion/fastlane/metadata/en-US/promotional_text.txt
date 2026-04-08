@@ -1,0 +1,1 @@
+Forge Companion keeps movement, sleep, workouts, and Apple-native context flowing into Forge with a low-friction native sync bridge.

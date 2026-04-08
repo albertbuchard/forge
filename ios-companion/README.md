@@ -77,3 +77,51 @@ Runtime discovery prefers Bonjour on the local network. The Forge runtime now
 advertises `_forge._tcp` and, when Tailscale Serve is available, includes the
 tailnet HTTPS base URLs in the Bonjour TXT record so the iPhone can discover both
 local-network and Tailscale paths from one source.
+
+## App Store release automation
+
+This repo now includes a one-command Apple release flow for the iPhone companion and
+its embedded watch targets.
+
+Public entrypoint:
+
+- `./ios-companion/scripts/publish-forge-companion.sh validate`
+- `./ios-companion/scripts/publish-forge-companion.sh testflight`
+- `./ios-companion/scripts/publish-forge-companion.sh app-store`
+
+The script bootstraps a local Fastlane toolchain under `ios-companion/vendor/bundle`,
+runs Forge repo checks, archives the real manually curated Xcode project at
+`ios-companion/ForgeCompanion/ForgeCompanion.xcodeproj`, and then uploads or submits
+depending on the selected mode.
+
+### One-time local setup
+
+1. Copy `ios-companion/.release.env.example` to `ios-companion/.release.env`
+2. Fill in the App Store Connect API key values
+3. Replace placeholder values in:
+   - `ios-companion/fastlane/metadata/en-US/support_url.txt`
+   - `ios-companion/fastlane/metadata/en-US/marketing_url.txt`
+   - `ios-companion/fastlane/metadata/en-US/privacy_url.txt`
+4. Update `ios-companion/release/release.yml` when you want a new marketing version
+5. Update `ios-companion/fastlane/metadata/en-US/release_notes.txt` before each release
+
+### One-time Apple-side prep
+
+Before the script can publish successfully, make sure App Store Connect / Apple
+Developer already has:
+
+- an app record for `Forge Companion`
+- the iPhone bundle id and watch companion bundle ids configured correctly
+- automatic signing working for team `KZ65F7924F`
+- an App Store Connect API key with permission to upload builds and manage releases
+- app category, pricing, availability, export compliance, privacy questionnaire, and age rating completed
+
+### Screenshots
+
+Screenshot upload is repo-managed but disabled by default. The release config lives in:
+
+- `ios-companion/release/release.yml`
+- `ios-companion/fastlane/screenshots/manifest.json`
+
+When `upload_screenshots_for_app_store` is set to `true`, the script will require the
+manifested screenshot files to exist before it uploads or submits the release.

@@ -1,0 +1,23 @@
+app:
+  name: Forge Companion
+  primary_bundle_id: com.albertbuchard.ForgeCompanion
+  watch_bundle_ids:
+    - com.albertbuchard.ForgeCompanion.watchkitapp
+    - com.albertbuchard.ForgeCompanion.watchkitapp.ForgeWatch
+
+version:
+  marketing: "1.0"
+
+release:
+  default_mode: testflight
+  phased_release: false
+  automatic_release: false
+  notify_external_testers: false
+  testflight_groups: []
+
+metadata:
+  default_locale: en-US
+  metadata_path: fastlane/metadata
+  screenshots_path: fastlane/screenshots
+  screenshots_manifest: fastlane/screenshots/manifest.json
+  upload_screenshots_for_app_store: false

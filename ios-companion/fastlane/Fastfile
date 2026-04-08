@@ -1,0 +1,374 @@
+default_platform(:ios)
+
+require "json"
+require "yaml"
+require "base64"
+require "fileutils"
+require "shellwords"
+
+platform :ios do
+  before_all do |_lane, _options|
+    setup_ci if ENV["CI"]
+  end
+
+  desc "Validate Forge Companion release inputs and produce a local archive without uploading"
+  lane :validate_release do |options|
+    config = load_release_config
+    mode = normalized_release_mode(options[:mode] || "validate")
+    metadata_state = validate_release_inputs!(config: config, mode: mode, require_api_key: false)
+    artifact_dir = prepare_artifact_dir(options[:artifact_dir], mode: "validate")
+    archive_path = File.join(artifact_dir, "ForgeCompanion.xcarchive")
+    ipa_path = build_release_archive!(
+      artifact_dir: artifact_dir,
+      archive_path: archive_path,
+      marketing_version: config.dig(:version, :marketing).to_s,
+      bump_build_number: false
+    )
+    write_release_summary(
+      artifact_dir: artifact_dir,
+      mode: "validate",
+      config: config,
+      archive_path: archive_path,
+      ipa_path: ipa_path,
+      build_number: current_build_number,
+      metadata_state: metadata_state,
+      uploaded: false,
+      submitted_for_review: false
+    )
+    UI.success("Validation archive complete at #{artifact_dir}")
+  end
+
+  desc "Archive and upload Forge Companion to TestFlight"
+  lane :testflight_release do |options|
+    config = load_release_config
+    metadata_state = validate_release_inputs!(config: config, mode: "testflight", require_api_key: true)
+    api_key = app_store_connect_api_key_from_env
+    verify_app_store_connect_app!(config: config)
+    artifact_dir = prepare_artifact_dir(options[:artifact_dir], mode: "testflight")
+    archive_path = File.join(artifact_dir, "ForgeCompanion.xcarchive")
+    increment_release_versions!(config)
+    build_number = current_build_number
+    ipa_path = build_release_archive!(
+      artifact_dir: artifact_dir,
+      archive_path: archive_path,
+      marketing_version: config.dig(:version, :marketing).to_s,
+      bump_build_number: false
+    )
+    upload_to_testflight(
+      api_key: api_key,
+      ipa: ipa_path,
+      changelog: release_notes_text(config),
+      groups: Array(config.dig(:release, :testflight_groups)),
+      notify_external_testers: config.dig(:release, :notify_external_testers) == true,
+      skip_waiting_for_build_processing: true
+    )
+    write_release_summary(
+      artifact_dir: artifact_dir,
+      mode: "testflight",
+      config: config,
+      archive_path: archive_path,
+      ipa_path: ipa_path,
+      build_number: build_number,
+      metadata_state: metadata_state,
+      uploaded: true,
+      submitted_for_review: false
+    )
+    UI.success("TestFlight upload complete at #{artifact_dir}")
+  end
+
+  desc "Archive, upload, and submit Forge Companion for App Store review"
+  lane :app_store_release do |options|
+    config = load_release_config
+    metadata_state = validate_release_inputs!(config: config, mode: "app-store", require_api_key: true)
+    api_key = app_store_connect_api_key_from_env
+    verify_app_store_connect_app!(config: config)
+    artifact_dir = prepare_artifact_dir(options[:artifact_dir], mode: "app-store")
+    archive_path = File.join(artifact_dir, "ForgeCompanion.xcarchive")
+    increment_release_versions!(config)
+    build_number = current_build_number
+    ipa_path = build_release_archive!(
+      artifact_dir: artifact_dir,
+      archive_path: archive_path,
+      marketing_version: config.dig(:version, :marketing).to_s,
+      bump_build_number: false
+    )
+    upload_to_app_store(
+      api_key: api_key,
+      app_identifier: config.dig(:app, :primary_bundle_id),
+      ipa: ipa_path,
+      metadata_path: metadata_root(config),
+      screenshots_path: screenshots_root(config),
+      skip_metadata: false,
+      skip_screenshots: !metadata_state[:upload_screenshots],
+      overwrite_screenshots: metadata_state[:upload_screenshots],
+      submit_for_review: true,
+      automatic_release: config.dig(:release, :automatic_release) == true,
+      phased_release: config.dig(:release, :phased_release) == true,
+      precheck_include_in_app_purchases: false,
+      force: true
+    )
+    write_release_summary(
+      artifact_dir: artifact_dir,
+      mode: "app-store",
+      config: config,
+      archive_path: archive_path,
+      ipa_path: ipa_path,
+      build_number: build_number,
+      metadata_state: metadata_state,
+      uploaded: true,
+      submitted_for_review: true
+    )
+    UI.success("App Store submission complete at #{artifact_dir}")
+  end
+end
+
+def release_root
+  File.expand_path("..", __dir__)
+end
+
+def forge_root
+  File.expand_path("..", release_root)
+end
+
+def xcode_project_path
+  File.join(release_root, "ForgeCompanion", "ForgeCompanion.xcodeproj")
+end
+
+def scheme_name
+  "ForgeCompanion"
+end
+
+def release_config_path
+  ENV["FORGE_RELEASE_CONFIG_PATH"] || File.join(release_root, "release", "release.yml")
+end
+
+def load_release_config
+  @load_release_config ||= begin
+    UI.user_error!("Missing release config at #{release_config_path}") unless File.exist?(release_config_path)
+    YAML.safe_load(File.read(release_config_path), aliases: false, symbolize_names: true)
+  end
+end
+
+def metadata_root(config)
+  File.join(release_root, config.dig(:metadata, :metadata_path) || "fastlane/metadata")
+end
+
+def screenshots_root(config)
+  File.join(release_root, config.dig(:metadata, :screenshots_path) || "fastlane/screenshots")
+end
+
+def screenshots_manifest_path(config)
+  File.join(release_root, config.dig(:metadata, :screenshots_manifest) || "fastlane/screenshots/manifest.json")
+end
+
+def default_locale(config)
+  config.dig(:metadata, :default_locale) || "en-US"
+end
+
+def normalized_release_mode(raw_mode)
+  case raw_mode.to_s
+  when "validate", "testflight", "app-store"
+    raw_mode.to_s
+  else
+    UI.user_error!("Unsupported release mode #{raw_mode.inspect}. Use validate, testflight, or app-store.")
+  end
+end
+
+def release_notes_file(config)
+  File.join(metadata_root(config), default_locale(config), "release_notes.txt")
+end
+
+def release_notes_text(config)
+  path = release_notes_file(config)
+  UI.user_error!("Missing release notes at #{path}") unless File.exist?(path)
+  contents = File.read(path).strip
+  UI.user_error!("Release notes at #{path} are empty") if contents.empty?
+  contents
+end
+
+def app_store_connect_api_key_from_env
+  key_id = ENV["FORGE_ASC_KEY_ID"].to_s
+  issuer_id = ENV["FORGE_ASC_ISSUER_ID"].to_s
+  key_path = ENV["FORGE_ASC_KEY_PATH"].to_s
+  key_content_base64 = ENV["FORGE_ASC_KEY_CONTENT_BASE64"].to_s
+
+  UI.user_error!("FORGE_ASC_KEY_ID is required") if key_id.empty?
+  UI.user_error!("FORGE_ASC_ISSUER_ID is required") if issuer_id.empty?
+
+  key_content =
+    if key_content_base64.empty?
+      if key_path.empty?
+        UI.user_error!("Provide either FORGE_ASC_KEY_PATH or FORGE_ASC_KEY_CONTENT_BASE64")
+      end
+      UI.user_error!("ASC key file not found at #{key_path}") unless File.exist?(key_path)
+      File.read(key_path)
+    else
+      Base64.decode64(key_content_base64)
+    end
+
+  app_store_connect_api_key(
+    key_id: key_id,
+    issuer_id: issuer_id,
+    key_content: key_content,
+    duration: 1200,
+    in_house: false
+  )
+end
+
+def verify_app_store_connect_app!(config:)
+  return nil if ENV["FORGE_RELEASE_SKIP_REMOTE_VALIDATION"] == "1"
+  app_identifier = config.dig(:app, :primary_bundle_id)
+  app = Spaceship::ConnectAPI.get_apps(filter: { bundleId: app_identifier }, limit: 1).first
+  UI.user_error!("No App Store Connect app record found for #{app_identifier}") unless app
+  app
+end
+
+def read_build_setting(target_name:, key:)
+  command = [
+    "xcodebuild",
+    "-project", Shellwords.escape(xcode_project_path),
+    "-target", Shellwords.escape(target_name),
+    "-showBuildSettings"
+  ].join(" ")
+  output = Actions.sh(command, log: false)
+  setting_pattern = /^\s*#{Regexp.escape(key)}\s*=/
+  line = output.lines.find { |current| current.match?(setting_pattern) }
+  UI.user_error!("Could not resolve #{key} for target #{target_name}") unless line
+  line.split("=", 2).last.to_s.strip
+end
+
+def verify_project_bundle_ids!(config)
+  expected = {
+    "ForgeCompanion" => config.dig(:app, :primary_bundle_id),
+    "ForgeWatch Watch App" => config.dig(:app, :watch_bundle_ids, 0),
+    "ForgeWatchExtension" => config.dig(:app, :watch_bundle_ids, 1)
+  }
+
+  expected.each do |target_name, bundle_id|
+    actual = read_build_setting(target_name: target_name, key: "PRODUCT_BUNDLE_IDENTIFIER")
+    UI.user_error!("Target #{target_name} bundle id mismatch: expected #{bundle_id}, got #{actual}") unless actual == bundle_id
+  end
+end
+
+def validate_metadata!(config:, mode:)
+  locale_root = File.join(metadata_root(config), default_locale(config))
+  required_files = %w[
+    description.txt
+    subtitle.txt
+    keywords.txt
+    promotional_text.txt
+    support_url.txt
+    marketing_url.txt
+    privacy_url.txt
+    release_notes.txt
+  ]
+
+  required_files.each do |file_name|
+    path = File.join(locale_root, file_name)
+    UI.user_error!("Missing required metadata file #{path}") unless File.exist?(path)
+    contents = File.read(path).strip
+    UI.user_error!("Metadata file #{path} is empty") if contents.empty?
+    if %w[support_url.txt marketing_url.txt privacy_url.txt].include?(file_name)
+      if contents.start_with?("REPLACE_WITH_") || contents.include?("TODO")
+        UI.user_error!("Replace placeholder value in #{path} before publishing")
+      end
+    end
+  end
+
+  upload_screenshots = mode == "app-store" && config.dig(:metadata, :upload_screenshots_for_app_store) == true
+  if upload_screenshots
+    manifest_path = screenshots_manifest_path(config)
+    UI.user_error!("Missing screenshot manifest at #{manifest_path}") unless File.exist?(manifest_path)
+    manifest = JSON.parse(File.read(manifest_path))
+    files = Array(manifest["required_files"])
+    UI.user_error!("Screenshot manifest #{manifest_path} has no required_files entries") if files.empty?
+    files.each do |relative_path|
+      full_path = File.join(screenshots_root(config), relative_path)
+      UI.user_error!("Missing screenshot asset #{full_path}") unless File.exist?(full_path)
+    end
+  end
+
+  {
+    locale: default_locale(config),
+    metadata_root: metadata_root(config),
+    upload_screenshots: upload_screenshots
+  }
+end
+
+def validate_release_inputs!(config:, mode:, require_api_key:)
+  verify_project_bundle_ids!(config)
+  metadata_state = validate_metadata!(config: config, mode: mode)
+  app_store_connect_api_key_from_env if require_api_key && ENV["FORGE_RELEASE_SKIP_REMOTE_VALIDATION"] != "1"
+  metadata_state
+end
+
+def prepare_artifact_dir(raw_path, mode:)
+  return raw_path if raw_path && !raw_path.to_s.strip.empty? && FileUtils.mkdir_p(raw_path)
+
+  timestamp = Time.now.utc.strftime("%Y%m%d-%H%M%S")
+  marketing_version = load_release_config.dig(:version, :marketing).to_s
+  artifact_dir = File.join(release_root, ".artifacts", "releases", "#{mode}-v#{marketing_version}-#{timestamp}")
+  FileUtils.mkdir_p(artifact_dir)
+  artifact_dir
+end
+
+def increment_release_versions!(config)
+  marketing_version = config.dig(:version, :marketing).to_s
+  UI.user_error!("release.version.marketing must be set in #{release_config_path}") if marketing_version.empty?
+  increment_version_number(
+    version_number: marketing_version,
+    xcodeproj: xcode_project_path
+  )
+  increment_build_number(xcodeproj: xcode_project_path)
+end
+
+def current_build_number
+  Actions.sh("cd #{Shellwords.escape(File.join(release_root, 'ForgeCompanion'))} && xcrun agvtool what-version -terse", log: false).strip
+end
+
+def build_release_archive!(artifact_dir:, archive_path:, marketing_version:, bump_build_number:)
+  build_ios_app(
+    project: xcode_project_path,
+    scheme: scheme_name,
+    configuration: "Release",
+    clean: true,
+    export_method: "app-store",
+    archive_path: archive_path,
+    output_directory: artifact_dir,
+    output_name: "ForgeCompanion-#{marketing_version}.ipa",
+    include_symbols: true,
+    include_bitcode: false,
+    disable_xcpretty: true,
+    xcargs: "-allowProvisioningUpdates",
+    export_xcargs: "-allowProvisioningUpdates",
+    export_team_id: ENV.fetch("FORGE_APPLE_TEAM_ID", "KZ65F7924F")
+  )
+end
+
+def write_release_summary(
+  artifact_dir:,
+  mode:,
+  config:,
+  archive_path:,
+  ipa_path:,
+  build_number:,
+  metadata_state:,
+  uploaded:,
+  submitted_for_review:
+)
+  summary = {
+    mode: mode,
+    app_name: config.dig(:app, :name),
+    bundle_id: config.dig(:app, :primary_bundle_id),
+    marketing_version: config.dig(:version, :marketing).to_s,
+    build_number: build_number.to_s,
+    archive_path: archive_path,
+    ipa_path: ipa_path,
+    metadata_root: metadata_state[:metadata_root],
+    locale: metadata_state[:locale],
+    uploaded: uploaded,
+    submitted_for_review: submitted_for_review,
+    generated_at: Time.now.utc.iso8601
+  }
+  File.write(File.join(artifact_dir, "release-summary.json"), JSON.pretty_generate(summary))
+end

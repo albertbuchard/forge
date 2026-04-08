@@ -1,0 +1,4 @@
+Forge Companion 1.0 introduces the native iPhone bridge for Forge with HealthKit sleep
+and workout sync, passive movement capture, a full life timeline, Tailscale-aware
+pairing, richer diagnostics, and a lower-friction sync flow after permissions are
+granted.
