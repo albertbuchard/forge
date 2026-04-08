@@ -260,6 +260,7 @@ export const movementSettingsPatchSchema = movementSettingsInputSchema.partial()
 export const movementTimelineQuerySchema = z.object({
   before: z.string().trim().min(1).optional(),
   limit: z.coerce.number().int().min(1).max(120).default(40),
+  includeInvalid: z.coerce.boolean().default(false),
   userIds: z.array(z.string().trim().min(1)).default([])
 });
 export const movementStayPatchSchema = z.object({
@@ -462,6 +463,40 @@ type MovementTripPointOverrideRow = {
   updated_at: string;
 };
 
+type MovementStayTombstoneRow = {
+  id: string;
+  user_id: string;
+  stay_external_uid: string;
+  created_at: string;
+  updated_at: string;
+};
+
+type MovementStayOverrideRow = {
+  id: string;
+  user_id: string;
+  stay_external_uid: string;
+  stay_json: string;
+  created_at: string;
+  updated_at: string;
+};
+
+type MovementTripTombstoneRow = {
+  id: string;
+  user_id: string;
+  trip_external_uid: string;
+  created_at: string;
+  updated_at: string;
+};
+
+type MovementTripOverrideRow = {
+  id: string;
+  user_id: string;
+  trip_external_uid: string;
+  trip_json: string;
+  created_at: string;
+  updated_at: string;
+};
+
 type MovementSettingsRow = {
   user_id: string;
   tracking_enabled: number;
@@ -617,6 +652,98 @@ function listMovementTripPointOverrides(
          AND trip_external_uid = ?`
     )
     .all(userId, tripExternalUid) as MovementTripPointOverrideRow[];
+}
+
+function listMovementStayTombstones(userId: string) {
+  return getDatabase()
+    .prepare(
+      `SELECT *
+       FROM movement_stay_tombstones
+       WHERE user_id = ?`
+    )
+    .all(userId) as MovementStayTombstoneRow[];
+}
+
+function listMovementStayOverrides(userId: string) {
+  return getDatabase()
+    .prepare(
+      `SELECT *
+       FROM movement_stay_overrides
+       WHERE user_id = ?`
+    )
+    .all(userId) as MovementStayOverrideRow[];
+}
+
+function listMovementTripTombstones(userId: string) {
+  return getDatabase()
+    .prepare(
+      `SELECT *
+       FROM movement_trip_tombstones
+       WHERE user_id = ?`
+    )
+    .all(userId) as MovementTripTombstoneRow[];
+}
+
+function listMovementTripOverrides(userId: string) {
+  return getDatabase()
+    .prepare(
+      `SELECT *
+       FROM movement_trip_overrides
+       WHERE user_id = ?`
+    )
+    .all(userId) as MovementTripOverrideRow[];
+}
+
+function applyMovementStaySyncDirectives(
+  userId: string,
+  stay: z.infer<typeof movementStayInputSchema>
+) {
+  const tombstoned = new Set(
+    listMovementStayTombstones(userId).map((row) => row.stay_external_uid)
+  );
+  if (tombstoned.has(stay.externalUid)) {
+    return null;
+  }
+  const override = listMovementStayOverrides(userId).find(
+    (row) => row.stay_external_uid === stay.externalUid
+  );
+  if (!override) {
+    return stay;
+  }
+  return movementStayInputSchema.parse({
+    ...stay,
+    ...safeJsonParse<Partial<z.infer<typeof movementStayInputSchema>>>(
+      override.stay_json,
+      {}
+    ),
+    externalUid: stay.externalUid
+  });
+}
+
+function applyMovementTripSyncDirectives(
+  userId: string,
+  trip: z.infer<typeof movementTripInputSchema>
+) {
+  const tombstoned = new Set(
+    listMovementTripTombstones(userId).map((row) => row.trip_external_uid)
+  );
+  if (tombstoned.has(trip.externalUid)) {
+    return null;
+  }
+  const override = listMovementTripOverrides(userId).find(
+    (row) => row.trip_external_uid === trip.externalUid
+  );
+  if (!override) {
+    return trip;
+  }
+  return movementTripInputSchema.parse({
+    ...trip,
+    ...safeJsonParse<Partial<z.infer<typeof movementTripInputSchema>>>(
+      override.trip_json,
+      {}
+    ),
+    externalUid: trip.externalUid
+  });
 }
 
 function applyTripPointSyncDirectives(input: {
@@ -2303,7 +2430,11 @@ export function ingestMovementSync(
   });
 
   parsed.stays.forEach((stay) => {
-    const result = upsertMovementStay(pairing, settings, stay);
+    const canonicalStay = applyMovementStaySyncDirectives(pairing.user_id, stay);
+    if (!canonicalStay) {
+      return;
+    }
+    const result = upsertMovementStay(pairing, settings, canonicalStay);
     if (result.mode === "created") {
       createdCount += 1;
     } else {
@@ -2312,7 +2443,11 @@ export function ingestMovementSync(
   });
 
   parsed.trips.forEach((trip) => {
-    const result = upsertMovementTrip(pairing, settings, trip);
+    const canonicalTrip = applyMovementTripSyncDirectives(pairing.user_id, trip);
+    if (!canonicalTrip) {
+      return;
+    }
+    const result = upsertMovementTrip(pairing, settings, canonicalTrip);
     if (result.mode === "created") {
       createdCount += 1;
     } else {
@@ -2571,14 +2706,16 @@ export function getMovementTimeline(input: z.input<typeof movementTimelineQueryS
     }
   }
 
-  const decorated = validChronological.map((segment, index) => {
-    const previousStayId = [...validChronological.slice(0, index)]
+  const timelineSource = parsed.includeInvalid ? chronological : validChronological;
+
+  const decorated = timelineSource.map((segment, index) => {
+    const previousStayId = [...timelineSource.slice(0, index)]
       .reverse()
       .find((candidate) => candidate.kind === "stay")?.id;
     const previousStayLane = previousStayId
       ? stayLaneById.get(previousStayId)
       : undefined;
-    const nextStayLaneId = validChronological
+    const nextStayLaneId = timelineSource
       .slice(index + 1)
       .find((candidate) => candidate.kind === "stay")?.id;
     const nextStayLane =
@@ -2590,6 +2727,7 @@ export function getMovementTimeline(input: z.input<typeof movementTimelineQueryS
       endedAt: segment.endedAt
     } satisfies MovementTimelineCursor;
     if (segment.kind === "stay") {
+      const invalid = hasInvalidMovementRecord(segment.stay.metadata);
       const laneSide = stayLaneById.get(segment.id) ?? "left";
       return {
         id: segment.id,
@@ -2609,12 +2747,14 @@ export function getMovementTimeline(input: z.input<typeof movementTimelineQueryS
             ? (((segment.stay.metrics as Record<string, unknown>).tags as string[]) ?? [])
             : [])
         ]),
+        isInvalid: invalid,
         syncSource: segment.stay.pairingSessionId ? "companion" : "forge",
         cursor: encodeMovementTimelineCursor(cursor),
         stay: segment.stay,
         trip: null
       };
     }
+    const invalid = hasInvalidMovementRecord(segment.trip.metadata);
     const laneSide = nextStayLane ?? previousStayLane ?? "left";
     return {
       id: segment.id,
@@ -2636,6 +2776,7 @@ export function getMovementTimeline(input: z.input<typeof movementTimelineQueryS
         ...(segment.trip.startPlace?.categoryTags ?? []),
         ...(segment.trip.endPlace?.categoryTags ?? [])
       ]),
+      isInvalid: invalid,
       syncSource: segment.trip.pairingSessionId ? "companion" : "forge",
       cursor: encodeMovementTimelineCursor(cursor),
       stay: null,
@@ -2706,6 +2847,32 @@ export function updateMovementStay(
     return undefined;
   }
   const parsed = movementStayPatchSchema.parse(patch);
+  const now = nowIso();
+  getDatabase()
+    .prepare(
+      `INSERT INTO movement_stay_overrides (
+         id, user_id, stay_external_uid, stay_json, created_at, updated_at
+       )
+       VALUES (?, ?, ?, ?, ?, ?)
+       ON CONFLICT(user_id, stay_external_uid) DO UPDATE SET
+         stay_json = excluded.stay_json,
+         updated_at = excluded.updated_at`
+    )
+    .run(
+      `msto_${randomUUID().replaceAll("-", "").slice(0, 10)}`,
+      existing.user_id,
+      existing.external_uid,
+      JSON.stringify(parsed),
+      now,
+      now
+    );
+  getDatabase()
+    .prepare(
+      `DELETE FROM movement_stay_tombstones
+       WHERE user_id = ?
+         AND stay_external_uid = ?`
+    )
+    .run(existing.user_id, existing.external_uid);
   const startedAt = parsed.startedAt ?? existing.started_at;
   const endedAt = parsed.endedAt ?? existing.ended_at;
   if (Date.parse(endedAt) < Date.parse(startedAt)) {
@@ -2781,6 +2948,7 @@ export function updateMovementStay(
       nowIso(),
       stayId
     );
+  reconcileMovementOverlapValidation(existing.user_id);
   const places = listMovementPlaceRows([existing.user_id]).map(mapMovementPlace);
   const placesById = new Map(places.map((place) => [place.id, place] as const));
   const updated = mapMovementStay(
@@ -2829,6 +2997,32 @@ export function updateMovementTrip(
     return undefined;
   }
   const parsed = movementTripPatchSchema.parse(patch);
+  const now = nowIso();
+  getDatabase()
+    .prepare(
+      `INSERT INTO movement_trip_overrides (
+         id, user_id, trip_external_uid, trip_json, created_at, updated_at
+       )
+       VALUES (?, ?, ?, ?, ?, ?)
+       ON CONFLICT(user_id, trip_external_uid) DO UPDATE SET
+         trip_json = excluded.trip_json,
+         updated_at = excluded.updated_at`
+    )
+    .run(
+      `mtro_${randomUUID().replaceAll("-", "").slice(0, 10)}`,
+      existing.user_id,
+      existing.external_uid,
+      JSON.stringify(parsed),
+      now,
+      now
+    );
+  getDatabase()
+    .prepare(
+      `DELETE FROM movement_trip_tombstones
+       WHERE user_id = ?
+         AND trip_external_uid = ?`
+    )
+    .run(existing.user_id, existing.external_uid);
   const startedAt = parsed.startedAt ?? existing.started_at;
   const endedAt = parsed.endedAt ?? existing.ended_at;
   if (Date.parse(endedAt) < Date.parse(startedAt)) {
@@ -2923,6 +3117,7 @@ export function updateMovementTrip(
       nowIso(),
       tripId
     );
+  reconcileMovementOverlapValidation(existing.user_id);
   const places = listMovementPlaceRows([existing.user_id]).map(mapMovementPlace);
   const placesById = new Map(places.map((place) => [place.id, place] as const));
   const updated = mapMovementTrip(
@@ -2952,6 +3147,154 @@ export function updateMovementTrip(
     }
   });
   return updated;
+}
+
+export function deleteMovementStay(
+  stayId: string,
+  context: ActivityContext,
+  options: { userId?: string } = {}
+) {
+  const existing = getDatabase()
+    .prepare(
+      `SELECT *
+       FROM movement_stays
+       WHERE id = ?`
+    )
+    .get(stayId) as MovementStayRow | undefined;
+  if (!existing) {
+    return undefined;
+  }
+  if (options.userId && existing.user_id !== options.userId) {
+    return undefined;
+  }
+  const now = nowIso();
+  getDatabase()
+    .prepare(
+      `INSERT INTO movement_stay_tombstones (
+         id, user_id, stay_external_uid, created_at, updated_at
+       )
+       VALUES (?, ?, ?, ?, ?)
+       ON CONFLICT(user_id, stay_external_uid) DO UPDATE SET
+         updated_at = excluded.updated_at`
+    )
+    .run(
+      `mstt_${randomUUID().replaceAll("-", "").slice(0, 10)}`,
+      existing.user_id,
+      existing.external_uid,
+      now,
+      now
+    );
+  getDatabase()
+    .prepare(
+      `DELETE FROM movement_stay_overrides
+       WHERE user_id = ?
+         AND stay_external_uid = ?`
+    )
+    .run(existing.user_id, existing.external_uid);
+  getDatabase()
+    .prepare(
+      `DELETE FROM movement_stays
+       WHERE id = ?`
+    )
+    .run(stayId);
+  reconcileMovementOverlapValidation(existing.user_id);
+  recordActivityEvent({
+    entityType: "system",
+    entityId: stayId,
+    eventType: "movement_stay_deleted",
+    title: "Movement stay deleted",
+    description: `Deleted ${existing.label || "movement stay"} and tombstoned it for sync.`,
+    actor: context.actor ?? null,
+    source: context.source,
+    metadata: {
+      stayExternalUid: existing.external_uid
+    }
+  });
+  return {
+    deletedStayId: stayId,
+    deletedStayExternalUid: existing.external_uid
+  };
+}
+
+export function deleteMovementTrip(
+  tripId: string,
+  context: ActivityContext,
+  options: { userId?: string } = {}
+) {
+  const existing = getDatabase()
+    .prepare(
+      `SELECT *
+       FROM movement_trips
+       WHERE id = ?`
+    )
+    .get(tripId) as MovementTripRow | undefined;
+  if (!existing) {
+    return undefined;
+  }
+  if (options.userId && existing.user_id !== options.userId) {
+    return undefined;
+  }
+  const now = nowIso();
+  getDatabase()
+    .prepare(
+      `INSERT INTO movement_trip_tombstones (
+         id, user_id, trip_external_uid, created_at, updated_at
+       )
+       VALUES (?, ?, ?, ?, ?)
+       ON CONFLICT(user_id, trip_external_uid) DO UPDATE SET
+         updated_at = excluded.updated_at`
+    )
+    .run(
+      `mtrt_${randomUUID().replaceAll("-", "").slice(0, 10)}`,
+      existing.user_id,
+      existing.external_uid,
+      now,
+      now
+    );
+  getDatabase()
+    .prepare(
+      `DELETE FROM movement_trip_overrides
+       WHERE user_id = ?
+         AND trip_external_uid = ?`
+    )
+    .run(existing.user_id, existing.external_uid);
+  getDatabase()
+    .prepare(
+      `DELETE FROM movement_trip_point_tombstones
+       WHERE user_id = ?
+         AND trip_external_uid = ?`
+    )
+    .run(existing.user_id, existing.external_uid);
+  getDatabase()
+    .prepare(
+      `DELETE FROM movement_trip_point_overrides
+       WHERE user_id = ?
+         AND trip_external_uid = ?`
+    )
+    .run(existing.user_id, existing.external_uid);
+  getDatabase()
+    .prepare(
+      `DELETE FROM movement_trips
+       WHERE id = ?`
+    )
+    .run(tripId);
+  reconcileMovementOverlapValidation(existing.user_id);
+  recordActivityEvent({
+    entityType: "system",
+    entityId: tripId,
+    eventType: "movement_trip_deleted",
+    title: "Movement trip deleted",
+    description: `Deleted ${existing.label || "movement trip"} and tombstoned it for sync.`,
+    actor: context.actor ?? null,
+    source: context.source,
+    metadata: {
+      tripExternalUid: existing.external_uid
+    }
+  });
+  return {
+    deletedTripId: tripId,
+    deletedTripExternalUid: existing.external_uid
+  };
 }
 
 export function updateMovementTripPoint(
@@ -3708,6 +4051,7 @@ export function getMovementSelectionAggregate(
 
 export function getMovementMobileBootstrap(pairing: PairingSessionLike) {
   const canonicalTripExternalUids = new Set<string>();
+  const canonicalStayExternalUids = new Set<string>();
   (
     getDatabase()
       .prepare(
@@ -3725,6 +4069,23 @@ export function getMovementMobileBootstrap(pairing: PairingSessionLike) {
       canonicalTripExternalUids.add(row.trip_external_uid);
     }
   });
+  (
+    getDatabase()
+      .prepare(
+        `SELECT DISTINCT stay_external_uid
+         FROM movement_stay_tombstones
+         WHERE user_id = ?
+         UNION
+         SELECT DISTINCT stay_external_uid
+         FROM movement_stay_overrides
+         WHERE user_id = ?`
+      )
+      .all(pairing.user_id, pairing.user_id) as Array<{ stay_external_uid: string }>
+  ).forEach((row) => {
+    if (row.stay_external_uid.trim().length > 0) {
+      canonicalStayExternalUids.add(row.stay_external_uid);
+    }
+  });
   const tripRows =
     canonicalTripExternalUids.size > 0
       ? (getDatabase()
@@ -3737,6 +4098,19 @@ export function getMovementMobileBootstrap(pairing: PairingSessionLike) {
                  .join(",")})`
           )
           .all(pairing.user_id, ...canonicalTripExternalUids) as MovementTripRow[])
+      : [];
+  const stayRows =
+    canonicalStayExternalUids.size > 0
+      ? (getDatabase()
+          .prepare(
+            `SELECT *
+             FROM movement_stays
+             WHERE user_id = ?
+               AND external_uid IN (${[...canonicalStayExternalUids]
+                 .map(() => "?")
+                 .join(",")})`
+          )
+          .all(pairing.user_id, ...canonicalStayExternalUids) as MovementStayRow[])
       : [];
   const placeRows = listMovementPlaceRows([pairing.user_id]);
   const places = placeRows.map(mapMovementPlace);
@@ -3752,6 +4126,7 @@ export function getMovementMobileBootstrap(pairing: PairingSessionLike) {
   return {
     settings: getMovementSettings([pairing.user_id]),
     places,
+    stayOverrides: stayRows.map((stay) => mapMovementStay(stay, placesById)),
     tripOverrides: tripRows.map((trip) =>
       mapMovementTrip(
         trip,
@@ -3759,6 +4134,12 @@ export function getMovementMobileBootstrap(pairing: PairingSessionLike) {
         pointsByTrip.get(trip.id) ?? [],
         stopsByTrip.get(trip.id) ?? []
       )
+    ),
+    deletedStayExternalUids: listMovementStayTombstones(pairing.user_id).map(
+      (row) => row.stay_external_uid
+    ),
+    deletedTripExternalUids: listMovementTripTombstones(pairing.user_id).map(
+      (row) => row.trip_external_uid
     )
   };
 }

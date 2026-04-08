@@ -2770,6 +2770,7 @@ export function getMovementTripDetail(tripId: string) {
 export function getMovementTimeline(input?: {
   before?: string;
   limit?: number;
+  includeInvalid?: boolean;
   userIds?: string[] | unknown;
 }) {
   const search = new URLSearchParams();
@@ -2778,6 +2779,9 @@ export function getMovementTimeline(input?: {
   }
   if (typeof input?.limit === "number") {
     search.set("limit", String(input.limit));
+  }
+  if (input?.includeInvalid) {
+    search.set("includeInvalid", "true");
   }
   appendUserIds(search, coerceUserIds(input?.userIds));
   const suffix = search.size > 0 ? `?${search.toString()}` : "";
@@ -2799,6 +2803,15 @@ export function patchMovementStay(
   );
 }
 
+export function deleteMovementStay(stayId: string) {
+  return request<{ deletedStayId: string; deletedStayExternalUid: string }>(
+    `/api/v1/movement/stays/${stayId}`,
+    {
+      method: "DELETE"
+    }
+  );
+}
+
 export function patchMovementTrip(
   tripId: string,
   patch: Record<string, unknown>
@@ -2808,6 +2821,15 @@ export function patchMovementTrip(
     {
       method: "PATCH",
       body: JSON.stringify(patch)
+    }
+  );
+}
+
+export function deleteMovementTrip(tripId: string) {
+  return request<{ deletedTripId: string; deletedTripExternalUid: string }>(
+    `/api/v1/movement/trips/${tripId}`,
+    {
+      method: "DELETE"
     }
   );
 }

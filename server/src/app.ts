@@ -530,6 +530,8 @@ import {
   movementTripPointPatchSchema,
   movementTripPatchSchema,
   deleteMovementTripPoint,
+  deleteMovementStay,
+  deleteMovementTrip,
   updateMovementPlace,
   updateMovementStay,
   updateMovementSettings,
@@ -5112,6 +5114,20 @@ export async function buildServer(
     }
     return { stay };
   });
+  app.delete("/api/v1/movement/stays/:id", async (request, reply) => {
+    const auth = requireScopedAccess(
+      request.headers as Record<string, unknown>,
+      ["write"],
+      { route: "/api/v1/movement/stays/:id" }
+    );
+    const { id } = request.params as { id: string };
+    const result = deleteMovementStay(id, toActivityContext(auth));
+    if (!result) {
+      reply.code(404);
+      return { error: "Movement stay not found" };
+    }
+    return result;
+  });
   app.patch("/api/v1/movement/trips/:id", async (request, reply) => {
     const auth = requireScopedAccess(
       request.headers as Record<string, unknown>,
@@ -5129,6 +5145,20 @@ export async function buildServer(
       return { error: "Movement trip not found" };
     }
     return { trip };
+  });
+  app.delete("/api/v1/movement/trips/:id", async (request, reply) => {
+    const auth = requireScopedAccess(
+      request.headers as Record<string, unknown>,
+      ["write"],
+      { route: "/api/v1/movement/trips/:id" }
+    );
+    const { id } = request.params as { id: string };
+    const result = deleteMovementTrip(id, toActivityContext(auth));
+    if (!result) {
+      reply.code(404);
+      return { error: "Movement trip not found" };
+    }
+    return result;
   });
   app.patch("/api/v1/movement/trips/:id/points/:pointId", async (request, reply) => {
     const auth = requireScopedAccess(

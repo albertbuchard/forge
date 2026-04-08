@@ -23,6 +23,7 @@ openclaw-plugin/data/
 plugins/forge-codex/runtime/data/
 ios-companion/ForgeCompanion/**/*.xcuserstate
 ios-companion/ForgeCompanion/**/xcuserdata/
+ios-companion/ForgeCompanion/build/
 ios-companion/.release.env
 ios-companion/.release.env.local
 ios-companion/.artifacts/

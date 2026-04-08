@@ -9,11 +9,18 @@ import {
 import { useVirtualizer } from "@tanstack/react-virtual";
 import {
   ArrowUpRight,
+  Database,
   MapPin,
   PencilLine,
   Route,
-  Save
+  Save,
+  Trash2
 } from "lucide-react";
+import { SheetScaffold } from "@/components/experience/sheet-scaffold";
+import {
+  FacetedTokenSearch,
+  type FacetedTokenOption
+} from "@/components/search/faceted-token-search";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -22,6 +29,8 @@ import { ErrorState } from "@/components/ui/page-state";
 import { SurfaceSkeleton } from "@/components/experience/surface-skeleton";
 import {
   createMovementPlace,
+  deleteMovementStay,
+  deleteMovementTrip,
   getMovementTimeline,
   patchMovementStay,
   patchMovementTrip
@@ -33,11 +42,12 @@ import type {
 import { cn } from "@/lib/utils";
 
 const TIMELINE_PAGE_SIZE = 24;
-const CENTER_PADDING = 420;
 const GRID_ROW_HEIGHT = 64;
 const MAX_DISPLAY_SECONDS = 6 * 60 * 60;
+const HISTORY_LEAD_HOURS = 5;
+const CENTER_PADDING = GRID_ROW_HEIGHT * HISTORY_LEAD_HOURS;
 const FUTURE_GRID_HOURS = 1;
-const END_PADDING = GRID_ROW_HEIGHT * FUTURE_GRID_HOURS;
+const SEGMENT_BOX_TOP = 32;
 
 type MovementLifeTimelineProps = {
   userIds?: string[];
@@ -50,6 +60,19 @@ type TimelineDraft = {
   startedAtInput: string;
   endedAtInput: string;
 };
+
+type TimelineRowMetric = {
+  segment: MovementTimelineSegment;
+  rowStart: number;
+  rowHeight: number;
+  displayHeight: number;
+  boxTop: number;
+  boxBottom: number;
+};
+
+function normalizeSearchText(text: string) {
+  return text.trim().toLowerCase();
+}
 
 function formatDurationLabel(durationSeconds: number) {
   if (durationSeconds >= 86_400) {
@@ -223,47 +246,300 @@ function buildDraft(segment: MovementTimelineSegment): TimelineDraft {
   };
 }
 
-function compressedMarkerFractions(durationSeconds: number) {
-  const count = durationSeconds > MAX_DISPLAY_SECONDS ? 5 : 3;
-  return Array.from({ length: count }, (_, index) => {
-    const ratio = index / (count - 1);
-    return durationSeconds > MAX_DISPLAY_SECONDS ? Math.pow(ratio, 1.9) : ratio;
+function segmentTimeBucket(value: string) {
+  const hour = new Date(value).getHours();
+  if (hour < 6) {
+    return "night";
+  }
+  if (hour < 12) {
+    return "morning";
+  }
+  if (hour < 18) {
+    return "afternoon";
+  }
+  return "evening";
+}
+
+function formatSegmentTimestamp(value: string) {
+  return new Intl.DateTimeFormat(undefined, {
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit"
+  }).format(new Date(value));
+}
+
+function buildMovementSegmentSearchText(segment: MovementTimelineSegment) {
+  return normalizeSearchText(
+    [
+      segment.kind,
+      displaySegmentTitle(segment),
+      segment.subtitle,
+      segment.placeLabel ?? "",
+      ...segment.tags,
+      formatSegmentTimestamp(segment.startedAt),
+      formatSegmentTimestamp(segment.endedAt),
+      segmentTimeBucket(segment.startedAt),
+      segment.kind === "stay"
+        ? segment.stay.place?.label ?? segment.stay.label
+        : [
+            segment.trip.label,
+            segment.trip.activityType,
+            segment.trip.travelMode,
+            segment.trip.startPlace?.label,
+            segment.trip.endPlace?.label
+          ]
+            .filter(Boolean)
+            .join(" ")
+    ].join(" ")
+  );
+}
+
+function createMovementSegmentFilterOptions(
+  segments: MovementTimelineSegment[]
+): FacetedTokenOption[] {
+  const options = new Map<string, FacetedTokenOption>();
+  options.set("kind:stay", {
+    id: "kind:stay",
+    label: "Stay",
+    description: "Stationary spans and place anchors."
+  });
+  options.set("kind:trip", {
+    id: "kind:trip",
+    label: "Move",
+    description: "Trips and movement connectors."
+  });
+  for (const bucket of ["night", "morning", "afternoon", "evening"] as const) {
+    options.set(`time:${bucket}`, {
+      id: `time:${bucket}`,
+      label: bucket[0]!.toUpperCase() + bucket.slice(1),
+      description: "Filter by the segment start time."
+    });
+  }
+  for (const segment of segments) {
+    for (const tag of segment.tags) {
+      options.set(`tag:${tag}`, {
+        id: `tag:${tag}`,
+        label: tag,
+        description: "Movement tag"
+      });
+    }
+    if (segment.placeLabel) {
+      options.set(`place:${segment.placeLabel}`, {
+        id: `place:${segment.placeLabel}`,
+        label: segment.placeLabel,
+        description: "Matched place"
+      });
+    }
+  }
+  return [...options.values()].sort((left, right) =>
+    left.label.localeCompare(right.label)
+  );
+}
+
+function matchesMovementSegmentFilters(
+  segment: MovementTimelineSegment,
+  filterIds: string[]
+) {
+  return filterIds.every((filterId) => {
+    if (filterId === "kind:stay" || filterId === "kind:trip") {
+      return segment.kind === filterId.slice("kind:".length);
+    }
+    if (filterId.startsWith("time:")) {
+      return segmentTimeBucket(segment.startedAt) === filterId.slice("time:".length);
+    }
+    if (filterId.startsWith("tag:")) {
+      return segment.tags.includes(filterId.slice("tag:".length));
+    }
+    if (filterId.startsWith("place:")) {
+      return (segment.placeLabel ?? "") === filterId.slice("place:".length);
+    }
+    return true;
   });
 }
 
+function removeSegmentFromTimelinePages(
+  data: { pages: Array<{ segments: MovementTimelineSegment[] }>; pageParams: unknown[] } | undefined,
+  segmentId: string
+) {
+  if (!data) {
+    return data;
+  }
+  return {
+    ...data,
+    pages: data.pages.map((page) => ({
+      ...page,
+      segments: page.segments.filter((segment) => segment.id !== segmentId)
+    }))
+  };
+}
+
+function warpDisplayRatio(ratio: number, severity: number) {
+  const eased =
+    ratio + (Math.sin((ratio - 0.5) * Math.PI) + 1) * 0.5 - ratio;
+  const centered = ratio - 0.5;
+  const cubicCompression = centered * (1 - severity * 0.64) + centered * centered * centered * severity * 2.56;
+  const warped = 0.5 + cubicCompression;
+  return Math.max(0, Math.min(1, warped - (eased - ratio) * severity * 0.08));
+}
+
+function buildHourMarkers(segment: MovementTimelineSegment) {
+  const endMs = new Date(segment.endedAt).getTime();
+  const startMs = new Date(segment.startedAt).getTime();
+  const durationMs = Math.max(1, endMs - startMs);
+  const markers = new Map<number, { ratio: number; label: string; strong: boolean }>();
+  let hourCursor = new Date(startMs);
+  hourCursor.setMinutes(0, 0, 0);
+  if (hourCursor.getTime() <= startMs) {
+    hourCursor = new Date(hourCursor.getTime() + 3_600_000);
+  }
+  while (hourCursor.getTime() < endMs) {
+    const timeMs = hourCursor.getTime();
+    const ratio = Math.min(1, Math.max(0, (timeMs - startMs) / durationMs));
+    markers.set(timeMs, {
+      ratio,
+      label: hourCursor.getHours() === 0
+        ? formatStickyDate(hourCursor.toISOString())
+        : formatHourMarker(hourCursor),
+      strong: hourCursor.getHours() === 0
+    });
+    hourCursor = new Date(timeMs + 3_600_000);
+  }
+  return [...markers.entries()]
+    .sort((left, right) => left[0] - right[0])
+    .map(([, marker]) => marker);
+}
+
+function nextHourBoundaryMs(valueMs: number) {
+  const hourStart = new Date(valueMs);
+  hourStart.setMinutes(0, 0, 0);
+  const hourMs = hourStart.getTime();
+  return hourMs <= valueMs ? hourMs + 3_600_000 : hourMs;
+}
+
+function buildTimelineHourMarkers(
+  rows: TimelineRowMetric[],
+  rangeEndMs: number
+) {
+  const markers: Array<{ y: number; label: string; strong: boolean }> = [];
+  if (rows.length === 0) {
+    return markers;
+  }
+
+  const firstRow = rows[0]!;
+  const firstStartMs = new Date(firstRow.segment.startedAt).getTime();
+  for (
+    let hourMs = nextHourBoundaryMs(firstStartMs - HISTORY_LEAD_HOURS * 3_600_000);
+    hourMs < firstStartMs;
+    hourMs += 3_600_000
+  ) {
+    const y =
+      firstRow.boxTop - ((firstStartMs - hourMs) / 3_600_000) * GRID_ROW_HEIGHT;
+    const hourDate = new Date(hourMs);
+    markers.push({
+      y,
+      label:
+        hourDate.getHours() === 0
+          ? formatStickyDate(hourDate.toISOString())
+          : formatHourMarker(hourDate),
+      strong: hourDate.getHours() === 0
+    });
+  }
+
+  for (let index = 0; index < rows.length; index += 1) {
+    const row = rows[index]!;
+    const segment = row.segment;
+    const durationMs = Math.max(
+      1,
+      new Date(segment.endedAt).getTime() - new Date(segment.startedAt).getTime()
+    );
+    const compressionSeverity = Math.max(
+      0,
+      1 - Math.min(1, MAX_DISPLAY_SECONDS / Math.max(1, segment.durationSeconds))
+    );
+    for (const marker of buildHourMarkers(segment)) {
+      const displayRatio =
+        segment.durationSeconds > MAX_DISPLAY_SECONDS
+          ? warpDisplayRatio(marker.ratio, compressionSeverity)
+          : marker.ratio;
+      markers.push({
+        y: row.boxTop + displayRatio * row.displayHeight,
+        label: marker.label,
+        strong: marker.strong
+      });
+    }
+
+    const nextRow = rows[index + 1] ?? null;
+    if (nextRow) {
+      const gapStartMs = new Date(segment.endedAt).getTime();
+      const gapEndMs = new Date(nextRow.segment.startedAt).getTime();
+      const gapDurationMs = gapEndMs - gapStartMs;
+      if (gapDurationMs > 0) {
+        for (
+          let hourMs = nextHourBoundaryMs(gapStartMs);
+          hourMs < gapEndMs;
+          hourMs += 3_600_000
+        ) {
+          const ratio = (hourMs - gapStartMs) / gapDurationMs;
+          const y = row.boxBottom + (nextRow.boxTop - row.boxBottom) * ratio;
+          const hourDate = new Date(hourMs);
+          markers.push({
+            y,
+            label:
+              hourDate.getHours() === 0
+                ? formatStickyDate(hourDate.toISOString())
+                : formatHourMarker(hourDate),
+            strong: hourDate.getHours() === 0
+          });
+        }
+      }
+      continue;
+    }
+
+    const lastEndMs = new Date(segment.endedAt).getTime();
+    for (
+      let hourMs = nextHourBoundaryMs(lastEndMs);
+      hourMs <= rangeEndMs;
+      hourMs += 3_600_000
+    ) {
+      const y = row.boxBottom + ((hourMs - lastEndMs) / 3_600_000) * GRID_ROW_HEIGHT;
+      const hourDate = new Date(hourMs);
+      markers.push({
+        y,
+        label:
+          hourDate.getHours() === 0
+            ? formatStickyDate(hourDate.toISOString())
+            : formatHourMarker(hourDate),
+        strong: hourDate.getHours() === 0
+      });
+    }
+  }
+
+  return markers.sort((left, right) => left.y - right.y);
+}
+
 function MovementTimelineViewportGrid({
+  rows,
   totalHeight,
-  latestEndedAt,
   scrollTop,
   viewportHeight
 }: {
+  rows: TimelineRowMetric[];
   totalHeight: number;
-  latestEndedAt: string;
   scrollTop: number;
   viewportHeight: number;
 }) {
-  const lineCount = Math.max(10, Math.ceil(totalHeight / GRID_ROW_HEIGHT) + 2);
-  const anchorY = Math.max(0, totalHeight - 1);
-  const latestDate = new Date(
-    new Date(latestEndedAt).getTime() + FUTURE_GRID_HOURS * 3_600_000
-  );
+  const rangeEndMs = Date.now() + FUTURE_GRID_HOURS * 3_600_000;
+  const markers = buildTimelineHourMarkers(rows, rangeEndMs);
   const overscan = GRID_ROW_HEIGHT * 6;
   const visibleStart = Math.max(0, scrollTop - overscan);
   const visibleEnd = Math.min(
     totalHeight,
     scrollTop + Math.max(viewportHeight, GRID_ROW_HEIGHT * 8) + overscan
   );
-  const startIndex = Math.max(
-    0,
-    Math.floor((anchorY - visibleEnd) / GRID_ROW_HEIGHT)
-  );
-  const endIndex = Math.min(
-    lineCount - 1,
-    Math.ceil((anchorY - visibleStart) / GRID_ROW_HEIGHT)
-  );
-  const visibleIndices = Array.from(
-    { length: Math.max(0, endIndex - startIndex + 1) },
-    (_, offset) => startIndex + offset
+  const visibleMarkers = markers.filter(
+    (marker) => marker.y >= visibleStart && marker.y <= visibleEnd
   );
 
   return (
@@ -272,74 +548,26 @@ function MovementTimelineViewportGrid({
       style={{ height: `${totalHeight}px` }}
     >
       <div className="absolute inset-y-0 left-0 w-18 bg-[linear-gradient(90deg,rgba(7,12,22,0.96),rgba(7,12,22,0.42),transparent)]" />
-      {visibleIndices.map((index) => {
-        const y = Math.max(0, anchorY - index * GRID_ROW_HEIGHT);
-        const lineDate = new Date(latestDate.getTime() - index * 3_600_000);
-        const isDateLine = lineDate.getHours() === 0;
+      {visibleMarkers.map((marker, index) => {
         return (
           <div
             key={`timeline-grid-${index}`}
             className="absolute inset-x-0"
-            style={{ top: `${y}px` }}
+            style={{ top: `${marker.y}px` }}
           >
             <div
               className={cn(
                 "border-t",
-                isDateLine ? "border-white/14" : "border-white/7"
+                marker.strong ? "border-white/14" : "border-white/7"
               )}
             />
             <div
               className={cn(
                 "absolute left-3 top-0 -translate-y-1/2 font-label text-[9px] tracking-[0.24em]",
-                isDateLine ? "text-white/38" : "text-white/22"
+                marker.strong ? "text-white/38" : "text-white/22"
               )}
             >
-              {isDateLine ? formatStickyDate(lineDate.toISOString()) : formatHourMarker(lineDate)}
-            </div>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
-function MovementTimelineSegmentScale({
-  segment,
-  className
-}: {
-  segment: MovementTimelineSegment;
-  className?: string;
-}) {
-  const markers = compressedMarkerFractions(segment.durationSeconds);
-  return (
-    <div
-      className={cn(
-        "pointer-events-none absolute inset-x-0 top-0 h-full overflow-hidden rounded-[30px]",
-        className
-      )}
-    >
-      {markers.map((ratio, index) => {
-        const markerDate = new Date(
-          new Date(segment.endedAt).getTime() - segment.durationSeconds * 1000 * ratio
-        );
-        const isStart = index === markers.length - 1;
-        const isDateLine = markerDate.getHours() === 0 || isStart;
-        return (
-          <div
-            key={`${segment.id}-marker-${index}`}
-            className="absolute inset-x-0"
-            style={{ top: `${ratio * 100}%` }}
-          >
-            <div className={cn("border-t", isDateLine ? "border-white/10" : "border-white/6")} />
-            <div
-              className={cn(
-                "absolute left-3 top-0 -translate-y-1/2 font-label text-[9px] tracking-[0.22em]",
-                isDateLine ? "text-white/32" : "text-white/18"
-              )}
-            >
-              {isDateLine
-                ? formatStickyDate(markerDate.toISOString())
-                : formatHourMarker(markerDate)}
+              {marker.label}
             </div>
           </div>
         );
@@ -718,7 +946,6 @@ function MovementTimelineRow({
   const shiftX = selected ? (detailSide === "right" ? -176 : 176) : 0;
   const displayHeight = segmentDisplayHeight(segment.durationSeconds, segment.kind);
   const minRowHeight = Math.max(240, displayHeight + 120);
-  const isWrapped = segment.durationSeconds > MAX_DISPLAY_SECONDS;
   const staySurface =
     segment.kind === "stay"
       ? "bg-[linear-gradient(180deg,rgba(98,130,238,0.22),rgba(18,34,79,0.22))] border-[rgba(152,208,255,0.24)]"
@@ -743,30 +970,12 @@ function MovementTimelineRow({
         className="relative"
         style={{ minHeight: `${minRowHeight}px` }}
       >
-        <div className="pointer-events-none absolute inset-x-0 top-0 h-full overflow-hidden rounded-[34px]">
-          {compressedMarkerFractions(segment.durationSeconds).map((ratio, index) => {
-            const markerDate = new Date(
-              new Date(segment.endedAt).getTime() - segment.durationSeconds * 1000 * ratio
-            );
-            const isDateLine = markerDate.getHours() === 0 || index === compressedMarkerFractions(segment.durationSeconds).length - 1;
-            return (
-              <div
-                key={`${segment.id}-bg-${index}`}
-                className="absolute inset-x-0"
-                style={{ top: `${ratio * 100}%` }}
-              >
-                <div className={cn("border-t", isDateLine ? "border-white/10" : "border-white/5")} />
-              </div>
-            );
-          })}
-        </div>
-
         {segment.kind === "trip" ? (
           <motion.div
             layout
             animate={{ x: shiftX }}
             transition={{ type: "spring", stiffness: 240, damping: 30 }}
-            className="absolute inset-x-0 top-8 h-[calc(100%-2rem)]"
+            className="absolute inset-x-0 top-8 h-[calc(100%-2rem)] z-10"
           >
             {tripEndpoints && selected ? (
               <>
@@ -818,11 +1027,6 @@ function MovementTimelineRow({
               <div className="mt-2 font-label text-[9px] uppercase tracking-[0.22em] text-white/28">
                 {compactTimeLabel(segment.startedAt)} → {compactTimeLabel(segment.endedAt)}
               </div>
-              {isWrapped ? (
-                <div className="mt-2 font-label text-[9px] uppercase tracking-[0.22em] text-white/28">
-                  Wrapped to a 6h road height, actual duration {formatDurationLabel(segment.durationSeconds)}
-                </div>
-              ) : null}
             </button>
           </motion.div>
         ) : (
@@ -830,7 +1034,7 @@ function MovementTimelineRow({
             layout
             animate={{ x: shiftX }}
             transition={{ type: "spring", stiffness: 260, damping: 28 }}
-            className="absolute top-8 left-1/2 w-[min(22rem,calc(100vw-5rem))] -translate-x-1/2"
+            className="absolute top-8 left-1/2 z-10 w-[min(22rem,calc(100vw-5rem))] -translate-x-1/2"
           >
             <button
               type="button"
@@ -844,7 +1048,6 @@ function MovementTimelineRow({
             >
               <MovementStayHandle position="top" />
               <MovementStayHandle position="bottom" />
-              <MovementTimelineSegmentScale segment={segment} />
               <div className="relative z-10 flex h-full flex-col justify-between p-5">
                 <div className="flex items-center justify-between gap-3">
                   <Badge tone="signal" className="bg-white/10 text-white/82">
@@ -859,11 +1062,6 @@ function MovementTimelineRow({
                     {compactTimeLabel(segment.startedAt)} → {compactTimeLabel(segment.endedAt)}
                   </div>
                 </div>
-                {isWrapped ? (
-                  <div className="mt-3 font-label text-[10px] uppercase tracking-[0.22em] text-white/32">
-                    Wrapped to a 6h block, actual stay {formatDurationLabel(segment.durationSeconds)}
-                  </div>
-                ) : null}
               </div>
             </button>
           </motion.div>
@@ -894,12 +1092,17 @@ function MovementTimelineRow({
 export function MovementLifeTimeline({ userIds = [] }: MovementLifeTimelineProps) {
   const queryClient = useQueryClient();
   const scrollParentRef = useRef<HTMLDivElement | null>(null);
+  const dataListRef = useRef<HTMLDivElement | null>(null);
   const initializedRef = useRef(false);
   const autoSelectedRef = useRef(false);
   const prependAnchorRef = useRef<{ count: number; size: number } | null>(null);
   const [selectedSegmentId, setSelectedSegmentId] = useState<string | null>(null);
   const [draftById, setDraftById] = useState<Record<string, TimelineDraft>>({});
   const [editingSegmentId, setEditingSegmentId] = useState<string | null>(null);
+  const [dataModalOpen, setDataModalOpen] = useState(false);
+  const [reopenDataModalOnEditClose, setReopenDataModalOnEditClose] = useState(false);
+  const [segmentQuery, setSegmentQuery] = useState("");
+  const [selectedFilterIds, setSelectedFilterIds] = useState<string[]>([]);
   const [scrollTop, setScrollTop] = useState(0);
   const [viewportHeight, setViewportHeight] = useState(0);
   const syncScrollMetrics = () => {
@@ -925,9 +1128,28 @@ export function MovementLifeTimeline({ userIds = [] }: MovementLifeTimelineProps
     refetchOnWindowFocus: false
   });
 
+  const dataTimelineQuery = useInfiniteQuery({
+    queryKey: ["forge-movement-life-timeline-data", ...userIds],
+    initialPageParam: null as string | null,
+    queryFn: ({ pageParam }) =>
+      getMovementTimeline({
+        before: pageParam ?? undefined,
+        includeInvalid: true,
+        limit: TIMELINE_PAGE_SIZE,
+        userIds
+      }).then((response) => response.movement),
+    getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
+    retry: false,
+    refetchOnWindowFocus: false
+  });
+
   const segmentsDescending = useMemo(
     () => timelineQuery.data?.pages.flatMap((page) => page.segments) ?? [],
     [timelineQuery.data]
+  );
+  const dataSegmentsDescending = useMemo(
+    () => dataTimelineQuery.data?.pages.flatMap((page) => page.segments) ?? [],
+    [dataTimelineQuery.data]
   );
   const invalidSegmentCount = useMemo(
     () =>
@@ -941,6 +1163,56 @@ export function MovementLifeTimeline({ userIds = [] }: MovementLifeTimelineProps
     () => [...segmentsDescending].reverse(),
     [segmentsDescending]
   );
+  const dataSegments = useMemo(
+    () => [...dataSegmentsDescending].reverse(),
+    [dataSegmentsDescending]
+  );
+  const futureTailHeight = useMemo(() => {
+    const latestEndedAt = segments[segments.length - 1]?.endedAt;
+    if (!latestEndedAt) {
+      return GRID_ROW_HEIGHT * FUTURE_GRID_HOURS;
+    }
+    const nowPlusOneHourMs = Date.now() + FUTURE_GRID_HOURS * 3_600_000;
+    const latestEndedMs = new Date(latestEndedAt).getTime();
+    return Math.max(
+      GRID_ROW_HEIGHT * FUTURE_GRID_HOURS,
+      ((nowPlusOneHourMs - latestEndedMs) / 3_600_000) * GRID_ROW_HEIGHT
+    );
+  }, [segments]);
+  const timelineRows = useMemo(() => {
+    let cursor = CENTER_PADDING;
+    return segments.map((segment) => {
+      const displayHeight = segmentDisplayHeight(segment.durationSeconds, segment.kind);
+      const rowHeight = rowHeightForSegment(segment);
+      const rowStart = cursor;
+      const boxTop = rowStart + SEGMENT_BOX_TOP;
+      const boxBottom = boxTop + displayHeight;
+      cursor += rowHeight;
+      return {
+        segment,
+        rowStart,
+        rowHeight,
+        displayHeight,
+        boxTop,
+        boxBottom
+      } satisfies TimelineRowMetric;
+    });
+  }, [segments]);
+
+  useEffect(() => {
+    if (!dataModalOpen) {
+      return;
+    }
+    if (!dataTimelineQuery.hasNextPage || dataTimelineQuery.isFetchingNextPage) {
+      return;
+    }
+    void dataTimelineQuery.fetchNextPage();
+  }, [
+    dataModalOpen,
+    dataTimelineQuery.fetchNextPage,
+    dataTimelineQuery.hasNextPage,
+    dataTimelineQuery.isFetchingNextPage
+  ]);
 
   const rowVirtualizer = useVirtualizer({
     count: segments.length,
@@ -948,7 +1220,7 @@ export function MovementLifeTimeline({ userIds = [] }: MovementLifeTimelineProps
     estimateSize: (index) => rowHeightForSegment(segments[index] ?? segments[0]!),
     overscan: 6,
     paddingStart: CENTER_PADDING,
-    paddingEnd: END_PADDING
+    paddingEnd: futureTailHeight
   });
 
   useEffect(() => {
@@ -1074,6 +1346,9 @@ export function MovementLifeTimeline({ userIds = [] }: MovementLifeTimelineProps
         queryClient.invalidateQueries({
           queryKey: ["forge-movement-life-timeline"]
         }),
+        queryClient.invalidateQueries({
+          queryKey: ["forge-movement-life-timeline-data"]
+        }),
         queryClient.invalidateQueries({ queryKey: ["forge-movement-day"] }),
         queryClient.invalidateQueries({ queryKey: ["forge-movement-month"] }),
         queryClient.invalidateQueries({ queryKey: ["forge-movement-all-time"] }),
@@ -1083,6 +1358,91 @@ export function MovementLifeTimeline({ userIds = [] }: MovementLifeTimelineProps
         })
       ]);
     }
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: async (segment: MovementTimelineSegment) => {
+      if (segment.kind === "stay") {
+        await deleteMovementStay(segment.stay.id);
+        return;
+      }
+      await deleteMovementTrip(segment.trip.id);
+    },
+    onSuccess: async (_, segment) => {
+      setSelectedSegmentId((current) => (current === segment.id ? null : current));
+      setEditingSegmentId((current) => (current === segment.id ? null : current));
+      queryClient.setQueryData(
+        ["forge-movement-life-timeline", ...userIds],
+        (current: { pages: Array<{ segments: MovementTimelineSegment[] }>; pageParams: unknown[] } | undefined) =>
+          removeSegmentFromTimelinePages(current, segment.id)
+      );
+      queryClient.setQueryData(
+        ["forge-movement-life-timeline-data", ...userIds],
+        (current: { pages: Array<{ segments: MovementTimelineSegment[] }>; pageParams: unknown[] } | undefined) =>
+          removeSegmentFromTimelinePages(current, segment.id)
+      );
+      await Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: ["forge-movement-life-timeline"]
+        }),
+        queryClient.invalidateQueries({
+          queryKey: ["forge-movement-life-timeline-data"]
+        }),
+        queryClient.invalidateQueries({ queryKey: ["forge-movement-day"] }),
+        queryClient.invalidateQueries({ queryKey: ["forge-movement-month"] }),
+        queryClient.invalidateQueries({ queryKey: ["forge-movement-all-time"] }),
+        queryClient.invalidateQueries({ queryKey: ["forge-movement-selection"] }),
+        queryClient.invalidateQueries({
+          queryKey: ["forge-psyche-self-observation-calendar"]
+        })
+      ]);
+    }
+  });
+
+  const segmentFilterOptions = useMemo(
+    () => createMovementSegmentFilterOptions(dataSegments),
+    [dataSegments]
+  );
+
+  const filteredSegments = useMemo(() => {
+    const normalizedQuery = normalizeSearchText(segmentQuery);
+    return [...dataSegments]
+      .sort(
+        (left, right) =>
+          new Date(right.endedAt).getTime() - new Date(left.endedAt).getTime()
+      )
+      .filter((segment) => {
+        const matchesQuery =
+          normalizedQuery.length === 0 ||
+          buildMovementSegmentSearchText(segment).includes(normalizedQuery);
+        return matchesQuery && matchesMovementSegmentFilters(segment, selectedFilterIds);
+      });
+  }, [dataSegments, segmentQuery, selectedFilterIds]);
+
+  const dataResultSummary = useMemo(() => {
+    if (dataSegments.length === 0) {
+      return "No movement records loaded yet.";
+    }
+    if (
+      filteredSegments.length === dataSegments.length &&
+      segmentQuery.trim().length === 0 &&
+      selectedFilterIds.length === 0
+    ) {
+      return `${dataSegments.length} loaded movement records visible`;
+    }
+    return `${filteredSegments.length} of ${dataSegments.length} loaded records visible`;
+  }, [
+    dataSegments.length,
+    filteredSegments.length,
+    segmentQuery,
+    selectedFilterIds.length
+  ]);
+
+  const dataListVirtualizer = useVirtualizer({
+    count: filteredSegments.length,
+    getScrollElement: () => dataListRef.current,
+    estimateSize: () => 136,
+    overscan: 8
   });
 
   const handleScroll = () => {
@@ -1133,10 +1493,15 @@ export function MovementLifeTimeline({ userIds = [] }: MovementLifeTimelineProps
   const editingDraft = editingSegment
     ? (draftById[editingSegment.id] ?? buildDraft(editingSegment))
     : null;
+
   const contentHeight = Math.max(
-    rowVirtualizer.getTotalSize(),
+    timelineRows.length > 0
+      ? timelineRows[timelineRows.length - 1]!.rowStart +
+          timelineRows[timelineRows.length - 1]!.rowHeight +
+          futureTailHeight
+      : CENTER_PADDING + futureTailHeight,
     viewportHeight > 0 ? viewportHeight + 260 : 960,
-    CENTER_PADDING + END_PADDING
+    CENTER_PADDING + futureTailHeight
   );
   return (
     <section className="grid gap-4">
@@ -1146,6 +1511,16 @@ export function MovementLifeTimeline({ userIds = [] }: MovementLifeTimelineProps
             Movement
           </div>
           <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-8 rounded-full border border-white/10 bg-white/[0.04] px-3 text-white/72 hover:bg-white/[0.08] hover:text-white"
+              onClick={() => setDataModalOpen(true)}
+            >
+              <Database className="size-3.5" />
+              View data
+            </Button>
             {invalidSegmentCount > 0 ? (
               <Badge className="bg-amber-500/10 text-amber-100">
                 {invalidSegmentCount} invalid hidden
@@ -1162,8 +1537,8 @@ export function MovementLifeTimeline({ userIds = [] }: MovementLifeTimelineProps
           className="relative h-[82vh] overflow-auto rounded-[30px] border border-white/8 bg-[linear-gradient(180deg,rgba(4,7,15,0.98),rgba(6,10,18,0.96))]"
         >
           <MovementTimelineViewportGrid
+            rows={timelineRows}
             totalHeight={contentHeight}
-            latestEndedAt={segments.at(-1)?.endedAt ?? new Date().toISOString()}
             scrollTop={scrollTop}
             viewportHeight={viewportHeight}
           />
@@ -1223,15 +1598,182 @@ export function MovementLifeTimeline({ userIds = [] }: MovementLifeTimelineProps
             return;
           }
           void saveMutation.mutateAsync(editingSegment, {
-            onSuccess: () => setEditingSegmentId(null)
+            onSuccess: () => {
+              setEditingSegmentId(null);
+              if (reopenDataModalOnEditClose) {
+                setReopenDataModalOnEditClose(false);
+                setDataModalOpen(true);
+              }
+            }
           });
         }}
         onOpenChange={(open) => {
           if (!open) {
             setEditingSegmentId(null);
+            if (reopenDataModalOnEditClose) {
+              setReopenDataModalOnEditClose(false);
+              setDataModalOpen(true);
+            }
           }
         }}
       />
+      <SheetScaffold
+        open={dataModalOpen}
+        onOpenChange={(open) => {
+          setDataModalOpen(open);
+          if (!open) {
+            if (!reopenDataModalOnEditClose) {
+              setSegmentQuery("");
+              setSelectedFilterIds([]);
+            }
+          }
+        }}
+        eyebrow="Movement data"
+        title="View data"
+        description=""
+      >
+        <div className="grid gap-4">
+          <FacetedTokenSearch
+            title=""
+            description=""
+            query={segmentQuery}
+            onQueryChange={setSegmentQuery}
+            options={segmentFilterOptions}
+            selectedOptionIds={selectedFilterIds}
+            onSelectedOptionIdsChange={setSelectedFilterIds}
+            resultSummary={dataResultSummary}
+            placeholder="Search movement labels, places, times, tags, or add time and kind filters"
+            emptyStateMessage="Keep typing or pick filters to narrow the movement history."
+          />
+
+          <Card className="grid gap-3">
+            <div className="flex items-center justify-between gap-3">
+              <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">
+                Data records
+              </div>
+              <div className="flex items-center gap-2">
+                <Badge tone="meta">{dataResultSummary}</Badge>
+                {invalidSegmentCount > 0 ? (
+                  <Badge className="bg-amber-500/10 text-amber-100">
+                    {invalidSegmentCount} invalid hidden included
+                  </Badge>
+                ) : null}
+                {dataTimelineQuery.hasNextPage ? (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 rounded-full border border-white/10 bg-white/[0.04] px-3 text-white/70"
+                    pending={dataTimelineQuery.isFetchingNextPage}
+                    pendingLabel="Loading…"
+                    onClick={() => void dataTimelineQuery.fetchNextPage()}
+                  >
+                    Load older
+                  </Button>
+                ) : null}
+              </div>
+            </div>
+
+              <div
+                ref={dataListRef}
+                className="h-[36rem] overflow-y-auto rounded-[24px] border border-white/8 bg-white/[0.03]"
+              >
+                {filteredSegments.length === 0 ? (
+                  <div className="flex h-full items-center justify-center p-6 text-center text-sm leading-6 text-white/50">
+                    No movement record matches the current search. Clear filters or load older timeline history.
+                  </div>
+                ) : (
+                  <div
+                    className="relative w-full"
+                    style={{ height: `${dataListVirtualizer.getTotalSize()}px` }}
+                  >
+                    {dataListVirtualizer.getVirtualItems().map((virtualRow) => {
+                      const segment = filteredSegments[virtualRow.index]!;
+                      return (
+                        <div
+                          key={segment.id}
+                          ref={dataListVirtualizer.measureElement}
+                          data-index={virtualRow.index}
+                          className="absolute left-0 top-0 w-full px-3 py-2"
+                          style={{ transform: `translateY(${virtualRow.start}px)` }}
+                        >
+                          <div className="flex items-start gap-2 rounded-[18px] border border-white/8 bg-white/[0.04] px-3 py-2.5">
+                            <button
+                              type="button"
+                              className="min-w-0 flex-1 text-left transition hover:opacity-100"
+                              onClick={() => {
+                                setReopenDataModalOnEditClose(true);
+                                setDataModalOpen(false);
+                                setEditingSegmentId(segment.id);
+                              }}
+                            >
+                              <div className="flex items-start justify-between gap-3">
+                                <div className="min-w-0">
+                                  <div className="flex items-center gap-2 text-white">
+                                    {segment.kind === "stay" ? (
+                                      <MapPin className="size-3.5 shrink-0 text-[var(--primary)]" />
+                                    ) : (
+                                      <Route className="size-3.5 shrink-0 text-[var(--primary)]" />
+                                    )}
+                                    <span className="truncate text-sm font-medium">
+                                      {displaySegmentTitle(segment)}
+                                    </span>
+                                  </div>
+                                  <div className="mt-1 text-xs text-white/56">
+                                    {formatSegmentTimestamp(segment.startedAt)} →{" "}
+                                    {formatSegmentTimestamp(segment.endedAt)}
+                                  </div>
+                                </div>
+                                <div className="flex shrink-0 flex-wrap justify-end gap-1.5">
+                                  <Badge tone={segment.kind === "trip" ? "signal" : "meta"}>
+                                    {segment.kind === "trip" ? "Move" : "Stay"}
+                                  </Badge>
+                                  <Badge tone="meta">
+                                    {formatDurationLabel(segment.durationSeconds)}
+                                  </Badge>
+                                  {segment.isInvalid ? (
+                                    <Badge className="bg-amber-500/10 text-amber-100">
+                                      Invalid
+                                    </Badge>
+                                  ) : null}
+                                  {segment.placeLabel ? (
+                                    <Badge tone="default">{segment.placeLabel}</Badge>
+                                  ) : null}
+                                </div>
+                              </div>
+                            </button>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              className="h-8 shrink-0 rounded-full border border-rose-400/22 bg-rose-500/10 px-2.5 text-rose-100 hover:bg-rose-500/18"
+                              pending={
+                                deleteMutation.isPending &&
+                                deleteMutation.variables?.id === segment.id
+                              }
+                              pendingLabel=""
+                              onClick={() => {
+                                const confirmed = window.confirm(
+                                  `Delete ${displaySegmentTitle(segment)} and keep it deleted across companion sync?`
+                                );
+                                if (!confirmed) {
+                                  return;
+                                }
+                                void deleteMutation.mutateAsync(segment);
+                              }}
+                            >
+                              <Trash2 className="size-3.5" />
+                            </Button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </Card>
+        </div>
+      </SheetScaffold>
     </section>
   );
 }

@@ -1232,13 +1232,6 @@ export function MovementPage() {
                     <Button
                       variant="ghost"
                       className="h-9 rounded-full border border-white/10 bg-white/[0.04] px-4"
-                      onClick={() => setDataModalOpen(true)}
-                    >
-                      View data
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      className="h-9 rounded-full border border-white/10 bg-white/[0.04] px-4"
                       onClick={() => setShowExactPath((current) => !current)}
                     >
                       {showExactPath ? "Stylized graph" : "Exact path"}

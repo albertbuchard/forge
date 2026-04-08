@@ -324,6 +324,19 @@ final class MovementSyncStore: NSObject, ObservableObject, CLLocationManagerDele
         } + knownPlaces.filter { localPlace in
             !remotePlaces.contains(where: { $0.externalUid == localPlace.externalUid })
         }
+        if bootstrap.deletedStayExternalUids.isEmpty == false {
+            storedStays.removeAll { stay in
+                bootstrap.deletedStayExternalUids.contains(stay.id)
+            }
+        }
+        if bootstrap.deletedTripExternalUids.isEmpty == false {
+            storedTrips.removeAll { trip in
+                bootstrap.deletedTripExternalUids.contains(trip.id)
+            }
+        }
+        bootstrap.stayOverrides.forEach { stay in
+            reconcileCanonicalStay(stay)
+        }
         bootstrap.tripOverrides.forEach { trip in
             reconcileCanonicalTrip(trip)
         }

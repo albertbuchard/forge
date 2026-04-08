@@ -254,7 +254,10 @@ struct SyncReceipt: Decodable {
             let categoryTags: [String]
         }
 
+        let stayOverrides: [ForgeMovementTimelineStay]
         let tripOverrides: [ForgeMovementTimelineTrip]
+        let deletedStayExternalUids: [String]
+        let deletedTripExternalUids: [String]
         let settings: Settings
         let places: [Place]
     }

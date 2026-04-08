@@ -1155,6 +1155,10 @@ test("movement sync stores places, stays, trips, and serves the movement workspa
       (trip) => trip.externalUid === "trip_home_grocery"
     )?.id;
     assert.ok(outboundTripId);
+    const inboundTripId = day.trips.find(
+      (trip) => trip.externalUid === "trip_grocery_home"
+    )?.id;
+    assert.ok(inboundTripId);
 
     const tripResponse = await app.inject({
       method: "GET",
@@ -1521,6 +1525,171 @@ test("movement sync stores places, stays, trips, and serves the movement workspa
     assert.equal(updatedMovementFrontmatter?.state, "closed");
     assert.equal(updatedMovementFrontmatter?.endedAt, "2026-04-06T09:15:00.000Z");
     assert.equal(updatedMovementFrontmatter?.durationSeconds, 3300);
+
+    const deleteStayResponse = await app.inject({
+      method: "DELETE",
+      url: `/api/v1/movement/stays/${groceryStayId}`,
+      headers: { cookie: operatorCookie }
+    });
+    assert.equal(deleteStayResponse.statusCode, 200);
+
+    const deleteTripResponse = await app.inject({
+      method: "DELETE",
+      url: `/api/v1/movement/trips/${inboundTripId}`,
+      headers: { cookie: operatorCookie }
+    });
+    assert.equal(deleteTripResponse.statusCode, 200);
+
+    const fourthSyncResponse = await app.inject({
+      method: "POST",
+      url: "/api/v1/mobile/healthkit/sync",
+      payload: {
+        sessionId: qrPayload.sessionId,
+        pairingToken: qrPayload.pairingToken,
+        device: {
+          name: "Omar iPhone",
+          platform: "ios",
+          appVersion: "1.0",
+          sourceDevice: "iPhone"
+        },
+        permissions: {
+          healthKitAuthorized: true,
+          backgroundRefreshEnabled: true,
+          motionReady: true,
+          locationReady: true
+        },
+        sleepSessions: [],
+        workouts: [],
+        movement: {
+          settings: {
+            trackingEnabled: true,
+            publishMode: "auto_publish",
+            retentionMode: "aggregates_only",
+            locationPermissionStatus: "always",
+            motionPermissionStatus: "ready",
+            backgroundTrackingReady: true,
+            metadata: {}
+          },
+          knownPlaces: [],
+          stays: [
+            {
+              externalUid: "stay_grocery_after",
+              label: "Corner Grocery",
+              status: "completed",
+              classification: "stationary",
+              startedAt: "2026-04-06T08:20:00.000Z",
+              endedAt: "2026-04-06T09:15:00.000Z",
+              centerLatitude: 46.5214,
+              centerLongitude: 6.6407,
+              radiusMeters: 85,
+              sampleCount: 8,
+              placeExternalUid: "place_grocery",
+              placeLabel: "Corner Grocery",
+              tags: ["grocery", "errand"],
+              metadata: {}
+            }
+          ],
+          trips: [
+            {
+              externalUid: "trip_grocery_home",
+              label: "Grocery to home",
+              status: "active",
+              travelMode: "travel",
+              activityType: "walking",
+              startedAt: "2026-04-06T09:15:00.000Z",
+              endedAt: "2026-04-06T09:35:00.000Z",
+              startPlaceExternalUid: "place_grocery",
+              endPlaceExternalUid: "place_home",
+              distanceMeters: 2050,
+              movingSeconds: 860,
+              idleSeconds: 90,
+              averageSpeedMps: 1.8,
+              maxSpeedMps: 2.3,
+              caloriesKcal: 110,
+              expectedMet: 3.1,
+              tags: ["grocery", "return"],
+              linkedEntities: [],
+              linkedPeople: [],
+              metadata: {},
+              points: [
+                {
+                  externalUid: "trip_grocery_home_p0",
+                  recordedAt: "2026-04-06T09:15:00.000Z",
+                  latitude: 46.5214,
+                  longitude: 6.6407,
+                  accuracyMeters: 8,
+                  altitudeMeters: null,
+                  speedMps: 1.3,
+                  isStopAnchor: false
+                },
+                {
+                  externalUid: "trip_grocery_home_p1",
+                  recordedAt: "2026-04-06T09:35:00.000Z",
+                  latitude: 46.5191,
+                  longitude: 6.6323,
+                  accuracyMeters: 8,
+                  altitudeMeters: null,
+                  speedMps: 1.6,
+                  isStopAnchor: true
+                }
+              ],
+              stops: []
+            }
+          ]
+        }
+      }
+    });
+    assert.equal(fourthSyncResponse.statusCode, 200);
+
+    const canonicalDayAfterDeleteResponse = await app.inject({
+      method: "GET",
+      url: "/api/v1/movement/day?date=2026-04-06"
+    });
+    assert.equal(canonicalDayAfterDeleteResponse.statusCode, 200);
+    const canonicalDayAfterDelete = (
+      canonicalDayAfterDeleteResponse.json() as {
+        movement: {
+          trips: Array<{ externalUid: string }>;
+          stays: Array<{ externalUid: string }>;
+        };
+      }
+    ).movement;
+    assert.equal(
+      canonicalDayAfterDelete.trips.some(
+        (trip) => trip.externalUid === "trip_grocery_home"
+      ),
+      false
+    );
+    assert.equal(
+      canonicalDayAfterDelete.stays.some(
+        (stay) => stay.externalUid === "stay_grocery_after"
+      ),
+      false
+    );
+
+    const bootstrapAfterSegmentDeletes = await app.inject({
+      method: "POST",
+      url: "/api/v1/mobile/movement/bootstrap",
+      payload: {
+        sessionId: qrPayload.sessionId,
+        pairingToken: qrPayload.pairingToken
+      }
+    });
+    assert.equal(bootstrapAfterSegmentDeletes.statusCode, 200);
+    const deletedBootstrapState = (
+      bootstrapAfterSegmentDeletes.json() as {
+        movement: {
+          deletedStayExternalUids: string[];
+          deletedTripExternalUids: string[];
+        };
+      }
+    ).movement;
+    assert.ok(
+      deletedBootstrapState.deletedStayExternalUids.includes("stay_grocery_after")
+    );
+    assert.ok(
+      deletedBootstrapState.deletedTripExternalUids.includes("trip_grocery_home")
+    );
   } finally {
     await app.close();
     closeDatabase();
@@ -1714,20 +1883,44 @@ test("movement timeline hides overlapping stays and trips and flags them invalid
     assert.equal(timeline.movement.segments.length, 1);
     assert.equal(timeline.movement.segments[0]?.kind, "stay");
 
+    const timelineWithInvalidResponse = await app.inject({
+      method: "GET",
+      url: "/api/v1/movement/timeline?includeInvalid=true"
+    });
+    assert.equal(timelineWithInvalidResponse.statusCode, 200);
+    const timelineWithInvalid = timelineWithInvalidResponse.json() as {
+      movement: {
+        invalidSegmentCount: number;
+        segments: Array<{
+          kind: "stay" | "trip";
+          isInvalid: boolean;
+          stay: { label: string } | null;
+          trip: { label: string } | null;
+        }>;
+      };
+    };
+    assert.equal(timelineWithInvalid.movement.invalidSegmentCount, 2);
+    assert.equal(timelineWithInvalid.movement.segments.length, 3);
+    assert.equal(
+      timelineWithInvalid.movement.segments.filter((segment) => segment.isInvalid)
+        .length,
+      2
+    );
+
     const invalidStay = getDatabase()
       .prepare(
-        `SELECT metadata_json
+        `SELECT id, metadata_json
          FROM movement_stays
          WHERE external_uid = 'stay_invalid_overlap'`
       )
-      .get() as { metadata_json: string };
+      .get() as { id: string; metadata_json: string };
     const invalidTrip = getDatabase()
       .prepare(
-        `SELECT metadata_json
+        `SELECT id, metadata_json
          FROM movement_trips
          WHERE external_uid = 'trip_invalid_overlap'`
       )
-      .get() as { metadata_json: string };
+      .get() as { id: string; metadata_json: string };
     const stayMetadata = JSON.parse(invalidStay.metadata_json) as {
       validation?: { invalidOverlap?: boolean; overlapIssues?: string[] };
     };
@@ -1738,6 +1931,30 @@ test("movement timeline hides overlapping stays and trips and flags them invalid
     assert.equal(tripMetadata.validation?.invalidOverlap, true);
     assert.ok((stayMetadata.validation?.overlapIssues?.length ?? 0) > 0);
     assert.ok((tripMetadata.validation?.overlapIssues?.length ?? 0) > 0);
+
+    const resolveOverlapResponse = await app.inject({
+      method: "PATCH",
+      url: `/api/v1/movement/stays/${invalidStay.id}`,
+      headers: { cookie: operatorCookie },
+      payload: {
+        endedAt: "2026-04-05T08:55:00.000Z"
+      }
+    });
+    assert.equal(resolveOverlapResponse.statusCode, 200);
+
+    const healedTimelineResponse = await app.inject({
+      method: "GET",
+      url: "/api/v1/movement/timeline"
+    });
+    assert.equal(healedTimelineResponse.statusCode, 200);
+    const healedTimeline = healedTimelineResponse.json() as {
+      movement: {
+        invalidSegmentCount: number;
+        segments: Array<{ id: string; kind: "stay" | "trip" }>;
+      };
+    };
+    assert.equal(healedTimeline.movement.invalidSegmentCount, 0);
+    assert.equal(healedTimeline.movement.segments.length, 3);
   } finally {
     await app.close();
     closeDatabase();

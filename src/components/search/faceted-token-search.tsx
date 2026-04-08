@@ -90,12 +90,16 @@ export function FacetedTokenSearch({
     <div className="rounded-[28px] border border-white/8 bg-[linear-gradient(135deg,rgba(19,30,42,0.92),rgba(9,15,24,0.98))] p-4 shadow-[0_30px_80px_rgba(3,8,18,0.28)] sm:p-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <div className="font-label text-[11px] uppercase tracking-[0.2em] text-white/42">
-            {title}
-          </div>
-          <div className="mt-2 max-w-3xl text-sm leading-6 text-white/62">
-            {description}
-          </div>
+          {title.trim().length > 0 ? (
+            <div className="font-label text-[11px] uppercase tracking-[0.2em] text-white/42">
+              {title}
+            </div>
+          ) : null}
+          {description.trim().length > 0 ? (
+            <div className="mt-2 max-w-3xl text-sm leading-6 text-white/62">
+              {description}
+            </div>
+          ) : null}
         </div>
         {selectedOptionIds.length > 0 || query.trim().length > 0 ? (
           <button

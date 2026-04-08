@@ -1370,6 +1370,7 @@ export type MovementTimelineLaneSide = "left" | "right";
 export interface MovementTimelineSegmentBase {
   id: string;
   kind: "stay" | "trip";
+  isInvalid: boolean;
   startedAt: string;
   endedAt: string;
   durationSeconds: number;
