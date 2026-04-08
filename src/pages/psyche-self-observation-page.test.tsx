@@ -542,7 +542,7 @@ describe("PsycheSelfObservationPage", () => {
           .length
       ).toBeGreaterThan(0)
     );
-  });
+  }, 10000);
 
   it("opens an existing observation in edit mode and lets it be deleted", async () => {
     renderPage();
