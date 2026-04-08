@@ -672,6 +672,15 @@ export interface MicrosoftCalendarOauthSession {
   discovery: CalendarDiscoveryPayload | null;
 }
 
+export interface GoogleCalendarOauthSession {
+  sessionId: string;
+  status: "pending" | "authorized" | "error" | "consumed" | "expired";
+  authUrl: string | null;
+  accountLabel: string | null;
+  error: string | null;
+  discovery: CalendarDiscoveryPayload | null;
+}
+
 export interface CalendarResource {
   id: string;
   connectionId: string;
@@ -1769,23 +1778,30 @@ export interface ForgeBoxPortDefinition {
   key: string;
   label: string;
   kind: string;
+  description?: string;
   required?: boolean;
   expandableKeys?: string[];
 }
 
 export interface ForgeBoxCatalogEntry {
-  boxId: string;
+  id: string;
+  boxId?: string;
   surfaceId: string | null;
   routePath: string | null;
-  label: string;
+  title: string;
+  label?: string;
+  icon?: string | null;
   description: string;
   category: string;
   tags: string[];
-  capabilityModes: ForgeBoxCapabilityMode[];
+  capabilityModes?: ForgeBoxCapabilityMode[];
   inputs: ForgeBoxPortDefinition[];
-  outputs: ForgeBoxPortDefinition[];
-  toolAdapters: ForgeBoxToolAdapter[];
-  snapshotResolverKey: string;
+  params: ForgeBoxPortDefinition[];
+  output: ForgeBoxPortDefinition[];
+  tools: ForgeBoxToolAdapter[];
+  outputs?: ForgeBoxPortDefinition[];
+  toolAdapters?: ForgeBoxToolAdapter[];
+  snapshotResolverKey?: string;
 }
 
 export interface ForgeBoxSnapshot {
@@ -1801,6 +1817,7 @@ export type AiConnectorKind = "functor" | "chat";
 export type AiConnectorNodeType =
   | "box"
   | "box_input"
+  | "value"
   | "user_input"
   | "functor"
   | "chat"
@@ -1833,8 +1850,12 @@ export interface AiConnectorNode {
     enabledToolKeys?: string[];
     inputs?: ForgeBoxPortDefinition[];
     outputs?: ForgeBoxPortDefinition[];
+    params?: ForgeBoxPortDefinition[];
+    paramValues?: Record<string, unknown>;
     template?: string;
     selectedKey?: string;
+    valueType?: "string" | "number" | "boolean" | "null" | "array" | "object";
+    valueLiteral?: string;
     modelConfig?: AiConnectorNodeModelConfig;
   };
 }
@@ -2259,6 +2280,19 @@ export interface SettingsPayload {
     psycheAuthRequired?: boolean;
   };
   calendarProviders: {
+    google: {
+      clientId: string;
+      appUrl: string;
+      redirectUri: string;
+      allowedOrigins: string[];
+      usesSharedAppCredentials: true;
+      authMode: "shared_web_server_oauth";
+      isConfigured: boolean;
+      isReadyForPairing: boolean;
+      runtimeOrigin: string;
+      runtimeOriginMatchesAppUrl: boolean;
+      setupMessage: string;
+    };
     microsoft: {
       clientId: string;
       tenantId: string;
@@ -2291,6 +2325,8 @@ export interface SettingsPayload {
 
 export type MicrosoftCalendarAuthSettings =
   SettingsPayload["calendarProviders"]["microsoft"];
+export type GoogleCalendarAuthSettings =
+  SettingsPayload["calendarProviders"]["google"];
 
 export interface DeletedEntityRecord {
   entityType: CrudEntityType;

@@ -8,7 +8,7 @@ const GUIDE_SECTIONS = [
     description:
       "Forge mirrors provider events into Forge. Writable providers can also publish work blocks plus owned timeboxes into a dedicated calendar named Forge, while Exchange Online stays read-only for now.",
     bullets: [
-      "Google uses OAuth client credentials plus a refresh token.",
+      "Google uses one shared Forge-owned OAuth web app. Each user signs in with their own Google account, while Forge stores that user's refresh token for background sync.",
       "Apple Calendar starts from https://caldav.icloud.com and autodiscovers the real principal plus calendar collections for you.",
       "Exchange Online uses Microsoft Graph with a guided local public-client Microsoft sign-in flow and mirrors the calendars you select into Forge.",
       "Custom CalDAV uses one account-level base URL, then Forge discovers the writable calendars before you choose what to mirror.",
@@ -20,12 +20,13 @@ const GUIDE_SECTIONS = [
   {
     title: "Google Calendar setup",
     description:
-      "Use Google Cloud to enable Calendar access, mint a refresh token, then let Forge discover the calendars available to that account.",
+      "Use one Google Cloud Web application OAuth client for Forge, register the exact Forge callback URI, then let each user sign in with their own Google account.",
     bullets: [
-      "Open Google Cloud credentials and create or reuse an OAuth client.",
+      "Open Google Cloud credentials and create or reuse one OAuth client for Forge as a Web application.",
       "Enable the Calendar API for the same project.",
-      "Generate a refresh token with Google Calendar scopes.",
-      "Paste the email, client ID, client secret, and refresh token into Forge.",
+      "Register Forge's exact callback URI. In local Forge, the default callback is http://127.0.0.1:4317/api/v1/calendar/oauth/google/callback.",
+      "Open Forge on the correct host machine and allowed local browser origin before clicking Sign in with Google.",
+      "The user signs in with their own Google account and grants Forge access. They do not create their own Google OAuth client.",
       "Forge will discover the calendars, let you choose which calendars to mirror, and create or reuse Forge as the write calendar."
     ],
     icon: KeyRound,
@@ -37,10 +38,6 @@ const GUIDE_SECTIONS = [
       {
         label: "Calendar API quickstart",
         href: "https://developers.google.com/workspace/calendar/api/quickstart"
-      },
-      {
-        label: "OAuth Playground",
-        href: "https://developers.google.com/oauthplayground"
       }
     ]
   },

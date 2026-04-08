@@ -486,6 +486,7 @@ export function SettingsCalendarPage() {
   }
 
   const { providers, connections } = connectionsQuery.data;
+  const googleSettings = settingsQuery.data.settings.calendarProviders.google;
   const microsoftSettings = settingsQuery.data.settings.calendarProviders.microsoft;
 
   return (
@@ -499,6 +500,113 @@ export function SettingsCalendarPage() {
       <SettingsSectionNav />
 
       <div className="grid gap-5">
+        <Card className="grid gap-5 rounded-[30px] border border-white/8 bg-[linear-gradient(180deg,rgba(17,28,41,0.98),rgba(9,16,27,0.98))]">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <div className="text-[11px] uppercase tracking-[0.18em] text-white/45">
+                Google Calendar OAuth
+              </div>
+              <p className="mt-2 max-w-3xl text-sm leading-6 text-white/60">
+                Forge uses one shared Google OAuth web application for everybody. The app credentials belong to Forge, while each user signs in with their own Google account so Forge can store a per-user refresh token for long-term sync.
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Badge className="bg-emerald-500/16 text-emerald-100">
+                Shared app credentials
+              </Badge>
+              {googleSettings.isReadyForPairing ? (
+                <Badge className="bg-emerald-500/16 text-emerald-100">
+                  <CheckCircle2 className="mr-1 size-3.5" />
+                  Ready for pairing
+                </Badge>
+              ) : (
+                <Badge className="bg-white/[0.08] text-white/74">
+                  <KeyRound className="mr-1 size-3.5" />
+                  Setup required
+                </Badge>
+              )}
+            </div>
+          </div>
+
+          <div className="grid gap-4 xl:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">
+            <div className="grid gap-4">
+              <div className="grid gap-2 rounded-[24px] border border-white/8 bg-white/[0.04] p-4">
+                <div className="text-sm font-medium text-white">Registered app endpoints</div>
+                <div className="grid gap-2 text-sm leading-6 text-white/62">
+                  <div>
+                    App URL:{" "}
+                    <span className="font-medium text-white">
+                      {googleSettings.appUrl}
+                    </span>
+                  </div>
+                  <div className="break-all">
+                    Redirect URI:{" "}
+                    <span className="font-medium text-white">
+                      {googleSettings.redirectUri}
+                    </span>
+                  </div>
+                  <div>
+                    Allowed browser origins:{" "}
+                    <span className="font-medium text-white">
+                      {googleSettings.allowedOrigins.join(", ")}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid gap-3 md:grid-cols-2">
+                <div className="rounded-[24px] border border-white/8 bg-white/[0.04] p-4 text-sm leading-6 text-white/60">
+                  Local Google pairing only works when the browser is already open on the configured Forge host and port. During `npm run dev`, that normally means <span className="font-medium text-white">http://127.0.0.1:3027/forge/</span>, while the OAuth redirect itself still returns to <span className="font-medium text-white">http://127.0.0.1:4317</span>.
+                </div>
+                <div className="rounded-[24px] border border-white/8 bg-white/[0.04] p-4 text-sm leading-6 text-white/60">
+                  If you open Forge from another localhost port, another device, or the wrong host machine, Google cannot redirect back to the registered callback. In that case, open Forge on the main machine or use the canonical hosted URL instead.
+                </div>
+              </div>
+
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  variant="secondary"
+                  onClick={() => {
+                    setInitialProvider("google");
+                    setDialogInitialStepId("credentials");
+                    setDialogOpen(true);
+                  }}
+                  disabled={!googleSettings.isReadyForPairing}
+                >
+                  <ExternalLink className="size-4" />
+                  Sign in with Google
+                </Button>
+              </div>
+            </div>
+
+            <div className="grid gap-3">
+              <div className="rounded-[24px] border border-white/8 bg-white/[0.04] p-4">
+                <div className="text-sm font-medium text-white">Current runtime alignment</div>
+                <div className="mt-3 grid gap-2 text-sm text-white/66">
+                  <div>
+                    Runtime origin:{" "}
+                    <span className="font-medium text-white">
+                      {googleSettings.runtimeOrigin}
+                    </span>
+                  </div>
+                  <div>
+                    App URL matches runtime:{" "}
+                    <span className="font-medium text-white">
+                      {googleSettings.runtimeOriginMatchesAppUrl ? "yes" : "no"}
+                    </span>
+                  </div>
+                </div>
+              </div>
+              <div className="rounded-[24px] border border-white/8 bg-white/[0.04] p-4 text-sm leading-6 text-white/60">
+                {googleSettings.setupMessage}
+              </div>
+              <div className="rounded-[24px] border border-white/8 bg-white/[0.04] p-4 text-sm leading-6 text-white/60">
+                Google Cloud must register the exact callback URI above on one Web application OAuth client. End users never create their own Google app; they only consent with their own Google accounts.
+              </div>
+            </div>
+          </div>
+        </Card>
+
         <Card className="grid gap-5 rounded-[30px] border border-white/8 bg-[linear-gradient(180deg,rgba(17,28,41,0.98),rgba(9,16,27,0.98))]">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
@@ -953,6 +1061,7 @@ export function SettingsCalendarPage() {
         }}
         initialProvider={initialProvider}
         initialStepId={dialogInitialStepId}
+        googleSetup={googleSettings}
         microsoftSetup={microsoftSettings}
         pending={connectMutation.isPending}
         onSubmit={async (input) => {

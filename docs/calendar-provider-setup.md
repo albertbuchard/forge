@@ -103,10 +103,19 @@ Important notes:
 
 What you need:
 
-- the Google account email
-- a Google OAuth client ID
-- a Google OAuth client secret
-- a Google refresh token
+- one Google Cloud OAuth client for Forge as a Web application
+- the Google Calendar API enabled in that same Google Cloud project
+- the exact Forge redirect URI registered on that OAuth client
+
+Important notes:
+
+- End users do not create their own Google OAuth app.
+- Forge owns the Google client ID and client secret once for the whole app.
+- Each user only signs in with their own Google account and grants this Forge
+  app access to that user's calendar data.
+- Forge needs offline access so it can store a refresh token per connected user.
+- The redirect URI must match exactly. Do not rely on arbitrary localhost
+  ports.
 
 Step by step:
 
@@ -114,19 +123,44 @@ Step by step:
    [https://console.cloud.google.com/apis/credentials](https://console.cloud.google.com/apis/credentials)
 2. Create or reuse a Google Cloud project and enable the Calendar API:
    [https://developers.google.com/workspace/calendar/api/quickstart](https://developers.google.com/workspace/calendar/api/quickstart)
-3. Create an OAuth client for that same project.
-4. Generate a refresh token. The fastest Google-hosted helper is OAuth
-   Playground:
-   [https://developers.google.com/oauthplayground](https://developers.google.com/oauthplayground)
-5. Open Forge and go to `Settings -> Calendar`.
-6. Click `Google Calendar`.
-7. Enter the account email, client ID, client secret, and refresh token.
-8. Click discovery. Forge will load the available calendars for that account.
-9. Select which calendars Forge should mirror into the Calendar page.
-10. Select the calendar Forge should write into for work blocks and timeboxes.
-11. If no write calendar named `Forge` exists yet, choose `Create a new Forge
+3. Create or reuse one OAuth client for Forge as a `Web application`.
+4. Register Forge's exact callback URI in Google Cloud Console. For the default
+   local Forge runtime, that callback is:
+   `http://127.0.0.1:4317/api/v1/calendar/oauth/google/callback`
+5. Configure the Google consent screen and make sure the Calendar scopes Forge
+   needs are allowed for that app.
+6. Set these Forge environment variables for the runtime that will host the
+   pairing flow:
+   - `GOOGLE_CLIENT_ID`
+   - `GOOGLE_CLIENT_SECRET`
+   - `APP_URL`
+   - `GOOGLE_REDIRECT_URI`
+   - `GOOGLE_ALLOWED_ORIGINS`
+7. Open Forge and go to `Settings -> Calendar`.
+8. Check that Forge shows the expected app URL, redirect URI, and allowed local
+   browser origins.
+9. Open Forge on the correct host machine and browser origin. In the default
+   local dev flow, that usually means the Vite UI on
+   `http://127.0.0.1:3027/forge/`, while the redirect itself still returns to
+   `http://127.0.0.1:4317`.
+10. Click `Google Calendar`, then `Sign in with Google`.
+11. Sign in with the user's own Google account and grant Forge access.
+12. Forge exchanges the authorization code on the backend, stores that user's
+    refresh token, and then discovers the calendars for that account.
+13. Select which calendars Forge should mirror into the Calendar page.
+14. Select the calendar Forge should write into for work blocks and timeboxes.
+15. If no write calendar named `Forge` exists yet, choose `Create a new Forge
     calendar`.
-12. Save the connection and run the first sync.
+16. Save the connection and run the first sync.
+
+Developer note for Google Cloud Console:
+
+1. Create one OAuth client for the Forge app.
+2. Set the app type to `Web application`.
+3. Register the exact Forge redirect URI.
+4. Configure the consent screen and Calendar scopes.
+5. End users sign in with their own Google accounts to grant this Forge app
+   access.
 
 ## Apple Calendar
 

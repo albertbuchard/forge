@@ -3,6 +3,7 @@ import type { SecretsManager } from "../managers/platform/secrets-manager.js";
 import { getDatabase, runInTransaction } from "../db.js";
 import { recordActivityEvent } from "./activity-events.js";
 import { recordEventLog } from "./event-log.js";
+import { resolveGoogleCalendarOauthPublicConfig } from "../services/google-calendar-oauth-config.js";
 import {
   buildConnectionAgentIdentity,
   defaultBaseUrlForProvider,
@@ -364,6 +365,7 @@ export function isPsycheAuthRequired(): boolean {
 export function getSettings(): SettingsPayload {
   const row = readSettingsRow();
   const connections = listAiModelConnections();
+  const googleConfig = resolveGoogleCalendarOauthPublicConfig();
   const microsoftClientId = row.microsoft_client_id?.trim() ?? "";
   const microsoftTenantId = normalizeMicrosoftTenantId(row.microsoft_tenant_id);
   const microsoftRedirectUri = normalizeMicrosoftRedirectUri(row.microsoft_redirect_uri);
@@ -403,6 +405,7 @@ export function getSettings(): SettingsPayload {
       psycheAuthRequired: boolFromInt(row.psyche_auth_required)
     },
     calendarProviders: {
+      google: googleConfig,
       microsoft: {
         clientId: microsoftClientId,
         tenantId: microsoftTenantId,
@@ -482,6 +485,7 @@ export function updateSettings(
       localePreference: parsed.localePreference ?? current.localePreference,
       psycheAuthRequired: parsed.security?.psycheAuthRequired ?? current.security.psycheAuthRequired,
       calendarProviders: {
+        google: current.calendarProviders.google,
         microsoft: {
           clientId:
             parsed.calendarProviders?.microsoft?.clientId?.trim() ??
@@ -578,6 +582,9 @@ export function updateSettings(
           dailyQuestReminders: next.notifications.dailyQuestReminders,
           maxActiveTasks: next.execution.maxActiveTasks,
           timeAccountingMode: next.execution.timeAccountingMode,
+          googleConfigured: next.calendarProviders.google.isConfigured,
+          googleAppUrl: next.calendarProviders.google.appUrl,
+          googleRedirectUri: next.calendarProviders.google.redirectUri,
           microsoftConfigured: next.calendarProviders.microsoft.clientId.trim().length > 0,
           microsoftTenantId: next.calendarProviders.microsoft.tenantId,
           forgeBasicChatModel: next.modelSettings.forgeAgent.basicChat.model,

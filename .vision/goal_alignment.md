@@ -188,6 +188,14 @@ XP effects remaining explicit and auditable.
 A calendar connection links Forge to an external provider. In the current production
 implementation that means Google Calendar, Apple Calendar, Exchange Online through
 Microsoft Graph, or custom CalDAV.
+Google setup now uses one shared app-owned Google OAuth web client for the whole
+Forge runtime. End users do not create their own Google app or paste a refresh
+token into Forge. They sign in with their own Google accounts through a guided
+web-server OAuth flow, Forge exchanges the authorization code on the backend,
+and Forge stores a per-user refresh token plus granted scopes for long-term sync.
+That Google flow must use one fixed registered callback URI and must only be
+offered from the configured Forge host or allowed local browser origins so the
+redirect contract stays exact.
 Apple setup starts from `https://caldav.icloud.com` and autodiscovers the principal,
 calendar home, and writable calendars instead of asking the user to paste hidden
 calendar collection URLs. Writable providers give Forge a dedicated Forge-owned
@@ -436,14 +444,17 @@ fetch stored result history without recomputing scores ad hoc in the client.
 ## Technical Stack And Architecture
 
 Forge currently runs as a React 19.1 + TypeScript 5.8 + Vite 6.3 web application with
-Tailwind CSS 4 styling, app-local shadcn-style UI primitives, TanStack Query for
-server-state coordination, React Router 7 for navigation, React Hook Form and Zod for
-forms and validation, dnd-kit for board interactions, Framer Motion for motion,
-Recharts for charts, `@xyflow/react` for connector graphs, and Lucide icons for the
-entity iconography. The server runtime is a Fastify 5 API served from `server/src`,
-started with `tsx`, and exposed locally on port `4317` by default with the web app
-mounted under `/forge/`. The public contract is a versioned REST API with an OpenAPI
-3.1 document at `/api/v1/openapi.json`. Agent adapters currently span the published
+Tailwind CSS 4 styling, app-local shadcn-style UI primitives, React Router 7 for
+navigation, and a front-end state architecture that is actively consolidating around
+Redux Toolkit slices plus RTK Query for server-state ownership and cache invalidation.
+TanStack Query remains present as a temporary migration bridge on routes that have not
+yet moved to RTK Query. Forms and validation use React Hook Form and Zod, board
+interactions use dnd-kit, motion uses Framer Motion, charts use Recharts, connector
+graphs use `@xyflow/react`, and Lucide provides the entity iconography. The server
+runtime is a Fastify 5 API served from `server/src`, started with `tsx`, and exposed
+locally on port `4317` by default with the web app mounted under `/forge/`. The public
+contract is a versioned REST API with an OpenAPI 3.1 document at `/api/v1/openapi.json`.
+Agent adapters currently span the published
 OpenClaw plugin, a Hermes Agent plugin packaged as a Python distribution with a
 `hermes_agent.plugins` entry point plus bundled runtime assets, and a repo-local Codex
 MCP plugin. The Wiki memory layer is part of that same stack: markdown and media files

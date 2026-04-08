@@ -2016,7 +2016,7 @@ export function getCalendarOverview(
         provider: "google",
         label: "Google Calendar",
         supportsDedicatedForgeCalendar: true,
-        connectionHelp: "Use a Google refresh token plus client credentials to sync calendars and publish Forge-owned events and timeboxes."
+        connectionHelp: "Forge uses one shared Google OAuth web app for everyone. Users sign in with Google, Forge stores a per-user refresh token, and the redirect only works from the configured Forge host and allowed local browser origins."
       },
       {
         provider: "apple",

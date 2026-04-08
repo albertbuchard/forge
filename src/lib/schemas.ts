@@ -60,6 +60,21 @@ export const settingsMutationSchema = z.object({
   localePreference: appLocaleSchema,
   calendarProviders: z
     .object({
+      google: z
+        .object({
+          clientId: z.string(),
+          appUrl: z.string(),
+          redirectUri: z.string(),
+          allowedOrigins: z.array(z.string()),
+          usesSharedAppCredentials: z.literal(true),
+          authMode: z.literal("shared_web_server_oauth"),
+          isConfigured: z.boolean(),
+          isReadyForPairing: z.boolean(),
+          runtimeOrigin: z.string(),
+          runtimeOriginMatchesAppUrl: z.boolean(),
+          setupMessage: z.string()
+        })
+        .optional(),
       microsoft: z
         .object({
           clientId: z.string().trim(),

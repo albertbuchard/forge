@@ -1,6 +1,11 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { CryptoProvider, PublicClientApplication } from "@azure/msal-node";
 import ical from "node-ical";
+import {
+  getGoogleCalendarOauthCallbackPath,
+  isGoogleCalendarOriginAllowed,
+  resolveGoogleCalendarOauthPrivateConfig
+} from "./google-calendar-oauth-config.js";
 import {
   createDAVClient,
   DAVNamespaceShort,
@@ -42,10 +47,12 @@ import type {
   ActivitySource,
   CalendarConnection,
   CalendarDiscoveryPayload,
+  GoogleCalendarOauthSession,
   MicrosoftCalendarOauthSession,
   CalendarOverviewPayload,
   CreateCalendarConnectionInput,
   DiscoverCalendarConnectionInput,
+  StartGoogleCalendarOauthInput,
   StartMicrosoftCalendarOauthInput,
   TestMicrosoftCalendarOauthConfigurationInput
 } from "../types.js";
@@ -59,11 +66,16 @@ type GoogleCredentials = {
   provider: "google";
   serverUrl: string;
   username: string;
-  clientId: string;
-  clientSecret: string;
   refreshToken: string;
+  accessTokenExpiresAt: string | null;
+  grantedScopes: string[];
   selectedCalendarUrls: string[];
   forgeCalendarUrl: string;
+};
+
+type LegacyGoogleCredentials = GoogleCredentials & {
+  clientId?: string;
+  clientSecret?: string;
 };
 
 type AppleCredentials = {
@@ -97,7 +109,7 @@ type MicrosoftCredentials = {
 };
 
 type StoredCalendarCredentials =
-  | GoogleCredentials
+  | LegacyGoogleCredentials
   | AppleCredentials
   | CustomCaldavCredentials
   | MicrosoftCredentials;
@@ -180,7 +192,16 @@ function isWritableCalendarCredentials(
 }
 
 const GOOGLE_CALDAV_URL = "https://apidata.googleusercontent.com/caldav/v2/";
-const GOOGLE_TOKEN_URL = "https://accounts.google.com/o/oauth2/token";
+const GOOGLE_OAUTH_AUTHORIZE_URL = "https://accounts.google.com/o/oauth2/v2/auth";
+const GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token";
+const GOOGLE_USERINFO_URL = "https://openidconnect.googleapis.com/v1/userinfo";
+const GOOGLE_CALLBACK_PATH = getGoogleCalendarOauthCallbackPath();
+const GOOGLE_OAUTH_SCOPES = [
+  "openid",
+  "email",
+  "profile",
+  "https://www.googleapis.com/auth/calendar"
+];
 const APPLE_CALDAV_URL = "https://caldav.icloud.com";
 const MICROSOFT_GRAPH_URL = "https://graph.microsoft.com/v1.0";
 const MICROSOFT_LOGIN_URL = "https://login.microsoftonline.com";
@@ -212,6 +233,28 @@ type MicrosoftOauthPendingSession = {
 };
 
 const microsoftOauthSessions = new Map<string, MicrosoftOauthPendingSession>();
+
+type GoogleOauthPendingSession = {
+  sessionId: string;
+  state: string;
+  label: string | null;
+  openerOrigin: string;
+  requestBaseOrigin: string;
+  redirectUri: string;
+  appUrl: string;
+  clientId: string;
+  codeVerifier: string;
+  createdAt: string;
+  expiresAt: string;
+  status: "pending" | "authorized" | "error" | "consumed" | "expired";
+  authUrl: string | null;
+  accountLabel: string | null;
+  error: string | null;
+  discovery: CalendarDiscoveryPayload | null;
+  credentials: Omit<GoogleCredentials, "selectedCalendarUrls" | "forgeCalendarUrl"> | null;
+};
+
+const googleOauthSessions = new Map<string, GoogleOauthPendingSession>();
 
 type MicrosoftOauthConfig = {
   clientId: string;
@@ -363,6 +406,159 @@ function pruneMicrosoftOauthSessions() {
       microsoftOauthSessions.delete(sessionId);
     }
   }
+}
+
+function pruneGoogleOauthSessions() {
+  const now = Date.now();
+  for (const [sessionId, session] of googleOauthSessions.entries()) {
+    if (new Date(session.expiresAt).getTime() <= now) {
+      googleOauthSessions.set(sessionId, { ...session, status: "expired" });
+    }
+    if (
+      session.status === "expired" ||
+      session.status === "consumed" ||
+      new Date(session.expiresAt).getTime() <= now - 5 * 60 * 1000
+    ) {
+      googleOauthSessions.delete(sessionId);
+    }
+  }
+}
+
+function encodeBase64Url(value: Buffer | string) {
+  return Buffer.from(value)
+    .toString("base64")
+    .replaceAll("+", "-")
+    .replaceAll("/", "_")
+    .replaceAll("=", "");
+}
+
+function buildPkcePair() {
+  const verifier = encodeBase64Url(randomBytes(32));
+  const challenge = createHash("sha256").update(verifier).digest("base64url");
+  return { verifier, challenge };
+}
+
+function normalizeRequestOrigin(value: string | null | undefined) {
+  const trimmed = value?.trim();
+  if (!trimmed) {
+    return null;
+  }
+  try {
+    return new URL(trimmed).origin;
+  } catch {
+    return null;
+  }
+}
+
+function googleOauthStartRejectionMessage(config: {
+  appUrl: string;
+  allowedOrigins: string[];
+}) {
+  const allowed = config.allowedOrigins.join(", ");
+  return `Google Calendar pairing is only available from the configured host: ${config.appUrl}. Open Forge on the main machine or use one of the allowed browser origins (${allowed}) so Google can redirect back correctly.`;
+}
+
+function ensureGoogleOauthStartAllowed(input: {
+  openerOrigin: string | null;
+  requestBaseOrigin: string;
+}) {
+  const config = resolveGoogleCalendarOauthPrivateConfig();
+  const openerOrigin = normalizeRequestOrigin(input.openerOrigin);
+  const requestBaseOrigin = normalizeRequestOrigin(input.requestBaseOrigin);
+  const baseMatchesApp = requestBaseOrigin === config.appUrl;
+  const openerAllowed =
+    openerOrigin !== null &&
+    isGoogleCalendarOriginAllowed(openerOrigin, config.allowedOrigins);
+  const pairingAllowed = config.isConfigured && baseMatchesApp && openerAllowed;
+
+  recordCalendarActivity(
+    "calendar_google_oauth_start_checked",
+    "calendar_connection",
+    "google_oauth",
+    "Google OAuth start checked",
+    pairingAllowed
+      ? "Forge accepted a Google OAuth start request."
+      : "Forge rejected a Google OAuth start request.",
+    { source: "system", actor: null },
+    {
+      configured: config.isConfigured,
+      pairingAllowed,
+      openerOrigin,
+      requestBaseOrigin,
+      appUrl: config.appUrl,
+      redirectUri: config.redirectUri
+    }
+  );
+
+  if (!config.isConfigured) {
+    throw new Error(config.setupMessage);
+  }
+
+  if (!baseMatchesApp || !openerAllowed) {
+    throw new Error(googleOauthStartRejectionMessage(config));
+  }
+
+  return {
+    config,
+    openerOrigin: openerOrigin!,
+    requestBaseOrigin: requestBaseOrigin!
+  };
+}
+
+function toGoogleOauthSessionPayload(
+  session: GoogleOauthPendingSession
+): GoogleCalendarOauthSession {
+  return {
+    sessionId: session.sessionId,
+    status: session.status,
+    authUrl: session.authUrl,
+    accountLabel: session.accountLabel,
+    error: session.error,
+    discovery: session.discovery
+  };
+}
+
+function explainGoogleOauthError(input: {
+  error?: string | null;
+  errorDescription?: string | null;
+  redirectUri: string;
+  appUrl: string;
+}) {
+  const raw = `${input.error ?? ""} ${input.errorDescription ?? ""}`.toLowerCase();
+
+  if (raw.includes("redirect_uri_mismatch")) {
+    return `Google rejected the redirect URI. Register exactly ${input.redirectUri} in Google Cloud Console, then open Forge on ${input.appUrl} or one of the allowed local browser origins before trying again.`;
+  }
+  if (raw.includes("access_denied") || raw.includes("cancel")) {
+    return "Google consent was denied or cancelled. Retry the Google sign-in and grant the requested calendar access.";
+  }
+  if (raw.includes("invalid_scope")) {
+    return "Google rejected the requested calendar scopes. Confirm the Calendar API is enabled and the consent screen includes the requested Calendar scopes.";
+  }
+  return input.errorDescription?.trim() || input.error?.trim() || "Google sign-in could not be completed.";
+}
+
+function mapGoogleRuntimeError(error: unknown) {
+  const message =
+    error instanceof Error ? error.message : "Google calendar sync failed.";
+  const raw = message.toLowerCase();
+
+  if (raw.includes("invalid_grant")) {
+    return new Error(
+      "The stored Google refresh token is missing, expired, or revoked. Reconnect Google Calendar from Settings so Forge can keep syncing."
+    );
+  }
+  if (raw.includes("invalid_client") || raw.includes("unauthorized_client")) {
+    return new Error(
+      "The shared Google OAuth app credentials were rejected. Check GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, and the registered redirect URI."
+    );
+  }
+  if (raw.includes("redirect_uri_mismatch")) {
+    return new Error(
+      "Google rejected the configured redirect URI. Register the exact Forge callback URI in Google Cloud Console and reconnect Google Calendar."
+    );
+  }
+  return error instanceof Error ? error : new Error(message);
 }
 
 function normalizeUrl(value: string) {
@@ -636,18 +832,32 @@ async function createProviderClient(
 
   const client =
     credentials.provider === "google"
-      ? await createDAVClient({
-          serverUrl: credentials.serverUrl,
-          credentials: {
-            username: credentials.username,
-            tokenUrl: GOOGLE_TOKEN_URL,
-            refreshToken: credentials.refreshToken,
-            clientId: credentials.clientId,
-            clientSecret: credentials.clientSecret
-          },
-          authMethod: "Oauth",
-          defaultAccountType: "caldav"
-        })
+      ? await (async () => {
+          try {
+            const googleConfig = resolveGoogleCalendarOauthPrivateConfig();
+            const legacyGoogle = credentials as LegacyGoogleCredentials;
+            return await createDAVClient({
+              serverUrl: credentials.serverUrl,
+              credentials: {
+                username: credentials.username,
+                tokenUrl: GOOGLE_TOKEN_URL,
+                refreshToken: credentials.refreshToken,
+                clientId:
+                  googleConfig.clientId ||
+                  legacyGoogle.clientId ||
+                  "",
+                clientSecret:
+                  googleConfig.clientSecret ||
+                  legacyGoogle.clientSecret ||
+                  ""
+              },
+              authMethod: "Oauth",
+              defaultAccountType: "caldav"
+            });
+          } catch (error) {
+            throw mapGoogleRuntimeError(error);
+          }
+        })()
       : await createDAVClient({
           serverUrl: credentials.serverUrl,
           credentials: {
@@ -658,13 +868,22 @@ async function createProviderClient(
           defaultAccountType: "caldav"
         });
 
-  const account = await client.createAccount({
-    account: {
-      accountType: "caldav"
-    }
-  });
+  let account;
+  let calendars;
+  try {
+    account = await client.createAccount({
+      account: {
+        accountType: "caldav"
+      }
+    });
 
-  const calendars = await client.fetchCalendars({ account });
+    calendars = await client.fetchCalendars({ account });
+  } catch (error) {
+    if (credentials.provider === "google") {
+      throw mapGoogleRuntimeError(error);
+    }
+    throw error;
+  }
 
   return {
     mode: "dav",
@@ -929,6 +1148,214 @@ export async function completeMicrosoftCalendarOauth(input: {
   }
 
   return { session: toMicrosoftOauthSessionPayload(session), openerOrigin: session.origin };
+}
+
+export async function startGoogleCalendarOauth(
+  input: StartGoogleCalendarOauthInput,
+  requestContext: {
+    openerOrigin: string | null;
+    requestBaseOrigin: string;
+  }
+) {
+  pruneGoogleOauthSessions();
+  const { config, openerOrigin, requestBaseOrigin } =
+    ensureGoogleOauthStartAllowed(requestContext);
+  const sessionId = randomUUID();
+  const pkce = buildPkcePair();
+  const params = new URLSearchParams({
+    client_id: config.clientId,
+    redirect_uri: config.redirectUri,
+    response_type: "code",
+    access_type: "offline",
+    include_granted_scopes: "true",
+    prompt: "consent",
+    scope: GOOGLE_OAUTH_SCOPES.join(" "),
+    state: sessionId,
+    code_challenge: pkce.challenge,
+    code_challenge_method: "S256"
+  });
+  const authUrl = `${GOOGLE_OAUTH_AUTHORIZE_URL}?${params.toString()}`;
+  const now = new Date();
+  googleOauthSessions.set(sessionId, {
+    sessionId,
+    state: sessionId,
+    label: input.label?.trim() || null,
+    openerOrigin,
+    requestBaseOrigin,
+    redirectUri: config.redirectUri,
+    appUrl: config.appUrl,
+    clientId: config.clientId,
+    codeVerifier: pkce.verifier,
+    createdAt: now.toISOString(),
+    expiresAt: new Date(now.getTime() + 15 * 60 * 1000).toISOString(),
+    status: "pending",
+    authUrl,
+    accountLabel: null,
+    error: null,
+    discovery: null,
+    credentials: null
+  });
+  return {
+    session: toGoogleOauthSessionPayload(googleOauthSessions.get(sessionId)!)
+  };
+}
+
+export function getGoogleCalendarOauthSession(sessionId: string) {
+  pruneGoogleOauthSessions();
+  const session = googleOauthSessions.get(sessionId);
+  if (!session) {
+    throw new Error(`Unknown Google calendar auth session ${sessionId}`);
+  }
+  return {
+    session: toGoogleOauthSessionPayload(session)
+  };
+}
+
+export async function completeGoogleCalendarOauth(input: {
+  state?: string | null;
+  code?: string | null;
+  error?: string | null;
+  errorDescription?: string | null;
+}) {
+  pruneGoogleOauthSessions();
+  const sessionId = input.state?.trim() || "";
+  const session = googleOauthSessions.get(sessionId);
+  if (!session) {
+    throw new Error("Unknown Google calendar auth session.");
+  }
+  if (new Date(session.expiresAt).getTime() <= Date.now()) {
+    session.status = "expired";
+    session.error = "The Google sign-in session expired. Start the guided sign-in again.";
+    return { session: toGoogleOauthSessionPayload(session) };
+  }
+  if (input.error) {
+    session.status = "error";
+    session.error = explainGoogleOauthError({
+      error: input.error,
+      errorDescription: input.errorDescription,
+      redirectUri: session.redirectUri,
+      appUrl: session.appUrl
+    });
+    return { session: toGoogleOauthSessionPayload(session), openerOrigin: session.openerOrigin };
+  }
+  if (!input.code) {
+    session.status = "error";
+    session.error = "Google did not return an authorization code.";
+    return { session: toGoogleOauthSessionPayload(session), openerOrigin: session.openerOrigin };
+  }
+
+  try {
+    const config = resolveGoogleCalendarOauthPrivateConfig();
+    const tokenResponse = await fetch(GOOGLE_TOKEN_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+        Accept: "application/json"
+      },
+      body: new URLSearchParams({
+        code: input.code,
+        client_id: config.clientId,
+        client_secret: config.clientSecret,
+        redirect_uri: session.redirectUri,
+        grant_type: "authorization_code",
+        code_verifier: session.codeVerifier
+      }).toString()
+    });
+    const tokenPayload = (await tokenResponse.json()) as Record<string, unknown>;
+    if (!tokenResponse.ok) {
+      throw new Error(
+        explainGoogleOauthError({
+          error:
+            typeof tokenPayload.error === "string" ? tokenPayload.error : null,
+          errorDescription:
+            typeof tokenPayload.error_description === "string"
+              ? tokenPayload.error_description
+              : null,
+          redirectUri: session.redirectUri,
+          appUrl: session.appUrl
+        })
+      );
+    }
+
+    const accessToken =
+      typeof tokenPayload.access_token === "string"
+        ? tokenPayload.access_token
+        : "";
+    const refreshToken =
+      typeof tokenPayload.refresh_token === "string"
+        ? tokenPayload.refresh_token
+        : "";
+    if (!accessToken) {
+      throw new Error("Google sign-in completed without an access token.");
+    }
+    if (!refreshToken) {
+      throw new Error(
+        "Google did not return a refresh token. Revoke the existing Forge access for this Google account or retry consent so Forge can keep syncing in the background."
+      );
+    }
+
+    const scopeText =
+      typeof tokenPayload.scope === "string" ? tokenPayload.scope : "";
+    const grantedScopes = scopeText
+      .split(/\s+/)
+      .map((entry) => entry.trim())
+      .filter((entry) => entry.length > 0);
+    const expiresInSeconds =
+      typeof tokenPayload.expires_in === "number"
+        ? tokenPayload.expires_in
+        : Number(tokenPayload.expires_in ?? 0);
+    const accessTokenExpiresAt =
+      Number.isFinite(expiresInSeconds) && expiresInSeconds > 0
+        ? new Date(Date.now() + expiresInSeconds * 1000).toISOString()
+        : null;
+
+    const profileResponse = await fetch(GOOGLE_USERINFO_URL, {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        Accept: "application/json"
+      }
+    });
+    const profilePayload = (await profileResponse.json()) as Record<string, unknown>;
+    if (!profileResponse.ok) {
+      throw new Error("Google sign-in completed, but Forge could not read the account profile.");
+    }
+    const email =
+      typeof profilePayload.email === "string" && profilePayload.email.trim().length > 0
+        ? profilePayload.email.trim()
+        : "";
+    if (!email) {
+      throw new Error("Google sign-in completed without an account email.");
+    }
+
+    const provisionalCredentials: Omit<
+      GoogleCredentials,
+      "selectedCalendarUrls" | "forgeCalendarUrl"
+    > = {
+      provider: "google",
+      serverUrl: GOOGLE_CALDAV_URL,
+      username: email,
+      refreshToken,
+      accessTokenExpiresAt,
+      grantedScopes
+    };
+    const state = await createProviderClient(provisionalCredentials);
+    const discovery = mapDiscoveryPayload("google", state);
+    session.status = "authorized";
+    session.accountLabel = discovery.accountLabel;
+    session.discovery = discovery;
+    session.credentials = provisionalCredentials;
+    session.codeVerifier = "";
+    session.error = null;
+  } catch (error) {
+    session.status = "error";
+    session.error =
+      error instanceof Error ? error.message : "Google sign-in failed.";
+  }
+
+  return {
+    session: toGoogleOauthSessionPayload(session),
+    openerOrigin: session.openerOrigin
+  };
 }
 
 async function ensureForgeCalendar(
@@ -1254,23 +1681,10 @@ function toStoredCredentials(
   input: CreateCalendarConnectionInput,
   forgeCalendarUrl: string | null
 ): WritableCalendarCredentials {
-  if (input.provider === "microsoft") {
+  if (input.provider === "microsoft" || input.provider === "google") {
     throw new Error(
-      "Exchange Online connections must be created from a completed Microsoft sign-in session."
+      `${input.provider === "google" ? "Google Calendar" : "Exchange Online"} connections must be created from a completed OAuth sign-in session.`
     );
-  }
-
-  if (input.provider === "google") {
-    return {
-      provider: "google",
-      serverUrl: GOOGLE_CALDAV_URL,
-      username: input.username,
-      clientId: input.clientId,
-      clientSecret: input.clientSecret,
-      refreshToken: input.refreshToken,
-      selectedCalendarUrls: input.selectedCalendarUrls.map(normalizeUrl),
-      forgeCalendarUrl: normalizeUrl(forgeCalendarUrl!)
-    };
   }
 
   if (input.provider === "apple") {
@@ -1343,21 +1757,10 @@ function findExistingCalendarConnection(
 function toDiscoveryCredentials(
   input: DiscoverCalendarConnectionInput | CreateCalendarConnectionInput
 ): DiscoverableCredentials {
-  if (input.provider === "microsoft") {
+  if (input.provider === "microsoft" || input.provider === "google") {
     throw new Error(
-      "Exchange Online discovery now uses the guided Microsoft sign-in flow."
+      `${input.provider === "google" ? "Google Calendar" : "Exchange Online"} discovery now uses the guided OAuth sign-in flow.`
     );
-  }
-
-  if (input.provider === "google") {
-    return {
-      provider: "google",
-      serverUrl: GOOGLE_CALDAV_URL,
-      username: input.username,
-      clientId: input.clientId,
-      clientSecret: input.clientSecret,
-      refreshToken: input.refreshToken
-    };
   }
 
   if (input.provider === "apple") {
@@ -1405,6 +1808,100 @@ export async function createCalendarConnection(
   secrets: SecretsManager,
   activity: ActivityContext = { source: "ui" }
 ) {
+  if (input.provider === "google") {
+    pruneGoogleOauthSessions();
+    const session = googleOauthSessions.get(input.authSessionId);
+    if (!session || session.status !== "authorized" || !session.discovery || !session.credentials) {
+      throw new Error(
+        "Complete the Google sign-in flow before saving this Google Calendar connection."
+      );
+    }
+
+    const existingConnection = listCalendarConnections().find((connection) => {
+      try {
+        const existing = requireSecretRecord<StoredCalendarCredentials>(
+          secrets,
+          connection.credentialsSecretId
+        );
+        return (
+          existing.provider === "google" &&
+          normalizeAccountIdentity(existing.username) ===
+            normalizeAccountIdentity(session.credentials?.username ?? "")
+        );
+      } catch {
+        return false;
+      }
+    });
+    if (existingConnection) {
+      throw new CalendarConnectionConflictError(
+        `${existingConnection.label} is already connected for ${existingConnection.accountLabel || "this account"}. Remove it first if you want to reconnect with different settings.`,
+        existingConnection.id
+      );
+    }
+
+    const state = await createProviderClient(session.credentials);
+    if (state.mode !== "dav") {
+      throw new Error("Forge expected a writable DAV provider state for this Google Calendar connection.");
+    }
+
+    let forgeCalendarUrl: string | null =
+      input.forgeCalendarUrl?.trim() ||
+      session.discovery.calendars.find((calendar) => calendar.isForgeCandidate)?.url ||
+      null;
+
+    if (!forgeCalendarUrl && input.createForgeCalendar) {
+      const created = await ensureForgeCalendar(state);
+      forgeCalendarUrl = created.forgeCalendarUrl;
+    }
+
+    if (!forgeCalendarUrl) {
+      throw new Error(
+        "Select the calendar Forge should write into, or create a new calendar named Forge."
+      );
+    }
+
+    const secretId = `calendar_secret_${randomUUID().replaceAll("-", "").slice(0, 10)}`;
+    const storedCredentials: GoogleCredentials = {
+      ...session.credentials,
+      selectedCalendarUrls: input.selectedCalendarUrls.map(normalizeUrl),
+      forgeCalendarUrl: normalizeUrl(forgeCalendarUrl)
+    };
+    // The app credentials belong to Forge itself. Only user-specific OAuth tokens
+    // are stored per calendar connection.
+    storeEncryptedSecret(
+      secretId,
+      secrets.sealJson(storedCredentials),
+      `${input.label} google calendar credentials`
+    );
+
+    const connection = createCalendarConnectionRecord({
+      provider: "google",
+      label: input.label,
+      accountLabel: session.accountLabel ?? session.discovery.accountLabel,
+      config: {
+        serverUrl: session.discovery.serverUrl,
+        selectedCalendarCount: storedCredentials.selectedCalendarUrls.length,
+        forgeCalendarUrl: normalizeUrl(storedCredentials.forgeCalendarUrl)
+      },
+      credentialsSecretId: secretId
+    });
+
+    await syncCalendarConnection(connection.id, secrets, activity);
+    session.status = "consumed";
+
+    recordCalendarActivity(
+      "calendar_connection_created",
+      "calendar_connection",
+      connection.id,
+      `Calendar connection created: ${connection.label}`,
+      "Google Calendar is now connected to Forge through the shared app-owned OAuth flow.",
+      activity,
+      { provider: input.provider }
+    );
+
+    return getCalendarConnectionById(connection.id)!;
+  }
+
   if (input.provider === "microsoft") {
     pruneMicrosoftOauthSessions();
     const session = microsoftOauthSessions.get(input.authSessionId);
@@ -1936,7 +2433,7 @@ export function listCalendarProviderMetadata() {
       label: "Google Calendar",
       supportsDedicatedForgeCalendar: true,
       connectionHelp:
-        "Use your Google email, client credentials, and refresh token. Forge discovers calendars and can create or reuse a Forge calendar automatically."
+        "Forge uses one shared Google OAuth web app for everyone. Users sign in with Google, Forge stores a per-user refresh token, and the redirect only works from the configured Forge host and allowed local browser origins."
     },
     {
       provider: "apple" as const,

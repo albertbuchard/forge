@@ -328,17 +328,20 @@ import {
 import { suggestTags } from "./services/tagging.js";
 import {
   CalendarConnectionConflictError,
+  completeGoogleCalendarOauth,
   completeMicrosoftCalendarOauth,
   createCalendarConnection,
   deleteCalendarEventProjection,
   discoverCalendarConnection,
   discoverExistingCalendarConnection,
+  getGoogleCalendarOauthSession,
   getMicrosoftCalendarOauthSession,
   listConnectedCalendarConnections,
   removeCalendarConnection,
   pushCalendarEventUpdate,
   readCalendarOverview,
   syncCalendarConnection,
+  startGoogleCalendarOauth,
   startMicrosoftCalendarOauth,
   testMicrosoftCalendarOauthConfiguration,
   listCalendarProviderMetadata,
@@ -426,6 +429,7 @@ import {
   createCalendarConnectionSchema,
   createDiagnosticLogSchema,
   discoverCalendarConnectionSchema,
+  startGoogleCalendarOauthSchema,
   startMicrosoftCalendarOauthSchema,
   testMicrosoftCalendarOauthConfigurationSchema,
   createHabitSchema,
@@ -3227,10 +3231,10 @@ const AGENT_ONBOARDING_TOOL_INPUT_CATALOG = [
     whenToUse:
       "Use only when the operator explicitly wants Forge connected to an external calendar provider.",
     inputShape:
-      '{ provider: "google"|"apple"|"caldav"|"microsoft", label: string, username?: string, clientId?: string, clientSecret?: string, refreshToken?: string, password?: string, serverUrl?: string, authSessionId?: string, selectedCalendarUrls: string[], forgeCalendarUrl?: string, createForgeCalendar?: boolean }',
+      '{ provider: "google"|"apple"|"caldav"|"microsoft", label: string, username?: string, password?: string, serverUrl?: string, authSessionId?: string, selectedCalendarUrls: string[], forgeCalendarUrl?: string, createForgeCalendar?: boolean }',
     requiredFields: ["provider", "label", "provider-specific credentials"],
     notes: [
-      "Google uses OAuth client credentials plus a refresh token.",
+      "Google now uses one shared Forge-owned OAuth web app. The user signs in interactively, Forge exchanges the authorization code on the backend, and forge_connect_calendar_provider should only be used after a completed Google authSessionId exists.",
       "Apple starts from https://caldav.icloud.com and autodiscovers the principal plus calendars after authentication.",
       "Exchange Online uses Microsoft Graph. In the current Forge implementation it is read-only: Forge mirrors the selected calendars but does not publish work blocks or timeboxes back to Microsoft.",
       "In the current self-hosted local runtime, Exchange Online now uses an interactive Microsoft public-client sign-in flow with PKCE after the operator has saved the Microsoft client ID, tenant, and redirect URI in Settings -> Calendar. Non-interactive callers should treat Microsoft connection setup as a Settings-owned operator action unless a completed authSessionId already exists.",
@@ -7548,6 +7552,47 @@ export async function buildServer(
     providers: listCalendarProviderMetadata(),
     connections: listConnectedCalendarConnections()
   }));
+  app.post("/api/v1/calendar/oauth/google/start", async (request) => {
+    requireScopedAccess(request.headers as Record<string, unknown>, ["write"], {
+      route: "/api/v1/calendar/oauth/google/start"
+    });
+    return await startGoogleCalendarOauth(
+      startGoogleCalendarOauthSchema.parse(request.body ?? {}),
+      {
+        openerOrigin:
+          typeof request.headers.origin === "string"
+            ? request.headers.origin
+            : typeof request.headers.referer === "string"
+              ? request.headers.referer
+              : null,
+        requestBaseOrigin: getRequestOrigin(request)
+      }
+    );
+  });
+  app.get(
+    "/api/v1/calendar/oauth/google/session/:id",
+    async (request, reply) => {
+      requireScopedAccess(
+        request.headers as Record<string, unknown>,
+        ["write"],
+        { route: "/api/v1/calendar/oauth/google/session/:id" }
+      );
+      try {
+        return getGoogleCalendarOauthSession(
+          (request.params as { id: string }).id
+        );
+      } catch (error) {
+        if (
+          error instanceof Error &&
+          error.message.startsWith("Unknown Google calendar auth session")
+        ) {
+          reply.code(404);
+          return { error: "Google calendar auth session not found" };
+        }
+        throw error;
+      }
+    }
+  );
   app.post("/api/v1/calendar/oauth/microsoft/start", async (request) => {
     requireScopedAccess(request.headers as Record<string, unknown>, ["write"], {
       route: "/api/v1/calendar/oauth/microsoft/start"
@@ -7630,6 +7675,62 @@ export async function buildServer(
     <main>
       <h1>${session.status === "authorized" ? "Microsoft account connected" : "Microsoft sign-in needs attention"}</h1>
       <p>${session.status === "authorized" ? "Forge received your Microsoft account and sent the result back to the calendar setup flow. You can close this window." : (session.error ?? "Forge could not complete Microsoft sign-in. You can close this window and try again from Settings.")}</p>
+    </main>
+    <script>
+      const message = ${escapedMessage};
+      const targetOrigin = ${escapedOrigin};
+      try {
+        if (window.opener && !window.opener.closed) {
+          window.opener.postMessage(message, targetOrigin);
+        }
+      } catch {}
+      setTimeout(() => window.close(), 180);
+    </script>
+  </body>
+</html>`;
+      reply.type("text/html; charset=utf-8");
+      return body;
+    }
+  );
+  app.get(
+    "/api/v1/calendar/oauth/google/callback",
+    async (request, reply) => {
+      const query = request.query as {
+        state?: string;
+        code?: string;
+        error?: string;
+        error_description?: string;
+      };
+      const result = await completeGoogleCalendarOauth({
+        state: query.state ?? null,
+        code: query.code ?? null,
+        error: query.error ?? null,
+        errorDescription: query.error_description ?? null
+      });
+      const session = result.session;
+      const escapedOrigin = JSON.stringify(result.openerOrigin || "*");
+      const escapedMessage = JSON.stringify({
+        type: "forge:google-calendar-auth",
+        sessionId: session.sessionId,
+        status: session.status
+      });
+      const body = `<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Forge Google sign-in</title>
+    <style>
+      body{margin:0;font-family:ui-sans-serif,system-ui,sans-serif;background:#0b1320;color:#f8fafc;display:grid;place-items:center;min-height:100vh}
+      main{max-width:30rem;padding:2rem;border:1px solid rgba(255,255,255,.08);border-radius:24px;background:linear-gradient(180deg,rgba(18,28,38,.98),rgba(11,17,28,.98))}
+      h1{margin:0 0 .75rem;font-size:1.15rem}
+      p{margin:0;color:rgba(248,250,252,.72);line-height:1.6}
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>${session.status === "authorized" ? "Google account connected" : "Google sign-in needs attention"}</h1>
+      <p>${session.status === "authorized" ? "Forge received your Google account and sent the result back to the calendar setup flow. You can close this window." : (session.error ?? "Forge could not complete Google sign-in. You can close this window and try again from Settings.")}</p>
     </main>
     <script>
       const message = ${escapedMessage};
@@ -9230,7 +9331,6 @@ export async function buildServer(
     basePath: string,
     noun: string,
     options?: {
-      includeLegacyBoxAliases?: boolean;
       collectionKey?: "connectors" | "flows";
       singularKey?: "connector" | "flow";
       catalogPath?: string;
@@ -9245,9 +9345,7 @@ export async function buildServer(
       });
       return {
         boxes: [
-          ...listForgeBoxCatalog({
-            includeLegacyAliases: options?.includeLegacyBoxAliases === true
-          }),
+          ...listForgeBoxCatalog(),
           ...listAiConnectors().flatMap((connector) =>
             connector.publishedOutputs.map((output) =>
               buildConnectorOutputCatalogEntry({
@@ -9327,7 +9425,7 @@ export async function buildServer(
         reply.code(404);
         return { error: `${noun} not found` };
       }
-      return await runAiConnector(
+      const execution = await runAiConnector(
         connector.id,
         runAiConnectorSchema.parse(request.body ?? {}),
         {
@@ -9336,6 +9434,11 @@ export async function buildServer(
         },
         "run"
       );
+      return {
+        [singularKey]: execution.connector,
+        run: execution.run,
+        conversation: execution.conversation
+      };
     });
     app.post(`${basePath}/:id/chat`, async (request, reply) => {
       requireScopedAccess(request.headers as Record<string, unknown>, ["write"], {
@@ -9346,7 +9449,7 @@ export async function buildServer(
         reply.code(404);
         return { error: `${noun} not found` };
       }
-      return await runAiConnector(
+      const execution = await runAiConnector(
         connector.id,
         runAiConnectorSchema.parse(request.body ?? {}),
         {
@@ -9355,6 +9458,11 @@ export async function buildServer(
         },
         "chat"
       );
+      return {
+        [singularKey]: execution.connector,
+        run: execution.run,
+        conversation: execution.conversation
+      };
     });
     app.get(`${basePath}/:id/output`, async (request, reply) => {
       requireScopedAccess(request.headers as Record<string, unknown>, ["read"], {
@@ -9388,9 +9496,6 @@ export async function buildServer(
     collectionKey: "flows",
     singularKey: "flow",
     catalogPath: "/api/v1/workbench/catalog/boxes"
-  });
-  registerFlowApiRoutes("/api/v1/ai-connectors", "AI connector", {
-    includeLegacyBoxAliases: true
   });
   app.post("/api/v1/workbench/run", async (request, reply) => {
     requireScopedAccess(request.headers as Record<string, unknown>, ["write"], {
@@ -9434,19 +9539,6 @@ export async function buildServer(
       return { error: "Workbench flow not found" };
     }
     return { flow: connector };
-  });
-  app.get("/api/v1/ai-connectors/by-slug/:slug", async (request, reply) => {
-    requireScopedAccess(request.headers as Record<string, unknown>, ["read"], {
-      route: "/api/v1/ai-connectors/by-slug/:slug"
-    });
-    const connector = getAiConnectorBySlug(
-      (request.params as { slug: string }).slug
-    );
-    if (!connector) {
-      reply.code(404);
-      return { error: "AI connector not found" };
-    }
-    return { connector };
   });
   app.post("/api/v1/settings/tokens", async (request, reply) => {
     const auth = requireOperatorSession(

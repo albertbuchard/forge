@@ -1351,6 +1351,20 @@ export const microsoftCalendarAuthSettingsSchema = z.object({
   setupMessage: z.string()
 });
 
+export const googleCalendarAuthSettingsSchema = z.object({
+  clientId: z.string(),
+  appUrl: z.string(),
+  redirectUri: z.string(),
+  allowedOrigins: z.array(z.string()),
+  usesSharedAppCredentials: z.literal(true),
+  authMode: z.literal("shared_web_server_oauth"),
+  isConfigured: z.boolean(),
+  isReadyForPairing: z.boolean(),
+  runtimeOrigin: z.string(),
+  runtimeOriginMatchesAppUrl: z.boolean(),
+  setupMessage: z.string()
+});
+
 export const aiModelProviderSchema = z.enum([
   "openai-api",
   "openai-codex",
@@ -1549,18 +1563,24 @@ export const forgeBoxPortDefinitionSchema = z.object({
 });
 
 export const forgeBoxCatalogEntrySchema = z.object({
-  boxId: nonEmptyTrimmedString,
+  id: nonEmptyTrimmedString,
+  boxId: trimmedString.optional(),
   surfaceId: trimmedString.nullable(),
   routePath: trimmedString.nullable(),
-  label: nonEmptyTrimmedString,
+  title: nonEmptyTrimmedString,
+  label: trimmedString.optional(),
+  icon: trimmedString.nullable().optional(),
   description: trimmedString.default(""),
   category: nonEmptyTrimmedString,
   tags: z.array(nonEmptyTrimmedString).default([]),
-  capabilityModes: z.array(forgeBoxCapabilityModeSchema).default(["content"]),
+  capabilityModes: z.array(forgeBoxCapabilityModeSchema).default(["content"]).optional(),
   inputs: z.array(forgeBoxPortDefinitionSchema).default([]),
-  outputs: z.array(forgeBoxPortDefinitionSchema).default([]),
-  toolAdapters: z.array(forgeBoxToolAdapterSchema).default([]),
-  snapshotResolverKey: nonEmptyTrimmedString.default("generic")
+  params: z.array(forgeBoxPortDefinitionSchema).default([]),
+  output: z.array(forgeBoxPortDefinitionSchema).default([]),
+  tools: z.array(forgeBoxToolAdapterSchema).default([]),
+  outputs: z.array(forgeBoxPortDefinitionSchema).default([]).optional(),
+  toolAdapters: z.array(forgeBoxToolAdapterSchema).default([]).optional(),
+  snapshotResolverKey: trimmedString.optional()
 });
 
 export const forgeBoxSnapshotSchema = z.object({
@@ -1576,6 +1596,7 @@ export const aiConnectorKindSchema = z.enum(["functor", "chat"]);
 export const aiConnectorNodeTypeSchema = z.enum([
   "box",
   "box_input",
+  "value",
   "user_input",
   "functor",
   "chat",
@@ -1612,8 +1633,14 @@ export const aiConnectorNodeSchema = z.object({
     enabledToolKeys: z.array(nonEmptyTrimmedString).default([]),
     inputs: z.array(forgeBoxPortDefinitionSchema).default([]).optional(),
     outputs: z.array(forgeBoxPortDefinitionSchema).default([]).optional(),
+    params: z.array(forgeBoxPortDefinitionSchema).default([]).optional(),
+    paramValues: z.record(z.string(), z.unknown()).default({}).optional(),
     template: trimmedString.optional(),
     selectedKey: trimmedString.optional(),
+    valueType: z
+      .enum(["string", "number", "boolean", "null", "array", "object"])
+      .optional(),
+    valueLiteral: trimmedString.optional(),
     modelConfig: aiConnectorNodeModelConfigSchema.optional()
   })
 });
@@ -2005,6 +2032,7 @@ export const settingsPayloadSchema = z.object({
     psycheAuthRequired: z.boolean()
   }),
   calendarProviders: z.object({
+    google: googleCalendarAuthSettingsSchema,
     microsoft: microsoftCalendarAuthSettingsSchema
   }),
   modelSettings: modelSettingsPayloadSchema,
@@ -2249,10 +2277,7 @@ export const createCalendarConnectionSchema = z.discriminatedUnion("provider", [
   z.object({
     provider: z.literal("google"),
     label: nonEmptyTrimmedString,
-    username: nonEmptyTrimmedString,
-    clientId: nonEmptyTrimmedString,
-    clientSecret: nonEmptyTrimmedString,
-    refreshToken: nonEmptyTrimmedString,
+    authSessionId: nonEmptyTrimmedString,
     selectedCalendarUrls: z.array(nonEmptyTrimmedString.url()).min(1),
     forgeCalendarUrl: nonEmptyTrimmedString.url().nullable().optional(),
     createForgeCalendar: z.boolean().optional().default(false)
@@ -2288,13 +2313,6 @@ export const discoverCalendarConnectionSchema = z.discriminatedUnion(
   "provider",
   [
     z.object({
-      provider: z.literal("google"),
-      username: nonEmptyTrimmedString,
-      clientId: nonEmptyTrimmedString,
-      clientSecret: nonEmptyTrimmedString,
-      refreshToken: nonEmptyTrimmedString
-    }),
-    z.object({
       provider: z.literal("apple"),
       username: nonEmptyTrimmedString,
       password: nonEmptyTrimmedString
@@ -2312,6 +2330,10 @@ export const startMicrosoftCalendarOauthSchema = z.object({
   label: nonEmptyTrimmedString.optional()
 });
 
+export const startGoogleCalendarOauthSchema = z.object({
+  label: nonEmptyTrimmedString.optional()
+});
+
 export const testMicrosoftCalendarOauthConfigurationSchema = z.object({
   clientId: nonEmptyTrimmedString.regex(
     /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/,
@@ -2322,6 +2344,15 @@ export const testMicrosoftCalendarOauthConfigurationSchema = z.object({
 });
 
 export const microsoftCalendarOauthSessionSchema = z.object({
+  sessionId: nonEmptyTrimmedString,
+  status: z.enum(["pending", "authorized", "error", "consumed", "expired"]),
+  authUrl: z.string().url().nullable(),
+  accountLabel: z.string().nullable(),
+  error: z.string().nullable(),
+  discovery: calendarDiscoveryPayloadSchema.nullable()
+});
+
+export const googleCalendarOauthSessionSchema = z.object({
   sessionId: nonEmptyTrimmedString,
   status: z.enum(["pending", "authorized", "error", "consumed", "expired"]),
   authUrl: z.string().url().nullable(),
@@ -3755,6 +3786,9 @@ export type DiscoverCalendarConnectionInput = z.infer<
 export type StartMicrosoftCalendarOauthInput = z.infer<
   typeof startMicrosoftCalendarOauthSchema
 >;
+export type StartGoogleCalendarOauthInput = z.infer<
+  typeof startGoogleCalendarOauthSchema
+>;
 export type TestMicrosoftCalendarOauthConfigurationInput = z.infer<
   typeof testMicrosoftCalendarOauthConfigurationSchema
 >;
@@ -3777,6 +3811,9 @@ export type CalendarDiscoveryPayload = z.infer<
 >;
 export type MicrosoftCalendarOauthSession = z.infer<
   typeof microsoftCalendarOauthSessionSchema
+>;
+export type GoogleCalendarOauthSession = z.infer<
+  typeof googleCalendarOauthSessionSchema
 >;
 export type WorkAdjustmentResult = z.infer<typeof workAdjustmentResultSchema>;
 export type OperatorLogWorkInput = z.infer<typeof operatorLogWorkSchema>;

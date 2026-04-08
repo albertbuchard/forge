@@ -239,6 +239,12 @@ PKCE in Settings rather than a user-facing form for client secrets or refresh
 tokens. For self-hosted local Forge, the Microsoft client ID, tenant, and redirect
 URI should be configurable from the Calendar settings UI itself so the operator does
 not have to treat backend env vars as the primary setup surface.
+Google should follow the same display-first guided setup posture, but with one
+shared Forge-owned Google OAuth web client configured for the runtime through env
+vars. The UI should explain clearly that the Google app belongs to Forge, that
+each user only signs in with their own Google account, that the redirect URI must
+match exactly, and that local pairing only works from the configured Forge host
+and allowed browser ports on the host machine.
 Calendar event editing now also needs a structured place model. The user should be able
 to enter a readable place label plus address and timezone fields, with room for future
 coordinates or provider place identifiers, so location-aware planning can build on the
@@ -515,10 +521,13 @@ they are using a broken fallback interface.
 
 Forge currently ships as a React 19.1 and TypeScript 5.8 application built with Vite
 6.3 and Tailwind CSS 4.1. The front end uses app-local shadcn-style UI primitives,
-React Router 7 for navigation, TanStack Query for server-state synchronization, React
-Hook Form and Zod for forms, dnd-kit for ordering interactions, Framer Motion for
-motion, Recharts for charts, `@xyflow/react` for connector graphs, and Lucide React
-for iconography. The API runtime is Fastify 5, started through `tsx`, and served
+React Router 7 for navigation, and an application-state architecture that is moving to
+Redux Toolkit slices plus RTK Query for cache ownership, route readiness, and shell
+coordination. TanStack Query remains in the codebase only as a migration bridge for
+legacy routes that have not been moved yet. Forms use React Hook Form and Zod, dnd-kit
+handles ordering interactions, Framer Motion handles motion, Recharts handles charts,
+`@xyflow/react` handles connector graphs, and Lucide React provides iconography. The
+API runtime is Fastify 5, started through `tsx`, and served
 locally on port `4317` by default. The web application lives under the `/forge/` base
 path, and the versioned REST contract is documented through OpenAPI 3.1 at
 `/api/v1/openapi.json`. The current agent-integration stack spans the published

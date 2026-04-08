@@ -20,12 +20,16 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
   discoverCalendarConnection,
+  getGoogleCalendarOauthSession,
   getMicrosoftCalendarOauthSession,
+  startGoogleCalendarOauth,
   startMicrosoftCalendarOauth
 } from "@/lib/api";
 import type {
   CalendarDiscoveryPayload,
   CalendarProvider,
+  GoogleCalendarAuthSettings,
+  GoogleCalendarOauthSession,
   MicrosoftCalendarAuthSettings,
   MicrosoftCalendarOauthSession
 } from "@/lib/types";
@@ -36,12 +40,15 @@ type ConnectionDraft = {
   serverUrl: string;
   username: string;
   password: string;
-  clientId: string;
-  clientSecret: string;
-  refreshToken: string;
   selectedCalendarUrls: string[];
   forgeCalendarUrl: string | null;
   createForgeCalendar: boolean;
+};
+
+type GooglePopupMessage = {
+  type?: string;
+  sessionId?: string;
+  status?: string;
 };
 
 type MicrosoftPopupMessage = {
@@ -76,9 +83,6 @@ function createDraft(provider: CalendarProvider): ConnectionDraft {
     serverUrl: PROVIDER_DEFAULTS[provider].serverUrl,
     username: "",
     password: "",
-    clientId: "",
-    clientSecret: "",
-    refreshToken: "",
     selectedCalendarUrls: [],
     forgeCalendarUrl: null,
     createForgeCalendar: false
@@ -95,6 +99,7 @@ export function CalendarConnectionFlowDialog({
   onOpenChange,
   initialProvider = "google",
   initialStepId,
+  googleSetup,
   microsoftSetup,
   onSubmit,
   pending = false
@@ -103,16 +108,14 @@ export function CalendarConnectionFlowDialog({
   onOpenChange: (open: boolean) => void;
   initialProvider?: CalendarProvider;
   initialStepId?: string;
+  googleSetup: GoogleCalendarAuthSettings;
   microsoftSetup: MicrosoftCalendarAuthSettings;
   onSubmit: (
     input:
       | {
           provider: "google";
           label: string;
-          username: string;
-          clientId: string;
-          clientSecret: string;
-          refreshToken: string;
+          authSessionId: string;
           selectedCalendarUrls: string[];
           forgeCalendarUrl?: string | null;
           createForgeCalendar?: boolean;
@@ -148,8 +151,14 @@ export function CalendarConnectionFlowDialog({
   const [draft, setDraft] = useState<ConnectionDraft>(() => createDraft(initialProvider));
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [discovery, setDiscovery] = useState<CalendarDiscoveryPayload | null>(null);
+  const [googleSession, setGoogleSession] = useState<GoogleCalendarOauthSession | null>(null);
   const [microsoftSession, setMicrosoftSession] = useState<MicrosoftCalendarOauthSession | null>(null);
   const popupRef = useRef<Window | null>(null);
+
+  const resetGoogleSession = () => {
+    setGoogleSession(null);
+    popupRef.current = null;
+  };
 
   const resetMicrosoftSession = () => {
     setMicrosoftSession(null);
@@ -191,16 +200,52 @@ export function CalendarConnectionFlowDialog({
     setSubmitError(null);
     setDiscovery(null);
     setDraft(createDraft(initialProvider));
+    resetGoogleSession();
     resetMicrosoftSession();
   }, [initialProvider, open]);
+
+  useEffect(() => {
+    if (!open || !googleSession || googleSession.status !== "pending") {
+      return;
+    }
+
+    const callbackOrigin = new URL(googleSetup.redirectUri).origin;
+    const handleMessage = (event: MessageEvent<GooglePopupMessage>) => {
+      if (event.origin !== callbackOrigin) {
+        return;
+      }
+      if (
+        event.data?.type !== "forge:google-calendar-auth" ||
+        event.data?.sessionId !== googleSession.sessionId
+      ) {
+        return;
+      }
+      void loadGoogleSession(googleSession.sessionId);
+    };
+
+    const interval = window.setInterval(() => {
+      if (!popupRef.current || !popupRef.current.closed) {
+        return;
+      }
+      popupRef.current = null;
+      void loadGoogleSession(googleSession.sessionId, { afterPopupClose: true });
+    }, 400);
+
+    window.addEventListener("message", handleMessage);
+    return () => {
+      window.removeEventListener("message", handleMessage);
+      window.clearInterval(interval);
+    };
+  }, [googleSession, googleSetup.redirectUri, open]);
 
   useEffect(() => {
     if (!open || !microsoftSession || microsoftSession.status !== "pending") {
       return;
     }
 
+    const callbackOrigin = new URL(microsoftSetup.redirectUri).origin;
     const handleMessage = (event: MessageEvent<MicrosoftPopupMessage>) => {
-      if (event.origin !== window.location.origin) {
+      if (event.origin !== callbackOrigin) {
         return;
       }
       if (
@@ -225,19 +270,10 @@ export function CalendarConnectionFlowDialog({
       window.removeEventListener("message", handleMessage);
       window.clearInterval(interval);
     };
-  }, [microsoftSession, open]);
+  }, [microsoftSession, microsoftSetup.redirectUri, open]);
 
   const discoveryMutation = useMutation({
     mutationFn: () => {
-      if (draft.provider === "google") {
-        return discoverCalendarConnection({
-          provider: "google",
-          username: draft.username,
-          clientId: draft.clientId,
-          clientSecret: draft.clientSecret,
-          refreshToken: draft.refreshToken
-        });
-      }
       if (draft.provider === "apple") {
         return discoverCalendarConnection({
           provider: "apple",
@@ -264,6 +300,39 @@ export function CalendarConnectionFlowDialog({
       );
     }
   });
+
+  const loadGoogleSession = async (
+    sessionId: string,
+    options?: { afterPopupClose?: boolean }
+  ) => {
+    try {
+      const { session } = await getGoogleCalendarOauthSession(sessionId);
+      setGoogleSession(session);
+      if (session.status === "authorized" && session.discovery) {
+        applyDiscoveryPayload(session.discovery);
+        setSubmitError(null);
+        return;
+      }
+      if (session.status === "error" || session.status === "expired") {
+        setSubmitError(
+          session.error ??
+            "Google sign-in did not complete. Start the guided sign-in again."
+        );
+        return;
+      }
+      if (options?.afterPopupClose) {
+        setSubmitError(
+          `The Google sign-in window closed before Forge received permission. If Google showed redirect_uri_mismatch, register exactly ${googleSetup.redirectUri} in Google Cloud Console and reopen Forge on an allowed local origin.`
+        );
+      }
+    } catch (error) {
+      setSubmitError(
+        error instanceof Error
+          ? error.message
+          : "Forge could not confirm the Google sign-in session."
+      );
+    }
+  };
 
   const loadMicrosoftSession = async (
     sessionId: string,
@@ -294,6 +363,47 @@ export function CalendarConnectionFlowDialog({
         error instanceof Error
           ? error.message
           : "Forge could not confirm the Microsoft sign-in session."
+      );
+    }
+  };
+
+  const startGoogleFlow = async () => {
+    try {
+      if (!googleSetup.isReadyForPairing) {
+        throw new Error(googleSetup.setupMessage);
+      }
+      if (!googleSetup.allowedOrigins.includes(window.location.origin)) {
+        throw new Error(
+          `Google Calendar pairing is only available from the configured host: ${googleSetup.appUrl}. Open Forge on one of these local origins first: ${googleSetup.allowedOrigins.join(", ")}.`
+        );
+      }
+      setSubmitError(null);
+      setDiscovery(null);
+      const { session } = await startGoogleCalendarOauth({
+        label: normalizeLabel("google", draft.label)
+      });
+      if (!session.authUrl) {
+        throw new Error("Forge could not prepare the Google sign-in URL.");
+      }
+      setGoogleSession(session);
+      popupRef.current?.close();
+      popupRef.current = window.open(
+        session.authUrl,
+        "forge-google-calendar-auth",
+        "popup=yes,width=520,height=720,resizable=yes,scrollbars=yes"
+      );
+      if (!popupRef.current) {
+        throw new Error(
+          "The Google sign-in popup was blocked. Allow popups for Forge and try again."
+        );
+      }
+      popupRef.current.focus();
+    } catch (error) {
+      resetGoogleSession();
+      setSubmitError(
+        error instanceof Error
+          ? error.message
+          : "Forge could not start the Google sign-in flow."
       );
     }
   };
@@ -343,7 +453,7 @@ export function CalendarConnectionFlowDialog({
         eyebrow: "Connection",
         title: "Choose the calendar provider Forge should connect to",
         description:
-          "Apple uses autodiscovery from caldav.icloud.com, Google uses CalDAV over OAuth, Exchange Online uses guided Microsoft sign-in in read-only mode, and custom CalDAV stays available for everything else.",
+          "Apple uses autodiscovery from caldav.icloud.com, Google uses a shared Forge-owned OAuth web app, Exchange Online uses guided Microsoft sign-in in read-only mode, and custom CalDAV stays available for everything else.",
         render: (value, setValue) => (
           <div className="grid gap-5">
             <FlowField
@@ -355,6 +465,7 @@ export function CalendarConnectionFlowDialog({
                 onChange={(next) => {
                   setDiscovery(null);
                   setSubmitError(null);
+                  resetGoogleSession();
                   resetMicrosoftSession();
                   setValue(createDraft(next as CalendarProvider));
                 }}
@@ -362,7 +473,7 @@ export function CalendarConnectionFlowDialog({
                   {
                     value: "google",
                     label: "Google Calendar",
-                    description: "Discover calendars from Google CalDAV using your OAuth refresh token."
+                    description: "Use the shared Forge Google OAuth app, sign in with your own Google account, and let Forge store a per-user refresh token."
                   },
                   {
                     value: "apple",
@@ -406,7 +517,9 @@ export function CalendarConnectionFlowDialog({
                   <div className="font-medium">Discovery first</div>
                 </div>
                 <p className="mt-3 text-sm leading-6 text-white/60">
-                  {value.provider === "microsoft"
+                  {value.provider === "google"
+                    ? "Forge opens a Google sign-in popup, exchanges the authorization code on the backend, stores a per-user refresh token, and then discovers the writable calendars for that account."
+                    : value.provider === "microsoft"
                     ? "Forge starts a Microsoft sign-in popup, then discovers the calendars available to that account before you choose what to mirror."
                     : "Forge discovers the actual calendar collections before you choose which ones to mirror and which one should receive owned timeboxes."}
                 </p>
@@ -434,14 +547,16 @@ export function CalendarConnectionFlowDialog({
         eyebrow: "Credentials",
         title:
           draft.provider === "google"
-            ? "Provide the Google CalDAV credentials"
+            ? "Sign in with Google"
             : draft.provider === "apple"
               ? "Provide the Apple account email and app-specific password"
               : draft.provider === "microsoft"
               ? "Sign in with Microsoft"
               : "Provide the custom CalDAV base URL and credentials",
         description:
-          draft.provider === "apple"
+          draft.provider === "google"
+            ? "Forge uses one app-owned Google OAuth client for everyone. The user only signs in with their own Google account and grants this Forge app access."
+            : draft.provider === "apple"
             ? "Apple discovery starts from https://caldav.icloud.com, so you only need the Apple ID email and app password here."
             : draft.provider === "microsoft"
               ? "Forge uses the Microsoft client ID, tenant, and redirect URI saved in Settings -> Calendar, then runs a guided popup sign-in. No client secret is required in the user-facing setup."
@@ -459,7 +574,112 @@ export function CalendarConnectionFlowDialog({
               />
             </FlowField>
 
-            {value.provider === "microsoft" ? (
+            {value.provider === "google" ? (
+              <div className="grid gap-4">
+                <div className="rounded-[24px] border border-white/8 bg-[linear-gradient(180deg,rgba(20,32,48,0.98),rgba(11,18,30,0.98))] p-5">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <div className="font-medium text-white">
+                        Guided Google sign-in
+                      </div>
+                      <p className="mt-2 max-w-2xl text-sm leading-6 text-white/60">
+                        Forge owns the Google OAuth client credentials. Each
+                        user only signs in with their own Google account, Forge
+                        exchanges the authorization code on the backend, and
+                        then stores the user-specific refresh token for future
+                        calendar sync.
+                      </p>
+                    </div>
+                    <Badge className="bg-emerald-500/16 text-emerald-100">
+                      Shared app credentials
+                    </Badge>
+                  </div>
+
+                  <div className="mt-4 rounded-[18px] bg-white/[0.04] px-4 py-3 text-sm leading-6 text-white/68">
+                    <div>
+                      App URL:{" "}
+                      <span className="font-medium text-white">
+                        {googleSetup.appUrl}
+                      </span>
+                    </div>
+                    <div className="break-all">
+                      Redirect URI:{" "}
+                      <span className="font-medium text-white">
+                        {googleSetup.redirectUri}
+                      </span>
+                    </div>
+                    <div>
+                      Allowed browser origins:{" "}
+                      <span className="font-medium text-white">
+                        {googleSetup.allowedOrigins.join(", ")}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="mt-4 flex flex-wrap items-center gap-3">
+                    <Button
+                      type="button"
+                      onClick={() => void startGoogleFlow()}
+                      disabled={
+                        !googleSetup.isReadyForPairing ||
+                        !googleSetup.allowedOrigins.includes(window.location.origin)
+                      }
+                      pending={googleSession?.status === "pending"}
+                      pendingLabel="Waiting for Google"
+                    >
+                      <ExternalLink className="size-4" />
+                      {googleSession?.status === "authorized"
+                        ? "Sign in again"
+                        : "Sign in with Google"}
+                    </Button>
+                    {googleSession?.accountLabel ? (
+                      <Badge className="bg-emerald-500/16 text-emerald-100">
+                        <CheckCircle2 className="mr-1 size-3.5" />
+                        {googleSession.accountLabel}
+                      </Badge>
+                    ) : null}
+                  </div>
+
+                  <div className="mt-4 grid gap-3 md:grid-cols-2">
+                    <div className="rounded-[18px] bg-white/[0.04] px-4 py-3 text-sm leading-6 text-white/68">
+                      App credentials belong to Forge itself. User tokens belong
+                      to the signed-in Google account and are issued per user
+                      after consent.
+                    </div>
+                    <div className="rounded-[18px] bg-white/[0.04] px-4 py-3 text-sm leading-6 text-white/68">
+                      Open Forge on the correct host machine and browser origin
+                      first. In local dev that usually means{" "}
+                      <span className="font-medium text-white">
+                        http://127.0.0.1:3027
+                      </span>{" "}
+                      for the Vite UI, while the redirect itself still returns
+                      to{" "}
+                      <span className="font-medium text-white">
+                        http://127.0.0.1:4317
+                      </span>
+                      .
+                    </div>
+                  </div>
+
+                  {!googleSetup.isReadyForPairing ? (
+                    <div className="mt-4 rounded-[18px] border border-amber-400/20 bg-amber-400/10 px-4 py-3 text-sm leading-6 text-amber-100">
+                      {googleSetup.setupMessage}
+                    </div>
+                  ) : null}
+
+                  {googleSetup.isReadyForPairing &&
+                  !googleSetup.allowedOrigins.includes(window.location.origin) ? (
+                    <div className="mt-4 rounded-[18px] border border-amber-400/20 bg-amber-400/10 px-4 py-3 text-sm leading-6 text-amber-100">
+                      Google Calendar pairing is only available from the
+                      configured host: {googleSetup.appUrl}. Open Forge on one
+                      of these browser origins first:{" "}
+                      {googleSetup.allowedOrigins.join(", ")}. Current origin:{" "}
+                      {window.location.origin}.
+                    </div>
+                  ) : null}
+                </div>
+              </div>
+            ) : value.provider === "microsoft" ? (
               <div className="grid gap-4">
                 <div className="rounded-[24px] border border-white/8 bg-[linear-gradient(180deg,rgba(20,32,48,0.98),rgba(11,18,30,0.98))] p-5">
                   <div className="flex flex-wrap items-start justify-between gap-3">
@@ -568,44 +788,16 @@ export function CalendarConnectionFlowDialog({
                   />
                 </FlowField>
 
-                {value.provider === "google" ? (
-                  <>
-                    <FlowField label="Google client ID">
-                      <Input
-                        value={value.clientId}
-                        onChange={(event) => setValue({ clientId: event.target.value })}
-                        placeholder="1234567890-abcdef.apps.googleusercontent.com"
-                      />
-                    </FlowField>
-                    <FlowField label="Google client secret">
-                      <Input
-                        type="password"
-                        value={value.clientSecret}
-                        onChange={(event) => setValue({ clientSecret: event.target.value })}
-                        placeholder="GOCSPX-..."
-                      />
-                    </FlowField>
-                    <FlowField label="Refresh token">
-                      <Input
-                        type="password"
-                        value={value.refreshToken}
-                        onChange={(event) => setValue({ refreshToken: event.target.value })}
-                        placeholder="1//0g..."
-                      />
-                    </FlowField>
-                  </>
-                ) : (
-                  <FlowField
-                    label={value.provider === "apple" ? "App-specific password" : "Password or app password"}
-                  >
-                    <Input
-                      type="password"
-                      value={value.password}
-                      onChange={(event) => setValue({ password: event.target.value })}
-                      placeholder="Password"
-                    />
-                  </FlowField>
-                )}
+                <FlowField
+                  label={value.provider === "apple" ? "App-specific password" : "Password or app password"}
+                >
+                  <Input
+                    type="password"
+                    value={value.password}
+                    onChange={(event) => setValue({ password: event.target.value })}
+                    placeholder="Password"
+                  />
+                </FlowField>
               </>
             )}
           </div>
@@ -621,7 +813,30 @@ export function CalendarConnectionFlowDialog({
             : "Select the calendars Forge should mirror into the Calendar page, then choose the calendar Forge should write into for work blocks and timeboxes.",
         render: (value, setValue) => (
           <div className="grid gap-4">
-            {value.provider === "microsoft" ? (
+            {value.provider === "google" ? (
+              <div className="flex flex-wrap items-center gap-3">
+                <Button
+                  type="button"
+                  onClick={() => void startGoogleFlow()}
+                  disabled={
+                    !googleSetup.isReadyForPairing ||
+                    !googleSetup.allowedOrigins.includes(window.location.origin)
+                  }
+                  pending={googleSession?.status === "pending"}
+                  pendingLabel="Waiting for Google"
+                >
+                  <ExternalLink className="size-4" />
+                  {googleSession?.status === "authorized"
+                    ? "Reconnect Google"
+                    : "Sign in with Google"}
+                </Button>
+                {discovery ? (
+                  <Badge className="bg-white/[0.08] text-white/74">
+                    {discovery.calendars.length} discovered
+                  </Badge>
+                ) : null}
+              </div>
+            ) : value.provider === "microsoft" ? (
               <div className="flex flex-wrap items-center gap-3">
                 <Button
                   type="button"
@@ -796,7 +1011,18 @@ export function CalendarConnectionFlowDialog({
               </>
             ) : (
               <div className="rounded-[24px] border border-dashed border-white/10 bg-white/[0.03] px-4 py-6 text-sm leading-6 text-white/58">
-                {value.provider === "microsoft" ? (
+                {value.provider === "google" ? (
+                  <>
+                    Start the guided Google sign-in first. Forge will bring the
+                    discovered Google calendars back here as soon as the popup
+                    completes. Make sure Forge is open on one of these browser
+                    origins first:{" "}
+                    <span className="font-medium text-white">
+                      {googleSetup.allowedOrigins.join(", ")}
+                    </span>
+                    .
+                  </>
+                ) : value.provider === "microsoft" ? (
                   <>
                     Start the guided Microsoft sign-in first. Forge will bring the
                     discovered Exchange Online calendars back here as soon as the
@@ -874,6 +1100,11 @@ export function CalendarConnectionFlowDialog({
       discovery,
       discoveryMutation.isPending,
       draft.provider,
+      googleSession,
+      googleSetup.allowedOrigins,
+      googleSetup.appUrl,
+      googleSetup.isReadyForPairing,
+      googleSetup.redirectUri,
       microsoftSession
     ]
   );
@@ -921,13 +1152,16 @@ export function CalendarConnectionFlowDialog({
           }
 
           if (draft.provider === "google") {
+            if (!googleSession?.sessionId || googleSession.status !== "authorized") {
+              setSubmitError(
+                "Complete the Google sign-in flow before saving this connection."
+              );
+              return;
+            }
             await onSubmit({
               provider: "google",
               label: normalizeLabel("google", draft.label),
-              username: draft.username.trim(),
-              clientId: draft.clientId.trim(),
-              clientSecret: draft.clientSecret.trim(),
-              refreshToken: draft.refreshToken.trim(),
+              authSessionId: googleSession.sessionId,
               selectedCalendarUrls: draft.selectedCalendarUrls,
               forgeCalendarUrl: draft.forgeCalendarUrl,
               createForgeCalendar: draft.createForgeCalendar

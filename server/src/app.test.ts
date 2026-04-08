@@ -10195,6 +10195,11 @@ test("settings and local agent token management persist through the versioned AP
         themePreference: string;
         execution: { maxActiveTasks: number; timeAccountingMode: string };
         calendarProviders: {
+          google: {
+            appUrl: string;
+            redirectUri: string;
+            isConfigured: boolean;
+          };
           microsoft: {
             clientId: string;
             tenantId: string;
@@ -10208,6 +10213,18 @@ test("settings and local agent token management persist through the versioned AP
     assert.equal(settingsBody.settings.themePreference, "obsidian");
     assert.equal(settingsBody.settings.execution.maxActiveTasks, 2);
     assert.equal(settingsBody.settings.execution.timeAccountingMode, "split");
+    assert.equal(
+      settingsBody.settings.calendarProviders.google.appUrl,
+      "http://127.0.0.1:4317"
+    );
+    assert.equal(
+      settingsBody.settings.calendarProviders.google.redirectUri,
+      "http://127.0.0.1:4317/api/v1/calendar/oauth/google/callback"
+    );
+    assert.equal(
+      settingsBody.settings.calendarProviders.google.isConfigured,
+      false
+    );
     assert.equal(
       settingsBody.settings.calendarProviders.microsoft.clientId,
       ""

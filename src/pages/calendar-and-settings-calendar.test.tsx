@@ -25,6 +25,8 @@ const {
   listCalendarResourcesMock,
   discoverCalendarConnectionMock,
   patchSettingsMock,
+  startGoogleCalendarOauthMock,
+  getGoogleCalendarOauthSessionMock,
   startMicrosoftCalendarOauthMock,
   testMicrosoftCalendarOauthConfigurationMock,
   getMicrosoftCalendarOauthSessionMock,
@@ -51,6 +53,8 @@ const {
   listCalendarResourcesMock: vi.fn(),
   discoverCalendarConnectionMock: vi.fn(),
   patchSettingsMock: vi.fn(),
+  startGoogleCalendarOauthMock: vi.fn(),
+  getGoogleCalendarOauthSessionMock: vi.fn(),
   startMicrosoftCalendarOauthMock: vi.fn(),
   testMicrosoftCalendarOauthConfigurationMock: vi.fn(),
   getMicrosoftCalendarOauthSessionMock: vi.fn(),
@@ -100,6 +104,8 @@ vi.mock("@/lib/api", () => ({
   listCalendarResources: listCalendarResourcesMock,
   discoverCalendarConnection: discoverCalendarConnectionMock,
   patchSettings: patchSettingsMock,
+  startGoogleCalendarOauth: startGoogleCalendarOauthMock,
+  getGoogleCalendarOauthSession: getGoogleCalendarOauthSessionMock,
   startMicrosoftCalendarOauth: startMicrosoftCalendarOauthMock,
   testMicrosoftCalendarOauthConfiguration: testMicrosoftCalendarOauthConfigurationMock,
   getMicrosoftCalendarOauthSession: getMicrosoftCalendarOauthSessionMock,
@@ -354,6 +360,21 @@ beforeEach(() => {
         psycheAuthRequired: false
       },
       calendarProviders: {
+        google: {
+          clientId: "google-client-id",
+          appUrl: "http://127.0.0.1:4317",
+          redirectUri:
+            "http://127.0.0.1:4317/api/v1/calendar/oauth/google/callback",
+          allowedOrigins: ["http://127.0.0.1:3027", "http://127.0.0.1:4317"],
+          usesSharedAppCredentials: true,
+          authMode: "shared_web_server_oauth",
+          isConfigured: true,
+          isReadyForPairing: true,
+          runtimeOrigin: "http://127.0.0.1:4317",
+          runtimeOriginMatchesAppUrl: true,
+          setupMessage:
+            "Google Calendar pairing is configured for the shared Forge app. Users only sign in with their own Google accounts; they do not create their own OAuth clients."
+        },
         microsoft: {
           clientId: "",
           tenantId: "common",
@@ -374,6 +395,56 @@ beforeEach(() => {
   });
   patchSettingsMock.mockResolvedValue({
     settings: {}
+  });
+  startGoogleCalendarOauthMock.mockResolvedValue({
+    session: {
+      sessionId: "google_session_1",
+      status: "pending",
+      authUrl: "https://accounts.google.com/o/oauth2/v2/auth?state=google_session_1",
+      accountLabel: null,
+      error: null,
+      discovery: null
+    }
+  });
+  getGoogleCalendarOauthSessionMock.mockResolvedValue({
+    session: {
+      sessionId: "google_session_1",
+      status: "authorized",
+      authUrl: "https://accounts.google.com/o/oauth2/v2/auth?state=google_session_1",
+      accountLabel: "albert@example.com",
+      error: null,
+      discovery: {
+        provider: "google",
+        accountLabel: "albert@example.com",
+        serverUrl: "https://apidata.googleusercontent.com/caldav/v2/",
+        principalUrl: "https://apidata.googleusercontent.com/caldav/v2/albert@example.com/",
+        homeUrl: "https://apidata.googleusercontent.com/caldav/v2/albert@example.com/events/",
+        calendars: [
+          {
+            url: "https://apidata.googleusercontent.com/caldav/v2/albert@example.com/events/",
+            displayName: "Primary",
+            description: "Primary Google calendar",
+            color: "#7dd3fc",
+            timezone: "Europe/Zurich",
+            isPrimary: true,
+            canWrite: true,
+            selectedByDefault: true,
+            isForgeCandidate: false
+          },
+          {
+            url: "https://apidata.googleusercontent.com/caldav/v2/albert@example.com/forge/",
+            displayName: "Forge",
+            description: "Forge write calendar",
+            color: "#22c55e",
+            timezone: "Europe/Zurich",
+            isPrimary: false,
+            canWrite: true,
+            selectedByDefault: false,
+            isForgeCandidate: true
+          }
+        ]
+      }
+    }
   });
   listCalendarConnectionsMock.mockResolvedValue({
     providers: [
@@ -849,6 +920,21 @@ describe("calendar routing surfaces", () => {
     expect(screen.getAllByText("Apple Calendar").length).toBeGreaterThan(0);
   });
 
+  it("shows the shared Google OAuth setup details in calendar settings", async () => {
+    renderWithRouter(<SettingsCalendarPage />, "/settings/calendar");
+
+    expect(await screen.findByText("Google Calendar OAuth")).toBeInTheDocument();
+    expect(
+      screen.getByText(/Forge uses one shared Google OAuth web application/i)
+    ).toBeInTheDocument();
+    expect(screen.getByText("Registered app endpoints")).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "http://127.0.0.1:4317/api/v1/calendar/oauth/google/callback"
+      )
+    ).toBeInTheDocument();
+  });
+
   it("supports the Exchange Online guided flow as read only", async () => {
     const popupStub = {
       closed: false,
@@ -883,6 +969,21 @@ describe("calendar routing surfaces", () => {
           psycheAuthRequired: false
         },
         calendarProviders: {
+          google: {
+            clientId: "google-client-id",
+            appUrl: "http://127.0.0.1:4317",
+            redirectUri:
+              "http://127.0.0.1:4317/api/v1/calendar/oauth/google/callback",
+            allowedOrigins: ["http://127.0.0.1:3027", "http://127.0.0.1:4317"],
+            usesSharedAppCredentials: true,
+            authMode: "shared_web_server_oauth",
+            isConfigured: true,
+            isReadyForPairing: true,
+            runtimeOrigin: "http://127.0.0.1:4317",
+            runtimeOriginMatchesAppUrl: true,
+            setupMessage:
+              "Google Calendar pairing is configured for the shared Forge app. Users only sign in with their own Google accounts; they do not create their own OAuth clients."
+          },
           microsoft: {
             clientId: "00000000-0000-0000-0000-000000000000",
             tenantId: "common",
@@ -950,7 +1051,7 @@ describe("calendar routing surfaces", () => {
 
     window.dispatchEvent(
       new MessageEvent("message", {
-        origin: window.location.origin,
+        origin: "http://127.0.0.1:4317",
         data: {
           type: "forge:microsoft-calendar-auth",
           sessionId: "ms_session_1",
