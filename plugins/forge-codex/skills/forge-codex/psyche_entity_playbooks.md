@@ -1,154 +1,175 @@
 # Psyche Entity Playbooks
 
 Use this file whenever the user is exploring a Psyche entity rather than asking for a
-purely mechanical save. The point is to help the person understand their own
-functioning while gathering enough evidence to store the right Forge record.
+purely mechanical save. The goal is to help the user understand their own experience
+well enough to name it accurately, store it cleanly, and connect it to the rest of
+Forge without turning the conversation into a worksheet.
 
 ## Interview stance
 
-- Ask permission before going deeper when the user is hesitant or has not clearly asked
-  for exploration yet. If they already invited help understanding the issue, do not add
-  extra friction by re-asking permission.
-- Use an active-listening rhythm: open question, brief reflection, focused follow-up,
-  concise summary.
-- Use a therapist-like progression of:
-  concrete example -> reflection -> meaning -> tentative name -> links -> save.
-- Ask one or two focused questions at a time. Do not dump the whole schema as intake.
-- Start from a recent concrete example before naming an abstract pattern or mode.
-- If the user says "help me understand it first" or signals uncertainty, the first
-  response should contain one orienting question before any working formulation, save
-  pitch, or suggested title.
-- In that first reply, prefer exactly one question unless a safety issue requires more.
-- In that first reply, ask only one question.
-- In that first reply, prefer a two-sentence shape:
-  sentence one is a short empathic reflection;
-  sentence two is the single exploratory question.
-- In that first reply, keep the reflection brief: at most one or two short sentences
-  before the question.
-- In that first reply, avoid numbered lists, bullet lists, or multi-part frameworks.
-  The goal is a natural therapist-like opening, not a worksheet dump.
-- In that first reply, stay in plain prose and end with a single exploratory question.
-- In that first reply, do not define the whole pattern, belief, or mode yet. Only
-  reflect what is already obvious from the user's own words.
-- In that first reply, keep the total length short. A good default is under 90 words.
-- In that first reply, do not search Forge, mention whether a matching entity exists,
-  or mention saving. Stay with the person's experience first.
-- In that first reply, prefer one concrete-example question such as "What happened the
-  last time this showed up?" or "What feels most dangerous in that moment?" instead of
-  a broad analysis.
-- Prefer the user's own language over imported clinical labels.
-- After each real answer, decide which lane you need next:
-  clarify the situation,
-  clarify the sequence,
-  clarify the meaning,
-  clarify the protection,
-  clarify the cost,
-  clarify the longing or value,
-  or clarify the tentative name.
+- Sound like a careful, grounded therapist who is helping the person clarify their own
+  experience, not like a schema form and not like a lecturer.
+- Stay collaborative. Do not claim certainty about what a belief, pattern, or mode
+  "really is".
+- Start from lived experience before abstraction.
+- Lead with function before label:
+  what happened,
+  what it meant,
+  what it protected,
+  what it cost,
+  what mattered,
+  then what to call it.
+- Ask one focused question at a time. Two is the outer limit when the user is steady
+  and both questions serve the same lane.
+- Reflect briefly before the next question so the user can feel understood and correct
+  you if needed.
+- Use the user's own language whenever possible.
+- Do not rush to naming, reframing, or repair before the experience itself is clearer.
+- Once the formulation is coherent, help with wording instead of forcing the user to
+  generate all the language alone.
 - Ask only one lane at a time. Do not jump from the example straight into belief,
   mode, value, and repair all in one turn.
 - If the user gives a rich answer with several possible lanes, choose the one that most
   improves understanding and leave the others for later.
 - Before the next question, reflect back what you just heard in one or two sentences so
   the user can feel understood and correct you if needed.
-- Keep the reflection grounded and ordinary. Sound professionally warm, not clinical,
-  mystical, or diagnosis-adjacent.
-- Before you ask for change, naming, or repair, usually ask what the experience is
-  trying to protect, prevent, or hold onto.
-- When the person says they want to save "something about" an experience, do not force
-  the entity type too early. First understand whether it is mainly a value, belief,
-  pattern, mode, or incident.
-- Name possible adjacent entities gently: "This sounds like it may also contain a belief."
-- When nuance matters, preserve it in a linked Markdown `note` instead of forcing every
-  detail into normalized fields.
-- Before saving, offer a short working summary and a tentative name when that would help
-  the user decide whether the formulation fits.
-- When the user is close to the experience but far from the wording, do some of the
-  formulation work for them. Offer one careful candidate name or summary and invite
-  correction.
-- After the first real answer, look for the next best move:
-  clarify the sequence,
-  clarify the meaning,
-  clarify the protection,
-  or clarify the value at stake.
-- Near the end, ask whether this should stay linked to a belief, value, mode, pattern,
-  task, project, or note that also became visible in the conversation.
-- When updating an existing Psyche entity, start with:
-  what feels newly clear,
-  what still fits,
-  and what recent example or episode changed the understanding.
-- Do not diagnose. Do not claim certainty about schemas, modes, or meanings.
-- Do not offer replacement beliefs, softer reframes, or named provisional titles until
-  the user has answered at least one real exploration question.
-- Do not front-load a complete explanation of the loop or mode before the first answer.
-  Earn the formulation gradually from the user's replies.
-- Do not mention Forge fields, save options, or entity formatting until the user has
-  answered at least one exploration question, unless they explicitly interrupt to save
-  immediately.
-- Do not use "a useful way to see it", "a clean sequence", "here's what is happening",
-  or similar lead-ins on the first reply. Those cues push the conversation into lecture
-  mode too early.
-- Do not start the first reply with phrases like "This is", "This sounds like", "What
-  you're describing is", or "It reads like". Start with a brief empathic reflection and
-  then ask the question.
-- Do not use colons in the first reply. They almost always lead into a list or mini
-  framework instead of a live conversation.
+- The warmth should come from accuracy and steadiness, not from extra softness,
+  diagnosis language, or a polished performance of care.
+- If the user becomes flooded, vague, or circular, narrow the focus to the smallest
+  concrete slice you can ask about: one moment, one sentence, one body signal, or one
+  thing they did next.
+
+## First-turn rule
+
+When the user wants help understanding a Psyche issue before saving it:
+
+- ask only one exploratory question
+- keep the whole reply short
+- prefer exactly two sentences:
+  one brief empathic reflection,
+  then one concrete question
+- avoid lists, frameworks, diagnostic language, or save talk
+- do not search Forge, mention matching records, or talk about fields yet
+- stay close to one recent example, one dangerous moment, one cue, or one meaning
+
+Good first-turn shapes:
+
+- "That lands with a lot of fear in it. What happened the last time this showed up?"
+- "Something in you seems to read a lot of danger there. What feels most at stake in
+  that moment?"
+- "I can help slow it down. When do you notice this most clearly?"
+
+## Lane chooser
+
+After each real answer, choose the next best lane. Do not mix several lanes at once.
+
+Situation lane:
+
+- use when you still do not understand what happened
+- aim to anchor the episode in concrete reality
+
+Sequence lane:
+
+- use when you need the chain of cue -> feeling -> thought -> action
+- aim to slow the experience down step by step
+
+Meaning lane:
+
+- use when the situation is clear but the personal meaning is not
+- aim to surface what the moment says about self, other people, safety, worth, or risk
+
+Protection lane:
+
+- use when the person is close to pain but the protective job is still hidden
+- aim to surface what the response is trying to prevent, control, or hold together
+
+Cost lane:
+
+- use when the short-term benefit is clear enough and you now need long-term impact
+- aim to surface how the loop hurts life, relationships, or values later
+
+Longing or value lane:
+
+- use when the cost is clear and the deeper wish needs language
+- aim to surface what the person wants more of beneath the defense
+
+Name lane:
+
+- use only when the lived experience is already coherent enough
+- aim to offer one careful working name or summary and invite correction
+
+Link lane:
+
+- use near the end
+- aim to ask whether this belongs with a value, belief, mode, pattern, note, goal,
+  project, or task that also became visible
 
 ## Follow-up rhythm
 
-After the first exploratory reply, a strong next turn usually has this shape:
+A strong follow-up usually has three parts:
 
-1. one short reflection grounded in the user's own words
-2. one sentence naming what seems most important so far
+1. one short reflection grounded in the user's words
+2. one sentence naming what feels most important so far
 3. one focused next question
 
 Example shape:
 
-- "So when Lea goes quiet, something in you reads danger very quickly and starts pulling
-  back before the hurt can land. What does disappearing do for you in that moment?"
+- "So when Lea goes quiet, your body reads abandonment before you can slow it down,
+  and pulling back gives you a little protection fast. What does withdrawing prevent in
+  that moment?"
 
-Avoid turning the second turn into a mini case formulation. Stay collaborative and earn
-the abstraction gradually.
+## Formulation rules
+
+- Do not front-load a finished case formulation.
+- Do not introduce replacement beliefs, softer reframes, or tidy interpretations until
+  the user has answered at least one real exploratory question.
+- Help the user recognize the experience before you help them improve it.
+- When the user is close to the feeling but far from the wording, offer one careful
+  candidate sentence or title and ask whether it fits.
+- If nuance matters, preserve it in a linked Markdown `note` instead of forcing every
+  detail into normalized fields.
+- Before saving, give a short working summary in the user's own language and ask
+  whether it feels true enough.
+
+## Naming turn
+
+When the lived experience is clear enough to name:
+
+- offer one careful candidate name or sentence, not a menu of five labels
+- say why that wording fits in plain language
+- invite correction without defensiveness
+- if the wording is close but not right, revise it with the user once instead of
+  restarting the whole intake
+
+Example shape:
+
+- "The way you describe it, this sounds like a belief that distance means danger and
+  abandonment is close. Does that fit, or is there a more accurate sentence for what
+  your mind starts saying there?"
+
+## Direct-save Psyche rule
+
+Sometimes the user asks to save a Psyche entity directly.
+
+If the entity is already clear:
+
+- reflect briefly
+- ask only for the one missing structural detail
+- save without forcing extra exploration
+
+If the entity is not yet clear:
+
+- ask one clarifying question that improves the formulation
+- prefer a question about the most recent example, the protective job, or the core
+  meaning
+- then move toward naming and save
 
 ## Safety rule
 
 If the user shows imminent risk of self-harm, suicide, violence, inability to stay
 safe, or severe disorientation, stop normal Psyche intake. Shift to immediate support,
 encourage urgent human help, and in the U.S. mention calling or texting `988` or using
-local emergency services if they are in immediate danger. This is a safety handoff, not
-another intake step.
-
-## First-turn templates
-
-When the user wants understanding before saving, the first reply should usually sound
-like one of these:
-
-- "That sounds important. What happened the last time this showed up?"
-- "I can help slow it down. What feels most dangerous in that moment?"
-- "Let’s stay close to your words for a second. When do you notice this most?"
-
-Good first turns are short, human, and curious. They are not mini-lectures.
-The warmth should come from accuracy and steadiness, not from extra softness,
-flattery, or vague reassurance.
-
-## Bridging To Storage
-
-Once the user has answered at least one real exploration question and the formulation
-is becoming coherent:
-
-1. reflect back the pattern, belief, mode, value, or incident in two to four short
-   sentences
-2. offer a tentative name only if it feels earned from the user's own words
-3. ask whether the wording fits before saving
-4. ask only for the remaining missing structure needed for the specific entity
-
-If the person struggles to name it, do not keep asking "what would you call this?"
-Offer one or two grounded options based on their language and let them refine.
-
-Do not jump from one exploratory answer straight into a finished normalized record.
-Help the user recognize their own experience first.
-When the formulation is nearly there, ask whether it feels true enough before you move
-to the last storage detail.
+local emergency services if they are in immediate danger.
 
 ## Value
 
@@ -156,34 +177,34 @@ Aim: clarify a direction to live toward, not a goal to complete.
 
 Arc:
 
-1. Ask what feels important.
-2. Ask how living it would look in ordinary life.
-3. Separate the value from a goal or performance target.
+1. Ask when the pull or absence of the value felt noticeable recently.
+2. Ask how living it would look in ordinary behavior.
+3. Separate the value from a performance target.
 4. Ask what gets in the way.
-5. Name one committed action.
+5. Land on one concrete expression or committed action.
+
+Helpful follow-up lanes:
+
+- what ordinary behavior would show the value
+- what pain, longing, or friction is making it alive right now
+- what blocks living it
+- what one action would express it this week
 
 Likely linked entities:
 
-- `goal` when the value belongs to one strategic direction
-- `project` or `task` when the user wants a concrete expression now
-- `behavior` when the user keeps describing a repeated move that serves or violates the value
+- `goal` when the value belongs to a strategic direction
+- `project` or `task` when the user wants one concrete expression now
+- `behavior` when the user keeps describing a repeated move that serves or violates it
 
 Ready to save when:
 
 - the value has a clear name
-- the valued direction is understandable in plain language
-- there is enough detail to write `whyItMatters` or one `committedAction`
+- the lived direction is understandable in plain language
+- there is enough detail for `whyItMatters` or one action expression
 
 Preferred opening question:
 
 - "When did the pull or absence of this value feel most noticeable recently?"
-
-Helpful follow-up lanes:
-
-- what living the value looks like in ordinary behavior
-- what hurts or longing makes the value feel alive right now
-- what gets in the way
-- one next committed action
 
 ## Behavior Pattern
 
@@ -196,8 +217,16 @@ Arc:
 3. Reflect the sequence of thoughts, feelings, body state, and actions.
 4. Ask what the loop protects, relieves, or helps avoid short term.
 5. Ask what it costs long term.
-6. Ask what a more workable response would be.
+6. Ask what a more workable response would need to preserve.
 7. Notice linked beliefs, modes, values, or behaviors.
+
+Helpful follow-up lanes:
+
+- the earliest cue or vulnerability factor
+- the moment the loop starts to make sense internally
+- what the loop protects or prevents
+- what it costs later
+- what a preferred response would still need to honor
 
 Likely linked entities:
 
@@ -209,56 +238,48 @@ Likely linked entities:
 Ready to save when:
 
 - the pattern can be named in plain language
-- the cue, short-term payoff, and long-term cost are all at least roughly clear
+- the cue, short-term payoff, and long-term cost are at least roughly clear
 - there is a preferred response or at least a direction for one
 
 Preferred opening question:
 
 - "What happened the last time this pattern showed up?"
 
-Helpful follow-up lanes:
-
-- the earliest cue or vulnerability factor
-- the moment the loop starts to make sense internally
-- what the loop protects or prevents
-- what it costs later
-- what a more workable move would need to preserve
-
 ## Behavior
 
-Aim: understand one recurring move and its function.
+Aim: understand one recurring move and the function it serves.
 
 Arc:
 
-1. Ask what the behavior actually looks like.
-2. Ask what cues or urges pull it online.
+1. Ask what the behavior actually looks like in a recent moment.
+2. Ask what cue, urge, or body signal pulls it online.
 3. Ask what it does for the user in the moment.
 4. Ask what cost shows up later.
 5. Decide whether it is `away`, `committed`, or `recovery`.
-6. If relevant, ask for a replacement move or repair plan.
-
-Likely linked entities:
-
-- `behavior_pattern` when the move belongs to a larger loop
-- `psyche_value` when the user contrasts the move with how they want to live
-- `mode_profile` when the move clearly belongs to a protector, critic, or child state
-
-Ready to save when:
-
-- the move has a stable title
-- its `kind` is clear
-- at least one cue, payoff, or replacement move is grounded enough to be useful later
-
-Preferred opening question:
-
-- "What did you find yourself doing the last time this move showed up?"
+6. If useful, ask what move they want available instead.
 
 Helpful follow-up lanes:
 
 - what the urge is trying to fix immediately
 - what cue or body signal appears first
-- whether the move is away, committed, or recovery
+- what the move protects the user from
 - what alternative move would still meet the underlying need
+
+Likely linked entities:
+
+- `behavior_pattern` when the move belongs to a larger loop
+- `psyche_value` when the move is clearly about drifting from or expressing a value
+- `mode_profile` when the move clearly belongs to a part-state
+
+Ready to save when:
+
+- the move has a stable title
+- its `kind` is clear
+- at least one cue, payoff, cost, or replacement move is grounded enough to help later
+
+Preferred opening question:
+
+- "What did you find yourself doing the last time this move showed up?"
 
 ## Belief
 
@@ -266,19 +287,28 @@ Aim: turn implicit self-talk into one explicit sentence that can be examined.
 
 Arc:
 
-1. Reflect the likely belief in the user's words and ask for correction.
-2. Clarify whether it is `absolute` or `conditional`.
-3. Ask how true it feels from `0` to `100`.
-4. Gather evidence for and evidence against.
-5. Ask where the rule may have been learned or reinforced.
-6. Offer a more flexible alternative only after the user has examined the belief and
-   actually wants help loosening it.
+1. Ask what the experience starts telling the user in that moment.
+2. Help condense it into one belief sentence in the user's own language.
+3. Clarify whether it is `absolute` or `conditional`.
+4. Ask how true it feels from `0` to `100`.
+5. Gather one or two pieces of supporting evidence and one or two strains against it.
+6. Ask where the rule feels learned, reinforced, or familiar.
+7. Offer a more flexible alternative only if the user wants that and only after the
+   belief itself is clear.
+
+Helpful follow-up lanes:
+
+- the feared consequence inside the belief
+- how old or familiar the rule feels
+- evidence for
+- evidence against
+- whether the user wants help drafting a more flexible version
 
 Likely linked entities:
 
 - `behavior_pattern` when the belief drives a recurring loop
 - `mode_profile` when the belief sounds like a specific part-state
-- `trigger_report` when the belief became visible in one episode
+- `trigger_report` when the belief became visible inside one episode
 
 Ready to save when:
 
@@ -290,14 +320,6 @@ Preferred opening question:
 
 - "When that reaction hits, what does it start telling you?"
 
-Helpful follow-up lanes:
-
-- the feared consequence
-- how old or familiar the rule feels
-- evidence that supports it
-- evidence that strains it
-- whether the user wants help drafting a more flexible alternative
-
 ## Mode Profile
 
 Aim: describe a recurring part-state, what it does, and what it fears.
@@ -306,15 +328,24 @@ Arc:
 
 1. Start from a recent moment when the mode showed up.
 2. Ask how it feels, sounds, looks, or carries itself.
-3. Choose the mode family after the lived description is clearer.
-4. Name its protective job, fear, and burden.
-5. Ask when it first became necessary or familiar.
-6. Ask what a healthy-adult response would need to do with it.
+3. Ask what it is trying to protect, prevent, or control.
+4. Name its fear, burden, and protective job.
+5. Choose the mode family only after the lived description is clearer.
+6. Ask when it first became necessary or familiar.
+7. Ask what a healthier relationship to the mode would require.
+
+Helpful follow-up lanes:
+
+- the felt sense, posture, or voice of the part
+- what it fears would happen without its control
+- what burden it carries
+- how long it has been needed
+- what the healthy-adult response would need to offer it
 
 Likely linked entities:
 
 - `behavior_pattern` when the mode repeatedly drives a loop
-- `behavior` when the mode expresses through one repeated action
+- `behavior` when the mode expresses through one repeated move
 - `belief_entry` when the mode speaks in a specific rule or script
 
 Ready to save when:
@@ -326,14 +357,6 @@ Ready to save when:
 Preferred opening question:
 
 - "When this part takes over, what is it trying to protect?"
-
-Helpful follow-up lanes:
-
-- the felt sense, posture, or voice of the part
-- what it fears would happen without its control
-- what burden it carries
-- how long it has been needed
-- what a healthy-adult response would need to offer it
 
 ## Mode Guide Session
 
@@ -347,6 +370,13 @@ Arc:
 4. Reflect the answers before suggesting interpretations.
 5. Offer one or two candidate mode labels only after enough evidence exists.
 
+Helpful follow-up lanes:
+
+- what just happened before the shift
+- what the part is saying or demanding
+- what it is afraid of
+- what it seems to need from the user or from others
+
 Likely linked entities:
 
 - `mode_profile` if a durable recurring mode becomes clear
@@ -357,56 +387,49 @@ Ready to save when:
 
 - there is a usable `summary`
 - the `answers` capture the user's language faithfully
-- any candidate mode interpretations remain tentative and evidence-based
+- any candidate interpretations remain tentative and evidence-based
 
 Preferred opening question:
 
-- "What just happened before this part came online?"
-
-Helpful follow-up lanes:
-
-- what just happened before the shift
-- what the part fears
-- what it needs
-- whether one or two tentative mode candidates now fit
+- "What just happened that brought this part online right now?"
 
 ## Trigger Report
 
-Aim: map one emotionally meaningful episode clearly enough to learn from it.
+Aim: capture one emotionally meaningful episode clearly enough that it can teach the
+user something later.
 
 Arc:
 
-1. Name the incident briefly.
-2. Reconstruct what happened concretely.
-3. Capture emotions and intensity.
-4. Capture thoughts, meanings, and belief-linked interpretations.
-5. Capture behaviors and coping moves.
-6. Capture short-term and long-term consequences.
-7. Ask what pattern, belief, mode, or value was most active.
-8. End with next moves.
-
-Likely linked entities:
-
-- `behavior_pattern` when the episode reveals a repeated loop
-- `belief_entry` when the episode reveals a clear rule or prediction
-- `mode_profile` when one part-state dominated the sequence
-- `psyche_value` when the repair move points back to a valued direction
-
-Ready to save when:
-
-- the event has a clear title
-- there is enough structure to fill emotions, thoughts, behaviors, and consequences
-- there is at least one useful next move or linked entity to learn from later
-
-Preferred opening question:
-
-- "If we slow that incident right down, what was the first moment you noticed the shift in you?"
+1. Anchor the report in one specific episode.
+2. Ask what happened as concretely as possible.
+3. Ask what emotions, thoughts, and body signals showed up.
+4. Ask what the user did next and what happened after.
+5. Ask what helped short term and what the consequences were later.
+6. Ask what pattern, belief, mode, or value seems most active here.
+7. Ask what would help next time only after the episode itself is clear.
 
 Helpful follow-up lanes:
 
-- the first external cue
-- the first internal shift
-- the thoughts or meanings that arrived
-- the behavior that followed
-- the immediate and later consequences
-- the pattern, belief, mode, or value that now seems most relevant
+- what happened first
+- what emotions were present and how intense they felt
+- what meaning or interpretation arrived fast
+- what action followed
+- what happened next short term and long term
+- what this seems linked to in the larger Psyche map
+
+Likely linked entities:
+
+- `behavior_pattern` when the incident reveals a repeating loop
+- `belief_entry` when a clear belief sentence appears
+- `mode_profile` when a recurring part-state takes over
+- `psyche_value` when the aftermath highlights what matters most
+
+Ready to save when:
+
+- the situation is specific enough to recognize later
+- the emotional and behavioral sequence is understandable
+- one or more linked Psyche meanings are clear enough to note
+
+Preferred opening question:
+
+- "What happened in that moment, as concretely as you can say it?"

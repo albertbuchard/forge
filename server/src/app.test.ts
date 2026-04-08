@@ -2112,6 +2112,7 @@ test("movement timeline hides tiny trips under the minimum distance or duration"
 test("watch bootstrap serves compact habit state and watch habit check-ins preserve canonical streak semantics", async () => {
   const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-watch-bootstrap-"));
   const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
+  const currentDateKey = new Date().toISOString().slice(0, 10);
 
   try {
     const operatorCookie = await issueOperatorSessionCookie(app);
@@ -2259,7 +2260,7 @@ test("watch bootstrap serves compact habit state and watch habit check-ins prese
         sessionId: qrPayload.sessionId,
         pairingToken: qrPayload.pairingToken,
         dedupeKey: "watch-positive-1",
-        dateKey: "2026-04-07",
+        dateKey: currentDateKey,
         status: "done",
         note: "Checked in from the watch."
       }
@@ -2290,7 +2291,7 @@ test("watch bootstrap serves compact habit state and watch habit check-ins prese
         sessionId: qrPayload.sessionId,
         pairingToken: qrPayload.pairingToken,
         dedupeKey: "watch-negative-1",
-        dateKey: "2026-04-07",
+        dateKey: currentDateKey,
         status: "missed",
         note: "Resisted on the watch."
       }

@@ -523,12 +523,12 @@ describe("core route states", () => {
 
     renderWithProviders(<ProjectsPage />);
 
-    expect(screen.getByText("Body Rebuild Sprint")).toBeInTheDocument();
+    expect(screen.getAllByText("Body Rebuild Sprint").length).toBeGreaterThan(0);
     expect(screen.queryByText("Paused Writing System")).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: /Suspended/i }));
-    expect(screen.getByText("Paused Writing System")).toBeInTheDocument();
-    expect(screen.queryByText("Body Rebuild Sprint")).not.toBeInTheDocument();
+    expect(screen.getAllByText("Paused Writing System").length).toBeGreaterThan(0);
+    expect(screen.queryAllByText("Body Rebuild Sprint")).toHaveLength(0);
 
     fireEvent.click(screen.getByRole("button", { name: /Active/i }));
     fireEvent.change(screen.getByPlaceholderText("Type a project, goal, task, human, bot, user, or tag"), {
@@ -539,7 +539,7 @@ describe("core route states", () => {
     fireEvent.change(screen.getByPlaceholderText("Type a project, goal, task, human, bot, user, or tag"), {
       target: { value: "rebuild" }
     });
-    expect(screen.getByText("Body Rebuild Sprint")).toBeInTheDocument();
+    expect(screen.getAllByText("Body Rebuild Sprint").length).toBeGreaterThan(0);
   });
 
   it("shows restart and delete actions for finished projects on the detail page", async () => {

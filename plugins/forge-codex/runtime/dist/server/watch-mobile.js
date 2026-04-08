@@ -119,8 +119,10 @@ function formatCadenceLabel(habit) {
     const labels = habit.weekDays.map((day) => weekdayLabels[day]).join(", ");
     return `${habit.targetCount}x weekly${labels ? ` · ${labels}` : ""}`;
 }
-function buildHabitHistory(habit) {
-    const now = new Date();
+function buildHabitHistory(habit, options) {
+    const now = options?.anchorDateKey
+        ? parseDateKey(options.anchorDateKey)
+        : new Date();
     if (habit.frequency === "daily") {
         const today = startOfUtcDay(now);
         return Array.from({ length: 7 }, (_, index) => {
@@ -462,7 +464,7 @@ export function assertWatchReady(pairing) {
         throw new HttpError(403, "watch_pairing_not_enabled", "This companion pairing is not allowed to serve watch data.");
     }
 }
-export function buildWatchBootstrap(pairing) {
+export function buildWatchBootstrap(pairing, options) {
     assertWatchReady(pairing);
     const habits = listHabits({ status: "active", limit: 64 })
         .filter((habit) => habit.userId === pairing.user_id || pairing.user_id === "user_operator")
@@ -476,7 +478,9 @@ export function buildWatchBootstrap(pairing) {
         return left.title.localeCompare(right.title);
     })
         .map((habit) => {
-        const history = buildHabitHistory(habit);
+        const history = buildHabitHistory(habit, {
+            anchorDateKey: options?.anchorDateKey
+        });
         const currentPeriodStatus = history.find((entry) => entry.current)?.state ?? "unknown";
         return {
             id: habit.id,

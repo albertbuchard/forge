@@ -489,7 +489,9 @@ export function PsycheSelfObservationPage() {
     : [];
   const defaultUserId = getSingleSelectedUserId(selectedUserIds);
   const [weekStart, setWeekStart] = useState(() => startOfWeek());
-  const [selectedTags, setSelectedTags] = useState<string[]>([]);
+  const [selectedTags, setSelectedTags] = useState<string[]>([
+    SELF_OBSERVATION_TAG
+  ]);
   const [authorFilter, setAuthorFilter] = useState("");
   const [onlyHumanOwned, setOnlyHumanOwned] = useState(false);
   const [sheetOpen, setSheetOpen] = useState(false);

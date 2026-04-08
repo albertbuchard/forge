@@ -56,7 +56,7 @@ import { registerWebRoutes } from "./web.js";
 import { createManagerRuntime } from "./managers/runtime.js";
 import { isManagerError } from "./managers/type-guards.js";
 import { createCompanionPairingSession, createCompanionPairingSessionSchema, getCompanionOverview, getFitnessViewData, getSleepViewData, ingestMobileHealthSync, mobileHealthSyncSchema, requireValidPairing, revokeAllCompanionPairingSessions, revokeAllCompanionPairingSessionsSchema, revokeCompanionPairingSession, verifyCompanionPairing, verifyCompanionPairingSchema, updateSleepMetadata, updateSleepMetadataSchema, updateWorkoutMetadata, updateWorkoutMetadataSchema } from "./health.js";
-import { createMovementPlace, getMovementAllTimeSummary, getMovementDayDetail, getMovementMobileBootstrap, getMovementTimeline, getMovementSelectionAggregate, getMovementSettings, getMovementTripDetail, getMovementMonthSummary, listMovementPlaces, movementMobileBootstrapSchema, movementMobileStayPatchSchema, movementMobileTimelineSchema, movementMobileTripPatchSchema, movementPlaceMutationSchema, movementPlacePatchSchema, movementSelectionAggregateSchema, movementStayPatchSchema, movementSettingsPatchSchema, movementTimelineQuerySchema, movementTripPatchSchema, updateMovementPlace, updateMovementStay, updateMovementSettings, updateMovementTrip } from "./movement.js";
+import { createMovementPlace, getMovementAllTimeSummary, getMovementDayDetail, getMovementMobileBootstrap, getMovementTimeline, getMovementSelectionAggregate, getMovementSettings, getMovementTripDetail, getMovementMonthSummary, listMovementPlaces, movementMobileBootstrapSchema, movementMobilePlaceMutationSchema, movementMobileStayPatchSchema, movementMobileTimelineSchema, movementMobileTripPatchSchema, movementPlaceMutationSchema, movementPlacePatchSchema, movementSelectionAggregateSchema, movementStayPatchSchema, movementSettingsPatchSchema, movementTimelineQuerySchema, movementTripPointPatchSchema, movementTripPatchSchema, deleteMovementTripPoint, deleteMovementStay, deleteMovementTrip, updateMovementPlace, updateMovementStay, updateMovementSettings, updateMovementTrip, updateMovementTripPoint } from "./movement.js";
 import { assertWatchReady, buildWatchBootstrap, ingestWatchCaptureBatch, mobileWatchBootstrapSchema, mobileWatchCaptureBatchSchema, mobileWatchHabitCheckInSchema } from "./watch-mobile.js";
 const COMPATIBILITY_SUNSET = "transitional-node";
 function markCompatibilityRoute(reply) {
@@ -2800,7 +2800,7 @@ function buildAgentOnboardingPayload(request) {
             workoutSession: "A workout session is a first-class sports record imported from HealthKit or generated from a habit. It holds workout type, timing, energy or distance when available, subjective effort, narrative context, and Forge links.",
             preferences: "Forge Preferences is the explicit taste-modeling domain. It has workspaces, contexts, concept libraries, direct items, pairwise judgments, direct signals, and inferred scores.",
             questionnaire: "Forge Psyche questionnaires are structured reusable instruments with provenance, scoring, draft and published versions, and user-owned answer runs.",
-            selfObservation: "Forge self-observation is a dedicated Psyche calendar view backed by note records tagged Self-observation and timestamped by frontmatter.observedAt.",
+            selfObservation: "Forge self-observation is a dedicated Psyche calendar view backed by observed notes timestamped by frontmatter.observedAt, including deliberate reflection notes and rolling movement notes from the companion.",
             insight: "An agent-authored observation or recommendation grounded in Forge data.",
             calendar: "A connected calendar source mirrored into Forge. Calendar state combines provider events, recurring work blocks, and task timeboxes.",
             workBlock: "A recurring half-day or custom time window such as Main Activity, Secondary Activity, Third Activity, Rest, Holiday, or Custom. Work blocks can allow or block work by default, can define active date bounds, and remain editable through the calendar surface.",
@@ -2914,7 +2914,7 @@ function buildAgentOnboardingPayload(request) {
                 },
                 selfObservation: {
                     read: "/api/v1/psyche/self-observation/calendar",
-                    writeModel: "Create or update a linked note with tag Self-observation and frontmatter.observedAt."
+                    writeModel: "Create or update an observed note with frontmatter.observedAt. Manual reflections usually carry the Self-observation tag, while movement sync can also publish rolling observed notes tagged movement."
                 },
                 sleep_session: {
                     read: "/api/v1/health/sleep",
@@ -4086,6 +4086,16 @@ export async function buildServer(options = {}) {
         }
         return { stay };
     });
+    app.delete("/api/v1/movement/stays/:id", async (request, reply) => {
+        const auth = requireScopedAccess(request.headers, ["write"], { route: "/api/v1/movement/stays/:id" });
+        const { id } = request.params;
+        const result = deleteMovementStay(id, toActivityContext(auth));
+        if (!result) {
+            reply.code(404);
+            return { error: "Movement stay not found" };
+        }
+        return result;
+    });
     app.patch("/api/v1/movement/trips/:id", async (request, reply) => {
         const auth = requireScopedAccess(request.headers, ["write"], { route: "/api/v1/movement/trips/:id" });
         const { id } = request.params;
@@ -4095,6 +4105,36 @@ export async function buildServer(options = {}) {
             return { error: "Movement trip not found" };
         }
         return { trip };
+    });
+    app.delete("/api/v1/movement/trips/:id", async (request, reply) => {
+        const auth = requireScopedAccess(request.headers, ["write"], { route: "/api/v1/movement/trips/:id" });
+        const { id } = request.params;
+        const result = deleteMovementTrip(id, toActivityContext(auth));
+        if (!result) {
+            reply.code(404);
+            return { error: "Movement trip not found" };
+        }
+        return result;
+    });
+    app.patch("/api/v1/movement/trips/:id/points/:pointId", async (request, reply) => {
+        const auth = requireScopedAccess(request.headers, ["write"], { route: "/api/v1/movement/trips/:id/points/:pointId" });
+        const { id, pointId } = request.params;
+        const result = updateMovementTripPoint(id, pointId, movementTripPointPatchSchema.parse(request.body ?? {}), toActivityContext(auth));
+        if (!result) {
+            reply.code(404);
+            return { error: "Movement datapoint not found" };
+        }
+        return result;
+    });
+    app.delete("/api/v1/movement/trips/:id/points/:pointId", async (request, reply) => {
+        const auth = requireScopedAccess(request.headers, ["write"], { route: "/api/v1/movement/trips/:id/points/:pointId" });
+        const { id, pointId } = request.params;
+        const result = deleteMovementTripPoint(id, pointId, toActivityContext(auth));
+        if (!result) {
+            reply.code(404);
+            return { error: "Movement datapoint not found" };
+        }
+        return result;
     });
     app.get("/api/v1/movement/trips/:id", async (request, reply) => {
         const { id } = request.params;
@@ -4150,6 +4190,21 @@ export async function buildServer(options = {}) {
         const pairing = requireValidPairing(parsed.sessionId, parsed.pairingToken);
         return {
             movement: getMovementMobileBootstrap(pairing)
+        };
+    });
+    app.post("/api/v1/mobile/movement/places", async (request, reply) => {
+        const parsed = movementMobilePlaceMutationSchema.parse(request.body ?? {});
+        const pairing = requireValidPairing(parsed.sessionId, parsed.pairingToken);
+        reply.code(201);
+        return {
+            place: createMovementPlace({
+                ...parsed.place,
+                userId: pairing.user_id,
+                source: "companion"
+            }, {
+                actor: "Forge Companion",
+                source: "system"
+            })
         };
     });
     app.post("/api/v1/mobile/movement/timeline", async (request) => {
@@ -4216,7 +4271,9 @@ export async function buildServer(options = {}) {
         return {
             habit,
             metrics: buildXpMetricsPayload(),
-            watch: buildWatchBootstrap(pairing)
+            watch: buildWatchBootstrap(pairing, {
+                anchorDateKey: parsed.dateKey
+            })
         };
     });
     app.post("/api/v1/mobile/watch/capture-events:batch", async (request) => {

@@ -5351,7 +5351,9 @@ export async function buildServer(
     return {
       habit,
       metrics: buildXpMetricsPayload(),
-      watch: buildWatchBootstrap(pairing)
+      watch: buildWatchBootstrap(pairing, {
+        anchorDateKey: parsed.dateKey
+      })
     };
   });
   app.post("/api/v1/mobile/watch/capture-events:batch", async (request) => {

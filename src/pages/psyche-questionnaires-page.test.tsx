@@ -102,7 +102,7 @@ describe("PsycheQuestionnairesPage", () => {
 
     fireEvent.change(
       screen.getByPlaceholderText(
-        "Search questionnaire title, alias, domain, source, response style, or filter chip"
+        "Search title, alias, domain, source, or filter chip"
       ),
       { target: { value: "schema" } }
     );
@@ -112,7 +112,7 @@ describe("PsycheQuestionnairesPage", () => {
 
     fireEvent.change(
       screen.getByPlaceholderText(
-        "Search questionnaire title, alias, domain, source, response style, or filter chip"
+        "Search title, alias, domain, source, or filter chip"
       ),
       { target: { value: "depression" } }
     );

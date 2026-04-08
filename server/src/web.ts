@@ -3,6 +3,13 @@ import path from "node:path";
 import type { FastifyInstance, FastifyReply } from "fastify";
 
 const distDir = path.join(process.cwd(), "dist");
+const packagedRuntimeDistDir = path.join(
+  process.cwd(),
+  "plugins",
+  "forge-codex",
+  "runtime",
+  "dist"
+);
 const defaultBasePath = process.env.FORGE_BASE_PATH ?? "/forge/";
 
 const contentTypes: Record<string, string> = {
@@ -54,8 +61,13 @@ function resolveAsset(clientDir: string, requestPath: string): string {
 }
 
 async function getClientDir() {
-  await access(path.join(distDir, "index.html"));
-  return distDir;
+  try {
+    await access(path.join(distDir, "index.html"));
+    return distDir;
+  } catch {
+    await access(path.join(packagedRuntimeDistDir, "index.html"));
+    return packagedRuntimeDistDir;
+  }
 }
 
 async function serveAsset(requestPath: string, reply: FastifyReply) {

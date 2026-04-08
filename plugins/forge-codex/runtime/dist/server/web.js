@@ -1,6 +1,7 @@
 import { access, readFile } from "node:fs/promises";
 import path from "node:path";
 const distDir = path.join(process.cwd(), "dist");
+const packagedRuntimeDistDir = path.join(process.cwd(), "plugins", "forge-codex", "runtime", "dist");
 const defaultBasePath = process.env.FORGE_BASE_PATH ?? "/forge/";
 const contentTypes = {
     ".css": "text/css; charset=utf-8",
@@ -42,8 +43,14 @@ function resolveAsset(clientDir, requestPath) {
     return path.join(clientDir, safePath);
 }
 async function getClientDir() {
-    await access(path.join(distDir, "index.html"));
-    return distDir;
+    try {
+        await access(path.join(distDir, "index.html"));
+        return distDir;
+    }
+    catch {
+        await access(path.join(packagedRuntimeDistDir, "index.html"));
+        return packagedRuntimeDistDir;
+    }
 }
 async function serveAsset(requestPath, reply) {
     if (requestPath.startsWith("/api")) {

@@ -77,13 +77,72 @@ function calculateCompletionRate(habit, checkIns) {
     const aligned = checkIns.filter((checkIn) => isAligned(habit, checkIn)).length;
     return Math.round((aligned / checkIns.length) * 100);
 }
-function calculateStreak(habit, checkIns) {
-    let streak = 0;
+function calculateStreak(habit, checkIns, now = new Date()) {
+    if (habit.frequency === "weekly" && habit.weekDays.length === 0) {
+        return 0;
+    }
+    const statusByDate = new Map();
     for (const checkIn of checkIns) {
-        if (!isAligned(habit, checkIn)) {
-            break;
+        if (!statusByDate.has(checkIn.dateKey)) {
+            statusByDate.set(checkIn.dateKey, checkIn.status);
         }
+    }
+    const isScheduledOn = (date) => habit.frequency === "daily" || habit.weekDays.includes(date.getUTCDay());
+    const toDateKey = (date) => date.toISOString().slice(0, 10);
+    const atUtcDayStart = (date) => new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
+    const previousScheduledDate = (date) => {
+        const cursor = atUtcDayStart(date);
+        do {
+            cursor.setUTCDate(cursor.getUTCDate() - 1);
+        } while (!isScheduledOn(cursor));
+        return cursor;
+    };
+    const startOfUtcWeek = (date) => {
+        const start = atUtcDayStart(date);
+        const offset = (start.getUTCDay() + 6) % 7;
+        start.setUTCDate(start.getUTCDate() - offset);
+        return start;
+    };
+    const previousUtcWeek = (date) => {
+        const start = startOfUtcWeek(date);
+        start.setUTCDate(start.getUTCDate() - 7);
+        return start;
+    };
+    const alignedStatusOn = (date) => {
+        const status = statusByDate.get(toDateKey(date));
+        return status ? isAligned(habit, { status }) : false;
+    };
+    if (habit.frequency === "daily") {
+        const today = atUtcDayStart(now);
+        let cursor = isScheduledOn(today) && !statusByDate.has(toDateKey(today))
+            ? previousScheduledDate(today)
+            : today;
+        let streak = 0;
+        while (alignedStatusOn(cursor)) {
+            streak += 1;
+            cursor = previousScheduledDate(cursor);
+        }
+        return streak;
+    }
+    const alignedCountForWeek = (weekStart) => {
+        let count = 0;
+        for (let offset = 0; offset < 7; offset += 1) {
+            const day = new Date(weekStart);
+            day.setUTCDate(weekStart.getUTCDate() + offset);
+            if (isScheduledOn(day) && alignedStatusOn(day)) {
+                count += 1;
+            }
+        }
+        return count;
+    };
+    const currentWeekStart = startOfUtcWeek(now);
+    let cursor = alignedCountForWeek(currentWeekStart) >= habit.targetCount
+        ? currentWeekStart
+        : previousUtcWeek(currentWeekStart);
+    let streak = 0;
+    while (alignedCountForWeek(cursor) >= habit.targetCount) {
         streak += 1;
+        cursor = previousUtcWeek(cursor);
     }
     return streak;
 }
@@ -137,7 +196,12 @@ function mapHabit(row, checkIns = listCheckInsForHabit(row.id)) {
         updatedAt: row.updated_at,
         lastCheckInAt: latestCheckIn?.createdAt ?? null,
         lastCheckInStatus: latestCheckIn?.status ?? null,
-        streakCount: calculateStreak({ polarity: row.polarity }, checkIns),
+        streakCount: calculateStreak({
+            polarity: row.polarity,
+            frequency: row.frequency,
+            targetCount: row.target_count,
+            weekDays: parseWeekDays(row.week_days_json)
+        }, checkIns),
         completionRate: calculateCompletionRate({ polarity: row.polarity }, checkIns),
         dueToday: false,
         checkIns

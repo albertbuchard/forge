@@ -209,8 +209,10 @@ function buildHabitHistory(habit: {
   frequency: "daily" | "weekly";
   polarity: "positive" | "negative";
   checkIns: Array<{ dateKey: string; status: "done" | "missed" }>;
-}) {
-  const now = new Date();
+}, options?: { anchorDateKey?: string }) {
+  const now = options?.anchorDateKey
+    ? parseDateKey(options.anchorDateKey)
+    : new Date();
 
   if (habit.frequency === "daily") {
     const today = startOfUtcDay(now);
@@ -627,7 +629,10 @@ export function assertWatchReady(pairing: PairingSessionLike) {
   }
 }
 
-export function buildWatchBootstrap(pairing: PairingSessionLike) {
+export function buildWatchBootstrap(
+  pairing: PairingSessionLike,
+  options?: { anchorDateKey?: string }
+) {
   assertWatchReady(pairing);
   const habits = listHabits({ status: "active", limit: 64 })
     .filter((habit) => habit.userId === pairing.user_id || pairing.user_id === "user_operator")
@@ -641,7 +646,9 @@ export function buildWatchBootstrap(pairing: PairingSessionLike) {
       return left.title.localeCompare(right.title);
     })
     .map((habit) => {
-      const history = buildHabitHistory(habit);
+      const history = buildHabitHistory(habit, {
+        anchorDateKey: options?.anchorDateKey
+      });
       const currentPeriodStatus =
         history.find((entry) => entry.current)?.state ?? "unknown";
       return {
