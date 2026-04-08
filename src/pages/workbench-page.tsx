@@ -1,122 +1,162 @@
-import { AiSurfaceWorkspace } from "@/components/customization/ai-surface-workspace";
-import type { SurfaceWidgetDefinition } from "@/components/customization/editable-surface";
-import {
-  MiniCalendarWidget,
-  QuickCaptureWidget,
-  SpotifyWidget,
-  TimeWidget,
-  WeatherWidget
-} from "@/components/customization/utility-widgets";
-import { useForgeShell } from "@/components/shell/app-shell";
+import { useMemo, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useNavigate, useSearchParams } from "react-router-dom";
+import { FacetedTokenSearch, type FacetedTokenOption } from "@/components/search/faceted-token-search";
 import { PageHero } from "@/components/shell/page-hero";
-
-const SURFACE_ID = "workbench";
+import { Button } from "@/components/ui/button";
+import { createWorkbenchFlow, listWorkbenchFlows } from "@/lib/api";
 
 export function WorkbenchPage() {
-  const shell = useForgeShell();
-
-  const baseWidgets: SurfaceWidgetDefinition[] = [
-    {
-      id: "hero",
-      title: "Workbench",
-      description: "Custom view with utility widgets and AI processors.",
-      defaultWidth: 12,
-      defaultHeight: 1,
-      removable: false,
-      surfaceChrome: "none",
-      defaultTitleVisible: false,
-      defaultDescriptionVisible: false,
-      processorCapability: {
-        label: "Workbench summary",
-        mode: "content",
-        metadata: { source: "hero" }
-      },
-      render: () => (
-        <PageHero
-          title="Workbench"
-          titleText="Workbench"
-          description="This surface supports utility widgets, AI processor widgets, and explicit widget-to-processor graph links."
-          badge="surface runtime"
-        />
-      )
-    },
-    {
-      id: "time",
-      title: "Clock",
-      description: "Live time widget.",
-      defaultWidth: 3,
-      defaultHeight: 2,
-      processorCapability: {
-        label: "Time context",
-        mode: "content",
-        metadata: { widgetType: "time" }
-      },
-      render: ({ compact }) => <TimeWidget compact={compact} />
-    },
-    {
-      id: "weather",
-      title: "Weather",
-      description: "Location-based weather widget.",
-      defaultWidth: 3,
-      defaultHeight: 2,
-      processorCapability: {
-        label: "Weather context",
-        mode: "content",
-        metadata: { widgetType: "weather" }
-      },
-      render: ({ compact }) => <WeatherWidget compact={compact} />
-    },
-    {
-      id: "mini-calendar",
-      title: "Mini calendar",
-      description: "Compact month view.",
-      defaultWidth: 4,
-      defaultHeight: 3,
-      processorCapability: {
-        label: "Calendar context",
-        mode: "content",
-        metadata: { widgetType: "mini-calendar" }
-      },
-      render: ({ compact }) => <MiniCalendarWidget compact={compact} />
-    },
-    {
-      id: "spotify",
-      title: "Spotify",
-      description: "Pinned music link.",
-      defaultWidth: 5,
-      defaultHeight: 2,
-      processorCapability: {
-        label: "Spotify link",
-        mode: "content",
-        metadata: { widgetType: "spotify" }
-      },
-      render: () => <SpotifyWidget surfaceId={SURFACE_ID} />
-    },
-    {
-      id: "quick-capture",
-      title: "Quick capture",
-      description: "Save a note or wiki page from a simple editor.",
-      defaultWidth: 7,
-      defaultHeight: 4,
-      processorCapability: {
-        label: "Quick capture actions",
-        mode: "mcp",
-        metadata: {
-          widgetType: "quick-capture",
-          noteEndpoint: "/api/v1/notes",
-          wikiEndpoint: "/api/v1/wiki/pages"
-        }
-      },
-      render: ({ compact }) => (
-        <QuickCaptureWidget
-          compact={compact}
-          defaultUserId={
-            shell.selectedUserIds[0] ?? shell.snapshot.users[0]?.id ?? null
-          }
-        />
-      )
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const [searchParams] = useSearchParams();
+  const preferredSurface = searchParams.get("surface");
+  const [query, setQuery] = useState("");
+  const [selectedOptionIds, setSelectedOptionIds] = useState<string[]>([]);
+  const flowsQuery = useQuery({
+    queryKey: ["forge-workbench-flows"],
+    queryFn: listWorkbenchFlows
+  });
+  const createMutation = useMutation({
+    mutationFn: (kind: "functor" | "chat") =>
+      createWorkbenchFlow({
+        title: kind === "chat" ? "New chat flow" : "New flow",
+        description:
+          kind === "chat"
+            ? "Conversational workbench flow."
+            : "Reusable workbench transformation flow.",
+        kind,
+        homeSurfaceId: preferredSurface
+      }),
+    onSuccess: ({ flow }) => {
+      void queryClient.invalidateQueries({ queryKey: ["forge-workbench-flows"] });
+      navigate(`/workbench/${flow.id}`);
     }
-  ];
+  });
 
-  return <AiSurfaceWorkspace surfaceId={SURFACE_ID} baseWidgets={baseWidgets} />;
+  const flows = flowsQuery.data?.flows ?? [];
+  const filterOptions = useMemo<FacetedTokenOption[]>(() => {
+    const byKind: FacetedTokenOption[] = [
+      {
+        id: "kind:functor",
+        label: "Functor",
+        description: "Single transformation flows"
+      },
+      {
+        id: "kind:chat",
+        label: "Chat",
+        description: "Conversational flows with user input"
+      }
+    ];
+    const surfaceOptions = Array.from(
+      new Set(
+        flows
+          .map((flow) => flow.homeSurfaceId)
+          .filter((entry): entry is string => Boolean(entry))
+      )
+    ).map((surfaceId) => ({
+      id: `surface:${surfaceId}`,
+      label: surfaceId,
+      description: "Home surface"
+    }));
+    return [...byKind, ...surfaceOptions];
+  }, [flows]);
+
+  const filteredFlows = useMemo(() => {
+    const normalizedQuery = query.trim().toLowerCase();
+    return flows.filter((flow) => {
+      const matchesQuery =
+        normalizedQuery.length === 0 ||
+        [
+          flow.title,
+          flow.description,
+          flow.kind,
+          flow.homeSurfaceId ?? "",
+          ...flow.graph.nodes.map((node) => node.data.label)
+        ]
+          .join(" ")
+          .toLowerCase()
+          .includes(normalizedQuery);
+      const matchesTokens = selectedOptionIds.every((token) => {
+        if (token.startsWith("kind:")) {
+          return flow.kind === token.replace("kind:", "");
+        }
+        if (token.startsWith("surface:")) {
+          return flow.homeSurfaceId === token.replace("surface:", "");
+        }
+        return true;
+      });
+      return matchesQuery && matchesTokens;
+    });
+  }, [flows, query, selectedOptionIds]);
+
+  return (
+    <div className="grid gap-5">
+      <PageHero
+        title="Workbench"
+        titleText="Workbench"
+        description="Search and launch reusable Forge flows, then open a flow to edit its graph, tools, prompts, and outputs."
+        badge={`${flows.length} flows`}
+      />
+
+      <div className="flex flex-wrap gap-2">
+        <Button
+          type="button"
+          variant="primary"
+          onClick={() => void createMutation.mutateAsync("functor")}
+        >
+          New flow
+        </Button>
+        <Button
+          type="button"
+          variant="secondary"
+          onClick={() => void createMutation.mutateAsync("chat")}
+        >
+          New chat flow
+        </Button>
+      </div>
+
+      <FacetedTokenSearch
+        title="Flow search"
+        description="Filter by flow kind or surface, then open a flow to edit or run it."
+        query={query}
+        onQueryChange={setQuery}
+        options={filterOptions}
+        selectedOptionIds={selectedOptionIds}
+        onSelectedOptionIdsChange={setSelectedOptionIds}
+        resultSummary={`${filteredFlows.length} of ${flows.length} flows`}
+        placeholder="Search flow title, description, nodes, or home surface"
+      />
+
+      <div className="grid gap-3 lg:grid-cols-2">
+        {filteredFlows.map((flow) => (
+          <button
+            key={flow.id}
+            type="button"
+            className="rounded-[26px] border border-white/8 bg-[linear-gradient(180deg,rgba(20,28,46,0.92),rgba(10,16,29,0.96))] p-5 text-left transition hover:border-white/12 hover:bg-[linear-gradient(180deg,rgba(24,34,55,0.94),rgba(12,18,34,0.98))]"
+            onClick={() => navigate(`/workbench/${flow.id}`)}
+          >
+            <div className="flex items-start justify-between gap-4">
+              <div className="min-w-0">
+                <div className="truncate text-lg font-semibold text-white">
+                  {flow.title}
+                </div>
+                <div className="mt-1 line-clamp-2 text-sm leading-6 text-white/54">
+                  {flow.description || "No description yet."}
+                </div>
+              </div>
+              <div className="rounded-full bg-white/[0.06] px-3 py-1 text-[11px] uppercase tracking-[0.16em] text-white/56">
+                {flow.kind}
+              </div>
+            </div>
+            <div className="mt-4 flex flex-wrap gap-2 text-[12px] text-white/44">
+              <span>{flow.graph.nodes.length} nodes</span>
+              <span>{flow.graph.edges.length} edges</span>
+              {flow.homeSurfaceId ? <span>{flow.homeSurfaceId}</span> : null}
+            </div>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
 }

@@ -196,14 +196,14 @@ function ensurePublishedOutputs(connectorId, graph) {
             id: entry.boxId.replace(/^connector-output:/, ""),
             nodeId: "node_output",
             label: entry.label,
-            apiPath: `/api/v1/ai-connectors/${connectorId}/output`
+            apiPath: `/api/v1/workbench/flows/${connectorId}/output`
         }));
     }
     return outputNodes.map((node, index) => ({
         id: `${connectorId}_out_${index + 1}`,
         nodeId: node.id,
         label: node.data.label || `Output ${index + 1}`,
-        apiPath: `/api/v1/ai-connectors/${connectorId}/output`
+        apiPath: `/api/v1/workbench/flows/${connectorId}/output`
     }));
 }
 function mapRun(row) {
@@ -321,6 +321,75 @@ function tryParseStructuredAgentResponse(value) {
     catch {
         return null;
     }
+}
+function tryParseJsonObject(value) {
+    try {
+        const parsed = JSON.parse(value);
+        if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+            return parsed;
+        }
+        return null;
+    }
+    catch {
+        return null;
+    }
+}
+function coerceText(value) {
+    if (typeof value === "string") {
+        return value;
+    }
+    if (value == null) {
+        return "";
+    }
+    if (typeof value === "number" || typeof value === "boolean") {
+        return String(value);
+    }
+    try {
+        return JSON.stringify(value);
+    }
+    catch {
+        return "";
+    }
+}
+function buildOutputMap(primaryText, primaryJson, outputKeys = []) {
+    const outputMap = {
+        primary: {
+            text: primaryText,
+            json: primaryJson
+        }
+    };
+    for (const key of outputKeys) {
+        if (!primaryJson || !(key in primaryJson)) {
+            continue;
+        }
+        const value = primaryJson[key];
+        outputMap[key] = {
+            text: coerceText(value),
+            json: value && typeof value === "object" && !Array.isArray(value)
+                ? value
+                : null
+        };
+    }
+    return outputMap;
+}
+function readOutputSelection(value, handle) {
+    if (!handle || handle === "primary") {
+        return { text: value.text, json: value.json };
+    }
+    const selected = value.outputMap[handle];
+    if (selected) {
+        return selected;
+    }
+    if (value.json && handle in value.json) {
+        const raw = value.json[handle];
+        return {
+            text: coerceText(raw),
+            json: raw && typeof raw === "object" && !Array.isArray(raw)
+                ? raw
+                : null
+        };
+    }
+    return { text: value.text, json: value.json };
 }
 async function executeMachineTool(tool, args) {
     if (tool === "machine_read_file") {
@@ -522,14 +591,18 @@ async function runModelNode(input) {
         if (activeTools.length === 0) {
             return {
                 text: rawText.trim(),
-                conversationId
+                json: tryParseJsonObject(rawText.trim()),
+                conversationId,
+                logs: transcript
             };
         }
         const structured = tryParseStructuredAgentResponse(rawText.trim());
         if (!structured || structured.action === "final") {
             return {
                 text: structured?.text?.trim() || rawText.trim(),
-                conversationId
+                json: tryParseJsonObject(structured?.text?.trim() || rawText.trim()),
+                conversationId,
+                logs: transcript
             };
         }
         const toolResult = structured.tool.startsWith("machine_")
@@ -539,7 +612,9 @@ async function runModelNode(input) {
     }
     return {
         text: "Connector stopped after reaching the maximum tool step count.",
-        conversationId
+        json: null,
+        conversationId,
+        logs: transcript
     };
 }
 function validateConnectorGraph(graph) {
@@ -615,6 +690,8 @@ async function executeConnector(connector, rawInput, services) {
         incoming.set(edge.target, list);
     }
     const values = new Map();
+    const debugNodes = [];
+    const debugErrors = [];
     const outputNodes = connector.graph.nodes.filter((node) => node.type === "output");
     const activeConversation = parsedInput.conversationId
         ? getAiConnectorConversationById(parsedInput.conversationId)
@@ -628,9 +705,18 @@ async function executeConnector(connector, rawInput, services) {
         if (!node) {
             throw new Error(`Missing connector node ${nodeId}.`);
         }
-        const upstream = await Promise.all((incoming.get(nodeId) ?? []).map((edge) => evaluateNode(edge.source)));
+        const upstreamEdges = incoming.get(nodeId) ?? [];
+        const upstream = await Promise.all(upstreamEdges.map(async (edge) => {
+            const upstreamValue = await evaluateNode(edge.source);
+            const selected = readOutputSelection(upstreamValue, edge.sourceHandle);
+            return {
+                edge,
+                sourceValue: upstreamValue,
+                selected
+            };
+        }));
         let resolved;
-        if (node.type === "box_input") {
+        if (node.type === "box" || node.type === "box_input") {
             const boxId = node.data.boxId?.trim() || "";
             const providedSnapshot = boxId ? parsedInput.boxSnapshots[boxId] : null;
             const snapshot = providedSnapshot && typeof providedSnapshot === "object"
@@ -648,6 +734,10 @@ async function executeConnector(connector, rawInput, services) {
                         contentJson: null,
                         tools: []
                     };
+            const outputKeys = [
+                ...(node.data.outputs ?? []).map((port) => port.key),
+                ...Object.keys(snapshot.contentJson ?? {})
+            ];
             resolved = {
                 text: snapshot.contentText,
                 json: snapshot.contentJson,
@@ -657,7 +747,9 @@ async function executeConnector(connector, rawInput, services) {
                     label: tool.label,
                     description: tool.description
                 })),
-                conversationId: null
+                conversationId: null,
+                outputMap: buildOutputMap(snapshot.contentText, snapshot.contentJson, outputKeys),
+                logs: []
             };
         }
         else if (node.type === "user_input") {
@@ -665,16 +757,76 @@ async function executeConnector(connector, rawInput, services) {
                 text: parsedInput.userInput || "",
                 json: Object.keys(parsedInput.context).length > 0 ? parsedInput.context : null,
                 tools: [],
-                conversationId: activeConversation?.id ?? null
+                conversationId: activeConversation?.id ?? null,
+                outputMap: buildOutputMap(parsedInput.userInput || "", Object.keys(parsedInput.context).length > 0 ? parsedInput.context : null, Object.keys(parsedInput.context ?? {})),
+                logs: []
+            };
+        }
+        else if (node.type === "merge") {
+            const mergedText = upstream
+                .map((entry) => entry.selected.text)
+                .filter(Boolean)
+                .join("\n\n");
+            const mergedJson = Object.assign({}, ...upstream
+                .map((entry) => entry.selected.json)
+                .filter((entry) => Boolean(entry) && typeof entry === "object"));
+            resolved = {
+                text: mergedText,
+                json: Object.keys(mergedJson).length > 0 ? mergedJson : null,
+                tools: upstream.flatMap((entry) => entry.sourceValue.tools),
+                conversationId: upstream.find((entry) => entry.sourceValue.conversationId)?.sourceValue
+                    .conversationId ?? null,
+                outputMap: buildOutputMap(mergedText, Object.keys(mergedJson).length > 0 ? mergedJson : null, Object.keys(mergedJson)),
+                logs: []
+            };
+        }
+        else if (node.type === "template") {
+            const primary = upstream[0]?.selected ?? { text: "", json: null };
+            const rendered = (node.data.template ?? node.data.promptTemplate ?? "")
+                .replaceAll("{{input}}", primary.text)
+                .replaceAll("{{json}}", primary.json ? JSON.stringify(primary.json) : "");
+            resolved = {
+                text: rendered,
+                json: tryParseJsonObject(rendered),
+                tools: [],
+                conversationId: upstream.find((entry) => entry.sourceValue.conversationId)?.sourceValue
+                    .conversationId ?? null,
+                outputMap: buildOutputMap(rendered, tryParseJsonObject(rendered)),
+                logs: []
+            };
+        }
+        else if (node.type === "pick_key") {
+            const primary = upstream[0]?.selected ?? { text: "", json: null };
+            const selectedKey = node.data.selectedKey?.trim() || "";
+            const selectedValue = primary.json && selectedKey in primary.json ? primary.json[selectedKey] : null;
+            const selectedJson = selectedValue &&
+                typeof selectedValue === "object" &&
+                !Array.isArray(selectedValue)
+                ? selectedValue
+                : null;
+            resolved = {
+                text: coerceText(selectedValue),
+                json: selectedJson,
+                tools: [],
+                conversationId: upstream.find((entry) => entry.sourceValue.conversationId)?.sourceValue
+                    .conversationId ?? null,
+                outputMap: buildOutputMap(coerceText(selectedValue), selectedJson),
+                logs: []
             };
         }
         else if (node.type === "output") {
-            const mergedText = upstream.map((entry) => entry.text).filter(Boolean).join("\n\n");
+            const mergedText = upstream
+                .map((entry) => entry.selected.text)
+                .filter(Boolean)
+                .join("\n\n");
             resolved = {
                 text: mergedText,
-                json: upstream[0]?.json ?? null,
+                json: upstream[0]?.selected.json ?? null,
                 tools: [],
-                conversationId: upstream.find((entry) => entry.conversationId)?.conversationId ?? null
+                conversationId: upstream.find((entry) => entry.sourceValue.conversationId)?.sourceValue
+                    .conversationId ?? null,
+                outputMap: buildOutputMap(mergedText, upstream[0]?.selected.json ?? null, Object.keys(upstream[0]?.selected.json ?? {})),
+                logs: []
             };
         }
         else {
@@ -682,24 +834,67 @@ async function executeConnector(connector, rawInput, services) {
                 connector,
                 node,
                 userInput: parsedInput.userInput,
-                upstream,
+                upstream: upstream.map((entry) => ({
+                    text: entry.selected.text,
+                    json: entry.selected.json,
+                    tools: entry.sourceValue.tools,
+                    conversationId: entry.sourceValue.conversationId,
+                    outputMap: entry.sourceValue.outputMap,
+                    logs: entry.sourceValue.logs
+                })),
                 services,
                 conversation: activeConversation
             });
+            const outputKeys = (node.data.outputs ?? []).map((port) => port.key);
             resolved = {
                 text: modelResult.text,
-                json: null,
+                json: modelResult.json,
                 tools: [],
-                conversationId: modelResult.conversationId
+                conversationId: modelResult.conversationId,
+                outputMap: buildOutputMap(modelResult.text, modelResult.json, outputKeys),
+                logs: modelResult.logs
             };
         }
         values.set(nodeId, resolved);
+        debugNodes.push({
+            nodeId: node.id,
+            nodeType: node.type,
+            label: node.data.label,
+            input: upstream.map((entry) => ({
+                sourceNodeId: entry.edge.source,
+                sourceHandle: entry.edge.sourceHandle ?? null,
+                targetHandle: entry.edge.targetHandle ?? null,
+                text: entry.selected.text,
+                json: entry.selected.json
+            })),
+            output: {
+                text: resolved.text,
+                json: resolved.json
+            },
+            tools: resolved.tools.map((tool) => tool.key),
+            logs: resolved.logs,
+            error: null
+        });
         return resolved;
     };
-    for (const outputNode of outputNodes) {
-        await evaluateNode(outputNode.id);
+    try {
+        for (const outputNode of outputNodes) {
+            await evaluateNode(outputNode.id);
+        }
     }
-    const result = buildOutputResult(connector, values);
+    catch (error) {
+        debugErrors.push(error instanceof Error ? error.message : "Flow execution failed");
+        throw error;
+    }
+    const result = aiConnectorRunResultSchema.parse({
+        ...buildOutputResult(connector, values),
+        debugTrace: parsedInput.debug
+            ? {
+                nodes: debugNodes,
+                errors: debugErrors
+            }
+            : undefined
+    });
     const conversationProviderNode = connector.graph.nodes.find((node) => node.type === "chat");
     const resolvedConversationId = [...values.values()].find((entry) => entry.conversationId)?.conversationId ?? null;
     const nextConversation = conversationProviderNode

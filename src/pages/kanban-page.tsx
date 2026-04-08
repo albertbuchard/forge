@@ -4,6 +4,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { ExecutionBoard } from "@/components/execution-board";
 import { TaskDialog } from "@/components/task-dialog";
 import { PageHero } from "@/components/shell/page-hero";
+import { WorkbenchSection } from "@/components/workbench/workbench-section";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -142,8 +143,9 @@ export function KanbanPage() {
         }
       />
 
-      <Card className="min-w-0 overflow-hidden">
-        <div className="flex flex-wrap items-center justify-between gap-3">
+      <WorkbenchSection boxId="surface:kanban-index:summary" surfaceId="kanban-index">
+        <Card className="min-w-0 overflow-hidden">
+          <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="min-w-0">
             <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">
               Board
@@ -167,10 +169,12 @@ export function KanbanPage() {
               {liveRunCount} live timer{liveRunCount === 1 ? "" : "s"}
             </Badge>
           </div>
-        </div>
-      </Card>
+          </div>
+        </Card>
+      </WorkbenchSection>
 
-      <Card className="min-w-0 overflow-hidden">
+      <WorkbenchSection boxId="surface:kanban-index:filters" surfaceId="kanban-index">
+        <Card className="min-w-0 overflow-hidden">
         <div className="type-label text-white/40">Filters</div>
         <div className="mt-3 flex flex-wrap items-center gap-2">
           <Badge tone="meta" className="bg-white/[0.08] text-white/60">
@@ -239,7 +243,8 @@ export function KanbanPage() {
             Reset
           </button>
         </div>
-      </Card>
+        </Card>
+      </WorkbenchSection>
 
       {filteredTasks.length === 0 ? (
         <EmptyState
@@ -253,46 +258,48 @@ export function KanbanPage() {
           }
         />
       ) : (
-        <ExecutionBoard
-          tasks={filteredTasks}
-          goals={shell.snapshot.goals}
-          tags={shell.snapshot.tags}
-          notesSummaryByEntity={shell.snapshot.dashboard.notesSummaryByEntity}
-          selectedTaskId={selectedTaskId}
-          onMove={async (taskId, nextStatus) => {
-            await shell.patchTaskStatus(taskId, nextStatus);
-          }}
-          onQuickReopenTask={async (taskId) => {
-            await uncompleteTask(taskId);
-            await invalidateBoard();
-          }}
-          onDeleteTask={async (taskId) => {
-            await deleteTaskMutation.mutateAsync(taskId);
-            setSelectedTaskId((current) => {
-              if (current !== taskId) {
-                return current;
-              }
-              return filteredTasks.find((task) => task.id !== taskId)?.id ?? null;
-            });
-            setEditingTaskId((current) => (current === taskId ? null : current));
-          }}
-          onStartTask={async (taskId) => {
-            await shell.startTaskNow(taskId);
-            setSelectedTaskId(taskId);
-            await queryClient.invalidateQueries({
-              queryKey: ["task-context", taskId]
-            });
-          }}
-          onSelectTask={(taskId) => {
-            setSelectedTaskId(taskId);
-          }}
-          onOpenTask={(taskId) => {
-            navigate(`/tasks/${taskId}`);
-          }}
-          onEditTask={(taskId) => {
-            setEditingTaskId(taskId);
-          }}
-        />
+        <WorkbenchSection boxId="surface:kanban-index:board" surfaceId="kanban-index">
+          <ExecutionBoard
+            tasks={filteredTasks}
+            goals={shell.snapshot.goals}
+            tags={shell.snapshot.tags}
+            notesSummaryByEntity={shell.snapshot.dashboard.notesSummaryByEntity}
+            selectedTaskId={selectedTaskId}
+            onMove={async (taskId, nextStatus) => {
+              await shell.patchTaskStatus(taskId, nextStatus);
+            }}
+            onQuickReopenTask={async (taskId) => {
+              await uncompleteTask(taskId);
+              await invalidateBoard();
+            }}
+            onDeleteTask={async (taskId) => {
+              await deleteTaskMutation.mutateAsync(taskId);
+              setSelectedTaskId((current) => {
+                if (current !== taskId) {
+                  return current;
+                }
+                return filteredTasks.find((task) => task.id !== taskId)?.id ?? null;
+              });
+              setEditingTaskId((current) => (current === taskId ? null : current));
+            }}
+            onStartTask={async (taskId) => {
+              await shell.startTaskNow(taskId);
+              setSelectedTaskId(taskId);
+              await queryClient.invalidateQueries({
+                queryKey: ["task-context", taskId]
+              });
+            }}
+            onSelectTask={(taskId) => {
+              setSelectedTaskId(taskId);
+            }}
+            onOpenTask={(taskId) => {
+              navigate(`/tasks/${taskId}`);
+            }}
+            onEditTask={(taskId) => {
+              setEditingTaskId(taskId);
+            }}
+          />
+        </WorkbenchSection>
       )}
 
       <TaskDialog

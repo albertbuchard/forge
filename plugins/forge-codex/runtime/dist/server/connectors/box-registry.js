@@ -1,67 +1,40 @@
+import { readFileSync } from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { getDatabase } from "../db.js";
+import { getFitnessViewData, getSleepViewData } from "../health.js";
+import { listMovementPlaces } from "../movement.js";
 import { createNote } from "../repositories/notes.js";
+import { listNotes } from "../repositories/notes.js";
 import { updateTask } from "../repositories/tasks.js";
 import { searchEntities } from "../services/entity-crud.js";
-const SEARCH_TOOL = {
-    key: "forge.search_entities",
-    label: "Search Forge entities",
-    description: "Search Forge entities by query and entity types. Args: { query, entityTypes?, limit? }",
-    accessMode: "read"
-};
-const MOVE_TASK_TOOL = {
-    key: "forge.update_task_status",
-    label: "Move task",
-    description: "Update a task status. Args: { taskId, status } where status is backlog, focus, in_progress, blocked, or done.",
-    accessMode: "write"
-};
-const CREATE_NOTE_TOOL = {
-    key: "forge.create_note",
-    label: "Create note",
-    description: "Create an evidence note. Args: { title, markdown, summary? }.",
-    accessMode: "write"
-};
-const GENERIC_SURFACE_BOXES = [
-    ["overview", "/overview", "Overview", "Strategic overview and priorities."],
-    ["goals-index", "/goals", "Goals", "Goals workspace and long-range direction."],
-    ["habits-index", "/habits", "Habits", "Recurring commitments and check-ins."],
-    ["project-detail", "/projects/:projectId", "Project detail", "Project execution surface."],
-    ["projects", "/projects", "Projects", "Projects browser and search."],
-    ["strategies-index", "/strategies", "Strategies", "Strategy graphs and sequencing."],
-    ["strategy-detail", "/strategies/:strategyId", "Strategy detail", "Single strategy execution plan."],
-    ["preferences-index", "/preferences", "Preferences", "Preference model and comparisons."],
-    ["calendar", "/calendar", "Calendar", "Calendar planning and timeboxes."],
-    ["movement", "/movement", "Movement", "Movement stays, trips, and mobility context."],
-    ["sleep", "/sleep", "Sleep", "Sleep session review and recovery context."],
-    ["sports", "/sports", "Sports", "Workout history and sport reflection."],
-    ["kanban", "/kanban", "Kanban", "Task execution board."],
-    ["today", "/today", "Today", "Daily execution and focus."],
-    ["notes", "/notes", "Notes", "Notes browser and evidence surface."],
-    ["wiki", "/wiki", "Wiki", "Wiki knowledge workspace."],
-    ["psyche", "/psyche", "Psyche", "Psychological reflection and maps."],
-    ["activity", "/activity", "Activity", "Activity timeline and audit trail."],
-    ["insights", "/insights", "Insights", "Synthesized system recommendations."],
-    ["review-weekly", "/review/weekly", "Weekly review", "Weekly reflection report."],
-    ["settings", "/settings", "Settings", "Forge settings and operator controls."],
-    ["workbench", "/workbench", "Workbench", "Custom utility surface."]
-].map(([surfaceId, routePath, label, description]) => ({
-    boxId: `surface:${surfaceId}:main`,
-    surfaceId,
-    routePath,
-    label,
-    description,
-    category: "Views",
-    capabilityModes: ["content"],
-    toolAdapters: []
-}));
-const FEATURE_BOXES = [
+import { forgeBoxCatalogEntrySchema } from "../types.js";
+const definitionFilePath = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../src/lib/workbench/box-definitions.json");
+const BOX_DEFINITIONS = JSON.parse(readFileSync(definitionFilePath, "utf8"));
+const SHARED_BOXES = BOX_DEFINITIONS.map((entry) => forgeBoxCatalogEntrySchema.parse(entry));
+const LEGACY_COMPAT_BOXES = [
     {
         boxId: "kanban:board",
-        surfaceId: "kanban",
+        surfaceId: "kanban-index",
         routePath: "/kanban",
         label: "Kanban board",
         description: "Task board with task search context and task status actions.",
         category: "Execution",
+        tags: ["legacy", "kanban", "tasks"],
         capabilityModes: ["content", "tool"],
-        toolAdapters: [SEARCH_TOOL, MOVE_TASK_TOOL]
+        inputs: [],
+        outputs: [
+            {
+                key: "primary",
+                label: "Kanban board",
+                kind: "content",
+                required: false,
+                expandableKeys: []
+            }
+        ],
+        toolAdapters: SHARED_BOXES.find((entry) => entry.boxId === "surface:kanban-index:main")
+            ?.toolAdapters ?? [],
+        snapshotResolverKey: "kanban-board"
     },
     {
         boxId: "projects:list",
@@ -70,8 +43,21 @@ const FEATURE_BOXES = [
         label: "Projects list",
         description: "Project browser, filters, and search context.",
         category: "Execution",
+        tags: ["legacy", "projects", "search"],
         capabilityModes: ["content", "tool"],
-        toolAdapters: [SEARCH_TOOL]
+        inputs: [],
+        outputs: [
+            {
+                key: "primary",
+                label: "Projects list",
+                kind: "content",
+                required: false,
+                expandableKeys: []
+            }
+        ],
+        toolAdapters: SHARED_BOXES.find((entry) => entry.boxId === "surface:projects:search-results")
+            ?.toolAdapters ?? [],
+        snapshotResolverKey: "projects-list"
     },
     {
         boxId: "today:focus",
@@ -80,8 +66,21 @@ const FEATURE_BOXES = [
         label: "Today focus",
         description: "Today priorities and daily focus context.",
         category: "Execution",
+        tags: ["legacy", "today", "focus"],
         capabilityModes: ["content", "tool"],
-        toolAdapters: [SEARCH_TOOL]
+        inputs: [],
+        outputs: [
+            {
+                key: "primary",
+                label: "Today focus",
+                kind: "content",
+                required: false,
+                expandableKeys: []
+            }
+        ],
+        toolAdapters: SHARED_BOXES.find((entry) => entry.boxId === "surface:today:focus")
+            ?.toolAdapters ?? [],
+        snapshotResolverKey: "today-focus"
     },
     {
         boxId: "overview:priorities",
@@ -90,18 +89,43 @@ const FEATURE_BOXES = [
         label: "Overview priorities",
         description: "Priority summary, momentum, and active work context.",
         category: "Views",
+        tags: ["legacy", "overview", "priorities"],
         capabilityModes: ["content"],
-        toolAdapters: []
+        inputs: [],
+        outputs: [
+            {
+                key: "primary",
+                label: "Overview priorities",
+                kind: "content",
+                required: false,
+                expandableKeys: []
+            }
+        ],
+        toolAdapters: [],
+        snapshotResolverKey: "overview-priorities"
     },
     {
         boxId: "notes:quick-capture",
-        surfaceId: "notes",
+        surfaceId: "notes-index",
         routePath: "/notes",
         label: "Quick capture",
         description: "Simple note capture and evidence drafting surface.",
         category: "Capture",
+        tags: ["legacy", "capture", "notes"],
         capabilityModes: ["content", "tool"],
-        toolAdapters: [CREATE_NOTE_TOOL]
+        inputs: [],
+        outputs: [
+            {
+                key: "primary",
+                label: "Capture content",
+                kind: "content",
+                required: false,
+                expandableKeys: []
+            }
+        ],
+        toolAdapters: SHARED_BOXES.find((entry) => entry.boxId === "surface:overview:quick-capture")
+            ?.toolAdapters ?? [],
+        snapshotResolverKey: "quick-capture"
     }
 ];
 function summarizeSearchMatches(boxId, query, entityTypes, limit) {
@@ -140,38 +164,169 @@ function summarizeSearchMatches(boxId, query, entityTypes, limit) {
         tools: getForgeBoxCatalogEntry(boxId)?.toolAdapters ?? []
     };
 }
-export function listForgeBoxCatalog() {
-    return [...GENERIC_SURFACE_BOXES, ...FEATURE_BOXES];
+export function listForgeBoxCatalog(options) {
+    return options?.includeLegacyAliases
+        ? [...SHARED_BOXES, ...LEGACY_COMPAT_BOXES]
+        : [...SHARED_BOXES];
 }
 export function getForgeBoxCatalogEntry(boxId) {
-    return listForgeBoxCatalog().find((entry) => entry.boxId === boxId) ?? null;
+    return (listForgeBoxCatalog({ includeLegacyAliases: true }).find((entry) => entry.boxId === boxId) ?? null);
 }
 export function buildConnectorOutputCatalogEntry(input) {
     return {
         boxId: `connector-output:${input.outputId}`,
         surfaceId: null,
-        routePath: `/connectors/${input.connectorId}`,
+        routePath: `/workbench/${input.connectorId}`,
         label: `${input.title} output`,
         description: "Published AI connector output.",
         category: "Connector outputs",
+        tags: ["workbench", "output"],
         capabilityModes: ["content"],
-        toolAdapters: []
+        inputs: [],
+        outputs: [
+            {
+                key: "primary",
+                label: "Published output",
+                kind: "content",
+                required: false,
+                expandableKeys: []
+            }
+        ],
+        toolAdapters: [],
+        snapshotResolverKey: "generic"
     };
 }
 export function resolveForgeBoxSnapshot(boxId) {
-    if (boxId === "kanban:board") {
-        return summarizeSearchMatches(boxId, "", ["task"], 24);
-    }
-    if (boxId === "projects:list") {
-        return summarizeSearchMatches(boxId, "", ["project"], 20);
-    }
-    if (boxId === "today:focus") {
-        return summarizeSearchMatches(boxId, "", ["task", "habit"], 16);
-    }
-    if (boxId === "overview:priorities") {
-        return summarizeSearchMatches(boxId, "", ["goal", "project", "task"], 18);
+    if (boxId.startsWith("connector-output:")) {
+        const outputId = boxId.replace(/^connector-output:/, "");
+        const rows = getDatabase()
+            .prepare(`SELECT id, title, published_outputs_json, last_run_json FROM ai_connectors ORDER BY updated_at DESC`)
+            .all();
+        for (const row of rows) {
+            const outputs = JSON.parse(row.published_outputs_json || "[]");
+            const output = outputs.find((entry) => entry.id === outputId);
+            if (!output) {
+                continue;
+            }
+            const lastRun = row.last_run_json
+                ? JSON.parse(row.last_run_json)
+                : null;
+            const published = lastRun?.result?.outputs?.[outputId] ?? null;
+            return {
+                boxId,
+                label: output.label,
+                capturedAt: new Date().toISOString(),
+                contentText: published?.text ?? `${row.title}\nNo published output has been generated yet.`,
+                contentJson: published?.json ?? null,
+                tools: []
+            };
+        }
     }
     const entry = getForgeBoxCatalogEntry(boxId);
+    if (entry?.snapshotResolverKey === "kanban-board") {
+        return summarizeSearchMatches(boxId, "", ["task"], 24);
+    }
+    if (entry?.snapshotResolverKey === "projects-list") {
+        return summarizeSearchMatches(boxId, "", ["project"], 20);
+    }
+    if (entry?.snapshotResolverKey === "today-focus") {
+        return summarizeSearchMatches(boxId, "", ["task", "habit"], 16);
+    }
+    if (entry?.snapshotResolverKey === "overview-priorities") {
+        return summarizeSearchMatches(boxId, "", ["goal", "project", "task"], 18);
+    }
+    if (entry?.snapshotResolverKey === "quick-capture") {
+        return {
+            boxId,
+            label: entry.label,
+            capturedAt: new Date().toISOString(),
+            contentText: `${entry.label}\n${entry.description}\nThis surface can draft notes and wiki pages.`,
+            contentJson: {
+                routePath: entry.routePath,
+                category: entry.category,
+                tags: entry.tags
+            },
+            tools: entry.toolAdapters
+        };
+    }
+    if (entry?.snapshotResolverKey === "notes-library") {
+        const notes = listNotes({ limit: 12 });
+        return {
+            boxId,
+            label: entry.label,
+            capturedAt: new Date().toISOString(),
+            contentText: notes.length > 0
+                ? notes
+                    .map((note) => {
+                    const firstLine = note.contentPlain.trim().split(/\n+/)[0] ?? "Untitled note";
+                    return `${note.author || "Unknown"}: ${firstLine.slice(0, 140)}`;
+                })
+                    .join("\n")
+                : "No notes are available yet.",
+            contentJson: {
+                noteCount: notes.length,
+                noteIds: notes.map((note) => note.id)
+            },
+            tools: entry.toolAdapters
+        };
+    }
+    if (entry?.snapshotResolverKey === "sleep-history") {
+        const sleep = getSleepViewData();
+        return {
+            boxId,
+            label: entry.label,
+            capturedAt: new Date().toISOString(),
+            contentText: sleep.sessions.length > 0
+                ? sleep.sessions
+                    .slice(0, 10)
+                    .map((session) => `${session.startedAt} -> ${session.endedAt} · score ${session.sleepScore ?? "n/a"} · asleep ${Math.round(session.asleepSeconds / 3600 * 10) / 10}h`)
+                    .join("\n")
+                : "No sleep sessions are available yet.",
+            contentJson: {
+                sessionCount: sleep.sessions.length,
+                summary: sleep.summary
+            },
+            tools: entry.toolAdapters
+        };
+    }
+    if (entry?.snapshotResolverKey === "sports-history") {
+        const fitness = getFitnessViewData();
+        return {
+            boxId,
+            label: entry.label,
+            capturedAt: new Date().toISOString(),
+            contentText: fitness.sessions.length > 0
+                ? fitness.sessions
+                    .slice(0, 10)
+                    .map((session) => `${session.workoutType} · ${session.startedAt} · ${Math.round(session.durationSeconds / 60)}m`)
+                    .join("\n")
+                : "No workout sessions are available yet.",
+            contentJson: {
+                sessionCount: fitness.sessions.length,
+                summary: fitness.summary
+            },
+            tools: entry.toolAdapters
+        };
+    }
+    if (entry?.snapshotResolverKey === "movement-places") {
+        const places = listMovementPlaces();
+        return {
+            boxId,
+            label: entry.label,
+            capturedAt: new Date().toISOString(),
+            contentText: places.length > 0
+                ? places
+                    .slice(0, 16)
+                    .map((place) => `${place.label} · ${place.categoryTags.join(", ") || "untagged"} · radius ${Math.round(place.radiusMeters)}m`)
+                    .join("\n")
+                : "No known places are registered yet.",
+            contentJson: {
+                placeCount: places.length,
+                placeIds: places.map((place) => place.id)
+            },
+            tools: entry.toolAdapters
+        };
+    }
     return {
         boxId,
         label: entry?.label ?? boxId,

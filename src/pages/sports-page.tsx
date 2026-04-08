@@ -12,6 +12,7 @@ import { EntityLinkMultiSelect } from "@/components/psyche/entity-link-multisele
 import { FacetedTokenSearch, type FacetedTokenOption } from "@/components/search/faceted-token-search";
 import { useForgeShell } from "@/components/shell/app-shell";
 import { PageHero } from "@/components/shell/page-hero";
+import { WorkbenchSection } from "@/components/workbench/workbench-section";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { SurfaceSkeleton } from "@/components/experience/surface-skeleton";
@@ -658,7 +659,8 @@ export function SportsPage() {
         badge={`${sessions.length} sessions`}
       />
 
-      <section className="grid gap-4 lg:grid-cols-4">
+      <WorkbenchSection boxId="surface:sports-index:summary" surfaceId="sports-index">
+        <section className="grid gap-4 lg:grid-cols-4">
         <Card>
           <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">
             Weekly volume
@@ -745,9 +747,11 @@ export function SportsPage() {
             Dominant workout type across the recent window.
           </div>
         </Card>
-      </section>
+        </section>
+      </WorkbenchSection>
 
-      <section className="grid gap-4 lg:grid-cols-[1.05fr_0.95fr]">
+      <WorkbenchSection boxId="surface:sports-index:composition" surfaceId="sports-index">
+        <section className="grid gap-4 lg:grid-cols-[1.05fr_0.95fr]">
         <Card className="grid gap-4">
           <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">
             Recent volume
@@ -840,9 +844,11 @@ export function SportsPage() {
             </div>
           </div>
         </Card>
-      </section>
+        </section>
+      </WorkbenchSection>
 
-      <section className="grid gap-4 xl:grid-cols-[minmax(0,25rem)_minmax(0,1fr)]">
+      <WorkbenchSection boxId="surface:sports-index:browser" surfaceId="sports-index">
+        <section className="grid gap-4 xl:grid-cols-[minmax(0,25rem)_minmax(0,1fr)]">
         <FacetedTokenSearch
           title="Session browser"
           description="Search past activities by workout type, source, reconciliation state, or whether they still need context."
@@ -955,7 +961,8 @@ export function SportsPage() {
             )}
           </div>
         </Card>
-      </section>
+        </section>
+      </WorkbenchSection>
 
       {activeSession && activeDraft ? (
         <SheetScaffold

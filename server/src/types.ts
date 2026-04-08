@@ -1540,6 +1540,14 @@ export const forgeBoxToolAdapterSchema = z.object({
   accessMode: aiProcessorAccessModeSchema.default("read")
 });
 
+export const forgeBoxPortDefinitionSchema = z.object({
+  key: nonEmptyTrimmedString,
+  label: nonEmptyTrimmedString,
+  kind: nonEmptyTrimmedString.default("content"),
+  required: z.boolean().default(false),
+  expandableKeys: z.array(nonEmptyTrimmedString).default([])
+});
+
 export const forgeBoxCatalogEntrySchema = z.object({
   boxId: nonEmptyTrimmedString,
   surfaceId: trimmedString.nullable(),
@@ -1547,8 +1555,12 @@ export const forgeBoxCatalogEntrySchema = z.object({
   label: nonEmptyTrimmedString,
   description: trimmedString.default(""),
   category: nonEmptyTrimmedString,
+  tags: z.array(nonEmptyTrimmedString).default([]),
   capabilityModes: z.array(forgeBoxCapabilityModeSchema).default(["content"]),
-  toolAdapters: z.array(forgeBoxToolAdapterSchema).default([])
+  inputs: z.array(forgeBoxPortDefinitionSchema).default([]),
+  outputs: z.array(forgeBoxPortDefinitionSchema).default([]),
+  toolAdapters: z.array(forgeBoxToolAdapterSchema).default([]),
+  snapshotResolverKey: nonEmptyTrimmedString.default("generic")
 });
 
 export const forgeBoxSnapshotSchema = z.object({
@@ -1562,11 +1574,15 @@ export const forgeBoxSnapshotSchema = z.object({
 
 export const aiConnectorKindSchema = z.enum(["functor", "chat"]);
 export const aiConnectorNodeTypeSchema = z.enum([
+  "box",
   "box_input",
   "user_input",
   "functor",
   "chat",
-  "output"
+  "output",
+  "merge",
+  "template",
+  "pick_key"
 ]);
 
 export const aiConnectorNodeModelConfigSchema = z.object({
@@ -1590,9 +1606,14 @@ export const aiConnectorNodeSchema = z.object({
     description: trimmedString.default(""),
     boxId: trimmedString.nullable().optional(),
     prompt: trimmedString.optional(),
+    promptTemplate: trimmedString.optional(),
     systemPrompt: trimmedString.optional(),
     outputKey: trimmedString.optional(),
     enabledToolKeys: z.array(nonEmptyTrimmedString).default([]),
+    inputs: z.array(forgeBoxPortDefinitionSchema).default([]).optional(),
+    outputs: z.array(forgeBoxPortDefinitionSchema).default([]).optional(),
+    template: trimmedString.optional(),
+    selectedKey: trimmedString.optional(),
     modelConfig: aiConnectorNodeModelConfigSchema.optional()
   })
 });
@@ -1622,7 +1643,35 @@ export const aiConnectorRunResultSchema = z.object({
       text: z.string(),
       json: z.record(z.string(), z.unknown()).nullable()
     })
-  )
+  ),
+  debugTrace: z
+    .object({
+      nodes: z.array(
+        z.object({
+          nodeId: nonEmptyTrimmedString,
+          nodeType: aiConnectorNodeTypeSchema,
+          label: nonEmptyTrimmedString,
+          input: z.array(
+            z.object({
+              sourceNodeId: nonEmptyTrimmedString,
+              sourceHandle: trimmedString.nullable(),
+              targetHandle: trimmedString.nullable(),
+              text: z.string(),
+              json: z.record(z.string(), z.unknown()).nullable()
+            })
+          ),
+          output: z.object({
+            text: z.string(),
+            json: z.record(z.string(), z.unknown()).nullable()
+          }),
+          tools: z.array(z.string()).default([]),
+          logs: z.array(z.string()).default([]),
+          error: z.string().nullable()
+        })
+      ),
+      errors: z.array(z.string()).default([])
+    })
+    .optional()
 });
 
 export const aiConnectorRunSchema = z.object({
@@ -3012,7 +3061,8 @@ export const runAiConnectorSchema = z.object({
   userInput: trimmedString.default(""),
   context: z.record(z.string(), z.unknown()).default({}),
   boxSnapshots: z.record(z.string(), z.unknown()).default({}),
-  conversationId: trimmedString.nullable().default(null)
+  conversationId: trimmedString.nullable().default(null),
+  debug: z.boolean().default(false)
 });
 
 export const createAgentTokenSchema = z.object({
@@ -3555,6 +3605,9 @@ export type ForgeBoxCapabilityMode = z.infer<
   typeof forgeBoxCapabilityModeSchema
 >;
 export type ForgeBoxToolAdapter = z.infer<typeof forgeBoxToolAdapterSchema>;
+export type ForgeBoxPortDefinition = z.infer<
+  typeof forgeBoxPortDefinitionSchema
+>;
 export type ForgeBoxCatalogEntry = z.infer<typeof forgeBoxCatalogEntrySchema>;
 export type ForgeBoxSnapshot = z.infer<typeof forgeBoxSnapshotSchema>;
 export type AiConnectorKind = z.infer<typeof aiConnectorKindSchema>;

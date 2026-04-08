@@ -2,7 +2,7 @@ import Fastify from "fastify";
 import cors from "@fastify/cors";
 import multipart from "@fastify/multipart";
 import { CronExpressionParser } from "cron-parser";
-import { ZodError } from "zod";
+import { z, ZodError } from "zod";
 import {
   configureDatabase,
   configureDatabaseSeeding,
@@ -72,7 +72,10 @@ import {
   resetSurfaceLayout,
   saveSurfaceLayout
 } from "./repositories/surface-layouts.js";
-import { listForgeBoxCatalog } from "./connectors/box-registry.js";
+import {
+  buildConnectorOutputCatalogEntry,
+  listForgeBoxCatalog
+} from "./connectors/box-registry.js";
 import {
   createHabit,
   createHabitCheckIn,
@@ -9223,136 +9226,214 @@ export async function buildServer(
       { trigger: "route" }
     );
   });
-  app.get("/api/v1/ai-connectors/catalog/boxes", async (request) => {
-    requireScopedAccess(request.headers as Record<string, unknown>, ["read"], {
-      route: "/api/v1/ai-connectors/catalog/boxes"
-    });
-    return {
-      boxes: listForgeBoxCatalog()
-    };
-  });
-  app.get("/api/v1/ai-connectors", async (request) => {
-    requireScopedAccess(request.headers as Record<string, unknown>, ["read"], {
-      route: "/api/v1/ai-connectors"
-    });
-    return {
-      connectors: listAiConnectors()
-    };
-  });
-  app.post("/api/v1/ai-connectors", async (request, reply) => {
-    requireScopedAccess(request.headers as Record<string, unknown>, ["write"], {
-      route: "/api/v1/ai-connectors"
-    });
-    const connector = createAiConnector(
-      createAiConnectorSchema.parse(request.body ?? {})
-    );
-    reply.code(201);
-    return { connector };
-  });
-  app.get("/api/v1/ai-connectors/:id", async (request, reply) => {
-    requireScopedAccess(request.headers as Record<string, unknown>, ["read"], {
-      route: "/api/v1/ai-connectors/:id"
-    });
-    const connector = getAiConnectorById((request.params as { id: string }).id);
-    if (!connector) {
-      reply.code(404);
-      return { error: "AI connector not found" };
+  const registerFlowApiRoutes = (
+    basePath: string,
+    noun: string,
+    options?: {
+      includeLegacyBoxAliases?: boolean;
+      collectionKey?: "connectors" | "flows";
+      singularKey?: "connector" | "flow";
+      catalogPath?: string;
     }
-    return {
-      connector,
-      runs: listAiConnectorRuns(connector.id),
-      conversation: getAiConnectorConversationForConnector(connector.id)
-    };
-  });
-  app.patch("/api/v1/ai-connectors/:id", async (request, reply) => {
-    requireScopedAccess(request.headers as Record<string, unknown>, ["write"], {
-      route: "/api/v1/ai-connectors/:id"
+  ) => {
+    const collectionKey = options?.collectionKey ?? "connectors";
+    const singularKey = options?.singularKey ?? "connector";
+    const catalogPath = options?.catalogPath ?? `${basePath}/catalog/boxes`;
+    app.get(catalogPath, async (request) => {
+      requireScopedAccess(request.headers as Record<string, unknown>, ["read"], {
+        route: catalogPath
+      });
+      return {
+        boxes: [
+          ...listForgeBoxCatalog({
+            includeLegacyAliases: options?.includeLegacyBoxAliases === true
+          }),
+          ...listAiConnectors().flatMap((connector) =>
+            connector.publishedOutputs.map((output) =>
+              buildConnectorOutputCatalogEntry({
+                connectorId: connector.id,
+                title: connector.title,
+                outputId: output.id
+              })
+            )
+          )
+        ]
+      };
     });
-    const connector = updateAiConnector(
-      (request.params as { id: string }).id,
-      updateAiConnectorSchema.parse(request.body ?? {})
-    );
-    if (!connector) {
-      reply.code(404);
-      return { error: "AI connector not found" };
-    }
-    return { connector };
-  });
-  app.delete("/api/v1/ai-connectors/:id", async (request, reply) => {
-    requireScopedAccess(request.headers as Record<string, unknown>, ["write"], {
-      route: "/api/v1/ai-connectors/:id"
+    app.get(basePath, async (request) => {
+      requireScopedAccess(request.headers as Record<string, unknown>, ["read"], {
+        route: basePath
+      });
+      return {
+        [collectionKey]: listAiConnectors()
+      };
     });
-    const connector = deleteAiConnector((request.params as { id: string }).id);
-    if (!connector) {
-      reply.code(404);
-      return { error: "AI connector not found" };
-    }
-    return { connector };
-  });
-  app.post("/api/v1/ai-connectors/:id/run", async (request, reply) => {
-    requireScopedAccess(request.headers as Record<string, unknown>, ["write"], {
-      route: "/api/v1/ai-connectors/:id/run"
+    app.post(basePath, async (request, reply) => {
+      requireScopedAccess(request.headers as Record<string, unknown>, ["write"], {
+        route: basePath
+      });
+      const connector = createAiConnector(
+        createAiConnectorSchema.parse(request.body ?? {})
+      );
+      reply.code(201);
+      return { [singularKey]: connector };
     });
-    const connector = getAiConnectorById((request.params as { id: string }).id);
-    if (!connector) {
+    app.get(`${basePath}/:id`, async (request, reply) => {
+      requireScopedAccess(request.headers as Record<string, unknown>, ["read"], {
+        route: `${basePath}/:id`
+      });
+      const connector = getAiConnectorById((request.params as { id: string }).id);
+      if (!connector) {
+        reply.code(404);
+        return { error: `${noun} not found` };
+      }
+      return {
+        [singularKey]: connector,
+        runs: listAiConnectorRuns(connector.id),
+        conversation: getAiConnectorConversationForConnector(connector.id)
+      };
+    });
+    app.patch(`${basePath}/:id`, async (request, reply) => {
+      requireScopedAccess(request.headers as Record<string, unknown>, ["write"], {
+        route: `${basePath}/:id`
+      });
+      const connector = updateAiConnector(
+        (request.params as { id: string }).id,
+        updateAiConnectorSchema.parse(request.body ?? {})
+      );
+      if (!connector) {
+        reply.code(404);
+        return { error: `${noun} not found` };
+      }
+      return { [singularKey]: connector };
+    });
+    app.delete(`${basePath}/:id`, async (request, reply) => {
+      requireScopedAccess(request.headers as Record<string, unknown>, ["write"], {
+        route: `${basePath}/:id`
+      });
+      const connector = deleteAiConnector((request.params as { id: string }).id);
+      if (!connector) {
+        reply.code(404);
+        return { error: `${noun} not found` };
+      }
+      return { [singularKey]: connector };
+    });
+    app.post(`${basePath}/:id/run`, async (request, reply) => {
+      requireScopedAccess(request.headers as Record<string, unknown>, ["write"], {
+        route: `${basePath}/:id/run`
+      });
+      const connector = getAiConnectorById((request.params as { id: string }).id);
+      if (!connector) {
+        reply.code(404);
+        return { error: `${noun} not found` };
+      }
+      return await runAiConnector(
+        connector.id,
+        runAiConnectorSchema.parse(request.body ?? {}),
+        {
+          llm: managers.llm,
+          secrets: managers.secrets
+        },
+        "run"
+      );
+    });
+    app.post(`${basePath}/:id/chat`, async (request, reply) => {
+      requireScopedAccess(request.headers as Record<string, unknown>, ["write"], {
+        route: `${basePath}/:id/chat`
+      });
+      const connector = getAiConnectorById((request.params as { id: string }).id);
+      if (!connector) {
+        reply.code(404);
+        return { error: `${noun} not found` };
+      }
+      return await runAiConnector(
+        connector.id,
+        runAiConnectorSchema.parse(request.body ?? {}),
+        {
+          llm: managers.llm,
+          secrets: managers.secrets
+        },
+        "chat"
+      );
+    });
+    app.get(`${basePath}/:id/output`, async (request, reply) => {
+      requireScopedAccess(request.headers as Record<string, unknown>, ["read"], {
+        route: `${basePath}/:id/output`
+      });
+      const connector = getAiConnectorById((request.params as { id: string }).id);
+      if (!connector) {
+        reply.code(404);
+        return { error: `${noun} not found` };
+      }
+      return {
+        [singularKey]: connector,
+        output: connector.lastRun?.result ?? null
+      };
+    });
+    app.get(`${basePath}/:id/runs`, async (request, reply) => {
+      requireScopedAccess(request.headers as Record<string, unknown>, ["read"], {
+        route: `${basePath}/:id/runs`
+      });
+      const connector = getAiConnectorById((request.params as { id: string }).id);
+      if (!connector) {
+        reply.code(404);
+        return { error: `${noun} not found` };
+      }
+      return {
+        runs: listAiConnectorRuns(connector.id)
+      };
+    });
+  };
+  registerFlowApiRoutes("/api/v1/workbench/flows", "Workbench flow", {
+    collectionKey: "flows",
+    singularKey: "flow",
+    catalogPath: "/api/v1/workbench/catalog/boxes"
+  });
+  registerFlowApiRoutes("/api/v1/ai-connectors", "AI connector", {
+    includeLegacyBoxAliases: true
+  });
+  app.post("/api/v1/workbench/run", async (request, reply) => {
+    requireScopedAccess(request.headers as Record<string, unknown>, ["write"], {
+      route: "/api/v1/workbench/run"
+    });
+    const payload = runAiConnectorSchema
+      .extend({
+        flowId: z.string().trim().min(1)
+      })
+      .parse(request.body ?? {});
+    const flow = getAiConnectorById(payload.flowId);
+    if (!flow) {
       reply.code(404);
-      return { error: "AI connector not found" };
+      return { error: "Workbench flow not found" };
     }
-    return await runAiConnector(
-      connector.id,
-      runAiConnectorSchema.parse(request.body ?? {}),
+    const { flowId, ...runInput } = payload;
+    const execution = await runAiConnector(
+      flow.id,
+      runInput,
       {
         llm: managers.llm,
         secrets: managers.secrets
       },
       "run"
     );
+    return {
+      flow: execution.connector,
+      run: execution.run,
+      conversation: execution.conversation
+    };
   });
-  app.post("/api/v1/ai-connectors/:id/chat", async (request, reply) => {
-    requireScopedAccess(request.headers as Record<string, unknown>, ["write"], {
-      route: "/api/v1/ai-connectors/:id/chat"
+  app.get("/api/v1/workbench/flows/by-slug/:slug", async (request, reply) => {
+    requireScopedAccess(request.headers as Record<string, unknown>, ["read"], {
+      route: "/api/v1/workbench/flows/by-slug/:slug"
     });
-    const connector = getAiConnectorById((request.params as { id: string }).id);
-    if (!connector) {
-      reply.code(404);
-      return { error: "AI connector not found" };
-    }
-    return await runAiConnector(
-      connector.id,
-      runAiConnectorSchema.parse(request.body ?? {}),
-      {
-        llm: managers.llm,
-        secrets: managers.secrets
-      },
-      "chat"
+    const connector = getAiConnectorBySlug(
+      (request.params as { slug: string }).slug
     );
-  });
-  app.get("/api/v1/ai-connectors/:id/output", async (request, reply) => {
-    requireScopedAccess(request.headers as Record<string, unknown>, ["read"], {
-      route: "/api/v1/ai-connectors/:id/output"
-    });
-    const connector = getAiConnectorById((request.params as { id: string }).id);
     if (!connector) {
       reply.code(404);
-      return { error: "AI connector not found" };
+      return { error: "Workbench flow not found" };
     }
-    return {
-      connector,
-      output: connector.lastRun?.result ?? null
-    };
-  });
-  app.get("/api/v1/ai-connectors/:id/runs", async (request, reply) => {
-    requireScopedAccess(request.headers as Record<string, unknown>, ["read"], {
-      route: "/api/v1/ai-connectors/:id/runs"
-    });
-    const connector = getAiConnectorById((request.params as { id: string }).id);
-    if (!connector) {
-      reply.code(404);
-      return { error: "AI connector not found" };
-    }
-    return {
-      runs: listAiConnectorRuns(connector.id)
-    };
+    return { flow: connector };
   });
   app.get("/api/v1/ai-connectors/by-slug/:slug", async (request, reply) => {
     requireScopedAccess(request.headers as Record<string, unknown>, ["read"], {

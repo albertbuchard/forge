@@ -1,6 +1,8 @@
 import { useEffect, type ReactElement } from "react";
 import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { AppShell } from "@/components/shell/app-shell";
+import { WorkbenchProvider } from "@/components/workbench/workbench-provider";
+import { WorkbenchRouteSurface } from "@/components/workbench/workbench-route-surface";
 import {
   createUiDiagnosticLogger,
   publishUiDiagnosticLog
@@ -57,6 +59,7 @@ import { WikiIngestHistoryPage } from "@/pages/wiki-ingest-history-page";
 import { WikiEditorPage } from "@/pages/wiki-editor-page";
 import { WeeklyReviewPage } from "@/pages/weekly-review-page";
 import { WorkbenchPage } from "@/pages/workbench-page";
+import { WorkbenchFlowPage } from "@/pages/workbench-flow-page";
 
 function DiagnosticsBootstrap() {
   const location = useLocation();
@@ -131,11 +134,15 @@ export function App() {
     _description: string,
     element: ReactElement
   ) {
-    return element;
+    return (
+      <WorkbenchRouteSurface surfaceId={_surfaceId}>
+        {element}
+      </WorkbenchRouteSurface>
+    );
   }
 
   return (
-    <>
+    <WorkbenchProvider>
       <DiagnosticsBootstrap />
       <Routes>
         <Route element={<AppShell />}>
@@ -456,7 +463,24 @@ export function App() {
             )}
           />
           <Route path="today" element={<TodayPage />} />
-          <Route path="workbench" element={<WorkbenchPage />} />
+          <Route
+            path="workbench"
+            element={surface(
+              "workbench",
+              "Workbench",
+              "Search, organize, and launch Forge flows.",
+              <WorkbenchPage />
+            )}
+          />
+          <Route
+            path="workbench/:flowId"
+            element={surface(
+              "workbench-flow",
+              "Workbench flow",
+              "Graph editor and runtime surface for a single flow.",
+              <WorkbenchFlowPage />
+            )}
+          />
           <Route
             path="activity"
             element={surface(
@@ -586,6 +610,6 @@ export function App() {
         </Route>
         <Route path="*" element={<Navigate to="/overview" replace />} />
       </Routes>
-    </>
+    </WorkbenchProvider>
   );
 }

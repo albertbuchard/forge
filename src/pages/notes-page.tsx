@@ -17,6 +17,7 @@ import { NoteMarkdown } from "@/components/notes/note-markdown";
 import { NoteTagsInput } from "@/components/notes/note-tags-input";
 import { PageHero } from "@/components/shell/page-hero";
 import { useForgeShell } from "@/components/shell/app-shell";
+import { WorkbenchSection } from "@/components/workbench/workbench-section";
 import {
   FloatingActionMenu,
   type FloatingActionMenuItem
@@ -664,7 +665,8 @@ export function NotesPage() {
         }
       />
 
-      <Card className="grid gap-4">
+      <WorkbenchSection boxId="surface:notes-index:filters" surfaceId="notes-index">
+        <Card className="grid gap-4">
         <NoteFilterInput
           entityOptions={entityFilterOptions}
           selectedEntityValues={selectedEntityValues}
@@ -696,10 +698,12 @@ export function NotesPage() {
             onChange={(event) => setUpdatedTo(event.target.value)}
           />
         </div>
-      </Card>
+        </Card>
+      </WorkbenchSection>
 
       {composerOpen ? (
-        <Card className="grid gap-4">
+        <WorkbenchSection boxId="surface:notes-index:composer" surfaceId="notes-index">
+          <Card className="grid gap-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <div className="font-label text-[11px] uppercase tracking-[0.16em] text-white/42">
@@ -845,7 +849,8 @@ export function NotesPage() {
               Save note
             </Button>
           </div>
-        </Card>
+          </Card>
+        </WorkbenchSection>
       ) : null}
 
       {notesQuery.isLoading ? (
@@ -857,7 +862,8 @@ export function NotesPage() {
           description="Try broader linked-entity filters, remove a date bound, or add the first durable note from the button above."
         />
       ) : (
-        <div className="grid gap-3">
+        <WorkbenchSection boxId="surface:notes-index:library" surfaceId="notes-index">
+          <div className="grid gap-3">
           {visibleNotes.map((note) => {
             const primaryLink = getPrimaryNavigableLink(note);
             const href = primaryLink
@@ -1112,7 +1118,8 @@ export function NotesPage() {
               </Card>
             );
           })}
-        </div>
+          </div>
+        </WorkbenchSection>
       )}
 
       <FloatingActionMenu

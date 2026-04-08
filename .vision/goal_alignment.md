@@ -78,11 +78,12 @@ app without forcing every page through one size-managed dashboard grid. Every ro
 page must keep its authored responsive mobile and desktop layout in normal viewing
 mode, while the layout editor only controls box visibility, ordering, and whether a
 box spans the full route width on larger screens.
-Twelfth, it must support global AI Connectors as first-class graph assets rather than
-surface widgets. A connector must be able to consume registered Forge boxes from any
-view, use box snapshots and tool adapters as graph inputs, run as a functor or chat
-connector, persist run history and optional conversation memory, and publish outputs
-through dedicated connector API routes.
+Twelfth, it must support Workbench as the canonical graph-flow system rather than
+page-local AI widgets. A Workbench flow must be able to consume registered Forge boxes
+from any view, use box snapshots and tool adapters as graph inputs, run as a functor
+or chat flow, persist run history and optional conversation memory, and publish outputs
+through dedicated Workbench API routes while older connector routes remain temporary
+compatibility aliases.
 Thirteenth, it must enforce a smooth route-handoff contract across the whole web app.
 When the user switches views, Forge should keep the previous page visible until the
 next page has finished the route-critical fetch work needed for first render. The

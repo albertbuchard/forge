@@ -2512,9 +2512,19 @@ export function runAiProcessorBySlug(
   });
 }
 
-export function listForgeBoxCatalog() {
+export function listWorkbenchBoxCatalog() {
   return request<{ boxes: import("./types").ForgeBoxCatalogEntry[] }>(
-    "/api/v1/ai-connectors/catalog/boxes"
+    "/api/v1/workbench/catalog/boxes"
+  );
+}
+
+export function listForgeBoxCatalog() {
+  return listWorkbenchBoxCatalog();
+}
+
+export function listWorkbenchFlows() {
+  return request<{ flows: import("./types").AiConnector[] }>(
+    "/api/v1/workbench/flows"
   );
 }
 
@@ -2524,7 +2534,7 @@ export function listAiConnectors() {
   );
 }
 
-export function createAiConnector(input: {
+export function createWorkbenchFlow(input: {
   title: string;
   description?: string;
   kind?: import("./types").AiConnectorKind;
@@ -2535,6 +2545,16 @@ export function createAiConnector(input: {
     edges: import("./types").AiConnectorEdge[];
   };
 }) {
+  return request<{ flow: import("./types").AiConnector }>(
+    "/api/v1/workbench/flows",
+    {
+      method: "POST",
+      body: JSON.stringify(input)
+    }
+  );
+}
+
+export function createAiConnector(input: Parameters<typeof createWorkbenchFlow>[0]) {
   return request<{ connector: import("./types").AiConnector }>(
     "/api/v1/ai-connectors",
     {
@@ -2542,6 +2562,14 @@ export function createAiConnector(input: {
       body: JSON.stringify(input)
     }
   );
+}
+
+export function getWorkbenchFlow(connectorId: string) {
+  return request<{
+    flow: import("./types").AiConnector;
+    runs: import("./types").AiConnectorRun[];
+    conversation: import("./types").AiConnectorConversation | null;
+  }>(`/api/v1/workbench/flows/${connectorId}`);
 }
 
 export function getAiConnector(connectorId: string) {
@@ -2552,7 +2580,7 @@ export function getAiConnector(connectorId: string) {
   }>(`/api/v1/ai-connectors/${connectorId}`);
 }
 
-export function updateAiConnector(
+export function updateWorkbenchFlow(
   connectorId: string,
   patch: Partial<{
     title: string;
@@ -2566,11 +2594,33 @@ export function updateAiConnector(
     };
   }>
 ) {
+  return request<{ flow: import("./types").AiConnector }>(
+    `/api/v1/workbench/flows/${connectorId}`,
+    {
+      method: "PATCH",
+      body: JSON.stringify(patch)
+    }
+  );
+}
+
+export function updateAiConnector(
+  connectorId: string,
+  patch: Parameters<typeof updateWorkbenchFlow>[1]
+) {
   return request<{ connector: import("./types").AiConnector }>(
     `/api/v1/ai-connectors/${connectorId}`,
     {
       method: "PATCH",
       body: JSON.stringify(patch)
+    }
+  );
+}
+
+export function deleteWorkbenchFlow(connectorId: string) {
+  return request<{ flow: import("./types").AiConnector }>(
+    `/api/v1/workbench/flows/${connectorId}`,
+    {
+      method: "DELETE"
     }
   );
 }
@@ -2584,14 +2634,29 @@ export function deleteAiConnector(connectorId: string) {
   );
 }
 
-export function runAiConnector(
+export function runWorkbenchFlow(
   connectorId: string,
   input: {
     userInput?: string;
     context?: Record<string, unknown>;
     boxSnapshots?: Record<string, unknown>;
     conversationId?: string | null;
+    debug?: boolean;
   }
+) {
+  return request<{
+    flow: import("./types").AiConnector;
+    run: import("./types").AiConnectorRun;
+    conversation: import("./types").AiConnectorConversation | null;
+  }>(`/api/v1/workbench/flows/${connectorId}/run`, {
+    method: "POST",
+    body: JSON.stringify(input)
+  });
+}
+
+export function runAiConnector(
+  connectorId: string,
+  input: Parameters<typeof runWorkbenchFlow>[1]
 ) {
   return request<{
     connector: import("./types").AiConnector;
@@ -2603,14 +2668,29 @@ export function runAiConnector(
   });
 }
 
-export function chatAiConnector(
+export function chatWorkbenchFlow(
   connectorId: string,
   input: {
     userInput?: string;
     context?: Record<string, unknown>;
     boxSnapshots?: Record<string, unknown>;
     conversationId?: string | null;
+    debug?: boolean;
   }
+) {
+  return request<{
+    flow: import("./types").AiConnector;
+    run: import("./types").AiConnectorRun;
+    conversation: import("./types").AiConnectorConversation | null;
+  }>(`/api/v1/workbench/flows/${connectorId}/chat`, {
+    method: "POST",
+    body: JSON.stringify(input)
+  });
+}
+
+export function chatAiConnector(
+  connectorId: string,
+  input: Parameters<typeof chatWorkbenchFlow>[1]
 ) {
   return request<{
     connector: import("./types").AiConnector;
@@ -2622,6 +2702,13 @@ export function chatAiConnector(
   });
 }
 
+export function getWorkbenchFlowOutput(connectorId: string) {
+  return request<{
+    flow: import("./types").AiConnector;
+    output: import("./types").AiConnectorRunResult | null;
+  }>(`/api/v1/workbench/flows/${connectorId}/output`);
+}
+
 export function getAiConnectorOutput(connectorId: string) {
   return request<{
     connector: import("./types").AiConnector;
@@ -2629,10 +2716,14 @@ export function getAiConnectorOutput(connectorId: string) {
   }>(`/api/v1/ai-connectors/${connectorId}/output`);
 }
 
-export function getAiConnectorRuns(connectorId: string) {
+export function getWorkbenchFlowRuns(connectorId: string) {
   return request<{ runs: import("./types").AiConnectorRun[] }>(
-    `/api/v1/ai-connectors/${connectorId}/runs`
+    `/api/v1/workbench/flows/${connectorId}/runs`
   );
+}
+
+export function getAiConnectorRuns(connectorId: string) {
+  return getWorkbenchFlowRuns(connectorId);
 }
 
 export function getCompanionOverview(userIds?: string[] | unknown) {

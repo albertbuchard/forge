@@ -7,6 +7,7 @@ import { PsycheSectionNav } from "@/components/psyche/psyche-section-nav";
 import { FacetedTokenSearch, type FacetedTokenOption } from "@/components/search/faceted-token-search";
 import { useForgeShell } from "@/components/shell/app-shell";
 import { PageHero } from "@/components/shell/page-hero";
+import { WorkbenchSection } from "@/components/workbench/workbench-section";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { SurfaceSkeleton } from "@/components/experience/surface-skeleton";
@@ -655,7 +656,8 @@ export function SleepPage() {
 
       <PsycheSectionNav />
 
-      <section className="grid gap-4 lg:grid-cols-4">
+      <WorkbenchSection boxId="surface:sleep-index:summary" surfaceId="sleep-index">
+        <section className="grid gap-4 lg:grid-cols-4">
         <Card>
           <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">
             Weekly sleep
@@ -745,9 +747,11 @@ export function SleepPage() {
             Mean bedtime and wake-time drift against your recent baseline.
           </div>
         </Card>
-      </section>
+        </section>
+      </WorkbenchSection>
 
-      <section className="grid gap-4 lg:grid-cols-[1.1fr_0.9fr]">
+      <WorkbenchSection boxId="surface:sleep-index:patterns" surfaceId="sleep-index">
+        <section className="grid gap-4 lg:grid-cols-[1.1fr_0.9fr]">
         <Card className="grid gap-4">
           <div className="flex items-center justify-between gap-3">
             <div>
@@ -872,9 +876,11 @@ export function SleepPage() {
             </div>
           </div>
         </Card>
-      </section>
+        </section>
+      </WorkbenchSection>
 
-      <section className="grid gap-4 xl:grid-cols-[minmax(0,25rem)_minmax(0,1fr)]">
+      <WorkbenchSection boxId="surface:sleep-index:browser" surfaceId="sleep-index">
+        <section className="grid gap-4 xl:grid-cols-[minmax(0,25rem)_minmax(0,1fr)]">
         <FacetedTokenSearch
           title="Night browser"
           description="Search previous nights by source, recovery state, reflective status, or whether they still need links."
@@ -990,7 +996,8 @@ export function SleepPage() {
             )}
           </div>
         </Card>
-      </section>
+        </section>
+      </WorkbenchSection>
 
       {activeSession && activeDraft ? (
         <SheetScaffold

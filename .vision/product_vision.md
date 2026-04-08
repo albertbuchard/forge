@@ -49,12 +49,14 @@ empty states, generic skeleton flashes, or half-loaded page shells just because 
 query is still in flight.
 
 AI automation should move out of page-local widgets and into a dedicated global
-Connectors workspace. A connector is a graph asset that can consume registered Forge
-boxes from any view, pull structured content snapshots, invoke approved box tools, and
-run either as a one-shot functor or as a chat connector with optional memory. The
-graph editor should feel like a serious visual workflow product, but its visuals must
-still belong to Forge's theme and type system rather than importing an alien design
-language into the app.
+Workbench workspace. A Workbench flow is a graph asset that can consume registered
+Forge boxes from any view, pull structured content snapshots, invoke approved box
+tools, and run either as a one-shot functor or as a chat flow with optional memory.
+Workbench is the canonical product surface for these graphs; older connector routes and
+runtime names may remain as temporary compatibility layers only. The graph editor
+should feel like a serious visual workflow product, but its visuals must still belong
+to Forge's theme and type system rather than importing an alien design language into
+the app.
 
 That operating model must now be explicitly multi-user. Forge should support multiple
 Forge users in one runtime, and every Forge user must be marked as either `human` or

@@ -1765,6 +1765,14 @@ export interface ForgeBoxToolAdapter {
   accessMode: "read" | "write" | "read_write" | "exec";
 }
 
+export interface ForgeBoxPortDefinition {
+  key: string;
+  label: string;
+  kind: string;
+  required?: boolean;
+  expandableKeys?: string[];
+}
+
 export interface ForgeBoxCatalogEntry {
   boxId: string;
   surfaceId: string | null;
@@ -1772,8 +1780,12 @@ export interface ForgeBoxCatalogEntry {
   label: string;
   description: string;
   category: string;
+  tags: string[];
   capabilityModes: ForgeBoxCapabilityMode[];
+  inputs: ForgeBoxPortDefinition[];
+  outputs: ForgeBoxPortDefinition[];
   toolAdapters: ForgeBoxToolAdapter[];
+  snapshotResolverKey: string;
 }
 
 export interface ForgeBoxSnapshot {
@@ -1787,11 +1799,15 @@ export interface ForgeBoxSnapshot {
 
 export type AiConnectorKind = "functor" | "chat";
 export type AiConnectorNodeType =
+  | "box"
   | "box_input"
   | "user_input"
   | "functor"
   | "chat"
-  | "output";
+  | "output"
+  | "merge"
+  | "template"
+  | "pick_key";
 
 export interface AiConnectorNodeModelConfig {
   connectionId: string | null;
@@ -1811,9 +1827,14 @@ export interface AiConnectorNode {
     description: string;
     boxId?: string | null;
     prompt?: string;
+    promptTemplate?: string;
     systemPrompt?: string;
     outputKey?: string;
     enabledToolKeys?: string[];
+    inputs?: ForgeBoxPortDefinition[];
+    outputs?: ForgeBoxPortDefinition[];
+    template?: string;
+    selectedKey?: string;
     modelConfig?: AiConnectorNodeModelConfig;
   };
 }
@@ -1844,6 +1865,28 @@ export interface AiConnectorRunResult {
       json: Record<string, unknown> | null;
     }
   >;
+  debugTrace?: {
+    nodes: Array<{
+      nodeId: string;
+      nodeType: AiConnectorNodeType;
+      label: string;
+      input: Array<{
+        sourceNodeId: string;
+        sourceHandle: string | null;
+        targetHandle: string | null;
+        text: string;
+        json: Record<string, unknown> | null;
+      }>;
+      output: {
+        text: string;
+        json: Record<string, unknown> | null;
+      };
+      tools: string[];
+      logs: string[];
+      error: string | null;
+    }>;
+    errors: string[];
+  };
 }
 
 export interface AiConnectorRun {

@@ -177,6 +177,20 @@ test("ai connectors can be created, run, and expose published outputs", async ()
     const connectorSlug = connectorBody.connector.slug;
     assert.equal(connectorBody.connector.publishedOutputs.length, 1);
 
+    const workbenchListResponse = await app.inject({
+      method: "GET",
+      url: "/api/v1/workbench/flows",
+      headers: {
+        cookie: operatorCookie,
+        host: "127.0.0.1:4317"
+      }
+    });
+    assert.equal(workbenchListResponse.statusCode, 200);
+    const workbenchListBody = workbenchListResponse.json() as {
+      flows: Array<{ id: string }>;
+    };
+    assert.ok(workbenchListBody.flows.some((entry) => entry.id === connectorId));
+
     const catalogResponse = await app.inject({
       method: "GET",
       url: "/api/v1/ai-connectors/catalog/boxes",
@@ -191,6 +205,24 @@ test("ai connectors can be created, run, and expose published outputs", async ()
     };
     assert.ok(
       catalogBody.boxes.some((entry) => entry.boxId === "overview:priorities")
+    );
+
+    const workbenchCatalogResponse = await app.inject({
+      method: "GET",
+      url: "/api/v1/workbench/catalog/boxes",
+      headers: {
+        cookie: operatorCookie,
+        host: "127.0.0.1:4317"
+      }
+    });
+    assert.equal(workbenchCatalogResponse.statusCode, 200);
+    const workbenchCatalogBody = workbenchCatalogResponse.json() as {
+      boxes: Array<{ boxId: string }>;
+    };
+    assert.ok(
+      workbenchCatalogBody.boxes.some(
+        (entry) => entry.boxId === "surface:overview:quick-capture"
+      )
     );
 
     const runResponse = await app.inject({
@@ -211,6 +243,44 @@ test("ai connectors can be created, run, and expose published outputs", async ()
     };
     assert.equal(runBody.connector.id, connectorId);
     assert.match(runBody.run.result.primaryText, /processor-output/);
+
+    const workbenchRunResponse = await app.inject({
+      method: "POST",
+      url: "/api/v1/workbench/run",
+      headers: {
+        cookie: operatorCookie,
+        host: "127.0.0.1:4317"
+      },
+      payload: {
+        flowId: connectorId,
+        userInput: "debug run",
+        debug: true
+      }
+    });
+    assert.equal(workbenchRunResponse.statusCode, 200);
+    const workbenchRunBody = workbenchRunResponse.json() as {
+      flow: { id: string };
+      run: { result: { primaryText: string; debugTrace?: { nodes: Array<{ nodeId: string }> } } };
+    };
+    assert.equal(workbenchRunBody.flow.id, connectorId);
+    assert.match(workbenchRunBody.run.result.primaryText, /processor-output/);
+    assert.ok((workbenchRunBody.run.result.debugTrace?.nodes.length ?? 0) >= 1);
+
+    const workbenchFlowResponse = await app.inject({
+      method: "GET",
+      url: `/api/v1/workbench/flows/${connectorId}`,
+      headers: {
+        cookie: operatorCookie,
+        host: "127.0.0.1:4317"
+      }
+    });
+    assert.equal(workbenchFlowResponse.statusCode, 200);
+    const workbenchFlowBody = workbenchFlowResponse.json() as {
+      flow: { id: string };
+      runs: Array<{ status: string }>;
+    };
+    assert.equal(workbenchFlowBody.flow.id, connectorId);
+    assert.ok(workbenchFlowBody.runs.length >= 2);
 
     const outputResponse = await app.inject({
       method: "GET",
@@ -240,7 +310,7 @@ test("ai connectors can be created, run, and expose published outputs", async ()
     const runsBody = runsResponse.json() as {
       runs: Array<{ status: string; result: { primaryText: string } }>;
     };
-    assert.equal(runsBody.runs.length, 1);
+    assert.ok(runsBody.runs.length >= 2);
     assert.equal(runsBody.runs[0]?.status, "completed");
     assert.match(runsBody.runs[0]?.result.primaryText ?? "", /processor-output/);
 
@@ -253,6 +323,20 @@ test("ai connectors can be created, run, and expose published outputs", async ()
       }
     });
     assert.equal(bySlugResponse.statusCode, 200);
+
+    const workbenchBySlugResponse = await app.inject({
+      method: "GET",
+      url: `/api/v1/workbench/flows/by-slug/${connectorSlug}`,
+      headers: {
+        cookie: operatorCookie,
+        host: "127.0.0.1:4317"
+      }
+    });
+    assert.equal(workbenchBySlugResponse.statusCode, 200);
+    const workbenchBySlugBody = workbenchBySlugResponse.json() as {
+      flow: { id: string };
+    };
+    assert.equal(workbenchBySlugBody.flow.id, connectorId);
   } finally {
     globalThis.fetch = originalFetch;
     await app.close();

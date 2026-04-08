@@ -205,10 +205,10 @@ const PRIMARY_ROUTES: ShellRouteDefinition[] = [
     icon: CalendarDays
   },
   {
-    id: "connectors",
-    to: "/connectors",
-    label: "Connectors",
-    detail: "Global AI connector graphs and published outputs",
+    id: "workbench",
+    to: "/workbench",
+    label: "Workbench",
+    detail: "Global graph flows, AI tools, and published outputs",
     icon: Network
   },
   {
@@ -297,14 +297,6 @@ const PRIMARY_ROUTES: ShellRouteDefinition[] = [
   }
 ];
 
-const WORKBENCH_ROUTE: ShellRouteDefinition = {
-  id: "workbench",
-  to: "/workbench",
-  icon: LayoutGrid,
-  label: "Workbench",
-  detail: "Custom widgets and utility surface"
-};
-
 const PSYCHE_SHORTCUT_ROUTES: ShellRouteDefinition[] = PSYCHE_SECTIONS.filter(
   (route) => route.to !== "/psyche"
 ).map((route) => ({
@@ -317,7 +309,6 @@ const PSYCHE_SHORTCUT_ROUTES: ShellRouteDefinition[] = PSYCHE_SECTIONS.filter(
 
 const NAV_ROUTE_REGISTRY: ShellRouteDefinition[] = [
   ...PRIMARY_ROUTES,
-  WORKBENCH_ROUTE,
   ...PSYCHE_SHORTCUT_ROUTES
 ];
 
@@ -345,7 +336,7 @@ const MOBILE_MORE_ROUTES = [
   requirePrimaryRoute("projects"),
   requirePrimaryRoute("strategies"),
   requirePrimaryRoute("calendar"),
-  requirePrimaryRoute("connectors"),
+  requirePrimaryRoute("workbench"),
   requirePrimaryRoute("movement"),
   requirePrimaryRoute("sports"),
   requirePrimaryRoute("wiki"),
@@ -625,8 +616,9 @@ function readStoredNavIds(storageKey: string, defaults: string[]) {
     const validIds = new Set(NAV_ROUTE_REGISTRY.map((route) => route.id));
     const filtered = parsed.filter(
       (entry): entry is string =>
-        typeof entry === "string" && validIds.has(entry)
-    );
+        typeof entry === "string" && validIds.has(entry === "connectors" ? "workbench" : entry)
+    ).map((entry) => (entry === "connectors" ? "workbench" : entry))
+    ;
     return filtered.length > 0 ? filtered : defaults;
   } catch {
     return defaults;
@@ -1131,7 +1123,7 @@ function ShellNavEditor({
       onOpenChange={onOpenChange}
       eyebrow="Navigation"
       title="Customize navigation"
-      description="Add or remove main routes, Psyche shortcuts, and the custom workbench surface."
+      description="Add or remove main routes, Psyche shortcuts, and the Workbench flow workspace."
     >
       <div className="grid gap-5">
         <div className="grid gap-3">
@@ -1317,8 +1309,7 @@ function ShellFrame({
   const [navCollapsed, setNavCollapsed] = useState(false);
   const [desktopNavIds, setDesktopNavIds] = useState<string[]>(() =>
     readStoredNavIds(DESKTOP_NAV_STORAGE_KEY, [
-      ...SHELL_NAV_ROUTES.map((route) => route.id),
-      WORKBENCH_ROUTE.id
+      ...SHELL_NAV_ROUTES.map((route) => route.id)
     ])
   );
   const [mobileNavIds, setMobileNavIds] = useState<string[]>(() =>
@@ -1336,7 +1327,8 @@ function ShellFrame({
   const isPsyche = isPsycheRoute(routeLocation.pathname);
   const wikiSurface = isWikiRoute(routeLocation.pathname);
   const psycheSurface = isPsycheRoute(routeLocation.pathname);
-  const autoCollapseSurface = wikiSurface || psycheSurface;
+  const workbenchSurface = routeLocation.pathname.startsWith("/workbench");
+  const autoCollapseSurface = wikiSurface || psycheSurface || workbenchSurface;
   const desktopRoutes = desktopNavIds
     .map((id) => NAV_ROUTE_REGISTRY.find((route) => route.id === id) ?? null)
     .filter((route): route is ShellRouteDefinition => route !== null);

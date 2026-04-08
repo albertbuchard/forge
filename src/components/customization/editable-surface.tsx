@@ -27,6 +27,7 @@ import {
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { WorkbenchBox } from "@/components/workbench/workbench-provider";
 import {
   getSurfaceLayout,
   resetSurfaceLayout,
@@ -58,6 +59,7 @@ export type SurfaceWidgetDefinition = SurfaceWidgetLayoutDefinition & {
   description?: string;
   removable?: boolean;
   surfaceChrome?: "default" | "none";
+  workbenchBoxId?: string;
   processorCapability?: {
     label: string;
     mode: "content" | "tool" | "mcp" | "processor";
@@ -570,12 +572,17 @@ export function EditableSurface({
                   editing={editing}
                   width={width}
                 >
-                  {widget.render({
-                    compact: width <= 4,
-                    width,
-                    editing,
-                    preferences
-                  })}
+                  <WorkbenchBox
+                    boxId={widget.workbenchBoxId ?? `surface:${surfaceId}:${widget.id}`}
+                    surfaceId={surfaceId}
+                  >
+                    {widget.render({
+                      compact: width <= 4,
+                      width,
+                      editing,
+                      preferences
+                    })}
+                  </WorkbenchBox>
                 </SurfaceWidgetCard>
               </div>
             );

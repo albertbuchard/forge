@@ -31,6 +31,7 @@ import { ErrorState } from "@/components/ui/page-state";
 import { Input } from "@/components/ui/input";
 import { SurfaceSkeleton } from "@/components/experience/surface-skeleton";
 import { MovementLifeTimeline } from "@/components/movement/movement-life-timeline";
+import { WorkbenchSection } from "@/components/workbench/workbench-section";
 import {
   createMovementPlace,
   deleteMovementTripPoint,
@@ -970,7 +971,8 @@ export function MovementPage() {
       />
 
       <section className="grid gap-4 xl:grid-cols-[minmax(0,1.65fr)_minmax(20rem,0.95fr)]">
-        <Card className="overflow-hidden rounded-[30px] border border-white/8 bg-[radial-gradient(circle_at_top_left,rgba(107,214,255,0.16),transparent_42%),linear-gradient(180deg,rgba(10,18,35,0.98),rgba(9,15,28,0.92))]">
+        <WorkbenchSection boxId="surface:movement-index:summary" surfaceId="movement-index">
+          <Card className="overflow-hidden rounded-[30px] border border-white/8 bg-[radial-gradient(circle_at_top_left,rgba(107,214,255,0.16),transparent_42%),linear-gradient(180deg,rgba(10,18,35,0.98),rgba(9,15,28,0.92))]">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <div className="flex items-center gap-2">
@@ -1040,9 +1042,11 @@ export function MovementPage() {
               </div>
             </Card>
           </div>
-        </Card>
+          </Card>
+        </WorkbenchSection>
 
-        <Card className="rounded-[30px] border border-white/8 bg-[linear-gradient(180deg,rgba(10,17,31,0.96),rgba(8,13,24,0.92))] p-5">
+        <WorkbenchSection boxId="surface:movement-index:selection" surfaceId="movement-index">
+          <Card className="rounded-[30px] border border-white/8 bg-[linear-gradient(180deg,rgba(10,17,31,0.96),rgba(8,13,24,0.92))] p-5">
           <div className="flex items-center gap-2">
             <div className="font-label text-[11px] uppercase tracking-[0.2em] text-white/42">
               Selection aggregate
@@ -1093,11 +1097,13 @@ export function MovementPage() {
               </Badge>
             ))}
           </div>
-        </Card>
+          </Card>
+        </WorkbenchSection>
       </section>
 
       {viewMode === "life" ? (
-        <section className="grid gap-3">
+        <WorkbenchSection boxId="surface:movement-index:timeline" surfaceId="movement-index">
+          <section className="grid gap-3">
           <div className="flex items-center justify-between gap-3 px-1">
             <div className="flex items-center gap-2">
               <div className="font-label text-[11px] uppercase tracking-[0.2em] text-white/38">
@@ -1107,7 +1113,8 @@ export function MovementPage() {
             </div>
           </div>
           <MovementLifeTimeline userIds={selectedUserIds} />
-        </section>
+          </section>
+        </WorkbenchSection>
       ) : null}
 
       {viewMode === "day" ? (
@@ -1479,7 +1486,8 @@ export function MovementPage() {
       ) : null}
 
       <section className="grid gap-4 xl:grid-cols-[minmax(0,1.25fr)_minmax(22rem,0.95fr)]">
-        <Card className="rounded-[30px] border border-white/8 bg-[linear-gradient(180deg,rgba(8,14,28,0.96),rgba(9,15,28,0.92))] p-5">
+        <WorkbenchSection boxId="surface:movement-index:places" surfaceId="movement-index">
+          <Card className="rounded-[30px] border border-white/8 bg-[linear-gradient(180deg,rgba(8,14,28,0.96),rgba(9,15,28,0.92))] p-5">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <div className="flex items-center gap-2">
@@ -1537,7 +1545,8 @@ export function MovementPage() {
               </button>
             ))}
           </div>
-        </Card>
+          </Card>
+        </WorkbenchSection>
 
         <Card className="rounded-[30px] border border-white/8 bg-[linear-gradient(180deg,rgba(10,17,31,0.96),rgba(8,13,24,0.92))] p-5">
           <div className="flex items-center gap-2">
@@ -1575,7 +1584,8 @@ export function MovementPage() {
           title={selectedTripQuery.data.trip.label || "Trip datapoints"}
           description="Inspect the raw datapoints behind this trip, search them with time and quality filters, then edit or tombstone them without letting the companion re-upload the stale version."
         >
-          <div className="grid gap-4 xl:grid-cols-[minmax(0,24rem)_minmax(0,1fr)]">
+          <WorkbenchSection boxId="surface:movement-index:data-browser" surfaceId="movement-index">
+            <div className="grid gap-4 xl:grid-cols-[minmax(0,24rem)_minmax(0,1fr)]">
             <div className="grid gap-4">
               <FacetedTokenSearch
                 title="Datapoint browser"
@@ -1751,7 +1761,8 @@ export function MovementPage() {
                 Pick a datapoint to edit or delete it. The canonical change will flow back to the companion on the next sync.
               </Card>
             )}
-          </div>
+            </div>
+          </WorkbenchSection>
         </SheetScaffold>
       ) : null}
 
