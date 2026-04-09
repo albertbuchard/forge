@@ -101,6 +101,9 @@ describe("forge skill playbook parity", () => {
     expect(entityPlaybook).toMatch(/Steering moves/i);
     expect(entityPlaybook).toMatch(/feels true[\s\S]*or needs one correction/i);
     expect(entityPlaybook).toMatch(/Prefer "what", "when", and "how" before "why"/i);
+    expect(entityPlaybook).toMatch(
+      /naming question[\s\S]*unless the meaning is already clear/i
+    );
     expect(entityPlaybook).toMatch(/reusable vocabulary or taxonomy records/i);
     expect(entityPlaybook).toMatch(/emotionally meaningful vocabulary records/i);
     expect(entityPlaybook).toMatch(/adjacent record becomes visible/i);
@@ -110,6 +113,7 @@ describe("forge skill playbook parity", () => {
     expect(entityPlaybook).toMatch(/## Preference Context/);
     expect(entityPlaybook).toMatch(/## Preference Item/);
     expect(entityPlaybook).toMatch(/favorite, veto, or compare-later/i);
+    expect(entityPlaybook).toMatch(/candidate label[\s\S]*what kinds of moments belong inside it/i);
 
     expect(psychePlaybook).toMatch(/Ask only one lane at a time/i);
     expect(psychePlaybook).toMatch(/Follow-up rhythm/i);
