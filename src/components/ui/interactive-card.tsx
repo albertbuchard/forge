@@ -19,7 +19,7 @@ export function InteractiveCard({
     >
       <Card
         className={cn(
-          "transition-[transform,box-shadow,background] duration-[var(--motion-medium)] ease-[var(--ease-standard)] group-hover:bg-white/[0.06] group-hover:shadow-[var(--card-shadow-hover)] group-focus-visible:shadow-[var(--card-shadow-hover)]",
+          "transition-[transform,box-shadow,background,border-color] duration-[var(--motion-medium)] ease-[var(--ease-standard)] group-hover:border-[var(--ui-border-strong)] group-hover:bg-[var(--ui-surface-hover)] group-hover:shadow-[var(--card-shadow-hover)] group-focus-visible:shadow-[var(--card-shadow-hover)]",
           className
         )}
       >

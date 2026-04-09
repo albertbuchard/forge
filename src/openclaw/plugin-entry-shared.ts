@@ -2,7 +2,11 @@ import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import path from "node:path";
 import { buildForgeBaseUrl, buildForgeWebAppUrl, type ForgePluginConfig } from "./api-client.js";
-import { primeForgeRuntime } from "./local-runtime.js";
+import {
+  ensureForgeRuntimeReady,
+  getForgeRuntimeStatus,
+  primeForgeRuntime
+} from "./local-runtime.js";
 import { registerForgePluginCli, registerForgePluginRoutes } from "./routes.js";
 import { registerForgeSessionBootstrapHook } from "./session-bootstrap.js";
 import { registerForgePluginTools } from "./tools.js";
@@ -189,7 +193,31 @@ export const forgePluginConfigSchema: ForgePluginConfigSchema = {
 
 export function registerForgePlugin(api: ForgePluginRegistrationApi) {
   const config = resolveForgePluginConfig(api.pluginConfig);
-  primeForgeRuntime(config);
+  if (api.registerService) {
+    api.registerService({
+      id: "forge-local-runtime-bootstrap",
+      start: async ({ logger }) => {
+        if (!isLocalOrigin(config.origin)) {
+          logger.info?.(`Forge local runtime bootstrap skipped for remote target ${config.baseUrl}.`);
+          return;
+        }
+        logger.info?.(`Forge local runtime bootstrap: ensuring Forge at ${config.baseUrl}.`);
+        try {
+          await ensureForgeRuntimeReady(config);
+          const status = await getForgeRuntimeStatus(config);
+          logger.info?.(
+            `Forge local runtime bootstrap: ${status?.message ?? `Forge is ready at ${config.baseUrl}.`}`
+          );
+        } catch (error) {
+          logger.warn?.(
+            `Forge local runtime bootstrap failed for ${config.baseUrl}: ${error instanceof Error ? error.message : String(error)}`
+          );
+        }
+      }
+    });
+  } else {
+    primeForgeRuntime(config, api.logger);
+  }
   registerForgeSessionBootstrapHook(api, config);
   registerForgePluginRoutes(api, config);
   registerForgePluginCli(api, config);

@@ -77,7 +77,7 @@ export function SettingsSectionNav({ className }: { className?: string }) {
     <>
       <Card
         className={cn(
-          "overflow-hidden bg-[linear-gradient(180deg,rgba(15,24,31,0.94),rgba(10,18,25,0.92))] p-2",
+          "surface-shell-panel overflow-hidden p-2",
           className
         )}
       >
@@ -92,8 +92,8 @@ export function SettingsSectionNav({ className }: { className?: string }) {
                   cn(
                     "inline-flex items-center gap-2 whitespace-nowrap rounded-full px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.14em] transition",
                     isActive || sectionMatches(location.pathname, section.to)
-                      ? "bg-[var(--primary)]/[0.18] text-[var(--primary)]"
-                      : "bg-white/[0.04] text-white/58 hover:bg-white/[0.08] hover:text-white"
+                      ? "border border-[var(--primary)]/14 bg-[var(--ui-accent-soft)] text-[var(--primary)]"
+                      : "border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] text-[var(--ui-ink-soft)] hover:border-[var(--ui-border-strong)] hover:bg-[var(--ui-surface-hover)] hover:text-[var(--ui-ink-strong)]"
                   )
                 }
               >
@@ -107,7 +107,7 @@ export function SettingsSectionNav({ className }: { className?: string }) {
         <div className="flex items-center justify-between gap-3 lg:hidden">
           <button
             type="button"
-            className="inline-flex min-w-0 flex-1 items-center justify-between gap-3 rounded-[22px] border border-white/8 bg-[linear-gradient(180deg,rgba(19,28,42,0.96),rgba(11,17,30,0.94))] px-3.5 py-2.5 text-left shadow-[0_18px_38px_rgba(3,8,18,0.2)] transition hover:border-white/12 hover:bg-[linear-gradient(180deg,rgba(24,34,50,0.98),rgba(12,19,34,0.96))]"
+            className="surface-shell-panel inline-flex min-w-0 flex-1 items-center justify-between gap-3 rounded-[22px] border px-3.5 py-2.5 text-left transition hover:border-[var(--ui-border-strong)] hover:bg-[var(--ui-surface-hover)]"
             onClick={() => setMobileOpen(true)}
           >
             <span className="flex min-w-0 items-center gap-3">
@@ -115,15 +115,15 @@ export function SettingsSectionNav({ className }: { className?: string }) {
                 <activeSection.icon className="size-4 text-[var(--primary)]" />
               </span>
               <span className="min-w-0">
-                <span className="block text-[10px] uppercase tracking-[0.18em] text-white/40">
+                <span className="block text-[10px] uppercase tracking-[0.18em] text-[var(--ui-ink-faint)]">
                   Settings section
                 </span>
-                <span className="mt-0.5 block truncate text-sm font-medium text-white">
+                <span className="mt-0.5 block truncate text-sm font-medium text-[var(--ui-ink-strong)]">
                   {activeSection.label}
                 </span>
               </span>
             </span>
-            <span className="rounded-full border border-white/8 bg-white/[0.04] px-2.5 py-1 text-[10px] uppercase tracking-[0.16em] text-white/48">
+            <span className="rounded-full border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] px-2.5 py-1 text-[10px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
               Browse
             </span>
           </button>
@@ -133,7 +133,7 @@ export function SettingsSectionNav({ className }: { className?: string }) {
       {mobileOpen && typeof document !== "undefined"
         ? createPortal(
             <div className="lg:hidden">
-              <div className="fixed inset-0 z-50 bg-[rgba(5,10,18,0.78)] backdrop-blur-xl" />
+              <div className="surface-overlay fixed inset-0 z-50 backdrop-blur-xl" />
               <button
                 type="button"
                 aria-label="Close settings sections"
@@ -157,23 +157,23 @@ export function SettingsSectionNav({ className }: { className?: string }) {
                   role="dialog"
                   aria-modal="true"
                   aria-label="Settings sections"
-                  className="pointer-events-auto flex max-h-[min(34rem,calc(100dvh-var(--forge-mobile-nav-clearance)-1rem))] w-full max-w-xl min-h-0 flex-col overflow-hidden rounded-[30px] border border-white/10 bg-[radial-gradient(circle_at_top,rgba(99,102,241,0.12),transparent_40%),linear-gradient(180deg,rgba(18,27,42,0.98),rgba(10,15,28,0.98))] shadow-[0_36px_110px_rgba(3,8,18,0.5)]"
+                  className="surface-modal-panel pointer-events-auto flex max-h-[min(34rem,calc(100dvh-var(--forge-mobile-nav-clearance)-1rem))] w-full max-w-xl min-h-0 flex-col overflow-hidden rounded-[30px] border"
                 >
-                  <div className="shrink-0 border-b border-white/8 px-4 pb-3 pt-4 sm:px-5">
+                  <div className="shrink-0 border-b border-[var(--ui-border-subtle)] px-4 pb-3 pt-4 sm:px-5">
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
-                        <div className="font-label text-[10px] uppercase tracking-[0.22em] text-white/38">
+                        <div className="font-label text-[10px] uppercase tracking-[0.22em] text-[var(--ui-ink-faint)]">
                           Settings
                         </div>
                         <div className="mt-1 flex min-w-0 flex-wrap items-center gap-2">
-                          <div className="truncate text-base font-semibold text-white">
+                          <div className="truncate text-base font-semibold text-[var(--ui-ink-strong)]">
                             Tune Forge
                           </div>
                           <span className="rounded-full border border-[var(--primary)]/20 bg-[var(--primary)]/12 px-2.5 py-1 text-[10px] uppercase tracking-[0.16em] text-[var(--primary)]">
                             {activeSection.label}
                           </span>
                         </div>
-                        <div className="mt-1 text-xs leading-5 text-white/55">
+                        <div className="mt-1 text-xs leading-5 text-[var(--ui-ink-soft)]">
                           Jump between users, calendar, models, rewards, and
                           more.
                         </div>
@@ -181,7 +181,7 @@ export function SettingsSectionNav({ className }: { className?: string }) {
                       <button
                         type="button"
                         aria-label="Close settings sections"
-                        className="inline-flex size-10 shrink-0 items-center justify-center rounded-full border border-white/8 bg-white/[0.05] text-white/65 transition hover:border-white/12 hover:bg-white/[0.09] hover:text-white"
+                        className="inline-flex size-10 shrink-0 items-center justify-center rounded-full border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] text-[var(--ui-ink-soft)] transition hover:border-[var(--ui-border-strong)] hover:bg-[var(--ui-surface-hover)] hover:text-[var(--ui-ink-strong)]"
                         onClick={() => setMobileOpen(false)}
                       >
                         <X className="size-4" />
@@ -206,8 +206,8 @@ export function SettingsSectionNav({ className }: { className?: string }) {
                             className={cn(
                               "group flex items-center justify-between gap-3 rounded-[22px] border px-3.5 py-3 transition-[transform,border-color,background-color,color] duration-150 hover:-translate-y-[1px] hover:text-white",
                               isActive
-                                ? "border-[var(--primary)]/18 bg-[var(--primary)]/12 text-white"
-                                : "border-white/8 bg-white/[0.04] text-white/72 hover:border-white/12 hover:bg-white/[0.06]"
+                                ? "border-[var(--primary)]/18 bg-[var(--ui-accent-soft)] text-[var(--ui-ink-strong)]"
+                                : "border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] text-[var(--ui-ink-medium)] hover:border-[var(--ui-border-strong)] hover:bg-[var(--ui-surface-hover)]"
                             )}
                           >
                             <span className="flex min-w-0 items-center gap-3">
@@ -216,16 +216,16 @@ export function SettingsSectionNav({ className }: { className?: string }) {
                                   "flex size-10 shrink-0 items-center justify-center rounded-2xl border transition",
                                   isActive
                                     ? "border-[var(--primary)]/18 bg-[var(--primary)]/14 text-[var(--primary)]"
-                                    : "border-white/8 bg-[rgba(255,255,255,0.03)] text-white/58 group-hover:border-white/12 group-hover:text-white/80"
+                                    : "border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] text-[var(--ui-ink-soft)] group-hover:border-[var(--ui-border-strong)] group-hover:text-[var(--ui-ink-strong)]"
                                 )}
                               >
                                 <section.icon className="size-4" />
                               </span>
                               <span className="min-w-0">
-                                <span className="block truncate text-sm font-semibold text-white">
+                                <span className="block truncate text-sm font-semibold text-[var(--ui-ink-strong)]">
                                   {section.label}
                                 </span>
-                                <span className="mt-0.5 block text-[10px] uppercase tracking-[0.16em] text-white/35">
+                                <span className="mt-0.5 block text-[10px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
                                   Forge settings
                                 </span>
                               </span>
@@ -235,7 +235,7 @@ export function SettingsSectionNav({ className }: { className?: string }) {
                                 "rounded-full px-2.5 py-1 text-[10px] uppercase tracking-[0.16em]",
                                 isActive
                                   ? "bg-[var(--primary)]/16 text-[var(--primary)]"
-                                  : "bg-white/[0.05] text-white/42"
+                                  : "bg-[var(--ui-surface-1)] text-[var(--ui-ink-faint)]"
                               )}
                             >
                               {isActive ? "Current" : "Open"}

@@ -1,7 +1,8 @@
-import { ForgeApiError } from "./api-error";
-import { publishUiDiagnosticLog } from "./diagnostics";
-import { resolveForgePath } from "./runtime-paths";
-import { normalizeForgeSnapshot } from "./snapshot-normalizer";
+import { ForgeApiError } from "./api-error.js";
+import { dedupeCalendarDiscoveryPayload, dedupeCalendarOverviewPayload } from "./calendar-name-deduper.js";
+import { publishUiDiagnosticLog } from "./diagnostics.js";
+import { resolveForgePath } from "./runtime-paths.js";
+import { normalizeForgeSnapshot } from "./snapshot-normalizer.js";
 function normalizeCalendarEventPlace(event) {
     const fallbackLocation = typeof event.location === "string" ? event.location : "";
     const place = event.place ?? {
@@ -28,7 +29,7 @@ function normalizeCalendarEventPlace(event) {
 }
 function normalizeCalendarOverviewPayload(payload) {
     return {
-        ...payload,
+        ...dedupeCalendarOverviewPayload(payload),
         events: payload.events.map(normalizeCalendarEventPlace)
     };
 }
@@ -963,7 +964,27 @@ export function discoverCalendarConnection(input) {
     return request("/api/v1/calendar/discovery", {
         method: "POST",
         body: JSON.stringify(input)
+    }).then((response) => ({
+        ...response,
+        discovery: dedupeCalendarDiscoveryPayload(response.discovery)
+    }));
+}
+export function startGoogleCalendarOauth(input) {
+    return request("/api/v1/calendar/oauth/google/start", {
+        method: "POST",
+        body: JSON.stringify(input)
     });
+}
+export function getGoogleCalendarOauthSession(sessionId) {
+    return request(`/api/v1/calendar/oauth/google/session/${sessionId}`).then((response) => ({
+        ...response,
+        session: {
+            ...response.session,
+            discovery: response.session.discovery
+                ? dedupeCalendarDiscoveryPayload(response.session.discovery)
+                : null
+        }
+    }));
 }
 export function startMicrosoftCalendarOauth(input) {
     return request("/api/v1/calendar/oauth/microsoft/start", {
@@ -978,10 +999,21 @@ export function testMicrosoftCalendarOauthConfiguration(input) {
     });
 }
 export function getMicrosoftCalendarOauthSession(sessionId) {
-    return request(`/api/v1/calendar/oauth/microsoft/session/${sessionId}`);
+    return request(`/api/v1/calendar/oauth/microsoft/session/${sessionId}`).then((response) => ({
+        ...response,
+        session: {
+            ...response.session,
+            discovery: response.session.discovery
+                ? dedupeCalendarDiscoveryPayload(response.session.discovery)
+                : null
+        }
+    }));
 }
 export function discoverExistingCalendarConnection(connectionId) {
-    return request(`/api/v1/calendar/connections/${connectionId}/discovery`);
+    return request(`/api/v1/calendar/connections/${connectionId}/discovery`).then((response) => ({
+        ...response,
+        discovery: dedupeCalendarDiscoveryPayload(response.discovery)
+    }));
 }
 export function createCalendarConnection(input) {
     return request("/api/v1/calendar/connections", {

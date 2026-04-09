@@ -289,6 +289,7 @@ export async function initializeDatabase() {
     await mkdir(getDataDir(), { recursive: true });
     const database = getDatabase();
     const migrationFiles = await listMigrationFiles();
+    const pendingMigrations = [];
     database.exec(`
     CREATE TABLE IF NOT EXISTS migrations (
       id TEXT PRIMARY KEY,
@@ -303,6 +304,7 @@ export async function initializeDatabase() {
         if (applied.has(file)) {
             continue;
         }
+        pendingMigrations.push(file);
         const sql = await readFile(path.join(migrationsDir, file), "utf8");
         database.exec("BEGIN");
         try {
@@ -317,6 +319,7 @@ export async function initializeDatabase() {
             throw error;
         }
     }
+    console.info(`[forge-db] initialized database path=${getDatabasePath()} applied_count=${appliedRows.length} pending_applied=${pendingMigrations.length} pending_list=${pendingMigrations.join(",") || "none"}`);
     if (seedDemoDataEnabled) {
         seedData();
     }

@@ -645,6 +645,7 @@ export interface CalendarConnection {
 export interface CalendarDiscoveryCalendar {
   url: string;
   displayName: string;
+  dedupedName?: string;
   description: string;
   color: string;
   timezone: string;
@@ -686,6 +687,7 @@ export interface CalendarResource {
   connectionId: string;
   remoteId: string;
   title: string;
+  dedupedName?: string;
   description: string;
   color: string;
   timezone: string;
@@ -2282,15 +2284,20 @@ export interface SettingsPayload {
   calendarProviders: {
     google: {
       clientId: string;
-      appUrl: string;
+      clientSecret: string;
+      storedClientId: string;
+      storedClientSecret: string;
+      appBaseUrl: string;
       redirectUri: string;
       allowedOrigins: string[];
-      usesSharedAppCredentials: true;
-      authMode: "shared_web_server_oauth";
+      usesPkce: true;
+      requiresServerClientSecret: false;
+      oauthClientType: "desktop_app";
+      authMode: "localhost_pkce";
       isConfigured: boolean;
       isReadyForPairing: boolean;
+      isLocalOnly: true;
       runtimeOrigin: string;
-      runtimeOriginMatchesAppUrl: boolean;
       setupMessage: string;
     };
     microsoft: {

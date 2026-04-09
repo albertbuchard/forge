@@ -239,12 +239,14 @@ PKCE in Settings rather than a user-facing form for client secrets or refresh
 tokens. For self-hosted local Forge, the Microsoft client ID, tenant, and redirect
 URI should be configurable from the Calendar settings UI itself so the operator does
 not have to treat backend env vars as the primary setup surface.
-Google should follow the same display-first guided setup posture, but with one
-shared Forge-owned Google OAuth web client configured for the runtime through env
-vars. The UI should explain clearly that the Google app belongs to Forge, that
-each user only signs in with their own Google account, that the redirect URI must
-match exactly, and that local pairing only works from the configured Forge host
-and allowed browser ports on the host machine.
+Google should follow the same display-first guided setup posture, but as a local
+localhost Authorization Code + PKCE flow. The UI should explain clearly that
+the Google OAuth client belongs to the local Forge runtime, that each user only
+signs in with their own Google account, that the local PKCE flow only needs
+`GOOGLE_CLIENT_ID`, that Forge performs the code exchange on the backend, that
+the redirect URI must match exactly, and that the browser must be running on
+localhost on the same machine as Forge rather than through a Tailscale phone
+route or another remote browser.
 Calendar event editing now also needs a structured place model. The user should be able
 to enter a readable place label plus address and timezone fields, with room for future
 coordinates or provider place identifiers, so location-aware planning can build on the

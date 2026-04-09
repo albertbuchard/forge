@@ -93,6 +93,17 @@ FORGE_BASE_PATH=/forge/ npm run dev:web -- --host 127.0.0.1 --port 3027</code></
                 shared Forge data root.
               </p>
             </article>
+            <article class="card">
+              <h3>Plugin entrypoint in dev mode</h3>
+              <pre><code>FORGE_OPENCLAW_DEV=1 node ./openclaw-plugin/server/index.js
+npm run dev:openclaw-plugin-runtime</code></pre>
+              <p>
+                The OpenClaw plugin entrypoint stays on the built runtime by default.
+                Set <code>FORGE_OPENCLAW_DEV=1</code> only during local development to
+                have that same entrypoint launch the source-backed autoreloading backend
+                on port <code>4317</code>.
+              </p>
+            </article>
           </div>
         </section>
 

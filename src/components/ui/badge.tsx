@@ -11,11 +11,11 @@ export function Badge({
   return (
     <span
       className={cn(
-        "inline-flex max-w-full items-center rounded-full border border-white/8 bg-white/6 font-medium text-white/78",
+        "inline-flex max-w-full items-center rounded-full border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] font-medium text-[var(--ui-ink-medium)]",
         wrap ? "whitespace-normal break-words [overflow-wrap:anywhere]" : "overflow-hidden text-ellipsis whitespace-nowrap",
         size === "sm" ? "min-h-7 px-2.5 py-1 text-[12px]" : "min-h-8 px-3 py-1.5 text-[12px]",
-        tone === "meta" && "bg-white/[0.04] text-white/58",
-        tone === "signal" && "bg-[rgba(192,193,255,0.12)] text-white/86",
+        tone === "meta" && "bg-[var(--ui-surface-1)] text-[var(--ui-ink-soft)]",
+        tone === "signal" && "border-[var(--primary)]/14 bg-[var(--ui-accent-soft)] text-[var(--ui-ink-on-accent)]",
         className
       )}
       {...props}

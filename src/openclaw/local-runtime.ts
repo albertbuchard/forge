@@ -18,6 +18,8 @@ const FORGE_PLUGIN_ID = "forge-openclaw-plugin";
 type ForgeRuntimeLaunchPlan = {
   packageRoot: string;
   entryFile: string;
+  mode: "packaged" | "source";
+  sourceEntryFile?: string;
 };
 
 type ForgeRuntimeProbe = {
@@ -261,6 +263,39 @@ function getCurrentModuleRoot() {
   return path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 }
 
+function buildLaunchPlanSearchPaths(moduleRoot: string) {
+  const repoRoot = path.resolve(moduleRoot, "..");
+  return {
+    packagedEntries: [
+      path.join(moduleRoot, "server", "index.js"),
+      path.join(moduleRoot, "dist", "server", "index.js"),
+      path.join(moduleRoot, "dist", "server", "src", "index.js"),
+      path.join(moduleRoot, "dist", "server", "server", "src", "index.js")
+    ],
+    packagedMigrations: path.join(moduleRoot, "server", "migrations"),
+    sourceEntries: [
+      path.join(repoRoot, "server", "src", "index.ts"),
+      path.join(moduleRoot, "server", "src", "index.ts")
+    ],
+    tsxCliCandidates: [
+      path.join(repoRoot, "node_modules", "tsx", "dist", "cli.mjs"),
+      path.join(moduleRoot, "node_modules", "tsx", "dist", "cli.mjs")
+    ],
+    repoRoot
+  };
+}
+
+function formatLaunchPlanFailure(moduleRoot: string) {
+  const paths = buildLaunchPlanSearchPaths(moduleRoot);
+  return [
+    "Forge local runtime could not find a launchable server entry.",
+    `Packaged entry candidates: ${paths.packagedEntries.join(", ")}.`,
+    `Expected migrations at: ${paths.packagedMigrations}.`,
+    `Source entry candidates: ${paths.sourceEntries.join(", ")}.`,
+    `tsx candidates: ${paths.tsxCliCandidates.join(", ")}.`
+  ].join(" ");
+}
+
 function getRuntimeLogPath(config: ForgePluginConfig) {
   const origin = new URL(config.origin).hostname.toLowerCase().replace(/[^a-z0-9._-]+/g, "-");
   return path.join(homedir(), ".openclaw", "logs", FORGE_PLUGIN_ID, `${origin}-${config.port}.log`);
@@ -272,7 +307,7 @@ function openRuntimeLogFile(logPath: string) {
 }
 
 function isPackagedServerPlan(plan: ForgeRuntimeLaunchPlan) {
-  return plan.entryFile.endsWith(path.join("dist", "server", "index.js"));
+  return plan.mode === "packaged";
 }
 
 function getNpmInvocation() {
@@ -364,25 +399,27 @@ async function ensurePackagedRuntimeDependencies(plan: ForgeRuntimeLaunchPlan, c
 
 function resolveLaunchPlan(): ForgeRuntimeLaunchPlan | null {
   const moduleRoot = getCurrentModuleRoot();
+  const paths = buildLaunchPlanSearchPaths(moduleRoot);
 
   // Published or linked plugin package runtime.
-  const packagedEntry = path.join(moduleRoot, "dist", "server", "index.js");
-  const packagedMigrations = path.join(moduleRoot, "server", "migrations");
-  if (existsSync(packagedEntry) && existsSync(packagedMigrations)) {
+  const packagedEntry = paths.packagedEntries.find((candidate) => existsSync(candidate));
+  if (packagedEntry && existsSync(paths.packagedMigrations)) {
     return {
       packageRoot: moduleRoot,
-      entryFile: packagedEntry
+      entryFile: packagedEntry,
+      mode: "packaged"
     };
   }
 
   // Source-tree fallback for local development before packaging.
-  const repoRoot = moduleRoot;
-  const sourceEntry = path.join(repoRoot, "server", "src", "index.ts");
-  const tsxCli = path.join(repoRoot, "node_modules", "tsx", "dist", "cli.mjs");
-  if (existsSync(sourceEntry) && existsSync(tsxCli)) {
+  const sourceEntry = paths.sourceEntries.find((candidate) => existsSync(candidate));
+  const tsxCli = paths.tsxCliCandidates.find((candidate) => existsSync(candidate));
+  if (sourceEntry && tsxCli) {
     return {
-      packageRoot: repoRoot,
-      entryFile: tsxCli
+      packageRoot: paths.repoRoot,
+      entryFile: tsxCli,
+      mode: "source",
+      sourceEntryFile: sourceEntry
     };
   }
 
@@ -453,7 +490,9 @@ async function adoptManagedRuntimeState(config: ForgePluginConfig, probe: ForgeR
 
 async function spawnManagedRuntime(config: ForgePluginConfig, plan: ForgeRuntimeLaunchPlan) {
   const isPackagedServer = isPackagedServerPlan(plan);
-  const args = isPackagedServer ? [plan.entryFile] : [plan.entryFile, path.join(plan.packageRoot, "server", "src", "index.ts")];
+  const args = isPackagedServer
+    ? [plan.entryFile]
+    : [plan.entryFile, plan.sourceEntryFile ?? path.join(plan.packageRoot, "server", "src", "index.ts")];
   const logPath = getRuntimeLogPath(config);
   const logFd = openRuntimeLogFile(logPath);
   const child = spawn(process.execPath, args, {
@@ -582,7 +621,7 @@ export async function ensureForgeRuntimeReady(config: ForgePluginConfig) {
 
   const plan = resolveLaunchPlan();
   if (!plan) {
-    return;
+    throw new Error(formatLaunchPlanFailure(getCurrentModuleRoot()));
   }
 
   startupPromise = (async () => {
@@ -692,8 +731,16 @@ export async function startForgeRuntime(config: ForgePluginConfig): Promise<Forg
   };
 }
 
-export function primeForgeRuntime(config: ForgePluginConfig) {
-  void ensureForgeRuntimeReady(config).catch(() => {
+export function primeForgeRuntime(
+  config: ForgePluginConfig,
+  logger?: {
+    warn?(message: string): void;
+  }
+) {
+  void ensureForgeRuntimeReady(config).catch((error) => {
+    logger?.warn?.(
+      `Forge local runtime bootstrap failed for ${config.baseUrl}: ${error instanceof Error ? error.message : String(error)}`
+    );
     // Keep plugin registration non-blocking. Failures surface on first real call.
   });
 }

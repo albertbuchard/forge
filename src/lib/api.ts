@@ -141,6 +141,10 @@ import type {
   TagMutationInput
 } from "./schemas";
 import { ForgeApiError, type ForgeValidationIssue } from "./api-error";
+import {
+  dedupeCalendarDiscoveryPayload,
+  dedupeCalendarOverviewPayload
+} from "./calendar-name-deduper";
 import { publishUiDiagnosticLog } from "./diagnostics";
 import { resolveForgePath } from "./runtime-paths";
 import { normalizeForgeSnapshot } from "./snapshot-normalizer";
@@ -175,7 +179,7 @@ function normalizeCalendarOverviewPayload(
   payload: CalendarOverviewPayload
 ): CalendarOverviewPayload {
   return {
-    ...payload,
+    ...dedupeCalendarOverviewPayload(payload),
     events: payload.events.map(normalizeCalendarEventPlace)
   };
 }
@@ -1771,10 +1775,16 @@ export function discoverCalendarConnection(
       method: "POST",
       body: JSON.stringify(input)
     }
-  );
+  ).then((response) => ({
+    ...response,
+    discovery: dedupeCalendarDiscoveryPayload(response.discovery)
+  }));
 }
 
-export function startGoogleCalendarOauth(input: { label?: string }) {
+export function startGoogleCalendarOauth(input: {
+  label?: string;
+  browserOrigin?: string;
+}) {
   return request<{ session: GoogleCalendarOauthSession }>(
     "/api/v1/calendar/oauth/google/start",
     {
@@ -1787,7 +1797,15 @@ export function startGoogleCalendarOauth(input: { label?: string }) {
 export function getGoogleCalendarOauthSession(sessionId: string) {
   return request<{ session: GoogleCalendarOauthSession }>(
     `/api/v1/calendar/oauth/google/session/${sessionId}`
-  );
+  ).then((response) => ({
+    ...response,
+    session: {
+      ...response.session,
+      discovery: response.session.discovery
+        ? dedupeCalendarDiscoveryPayload(response.session.discovery)
+        : null
+    }
+  }));
 }
 
 export function startMicrosoftCalendarOauth(input: { label?: string }) {
@@ -1826,13 +1844,24 @@ export function testMicrosoftCalendarOauthConfiguration(input: {
 export function getMicrosoftCalendarOauthSession(sessionId: string) {
   return request<{ session: MicrosoftCalendarOauthSession }>(
     `/api/v1/calendar/oauth/microsoft/session/${sessionId}`
-  );
+  ).then((response) => ({
+    ...response,
+    session: {
+      ...response.session,
+      discovery: response.session.discovery
+        ? dedupeCalendarDiscoveryPayload(response.session.discovery)
+        : null
+    }
+  }));
 }
 
 export function discoverExistingCalendarConnection(connectionId: string) {
   return request<{ discovery: CalendarDiscoveryPayload }>(
     `/api/v1/calendar/connections/${connectionId}/discovery`
-  );
+  ).then((response) => ({
+    ...response,
+    discovery: dedupeCalendarDiscoveryPayload(response.discovery)
+  }));
 }
 
 export function createCalendarConnection(

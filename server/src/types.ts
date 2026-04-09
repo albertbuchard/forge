@@ -1320,6 +1320,9 @@ export const themePreferenceSchema = z.enum([
   "solar",
   "aurora",
   "ember",
+  "paper",
+  "dawn",
+  "atelier",
   "custom",
   "system"
 ]);
@@ -1353,15 +1356,20 @@ export const microsoftCalendarAuthSettingsSchema = z.object({
 
 export const googleCalendarAuthSettingsSchema = z.object({
   clientId: z.string(),
-  appUrl: z.string(),
+  clientSecret: z.string(),
+  storedClientId: z.string(),
+  storedClientSecret: z.string(),
+  appBaseUrl: z.string(),
   redirectUri: z.string(),
   allowedOrigins: z.array(z.string()),
-  usesSharedAppCredentials: z.literal(true),
-  authMode: z.literal("shared_web_server_oauth"),
+  usesPkce: z.literal(true),
+  requiresServerClientSecret: z.literal(false),
+  oauthClientType: z.literal("desktop_app"),
+  authMode: z.literal("localhost_pkce"),
   isConfigured: z.boolean(),
   isReadyForPairing: z.boolean(),
+  isLocalOnly: z.literal(true),
   runtimeOrigin: z.string(),
-  runtimeOriginMatchesAppUrl: z.boolean(),
   setupMessage: z.string()
 });
 
@@ -2331,7 +2339,8 @@ export const startMicrosoftCalendarOauthSchema = z.object({
 });
 
 export const startGoogleCalendarOauthSchema = z.object({
-  label: nonEmptyTrimmedString.optional()
+  label: nonEmptyTrimmedString.optional(),
+  browserOrigin: trimmedString.optional()
 });
 
 export const testMicrosoftCalendarOauthConfigurationSchema = z.object({
@@ -2924,6 +2933,12 @@ export const updateSettingsSchema = z.object({
     .optional(),
   calendarProviders: z
     .object({
+      google: z
+        .object({
+          clientId: trimmedString.optional(),
+          clientSecret: trimmedString.optional()
+        })
+        .optional(),
       microsoft: z
         .object({
           clientId: trimmedString.optional(),
@@ -2932,7 +2947,39 @@ export const updateSettingsSchema = z.object({
         })
         .optional()
     })
-    .optional(),
+    .optional()
+    .superRefine((value, context) => {
+      if (!value) {
+        return;
+      }
+      const google = value.google;
+      if (!google) {
+        return;
+      }
+      const hasClientIdField = google.clientId !== undefined;
+      const hasClientSecretField = google.clientSecret !== undefined;
+      const hasClientIdValue = (google.clientId?.length ?? 0) > 0;
+      const hasClientSecretValue = (google.clientSecret?.length ?? 0) > 0;
+      if (hasClientIdField !== hasClientSecretField) {
+        const message =
+          "When overriding Google OAuth credentials, provide both the client ID and client secret together, or clear both fields together.";
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["google", hasClientIdField ? "clientSecret" : "clientId"],
+          message
+        });
+        return;
+      }
+      if (hasClientIdValue !== hasClientSecretValue) {
+        const message =
+          "When overriding Google OAuth credentials, provide both the client ID and client secret together, or clear both fields together.";
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["google", hasClientIdValue ? "clientSecret" : "clientId"],
+          message
+        });
+      }
+    }),
   modelSettings: z
     .object({
       forgeAgent: z

@@ -51,6 +51,7 @@ import {
   getFallbackCalendarColor,
   readCalendarDisplayPreferences
 } from "@/lib/calendar-display-preferences";
+import { readCalendarDisplayName } from "@/lib/calendar-name-deduper";
 import { addDays, buildWeekDays, formatWeekday, startOfWeek } from "@/lib/calendar-ui";
 import type { EntityKind } from "@/lib/entity-visuals";
 import type { CalendarEvent, CalendarEventLink, TaskTimebox, WorkBlockKind, WorkBlockTemplate } from "@/lib/types";
@@ -655,7 +656,13 @@ export function CalendarPage() {
     [calendarData]
   );
   const calendarTitleById = useMemo(
-    () => new Map(overview.calendars.map((calendar) => [calendar.id, calendar.title])),
+    () =>
+      new Map(
+        overview.calendars.map((calendar) => [
+          calendar.id,
+          readCalendarDisplayName(calendar)
+        ])
+      ),
     [overview.calendars]
   );
   const calendarDisplayColors = useMemo(

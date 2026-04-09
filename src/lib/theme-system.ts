@@ -5,6 +5,9 @@ export const forgeThemePreferenceValues = [
   "solar",
   "aurora",
   "ember",
+  "paper",
+  "dawn",
+  "atelier",
   "custom",
   "system"
 ] as const;
@@ -34,6 +37,7 @@ export type ForgeCustomTheme = z.infer<typeof forgeCustomThemeSchema>;
 type ThemeSpec = {
   label: string;
   description: string;
+  mode: "dark" | "light";
   preview: ForgeCustomTheme;
 };
 
@@ -78,6 +82,7 @@ export const forgeThemeCatalog: Record<
   obsidian: {
     label: "Obsidian",
     description: "Deep indigo with cool neon edges. This is the current default.",
+    mode: "dark",
     preview: {
       label: "Obsidian",
       primary: "#c0c1ff",
@@ -94,6 +99,7 @@ export const forgeThemeCatalog: Record<
     label: "Catppuccin",
     description:
       "Pastel mocha surfaces inspired by the widely adopted Catppuccin palette.",
+    mode: "dark",
     preview: {
       label: "Catppuccin",
       primary: "#cba6f7",
@@ -110,6 +116,7 @@ export const forgeThemeCatalog: Record<
     label: "Nord",
     description:
       "Arctic blue-grey surfaces based on Nord's clean and uncluttered palette.",
+    mode: "dark",
     preview: {
       label: "Nord",
       primary: "#88c0d0",
@@ -126,6 +133,7 @@ export const forgeThemeCatalog: Record<
     label: "Dracula",
     description:
       "High-contrast purple and pink accents drawn from the official Dracula specification.",
+    mode: "dark",
     preview: {
       label: "Dracula",
       primary: "#bd93f9",
@@ -136,6 +144,57 @@ export const forgeThemeCatalog: Record<
       panelHigh: "#424450",
       panelLow: "#21222c",
       ink: "#f8f8f2"
+    }
+  },
+  paper: {
+    label: "Paper",
+    description:
+      "Warm ivory surfaces with navy ink and restrained blue-green accents for a crisp daytime workspace.",
+    mode: "light",
+    preview: {
+      label: "Paper",
+      primary: "#2f6fed",
+      secondary: "#1d8f6b",
+      tertiary: "#c9772b",
+      canvas: "#f4efe6",
+      panel: "#fbf7f1",
+      panelHigh: "#ffffff",
+      panelLow: "#e5ddd0",
+      ink: "#182235"
+    }
+  },
+  dawn: {
+    label: "Dawn",
+    description:
+      "Rosy morning tones with plum-blue ink and enough contrast to stay readable across dense settings screens.",
+    mode: "light",
+    preview: {
+      label: "Dawn",
+      primary: "#8b5cf6",
+      secondary: "#ec7a6b",
+      tertiary: "#d0a12b",
+      canvas: "#f8eef1",
+      panel: "#fff7f8",
+      panelHigh: "#ffffff",
+      panelLow: "#ead9df",
+      ink: "#2d1834"
+    }
+  },
+  atelier: {
+    label: "Atelier",
+    description:
+      "Cool drafting-table neutrals with slate ink and modern cobalt accents for a brighter, studio-like shell.",
+    mode: "light",
+    preview: {
+      label: "Atelier",
+      primary: "#2563eb",
+      secondary: "#0f8b6d",
+      tertiary: "#b85c38",
+      canvas: "#edf3f7",
+      panel: "#f8fbfd",
+      panelHigh: "#ffffff",
+      panelLow: "#dbe5ec",
+      ink: "#162334"
     }
   }
 };
@@ -166,16 +225,31 @@ export const forgeThemeOptions: Array<{
     description: forgeThemeCatalog.ember.description
   },
   {
+    value: "paper",
+    label: forgeThemeCatalog.paper.label,
+    description: forgeThemeCatalog.paper.description
+  },
+  {
+    value: "dawn",
+    label: forgeThemeCatalog.dawn.label,
+    description: forgeThemeCatalog.dawn.description
+  },
+  {
+    value: "atelier",
+    label: forgeThemeCatalog.atelier.label,
+    description: forgeThemeCatalog.atelier.description
+  },
+  {
     value: "custom",
     label: "Custom",
     description:
-      "Use your own dark-theme token set through the guided editor or direct JSON import."
+      "Use your own Forge token set through the guided editor or direct JSON import."
   },
   {
     value: "system",
     label: "System",
     description:
-      "Follow the device preference. Forge maps dark mode to Obsidian and light mode to Catppuccin."
+      "Follow the device preference. Forge maps dark mode to Obsidian and light mode to Paper."
   }
 ];
 
@@ -226,7 +300,7 @@ export function resolveForgeThemePreference(
   prefersDark: boolean
 ): Exclude<ForgeThemePreference, "system"> {
   if (preference === "system") {
-    return prefersDark ? "obsidian" : "solar";
+    return prefersDark ? "obsidian" : "paper";
   }
   return preference;
 }
@@ -297,10 +371,15 @@ export function applyForgeThemeToDocument(
   const root = document.documentElement;
 
   body.classList.remove(
+    "theme-forge-dark",
+    "theme-forge-light",
     "theme-forge-obsidian",
     "theme-forge-solar",
     "theme-forge-aurora",
     "theme-forge-ember",
+    "theme-forge-paper",
+    "theme-forge-dawn",
+    "theme-forge-atelier",
     "theme-forge-custom"
   );
 
@@ -308,6 +387,7 @@ export function applyForgeThemeToDocument(
     const theme = customTheme ?? defaultCustomTheme;
     const variables = buildForgeThemeVariables(theme);
     body.classList.add("theme-forge-custom");
+    body.classList.add("theme-forge-dark");
     for (const [name, value] of Object.entries(variables)) {
       root.style.setProperty(name, value);
     }
@@ -319,5 +399,8 @@ export function applyForgeThemeToDocument(
     root.style.removeProperty(name);
   }
   delete root.dataset.forgeTheme;
+  body.classList.add(
+    forgeThemeCatalog[resolved].mode === "light" ? "theme-forge-light" : "theme-forge-dark"
+  );
   body.classList.add(`theme-forge-${resolved}`);
 }

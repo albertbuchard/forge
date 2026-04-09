@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   CheckCircle2,
   Cloud,
+  Pencil,
   ExternalLink,
   KeyRound,
   Link2,
@@ -17,13 +18,17 @@ import {
 import { CalendarSetupGuide } from "@/components/calendar/calendar-setup-guide";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { InfoTooltip } from "@/components/ui/info-tooltip";
 import { Input } from "@/components/ui/input";
+import { readCalendarDisplayName } from "@/lib/calendar-name-deduper";
 import {
   discoverCalendarConnection,
   getGoogleCalendarOauthSession,
   getMicrosoftCalendarOauthSession,
+  patchSettings,
   startGoogleCalendarOauth,
-  startMicrosoftCalendarOauth
+  startMicrosoftCalendarOauth,
+  testMicrosoftCalendarOauthConfiguration
 } from "@/lib/api";
 import type {
   CalendarDiscoveryPayload,
@@ -56,6 +61,22 @@ type MicrosoftPopupMessage = {
   sessionId?: string;
   status?: string;
 };
+
+type MicrosoftSettingsDraft = {
+  clientId: string;
+  tenantId: string;
+  redirectUri: string;
+};
+
+type GoogleSettingsDraft = {
+  clientId: string;
+  clientSecret: string;
+};
+
+const MICROSOFT_CALLBACK_PATH = "/api/v1/calendar/oauth/microsoft/callback";
+const MICROSOFT_CLIENT_ID_PATTERN =
+  /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
+const OAUTH_SESSION_POLL_INTERVAL_MS = 1000;
 
 const PROVIDER_DEFAULTS: Record<CalendarProvider, { label: string; serverUrl: string }> = {
   google: {
@@ -94,6 +115,195 @@ function normalizeLabel(provider: CalendarProvider, label: string) {
   return trimmed.length > 0 ? trimmed : PROVIDER_DEFAULTS[provider].label;
 }
 
+function buildMicrosoftSettingsDraft(
+  microsoftSetup: MicrosoftCalendarAuthSettings
+): MicrosoftSettingsDraft {
+  return {
+    clientId: microsoftSetup.clientId,
+    tenantId: microsoftSetup.tenantId,
+    redirectUri: microsoftSetup.redirectUri
+  };
+}
+
+function buildGoogleSettingsDraft(
+  googleSetup: GoogleCalendarAuthSettings
+): GoogleSettingsDraft {
+  return {
+    clientId: googleSetup.storedClientId ?? "",
+    clientSecret: googleSetup.storedClientSecret ?? ""
+  };
+}
+
+function sanitizeGoogleSetupMessage(message: string) {
+  return message
+    .replace(/\s*No GOOGLE_CLIENT_SECRET is used in this local PKCE flow\./gi, "")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+}
+
+function buildGoogleClientIdMissingMessage() {
+  return [
+    "Google OAuth credentials are not set for this Forge install.",
+    "- Save a Google desktop-app client ID and client secret below for this Forge install.",
+    "- Or rely on the packaged or environment defaults for the Forge runtime."
+  ].join("\n");
+}
+
+function buildGoogleRouteErrorMessage(routeMessage: string, allowedOrigins: string[]) {
+  return [
+    routeMessage,
+    `- Open Forge from a local browser on the host running Forge.`,
+    `- Use one of these local addresses: ${allowedOrigins.join(", ")}.`
+  ].join("\n");
+}
+
+function normalizeGoogleSettingsDraft(
+  draft: GoogleSettingsDraft
+): GoogleSettingsDraft {
+  return {
+    clientId: (draft.clientId ?? "").trim(),
+    clientSecret: (draft.clientSecret ?? "").trim()
+  };
+}
+
+function sameGoogleSettingsDraft(
+  left: GoogleSettingsDraft,
+  right: GoogleSettingsDraft
+) {
+  return (
+    left.clientId.trim() === right.clientId.trim() &&
+    left.clientSecret.trim() === right.clientSecret.trim()
+  );
+}
+
+function validateGoogleSettingsDraft(draft: GoogleSettingsDraft) {
+  const normalized = normalizeGoogleSettingsDraft(draft);
+  const issues: Partial<Record<keyof GoogleSettingsDraft, string>> = {};
+  const hasClientId = normalized.clientId.length > 0;
+  const hasClientSecret = normalized.clientSecret.length > 0;
+
+  if (hasClientId !== hasClientSecret) {
+    const message =
+      "When overriding Google OAuth credentials, save the client ID and client secret together, or clear both to use the bundled defaults.";
+    if (!hasClientId) {
+      issues.clientId = message;
+    }
+    if (!hasClientSecret) {
+      issues.clientSecret = message;
+    }
+  }
+
+  return {
+    normalized,
+    issues,
+    isValid: Object.keys(issues).length === 0
+  };
+}
+
+function normalizeMicrosoftSettingsDraft(
+  draft: MicrosoftSettingsDraft
+): MicrosoftSettingsDraft {
+  return {
+    clientId: draft.clientId.trim(),
+    tenantId: draft.tenantId.trim() || "common",
+    redirectUri: draft.redirectUri.trim()
+  };
+}
+
+function validateMicrosoftSettingsDraft(draft: MicrosoftSettingsDraft) {
+  const normalized = normalizeMicrosoftSettingsDraft(draft);
+  const issues: Partial<Record<keyof MicrosoftSettingsDraft, string>> = {};
+
+  if (!normalized.clientId) {
+    issues.clientId = "Microsoft client ID is required.";
+  } else if (!MICROSOFT_CLIENT_ID_PATTERN.test(normalized.clientId)) {
+    issues.clientId = "Use the Microsoft app registration client ID GUID.";
+  }
+
+  if (!normalized.redirectUri) {
+    issues.redirectUri = "Redirect URI is required.";
+  } else {
+    try {
+      const url = new URL(normalized.redirectUri);
+      if (url.protocol !== "http:" && url.protocol !== "https:") {
+        issues.redirectUri = "Redirect URI must use http or https.";
+      } else if (url.pathname !== MICROSOFT_CALLBACK_PATH) {
+        issues.redirectUri = `Redirect URI must end with ${MICROSOFT_CALLBACK_PATH}.`;
+      }
+    } catch {
+      issues.redirectUri = "Redirect URI must be a full URL.";
+    }
+  }
+
+  return {
+    normalized,
+    issues,
+    isValid: Object.keys(issues).length === 0
+  };
+}
+
+function sameMicrosoftSettingsDraft(
+  left: MicrosoftSettingsDraft,
+  right: MicrosoftSettingsDraft
+) {
+  return (
+    left.clientId.trim() === right.clientId.trim() &&
+    left.tenantId.trim() === right.tenantId.trim() &&
+    left.redirectUri.trim() === right.redirectUri.trim()
+  );
+}
+
+function isLoopbackHostname(hostname: string) {
+  return hostname === "127.0.0.1" || hostname === "localhost";
+}
+
+function isTailscaleHostname(hostname: string) {
+  return hostname.endsWith(".ts.net");
+}
+
+export function describeGoogleRouteRequirement(input: {
+  currentOrigin: string;
+  appBaseUrl: string;
+  redirectUri: string;
+  allowedOrigins: string[];
+  isLocalOnly: boolean;
+}) {
+  const allowedLocalOrigins = input.allowedOrigins.filter((origin) => {
+    try {
+      return isLoopbackHostname(new URL(origin).hostname);
+    } catch {
+      return false;
+    }
+  });
+
+  const redirectHostname = (() => {
+    try {
+      return new URL(input.redirectUri).hostname;
+    } catch {
+      return "";
+    }
+  })();
+  let currentHostname = "";
+  try {
+    currentHostname = new URL(input.currentOrigin).hostname;
+  } catch {
+    currentHostname = "";
+  }
+
+  if (
+    isTailscaleHostname(currentHostname) &&
+    isLoopbackHostname(redirectHostname)
+  ) {
+    return `Google sign-in has to start from a local browser on the host running Forge. Forge is currently open through Tailscale at ${input.currentOrigin}, but Google sends the callback to localhost on the device that opens the popup. On a phone or another computer, that callback goes to that device instead of the Forge host.`;
+  }
+
+  if (input.isLocalOnly) {
+    return `Google sign-in has to start from a local browser on the host running Forge. Google sends the callback to localhost, so if Forge is opened remotely, the callback goes to the other device instead of the Forge host.`;
+  }
+
+  return `Google sign-in is only enabled from the configured Forge host for this deployment. Open Forge on ${input.appBaseUrl}. Current browser origin: ${input.currentOrigin}.`;
+}
+
 export function CalendarConnectionFlowDialog({
   open,
   onOpenChange,
@@ -101,6 +311,7 @@ export function CalendarConnectionFlowDialog({
   initialStepId,
   googleSetup,
   microsoftSetup,
+  onCalendarSettingsChanged,
   onSubmit,
   pending = false
 }: {
@@ -110,6 +321,7 @@ export function CalendarConnectionFlowDialog({
   initialStepId?: string;
   googleSetup: GoogleCalendarAuthSettings;
   microsoftSetup: MicrosoftCalendarAuthSettings;
+  onCalendarSettingsChanged?: () => Promise<void>;
   onSubmit: (
     input:
       | {
@@ -148,12 +360,35 @@ export function CalendarConnectionFlowDialog({
   ) => Promise<void>;
   pending?: boolean;
 }) {
+  const queryClient = useQueryClient();
   const [draft, setDraft] = useState<ConnectionDraft>(() => createDraft(initialProvider));
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [discovery, setDiscovery] = useState<CalendarDiscoveryPayload | null>(null);
   const [googleSession, setGoogleSession] = useState<GoogleCalendarOauthSession | null>(null);
   const [microsoftSession, setMicrosoftSession] = useState<MicrosoftCalendarOauthSession | null>(null);
+  const [activeGoogleSetup, setActiveGoogleSetup] =
+    useState<GoogleCalendarAuthSettings>(googleSetup);
+  const [googleSettingsDraft, setGoogleSettingsDraft] = useState<GoogleSettingsDraft>(() =>
+    buildGoogleSettingsDraft(googleSetup)
+  );
+  const [savedGoogleSettingsDraft, setSavedGoogleSettingsDraft] =
+    useState<GoogleSettingsDraft>(() => buildGoogleSettingsDraft(googleSetup));
+  const [googleClientIdEditing, setGoogleClientIdEditing] = useState(false);
+  const [googleSetupMessage, setGoogleSetupMessage] = useState<string | null>(null);
+  const [activeMicrosoftSetup, setActiveMicrosoftSetup] =
+    useState<MicrosoftCalendarAuthSettings>(microsoftSetup);
+  const [microsoftSettingsDraft, setMicrosoftSettingsDraft] = useState<MicrosoftSettingsDraft>(() =>
+    buildMicrosoftSettingsDraft(microsoftSetup)
+  );
+  const [savedMicrosoftSettingsDraft, setSavedMicrosoftSettingsDraft] =
+    useState<MicrosoftSettingsDraft>(() => buildMicrosoftSettingsDraft(microsoftSetup));
+  const [microsoftSetupMessage, setMicrosoftSetupMessage] = useState<string | null>(null);
   const popupRef = useRef<Window | null>(null);
+
+  const applyServerSettings = (response: Awaited<ReturnType<typeof patchSettings>>) => {
+    queryClient.setQueryData(["forge-settings"], response);
+    return response.settings;
+  };
 
   const resetGoogleSession = () => {
     setGoogleSession(null);
@@ -202,75 +437,139 @@ export function CalendarConnectionFlowDialog({
     setDraft(createDraft(initialProvider));
     resetGoogleSession();
     resetMicrosoftSession();
+    setGoogleClientIdEditing(false);
+    setGoogleSetupMessage(null);
+    setMicrosoftSetupMessage(null);
   }, [initialProvider, open]);
+
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+    setActiveGoogleSetup(googleSetup);
+    const savedDraft = buildGoogleSettingsDraft(googleSetup);
+    setGoogleSettingsDraft(savedDraft);
+    setSavedGoogleSettingsDraft(savedDraft);
+    setGoogleClientIdEditing(false);
+    setGoogleSetupMessage(null);
+  }, [googleSetup, open]);
+
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+    setActiveMicrosoftSetup(microsoftSetup);
+    const savedDraft = buildMicrosoftSettingsDraft(microsoftSetup);
+    setMicrosoftSettingsDraft(savedDraft);
+    setSavedMicrosoftSettingsDraft(savedDraft);
+    setMicrosoftSetupMessage(null);
+  }, [microsoftSetup, open]);
 
   useEffect(() => {
     if (!open || !googleSession || googleSession.status !== "pending") {
       return;
     }
 
-    const callbackOrigin = new URL(googleSetup.redirectUri).origin;
+    const callbackOrigin = new URL(activeGoogleSetup.redirectUri).origin;
+    let requestInFlight = false;
+    const refreshSession = () => {
+      if (requestInFlight) {
+        return;
+      }
+      requestInFlight = true;
+      void loadGoogleSession(googleSession.sessionId).finally(() => {
+        requestInFlight = false;
+      });
+    };
     const handleMessage = (event: MessageEvent<GooglePopupMessage>) => {
       if (event.origin !== callbackOrigin) {
         return;
       }
       if (
         event.data?.type !== "forge:google-calendar-auth" ||
-        event.data?.sessionId !== googleSession.sessionId
+          event.data?.sessionId !== googleSession.sessionId
       ) {
         return;
       }
-      void loadGoogleSession(googleSession.sessionId);
+      refreshSession();
+    };
+    const handleFocus = () => {
+      refreshSession();
+    };
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        refreshSession();
+      }
     };
 
-    const interval = window.setInterval(() => {
-      if (!popupRef.current || !popupRef.current.closed) {
-        return;
-      }
-      popupRef.current = null;
-      void loadGoogleSession(googleSession.sessionId, { afterPopupClose: true });
-    }, 400);
+    const interval = window.setInterval(
+      refreshSession,
+      OAUTH_SESSION_POLL_INTERVAL_MS
+    );
 
     window.addEventListener("message", handleMessage);
+    window.addEventListener("focus", handleFocus);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
     return () => {
       window.removeEventListener("message", handleMessage);
+      window.removeEventListener("focus", handleFocus);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
       window.clearInterval(interval);
     };
-  }, [googleSession, googleSetup.redirectUri, open]);
+  }, [activeGoogleSetup.redirectUri, googleSession, open]);
 
   useEffect(() => {
     if (!open || !microsoftSession || microsoftSession.status !== "pending") {
       return;
     }
 
-    const callbackOrigin = new URL(microsoftSetup.redirectUri).origin;
+    const callbackOrigin = new URL(activeMicrosoftSetup.redirectUri).origin;
+    let requestInFlight = false;
+    const refreshSession = () => {
+      if (requestInFlight) {
+        return;
+      }
+      requestInFlight = true;
+      void loadMicrosoftSession(microsoftSession.sessionId).finally(() => {
+        requestInFlight = false;
+      });
+    };
     const handleMessage = (event: MessageEvent<MicrosoftPopupMessage>) => {
       if (event.origin !== callbackOrigin) {
         return;
       }
       if (
         event.data?.type !== "forge:microsoft-calendar-auth" ||
-        event.data?.sessionId !== microsoftSession.sessionId
+          event.data?.sessionId !== microsoftSession.sessionId
       ) {
         return;
       }
-      void loadMicrosoftSession(microsoftSession.sessionId);
+      refreshSession();
+    };
+    const handleFocus = () => {
+      refreshSession();
+    };
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        refreshSession();
+      }
     };
 
-    const interval = window.setInterval(() => {
-      if (!popupRef.current || !popupRef.current.closed) {
-        return;
-      }
-      popupRef.current = null;
-      void loadMicrosoftSession(microsoftSession.sessionId, { afterPopupClose: true });
-    }, 400);
+    const interval = window.setInterval(
+      refreshSession,
+      OAUTH_SESSION_POLL_INTERVAL_MS
+    );
 
     window.addEventListener("message", handleMessage);
+    window.addEventListener("focus", handleFocus);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
     return () => {
       window.removeEventListener("message", handleMessage);
+      window.removeEventListener("focus", handleFocus);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
       window.clearInterval(interval);
     };
-  }, [microsoftSession, microsoftSetup.redirectUri, open]);
+  }, [activeMicrosoftSetup.redirectUri, microsoftSession, open]);
 
   const discoveryMutation = useMutation({
     mutationFn: () => {
@@ -301,6 +600,171 @@ export function CalendarConnectionFlowDialog({
     }
   });
 
+  const saveMicrosoftSettingsMutation = useMutation({
+    mutationFn: async (input: MicrosoftSettingsDraft) => {
+      const normalized = normalizeMicrosoftSettingsDraft(input);
+      const response = await patchSettings({
+        calendarProviders: {
+          microsoft: normalized
+        }
+      });
+      return {
+        normalized,
+        settings: applyServerSettings(response)
+      };
+    },
+    onSuccess: async ({ settings }) => {
+      setActiveMicrosoftSetup(settings.calendarProviders.microsoft);
+      const savedDraft = buildMicrosoftSettingsDraft(
+        settings.calendarProviders.microsoft
+      );
+      setSavedMicrosoftSettingsDraft(savedDraft);
+      setMicrosoftSettingsDraft(savedDraft);
+      setMicrosoftSetupMessage(
+        "Microsoft settings saved. Start the guided Microsoft sign-in when you are ready."
+      );
+      void onCalendarSettingsChanged?.();
+    },
+    onError: (error) => {
+      setMicrosoftSetupMessage(
+        error instanceof Error
+          ? error.message
+          : "Forge could not save the Microsoft settings."
+      );
+    }
+  });
+
+  const saveGoogleSettingsMutation = useMutation({
+    mutationFn: async (input: GoogleSettingsDraft) => {
+      const normalized = normalizeGoogleSettingsDraft(input);
+      const response = await patchSettings({
+        calendarProviders: {
+          google: normalized
+        }
+      });
+      return {
+        normalized,
+        settings: applyServerSettings(response)
+      };
+    },
+    onSuccess: async ({ normalized, settings }) => {
+      setActiveGoogleSetup(settings.calendarProviders.google);
+      const savedDraft = buildGoogleSettingsDraft(settings.calendarProviders.google);
+      setSavedGoogleSettingsDraft(savedDraft);
+      setGoogleSettingsDraft(savedDraft);
+      setGoogleClientIdEditing(false);
+      setGoogleSetupMessage(
+        normalized.clientId || normalized.clientSecret
+          ? "Google OAuth credentials saved on the Forge server for this install."
+          : "Google OAuth override cleared. Forge will use the packaged or environment default again."
+      );
+      void onCalendarSettingsChanged?.();
+    },
+    onError: (error) => {
+      setGoogleSetupMessage(
+        error instanceof Error
+          ? error.message
+          : "Forge could not save the Google OAuth credentials."
+      );
+    }
+  });
+
+  const testMicrosoftSettingsMutation = useMutation({
+    mutationFn: (input: MicrosoftSettingsDraft) => {
+      const normalized = normalizeMicrosoftSettingsDraft(input);
+      return testMicrosoftCalendarOauthConfiguration(normalized);
+    },
+    onSuccess: ({ result }) => {
+      setMicrosoftSetupMessage(result.message);
+    },
+    onError: (error) => {
+      setMicrosoftSetupMessage(
+        error instanceof Error
+          ? error.message
+          : "Forge could not validate the Microsoft configuration."
+      );
+    }
+  });
+
+  const microsoftValidation = useMemo(
+    () => validateMicrosoftSettingsDraft(microsoftSettingsDraft),
+    [microsoftSettingsDraft]
+  );
+  const googleValidation = useMemo(
+    () => validateGoogleSettingsDraft(googleSettingsDraft),
+    [googleSettingsDraft]
+  );
+  const hasUnsavedGoogleSettings = !sameGoogleSettingsDraft(
+    googleSettingsDraft,
+    savedGoogleSettingsDraft
+  );
+  const hasUnsavedMicrosoftSettings = !sameMicrosoftSettingsDraft(
+    microsoftSettingsDraft,
+    savedMicrosoftSettingsDraft
+  );
+  const currentBrowserOrigin =
+    typeof window === "undefined" ? "" : window.location.origin;
+  const googleRedirectOrigin = useMemo(() => {
+    try {
+      return new URL(activeGoogleSetup.redirectUri).origin;
+    } catch {
+      return "";
+    }
+  }, [activeGoogleSetup.redirectUri]);
+  const googlePairingAllowedFromCurrentOrigin =
+    currentBrowserOrigin.length > 0 &&
+    activeGoogleSetup.allowedOrigins.includes(currentBrowserOrigin) &&
+    (!activeGoogleSetup.isLocalOnly ||
+      isLoopbackHostname(new URL(currentBrowserOrigin).hostname));
+  const googleWrongRouteMessage = currentBrowserOrigin &&
+    !googlePairingAllowedFromCurrentOrigin
+      ? describeGoogleRouteRequirement({
+          currentOrigin: currentBrowserOrigin,
+          appBaseUrl: activeGoogleSetup.appBaseUrl,
+          redirectUri: activeGoogleSetup.redirectUri,
+          allowedOrigins: activeGoogleSetup.allowedOrigins,
+          isLocalOnly: activeGoogleSetup.isLocalOnly
+        })
+      : null;
+  const googleSetupError = !activeGoogleSetup.isReadyForPairing
+    ? sanitizeGoogleSetupMessage(activeGoogleSetup.setupMessage) ||
+      buildGoogleClientIdMissingMessage()
+    : null;
+  const googleRouteError = googleWrongRouteMessage
+    ? buildGoogleRouteErrorMessage(
+        googleWrongRouteMessage,
+        activeGoogleSetup.allowedOrigins
+      )
+    : null;
+  const inlineStepError = (stepId: string) => {
+    if (submitError) {
+      return submitError;
+    }
+
+    if (draft.provider === "google" && (stepId === "credentials" || stepId === "discovery")) {
+      if (hasUnsavedGoogleSettings) {
+        return "Save the Google OAuth credential change before starting sign-in.";
+      }
+      const googleBlockingMessages = [googleRouteError, googleSetupError].filter(
+        (message): message is string => Boolean(message)
+      );
+      if (googleBlockingMessages.length > 0) {
+        return googleBlockingMessages.join("\n\n");
+      }
+    }
+
+    if (draft.provider === "microsoft" && stepId === "credentials") {
+      if (hasUnsavedMicrosoftSettings) {
+        return "Save these Microsoft settings before starting sign-in.";
+      }
+      if (!hasUnsavedMicrosoftSettings && !savedMicrosoftSettingsDraft.clientId && !microsoftSetupMessage) {
+        return activeMicrosoftSetup.setupMessage;
+      }
+    }
+
+    return undefined;
+  };
+
   const loadGoogleSession = async (
     sessionId: string,
     options?: { afterPopupClose?: boolean }
@@ -322,7 +786,7 @@ export function CalendarConnectionFlowDialog({
       }
       if (options?.afterPopupClose) {
         setSubmitError(
-          `The Google sign-in window closed before Forge received permission. If Google showed redirect_uri_mismatch, register exactly ${googleSetup.redirectUri} in Google Cloud Console and reopen Forge on an allowed local origin.`
+          `The Google sign-in window closed before Forge received permission. If Google showed redirect_uri_mismatch, register exactly ${activeGoogleSetup.redirectUri} in Google Cloud Console and reopen Forge on a browser route that can really receive that callback.`
         );
       }
     } catch (error) {
@@ -369,18 +833,22 @@ export function CalendarConnectionFlowDialog({
 
   const startGoogleFlow = async () => {
     try {
-      if (!googleSetup.isReadyForPairing) {
-        throw new Error(googleSetup.setupMessage);
-      }
-      if (!googleSetup.allowedOrigins.includes(window.location.origin)) {
+      if (googleWrongRouteMessage) {
         throw new Error(
-          `Google Calendar pairing is only available from the configured host: ${googleSetup.appUrl}. Open Forge on one of these local origins first: ${googleSetup.allowedOrigins.join(", ")}.`
+          buildGoogleRouteErrorMessage(
+            googleWrongRouteMessage,
+            activeGoogleSetup.allowedOrigins
+          )
         );
+      }
+      if (!activeGoogleSetup.isReadyForPairing) {
+        throw new Error(buildGoogleClientIdMissingMessage());
       }
       setSubmitError(null);
       setDiscovery(null);
       const { session } = await startGoogleCalendarOauth({
-        label: normalizeLabel("google", draft.label)
+        label: normalizeLabel("google", draft.label),
+        browserOrigin: currentBrowserOrigin || undefined
       });
       if (!session.authUrl) {
         throw new Error("Forge could not prepare the Google sign-in URL.");
@@ -410,12 +878,23 @@ export function CalendarConnectionFlowDialog({
 
   const startMicrosoftFlow = async () => {
     try {
-      if (!microsoftSetup.isReadyForSignIn) {
+      if (!microsoftValidation.isValid) {
         throw new Error(
-          "Finish the Microsoft setup in Settings -> Calendar before starting sign-in."
+          "Enter a valid Microsoft client ID and redirect URI before starting sign-in."
+        );
+      }
+      if (hasUnsavedMicrosoftSettings) {
+        throw new Error(
+          "Save the Microsoft settings in this guided flow before starting sign-in."
+        );
+      }
+      if (saveMicrosoftSettingsMutation.isPending) {
+        throw new Error(
+          "Wait for Forge to finish saving the Microsoft settings before starting sign-in."
         );
       }
       setSubmitError(null);
+      setMicrosoftSetupMessage(null);
       setDiscovery(null);
       const { session } = await startMicrosoftCalendarOauth({
         label: normalizeLabel("microsoft", draft.label)
@@ -453,7 +932,7 @@ export function CalendarConnectionFlowDialog({
         eyebrow: "Connection",
         title: "Choose the calendar provider Forge should connect to",
         description:
-          "Apple uses autodiscovery from caldav.icloud.com, Google uses a shared Forge-owned OAuth web app, Exchange Online uses guided Microsoft sign-in in read-only mode, and custom CalDAV stays available for everything else.",
+          "Apple uses autodiscovery from caldav.icloud.com, Google uses a localhost Authorization Code + PKCE flow, Exchange Online uses guided Microsoft sign-in in read-only mode, and custom CalDAV stays available for everything else.",
         render: (value, setValue) => (
           <div className="grid gap-5">
             <FlowField
@@ -465,6 +944,7 @@ export function CalendarConnectionFlowDialog({
                 onChange={(next) => {
                   setDiscovery(null);
                   setSubmitError(null);
+                  setMicrosoftSetupMessage(null);
                   resetGoogleSession();
                   resetMicrosoftSession();
                   setValue(createDraft(next as CalendarProvider));
@@ -473,7 +953,7 @@ export function CalendarConnectionFlowDialog({
                   {
                     value: "google",
                     label: "Google Calendar",
-                    description: "Use the shared Forge Google OAuth app, sign in with your own Google account, and let Forge store a per-user refresh token."
+                    description: "Use Google sign-in with Authorization Code + PKCE, let Forge exchange the code on the backend, and store a per-user refresh token server-side."
                   },
                   {
                     value: "apple",
@@ -555,11 +1035,11 @@ export function CalendarConnectionFlowDialog({
               : "Provide the custom CalDAV base URL and credentials",
         description:
           draft.provider === "google"
-            ? "Forge uses one app-owned Google OAuth client for everyone. The user only signs in with their own Google account and grants this Forge app access."
+            ? "Review the Google desktop OAuth client, save a local override only if you need one, then start the popup and let Forge finish the PKCE exchange on the backend."
             : draft.provider === "apple"
             ? "Apple discovery starts from https://caldav.icloud.com, so you only need the Apple ID email and app password here."
             : draft.provider === "microsoft"
-              ? "Forge uses the Microsoft client ID, tenant, and redirect URI saved in Settings -> Calendar, then runs a guided popup sign-in. No client secret is required in the user-facing setup."
+              ? "Forge uses the Microsoft client ID, tenant, and redirect URI saved in Settings -> Calendar, then runs a guided popup sign-in."
               : "Forge stores the secrets securely, then discovers the available calendars before anything is saved.",
         render: (value, setValue) => (
           <div className="grid gap-4">
@@ -580,40 +1060,254 @@ export function CalendarConnectionFlowDialog({
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div>
                       <div className="font-medium text-white">
-                        Guided Google sign-in
+                        How Google sign-in works
                       </div>
                       <p className="mt-2 max-w-2xl text-sm leading-6 text-white/60">
-                        Forge owns the Google OAuth client credentials. Each
-                        user only signs in with their own Google account, Forge
-                        exchanges the authorization code on the backend, and
-                        then stores the user-specific refresh token for future
-                        calendar sync.
+                        Start the popup from the host running Forge. Google
+                        returns to Forge on localhost, Forge completes the PKCE
+                        exchange on the backend, then Forge discovers the
+                        calendars for that account.
                       </p>
                     </div>
                     <Badge className="bg-emerald-500/16 text-emerald-100">
-                      Shared app credentials
+                      Auth code + PKCE
                     </Badge>
                   </div>
 
                   <div className="mt-4 rounded-[18px] bg-white/[0.04] px-4 py-3 text-sm leading-6 text-white/68">
                     <div>
-                      App URL:{" "}
+                      Forge runtime:{" "}
                       <span className="font-medium text-white">
-                        {googleSetup.appUrl}
+                        {activeGoogleSetup.appBaseUrl}
                       </span>
                     </div>
                     <div className="break-all">
                       Redirect URI:{" "}
                       <span className="font-medium text-white">
-                        {googleSetup.redirectUri}
+                        {activeGoogleSetup.redirectUri}
+                      </span>
+                    </div>
+                    <div className="break-all">
+                      Redirect origin:{" "}
+                      <span className="font-medium text-white">
+                        {googleRedirectOrigin || "Unavailable"}
                       </span>
                     </div>
                     <div>
-                      Allowed browser origins:{" "}
+                      Allowed local browser origins:{" "}
                       <span className="font-medium text-white">
-                        {googleSetup.allowedOrigins.join(", ")}
+                        {activeGoogleSetup.allowedOrigins.join(", ")}
                       </span>
                     </div>
+                    <div className="break-all">
+                      Detected browser origin:{" "}
+                      <span className="font-medium text-white">
+                        {currentBrowserOrigin || "Unavailable"}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="mt-4 rounded-[18px] bg-white/[0.04] p-4">
+                    {!googleClientIdEditing ? (
+                      <div className="grid gap-3">
+                        <div className="grid min-w-0 gap-3">
+                          <div className="flex min-w-0 items-center justify-between gap-3">
+                            <div className="min-w-0 flex-1">
+                              <div className="flex min-w-0 items-center gap-2">
+                                <span className="truncate font-medium text-white">
+                                  Google OAuth client
+                                </span>
+                                <Badge
+                                  className={
+                                    (activeGoogleSetup.storedClientId || "") ||
+                                    (activeGoogleSetup.storedClientSecret || "")
+                                      ? "bg-emerald-500/16 text-emerald-100"
+                                      : "bg-white/[0.08] text-white/72"
+                                  }
+                                >
+                                  {(activeGoogleSetup.storedClientId || "") ||
+                                  (activeGoogleSetup.storedClientSecret || "")
+                                    ? "Stored on server"
+                                    : "Using packaged default"}
+                                </Badge>
+                                <InfoTooltip
+                                  content="Forge ships with a packaged Google desktop OAuth client by default. Save both fields only when this Forge install should use a different client ID and client secret pair."
+                                  label="Explain Google OAuth client"
+                                  className="shrink-0"
+                                />
+                              </div>
+                            </div>
+                            <button
+                              type="button"
+                              aria-label="Edit Google OAuth client"
+                              className="inline-flex size-9 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/[0.06] text-white/72 transition hover:bg-white/[0.12] hover:text-white"
+                              onClick={() => {
+                                setGoogleSetupMessage(null);
+                                setGoogleClientIdEditing(true);
+                              }}
+                            >
+                              <Pencil className="size-4" />
+                            </button>
+                          </div>
+                        </div>
+
+                        <FlowField
+                          label="Effective client ID"
+                          description="This is the Google desktop-app client ID Forge will use right now."
+                        >
+                          <div className="flex min-h-11 min-w-0 items-center overflow-hidden rounded-[18px] border border-white/8 bg-black/20 px-4 text-sm text-white/38">
+                            <span
+                              className="block min-w-0 truncate"
+                              title={activeGoogleSetup.clientId}
+                            >
+                              {activeGoogleSetup.clientId}
+                            </span>
+                          </div>
+                        </FlowField>
+
+                        <FlowField
+                          label="Effective client secret"
+                          description="Forge uses this value on the local backend when exchanging and refreshing Google tokens."
+                        >
+                          <div className="flex min-h-11 min-w-0 items-center overflow-hidden rounded-[18px] border border-white/8 bg-black/20 px-4 text-sm text-white/38">
+                            <span
+                              className="block min-w-0 truncate"
+                              title={activeGoogleSetup.clientSecret || ""}
+                            >
+                              {activeGoogleSetup.clientSecret || ""}
+                            </span>
+                          </div>
+                        </FlowField>
+                      </div>
+                    ) : (
+                      <div className="grid gap-3">
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <div className="font-medium text-white">
+                              Google OAuth override
+                            </div>
+                            <p className="mt-2 max-w-2xl text-sm leading-6 text-white/60">
+                              Save both the client ID and client secret only when
+                              this Forge install should use a different Google
+                              desktop OAuth app than the packaged default.
+                            </p>
+                          </div>
+                          <button
+                            type="button"
+                            aria-label="Done editing Google OAuth client"
+                            className="inline-flex size-9 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/[0.06] text-white/72 transition hover:bg-white/[0.12] hover:text-white"
+                            onClick={() => {
+                              setGoogleSetupMessage(null);
+                              const savedDraft =
+                                buildGoogleSettingsDraft(activeGoogleSetup);
+                              setGoogleSettingsDraft(savedDraft);
+                              setGoogleClientIdEditing(false);
+                            }}
+                          >
+                            <CheckCircle2 className="size-4" />
+                          </button>
+                        </div>
+
+                        <FlowField
+                          label="Client ID"
+                          description="Override the packaged Google desktop-app client ID for this Forge install."
+                        >
+                          <Input
+                            aria-label="Client ID"
+                            value={googleSettingsDraft.clientId}
+                            onChange={(event) => {
+                              setGoogleSetupMessage(null);
+                              setGoogleSettingsDraft({
+                                ...googleSettingsDraft,
+                                clientId: event.target.value
+                              });
+                            }}
+                            placeholder="1234567890-abcdef.apps.googleusercontent.com"
+                          />
+                          {googleValidation.issues.clientId ? (
+                            <p className="mt-2 text-sm text-rose-200">
+                              {googleValidation.issues.clientId}
+                            </p>
+                          ) : null}
+                        </FlowField>
+
+                        <FlowField
+                          label="Client secret"
+                          description="Override the packaged Google desktop-app client secret for this Forge install."
+                        >
+                          <Input
+                            aria-label="Client secret"
+                            value={googleSettingsDraft.clientSecret}
+                            onChange={(event) => {
+                              setGoogleSetupMessage(null);
+                              setGoogleSettingsDraft({
+                                ...googleSettingsDraft,
+                                clientSecret: event.target.value
+                              });
+                            }}
+                            placeholder="GOCSPX-..."
+                          />
+                          {googleValidation.issues.clientSecret ? (
+                            <p className="mt-2 text-sm text-rose-200">
+                              {googleValidation.issues.clientSecret}
+                            </p>
+                          ) : null}
+                        </FlowField>
+
+                        <div className="flex flex-wrap items-center gap-3">
+                          <Button
+                            type="button"
+                            onClick={() =>
+                              void saveGoogleSettingsMutation.mutateAsync(
+                                googleSettingsDraft
+                              )
+                            }
+                            disabled={
+                              !hasUnsavedGoogleSettings || !googleValidation.isValid
+                            }
+                            pending={saveGoogleSettingsMutation.isPending}
+                            pendingLabel="Saving"
+                          >
+                            Save Google OAuth override
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="secondary"
+                            onClick={() => {
+                              setGoogleSetupMessage(null);
+                              setGoogleSettingsDraft({
+                                clientId: "",
+                                clientSecret: ""
+                              });
+                            }}
+                            disabled={
+                              saveGoogleSettingsMutation.isPending ||
+                              (!savedGoogleSettingsDraft.clientId &&
+                                !savedGoogleSettingsDraft.clientSecret &&
+                                googleSettingsDraft.clientId.length === 0 &&
+                                googleSettingsDraft.clientSecret.length === 0)
+                            }
+                          >
+                            {savedGoogleSettingsDraft.clientId ||
+                            savedGoogleSettingsDraft.clientSecret
+                              ? "Clear override"
+                              : "Use packaged default"}
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {googleSetupMessage ? (
+                    <div className="mt-4 rounded-[18px] border border-white/10 bg-white/[0.04] px-4 py-3 text-sm leading-6 text-white/72">
+                      {googleSetupMessage}
+                    </div>
+                  ) : null}
+
+                  <div className="mt-4 rounded-[18px] border border-sky-400/20 bg-sky-400/10 px-4 py-3 text-sm leading-6 text-sky-50">
+                    If you open Forge on a phone or another remote route,
+                    Google redirects to localhost on that other device instead of
+                    back to Forge.
                   </div>
 
                   <div className="mt-4 flex flex-wrap items-center gap-3">
@@ -621,8 +1315,10 @@ export function CalendarConnectionFlowDialog({
                       type="button"
                       onClick={() => void startGoogleFlow()}
                       disabled={
-                        !googleSetup.isReadyForPairing ||
-                        !googleSetup.allowedOrigins.includes(window.location.origin)
+                        !activeGoogleSetup.isReadyForPairing ||
+                        !googlePairingAllowedFromCurrentOrigin ||
+                        hasUnsavedGoogleSettings ||
+                        saveGoogleSettingsMutation.isPending
                       }
                       pending={googleSession?.status === "pending"}
                       pendingLabel="Waiting for Google"
@@ -639,44 +1335,6 @@ export function CalendarConnectionFlowDialog({
                       </Badge>
                     ) : null}
                   </div>
-
-                  <div className="mt-4 grid gap-3 md:grid-cols-2">
-                    <div className="rounded-[18px] bg-white/[0.04] px-4 py-3 text-sm leading-6 text-white/68">
-                      App credentials belong to Forge itself. User tokens belong
-                      to the signed-in Google account and are issued per user
-                      after consent.
-                    </div>
-                    <div className="rounded-[18px] bg-white/[0.04] px-4 py-3 text-sm leading-6 text-white/68">
-                      Open Forge on the correct host machine and browser origin
-                      first. In local dev that usually means{" "}
-                      <span className="font-medium text-white">
-                        http://127.0.0.1:3027
-                      </span>{" "}
-                      for the Vite UI, while the redirect itself still returns
-                      to{" "}
-                      <span className="font-medium text-white">
-                        http://127.0.0.1:4317
-                      </span>
-                      .
-                    </div>
-                  </div>
-
-                  {!googleSetup.isReadyForPairing ? (
-                    <div className="mt-4 rounded-[18px] border border-amber-400/20 bg-amber-400/10 px-4 py-3 text-sm leading-6 text-amber-100">
-                      {googleSetup.setupMessage}
-                    </div>
-                  ) : null}
-
-                  {googleSetup.isReadyForPairing &&
-                  !googleSetup.allowedOrigins.includes(window.location.origin) ? (
-                    <div className="mt-4 rounded-[18px] border border-amber-400/20 bg-amber-400/10 px-4 py-3 text-sm leading-6 text-amber-100">
-                      Google Calendar pairing is only available from the
-                      configured host: {googleSetup.appUrl}. Open Forge on one
-                      of these browser origins first:{" "}
-                      {googleSetup.allowedOrigins.join(", ")}. Current origin:{" "}
-                      {window.location.origin}.
-                    </div>
-                  ) : null}
                 </div>
               </div>
             ) : value.provider === "microsoft" ? (
@@ -685,14 +1343,13 @@ export function CalendarConnectionFlowDialog({
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div>
                       <div className="font-medium text-white">
-                        Guided Microsoft sign-in
+                        Guided Microsoft setup
                       </div>
                       <p className="mt-2 max-w-2xl text-sm leading-6 text-white/60">
-                        Forge uses the Microsoft client ID and redirect URI saved
-                        in Calendar Settings, opens a Microsoft login popup,
-                        completes a local MSAL public-client authorization-code
-                        flow with PKCE, and then brings the discovered calendars
-                        back here for selection.
+                        Save the Microsoft app registration details for this
+                        Forge instance here, optionally test them, then continue
+                        into the Microsoft sign-in popup. Exchange Online stays
+                        read-only for now.
                       </p>
                     </div>
                     <Badge className="bg-sky-400/12 text-sky-100">
@@ -700,32 +1357,110 @@ export function CalendarConnectionFlowDialog({
                     </Badge>
                   </div>
 
+                  <div className="mt-4 grid gap-4 md:grid-cols-2">
+                    <FlowField
+                      label="Microsoft client ID"
+                      description="Use the Application (client) ID from the Microsoft Entra app registration for this Forge instance."
+                    >
+                      <Input
+                        value={microsoftSettingsDraft.clientId}
+                        onChange={(event) => {
+                          setMicrosoftSetupMessage(null);
+                          setMicrosoftSettingsDraft((current) => ({
+                            ...current,
+                            clientId: event.target.value
+                          }));
+                        }}
+                        placeholder="00000000-0000-0000-0000-000000000000"
+                      />
+                      {microsoftValidation.issues.clientId ? (
+                        <div className="text-sm text-rose-300">
+                          {microsoftValidation.issues.clientId}
+                        </div>
+                      ) : null}
+                    </FlowField>
+
+                    <FlowField
+                      label="Tenant / authority"
+                      description="Use common unless you need a tenant-specific authority."
+                    >
+                      <Input
+                        value={microsoftSettingsDraft.tenantId}
+                        onChange={(event) => {
+                          setMicrosoftSetupMessage(null);
+                          setMicrosoftSettingsDraft((current) => ({
+                            ...current,
+                            tenantId: event.target.value
+                          }));
+                        }}
+                        placeholder="common"
+                      />
+                    </FlowField>
+                  </div>
+
+                  <FlowField
+                    label="Redirect URI"
+                    description="Register this exact Forge callback URI in the Microsoft app registration."
+                  >
+                    <Input
+                      value={microsoftSettingsDraft.redirectUri}
+                      onChange={(event) => {
+                        setMicrosoftSetupMessage(null);
+                        setMicrosoftSettingsDraft((current) => ({
+                          ...current,
+                          redirectUri: event.target.value
+                        }));
+                      }}
+                      placeholder="http://127.0.0.1:4317/api/v1/calendar/oauth/microsoft/callback"
+                    />
+                    {microsoftValidation.issues.redirectUri ? (
+                      <div className="text-sm text-rose-300">
+                        {microsoftValidation.issues.redirectUri}
+                      </div>
+                    ) : null}
+                  </FlowField>
+
                   <div className="mt-4 rounded-[18px] bg-white/[0.04] px-4 py-3 text-sm leading-6 text-white/68">
-                    <div>
-                      Saved client ID:{" "}
-                      <span className="font-medium text-white">
-                        {microsoftSetup.clientId || "Not configured yet"}
-                      </span>
-                    </div>
-                    <div>
-                      Tenant:{" "}
-                      <span className="font-medium text-white">
-                        {microsoftSetup.tenantId}
-                      </span>
-                    </div>
-                    <div className="break-all">
-                      Redirect URI:{" "}
-                      <span className="font-medium text-white">
-                        {microsoftSetup.redirectUri}
-                      </span>
-                    </div>
+                    Forge saves the client ID, tenant, and redirect URI for this
+                    local instance, then handles Microsoft sign-in in a popup.
                   </div>
 
                   <div className="mt-4 flex flex-wrap items-center gap-3">
                     <Button
                       type="button"
+                      onClick={() =>
+                        void saveMicrosoftSettingsMutation.mutateAsync(
+                          microsoftSettingsDraft
+                        )
+                      }
+                      disabled={!microsoftValidation.isValid}
+                      pending={saveMicrosoftSettingsMutation.isPending}
+                      pendingLabel="Saving"
+                    >
+                      Save Microsoft settings
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      onClick={() =>
+                        void testMicrosoftSettingsMutation.mutateAsync(
+                          microsoftSettingsDraft
+                        )
+                      }
+                      disabled={!microsoftValidation.isValid}
+                      pending={testMicrosoftSettingsMutation.isPending}
+                      pendingLabel="Testing"
+                    >
+                      Test Microsoft configuration
+                    </Button>
+                    <Button
+                      type="button"
                       onClick={() => void startMicrosoftFlow()}
-                      disabled={!microsoftSetup.isReadyForSignIn}
+                      disabled={
+                        !microsoftValidation.isValid ||
+                        hasUnsavedMicrosoftSettings ||
+                        saveMicrosoftSettingsMutation.isPending
+                      }
                       pending={microsoftSession?.status === "pending"}
                       pendingLabel="Waiting for Microsoft"
                     >
@@ -744,7 +1479,8 @@ export function CalendarConnectionFlowDialog({
 
                   <div className="mt-4 grid gap-3 md:grid-cols-2">
                     <div className="rounded-[18px] bg-white/[0.04] px-4 py-3 text-sm leading-6 text-white/68">
-                      Users do not paste client secrets or refresh tokens here.
+                      Save before sign-in. The Microsoft popup always uses the
+                      latest saved client ID, tenant, and redirect URI.
                     </div>
                     <div className="rounded-[18px] bg-white/[0.04] px-4 py-3 text-sm leading-6 text-white/68">
                       After sign-in, Forge will let you choose which Exchange
@@ -752,9 +1488,9 @@ export function CalendarConnectionFlowDialog({
                     </div>
                   </div>
 
-                  {!microsoftSetup.isReadyForSignIn ? (
-                    <div className="mt-4 rounded-[18px] border border-amber-400/20 bg-amber-400/10 px-4 py-3 text-sm leading-6 text-amber-100">
-                      {microsoftSetup.setupMessage}
+                  {microsoftSetupMessage ? (
+                    <div className="mt-4 rounded-[18px] border border-white/10 bg-white/[0.04] px-4 py-3 text-sm leading-6 text-white/72">
+                      {microsoftSetupMessage}
                     </div>
                   ) : null}
                 </div>
@@ -819,8 +1555,8 @@ export function CalendarConnectionFlowDialog({
                   type="button"
                   onClick={() => void startGoogleFlow()}
                   disabled={
-                    !googleSetup.isReadyForPairing ||
-                    !googleSetup.allowedOrigins.includes(window.location.origin)
+                    !activeGoogleSetup.isReadyForPairing ||
+                    !googlePairingAllowedFromCurrentOrigin
                   }
                   pending={googleSession?.status === "pending"}
                   pendingLabel="Waiting for Google"
@@ -841,6 +1577,11 @@ export function CalendarConnectionFlowDialog({
                 <Button
                   type="button"
                   onClick={() => void startMicrosoftFlow()}
+                  disabled={
+                    !microsoftValidation.isValid ||
+                    hasUnsavedMicrosoftSettings ||
+                    saveMicrosoftSettingsMutation.isPending
+                  }
                   pending={microsoftSession?.status === "pending"}
                   pendingLabel="Waiting for Microsoft"
                 >
@@ -899,7 +1640,7 @@ export function CalendarConnectionFlowDialog({
                         <div className="flex flex-wrap items-start justify-between gap-3">
                           <div>
                             <div className="font-medium text-white">
-                              {calendar.displayName}
+                              {readCalendarDisplayName(calendar)}
                             </div>
                             <div className="mt-1 text-sm text-white/56">
                               {calendar.timezone || "No timezone exposed"} ·{" "}
@@ -1015,12 +1756,7 @@ export function CalendarConnectionFlowDialog({
                   <>
                     Start the guided Google sign-in first. Forge will bring the
                     discovered Google calendars back here as soon as the popup
-                    completes. Make sure Forge is open on one of these browser
-                    origins first:{" "}
-                    <span className="font-medium text-white">
-                      {googleSetup.allowedOrigins.join(", ")}
-                    </span>
-                    .
+                    completes.
                   </>
                 ) : value.provider === "microsoft" ? (
                   <>
@@ -1100,11 +1836,31 @@ export function CalendarConnectionFlowDialog({
       discovery,
       discoveryMutation.isPending,
       draft.provider,
+      googleClientIdEditing,
+      googleSettingsDraft,
       googleSession,
-      googleSetup.allowedOrigins,
-      googleSetup.appUrl,
-      googleSetup.isReadyForPairing,
-      googleSetup.redirectUri,
+      activeGoogleSetup.clientId,
+      googleSetupMessage,
+      activeGoogleSetup.allowedOrigins,
+      activeGoogleSetup.appBaseUrl,
+      activeGoogleSetup.isLocalOnly,
+      activeGoogleSetup.isReadyForPairing,
+      activeGoogleSetup.redirectUri,
+      googleRedirectOrigin,
+      hasUnsavedGoogleSettings,
+      googlePairingAllowedFromCurrentOrigin,
+      googleWrongRouteMessage,
+      hasUnsavedMicrosoftSettings,
+      microsoftSettingsDraft,
+      activeMicrosoftSetup.setupMessage,
+      microsoftSetupMessage,
+      microsoftValidation,
+      saveGoogleSettingsMutation.isPending,
+      saveMicrosoftSettingsMutation.isPending,
+      savedMicrosoftSettingsDraft,
+      testMicrosoftSettingsMutation.isPending,
+      activeMicrosoftSetup.isReadyForSignIn,
+      activeMicrosoftSetup.redirectUri,
       microsoftSession
     ]
   );
@@ -1128,6 +1884,7 @@ export function CalendarConnectionFlowDialog({
       pending={pending}
       pendingLabel="Connecting"
       error={submitError}
+      resolveError={inlineStepError}
       initialStepId={initialStepId}
       onSubmit={async () => {
         try {

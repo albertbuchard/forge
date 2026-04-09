@@ -1,4 +1,4 @@
-import { cp, mkdir, readdir, rm } from "node:fs/promises";
+import { cp, mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawn } from "node:child_process";
@@ -15,6 +15,74 @@ const codexRuntimeDistDir = path.join(codexRuntimeRoot, "dist");
 const codexRuntimeMigrationsDir = path.join(codexRuntimeRoot, "server", "migrations");
 const repoWebDistDir = path.join(repoRoot, "dist");
 const repoMigrationsDir = path.join(repoRoot, "server", "migrations");
+const pluginServerEntrySource = `import { existsSync } from "node:fs";
+import { spawn } from "node:child_process";
+import path from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
+
+const packageRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const repoRoot = path.resolve(packageRoot, "..");
+const builtRuntimeEntry = path.join(packageRoot, "dist", "server", "server", "src", "index.js");
+const devRuntimeEntry = path.join(repoRoot, "server", "src", "index.ts");
+const devDataRootWrapper = path.join(repoRoot, "scripts", "with-openclaw-plugin-data-root.mjs");
+const tsxCliEntry = path.join(repoRoot, "node_modules", "tsx", "dist", "cli.mjs");
+const devModeFlag = (process.env.FORGE_OPENCLAW_DEV ?? "").trim().toLowerCase();
+const useDevRuntime = devModeFlag === "1" || devModeFlag === "true" || devModeFlag === "yes";
+
+if (!useDevRuntime) {
+  await import(pathToFileURL(builtRuntimeEntry).href);
+} else {
+  if (!existsSync(devRuntimeEntry) || !existsSync(devDataRootWrapper) || !existsSync(tsxCliEntry)) {
+    throw new Error(
+      "FORGE_OPENCLAW_DEV is enabled, but the Forge repo dev runtime was not found. " +
+        "Run this from the Forge repository checkout or disable FORGE_OPENCLAW_DEV."
+    );
+  }
+
+  console.log("[forge-openclaw-plugin] starting source-backed dev runtime on port", process.env.PORT ?? "4317");
+
+  const child = spawn(
+    process.execPath,
+    [devDataRootWrapper, process.execPath, tsxCliEntry, "watch", devRuntimeEntry],
+    {
+      cwd: repoRoot,
+      stdio: "inherit",
+      env: {
+        ...process.env,
+        FORGE_DEV_WEB_ORIGIN:
+          process.env.FORGE_DEV_WEB_ORIGIN ?? "http://127.0.0.1:3027/forge/",
+        HOST: process.env.HOST ?? "0.0.0.0",
+        PORT: process.env.PORT ?? "4317"
+      }
+    }
+  );
+
+  const forwardSignal = (signal) => {
+    if (!child.killed) {
+      child.kill(signal);
+    }
+  };
+
+  process.on("SIGINT", forwardSignal);
+  process.on("SIGTERM", forwardSignal);
+
+  await new Promise((resolve, reject) => {
+    child.once("error", reject);
+    child.once("exit", (code, signal) => {
+      if (signal) {
+        process.exitCode = signal === "SIGINT" || signal === "SIGTERM" ? 0 : 1;
+        resolve();
+        return;
+      }
+      if (code === 0) {
+        resolve();
+        return;
+      }
+      reject(new Error(\`Forge OpenClaw dev runtime exited with code \${code ?? "unknown"}.\`));
+    });
+  });
+}
+`;
 
 function run(command, args, cwd) {
   return new Promise((resolve, reject) => {
@@ -48,6 +116,46 @@ async function removeCompiledTests(directory) {
   }
 }
 
+function normalizeRelativeJsSpecifier(specifier) {
+  if (!specifier.startsWith("./") && !specifier.startsWith("../")) {
+    return specifier;
+  }
+  if (specifier.endsWith("/")) {
+    return `${specifier}index.js`;
+  }
+  return path.extname(specifier) ? specifier : `${specifier}.js`;
+}
+
+function rewriteRelativeJsSpecifiers(source) {
+  return source
+    .replace(/((?:import|export)\s[^"'\n]*?\sfrom\s+["'])(\.\.?\/[^"']+)(["'])/g, (_match, prefix, specifier, suffix) =>
+      `${prefix}${normalizeRelativeJsSpecifier(specifier)}${suffix}`
+    )
+    .replace(/(import\s*\(\s*["'])(\.\.?\/[^"']+)(["']\s*\))/g, (_match, prefix, specifier, suffix) =>
+      `${prefix}${normalizeRelativeJsSpecifier(specifier)}${suffix}`
+    );
+}
+
+async function patchCompiledJsSpecifiers(directory) {
+  const entries = await readdir(directory, { withFileTypes: true });
+  for (const entry of entries) {
+    const fullPath = path.join(directory, entry.name);
+    if (entry.isDirectory()) {
+      await patchCompiledJsSpecifiers(fullPath);
+      continue;
+    }
+    if (!entry.isFile() || !entry.name.endsWith(".js")) {
+      continue;
+    }
+
+    const source = await readFile(fullPath, "utf8");
+    const rewritten = rewriteRelativeJsSpecifiers(source);
+    if (rewritten !== source) {
+      await writeFile(fullPath, rewritten, "utf8");
+    }
+  }
+}
+
 await rm(pluginDistDir, { recursive: true, force: true });
 await rm(pluginServerDir, { recursive: true, force: true });
 await mkdir(pluginDistDir, { recursive: true });
@@ -57,11 +165,19 @@ await cp(repoSkillDir, packageSkillDir, { recursive: true, force: true });
 await run("npm", ["exec", "--", "tsc", "-p", "tsconfig.build.json"], packageRoot);
 await run("npm", ["exec", "--", "tsc", "-p", "../server/tsconfig.json", "--outDir", "./dist/server"], packageRoot);
 await removeCompiledTests(path.join(pluginDistDir, "server"));
+await patchCompiledJsSpecifiers(path.join(pluginDistDir, "server"));
 await run("npm", ["run", "build"], repoRoot);
 
 await cp(repoWebDistDir, pluginDistDir, { recursive: true, force: true });
+await mkdir(path.join(pluginDistDir, "server", "server"), { recursive: true });
+await cp(repoMigrationsDir, path.join(pluginDistDir, "server", "server", "migrations"), { recursive: true, force: true });
 await mkdir(path.join(pluginServerDir), { recursive: true });
 await cp(repoMigrationsDir, path.join(pluginServerDir, "migrations"), { recursive: true, force: true });
+await writeFile(
+  path.join(pluginServerDir, "index.js"),
+  `${pluginServerEntrySource}\n`,
+  "utf8"
+);
 
 await rm(codexRuntimeDistDir, { recursive: true, force: true });
 await rm(codexRuntimeMigrationsDir, { recursive: true, force: true });

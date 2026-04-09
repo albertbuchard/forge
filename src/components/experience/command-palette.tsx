@@ -127,15 +127,17 @@ function getAuxiliaryVisual(
       return {
         icon: resolvedIcon,
         tileClassName:
-          "border-white/12 bg-white/[0.05] text-white/72 shadow-[0_18px_36px_rgba(3,8,18,0.18)]",
-        badgeClassName: "border-white/10 bg-white/[0.05] text-white/62"
+          "border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] text-[var(--ui-ink-medium)] shadow-[var(--ui-shadow-soft)]",
+        badgeClassName:
+          "border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] text-[var(--ui-ink-soft)]"
       };
     default:
       return {
         icon: resolvedIcon,
         tileClassName:
-          "border-white/12 bg-white/[0.05] text-white/72 shadow-[0_18px_36px_rgba(3,8,18,0.18)]",
-        badgeClassName: "border-white/10 bg-white/[0.05] text-white/62"
+          "border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] text-[var(--ui-ink-medium)] shadow-[var(--ui-shadow-soft)]",
+        badgeClassName:
+          "border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] text-[var(--ui-ink-soft)]"
       };
   }
 }
@@ -666,34 +668,34 @@ export function CommandPalette({
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Portal>
-        <Dialog.Overlay className="fixed inset-0 z-40 bg-[rgba(5,10,18,0.72)] backdrop-blur-xl" />
-        <Dialog.Content className="fixed inset-x-3 bottom-3 top-3 z-50 flex flex-col overflow-hidden rounded-[30px] border border-white/10 bg-[radial-gradient(circle_at_top,rgba(71,85,105,0.24),transparent_36%),linear-gradient(180deg,rgba(18,27,42,0.98),rgba(8,12,24,0.98))] shadow-[0_40px_120px_rgba(3,8,18,0.56)] sm:inset-x-6 sm:bottom-6 sm:top-6 md:left-1/2 md:right-auto md:top-[9vh] md:h-[min(78vh,44rem)] md:w-[min(60rem,calc(100vw-2rem))] md:-translate-x-1/2 md:bottom-auto">
+        <Dialog.Overlay className="surface-overlay fixed inset-0 z-40 backdrop-blur-xl" />
+        <Dialog.Content className="surface-modal-panel fixed inset-x-3 bottom-3 top-3 z-50 flex flex-col overflow-hidden rounded-[30px] border sm:inset-x-6 sm:bottom-6 sm:top-6 md:left-1/2 md:right-auto md:top-[9vh] md:h-[min(78vh,44rem)] md:w-[min(60rem,calc(100vw-2rem))] md:-translate-x-1/2 md:bottom-auto">
           <Dialog.Title className="sr-only">Forge power bar</Dialog.Title>
           <Dialog.Description className="sr-only">
             Search routes and Forge records, then open the selected result.
           </Dialog.Description>
 
-          <div className="border-b border-white/8 px-4 py-4 sm:px-5">
+          <div className="border-b border-[var(--ui-border-subtle)] px-4 py-4 sm:px-5">
             <div className="flex flex-wrap items-center justify-between gap-3">
-              <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.05] px-3 py-1.5 text-[12px] text-white/68">
-                <span className="rounded-full bg-white/[0.08] px-2 py-0.5 text-[11px] uppercase tracking-[0.16em] text-white/50">
+              <div className="inline-flex items-center gap-2 rounded-full border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] px-3 py-1.5 text-[12px] text-[var(--ui-ink-medium)]">
+                <span className="rounded-full bg-[var(--ui-surface-2)] px-2 py-0.5 text-[11px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
                   Scope
                 </span>
                 <span>{scopeLabel}</span>
               </div>
-              <div className="flex flex-wrap items-center gap-2 text-[11px] uppercase tracking-[0.16em] text-white/40">
-                <span className="rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1">
+              <div className="flex flex-wrap items-center gap-2 text-[11px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
+                <span className="rounded-full border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] px-2.5 py-1">
                   Shift Shift
                 </span>
-                <span className="rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1">
+                <span className="rounded-full border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] px-2.5 py-1">
                   Cmd/Ctrl K
                 </span>
               </div>
             </div>
 
-            <div className="mt-4 rounded-[24px] border border-white/10 bg-[linear-gradient(180deg,rgba(255,255,255,0.08),rgba(255,255,255,0.03))] px-4 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]">
+            <div className="mt-4 rounded-[24px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-4 py-3 shadow-[inset_0_1px_0_var(--ui-border-subtle)]">
               <div className="flex items-center gap-3">
-                <Search className="size-5 text-white/36" />
+                <Search className="size-5 text-[var(--ui-ink-faint)]" />
                 <Input
                   autoFocus
                   value={query}
@@ -730,10 +732,10 @@ export function CommandPalette({
                   className="border-0 bg-transparent px-0 py-0 text-[1rem] focus:border-0"
                 />
                 {isSearching ? (
-                  <LoaderCircle className="size-4 shrink-0 animate-spin text-white/42" />
+                  <LoaderCircle className="size-4 shrink-0 animate-spin text-[var(--ui-ink-faint)]" />
                 ) : null}
               </div>
-              <div className="mt-2 pl-8 text-[13px] leading-6 text-white/46">
+              <div className="mt-2 pl-8 text-[13px] leading-6 text-[var(--ui-ink-soft)]">
                 {normalizedQuery
                   ? "Search spans routes plus Forge records in the current owner scope."
                   : "Jump between Forge surfaces or start typing to search records across the current scope."}
@@ -743,7 +745,7 @@ export function CommandPalette({
 
           <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3 sm:px-4">
             {visibleItems.length === 0 ? (
-              <div className="rounded-[24px] border border-dashed border-white/10 bg-white/[0.03] px-4 py-8 text-center text-sm text-white/56">
+              <div className="rounded-[24px] border border-dashed border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] px-4 py-8 text-center text-sm text-[var(--ui-ink-soft)]">
                 {entitySearchQuery.isFetching
                   ? "Searching Forge..."
                   : t("common.commandPalette.noResults")}
@@ -757,7 +759,7 @@ export function CommandPalette({
                   return (
                     <div key={item.id}>
                       {showSectionLabel ? (
-                        <div className="px-2 pb-1 pt-2 text-[11px] uppercase tracking-[0.18em] text-white/34 first:pt-0">
+                        <div className="px-2 pb-1 pt-2 text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-faint)] first:pt-0">
                           {item.section}
                         </div>
                       ) : null}
@@ -770,8 +772,8 @@ export function CommandPalette({
                         className={cn(
                           "group flex w-full items-start gap-3 rounded-[24px] border px-4 py-3.5 text-left transition",
                           index === activeIndex
-                            ? "border-white/18 bg-[linear-gradient(180deg,rgba(255,255,255,0.11),rgba(255,255,255,0.05))] shadow-[0_24px_60px_rgba(3,8,18,0.24)]"
-                            : "border-transparent bg-white/[0.04] hover:bg-white/[0.07]"
+                            ? "border-[var(--ui-border-strong)] bg-[var(--ui-surface-3)] shadow-[var(--ui-shadow-soft)]"
+                            : "border-transparent bg-[var(--ui-surface-1)] hover:border-[var(--ui-border-subtle)] hover:bg-[var(--ui-surface-hover)]"
                         )}
                         onMouseEnter={() => setActiveIndex(index)}
                         onClick={() => handleSelect(item)}
@@ -781,19 +783,19 @@ export function CommandPalette({
                           <div className="flex flex-wrap items-center gap-2">
                             <PowerBarCategoryBadge item={item} />
                           </div>
-                          <div className="mt-2 text-[15px] font-medium text-white">
+                          <div className="mt-2 text-[15px] font-medium text-[var(--ui-ink-strong)]">
                             {item.kind ? (
                               <EntityName
                                 kind={item.kind}
                                 label={item.title}
                                 showIcon={false}
-                                labelClassName="text-white"
+                                labelClassName="text-[var(--ui-ink-strong)]"
                               />
                             ) : (
                               item.title
                             )}
                           </div>
-                          <div className="mt-1 text-sm leading-6 text-white/56">
+                          <div className="mt-1 text-sm leading-6 text-[var(--ui-ink-soft)]">
                             {item.detail}
                           </div>
                         </div>
@@ -801,8 +803,8 @@ export function CommandPalette({
                           className={cn(
                             "mt-1 size-4 shrink-0 transition",
                             index === activeIndex
-                              ? "text-white/72"
-                              : "text-white/26 group-hover:text-white/48"
+                              ? "text-[var(--ui-ink-medium)]"
+                              : "text-[var(--ui-ink-faint)] group-hover:text-[var(--ui-ink-soft)]"
                           )}
                         />
                       </button>
@@ -813,15 +815,15 @@ export function CommandPalette({
             )}
           </div>
 
-          <div className="border-t border-white/8 px-4 py-3 sm:px-5">
-            <div className="flex flex-wrap items-center gap-2 text-[12px] text-white/44">
-              <span className="rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1">
+          <div className="border-t border-[var(--ui-border-subtle)] px-4 py-3 sm:px-5">
+            <div className="flex flex-wrap items-center gap-2 text-[12px] text-[var(--ui-ink-faint)]">
+              <span className="rounded-full border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] px-2.5 py-1">
                 Up/Down navigate
               </span>
-              <span className="rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1">
+              <span className="rounded-full border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] px-2.5 py-1">
                 Enter open
               </span>
-              <span className="rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1">
+              <span className="rounded-full border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] px-2.5 py-1">
                 Esc close
               </span>
             </div>

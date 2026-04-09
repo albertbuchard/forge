@@ -94,6 +94,14 @@ describe("forge skill playbook parity", () => {
     expect(entityPlaybook).toMatch(/already answered the usual opening question/i);
     expect(entityPlaybook).toMatch(/stop exploring broadly/i);
     expect(entityPlaybook).toMatch(/Do not over-warm or over-therapize logistical records/i);
+    expect(entityPlaybook).toMatch(/Lead with what the user is trying to preserve, change, resolve, or make true/i);
+    expect(entityPlaybook).toMatch(/When the user is vague, ask for the smallest real example, desired outcome, or stake/i);
+    expect(entityPlaybook).toMatch(/When the user is clear, say what the record seems to be becoming/i);
+    expect(entityPlaybook).toMatch(/Steering moves/i);
+    expect(entityPlaybook).toMatch(/feels true[\s\S]*or needs one correction/i);
+    expect(entityPlaybook).toMatch(/Prefer "what", "when", and "how" before "why"/i);
+    expect(entityPlaybook).toMatch(/adjacent record becomes visible/i);
+    expect(entityPlaybook).toMatch(/offer one revised formulation yourself/i);
 
     expect(psychePlaybook).toMatch(/Ask only one lane at a time/i);
     expect(psychePlaybook).toMatch(/Follow-up rhythm/i);
@@ -103,9 +111,16 @@ describe("forge skill playbook parity", () => {
     expect(psychePlaybook).toMatch(/choose the one that most[\s\S]*improves understanding/i);
     expect(psychePlaybook).toMatch(/feels true enough/i);
     expect(psychePlaybook).toMatch(/accuracy and steadiness/i);
+    expect(psychePlaybook).toMatch(/Therapist micro-skills/i);
+    expect(psychePlaybook).toMatch(/Prefer "what", "when", and "how" early/i);
+    expect(psychePlaybook).toMatch(/whether it feels true, too sharp, or still misses something important/i);
+    expect(psychePlaybook).toMatch(/one brief reflection[\s\S]*one missing-detail question/i);
+    expect(psychePlaybook).toMatch(/what does it seem to prove in that moment/i);
+    expect(psychePlaybook).toMatch(/Psyche update loop/i);
+    expect(psychePlaybook).toMatch(/newly true, newly visible, or newly inaccurate/i);
     expect(psychePlaybook).toMatch(/What happened the last time this pattern showed up/i);
     expect(psychePlaybook).toMatch(/What did you find yourself doing the last time this move showed up/i);
-    expect(psychePlaybook).toMatch(/When that reaction hits, what does it start telling you/i);
+    expect(psychePlaybook).toMatch(/When that reaction hits, what does it start telling you about you, them, or what happens next/i);
     expect(psychePlaybook).not.toMatch(/disappearing like that/i);
     expect(psychePlaybook).not.toMatch(/send the long message/i);
     expect(psychePlaybook).not.toMatch(/polished and unreachable/i);

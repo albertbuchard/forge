@@ -12,8 +12,9 @@
   "scripts": {
     "dev": "concurrently -k -n server,web -c cyan,magenta \"npm run dev:server\" \"npm run dev:web\"",
     "dev:openclaw-data": "node ./scripts/with-openclaw-plugin-data-root.mjs npm run dev",
+    "dev:openclaw-plugin-runtime": "FORGE_OPENCLAW_DEV=1 node ./openclaw-plugin/server/index.js",
     "dev:web": "vite --host 0.0.0.0",
-    "dev:server": "HOST=0.0.0.0 PORT=4317 tsx watch server/src/index.ts",
+    "dev:server": "FORGE_DEV_WEB_ORIGIN=http://127.0.0.1:3027/forge/ HOST=0.0.0.0 PORT=4317 tsx watch server/src/index.ts",
     "dev:server:openclaw-data": "node ./scripts/with-openclaw-plugin-data-root.mjs npm run dev:server",
     "demo:seed": "node --import tsx server/src/seed-demo.ts",
     "demo:seed:openclaw-data": "node ./scripts/with-openclaw-plugin-data-root.mjs npm run demo:seed",

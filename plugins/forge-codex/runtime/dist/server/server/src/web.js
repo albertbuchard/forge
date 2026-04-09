@@ -2,7 +2,6 @@ import { access, readFile } from "node:fs/promises";
 import path from "node:path";
 const distDir = path.join(process.cwd(), "dist");
 const packagedRuntimeDistDir = path.join(process.cwd(), "plugins", "forge-codex", "runtime", "dist");
-const defaultBasePath = process.env.FORGE_BASE_PATH ?? "/forge/";
 const contentTypes = {
     ".css": "text/css; charset=utf-8",
     ".html": "text/html; charset=utf-8",
@@ -19,6 +18,18 @@ function normalizeBasePath(value) {
     }
     const withLeadingSlash = value.startsWith("/") ? value : `/${value}`;
     return withLeadingSlash.endsWith("/") ? withLeadingSlash : `${withLeadingSlash}/`;
+}
+function normalizeAbsoluteUrl(value) {
+    const url = new URL(value);
+    url.pathname = normalizeBasePath(url.pathname);
+    return url;
+}
+function getDefaultBasePath() {
+    return process.env.FORGE_BASE_PATH ?? "/forge/";
+}
+function getDevWebOrigin() {
+    const value = process.env.FORGE_DEV_WEB_ORIGIN?.trim();
+    return value && value.length > 0 ? value : null;
 }
 function stripBasePath(requestPath, basePath) {
     const normalizedBasePath = normalizeBasePath(basePath);
@@ -57,8 +68,16 @@ async function serveAsset(requestPath, reply) {
         reply.code(404);
         return { error: "Not found" };
     }
+    const normalizedRequestPath = stripBasePath(requestPath, getDefaultBasePath());
+    const devWebOrigin = getDevWebOrigin();
+    if (devWebOrigin) {
+        const target = new URL(normalizedRequestPath.startsWith("/")
+            ? normalizedRequestPath.slice(1)
+            : normalizedRequestPath, normalizeAbsoluteUrl(devWebOrigin));
+        reply.code(307).redirect(target.toString());
+        return reply;
+    }
     const clientDir = await getClientDir();
-    const normalizedRequestPath = stripBasePath(requestPath, defaultBasePath);
     const assetPath = resolveAsset(clientDir, normalizedRequestPath);
     const ext = path.extname(assetPath);
     try {

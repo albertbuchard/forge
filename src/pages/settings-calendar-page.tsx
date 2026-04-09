@@ -2,13 +2,11 @@ import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   CalendarDays,
-  CheckCircle2,
   ExternalLink,
   EyeOff,
   KeyRound,
   Link2,
   RefreshCcw,
-  Settings2,
   Trash2
 } from "lucide-react";
 import { useSearchParams } from "react-router-dom";
@@ -30,16 +28,18 @@ import {
   listCalendarConnections,
   listCalendarResources,
   patchCalendarConnection,
-  patchSettings,
-  syncCalendarConnection,
-  testMicrosoftCalendarOauthConfiguration
+  syncCalendarConnection
 } from "@/lib/api";
 import {
   buildCalendarDisplayColorMap,
   readCalendarDisplayPreferences,
   writeCalendarDisplayPreferences
 } from "@/lib/calendar-display-preferences";
-import type { CalendarDiscoveryPayload, CalendarProvider, CalendarResource, SettingsPayload } from "@/lib/types";
+import {
+  dedupeCalendarResourcesWithConnections,
+  readCalendarDisplayName
+} from "@/lib/calendar-name-deduper";
+import type { CalendarDiscoveryPayload, CalendarProvider, CalendarResource } from "@/lib/types";
 
 function normalizeCalendarUrl(value: string) {
   try {
@@ -67,65 +67,69 @@ function calendarProviderLabel(provider: CalendarProvider) {
   }
 }
 
-type MicrosoftSettingsDraft = {
-  clientId: string;
-  tenantId: string;
-  redirectUri: string;
-};
-
-const MICROSOFT_CALLBACK_PATH = "/api/v1/calendar/oauth/microsoft/callback";
-const MICROSOFT_CLIENT_ID_PATTERN =
-  /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
-
-function buildMicrosoftSettingsDraft(
-  microsoft: SettingsPayload["calendarProviders"]["microsoft"]
-): MicrosoftSettingsDraft {
-  return {
-    clientId: microsoft.clientId,
-    tenantId: microsoft.tenantId,
-    redirectUri: microsoft.redirectUri
-  };
+function providerActionLabel(provider: CalendarProvider) {
+  switch (provider) {
+    case "google":
+      return "Open Google guided flow";
+    case "microsoft":
+      return "Open Microsoft guided flow";
+    default:
+      return "Open guided setup";
+  }
 }
 
-function validateMicrosoftSettingsDraft(draft: MicrosoftSettingsDraft) {
-  const issues: Partial<Record<keyof MicrosoftSettingsDraft, string>> = {};
-
-  if (!draft.clientId.trim()) {
-    issues.clientId = "Microsoft client ID is required.";
-  } else if (!MICROSOFT_CLIENT_ID_PATTERN.test(draft.clientId.trim())) {
-    issues.clientId = "Use the Microsoft app registration client ID GUID.";
+function providerConnectionIcon(provider: CalendarProvider) {
+  switch (provider) {
+    case "google":
+    case "microsoft":
+      return KeyRound;
+    case "apple":
+      return CalendarDays;
+    case "caldav":
+    default:
+      return Link2;
   }
-
-  if (!draft.redirectUri.trim()) {
-    issues.redirectUri = "Redirect URI is required.";
-  } else {
-    try {
-      const url = new URL(draft.redirectUri.trim());
-      if (url.protocol !== "http:" && url.protocol !== "https:") {
-        issues.redirectUri = "Redirect URI must use http or https.";
-      } else if (url.pathname !== MICROSOFT_CALLBACK_PATH) {
-        issues.redirectUri = `Redirect URI must end with ${MICROSOFT_CALLBACK_PATH}.`;
-      }
-    } catch {
-      issues.redirectUri = "Redirect URI must be a full URL.";
-    }
-  }
-
-  return {
-    issues,
-    isValid: Object.keys(issues).length === 0
-  };
 }
 
-function sameMicrosoftSettingsDraft(
-  left: MicrosoftSettingsDraft,
-  right: MicrosoftSettingsDraft
-) {
-  return (
-    left.clientId.trim() === right.clientId.trim() &&
-    left.tenantId.trim() === right.tenantId.trim() &&
-    left.redirectUri.trim() === right.redirectUri.trim()
-  );
+function providerSyncLabel(provider: CalendarProvider) {
+  switch (provider) {
+    case "microsoft":
+      return "Read only";
+    default:
+      return "Read + write";
+  }
+}
+
+function providerAccessLabel(provider: CalendarProvider) {
+  switch (provider) {
+    case "google":
+      return "Local PKCE";
+    case "microsoft":
+      return "Guided sign-in";
+    case "apple":
+      return "App password";
+    case "caldav":
+    default:
+      return "CalDAV credentials";
+  }
+}
+
+function providerConnectionSummary(provider: CalendarProvider) {
+  switch (provider) {
+    case "google":
+      return "Sign in from the same machine running Forge. After connection, Forge can mirror the calendars you choose and write to a dedicated Forge calendar.";
+    case "apple":
+      return "Use your Apple ID email and app-specific password. Forge discovers your iCloud calendars before you choose what to mirror.";
+    case "microsoft":
+      return "Use the guided Microsoft sign-in flow. Forge mirrors the Exchange calendars you choose and keeps this provider read only.";
+    case "caldav":
+    default:
+      return "Enter a CalDAV server URL and account credentials. Forge discovers the calendars on that account before you choose what to mirror.";
+  }
+}
+
+function providerConnectionCountLabel(count: number) {
+  return `${count} connection${count === 1 ? "" : "s"}`;
 }
 
 export function SettingsCalendarPage() {
@@ -139,11 +143,6 @@ export function SettingsCalendarPage() {
   const [manageSelectionSeeded, setManageSelectionSeeded] = useState(false);
   const [removeConnectionId, setRemoveConnectionId] = useState<string | null>(null);
   const [displayPreferences, setDisplayPreferences] = useState(() => readCalendarDisplayPreferences());
-  const [microsoftSettingsDraft, setMicrosoftSettingsDraft] = useState<MicrosoftSettingsDraft>({
-    clientId: "",
-    tenantId: "common",
-    redirectUri: ""
-  });
 
   const operatorSessionQuery = useQuery({
     queryKey: ["forge-operator-session"],
@@ -205,25 +204,6 @@ export function SettingsCalendarPage() {
     onSuccess: invalidateCalendarSettings
   });
 
-  const saveMicrosoftSettingsMutation = useMutation({
-    mutationFn: (input: MicrosoftSettingsDraft) =>
-      patchSettings({
-        calendarProviders: {
-          microsoft: input
-        }
-      }),
-    onSuccess: invalidateCalendarSettings
-  });
-
-  const testMicrosoftSettingsMutation = useMutation({
-    mutationFn: (input: MicrosoftSettingsDraft) =>
-      testMicrosoftCalendarOauthConfiguration({
-        clientId: input.clientId.trim(),
-        tenantId: input.tenantId.trim() || "common",
-        redirectUri: input.redirectUri.trim()
-      })
-  });
-
   useEffect(() => {
     if (!operatorReady) {
       return;
@@ -246,26 +226,33 @@ export function SettingsCalendarPage() {
     setSearchParams(next, { replace: true });
   }, [operatorReady, searchParams, setSearchParams]);
 
-  useEffect(() => {
-    const microsoft = settingsQuery.data?.settings.calendarProviders.microsoft;
-    if (!microsoft) {
-      return;
-    }
-    setMicrosoftSettingsDraft(buildMicrosoftSettingsDraft(microsoft));
-  }, [settingsQuery.data]);
-
+  const displayCalendars = useMemo(
+    () =>
+      dedupeCalendarResourcesWithConnections(
+        calendarsQuery.data?.calendars ?? [],
+        connectionsQuery.data?.connections ?? []
+      ),
+    [calendarsQuery.data?.calendars, connectionsQuery.data?.connections]
+  );
   const calendarsByConnection = useMemo(() => {
     const grouped = new Map<string, CalendarResource[]>();
-    for (const calendar of calendarsQuery.data?.calendars ?? []) {
+    for (const calendar of displayCalendars) {
       const bucket = grouped.get(calendar.connectionId) ?? [];
       bucket.push(calendar);
       grouped.set(calendar.connectionId, bucket);
     }
     return grouped;
-  }, [calendarsQuery.data]);
+  }, [displayCalendars]);
+  const connectionCountsByProvider = useMemo(() => {
+    const counts: Partial<Record<CalendarProvider, number>> = {};
+    for (const connection of connectionsQuery.data?.connections ?? []) {
+      counts[connection.provider] = (counts[connection.provider] ?? 0) + 1;
+    }
+    return counts;
+  }, [connectionsQuery.data?.connections]);
   const calendarDisplayColors = useMemo(
-    () => buildCalendarDisplayColorMap(calendarsQuery.data?.calendars ?? [], displayPreferences.calendarColors),
-    [calendarsQuery.data?.calendars, displayPreferences.calendarColors]
+    () => buildCalendarDisplayColorMap(displayCalendars, displayPreferences.calendarColors),
+    [displayCalendars, displayPreferences.calendarColors]
   );
 
   const managedConnection = useMemo(
@@ -282,23 +269,6 @@ export function SettingsCalendarPage() {
     () => (manageConnectionId ? calendarsByConnection.get(manageConnectionId) ?? [] : []),
     [calendarsByConnection, manageConnectionId]
   );
-
-  const savedMicrosoftSettings = settingsQuery.data?.settings.calendarProviders.microsoft ?? null;
-  const microsoftValidation = useMemo(
-    () => validateMicrosoftSettingsDraft(microsoftSettingsDraft),
-    [microsoftSettingsDraft]
-  );
-  const hasUnsavedMicrosoftSettings =
-    savedMicrosoftSettings !== null &&
-    !sameMicrosoftSettingsDraft(
-      microsoftSettingsDraft,
-      buildMicrosoftSettingsDraft(savedMicrosoftSettings)
-    );
-  const microsoftSignInDisabled =
-    !savedMicrosoftSettings?.isReadyForSignIn ||
-    !microsoftValidation.isValid ||
-    hasUnsavedMicrosoftSettings ||
-    saveMicrosoftSettingsMutation.isPending;
 
   const managedDiscoveryQuery = useQuery({
     queryKey: ["forge-calendar-connection-discovery", manageConnectionId],
@@ -377,7 +347,9 @@ export function SettingsCalendarPage() {
                   >
                     <div className="flex flex-wrap items-start justify-between gap-3">
                       <div>
-                        <div className="font-medium text-white">{calendar.displayName}</div>
+                        <div className="font-medium text-white">
+                          {readCalendarDisplayName(calendar)}
+                        </div>
                         <div className="mt-1 text-sm text-white/56">
                           {calendar.timezone || "No timezone exposed"} · {calendar.url}
                         </div>
@@ -500,360 +472,105 @@ export function SettingsCalendarPage() {
       <SettingsSectionNav />
 
       <div className="grid gap-5">
-        <Card className="grid gap-5 rounded-[30px] border border-white/8 bg-[linear-gradient(180deg,rgba(17,28,41,0.98),rgba(9,16,27,0.98))]">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <div className="text-[11px] uppercase tracking-[0.18em] text-white/45">
-                Google Calendar OAuth
-              </div>
-              <p className="mt-2 max-w-3xl text-sm leading-6 text-white/60">
-                Forge uses one shared Google OAuth web application for everybody. The app credentials belong to Forge, while each user signs in with their own Google account so Forge can store a per-user refresh token for long-term sync.
-              </p>
+        <Card className="surface-section-panel grid gap-5 rounded-[30px] border">
+          <div className="max-w-3xl">
+            <div className="text-[11px] uppercase tracking-[0.18em] text-white/45">
+              Provider connections
             </div>
-            <div className="flex flex-wrap gap-2">
-              <Badge className="bg-emerald-500/16 text-emerald-100">
-                Shared app credentials
-              </Badge>
-              {googleSettings.isReadyForPairing ? (
-                <Badge className="bg-emerald-500/16 text-emerald-100">
-                  <CheckCircle2 className="mr-1 size-3.5" />
-                  Ready for pairing
-                </Badge>
-              ) : (
-                <Badge className="bg-white/[0.08] text-white/74">
-                  <KeyRound className="mr-1 size-3.5" />
-                  Setup required
-                </Badge>
-              )}
-            </div>
+            <p className="mt-2 text-sm leading-6 text-white/60">
+              Connect a provider here, then choose which calendars Forge should mirror. Providers with write access can publish work blocks and owned timeboxes into a dedicated calendar named <span className="font-medium text-white">Forge</span>.
+            </p>
           </div>
 
-          <div className="grid gap-4 xl:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">
-            <div className="grid gap-4">
-              <div className="grid gap-2 rounded-[24px] border border-white/8 bg-white/[0.04] p-4">
-                <div className="text-sm font-medium text-white">Registered app endpoints</div>
-                <div className="grid gap-2 text-sm leading-6 text-white/62">
-                  <div>
-                    App URL:{" "}
-                    <span className="font-medium text-white">
-                      {googleSettings.appUrl}
-                    </span>
-                  </div>
-                  <div className="break-all">
-                    Redirect URI:{" "}
-                    <span className="font-medium text-white">
-                      {googleSettings.redirectUri}
-                    </span>
-                  </div>
-                  <div>
-                    Allowed browser origins:{" "}
-                    <span className="font-medium text-white">
-                      {googleSettings.allowedOrigins.join(", ")}
-                    </span>
-                  </div>
-                </div>
-              </div>
+          <div className="grid gap-4 lg:grid-cols-2">
+            {providers.map((provider) => {
+              const ProviderIcon = providerConnectionIcon(provider.provider);
+              const connectionCount = connectionCountsByProvider[provider.provider] ?? 0;
+              const hasConnections = connectionCount > 0;
 
-              <div className="grid gap-3 md:grid-cols-2">
-                <div className="rounded-[24px] border border-white/8 bg-white/[0.04] p-4 text-sm leading-6 text-white/60">
-                  Local Google pairing only works when the browser is already open on the configured Forge host and port. During `npm run dev`, that normally means <span className="font-medium text-white">http://127.0.0.1:3027/forge/</span>, while the OAuth redirect itself still returns to <span className="font-medium text-white">http://127.0.0.1:4317</span>.
-                </div>
-                <div className="rounded-[24px] border border-white/8 bg-white/[0.04] p-4 text-sm leading-6 text-white/60">
-                  If you open Forge from another localhost port, another device, or the wrong host machine, Google cannot redirect back to the registered callback. In that case, open Forge on the main machine or use the canonical hosted URL instead.
-                </div>
-              </div>
-
-              <div className="flex flex-wrap gap-2">
-                <Button
-                  variant="secondary"
-                  onClick={() => {
-                    setInitialProvider("google");
-                    setDialogInitialStepId("credentials");
-                    setDialogOpen(true);
-                  }}
-                  disabled={!googleSettings.isReadyForPairing}
+              return (
+                <div
+                  key={provider.provider}
+                  className={`flex min-h-[248px] flex-col rounded-[26px] border p-5 shadow-[inset_0_1px_0_var(--ui-border-subtle)] ${
+                    hasConnections
+                      ? "border-emerald-400/24 bg-[linear-gradient(180deg,color-mix(in_srgb,#10b981_18%,var(--surface-panel)_82%),var(--ui-surface-2))]"
+                      : "border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)]"
+                  }`}
                 >
-                  <ExternalLink className="size-4" />
-                  Sign in with Google
-                </Button>
-              </div>
-            </div>
-
-            <div className="grid gap-3">
-              <div className="rounded-[24px] border border-white/8 bg-white/[0.04] p-4">
-                <div className="text-sm font-medium text-white">Current runtime alignment</div>
-                <div className="mt-3 grid gap-2 text-sm text-white/66">
-                  <div>
-                    Runtime origin:{" "}
-                    <span className="font-medium text-white">
-                      {googleSettings.runtimeOrigin}
-                    </span>
+                  <div className="flex items-start gap-4">
+                    <div
+                      className={`rounded-[18px] p-3 ${
+                        hasConnections
+                          ? "bg-emerald-400/16 text-emerald-100"
+                          : "bg-[var(--primary)]/14 text-[var(--primary)]"
+                      }`}
+                    >
+                      <ProviderIcon className="size-4" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <div className="font-medium text-[var(--ui-ink-strong)]">{provider.label}</div>
+                        {hasConnections ? (
+                          <>
+                            <Badge className="bg-emerald-400/16 text-emerald-50">Connected</Badge>
+                            <Badge className="bg-white/[0.08] text-white/82">
+                              {providerConnectionCountLabel(connectionCount)}
+                            </Badge>
+                          </>
+                        ) : null}
+                      </div>
+                      <p className="mt-2 text-sm leading-6 text-[var(--ui-ink-soft)]">
+                        {providerConnectionSummary(provider.provider)}
+                      </p>
+                      {hasConnections ? (
+                        <div className="mt-3 text-sm text-emerald-100/88">
+                          Forge already has {providerConnectionCountLabel(connectionCount)} for this provider. Open the guided flow again to add another account or reconfigure one.
+                        </div>
+                      ) : null}
+                    </div>
                   </div>
-                  <div>
-                    App URL matches runtime:{" "}
-                    <span className="font-medium text-white">
-                      {googleSettings.runtimeOriginMatchesAppUrl ? "yes" : "no"}
-                    </span>
+
+                  <div className="mt-5 flex flex-wrap gap-2">
+                    <Badge tone="signal" className="bg-[var(--primary)]/14 text-white/86">
+                      {providerAccessLabel(provider.provider)}
+                    </Badge>
+                    <Badge
+                      className={
+                        provider.supportsDedicatedForgeCalendar
+                          ? "bg-emerald-500/16 text-emerald-100"
+                          : "bg-sky-400/14 text-sky-100"
+                      }
+                    >
+                      {providerSyncLabel(provider.provider)}
+                    </Badge>
+                  </div>
+
+                  <div className="mt-auto pt-5">
+                    <Button
+                      variant="secondary"
+                      className="w-full justify-center"
+                      onClick={() => {
+                        setInitialProvider(provider.provider);
+                        setDialogInitialStepId(
+                          provider.provider === "google" ||
+                            provider.provider === "microsoft"
+                            ? "credentials"
+                            : undefined
+                        );
+                        setDialogOpen(true);
+                      }}
+                    >
+                      <ExternalLink className="size-4" />
+                      {providerActionLabel(provider.provider)}
+                    </Button>
                   </div>
                 </div>
-              </div>
-              <div className="rounded-[24px] border border-white/8 bg-white/[0.04] p-4 text-sm leading-6 text-white/60">
-                {googleSettings.setupMessage}
-              </div>
-              <div className="rounded-[24px] border border-white/8 bg-white/[0.04] p-4 text-sm leading-6 text-white/60">
-                Google Cloud must register the exact callback URI above on one Web application OAuth client. End users never create their own Google app; they only consent with their own Google accounts.
-              </div>
-            </div>
+              );
+            })}
           </div>
         </Card>
 
-        <Card className="grid gap-5 rounded-[30px] border border-white/8 bg-[linear-gradient(180deg,rgba(17,28,41,0.98),rgba(9,16,27,0.98))]">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <div className="text-[11px] uppercase tracking-[0.18em] text-white/45">
-                Exchange Online local setup
-              </div>
-              <p className="mt-2 max-w-3xl text-sm leading-6 text-white/60">
-                Self-hosted Forge uses a Microsoft public client with PKCE. Save the Microsoft app registration details here first, then continue to the guided sign-in flow to choose which Exchange calendars Forge should mirror.
-              </p>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              <Badge className="bg-sky-400/12 text-sky-100">Read only</Badge>
-              {microsoftSettings.isReadyForSignIn && !hasUnsavedMicrosoftSettings ? (
-                <Badge className="bg-emerald-500/16 text-emerald-100">
-                  <CheckCircle2 className="mr-1 size-3.5" />
-                  Ready for sign-in
-                </Badge>
-              ) : (
-                <Badge className="bg-white/[0.08] text-white/74">
-                  <KeyRound className="mr-1 size-3.5" />
-                  Setup required
-                </Badge>
-              )}
-            </div>
-          </div>
-
-          <div className="grid gap-4 xl:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)]">
-            <div className="grid gap-4">
-              <label className="grid gap-2">
-                <span className="text-sm font-medium text-white">Microsoft client ID</span>
-                <span className="text-sm leading-6 text-white/54">
-                  Use the Application (client) ID from the Microsoft Entra app registration for this local Forge instance.
-                </span>
-                <input
-                  className="min-h-12 rounded-[18px] border border-white/10 bg-white/[0.04] px-4 py-3 text-sm text-white outline-none transition placeholder:text-white/28 focus:border-[var(--primary)]/40 focus:bg-white/[0.06]"
-                  value={microsoftSettingsDraft.clientId}
-                  onChange={(event) =>
-                    setMicrosoftSettingsDraft((current) => ({
-                      ...current,
-                      clientId: event.target.value
-                    }))
-                  }
-                  placeholder="00000000-0000-0000-0000-000000000000"
-                />
-                {microsoftValidation.issues.clientId ? (
-                  <span className="text-sm text-rose-300">
-                    {microsoftValidation.issues.clientId}
-                  </span>
-                ) : null}
-              </label>
-
-              <div className="grid gap-4 md:grid-cols-2">
-                <label className="grid gap-2">
-                  <span className="text-sm font-medium text-white">Tenant / authority</span>
-                  <span className="text-sm leading-6 text-white/54">
-                    Use <span className="font-medium text-white">common</span> for a normal self-hosted delegated flow unless you need a tenant-specific authority.
-                  </span>
-                  <input
-                    className="min-h-12 rounded-[18px] border border-white/10 bg-white/[0.04] px-4 py-3 text-sm text-white outline-none transition placeholder:text-white/28 focus:border-[var(--primary)]/40 focus:bg-white/[0.06]"
-                    value={microsoftSettingsDraft.tenantId}
-                    onChange={(event) =>
-                      setMicrosoftSettingsDraft((current) => ({
-                        ...current,
-                        tenantId: event.target.value
-                      }))
-                    }
-                    placeholder="common"
-                  />
-                </label>
-
-                <div className="grid gap-2 rounded-[22px] border border-white/8 bg-white/[0.04] p-4">
-                  <div className="text-sm font-medium text-white">Microsoft access mode</div>
-                  <p className="text-sm leading-6 text-white/54">
-                    Forge currently requests delegated read access only. Exchange calendars are mirrored into Forge, but Forge does not publish work blocks or owned timeboxes back to Microsoft yet.
-                  </p>
-                  <Badge className="w-fit bg-sky-400/12 text-sky-100">Read-only mirroring</Badge>
-                </div>
-              </div>
-
-              <label className="grid gap-2">
-                <span className="text-sm font-medium text-white">Redirect URI</span>
-                <span className="text-sm leading-6 text-white/54">
-                  Register this exact Forge callback URI in the Microsoft app registration. The default works for the local backend on port 4317.
-                </span>
-                <input
-                  className="min-h-12 rounded-[18px] border border-white/10 bg-white/[0.04] px-4 py-3 text-sm text-white outline-none transition placeholder:text-white/28 focus:border-[var(--primary)]/40 focus:bg-white/[0.06]"
-                  value={microsoftSettingsDraft.redirectUri}
-                  onChange={(event) =>
-                    setMicrosoftSettingsDraft((current) => ({
-                      ...current,
-                      redirectUri: event.target.value
-                    }))
-                  }
-                  placeholder="http://127.0.0.1:4317/api/v1/calendar/oauth/microsoft/callback"
-                />
-                {microsoftValidation.issues.redirectUri ? (
-                  <span className="text-sm text-rose-300">
-                    {microsoftValidation.issues.redirectUri}
-                  </span>
-                ) : null}
-              </label>
-
-              <div className="flex flex-wrap gap-2">
-                <Button
-                  onClick={() =>
-                    void saveMicrosoftSettingsMutation.mutateAsync({
-                      clientId: microsoftSettingsDraft.clientId.trim(),
-                      tenantId: microsoftSettingsDraft.tenantId.trim() || "common",
-                      redirectUri: microsoftSettingsDraft.redirectUri.trim()
-                    })
-                  }
-                  disabled={!microsoftValidation.isValid}
-                  pending={saveMicrosoftSettingsMutation.isPending}
-                  pendingLabel="Saving"
-                >
-                  Save Microsoft settings
-                </Button>
-                <Button
-                  variant="secondary"
-                  onClick={() =>
-                    void testMicrosoftSettingsMutation.mutateAsync(microsoftSettingsDraft)
-                  }
-                  disabled={!microsoftValidation.isValid}
-                  pending={testMicrosoftSettingsMutation.isPending}
-                  pendingLabel="Testing"
-                >
-                  Test Microsoft configuration
-                </Button>
-                <Button
-                  variant="secondary"
-                  onClick={() => {
-                    setInitialProvider("microsoft");
-                    setDialogInitialStepId("credentials");
-                    setDialogOpen(true);
-                  }}
-                  disabled={microsoftSignInDisabled}
-                >
-                  <ExternalLink className="size-4" />
-                  Sign in with Microsoft
-                </Button>
-              </div>
-
-              {saveMicrosoftSettingsMutation.error instanceof Error ? (
-                <div className="rounded-[18px] border border-rose-400/20 bg-rose-400/10 px-4 py-3 text-sm text-rose-100">
-                  {saveMicrosoftSettingsMutation.error.message}
-                </div>
-              ) : null}
-
-              {testMicrosoftSettingsMutation.isSuccess ? (
-                <div className="rounded-[18px] border border-emerald-400/20 bg-emerald-500/[0.08] px-4 py-3 text-sm text-emerald-100">
-                  {testMicrosoftSettingsMutation.data.result.message}
-                </div>
-              ) : null}
-
-              {testMicrosoftSettingsMutation.error instanceof Error ? (
-                <div className="rounded-[18px] border border-rose-400/20 bg-rose-400/10 px-4 py-3 text-sm text-rose-100">
-                  {testMicrosoftSettingsMutation.error.message}
-                </div>
-              ) : null}
-            </div>
-
-            <div className="grid gap-3">
-              <div className="rounded-[24px] border border-white/8 bg-white/[0.04] p-4">
-                <div className="text-sm font-medium text-white">What the user needs first</div>
-                <p className="mt-2 text-sm leading-6 text-white/58">
-                  Microsoft sign-in cannot work until this Forge instance has a registered Microsoft app client ID and callback URI. Forge no longer asks the user for a client secret or refresh token in local self-hosted mode.
-                </p>
-              </div>
-              <div className="rounded-[24px] border border-white/8 bg-white/[0.04] p-4">
-                <div className="text-sm font-medium text-white">Current saved setup</div>
-                <div className="mt-3 grid gap-2 text-sm text-white/66">
-                  <div>
-                    Client ID:{" "}
-                    <span className="font-medium text-white">
-                      {microsoftSettings.clientId || "Not saved yet"}
-                    </span>
-                  </div>
-                  <div>
-                    Tenant:{" "}
-                    <span className="font-medium text-white">
-                      {microsoftSettings.tenantId}
-                    </span>
-                  </div>
-                  <div className="break-all">
-                    Redirect URI:{" "}
-                    <span className="font-medium text-white">
-                      {microsoftSettings.redirectUri}
-                    </span>
-                  </div>
-                </div>
-              </div>
-              <div className="rounded-[24px] border border-white/8 bg-white/[0.04] p-4 text-sm leading-6 text-white/60">
-                {hasUnsavedMicrosoftSettings
-                  ? "Save these Microsoft settings before you try to sign in, otherwise the popup will still use the previous saved configuration."
-                  : microsoftSettings.setupMessage}
-              </div>
-            </div>
-          </div>
-        </Card>
-
-        <Card className="grid gap-4 rounded-[30px] border border-white/8 bg-[linear-gradient(180deg,rgba(18,28,38,0.98),rgba(11,17,28,0.98))]">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <div className="text-[11px] uppercase tracking-[0.18em] text-white/45">Provider connections</div>
-              <p className="mt-2 max-w-3xl text-sm leading-6 text-white/60">
-                All provider setup lives here. Writable providers can publish work blocks and owned timeboxes into a dedicated calendar named <span className="font-medium text-white">Forge</span>, while read-only providers only mirror the calendars you select. Exact provider instructions appear only inside the guided setup flow.
-              </p>
-            </div>
-            <Badge className="bg-[var(--primary)]/14 text-[var(--primary)]">
-              <Settings2 className="mr-1 size-3.5" />
-              Settings-owned
-            </Badge>
-          </div>
-
-          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-            {providers.map((provider) => (
-              <button
-                key={provider.provider}
-                type="button"
-                onClick={() => {
-                  setInitialProvider(provider.provider);
-                  setDialogInitialStepId(
-                    provider.provider === "microsoft" ? "credentials" : undefined
-                  );
-                  setDialogOpen(true);
-                }}
-                className="rounded-[26px] border border-white/8 bg-white/[0.04] p-5 text-left transition hover:bg-white/[0.06]"
-              >
-                <div className="flex items-center gap-3">
-                  <div className="rounded-[18px] bg-[var(--primary)]/14 p-3 text-[var(--primary)]">
-                    <Link2 className="size-4" />
-                  </div>
-                  <div>
-                    <div className="font-medium text-white">{provider.label}</div>
-                    <div className="mt-1 text-sm text-white/56">Connect and manage sync</div>
-                  </div>
-                </div>
-                <p className="mt-4 text-sm leading-6 text-white/60">{provider.connectionHelp}</p>
-                <div className="mt-4 inline-flex rounded-full bg-white/[0.06] px-3 py-2 text-xs uppercase tracking-[0.16em] text-white/52">
-                  Open guided setup
-                </div>
-              </button>
-            ))}
-          </div>
-        </Card>
-
-        <Card className="grid gap-4 rounded-[30px] border border-white/8 bg-[linear-gradient(180deg,rgba(18,28,38,0.98),rgba(11,17,28,0.98))]">
+        <Card className="surface-section-panel grid gap-4 rounded-[30px] border">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
               <div className="text-[11px] uppercase tracking-[0.18em] text-white/45">Calendar colors</div>
@@ -871,80 +588,83 @@ export function SettingsCalendarPage() {
               }
               className={`rounded-full px-4 py-2 text-sm transition ${
                 displayPreferences.useCalendarColors
-                  ? "bg-[var(--primary)]/16 text-[var(--primary)] shadow-[inset_0_0_0_1px_rgba(192,193,255,0.2)]"
-                  : "bg-white/[0.06] text-white/62 hover:bg-white/[0.08]"
+                  ? "bg-[var(--ui-accent-soft)] text-[var(--primary)] shadow-[inset_0_0_0_1px_rgba(192,193,255,0.2)]"
+                  : "border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] text-[var(--ui-ink-soft)] hover:bg-[var(--ui-surface-hover)]"
               }`}
             >
               {displayPreferences.useCalendarColors ? "Colors on" : "Colors off"}
             </button>
           </div>
 
-          {(calendarsQuery.data?.calendars ?? []).length > 0 ? (
+          {displayCalendars.length > 0 ? (
             <div className="grid gap-3">
-              {(calendarsQuery.data?.calendars ?? []).map((calendar) => (
-                <div
-                  key={calendar.id}
-                  className="grid gap-3 rounded-[22px] border border-white/8 bg-white/[0.04] p-4 md:grid-cols-[minmax(0,1fr)_auto]"
-                >
-                  <div className="min-w-0">
-                    <div className="flex min-w-0 items-center gap-3">
-                      <span
-                        aria-hidden="true"
-                        className="size-3 shrink-0 rounded-full"
-                        style={{ backgroundColor: calendarDisplayColors[calendar.id] }}
-                      />
-                      <div className="min-w-0">
-                        <div className="truncate font-medium text-white">{calendar.title}</div>
-                        <div className="mt-1 text-sm text-white/56">
-                          {calendar.canWrite ? "Writable" : "Read only"} · {calendar.timezone}
+              {displayCalendars.map((calendar) => {
+                const calendarLabel = readCalendarDisplayName(calendar);
+                return (
+                  <div
+                    key={calendar.id}
+                    className="grid gap-3 rounded-[22px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] p-4 md:grid-cols-[minmax(0,1fr)_auto]"
+                  >
+                    <div className="min-w-0">
+                      <div className="flex min-w-0 items-center gap-3">
+                        <span
+                          aria-hidden="true"
+                          className="size-3 shrink-0 rounded-full"
+                          style={{ backgroundColor: calendarDisplayColors[calendar.id] }}
+                        />
+                        <div className="min-w-0">
+                          <div className="truncate font-medium text-[var(--ui-ink-strong)]">{calendarLabel}</div>
+                          <div className="mt-1 text-sm text-[var(--ui-ink-soft)]">
+                            {calendar.canWrite ? "Writable" : "Read only"} · {calendar.timezone}
+                          </div>
                         </div>
                       </div>
                     </div>
-                  </div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <input
-                      aria-label={`Choose display color for ${calendar.title}`}
-                      type="color"
-                      value={calendarDisplayColors[calendar.id]}
-                      onChange={(event) =>
-                        setDisplayPreferences((current) => ({
-                          ...current,
-                          calendarColors: {
-                            ...current.calendarColors,
-                            [calendar.id]: event.target.value
-                          }
-                        }))
-                      }
-                      className="h-10 w-12 cursor-pointer rounded-[14px] border border-white/12 bg-transparent p-1"
-                    />
-                    <Button
-                      size="sm"
-                      variant="secondary"
-                      onClick={() =>
-                        setDisplayPreferences((current) => {
-                          const nextColors = { ...current.calendarColors };
-                          delete nextColors[calendar.id];
-                          return {
+                    <div className="flex flex-wrap items-center gap-2">
+                      <input
+                        aria-label={`Choose display color for ${calendarLabel}`}
+                        type="color"
+                        value={calendarDisplayColors[calendar.id]}
+                        onChange={(event) =>
+                          setDisplayPreferences((current) => ({
                             ...current,
-                            calendarColors: nextColors
-                          };
-                        })
-                      }
-                    >
-                      Reset palette
-                    </Button>
+                            calendarColors: {
+                              ...current.calendarColors,
+                              [calendar.id]: event.target.value
+                            }
+                          }))
+                        }
+                        className="h-10 w-12 cursor-pointer rounded-[14px] border border-[var(--ui-border-subtle)] bg-transparent p-1"
+                      />
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        onClick={() =>
+                          setDisplayPreferences((current) => {
+                            const nextColors = { ...current.calendarColors };
+                            delete nextColors[calendar.id];
+                            return {
+                              ...current,
+                              calendarColors: nextColors
+                            };
+                          })
+                        }
+                      >
+                        Reset palette
+                      </Button>
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           ) : (
-            <div className="rounded-[24px] border border-dashed border-white/10 bg-white/[0.03] px-4 py-5 text-sm leading-6 text-white/56">
+            <div className="rounded-[24px] border border-dashed border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] px-4 py-5 text-sm leading-6 text-[var(--ui-ink-soft)]">
               Connect a provider first, then Forge will let you tune the display color of each mirrored calendar here.
             </div>
           )}
         </Card>
 
-        <Card className="grid gap-4 rounded-[30px] border border-white/8 bg-[linear-gradient(180deg,rgba(18,28,38,0.98),rgba(11,17,28,0.98))]">
+        <Card className="surface-section-panel grid gap-4 rounded-[30px] border">
           <div className="flex items-center justify-between gap-3">
             <div>
               <div className="text-[11px] uppercase tracking-[0.18em] text-white/45">Connected providers</div>
@@ -959,15 +679,15 @@ export function SettingsCalendarPage() {
               {connections.map((connection) => {
                 const calendars = calendarsByConnection.get(connection.id) ?? [];
                 return (
-                  <div key={connection.id} className="rounded-[24px] border border-white/8 bg-white/[0.04] p-4">
+                  <div key={connection.id} className="rounded-[24px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] p-4">
                     <div className="flex flex-wrap items-start justify-between gap-3">
                       <div>
-                        <div className="font-medium text-white">{connection.label}</div>
-                        <div className="mt-1 text-sm text-white/55">
+                        <div className="font-medium text-[var(--ui-ink-strong)]">{connection.label}</div>
+                        <div className="mt-1 text-sm text-[var(--ui-ink-soft)]">
                           {calendarProviderLabel(connection.provider)} · {connection.accountLabel || "No account label yet"}
                         </div>
                         {connection.lastSyncedAt ? (
-                          <div className="mt-2 text-sm text-white/48">
+                          <div className="mt-2 text-sm text-[var(--ui-ink-faint)]">
                             Last synced {new Date(connection.lastSyncedAt).toLocaleString()}
                           </div>
                         ) : null}
@@ -1023,8 +743,10 @@ export function SettingsCalendarPage() {
                           className="flex flex-wrap items-center justify-between gap-3 rounded-[18px] bg-white/[0.04] px-4 py-3"
                         >
                           <div className="min-w-0">
-                            <div className="truncate text-sm font-medium text-white">{calendar.title}</div>
-                            <div className="mt-1 text-xs uppercase tracking-[0.16em] text-white/45">
+                            <div className="truncate text-sm font-medium text-[var(--ui-ink-strong)]">
+                              {readCalendarDisplayName(calendar)}
+                            </div>
+                            <div className="mt-1 text-xs uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
                               {calendar.canWrite ? "Writable" : "Read only"} · {calendar.timezone}
                             </div>
                           </div>
@@ -1063,6 +785,7 @@ export function SettingsCalendarPage() {
         initialStepId={dialogInitialStepId}
         googleSetup={googleSettings}
         microsoftSetup={microsoftSettings}
+        onCalendarSettingsChanged={invalidateCalendarSettings}
         pending={connectMutation.isPending}
         onSubmit={async (input) => {
           await connectMutation.mutateAsync(input);

@@ -2016,7 +2016,7 @@ export function getCalendarOverview(
         provider: "google",
         label: "Google Calendar",
         supportsDedicatedForgeCalendar: true,
-        connectionHelp: "Forge uses one shared Google OAuth web app for everyone. Users sign in with Google, Forge stores a per-user refresh token, and the redirect only works from the configured Forge host and allowed local browser origins."
+        connectionHelp: "Forge uses a localhost Authorization Code + PKCE flow. Users sign in with Google from the same machine running Forge, Forge exchanges the code on the backend, and stores a per-user refresh token server-side."
       },
       {
         provider: "apple",

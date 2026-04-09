@@ -1,25 +1,38 @@
 const GOOGLE_CALLBACK_PATH = "/api/v1/calendar/oauth/google/callback";
 const DEFAULT_APP_PORT = "4317";
-const DEFAULT_APP_URL = `http://127.0.0.1:${DEFAULT_APP_PORT}`;
-const DEFAULT_DEV_WEB_ORIGIN = "http://127.0.0.1:3027";
+const DEFAULT_APP_BASE_URL = `http://127.0.0.1:${DEFAULT_APP_PORT}`;
+const PACKAGED_DEFAULT_GOOGLE_CLIENT_ID =
+  "208661368905-bc5v9t1h4uek8c550526k7d5ol0tk0rj.apps.googleusercontent.com";
+const PACKAGED_DEFAULT_GOOGLE_CLIENT_SECRET =
+  "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";
+const DEFAULT_DEV_WEB_ORIGINS = [
+  "http://127.0.0.1:3027",
+  "http://localhost:3027"
+];
 
 export type GoogleCalendarOauthPublicConfig = {
   clientId: string;
-  appUrl: string;
+  clientSecret: string;
+  storedClientId: string;
+  storedClientSecret: string;
+  appBaseUrl: string;
   redirectUri: string;
   allowedOrigins: string[];
-  usesSharedAppCredentials: true;
-  authMode: "shared_web_server_oauth";
+  usesPkce: true;
+  requiresServerClientSecret: false;
+  oauthClientType: "desktop_app";
+  authMode: "localhost_pkce";
   isConfigured: boolean;
   isReadyForPairing: boolean;
+  isLocalOnly: true;
   runtimeOrigin: string;
-  runtimeOriginMatchesAppUrl: boolean;
   setupMessage: string;
 };
 
-export type GoogleCalendarOauthPrivateConfig = GoogleCalendarOauthPublicConfig & {
-  clientSecret: string;
-};
+export type GoogleCalendarOauthPrivateConfig =
+  GoogleCalendarOauthPublicConfig & {
+    clientSecret: string;
+  };
 
 function runtimeOriginFromEnv(env: NodeJS.ProcessEnv) {
   const port = env.PORT?.trim() || DEFAULT_APP_PORT;
@@ -34,8 +47,8 @@ function normalizeOrigin(value: string, fieldLabel: string) {
     throw new Error(`${fieldLabel} must be a full URL.`);
   }
 
-  if (url.protocol !== "http:" && url.protocol !== "https:") {
-    throw new Error(`${fieldLabel} must use http or https.`);
+  if (url.protocol !== "http:") {
+    throw new Error(`${fieldLabel} must use http in local Forge mode.`);
   }
 
   if (url.pathname !== "/" && url.pathname !== "") {
@@ -45,7 +58,22 @@ function normalizeOrigin(value: string, fieldLabel: string) {
   return url.origin;
 }
 
-function normalizeRedirectUri(value: string, appOrigin: string) {
+function isLoopbackHostname(hostname: string) {
+  return hostname === "127.0.0.1" || hostname === "localhost";
+}
+
+function normalizeLoopbackOrigin(value: string, fieldLabel: string) {
+  const origin = normalizeOrigin(value, fieldLabel);
+  const url = new URL(origin);
+  if (!isLoopbackHostname(url.hostname)) {
+    throw new Error(
+      `${fieldLabel} must use localhost or 127.0.0.1 in local Forge mode.`
+    );
+  }
+  return origin;
+}
+
+function normalizeRedirectUri(value: string, appBaseUrl: string) {
   let url: URL;
   try {
     url = new URL(value);
@@ -53,8 +81,14 @@ function normalizeRedirectUri(value: string, appOrigin: string) {
     throw new Error("GOOGLE_REDIRECT_URI must be a full URL.");
   }
 
-  if (url.protocol !== "http:" && url.protocol !== "https:") {
-    throw new Error("GOOGLE_REDIRECT_URI must use http or https.");
+  if (url.protocol !== "http:") {
+    throw new Error("GOOGLE_REDIRECT_URI must use http in local Forge mode.");
+  }
+
+  if (!isLoopbackHostname(url.hostname)) {
+    throw new Error(
+      "GOOGLE_REDIRECT_URI must use localhost or 127.0.0.1 in local Forge mode."
+    );
   }
 
   if (url.pathname !== GOOGLE_CALLBACK_PATH) {
@@ -63,25 +97,18 @@ function normalizeRedirectUri(value: string, appOrigin: string) {
     );
   }
 
-  if (url.origin !== appOrigin) {
+  if (url.origin !== appBaseUrl) {
     throw new Error(
-      `GOOGLE_REDIRECT_URI must use the same origin as APP_URL (${appOrigin}).`
+      `GOOGLE_REDIRECT_URI must use the same origin as APP_BASE_URL (${appBaseUrl}).`
     );
   }
 
   return url.toString();
 }
 
-function defaultAllowedOrigins(appOrigin: string) {
-  if (appOrigin === DEFAULT_APP_URL) {
-    return [appOrigin, DEFAULT_DEV_WEB_ORIGIN];
-  }
-  return [appOrigin];
-}
-
 function normalizeAllowedOrigins(
   value: string | undefined,
-  appOrigin: string
+  appBaseUrl: string
 ) {
   const rawValues =
     value && value.trim().length > 0
@@ -89,9 +116,9 @@ function normalizeAllowedOrigins(
           .split(",")
           .map((entry) => entry.trim())
           .filter((entry) => entry.length > 0)
-      : defaultAllowedOrigins(appOrigin);
+      : [appBaseUrl, ...DEFAULT_DEV_WEB_ORIGINS];
   const normalized = rawValues.map((entry) =>
-    normalizeOrigin(entry, "GOOGLE_ALLOWED_ORIGINS")
+    normalizeLoopbackOrigin(entry, "GOOGLE_ALLOWED_ORIGINS")
   );
   return Array.from(new Set(normalized));
 }
@@ -101,58 +128,81 @@ export function getGoogleCalendarOauthCallbackPath() {
 }
 
 export function resolveGoogleCalendarOauthPublicConfig(
-  env: NodeJS.ProcessEnv = process.env
+  env: NodeJS.ProcessEnv = process.env,
+  overrides?: {
+    clientId?: string | null;
+    clientSecret?: string | null;
+  }
 ): GoogleCalendarOauthPublicConfig {
   const runtimeOrigin = runtimeOriginFromEnv(env);
-  const appUrl = normalizeOrigin(env.APP_URL?.trim() || runtimeOrigin, "APP_URL");
+  const appBaseUrl = normalizeLoopbackOrigin(
+    env.APP_BASE_URL?.trim() ||
+      env.APP_URL?.trim() ||
+      DEFAULT_APP_BASE_URL,
+    env.APP_BASE_URL?.trim() ? "APP_BASE_URL" : "APP_URL"
+  );
   const redirectUri = normalizeRedirectUri(
-    env.GOOGLE_REDIRECT_URI?.trim() || `${appUrl}${GOOGLE_CALLBACK_PATH}`,
-    appUrl
+    env.GOOGLE_REDIRECT_URI?.trim() || `${appBaseUrl}${GOOGLE_CALLBACK_PATH}`,
+    appBaseUrl
   );
   const allowedOrigins = normalizeAllowedOrigins(
     env.GOOGLE_ALLOWED_ORIGINS,
-    appUrl
+    appBaseUrl
   );
-  const clientId = env.GOOGLE_CLIENT_ID?.trim() ?? "";
-  const clientSecret = env.GOOGLE_CLIENT_SECRET?.trim() ?? "";
-  const isConfigured = clientId.length > 0 && clientSecret.length > 0;
-  const runtimeOriginMatchesAppUrl = runtimeOrigin === appUrl;
+  const storedClientId = overrides?.clientId?.trim() || "";
+  const storedClientSecret = overrides?.clientSecret?.trim() || "";
+  const envClientId = env.GOOGLE_CLIENT_ID?.trim() || "";
+  const envClientSecret = env.GOOGLE_CLIENT_SECRET?.trim() || "";
+  const hasStoredOverride = storedClientId.length > 0 || storedClientSecret.length > 0;
+  const hasEnvOverride = envClientId.length > 0 || envClientSecret.length > 0;
+  const clientId = hasStoredOverride
+    ? storedClientId
+    : hasEnvOverride
+      ? envClientId
+      : PACKAGED_DEFAULT_GOOGLE_CLIENT_ID.trim();
+  const clientSecret = hasStoredOverride
+    ? storedClientSecret
+    : hasEnvOverride
+      ? envClientSecret
+      : PACKAGED_DEFAULT_GOOGLE_CLIENT_SECRET.trim();
+  const isConfigured = clientId.length > 0;
+  const hasIncompleteStoredOverride =
+    storedClientId.length > 0 !== storedClientSecret.length > 0;
 
-  let setupMessage = "";
-  if (!isConfigured) {
-    setupMessage =
-      "Google Calendar pairing is not configured yet. Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET for the shared Forge app, then restart Forge.";
-  } else if (!runtimeOriginMatchesAppUrl) {
-    setupMessage = `Google Calendar pairing is configured for ${appUrl}. This backend currently looks local on ${runtimeOrigin}. Open Forge on the configured host or update APP_URL so the callback origin matches the running Forge runtime.`;
-  } else {
-    setupMessage =
-      "Google Calendar pairing is configured for the shared Forge app. Users only sign in with their own Google accounts; they do not create their own OAuth clients.";
-  }
+  const setupMessage = hasIncompleteStoredOverride
+    ? "Google OAuth override is incomplete for this Forge install. Save both the client ID and client secret together, or clear both fields to use the packaged default."
+    : isConfigured
+      ? "Google Calendar sign-in is configured for local Forge. Open Forge on localhost or 127.0.0.1 on the same machine that is running Forge, because Google will redirect back to the local callback on that machine."
+      : "Google client ID is not set for this Forge install.";
 
   return {
     clientId,
-    appUrl,
+    clientSecret,
+    storedClientId,
+    storedClientSecret,
+    appBaseUrl,
     redirectUri,
     allowedOrigins,
-    usesSharedAppCredentials: true,
-    authMode: "shared_web_server_oauth",
+    usesPkce: true,
+    requiresServerClientSecret: false,
+    oauthClientType: "desktop_app",
+    authMode: "localhost_pkce",
     isConfigured,
-    isReadyForPairing: isConfigured,
+    isReadyForPairing: isConfigured && !hasIncompleteStoredOverride,
+    isLocalOnly: true,
     runtimeOrigin,
-    runtimeOriginMatchesAppUrl,
     setupMessage
   };
 }
 
 export function resolveGoogleCalendarOauthPrivateConfig(
-  env: NodeJS.ProcessEnv = process.env
+  env: NodeJS.ProcessEnv = process.env,
+  overrides?: {
+    clientId?: string | null;
+    clientSecret?: string | null;
+  }
 ): GoogleCalendarOauthPrivateConfig {
-  const publicConfig = resolveGoogleCalendarOauthPublicConfig(env);
-  const clientSecret = env.GOOGLE_CLIENT_SECRET?.trim() ?? "";
-  return {
-    ...publicConfig,
-    clientSecret
-  };
+  return resolveGoogleCalendarOauthPublicConfig(env, overrides);
 }
 
 export function isGoogleCalendarOriginAllowed(
@@ -161,6 +211,14 @@ export function isGoogleCalendarOriginAllowed(
 ) {
   try {
     return allowedOrigins.includes(new URL(origin).origin);
+  } catch {
+    return false;
+  }
+}
+
+export function isGoogleCalendarLoopbackOrigin(origin: string) {
+  try {
+    return isLoopbackHostname(new URL(origin).hostname);
   } catch {
     return false;
   }

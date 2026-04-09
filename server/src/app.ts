@@ -3234,7 +3234,7 @@ const AGENT_ONBOARDING_TOOL_INPUT_CATALOG = [
       '{ provider: "google"|"apple"|"caldav"|"microsoft", label: string, username?: string, password?: string, serverUrl?: string, authSessionId?: string, selectedCalendarUrls: string[], forgeCalendarUrl?: string, createForgeCalendar?: boolean }',
     requiredFields: ["provider", "label", "provider-specific credentials"],
     notes: [
-      "Google now uses one shared Forge-owned OAuth web app. The user signs in interactively, Forge exchanges the authorization code on the backend, and forge_connect_calendar_provider should only be used after a completed Google authSessionId exists.",
+      "Google now uses an interactive localhost Authorization Code + PKCE flow. The user signs in interactively on the same machine running Forge, Forge exchanges the authorization code on the backend, and forge_connect_calendar_provider should only be used after a completed Google authSessionId exists.",
       "Apple starts from https://caldav.icloud.com and autodiscovers the principal plus calendars after authentication.",
       "Exchange Online uses Microsoft Graph. In the current Forge implementation it is read-only: Forge mirrors the selected calendars but does not publish work blocks or timeboxes back to Microsoft.",
       "In the current self-hosted local runtime, Exchange Online now uses an interactive Microsoft public-client sign-in flow with PKCE after the operator has saved the Microsoft client ID, tenant, and redirect URI in Settings -> Calendar. Non-interactive callers should treat Microsoft connection setup as a Settings-owned operator action unless a completed authSessionId already exists.",
@@ -3809,9 +3809,9 @@ function buildAgentOnboardingPayload(request: {
       saveSuggestionTone: "gentle_optional",
       maxQuestionsPerTurn: 1,
       psycheExplorationRule:
-        "When a Psyche entity needs understanding first, begin with one exploratory question before any working formulation, replacement belief, suggested title, or save pitch. Keep the opening reflection to one or two short sentences, stay in plain prose instead of bullets or numbered lists, keep that first reply short, do not mention Forge search or save structure yet, avoid colons or list-shaped phrasing, and wait for the user's answer before offering a fuller formulation.",
+        "When a Psyche entity needs understanding first, begin with one exploratory question before any working formulation, replacement belief, suggested title, or save pitch. Keep the opening reflection to one or two short sentences, stay in plain prose instead of bullets or numbered lists, keep that first reply short, do not mention Forge search or save structure yet, avoid colons or list-shaped phrasing, prefer what/when/how over why until the experience is grounded, and wait for the user's answer before offering a fuller formulation.",
       psycheOpeningQuestionRule:
-        "Prefer a concrete opening question tied to the entity: ask when the value mattered, what happened the last time the pattern appeared, what felt threatened before the behavior, what the feared outcome is inside the belief, what the mode is protecting, what the part says to do, or where the shift began in the incident.",
+        "Prefer a concrete opening question tied to the entity: ask when the value mattered, what happened the last time the pattern appeared, what cue or body signal came first before the behavior, what the belief starts saying about self or outcome, what feels most at risk inside the mode, what the part is trying to get the user to do or stop doing, or where the shift began in the incident. Reflect briefly before the question and stay in one follow-up lane at a time.",
       duplicateCheckRoute: "/api/v1/entities/search",
       uiSuggestionRule:
         "offer_visual_ui_when_review_or_editing_would_be_easier",
@@ -7559,6 +7559,11 @@ export async function buildServer(
     return await startGoogleCalendarOauth(
       startGoogleCalendarOauthSchema.parse(request.body ?? {}),
       {
+        browserOrigin:
+          typeof (request.body as { browserOrigin?: unknown } | null)?.browserOrigin ===
+          "string"
+            ? (request.body as { browserOrigin: string }).browserOrigin
+            : null,
         openerOrigin:
           typeof request.headers.origin === "string"
             ? request.headers.origin

@@ -36,6 +36,7 @@ import { Link } from "react-router-dom";
 import { useWorkbenchNodeDefinition } from "@/components/workbench/workbench-provider";
 import { FacetedTokenSearch, type FacetedTokenOption } from "@/components/search/faceted-token-search";
 import { Button } from "@/components/ui/button";
+import { ModalCloseButton } from "@/components/ui/modal-close-button";
 import type {
   AiConnector,
   AiConnectorEdge,
@@ -480,12 +481,7 @@ function WorkbenchDialog({
               ) : null}
             </div>
             <Dialog.Close asChild>
-              <button
-                type="button"
-                className="rounded-full bg-white/[0.05] px-3 py-2 text-sm text-white/66"
-              >
-                Close
-              </button>
+              <ModalCloseButton aria-label="Close workbench flow dialog" />
             </Dialog.Close>
           </div>
           <div className="mt-5">{children}</div>

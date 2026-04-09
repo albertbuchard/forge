@@ -2074,7 +2074,7 @@ export function buildOpenApiDocument() {
       },
       themePreference: {
         type: "string",
-        enum: ["obsidian", "solar", "aurora", "ember", "custom", "system"]
+        enum: ["obsidian", "solar", "aurora", "ember", "paper", "dawn", "atelier", "custom", "system"]
       },
       customTheme: nullable({
         type: "object",
@@ -2604,7 +2604,7 @@ export function buildOpenApiDocument() {
       execution: { $ref: "#/components/schemas/ExecutionSettings" },
       themePreference: {
         type: "string",
-        enum: ["obsidian", "solar", "aurora", "ember", "custom", "system"]
+        enum: ["obsidian", "solar", "aurora", "ember", "paper", "dawn", "atelier", "custom", "system"]
       },
       customTheme: nullable({
         type: "object",

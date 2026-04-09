@@ -1,9 +1,10 @@
 import * as Dialog from "@radix-ui/react-dialog";
 import { AnimatePresence, motion } from "framer-motion";
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { ArrowLeft, ArrowRight, Check, X } from "lucide-react";
+import { ArrowLeft, ArrowRight, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { FieldHint, InfoTooltip } from "@/components/ui/info-tooltip";
+import { ModalCloseButton } from "@/components/ui/modal-close-button";
 import { useI18n } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
@@ -19,6 +20,48 @@ export type QuestionFlowStep<TValue> = {
     setValue: (patch: Partial<TValue>) => void
   ) => ReactNode;
 };
+
+function renderDialogMessageBlock(message: string) {
+  const sections = message
+    .split(/\n\s*\n/g)
+    .map((section) =>
+      section
+        .split("\n")
+        .map((line) => line.trim())
+        .filter((line) => line.length > 0)
+    )
+    .filter((section) => section.length > 0);
+
+  if (sections.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className="grid gap-2">
+      {sections.map((section, sectionIndex) => {
+        const bulletLines = section.filter((line) => line.startsWith("- "));
+        const bodyLines = section.filter((line) => !line.startsWith("- "));
+
+        return (
+          <div key={`section-${sectionIndex}`} className="grid gap-2">
+            {bodyLines.map((line, index) => (
+              <p key={`${sectionIndex}-${line}-${index}`}>{line}</p>
+            ))}
+            {bulletLines.length > 0 ? (
+              <ul className="grid list-disc gap-1 pl-5">
+                {bulletLines.map((line, index) => (
+                  <li key={`${sectionIndex}-${line}-${index}`}>
+                    {line.slice(2)}
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
 
 function useIsMobileFlow() {
   const [isMobile, setIsMobile] = useState(() => {
@@ -262,13 +305,7 @@ export function QuestionFlowDialog<TValue>({
                 </div>
               </div>
               <Dialog.Close asChild>
-                <button
-                  type="button"
-                  aria-label={t("common.dialogs.closeDialog")}
-                  className="rounded-full bg-white/6 p-2 text-white/65 transition hover:bg-white/10 hover:text-white"
-                >
-                  <X className="size-4" />
-                </button>
+                <ModalCloseButton aria-label={t("common.dialogs.closeDialog")} />
               </Dialog.Close>
             </div>
           </div>
@@ -300,15 +337,15 @@ export function QuestionFlowDialog<TValue>({
                       {step.description}
                     </p>
                   ) : null}
+                  {visibleError ? (
+                    <div className="mt-4 rounded-[20px] border border-rose-400/20 bg-rose-400/10 px-4 py-3 text-sm leading-6 text-rose-100">
+                      {renderDialogMessageBlock(visibleError)}
+                    </div>
+                  ) : null}
                   <div className="mt-5 grid flex-1 content-start gap-5">
                     {step.render(value, setValue)}
                   </div>
                 </div>
-                {visibleError ? (
-                  <div className="rounded-[20px] border border-rose-400/20 bg-rose-400/10 px-4 py-3 text-sm text-rose-200">
-                    {visibleError}
-                  </div>
-                ) : null}
               </motion.div>
             </AnimatePresence>
           </div>

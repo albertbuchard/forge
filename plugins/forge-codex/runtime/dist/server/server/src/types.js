@@ -1220,6 +1220,9 @@ export const themePreferenceSchema = z.enum([
     "solar",
     "aurora",
     "ember",
+    "paper",
+    "dawn",
+    "atelier",
     "custom",
     "system"
 ]);
@@ -1247,6 +1250,24 @@ export const microsoftCalendarAuthSettingsSchema = z.object({
     authMode: z.literal("public_client_pkce"),
     isConfigured: z.boolean(),
     isReadyForSignIn: z.boolean(),
+    setupMessage: z.string()
+});
+export const googleCalendarAuthSettingsSchema = z.object({
+    clientId: z.string(),
+    clientSecret: z.string(),
+    storedClientId: z.string(),
+    storedClientSecret: z.string(),
+    appBaseUrl: z.string(),
+    redirectUri: z.string(),
+    allowedOrigins: z.array(z.string()),
+    usesPkce: z.literal(true),
+    requiresServerClientSecret: z.literal(false),
+    oauthClientType: z.literal("desktop_app"),
+    authMode: z.literal("localhost_pkce"),
+    isConfigured: z.boolean(),
+    isReadyForPairing: z.boolean(),
+    isLocalOnly: z.literal(true),
+    runtimeOrigin: z.string(),
     setupMessage: z.string()
 });
 export const aiModelProviderSchema = z.enum([
@@ -1849,6 +1870,7 @@ export const settingsPayloadSchema = z.object({
         psycheAuthRequired: z.boolean()
     }),
     calendarProviders: z.object({
+        google: googleCalendarAuthSettingsSchema,
         microsoft: microsoftCalendarAuthSettingsSchema
     }),
     modelSettings: modelSettingsPayloadSchema,
@@ -2065,10 +2087,7 @@ export const createCalendarConnectionSchema = z.discriminatedUnion("provider", [
     z.object({
         provider: z.literal("google"),
         label: nonEmptyTrimmedString,
-        username: nonEmptyTrimmedString,
-        clientId: nonEmptyTrimmedString,
-        clientSecret: nonEmptyTrimmedString,
-        refreshToken: nonEmptyTrimmedString,
+        authSessionId: nonEmptyTrimmedString,
         selectedCalendarUrls: z.array(nonEmptyTrimmedString.url()).min(1),
         forgeCalendarUrl: nonEmptyTrimmedString.url().nullable().optional(),
         createForgeCalendar: z.boolean().optional().default(false)
@@ -2101,13 +2120,6 @@ export const createCalendarConnectionSchema = z.discriminatedUnion("provider", [
 ]);
 export const discoverCalendarConnectionSchema = z.discriminatedUnion("provider", [
     z.object({
-        provider: z.literal("google"),
-        username: nonEmptyTrimmedString,
-        clientId: nonEmptyTrimmedString,
-        clientSecret: nonEmptyTrimmedString,
-        refreshToken: nonEmptyTrimmedString
-    }),
-    z.object({
         provider: z.literal("apple"),
         username: nonEmptyTrimmedString,
         password: nonEmptyTrimmedString
@@ -2122,12 +2134,24 @@ export const discoverCalendarConnectionSchema = z.discriminatedUnion("provider",
 export const startMicrosoftCalendarOauthSchema = z.object({
     label: nonEmptyTrimmedString.optional()
 });
+export const startGoogleCalendarOauthSchema = z.object({
+    label: nonEmptyTrimmedString.optional(),
+    browserOrigin: trimmedString.optional()
+});
 export const testMicrosoftCalendarOauthConfigurationSchema = z.object({
     clientId: nonEmptyTrimmedString.regex(/^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/, "Microsoft client IDs must use the standard app registration GUID format."),
     tenantId: trimmedString.default("common"),
     redirectUri: nonEmptyTrimmedString.url()
 });
 export const microsoftCalendarOauthSessionSchema = z.object({
+    sessionId: nonEmptyTrimmedString,
+    status: z.enum(["pending", "authorized", "error", "consumed", "expired"]),
+    authUrl: z.string().url().nullable(),
+    accountLabel: z.string().nullable(),
+    error: z.string().nullable(),
+    discovery: calendarDiscoveryPayloadSchema.nullable()
+});
+export const googleCalendarOauthSessionSchema = z.object({
     sessionId: nonEmptyTrimmedString,
     status: z.enum(["pending", "authorized", "error", "consumed", "expired"]),
     authUrl: z.string().url().nullable(),
@@ -2652,6 +2676,12 @@ export const updateSettingsSchema = z.object({
         .optional(),
     calendarProviders: z
         .object({
+        google: z
+            .object({
+            clientId: trimmedString.optional(),
+            clientSecret: trimmedString.optional()
+        })
+            .optional(),
         microsoft: z
             .object({
             clientId: trimmedString.optional(),
@@ -2660,7 +2690,37 @@ export const updateSettingsSchema = z.object({
         })
             .optional()
     })
-        .optional(),
+        .optional()
+        .superRefine((value, context) => {
+        if (!value) {
+            return;
+        }
+        const google = value.google;
+        if (!google) {
+            return;
+        }
+        const hasClientIdField = google.clientId !== undefined;
+        const hasClientSecretField = google.clientSecret !== undefined;
+        const hasClientIdValue = (google.clientId?.length ?? 0) > 0;
+        const hasClientSecretValue = (google.clientSecret?.length ?? 0) > 0;
+        if (hasClientIdField !== hasClientSecretField) {
+            const message = "When overriding Google OAuth credentials, provide both the client ID and client secret together, or clear both fields together.";
+            context.addIssue({
+                code: z.ZodIssueCode.custom,
+                path: ["google", hasClientIdField ? "clientSecret" : "clientId"],
+                message
+            });
+            return;
+        }
+        if (hasClientIdValue !== hasClientSecretValue) {
+            const message = "When overriding Google OAuth credentials, provide both the client ID and client secret together, or clear both fields together.";
+            context.addIssue({
+                code: z.ZodIssueCode.custom,
+                path: ["google", hasClientIdValue ? "clientSecret" : "clientId"],
+                message
+            });
+        }
+    }),
     modelSettings: z
         .object({
         forgeAgent: z

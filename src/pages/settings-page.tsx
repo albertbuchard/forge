@@ -91,6 +91,15 @@ export function SettingsPage() {
     onSuccess: invalidateSettings
   });
 
+  const themeMutation = useMutation({
+    mutationFn: (input: Pick<SettingsMutationInput, "themePreference" | "customTheme">) =>
+      patchSettings(input),
+    onSuccess: async (response) => {
+      queryClient.setQueryData(["forge-settings"], response);
+      await invalidateSettings();
+    }
+  });
+
   const revokeSessionMutation = useMutation({
     mutationFn: revokeOperatorSession,
     onSuccess: async () => {
@@ -107,6 +116,20 @@ export function SettingsPage() {
   const settings = settingsQuery.data?.settings;
   const selectedTheme = settingsForm.watch("themePreference");
   const customTheme = settingsForm.watch("customTheme") ?? defaultCustomTheme;
+
+  const saveThemeSelection = async (
+    themePreference: ForgeThemePreference,
+    nextCustomTheme: SettingsMutationInput["customTheme"] = customTheme
+  ) => {
+    settingsForm.setValue("themePreference", themePreference, { shouldDirty: true });
+    settingsForm.setValue("customTheme", nextCustomTheme ?? defaultCustomTheme, {
+      shouldDirty: true
+    });
+    await themeMutation.mutateAsync({
+      themePreference,
+      customTheme: nextCustomTheme ?? defaultCustomTheme
+    });
+  };
 
   useEffect(() => {
     if (!settings) {
@@ -266,7 +289,7 @@ export function SettingsPage() {
 
             <div className="mt-2 font-label text-[11px] uppercase tracking-[0.18em] text-white/45">Theme calibration</div>
             <p className="text-sm text-white/58">
-              Switch between Forge presets, follow the system palette, or save your own dark shell theme.
+              Switch between Forge dark and light presets, follow the system palette, or save your own shell theme.
             </p>
             <div className="grid gap-3 xl:grid-cols-3">
               {forgeThemeOptions.map((themeOption) => {
@@ -277,10 +300,9 @@ export function SettingsPage() {
                     key={themeOption.value}
                     type="button"
                     onClick={() =>
-                      settingsForm.setValue(
-                        "themePreference",
+                      void saveThemeSelection(
                         themeOption.value as ForgeThemePreference,
-                        { shouldDirty: true }
+                        themeOption.value === "custom" ? customTheme : customTheme
                       )
                     }
                     className={`rounded-[24px] border px-4 py-4 text-left transition ${
@@ -324,6 +346,7 @@ export function SettingsPage() {
                 type="button"
                 variant={selectedTheme === "custom" ? "secondary" : "ghost"}
                 onClick={() => setThemeEditorOpen(true)}
+                pending={themeMutation.isPending}
               >
                 {selectedTheme === "custom" ? "Edit custom theme" : "Create custom theme"}
               </Button>
@@ -383,10 +406,7 @@ export function SettingsPage() {
         open={themeEditorOpen}
         onOpenChange={setThemeEditorOpen}
         value={customTheme}
-        onSave={(theme) => {
-          settingsForm.setValue("customTheme", theme, { shouldDirty: true });
-          settingsForm.setValue("themePreference", "custom", { shouldDirty: true });
-        }}
+        onSave={(theme) => void saveThemeSelection("custom", theme)}
       />
     </div>
   );

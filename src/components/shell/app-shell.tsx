@@ -1,4 +1,19 @@
 import {
+  DndContext,
+  PointerSensor,
+  closestCenter,
+  useSensor,
+  useSensors,
+  type DragEndEvent
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  arrayMove,
+  useSortable,
+  verticalListSortingStrategy
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
+import {
   createContext,
   useContext,
   useEffect,
@@ -72,6 +87,7 @@ import {
 } from "@/components/shell/task-timer-rail";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { ModalCloseButton } from "@/components/ui/modal-close-button";
 import { ErrorState, LoadingState } from "@/components/ui/page-state";
 import { useLiveEvents } from "@/hooks/use-live-events";
 import {
@@ -790,12 +806,7 @@ function UserScopeSelector({
               </Dialog.Description>
             </div>
             <Dialog.Close asChild>
-              <button
-                type="button"
-                className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-2 text-[12px] font-medium text-white/70 transition hover:bg-white/[0.08] hover:text-white"
-              >
-                Close
-              </button>
+              <ModalCloseButton aria-label="Close user scope dialog" />
             </Dialog.Close>
           </div>
 
@@ -1026,6 +1037,61 @@ function MobileBottomNav({
   );
 }
 
+function moveNavEntry(values: string[], fromId: string, toId: string) {
+  const fromIndex = values.indexOf(fromId);
+  const toIndex = values.indexOf(toId);
+  if (fromIndex < 0 || toIndex < 0 || fromIndex === toIndex) {
+    return values;
+  }
+  return arrayMove(values, fromIndex, toIndex);
+}
+
+function SortableNavEntry({
+  route,
+  prefix,
+  label,
+  onRemove
+}: {
+  route: ShellRouteDefinition;
+  prefix: string;
+  label: string;
+  onRemove: () => void;
+}) {
+  const sortable = useSortable({ id: `${prefix}:${route.id}` });
+
+  return (
+    <div
+      ref={sortable.setNodeRef}
+      style={{
+        transform: CSS.Transform.toString(sortable.transform),
+        transition: sortable.transition
+      }}
+      className="flex min-h-16 items-center justify-between gap-3 rounded-[20px] bg-white/[0.04] px-4 py-3"
+    >
+      <span className="flex min-w-0 items-center gap-3">
+        <button
+          type="button"
+          className="inline-flex size-8 shrink-0 items-center justify-center rounded-full bg-white/[0.05] text-white/50 transition hover:bg-white/[0.08] hover:text-white"
+          aria-label={`Reorder ${label}`}
+          {...sortable.attributes}
+          {...sortable.listeners}
+        >
+          <GripVertical className="size-4" />
+        </button>
+        <route.icon className="size-4 shrink-0 text-[var(--primary)]" />
+        <span className="truncate text-sm text-white">{label}</span>
+      </span>
+      <button
+        type="button"
+        className="rounded-full bg-white/[0.05] px-3 py-1.5 text-[12px] text-white/70"
+        onClick={onRemove}
+      >
+        Remove
+      </button>
+    </div>
+  );
+}
+
 function ShellNavEditor({
   open,
   onOpenChange,
@@ -1042,12 +1108,11 @@ function ShellNavEditor({
   onMobileNavIdsChange: (ids: string[]) => void;
 }) {
   const { t } = useI18n();
-  const desktopRoutes = desktopNavIds
-    .map((id) => NAV_ROUTE_REGISTRY.find((route) => route.id === id) ?? null)
-    .filter((route): route is ShellRouteDefinition => route !== null);
-  const mobileRoutes = mobileNavIds
-    .map((id) => NAV_ROUTE_REGISTRY.find((route) => route.id === id) ?? null)
-    .filter((route): route is ShellRouteDefinition => route !== null);
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: { distance: 6 }
+    })
+  );
   const availableRoutes = NAV_ROUTE_REGISTRY.filter(
     (route) =>
       !desktopNavIds.includes(route.id) || !mobileNavIds.includes(route.id)
@@ -1062,14 +1127,47 @@ function ShellNavEditor({
     minimum: number,
     prefix: string
   ) {
-    return Array.from({ length: slotCount }, (_, index) => {
-      const id = ids[index] ?? null;
-      const route = id
-        ? (NAV_ROUTE_REGISTRY.find((entry) => entry.id === id) ?? null)
-        : null;
+    const filledRoutes = ids
+      .map((id) => NAV_ROUTE_REGISTRY.find((entry) => entry.id === id) ?? null)
+      .filter((route): route is ShellRouteDefinition => route !== null);
+    const emptySlotCount = Math.max(0, slotCount - filledRoutes.length);
 
-      if (!route) {
-        return (
+    return (
+      <div className="grid gap-2">
+        <DndContext
+          sensors={sensors}
+          collisionDetection={closestCenter}
+          onDragEnd={(event: DragEndEvent) => {
+            const activeId = String(event.active.id);
+            const overId = event.over ? String(event.over.id) : null;
+            if (!overId) {
+              return;
+            }
+            onChange(
+              moveNavEntry(
+                ids,
+                activeId.replace(`${prefix}:`, ""),
+                overId.replace(`${prefix}:`, "")
+              )
+            );
+          }}
+        >
+          <SortableContext
+            items={filledRoutes.map((route) => `${prefix}:${route.id}`)}
+            strategy={verticalListSortingStrategy}
+          >
+            {filledRoutes.map((route) => (
+              <SortableNavEntry
+                key={`${prefix}-${route.id}`}
+                route={route}
+                prefix={prefix}
+                label={getRouteLabel(route, t)}
+                onRemove={() => removeFromList(ids, route.id, onChange, minimum)}
+              />
+            ))}
+          </SortableContext>
+        </DndContext>
+        {Array.from({ length: emptySlotCount }, (_, index) => (
           <div
             key={`${prefix}-empty-${index}`}
             className="flex min-h-16 items-center justify-between gap-3 rounded-[20px] border border-dashed border-white/12 bg-white/[0.02] px-4 py-3"
@@ -1081,33 +1179,12 @@ function ShellNavEditor({
               </div>
             </div>
             <div className="rounded-full bg-white/[0.05] px-2.5 py-1 text-[11px] text-white/46">
-              Slot {index + 1}
+              Slot {filledRoutes.length + index + 1}
             </div>
           </div>
-        );
-      }
-
-      return (
-        <div
-          key={`${prefix}-${route.id}`}
-          className="flex min-h-16 items-center justify-between gap-3 rounded-[20px] bg-white/[0.04] px-4 py-3"
-        >
-          <span className="flex items-center gap-3">
-            <route.icon className="size-4 text-[var(--primary)]" />
-            <span className="text-sm text-white">
-              {getRouteLabel(route, t)}
-            </span>
-          </span>
-          <button
-            type="button"
-            className="rounded-full bg-white/[0.05] px-3 py-1.5 text-[12px] text-white/70"
-            onClick={() => removeFromList(ids, route.id, onChange, minimum)}
-          >
-            Remove
-          </button>
-        </div>
-      );
-    });
+        ))}
+      </div>
+    );
   }
 
   function addToList(
@@ -1198,7 +1275,7 @@ function ShellNavEditor({
                   {!desktopNavIds.includes(route.id) ? (
                     <button
                       type="button"
-                      className="rounded-full bg-white/[0.05] px-3 py-1.5 text-[12px] text-white/70"
+                      className="rounded-full bg-white/[0.05] px-2.5 py-1.5 text-[11px] text-white/70"
                       onClick={() =>
                         addToList(
                           desktopNavIds,
@@ -1207,13 +1284,13 @@ function ShellNavEditor({
                         )
                       }
                     >
-                      Add to sidebar
+                      + Sidebar
                     </button>
                   ) : null}
                   {!mobileNavIds.includes(route.id) ? (
                     <button
                       type="button"
-                      className="rounded-full bg-white/[0.05] px-3 py-1.5 text-[12px] text-white/70"
+                      className="rounded-full bg-white/[0.05] px-2.5 py-1.5 text-[11px] text-white/70"
                       onClick={() =>
                         addToList(
                           mobileNavIds,
@@ -1223,7 +1300,7 @@ function ShellNavEditor({
                         )
                       }
                     >
-                      Add to mobile
+                      + Mobile
                     </button>
                   ) : null}
                 </div>
@@ -1567,7 +1644,7 @@ function ShellFrame({
   return (
     <div
       ref={shellRootRef}
-      className={`min-h-screen ${shell.snapshot.meta.mode === "transitional-node" ? "theme-forge-obsidian" : ""}`}
+      className="min-h-screen"
       style={shellRootStyle}
     >
       <CommandPalette
@@ -1587,9 +1664,13 @@ function ShellFrame({
       >
         <aside
           className={cn(
-            "flex min-h-screen flex-col border-r border-white/5 bg-[rgba(8,13,28,0.78)] py-6 backdrop-blur-xl transition-[padding,width]",
+            "flex min-h-screen flex-col border-r border-white/5 py-6 backdrop-blur-xl transition-[padding,width]",
             navCollapsed ? "px-3" : "px-5"
           )}
+          style={{
+            background:
+              "linear-gradient(180deg, color-mix(in srgb, var(--surface-panel) 94%, transparent), color-mix(in srgb, var(--surface-low) 92%, transparent))"
+          }}
         >
           <div
             className={cn(
@@ -1712,8 +1793,10 @@ function ShellFrame({
         <div className="min-h-screen">
           <TaskTimerRailProvider>
             <header
-              className="sticky top-0 z-30 border-b border-white/5 bg-[rgba(10,16,30,0.82)] px-6 backdrop-blur-xl"
+              className="sticky top-0 z-30 border-b border-white/5 px-6 backdrop-blur-xl"
               style={{
+                background:
+                  "color-mix(in srgb, var(--surface-glass) 92%, transparent)",
                 paddingTop: "var(--forge-shell-desktop-header-padding-top)",
                 paddingBottom:
                   "var(--forge-shell-desktop-header-padding-bottom)",
@@ -1880,8 +1963,10 @@ function ShellFrame({
       <div className="min-h-[100dvh] overflow-x-clip lg:hidden">
         <TaskTimerRailProvider>
           <header
-            className="sticky top-0 z-30 border-b border-white/6 bg-[rgba(8,13,28,0.92)] px-4 backdrop-blur-xl"
+            className="sticky top-0 z-30 border-b border-white/6 px-4 backdrop-blur-xl"
             style={{
+              background:
+                "color-mix(in srgb, var(--surface-glass) 96%, transparent)",
               paddingTop: "var(--forge-shell-mobile-header-padding-top)",
               paddingBottom: "var(--forge-shell-mobile-header-padding-bottom)",
               willChange: "padding, background-color"
@@ -2051,12 +2136,7 @@ function ShellFrame({
                 </Dialog.Description>
               </div>
               <Dialog.Close asChild>
-                <button
-                  type="button"
-                  className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-2 text-[12px] font-medium text-white/70 transition hover:bg-white/[0.08] hover:text-white"
-                >
-                  Close
-                </button>
+                <ModalCloseButton aria-label="Close background activity dialog" />
               </Dialog.Close>
             </div>
 

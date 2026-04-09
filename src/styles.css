@@ -54,6 +54,44 @@
   );
   --card-shadow: 0 24px 60px rgba(3, 8, 18, 0.28);
   --card-shadow-hover: 0 32px 80px rgba(3, 8, 18, 0.36);
+  --ui-ink-strong: rgba(238, 242, 255, 0.96);
+  --ui-ink-medium: rgba(238, 242, 255, 0.74);
+  --ui-ink-soft: rgba(238, 242, 255, 0.58);
+  --ui-ink-faint: rgba(238, 242, 255, 0.4);
+  --ui-ink-on-accent: #ffffff;
+  --ui-border-subtle: rgba(255, 255, 255, 0.08);
+  --ui-border-strong: rgba(255, 255, 255, 0.14);
+  --ui-surface-1: rgba(255, 255, 255, 0.04);
+  --ui-surface-2: rgba(255, 255, 255, 0.06);
+  --ui-surface-3: rgba(255, 255, 255, 0.1);
+  --ui-surface-hover: rgba(255, 255, 255, 0.09);
+  --ui-surface-active: rgba(192, 193, 255, 0.14);
+  --ui-surface-shell: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--surface-panel) 94%, transparent),
+    color-mix(in srgb, var(--surface-low) 92%, transparent)
+  );
+  --ui-surface-section: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--surface-panel) 98%, transparent),
+    color-mix(in srgb, var(--surface-low) 96%, transparent)
+  );
+  --ui-surface-modal: radial-gradient(
+      circle at top,
+      color-mix(in srgb, var(--primary) 18%, transparent),
+      transparent 38%
+    ),
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--surface-panel) 98%, transparent),
+      color-mix(in srgb, var(--surface-low) 98%, transparent)
+    );
+  --ui-overlay-backdrop: rgba(5, 10, 18, 0.72);
+  --ui-accent-soft: color-mix(in srgb, var(--primary) 14%, transparent);
+  --ui-accent-soft-hover: color-mix(in srgb, var(--primary) 20%, transparent);
+  --ui-success-soft: rgba(16, 185, 129, 0.16);
+  --ui-shadow-soft: 0 18px 38px rgba(3, 8, 18, 0.18);
+  --ui-shadow-floating: 0 36px 110px rgba(3, 8, 18, 0.5);
   --radius-card: 24px;
   --radius-hero: 28px;
   --radius-control: 16px;
@@ -112,6 +150,33 @@ body {
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   overflow-x: clip;
+}
+
+body.theme-forge-dark {
+  color-scheme: dark;
+}
+
+body.theme-forge-light {
+  color-scheme: light;
+  --outline-ghost: rgba(24, 34, 53, 0.08);
+  --ui-ink-strong: color-mix(in srgb, var(--forge-body-text) 92%, black 8%);
+  --ui-ink-medium: color-mix(in srgb, var(--forge-body-text) 74%, transparent);
+  --ui-ink-soft: color-mix(in srgb, var(--forge-body-text) 58%, transparent);
+  --ui-ink-faint: color-mix(in srgb, var(--forge-body-text) 42%, transparent);
+  --ui-ink-on-accent: color-mix(in srgb, var(--primary) 78%, black 22%);
+  --ui-border-subtle: rgba(24, 34, 53, 0.1);
+  --ui-border-strong: rgba(24, 34, 53, 0.16);
+  --ui-surface-1: color-mix(in srgb, var(--surface-high) 84%, var(--surface-panel) 16%);
+  --ui-surface-2: color-mix(in srgb, var(--surface-high) 68%, var(--surface-panel) 32%);
+  --ui-surface-3: color-mix(in srgb, var(--surface-panel) 84%, var(--surface-low) 16%);
+  --ui-surface-hover: color-mix(in srgb, var(--surface-panel) 78%, var(--surface-low) 22%);
+  --ui-surface-active: color-mix(in srgb, var(--primary) 14%, var(--surface-high) 86%);
+  --ui-overlay-backdrop: rgba(24, 34, 53, 0.28);
+  --ui-accent-soft: color-mix(in srgb, var(--primary) 12%, var(--surface-high) 88%);
+  --ui-accent-soft-hover: color-mix(in srgb, var(--primary) 18%, var(--surface-high) 82%);
+  --ui-success-soft: color-mix(in srgb, #10b981 18%, var(--surface-high) 82%);
+  --ui-shadow-soft: 0 16px 38px rgba(24, 34, 53, 0.09);
+  --ui-shadow-floating: 0 28px 88px rgba(24, 34, 53, 0.16);
 }
 
 body.theme-forge-obsidian {
@@ -208,8 +273,174 @@ body.theme-forge-ember {
   --card-shadow-hover: 0 32px 80px rgba(25, 26, 33, 0.4);
 }
 
+body.theme-forge-paper {
+  --primary: #2f6fed;
+  --secondary: #1d8f6b;
+  --tertiary: #c9772b;
+  --surface: #f5efe4;
+  --surface-low: #ede3d4;
+  --surface-panel: #fdf9f3;
+  --surface-high: #ffffff;
+  --surface-glass: rgba(253, 249, 243, 0.9);
+  --surface-psyche: rgba(245, 238, 227, 0.94);
+  --surface-psyche-high: rgba(255, 255, 255, 0.96);
+  --forge-body-ambient-primary: rgba(47, 111, 237, 0.08);
+  --forge-body-ambient-secondary: rgba(29, 143, 107, 0.07);
+  --forge-body-gradient-start: #f9f4eb;
+  --forge-body-gradient-end: #efe7d9;
+  --forge-body-text: #182235;
+  --hero-gradient: linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 0.98) 0%,
+    rgba(247, 240, 228, 0.96) 100%
+  );
+  --card-gradient: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.99),
+    rgba(246, 240, 231, 0.96)
+  );
+  --card-shadow: 0 24px 60px rgba(24, 34, 53, 0.12);
+  --card-shadow-hover: 0 32px 80px rgba(24, 34, 53, 0.16);
+}
+
+body.theme-forge-dawn {
+  --primary: #8b5cf6;
+  --secondary: #ec7a6b;
+  --tertiary: #d0a12b;
+  --surface: #fbf0f4;
+  --surface-low: #f1dfe6;
+  --surface-panel: #fff8fa;
+  --surface-high: #ffffff;
+  --surface-glass: rgba(255, 248, 250, 0.9);
+  --surface-psyche: rgba(247, 232, 238, 0.94);
+  --surface-psyche-high: rgba(255, 255, 255, 0.97);
+  --forge-body-ambient-primary: rgba(139, 92, 246, 0.08);
+  --forge-body-ambient-secondary: rgba(236, 122, 107, 0.08);
+  --forge-body-gradient-start: #fdf3f6;
+  --forge-body-gradient-end: #f3e3ea;
+  --forge-body-text: #2d1834;
+  --hero-gradient: linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 0.98) 0%,
+    rgba(248, 235, 241, 0.96) 100%
+  );
+  --card-gradient: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.99),
+    rgba(245, 231, 237, 0.96)
+  );
+  --card-shadow: 0 24px 60px rgba(45, 24, 52, 0.11);
+  --card-shadow-hover: 0 32px 80px rgba(45, 24, 52, 0.16);
+}
+
+body.theme-forge-atelier {
+  --primary: #2563eb;
+  --secondary: #0f8b6d;
+  --tertiary: #b85c38;
+  --surface: #eef4f8;
+  --surface-low: #dfe7ee;
+  --surface-panel: #f9fcfe;
+  --surface-high: #ffffff;
+  --surface-glass: rgba(249, 252, 254, 0.9);
+  --surface-psyche: rgba(237, 243, 248, 0.94);
+  --surface-psyche-high: rgba(255, 255, 255, 0.97);
+  --forge-body-ambient-primary: rgba(37, 99, 235, 0.08);
+  --forge-body-ambient-secondary: rgba(15, 139, 109, 0.07);
+  --forge-body-gradient-start: #f6fbfd;
+  --forge-body-gradient-end: #e4edf3;
+  --forge-body-text: #162334;
+  --hero-gradient: linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 0.98) 0%,
+    rgba(237, 244, 248, 0.96) 100%
+  );
+  --card-gradient: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.99),
+    rgba(233, 240, 245, 0.96)
+  );
+  --card-shadow: 0 24px 60px rgba(22, 35, 52, 0.11);
+  --card-shadow-hover: 0 32px 80px rgba(22, 35, 52, 0.16);
+}
+
 body.theme-forge-custom {
   color-scheme: dark;
+}
+
+.surface-shell-panel {
+  background: var(--ui-surface-shell);
+  border-color: var(--ui-border-subtle);
+  box-shadow: var(--ui-shadow-soft);
+}
+
+.surface-section-panel {
+  background: var(--ui-surface-section);
+  border-color: var(--ui-border-subtle);
+}
+
+.surface-modal-panel {
+  background: var(--ui-surface-modal);
+  border-color: var(--ui-border-subtle);
+  box-shadow: var(--ui-shadow-floating);
+}
+
+.surface-overlay {
+  background: var(--ui-overlay-backdrop);
+}
+
+body.theme-forge-light [class~="text-white"],
+body.theme-forge-light .text-white {
+  color: var(--forge-body-text) !important;
+}
+
+body.theme-forge-light [class*="text-white/82"],
+body.theme-forge-light [class*="text-white/78"],
+body.theme-forge-light [class*="text-white/74"],
+body.theme-forge-light [class*="text-white/72"],
+body.theme-forge-light [class*="text-white/70"] {
+  color: color-mix(in srgb, var(--forge-body-text) 78%, transparent) !important;
+}
+
+body.theme-forge-light [class*="text-white/62"],
+body.theme-forge-light [class*="text-white/60"],
+body.theme-forge-light [class*="text-white/58"],
+body.theme-forge-light [class*="text-white/56"],
+body.theme-forge-light [class*="text-white/55"],
+body.theme-forge-light [class*="text-white/54"],
+body.theme-forge-light [class*="text-white/52"],
+body.theme-forge-light [class*="text-white/50"],
+body.theme-forge-light [class*="text-white/48"],
+body.theme-forge-light [class*="text-white/46"],
+body.theme-forge-light [class*="text-white/45"],
+body.theme-forge-light [class*="text-white/44"],
+body.theme-forge-light [class*="text-white/42"],
+body.theme-forge-light [class*="text-white/40"] {
+  color: color-mix(in srgb, var(--forge-body-text) 62%, transparent) !important;
+}
+
+body.theme-forge-light [class*="text-white/38"],
+body.theme-forge-light [class*="text-white/35"],
+body.theme-forge-light [class*="text-white/30"] {
+  color: color-mix(in srgb, var(--forge-body-text) 46%, transparent) !important;
+}
+
+body.theme-forge-light [class*="bg-white/[0.03]"],
+body.theme-forge-light [class*="bg-white/[0.04]"],
+body.theme-forge-light [class*="bg-white/[0.05]"] {
+  background-color: color-mix(in srgb, var(--surface-high) 86%, var(--surface-panel) 14%) !important;
+}
+
+body.theme-forge-light [class*="bg-white/[0.06]"],
+body.theme-forge-light [class*="bg-white/[0.08]"],
+body.theme-forge-light [class*="bg-white/[0.12]"] {
+  background-color: color-mix(in srgb, var(--surface-panel) 88%, var(--surface-low) 12%) !important;
+}
+
+body.theme-forge-light [class*="border-white/8"],
+body.theme-forge-light [class*="border-white/10"],
+body.theme-forge-light [class*="border-white/12"],
+body.theme-forge-light [class*="border-white/25"] {
+  border-color: color-mix(in srgb, var(--forge-body-text) 12%, transparent) !important;
 }
 
 .font-display {

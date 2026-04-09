@@ -8,7 +8,7 @@ const GUIDE_SECTIONS = [
     description:
       "Forge mirrors provider events into Forge. Writable providers can also publish work blocks plus owned timeboxes into a dedicated calendar named Forge, while Exchange Online stays read-only for now.",
     bullets: [
-      "Google uses one shared Forge-owned OAuth web app. Each user signs in with their own Google account, while Forge stores that user's refresh token for background sync.",
+      "Google uses a localhost Authorization Code + PKCE flow. Each user signs in with their own Google account on the same machine running Forge, while Forge stores that user's refresh token on the server for background sync.",
       "Apple Calendar starts from https://caldav.icloud.com and autodiscovers the real principal plus calendar collections for you.",
       "Exchange Online uses Microsoft Graph with a guided local public-client Microsoft sign-in flow and mirrors the calendars you select into Forge.",
       "Custom CalDAV uses one account-level base URL, then Forge discovers the writable calendars before you choose what to mirror.",
@@ -20,13 +20,13 @@ const GUIDE_SECTIONS = [
   {
     title: "Google Calendar setup",
     description:
-      "Use one Google Cloud Web application OAuth client for Forge, register the exact Forge callback URI, then let each user sign in with their own Google account.",
+      "Use one Google Cloud desktop-app OAuth client for local Forge, register the exact localhost callback URI, and let Forge complete the Authorization Code + PKCE exchange on the backend.",
     bullets: [
-      "Open Google Cloud credentials and create or reuse one OAuth client for Forge as a Web application.",
+      "Open Google Cloud credentials and create or reuse one OAuth client for Forge as a Desktop app.",
       "Enable the Calendar API for the same project.",
       "Register Forge's exact callback URI. In local Forge, the default callback is http://127.0.0.1:4317/api/v1/calendar/oauth/google/callback.",
-      "Open Forge on the correct host machine and allowed local browser origin before clicking Sign in with Google.",
-      "The user signs in with their own Google account and grants Forge access. They do not create their own Google OAuth client.",
+      "Open Forge on localhost on the same machine that is running Forge. If Forge is opened remotely from a phone or a Tailscale route while the callback is localhost, Google will redirect to localhost on that device and the flow will fail.",
+      "The user signs in with their own Google account and grants Forge access. They do not create their own Google OAuth client during this step.",
       "Forge will discover the calendars, let you choose which calendars to mirror, and create or reuse Forge as the write calendar."
     ],
     icon: KeyRound,

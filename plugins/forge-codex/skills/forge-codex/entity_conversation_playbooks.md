@@ -7,6 +7,8 @@ Forge correctly, and gather only the structure that still matters.
 
 ## Core stance
 
+- Lead with what the user is trying to preserve, change, resolve, or make true, not
+  with the entity label.
 - Ask only for what is missing or still unclear.
 - Before every question, decide the one missing thing you are trying to clarify.
 - Know where the conversation is headed before you ask the next question.
@@ -20,6 +22,10 @@ Forge correctly, and gather only the structure that still matters.
   brief reflection -> one orienting question.
 - Another good shorthand for the same rhythm is:
   short reflection -> one orienting question.
+- When the user is vague, ask for the smallest real example, desired outcome, or stake
+  before you ask for wording.
+- When the user is clear, say what the record seems to be becoming and move straight to
+  the last missing structural detail.
 - For straightforward logistical entities such as tasks, calendar events, work blocks,
   timeboxes, and task runs, use a fast path:
   one brief confirming sentence -> one operational question.
@@ -33,6 +39,8 @@ Forge correctly, and gather only the structure that still matters.
   yourself and ask whether it fits.
 - If the user already answered the usual opening question, do not repeat the stock
   opener. Move straight to the next missing clarification.
+- After a substantive answer, briefly say what is becoming clear so the user can
+  correct the direction early.
 - Once the record is clear enough to name, stop exploring broadly and ask only for the
   last missing structural detail.
 
@@ -71,6 +79,40 @@ Update record:
 
 - "Before I change it, what feels newly true now, and what should stay intact?"
 
+## Steering moves
+
+Use these small moves to keep the intake natural and intentional.
+
+When the user is still searching:
+
+- reflect the stake in one sentence, then ask for the smallest concrete example or the
+  desired outcome
+
+When the user already knows what they mean:
+
+- offer the working formulation, then ask only for the last missing placement, timing,
+  or ownership detail
+
+When the record carries emotion but is not Psyche:
+
+- reflect what the user is trying to hold onto, repair, or not lose, then ask one
+  orienting question
+
+When the user is updating an existing record:
+
+- ask what is changing, what should remain true, and what prompted the change now only
+  if those answers would alter the record shape
+
+When you are about to save:
+
+- give one short working summary in the user's language and ask whether it feels true
+  enough or needs one correction
+
+When an adjacent record becomes visible:
+
+- name it gently and ask whether it should be linked now, saved separately later, or
+  left alone for now
+
 ## Question design rules
 
 - Let each question have one job:
@@ -83,6 +125,8 @@ Update record:
 - Do not over-warm or over-therapize logistical records. For those flows, one brief
   confirming sentence plus one question is usually enough.
 - Ask the more meaning-bearing question before the more administrative one.
+- Prefer "what", "when", and "how" before "why" when the user's meaning is still
+  forming. "Why" is often better after the experience or outcome is already clear.
 - If the user is uncertain, ask for a recent example before asking for an abstraction.
 - If the user is clear and decisive, confirm the working formulation and move directly
   to the one missing structural detail.
@@ -104,6 +148,11 @@ Before saving, make sure you can answer all of these in plain language:
 
 If the answer to the last question is "none", save it instead of prolonging intake.
 
+Before the final write, it is usually worth asking one light confirmation such as:
+
+- "That sounds like the right shape to save. Do you want to keep it that way, or is
+  there one thing you want adjusted first?"
+
 ## Update loop
 
 Use this when the user is updating an existing record rather than creating a new one.
@@ -112,6 +161,9 @@ Use this when the user is updating an existing record rather than creating a new
 2. Ask what should stay true so the record keeps its core meaning.
 3. Ask what prompted the update now if that changes the shape of the record.
 4. Then ask only for the missing structural detail required by the change.
+
+If the current title or shape may no longer fit, offer one revised formulation yourself
+before asking the user to rewrite it from scratch.
 
 ## Goal
 
@@ -279,7 +331,7 @@ Ready to save when:
 
 Preferred opening question:
 
-- "What feels important to preserve from this?"
+- "What feels important enough here that you would want to be able to find it again later?"
 
 ## Insight
 
@@ -455,7 +507,7 @@ Ready to update when:
 
 Preferred opening question:
 
-- "What about this night feels worth remembering or linking?"
+- "What about this night feels important enough to remember or connect?"
 
 ## Workout Session
 
@@ -475,7 +527,7 @@ Ready to update when:
 
 Preferred opening question:
 
-- "What about this workout feels most worth capturing?"
+- "What about this workout feels most worth remembering or connecting?"
 
 ## Preference Item Or Context
 

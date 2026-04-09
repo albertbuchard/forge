@@ -33,7 +33,9 @@ export type ForgeRuntimeRestartResult = {
 };
 export declare function ensureForgeRuntimeReady(config: ForgePluginConfig): Promise<void>;
 export declare function startForgeRuntime(config: ForgePluginConfig): Promise<ForgeRuntimeStartResult>;
-export declare function primeForgeRuntime(config: ForgePluginConfig): void;
+export declare function primeForgeRuntime(config: ForgePluginConfig, logger?: {
+    warn?(message: string): void;
+}): void;
 export declare function stopForgeRuntime(config: ForgePluginConfig): Promise<ForgeRuntimeStopResult>;
 export declare function getForgeRuntimeStatus(config: ForgePluginConfig): Promise<ForgeRuntimeStatusResult>;
 export declare function restartForgeRuntime(config: ForgePluginConfig): Promise<ForgeRuntimeRestartResult>;

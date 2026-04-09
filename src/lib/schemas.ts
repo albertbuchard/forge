@@ -62,17 +62,22 @@ export const settingsMutationSchema = z.object({
     .object({
       google: z
         .object({
-          clientId: z.string(),
-          appUrl: z.string(),
-          redirectUri: z.string(),
-          allowedOrigins: z.array(z.string()),
-          usesSharedAppCredentials: z.literal(true),
-          authMode: z.literal("shared_web_server_oauth"),
-          isConfigured: z.boolean(),
-          isReadyForPairing: z.boolean(),
-          runtimeOrigin: z.string(),
-          runtimeOriginMatchesAppUrl: z.boolean(),
-          setupMessage: z.string()
+          clientId: z.string().trim().optional(),
+          clientSecret: z.string().trim().optional(),
+          storedClientId: z.string().optional(),
+          storedClientSecret: z.string().optional(),
+          appBaseUrl: z.string().optional(),
+          redirectUri: z.string().optional(),
+          allowedOrigins: z.array(z.string()).optional(),
+          usesPkce: z.literal(true).optional(),
+          requiresServerClientSecret: z.literal(false).optional(),
+          oauthClientType: z.literal("desktop_app").optional(),
+          authMode: z.literal("localhost_pkce").optional(),
+          isConfigured: z.boolean().optional(),
+          isReadyForPairing: z.boolean().optional(),
+          isLocalOnly: z.literal(true).optional(),
+          runtimeOrigin: z.string().optional(),
+          setupMessage: z.string().optional()
         })
         .optional(),
       microsoft: z
@@ -83,7 +88,34 @@ export const settingsMutationSchema = z.object({
         })
         .optional()
     })
-    .optional(),
+    .optional()
+    .superRefine((value, context) => {
+      const google = value?.google;
+      if (!google) {
+        return;
+      }
+      const hasClientIdField = google.clientId !== undefined;
+      const hasClientSecretField = google.clientSecret !== undefined;
+      const hasClientIdValue = (google.clientId?.length ?? 0) > 0;
+      const hasClientSecretValue = (google.clientSecret?.length ?? 0) > 0;
+      if (hasClientIdField !== hasClientSecretField) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["google", hasClientIdField ? "clientSecret" : "clientId"],
+          message:
+            "Provide both the Google client ID and client secret together, or clear both together."
+        });
+        return;
+      }
+      if (hasClientIdValue !== hasClientSecretValue) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["google", hasClientIdValue ? "clientSecret" : "clientId"],
+          message:
+            "Provide both the Google client ID and client secret together, or clear both together."
+        });
+      }
+    }),
   modelSettings: z
     .object({
       forgeAgent: z

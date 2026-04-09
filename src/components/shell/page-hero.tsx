@@ -68,13 +68,20 @@ export function PageHero({
   const hasHeaderMeta = Boolean(entityVisual || resolvedEyebrow || badge);
   return (
     <header
-      className="relative min-w-0 w-full max-w-full overflow-hidden border-b border-white/6 bg-[linear-gradient(135deg,rgba(24,34,60,0.68)_0%,rgba(15,24,44,0.42)_58%,rgba(10,16,31,0.18)_100%)] px-5 py-5 sm:px-6 lg:grid lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end lg:px-7 lg:py-6"
+      className="relative min-w-0 w-full max-w-full overflow-hidden border-b border-white/6 px-5 py-5 sm:px-6 lg:grid lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end lg:px-7 lg:py-6"
       style={{
+        background: "var(--hero-gradient)",
         paddingTop: "var(--forge-shell-hero-padding-top)",
         paddingBottom: "var(--forge-shell-hero-padding-bottom)"
       }}
     >
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(121,136,255,0.16),transparent_34%)]" />
+      <div
+        className="pointer-events-none absolute inset-0"
+        style={{
+          background:
+            "radial-gradient(circle at top right, color-mix(in srgb, var(--forge-body-ambient-primary) 94%, transparent), transparent 34%)"
+        }}
+      />
       <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-white/10" />
       <div className="relative min-w-0 w-full max-w-full">
         {hasHeaderMeta ? (

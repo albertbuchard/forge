@@ -45,12 +45,12 @@ import { getWeeklyReviewPayload } from "./services/reviews.js";
 import { finalizeWeeklyReviewClosure } from "./repositories/weekly-reviews.js";
 import { createTaskRunWatchdog } from "./services/task-run-watchdog.js";
 import { suggestTags } from "./services/tagging.js";
-import { CalendarConnectionConflictError, completeMicrosoftCalendarOauth, createCalendarConnection, deleteCalendarEventProjection, discoverCalendarConnection, discoverExistingCalendarConnection, getMicrosoftCalendarOauthSession, listConnectedCalendarConnections, removeCalendarConnection, pushCalendarEventUpdate, readCalendarOverview, syncCalendarConnection, startMicrosoftCalendarOauth, testMicrosoftCalendarOauthConfiguration, listCalendarProviderMetadata, updateCalendarConnectionSelection } from "./services/calendar-runtime.js";
+import { CalendarConnectionConflictError, completeGoogleCalendarOauth, completeMicrosoftCalendarOauth, createCalendarConnection, deleteCalendarEventProjection, discoverCalendarConnection, discoverExistingCalendarConnection, getGoogleCalendarOauthSession, getMicrosoftCalendarOauthSession, listConnectedCalendarConnections, removeCalendarConnection, pushCalendarEventUpdate, readCalendarOverview, syncCalendarConnection, startGoogleCalendarOauth, startMicrosoftCalendarOauth, testMicrosoftCalendarOauthConfiguration, listCalendarProviderMetadata, updateCalendarConnectionSelection } from "./services/calendar-runtime.js";
 import { consumeOpenAiCodexOauthCredentials, getOpenAiCodexOauthSession, startOpenAiCodexOauthSession, submitOpenAiCodexOauthManualInput } from "./services/openai-codex-oauth.js";
 import { PSYCHE_ENTITY_TYPES, createBehaviorSchema, createBeliefEntrySchema, createBehaviorPatternSchema, createEmotionDefinitionSchema, createEventTypeSchema, createModeGuideSessionSchema, createModeProfileSchema, createPsycheValueSchema, createTriggerReportSchema, updateBehaviorSchema, updateBeliefEntrySchema, updateBehaviorPatternSchema, updateEmotionDefinitionSchema, updateEventTypeSchema, updateModeGuideSessionSchema, updateModeProfileSchema, updatePsycheValueSchema, updateTriggerReportSchema } from "./psyche-types.js";
 import { createQuestionnaireInstrumentSchema, publishQuestionnaireVersionSchema, startQuestionnaireRunSchema, updateQuestionnaireRunSchema, updateQuestionnaireVersionSchema } from "./questionnaire-types.js";
 import { createPreferenceCatalogItemSchema, createPreferenceCatalogSchema, createPreferenceContextSchema, createPreferenceItemSchema, enqueueEntityPreferenceItemSchema, mergePreferenceContextsSchema, preferenceWorkspaceQuerySchema, startPreferenceGameSchema, submitAbsoluteSignalSchema, submitPairwiseJudgmentSchema, updatePreferenceCatalogItemSchema, updatePreferenceCatalogSchema, updatePreferenceContextSchema, updatePreferenceItemSchema, updatePreferenceScoreSchema } from "./preferences-types.js";
-import { activityListQuerySchema, activitySourceSchema, createAgentActionSchema, createAgentTokenSchema, createAiConnectorSchema, createAiProcessorLinkSchema, createAiProcessorSchema, runAiConnectorSchema, writeSurfaceLayoutSchema, upsertAiModelConnectionSchema, testAiModelConnectionSchema, submitOpenAiCodexOauthManualCodeSchema, batchCreateEntitiesSchema, batchDeleteEntitiesSchema, batchRestoreEntitiesSchema, batchSearchEntitiesSchema, batchUpdateEntitiesSchema, createGoalSchema, createInsightFeedbackSchema, createInsightSchema, createStrategySchema, createUserSchema, createNoteSchema, createProjectSchema, createManualRewardGrantSchema, createCalendarEventSchema, createHabitCheckInSchema, createCalendarConnectionSchema, createDiagnosticLogSchema, discoverCalendarConnectionSchema, startMicrosoftCalendarOauthSchema, testMicrosoftCalendarOauthConfigurationSchema, createHabitSchema, createTaskTimeboxSchema, createWorkBlockTemplateSchema, createSessionEventSchema, createWorkAdjustmentSchema, createTagSchema, calendarOverviewQuerySchema, notesListQuerySchema, updateTagSchema, createTaskSchema, diagnosticLogListQuerySchema, eventsListQuerySchema, operatorLogWorkSchema, projectBoardPayloadSchema, projectListQuerySchema, entityDeleteQuerySchema, removeActivityEventSchema, resolveApprovalRequestSchema, rewardsLedgerQuerySchema, habitListQuerySchema, taskContextPayloadSchema, taskRunClaimSchema, taskRunFocusSchema, taskRunFinishSchema, taskRunHeartbeatSchema, taskRunListQuerySchema, taskListQuerySchema, tagSuggestionRequestSchema, uncompleteTaskSchema, updateSettingsSchema, updateGoalSchema, updateHabitSchema, updateInsightSchema, updateStrategySchema, updateUserSchema, updateCalendarConnectionSchema, updateCalendarEventSchema, updateNoteSchema, updateProjectSchema, updateRewardRuleSchema, updateTaskTimeboxSchema, updateTaskSchema, updateUserAccessGrantSchema, updateWorkBlockTemplateSchema, updateAiConnectorSchema, updateAiProcessorSchema, runAiProcessorSchema, workAdjustmentResultSchema, finalizeWeeklyReviewResultSchema, goalListQuerySchema, recommendTaskTimeboxesSchema, strategyListQuerySchema } from "./types.js";
+import { activityListQuerySchema, activitySourceSchema, createAgentActionSchema, createAgentTokenSchema, createAiConnectorSchema, createAiProcessorLinkSchema, createAiProcessorSchema, runAiConnectorSchema, writeSurfaceLayoutSchema, upsertAiModelConnectionSchema, testAiModelConnectionSchema, submitOpenAiCodexOauthManualCodeSchema, batchCreateEntitiesSchema, batchDeleteEntitiesSchema, batchRestoreEntitiesSchema, batchSearchEntitiesSchema, batchUpdateEntitiesSchema, createGoalSchema, createInsightFeedbackSchema, createInsightSchema, createStrategySchema, createUserSchema, createNoteSchema, createProjectSchema, createManualRewardGrantSchema, createCalendarEventSchema, createHabitCheckInSchema, createCalendarConnectionSchema, createDiagnosticLogSchema, discoverCalendarConnectionSchema, startGoogleCalendarOauthSchema, startMicrosoftCalendarOauthSchema, testMicrosoftCalendarOauthConfigurationSchema, createHabitSchema, createTaskTimeboxSchema, createWorkBlockTemplateSchema, createSessionEventSchema, createWorkAdjustmentSchema, createTagSchema, calendarOverviewQuerySchema, notesListQuerySchema, updateTagSchema, createTaskSchema, diagnosticLogListQuerySchema, eventsListQuerySchema, operatorLogWorkSchema, projectBoardPayloadSchema, projectListQuerySchema, entityDeleteQuerySchema, removeActivityEventSchema, resolveApprovalRequestSchema, rewardsLedgerQuerySchema, habitListQuerySchema, taskContextPayloadSchema, taskRunClaimSchema, taskRunFocusSchema, taskRunFinishSchema, taskRunHeartbeatSchema, taskRunListQuerySchema, taskListQuerySchema, tagSuggestionRequestSchema, uncompleteTaskSchema, updateSettingsSchema, updateGoalSchema, updateHabitSchema, updateInsightSchema, updateStrategySchema, updateUserSchema, updateCalendarConnectionSchema, updateCalendarEventSchema, updateNoteSchema, updateProjectSchema, updateRewardRuleSchema, updateTaskTimeboxSchema, updateTaskSchema, updateUserAccessGrantSchema, updateWorkBlockTemplateSchema, updateAiConnectorSchema, updateAiProcessorSchema, runAiProcessorSchema, workAdjustmentResultSchema, finalizeWeeklyReviewResultSchema, goalListQuerySchema, recommendTaskTimeboxesSchema, strategyListQuerySchema } from "./types.js";
 import { buildOpenApiDocument } from "./openapi.js";
 import { registerWebRoutes } from "./web.js";
 import { createManagerRuntime } from "./managers/runtime.js";
@@ -2569,10 +2569,10 @@ const AGENT_ONBOARDING_TOOL_INPUT_CATALOG = [
         toolName: "forge_connect_calendar_provider",
         summary: "Create a Forge calendar connection for Google, Apple, Exchange Online, or custom CalDAV.",
         whenToUse: "Use only when the operator explicitly wants Forge connected to an external calendar provider.",
-        inputShape: '{ provider: "google"|"apple"|"caldav"|"microsoft", label: string, username?: string, clientId?: string, clientSecret?: string, refreshToken?: string, password?: string, serverUrl?: string, authSessionId?: string, selectedCalendarUrls: string[], forgeCalendarUrl?: string, createForgeCalendar?: boolean }',
+        inputShape: '{ provider: "google"|"apple"|"caldav"|"microsoft", label: string, username?: string, password?: string, serverUrl?: string, authSessionId?: string, selectedCalendarUrls: string[], forgeCalendarUrl?: string, createForgeCalendar?: boolean }',
         requiredFields: ["provider", "label", "provider-specific credentials"],
         notes: [
-            "Google uses OAuth client credentials plus a refresh token.",
+            "Google now uses an interactive localhost Authorization Code + PKCE flow. The user signs in interactively on the same machine running Forge, Forge exchanges the authorization code on the backend, and forge_connect_calendar_provider should only be used after a completed Google authSessionId exists.",
             "Apple starts from https://caldav.icloud.com and autodiscovers the principal plus calendars after authentication.",
             "Exchange Online uses Microsoft Graph. In the current Forge implementation it is read-only: Forge mirrors the selected calendars but does not publish work blocks or timeboxes back to Microsoft.",
             "In the current self-hosted local runtime, Exchange Online now uses an interactive Microsoft public-client sign-in flow with PKCE after the operator has saved the Microsoft client ID, tenant, and redirect URI in Settings -> Calendar. Non-interactive callers should treat Microsoft connection setup as a Settings-owned operator action unless a completed authSessionId already exists.",
@@ -3072,8 +3072,8 @@ function buildAgentOnboardingPayload(request) {
             saveSuggestionPlacement: "end_of_message",
             saveSuggestionTone: "gentle_optional",
             maxQuestionsPerTurn: 1,
-            psycheExplorationRule: "When a Psyche entity needs understanding first, begin with one exploratory question before any working formulation, replacement belief, suggested title, or save pitch. Keep the opening reflection to one or two short sentences, stay in plain prose instead of bullets or numbered lists, keep that first reply short, do not mention Forge search or save structure yet, avoid colons or list-shaped phrasing, and wait for the user's answer before offering a fuller formulation.",
-            psycheOpeningQuestionRule: "Prefer a concrete opening question tied to the entity: ask when the value mattered, what happened the last time the pattern appeared, what felt threatened before the behavior, what the feared outcome is inside the belief, what the mode is protecting, what the part says to do, or where the shift began in the incident.",
+            psycheExplorationRule: "When a Psyche entity needs understanding first, begin with one exploratory question before any working formulation, replacement belief, suggested title, or save pitch. Keep the opening reflection to one or two short sentences, stay in plain prose instead of bullets or numbered lists, keep that first reply short, do not mention Forge search or save structure yet, avoid colons or list-shaped phrasing, prefer what/when/how over why until the experience is grounded, and wait for the user's answer before offering a fuller formulation.",
+            psycheOpeningQuestionRule: "Prefer a concrete opening question tied to the entity: ask when the value mattered, what happened the last time the pattern appeared, what cue or body signal came first before the behavior, what the belief starts saying about self or outcome, what feels most at risk inside the mode, what the part is trying to get the user to do or stop doing, or where the shift began in the incident. Reflect briefly before the question and stay in one follow-up lane at a time.",
             duplicateCheckRoute: "/api/v1/entities/search",
             uiSuggestionRule: "offer_visual_ui_when_review_or_editing_would_be_easier",
             browserFallbackRule: "Do not open the Forge UI or a browser just to create or update normal entities when the batch entity tools can do the job.",
@@ -5711,6 +5711,37 @@ export async function buildServer(options = {}) {
         providers: listCalendarProviderMetadata(),
         connections: listConnectedCalendarConnections()
     }));
+    app.post("/api/v1/calendar/oauth/google/start", async (request) => {
+        requireScopedAccess(request.headers, ["write"], {
+            route: "/api/v1/calendar/oauth/google/start"
+        });
+        return await startGoogleCalendarOauth(startGoogleCalendarOauthSchema.parse(request.body ?? {}), {
+            browserOrigin: typeof request.body?.browserOrigin ===
+                "string"
+                ? request.body.browserOrigin
+                : null,
+            openerOrigin: typeof request.headers.origin === "string"
+                ? request.headers.origin
+                : typeof request.headers.referer === "string"
+                    ? request.headers.referer
+                    : null,
+            requestBaseOrigin: getRequestOrigin(request)
+        });
+    });
+    app.get("/api/v1/calendar/oauth/google/session/:id", async (request, reply) => {
+        requireScopedAccess(request.headers, ["write"], { route: "/api/v1/calendar/oauth/google/session/:id" });
+        try {
+            return getGoogleCalendarOauthSession(request.params.id);
+        }
+        catch (error) {
+            if (error instanceof Error &&
+                error.message.startsWith("Unknown Google calendar auth session")) {
+                reply.code(404);
+                return { error: "Google calendar auth session not found" };
+            }
+            throw error;
+        }
+    });
     app.post("/api/v1/calendar/oauth/microsoft/start", async (request) => {
         requireScopedAccess(request.headers, ["write"], {
             route: "/api/v1/calendar/oauth/microsoft/start"
@@ -5771,6 +5802,54 @@ export async function buildServer(options = {}) {
     <main>
       <h1>${session.status === "authorized" ? "Microsoft account connected" : "Microsoft sign-in needs attention"}</h1>
       <p>${session.status === "authorized" ? "Forge received your Microsoft account and sent the result back to the calendar setup flow. You can close this window." : (session.error ?? "Forge could not complete Microsoft sign-in. You can close this window and try again from Settings.")}</p>
+    </main>
+    <script>
+      const message = ${escapedMessage};
+      const targetOrigin = ${escapedOrigin};
+      try {
+        if (window.opener && !window.opener.closed) {
+          window.opener.postMessage(message, targetOrigin);
+        }
+      } catch {}
+      setTimeout(() => window.close(), 180);
+    </script>
+  </body>
+</html>`;
+        reply.type("text/html; charset=utf-8");
+        return body;
+    });
+    app.get("/api/v1/calendar/oauth/google/callback", async (request, reply) => {
+        const query = request.query;
+        const result = await completeGoogleCalendarOauth({
+            state: query.state ?? null,
+            code: query.code ?? null,
+            error: query.error ?? null,
+            errorDescription: query.error_description ?? null
+        });
+        const session = result.session;
+        const escapedOrigin = JSON.stringify(result.openerOrigin || "*");
+        const escapedMessage = JSON.stringify({
+            type: "forge:google-calendar-auth",
+            sessionId: session.sessionId,
+            status: session.status
+        });
+        const body = `<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Forge Google sign-in</title>
+    <style>
+      body{margin:0;font-family:ui-sans-serif,system-ui,sans-serif;background:#0b1320;color:#f8fafc;display:grid;place-items:center;min-height:100vh}
+      main{max-width:30rem;padding:2rem;border:1px solid rgba(255,255,255,.08);border-radius:24px;background:linear-gradient(180deg,rgba(18,28,38,.98),rgba(11,17,28,.98))}
+      h1{margin:0 0 .75rem;font-size:1.15rem}
+      p{margin:0;color:rgba(248,250,252,.72);line-height:1.6}
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>${session.status === "authorized" ? "Google account connected" : "Google sign-in needs attention"}</h1>
+      <p>${session.status === "authorized" ? "Forge received your Google account and sent the result back to the calendar setup flow. You can close this window." : (session.error ?? "Forge could not complete Google sign-in. You can close this window and try again from Settings.")}</p>
     </main>
     <script>
       const message = ${escapedMessage};

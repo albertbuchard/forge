@@ -8,9 +8,12 @@ const buttonVariants = cva(
   {
     variants: {
       variant: {
-        primary: "bg-[linear-gradient(135deg,rgba(192,193,255,0.36),rgba(192,193,255,0.22))] text-white shadow-[0_12px_30px_rgba(192,193,255,0.08)]",
-        secondary: "bg-white/8 text-white hover:bg-white/12",
-        ghost: "bg-transparent text-[var(--primary)] hover:bg-white/6"
+        primary:
+          "border border-[var(--primary)]/14 bg-[var(--ui-accent-soft)] text-[var(--ui-ink-on-accent)] shadow-[var(--ui-shadow-soft)] hover:bg-[var(--ui-accent-soft-hover)]",
+        secondary:
+          "border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] text-[var(--ui-ink-strong)] hover:border-[var(--ui-border-strong)] hover:bg-[var(--ui-surface-hover)]",
+        ghost:
+          "border border-transparent bg-transparent text-[var(--primary)] hover:bg-[var(--ui-surface-1)]"
       },
       size: {
         sm: "min-h-[2.125rem] px-2.5 py-[0.4375rem] text-[13px]",

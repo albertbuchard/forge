@@ -1,5 +1,13 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { claimTaskRun, createCalendarConnection, createGoal, createProject, createTask, patchTask } from "./api";
+import {
+  claimTaskRun,
+  createCalendarConnection,
+  createGoal,
+  createProject,
+  createTask,
+  getCalendarOverview,
+  patchTask
+} from "./api";
 
 function mockJsonResponse(body: unknown) {
   return {
@@ -175,5 +183,91 @@ describe("create entity payload normalization", () => {
       selectedCalendarUrls: ["https://caldav.example.com/calendars/main/"],
       forgeCalendarUrl: "https://caldav.example.com/calendars/forge/"
     });
+  });
+
+  it("dedupes identical calendar names by provider in the overview payload", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      mockJsonResponse({
+        calendar: {
+          generatedAt: "2026-04-09T10:00:00.000Z",
+          providers: [],
+          connections: [
+            {
+              id: "conn_google",
+              provider: "google",
+              label: "Primary Google",
+              accountLabel: "albert@gmail.com",
+              status: "connected",
+              config: {},
+              forgeCalendarId: null,
+              lastSyncedAt: null,
+              lastSyncError: null,
+              createdAt: "",
+              updatedAt: ""
+            },
+            {
+              id: "conn_apple",
+              provider: "apple",
+              label: "Primary Apple",
+              accountLabel: "albert@icloud.com",
+              status: "connected",
+              config: {},
+              forgeCalendarId: null,
+              lastSyncedAt: null,
+              lastSyncError: null,
+              createdAt: "",
+              updatedAt: ""
+            }
+          ],
+          calendars: [
+            {
+              id: "cal_google",
+              connectionId: "conn_google",
+              remoteId:
+                "https://apidata.googleusercontent.com/caldav/v2/albert@gmail.com/forge/",
+              title: "Forge",
+              description: "",
+              color: "#22c55e",
+              timezone: "Europe/Zurich",
+              isPrimary: false,
+              canWrite: true,
+              selectedForSync: true,
+              forgeManaged: true,
+              lastSyncedAt: null,
+              createdAt: "",
+              updatedAt: ""
+            },
+            {
+              id: "cal_apple",
+              connectionId: "conn_apple",
+              remoteId: "https://caldav.icloud.com/calendars/forge/",
+              title: "Forge",
+              description: "",
+              color: "#7dd3fc",
+              timezone: "Europe/Zurich",
+              isPrimary: false,
+              canWrite: true,
+              selectedForSync: true,
+              forgeManaged: true,
+              lastSyncedAt: null,
+              createdAt: "",
+              updatedAt: ""
+            }
+          ],
+          events: [],
+          workBlockTemplates: [],
+          workBlockInstances: [],
+          timeboxes: []
+        }
+      })
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const response = await getCalendarOverview();
+
+    expect(response.calendar.calendars).toMatchObject([
+      { id: "cal_google", dedupedName: "Forge (Google)" },
+      { id: "cal_apple", dedupedName: "Forge (Apple)" }
+    ]);
   });
 });

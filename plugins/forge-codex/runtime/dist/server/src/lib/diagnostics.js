@@ -1,4 +1,4 @@
-import { resolveForgePath } from "./runtime-paths";
+import { resolveForgePath } from "./runtime-paths.js";
 function sanitizeValue(value, depth = 0) {
     if (value === null ||
         typeof value === "boolean" ||

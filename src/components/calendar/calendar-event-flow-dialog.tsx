@@ -13,6 +13,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { EntityBadge } from "@/components/ui/entity-badge";
+import { readCalendarDisplayName } from "@/lib/calendar-name-deduper";
 import type { EntityKind } from "@/lib/entity-visuals";
 import type {
   CalendarAvailability,
@@ -430,7 +431,7 @@ export function CalendarEventFlowDialog({
                 >
                   <div className="flex items-center gap-2 font-medium">
                     <CalendarDays className="size-4" />
-                    {calendar.title}
+                    {readCalendarDisplayName(calendar)}
                   </div>
                   <div className="mt-2 text-sm leading-6 text-white/55">
                     {calendar.description || `${calendar.timezone} · writable`}

@@ -103,17 +103,22 @@ Important notes:
 
 What you need:
 
-- one Google Cloud OAuth client for Forge as a Web application
+- one Google Cloud OAuth client for Forge as a Desktop app
 - the Google Calendar API enabled in that same Google Cloud project
 - the exact Forge redirect URI registered on that OAuth client
 
 Important notes:
 
 - End users do not create their own Google OAuth app.
-- Forge owns the Google client ID and client secret once for the whole app.
+- The local Forge runtime uses one Google OAuth client ID.
 - Each user only signs in with their own Google account and grants this Forge
   app access to that user's calendar data.
 - Forge needs offline access so it can store a refresh token per connected user.
+- Forge uses Authorization Code + PKCE, and the code exchange still happens on
+  the backend for this local localhost app.
+- Prefer a Google `Desktop app` client for Forge. If Google still treats the
+  configured client as secret-based, set `GOOGLE_CLIENT_SECRET` on the Forge
+  server as well.
 - The redirect URI must match exactly. Do not rely on arbitrary localhost
   ports.
 
@@ -123,7 +128,7 @@ Step by step:
    [https://console.cloud.google.com/apis/credentials](https://console.cloud.google.com/apis/credentials)
 2. Create or reuse a Google Cloud project and enable the Calendar API:
    [https://developers.google.com/workspace/calendar/api/quickstart](https://developers.google.com/workspace/calendar/api/quickstart)
-3. Create or reuse one OAuth client for Forge as a `Web application`.
+3. Create or reuse one OAuth client for Forge as a `Desktop app`.
 4. Register Forge's exact callback URI in Google Cloud Console. For the default
    local Forge runtime, that callback is:
    `http://127.0.0.1:4317/api/v1/calendar/oauth/google/callback`
@@ -132,31 +137,36 @@ Step by step:
 6. Set these Forge environment variables for the runtime that will host the
    pairing flow:
    - `GOOGLE_CLIENT_ID`
-   - `GOOGLE_CLIENT_SECRET`
-   - `APP_URL`
+   - `GOOGLE_CLIENT_SECRET` only if the configured Google OAuth client still
+     requires one
+   - `APP_BASE_URL`
    - `GOOGLE_REDIRECT_URI`
    - `GOOGLE_ALLOWED_ORIGINS`
 7. Open Forge and go to `Settings -> Calendar`.
-8. Check that Forge shows the expected app URL, redirect URI, and allowed local
+8. Check that Forge shows the expected base URL, redirect URI, and allowed
    browser origins.
-9. Open Forge on the correct host machine and browser origin. In the default
-   local dev flow, that usually means the Vite UI on
-   `http://127.0.0.1:3027/forge/`, while the redirect itself still returns to
-   `http://127.0.0.1:4317`.
-10. Click `Google Calendar`, then `Sign in with Google`.
-11. Sign in with the user's own Google account and grant Forge access.
-12. Forge exchanges the authorization code on the backend, stores that user's
+9. For local development, open Forge locally on the same machine that is
+   running Forge. In the default local dev flow, that usually means the Vite UI
+   on `http://127.0.0.1:3027/forge/`, while the redirect itself still returns
+   to `http://127.0.0.1:4317`.
+10. Do not start Google pairing from a Tailscale `.ts.net` URL on a phone or
+    another device when the registered callback still points to
+    `127.0.0.1`. Google will redirect to localhost on that device, not back to
+    Forge on the Mac.
+11. Click `Google Calendar`, then `Sign in with Google`.
+12. Sign in with the user's own Google account and grant Forge access.
+13. Forge exchanges the authorization code on the backend, stores that user's
     refresh token, and then discovers the calendars for that account.
-13. Select which calendars Forge should mirror into the Calendar page.
-14. Select the calendar Forge should write into for work blocks and timeboxes.
-15. If no write calendar named `Forge` exists yet, choose `Create a new Forge
+14. Select which calendars Forge should mirror into the Calendar page.
+15. Select the calendar Forge should write into for work blocks and timeboxes.
+16. If no write calendar named `Forge` exists yet, choose `Create a new Forge
     calendar`.
-16. Save the connection and run the first sync.
+17. Save the connection and run the first sync.
 
 Developer note for Google Cloud Console:
 
-1. Create one OAuth client for the Forge app.
-2. Set the app type to `Web application`.
+1. Create one OAuth client for the local Forge app.
+2. Set the app type to `Desktop app`.
 3. Register the exact Forge redirect URI.
 4. Configure the consent screen and Calendar scopes.
 5. End users sign in with their own Google accounts to grant this Forge app

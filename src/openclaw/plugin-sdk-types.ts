@@ -49,6 +49,24 @@ export type ForgeCliRegistrarContext = {
   };
 };
 
+export type ForgePluginServiceContext = {
+  config?: unknown;
+  workspaceDir?: string;
+  stateDir: string;
+  logger: {
+    info?(message: string): void;
+    warn?(message: string): void;
+    error?(message: string): void;
+    debug?(message: string): void;
+  };
+};
+
+export type ForgeRegisteredService = {
+  id: string;
+  start: (context: ForgePluginServiceContext) => Promise<void> | void;
+  stop?: (context: ForgePluginServiceContext) => Promise<void> | void;
+};
+
 export type ForgePluginRegistrationApi = {
   pluginConfig?: unknown;
   logger?: {
@@ -65,6 +83,7 @@ export type ForgePluginRegistrationApi = {
     options?: { name?: string; description?: string; register?: boolean }
   ): void;
   registerCli?(registrar: (context: ForgeCliRegistrarContext) => void, options?: { commands?: string[] }): void;
+  registerService?(service: ForgeRegisteredService): void;
 };
 
 export type ForgePluginRouteApi = Pick<ForgePluginRegistrationApi, "registerHttpRoute">;

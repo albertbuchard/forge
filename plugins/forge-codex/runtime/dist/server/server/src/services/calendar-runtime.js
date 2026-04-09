@@ -1,6 +1,7 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { CryptoProvider, PublicClientApplication } from "@azure/msal-node";
 import ical from "node-ical";
+import { getGoogleCalendarOauthCallbackPath, isGoogleCalendarOriginAllowed, isGoogleCalendarLoopbackOrigin, resolveGoogleCalendarOauthPrivateConfig } from "./google-calendar-oauth-config.js";
 import { createDAVClient, DAVNamespaceShort } from "tsdav";
 import { getSettings } from "../repositories/settings.js";
 import { createCalendarConnectionRecord, deleteCalendarConnectionRecord, deleteEncryptedSecret, deleteExternalEventsForConnection, detachConnectionFromForgeEvents, getCalendarById, getCalendarConnectionById, getCalendarEventStorageRecord, getCalendarOverview, listCalendarConnections, listCalendarEventSources, listCalendars, listTaskTimeboxes, markCalendarEventSourcesSyncState, readEncryptedSecret, registerCalendarEventSourceProjection, recordCalendarActivity, storeEncryptedSecret, updateCalendarConnectionRecord, updateTaskTimebox, upsertCalendarEventRecord, upsertCalendarRecord } from "../repositories/calendar.js";
@@ -8,7 +9,18 @@ function isWritableCalendarCredentials(credentials) {
     return credentials.provider !== "microsoft";
 }
 const GOOGLE_CALDAV_URL = "https://apidata.googleusercontent.com/caldav/v2/";
-const GOOGLE_TOKEN_URL = "https://accounts.google.com/o/oauth2/token";
+const GOOGLE_OAUTH_AUTHORIZE_URL = "https://accounts.google.com/o/oauth2/v2/auth";
+const GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token";
+const GOOGLE_USERINFO_URL = "https://openidconnect.googleapis.com/v1/userinfo";
+const GOOGLE_CALENDAR_LIST_URL = "https://www.googleapis.com/calendar/v3/users/me/calendarList";
+const GOOGLE_CALENDAR_CREATE_URL = "https://www.googleapis.com/calendar/v3/calendars";
+const GOOGLE_CALLBACK_PATH = getGoogleCalendarOauthCallbackPath();
+const GOOGLE_OAUTH_SCOPES = [
+    "openid",
+    "email",
+    "profile",
+    "https://www.googleapis.com/auth/calendar"
+];
 const APPLE_CALDAV_URL = "https://caldav.icloud.com";
 const MICROSOFT_GRAPH_URL = "https://graph.microsoft.com/v1.0";
 const MICROSOFT_LOGIN_URL = "https://login.microsoftonline.com";
@@ -18,6 +30,8 @@ const MICROSOFT_CLIENT_ID_PATTERN = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{
 const FORGE_CALENDAR_NAME = "Forge";
 const FORGE_CALENDAR_COLOR = "#7dd3fc";
 const microsoftOauthSessions = new Map();
+const googleOauthSessions = new Map();
+const googleOauthStates = new Map();
 export class CalendarConnectionConflictError extends Error {
     connectionId;
     constructor(message, connectionId) {
@@ -125,6 +139,205 @@ function pruneMicrosoftOauthSessions() {
         }
     }
 }
+function pruneGoogleOauthSessions() {
+    const now = Date.now();
+    for (const [sessionId, session] of googleOauthSessions.entries()) {
+        if (new Date(session.expiresAt).getTime() <= now) {
+            googleOauthSessions.set(sessionId, { ...session, status: "expired" });
+        }
+        if (session.status === "expired" ||
+            session.status === "consumed" ||
+            new Date(session.expiresAt).getTime() <= now - 5 * 60 * 1000) {
+            googleOauthStates.delete(session.state);
+            googleOauthSessions.delete(sessionId);
+        }
+    }
+}
+function encodeBase64Url(value) {
+    return Buffer.from(value)
+        .toString("base64")
+        .replaceAll("+", "-")
+        .replaceAll("/", "_")
+        .replaceAll("=", "");
+}
+function buildPkcePair() {
+    const verifier = encodeBase64Url(randomBytes(32));
+    const challenge = createHash("sha256").update(verifier).digest("base64url");
+    return { verifier, challenge };
+}
+function findGoogleOauthSessionByState(state) {
+    const sessionId = googleOauthStates.get(state);
+    if (!sessionId) {
+        return null;
+    }
+    const session = googleOauthSessions.get(sessionId);
+    if (!session || session.state !== state) {
+        googleOauthStates.delete(state);
+        return null;
+    }
+    return session;
+}
+function finalizeGoogleOauthSession(session) {
+    googleOauthStates.delete(session.state);
+    session.codeVerifier = null;
+}
+function normalizeRequestOrigin(value) {
+    const trimmed = value?.trim();
+    if (!trimmed) {
+        return null;
+    }
+    try {
+        return new URL(trimmed).origin;
+    }
+    catch {
+        return null;
+    }
+}
+function googleOauthStartRejectionMessage(config, browserOrigin) {
+    const allowed = config.allowedOrigins.join(", ");
+    if (browserOrigin && !isGoogleCalendarLoopbackOrigin(browserOrigin)) {
+        return `Google Calendar sign-in cannot start from ${browserOrigin}. Forge is running as a localhost app and Google redirects back to ${config.redirectUri}, so the browser must also be on localhost on the same machine running Forge. Open Forge locally on one of these origins: ${allowed}.`;
+    }
+    return `Google Calendar sign-in is only available from local Forge browser origins on this machine. Current browser origin: ${browserOrigin ?? "unknown"}. Allowed local origins: ${allowed}. Callback: ${config.redirectUri}.`;
+}
+function resolveStoredGoogleOauthConfig() {
+    const settings = getSettings();
+    const config = resolveGoogleCalendarOauthPrivateConfig(process.env, {
+        clientId: settings.calendarProviders.google.storedClientId,
+        clientSecret: settings.calendarProviders.google.storedClientSecret
+    });
+    console.info(`[forge-google-oauth] resolve_stored_config clientId=${JSON.stringify(config.clientId)} isConfigured=${JSON.stringify(config.isConfigured)} redirectUri=${JSON.stringify(config.redirectUri)} allowedOrigins=${JSON.stringify(config.allowedOrigins)} hasServerClientSecret=${JSON.stringify(Boolean(config.clientSecret))}`);
+    return config;
+}
+function ensureGoogleOauthStartAllowed(input) {
+    const config = resolveStoredGoogleOauthConfig();
+    const browserOrigin = normalizeRequestOrigin(input.browserOrigin) ??
+        normalizeRequestOrigin(input.openerOrigin);
+    const openerOrigin = normalizeRequestOrigin(input.openerOrigin) ?? browserOrigin;
+    const requestBaseOrigin = normalizeRequestOrigin(input.requestBaseOrigin);
+    const browserOriginAllowed = browserOrigin !== null &&
+        isGoogleCalendarOriginAllowed(browserOrigin, config.allowedOrigins);
+    const callbackReachableFromBrowser = browserOrigin !== null &&
+        isGoogleCalendarLoopbackOrigin(config.redirectUri) &&
+        isGoogleCalendarLoopbackOrigin(browserOrigin);
+    const pairingAllowed = config.isConfigured && browserOriginAllowed && callbackReachableFromBrowser;
+    console.info(`[forge-google-oauth] start_check browserOrigin=${JSON.stringify(browserOrigin)} openerOrigin=${JSON.stringify(openerOrigin)} requestBaseOrigin=${JSON.stringify(requestBaseOrigin)} browserOriginAllowed=${JSON.stringify(browserOriginAllowed)} callbackReachableFromBrowser=${JSON.stringify(callbackReachableFromBrowser)} pairingAllowed=${JSON.stringify(pairingAllowed)}`);
+    recordCalendarActivity("calendar_google_oauth_start_checked", "calendar_connection", "google_oauth", "Google OAuth start checked", pairingAllowed
+        ? "Forge accepted a Google OAuth start request."
+        : "Forge rejected a Google OAuth start request.", { source: "system", actor: null }, {
+        configured: config.isConfigured,
+        pairingAllowed,
+        browserOrigin,
+        openerOrigin,
+        requestBaseOrigin,
+        appBaseUrl: config.appBaseUrl,
+        redirectUri: config.redirectUri
+    });
+    if (!config.isConfigured) {
+        throw new Error(config.setupMessage);
+    }
+    if (!browserOriginAllowed || !callbackReachableFromBrowser || !openerOrigin) {
+        throw new Error(googleOauthStartRejectionMessage(config, browserOrigin));
+    }
+    return {
+        config,
+        browserOrigin: browserOrigin,
+        openerOrigin: openerOrigin,
+        requestBaseOrigin: requestBaseOrigin
+    };
+}
+function toGoogleOauthSessionPayload(session) {
+    return {
+        sessionId: session.sessionId,
+        status: session.status,
+        authUrl: session.authUrl,
+        accountLabel: session.accountLabel,
+        error: session.error,
+        discovery: session.discovery
+    };
+}
+function explainGoogleOauthError(input) {
+    const raw = `${input.error ?? ""} ${input.errorDescription ?? ""}`.toLowerCase();
+    if (raw.includes("redirect_uri_mismatch")) {
+        return `Google rejected the redirect URI. Register exactly ${input.redirectUri} on the local Google OAuth client and reopen Forge on localhost on the same machine running Forge.`;
+    }
+    if (raw.includes("access_denied") || raw.includes("cancel")) {
+        return "Google consent was denied or cancelled. Retry the Google sign-in and grant the requested calendar access.";
+    }
+    if (raw.includes("invalid_scope")) {
+        return "Google rejected the requested calendar scopes. Confirm the Calendar API is enabled and the consent screen includes the requested Calendar scopes.";
+    }
+    if (raw.includes("client_secret is missing")) {
+        return "Google rejected this OAuth client because it still requires a client secret. Set GOOGLE_CLIENT_SECRET on the Forge server for this install, or replace the client with a Google Desktop app client that supports the local PKCE flow.";
+    }
+    return input.errorDescription?.trim() || input.error?.trim() || "Google sign-in could not be completed.";
+}
+function mapGoogleRuntimeError(error) {
+    const message = error instanceof Error ? error.message : "Google calendar sync failed.";
+    const raw = message.toLowerCase();
+    if (raw.includes("invalid_grant")) {
+        return new Error("The stored Google refresh token is missing, expired, or revoked. Reconnect Google Calendar from Settings so Forge can keep syncing.");
+    }
+    if (raw.includes("invalid_client") || raw.includes("unauthorized_client")) {
+        return new Error("The local Google OAuth client was rejected. Check the Google client ID and the registered localhost redirect URI.");
+    }
+    if (raw.includes("redirect_uri_mismatch")) {
+        return new Error("Google rejected the configured redirect URI. Register the exact Forge callback URI in Google Cloud Console and reconnect Google Calendar.");
+    }
+    return error instanceof Error ? error : new Error(message);
+}
+async function refreshGoogleCaldavAccessToken(credentials) {
+    const config = resolveStoredGoogleOauthConfig();
+    console.info(`[forge-google-oauth] caldav_refresh_start username=${JSON.stringify(credentials.username)} hasRefreshToken=${JSON.stringify(Boolean(credentials.refreshToken))} hasServerClientSecret=${JSON.stringify(Boolean(config.clientSecret))}`);
+    const requestBody = new URLSearchParams({
+        client_id: config.clientId,
+        grant_type: "refresh_token",
+        refresh_token: credentials.refreshToken
+    });
+    if (config.clientSecret) {
+        requestBody.set("client_secret", config.clientSecret);
+    }
+    const response = await fetch(GOOGLE_TOKEN_URL, {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/x-www-form-urlencoded",
+            Accept: "application/json"
+        },
+        body: requestBody.toString()
+    });
+    const payload = (await response.json());
+    if (!response.ok) {
+        throw new Error(explainGoogleOauthError({
+            error: typeof payload.error === "string" ? payload.error : null,
+            errorDescription: typeof payload.error_description === "string"
+                ? payload.error_description
+                : null,
+            redirectUri: config.redirectUri,
+            appBaseUrl: config.appBaseUrl
+        }));
+    }
+    const accessToken = typeof payload.access_token === "string" ? payload.access_token : "";
+    if (!accessToken) {
+        throw new Error("Google refresh completed without an access token.");
+    }
+    const expiresInSeconds = typeof payload.expires_in === "number"
+        ? payload.expires_in
+        : Number(payload.expires_in ?? 0);
+    const accessTokenExpiresAt = Number.isFinite(expiresInSeconds) && expiresInSeconds > 0
+        ? new Date(Date.now() + expiresInSeconds * 1000).toISOString()
+        : credentials.accessTokenExpiresAt;
+    const scopeText = typeof payload.scope === "string" ? payload.scope : "";
+    const grantedScopes = scopeText
+        .split(/\s+/)
+        .map((entry) => entry.trim())
+        .filter((entry) => entry.length > 0);
+    console.info(`[forge-google-oauth] caldav_refresh_complete username=${JSON.stringify(credentials.username)} accessTokenExpiresAt=${JSON.stringify(accessTokenExpiresAt)} grantedScopeCount=${JSON.stringify((grantedScopes.length > 0 ? grantedScopes : credentials.grantedScopes).length)}`);
+    return {
+        accessToken,
+        accessTokenExpiresAt,
+        grantedScopes: grantedScopes.length > 0 ? grantedScopes : credentials.grantedScopes
+    };
+}
 function normalizeUrl(value) {
     const url = new URL(value);
     if (!url.pathname.endsWith("/")) {
@@ -134,6 +347,209 @@ function normalizeUrl(value) {
 }
 function normalizeAccountIdentity(value) {
     return value.trim().toLowerCase();
+}
+function buildGoogleCalendarCollectionUrl(calendarId) {
+    return normalizeUrl(new URL(`${encodeURIComponent(calendarId)}/events`, GOOGLE_CALDAV_URL).toString());
+}
+function extractGoogleCalendarIdFromCollectionUrl(calendarUrl) {
+    const url = new URL(calendarUrl);
+    const match = /^\/caldav\/v2\/(.+)\/events\/$/.exec(url.pathname);
+    if (!match?.[1]) {
+        throw new Error(`Forge could not derive the Google calendar ID from ${calendarUrl}.`);
+    }
+    return decodeURIComponent(match[1]);
+}
+function buildGoogleCalendarEventApiUrl(calendarId, eventId) {
+    return `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events/${encodeURIComponent(eventId)}`;
+}
+function buildGoogleDavAccount(email) {
+    const normalizedEmail = normalizeAccountIdentity(email);
+    const principalUrl = normalizeUrl(new URL(`${encodeURIComponent(normalizedEmail)}/user`, GOOGLE_CALDAV_URL).toString());
+    return {
+        accountType: "caldav",
+        serverUrl: GOOGLE_CALDAV_URL,
+        rootUrl: GOOGLE_CALDAV_URL,
+        principalUrl,
+        homeUrl: normalizeUrl(new URL(`${encodeURIComponent(normalizedEmail)}/`, GOOGLE_CALDAV_URL).toString())
+    };
+}
+async function fetchGoogleCalendarList(credentials) {
+    const refreshed = await refreshGoogleCaldavAccessToken(credentials);
+    const calendars = [];
+    let pageToken = null;
+    do {
+        const url = new URL(GOOGLE_CALENDAR_LIST_URL);
+        if (pageToken) {
+            url.searchParams.set("pageToken", pageToken);
+        }
+        const response = await fetch(url.toString(), {
+            headers: {
+                Authorization: `Bearer ${refreshed.accessToken}`,
+                Accept: "application/json"
+            }
+        });
+        const payload = (await response.json());
+        if (!response.ok) {
+            throw new Error(payload.error?.message?.trim() ||
+                "Google sign-in completed, but Forge could not list the available calendars.");
+        }
+        for (const item of payload.items ?? []) {
+            const calendarId = typeof item.id === "string" && item.id.trim().length > 0
+                ? item.id.trim()
+                : null;
+            if (!calendarId) {
+                continue;
+            }
+            const displayName = safeDisplayName(item.summary, item.primary ? "Primary" : "Calendar");
+            const accessRole = safeDisplayName(item.accessRole, "");
+            const canWrite = accessRole === "owner" || accessRole === "writer";
+            calendars.push({
+                url: buildGoogleCalendarCollectionUrl(calendarId),
+                displayName,
+                description: safeDisplayName(item.description, "") ||
+                    (item.primary ? "Primary Google calendar" : ""),
+                calendarColor: typeof item.backgroundColor === "string" && item.backgroundColor.trim().length > 0
+                    ? item.backgroundColor.trim()
+                    : FORGE_CALENDAR_COLOR,
+                timezone: normalizeTimezone(item.timeZone),
+                components: ["VEVENT"],
+                resourcetype: ["collection", "calendar"],
+                reports: ["syncCollection"],
+                ctag: undefined,
+                syncToken: undefined,
+                objects: [],
+                account: undefined,
+                data: undefined,
+                etag: undefined,
+                props: undefined,
+                addressBook: undefined
+            });
+            if (!canWrite) {
+                const last = calendars[calendars.length - 1];
+                if (last) {
+                    last._forgeCanWrite = false;
+                }
+            }
+        }
+        pageToken =
+            typeof payload.nextPageToken === "string" && payload.nextPageToken.trim().length > 0
+                ? payload.nextPageToken.trim()
+                : null;
+    } while (pageToken);
+    return calendars;
+}
+async function createGoogleForgeCalendar(credentials) {
+    const refreshed = await refreshGoogleCaldavAccessToken(credentials);
+    const response = await fetch(GOOGLE_CALENDAR_CREATE_URL, {
+        method: "POST",
+        headers: {
+            Authorization: `Bearer ${refreshed.accessToken}`,
+            Accept: "application/json",
+            "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+            summary: FORGE_CALENDAR_NAME,
+            description: "Forge-owned work blocks and task timeboxes",
+            timeZone: "UTC"
+        })
+    });
+    const payload = (await response.json());
+    if (!response.ok) {
+        throw new Error(payload.error?.message?.trim() ||
+            "Forge could not create the dedicated Google calendar.");
+    }
+    const calendarId = typeof payload.id === "string" && payload.id.trim().length > 0
+        ? payload.id.trim()
+        : null;
+    if (!calendarId) {
+        throw new Error("Google created a calendar without returning its ID.");
+    }
+    return buildGoogleCalendarCollectionUrl(calendarId);
+}
+function parseGoogleCalendarEventDate(value, fallbackToEndOfDay = false) {
+    if (!value) {
+        return null;
+    }
+    if (typeof value.dateTime === "string" && value.dateTime.trim().length > 0) {
+        const candidate = new Date(value.dateTime);
+        return Number.isNaN(candidate.getTime()) ? null : candidate.toISOString();
+    }
+    if (typeof value.date === "string" && value.date.trim().length > 0) {
+        const suffix = fallbackToEndOfDay ? "T23:59:59.999Z" : "T00:00:00.000Z";
+        const candidate = new Date(`${value.date}${suffix}`);
+        return Number.isNaN(candidate.getTime()) ? null : candidate.toISOString();
+    }
+    return null;
+}
+function mapGoogleCalendarEventToSyncInput(calendarUrl, event) {
+    const calendarId = extractGoogleCalendarIdFromCollectionUrl(calendarUrl);
+    const startAt = parseGoogleCalendarEventDate(event.start, false);
+    const endAt = parseGoogleCalendarEventDate(event.end, true);
+    if (!startAt || !endAt) {
+        return null;
+    }
+    const remoteId = typeof event.id === "string" && event.id.trim().length > 0
+        ? event.id.trim()
+        : typeof event.iCalUID === "string" && event.iCalUID.trim().length > 0
+            ? event.iCalUID.trim()
+            : null;
+    if (!remoteId) {
+        return null;
+    }
+    return {
+        calendarRemoteId: normalizeUrl(calendarUrl),
+        remoteId,
+        remoteHref: typeof event.htmlLink === "string" && event.htmlLink.trim().length > 0
+            ? event.htmlLink.trim()
+            : buildGoogleCalendarEventApiUrl(calendarId, remoteId),
+        remoteEtag: null,
+        ownership: "external",
+        status: event.status === "cancelled"
+            ? "cancelled"
+            : event.status === "tentative"
+                ? "tentative"
+                : "confirmed",
+        title: typeof event.summary === "string" && event.summary.trim().length > 0
+            ? event.summary.trim()
+            : "(untitled event)",
+        description: typeof event.description === "string" ? event.description : "",
+        location: typeof event.location === "string" ? event.location : "",
+        startAt,
+        endAt,
+        isAllDay: typeof event.start?.date === "string" && event.start.date.trim().length > 0,
+        availability: event.transparency === "transparent" ? "free" : "busy",
+        eventType: "",
+        categories: [],
+        rawPayload: event,
+        remoteUpdatedAt: typeof event.updated === "string" && event.updated.trim().length > 0
+            ? event.updated.trim()
+            : null,
+        deletedAt: event.status === "cancelled" ? new Date().toISOString() : null
+    };
+}
+async function fetchGoogleCalendarEvents(credentials, calendarUrl, range) {
+    const refreshed = await refreshGoogleCaldavAccessToken(credentials);
+    const calendarId = extractGoogleCalendarIdFromCollectionUrl(calendarUrl);
+    const url = new URL(`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events`);
+    url.searchParams.set("timeMin", range.start);
+    url.searchParams.set("timeMax", range.end);
+    url.searchParams.set("singleEvents", "true");
+    url.searchParams.set("showDeleted", "true");
+    url.searchParams.set("maxResults", "2500");
+    const response = await fetch(url.toString(), {
+        headers: {
+            Authorization: `Bearer ${refreshed.accessToken}`,
+            Accept: "application/json"
+        }
+    });
+    const payload = (await response.json());
+    if (!response.ok) {
+        throw new Error(payload.error?.message?.trim() ||
+            `Google Calendar API event sync failed for ${calendarId}.`);
+    }
+    return (payload.items ?? [])
+        .map((event) => mapGoogleCalendarEventToSyncInput(calendarUrl, event))
+        .filter((event) => event !== null);
 }
 function safeDisplayName(value, fallback) {
     if (typeof value === "string" && value.trim().length > 0) {
@@ -147,6 +563,9 @@ function isForgeName(value) {
 function normalizeTimezone(value) {
     const normalized = value?.trim();
     return normalized && normalized.length > 0 ? normalized : "UTC";
+}
+function canWriteDavCalendar(calendar) {
+    return calendar._forgeCanWrite ?? true;
 }
 function buildEventIcs(payload) {
     const dt = (value) => value.replaceAll(/[-:]/g, "").replace(/\.\d{3}Z$/, "Z");
@@ -337,18 +756,21 @@ async function createProviderClient(credentials) {
         };
     }
     const client = credentials.provider === "google"
-        ? await createDAVClient({
-            serverUrl: credentials.serverUrl,
-            credentials: {
-                username: credentials.username,
-                tokenUrl: GOOGLE_TOKEN_URL,
-                refreshToken: credentials.refreshToken,
-                clientId: credentials.clientId,
-                clientSecret: credentials.clientSecret
-            },
-            authMethod: "Oauth",
-            defaultAccountType: "caldav"
-        })
+        ? await (async () => {
+            try {
+                const refreshed = await refreshGoogleCaldavAccessToken(credentials);
+                return await createDAVClient({
+                    serverUrl: credentials.serverUrl,
+                    credentials: {
+                        accessToken: refreshed.accessToken
+                    },
+                    authMethod: "Bearer"
+                });
+            }
+            catch (error) {
+                throw mapGoogleRuntimeError(error);
+            }
+        })()
         : await createDAVClient({
             serverUrl: credentials.serverUrl,
             credentials: {
@@ -358,15 +780,33 @@ async function createProviderClient(credentials) {
             authMethod: "Basic",
             defaultAccountType: "caldav"
         });
-    const account = await client.createAccount({
-        account: {
-            accountType: "caldav"
+    let account;
+    let calendars;
+    try {
+        if (credentials.provider === "google") {
+            account = buildGoogleDavAccount(credentials.username);
+            console.info(`[forge-google-oauth] google_caldav_account username=${JSON.stringify(credentials.username)} principalUrl=${JSON.stringify(account.principalUrl ?? null)} homeUrl=${JSON.stringify(account.homeUrl ?? null)}`);
+            calendars = await fetchGoogleCalendarList(credentials);
         }
-    });
-    const calendars = await client.fetchCalendars({ account });
+        else {
+            account = await client.createAccount({
+                account: {
+                    accountType: "caldav"
+                }
+            });
+            calendars = await client.fetchCalendars({ account });
+        }
+    }
+    catch (error) {
+        if (credentials.provider === "google") {
+            throw mapGoogleRuntimeError(error);
+        }
+        throw error;
+    }
     return {
         mode: "dav",
         client,
+        credentials,
         account,
         calendars,
         accountLabel: credentials.username,
@@ -411,7 +851,7 @@ function mapDiscoveryPayload(provider, state) {
                 color: calendar.calendarColor ?? FORGE_CALENDAR_COLOR,
                 timezone: normalizeTimezone(calendar.timezone),
                 isPrimary: false,
-                canWrite: true,
+                canWrite: canWriteDavCalendar(calendar),
                 selectedByDefault: !isForgeName(displayName),
                 isForgeCandidate: isForgeName(displayName)
             };
@@ -594,9 +1034,226 @@ export async function completeMicrosoftCalendarOauth(input) {
     }
     return { session: toMicrosoftOauthSessionPayload(session), openerOrigin: session.origin };
 }
+export async function startGoogleCalendarOauth(input, requestContext) {
+    pruneGoogleOauthSessions();
+    const { config, browserOrigin, openerOrigin, requestBaseOrigin } = ensureGoogleOauthStartAllowed(requestContext);
+    const sessionId = randomUUID();
+    const state = encodeBase64Url(randomBytes(32));
+    const pkce = buildPkcePair();
+    const params = new URLSearchParams({
+        client_id: config.clientId,
+        redirect_uri: config.redirectUri,
+        response_type: "code",
+        access_type: "offline",
+        include_granted_scopes: "true",
+        prompt: "consent",
+        scope: GOOGLE_OAUTH_SCOPES.join(" "),
+        state,
+        code_challenge: pkce.challenge,
+        code_challenge_method: "S256"
+    });
+    const authUrl = `${GOOGLE_OAUTH_AUTHORIZE_URL}?${params.toString()}`;
+    const now = new Date();
+    googleOauthSessions.set(sessionId, {
+        sessionId,
+        state,
+        label: input.label?.trim() || null,
+        browserOrigin,
+        openerOrigin,
+        requestBaseOrigin,
+        redirectUri: config.redirectUri,
+        appBaseUrl: config.appBaseUrl,
+        clientId: config.clientId,
+        codeVerifier: pkce.verifier,
+        createdAt: now.toISOString(),
+        expiresAt: new Date(now.getTime() + 15 * 60 * 1000).toISOString(),
+        status: "pending",
+        authUrl,
+        accountLabel: null,
+        error: null,
+        discovery: null,
+        credentials: null
+    });
+    googleOauthStates.set(state, sessionId);
+    return {
+        session: toGoogleOauthSessionPayload(googleOauthSessions.get(sessionId))
+    };
+}
+export function getGoogleCalendarOauthSession(sessionId) {
+    pruneGoogleOauthSessions();
+    const session = googleOauthSessions.get(sessionId);
+    if (!session) {
+        throw new Error(`Unknown Google calendar auth session ${sessionId}`);
+    }
+    return {
+        session: toGoogleOauthSessionPayload(session)
+    };
+}
+export async function completeGoogleCalendarOauth(input) {
+    pruneGoogleOauthSessions();
+    const state = input.state?.trim() || "";
+    const session = findGoogleOauthSessionByState(state);
+    if (!session) {
+        throw new Error("Google sign-in state is invalid or expired.");
+    }
+    const logGoogleOauthCompletion = () => {
+        console.info(`[forge-google-oauth] callback_complete sessionId=${JSON.stringify(session.sessionId)} status=${JSON.stringify(session.status)} accountLabel=${JSON.stringify(session.accountLabel)} hasDiscovery=${JSON.stringify(Boolean(session.discovery))} error=${JSON.stringify(session.error)}`);
+    };
+    if (new Date(session.expiresAt).getTime() <= Date.now()) {
+        session.status = "expired";
+        session.error = "The Google sign-in session expired. Start the guided sign-in again.";
+        finalizeGoogleOauthSession(session);
+        logGoogleOauthCompletion();
+        return { session: toGoogleOauthSessionPayload(session) };
+    }
+    if (input.error) {
+        session.status = "error";
+        session.error = explainGoogleOauthError({
+            error: input.error,
+            errorDescription: input.errorDescription,
+            redirectUri: session.redirectUri,
+            appBaseUrl: session.appBaseUrl
+        });
+        finalizeGoogleOauthSession(session);
+        logGoogleOauthCompletion();
+        return { session: toGoogleOauthSessionPayload(session), openerOrigin: session.openerOrigin };
+    }
+    if (!input.code) {
+        session.status = "error";
+        session.error = "Google did not return an authorization code.";
+        finalizeGoogleOauthSession(session);
+        logGoogleOauthCompletion();
+        return { session: toGoogleOauthSessionPayload(session), openerOrigin: session.openerOrigin };
+    }
+    if (!session.codeVerifier) {
+        session.status = "error";
+        session.error =
+            "The Google PKCE verifier is missing or expired for this sign-in session. Start the guided Google sign-in again.";
+        finalizeGoogleOauthSession(session);
+        logGoogleOauthCompletion();
+        return {
+            session: toGoogleOauthSessionPayload(session),
+            openerOrigin: session.openerOrigin
+        };
+    }
+    try {
+        const config = resolveStoredGoogleOauthConfig();
+        console.info(`[forge-google-oauth] code_exchange_start sessionId=${JSON.stringify(session.sessionId)} hasServerClientSecret=${JSON.stringify(Boolean(config.clientSecret))} redirectUri=${JSON.stringify(session.redirectUri)}`);
+        const tokenRequestBody = new URLSearchParams({
+            code: input.code,
+            client_id: config.clientId,
+            redirect_uri: session.redirectUri,
+            grant_type: "authorization_code",
+            code_verifier: session.codeVerifier
+        });
+        if (config.clientSecret) {
+            tokenRequestBody.set("client_secret", config.clientSecret);
+        }
+        const tokenResponse = await fetch(GOOGLE_TOKEN_URL, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/x-www-form-urlencoded",
+                Accept: "application/json"
+            },
+            body: tokenRequestBody.toString()
+        });
+        const tokenPayload = (await tokenResponse.json());
+        if (!tokenResponse.ok) {
+            throw new Error(explainGoogleOauthError({
+                error: typeof tokenPayload.error === "string" ? tokenPayload.error : null,
+                errorDescription: typeof tokenPayload.error_description === "string"
+                    ? tokenPayload.error_description
+                    : null,
+                redirectUri: session.redirectUri,
+                appBaseUrl: session.appBaseUrl
+            }));
+        }
+        const accessToken = typeof tokenPayload.access_token === "string"
+            ? tokenPayload.access_token
+            : "";
+        const refreshToken = typeof tokenPayload.refresh_token === "string"
+            ? tokenPayload.refresh_token
+            : "";
+        if (!accessToken) {
+            throw new Error("Google sign-in completed without an access token.");
+        }
+        if (!refreshToken) {
+            throw new Error("Google did not return a refresh token. Revoke the existing Forge access for this Google account or retry consent so Forge can keep syncing in the background.");
+        }
+        const scopeText = typeof tokenPayload.scope === "string" ? tokenPayload.scope : "";
+        const grantedScopes = scopeText
+            .split(/\s+/)
+            .map((entry) => entry.trim())
+            .filter((entry) => entry.length > 0);
+        const expiresInSeconds = typeof tokenPayload.expires_in === "number"
+            ? tokenPayload.expires_in
+            : Number(tokenPayload.expires_in ?? 0);
+        const accessTokenExpiresAt = Number.isFinite(expiresInSeconds) && expiresInSeconds > 0
+            ? new Date(Date.now() + expiresInSeconds * 1000).toISOString()
+            : null;
+        const profileResponse = await fetch(GOOGLE_USERINFO_URL, {
+            headers: {
+                Authorization: `Bearer ${accessToken}`,
+                Accept: "application/json"
+            }
+        });
+        const profilePayload = (await profileResponse.json());
+        if (!profileResponse.ok) {
+            throw new Error("Google sign-in completed, but Forge could not read the account profile.");
+        }
+        const email = typeof profilePayload.email === "string" && profilePayload.email.trim().length > 0
+            ? profilePayload.email.trim()
+            : "";
+        if (!email) {
+            throw new Error("Google sign-in completed without an account email.");
+        }
+        const provisionalCredentials = {
+            provider: "google",
+            serverUrl: GOOGLE_CALDAV_URL,
+            username: email,
+            refreshToken,
+            accessTokenExpiresAt,
+            grantedScopes
+        };
+        const state = await createProviderClient(provisionalCredentials);
+        const discovery = mapDiscoveryPayload("google", state);
+        session.status = "authorized";
+        session.accountLabel = discovery.accountLabel;
+        session.discovery = discovery;
+        session.credentials = provisionalCredentials;
+        session.error = null;
+        finalizeGoogleOauthSession(session);
+    }
+    catch (error) {
+        session.status = "error";
+        session.error =
+            error instanceof Error ? error.message : "Google sign-in failed.";
+        finalizeGoogleOauthSession(session);
+    }
+    logGoogleOauthCompletion();
+    return {
+        session: toGoogleOauthSessionPayload(session),
+        openerOrigin: session.openerOrigin
+    };
+}
 async function ensureForgeCalendar(state) {
     if (state.mode !== "dav") {
         throw new Error("This calendar provider is read-only, so Forge cannot create a dedicated write calendar there.");
+    }
+    if (state.credentials.provider === "google") {
+        const existingForge = state.calendars.find((calendar) => isForgeName(safeDisplayName(calendar.displayName, "")));
+        if (existingForge) {
+            return {
+                forgeCalendarUrl: normalizeUrl(existingForge.url),
+                calendars: state.calendars
+            };
+        }
+        const forgeCalendarUrl = await createGoogleForgeCalendar(state.credentials);
+        const calendars = await fetchGoogleCalendarList(state.credentials);
+        return {
+            forgeCalendarUrl,
+            calendars
+        };
     }
     const existingForge = state.calendars.find((calendar) => isForgeName(safeDisplayName(calendar.displayName, "")));
     if (existingForge) {
@@ -701,7 +1358,7 @@ function mapCalendarRecord(calendar, options) {
             color: calendar.calendarColor ?? FORGE_CALENDAR_COLOR,
             timezone: normalizeTimezone(calendar.timezone),
             isPrimary: false,
-            canWrite: true,
+            canWrite: canWriteDavCalendar(calendar),
             selectedForSync: forgeCalendarUrl ? remoteUrl !== forgeCalendarUrl : true,
             forgeManaged: forgeCalendarUrl ? remoteUrl === forgeCalendarUrl : false
         };
@@ -805,7 +1462,14 @@ async function syncDiscoveredState(connectionId, credentials) {
     const forgeCalendarUrl = normalizeUrl(credentials.forgeCalendarUrl);
     const calendarsToSync = state.calendars.filter((calendar) => {
         const normalized = normalizeUrl(calendar.url);
-        return selected.has(normalized) || normalized === forgeCalendarUrl;
+        if (selected.has(normalized)) {
+            return true;
+        }
+        if (credentials.provider === "google" && normalized === forgeCalendarUrl) {
+            console.info(`[forge-calendar-sync] skip_forge_readback connectionId=${JSON.stringify(connectionId)} provider=${JSON.stringify(credentials.provider)} calendarUrl=${JSON.stringify(normalized)}`);
+            return false;
+        }
+        return normalized === forgeCalendarUrl;
     });
     for (const calendar of state.calendars) {
         const normalized = normalizeUrl(calendar.url);
@@ -819,17 +1483,32 @@ async function syncDiscoveredState(connectionId, credentials) {
     const end = new Date(now.getTime() + 180 * 24 * 60 * 60 * 1000).toISOString();
     for (const calendar of calendarsToSync) {
         const ownership = normalizeUrl(calendar.url) === forgeCalendarUrl ? "forge" : "external";
-        const objects = await state.client.fetchCalendarObjects({
-            calendar,
-            timeRange: {
+        const calendarUrl = normalizeUrl(calendar.url);
+        console.info(`[forge-calendar-sync] fetch_calendar_objects_start connectionId=${JSON.stringify(connectionId)} provider=${JSON.stringify(credentials.provider)} calendarUrl=${JSON.stringify(calendarUrl)} ownership=${JSON.stringify(ownership)}`);
+        if (credentials.provider === "google") {
+            const events = await fetchGoogleCalendarEvents(credentials, calendarUrl, {
                 start,
                 end
-            }
-        });
-        for (const object of objects) {
-            const mapped = mapDavObjectToEvents(normalizeUrl(calendar.url), object, ownership);
-            for (const event of mapped) {
+            });
+            console.info(`[forge-calendar-sync] fetch_calendar_objects_complete connectionId=${JSON.stringify(connectionId)} provider=${JSON.stringify(credentials.provider)} calendarUrl=${JSON.stringify(calendarUrl)} objectCount=${JSON.stringify(events.length)}`);
+            for (const event of events) {
                 upsertCalendarEventRecord(connectionId, event);
+            }
+        }
+        else {
+            const objects = await state.client.fetchCalendarObjects({
+                calendar,
+                timeRange: {
+                    start,
+                    end
+                }
+            });
+            console.info(`[forge-calendar-sync] fetch_calendar_objects_complete connectionId=${JSON.stringify(connectionId)} provider=${JSON.stringify(credentials.provider)} calendarUrl=${JSON.stringify(calendarUrl)} objectCount=${JSON.stringify(objects.length)}`);
+            for (const object of objects) {
+                const mapped = mapDavObjectToEvents(normalizeUrl(calendar.url), object, ownership);
+                for (const event of mapped) {
+                    upsertCalendarEventRecord(connectionId, event);
+                }
             }
         }
     }
@@ -839,20 +1518,8 @@ async function syncDiscoveredState(connectionId, credentials) {
     };
 }
 function toStoredCredentials(input, forgeCalendarUrl) {
-    if (input.provider === "microsoft") {
-        throw new Error("Exchange Online connections must be created from a completed Microsoft sign-in session.");
-    }
-    if (input.provider === "google") {
-        return {
-            provider: "google",
-            serverUrl: GOOGLE_CALDAV_URL,
-            username: input.username,
-            clientId: input.clientId,
-            clientSecret: input.clientSecret,
-            refreshToken: input.refreshToken,
-            selectedCalendarUrls: input.selectedCalendarUrls.map(normalizeUrl),
-            forgeCalendarUrl: normalizeUrl(forgeCalendarUrl)
-        };
+    if (input.provider === "microsoft" || input.provider === "google") {
+        throw new Error(`${input.provider === "google" ? "Google Calendar" : "Exchange Online"} connections must be created from a completed OAuth sign-in session.`);
     }
     if (input.provider === "apple") {
         return {
@@ -902,18 +1569,8 @@ function findExistingCalendarConnection(incoming, secrets) {
     });
 }
 function toDiscoveryCredentials(input) {
-    if (input.provider === "microsoft") {
-        throw new Error("Exchange Online discovery now uses the guided Microsoft sign-in flow.");
-    }
-    if (input.provider === "google") {
-        return {
-            provider: "google",
-            serverUrl: GOOGLE_CALDAV_URL,
-            username: input.username,
-            clientId: input.clientId,
-            clientSecret: input.clientSecret,
-            refreshToken: input.refreshToken
-        };
+    if (input.provider === "microsoft" || input.provider === "google") {
+        throw new Error(`${input.provider === "google" ? "Google Calendar" : "Exchange Online"} discovery now uses the guided OAuth sign-in flow.`);
     }
     if (input.provider === "apple") {
         return {
@@ -944,6 +1601,65 @@ export async function discoverExistingCalendarConnection(connectionId, secrets) 
     return mapDiscoveryPayload(connection.provider, state);
 }
 export async function createCalendarConnection(input, secrets, activity = { source: "ui" }) {
+    if (input.provider === "google") {
+        pruneGoogleOauthSessions();
+        const session = googleOauthSessions.get(input.authSessionId);
+        if (!session || session.status !== "authorized" || !session.discovery || !session.credentials) {
+            throw new Error("Complete the Google sign-in flow before saving this Google Calendar connection.");
+        }
+        const existingConnection = listCalendarConnections().find((connection) => {
+            try {
+                const existing = requireSecretRecord(secrets, connection.credentialsSecretId);
+                return (existing.provider === "google" &&
+                    normalizeAccountIdentity(existing.username) ===
+                        normalizeAccountIdentity(session.credentials?.username ?? ""));
+            }
+            catch {
+                return false;
+            }
+        });
+        if (existingConnection) {
+            throw new CalendarConnectionConflictError(`${existingConnection.label} is already connected for ${existingConnection.accountLabel || "this account"}. Remove it first if you want to reconnect with different settings.`, existingConnection.id);
+        }
+        const state = await createProviderClient(session.credentials);
+        if (state.mode !== "dav") {
+            throw new Error("Forge expected a writable DAV provider state for this Google Calendar connection.");
+        }
+        let forgeCalendarUrl = input.forgeCalendarUrl?.trim() ||
+            session.discovery.calendars.find((calendar) => calendar.isForgeCandidate)?.url ||
+            null;
+        if (!forgeCalendarUrl && input.createForgeCalendar) {
+            const created = await ensureForgeCalendar(state);
+            forgeCalendarUrl = created.forgeCalendarUrl;
+        }
+        if (!forgeCalendarUrl) {
+            throw new Error("Select the calendar Forge should write into, or create a new calendar named Forge.");
+        }
+        const secretId = `calendar_secret_${randomUUID().replaceAll("-", "").slice(0, 10)}`;
+        const storedCredentials = {
+            ...session.credentials,
+            selectedCalendarUrls: input.selectedCalendarUrls.map(normalizeUrl),
+            forgeCalendarUrl: normalizeUrl(forgeCalendarUrl)
+        };
+        // The app credentials belong to Forge itself. Only user-specific OAuth tokens
+        // are stored per calendar connection.
+        storeEncryptedSecret(secretId, secrets.sealJson(storedCredentials), `${input.label} google calendar credentials`);
+        const connection = createCalendarConnectionRecord({
+            provider: "google",
+            label: input.label,
+            accountLabel: session.accountLabel ?? session.discovery.accountLabel,
+            config: {
+                serverUrl: session.discovery.serverUrl,
+                selectedCalendarCount: storedCredentials.selectedCalendarUrls.length,
+                forgeCalendarUrl: normalizeUrl(storedCredentials.forgeCalendarUrl)
+            },
+            credentialsSecretId: secretId
+        });
+        await syncCalendarConnection(connection.id, secrets, activity);
+        session.status = "consumed";
+        recordCalendarActivity("calendar_connection_created", "calendar_connection", connection.id, `Calendar connection created: ${connection.label}`, "Google Calendar is now connected to Forge through the Authorization Code + PKCE flow.", activity, { provider: input.provider });
+        return getCalendarConnectionById(connection.id);
+    }
     if (input.provider === "microsoft") {
         pruneMicrosoftOauthSessions();
         const session = microsoftOauthSessions.get(input.authSessionId);
@@ -1024,7 +1740,7 @@ export async function createCalendarConnection(input, secrets, activity = { sour
         credentialsSecretId: secretId
     });
     await syncCalendarConnection(connection.id, secrets, activity);
-    recordCalendarActivity("calendar_connection_created", "calendar_connection", connection.id, `Calendar connection created: ${connection.label}`, `${input.provider === "apple" ? "Apple Calendar" : input.provider === "google" ? "Google Calendar" : "Custom CalDAV"} is now connected to Forge.`, activity, { provider: input.provider });
+    recordCalendarActivity("calendar_connection_created", "calendar_connection", connection.id, `Calendar connection created: ${connection.label}`, `${input.provider === "apple" ? "Apple Calendar" : "Custom CalDAV"} is now connected to Forge.`, activity, { provider: input.provider });
     return getCalendarConnectionById(connection.id);
 }
 export async function removeCalendarConnection(connectionId, secrets, activity = { source: "ui" }) {
@@ -1274,7 +1990,7 @@ export function listCalendarProviderMetadata() {
             provider: "google",
             label: "Google Calendar",
             supportsDedicatedForgeCalendar: true,
-            connectionHelp: "Use your Google email, client credentials, and refresh token. Forge discovers calendars and can create or reuse a Forge calendar automatically."
+            connectionHelp: "Forge uses a localhost Authorization Code + PKCE flow. Users sign in with Google from the same machine running Forge, Forge exchanges the code on the backend, and stores a per-user refresh token server-side."
         },
         {
             provider: "apple",

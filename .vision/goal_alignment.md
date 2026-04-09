@@ -188,14 +188,17 @@ XP effects remaining explicit and auditable.
 A calendar connection links Forge to an external provider. In the current production
 implementation that means Google Calendar, Apple Calendar, Exchange Online through
 Microsoft Graph, or custom CalDAV.
-Google setup now uses one shared app-owned Google OAuth web client for the whole
-Forge runtime. End users do not create their own Google app or paste a refresh
-token into Forge. They sign in with their own Google accounts through a guided
-web-server OAuth flow, Forge exchanges the authorization code on the backend,
-and Forge stores a per-user refresh token plus granted scopes for long-term sync.
-That Google flow must use one fixed registered callback URI and must only be
-offered from the configured Forge host or allowed local browser origins so the
-redirect contract stays exact.
+Google setup now uses one local Google OAuth desktop-app client for the Forge
+runtime. End users do not create their own Google app or paste a refresh token
+into Forge. They sign in with their own Google accounts through a guided
+Authorization Code + PKCE localhost flow, Forge stores the PKCE verifier and
+state on the backend, Forge exchanges the authorization code on the backend, and
+Forge stores a per-user refresh token plus granted scopes for long-term sync.
+This local Google flow does not use `GOOGLE_CLIENT_SECRET`. The browser must be
+running on localhost on the same machine as Forge, because the callback returns
+to localhost on that machine. If the browser is opened remotely while the
+callback still points to localhost, Forge must explain that Google would
+redirect to localhost on that other device rather than back to the Forge server.
 Apple setup starts from `https://caldav.icloud.com` and autodiscovers the principal,
 calendar home, and writable calendars instead of asking the user to paste hidden
 calendar collection URLs. Writable providers give Forge a dedicated Forge-owned

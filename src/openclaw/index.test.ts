@@ -11,6 +11,7 @@ import { Readable } from "node:stream";
 import { tmpdir } from "node:os";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  ensureForgeRuntimeReady,
   getForgeRuntimeStatus,
   primeForgeRuntime,
   restartForgeRuntime,
@@ -90,6 +91,18 @@ type HookCall = {
     description?: string;
     register?: boolean;
   };
+};
+
+type ServiceCall = {
+  id: string;
+  start: (context: {
+    logger: {
+      info?(message: string): void;
+      warn?(message: string): void;
+      error?(message: string): void;
+      debug?(message: string): void;
+    };
+  }) => Promise<void> | void;
 };
 
 type MockCommand = {
@@ -213,6 +226,7 @@ describe("forge openclaw plugin", () => {
     const routes: RouteCall[] = [];
     const tools: ToolCall[] = [];
     const hooks: HookCall[] = [];
+    const services: ServiceCall[] = [];
     const program = createCommand("root");
 
     registerForgePlugin({
@@ -233,6 +247,9 @@ describe("forge openclaw plugin", () => {
       },
       registerHook(events, _handler, options) {
         hooks.push({ events, options });
+      },
+      registerService(service) {
+        services.push(service as ServiceCall);
       },
       registerCli(registrar) {
         registrar({
@@ -376,13 +393,70 @@ describe("forge openclaw plugin", () => {
       "doctor",
       "route-check"
     ]);
+    expect(services.map((service) => service.id)).toEqual([
+      "forge-local-runtime-bootstrap"
+    ]);
+    expect(primeForgeRuntime).not.toHaveBeenCalled();
+  });
+
+  it("falls back to primeForgeRuntime when registerService is unavailable", () => {
+    registerForgePlugin({
+      pluginConfig: {
+        origin: "http://127.0.0.1",
+        port: 4317,
+        dataRoot: "/tmp/forge-data"
+      },
+      registerHttpRoute() {},
+      registerTool() {}
+    });
+
     expect(primeForgeRuntime).toHaveBeenCalledWith(
       expect.objectContaining({
         origin: "http://127.0.0.1",
         port: 4317,
         dataRoot: "/tmp/forge-data"
+      }),
+      undefined
+    );
+  });
+
+  it("starts Forge through the registered gateway service", async () => {
+    const services: ServiceCall[] = [];
+    const info = vi.fn();
+    const warn = vi.fn();
+
+    registerForgePlugin({
+      pluginConfig: {
+        origin: "http://127.0.0.1",
+        port: 4317
+      },
+      registerHttpRoute() {},
+      registerTool() {},
+      registerService(service) {
+        services.push(service as ServiceCall);
+      }
+    });
+
+    await services[0]?.start({
+      logger: { info, warn }
+    });
+
+    expect(ensureForgeRuntimeReady).toHaveBeenCalledWith(
+      expect.objectContaining({
+        origin: "http://127.0.0.1",
+        port: 4317
       })
     );
+    expect(info).toHaveBeenCalledWith(
+      "Forge local runtime bootstrap: ensuring Forge at http://127.0.0.1:4317."
+    );
+    expect(getForgeRuntimeStatus).toHaveBeenCalledWith(
+      expect.objectContaining({
+        origin: "http://127.0.0.1",
+        port: 4317
+      })
+    );
+    expect(warn).not.toHaveBeenCalled();
   });
 
   it("exposes forge runtime lifecycle CLI actions for plugin-managed local runtimes", async () => {

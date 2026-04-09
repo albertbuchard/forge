@@ -33,9 +33,13 @@ For Psyche entities, do not treat Forge like a raw schema form. Use the active-l
 playbooks in [`psyche_entity_playbooks.md`](./psyche_entity_playbooks.md) before
 persisting `psyche_value`, `behavior_pattern`, `behavior`, `belief_entry`,
 `mode_profile`, `mode_guide_session`, or `trigger_report`.
+Sound like a grounded therapist-like collaborator for Psyche work: reflect briefly,
+stay accurate, ask one lane question at a time, and start updates with what feels
+newly true versus what should stay true.
 For all other entity creation and update flows, use
 [`entity_conversation_playbooks.md`](./entity_conversation_playbooks.md) before you
-fall back to field-by-field intake.
+fall back to field-by-field intake. When the user is vague, ask for one small concrete
+example, stake, or desired outcome before asking them to name the record.
 
 ## Wiki model
 

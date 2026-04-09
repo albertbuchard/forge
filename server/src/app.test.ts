@@ -3389,6 +3389,34 @@ test("built frontend assets are served correctly from the /forge base path", asy
   }
 });
 
+test("dev web origin redirects /forge routes to the live Vite app", async () => {
+  const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-web-dev-redirect-"));
+  const previousDevWebOrigin = process.env.FORGE_DEV_WEB_ORIGIN;
+  process.env.FORGE_DEV_WEB_ORIGIN = "http://127.0.0.1:3027/forge/";
+  const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
+
+  try {
+    const response = await app.inject({
+      method: "GET",
+      url: "/forge/settings/calendar?view=debug"
+    });
+    assert.equal(response.statusCode, 307);
+    assert.equal(
+      response.headers.location,
+      "http://127.0.0.1:3027/forge/settings/calendar?view=debug"
+    );
+  } finally {
+    if (previousDevWebOrigin === undefined) {
+      delete process.env.FORGE_DEV_WEB_ORIGIN;
+    } else {
+      process.env.FORGE_DEV_WEB_ORIGIN = previousDevWebOrigin;
+    }
+    await app.close();
+    closeDatabase();
+    await rm(rootDir, { recursive: true, force: true });
+  }
+});
+
 test("reward rules can be updated and manual bonus XP stays explainable", async () => {
   const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-reward-ops-"));
   const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
@@ -10196,7 +10224,9 @@ test("settings and local agent token management persist through the versioned AP
         execution: { maxActiveTasks: number; timeAccountingMode: string };
         calendarProviders: {
           google: {
-            appUrl: string;
+            clientId: string;
+            clientSecret: string;
+            appBaseUrl: string;
             redirectUri: string;
             isConfigured: boolean;
           };
@@ -10214,7 +10244,15 @@ test("settings and local agent token management persist through the versioned AP
     assert.equal(settingsBody.settings.execution.maxActiveTasks, 2);
     assert.equal(settingsBody.settings.execution.timeAccountingMode, "split");
     assert.equal(
-      settingsBody.settings.calendarProviders.google.appUrl,
+      settingsBody.settings.calendarProviders.google.clientId,
+      "208661368905-bc5v9t1h4uek8c550526k7d5ol0tk0rj.apps.googleusercontent.com"
+    );
+    assert.equal(
+      settingsBody.settings.calendarProviders.google.clientSecret,
+      "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"
+    );
+    assert.equal(
+      settingsBody.settings.calendarProviders.google.appBaseUrl,
       "http://127.0.0.1:4317"
     );
     assert.equal(
@@ -10223,7 +10261,7 @@ test("settings and local agent token management persist through the versioned AP
     );
     assert.equal(
       settingsBody.settings.calendarProviders.google.isConfigured,
-      false
+      true
     );
     assert.equal(
       settingsBody.settings.calendarProviders.microsoft.clientId,
@@ -10261,6 +10299,10 @@ test("settings and local agent token management persist through the versioned AP
           operatorTitle: "Systems architect"
         },
         calendarProviders: {
+          google: {
+            clientId: "google-client-id-from-settings",
+            clientSecret: "google-client-secret-from-settings"
+          },
           microsoft: {
             clientId: "00000000-0000-0000-0000-000000000000",
             tenantId: "common",
@@ -10277,6 +10319,11 @@ test("settings and local agent token management persist through the versioned AP
         execution: { maxActiveTasks: number; timeAccountingMode: string };
         profile: { operatorTitle: string };
         calendarProviders: {
+          google: {
+            clientId: string;
+            clientSecret: string;
+            isConfigured: boolean;
+          };
           microsoft: { clientId: string; isReadyForSignIn: boolean };
         };
       };
@@ -10287,6 +10334,18 @@ test("settings and local agent token management persist through the versioned AP
     assert.equal(
       updatedBody.settings.profile.operatorTitle,
       "Systems architect"
+    );
+    assert.equal(
+      updatedBody.settings.calendarProviders.google.clientId,
+      "google-client-id-from-settings"
+    );
+    assert.equal(
+      updatedBody.settings.calendarProviders.google.clientSecret,
+      "google-client-secret-from-settings"
+    );
+    assert.equal(
+      updatedBody.settings.calendarProviders.google.isConfigured,
+      true
     );
     assert.equal(
       updatedBody.settings.calendarProviders.microsoft.clientId,
@@ -10932,6 +10991,582 @@ test("settings and local agent token management persist through the versioned AP
     };
     assert.equal(revokedBody.token.status, "revoked");
   } finally {
+    await app.close();
+    closeDatabase();
+    await rm(rootDir, { recursive: true, force: true });
+  }
+});
+
+test("settings API rejects incomplete Google OAuth override pairs", async () => {
+  const rootDir = await mkdtemp(
+    path.join(os.tmpdir(), "forge-settings-google-pair-")
+  );
+  const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
+
+  try {
+    const operatorCookie = await issueOperatorSessionCookie(app);
+    const response = await app.inject({
+      method: "PATCH",
+      url: "/api/v1/settings",
+      headers: {
+        cookie: operatorCookie
+      },
+      payload: {
+        calendarProviders: {
+          google: {
+            clientId: "only-client-id.apps.googleusercontent.com",
+            clientSecret: ""
+          }
+        }
+      }
+    });
+
+    assert.equal(response.statusCode, 400);
+    assert.match(
+      response.body,
+      /provide both the client ID and client secret together, or clear both fields together/i
+    );
+  } finally {
+    await app.close();
+    closeDatabase();
+    await rm(rootDir, { recursive: true, force: true });
+  }
+});
+
+test("google oauth start generates a PKCE auth url for local localhost flow", async () => {
+  const rootDir = await mkdtemp(
+    path.join(os.tmpdir(), "forge-google-oauth-start-")
+  );
+  const previousEnv = {
+    APP_BASE_URL: process.env.APP_BASE_URL,
+    APP_URL: process.env.APP_URL,
+    GOOGLE_CLIENT_ID: process.env.GOOGLE_CLIENT_ID,
+    GOOGLE_REDIRECT_URI: process.env.GOOGLE_REDIRECT_URI,
+    GOOGLE_ALLOWED_ORIGINS: process.env.GOOGLE_ALLOWED_ORIGINS
+  };
+  process.env.APP_BASE_URL = "http://127.0.0.1:4317";
+  delete process.env.GOOGLE_REDIRECT_URI;
+  delete process.env.GOOGLE_ALLOWED_ORIGINS;
+  process.env.GOOGLE_CLIENT_ID = "google-client-id";
+  const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
+
+  try {
+    const operatorCookie = await issueOperatorSessionCookie(app);
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/v1/calendar/oauth/google/start",
+      headers: {
+        cookie: operatorCookie,
+        origin: "http://127.0.0.1:3027",
+        "x-forwarded-proto": "http",
+        "x-forwarded-host": "127.0.0.1:4317"
+      },
+      payload: {
+        label: "Primary Google",
+        browserOrigin: "http://127.0.0.1:3027"
+      }
+    });
+
+    assert.equal(response.statusCode, 200);
+    const body = response.json() as {
+      session: { sessionId: string; authUrl: string | null };
+    };
+    assert.ok(body.session.sessionId);
+    assert.ok(body.session.authUrl);
+
+    const authUrl = new URL(body.session.authUrl!);
+    assert.equal(authUrl.origin, "https://accounts.google.com");
+    assert.equal(
+      authUrl.pathname,
+      "/o/oauth2/v2/auth"
+    );
+    assert.equal(authUrl.searchParams.get("client_id"), "google-client-id");
+    assert.equal(
+      authUrl.searchParams.get("redirect_uri"),
+      "http://127.0.0.1:4317/api/v1/calendar/oauth/google/callback"
+    );
+    assert.equal(authUrl.searchParams.get("response_type"), "code");
+    assert.equal(authUrl.searchParams.get("access_type"), "offline");
+    assert.equal(authUrl.searchParams.get("prompt"), "consent");
+    assert.equal(
+      authUrl.searchParams.get("code_challenge_method"),
+      "S256"
+    );
+    assert.ok(authUrl.searchParams.get("state"));
+    assert.ok(authUrl.searchParams.get("code_challenge"));
+  } finally {
+    if (previousEnv.APP_BASE_URL === undefined) {
+      delete process.env.APP_BASE_URL;
+    } else {
+      process.env.APP_BASE_URL = previousEnv.APP_BASE_URL;
+    }
+    if (previousEnv.APP_URL === undefined) {
+      delete process.env.APP_URL;
+    } else {
+      process.env.APP_URL = previousEnv.APP_URL;
+    }
+    if (previousEnv.GOOGLE_CLIENT_ID === undefined) {
+      delete process.env.GOOGLE_CLIENT_ID;
+    } else {
+      process.env.GOOGLE_CLIENT_ID = previousEnv.GOOGLE_CLIENT_ID;
+    }
+    if (previousEnv.GOOGLE_REDIRECT_URI === undefined) {
+      delete process.env.GOOGLE_REDIRECT_URI;
+    } else {
+      process.env.GOOGLE_REDIRECT_URI = previousEnv.GOOGLE_REDIRECT_URI;
+    }
+    if (previousEnv.GOOGLE_ALLOWED_ORIGINS === undefined) {
+      delete process.env.GOOGLE_ALLOWED_ORIGINS;
+    } else {
+      process.env.GOOGLE_ALLOWED_ORIGINS = previousEnv.GOOGLE_ALLOWED_ORIGINS;
+    }
+    await app.close();
+    closeDatabase();
+    await rm(rootDir, { recursive: true, force: true });
+  }
+});
+
+test("google oauth start prefers the saved Forge client ID over the runtime default", async () => {
+  const rootDir = await mkdtemp(
+    path.join(os.tmpdir(), "forge-google-oauth-settings-override-")
+  );
+  const previousEnv = {
+    APP_BASE_URL: process.env.APP_BASE_URL,
+    APP_URL: process.env.APP_URL,
+    GOOGLE_CLIENT_ID: process.env.GOOGLE_CLIENT_ID,
+    GOOGLE_REDIRECT_URI: process.env.GOOGLE_REDIRECT_URI,
+    GOOGLE_ALLOWED_ORIGINS: process.env.GOOGLE_ALLOWED_ORIGINS
+  };
+  process.env.APP_BASE_URL = "http://127.0.0.1:4317";
+  delete process.env.GOOGLE_REDIRECT_URI;
+  delete process.env.GOOGLE_ALLOWED_ORIGINS;
+  process.env.GOOGLE_CLIENT_ID = "google-client-id-from-env";
+  const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
+
+  try {
+    const operatorCookie = await issueOperatorSessionCookie(app);
+    const updated = await app.inject({
+      method: "PATCH",
+      url: "/api/v1/settings",
+      headers: {
+        cookie: operatorCookie
+      },
+      payload: {
+        calendarProviders: {
+          google: {
+            clientId: "google-client-id-from-settings"
+          }
+        }
+      }
+    });
+    assert.equal(updated.statusCode, 200);
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/v1/calendar/oauth/google/start",
+      headers: {
+        cookie: operatorCookie,
+        origin: "http://127.0.0.1:3027",
+        "x-forwarded-proto": "http",
+        "x-forwarded-host": "127.0.0.1:4317"
+      },
+      payload: {
+        label: "Primary Google",
+        browserOrigin: "http://127.0.0.1:3027"
+      }
+    });
+
+    assert.equal(response.statusCode, 200);
+    const body = response.json() as {
+      session: { authUrl: string | null };
+    };
+    assert.ok(body.session.authUrl);
+    const authUrl = new URL(body.session.authUrl!);
+    assert.equal(
+      authUrl.searchParams.get("client_id"),
+      "google-client-id-from-settings"
+    );
+  } finally {
+    if (previousEnv.APP_BASE_URL === undefined) {
+      delete process.env.APP_BASE_URL;
+    } else {
+      process.env.APP_BASE_URL = previousEnv.APP_BASE_URL;
+    }
+    if (previousEnv.APP_URL === undefined) {
+      delete process.env.APP_URL;
+    } else {
+      process.env.APP_URL = previousEnv.APP_URL;
+    }
+    if (previousEnv.GOOGLE_CLIENT_ID === undefined) {
+      delete process.env.GOOGLE_CLIENT_ID;
+    } else {
+      process.env.GOOGLE_CLIENT_ID = previousEnv.GOOGLE_CLIENT_ID;
+    }
+    if (previousEnv.GOOGLE_REDIRECT_URI === undefined) {
+      delete process.env.GOOGLE_REDIRECT_URI;
+    } else {
+      process.env.GOOGLE_REDIRECT_URI = previousEnv.GOOGLE_REDIRECT_URI;
+    }
+    if (previousEnv.GOOGLE_ALLOWED_ORIGINS === undefined) {
+      delete process.env.GOOGLE_ALLOWED_ORIGINS;
+    } else {
+      process.env.GOOGLE_ALLOWED_ORIGINS = previousEnv.GOOGLE_ALLOWED_ORIGINS;
+    }
+    await app.close();
+    closeDatabase();
+    await rm(rootDir, { recursive: true, force: true });
+  }
+});
+
+test("google oauth start rejects a remote browser origin when the callback is localhost", async () => {
+  const rootDir = await mkdtemp(
+    path.join(os.tmpdir(), "forge-google-oauth-remote-loopback-")
+  );
+  const previousEnv = {
+    APP_BASE_URL: process.env.APP_BASE_URL,
+    APP_URL: process.env.APP_URL,
+    GOOGLE_CLIENT_ID: process.env.GOOGLE_CLIENT_ID,
+    GOOGLE_REDIRECT_URI: process.env.GOOGLE_REDIRECT_URI,
+    GOOGLE_ALLOWED_ORIGINS: process.env.GOOGLE_ALLOWED_ORIGINS
+  };
+  delete process.env.APP_BASE_URL;
+  delete process.env.APP_URL;
+  delete process.env.GOOGLE_REDIRECT_URI;
+  delete process.env.GOOGLE_ALLOWED_ORIGINS;
+  process.env.GOOGLE_CLIENT_ID = "google-client-id";
+  const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
+
+  try {
+    const operatorCookie = await issueOperatorSessionCookie(app);
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/v1/calendar/oauth/google/start",
+      headers: {
+        cookie: operatorCookie,
+        origin:
+          "https://macbook-pro--de-francis-lalanne.tail47ba04.ts.net",
+        "x-forwarded-proto": "https",
+        "x-forwarded-host":
+          "macbook-pro--de-francis-lalanne.tail47ba04.ts.net"
+      },
+      payload: {
+        label: "Primary Google",
+        browserOrigin:
+          "https://macbook-pro--de-francis-lalanne.tail47ba04.ts.net"
+      }
+    });
+
+    assert.equal(response.statusCode, 500);
+    assert.match(
+      response.body,
+      /Forge is running as a localhost app/i
+    );
+    assert.match(response.body, /browser must also be on localhost/i);
+  } finally {
+    if (previousEnv.APP_BASE_URL === undefined) {
+      delete process.env.APP_BASE_URL;
+    } else {
+      process.env.APP_BASE_URL = previousEnv.APP_BASE_URL;
+    }
+    if (previousEnv.APP_URL === undefined) {
+      delete process.env.APP_URL;
+    } else {
+      process.env.APP_URL = previousEnv.APP_URL;
+    }
+    if (previousEnv.GOOGLE_CLIENT_ID === undefined) {
+      delete process.env.GOOGLE_CLIENT_ID;
+    } else {
+      process.env.GOOGLE_CLIENT_ID = previousEnv.GOOGLE_CLIENT_ID;
+    }
+    if (previousEnv.GOOGLE_REDIRECT_URI === undefined) {
+      delete process.env.GOOGLE_REDIRECT_URI;
+    } else {
+      process.env.GOOGLE_REDIRECT_URI = previousEnv.GOOGLE_REDIRECT_URI;
+    }
+    if (previousEnv.GOOGLE_ALLOWED_ORIGINS === undefined) {
+      delete process.env.GOOGLE_ALLOWED_ORIGINS;
+    } else {
+      process.env.GOOGLE_ALLOWED_ORIGINS = previousEnv.GOOGLE_ALLOWED_ORIGINS;
+    }
+    await app.close();
+    closeDatabase();
+    await rm(rootDir, { recursive: true, force: true });
+  }
+});
+
+test("google oauth callback rejects an invalid state", async () => {
+  const rootDir = await mkdtemp(
+    path.join(os.tmpdir(), "forge-google-oauth-invalid-state-")
+  );
+  const previousEnv = {
+    APP_BASE_URL: process.env.APP_BASE_URL,
+    APP_URL: process.env.APP_URL,
+    GOOGLE_CLIENT_ID: process.env.GOOGLE_CLIENT_ID,
+    GOOGLE_REDIRECT_URI: process.env.GOOGLE_REDIRECT_URI,
+    GOOGLE_ALLOWED_ORIGINS: process.env.GOOGLE_ALLOWED_ORIGINS
+  };
+  delete process.env.APP_BASE_URL;
+  delete process.env.APP_URL;
+  delete process.env.GOOGLE_REDIRECT_URI;
+  delete process.env.GOOGLE_ALLOWED_ORIGINS;
+  process.env.GOOGLE_CLIENT_ID = "google-client-id";
+  const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
+
+  try {
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/v1/calendar/oauth/google/callback?state=not-a-real-state&code=demo-code"
+    });
+
+    assert.equal(response.statusCode, 500);
+    assert.match(response.body, /Google sign-in state is invalid or expired/i);
+  } finally {
+    if (previousEnv.APP_BASE_URL === undefined) {
+      delete process.env.APP_BASE_URL;
+    } else {
+      process.env.APP_BASE_URL = previousEnv.APP_BASE_URL;
+    }
+    if (previousEnv.APP_URL === undefined) {
+      delete process.env.APP_URL;
+    } else {
+      process.env.APP_URL = previousEnv.APP_URL;
+    }
+    if (previousEnv.GOOGLE_CLIENT_ID === undefined) {
+      delete process.env.GOOGLE_CLIENT_ID;
+    } else {
+      process.env.GOOGLE_CLIENT_ID = previousEnv.GOOGLE_CLIENT_ID;
+    }
+    if (previousEnv.GOOGLE_REDIRECT_URI === undefined) {
+      delete process.env.GOOGLE_REDIRECT_URI;
+    } else {
+      process.env.GOOGLE_REDIRECT_URI = previousEnv.GOOGLE_REDIRECT_URI;
+    }
+    if (previousEnv.GOOGLE_ALLOWED_ORIGINS === undefined) {
+      delete process.env.GOOGLE_ALLOWED_ORIGINS;
+    } else {
+      process.env.GOOGLE_ALLOWED_ORIGINS = previousEnv.GOOGLE_ALLOWED_ORIGINS;
+    }
+    await app.close();
+    closeDatabase();
+    await rm(rootDir, { recursive: true, force: true });
+  }
+});
+
+test("google oauth callback explains when the configured client still needs a server client secret", async () => {
+  const rootDir = await mkdtemp(
+    path.join(os.tmpdir(), "forge-google-oauth-client-secret-required-")
+  );
+  const previousEnv = {
+    APP_BASE_URL: process.env.APP_BASE_URL,
+    APP_URL: process.env.APP_URL,
+    GOOGLE_CLIENT_ID: process.env.GOOGLE_CLIENT_ID,
+    GOOGLE_CLIENT_SECRET: process.env.GOOGLE_CLIENT_SECRET,
+    GOOGLE_REDIRECT_URI: process.env.GOOGLE_REDIRECT_URI,
+    GOOGLE_ALLOWED_ORIGINS: process.env.GOOGLE_ALLOWED_ORIGINS
+  };
+  process.env.APP_BASE_URL = "http://127.0.0.1:4317";
+  delete process.env.APP_URL;
+  delete process.env.GOOGLE_CLIENT_SECRET;
+  delete process.env.GOOGLE_REDIRECT_URI;
+  delete process.env.GOOGLE_ALLOWED_ORIGINS;
+  process.env.GOOGLE_CLIENT_ID = "google-client-id";
+  const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
+  const originalFetch = globalThis.fetch;
+
+  globalThis.fetch = (async (input: RequestInfo | URL) => {
+    const url = String(input);
+    if (url === "https://oauth2.googleapis.com/token") {
+      return new Response(
+        JSON.stringify({
+          error: "invalid_client",
+          error_description: "client_secret is missing."
+        }),
+        {
+          status: 400,
+          headers: { "content-type": "application/json" }
+        }
+      );
+    }
+    throw new Error(`Unexpected fetch during Google OAuth callback test: ${url}`);
+  }) as typeof fetch;
+
+  try {
+    const operatorCookie = await issueOperatorSessionCookie(app);
+    const startResponse = await app.inject({
+      method: "POST",
+      url: "/api/v1/calendar/oauth/google/start",
+      headers: {
+        cookie: operatorCookie,
+        origin: "http://127.0.0.1:3027",
+        "x-forwarded-proto": "http",
+        "x-forwarded-host": "127.0.0.1:4317"
+      },
+      payload: {
+        label: "Primary Google",
+        browserOrigin: "http://127.0.0.1:3027"
+      }
+    });
+
+    assert.equal(startResponse.statusCode, 200);
+    const startBody = startResponse.json() as {
+      session: { authUrl: string | null };
+    };
+    const state = new URL(startBody.session.authUrl ?? "").searchParams.get("state");
+    assert.ok(state);
+
+    const callbackResponse = await app.inject({
+      method: "GET",
+      url: `/api/v1/calendar/oauth/google/callback?state=${encodeURIComponent(state!)}&code=demo-code`
+    });
+
+    assert.equal(callbackResponse.statusCode, 200);
+    assert.match(callbackResponse.body, /requires a client secret/i);
+    assert.match(callbackResponse.body, /GOOGLE_CLIENT_SECRET/);
+    assert.match(callbackResponse.body, /Desktop app client/i);
+  } finally {
+    globalThis.fetch = originalFetch;
+    if (previousEnv.APP_BASE_URL === undefined) {
+      delete process.env.APP_BASE_URL;
+    } else {
+      process.env.APP_BASE_URL = previousEnv.APP_BASE_URL;
+    }
+    if (previousEnv.APP_URL === undefined) {
+      delete process.env.APP_URL;
+    } else {
+      process.env.APP_URL = previousEnv.APP_URL;
+    }
+    if (previousEnv.GOOGLE_CLIENT_ID === undefined) {
+      delete process.env.GOOGLE_CLIENT_ID;
+    } else {
+      process.env.GOOGLE_CLIENT_ID = previousEnv.GOOGLE_CLIENT_ID;
+    }
+    if (previousEnv.GOOGLE_CLIENT_SECRET === undefined) {
+      delete process.env.GOOGLE_CLIENT_SECRET;
+    } else {
+      process.env.GOOGLE_CLIENT_SECRET = previousEnv.GOOGLE_CLIENT_SECRET;
+    }
+    if (previousEnv.GOOGLE_REDIRECT_URI === undefined) {
+      delete process.env.GOOGLE_REDIRECT_URI;
+    } else {
+      process.env.GOOGLE_REDIRECT_URI = previousEnv.GOOGLE_REDIRECT_URI;
+    }
+    if (previousEnv.GOOGLE_ALLOWED_ORIGINS === undefined) {
+      delete process.env.GOOGLE_ALLOWED_ORIGINS;
+    } else {
+      process.env.GOOGLE_ALLOWED_ORIGINS = previousEnv.GOOGLE_ALLOWED_ORIGINS;
+    }
+    await app.close();
+    closeDatabase();
+    await rm(rootDir, { recursive: true, force: true });
+  }
+});
+
+test("google oauth callback includes the server client secret in the token exchange when configured", async () => {
+  const rootDir = await mkdtemp(
+    path.join(os.tmpdir(), "forge-google-oauth-client-secret-body-")
+  );
+  const previousEnv = {
+    APP_BASE_URL: process.env.APP_BASE_URL,
+    APP_URL: process.env.APP_URL,
+    GOOGLE_CLIENT_ID: process.env.GOOGLE_CLIENT_ID,
+    GOOGLE_CLIENT_SECRET: process.env.GOOGLE_CLIENT_SECRET,
+    GOOGLE_REDIRECT_URI: process.env.GOOGLE_REDIRECT_URI,
+    GOOGLE_ALLOWED_ORIGINS: process.env.GOOGLE_ALLOWED_ORIGINS
+  };
+  process.env.APP_BASE_URL = "http://127.0.0.1:4317";
+  delete process.env.APP_URL;
+  process.env.GOOGLE_CLIENT_ID = "google-client-id";
+  process.env.GOOGLE_CLIENT_SECRET = "google-client-secret";
+  delete process.env.GOOGLE_REDIRECT_URI;
+  delete process.env.GOOGLE_ALLOWED_ORIGINS;
+  const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
+  const originalFetch = globalThis.fetch;
+  const tokenRequestBodies: string[] = [];
+
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = String(input);
+    if (url === "https://oauth2.googleapis.com/token") {
+      tokenRequestBodies.push(String(init?.body ?? ""));
+      return new Response(
+        JSON.stringify({
+          error: "invalid_grant",
+          error_description: "Code was already redeemed."
+        }),
+        {
+          status: 400,
+          headers: { "content-type": "application/json" }
+        }
+      );
+    }
+    throw new Error(`Unexpected fetch during Google OAuth callback secret test: ${url}`);
+  }) as typeof fetch;
+
+  try {
+    const operatorCookie = await issueOperatorSessionCookie(app);
+    const startResponse = await app.inject({
+      method: "POST",
+      url: "/api/v1/calendar/oauth/google/start",
+      headers: {
+        cookie: operatorCookie,
+        origin: "http://127.0.0.1:3027",
+        "x-forwarded-proto": "http",
+        "x-forwarded-host": "127.0.0.1:4317"
+      },
+      payload: {
+        label: "Primary Google",
+        browserOrigin: "http://127.0.0.1:3027"
+      }
+    });
+
+    assert.equal(startResponse.statusCode, 200);
+    const startBody = startResponse.json() as {
+      session: { authUrl: string | null };
+    };
+    const state = new URL(startBody.session.authUrl ?? "").searchParams.get("state");
+    assert.ok(state);
+
+    const callbackResponse = await app.inject({
+      method: "GET",
+      url: `/api/v1/calendar/oauth/google/callback?state=${encodeURIComponent(state!)}&code=demo-code`
+    });
+
+    assert.equal(callbackResponse.statusCode, 200);
+    assert.equal(tokenRequestBodies.length, 1);
+    assert.match(tokenRequestBodies[0] ?? "", /client_secret=google-client-secret/);
+    assert.match(tokenRequestBodies[0] ?? "", /client_id=google-client-id/);
+    assert.match(tokenRequestBodies[0] ?? "", /code_verifier=/);
+  } finally {
+    globalThis.fetch = originalFetch;
+    if (previousEnv.APP_BASE_URL === undefined) {
+      delete process.env.APP_BASE_URL;
+    } else {
+      process.env.APP_BASE_URL = previousEnv.APP_BASE_URL;
+    }
+    if (previousEnv.APP_URL === undefined) {
+      delete process.env.APP_URL;
+    } else {
+      process.env.APP_URL = previousEnv.APP_URL;
+    }
+    if (previousEnv.GOOGLE_CLIENT_ID === undefined) {
+      delete process.env.GOOGLE_CLIENT_ID;
+    } else {
+      process.env.GOOGLE_CLIENT_ID = previousEnv.GOOGLE_CLIENT_ID;
+    }
+    if (previousEnv.GOOGLE_CLIENT_SECRET === undefined) {
+      delete process.env.GOOGLE_CLIENT_SECRET;
+    } else {
+      process.env.GOOGLE_CLIENT_SECRET = previousEnv.GOOGLE_CLIENT_SECRET;
+    }
+    if (previousEnv.GOOGLE_REDIRECT_URI === undefined) {
+      delete process.env.GOOGLE_REDIRECT_URI;
+    } else {
+      process.env.GOOGLE_REDIRECT_URI = previousEnv.GOOGLE_REDIRECT_URI;
+    }
+    if (previousEnv.GOOGLE_ALLOWED_ORIGINS === undefined) {
+      delete process.env.GOOGLE_ALLOWED_ORIGINS;
+    } else {
+      process.env.GOOGLE_ALLOWED_ORIGINS = previousEnv.GOOGLE_ALLOWED_ORIGINS;
+    }
     await app.close();
     closeDatabase();
     await rm(rootDir, { recursive: true, force: true });

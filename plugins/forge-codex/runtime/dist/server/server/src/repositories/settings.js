@@ -2,6 +2,7 @@ import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { getDatabase, runInTransaction } from "../db.js";
 import { recordActivityEvent } from "./activity-events.js";
 import { recordEventLog } from "./event-log.js";
+import { resolveGoogleCalendarOauthPublicConfig } from "../services/google-calendar-oauth-config.js";
 import { buildConnectionAgentIdentity, FORGE_DEFAULT_AGENT_ID, listAiModelConnections, syncForgeManagedWikiProfile } from "./model-settings.js";
 import { createAgentTokenSchema, agentIdentitySchema, customThemeSchema, settingsPayloadSchema, updateSettingsSchema } from "../types.js";
 function boolFromInt(value) {
@@ -24,6 +25,12 @@ function normalizeMicrosoftTenantId(value) {
 function normalizeMicrosoftRedirectUri(value) {
     const trimmed = value?.trim();
     return trimmed && trimmed.length > 0 ? trimmed : defaultMicrosoftRedirectUri();
+}
+function logCalendarSettingsDebug(message, details) {
+    const serialized = Object.entries(details)
+        .map(([key, value]) => `${key}=${JSON.stringify(value)}`)
+        .join(" ");
+    console.info(`[forge-calendar-settings] ${message} ${serialized}`);
 }
 function normalizeModelConnectionId(value) {
     const trimmed = value?.trim();
@@ -137,7 +144,7 @@ function readSettingsRow() {
         .prepare(`SELECT
         operator_name, operator_email, operator_title, theme_preference, custom_theme_json, locale_preference,
         goal_drift_alerts, daily_quest_reminders, achievement_celebrations, max_active_tasks, time_accounting_mode,
-        integrity_score, last_audit_at, psyche_auth_required, microsoft_client_id, microsoft_tenant_id, microsoft_redirect_uri,
+        integrity_score, last_audit_at, psyche_auth_required, google_client_id, google_client_secret, microsoft_client_id, microsoft_tenant_id, microsoft_redirect_uri,
         forge_basic_chat_connection_id, forge_basic_chat_model, forge_wiki_connection_id, forge_wiki_model, created_at, updated_at
        FROM app_settings
        WHERE id = 1`)
@@ -213,6 +220,18 @@ export function isPsycheAuthRequired() {
 export function getSettings() {
     const row = readSettingsRow();
     const connections = listAiModelConnections();
+    const googleConfig = resolveGoogleCalendarOauthPublicConfig(process.env, {
+        clientId: row.google_client_id,
+        clientSecret: row.google_client_secret
+    });
+    logCalendarSettingsDebug("get_settings", {
+        storedGoogleClientId: row.google_client_id,
+        storedGoogleClientSecret: row.google_client_secret.length > 0,
+        resolvedGoogleClientId: googleConfig.clientId,
+        resolvedGoogleClientSecret: googleConfig.clientSecret.length > 0,
+        googleIsConfigured: googleConfig.isConfigured,
+        googleRedirectUri: googleConfig.redirectUri
+    });
     const microsoftClientId = row.microsoft_client_id?.trim() ?? "";
     const microsoftTenantId = normalizeMicrosoftTenantId(row.microsoft_tenant_id);
     const microsoftRedirectUri = normalizeMicrosoftRedirectUri(row.microsoft_redirect_uri);
@@ -248,6 +267,7 @@ export function getSettings() {
             psycheAuthRequired: boolFromInt(row.psyche_auth_required)
         },
         calendarProviders: {
+            google: googleConfig,
             microsoft: {
                 clientId: microsoftClientId,
                 tenantId: microsoftTenantId,
@@ -297,6 +317,20 @@ export function updateSettings(input, options = {}) {
     return runInTransaction(() => {
         const current = getSettings();
         const now = new Date().toISOString();
+        const nextGoogleClientId = parsed.calendarProviders?.google?.clientId?.trim() ??
+            current.calendarProviders.google.storedClientId;
+        const nextGoogleClientSecret = parsed.calendarProviders?.google?.clientSecret?.trim() ??
+            current.calendarProviders.google.storedClientSecret;
+        logCalendarSettingsDebug("update_settings_requested", {
+            requestedGoogleClientId: parsed.calendarProviders?.google?.clientId ?? null,
+            requestedGoogleClientSecret: parsed.calendarProviders?.google?.clientSecret !== undefined
+                ? parsed.calendarProviders.google.clientSecret.length > 0
+                : null,
+            currentGoogleClientId: current.calendarProviders.google.storedClientId,
+            currentGoogleClientSecret: current.calendarProviders.google.storedClientSecret.length > 0,
+            nextGoogleClientId,
+            nextGoogleClientSecret: nextGoogleClientSecret.length > 0
+        });
         const next = {
             profile: {
                 operatorName: parsed.profile?.operatorName ?? current.profile.operatorName,
@@ -317,6 +351,10 @@ export function updateSettings(input, options = {}) {
             localePreference: parsed.localePreference ?? current.localePreference,
             psycheAuthRequired: parsed.security?.psycheAuthRequired ?? current.security.psycheAuthRequired,
             calendarProviders: {
+                google: resolveGoogleCalendarOauthPublicConfig(process.env, {
+                    clientId: nextGoogleClientId,
+                    clientSecret: nextGoogleClientSecret
+                }),
                 microsoft: {
                     clientId: parsed.calendarProviders?.microsoft?.clientId?.trim() ??
                         current.calendarProviders.microsoft.clientId,
@@ -350,10 +388,16 @@ export function updateSettings(input, options = {}) {
             .prepare(`UPDATE app_settings
          SET operator_name = ?, operator_email = ?, operator_title = ?, theme_preference = ?, custom_theme_json = ?, locale_preference = ?,
              goal_drift_alerts = ?, daily_quest_reminders = ?, achievement_celebrations = ?, max_active_tasks = ?, time_accounting_mode = ?,
-             psyche_auth_required = ?, microsoft_client_id = ?, microsoft_tenant_id = ?, microsoft_redirect_uri = ?,
+             psyche_auth_required = ?, google_client_id = ?, google_client_secret = ?, microsoft_client_id = ?, microsoft_tenant_id = ?, microsoft_redirect_uri = ?,
              forge_basic_chat_connection_id = ?, forge_basic_chat_model = ?, forge_wiki_connection_id = ?, forge_wiki_model = ?, updated_at = ?
          WHERE id = 1`)
-            .run(next.profile.operatorName, next.profile.operatorEmail, next.profile.operatorTitle, next.themePreference, next.customTheme ? JSON.stringify(next.customTheme) : "", next.localePreference, toInt(next.notifications.goalDriftAlerts), toInt(next.notifications.dailyQuestReminders), toInt(next.notifications.achievementCelebrations), next.execution.maxActiveTasks, next.execution.timeAccountingMode, toInt(next.psycheAuthRequired), next.calendarProviders.microsoft.clientId, next.calendarProviders.microsoft.tenantId, next.calendarProviders.microsoft.redirectUri, next.modelSettings.forgeAgent.basicChat.connectionId, next.modelSettings.forgeAgent.basicChat.model, next.modelSettings.forgeAgent.wiki.connectionId, next.modelSettings.forgeAgent.wiki.model, now);
+            .run(next.profile.operatorName, next.profile.operatorEmail, next.profile.operatorTitle, next.themePreference, next.customTheme ? JSON.stringify(next.customTheme) : "", next.localePreference, toInt(next.notifications.goalDriftAlerts), toInt(next.notifications.dailyQuestReminders), toInt(next.notifications.achievementCelebrations), next.execution.maxActiveTasks, next.execution.timeAccountingMode, toInt(next.psycheAuthRequired), nextGoogleClientId, nextGoogleClientSecret, next.calendarProviders.microsoft.clientId, next.calendarProviders.microsoft.tenantId, next.calendarProviders.microsoft.redirectUri, next.modelSettings.forgeAgent.basicChat.connectionId, next.modelSettings.forgeAgent.basicChat.model, next.modelSettings.forgeAgent.wiki.connectionId, next.modelSettings.forgeAgent.wiki.model, now);
+        logCalendarSettingsDebug("update_settings_committed", {
+            persistedGoogleClientId: nextGoogleClientId,
+            persistedGoogleClientSecret: nextGoogleClientSecret.length > 0,
+            persistedMicrosoftClientId: next.calendarProviders.microsoft.clientId,
+            updatedAt: now
+        });
         if (options.secrets) {
             syncForgeManagedWikiProfile(options.secrets);
         }
@@ -374,6 +418,9 @@ export function updateSettings(input, options = {}) {
                     dailyQuestReminders: next.notifications.dailyQuestReminders,
                     maxActiveTasks: next.execution.maxActiveTasks,
                     timeAccountingMode: next.execution.timeAccountingMode,
+                    googleConfigured: next.calendarProviders.google.isConfigured,
+                    googleAppBaseUrl: next.calendarProviders.google.appBaseUrl,
+                    googleRedirectUri: next.calendarProviders.google.redirectUri,
                     microsoftConfigured: next.calendarProviders.microsoft.clientId.trim().length > 0,
                     microsoftTenantId: next.calendarProviders.microsoft.tenantId,
                     forgeBasicChatModel: next.modelSettings.forgeAgent.basicChat.model,

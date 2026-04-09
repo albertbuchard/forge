@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { CalendarPage } from "@/pages/calendar-page";
 import { SettingsCalendarPage } from "@/pages/settings-calendar-page";
+import { describeGoogleRouteRequirement } from "@/components/calendar/calendar-connection-flow-dialog";
 import { useForgeClipboardStore } from "@/store/use-forge-clipboard";
 import type { ForgeSnapshot } from "@/lib/types";
 
@@ -300,6 +301,7 @@ function createDeferred<T>() {
 }
 
 beforeEach(() => {
+  window.history.replaceState({}, "", "http://localhost:3000/");
   window.localStorage.clear();
   useForgeShellMock.mockReturnValue({
     snapshot: createSnapshot(),
@@ -362,18 +364,20 @@ beforeEach(() => {
       calendarProviders: {
         google: {
           clientId: "google-client-id",
-          appUrl: "http://127.0.0.1:4317",
+          appBaseUrl: "http://127.0.0.1:4317",
           redirectUri:
             "http://127.0.0.1:4317/api/v1/calendar/oauth/google/callback",
           allowedOrigins: ["http://127.0.0.1:3027", "http://127.0.0.1:4317"],
-          usesSharedAppCredentials: true,
-          authMode: "shared_web_server_oauth",
+          usesPkce: true,
+          requiresServerClientSecret: false,
+          oauthClientType: "desktop_app",
+          authMode: "localhost_pkce",
           isConfigured: true,
           isReadyForPairing: true,
+          isLocalOnly: true,
           runtimeOrigin: "http://127.0.0.1:4317",
-          runtimeOriginMatchesAppUrl: true,
           setupMessage:
-            "Google Calendar pairing is configured for the shared Forge app. Users only sign in with their own Google accounts; they do not create their own OAuth clients."
+            "Google Calendar sign-in is configured for local Forge. Open Forge on localhost or 127.0.0.1 on the same machine that is running Forge, because Google will redirect back to the local callback on that machine."
         },
         microsoft: {
           clientId: "",
@@ -920,19 +924,503 @@ describe("calendar routing surfaces", () => {
     expect(screen.getAllByText("Apple Calendar").length).toBeGreaterThan(0);
   });
 
-  it("shows the shared Google OAuth setup details in calendar settings", async () => {
+  it("keeps the Google host warning inside the guided modal", async () => {
     renderWithRouter(<SettingsCalendarPage />, "/settings/calendar");
 
-    expect(await screen.findByText("Google Calendar OAuth")).toBeInTheDocument();
+    expect(await screen.findByText("Provider connections")).toBeInTheDocument();
     expect(
-      screen.getByText(/Forge uses one shared Google OAuth web application/i)
+      screen.getByText(/Connect a provider here, then choose which calendars Forge should mirror/i)
     ).toBeInTheDocument();
-    expect(screen.getByText("Registered app endpoints")).toBeInTheDocument();
     expect(
-      screen.getByText(
-        "http://127.0.0.1:4317/api/v1/calendar/oauth/google/callback"
+      screen.queryByText(/Google sign-in is only available from one of these local browser origins/i)
+    ).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Open Google guided flow" }));
+    expect(await screen.findByText("Connect a calendar provider")).toBeInTheDocument();
+    expect(screen.getByText(/Detected browser origin:/i)).toBeInTheDocument();
+    expect(screen.getByText(window.location.origin)).toBeInTheDocument();
+    expect(
+      screen.getByText(/Google sign-in has to start from a local browser on the host running Forge/i)
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Sign in with Google" })).toBeDisabled();
+  });
+
+  it("shows provider connection badges without blocking additional connections", async () => {
+    listCalendarConnectionsMock.mockResolvedValueOnce({
+      providers: [
+        {
+          provider: "google",
+          label: "Google Calendar",
+          supportsDedicatedForgeCalendar: true,
+          connectionHelp: "Use Google OAuth credentials."
+        },
+        {
+          provider: "apple",
+          label: "Apple Calendar",
+          supportsDedicatedForgeCalendar: true,
+          connectionHelp: "Use Apple autodiscovery from caldav.icloud.com."
+        }
+      ],
+      connections: [
+        {
+          id: "conn_google_1",
+          provider: "google",
+          label: "Primary Google",
+          accountLabel: "albert.buchard@gmail.com",
+          status: "connected",
+          config: {
+            selectedCalendarCount: 1,
+            forgeCalendarUrl: "https://apidata.googleusercontent.com/caldav/v2/albert.buchard%40gmail.com/forge/"
+          },
+          forgeCalendarId: "calendar_google_forge",
+          lastSyncedAt: "2026-04-03T08:00:00.000Z",
+          lastSyncError: null,
+          createdAt: "2026-04-03T08:00:00.000Z",
+          updatedAt: "2026-04-03T08:00:00.000Z"
+        },
+        {
+          id: "conn_google_2",
+          provider: "google",
+          label: "Work Google",
+          accountLabel: "work@example.com",
+          status: "connected",
+          config: {
+            selectedCalendarCount: 2,
+            forgeCalendarUrl: "https://apidata.googleusercontent.com/caldav/v2/work%40example.com/forge/"
+          },
+          forgeCalendarId: "calendar_google_work",
+          lastSyncedAt: "2026-04-03T08:00:00.000Z",
+          lastSyncError: null,
+          createdAt: "2026-04-03T08:00:00.000Z",
+          updatedAt: "2026-04-03T08:00:00.000Z"
+        }
+      ]
+    });
+
+    renderWithRouter(<SettingsCalendarPage />, "/settings/calendar");
+
+    const googleAction = await screen.findByRole("button", { name: "Open Google guided flow" });
+    const googleCard = googleAction.closest(".rounded-\\[26px\\]");
+    expect(googleCard).toBeTruthy();
+    expect(within(googleCard as HTMLElement).getByText("Connected")).toBeInTheDocument();
+    expect(within(googleCard as HTMLElement).getByText("2 connections")).toBeInTheDocument();
+    expect(
+      within(googleCard as HTMLElement).getByText(
+        /Forge already has 2 connections for this provider/i
       )
     ).toBeInTheDocument();
+    expect(googleAction).toBeInTheDocument();
+  });
+
+  it("shows both the wrong-machine warning and missing Google client ID in the guided modal", async () => {
+    getSettingsMock.mockResolvedValueOnce({
+      settings: {
+        profile: {
+          operatorName: "Albert",
+          operatorEmail: "albert@example.com",
+          operatorTitle: "Operator"
+        },
+        notifications: {
+          goalDriftAlerts: true,
+          dailyQuestReminders: true,
+          achievementCelebrations: true
+        },
+        execution: {
+          maxActiveTasks: 2,
+          timeAccountingMode: "split"
+        },
+        themePreference: "obsidian",
+        localePreference: "en",
+        security: {
+          integrityScore: 98,
+          lastAuditAt: "2026-04-03T08:00:00.000Z",
+          storageMode: "local-first",
+          activeSessions: 1,
+          tokenCount: 0,
+          psycheAuthRequired: false
+        },
+        calendarProviders: {
+          google: {
+            clientId: "",
+            clientSecret: "",
+            storedClientId: "",
+            storedClientSecret: "",
+            appBaseUrl: "http://127.0.0.1:4317",
+            redirectUri:
+              "http://127.0.0.1:4317/api/v1/calendar/oauth/google/callback",
+            allowedOrigins: ["http://127.0.0.1:3027", "http://127.0.0.1:4317"],
+            usesPkce: true,
+            requiresServerClientSecret: false,
+            oauthClientType: "desktop_app",
+            authMode: "localhost_pkce",
+            isConfigured: false,
+            isReadyForPairing: false,
+            isLocalOnly: true,
+            runtimeOrigin: "http://127.0.0.1:4317",
+            setupMessage: "Google OAuth credentials are not set for this Forge install."
+          },
+          microsoft: {
+            clientId: "",
+            tenantId: "common",
+            redirectUri:
+              "http://127.0.0.1:4317/api/v1/calendar/oauth/microsoft/callback",
+            usesClientSecret: false,
+            readOnly: true,
+            authMode: "public_client_pkce",
+            isConfigured: false,
+            isReadyForSignIn: false,
+            setupMessage:
+              "Save the Microsoft client ID and the Forge callback redirect URI here before you try to sign in."
+          }
+        },
+        agents: [],
+        agentTokens: []
+      }
+    });
+
+    renderWithRouter(<SettingsCalendarPage />, "/settings/calendar");
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Open Google guided flow" })
+    );
+
+    expect(
+      await screen.findByText(/Google sign-in has to start from a local browser on the host running Forge/i)
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/Google OAuth credentials are not set for this Forge install/i)
+    ).toBeInTheDocument();
+    expect(screen.getByText(/Detected browser origin:/i)).toBeInTheDocument();
+    expect(screen.getByText(window.location.origin)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Sign in with Google" })).toBeDisabled();
+  });
+
+  it("reveals the Google OAuth editor only after clicking the edit control", async () => {
+    renderWithRouter(<SettingsCalendarPage />, "/settings/calendar");
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Open Google guided flow" })
+    );
+
+    expect(
+      screen.queryByLabelText("Client ID")
+    ).not.toBeInTheDocument();
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Edit Google OAuth client" })
+    );
+
+    expect(await screen.findByLabelText("Client ID")).toBeInTheDocument();
+    expect(await screen.findByLabelText("Client secret")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Save Google OAuth override" })
+    ).toBeInTheDocument();
+  });
+
+  it("starts Google sign-in immediately after saving the server-backed Google client ID", async () => {
+    const popupStub = {
+      closed: false,
+      focus: vi.fn(),
+      close: vi.fn()
+    } as unknown as Window;
+    vi.spyOn(window, "open").mockReturnValue(popupStub);
+    const browserOrigin = window.location.origin;
+
+    const initialSettings = {
+      settings: {
+        profile: {
+          operatorName: "Albert",
+          operatorEmail: "albert@example.com",
+          operatorTitle: "Operator"
+        },
+        notifications: {
+          goalDriftAlerts: true,
+          dailyQuestReminders: true,
+          achievementCelebrations: true
+        },
+        execution: {
+          maxActiveTasks: 2,
+          timeAccountingMode: "split"
+        },
+        themePreference: "obsidian",
+        localePreference: "en",
+        security: {
+          integrityScore: 98,
+          lastAuditAt: "2026-04-03T08:00:00.000Z",
+          storageMode: "local-first",
+          activeSessions: 1,
+          tokenCount: 0,
+          psycheAuthRequired: false
+        },
+        calendarProviders: {
+          google: {
+            clientId: "",
+            appBaseUrl: "http://127.0.0.1:4317",
+            redirectUri:
+              "http://127.0.0.1:4317/api/v1/calendar/oauth/google/callback",
+            allowedOrigins: [browserOrigin, "http://127.0.0.1:3027", "http://127.0.0.1:4317"],
+            usesPkce: true,
+            requiresServerClientSecret: false,
+            oauthClientType: "desktop_app",
+            authMode: "localhost_pkce",
+            isConfigured: false,
+            isReadyForPairing: false,
+            isLocalOnly: true,
+            runtimeOrigin: "http://127.0.0.1:4317",
+            setupMessage: "Google client ID is not set for this Forge install."
+          },
+          microsoft: {
+            clientId: "",
+            tenantId: "common",
+            redirectUri:
+              "http://127.0.0.1:4317/api/v1/calendar/oauth/microsoft/callback",
+            usesClientSecret: false,
+            readOnly: true,
+            authMode: "public_client_pkce",
+            isConfigured: false,
+            isReadyForSignIn: false,
+            setupMessage:
+              "Save the Microsoft client ID and the Forge callback redirect URI here before you try to sign in."
+          }
+        },
+        agents: [],
+        agentTokens: []
+      }
+    };
+
+    const readySettings = {
+      settings: {
+        profile: {
+          operatorName: "Albert",
+          operatorEmail: "albert@example.com",
+          operatorTitle: "Operator"
+        },
+        notifications: {
+          goalDriftAlerts: true,
+          dailyQuestReminders: true,
+          achievementCelebrations: true
+        },
+        execution: {
+          maxActiveTasks: 2,
+          timeAccountingMode: "split"
+        },
+        themePreference: "obsidian",
+        localePreference: "en",
+        security: {
+          integrityScore: 98,
+          lastAuditAt: "2026-04-03T08:00:00.000Z",
+          storageMode: "local-first",
+          activeSessions: 1,
+          tokenCount: 0,
+          psycheAuthRequired: false
+        },
+        calendarProviders: {
+          google: {
+            clientId: "new-google-client-id.apps.googleusercontent.com",
+            clientSecret: "new-google-client-secret",
+            storedClientId: "new-google-client-id.apps.googleusercontent.com",
+            storedClientSecret: "new-google-client-secret",
+            appBaseUrl: "http://127.0.0.1:4317",
+            redirectUri:
+              "http://127.0.0.1:4317/api/v1/calendar/oauth/google/callback",
+            allowedOrigins: [browserOrigin, "http://127.0.0.1:3027", "http://127.0.0.1:4317"],
+            usesPkce: true,
+            requiresServerClientSecret: false,
+            oauthClientType: "desktop_app",
+            authMode: "localhost_pkce",
+            isConfigured: true,
+            isReadyForPairing: true,
+            isLocalOnly: true,
+            runtimeOrigin: "http://127.0.0.1:4317",
+            setupMessage:
+              "Google Calendar sign-in is configured for local Forge. Open Forge on localhost or 127.0.0.1 on the same machine that is running Forge, because Google will redirect back to the local callback on that machine."
+          },
+          microsoft: {
+            clientId: "",
+            tenantId: "common",
+            redirectUri:
+              "http://127.0.0.1:4317/api/v1/calendar/oauth/microsoft/callback",
+            usesClientSecret: false,
+            readOnly: true,
+            authMode: "public_client_pkce",
+            isConfigured: false,
+            isReadyForSignIn: false,
+            setupMessage:
+              "Save the Microsoft client ID and the Forge callback redirect URI here before you try to sign in."
+          }
+        },
+        agents: [],
+        agentTokens: []
+      }
+    };
+
+    patchSettingsMock.mockResolvedValue(readySettings);
+    getSettingsMock.mockResolvedValueOnce(initialSettings);
+    getSettingsMock.mockImplementation(
+      () => new Promise<never>(() => {})
+    );
+    renderWithRouter(<SettingsCalendarPage />, "/settings/calendar");
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Open Google guided flow" })
+    );
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Edit Google OAuth client" })
+    );
+    fireEvent.change(await screen.findByLabelText("Client ID"), {
+      target: { value: "new-google-client-id.apps.googleusercontent.com" }
+    });
+    fireEvent.change(await screen.findByLabelText("Client secret"), {
+      target: { value: "new-google-client-secret" }
+    });
+    fireEvent.click(
+      screen.getByRole("button", { name: "Save Google OAuth override" })
+    );
+
+    await waitFor(() => {
+      expect(patchSettingsMock).toHaveBeenCalledWith({
+        calendarProviders: {
+          google: {
+            clientId: "new-google-client-id.apps.googleusercontent.com",
+            clientSecret: "new-google-client-secret"
+          }
+        }
+      });
+    });
+
+    const signInButton = await screen.findByRole("button", {
+      name: "Sign in with Google"
+    });
+    await waitFor(() => {
+      expect(signInButton).toBeEnabled();
+    });
+
+    expect(screen.getByText("Stored on server")).toBeInTheDocument();
+    expect(
+      screen.getByText("new-google-client-id.apps.googleusercontent.com")
+    ).toBeInTheDocument();
+    expect(screen.getByText("new-google-client-secret")).toBeInTheDocument();
+
+    fireEvent.click(signInButton);
+
+    await waitFor(() => {
+      expect(startGoogleCalendarOauthMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          label: "Primary Google",
+          browserOrigin
+        })
+      );
+    });
+  });
+
+  it("polls the Google OAuth session until authorization completes", async () => {
+    const browserOrigin = window.location.origin;
+    const popupStub = {
+      focus: vi.fn(),
+      close: vi.fn()
+    } as unknown as Window;
+    vi.spyOn(window, "open").mockReturnValue(popupStub);
+    getGoogleCalendarOauthSessionMock.mockClear();
+    getSettingsMock.mockResolvedValue({
+      settings: {
+        profile: {
+          operatorName: "Albert",
+          operatorEmail: "albert@example.com",
+          operatorTitle: "Operator"
+        },
+        notifications: {
+          goalDriftAlerts: true,
+          dailyQuestReminders: true,
+          achievementCelebrations: true
+        },
+        execution: {
+          maxActiveTasks: 2,
+          timeAccountingMode: "split"
+        },
+        themePreference: "obsidian",
+        localePreference: "en",
+        security: {
+          integrityScore: 98,
+          lastAuditAt: "2026-04-03T08:00:00.000Z",
+          storageMode: "local-first",
+          activeSessions: 1,
+          tokenCount: 0,
+          psycheAuthRequired: false
+        },
+        calendarProviders: {
+          google: {
+            clientId: "google-client-id",
+            appBaseUrl: "http://127.0.0.1:4317",
+            redirectUri:
+              "http://127.0.0.1:4317/api/v1/calendar/oauth/google/callback",
+            allowedOrigins: [browserOrigin, "http://127.0.0.1:3027", "http://127.0.0.1:4317"],
+            usesPkce: true,
+            requiresServerClientSecret: false,
+            oauthClientType: "desktop_app",
+            authMode: "localhost_pkce",
+            isConfigured: true,
+            isReadyForPairing: true,
+            isLocalOnly: true,
+            runtimeOrigin: "http://127.0.0.1:4317",
+            setupMessage:
+              "Google Calendar sign-in is configured for local Forge. Open Forge on localhost or 127.0.0.1 on the same machine that is running Forge, because Google will redirect back to the local callback on that machine."
+          },
+          microsoft: {
+            clientId: "",
+            tenantId: "common",
+            redirectUri:
+              "http://127.0.0.1:4317/api/v1/calendar/oauth/microsoft/callback",
+            usesClientSecret: false,
+            readOnly: true,
+            authMode: "public_client_pkce",
+            isConfigured: false,
+            isReadyForSignIn: false,
+            setupMessage:
+              "Save the Microsoft client ID and the Forge callback redirect URI here before you try to sign in."
+          }
+        },
+        agents: [],
+        agentTokens: []
+      }
+    });
+
+    renderWithRouter(<SettingsCalendarPage />, "/settings/calendar");
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Open Google guided flow" })
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Sign in with Google" }));
+
+    await waitFor(() => {
+      expect(startGoogleCalendarOauthMock).toHaveBeenCalled();
+    });
+
+    await waitFor(
+      () => {
+        expect(getGoogleCalendarOauthSessionMock).toHaveBeenCalledWith(
+          "google_session_1"
+        );
+      },
+      { timeout: 2500 }
+    );
+
+    expect(await screen.findByText("albert@example.com")).toBeInTheDocument();
+    expect(
+      await screen.findByRole("button", { name: "Sign in again" })
+    ).toBeInTheDocument();
+  });
+
+  it("explains why Google pairing fails from a Tailscale phone route", () => {
+    const message = describeGoogleRouteRequirement({
+      currentOrigin: "https://macbook-pro--de-francis-lalanne.tail47ba04.ts.net",
+      appBaseUrl: "http://127.0.0.1:4317",
+      redirectUri: "http://127.0.0.1:4317/api/v1/calendar/oauth/google/callback",
+      allowedOrigins: ["http://127.0.0.1:3027", "http://127.0.0.1:4317"],
+      isLocalOnly: true
+    });
+
+    expect(message).toMatch(/Google sign-in has to start from a local browser on the host running Forge/i);
+    expect(message).toMatch(/Forge is currently open through Tailscale/i);
+    expect(message).toMatch(/that callback goes to that device instead of the Forge host/i);
   });
 
   it("supports the Exchange Online guided flow as read only", async () => {
@@ -971,18 +1459,20 @@ describe("calendar routing surfaces", () => {
         calendarProviders: {
           google: {
             clientId: "google-client-id",
-            appUrl: "http://127.0.0.1:4317",
+            appBaseUrl: "http://127.0.0.1:4317",
             redirectUri:
               "http://127.0.0.1:4317/api/v1/calendar/oauth/google/callback",
             allowedOrigins: ["http://127.0.0.1:3027", "http://127.0.0.1:4317"],
-            usesSharedAppCredentials: true,
-            authMode: "shared_web_server_oauth",
+            usesPkce: true,
+            requiresServerClientSecret: false,
+            oauthClientType: "desktop_app",
+            authMode: "localhost_pkce",
             isConfigured: true,
             isReadyForPairing: true,
+            isLocalOnly: true,
             runtimeOrigin: "http://127.0.0.1:4317",
-            runtimeOriginMatchesAppUrl: true,
             setupMessage:
-              "Google Calendar pairing is configured for the shared Forge app. Users only sign in with their own Google accounts; they do not create their own OAuth clients."
+              "Google Calendar sign-in is configured for local Forge. Open Forge on localhost or 127.0.0.1 on the same machine that is running Forge, because Google will redirect back to the local callback on that machine."
           },
           microsoft: {
             clientId: "00000000-0000-0000-0000-000000000000",
@@ -1010,6 +1500,9 @@ describe("calendar routing surfaces", () => {
     renderWithRouter(<SettingsCalendarPage />, "/settings/calendar");
 
     expect((await screen.findAllByText("Exchange Online")).length).toBeGreaterThan(0);
+    fireEvent.click(screen.getByRole("button", { name: "Open Microsoft guided flow" }));
+    expect(await screen.findByText("Connect a calendar provider")).toBeInTheDocument();
+
     fireEvent.change(screen.getByPlaceholderText("00000000-0000-0000-0000-000000000000"), {
       target: { value: "00000000-0000-0000-0000-000000000000" }
     });
@@ -1035,12 +1528,6 @@ describe("calendar routing surfaces", () => {
       )
     ).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "Sign in with Microsoft" }));
-    expect(await screen.findByText("Connect a calendar provider")).toBeInTheDocument();
-    expect(
-      await screen.findByRole("button", { name: "Sign in with Microsoft" })
-    ).toBeInTheDocument();
-    expect(screen.queryByPlaceholderText("operator@example.com")).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Sign in with Microsoft" }));
 
     await waitFor(() => {
@@ -1175,6 +1662,101 @@ describe("calendar routing surfaces", () => {
         selectedCalendarUrls: []
       });
     });
+  });
+
+  it("shows deduped calendar labels when identical names come from different providers", async () => {
+    listCalendarConnectionsMock.mockResolvedValueOnce({
+      providers: [
+        {
+          provider: "google",
+          label: "Google Calendar",
+          supportsDedicatedForgeCalendar: true,
+          connectionHelp: "Use Google OAuth credentials."
+        },
+        {
+          provider: "apple",
+          label: "Apple Calendar",
+          supportsDedicatedForgeCalendar: true,
+          connectionHelp: "Use Apple autodiscovery from caldav.icloud.com."
+        }
+      ],
+      connections: [
+        {
+          id: "conn_google",
+          provider: "google",
+          label: "Primary Google",
+          accountLabel: "albert@gmail.com",
+          status: "connected",
+          config: {},
+          forgeCalendarId: "calendar_google",
+          lastSyncedAt: null,
+          lastSyncError: null,
+          createdAt: "2026-04-03T08:00:00.000Z",
+          updatedAt: "2026-04-03T08:00:00.000Z"
+        },
+        {
+          id: "conn_apple",
+          provider: "apple",
+          label: "Primary Apple",
+          accountLabel: "albert@icloud.com",
+          status: "connected",
+          config: {},
+          forgeCalendarId: "calendar_apple",
+          lastSyncedAt: null,
+          lastSyncError: null,
+          createdAt: "2026-04-03T08:00:00.000Z",
+          updatedAt: "2026-04-03T08:00:00.000Z"
+        }
+      ]
+    });
+    listCalendarResourcesMock.mockResolvedValueOnce({
+      calendars: [
+        {
+          id: "calendar_google",
+          connectionId: "conn_google",
+          remoteId:
+            "https://apidata.googleusercontent.com/caldav/v2/albert@gmail.com/forge/",
+          title: "Forge",
+          description: "",
+          color: "#22c55e",
+          timezone: "Europe/Zurich",
+          isPrimary: false,
+          canWrite: true,
+          selectedForSync: true,
+          forgeManaged: true,
+          lastSyncedAt: null,
+          createdAt: "2026-04-03T08:00:00.000Z",
+          updatedAt: "2026-04-03T08:00:00.000Z"
+        },
+        {
+          id: "calendar_apple",
+          connectionId: "conn_apple",
+          remoteId: "https://caldav.icloud.com/calendars/forge/",
+          title: "Forge",
+          description: "",
+          color: "#7dd3fc",
+          timezone: "Europe/Zurich",
+          isPrimary: false,
+          canWrite: true,
+          selectedForSync: true,
+          forgeManaged: true,
+          lastSyncedAt: null,
+          createdAt: "2026-04-03T08:00:00.000Z",
+          updatedAt: "2026-04-03T08:00:00.000Z"
+        }
+      ]
+    });
+
+    renderWithRouter(<SettingsCalendarPage />, "/settings/calendar");
+
+    expect((await screen.findAllByText("Forge (Google)")).length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Forge (Apple)").length).toBeGreaterThan(0);
+    expect(
+      screen.getByLabelText("Choose display color for Forge (Google)")
+    ).toBeInTheDocument();
+    expect(
+      screen.getByLabelText("Choose display color for Forge (Apple)")
+    ).toBeInTheDocument();
   });
 
   it("shows calendar color controls in settings for connected calendars", async () => {
