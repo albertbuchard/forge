@@ -132,6 +132,8 @@ When an adjacent record becomes visible:
   to the one missing structural detail.
 - Avoid dead-form prompts such as "What should this be called?" when the user is still
   figuring out what the thing is.
+- For labels such as `tag`, `event_type`, and `emotion_definition`, do not open with a
+  naming question unless the meaning is already clear and only the wording is missing.
 - Before the final save question, it is often better to offer a candidate formulation
   than to ask for raw wording from scratch.
 - When useful, say what you think the record is becoming before asking the next
@@ -738,6 +740,9 @@ Arc:
 3. Ask what would count as inside versus outside the category if that boundary is
    still fuzzy.
 4. Ask for a short description only if the label could be ambiguous later.
+
+If the user already offered a candidate label, keep the wording provisional and ask
+what kinds of moments belong inside it before you ask whether the label is right.
 
 Ready to save when:
 
