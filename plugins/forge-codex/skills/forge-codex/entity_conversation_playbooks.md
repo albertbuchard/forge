@@ -136,6 +136,13 @@ When an adjacent record becomes visible:
   than to ask for raw wording from scratch.
 - When useful, say what you think the record is becoming before asking the next
   question. That helps the user correct the shape early.
+- For reusable vocabulary or taxonomy records such as `tag`, `event_type`,
+  `emotion_definition`, `preference_catalog`, and `preference_context`, ask what
+  distinction the label should help the user notice, sort, or retrieve later before
+  you ask about naming or aliases.
+- For collection-like records such as `preference_catalog` and
+  `questionnaire_instrument`, ask what they are for before you ask what should go
+  inside them.
 
 ## Ready-to-save check
 
@@ -304,6 +311,34 @@ Ready to save when:
 Preferred opening question:
 
 - "What recurring move are you trying to strengthen or loosen?"
+
+## Tag
+
+Aim: create a label that helps future retrieval or grouping, not just another vague
+bucket.
+
+Arc:
+
+1. Ask what the tag should help the user notice, group, or find later.
+2. Ask what kinds of records should belong under it.
+3. Offer a concise label if the meaning is clearer than the wording.
+4. Ask about color, kind, or parent grouping only if that changes how it will be used.
+
+Helpful follow-up lanes:
+
+- what the tag is for later
+- what should count as inside versus outside the label
+- whether the user already has nearby tags that this should stay distinct from
+
+Ready to save when:
+
+- the tag has a stable label
+- the grouping meaning is clear enough to reuse later
+- any important distinction from nearby tags is clear
+
+Preferred opening question:
+
+- "What do you want this tag to help you notice or find again later?"
 
 ## Note
 
@@ -529,31 +564,115 @@ Preferred opening question:
 
 - "What about this workout feels most worth remembering or connecting?"
 
-## Preference Item Or Context
+## Preference Catalog
 
-Aim: understand whether the user is trying to save a preference signal, define a
-context, or inspect the learned model.
+Aim: define a useful comparison pool, not just a list with no decision purpose.
 
 Arc:
 
-1. Ask what preference question the user is trying to answer.
-2. Distinguish whether this is:
-   a direct item signal,
-   a context change,
-   or a request to inspect what Forge already knows.
-3. If the user wants live comparisons, hand off to the Preferences game UI.
-4. If the user wants a direct signal or context change, ask only for the missing domain,
-   item, or context detail.
+1. Ask what preference question this catalog is meant to support.
+2. Ask what domain or concept area it belongs to.
+3. Ask what kinds of items should be included or excluded.
+4. Offer a working catalog name once the purpose is clear.
 
-Ready to act when:
+Helpful follow-up lanes:
 
+- what decision or taste question this catalog should help answer
+- what belongs in scope
+- what would make the catalog immediately useful instead of bloated
+
+Ready to save when:
+
+- the catalog has a stable purpose
 - the domain is clear
-- the user intent is clear: inspect, compare, signal, or context-edit
-- the missing item or context detail is clear enough
+- the boundary of what belongs inside is clear enough
 
 Preferred opening question:
 
-- "What preference are you trying to make clearer right now?"
+- "What preference question do you want this catalog to help answer?"
+
+## Preference Catalog Item
+
+Aim: add one candidate in a way that will make later comparisons feel clear and fair.
+
+Arc:
+
+1. Ask what makes this item worth including in the catalog.
+2. Ask what catalog or domain it belongs to if that is still unclear.
+3. Ask for a short clarifying description only if the label would be ambiguous later.
+4. Ask about aliases or tags only if they help retrieval.
+
+Helpful follow-up lanes:
+
+- why this item belongs in the comparison pool
+- what would distinguish it from nearby items
+- whether the label alone will be clear later
+
+Ready to save when:
+
+- the item label is clear
+- the parent catalog is clear
+- there is enough context to recognize it later if the label is ambiguous
+
+Preferred opening question:
+
+- "What makes this item worth comparing in that catalog?"
+
+## Preference Context
+
+Aim: define a real operating mode for preferences, not a decorative label.
+
+Arc:
+
+1. Ask what situation or mode this context is meant to represent.
+2. Ask what should count inside that context and what should stay outside it.
+3. Ask whether it should be active, default, or kept separate from other evidence.
+4. Offer a concise name if the mode is clearer than the wording.
+
+Helpful follow-up lanes:
+
+- what decisions this context should shape
+- what belongs inside versus outside the mode
+- whether it should be default or explicitly separate
+
+Ready to save when:
+
+- the context has a stable purpose
+- its boundary is clear enough to use consistently
+- any default or sharing choice that matters is clear
+
+Preferred opening question:
+
+- "What situation or mode should this context help Forge treat differently?"
+
+## Preference Item
+
+Aim: save one concrete preference candidate or signal without losing the context that
+makes it meaningful.
+
+Arc:
+
+1. Ask what preference or taste question this item belongs to.
+2. Ask what domain or context it should live in.
+3. Ask what makes this item distinct enough to compare usefully.
+4. If the user is really trying to send a direct signal, ask only for the missing
+   detail and then act.
+
+Helpful follow-up lanes:
+
+- what domain this belongs to
+- what context makes the preference meaningful
+- what distinguishes the item from nearby options
+
+Ready to act when:
+
+- the item is clear
+- the domain or profile context is clear enough
+- any needed distinguishing detail is captured
+
+Preferred opening question:
+
+- "What preference are you trying to make clearer by saving this item?"
 
 ## Questionnaire Instrument
 
@@ -564,7 +683,8 @@ Arc:
 
 1. Ask what the questionnaire is meant to measure or surface.
 2. Ask who it is for and when it should be used.
-3. Ask what style of questions it needs before getting into item wording.
+3. Ask what kind of questions would make it honest and useful before getting into
+   item wording.
 4. Move to draft creation once the purpose is clear.
 
 Ready to act when:
