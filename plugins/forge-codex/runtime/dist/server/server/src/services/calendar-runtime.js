@@ -1,6 +1,7 @@
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { CryptoProvider, PublicClientApplication } from "@azure/msal-node";
 import ical from "node-ical";
+import { logForgeDebug } from "../debug.js";
 import { getGoogleCalendarOauthCallbackPath, isGoogleCalendarOriginAllowed, isGoogleCalendarLoopbackOrigin, resolveGoogleCalendarOauthPrivateConfig } from "./google-calendar-oauth-config.js";
 import { createDAVClient, DAVNamespaceShort } from "tsdav";
 import { getSettings } from "../repositories/settings.js";
@@ -206,7 +207,7 @@ function resolveStoredGoogleOauthConfig() {
         clientId: settings.calendarProviders.google.storedClientId,
         clientSecret: settings.calendarProviders.google.storedClientSecret
     });
-    console.info(`[forge-google-oauth] resolve_stored_config clientId=${JSON.stringify(config.clientId)} isConfigured=${JSON.stringify(config.isConfigured)} redirectUri=${JSON.stringify(config.redirectUri)} allowedOrigins=${JSON.stringify(config.allowedOrigins)} hasServerClientSecret=${JSON.stringify(Boolean(config.clientSecret))}`);
+    logForgeDebug(`[forge-google-oauth] resolve_stored_config clientId=${JSON.stringify(config.clientId)} isConfigured=${JSON.stringify(config.isConfigured)} redirectUri=${JSON.stringify(config.redirectUri)} allowedOrigins=${JSON.stringify(config.allowedOrigins)} hasServerClientSecret=${JSON.stringify(Boolean(config.clientSecret))}`);
     return config;
 }
 function ensureGoogleOauthStartAllowed(input) {
@@ -221,7 +222,7 @@ function ensureGoogleOauthStartAllowed(input) {
         isGoogleCalendarLoopbackOrigin(config.redirectUri) &&
         isGoogleCalendarLoopbackOrigin(browserOrigin);
     const pairingAllowed = config.isConfigured && browserOriginAllowed && callbackReachableFromBrowser;
-    console.info(`[forge-google-oauth] start_check browserOrigin=${JSON.stringify(browserOrigin)} openerOrigin=${JSON.stringify(openerOrigin)} requestBaseOrigin=${JSON.stringify(requestBaseOrigin)} browserOriginAllowed=${JSON.stringify(browserOriginAllowed)} callbackReachableFromBrowser=${JSON.stringify(callbackReachableFromBrowser)} pairingAllowed=${JSON.stringify(pairingAllowed)}`);
+    logForgeDebug(`[forge-google-oauth] start_check browserOrigin=${JSON.stringify(browserOrigin)} openerOrigin=${JSON.stringify(openerOrigin)} requestBaseOrigin=${JSON.stringify(requestBaseOrigin)} browserOriginAllowed=${JSON.stringify(browserOriginAllowed)} callbackReachableFromBrowser=${JSON.stringify(callbackReachableFromBrowser)} pairingAllowed=${JSON.stringify(pairingAllowed)}`);
     recordCalendarActivity("calendar_google_oauth_start_checked", "calendar_connection", "google_oauth", "Google OAuth start checked", pairingAllowed
         ? "Forge accepted a Google OAuth start request."
         : "Forge rejected a Google OAuth start request.", { source: "system", actor: null }, {
@@ -288,7 +289,7 @@ function mapGoogleRuntimeError(error) {
 }
 async function refreshGoogleCaldavAccessToken(credentials) {
     const config = resolveStoredGoogleOauthConfig();
-    console.info(`[forge-google-oauth] caldav_refresh_start username=${JSON.stringify(credentials.username)} hasRefreshToken=${JSON.stringify(Boolean(credentials.refreshToken))} hasServerClientSecret=${JSON.stringify(Boolean(config.clientSecret))}`);
+    logForgeDebug(`[forge-google-oauth] caldav_refresh_start username=${JSON.stringify(credentials.username)} hasRefreshToken=${JSON.stringify(Boolean(credentials.refreshToken))} hasServerClientSecret=${JSON.stringify(Boolean(config.clientSecret))}`);
     const requestBody = new URLSearchParams({
         client_id: config.clientId,
         grant_type: "refresh_token",
@@ -331,7 +332,7 @@ async function refreshGoogleCaldavAccessToken(credentials) {
         .split(/\s+/)
         .map((entry) => entry.trim())
         .filter((entry) => entry.length > 0);
-    console.info(`[forge-google-oauth] caldav_refresh_complete username=${JSON.stringify(credentials.username)} accessTokenExpiresAt=${JSON.stringify(accessTokenExpiresAt)} grantedScopeCount=${JSON.stringify((grantedScopes.length > 0 ? grantedScopes : credentials.grantedScopes).length)}`);
+    logForgeDebug(`[forge-google-oauth] caldav_refresh_complete username=${JSON.stringify(credentials.username)} accessTokenExpiresAt=${JSON.stringify(accessTokenExpiresAt)} grantedScopeCount=${JSON.stringify((grantedScopes.length > 0 ? grantedScopes : credentials.grantedScopes).length)}`);
     return {
         accessToken,
         accessTokenExpiresAt,
@@ -785,7 +786,7 @@ async function createProviderClient(credentials) {
     try {
         if (credentials.provider === "google") {
             account = buildGoogleDavAccount(credentials.username);
-            console.info(`[forge-google-oauth] google_caldav_account username=${JSON.stringify(credentials.username)} principalUrl=${JSON.stringify(account.principalUrl ?? null)} homeUrl=${JSON.stringify(account.homeUrl ?? null)}`);
+            logForgeDebug(`[forge-google-oauth] google_caldav_account username=${JSON.stringify(credentials.username)} principalUrl=${JSON.stringify(account.principalUrl ?? null)} homeUrl=${JSON.stringify(account.homeUrl ?? null)}`);
             calendars = await fetchGoogleCalendarList(credentials);
         }
         else {
@@ -1097,7 +1098,7 @@ export async function completeGoogleCalendarOauth(input) {
         throw new Error("Google sign-in state is invalid or expired.");
     }
     const logGoogleOauthCompletion = () => {
-        console.info(`[forge-google-oauth] callback_complete sessionId=${JSON.stringify(session.sessionId)} status=${JSON.stringify(session.status)} accountLabel=${JSON.stringify(session.accountLabel)} hasDiscovery=${JSON.stringify(Boolean(session.discovery))} error=${JSON.stringify(session.error)}`);
+        logForgeDebug(`[forge-google-oauth] callback_complete sessionId=${JSON.stringify(session.sessionId)} status=${JSON.stringify(session.status)} accountLabel=${JSON.stringify(session.accountLabel)} hasDiscovery=${JSON.stringify(Boolean(session.discovery))} error=${JSON.stringify(session.error)}`);
     };
     if (new Date(session.expiresAt).getTime() <= Date.now()) {
         session.status = "expired";
@@ -1138,7 +1139,7 @@ export async function completeGoogleCalendarOauth(input) {
     }
     try {
         const config = resolveStoredGoogleOauthConfig();
-        console.info(`[forge-google-oauth] code_exchange_start sessionId=${JSON.stringify(session.sessionId)} hasServerClientSecret=${JSON.stringify(Boolean(config.clientSecret))} redirectUri=${JSON.stringify(session.redirectUri)}`);
+        logForgeDebug(`[forge-google-oauth] code_exchange_start sessionId=${JSON.stringify(session.sessionId)} hasServerClientSecret=${JSON.stringify(Boolean(config.clientSecret))} redirectUri=${JSON.stringify(session.redirectUri)}`);
         const tokenRequestBody = new URLSearchParams({
             code: input.code,
             client_id: config.clientId,
@@ -1466,7 +1467,7 @@ async function syncDiscoveredState(connectionId, credentials) {
             return true;
         }
         if (credentials.provider === "google" && normalized === forgeCalendarUrl) {
-            console.info(`[forge-calendar-sync] skip_forge_readback connectionId=${JSON.stringify(connectionId)} provider=${JSON.stringify(credentials.provider)} calendarUrl=${JSON.stringify(normalized)}`);
+            logForgeDebug(`[forge-calendar-sync] skip_forge_readback connectionId=${JSON.stringify(connectionId)} provider=${JSON.stringify(credentials.provider)} calendarUrl=${JSON.stringify(normalized)}`);
             return false;
         }
         return normalized === forgeCalendarUrl;
@@ -1484,13 +1485,13 @@ async function syncDiscoveredState(connectionId, credentials) {
     for (const calendar of calendarsToSync) {
         const ownership = normalizeUrl(calendar.url) === forgeCalendarUrl ? "forge" : "external";
         const calendarUrl = normalizeUrl(calendar.url);
-        console.info(`[forge-calendar-sync] fetch_calendar_objects_start connectionId=${JSON.stringify(connectionId)} provider=${JSON.stringify(credentials.provider)} calendarUrl=${JSON.stringify(calendarUrl)} ownership=${JSON.stringify(ownership)}`);
+        logForgeDebug(`[forge-calendar-sync] fetch_calendar_objects_start connectionId=${JSON.stringify(connectionId)} provider=${JSON.stringify(credentials.provider)} calendarUrl=${JSON.stringify(calendarUrl)} ownership=${JSON.stringify(ownership)}`);
         if (credentials.provider === "google") {
             const events = await fetchGoogleCalendarEvents(credentials, calendarUrl, {
                 start,
                 end
             });
-            console.info(`[forge-calendar-sync] fetch_calendar_objects_complete connectionId=${JSON.stringify(connectionId)} provider=${JSON.stringify(credentials.provider)} calendarUrl=${JSON.stringify(calendarUrl)} objectCount=${JSON.stringify(events.length)}`);
+            logForgeDebug(`[forge-calendar-sync] fetch_calendar_objects_complete connectionId=${JSON.stringify(connectionId)} provider=${JSON.stringify(credentials.provider)} calendarUrl=${JSON.stringify(calendarUrl)} objectCount=${JSON.stringify(events.length)}`);
             for (const event of events) {
                 upsertCalendarEventRecord(connectionId, event);
             }
@@ -1503,7 +1504,7 @@ async function syncDiscoveredState(connectionId, credentials) {
                     end
                 }
             });
-            console.info(`[forge-calendar-sync] fetch_calendar_objects_complete connectionId=${JSON.stringify(connectionId)} provider=${JSON.stringify(credentials.provider)} calendarUrl=${JSON.stringify(calendarUrl)} objectCount=${JSON.stringify(objects.length)}`);
+            logForgeDebug(`[forge-calendar-sync] fetch_calendar_objects_complete connectionId=${JSON.stringify(connectionId)} provider=${JSON.stringify(credentials.provider)} calendarUrl=${JSON.stringify(calendarUrl)} objectCount=${JSON.stringify(objects.length)}`);
             for (const object of objects) {
                 const mapped = mapDavObjectToEvents(normalizeUrl(calendar.url), object, ownership);
                 for (const event of mapped) {

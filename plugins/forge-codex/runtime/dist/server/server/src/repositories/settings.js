@@ -1,5 +1,6 @@
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { getDatabase, runInTransaction } from "../db.js";
+import { logForgeDebug } from "../debug.js";
 import { recordActivityEvent } from "./activity-events.js";
 import { recordEventLog } from "./event-log.js";
 import { resolveGoogleCalendarOauthPublicConfig } from "../services/google-calendar-oauth-config.js";
@@ -30,7 +31,7 @@ function logCalendarSettingsDebug(message, details) {
     const serialized = Object.entries(details)
         .map(([key, value]) => `${key}=${JSON.stringify(value)}`)
         .join(" ");
-    console.info(`[forge-calendar-settings] ${message} ${serialized}`);
+    logForgeDebug(`[forge-calendar-settings] ${message} ${serialized}`);
 }
 function normalizeModelConnectionId(value) {
     const trimmed = value?.trim();
