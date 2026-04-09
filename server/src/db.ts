@@ -3,6 +3,7 @@ import { mkdir, readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { DatabaseSync } from "node:sqlite";
+import { logForgeDebug } from "./debug.js";
 import { ensureQuestionnaireSeeds } from "./repositories/questionnaires.js";
 
 function nowIso(): string {
@@ -405,7 +406,7 @@ export async function initializeDatabase(): Promise<void> {
     }
   }
 
-  console.info(
+  logForgeDebug(
     `[forge-db] initialized database path=${getDatabasePath()} applied_count=${appliedRows.length} pending_applied=${pendingMigrations.length} pending_list=${pendingMigrations.join(",") || "none"}`
   );
 

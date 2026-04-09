@@ -5342,6 +5342,21 @@ test("misaligned habit penalties do not break the context payload", async () => 
 test("habit streaks use consecutive cadence windows instead of raw aligned check-in counts", async () => {
   const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-habit-streak-"));
   const app = await buildServer({ dataRoot: rootDir, seedDemoData: false });
+  const RealDate = Date;
+  const fixedNow = new RealDate("2026-04-09T12:00:00.000Z");
+
+  class MockDate extends RealDate {
+    constructor(value?: ConstructorParameters<typeof Date>[0]) {
+      super(value ?? fixedNow.toISOString());
+    }
+
+    static now() {
+      return fixedNow.getTime();
+    }
+  }
+
+  // Keep streak expectations stable regardless of the machine's real date.
+  globalThis.Date = MockDate as DateConstructor;
 
   try {
     const operatorCookie = await issueOperatorSessionCookie(app);
@@ -5404,15 +5419,15 @@ test("habit streaks use consecutive cadence windows instead of raw aligned check
       weeklyPositiveResponse.json() as { habit: { id: string } }
     ).habit.id;
 
-    for (const dateKey of [
-      "2026-04-07",
-      "2026-04-06",
-      "2026-04-05",
-      "2026-04-04",
-      "2026-04-02",
-      "2026-04-01",
-      "2026-03-31"
-    ]) {
+	    for (const dateKey of [
+	      "2026-04-08",
+	      "2026-04-07",
+	      "2026-04-06",
+	      "2026-04-05",
+	      "2026-04-03",
+	      "2026-04-02",
+	      "2026-04-01"
+	    ]) {
       const positiveCheckIn = await app.inject({
         method: "POST",
         url: `/api/v1/habits/${dailyPositiveId}/check-ins`,
@@ -5471,11 +5486,12 @@ test("habit streaks use consecutive cadence windows instead of raw aligned check
       habits.find((habit) => habit.id === weeklyPositiveId)?.streakCount,
       2
     );
-  } finally {
-    await app.close();
-    closeDatabase();
-    await rm(rootDir, { recursive: true, force: true });
-  }
+	  } finally {
+	    globalThis.Date = RealDate;
+	    await app.close();
+	    closeDatabase();
+	    await rm(rootDir, { recursive: true, force: true });
+	  }
 });
 
 test("psyche notes persist and scoped tokens cannot read psyche without explicit grant", async () => {
@@ -11153,7 +11169,8 @@ test("google oauth start prefers the saved Forge client ID over the runtime defa
       payload: {
         calendarProviders: {
           google: {
-            clientId: "google-client-id-from-settings"
+            clientId: "google-client-id-from-settings",
+            clientSecret: "google-client-secret-from-settings"
           }
         }
       }
