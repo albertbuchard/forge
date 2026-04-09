@@ -13,16 +13,20 @@ import type {
   WikiIngestJobPayload
 } from "@/lib/types";
 import {
+  chatWorkbenchFlow,
   claimTaskRun,
   completeTaskRun,
   createGoal,
   createProject,
   createTask,
+  deleteWorkbenchFlow,
   ensureOperatorSession,
   focusTaskRun,
   getForgeSnapshot,
   getSettings,
   getSleepView,
+  getWorkbenchFlow,
+  listWorkbenchFlows,
   heartbeatTaskRun,
   listBehaviorPatterns,
   listBehaviors,
@@ -34,7 +38,9 @@ import {
   patchProject,
   patchSleepSession,
   patchTask,
-  releaseTaskRun
+  runWorkbenchFlow,
+  releaseTaskRun,
+  updateWorkbenchFlow
 } from "@/lib/api";
 import type {
   Behavior,
@@ -66,7 +72,9 @@ export const forgeApi = createApi({
     "Snapshot",
     "Sleep",
     "Psyche",
-    "WikiIngestJobs"
+    "WikiIngestJobs",
+    "WorkbenchFlow",
+    "WorkbenchFlows"
   ],
   endpoints: (builder) => ({
     getOperatorSession: builder.query<AsyncResult<typeof ensureOperatorSession>, void>({
@@ -76,6 +84,17 @@ export const forgeApi = createApi({
     getSettings: builder.query<{ settings: SettingsPayload }, void>({
       queryFn: () => resolveResult(getSettings),
       providesTags: ["Settings"]
+    }),
+    listWorkbenchFlows: builder.query<AsyncResult<typeof listWorkbenchFlows>, void>({
+      queryFn: () => resolveResult(() => listWorkbenchFlows()),
+      providesTags: ["WorkbenchFlows"]
+    }),
+    getWorkbenchFlow: builder.query<AsyncResult<typeof getWorkbenchFlow>, string>({
+      queryFn: (flowId) => resolveResult(() => getWorkbenchFlow(flowId)),
+      providesTags: (_result, _error, flowId) => [
+        { type: "WorkbenchFlow", id: flowId },
+        "WorkbenchFlows"
+      ]
     }),
     getSnapshot: builder.query<ForgeSnapshot, string[] | void>({
       queryFn: (userIds) => resolveResult(() => getForgeSnapshot(userIds)),
@@ -209,6 +228,53 @@ export const forgeApi = createApi({
       queryFn: ({ sleepId, patch }) =>
         resolveResult(() => patchSleepSession(sleepId, patch)),
       invalidatesTags: ["Sleep"]
+    }),
+    updateWorkbenchFlow: builder.mutation<
+      AsyncResult<typeof updateWorkbenchFlow>,
+      {
+        flowId: string;
+        patch: Parameters<typeof updateWorkbenchFlow>[1];
+      }
+    >({
+      queryFn: ({ flowId, patch }) =>
+        resolveResult(() => updateWorkbenchFlow(flowId, patch)),
+      invalidatesTags: (_result, _error, { flowId }) => [
+        { type: "WorkbenchFlow", id: flowId },
+        "WorkbenchFlows"
+      ]
+    }),
+    deleteWorkbenchFlow: builder.mutation<AsyncResult<typeof deleteWorkbenchFlow>, string>({
+      queryFn: (flowId) => resolveResult(() => deleteWorkbenchFlow(flowId)),
+      invalidatesTags: (_result, _error, flowId) => [
+        { type: "WorkbenchFlow", id: flowId },
+        "WorkbenchFlows"
+      ]
+    }),
+    runWorkbenchFlow: builder.mutation<
+      AsyncResult<typeof runWorkbenchFlow>,
+      {
+        flowId: string;
+        input: Parameters<typeof runWorkbenchFlow>[1];
+      }
+    >({
+      queryFn: ({ flowId, input }) =>
+        resolveResult(() => runWorkbenchFlow(flowId, input)),
+      invalidatesTags: (_result, _error, { flowId }) => [
+        { type: "WorkbenchFlow", id: flowId }
+      ]
+    }),
+    chatWorkbenchFlow: builder.mutation<
+      AsyncResult<typeof chatWorkbenchFlow>,
+      {
+        flowId: string;
+        input: Parameters<typeof chatWorkbenchFlow>[1];
+      }
+    >({
+      queryFn: ({ flowId, input }) =>
+        resolveResult(() => chatWorkbenchFlow(flowId, input)),
+      invalidatesTags: (_result, _error, { flowId }) => [
+        { type: "WorkbenchFlow", id: flowId }
+      ]
     })
   })
 });
@@ -229,11 +295,17 @@ export const {
   useGetSleepViewQuery,
   useGetSnapshotQuery,
   useGetTriggerReportsQuery,
+  useGetWorkbenchFlowQuery,
   useListWikiIngestJobsQuery,
+  useListWorkbenchFlowsQuery,
   useHeartbeatTaskRunMutation,
+  useChatWorkbenchFlowMutation,
+  useDeleteWorkbenchFlowMutation,
   usePatchGoalMutation,
   usePatchProjectMutation,
   usePatchSleepSessionMutation,
   usePatchTaskStatusMutation,
-  useReleaseTaskRunMutation
+  useReleaseTaskRunMutation,
+  useRunWorkbenchFlowMutation,
+  useUpdateWorkbenchFlowMutation
 } = forgeApi;

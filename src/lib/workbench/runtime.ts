@@ -206,6 +206,113 @@ export function buildSportsWorkbenchExecution(input: WorkbenchNodeExecutionInput
   });
 }
 
+export function buildOverviewWorkbenchExecution(input: WorkbenchNodeExecutionInput) {
+  const payload = input.context.services.overview.getContext?.() ?? null;
+  const record = asRecord(payload);
+  const summary = record
+    ? [
+        `Projects: ${Array.isArray(record.projects) ? record.projects.length : 0}`,
+        `Goals: ${Array.isArray(record.activeGoals) ? record.activeGoals.length : 0}`,
+        `Top tasks: ${Array.isArray(record.topTasks) ? record.topTasks.length : 0}`,
+        `Due habits: ${Array.isArray(record.dueHabits) ? record.dueHabits.length : 0}`
+      ].join("\n")
+    : "No overview context is available.";
+  return buildWorkbenchExecutionEnvelope(input, {
+    primaryText: summary,
+    output: record
+  });
+}
+
+export function buildInsightsWorkbenchExecution(input: WorkbenchNodeExecutionInput) {
+  const payload = input.context.services.overview.getInsights?.() ?? null;
+  const record = asRecord(payload);
+  const status = asRecord(record?.status);
+  const coaching = asRecord(record?.coaching);
+  const summary = record
+    ? [
+        typeof status?.systemStatus === "string" ? status.systemStatus : "Insights ready",
+        typeof coaching?.title === "string" ? coaching.title : null,
+        typeof coaching?.summary === "string" ? coaching.summary : null
+      ]
+        .filter(Boolean)
+        .join("\n")
+    : "No insights payload is available.";
+  return buildWorkbenchExecutionEnvelope(input, {
+    primaryText: summary,
+    output: record
+  });
+}
+
+export function buildWeeklyReviewWorkbenchExecution(input: WorkbenchNodeExecutionInput) {
+  const payload = input.context.services.overview.getWeeklyReview?.() ?? null;
+  const record = asRecord(payload);
+  const momentum = asRecord(record?.momentumSummary);
+  const summary = record
+    ? [
+        typeof record.windowLabel === "string" ? record.windowLabel : "Weekly review",
+        typeof momentum?.totalXp === "number" ? `${momentum.totalXp} XP` : null,
+        typeof momentum?.focusHours === "number"
+          ? `${momentum.focusHours} focus hours`
+          : null
+      ]
+        .filter(Boolean)
+        .join("\n")
+    : "No weekly review payload is available.";
+  return buildWorkbenchExecutionEnvelope(input, {
+    primaryText: summary,
+    output: record
+  });
+}
+
+export function buildWikiPagesWorkbenchExecution(input: WorkbenchNodeExecutionInput) {
+  const pages = input.context.services.wiki.listPages?.() ?? [];
+  const summary =
+    pages.length > 0
+      ? pages
+          .slice(0, 12)
+          .map((page) =>
+            typeof page.title === "string"
+              ? page.title
+              : typeof page.slug === "string"
+                ? page.slug
+                : typeof page.id === "string"
+                  ? page.id
+                  : "Wiki page"
+          )
+          .join("\n")
+      : "No wiki pages are available.";
+  return buildWorkbenchExecutionEnvelope(input, {
+    primaryText: summary,
+    output: {
+      pages
+    }
+  });
+}
+
+export function buildWikiHealthWorkbenchExecution(input: WorkbenchNodeExecutionInput) {
+  const payload = input.context.services.wiki.getHealth?.() ?? null;
+  const record = asRecord(payload);
+  const unresolvedLinks = Array.isArray(record?.unresolvedLinks)
+    ? record.unresolvedLinks.length
+    : null;
+  const orphanPages = Array.isArray(record?.orphanPages)
+    ? record.orphanPages.length
+    : null;
+  const summary = record
+    ? [
+        "Wiki health summary",
+        unresolvedLinks !== null ? `${unresolvedLinks} unresolved links` : null,
+        orphanPages !== null ? `${orphanPages} orphan pages` : null
+      ]
+        .filter(Boolean)
+        .join("\n")
+    : "No wiki health payload is available.";
+  return buildWorkbenchExecutionEnvelope(input, {
+    primaryText: summary,
+    output: record
+  });
+}
+
 export function mapWorkbenchTools(
   tools: WorkbenchToolDefinition[]
 ) {

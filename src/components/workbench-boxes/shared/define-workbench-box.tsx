@@ -9,5 +9,10 @@ export function defineWorkbenchBox<Props extends Record<string, unknown>>(
   component: (props: Props) => ReactNode,
   definition: Omit<WorkbenchNodeDefinition, "WebView">
 ) {
-  return defineWorkbenchComponent(component, definition) as WorkbenchRegisteredComponent<Props>;
+  const WorkbenchBoxComponent = (props: Props) => component(props);
+  WorkbenchBoxComponent.displayName = definition.title.replace(/\s+/g, "");
+  return defineWorkbenchComponent(
+    WorkbenchBoxComponent,
+    definition
+  ) as WorkbenchRegisteredComponent<Props>;
 }

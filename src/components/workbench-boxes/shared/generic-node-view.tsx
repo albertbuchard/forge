@@ -1,8 +1,10 @@
 import { Handle, Position } from "@xyflow/react";
+import { useState } from "react";
 import type {
   WorkbenchNodeComponentProps,
   WorkbenchNodeDefinition
 } from "../../../lib/workbench/nodes.js";
+import { InfoTooltip } from "../../../components/ui/info-tooltip.js";
 import { cn } from "../../../lib/utils.js";
 
 function PortList({
@@ -18,11 +20,19 @@ function PortList({
     <div className="grid gap-1.5">
       <div
         className={cn(
-          "text-[10px] uppercase tracking-[0.18em] text-white/34",
+          "flex items-center gap-1 text-[10px] uppercase tracking-[0.18em] text-white/34",
           align === "left" ? "text-left" : "text-right"
         )}
       >
-        {title}
+        <span>{title}</span>
+        <InfoTooltip
+          content={
+            align === "left"
+              ? "Inputs are values this box expects from upstream nodes."
+              : "Outputs are values this box publishes for downstream nodes."
+          }
+          label={align === "left" ? "Explain box inputs" : "Explain box outputs"}
+        />
       </div>
       {ports.length === 0 ? (
         <div className="rounded-full border border-dashed border-white/10 px-3 py-1.5 text-[11px] text-white/28">
@@ -62,6 +72,7 @@ export function createGenericWorkbenchNodeView(
   return function GenericWorkbenchNodeView(
     _props: WorkbenchNodeComponentProps
   ) {
+    const [schemaOpen, setSchemaOpen] = useState(false);
     return (
       <div className="min-w-[280px] rounded-[24px] border border-white/10 bg-[linear-gradient(180deg,rgba(20,28,45,0.98),rgba(11,16,29,0.98))] p-3 shadow-[0_26px_80px_rgba(0,0,0,0.4)]">
         <div className="flex items-start justify-between gap-3">
@@ -91,11 +102,53 @@ export function createGenericWorkbenchNodeView(
             {definition.tools.length === 1 ? "" : "s"} available
           </div>
         ) : null}
+        <div className="mt-2">
+          <button
+            type="button"
+            className="rounded-full bg-white/[0.05] px-3 py-1.5 text-[11px] text-white/56 transition hover:bg-white/[0.08] hover:text-white"
+            onClick={() => setSchemaOpen((current) => !current)}
+          >
+            {schemaOpen ? "Hide schema" : "Preview schema"}
+          </button>
+        </div>
 
         <div className="mt-3 grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-3">
           <PortList title="Inputs" ports={definition.inputs} align="left" />
           <PortList title="Outputs" ports={definition.output} align="right" />
         </div>
+        {schemaOpen ? (
+          <div className="mt-3 rounded-[18px] border border-white/8 bg-black/20 p-3">
+            <div className="flex items-center gap-2 text-[10px] uppercase tracking-[0.18em] text-white/38">
+              <span>Box contract</span>
+              <InfoTooltip
+                content="This preview summarizes what the box consumes, publishes, and what tools it can expose to AI nodes."
+                label="Explain box contract preview"
+              />
+            </div>
+            <pre className="mt-2 overflow-auto whitespace-pre-wrap text-[11px] leading-5 text-white/64">
+              {JSON.stringify(
+                {
+                  inputs: definition.inputs.map(({ key, kind, required }) => ({
+                    key,
+                    kind,
+                    required: Boolean(required)
+                  })),
+                  outputs: definition.output.map(({ key, kind, required }) => ({
+                    key,
+                    kind,
+                    required: Boolean(required)
+                  })),
+                  tools: definition.tools.map(({ key, accessMode }) => ({
+                    key,
+                    accessMode
+                  }))
+                },
+                null,
+                2
+              )}
+            </pre>
+          </div>
+        ) : null}
       </div>
     );
   };

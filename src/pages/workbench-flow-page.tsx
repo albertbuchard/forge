@@ -1,63 +1,30 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useParams } from "react-router-dom";
 import { useWorkbenchNodeCatalog } from "@/components/workbench/workbench-provider";
 import { WorkbenchFlowEditor } from "@/components/workbench/workbench-flow-editor";
 import { EmptyState, ErrorState, LoadingState } from "@/components/ui/page-state";
 import {
-  chatWorkbenchFlow,
-  deleteWorkbenchFlow,
-  getSettings,
-  getWorkbenchFlow,
-  runWorkbenchFlow,
-  updateWorkbenchFlow
-} from "@/lib/api";
+  useChatWorkbenchFlowMutation,
+  useDeleteWorkbenchFlowMutation,
+  useGetSettingsQuery,
+  useGetWorkbenchFlowQuery,
+  useRunWorkbenchFlowMutation,
+  useUpdateWorkbenchFlowMutation
+} from "@/store/api/forge-api";
 
 export function WorkbenchFlowPage() {
   const params = useParams();
   const navigate = useNavigate();
-  const queryClient = useQueryClient();
   const flowId = params.flowId ?? "";
   const boxes = useWorkbenchNodeCatalog();
 
-  const flowQuery = useQuery({
-    queryKey: ["forge-workbench-flow", flowId],
-    queryFn: () => getWorkbenchFlow(flowId),
-    enabled: flowId.length > 0
+  const flowQuery = useGetWorkbenchFlowQuery(flowId, {
+    skip: flowId.length === 0
   });
-  const settingsQuery = useQuery({
-    queryKey: ["forge-settings"],
-    queryFn: getSettings
-  });
-
-  const updateMutation = useMutation({
-    mutationFn: (patch: Parameters<typeof updateWorkbenchFlow>[1]) =>
-      updateWorkbenchFlow(flowId, patch),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ["forge-workbench-flow", flowId] });
-      void queryClient.invalidateQueries({ queryKey: ["forge-workbench-flows"] });
-    }
-  });
-  const deleteMutation = useMutation({
-    mutationFn: () => deleteWorkbenchFlow(flowId),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ["forge-workbench-flows"] });
-      navigate("/workbench");
-    }
-  });
-  const runMutation = useMutation({
-    mutationFn: (input: { userInput: string; debug: boolean }) =>
-      runWorkbenchFlow(flowId, { userInput: input.userInput, debug: input.debug }),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ["forge-workbench-flow", flowId] });
-    }
-  });
-  const chatMutation = useMutation({
-    mutationFn: (input: { userInput: string; debug: boolean }) =>
-      chatWorkbenchFlow(flowId, { userInput: input.userInput, debug: input.debug }),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ["forge-workbench-flow", flowId] });
-    }
-  });
+  const settingsQuery = useGetSettingsQuery();
+  const [updateFlow] = useUpdateWorkbenchFlowMutation();
+  const [deleteFlow] = useDeleteWorkbenchFlowMutation();
+  const [runFlow] = useRunWorkbenchFlowMutation();
+  const [chatFlow] = useChatWorkbenchFlowMutation();
 
   if (flowQuery.isLoading || settingsQuery.isLoading) {
     return (
@@ -103,16 +70,23 @@ export function WorkbenchFlowPage() {
       )}
       runs={flowQuery.data.runs}
       onSave={async (patch) => {
-        await updateMutation.mutateAsync(patch);
+        await updateFlow({ flowId, patch }).unwrap();
       }}
       onDelete={async () => {
-        await deleteMutation.mutateAsync();
+        await deleteFlow(flowId).unwrap();
+        navigate("/workbench");
       }}
       onRun={async (userInput, _conversationId, debug) => {
-        await runMutation.mutateAsync({ userInput, debug: Boolean(debug) });
+        await runFlow({
+          flowId,
+          input: { userInput, debug: Boolean(debug) }
+        }).unwrap();
       }}
       onChat={async (userInput, _conversationId, debug) => {
-        await chatMutation.mutateAsync({ userInput, debug: Boolean(debug) });
+        await chatFlow({
+          flowId,
+          input: { userInput, debug: Boolean(debug) }
+        }).unwrap();
       }}
     />
   );

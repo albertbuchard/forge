@@ -15,6 +15,16 @@ it should say Reports. The subtitle can add nuance, but the primary title must n
 entity or function clearly. The user should not need to decode the product's language
 before they can use it.
 
+Forge must also use one consistent modal system for substantial interactions. Long
+forms, editors, setup flows, and multi-part configuration should default to the same
+step-based modal pattern already used elsewhere in the app, with a stable header,
+progress framing, a scrollable body, and a footer that keeps navigation and submit
+actions visible. Ad-hoc one-off dialogs that dump long forms into a fixed panel are a
+product bug, not an acceptable variant. If an interaction is large enough that the
+user may need to scroll, branch, review, or understand staged configuration, it
+belongs in the step-based modal system or the sheet scaffold, not in a custom dialog
+primitive.
+
 ## The Product As A Whole
 
 Forge is built around a hierarchy of meaning and execution. Life goals express the

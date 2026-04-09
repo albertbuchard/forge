@@ -1,9 +1,13 @@
 import { getDatabase } from "../db.js";
 import { getFitnessViewData, getSleepViewData } from "../health.js";
 import { listMovementPlaces } from "../movement.js";
+import { getInsightsPayload } from "../services/insights.js";
+import { getWeeklyReviewPayload } from "../services/reviews.js";
 import { createNote, listNotes } from "../repositories/notes.js";
 import { updateTask } from "../repositories/tasks.js";
+import { getOverviewContext } from "../services/context.js";
 import { searchEntities } from "../services/entity-crud.js";
+import { getWikiHealth, listWikiPages } from "../repositories/wiki-memory.js";
 import type {
   ForgeBoxCatalogEntry,
   ForgeBoxSnapshot
@@ -94,6 +98,22 @@ function createRuntimeContext(input?: {
     health: {
       getSleepViewData: getSleepViewData as WorkbenchRuntimeServices["health"]["getSleepViewData"],
       getFitnessViewData: getFitnessViewData as WorkbenchRuntimeServices["health"]["getFitnessViewData"]
+    },
+    overview: {
+      getContext: (() => getOverviewContext()) as WorkbenchRuntimeServices["overview"]["getContext"],
+      getWeeklyReview:
+        (() => getWeeklyReviewPayload()) as WorkbenchRuntimeServices["overview"]["getWeeklyReview"],
+      getInsights:
+        (() => getInsightsPayload()) as WorkbenchRuntimeServices["overview"]["getInsights"]
+    },
+    wiki: {
+      listPages: ((input) =>
+        listWikiPages({
+          spaceId: typeof input?.spaceId === "string" ? input.spaceId : undefined,
+          kind: typeof input?.kind === "string" ? (input.kind as any) : undefined,
+          limit: typeof input?.limit === "number" ? input.limit : undefined
+        })) as WorkbenchRuntimeServices["wiki"]["listPages"],
+      getHealth: (() => getWikiHealth()) as WorkbenchRuntimeServices["wiki"]["getHealth"]
     },
     tasks: {
       update: ((taskId, patch) =>

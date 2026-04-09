@@ -106,6 +106,15 @@ export interface WorkbenchRuntimeServices {
     getSleepViewData?: () => Record<string, unknown>;
     getFitnessViewData?: () => Record<string, unknown>;
   };
+  overview: {
+    getContext?: () => Record<string, unknown>;
+    getWeeklyReview?: () => Record<string, unknown>;
+    getInsights?: () => Record<string, unknown>;
+  };
+  wiki: {
+    listPages?: (input?: Record<string, unknown>) => Array<Record<string, unknown>>;
+    getHealth?: () => Record<string, unknown>;
+  };
   tasks: {
     update?: (taskId: string, patch: Record<string, unknown>) => unknown;
   };

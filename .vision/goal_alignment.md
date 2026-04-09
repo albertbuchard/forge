@@ -89,6 +89,12 @@ When the user switches views, Forge should keep the previous page visible until 
 next page has finished the route-critical fetch work needed for first render. The
 background activity bar is the truthful loading indicator for this work. Skeletons,
 empty states, and route chrome must not flash as a substitute for stable navigation.
+Fourteenth, it must enforce one consistent step-based modal standard for substantial
+flows and editors across the app. Large forms, configuration editors, and setup
+experiences must use the shared paged modal system or sheet scaffold with proper body
+scrolling, persistent navigation controls, and explicit progress. A one-off custom
+dialog that traps long content in a non-scrollable panel is misaligned with Forge's UX
+contract and should be treated as a regression to correct.
 
 ## Product Concepts That Must Be Explained Clearly
 

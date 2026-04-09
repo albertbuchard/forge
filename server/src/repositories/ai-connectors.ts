@@ -909,6 +909,9 @@ async function runModelNode(input: {
 }
 
 function validateConnectorGraph(graph: AiConnector["graph"]) {
+  if (graph.nodes.length === 0) {
+    throw new Error("Connector graph has no nodes yet.");
+  }
   const nodeIds = new Set(graph.nodes.map((node) => node.id));
   for (const edge of graph.edges) {
     if (!nodeIds.has(edge.source) || !nodeIds.has(edge.target)) {
@@ -942,6 +945,76 @@ function validateConnectorGraph(graph: AiConnector["graph"]) {
 
   for (const node of graph.nodes) {
     visit(node.id);
+  }
+
+  const incomingCounts = new Map<string, number>();
+  const outgoingCounts = new Map<string, number>();
+  for (const edge of graph.edges) {
+    incomingCounts.set(edge.target, (incomingCounts.get(edge.target) ?? 0) + 1);
+    outgoingCounts.set(edge.source, (outgoingCounts.get(edge.source) ?? 0) + 1);
+  }
+
+  const outputNodes = graph.nodes.filter((node) => node.type === "output");
+  if (outputNodes.length === 0) {
+    throw new Error("Connector graph is missing an output node.");
+  }
+
+  const disconnectedOutput = outputNodes.find(
+    (node) => (incomingCounts.get(node.id) ?? 0) === 0
+  );
+  if (disconnectedOutput) {
+    throw new Error(
+      `Output node "${disconnectedOutput.data.label || disconnectedOutput.id}" has no incoming connection.`
+    );
+  }
+
+  const aiNodeMissingPrompt = graph.nodes.find(
+    (node) =>
+      (node.type === "functor" || node.type === "chat") &&
+      !(node.data.promptTemplate?.trim() || node.data.prompt?.trim())
+  );
+  if (aiNodeMissingPrompt) {
+    throw new Error(
+      `AI node "${aiNodeMissingPrompt.data.label || aiNodeMissingPrompt.id}" is missing a prompt.`
+    );
+  }
+
+  const mergeNodeMissingInputs = graph.nodes.find(
+    (node) => node.type === "merge" && (incomingCounts.get(node.id) ?? 0) < 2
+  );
+  if (mergeNodeMissingInputs) {
+    throw new Error(
+      `Merge node "${mergeNodeMissingInputs.data.label || mergeNodeMissingInputs.id}" must receive both left and right inputs.`
+    );
+  }
+
+  const templateNodeMissingTemplate = graph.nodes.find(
+    (node) => node.type === "template" && !(node.data.template ?? "").trim()
+  );
+  if (templateNodeMissingTemplate) {
+    throw new Error(
+      `Template node "${templateNodeMissingTemplate.data.label || templateNodeMissingTemplate.id}" is missing its template string.`
+    );
+  }
+
+  const pickKeyNodeMissingSelection = graph.nodes.find(
+    (node) => node.type === "pick_key" && !(node.data.selectedKey ?? "").trim()
+  );
+  if (pickKeyNodeMissingSelection) {
+    throw new Error(
+      `Pick-key node "${pickKeyNodeMissingSelection.data.label || pickKeyNodeMissingSelection.id}" is missing the key it should select.`
+    );
+  }
+
+  const isolatedNode = graph.nodes.find(
+    (node) =>
+      node.type !== "output" &&
+      (outgoingCounts.get(node.id) ?? 0) === 0
+  );
+  if (isolatedNode) {
+    throw new Error(
+      `Node "${isolatedNode.data.label || isolatedNode.id}" is not connected to anything downstream.`
+    );
   }
 }
 
