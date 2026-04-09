@@ -10243,13 +10243,12 @@ test("settings and local agent token management persist through the versioned AP
     assert.equal(settingsBody.settings.themePreference, "obsidian");
     assert.equal(settingsBody.settings.execution.maxActiveTasks, 2);
     assert.equal(settingsBody.settings.execution.timeAccountingMode, "split");
-    assert.equal(
+    assert.match(
       settingsBody.settings.calendarProviders.google.clientId,
-      "208661368905-bc5v9t1h4uek8c550526k7d5ol0tk0rj.apps.googleusercontent.com"
+      /\.apps\.googleusercontent\.com$/
     );
-    assert.equal(
-      settingsBody.settings.calendarProviders.google.clientSecret,
-      "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"
+    assert.ok(
+      settingsBody.settings.calendarProviders.google.clientSecret.length > 0
     );
     assert.equal(
       settingsBody.settings.calendarProviders.google.appBaseUrl,

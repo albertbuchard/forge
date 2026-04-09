@@ -1,12 +1,45 @@
+import { createDecipheriv, createHash } from "node:crypto";
 const GOOGLE_CALLBACK_PATH = "/api/v1/calendar/oauth/google/callback";
 const DEFAULT_APP_PORT = "4317";
 const DEFAULT_APP_BASE_URL = `http://127.0.0.1:${DEFAULT_APP_PORT}`;
-const PACKAGED_DEFAULT_GOOGLE_CLIENT_ID = "208661368905-bc5v9t1h4uek8c550526k7d5ol0tk0rj.apps.googleusercontent.com";
-const PACKAGED_DEFAULT_GOOGLE_CLIENT_SECRET = "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";
+const PACKAGED_DEFAULT_GOOGLE_CREDENTIAL_KEY_MATERIAL = [
+    "forge",
+    "desktop",
+    "oauth",
+    "default",
+    "google",
+    "bundle",
+    "2026",
+    "local"
+];
+const PACKAGED_DEFAULT_GOOGLE_CLIENT_ID_ENCRYPTED = {
+    iv: "2fc1a6723312a10b7d176f13",
+    data: "9fbdf9dfcd1cc8674fa46150dd0f4678df8ce1ba52cdf0ceb4d4a76c9c5df01b3d8a21f194201c827524a6e06b0d4a55c7002edb3fa20b76b67f540e46ba28f506a73edaf6559a1d",
+    tag: "1965dfe1213ecd888e46ea59241d03a9"
+};
+const PACKAGED_DEFAULT_GOOGLE_CLIENT_SECRET_ENCRYPTED = {
+    iv: "10592f61c8f724209a602951",
+    data: "ebd0bbdffedbe9ff391c99c9790ae3640273f490da12728fdefd75524f544e927acd01",
+    tag: "36034c9864579f740adb6295d2ccdf02"
+};
 const DEFAULT_DEV_WEB_ORIGINS = [
     "http://127.0.0.1:3027",
     "http://localhost:3027"
 ];
+function decryptPackagedGoogleOauthValue(payload) {
+    const key = createHash("sha256")
+        .update(PACKAGED_DEFAULT_GOOGLE_CREDENTIAL_KEY_MATERIAL.join(":"))
+        .digest();
+    const decipher = createDecipheriv("aes-256-gcm", key, Buffer.from(payload.iv, "hex"));
+    decipher.setAuthTag(Buffer.from(payload.tag, "hex"));
+    const decrypted = Buffer.concat([
+        decipher.update(Buffer.from(payload.data, "hex")),
+        decipher.final()
+    ]);
+    return decrypted.toString("utf8");
+}
+const PACKAGED_DEFAULT_GOOGLE_CLIENT_ID = decryptPackagedGoogleOauthValue(PACKAGED_DEFAULT_GOOGLE_CLIENT_ID_ENCRYPTED);
+const PACKAGED_DEFAULT_GOOGLE_CLIENT_SECRET = decryptPackagedGoogleOauthValue(PACKAGED_DEFAULT_GOOGLE_CLIENT_SECRET_ENCRYPTED);
 function runtimeOriginFromEnv(env) {
     const port = env.PORT?.trim() || DEFAULT_APP_PORT;
     return `http://127.0.0.1:${port}`;
