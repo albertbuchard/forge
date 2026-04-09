@@ -140,6 +140,9 @@ When an adjacent record becomes visible:
   `emotion_definition`, `preference_catalog`, and `preference_context`, ask what
   distinction the label should help the user notice, sort, or retrieve later before
   you ask about naming or aliases.
+- For emotionally meaningful vocabulary records such as `event_type`,
+  `emotion_definition`, and many `self_observation` entries, start from the lived
+  moment or felt meaning before you move to reuse or retrieval language.
 - For collection-like records such as `preference_catalog` and
   `questionnaire_instrument`, ask what they are for before you ask what should go
   inside them.
@@ -513,6 +516,9 @@ Arc:
 3. Ask what it may connect to: pattern, belief, value, mode, task, project, or note.
 4. Ask for tags or extra context only if that will help later review.
 
+If the user already gave the moment or timing, move straight to what they noticed most
+clearly instead of re-asking when.
+
 Ready to save when:
 
 - the observation itself is clear
@@ -654,14 +660,18 @@ Arc:
 
 1. Ask what preference or taste question this item belongs to.
 2. Ask what domain or context it should live in.
-3. Ask what makes this item distinct enough to compare usefully.
-4. If the user is really trying to send a direct signal, ask only for the missing
+3. Ask whether the user is trying to save it as a comparison candidate or as a direct
+   signal such as favorite, veto, or compare-later.
+4. Ask what makes this item distinct enough to compare usefully only if it is still a
+   comparison candidate.
+5. If the user is really trying to send a direct signal, ask only for the missing
    detail and then act.
 
 Helpful follow-up lanes:
 
 - what domain this belongs to
 - what context makes the preference meaningful
+- whether this is a signal or a comparison candidate
 - what distinguishes the item from nearby options
 
 Ready to act when:
@@ -723,9 +733,11 @@ consistent.
 
 Arc:
 
-1. Ask what category the label should capture.
+1. Ask what kind of moment or incident this label should capture in lived terms.
 2. Ask how narrow or broad it should be.
-3. Ask for a short description only if the label could be ambiguous later.
+3. Ask what would count as inside versus outside the category if that boundary is
+   still fuzzy.
+4. Ask for a short description only if the label could be ambiguous later.
 
 Ready to save when:
 
@@ -734,7 +746,7 @@ Ready to save when:
 
 Preferred opening question:
 
-- "What kind of incident should this event type capture?"
+- "What kind of moment do you want this event type to help you name more consistently?"
 
 ## Emotion Definition
 
@@ -742,7 +754,7 @@ Aim: define one reusable emotion entry clearly enough that future reports stay p
 
 Arc:
 
-1. Ask what emotion this should represent.
+1. Ask what this feeling is like in lived terms when the user says it.
 2. Ask what distinguishes it from nearby emotions if that matters.
 3. Ask for a short description only if later reports would benefit from it.
 
@@ -753,4 +765,4 @@ Ready to save when:
 
 Preferred opening question:
 
-- "Which emotion do you want this entry to help name more clearly?"
+- "When you say this feeling, what does it actually feel like for you?"
