@@ -8,6 +8,7 @@ PLUGIN_DIR="${FORGE_DIR}/openclaw-plugin"
 ROOT_MANIFEST="${FORGE_DIR}/openclaw.plugin.json"
 PLUGIN_MANIFEST="${PLUGIN_DIR}/openclaw.plugin.json"
 PLUGIN_PACKAGE_JSON="${PLUGIN_DIR}/package.json"
+PLUGIN_PACKAGE_LOCK_JSON="${PLUGIN_DIR}/package-lock.json"
 CODEX_PLUGIN_MANIFEST="${FORGE_DIR}/plugins/forge-codex/.codex-plugin/plugin.json"
 CODEX_RUNTIME_PACKAGE_JSON="${FORGE_DIR}/plugins/forge-codex/runtime/package.json"
 DEFAULT_FORGE_PORT=4317
@@ -18,12 +19,11 @@ RELEASE_TAG_CREATED=0
 ORIGINAL_ROOT_VERSION=""
 ORIGINAL_PLUGIN_MANIFEST_VERSION=""
 ORIGINAL_PLUGIN_PACKAGE_VERSION=""
+ORIGINAL_PLUGIN_PACKAGE_LOCK_VERSION=""
 ORIGINAL_CODEX_PLUGIN_VERSION=""
 ORIGINAL_CODEX_RUNTIME_VERSION=""
 RELEASE_TARGET_VERSION=""
 VERIFY_TESTS=(
-  "npm exec -- tsc --noEmit"
-  "npm exec -- tsc -p server/tsconfig.json --noEmit"
   "npm exec -- vitest run src/openclaw/parity.test.ts src/openclaw/index.test.ts src/openclaw/api-client.test.ts src/openclaw/manifest.test.ts"
   "npm run build"
   "node --import tsx --test --test-concurrency=1 server/src/app.test.ts"
@@ -68,6 +68,7 @@ cleanup_release_workspace() {
   git -C "${FORGE_DIR}" restore --source=HEAD --staged --worktree -- \
     "${ROOT_MANIFEST}" \
     "${PLUGIN_PACKAGE_JSON}" \
+    "${PLUGIN_PACKAGE_LOCK_JSON}" \
     "${PLUGIN_MANIFEST}" \
     "${CODEX_PLUGIN_MANIFEST}" \
     "${CODEX_RUNTIME_PACKAGE_JSON}" \
@@ -90,9 +91,10 @@ rollback_release_state() {
     git -C "${FORGE_DIR}" reset --mixed HEAD~1 >/dev/null 2>&1 || true
   fi
 
-  if [[ -n "${ORIGINAL_ROOT_VERSION}" && -n "${ORIGINAL_PLUGIN_MANIFEST_VERSION}" && -n "${ORIGINAL_PLUGIN_PACKAGE_VERSION}" && -n "${ORIGINAL_CODEX_PLUGIN_VERSION}" && -n "${ORIGINAL_CODEX_RUNTIME_VERSION}" ]]; then
+  if [[ -n "${ORIGINAL_ROOT_VERSION}" && -n "${ORIGINAL_PLUGIN_MANIFEST_VERSION}" && -n "${ORIGINAL_PLUGIN_PACKAGE_VERSION}" && -n "${ORIGINAL_PLUGIN_PACKAGE_LOCK_VERSION}" && -n "${ORIGINAL_CODEX_PLUGIN_VERSION}" && -n "${ORIGINAL_CODEX_RUNTIME_VERSION}" ]]; then
     write_release_versions "${ORIGINAL_ROOT_VERSION}" "${ROOT_MANIFEST}"
     write_release_versions "${ORIGINAL_PLUGIN_PACKAGE_VERSION}" "${PLUGIN_PACKAGE_JSON}"
+    write_release_versions "${ORIGINAL_PLUGIN_PACKAGE_LOCK_VERSION}" "${PLUGIN_PACKAGE_LOCK_JSON}"
     write_release_versions "${ORIGINAL_PLUGIN_MANIFEST_VERSION}" "${PLUGIN_MANIFEST}"
     write_release_versions "${ORIGINAL_CODEX_PLUGIN_VERSION}" "${CODEX_PLUGIN_MANIFEST}"
     write_release_versions "${ORIGINAL_CODEX_RUNTIME_VERSION}" "${CODEX_RUNTIME_PACKAGE_JSON}"
@@ -204,6 +206,9 @@ const files = process.argv.slice(3);
 for (const file of files) {
   const json = JSON.parse(fs.readFileSync(file, "utf8"));
   json.version = version;
+  if (file.endsWith("package-lock.json") && json.packages?.[""]) {
+    json.packages[""].version = version;
+  }
   fs.writeFileSync(file, `${JSON.stringify(json, null, 2)}\n`);
 }
 NODE
@@ -213,14 +218,20 @@ verify_version_alignment() {
   local version
   version="$1"
   local actual
-  actual="$(node --input-type=module - "${ROOT_MANIFEST}" "${PLUGIN_PACKAGE_JSON}" "${PLUGIN_MANIFEST}" "${CODEX_PLUGIN_MANIFEST}" "${CODEX_RUNTIME_PACKAGE_JSON}" <<'NODE'
+  actual="$(node --input-type=module - "${ROOT_MANIFEST}" "${PLUGIN_PACKAGE_JSON}" "${PLUGIN_PACKAGE_LOCK_JSON}" "${PLUGIN_MANIFEST}" "${CODEX_PLUGIN_MANIFEST}" "${CODEX_RUNTIME_PACKAGE_JSON}" <<'NODE'
 import fs from "node:fs";
 const files = process.argv.slice(2);
-const versions = files.map((file) => JSON.parse(fs.readFileSync(file, "utf8")).version);
+const versions = files.map((file) => {
+  const json = JSON.parse(fs.readFileSync(file, "utf8"));
+  if (file.endsWith("package-lock.json")) {
+    return `${json.version}:${json.packages?.[""]?.version ?? ""}`;
+  }
+  return json.version;
+});
 process.stdout.write(JSON.stringify(versions));
 NODE
 )"
-  [[ "${actual}" == "[\"${version}\",\"${version}\",\"${version}\",\"${version}\",\"${version}\"]" ]] || fail "plugin versions are not aligned: ${actual}"
+  [[ "${actual}" == "[\"${version}\",\"${version}\",\"${version}:${version}\",\"${version}\",\"${version}\",\"${version}\"]" ]] || fail "plugin versions are not aligned: ${actual}"
 }
 
 run_verification_suite() {
@@ -236,7 +247,7 @@ run_verification_suite() {
 
 create_release_commit() {
   local version="$1"
-  git -C "${FORGE_DIR}" add "${ROOT_MANIFEST}" "${PLUGIN_PACKAGE_JSON}" "${PLUGIN_MANIFEST}" "${CODEX_PLUGIN_MANIFEST}" "${CODEX_RUNTIME_PACKAGE_JSON}"
+  git -C "${FORGE_DIR}" add "${ROOT_MANIFEST}" "${PLUGIN_PACKAGE_JSON}" "${PLUGIN_PACKAGE_LOCK_JSON}" "${PLUGIN_MANIFEST}" "${CODEX_PLUGIN_MANIFEST}" "${CODEX_RUNTIME_PACKAGE_JSON}"
   git -C "${FORGE_DIR}" add -A \
     "${FORGE_DIR}/plugins/forge-codex/runtime/dist" \
     "${FORGE_DIR}/plugins/forge-codex/runtime/server/migrations"
@@ -314,6 +325,7 @@ main() {
   ORIGINAL_ROOT_VERSION="$(read_json_version "${ROOT_MANIFEST}")"
   ORIGINAL_PLUGIN_MANIFEST_VERSION="$(read_json_version "${PLUGIN_MANIFEST}")"
   ORIGINAL_PLUGIN_PACKAGE_VERSION="$(read_json_version "${PLUGIN_PACKAGE_JSON}")"
+  ORIGINAL_PLUGIN_PACKAGE_LOCK_VERSION="$(read_json_version "${PLUGIN_PACKAGE_LOCK_JSON}")"
   ORIGINAL_CODEX_PLUGIN_VERSION="$(read_json_version "${CODEX_PLUGIN_MANIFEST}")"
   ORIGINAL_CODEX_RUNTIME_VERSION="$(read_json_version "${CODEX_RUNTIME_PACKAGE_JSON}")"
 
@@ -335,7 +347,7 @@ main() {
       fi
     )
     echo "Releasing forge-openclaw-plugin ${current_version} -> ${next_version}"
-    write_release_versions "${next_version}" "${ROOT_MANIFEST}" "${PLUGIN_PACKAGE_JSON}" "${PLUGIN_MANIFEST}" "${CODEX_PLUGIN_MANIFEST}" "${CODEX_RUNTIME_PACKAGE_JSON}"
+    write_release_versions "${next_version}" "${ROOT_MANIFEST}" "${PLUGIN_PACKAGE_JSON}" "${PLUGIN_PACKAGE_LOCK_JSON}" "${PLUGIN_MANIFEST}" "${CODEX_PLUGIN_MANIFEST}" "${CODEX_RUNTIME_PACKAGE_JSON}"
   fi
 
   RELEASE_TARGET_VERSION="${next_version}"

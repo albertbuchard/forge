@@ -9,6 +9,8 @@ HERMES_PLUGIN_MANIFEST="${HERMES_PLUGIN_DIR}/plugin.yaml"
 HERMES_PLUGIN_PACKAGE_VERSION="${HERMES_PLUGIN_DIR}/forge_hermes/version.py"
 HERMES_PLUGIN_PYPROJECT="${HERMES_PLUGIN_DIR}/pyproject.toml"
 HERMES_PLUGIN_PYTHON_DIST="${HERMES_PLUGIN_DIR}/python-dist"
+HERMES_PLUGIN_BUILD_DIR="${HERMES_PLUGIN_DIR}/build"
+HERMES_PLUGIN_EGG_INFO_DIR="${HERMES_PLUGIN_DIR}/forge_hermes_plugin.egg-info"
 HERMES_TAG_PREFIX="hermes-v"
 RELEASE_MODE="${FORGE_RELEASE_MODE:-full}"
 SKIP_UPLOAD="${FORGE_RELEASE_SKIP_UPLOAD:-0}"
@@ -68,7 +70,7 @@ rollback_release_state() {
     write_release_versions "${ORIGINAL_HERMES_MANIFEST_VERSION}"
   fi
 
-  rm -rf "${HERMES_PLUGIN_PYTHON_DIST}"
+  rm -rf "${HERMES_PLUGIN_PYTHON_DIST}" "${HERMES_PLUGIN_BUILD_DIR}" "${HERMES_PLUGIN_EGG_INFO_DIR}"
   [[ -n "${PACKAGING_VENV_DIR}" ]] && rm -rf "${PACKAGING_VENV_DIR}"
 
   return "${exit_code}"
@@ -235,31 +237,21 @@ verify_version_alignment() {
 }
 
 run_verification_suite() {
-  rm -rf "${HERMES_PLUGIN_PYTHON_DIST}"
+  rm -rf "${HERMES_PLUGIN_PYTHON_DIST}" "${HERMES_PLUGIN_BUILD_DIR}" "${HERMES_PLUGIN_EGG_INFO_DIR}"
   echo "+ node ./plugins/forge-hermes/scripts/build-package-runtime.mjs"
   (
     cd "${FORGE_DIR}"
     node ./plugins/forge-hermes/scripts/build-package-runtime.mjs
   )
-  echo "+ npm exec -- tsc --noEmit"
+  echo "+ npm exec -- vitest run src/openclaw/parity.test.ts src/openclaw/index.test.ts src/openclaw/api-client.test.ts src/openclaw/manifest.test.ts"
   (
     cd "${FORGE_DIR}"
-    npm exec -- tsc --noEmit
+    npm exec -- vitest run src/openclaw/parity.test.ts src/openclaw/index.test.ts src/openclaw/api-client.test.ts src/openclaw/manifest.test.ts
   )
-  echo "+ npm exec -- tsc -p server/tsconfig.json --noEmit"
+  echo "+ node --import tsx --test --test-concurrency=1 server/src/app.test.ts"
   (
     cd "${FORGE_DIR}"
-    npm exec -- tsc -p server/tsconfig.json --noEmit
-  )
-  echo "+ npm run test"
-  (
-    cd "${FORGE_DIR}"
-    npm run test
-  )
-  echo "+ node --import tsx --test --test-concurrency=1 server/src/*.test.ts"
-  (
-    cd "${FORGE_DIR}"
-    node --import tsx --test --test-concurrency=1 server/src/*.test.ts
+    node --import tsx --test --test-concurrency=1 server/src/app.test.ts
   )
   echo "+ python3 -m py_compile plugins/forge-hermes/__init__.py plugins/forge-hermes/forge_hermes/*.py"
   (

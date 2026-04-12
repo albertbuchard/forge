@@ -102,6 +102,15 @@ function run(command, args, cwd) {
   });
 }
 
+async function removePath(targetPath) {
+  await rm(targetPath, {
+    recursive: true,
+    force: true,
+    maxRetries: 5,
+    retryDelay: 100
+  });
+}
+
 async function removeCompiledTests(directory) {
   const entries = await readdir(directory, { withFileTypes: true });
   for (const entry of entries) {
@@ -156,10 +165,10 @@ async function patchCompiledJsSpecifiers(directory) {
   }
 }
 
-await rm(pluginDistDir, { recursive: true, force: true });
-await rm(pluginServerDir, { recursive: true, force: true });
+await removePath(pluginDistDir);
+await removePath(pluginServerDir);
 await mkdir(pluginDistDir, { recursive: true });
-await rm(packageSkillDir, { recursive: true, force: true });
+await removePath(packageSkillDir);
 await cp(repoSkillDir, packageSkillDir, { recursive: true, force: true });
 
 await run("npm", ["exec", "--", "tsc", "-p", "tsconfig.build.json"], packageRoot);
@@ -186,8 +195,8 @@ await writeFile(
   "utf8"
 );
 
-await rm(codexRuntimeDistDir, { recursive: true, force: true });
-await rm(codexRuntimeMigrationsDir, { recursive: true, force: true });
+await removePath(codexRuntimeDistDir);
+await removePath(codexRuntimeMigrationsDir);
 await mkdir(codexRuntimeRoot, { recursive: true });
 await cp(pluginDistDir, codexRuntimeDistDir, { recursive: true, force: true });
 await mkdir(path.join(codexRuntimeRoot, "server"), { recursive: true });
