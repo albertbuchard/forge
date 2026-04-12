@@ -2565,13 +2565,13 @@ struct MovementLifeTimelineItem: Identifiable, Hashable {
                 id: "remote-stay-\(segment.id)",
                 source: segment.sourceKind == "user_defined"
                     ? .remoteUserBox(
-                        segment.id,
+                        segment.boxId ?? segment.id,
                         segment.stay.map {
                             .init(latitude: $0.centerLatitude, longitude: $0.centerLongitude)
                         }
                     )
                     : .remoteAutomatic(
-                        segment.id,
+                        segment.boxId ?? segment.id,
                         segment.stay.map {
                             .init(latitude: $0.centerLatitude, longitude: $0.centerLongitude)
                         }
@@ -2615,8 +2615,8 @@ struct MovementLifeTimelineItem: Identifiable, Hashable {
             self.init(
                 id: "remote-trip-\(segment.id)",
                 source: segment.sourceKind == "user_defined"
-                    ? .remoteUserBox(segment.id, nil)
-                    : .remoteAutomatic(segment.id, nil),
+                    ? .remoteUserBox(segment.boxId ?? segment.id, nil)
+                    : .remoteAutomatic(segment.boxId ?? segment.id, nil),
                 kind: .trip,
                 title: segment.title,
                 subtitle: segment.subtitle,
@@ -2656,8 +2656,8 @@ struct MovementLifeTimelineItem: Identifiable, Hashable {
             self.init(
                 id: "remote-missing-\(segment.id)",
                 source: segment.sourceKind == "user_defined"
-                    ? .remoteUserBox(segment.id, nil)
-                    : .remoteAutomatic(segment.id, nil),
+                    ? .remoteUserBox(segment.boxId ?? segment.id, nil)
+                    : .remoteAutomatic(segment.boxId ?? segment.id, nil),
                 kind: .missing,
                 title: segment.title,
                 subtitle: segment.subtitle,

@@ -959,7 +959,10 @@ function MovementTimelineEditDialog({
   draft,
   creating,
   saving,
+  preflight,
+  preflightLoading,
   onDraftChange,
+  onFitMissing,
   onSave,
   onOpenChange
 }: {
@@ -968,7 +971,10 @@ function MovementTimelineEditDialog({
   draft: TimelineDraft | null;
   creating: boolean;
   saving: boolean;
+  preflight: MovementUserBoxPreflight | null;
+  preflightLoading: boolean;
   onDraftChange: (draft: TimelineDraft) => void;
+  onFitMissing: () => void;
   onSave: () => void;
   onOpenChange: (open: boolean) => void;
 }) {
@@ -1090,6 +1096,46 @@ function MovementTimelineEditDialog({
                   />
                 </label>
               </div>
+              <Card className="grid gap-3 border-white/10 bg-white/[0.03] p-4">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="text-sm font-medium text-white">
+                    Overlap guidance
+                  </div>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    className="border border-white/10 bg-white/[0.04] text-white hover:bg-white/[0.08]"
+                    onClick={onFitMissing}
+                    disabled={
+                      !preflight?.nearestMissingStartedAt ||
+                      !preflight?.nearestMissingEndedAt
+                    }
+                  >
+                    Fit Missing Time
+                  </Button>
+                </div>
+                <div className="text-sm leading-6 text-white/62">
+                  {preflightLoading
+                    ? "Checking visible overlaps and missing windows…"
+                    : preflight?.overlapsAnything
+                      ? `This box overlaps ${preflight.affectedAutomaticBoxIds.length} automatic and ${preflight.affectedUserBoxIds.length} manual boxes. Saving will fully override ${preflight.fullyOverriddenUserBoxIds.length} manual boxes and trim ${preflight.trimmedUserBoxIds.length}.`
+                      : "No overlap in the currently visible timeline window."}
+                </div>
+                <div className="grid gap-1 text-xs text-white/50">
+                  <div>
+                    Visible range:{" "}
+                    {preflight?.visibleRangeStart && preflight?.visibleRangeEnd
+                      ? `${formatDateTime(preflight.visibleRangeStart)} -> ${formatDateTime(preflight.visibleRangeEnd)}`
+                      : "Unavailable"}
+                  </div>
+                  <div>
+                    Suggested missing slot:{" "}
+                    {preflight?.nearestMissingStartedAt && preflight?.nearestMissingEndedAt
+                      ? `${formatDateTime(preflight.nearestMissingStartedAt)} -> ${formatDateTime(preflight.nearestMissingEndedAt)}`
+                      : "No missing interval in view"}
+                  </div>
+                </div>
+              </Card>
             </div>
           ) : null}
 
