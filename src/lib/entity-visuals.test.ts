@@ -84,4 +84,10 @@ describe("entity visuals", () => {
     expect(getEntityKindForWorkbenchFlowKind("functor")).toBe("functor");
     expect(getEntityKindForWorkbenchFlowKind("chat")).toBe("chat");
   });
+
+  it("keeps insight visually distinct from goal", () => {
+    expect(getEntityVisual("insight").colorToken.hex).not.toBe(
+      getEntityVisual("goal").colorToken.hex
+    );
+  });
 });

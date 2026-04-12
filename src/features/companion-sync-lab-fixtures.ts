@@ -63,6 +63,50 @@ export type CompanionSyncLabTimelinePreview = {
   uncoveredIntervals: Array<{ startedAt: string; endedAt: string }>;
 };
 
+export type CompanionSyncLabBoxLayerFixture = {
+  id: string;
+  title: string;
+  rawMeasurements: Array<{
+    id: string;
+    label: string;
+    startedAt: string;
+    endedAt: string;
+  }>;
+  automaticBoxes: Array<{
+    id: string;
+    kind: "stay" | "trip" | "missing";
+    origin: "recorded" | "continued_stay" | "repaired_gap" | "missing";
+    startedAt: string;
+    endedAt: string;
+    title: string;
+  }>;
+  userBoxes: Array<{
+    id: string;
+    kind: "stay" | "trip" | "missing";
+    origin: "user_defined" | "user_invalidated";
+    startedAt: string;
+    endedAt: string;
+    title: string;
+    overrideCount: number;
+  }>;
+  projectedBoxes: Array<{
+    id: string;
+    kind: "stay" | "trip" | "missing";
+    sourceKind: "automatic" | "user_defined";
+    origin:
+      | "recorded"
+      | "continued_stay"
+      | "repaired_gap"
+      | "missing"
+      | "user_defined"
+      | "user_invalidated";
+    startedAt: string;
+    endedAt: string;
+    title: string;
+    overrideCount: number;
+  }>;
+};
+
 export const companionSyncLabSourceFixtures: CompanionSyncLabSourceFixture[] = [
   {
     id: "health-ready",
@@ -209,6 +253,74 @@ export const companionSyncLabTimelineFixtures: CompanionSyncLabTimelineFixture[]
         placeExternalUid: null,
         startCoordinate: { latitude: 46.5217, longitude: 6.6405 },
         endCoordinate: { latitude: 46.5221, longitude: 6.6412 }
+      }
+    ]
+  }
+];
+
+export const companionSyncLabBoxLayerFixtures: CompanionSyncLabBoxLayerFixture[] = [
+  {
+    id: "user-override-home-window",
+    title: "User-defined missing box overrides one automatic home stay",
+    rawMeasurements: [
+      {
+        id: "raw-stay-home",
+        label: "Raw stay · Home",
+        startedAt: "2026-04-05T08:00:00.000Z",
+        endedAt: "2026-04-05T10:00:00.000Z"
+      }
+    ],
+    automaticBoxes: [
+      {
+        id: "auto-stay-home",
+        kind: "stay",
+        origin: "recorded",
+        startedAt: "2026-04-05T08:00:00.000Z",
+        endedAt: "2026-04-05T10:00:00.000Z",
+        title: "Home"
+      }
+    ],
+    userBoxes: [
+      {
+        id: "user-missing-home-window",
+        kind: "missing",
+        origin: "user_invalidated",
+        startedAt: "2026-04-05T08:30:00.000Z",
+        endedAt: "2026-04-05T09:00:00.000Z",
+        title: "User invalidated automatic movement",
+        overrideCount: 1
+      }
+    ],
+    projectedBoxes: [
+      {
+        id: "projected-home-early",
+        kind: "stay",
+        sourceKind: "automatic",
+        origin: "recorded",
+        startedAt: "2026-04-05T08:00:00.000Z",
+        endedAt: "2026-04-05T08:30:00.000Z",
+        title: "Home",
+        overrideCount: 0
+      },
+      {
+        id: "projected-home-user-missing",
+        kind: "missing",
+        sourceKind: "user_defined",
+        origin: "user_invalidated",
+        startedAt: "2026-04-05T08:30:00.000Z",
+        endedAt: "2026-04-05T09:00:00.000Z",
+        title: "User invalidated automatic movement",
+        overrideCount: 1
+      },
+      {
+        id: "projected-home-late",
+        kind: "stay",
+        sourceKind: "automatic",
+        origin: "recorded",
+        startedAt: "2026-04-05T09:00:00.000Z",
+        endedAt: "2026-04-05T10:00:00.000Z",
+        title: "Home",
+        overrideCount: 0
       }
     ]
   }

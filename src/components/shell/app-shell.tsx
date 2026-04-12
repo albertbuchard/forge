@@ -70,15 +70,17 @@ import {
   NavLink,
   UNSAFE_LocationContext,
   useLocation,
+  useNavigate,
   useOutlet,
   useOutletContext
 } from "react-router-dom";
 import type { Location as RouterLocation } from "react-router-dom";
 import { AmbientActivityPill } from "@/components/experience/ambient-activity-pill";
-import { CommandPalette } from "@/components/experience/command-palette";
+import { ActionBar } from "@/components/experience/action-bar";
 import { RouteTransitionFrame } from "@/components/experience/route-transition-frame";
 import { SheetScaffold } from "@/components/experience/sheet-scaffold";
-import { CreateMenu } from "@/components/create-menu";
+import { KnowledgeGraphFocusDrawer } from "@/components/knowledge-graph/knowledge-graph-focus-drawer";
+import { CreateMenu, useForgeCreateActions } from "@/components/create-menu";
 import { PSYCHE_SECTIONS } from "@/components/psyche/psyche-section-nav";
 import { StartWorkComposer } from "@/components/start-work-composer";
 import {
@@ -106,6 +108,11 @@ import {
 } from "@/lib/api";
 import { ForgeApiError } from "@/lib/api-error";
 import { I18nProvider, useI18n, type TranslationKey } from "@/lib/i18n";
+import {
+  formatKnowledgeGraphFocusValue,
+  type KnowledgeGraphNode
+} from "@/lib/knowledge-graph-types";
+import { getEntityNotesHref } from "@/lib/note-helpers";
 import { cn } from "@/lib/utils";
 import { isShellRouteReady } from "@/features/shell/route-readiness";
 import { selectPendingRtkRequestCount, selectSelectedUserIds } from "@/features/shell/selectors";
@@ -143,6 +150,7 @@ import {
   useReleaseTaskRunMutation
 } from "@/store/api/forge-api";
 import {
+  clearKnowledgeGraphOverlayFocus,
   setSelectedUserIds as setSelectedUserIdsAction
 } from "@/store/slices/shell-slice";
 import { useAppDispatch, useAppSelector } from "@/store/typed-hooks";
@@ -181,6 +189,44 @@ type ShellContextValue = {
     projectId?: string | null;
   }) => void;
 };
+
+function getKnowledgeGraphNodeNotesHref(node: KnowledgeGraphNode) {
+  switch (node.entityType) {
+    case "workbench_flow":
+    case "workbench_surface":
+    case "wiki_space":
+      return null;
+    default:
+      return getEntityNotesHref(node.entityType, node.entityId);
+  }
+}
+
+function buildKnowledgeGraphSearchFromLocation(
+  location: RouterLocation,
+  node: KnowledgeGraphNode | null,
+  extras?: Record<string, string | null>
+) {
+  const next = new URLSearchParams(location.search);
+  if (!node) {
+    next.delete("focus");
+  } else {
+    next.set(
+      "focus",
+      formatKnowledgeGraphFocusValue(node.entityType, node.entityId)
+    );
+  }
+  if (extras) {
+    for (const [key, value] of Object.entries(extras)) {
+      if (value === null) {
+        next.delete(key);
+      } else {
+        next.set(key, value);
+      }
+    }
+  }
+  const query = next.toString();
+  return query ? `?${query}` : "";
+}
 
 const ShellContext = createContext<ShellContextValue | null>(null);
 
@@ -1485,7 +1531,7 @@ function ShellFrame({
       routeMatches(routeLocation.pathname, route)
     ) ?? PRIMARY_ROUTES[0];
   const transitionKey = getRouteTransitionKey(routeLocation.pathname);
-  const [paletteOpen, setPaletteOpen] = useState(false);
+  const [actionBarOpen, setActionBarOpen] = useState(false);
   const [backgroundActivityOpen, setBackgroundActivityOpen] = useState(false);
   const shellRootRef = useRef<HTMLDivElement | null>(null);
   const [navCollapsed, setNavCollapsed] = useState(false);
@@ -1514,6 +1560,7 @@ function ShellFrame({
   const knowledgeGraphSurface = routeLocation.pathname.startsWith("/knowledge-graph");
   const autoCollapseSurface =
     wikiSurface || psycheSurface || workbenchSurface || knowledgeGraphSurface;
+  const immersiveMobileSurface = false;
   const desktopRoutes = desktopNavIds
     .map((id) => NAV_ROUTE_REGISTRY.find((route) => route.id === id) ?? null)
     .filter((route): route is ShellRouteDefinition => route !== null);
@@ -1567,6 +1614,17 @@ function ShellFrame({
       icon: Activity
     }
   ] as const;
+  const createActions = useForgeCreateActions({
+    goals: shell.snapshot.dashboard.goals,
+    projects: shell.snapshot.dashboard.projects,
+    tags: shell.snapshot.tags,
+    users: shell.snapshot.users,
+    defaultUserId:
+      shell.selectedUserIds.length === 1 ? shell.selectedUserIds[0] : null,
+    onCreateGoal: shell.createGoal,
+    onCreateProject: shell.createProject,
+    onCreateTask: shell.createTask
+  });
   const railLinks = useMemo(() => {
     if (routeLocation.pathname.startsWith("/tasks/")) {
       return [
@@ -1610,7 +1668,7 @@ function ShellFrame({
     const onKeyDown = (event: KeyboardEvent) => {
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
         event.preventDefault();
-        setPaletteOpen((current) => !current);
+        setActionBarOpen((current) => !current);
         lastStandaloneShiftAt = 0;
         return;
       }
@@ -1625,7 +1683,7 @@ function ShellFrame({
         const now = window.performance.now();
         if (now - lastStandaloneShiftAt <= 360) {
           event.preventDefault();
-          setPaletteOpen(true);
+          setActionBarOpen(true);
           lastStandaloneShiftAt = 0;
           return;
         }
@@ -1737,12 +1795,14 @@ function ShellFrame({
       className="min-h-screen"
       style={shellRootStyle}
     >
-      <CommandPalette
-        open={paletteOpen}
-        onOpenChange={setPaletteOpen}
+      <ActionBar
+        open={actionBarOpen}
+        onOpenChange={setActionBarOpen}
         snapshot={shell.snapshot}
         selectedUserIds={shell.selectedUserIds}
+        createActions={createActions.actions}
       />
+      {createActions.dialogs}
 
       <div
         className="hidden lg:grid lg:min-h-screen"
@@ -1933,7 +1993,7 @@ function ShellFrame({
                     label={activityLabel}
                     onClick={() => setBackgroundActivityOpen(true)}
                   />
-                  <ShellCommandButton onClick={() => setPaletteOpen(true)} />
+                  <ShellCommandButton onClick={() => setActionBarOpen(true)} />
                   <Button
                     variant="secondary"
                     size="sm"
@@ -2040,28 +2100,31 @@ function ShellFrame({
           </div>
 
           <main className="px-6 pb-3">
-            <RouteTransitionFrame
-              routeKey={transitionKey}
-              tone={isPsyche ? "psyche" : "core"}
-            >
-              {children}
-            </RouteTransitionFrame>
+            <div className="min-w-0">
+              <RouteTransitionFrame
+                routeKey={transitionKey}
+                tone={isPsyche ? "psyche" : "core"}
+              >
+                {children}
+              </RouteTransitionFrame>
+            </div>
           </main>
         </div>
       </div>
 
       <div className="min-h-[100dvh] overflow-x-clip lg:hidden">
         <TaskTimerRailProvider>
-          <header
-            className="sticky top-0 z-30 border-b border-white/6 px-4 backdrop-blur-xl"
-            style={{
-              background:
-                "color-mix(in srgb, var(--surface-glass) 96%, transparent)",
-              paddingTop: "var(--forge-shell-mobile-header-padding-top)",
-              paddingBottom: "var(--forge-shell-mobile-header-padding-bottom)",
-              willChange: "padding, background-color"
-            }}
-          >
+          {!immersiveMobileSurface ? (
+            <header
+              className="sticky top-0 z-30 border-b border-white/6 px-4 backdrop-blur-xl"
+              style={{
+                background:
+                  "color-mix(in srgb, var(--surface-glass) 96%, transparent)",
+                paddingTop: "var(--forge-shell-mobile-header-padding-top)",
+                paddingBottom: "var(--forge-shell-mobile-header-padding-bottom)",
+                willChange: "padding, background-color"
+              }}
+            >
             <div
               className="flex items-center justify-between gap-2"
               style={{
@@ -2099,7 +2162,7 @@ function ShellFrame({
                   variant="secondary"
                   size="sm"
                   className="min-h-[2.125rem] px-2.5"
-                  onClick={() => setPaletteOpen(true)}
+                  onClick={() => setActionBarOpen(true)}
                 >
                   <Search className="size-4" />
                 </Button>
@@ -2154,7 +2217,8 @@ function ShellFrame({
                 />
               </div>
             </div>
-          </header>
+            </header>
+          ) : null}
         </TaskTimerRailProvider>
 
         <StartWorkComposer
@@ -2179,11 +2243,22 @@ function ShellFrame({
         />
 
         <main
-          className="overflow-x-clip px-4 pb-2.5 lg:pb-24"
+          className={cn(
+            "overflow-x-clip pb-2.5 lg:pb-24",
+            knowledgeGraphSurface ? "px-0" : immersiveMobileSurface ? "px-0" : "px-4"
+          )}
           style={{
             paddingBottom: "calc(var(--forge-mobile-nav-clearance) + 2.5rem)",
-            paddingLeft: "max(1rem, calc(var(--forge-safe-area-left) + 1rem))",
-            paddingRight: "max(1rem, calc(var(--forge-safe-area-right) + 1rem))"
+            paddingLeft: knowledgeGraphSurface
+              ? "var(--forge-safe-area-left)"
+              : immersiveMobileSurface
+              ? "var(--forge-safe-area-left)"
+              : "max(1rem, calc(var(--forge-safe-area-left) + 1rem))",
+            paddingRight: knowledgeGraphSurface
+              ? "var(--forge-safe-area-right)"
+              : immersiveMobileSurface
+              ? "var(--forge-safe-area-right)"
+              : "max(1rem, calc(var(--forge-safe-area-right) + 1rem))"
           }}
         >
           <RouteTransitionFrame
@@ -2305,16 +2380,7 @@ function ShellFrame({
 
       <CreateMenu
         className="fixed z-40 lg:bottom-6 lg:right-6"
-        goals={shell.snapshot.dashboard.goals}
-        projects={shell.snapshot.dashboard.projects}
-        tags={shell.snapshot.tags}
-        users={shell.snapshot.users}
-        defaultUserId={
-          shell.selectedUserIds.length === 1 ? shell.selectedUserIds[0] : null
-        }
-        onCreateGoal={shell.createGoal}
-        onCreateProject={shell.createProject}
-        onCreateTask={shell.createTask}
+        actions={createActions.actions}
       />
     </div>
   );
@@ -2323,6 +2389,7 @@ function ShellFrame({
 export function AppShell() {
   useLiveEvents();
   const dispatch = useAppDispatch();
+  const navigate = useNavigate();
   const xpTimerRef = useRef<number | null>(null);
   const previousXpRef = useRef<number | null>(null);
   const queryClient = useQueryClient();
@@ -2332,6 +2399,9 @@ export function AppShell() {
   const tanstackFetching = useIsFetching();
   const pendingRtkRequests = useAppSelector(selectPendingRtkRequestCount);
   const selectedUserIds = useAppSelector(selectSelectedUserIds);
+  const knowledgeGraphOverlayFocus = useAppSelector(
+    (state) => state.shell.knowledgeGraphOverlayFocus
+  );
   const [startWorkOpen, setStartWorkOpen] = useState(false);
   const [startWorkDefaults, setStartWorkDefaults] = useState<{
     taskId?: string | null;
@@ -2381,6 +2451,26 @@ export function AppShell() {
     dispatch(setSelectedUserIdsAction(userIds));
   };
 
+  const setKnowledgeGraphRouteFocus = (node: KnowledgeGraphNode | null) => {
+    const search = buildKnowledgeGraphSearchFromLocation(routerLocation, node);
+    if (!node) {
+      dispatch(clearKnowledgeGraphOverlayFocus());
+    }
+    navigate({
+      pathname: "/knowledge-graph",
+      search
+    });
+  };
+
+  const openKnowledgeGraphHierarchy = (node: KnowledgeGraphNode) => {
+    navigate({
+      pathname: "/knowledge-graph",
+      search: buildKnowledgeGraphSearchFromLocation(routerLocation, node, {
+        view: "hierarchy"
+      })
+    });
+  };
+
   useEffect(() => {
     if (!operatorSessionQuery.isSuccess) {
       return;
@@ -2397,6 +2487,15 @@ export function AppShell() {
       }
     });
   }, [operatorSessionQuery.isSuccess, queryClient, selectedUserIds]);
+
+  useEffect(() => {
+    if (routerLocation.pathname.startsWith("/knowledge-graph")) {
+      return;
+    }
+    if (knowledgeGraphOverlayFocus) {
+      dispatch(clearKnowledgeGraphOverlayFocus());
+    }
+  }, [dispatch, knowledgeGraphOverlayFocus, routerLocation.pathname]);
 
   useShellSessionTelemetry(operatorSessionQuery.isSuccess);
   useShellTaskHeartbeat({
@@ -2955,6 +3054,31 @@ export function AppShell() {
               </Dialog.Content>
             </Dialog.Portal>
           </Dialog.Root>
+          {knowledgeGraphOverlayFocus?.focusNode ? (
+            <div className="pointer-events-none fixed inset-y-0 right-0 z-[64] hidden lg:flex lg:max-w-[min(30rem,calc(100vw-4rem))] lg:items-start lg:justify-end lg:p-4">
+              <div className="pointer-events-auto h-full w-[min(30rem,calc(100vw-4rem))] max-w-full overflow-hidden rounded-[28px] border border-white/10 bg-[linear-gradient(180deg,rgba(8,12,20,0.82),rgba(8,12,20,0.94))] pt-[calc(var(--forge-shell-desktop-header-padding-top)+4.8rem)] shadow-[0_24px_80px_rgba(5,8,18,0.42)] backdrop-blur-xl">
+                <div className="h-full min-h-0 overflow-hidden">
+                  <KnowledgeGraphFocusDrawer
+                    focus={knowledgeGraphOverlayFocus}
+                    onOpenPage={(node) => {
+                      if (node.href) {
+                        navigate(node.href);
+                      }
+                    }}
+                    onOpenNotes={(node) => {
+                      const href = getKnowledgeGraphNodeNotesHref(node);
+                      if (href) {
+                        navigate(href);
+                      }
+                    }}
+                    onOpenHierarchy={openKnowledgeGraphHierarchy}
+                    onSelectNode={setKnowledgeGraphRouteFocus}
+                    onClose={() => setKnowledgeGraphRouteFocus(null)}
+                  />
+                </div>
+              </div>
+            </div>
+          ) : null}
           {xpNotice ? (
             <div className="pointer-events-none fixed inset-x-0 bottom-24 z-50 flex justify-center px-4 lg:bottom-6">
               <div

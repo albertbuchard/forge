@@ -32,5 +32,10 @@ describe("CompanionSyncLabPage", () => {
     expect(screen.getByText("Long missing gap")).toBeInTheDocument();
     expect(screen.getByText("Exact overnight stay-gap-move bug")).toBeInTheDocument();
     expect(screen.getAllByText("Coverage locked").length).toBeGreaterThan(0);
+    expect(screen.getByText("Canonical box layers")).toBeInTheDocument();
+    expect(
+      screen.getByText("User-defined missing box overrides one automatic home stay")
+    ).toBeInTheDocument();
+    expect(screen.getByText("Projected visible boxes")).toBeInTheDocument();
   });
 });

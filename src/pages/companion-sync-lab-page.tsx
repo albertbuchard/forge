@@ -2,6 +2,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { PageHero } from "@/components/shell/page-hero";
 import {
+  companionSyncLabBoxLayerFixtures,
   classifyCompanionSyncLabGap,
   companionSyncLabGapFixtures,
   companionSyncLabSourceFixtures,
@@ -202,6 +203,151 @@ export function CompanionSyncLabPage() {
               </div>
             );
           })}
+        </div>
+      </Card>
+
+      <Card className="grid gap-4 rounded-[28px] border border-white/8 bg-[linear-gradient(180deg,rgba(10,17,31,0.96),rgba(8,13,24,0.92))] p-5">
+        <div>
+          <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/42">
+            Canonical box layers
+          </div>
+          <div className="mt-2 text-sm leading-6 text-white/58">
+            Raw phone measurements stay immutable. Forge generates automatic
+            boxes from them, user-defined boxes override them, and the final
+            projected boxes are what both the web and iPhone should render.
+          </div>
+        </div>
+        <div className="grid gap-4">
+          {companionSyncLabBoxLayerFixtures.map((fixture) => (
+            <div
+              key={fixture.id}
+              className="grid gap-4 rounded-[20px] border border-white/8 bg-white/[0.03] px-4 py-4"
+            >
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="text-sm font-medium text-white">{fixture.title}</div>
+                <Badge tone="meta">Raw: {fixture.rawMeasurements.length}</Badge>
+                <Badge tone="meta">Automatic: {fixture.automaticBoxes.length}</Badge>
+                <Badge tone="meta">User: {fixture.userBoxes.length}</Badge>
+                <Badge tone="signal">Projected: {fixture.projectedBoxes.length}</Badge>
+              </div>
+              <div className="grid gap-3 xl:grid-cols-4">
+                <div className="grid gap-2 rounded-[16px] border border-white/6 bg-black/10 p-3">
+                  <div className="text-[11px] uppercase tracking-[0.16em] text-white/42">
+                    Raw measurements
+                  </div>
+                  {fixture.rawMeasurements.map((entry) => (
+                    <div
+                      key={entry.id}
+                      className="rounded-[14px] border border-white/6 bg-white/[0.03] px-3 py-2 text-xs text-white/68"
+                    >
+                      <div className="font-medium text-white">{entry.label}</div>
+                      <div>
+                        {new Date(entry.startedAt).toLocaleTimeString()} →{" "}
+                        {new Date(entry.endedAt).toLocaleTimeString()}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <div className="grid gap-2 rounded-[16px] border border-white/6 bg-black/10 p-3">
+                  <div className="text-[11px] uppercase tracking-[0.16em] text-white/42">
+                    Automatic boxes
+                  </div>
+                  {fixture.automaticBoxes.map((entry) => (
+                    <div
+                      key={entry.id}
+                      className="rounded-[14px] border border-white/6 bg-white/[0.03] px-3 py-2 text-xs text-white/68"
+                    >
+                      <div className="flex items-center gap-2">
+                        <Badge
+                          tone={
+                            entry.kind === "trip"
+                              ? "signal"
+                              : entry.kind === "missing"
+                                ? "meta"
+                                : "default"
+                          }
+                        >
+                          {entry.kind}
+                        </Badge>
+                        <Badge tone="meta">{entry.origin}</Badge>
+                      </div>
+                      <div className="mt-2 font-medium text-white">{entry.title}</div>
+                      <div>
+                        {new Date(entry.startedAt).toLocaleTimeString()} →{" "}
+                        {new Date(entry.endedAt).toLocaleTimeString()}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <div className="grid gap-2 rounded-[16px] border border-white/6 bg-black/10 p-3">
+                  <div className="text-[11px] uppercase tracking-[0.16em] text-white/42">
+                    User-defined boxes
+                  </div>
+                  {fixture.userBoxes.map((entry) => (
+                    <div
+                      key={entry.id}
+                      className="rounded-[14px] border border-white/6 bg-white/[0.03] px-3 py-2 text-xs text-white/68"
+                    >
+                      <div className="flex items-center gap-2">
+                        <Badge tone={entry.kind === "missing" ? "meta" : "default"}>
+                          {entry.kind}
+                        </Badge>
+                        <Badge className="bg-pink-400/10 text-pink-100">
+                          {entry.origin}
+                        </Badge>
+                      </div>
+                      <div className="mt-2 font-medium text-white">{entry.title}</div>
+                      <div>
+                        {new Date(entry.startedAt).toLocaleTimeString()} →{" "}
+                        {new Date(entry.endedAt).toLocaleTimeString()}
+                      </div>
+                      <div className="mt-1 text-white/52">
+                        Overrides {entry.overrideCount} automatic box
+                        {entry.overrideCount === 1 ? "" : "es"}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <div className="grid gap-2 rounded-[16px] border border-white/6 bg-black/10 p-3">
+                  <div className="text-[11px] uppercase tracking-[0.16em] text-white/42">
+                    Projected visible boxes
+                  </div>
+                  {fixture.projectedBoxes.map((entry) => (
+                    <div
+                      key={entry.id}
+                      className="rounded-[14px] border border-white/6 bg-white/[0.03] px-3 py-2 text-xs text-white/68"
+                    >
+                      <div className="flex items-center gap-2">
+                        <Badge
+                          tone={
+                            entry.kind === "trip"
+                              ? "signal"
+                              : entry.kind === "missing"
+                                ? "meta"
+                                : "default"
+                          }
+                        >
+                          {entry.kind}
+                        </Badge>
+                        <Badge tone="meta">{entry.sourceKind}</Badge>
+                      </div>
+                      <div className="mt-2 font-medium text-white">{entry.title}</div>
+                      <div>
+                        {new Date(entry.startedAt).toLocaleTimeString()} →{" "}
+                        {new Date(entry.endedAt).toLocaleTimeString()}
+                      </div>
+                      <div className="mt-1 text-white/52">
+                        {entry.origin}
+                        {entry.overrideCount > 0
+                          ? ` · overrides ${entry.overrideCount}`
+                          : ""}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          ))}
         </div>
       </Card>
     </div>

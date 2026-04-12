@@ -2,6 +2,7 @@ import { defineConfig } from "vitest/config";
 import react from "@vitejs/plugin-react-swc";
 import tailwindcss from "@tailwindcss/vite";
 import path from "node:path";
+import { buildForgeHmrConfig } from "./src/lib/vite-hmr";
 
 function normalizeBasePath(value: string) {
   if (!value || value === "/") {
@@ -27,7 +28,9 @@ export default defineConfig(({ command }) => {
     server: {
       host: "0.0.0.0",
       port: 3027,
+      strictPort: true,
       allowedHosts: true,
+      hmr: buildForgeHmrConfig(base, process.env),
       proxy: {
         "/api": {
           target: apiTarget,

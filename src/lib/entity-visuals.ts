@@ -151,7 +151,7 @@ const ENTITY_VISUAL_SEEDS: ReadonlyArray<EntityVisualSeed> = [
     label: "Insight",
     icon: Sparkles,
     iconName: "Sparkles",
-    accentRgb: [250, 204, 21]
+    accentRgb: [244, 63, 94]
   },
   {
     kind: "calendar_event",

@@ -30,7 +30,8 @@ export function EntityLinkMultiSelect({
   emptyMessage = "No matching entries yet.",
   createLabel = "Create",
   onCreate,
-  className
+  className,
+  variant = "default"
 }: {
   options?: EntityLinkOption[];
   selectedValues?: string[];
@@ -40,6 +41,7 @@ export function EntityLinkMultiSelect({
   createLabel?: string;
   onCreate?: (query: string) => Promise<EntityLinkOption>;
   className?: string;
+  variant?: "default" | "action-bar";
 }) {
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
@@ -49,6 +51,7 @@ export function EntityLinkMultiSelect({
   const [createdOptions, setCreatedOptions] = useState<EntityLinkOption[]>([]);
   const safeOptions = options ?? [];
   const safeSelectedValues = selectedValues ?? [];
+  const actionBarVariant = variant === "action-bar";
 
   const mergedOptions = useMemo(() => {
     const map = new Map<string, EntityLinkOption>();
@@ -116,23 +119,53 @@ export function EntityLinkMultiSelect({
 
   return (
     <div className={cn("relative grid gap-2", className)}>
-      <div className="rounded-[22px] border border-white/10 bg-white/[0.04] px-3 py-3">
+      <div
+        className={cn(
+          "rounded-[22px] border border-white/10 bg-white/[0.04]",
+          actionBarVariant
+            ? "rounded-[20px] border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] px-3.5 py-3 shadow-[inset_0_1px_0_var(--ui-border-subtle)]"
+            : "px-3 py-3"
+        )}
+      >
         {selectedOptions.length > 0 ? (
-          <div className="mb-2 flex flex-wrap gap-2">
+          <div
+            className={cn(
+              "flex flex-wrap gap-2",
+              actionBarVariant ? "mb-2.5" : "mb-2"
+            )}
+          >
             {selectedOptions.map((option) => (
               <span key={option.value} className="inline-flex min-w-0 max-w-full items-center gap-2">
                 {option.kind ? (
-                  <EntityBadge kind={option.kind} label={option.label} compact className="max-w-[16rem]" />
+                  <EntityBadge
+                    kind={option.kind}
+                    label={option.label}
+                    compact
+                    gradient={false}
+                    className="max-w-[16rem]"
+                  />
                 ) : option.badge ? (
                   option.badge
                 ) : (
-                  <span className="inline-flex items-center gap-2 rounded-full bg-white/[0.08] px-3 py-1.5 text-sm text-white/78">
+                  <span
+                    className={cn(
+                      "inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-sm",
+                      actionBarVariant
+                        ? "border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] text-[var(--ui-ink-medium)]"
+                        : "bg-white/[0.08] text-white/78"
+                    )}
+                  >
                     <span className="max-w-[16rem] truncate">{option.label}</span>
                   </span>
                 )}
                 <button
                   type="button"
-                  className="rounded-full text-white/50 transition hover:text-white"
+                  className={cn(
+                    "rounded-full transition",
+                    actionBarVariant
+                      ? "text-[var(--ui-ink-faint)] hover:text-[var(--ui-ink-strong)]"
+                      : "text-white/50 hover:text-white"
+                  )}
                   aria-label={`Remove ${option.label}`}
                   onClick={() => removeValue(option.value)}
                 >
@@ -144,7 +177,14 @@ export function EntityLinkMultiSelect({
         ) : null}
 
         <div className="flex items-center gap-2">
-          <Search className="size-4 text-white/34" />
+          <Search
+            className={cn(
+              "size-4",
+              actionBarVariant
+                ? "text-[var(--ui-ink-faint)]"
+                : "text-white/34"
+            )}
+          />
           <input
             value={query}
             onChange={(event) => {
@@ -202,20 +242,38 @@ export function EntityLinkMultiSelect({
               void createValue();
             }}
             placeholder={placeholder}
-            className="min-w-0 flex-1 bg-transparent text-sm text-white placeholder:text-white/34 focus:outline-none"
+            className={cn(
+              "min-w-0 flex-1 bg-transparent text-sm focus:outline-none",
+              actionBarVariant
+                ? "text-[var(--ui-ink-strong)] placeholder:text-[var(--ui-ink-faint)]"
+                : "text-white placeholder:text-white/34"
+            )}
           />
         </div>
       </div>
 
       {open ? (
-        <div className="absolute top-full z-20 mt-1.5 max-h-64 w-full overflow-y-auto rounded-[22px] border border-white/10 bg-[rgba(10,15,27,0.96)] p-2 shadow-[0_26px_60px_rgba(4,8,18,0.32)] backdrop-blur-xl">
+        <div
+          className={cn(
+            "absolute top-full z-20 mt-1.5 max-h-64 w-full overflow-y-auto rounded-[22px] p-2 backdrop-blur-xl",
+            actionBarVariant
+              ? "border border-[var(--ui-border-subtle)] bg-[color-mix(in_srgb,var(--ui-surface-1)_94%,transparent)] shadow-[0_24px_56px_rgba(4,8,18,0.16)]"
+              : "border border-white/10 bg-[rgba(10,15,27,0.96)] shadow-[0_26px_60px_rgba(4,8,18,0.32)]"
+          )}
+        >
           {filteredOptions.map((option, index) => (
             <button
               key={option.value}
               type="button"
               className={cn(
                 "flex w-full items-start justify-between gap-3 rounded-[18px] px-3 py-2.5 text-left transition",
-                index === highlightedIndex ? "bg-white/[0.1] text-white" : "text-white/70 hover:bg-white/[0.06] hover:text-white"
+                index === highlightedIndex
+                  ? actionBarVariant
+                    ? "bg-[var(--ui-surface-3)] text-[var(--ui-ink-strong)]"
+                    : "bg-white/[0.1] text-white"
+                  : actionBarVariant
+                    ? "text-[var(--ui-ink-medium)] hover:bg-[var(--ui-surface-hover)] hover:text-[var(--ui-ink-strong)]"
+                    : "text-white/70 hover:bg-white/[0.06] hover:text-white"
               )}
               onMouseEnter={() => setHighlightedIndex(index)}
               onMouseDown={(event) => event.preventDefault()}
@@ -224,7 +282,12 @@ export function EntityLinkMultiSelect({
               <div className="min-w-0">
                 <div className="truncate text-sm font-medium">
                   {option.kind ? (
-                    <EntityBadge kind={option.kind} label={option.label} compact gradient={false} />
+                    <EntityBadge
+                      kind={option.kind}
+                      label={option.label}
+                      compact
+                      gradient={false}
+                    />
                   ) : option.menuBadge ? (
                     option.menuBadge
                   ) : option.badge ? (
@@ -233,7 +296,18 @@ export function EntityLinkMultiSelect({
                     option.label
                   )}
                 </div>
-                {option.description ? <div className="mt-1 text-xs leading-5 text-white/46">{option.description}</div> : null}
+                {option.description ? (
+                  <div
+                    className={cn(
+                      "mt-1 text-xs leading-5",
+                      actionBarVariant
+                        ? "text-[var(--ui-ink-soft)]"
+                        : "text-white/46"
+                    )}
+                  >
+                    {option.description}
+                  </div>
+                ) : null}
               </div>
             </button>
           ))}
@@ -242,7 +316,12 @@ export function EntityLinkMultiSelect({
             <button
               type="button"
               disabled={pendingCreate}
-              className="mt-1 flex w-full items-center gap-2 rounded-[18px] px-3 py-2.5 text-left text-sm text-[var(--secondary)] transition hover:bg-white/[0.06] disabled:opacity-50"
+              className={cn(
+                "mt-1 flex w-full items-center gap-2 rounded-[18px] px-3 py-2.5 text-left text-sm transition disabled:opacity-50",
+                actionBarVariant
+                  ? "text-[var(--secondary)] hover:bg-[var(--ui-surface-hover)]"
+                  : "text-[var(--secondary)] hover:bg-white/[0.06]"
+              )}
               onMouseDown={(event) => event.preventDefault()}
               onClick={() => void createValue()}
             >
@@ -254,12 +333,23 @@ export function EntityLinkMultiSelect({
           ) : null}
 
           {filteredOptions.length === 0 && (!normalizedQuery || hasExactMatch || !onCreate) ? (
-            <div className="px-3 py-2.5 text-sm text-white/42">{emptyMessage}</div>
+            <div
+              className={cn(
+                "px-3 py-2.5 text-sm",
+                actionBarVariant
+                  ? "text-[var(--ui-ink-soft)]"
+                  : "text-white/42"
+              )}
+            >
+              {emptyMessage}
+            </div>
           ) : null}
         </div>
       ) : null}
 
-      {createError ? <div className="text-sm text-rose-300">{createError}</div> : null}
+      {createError ? (
+        <div className="text-sm text-rose-300">{createError}</div>
+      ) : null}
     </div>
   );
 }

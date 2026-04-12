@@ -28,12 +28,12 @@ import { Input } from "@/components/ui/input";
 import { ErrorState } from "@/components/ui/page-state";
 import { SurfaceSkeleton } from "@/components/experience/surface-skeleton";
 import {
+  createMovementUserBox,
   createMovementPlace,
-  deleteMovementStay,
-  deleteMovementTrip,
+  deleteMovementUserBox,
   getMovementTimeline,
-  patchMovementStay,
-  patchMovementTrip
+  invalidateAutomaticMovementBox,
+  patchMovementUserBox
 } from "@/lib/api";
 import type {
   MovementTimelineLaneSide,
@@ -54,6 +54,7 @@ type MovementLifeTimelineProps = {
 };
 
 type TimelineDraft = {
+  kind: MovementTimelineSegment["kind"];
   label: string;
   placeLabel: string;
   tagsInput: string;
@@ -213,7 +214,27 @@ function isGenericTripTitle(title: string) {
   return normalized === "travel" || normalized === "trip" || normalized === "move";
 }
 
+function normalizeMissingSegmentTitle(segment: Extract<MovementTimelineSegment, { kind: "missing" }>) {
+  const normalized = segment.title.trim().toLowerCase();
+  if (
+    normalized.length === 0 ||
+    normalized === "stay" ||
+    normalized === "continued stay" ||
+    normalized === "repaired stay"
+  ) {
+    return segment.sourceKind === "user_defined"
+      ? segment.origin === "user_invalidated"
+        ? "User invalidated movement"
+        : "User-defined missing data"
+      : "Missing data";
+  }
+  return segment.title;
+}
+
 function displaySegmentTitle(segment: MovementTimelineSegment) {
+  if (segment.kind === "missing") {
+    return normalizeMissingSegmentTitle(segment);
+  }
   if (segment.kind === "trip" && isGenericTripTitle(segment.title)) {
     const start = resolveTripEndpoint(segment, "start").label;
     const end = resolveTripEndpoint(segment, "end").label;
@@ -262,6 +283,7 @@ function rowHeightForSegment(segment: MovementTimelineSegment) {
 
 function buildDraft(segment: MovementTimelineSegment): TimelineDraft {
   return {
+    kind: segment.kind,
     label: hasRecordedStay(segment)
       ? segment.stay.label || segment.title
       : hasRecordedTrip(segment)
@@ -273,6 +295,32 @@ function buildDraft(segment: MovementTimelineSegment): TimelineDraft {
     tagsInput: segment.tags.join(", "),
     startedAtInput: formatDateTimeInput(segment.startedAt),
     endedAtInput: formatDateTimeInput(segment.endedAt)
+  };
+}
+
+function buildNewDraft(
+  kind: MovementTimelineSegment["kind"],
+  seedSegment?: MovementTimelineSegment | null
+): TimelineDraft {
+  const seedStart = seedSegment?.startedAt ?? new Date(Date.now() - 60 * 60 * 1000).toISOString();
+  const seedEnd = seedSegment?.endedAt ?? new Date().toISOString();
+  return {
+    kind,
+    label:
+      kind === "missing"
+        ? "User-defined missing data"
+        : kind === "stay"
+          ? seedSegment?.placeLabel || "Manual stay"
+          : "Manual move",
+    placeLabel: seedSegment?.placeLabel ?? "",
+    tagsInput:
+      kind === "missing"
+        ? "user-defined, missing-data"
+        : kind === "stay"
+          ? "user-defined, stay"
+          : "user-defined, move",
+    startedAtInput: formatDateTimeInput(seedStart),
+    endedAtInput: formatDateTimeInput(seedEnd)
   };
 }
 
@@ -727,6 +775,26 @@ function MovementTimelineDetailCard({
                 : "Missing data"}
           </div>
           <div className="mt-2 text-lg text-white">{displaySegmentTitle(segment)}</div>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <Badge
+              className={
+                segment.sourceKind === "user_defined"
+                  ? "bg-fuchsia-400/12 text-fuchsia-100"
+                  : "bg-white/[0.06] text-white/70"
+              }
+            >
+              {segment.sourceKind === "user_defined"
+                ? segment.origin === "user_invalidated"
+                  ? "User invalidated"
+                  : "User-defined"
+                : "Automatic"}
+            </Badge>
+            {segment.overrideCount > 0 ? (
+              <Badge className="bg-amber-400/10 text-amber-100">
+                Overrides {segment.overrideCount} automatic box{segment.overrideCount === 1 ? "" : "es"}
+              </Badge>
+            ) : null}
+          </div>
         </div>
         <div className="flex items-center gap-2">
           <Button
@@ -734,7 +802,7 @@ function MovementTimelineDetailCard({
             variant="ghost"
             className="size-9 rounded-full border border-white/10 bg-white/[0.04] text-white/78 hover:bg-white/[0.08]"
             aria-label="Edit movement segment"
-            disabled={segment.kind === "missing"}
+            disabled={segment.kind === "missing" || !segment.editable}
           >
             <PencilLine className="size-4" />
           </Button>
@@ -795,6 +863,30 @@ function MovementTimelineDetailCard({
                 : `No reliable movement signal reached Forge from ${compactTimeLabel(segment.startedAt)} to ${compactTimeLabel(segment.endedAt)}.`}
           </div>
         </div>
+        <div className="rounded-[18px] border border-white/8 bg-white/[0.03] p-3">
+          <div className="text-[11px] uppercase tracking-[0.18em] text-white/34">
+            Projection model
+          </div>
+          <div className="mt-2 text-sm leading-6 text-white/76">
+            Raw phone measurements stay immutable. Forge derives automatic boxes from that raw movement evidence, then overlays user-defined boxes on top without mutating the imported raw data.
+          </div>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <Badge className="bg-white/[0.08] text-white/74">
+              Raw stays {segment.rawStayIds.length}
+            </Badge>
+            <Badge className="bg-white/[0.08] text-white/74">
+              Raw trips {segment.rawTripIds.length}
+            </Badge>
+            <Badge className="bg-white/[0.08] text-white/74">
+              Raw points {segment.rawPointCount}
+            </Badge>
+            {segment.hasLegacyCorrections ? (
+              <Badge className="bg-amber-400/10 text-amber-100">
+                Legacy corrections present
+              </Badge>
+            ) : null}
+          </div>
+        </div>
       </div>
 
       <div className="mt-5 flex flex-wrap items-center gap-2 text-sm text-white/56">
@@ -828,6 +920,7 @@ function MovementTimelineEditDialog({
   open,
   segment,
   draft,
+  creating,
   saving,
   onDraftChange,
   onSave,
@@ -836,6 +929,7 @@ function MovementTimelineEditDialog({
   open: boolean;
   segment: MovementTimelineSegment | null;
   draft: TimelineDraft | null;
+  creating: boolean;
   saving: boolean;
   onDraftChange: (draft: TimelineDraft) => void;
   onSave: () => void;
@@ -849,11 +943,13 @@ function MovementTimelineEditDialog({
           <div className="flex items-start justify-between gap-3">
             <div>
               <Dialog.Title className="font-display text-[1.3rem] tracking-[-0.05em] text-white">
-                Edit movement segment
+                {creating ? "Create movement box" : "Edit movement box"}
               </Dialog.Title>
               <Dialog.Description className="mt-2 text-sm leading-6 text-white/62">
-                {segment
-                  ? `Adjust the canonical ${segment.kind} metadata, labels, tags, timing, and place attachment in a dedicated form.`
+                {draft
+                  ? creating
+                    ? "Create a canonical user-defined stay, move, or missing-data box without mutating raw phone measurements."
+                    : `Adjust this user-defined ${draft.kind} box. Automatic boxes stay immutable and can only be invalidated.`
                   : "No segment selected."}
               </Dialog.Description>
             </div>
@@ -867,8 +963,31 @@ function MovementTimelineEditDialog({
             </Dialog.Close>
           </div>
 
-          {segment && draft ? (
+          {draft ? (
             <div className="mt-5 grid gap-4">
+              <label className="grid gap-2 text-sm text-white/78">
+                Kind
+                <div className="grid grid-cols-3 gap-2">
+                  {([
+                    ["stay", "Stay"],
+                    ["trip", "Move"],
+                    ["missing", "Missing"]
+                  ] as const).map(([kind, label]) => (
+                    <Button
+                      key={kind}
+                      type="button"
+                      variant="ghost"
+                      className={cn(
+                        "border border-white/10 bg-white/[0.04] text-white hover:bg-white/[0.08]",
+                        draft.kind === kind ? "ring-1 ring-[rgba(126,229,255,0.42)]" : ""
+                      )}
+                      onClick={() => onDraftChange({ ...draft, kind })}
+                    >
+                      {label}
+                    </Button>
+                  ))}
+                </div>
+              </label>
               <label className="grid gap-2 text-sm text-white/78">
                 Label
                 <Input
@@ -878,7 +997,7 @@ function MovementTimelineEditDialog({
                   }
                 />
               </label>
-              {segment.kind === "stay" ? (
+              {draft.kind !== "trip" ? (
                 <label className="grid gap-2 text-sm text-white/78">
                   Place
                   <Input
@@ -947,9 +1066,9 @@ function MovementTimelineEditDialog({
                 Cancel
               </Button>
             </Dialog.Close>
-            <Button onClick={onSave} disabled={!segment || !draft || saving}>
+            <Button onClick={onSave} disabled={!draft || saving}>
               <Save className="size-4" />
-              {saving ? "Saving…" : "Save changes"}
+              {saving ? "Saving…" : creating ? "Create box" : "Save changes"}
             </Button>
           </div>
         </Dialog.Content>
@@ -1152,6 +1271,7 @@ export function MovementLifeTimeline({ userIds = [] }: MovementLifeTimelineProps
   const [selectedSegmentId, setSelectedSegmentId] = useState<string | null>(null);
   const [draftById, setDraftById] = useState<Record<string, TimelineDraft>>({});
   const [editingSegmentId, setEditingSegmentId] = useState<string | null>(null);
+  const [creatingDraft, setCreatingDraft] = useState<TimelineDraft | null>(null);
   const [dataModalOpen, setDataModalOpen] = useState(false);
   const [reopenDataModalOnEditClose, setReopenDataModalOnEditClose] = useState(false);
   const [segmentQuery, setSegmentQuery] = useState("");
@@ -1349,55 +1469,79 @@ export function MovementLifeTimeline({ userIds = [] }: MovementLifeTimelineProps
   }, [segments, selectedSegmentId]);
 
   const saveMutation = useMutation({
-    mutationFn: async (segment: MovementTimelineSegment) => {
-      const draft = draftById[segment.id] ?? buildDraft(segment);
+    mutationFn: async (input: {
+      segment: MovementTimelineSegment | null;
+      draft: TimelineDraft;
+      creating: boolean;
+    }) => {
+      const { segment, draft, creating } = input;
       const tags = draft.tagsInput
         .split(",")
         .map((value) => value.trim())
         .filter(Boolean);
-      const startedAt = parseDateTimeInput(draft.startedAtInput) ?? segment.startedAt;
-      const endedAt = parseDateTimeInput(draft.endedAtInput) ?? segment.endedAt;
+      const startedAt =
+        parseDateTimeInput(draft.startedAtInput) ??
+        segment?.startedAt ??
+        new Date(Date.now() - 60 * 60 * 1000).toISOString();
+      const endedAt =
+        parseDateTimeInput(draft.endedAtInput) ??
+        segment?.endedAt ??
+        new Date().toISOString();
 
-      if (hasRecordedStay(segment)) {
-        let placeId: string | undefined;
-        const desiredPlaceLabel = draft.placeLabel.trim();
-        if (!hasRecordedStay(segment)) {
-          throw new Error("Only recorded stays can create or link canonical places.");
-        }
-        if (
-          desiredPlaceLabel &&
-          desiredPlaceLabel !== (segment.stay.place?.label ?? segment.placeLabel ?? "")
-        ) {
-          const created = await createMovementPlace(
-            {
-              label: desiredPlaceLabel,
-              latitude: segment.stay.centerLatitude,
-              longitude: segment.stay.centerLongitude,
-              radiusMeters: segment.stay.radiusMeters,
-              categoryTags: tags.length > 0 ? tags : ["movement"]
-            },
-            userIds
-          );
-          placeId = created.place.id;
-        }
+      if (creating) {
+        await createMovementUserBox(
+          {
+            kind: draft.kind,
+            startedAt,
+            endedAt,
+            title: draft.label.trim(),
+            subtitle:
+              draft.kind === "missing"
+                ? "User-defined missing-data override."
+                : "User-defined movement box.",
+            placeLabel: draft.placeLabel.trim() || null,
+            tags,
+            distanceMeters:
+              draft.kind === "trip" ? Math.max(segment?.trip?.distanceMeters ?? 150, 150) : null,
+            averageSpeedMps: draft.kind === "trip" ? segment?.trip?.averageSpeedMps ?? null : null,
+            metadata: { createdFrom: "movement-life-timeline" }
+          },
+          userIds
+        );
+        return;
+      }
 
-        await patchMovementStay(segment.stay.id, {
-          label: draft.label.trim(),
-          tags,
+      if (!segment) {
+        throw new Error("No movement box selected.");
+      }
+      if (segment.sourceKind !== "user_defined") {
+        throw new Error(
+          "Automatic movement boxes are immutable. Invalidate them into missing data or create a user-defined override instead."
+        );
+      }
+
+      await patchMovementUserBox(
+        segment.id,
+        {
+          kind: draft.kind,
           startedAt,
           endedAt,
-          ...(placeId ? { placeId } : {})
-        });
-      } else if (hasRecordedTrip(segment)) {
-        await patchMovementTrip(segment.trip.id, {
-          label: draft.label.trim(),
+          title: draft.label.trim(),
+          subtitle:
+            draft.kind === "missing"
+              ? "User-defined missing-data override."
+              : "User-defined movement box.",
+          placeLabel: draft.placeLabel.trim() || null,
           tags,
-          startedAt,
-          endedAt
-        });
-      } else {
-        throw new Error("Only recorded movement segments can be edited.");
-      }
+          distanceMeters:
+            draft.kind === "trip"
+              ? Math.max(segment.trip?.distanceMeters ?? 150, 150)
+              : null,
+          averageSpeedMps: draft.kind === "trip" ? segment.trip?.averageSpeedMps ?? null : null,
+          metadata: { updatedFrom: "movement-life-timeline" }
+        },
+        userIds
+      );
     },
     onSuccess: async () => {
       await Promise.all([
@@ -1420,15 +1564,18 @@ export function MovementLifeTimeline({ userIds = [] }: MovementLifeTimelineProps
 
   const deleteMutation = useMutation({
     mutationFn: async (segment: MovementTimelineSegment) => {
-      if (hasRecordedStay(segment)) {
-        await deleteMovementStay(segment.stay.id);
+      if (segment.sourceKind === "user_defined") {
+        await deleteMovementUserBox(segment.id, userIds);
         return;
       }
-      if (hasRecordedTrip(segment)) {
-        await deleteMovementTrip(segment.trip.id);
-        return;
-      }
-      throw new Error("Only recorded movement segments can be deleted.");
+      await invalidateAutomaticMovementBox(
+        segment.id,
+        {
+          title: "User invalidated automatic movement",
+          subtitle: `Overrides ${displaySegmentTitle(segment)} with missing data.`
+        },
+        userIds
+      );
     },
     onSuccess: async (_, segment) => {
       setSelectedSegmentId((current) => (current === segment.id ? null : current));
@@ -1555,6 +1702,8 @@ export function MovementLifeTimeline({ userIds = [] }: MovementLifeTimelineProps
   const editingDraft = editingSegment
     ? (draftById[editingSegment.id] ?? buildDraft(editingSegment))
     : null;
+  const isCreating = creatingDraft !== null;
+  const activeDraft = creatingDraft ?? editingDraft;
 
   const contentHeight = Math.max(
     timelineRows.length > 0
@@ -1568,11 +1717,21 @@ export function MovementLifeTimeline({ userIds = [] }: MovementLifeTimelineProps
   return (
     <section className="grid gap-4">
       <Card className="overflow-hidden rounded-[34px] border border-white/8 bg-[radial-gradient(circle_at_top,rgba(88,182,255,0.08),transparent_28%),linear-gradient(180deg,rgba(4,8,17,0.99),rgba(5,9,18,0.97))] p-4">
-        <div className="mb-3 flex items-center justify-between gap-3 px-1">
+            <div className="mb-3 flex items-center justify-between gap-3 px-1">
           <div className="font-label text-[11px] uppercase tracking-[0.22em] text-white/34">
             Movement
           </div>
           <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-8 rounded-full border border-white/10 bg-white/[0.04] px-3 text-white/72 hover:bg-white/[0.08] hover:text-white"
+              onClick={() => setCreatingDraft(buildNewDraft("stay", segments.at(-1) ?? null))}
+            >
+              <PencilLine className="size-3.5" />
+              Add box
+            </Button>
             <Button
               type="button"
               variant="ghost"
@@ -1647,11 +1806,16 @@ export function MovementLifeTimeline({ userIds = [] }: MovementLifeTimelineProps
         </div>
       </Card>
       <MovementTimelineEditDialog
-        open={editingSegment !== null}
+        open={editingSegment !== null || creatingDraft !== null}
         segment={editingSegment}
-        draft={editingDraft}
+        draft={activeDraft}
+        creating={isCreating}
         saving={saveMutation.isPending}
         onDraftChange={(nextDraft) => {
+          if (isCreating) {
+            setCreatingDraft(nextDraft);
+            return;
+          }
           if (!editingSegment) {
             return;
           }
@@ -1661,12 +1825,19 @@ export function MovementLifeTimeline({ userIds = [] }: MovementLifeTimelineProps
           }));
         }}
         onSave={() => {
-          if (!editingSegment) {
+          if (!activeDraft) {
             return;
           }
-          void saveMutation.mutateAsync(editingSegment, {
+          void saveMutation.mutateAsync(
+            {
+              segment: editingSegment,
+              draft: activeDraft,
+              creating: isCreating
+            },
+            {
             onSuccess: () => {
               setEditingSegmentId(null);
+              setCreatingDraft(null);
               if (reopenDataModalOnEditClose) {
                 setReopenDataModalOnEditClose(false);
                 setDataModalOpen(true);
@@ -1677,6 +1848,7 @@ export function MovementLifeTimeline({ userIds = [] }: MovementLifeTimelineProps
         onOpenChange={(open) => {
           if (!open) {
             setEditingSegmentId(null);
+            setCreatingDraft(null);
             if (reopenDataModalOnEditClose) {
               setReopenDataModalOnEditClose(false);
               setDataModalOpen(true);
@@ -1715,10 +1887,28 @@ export function MovementLifeTimeline({ userIds = [] }: MovementLifeTimelineProps
 
           <Card className="grid gap-3">
             <div className="flex items-center justify-between gap-3">
-              <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">
-                Data records
+              <div className="space-y-2">
+                <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">
+                  Canonical boxes
+                </div>
+                <div className="max-w-3xl text-sm leading-6 text-white/56">
+                  This list shows the canonical movement boxes projected by Forge. Automatic boxes are derived from immutable raw phone measurements. User-defined boxes override the projection without mutating raw movement data.
+                </div>
               </div>
               <div className="flex items-center gap-2">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-8 rounded-full border border-white/10 bg-white/[0.04] px-3 text-white/70"
+                  onClick={() => {
+                    setReopenDataModalOnEditClose(true);
+                    setDataModalOpen(false);
+                    setCreatingDraft(buildNewDraft("stay", filteredSegments.at(-1) ?? null));
+                  }}
+                >
+                  Add box
+                </Button>
                 <Badge tone="meta">{dataResultSummary}</Badge>
                 {invalidSegmentCount > 0 ? (
                   <Badge className="bg-amber-500/10 text-amber-100">
@@ -1782,6 +1972,8 @@ export function MovementLifeTimeline({ userIds = [] }: MovementLifeTimelineProps
                                   <div className="flex items-center gap-2 text-white">
                                     {segment.kind === "stay" ? (
                                       <MapPin className="size-3.5 shrink-0 text-[var(--primary)]" />
+                                    ) : segment.kind === "missing" ? (
+                                      <Database className="size-3.5 shrink-0 text-slate-300/80" />
                                     ) : (
                                       <Route className="size-3.5 shrink-0 text-[var(--primary)]" />
                                     )}
@@ -1795,12 +1987,25 @@ export function MovementLifeTimeline({ userIds = [] }: MovementLifeTimelineProps
                                   </div>
                                 </div>
                                 <div className="flex shrink-0 flex-wrap justify-end gap-1.5">
-                                  <Badge tone={segment.kind === "trip" ? "signal" : "meta"}>
-                                    {segment.kind === "trip"
-                                      ? "Move"
-                                      : segment.kind === "missing"
-                                        ? "Missing"
-                                        : "Stay"}
+                                    <Badge tone={segment.kind === "trip" ? "signal" : "meta"}>
+                                      {segment.kind === "trip"
+                                        ? "Move"
+                                        : segment.kind === "missing"
+                                          ? "Missing"
+                                          : "Stay"}
+                                    </Badge>
+                                  <Badge
+                                    className={
+                                      segment.sourceKind === "user_defined"
+                                        ? "bg-fuchsia-400/12 text-fuchsia-100"
+                                        : "bg-white/[0.06] text-white/70"
+                                    }
+                                  >
+                                    {segment.sourceKind === "user_defined"
+                                      ? segment.origin === "user_invalidated"
+                                        ? "User invalidated"
+                                        : "User-defined"
+                                      : "Automatic"}
                                   </Badge>
                                   <Badge tone="meta">
                                     {formatDurationLabel(segment.durationSeconds)}
@@ -1828,6 +2033,25 @@ export function MovementLifeTimeline({ userIds = [] }: MovementLifeTimelineProps
                                   {segment.placeLabel ? (
                                     <Badge tone="default">{segment.placeLabel}</Badge>
                                   ) : null}
+                                  {segment.overrideCount > 0 ? (
+                                    <Badge className="bg-amber-400/10 text-amber-100">
+                                      Overrides {segment.overrideCount}
+                                    </Badge>
+                                  ) : null}
+                                  <Badge className="bg-white/[0.06] text-white/66">
+                                    Raw stays {segment.rawStayIds.length}
+                                  </Badge>
+                                  <Badge className="bg-white/[0.06] text-white/66">
+                                    Raw trips {segment.rawTripIds.length}
+                                  </Badge>
+                                  <Badge className="bg-white/[0.06] text-white/66">
+                                    Raw points {segment.rawPointCount}
+                                  </Badge>
+                                  {segment.hasLegacyCorrections ? (
+                                    <Badge className="bg-amber-400/10 text-amber-100">
+                                      Legacy corrections
+                                    </Badge>
+                                  ) : null}
                                 </div>
                               </div>
                             </button>
@@ -1835,19 +2059,22 @@ export function MovementLifeTimeline({ userIds = [] }: MovementLifeTimelineProps
                               type="button"
                               variant="ghost"
                               size="sm"
-                              className="h-8 shrink-0 rounded-full border border-rose-400/22 bg-rose-500/10 px-2.5 text-rose-100 hover:bg-rose-500/18"
+                              className={cn(
+                                "h-8 shrink-0 rounded-full border px-2.5",
+                                segment.sourceKind === "user_defined"
+                                  ? "border-rose-400/22 bg-rose-500/10 text-rose-100 hover:bg-rose-500/18"
+                                  : "border-amber-400/22 bg-amber-500/10 text-amber-100 hover:bg-amber-500/18"
+                              )}
                               pending={
                                 deleteMutation.isPending &&
                                 deleteMutation.variables?.id === segment.id
                               }
                               pendingLabel=""
-                              disabled={!segment.editable}
                               onClick={() => {
-                                if (!segment.editable) {
-                                  return;
-                                }
                                 const confirmed = window.confirm(
-                                  `Delete ${displaySegmentTitle(segment)} and keep it deleted across companion sync?`
+                                  segment.sourceKind === "user_defined"
+                                    ? `Delete ${displaySegmentTitle(segment)} and remove this user-defined box from every synced surface?`
+                                    : `Invalidate ${displaySegmentTitle(segment)} into missing data and hide the automatic box everywhere?`
                                 );
                                 if (!confirmed) {
                                   return;

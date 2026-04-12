@@ -361,6 +361,7 @@ struct SyncReceipt: Decodable {
         let deletedTripExternalUids: [String]
         let settings: Settings
         let places: [Place]
+        let projectedBoxes: [ForgeMovementTimelineSegment]
     }
 
     let pairingSession: CompanionPairingSessionState?
@@ -458,13 +459,13 @@ enum MovementTimelineLaneSide: String, Codable {
     case right
 }
 
-struct ForgeMovementTimelinePage: Decodable {
+struct ForgeMovementTimelinePage: Codable {
     let segments: [ForgeMovementTimelineSegment]
     let nextCursor: String?
     let hasMore: Bool
 }
 
-struct ForgeMovementTimelinePlace: Decodable, Hashable, Identifiable {
+struct ForgeMovementTimelinePlace: Codable, Hashable, Identifiable {
     let id: String
     let externalUid: String
     let label: String
@@ -477,13 +478,13 @@ struct ForgeMovementTimelinePlace: Decodable, Hashable, Identifiable {
     let wikiNoteId: String?
 }
 
-struct ForgeMovementTimelineNote: Decodable, Hashable {
+struct ForgeMovementTimelineNote: Codable, Hashable {
     let id: String
     let title: String
     let slug: String
 }
 
-struct ForgeMovementTimelineTripPoint: Decodable, Hashable, Identifiable {
+struct ForgeMovementTimelineTripPoint: Codable, Hashable, Identifiable {
     let id: String
     let externalUid: String
     let recordedAt: String
@@ -495,7 +496,7 @@ struct ForgeMovementTimelineTripPoint: Decodable, Hashable, Identifiable {
     let isStopAnchor: Bool
 }
 
-struct ForgeMovementTimelineTripStop: Decodable, Hashable, Identifiable {
+struct ForgeMovementTimelineTripStop: Codable, Hashable, Identifiable {
     let id: String
     let externalUid: String
     let sequenceIndex: Int
@@ -511,7 +512,7 @@ struct ForgeMovementTimelineTripStop: Decodable, Hashable, Identifiable {
     let place: ForgeMovementTimelinePlace?
 }
 
-struct ForgeMovementTimelineStay: Decodable, Hashable, Identifiable {
+struct ForgeMovementTimelineStay: Codable, Hashable, Identifiable {
     let id: String
     let externalUid: String
     let pairingSessionId: String?
@@ -537,7 +538,7 @@ struct ForgeMovementTimelineStay: Decodable, Hashable, Identifiable {
     let note: ForgeMovementTimelineNote?
 }
 
-struct ForgeMovementTimelineTrip: Decodable, Hashable, Identifiable {
+struct ForgeMovementTimelineTrip: Codable, Hashable, Identifiable {
     let id: String
     let externalUid: String
     let pairingSessionId: String?
@@ -571,9 +572,10 @@ struct ForgeMovementTimelineTrip: Decodable, Hashable, Identifiable {
     let note: ForgeMovementTimelineNote?
 }
 
-struct ForgeMovementTimelineSegment: Decodable, Hashable, Identifiable {
+struct ForgeMovementTimelineSegment: Codable, Hashable, Identifiable {
     let id: String
     let kind: String
+    let sourceKind: String
     let origin: String
     let editable: Bool
     let startedAt: String
@@ -588,46 +590,27 @@ struct ForgeMovementTimelineSegment: Decodable, Hashable, Identifiable {
     let tags: [String]
     let syncSource: String
     let cursor: String
+    let overrideCount: Int
+    let overriddenAutomaticBoxIds: [String]
+    let rawStayIds: [String]
+    let rawTripIds: [String]
+    let rawPointCount: Int
+    let hasLegacyCorrections: Bool
     let stay: ForgeMovementTimelineStay?
     let trip: ForgeMovementTimelineTrip?
 }
 
-struct ForgeMovementStayPatch: Encodable {
-    var label: String?
-    var status: String?
-    var classification: String?
+struct ForgeMovementUserBoxPayload: Encodable {
+    var kind: String?
     var startedAt: String?
     var endedAt: String?
-    var centerLatitude: Double?
-    var centerLongitude: Double?
-    var radiusMeters: Double?
-    var sampleCount: Int?
-    var placeId: String??
-    var placeExternalUid: String??
-    var placeLabel: String?
+    var title: String?
+    var subtitle: String?
+    var placeLabel: String??
+    var anchorExternalUid: String??
     var tags: [String]?
-    var metadata: [String: String]?
-}
-
-struct ForgeMovementTripPatch: Encodable {
-    var label: String?
-    var status: String?
-    var travelMode: String?
-    var activityType: String?
-    var startedAt: String?
-    var endedAt: String?
-    var startPlaceId: String??
-    var endPlaceId: String??
-    var startPlaceExternalUid: String??
-    var endPlaceExternalUid: String??
     var distanceMeters: Double?
-    var movingSeconds: Int?
-    var idleSeconds: Int?
     var averageSpeedMps: Double??
-    var maxSpeedMps: Double??
-    var caloriesKcal: Double??
-    var expectedMet: Double??
-    var tags: [String]?
     var metadata: [String: String]?
 }
 

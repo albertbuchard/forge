@@ -30,7 +30,9 @@ function normalizeBasePath(value: string) {
   }
 
   const withLeadingSlash = value.startsWith("/") ? value : `/${value}`;
-  return withLeadingSlash.endsWith("/") ? withLeadingSlash : `${withLeadingSlash}/`;
+  return withLeadingSlash.endsWith("/")
+    ? withLeadingSlash
+    : `${withLeadingSlash}/`;
 }
 
 function normalizeAbsoluteUrl(value: string) {
@@ -330,7 +332,8 @@ async function serveAsset(
         reply.code(503);
         return {
           code: "frontend_not_built",
-          error: "Forge frontend build output is missing. Run the Vite build before serving the modern web client.",
+          error:
+            "Forge frontend build output is missing. Run the Vite build before serving the modern web client.",
           statusCode: 503
         };
       }

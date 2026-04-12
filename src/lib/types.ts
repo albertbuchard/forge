@@ -1576,7 +1576,14 @@ export interface MovementDayData {
   segments: Array<{
     id: string;
     kind: "stay" | "trip" | "missing";
-    origin: "recorded" | "continued_stay" | "repaired_gap" | "missing";
+    sourceKind: "automatic" | "user_defined";
+    origin:
+      | "recorded"
+      | "continued_stay"
+      | "repaired_gap"
+      | "missing"
+      | "user_defined"
+      | "user_invalidated";
     editable: boolean;
     startedAt: string;
     endedAt: string;
@@ -1589,6 +1596,11 @@ export interface MovementDayData {
     pickupCount: number;
     colorTone: string;
     noteCount: number;
+    overrideCount: number;
+    rawStayIds: string[];
+    rawTripIds: string[];
+    rawPointCount: number;
+    hasLegacyCorrections: boolean;
   }>;
   stays: MovementStayRecord[];
   trips: MovementTripRecord[];
@@ -1718,7 +1730,14 @@ export type MovementTimelineLaneSide = "left" | "right";
 export interface MovementTimelineSegmentBase {
   id: string;
   kind: "stay" | "trip" | "missing";
-  origin: "recorded" | "continued_stay" | "repaired_gap" | "missing";
+  sourceKind: "automatic" | "user_defined";
+  origin:
+    | "recorded"
+    | "continued_stay"
+    | "repaired_gap"
+    | "missing"
+    | "user_defined"
+    | "user_invalidated";
   editable: boolean;
   isInvalid: boolean;
   startedAt: string;
@@ -1733,6 +1752,12 @@ export interface MovementTimelineSegmentBase {
   tags: string[];
   syncSource: string;
   cursor: string;
+  overrideCount: number;
+  overriddenAutomaticBoxIds: string[];
+  rawStayIds: string[];
+  rawTripIds: string[];
+  rawPointCount: number;
+  hasLegacyCorrections: boolean;
 }
 
 export interface MovementTimelineStaySegment extends MovementTimelineSegmentBase {

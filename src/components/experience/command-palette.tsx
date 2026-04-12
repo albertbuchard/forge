@@ -505,7 +505,7 @@ export function CommandPalette({
 
   const entitySearchQuery = useQuery({
     queryKey: [
-      "forge-power-bar-search",
+      "forge-action-bar-search-legacy",
       normalizedQuery,
       [...selectedUserIds].sort().join("|")
     ],
@@ -687,7 +687,7 @@ export function CommandPalette({
       <Dialog.Portal>
         <Dialog.Overlay className="surface-overlay fixed inset-0 z-40 backdrop-blur-xl" />
         <Dialog.Content className="surface-modal-panel fixed inset-x-3 bottom-3 top-3 z-50 flex flex-col overflow-hidden rounded-[30px] border sm:inset-x-6 sm:bottom-6 sm:top-6 md:left-1/2 md:right-auto md:top-[9vh] md:h-[min(78vh,44rem)] md:w-[min(60rem,calc(100vw-2rem))] md:-translate-x-1/2 md:bottom-auto">
-          <Dialog.Title className="sr-only">Forge power bar</Dialog.Title>
+          <Dialog.Title className="sr-only">Forge Action bar</Dialog.Title>
           <Dialog.Description className="sr-only">
             Search routes and Forge records, then open the selected result.
           </Dialog.Description>

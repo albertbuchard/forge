@@ -337,6 +337,54 @@ def _resolve_current_work(config: ForgeConfig, args: Dict[str, Any]) -> Dict[str
     }
 
 
+def _resolve_doctor(config: ForgeConfig) -> Dict[str, Any]:
+    doctor_response = _request_json(config, "GET", "/api/v1/doctor")
+    overview = _request_json(config, "GET", "/api/v1/operator/overview")
+    onboarding = _request_json(config, "GET", "/api/v1/agents/onboarding")
+
+    doctor = doctor_response.get("doctor") if isinstance(doctor_response, dict) else None
+    overview_body = overview.get("overview") if isinstance(overview, dict) else None
+    capabilities = overview_body.get("capabilities") if isinstance(overview_body, dict) else None
+
+    warnings = [
+        entry
+        for entry in doctor.get("warnings", [])
+        if isinstance(doctor, dict) and isinstance(entry, str)
+    ] if isinstance(doctor, dict) else []
+
+    can_bootstrap = _can_bootstrap_operator_session(config.base_url)
+    if not config.api_token and can_bootstrap:
+        warnings.append(
+            "Forge apiToken is not set. Hermes will rely on operator-session bootstrap for protected reads and writes."
+        )
+    if not config.api_token and not can_bootstrap:
+        warnings.append(
+            "Forge apiToken is missing, and this target cannot use local or Tailscale operator-session bootstrap. Protected writes will fail."
+        )
+    if isinstance(capabilities, dict) and capabilities.get("canReadPsyche") is False:
+        warnings.append(
+            "The configured token cannot read Psyche state. Sensitive reflection summaries will stay partial."
+        )
+
+    return {
+        **(doctor if isinstance(doctor, dict) else {}),
+        "ok": bool(
+            isinstance(doctor, dict)
+            and doctor.get("ok") is True
+            and (config.api_token.strip() or can_bootstrap)
+        ),
+        "origin": config.origin,
+        "port": config.port,
+        "baseUrl": config.base_url,
+        "webAppUrl": config.web_app_url,
+        "apiTokenConfigured": bool(config.api_token.strip()),
+        "operatorSessionBootstrapAvailable": can_bootstrap,
+        "warnings": warnings,
+        "overview": overview,
+        "onboarding": onboarding,
+    }
+
+
 def _execute_spec(spec: Dict[str, Any], args: Dict[str, Any]) -> Dict[str, Any]:
     config = _ensure_runtime(_load_config())
     custom_handler = spec.get("custom_handler")
@@ -344,6 +392,8 @@ def _execute_spec(spec: Dict[str, Any], args: Dict[str, Any]) -> Dict[str, Any]:
         return _resolve_ui_entrypoint(config)
     if custom_handler == "current_work":
         return _resolve_current_work(config, args)
+    if custom_handler == "doctor":
+        return _resolve_doctor(config)
 
     path = _resolve_path(spec, args)
     method = _resolve_method(spec, args)

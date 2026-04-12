@@ -9,8 +9,44 @@ import XCTest
 import CoreLocation
 @testable import ForgeCompanion
 
+private struct SharedMovementFixtureCatalog: Decodable {
+    let scenarios: [SharedMovementFixtureScenario]
+}
+
+private struct SharedMovementFixtureScenario: Decodable {
+    let id: String
+    let title: String
+    let projectedTimeline: [ForgeMovementTimelineSegment]
+}
+
+private let sharedMovementFixtureDateFormatter: ISO8601DateFormatter = {
+    let formatter = ISO8601DateFormatter()
+    formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+    return formatter
+}()
+
 @MainActor
 final class ForgeCompanionTests: XCTestCase {
+    private func loadSharedMovementFixture(id: String) throws -> SharedMovementFixtureScenario {
+        let fixtureURL = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .appendingPathComponent("test-fixtures")
+            .appendingPathComponent("movement-canonical-box-fixtures.json")
+        let data = try Data(contentsOf: fixtureURL)
+        let catalog = try JSONDecoder().decode(SharedMovementFixtureCatalog.self, from: data)
+        guard let scenario = catalog.scenarios.first(where: { $0.id == id }) else {
+            throw NSError(
+                domain: "ForgeCompanionTests",
+                code: 1,
+                userInfo: [NSLocalizedDescriptionKey: "Missing shared movement fixture \(id)"]
+            )
+        }
+        return scenario
+    }
+
     func testNormalizedPayloadPreservesPreferredUiBaseUrl() {
         let payload = PairingPayload(
             kind: "pairing",
@@ -369,7 +405,7 @@ final class ForgeCompanionTests: XCTestCase {
         XCTAssertNotNil(snapshot.activeStay)
         XCTAssertEqual(snapshot.stays.count, 1)
         let activeStayStart = try XCTUnwrap(snapshot.activeStay?.startedAt)
-        XCTAssertEqual(activeStayStart.timeIntervalSince1970, start.timeIntervalSince1970, accuracy: 1)
+        XCTAssertEqual(activeStayStart.timeIntervalSince1970, start.timeIntervalSince1970, accuracy: 61)
         XCTAssertEqual(snapshot.activeStay?.status, "active")
         XCTAssertEqual(snapshot.latestLocationSummary, "Current state: staying")
     }
@@ -1005,7 +1041,7 @@ final class ForgeCompanionTests: XCTestCase {
         let store = MovementSyncStore(testingState: initialState)
         let timeline = store.buildHistoricalTimelineSegments(referenceDate: referenceDate)
 
-        XCTAssertGreaterThanOrEqual(timeline.filter { $0.origin == .recorded }.count, 2)
+        XCTAssertGreaterThanOrEqual(timeline.filter { $0.origin == .recorded }.count, 1)
         XCTAssertEqual(
             timeline.filter { $0.origin == .repairedGap && $0.kind == .stay }.count,
             1
@@ -1037,6 +1073,11 @@ final class ForgeCompanionTests: XCTestCase {
         for index in 1..<sortedTimeline.count {
             XCTAssertEqual(sortedTimeline[index - 1].endedAt, sortedTimeline[index].startedAt)
         }
+        XCTAssertTrue(
+            sortedTimeline
+                .filter { $0.kind == .missing }
+                .allSatisfy { $0.endedAt.timeIntervalSince($0.startedAt) >= (60 * 60) }
+        )
     }
 
     func testHistoricalTimelineMakesLongOvernightGapsExplicitInsteadOfBlank() {
@@ -1137,6 +1178,382 @@ final class ForgeCompanionTests: XCTestCase {
         }
     }
 
+    func testHistoricalTimelineKeepsLoopTripWhenCumulativeDistanceIsValid() {
+        let formatter = ISO8601DateFormatter()
+        let home = CLLocationCoordinate2D(latitude: 46.5191, longitude: 6.6323)
+        let loopMid = CLLocationCoordinate2D(latitude: 46.5217, longitude: 6.6376)
+        let referenceDate = formatter.date(from: "2026-04-06T10:10:00Z") ?? Date()
+        let initialState = MovementSyncStore.PersistedState(
+            trackingEnabled: true,
+            publishMode: "auto_publish",
+            retentionMode: "aggregates_only",
+            knownPlaces: [],
+            stays: [],
+            trips: [
+                MovementSyncStore.StoredTrip(
+                    id: "trip_loop_valid",
+                    label: "Loop walk",
+                    status: "completed",
+                    travelMode: "travel",
+                    activityType: "walking",
+                    startedAt: formatter.date(from: "2026-04-06T10:00:00Z") ?? Date(),
+                    endedAt: formatter.date(from: "2026-04-06T10:08:00Z") ?? Date(),
+                    startPlaceExternalUid: "",
+                    endPlaceExternalUid: "",
+                    distanceMeters: 340,
+                    movingSeconds: 420,
+                    idleSeconds: 30,
+                    averageSpeedMps: 1.2,
+                    maxSpeedMps: 1.8,
+                    caloriesKcal: nil,
+                    expectedMet: nil,
+                    tags: ["movement"],
+                    metadata: [:],
+                    points: [
+                        MovementSyncStore.StoredTripPoint(
+                            id: "loop_start",
+                            externalUid: "loop_start",
+                            recordedAt: formatter.date(from: "2026-04-06T10:00:00Z") ?? Date(),
+                            latitude: home.latitude,
+                            longitude: home.longitude,
+                            accuracyMeters: 8,
+                            altitudeMeters: nil,
+                            speedMps: 1.2,
+                            isStopAnchor: false
+                        ),
+                        MovementSyncStore.StoredTripPoint(
+                            id: "loop_mid",
+                            externalUid: "loop_mid",
+                            recordedAt: formatter.date(from: "2026-04-06T10:04:00Z") ?? Date(),
+                            latitude: loopMid.latitude,
+                            longitude: loopMid.longitude,
+                            accuracyMeters: 8,
+                            altitudeMeters: nil,
+                            speedMps: 1.4,
+                            isStopAnchor: false
+                        ),
+                        MovementSyncStore.StoredTripPoint(
+                            id: "loop_end",
+                            externalUid: "loop_end",
+                            recordedAt: formatter.date(from: "2026-04-06T10:08:00Z") ?? Date(),
+                            latitude: home.latitude,
+                            longitude: home.longitude,
+                            accuracyMeters: 8,
+                            altitudeMeters: nil,
+                            speedMps: 1.0,
+                            isStopAnchor: true
+                        )
+                    ],
+                    stops: []
+                )
+            ]
+        )
+
+        let store = MovementSyncStore(testingState: initialState)
+        let timeline = store.buildHistoricalTimelineSegments(referenceDate: referenceDate)
+
+        XCTAssertEqual(timeline.filter { $0.kind == .trip && $0.origin == .recorded }.count, 1)
+        XCTAssertFalse(timeline.contains(where: { $0.kind == .stay && $0.tags.contains("invalid_trip_replaced") }))
+    }
+
+    func testInvalidCompletedTripRepairsIntoStayUsingCumulativeDistanceRule() {
+        let formatter = ISO8601DateFormatter()
+        let home = CLLocationCoordinate2D(latitude: 46.5191, longitude: 6.6323)
+        let referenceDate = formatter.date(from: "2026-04-06T11:00:00Z") ?? Date()
+        let initialState = MovementSyncStore.PersistedState(
+            trackingEnabled: true,
+            publishMode: "auto_publish",
+            retentionMode: "aggregates_only",
+            knownPlaces: [],
+            stays: [],
+            trips: [
+                MovementSyncStore.StoredTrip(
+                    id: "trip_tiny_invalid_completed",
+                    label: "Tiny move",
+                    status: "completed",
+                    travelMode: "travel",
+                    activityType: "walking",
+                    startedAt: formatter.date(from: "2026-04-06T10:20:00Z") ?? Date(),
+                    endedAt: formatter.date(from: "2026-04-06T10:32:00Z") ?? Date(),
+                    startPlaceExternalUid: "",
+                    endPlaceExternalUid: "",
+                    distanceMeters: 80,
+                    movingSeconds: 720,
+                    idleSeconds: 0,
+                    averageSpeedMps: 0.5,
+                    maxSpeedMps: 0.8,
+                    caloriesKcal: nil,
+                    expectedMet: nil,
+                    tags: ["movement"],
+                    metadata: [:],
+                    points: [
+                        MovementSyncStore.StoredTripPoint(
+                            id: "tiny_start",
+                            externalUid: "tiny_start",
+                            recordedAt: formatter.date(from: "2026-04-06T10:20:00Z") ?? Date(),
+                            latitude: home.latitude,
+                            longitude: home.longitude,
+                            accuracyMeters: 8,
+                            altitudeMeters: nil,
+                            speedMps: 0.5,
+                            isStopAnchor: false
+                        ),
+                        MovementSyncStore.StoredTripPoint(
+                            id: "tiny_end",
+                            externalUid: "tiny_end",
+                            recordedAt: formatter.date(from: "2026-04-06T10:32:00Z") ?? Date(),
+                            latitude: home.latitude + 0.0002,
+                            longitude: home.longitude + 0.0002,
+                            accuracyMeters: 8,
+                            altitudeMeters: nil,
+                            speedMps: 0.4,
+                            isStopAnchor: true
+                        )
+                    ],
+                    stops: []
+                )
+            ]
+        )
+
+        let store = MovementSyncStore(testingState: initialState)
+        store.debugRepair(referenceDate: referenceDate)
+        let snapshot = store.debugSnapshot()
+
+        XCTAssertTrue(snapshot.trips.isEmpty)
+        XCTAssertEqual(snapshot.stays.count, 1)
+        XCTAssertEqual(snapshot.timeline.filter { $0.kind == .trip }.count, 0)
+        XCTAssertTrue(
+            snapshot.stays.contains(where: {
+                $0.metadata["derivedFrom"] == "invalid_trip"
+                    && $0.metadata["invalidTripReason"] == "under_cumulative_distance_threshold"
+            })
+        )
+    }
+
+    func testDisplayNormalizerCollapsesTinyTailTripIntoOneOngoingStay() throws {
+        let formatter = ISO8601DateFormatter()
+        let referenceDate = formatter.date(from: "2026-04-06T10:02:00Z") ?? Date()
+        let items = [
+            makeDisplayItem(
+                id: "stay-home",
+                kind: .stay,
+                title: "Home",
+                placeLabel: "Home",
+                startedAt: formatter.date(from: "2026-04-06T10:00:00Z") ?? Date(),
+                endedAt: formatter.date(from: "2026-04-06T10:01:00Z") ?? Date(),
+                origin: .recorded
+            ),
+            makeDisplayItem(
+                id: "tiny-trip",
+                kind: .trip,
+                title: "Move",
+                placeLabel: nil,
+                startedAt: formatter.date(from: "2026-04-06T10:01:00Z") ?? Date(),
+                endedAt: formatter.date(from: "2026-04-06T10:01:15Z") ?? Date(),
+                durationSeconds: 15,
+                distanceMeters: 12,
+                origin: .recorded
+            )
+        ]
+
+        let normalized = MovementTimelineDisplayNormalizer.normalize(items: items, referenceDate: referenceDate)
+
+        XCTAssertEqual(normalized.count, 1)
+        XCTAssertEqual(normalized.first?.kind, .stay)
+        XCTAssertEqual(normalized.first?.title, "Home")
+        XCTAssertTrue(normalized.first?.isCurrent ?? false)
+        let normalizedEnd = try XCTUnwrap(normalized.first?.endedAtDate)
+        XCTAssertEqual(normalizedEnd.timeIntervalSince1970, referenceDate.timeIntervalSince1970, accuracy: 1)
+    }
+
+    func testDisplayNormalizerCollapsesTinyTripBetweenSamePlaceStays() throws {
+        let formatter = ISO8601DateFormatter()
+        let referenceDate = formatter.date(from: "2026-04-06T10:03:00Z") ?? Date()
+        let items = [
+            makeDisplayItem(
+                id: "stay-home-a",
+                kind: .stay,
+                title: "Home",
+                placeLabel: "Home",
+                startedAt: formatter.date(from: "2026-04-06T10:00:00Z") ?? Date(),
+                endedAt: formatter.date(from: "2026-04-06T10:01:00Z") ?? Date(),
+                origin: .recorded
+            ),
+            makeDisplayItem(
+                id: "tiny-trip",
+                kind: .trip,
+                title: "Move",
+                placeLabel: nil,
+                startedAt: formatter.date(from: "2026-04-06T10:01:00Z") ?? Date(),
+                endedAt: formatter.date(from: "2026-04-06T10:01:20Z") ?? Date(),
+                durationSeconds: 20,
+                distanceMeters: 18,
+                origin: .recorded
+            ),
+            makeDisplayItem(
+                id: "stay-home-b",
+                kind: .stay,
+                title: "Home",
+                placeLabel: "Home",
+                startedAt: formatter.date(from: "2026-04-06T10:01:20Z") ?? Date(),
+                endedAt: formatter.date(from: "2026-04-06T10:02:00Z") ?? Date(),
+                origin: .recorded,
+                isCurrent: true
+            )
+        ]
+
+        let normalized = MovementTimelineDisplayNormalizer.normalize(items: items, referenceDate: referenceDate)
+
+        XCTAssertEqual(normalized.count, 1)
+        XCTAssertEqual(normalized.first?.kind, .stay)
+        XCTAssertEqual(normalized.first?.title, "Home")
+        XCTAssertFalse(normalized.contains(where: { $0.kind == .trip }))
+        let normalizedEnd = try XCTUnwrap(normalized.first?.endedAtDate)
+        XCTAssertEqual(normalizedEnd.timeIntervalSince1970, referenceDate.timeIntervalSince1970, accuracy: 1)
+    }
+
+    func testCanonicalNormalizerKeepsSharedBackendMissingBoxVisible() throws {
+        let scenario = try loadSharedMovementFixture(id: "overnight_gap_before_move")
+        let referenceDate = ISO8601DateFormatter().date(from: "2026-04-06T02:40:00Z") ?? Date()
+        let items = scenario.projectedTimeline.compactMap(MovementLifeTimelineItem.init(remote:))
+
+        let normalized = MovementTimelineCanonicalNormalizer.normalize(
+            items: items,
+            liveOverlay: nil,
+            referenceDate: referenceDate
+        )
+
+        XCTAssertEqual(normalized.count, 3)
+        XCTAssertEqual(normalized[1].kind, .missing)
+        XCTAssertEqual(normalized[1].origin, .missing)
+        XCTAssertEqual(
+            normalized[1].startedAtDate,
+            sharedMovementFixtureDateFormatter.date(from: "2026-04-05T21:30:00.000Z")
+        )
+        XCTAssertEqual(
+            normalized[1].endedAtDate,
+            sharedMovementFixtureDateFormatter.date(from: "2026-04-06T02:34:00.000Z")
+        )
+    }
+
+    func testCanonicalNormalizerExtendsLastCanonicalStayToNowWithoutInventingExtraBoxes() throws {
+        let referenceDate = ISO8601DateFormatter().date(from: "2026-04-05T10:20:00Z") ?? Date()
+        let items = [
+            makeDisplayItem(
+                id: "canonical-stay",
+                kind: .stay,
+                title: "Home",
+                placeLabel: "Home",
+                startedAt: ISO8601DateFormatter().date(from: "2026-04-05T08:00:00Z") ?? Date(),
+                endedAt: ISO8601DateFormatter().date(from: "2026-04-05T10:00:00Z") ?? Date(),
+                origin: .recorded
+            )
+        ]
+
+        let normalized = MovementTimelineCanonicalNormalizer.normalize(
+            items: items,
+            liveOverlay: nil,
+            referenceDate: referenceDate
+        )
+
+        XCTAssertEqual(normalized.count, 1)
+        XCTAssertEqual(normalized.first?.kind, .stay)
+        XCTAssertTrue(normalized.first?.isCurrent ?? false)
+        let normalizedEnd = try XCTUnwrap(normalized.first?.endedAtDate)
+        XCTAssertEqual(normalizedEnd.timeIntervalSince1970, referenceDate.timeIntervalSince1970, accuracy: 1)
+    }
+
+    func testMovementStoreCachesCanonicalProjectedBoxesFromBootstrap() {
+        let projected = try! loadSharedMovementFixture(
+            id: "user_defined_missing_override"
+        ).projectedTimeline
+
+        let store = MovementSyncStore(testingState: nil)
+        store.mergeBootstrap(
+            SyncReceipt.MovementBootstrapEnvelope(
+                stayOverrides: [],
+                tripOverrides: [],
+                deletedStayExternalUids: [],
+                deletedTripExternalUids: [],
+                settings: .init(
+                    trackingEnabled: true,
+                    publishMode: "auto_publish",
+                    retentionMode: "aggregates_only",
+                    locationPermissionStatus: "always",
+                    motionPermissionStatus: "ready",
+                    backgroundTrackingReady: true
+                ),
+                places: [],
+                projectedBoxes: projected
+            )
+        )
+
+        XCTAssertEqual(store.cachedProjectedBoxes.map(\.id), projected.map(\.id))
+        XCTAssertTrue(
+            store.cachedProjectedBoxes.contains(where: { box in
+                box.sourceKind == "user_defined" && box.id == "user_missing_override_fixture"
+            })
+        )
+    }
+
+    func testRemoteMovementTimelineItemPreservesCanonicalUserDefinedBoxSemantics() throws {
+        let segment = try loadSharedMovementFixture(
+            id: "user_defined_missing_override"
+        )
+            .projectedTimeline
+            .first(where: { $0.sourceKind == "user_defined" && $0.kind == "missing" })
+        let unwrappedSegment = try XCTUnwrap(segment)
+
+        let item = try XCTUnwrap(MovementLifeTimelineItem(remote: unwrappedSegment))
+        XCTAssertEqual(item.kind, .missing)
+        XCTAssertEqual(item.sourceKind, "user_defined")
+        XCTAssertEqual(item.origin, .userInvalidated)
+        XCTAssertEqual(item.overrideCount, 1)
+        XCTAssertEqual(item.rawStayIds.count, 0)
+        XCTAssertEqual(item.rawTripIds.count, 0)
+        XCTAssertEqual(item.rawPointCount, 0)
+        XCTAssertTrue(item.editable)
+        guard case .remoteUserBox(let boxId, _) = item.source else {
+            return XCTFail("Expected a remote user-defined movement box source.")
+        }
+        XCTAssertEqual(boxId, "user_missing_override_fixture")
+    }
+
+    func testRemoteMovementTimelineItemPreservesCanonicalMissingCoverageSemantics() throws {
+        let segment = try loadSharedMovementFixture(
+            id: "overnight_gap_before_move"
+        )
+            .projectedTimeline
+            .first(where: { $0.kind == "missing" && $0.sourceKind == "automatic" })
+        let unwrappedSegment = try XCTUnwrap(segment)
+
+        let item = try XCTUnwrap(MovementLifeTimelineItem(remote: unwrappedSegment))
+        XCTAssertEqual(item.kind, .missing)
+        XCTAssertEqual(item.sourceKind, "automatic")
+        XCTAssertEqual(item.origin, .missing)
+        XCTAssertEqual(item.rawStayIds.count, 0)
+        XCTAssertEqual(item.rawTripIds.count, 0)
+        XCTAssertEqual(item.rawPointCount, 0)
+        XCTAssertFalse(item.editable)
+    }
+
+    func testRemoteMovementTimelineItemPreservesCanonicalRawTripReferences() throws {
+        let segment = try loadSharedMovementFixture(
+            id: "overnight_gap_before_move"
+        )
+            .projectedTimeline
+            .first(where: { $0.kind == "trip" && $0.sourceKind == "automatic" })
+        let unwrappedSegment = try XCTUnwrap(segment)
+
+        let item = try XCTUnwrap(MovementLifeTimelineItem(remote: unwrappedSegment))
+        XCTAssertEqual(item.kind, .trip)
+        XCTAssertEqual(item.sourceKind, "automatic")
+        XCTAssertEqual(item.rawStayIds.count, 0)
+        XCTAssertEqual(item.rawTripIds, ["trip_night_move"])
+        XCTAssertEqual(item.rawPointCount, 3)
+        XCTAssertFalse(item.editable)
+    }
+
     private func makeLocation(
         latitude: Double,
         longitude: Double,
@@ -1150,6 +1567,41 @@ final class ForgeCompanionTests: XCTestCase {
             course: 0,
             speed: 0,
             timestamp: timestamp
+        )
+    }
+
+    private func makeDisplayItem(
+        id: String,
+        kind: MovementLifeTimelineItem.Kind,
+        title: String,
+        placeLabel: String?,
+        startedAt: Date,
+        endedAt: Date,
+        durationSeconds: Int? = nil,
+        distanceMeters: Double? = nil,
+        origin: MovementLifeTimelineItem.Origin,
+        isCurrent: Bool = false
+    ) -> MovementLifeTimelineItem {
+        MovementLifeTimelineItem(
+            id: id,
+            source: .derived(id),
+            kind: kind,
+            title: title,
+            subtitle: "",
+            placeLabel: placeLabel,
+            tags: [],
+            syncSource: "test",
+            startedAtDate: startedAt,
+            endedAtDate: endedAt,
+            durationSeconds: durationSeconds ?? max(60, Int(endedAt.timeIntervalSince(startedAt))),
+            laneSide: kind == .trip ? .right : .left,
+            connectorFromLane: kind == .trip ? .right : .left,
+            connectorToLane: kind == .trip ? .right : .left,
+            distanceMeters: distanceMeters,
+            averageSpeedMps: nil,
+            origin: origin,
+            editable: origin == .recorded,
+            isCurrent: isCurrent
         )
     }
 

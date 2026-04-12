@@ -13,10 +13,16 @@ import type { ForgeSnapshot } from "@/lib/types";
 const {
   getKnowledgeGraphMock,
   useForgeShellMock,
+  useAppDispatchMock,
+  useAppSelectorMock,
+  dispatchMock,
   forceViewModeMock
 } = vi.hoisted(() => ({
   getKnowledgeGraphMock: vi.fn(),
   useForgeShellMock: vi.fn(),
+  dispatchMock: vi.fn(),
+  useAppDispatchMock: vi.fn(),
+  useAppSelectorMock: vi.fn(),
   forceViewModeMock: {
     current: "render" as "render" | "throw"
   }
@@ -28,6 +34,11 @@ vi.mock("@/lib/api", () => ({
 
 vi.mock("@/components/shell/app-shell", () => ({
   useForgeShell: useForgeShellMock
+}));
+
+vi.mock("@/store/typed-hooks", () => ({
+  useAppDispatch: useAppDispatchMock,
+  useAppSelector: useAppSelectorMock
 }));
 
 vi.mock("@/components/psyche/entity-link-multiselect", () => ({
@@ -90,10 +101,15 @@ vi.mock("@/components/knowledge-graph/knowledge-graph-force-view", () => ({
   KnowledgeGraphForceView: ({
     nodes,
     focusNodeId,
+    physicsSettings,
     onSelectNode
   }: {
     nodes: KnowledgeGraphNode[];
     focusNodeId: string | null;
+    physicsSettings: {
+      focusRepulsion: number;
+      focusDiffusion: number;
+    };
     onSelectNode: (node: KnowledgeGraphNode | null) => void;
   }) => {
     if (forceViewModeMock.current === "throw") {
@@ -103,6 +119,7 @@ vi.mock("@/components/knowledge-graph/knowledge-graph-force-view", () => ({
       <div aria-label="Knowledge graph canvas">
         <div>{`nodes:${nodes.length}`}</div>
         <div>{focusNodeId ? `focus:${focusNodeId}` : "focus:none"}</div>
+        <div>{`physics:${physicsSettings.focusRepulsion.toFixed(2)}:${physicsSettings.focusDiffusion.toFixed(2)}`}</div>
         <button type="button" onClick={() => onSelectNode(nodes[0] ?? null)}>
           Focus first node
         </button>
@@ -442,6 +459,21 @@ describe("KnowledgeGraphPage", () => {
       }))
     });
     forceViewModeMock.current = "render";
+    dispatchMock.mockReset();
+    useAppDispatchMock.mockReturnValue(dispatchMock);
+    useAppSelectorMock.mockImplementation((selector: (state: unknown) => unknown) =>
+      selector({
+        shell: {
+          knowledgeGraphOverlayFocus: null
+        },
+        knowledgeGraphDiagnostics: {
+          panelOpen: false,
+          latestStatus: null,
+          recentEvents: [],
+          recentSnapshots: []
+        }
+      })
+    );
     getKnowledgeGraphMock.mockResolvedValue(graphFixture);
     useForgeShellMock.mockReturnValue({
       selectedUserIds: ["user_operator"],
@@ -452,6 +484,9 @@ describe("KnowledgeGraphPage", () => {
   afterEach(() => {
     cleanup();
     vi.clearAllMocks();
+    window.localStorage.clear();
+    delete window.__FORGE_ENABLE_GRAPH_DIAGNOSTICS__;
+    delete window.__FORGE_KNOWLEDGE_GRAPH_PAGE_TEST__;
   });
 
   it("builds the graph query from route params", async () => {
@@ -482,6 +517,43 @@ describe("KnowledgeGraphPage", () => {
         "Search titles, summaries, owners, tags, or add a quick filter chip"
       )
     ).toBeInTheDocument();
+  });
+
+  it("records the resolved graph diagnostics event only once per stable query result", async () => {
+    useAppSelectorMock.mockImplementation((selector: (state: unknown) => unknown) =>
+      selector({
+        shell: {
+          knowledgeGraphOverlayFocus: null
+        },
+        knowledgeGraphDiagnostics: {
+          panelOpen: true,
+          latestStatus: null,
+          recentEvents: [],
+          recentSnapshots: []
+        }
+      })
+    );
+    const groupSpy = vi
+      .spyOn(console, "groupCollapsed")
+      .mockImplementation(() => {});
+    const infoSpy = vi.spyOn(console, "info").mockImplementation(() => {});
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+    const endSpy = vi.spyOn(console, "groupEnd").mockImplementation(() => {});
+
+    renderPage("/knowledge-graph?q=North%20Star&entityKind=goal&limit=120");
+
+    await waitFor(() =>
+      expect(
+        groupSpy.mock.calls.filter(([label]) =>
+          String(label).includes("graph_query_resolved")
+        )
+      ).toHaveLength(1)
+    );
+
+    groupSpy.mockRestore();
+    infoSpy.mockRestore();
+    logSpy.mockRestore();
+    endSpy.mockRestore();
   });
 
   it("updates free text, entity filters, and max nodes through the graph controls", async () => {
@@ -546,7 +618,146 @@ describe("KnowledgeGraphPage", () => {
     );
   });
 
-  it("opens and closes the focus drawer from node selection", async () => {
+  it("opens the graph appearance dialog and pushes physics slider changes into the graph view", async () => {
+    renderPage();
+    await waitFor(() =>
+      expect(
+        screen.queryByText("Loading the Forge world model")
+      ).not.toBeInTheDocument()
+    );
+
+    expect(screen.getByText("physics:2.25:1.95")).toBeInTheDocument();
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: /open graph appearance settings/i
+      })
+    );
+
+    expect(
+      await screen.findByText("Tune the focus field")
+    ).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("Focused repulsion"), {
+      target: { value: "3.10" }
+    });
+    fireEvent.change(screen.getByLabelText("Focus diffusion"), {
+      target: { value: "2.60" }
+    });
+
+    await waitFor(() =>
+      expect(screen.getByText("physics:3.10:2.60")).toBeInTheDocument()
+    );
+  });
+
+  it("opens the dev diagnostics panel from Redux-backed state in dev mode", async () => {
+    useAppSelectorMock.mockImplementation((selector: (state: unknown) => unknown) =>
+      selector({
+        shell: {
+          knowledgeGraphOverlayFocus: null
+        },
+        knowledgeGraphDiagnostics: {
+          panelOpen: true,
+          latestStatus: {
+            datasetSignature: "graph-a",
+            route: "/knowledge-graph",
+            rendererMode: "sigma",
+            startupPhase: "startup_verified",
+            startupInvariantSatisfied: true,
+            visibleNodeCount: 2,
+            focusedNodeId: null,
+            primaryFocusedNodeId: null,
+            graphCentroid: { x: 0, y: 0 },
+            boundsCenter: { x: 0, y: 0 },
+            camera: { x: 0, y: 0, ratio: 1, angle: 0 },
+            cameraTarget: null,
+            driftMetrics: {
+              centroidDistanceFromOrigin: 0,
+              boundsCenterDistanceFromOrigin: 0,
+              cameraDistanceFromOrigin: 0,
+              cameraToCentroidDistance: 0
+            },
+            latestSnapshotAt: "2026-04-12T14:00:05.000Z",
+            lastVerifiedAt: "2026-04-12T14:00:06.000Z"
+          },
+          recentEvents: [
+            {
+              id: "event-1",
+              createdAt: "2026-04-12T14:00:01.000Z",
+              level: "info",
+              eventKey: "startup_verified",
+              message: "Startup verified",
+              route: "/knowledge-graph",
+              details: {}
+            }
+          ],
+          recentSnapshots: [
+            {
+              id: "snapshot-1",
+              capturedAt: "2026-04-12T14:00:05.000Z",
+              datasetSignature: "graph-a",
+              route: "/knowledge-graph",
+              rendererMode: "sigma",
+              startupPhase: "startup_verified",
+              startupInvariantSatisfied: true,
+              focusedNodeId: null,
+              primaryFocusedNodeId: null,
+              graphCentroid: { x: 0, y: 0 },
+              boundsCenter: { x: 0, y: 0 },
+              camera: { x: 0, y: 0, ratio: 1, angle: 0 },
+              cameraTarget: null,
+              driftMetrics: {
+                centroidDistanceFromOrigin: 0,
+                boundsCenterDistanceFromOrigin: 0,
+                cameraDistanceFromOrigin: 0,
+                cameraToCentroidDistance: 0
+              },
+              nodeCount: 2,
+              viewportSize: {
+                width: 1280,
+                height: 720
+              },
+              nodePositions: [
+                { id: "goal:goal-1", x: -1, y: 0.5 },
+                { id: "project:project-1", x: 1, y: -0.5 }
+              ]
+            }
+          ]
+        }
+      })
+    );
+
+    renderPage();
+    await waitFor(() =>
+      expect(
+        screen.queryByText("Loading the Forge world model")
+      ).not.toBeInTheDocument()
+    );
+
+    expect(
+      screen.getByText("Knowledge Graph truth surface")
+    ).toBeInTheDocument();
+    expect(screen.getAllByText("startup_verified").length).toBeGreaterThan(0);
+    expect(screen.getByText("Startup verified")).toBeInTheDocument();
+  });
+
+  it("restores saved graph physics settings from local storage", async () => {
+    window.localStorage.setItem(
+      "forge.knowledge-graph.physics",
+      JSON.stringify({
+        focusRepulsion: 2.9,
+        focusDiffusion: 2.4
+      })
+    );
+
+    renderPage();
+
+    await waitFor(() =>
+      expect(screen.getByText("physics:2.90:2.40")).toBeInTheDocument()
+    );
+  });
+
+  it("publishes desktop focus details through the shell store instead of a local drawer", async () => {
     renderPage();
     await waitFor(() =>
       expect(
@@ -555,12 +766,17 @@ describe("KnowledgeGraphPage", () => {
     );
 
     fireEvent.click(screen.getByRole("button", { name: "Focus first node" }));
-    expect(await screen.findByText("Focus drawer: North Star")).toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole("button", { name: "Close focus drawer" }));
-
     await waitFor(() =>
-      expect(screen.queryByText("Focus drawer: North Star")).not.toBeInTheDocument()
+      expect(dispatchMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: "shell/setKnowledgeGraphOverlayFocus",
+          payload: expect.objectContaining({
+            focusNode: expect.objectContaining({
+              id: "goal:goal-1"
+            })
+          })
+        })
+      )
     );
   });
 
@@ -586,10 +802,49 @@ describe("KnowledgeGraphPage", () => {
     fireEvent.click(screen.getByRole("button", { name: "Focus first node" }));
     expect(screen.getByText("focus:goal:goal-1")).toBeInTheDocument();
     expect(screen.queryByTestId("mobile-sheet")).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("knowledge-graph-desktop-toolbar")
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Open graph filters" })
+    ).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Focus first node" }));
     expect(await screen.findByTestId("mobile-sheet")).toBeInTheDocument();
     expect(screen.getByText("Entity panel: North Star")).toBeInTheDocument();
+  });
+
+  it("exposes a page diagnostics activation hook that reopens the focused mobile sheet", async () => {
+    window.__FORGE_ENABLE_GRAPH_DIAGNOSTICS__ = true;
+    vi.mocked(window.matchMedia).mockImplementation(() => ({
+      matches: true,
+      media: "(max-width: 1023px)",
+      onchange: null,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      dispatchEvent: vi.fn()
+    }));
+
+    renderPage();
+    await waitFor(() =>
+      expect(
+        screen.queryByText("Loading the Forge world model")
+      ).not.toBeInTheDocument()
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Focus first node" }));
+    expect(screen.queryByTestId("mobile-sheet")).not.toBeInTheDocument();
+
+    await waitFor(() =>
+      expect(
+        window.__FORGE_KNOWLEDGE_GRAPH_PAGE_TEST__?.activateFocusedNode
+      ).toBeTypeOf("function")
+    );
+
+    window.__FORGE_KNOWLEDGE_GRAPH_PAGE_TEST__?.activateFocusedNode?.();
+    expect(await screen.findByTestId("mobile-sheet")).toBeInTheDocument();
   });
 
   it("retargets mobile focus without opening the sheet when a different node is tapped", async () => {
@@ -618,7 +873,7 @@ describe("KnowledgeGraphPage", () => {
     expect(screen.queryByTestId("mobile-sheet")).not.toBeInTheDocument();
   });
 
-  it("keeps the desktop drawer as an overlay constrained to half the graph width", async () => {
+  it("does not refetch the graph dataset when focus changes", async () => {
     renderPage();
     await waitFor(() =>
       expect(
@@ -626,12 +881,12 @@ describe("KnowledgeGraphPage", () => {
       ).not.toBeInTheDocument()
     );
 
+    expect(getKnowledgeGraphMock).toHaveBeenCalledTimes(1);
     fireEvent.click(screen.getByRole("button", { name: "Focus first node" }));
-    const drawer = screen.getByText("Focus drawer: North Star").closest("[style]");
-    expect(drawer).toHaveStyle({
-      width: "min(30rem, calc(50% - 1.5rem))",
-      maxWidth: "calc(50% - 1.5rem)"
-    });
+    await waitFor(() =>
+      expect(screen.getByText("focus:goal:goal-1")).toBeInTheDocument()
+    );
+    expect(getKnowledgeGraphMock).toHaveBeenCalledTimes(1);
   });
 
   it("shows a sturdy fallback when the graph renderer throws", async () => {

@@ -146,24 +146,35 @@ struct ForgeSyncClient {
         let place: ForgeMovementTimelinePlace
     }
 
-    private struct MovementStayPatchRequest: Encodable {
+    private struct MovementUserBoxCreateRequest: Encodable {
         let sessionId: String
         let pairingToken: String
-        let patch: ForgeMovementStayPatch
+        let box: ForgeMovementUserBoxPayload
     }
 
-    private struct MovementStayPatchEnvelope: Decodable {
-        let stay: ForgeMovementTimelineStay
-    }
-
-    private struct MovementTripPatchRequest: Encodable {
+    private struct MovementUserBoxPatchRequest: Encodable {
         let sessionId: String
         let pairingToken: String
-        let patch: ForgeMovementTripPatch
+        let patch: ForgeMovementUserBoxPayload
     }
 
-    private struct MovementTripPatchEnvelope: Decodable {
-        let trip: ForgeMovementTimelineTrip
+    private struct MovementUserBoxEnvelope: Decodable {
+        let box: ForgeMovementTimelineSegment
+    }
+
+    private struct MovementUserBoxDeleteRequest: Encodable {
+        let sessionId: String
+        let pairingToken: String
+    }
+
+    private struct MovementUserBoxDeleteEnvelope: Decodable {
+        let deletedBoxId: String
+    }
+
+    private struct MovementAutomaticInvalidateRequest: Encodable {
+        let sessionId: String
+        let pairingToken: String
+        let invalidate: ForgeMovementUserBoxPayload
     }
 
     private struct ErrorEnvelope: Decodable {
@@ -350,46 +361,44 @@ struct ForgeSyncClient {
         return envelope.movement
     }
 
-    func patchMovementStay(
-        stayId: String,
-        patch: ForgeMovementStayPatch,
+    func createMovementUserBox(
+        box: ForgeMovementUserBoxPayload,
         pairing: PairingPayload
-    ) async throws -> ForgeMovementTimelineStay {
+    ) async throws -> ForgeMovementTimelineSegment {
         companionDebugLog(
             "ForgeSyncClient",
-            "patchMovementStay start stay=\(stayId)"
+            "createMovementUserBox start session=\(pairing.sessionId)"
         )
-        let envelope: MovementStayPatchEnvelope = try await sendRequest(
-            path: "/mobile/movement/stays/\(stayId)",
+        let envelope: MovementUserBoxEnvelope = try await sendRequest(
+            path: "/mobile/movement/user-boxes",
             apiBaseUrl: pairing.apiBaseUrl,
-            method: "PATCH",
-            body: MovementStayPatchRequest(
+            body: MovementUserBoxCreateRequest(
                 sessionId: pairing.sessionId,
                 pairingToken: pairing.pairingToken,
-                patch: patch
+                box: box
             )
         )
         companionDebugLog(
             "ForgeSyncClient",
-            "patchMovementStay success stay=\(stayId)"
+            "createMovementUserBox success box=\(envelope.box.id)"
         )
-        return envelope.stay
+        return envelope.box
     }
 
-    func patchMovementTrip(
-        tripId: String,
-        patch: ForgeMovementTripPatch,
+    func patchMovementUserBox(
+        boxId: String,
+        patch: ForgeMovementUserBoxPayload,
         pairing: PairingPayload
-    ) async throws -> ForgeMovementTimelineTrip {
+    ) async throws -> ForgeMovementTimelineSegment {
         companionDebugLog(
             "ForgeSyncClient",
-            "patchMovementTrip start trip=\(tripId)"
+            "patchMovementUserBox start box=\(boxId)"
         )
-        let envelope: MovementTripPatchEnvelope = try await sendRequest(
-            path: "/mobile/movement/trips/\(tripId)",
+        let envelope: MovementUserBoxEnvelope = try await sendRequest(
+            path: "/mobile/movement/user-boxes/\(boxId)",
             apiBaseUrl: pairing.apiBaseUrl,
             method: "PATCH",
-            body: MovementTripPatchRequest(
+            body: MovementUserBoxPatchRequest(
                 sessionId: pairing.sessionId,
                 pairingToken: pairing.pairingToken,
                 patch: patch
@@ -397,9 +406,58 @@ struct ForgeSyncClient {
         )
         companionDebugLog(
             "ForgeSyncClient",
-            "patchMovementTrip success trip=\(tripId)"
+            "patchMovementUserBox success box=\(boxId)"
         )
-        return envelope.trip
+        return envelope.box
+    }
+
+    func deleteMovementUserBox(
+        boxId: String,
+        pairing: PairingPayload
+    ) async throws -> String {
+        companionDebugLog(
+            "ForgeSyncClient",
+            "deleteMovementUserBox start box=\(boxId)"
+        )
+        let envelope: MovementUserBoxDeleteEnvelope = try await sendRequest(
+            path: "/mobile/movement/user-boxes/\(boxId)",
+            apiBaseUrl: pairing.apiBaseUrl,
+            method: "DELETE",
+            body: MovementUserBoxDeleteRequest(
+                sessionId: pairing.sessionId,
+                pairingToken: pairing.pairingToken
+            )
+        )
+        companionDebugLog(
+            "ForgeSyncClient",
+            "deleteMovementUserBox success box=\(boxId)"
+        )
+        return envelope.deletedBoxId
+    }
+
+    func invalidateAutomaticMovementBox(
+        boxId: String,
+        payload: ForgeMovementUserBoxPayload,
+        pairing: PairingPayload
+    ) async throws -> ForgeMovementTimelineSegment {
+        companionDebugLog(
+            "ForgeSyncClient",
+            "invalidateAutomaticMovementBox start box=\(boxId)"
+        )
+        let envelope: MovementUserBoxEnvelope = try await sendRequest(
+            path: "/mobile/movement/automatic-boxes/\(boxId)/invalidate",
+            apiBaseUrl: pairing.apiBaseUrl,
+            body: MovementAutomaticInvalidateRequest(
+                sessionId: pairing.sessionId,
+                pairingToken: pairing.pairingToken,
+                invalidate: payload
+            )
+        )
+        companionDebugLog(
+            "ForgeSyncClient",
+            "invalidateAutomaticMovementBox success box=\(boxId)"
+        )
+        return envelope.box
     }
 
     func createMovementPlace(

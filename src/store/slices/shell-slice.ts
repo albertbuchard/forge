@@ -1,5 +1,6 @@
 import { createSlice, type PayloadAction } from "@reduxjs/toolkit";
 import { readStoredSelectedUserIds } from "@/features/shell/storage";
+import type { KnowledgeGraphFocusPayload } from "@/lib/knowledge-graph-types";
 
 export type PendingRouteStatus = "idle" | "loading" | "ready";
 
@@ -10,6 +11,7 @@ export interface ShellState {
   pendingRouteKey: string | null;
   pendingRouteStatus: PendingRouteStatus;
   routeReadyToCommit: boolean;
+  knowledgeGraphOverlayFocus: KnowledgeGraphFocusPayload | null;
 }
 
 const initialState: ShellState = {
@@ -18,7 +20,8 @@ const initialState: ShellState = {
   displayedRouteKey: "",
   pendingRouteKey: null,
   pendingRouteStatus: "idle",
-  routeReadyToCommit: false
+  routeReadyToCommit: false,
+  knowledgeGraphOverlayFocus: null
 };
 
 const shellSlice = createSlice({
@@ -70,6 +73,15 @@ const shellSlice = createSlice({
       state.pendingRouteKey = null;
       state.pendingRouteStatus = "idle";
       state.routeReadyToCommit = false;
+    },
+    setKnowledgeGraphOverlayFocus(
+      state,
+      action: PayloadAction<KnowledgeGraphFocusPayload | null>
+    ) {
+      state.knowledgeGraphOverlayFocus = action.payload;
+    },
+    clearKnowledgeGraphOverlayFocus(state) {
+      state.knowledgeGraphOverlayFocus = null;
     }
   }
 });
@@ -77,8 +89,10 @@ const shellSlice = createSlice({
 export const {
   beginRouteHandoff,
   cancelPendingRoute,
+  clearKnowledgeGraphOverlayFocus,
   commitPendingRoute,
   hydrateSelectedUserIds,
+  setKnowledgeGraphOverlayFocus,
   setCollapseProgress,
   setPendingRouteStatus,
   setRouteReadyToCommit,

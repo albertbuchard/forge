@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Scissors } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
@@ -8,19 +8,84 @@ import {
   KanbanSummaryBox
 } from "@/components/workbench-boxes/kanban/kanban-boxes";
 import { ExecutionBoard } from "@/components/execution-board";
+import {
+  EntityLinkMultiSelect,
+  type EntityLinkOption
+} from "@/components/psyche/entity-link-multiselect";
 import { TaskDialog } from "@/components/task-dialog";
 import { PageHero } from "@/components/shell/page-hero";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { EntityName } from "@/components/ui/entity-name";
 import { Input } from "@/components/ui/input";
 import { EmptyState } from "@/components/ui/page-state";
+import { UserBadge } from "@/components/ui/user-badge";
 import { deleteTask, patchTask, splitTask, uncompleteTask } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
-import { useCommandCenterStore } from "@/store/use-command-center";
 import { useForgeShell } from "@/components/shell/app-shell";
 import { getSingleSelectedUserId } from "@/lib/user-ownership";
+import type { UserSummary } from "@/lib/types";
+
+const ENTITY_FILTER_PREFIX = {
+  goal: "goal:",
+  project: "project:",
+  tag: "tag:"
+} as const;
+
+const OWNER_FILTER_PREFIX = {
+  user: "user:",
+  kind: "kind:"
+} as const;
+
+function parseEntityFilterValues(values: string[]) {
+  return values.reduce(
+    (accumulator, value) => {
+      if (value.startsWith(ENTITY_FILTER_PREFIX.goal)) {
+        accumulator.goalIds.push(value.slice(ENTITY_FILTER_PREFIX.goal.length));
+      } else if (value.startsWith(ENTITY_FILTER_PREFIX.project)) {
+        accumulator.projectIds.push(
+          value.slice(ENTITY_FILTER_PREFIX.project.length)
+        );
+      } else if (value.startsWith(ENTITY_FILTER_PREFIX.tag)) {
+        accumulator.tagIds.push(value.slice(ENTITY_FILTER_PREFIX.tag.length));
+      }
+      return accumulator;
+    },
+    {
+      goalIds: [] as string[],
+      projectIds: [] as string[],
+      tagIds: [] as string[]
+    }
+  );
+}
+
+function parseOwnerFilterValues(values: string[]) {
+  return values.reduce(
+    (accumulator, value) => {
+      if (value.startsWith(OWNER_FILTER_PREFIX.user)) {
+        accumulator.userIds.push(value.slice(OWNER_FILTER_PREFIX.user.length));
+      } else if (value.startsWith(OWNER_FILTER_PREFIX.kind)) {
+        const kind = value.slice(OWNER_FILTER_PREFIX.kind.length);
+        if (kind === "human" || kind === "bot") {
+          accumulator.kinds.push(kind);
+        }
+      }
+      return accumulator;
+    },
+    {
+      userIds: [] as string[],
+      kinds: [] as Array<UserSummary["kind"]>
+    }
+  );
+}
+
+function clearKanbanFilters(
+  setSelectedEntityFilterIds: (values: string[]) => void,
+  setSelectedOwnerFilterIds: (values: string[]) => void
+) {
+  setSelectedEntityFilterIds([]);
+  setSelectedOwnerFilterIds([]);
+}
 
 function buildDefaultSplitTitles(title: string) {
   const cleaned = title.trim();
@@ -41,6 +106,12 @@ export function KanbanPage() {
   const shell = useForgeShell();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const [selectedEntityFilterIds, setSelectedEntityFilterIds] = useState<
+    string[]
+  >([]);
+  const [selectedOwnerFilterIds, setSelectedOwnerFilterIds] = useState<
+    string[]
+  >([]);
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(
     shell.snapshot.tasks[0]?.id ?? null
   );
@@ -51,28 +122,125 @@ export function KanbanPage() {
     secondTitle: "",
     remainingRatio: 0.5
   });
-  const {
-    selectedGoalId,
-    selectedUserId,
-    selectedTagIds,
-    setGoal,
-    setUserId,
-    toggleTag,
-    reset
-  } = useCommandCenterStore();
+
+  const entityFilterOptions = useMemo<EntityLinkOption[]>(
+    () => [
+      ...shell.snapshot.goals.map((goal) => ({
+        value: `${ENTITY_FILTER_PREFIX.goal}${goal.id}`,
+        label: goal.title,
+        description: "Goal",
+        searchText: `goal ${goal.title} ${goal.description ?? ""}`,
+        kind: "goal" as const
+      })),
+      ...shell.snapshot.dashboard.projects.map((project) => ({
+        value: `${ENTITY_FILTER_PREFIX.project}${project.id}`,
+        label: project.title,
+        description: "Project",
+        searchText: `project ${project.title} ${project.description ?? ""} ${project.goalTitle ?? ""}`,
+        kind: "project" as const
+      })),
+      ...shell.snapshot.tags.map((tag) => ({
+        value: `${ENTITY_FILTER_PREFIX.tag}${tag.id}`,
+        label: tag.name,
+        description: "Tag",
+        searchText: `tag ${tag.name} ${tag.color ?? ""}`,
+        kind: "tag" as const
+      }))
+    ],
+    [shell.snapshot.dashboard.projects, shell.snapshot.goals, shell.snapshot.tags]
+  );
+
+  const ownerFilterOptions = useMemo<EntityLinkOption[]>(() => {
+    const bots = shell.snapshot.users.filter((user) => user.kind === "bot");
+    const humans = shell.snapshot.users.filter((user) => user.kind === "human");
+
+    return [
+      {
+        value: `${OWNER_FILTER_PREFIX.kind}bot`,
+        label: "Bots",
+        description: `${bots.length} bot owner${bots.length === 1 ? "" : "s"}`,
+        searchText: `bots bot ai agents assistants ${bots.map((user) => `${user.displayName} ${user.handle}`).join(" ")}`,
+        badge: (
+          <Badge className="border-cyan-300/18 bg-cyan-400/12 text-cyan-50">
+            Bots
+          </Badge>
+        ),
+        menuBadge: (
+          <Badge className="border-cyan-300/18 bg-cyan-400/12 text-cyan-50">
+            Bots
+          </Badge>
+        )
+      },
+      {
+        value: `${OWNER_FILTER_PREFIX.kind}human`,
+        label: "Humans",
+        description: `${humans.length} human owner${humans.length === 1 ? "" : "s"}`,
+        searchText: `humans human people operators ${humans.map((user) => `${user.displayName} ${user.handle}`).join(" ")}`,
+        badge: (
+          <Badge className="border-amber-300/18 bg-amber-400/12 text-amber-50">
+            Humans
+          </Badge>
+        ),
+        menuBadge: (
+          <Badge className="border-amber-300/18 bg-amber-400/12 text-amber-50">
+            Humans
+          </Badge>
+        )
+      },
+      ...shell.snapshot.users.map((user) => ({
+        value: `${OWNER_FILTER_PREFIX.user}${user.id}`,
+        label: user.displayName,
+        description: `${user.kind}${user.handle ? ` · @${user.handle}` : ""}`,
+        searchText: `${user.displayName} ${user.handle} ${user.kind} ${user.description}`,
+        badge: <UserBadge user={user} compact />,
+        menuBadge: <UserBadge user={user} compact />
+      }))
+    ];
+  }, [shell.snapshot.users]);
+
+  const parsedEntityFilters = useMemo(
+    () => parseEntityFilterValues(selectedEntityFilterIds),
+    [selectedEntityFilterIds]
+  );
+  const parsedOwnerFilters = useMemo(
+    () => parseOwnerFilterValues(selectedOwnerFilterIds),
+    [selectedOwnerFilterIds]
+  );
 
   const filteredTasks = shell.snapshot.tasks.filter((task) => {
-    if (selectedGoalId && task.goalId !== selectedGoalId) {
-      return false;
-    }
-    if (selectedUserId && task.userId !== selectedUserId) {
+    if (
+      parsedEntityFilters.goalIds.length > 0 &&
+      (task.goalId === null ||
+        !parsedEntityFilters.goalIds.includes(task.goalId))
+    ) {
       return false;
     }
     if (
-      selectedTagIds.length > 0 &&
-      !selectedTagIds.every((tagId) => task.tagIds.includes(tagId))
+      parsedEntityFilters.projectIds.length > 0 &&
+      (task.projectId === null ||
+        !parsedEntityFilters.projectIds.includes(task.projectId))
     ) {
       return false;
+    }
+    if (
+      parsedEntityFilters.tagIds.length > 0 &&
+      !parsedEntityFilters.tagIds.every((tagId) => task.tagIds.includes(tagId))
+    ) {
+      return false;
+    }
+    if (
+      parsedOwnerFilters.userIds.length > 0 ||
+      parsedOwnerFilters.kinds.length > 0
+    ) {
+      const matchesExplicitUser = parsedOwnerFilters.userIds.includes(
+        task.userId ?? ""
+      );
+      const matchesOwnerKind =
+        task.user && parsedOwnerFilters.kinds.includes(task.user.kind);
+
+      if (!matchesExplicitUser && !matchesOwnerKind) {
+        return false;
+      }
     }
     return true;
   });
@@ -230,74 +398,56 @@ export function KanbanPage() {
 
       <KanbanFiltersBox>
         <Card className="min-w-0 overflow-hidden">
-        <div className="type-label text-white/40">Filters</div>
-        <div className="mt-3 flex flex-wrap items-center gap-2">
-          <Badge tone="meta" className="bg-white/[0.08] text-white/60">
-            Goal
-          </Badge>
-          <button
-            className={`interactive-tap max-w-full rounded-full px-4 py-2 text-sm ${selectedGoalId === null ? "bg-white/[0.12] text-white" : "bg-white/[0.04] text-white/58"}`}
-            onClick={() => setGoal(null)}
-          >
-            All goals
-          </button>
-          {shell.snapshot.goals.map((goal) => (
-            <button
-              key={goal.id}
-              className={`interactive-tap min-w-0 max-w-full rounded-full px-4 py-2 text-sm ${selectedGoalId === goal.id ? "bg-white/[0.12] text-white" : "bg-white/[0.04] text-white/58"}`}
-              onClick={() =>
-                setGoal(selectedGoalId === goal.id ? null : goal.id)
-              }
-            >
-              <EntityName
-                kind="goal"
-                label={goal.title}
-                className="max-w-full min-w-0"
-                lines={2}
-                labelClassName="whitespace-normal text-left"
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <div className="type-label text-white/40">Filters</div>
+              <div className="mt-2 text-sm text-white/56">
+                Use compact entity chips for goals, projects, tags, and owner
+                scopes instead of the wide pill rows.
+              </div>
+            </div>
+            {selectedEntityFilterIds.length > 0 || selectedOwnerFilterIds.length > 0 ? (
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() =>
+                  clearKanbanFilters(
+                    setSelectedEntityFilterIds,
+                    setSelectedOwnerFilterIds
+                  )
+                }
+              >
+                Reset
+              </Button>
+            ) : null}
+          </div>
+
+          <div className="mt-4 grid gap-3 xl:grid-cols-[minmax(0,1.55fr)_minmax(18rem,1fr)]">
+            <div className="grid gap-2">
+              <div className="text-[11px] uppercase tracking-[0.18em] text-white/42">
+                Entity filters
+              </div>
+              <EntityLinkMultiSelect
+                options={entityFilterOptions}
+                selectedValues={selectedEntityFilterIds}
+                onChange={setSelectedEntityFilterIds}
+                placeholder="Filter by goal, project, or tag"
+                emptyMessage="No matching goals, projects, or tags."
               />
-            </button>
-          ))}
-        </div>
-        <div className="mt-2 flex flex-wrap items-center gap-2">
-          <Badge tone="meta" className="bg-white/[0.08] text-white/60">
-            Owner
-          </Badge>
-          <button
-            className={`interactive-tap max-w-full rounded-full px-4 py-2 text-sm ${selectedUserId === null ? "bg-white/[0.12] text-white" : "bg-white/[0.04] text-white/58"}`}
-            onClick={() => setUserId(null)}
-          >
-            Everyone
-          </button>
-          {shell.snapshot.users.map((user) => (
-            <button
-              key={user.id}
-              className={`interactive-tap max-w-full rounded-full px-4 py-2 text-sm ${selectedUserId === user.id ? "bg-white/[0.12] text-white" : "bg-white/[0.04] text-white/58"}`}
-              onClick={() =>
-                setUserId(selectedUserId === user.id ? null : user.id)
-              }
-            >
-              {user.displayName}
-            </button>
-          ))}
-        </div>
-        <div className="mt-2 flex flex-wrap gap-2">
-          {shell.snapshot.tags.map((tag) => (
-            <button
-              key={tag.id}
-              className={`interactive-tap max-w-full rounded-full px-4 py-2 text-sm ${selectedTagIds.includes(tag.id) ? "bg-white/[0.12] text-white" : "bg-white/[0.04] text-white/58"}`}
-              onClick={() => toggleTag(tag.id)}
-            >
-              {tag.name}
-            </button>
-          ))}
-          <button
-            className="interactive-tap max-w-full rounded-full bg-white/[0.04] px-4 py-2 text-sm text-[var(--primary)]"
-            onClick={reset}
-          >
-            Reset
-          </button>
-        </div>
+            </div>
+            <div className="grid gap-2">
+              <div className="text-[11px] uppercase tracking-[0.18em] text-white/42">
+                Owner filters
+              </div>
+              <EntityLinkMultiSelect
+                options={ownerFilterOptions}
+                selectedValues={selectedOwnerFilterIds}
+                onChange={setSelectedOwnerFilterIds}
+                placeholder="Type Bo for bots, Hu for humans, or a teammate name"
+                emptyMessage="No matching owners."
+              />
+            </div>
+          </div>
         </Card>
       </KanbanFiltersBox>
 
@@ -307,7 +457,15 @@ export function KanbanPage() {
           title={t("common.kanban.noTasksMatch")}
           description="No tasks match the current filters. Reset the filters to bring the full board back."
           action={
-            <Button variant="secondary" onClick={reset}>
+            <Button
+              variant="secondary"
+              onClick={() =>
+                clearKanbanFilters(
+                  setSelectedEntityFilterIds,
+                  setSelectedOwnerFilterIds
+                )
+              }
+            >
               Reset
             </Button>
           }

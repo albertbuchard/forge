@@ -217,85 +217,117 @@ private struct MovementLifeTimelineView: View {
     @State private var loadError: String?
     @State private var selectedId: String?
     @State private var editorDraft: MovementTimelineEditorDraft?
+    @State private var creatingDraft: MovementTimelineEditorDraft?
     @State private var scrolledToCurrent = false
     @State private var focusedVisibleId: String?
 
     var body: some View {
         NavigationStack {
             GeometryReader { proxy in
+                let rangeEnd = Date().addingTimeInterval(
+                    TimeInterval(MovementTimelineViewportLayout.futureGridHours * 3600)
+                )
+                let timelineBottomPadding = proxy.safeAreaInsets.bottom + 80
+                let timelineContentHeight = movementTimelineContentHeight(
+                    viewportHeight: proxy.size.height,
+                    safeTopInset: proxy.safeAreaInsets.top,
+                    bottomPadding: timelineBottomPadding,
+                    rangeEnd: rangeEnd
+                )
                 ZStack {
                     CompanionStyle.background
                     Color.black.opacity(0.16)
                         .ignoresSafeArea()
-                    MovementTimelineBackdropGrid(anchorDate: displayItems.last?.endedAtDate ?? Date())
 
                     ScrollViewReader { reader in
                         ScrollView(.vertical, showsIndicators: false) {
-                            VStack(spacing: 0) {
-                                if let oldestTimelineItem {
-                                    MovementTimelineHistoryCap(item: oldestTimelineItem)
-                                        .padding(.top, proxy.safeAreaInsets.top + 12)
-                                        .padding(.bottom, 18)
-                                }
+                            ZStack(alignment: .topLeading) {
+                                MovementTimelineViewportGrid(
+                                    items: displayItems,
+                                    viewportHeight: proxy.size.height,
+                                    safeTopInset: proxy.safeAreaInsets.top,
+                                    bottomPadding: timelineBottomPadding,
+                                    rangeEnd: rangeEnd
+                                )
+                                .frame(height: timelineContentHeight)
 
-                                Color.clear
-                                    .frame(height: max(proxy.size.height * 0.42, 260))
+                                VStack(spacing: 0) {
+                                    if let oldestTimelineItem {
+                                        MovementTimelineHistoryCap(item: oldestTimelineItem)
+                                            .padding(.top, proxy.safeAreaInsets.top + 12)
+                                            .padding(.bottom, 18)
+                                    }
 
-                                LazyVStack(spacing: 18) {
-                                    if loadingMore {
-                                        ProgressView()
-                                            .tint(CompanionStyle.accentStrong)
-                                            .padding(.vertical, 10)
-                                    } else if hasMore {
-                                        Color.clear
-                                            .frame(height: 1)
-                                            .onAppear {
-                                                Task {
-                                                    await loadMoreIfNeeded()
+                                    Color.clear
+                                        .frame(height: max(proxy.size.height * 0.42, 260))
+
+                                    LazyVStack(spacing: 18) {
+                                        if loadingMore {
+                                            ProgressView()
+                                                .tint(CompanionStyle.accentStrong)
+                                                .padding(.vertical, 10)
+                                        } else if hasMore {
+                                            Color.clear
+                                                .frame(height: 1)
+                                                .onAppear {
+                                                    Task {
+                                                        await loadMoreIfNeeded()
+                                                    }
                                                 }
-                                            }
-                                    }
+                                        }
 
-                                    if let loadError {
-                                        MovementTimelineStatusCard(
-                                            title: "Timeline load issue",
-                                            detail: loadError
-                                        )
-                                    } else if loading && displayItems.isEmpty {
-                                        MovementTimelineStatusCard(
-                                            title: "Loading movement history",
-                                            detail: "Forge is paging your stay and trip history from the canonical movement store."
-                                        )
-                                    }
+                                        if let loadError {
+                                            MovementTimelineStatusCard(
+                                                title: "Timeline load issue",
+                                                detail: loadError
+                                            )
+                                        } else if loading && displayItems.isEmpty {
+                                            MovementTimelineStatusCard(
+                                                title: "Loading movement history",
+                                                detail: "Forge is paging your stay and trip history from the canonical movement store."
+                                            )
+                                        }
 
-                                    ForEach(displayItems) { item in
-                                        MovementTimelineRow(
-                                            item: item,
-                                            width: proxy.size.width - 28,
-                                            isSelected: selectedId == item.id,
-                                            onSelect: {
-                                                withAnimation(.spring(response: 0.34, dampingFraction: 0.86)) {
-                                                    selectedId = selectedId == item.id ? nil : item.id
+                                        ForEach(displayItems) { item in
+                                            MovementTimelineRow(
+                                                item: item,
+                                                width: proxy.size.width - 28,
+                                                isSelected: selectedId == item.id,
+                                                onSelect: {
+                                                    withAnimation(.spring(response: 0.34, dampingFraction: 0.86)) {
+                                                        selectedId = selectedId == item.id ? nil : item.id
+                                                    }
+                                                },
+                                                onEdit: {
+                                                    if item.sourceKind == "automatic" {
+                                                        Task {
+                                                            await invalidateAutomaticItem(item)
+                                                        }
+                                                    } else {
+                                                        editorDraft = MovementTimelineEditorDraft(item: item)
+                                                    }
+                                                },
+                                                onDelete: {
+                                                    Task {
+                                                        await deleteUserDefinedItem(item)
+                                                    }
                                                 }
-                                            },
-                                            onEdit: {
-                                                editorDraft = MovementTimelineEditorDraft(item: item)
-                                            }
-                                        )
-                                        .id(item.id)
-                                        .background(
-                                            GeometryReader { rowProxy in
-                                                Color.clear
-                                                    .preference(
-                                                        key: MovementTimelineVisiblePositionKey.self,
-                                                        value: [item.id: rowProxy.frame(in: .named("MovementLifeTimelineScroll")).midY]
-                                                    )
-                                            }
-                                        )
+                                            )
+                                            .id(item.id)
+                                            .background(
+                                                GeometryReader { rowProxy in
+                                                    Color.clear
+                                                        .preference(
+                                                            key: MovementTimelineVisiblePositionKey.self,
+                                                            value: [item.id: rowProxy.frame(in: .named("MovementLifeTimelineScroll")).midY]
+                                                        )
+                                                }
+                                            )
+                                        }
                                     }
+                                    .padding(.horizontal, 14)
+                                    .padding(.bottom, timelineBottomPadding)
                                 }
-                                .padding(.horizontal, 14)
-                                .padding(.bottom, proxy.safeAreaInsets.bottom + 80)
                             }
                         }
                         .coordinateSpace(name: "MovementLifeTimelineScroll")
@@ -377,25 +409,53 @@ private struct MovementLifeTimelineView: View {
                 }
 
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button {
-                        Task {
-                            await reload()
+                    HStack(spacing: 14) {
+                        Menu {
+                            Button("Manual stay") {
+                                creatingDraft = makeCreateDraft(kind: .stay)
+                            }
+                            Button("Manual move") {
+                                creatingDraft = makeCreateDraft(kind: .trip)
+                            }
+                            Button("Manual missing") {
+                                creatingDraft = makeCreateDraft(kind: .missing)
+                            }
+                        } label: {
+                            Image(systemName: "plus")
+                                .foregroundStyle(CompanionStyle.accentStrong)
                         }
-                    } label: {
-                        Image(systemName: "arrow.clockwise")
-                            .foregroundStyle(CompanionStyle.accentStrong)
+
+                        Button {
+                            Task {
+                                await reload()
+                            }
+                        } label: {
+                            Image(systemName: "arrow.clockwise")
+                                .foregroundStyle(CompanionStyle.accentStrong)
+                        }
                     }
                 }
             }
         }
-        .sheet(item: $editorDraft) { draft in
+        .sheet(item: Binding<MovementTimelineEditorDraft?>(
+            get: { creatingDraft ?? editorDraft },
+            set: { nextValue in
+                if creatingDraft != nil {
+                    creatingDraft = nextValue
+                } else {
+                    editorDraft = nextValue
+                }
+            }
+        )) { draft in
             MovementTimelineEditSheet(
                 draft: draft,
+                creating: creatingDraft != nil,
                 save: { updatedDraft in
                     await saveEditor(updatedDraft)
                 },
                 close: {
                     editorDraft = nil
+                    creatingDraft = nil
                 }
             )
             .presentationDetents([.large])
@@ -404,6 +464,14 @@ private struct MovementLifeTimelineView: View {
     }
 
     private var liveOverlayItem: MovementLifeTimelineItem? {
+        if let stay = appModel.movementStore.activeStay,
+           let trip = appModel.movementStore.activeTrip
+        {
+            let tripDuration = max(trip.endedAt, Date()).timeIntervalSince(trip.startedAt)
+            if tripDuration < 5 * 60 || trip.distanceMeters < 100 {
+                return MovementLifeTimelineItem(liveStay: stay)
+            }
+        }
         if let trip = appModel.movementStore.activeTrip {
             return MovementLifeTimelineItem(liveTrip: trip)
         }
@@ -419,13 +487,26 @@ private struct MovementLifeTimelineView: View {
             .compactMap(MovementLifeTimelineItem.init(localHistorySegment:))
     }
 
+    private var cachedCanonicalItems: [MovementLifeTimelineItem] {
+        appModel.movementStore.cachedProjectedBoxes
+            .compactMap(MovementLifeTimelineItem.init(remote:))
+    }
+
     private var displayItems: [MovementLifeTimelineItem] {
         let remoteItems = segments.compactMap(MovementLifeTimelineItem.init(remote:))
-        var items = remoteItems.isEmpty ? localHistoricalItems : remoteItems
-        if let liveOverlayItem {
-            items.append(liveOverlayItem)
+        let canonicalItems = remoteItems.isEmpty ? cachedCanonicalItems : remoteItems
+        if canonicalItems.isEmpty == false {
+            return canonicalTimelineItems(
+                canonicalItems,
+                liveOverlay: liveOverlayItem,
+                referenceDate: Date()
+            ) + [.currentAnchor]
         }
-        return normalizedTimelineItems(items, referenceDate: Date()) + [.currentAnchor]
+        var localItems = localHistoricalItems
+        if let liveOverlayItem {
+            localItems.append(liveOverlayItem)
+        }
+        return normalizedTimelineItems(localItems, referenceDate: Date()) + [.currentAnchor]
     }
 
     private var visibleDateLabel: String {
@@ -447,291 +528,86 @@ private struct MovementLifeTimelineView: View {
         displayItems.first(where: { $0.kind != .anchor })
     }
 
+    private func movementTimelineContentHeight(
+        viewportHeight: CGFloat,
+        safeTopInset: CGFloat,
+        bottomPadding: CGFloat,
+        rangeEnd: Date
+    ) -> CGFloat {
+        let rows = buildMovementViewportGridMetrics(
+            items: displayItems,
+            viewportHeight: viewportHeight,
+            safeTopInset: safeTopInset
+        )
+        let trailingReference = displayItems.last(where: { $0.kind != .anchor })?.endedAtDate ?? rangeEnd
+        let trailingHeight = max(
+            CGFloat(MovementTimelineViewportLayout.futureGridHours)
+                * MovementTimelineViewportLayout.gridRowHeight,
+            CGFloat(max(0, rangeEnd.timeIntervalSince(trailingReference)) / 3600)
+                * MovementTimelineViewportLayout.gridRowHeight
+        )
+        let minimumContentHeight =
+            (oldestTimelineItem == nil
+                ? 0
+                : safeTopInset
+                    + 12
+                    + MovementTimelineViewportLayout.historyCapHeight
+                    + MovementTimelineViewportLayout.historyCapBottomSpacing
+            )
+            + MovementTimelineViewportLayout.leadSpacerHeight(for: viewportHeight)
+            + trailingHeight
+            + bottomPadding
+        let baseHeight = (rows.last?.boxBottom ?? 0) + trailingHeight + bottomPadding
+        return max(baseHeight, minimumContentHeight, viewportHeight + 260)
+    }
+
+    private func makeCreateDraft(kind: MovementLifeTimelineItem.Kind) -> MovementTimelineEditorDraft {
+        let seed = displayItems.last(where: { $0.kind != .anchor })
+        let seedDate = Date()
+        return MovementTimelineEditorDraft(
+            item: MovementLifeTimelineItem(
+                id: "create-\(UUID().uuidString)",
+                source: .derived("create"),
+                kind: kind,
+                title: kind == .missing ? "User-defined missing data" : kind == .stay ? "Manual stay" : "Manual move",
+                subtitle: "User-defined movement box",
+                placeLabel: seed?.placeLabel,
+                tags: [],
+                syncSource: "companion",
+                startedAtDate: seed?.endedAtDate ?? seedDate.addingTimeInterval(-60 * 60),
+                endedAtDate: seedDate,
+                durationSeconds: 60 * 60,
+                laneSide: kind == .trip ? .right : .left,
+                connectorFromLane: .left,
+                connectorToLane: kind == .trip ? .right : .left,
+                distanceMeters: nil,
+                averageSpeedMps: nil,
+                sourceKind: "user_defined",
+                overrideCount: 0,
+                origin: kind == .missing ? .userInvalidated : .userDefined,
+                editable: true,
+                isCurrent: false
+            )
+        )
+    }
+
     private func normalizedTimelineItems(
         _ items: [MovementLifeTimelineItem],
         referenceDate: Date
     ) -> [MovementLifeTimelineItem] {
-        let sorted = items
-            .filter { $0.kind != .anchor && $0.endedAtDate > $0.startedAtDate }
-            .sorted { left, right in
-                if left.startedAtDate == right.startedAtDate {
-                    return left.endedAtDate < right.endedAtDate
-                }
-                return left.startedAtDate < right.startedAtDate
-            }
+        MovementTimelineDisplayNormalizer.normalize(items: items, referenceDate: referenceDate)
+    }
 
-        guard sorted.isEmpty == false else {
-            return []
-        }
-
-        func stayAnchorKey(for item: MovementLifeTimelineItem) -> String? {
-            guard item.kind == .stay else {
-                return nil
-            }
-            let candidate = item.placeLabel?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
-                ? item.placeLabel
-                : item.title
-            let normalized = candidate?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-            return normalized?.isEmpty == false ? normalized : nil
-        }
-
-        func sharesStayAnchor(_ left: MovementLifeTimelineItem, _ right: MovementLifeTimelineItem) -> Bool {
-            guard left.kind == .stay, right.kind == .stay else {
-                return false
-            }
-            guard let leftAnchor = stayAnchorKey(for: left),
-                  let rightAnchor = stayAnchorKey(for: right)
-            else {
-                return left.origin != .recorded || right.origin != .recorded
-            }
-            return leftAnchor == rightAnchor
-        }
-
-        func makeDerivedGapItem(
-            from previous: MovementLifeTimelineItem,
-            to next: MovementLifeTimelineItem
-        ) -> MovementLifeTimelineItem? {
-            let gapSeconds = next.startedAtDate.timeIntervalSince(previous.endedAtDate)
-            guard gapSeconds > 0 else {
-                return nil
-            }
-            if gapSeconds <= 60 * 60, sharesStayAnchor(previous, next) {
-                return MovementLifeTimelineItem(
-                    id: "display-continued-\(previous.id)-\(next.id)",
-                    source: .derived("display-continued-\(previous.id)-\(next.id)"),
-                    kind: .stay,
-                    title: previous.placeLabel ?? next.placeLabel ?? previous.title,
-                    subtitle: "Short stationary gap carried forward into one continuous stay.",
-                    placeLabel: previous.placeLabel ?? next.placeLabel,
-                    tags: Array(Set(previous.tags + next.tags + ["continued-stay"])).sorted(),
-                    syncSource: "display repair",
-                    startedAtDate: previous.endedAtDate,
-                    endedAtDate: next.startedAtDate,
-                    durationSeconds: max(60, Int(gapSeconds)),
-                    laneSide: .left,
-                    connectorFromLane: .left,
-                    connectorToLane: .left,
-                    distanceMeters: nil,
-                    averageSpeedMps: nil,
-                    origin: .continuedStay,
-                    editable: false,
-                    isCurrent: false
-                )
-            }
-            return MovementLifeTimelineItem(
-                id: "display-missing-\(previous.id)-\(next.id)",
-                source: .derived("display-missing-\(previous.id)-\(next.id)"),
-                kind: .missing,
-                title: "Missing data",
-                subtitle: "Forge backfilled an uncovered interval so the timeline never goes silent.",
-                placeLabel: nil,
-                tags: ["missing-data", "display-repair"],
-                syncSource: "display repair",
-                startedAtDate: previous.endedAtDate,
-                endedAtDate: next.startedAtDate,
-                durationSeconds: max(60, Int(gapSeconds)),
-                laneSide: .left,
-                connectorFromLane: previous.kind == .trip ? .right : .left,
-                connectorToLane: next.kind == .trip ? .right : .left,
-                distanceMeters: nil,
-                averageSpeedMps: nil,
-                origin: .missing,
-                editable: false,
-                isCurrent: false
-            )
-        }
-
-        func makeTrailingCoverageItem(
-            after item: MovementLifeTimelineItem
-        ) -> MovementLifeTimelineItem? {
-            let gapSeconds = referenceDate.timeIntervalSince(item.endedAtDate)
-            guard gapSeconds > 0 else {
-                return nil
-            }
-            if item.kind == .stay, gapSeconds <= 60 * 60 {
-                return MovementLifeTimelineItem(
-                    id: "display-trailing-stay-\(item.id)",
-                    source: .derived("display-trailing-stay-\(item.id)"),
-                    kind: .stay,
-                    title: item.placeLabel ?? item.title,
-                    subtitle: "Short stationary gap carried forward into one continuous stay.",
-                    placeLabel: item.placeLabel,
-                    tags: Array(Set(item.tags + ["continued-stay"])).sorted(),
-                    syncSource: "display repair",
-                    startedAtDate: item.endedAtDate,
-                    endedAtDate: referenceDate,
-                    durationSeconds: max(60, Int(gapSeconds)),
-                    laneSide: .left,
-                    connectorFromLane: .left,
-                    connectorToLane: .left,
-                    distanceMeters: nil,
-                    averageSpeedMps: nil,
-                    origin: .continuedStay,
-                    editable: false,
-                    isCurrent: false
-                )
-            }
-            return MovementLifeTimelineItem(
-                id: "display-trailing-missing-\(item.id)",
-                source: .derived("display-trailing-missing-\(item.id)"),
-                kind: .missing,
-                title: "Missing data",
-                subtitle: "Forge backfilled the trailing interval so the view stays fully labelled.",
-                placeLabel: nil,
-                tags: ["missing-data", "display-repair"],
-                syncSource: "display repair",
-                startedAtDate: item.endedAtDate,
-                endedAtDate: referenceDate,
-                durationSeconds: max(60, Int(gapSeconds)),
-                laneSide: .left,
-                connectorFromLane: item.kind == .trip ? .right : .left,
-                connectorToLane: .left,
-                distanceMeters: nil,
-                averageSpeedMps: nil,
-                origin: .missing,
-                editable: false,
-                isCurrent: false
-            )
-        }
-
-        func mergedItem(
-            _ previous: MovementLifeTimelineItem,
-            _ next: MovementLifeTimelineItem
-        ) -> MovementLifeTimelineItem? {
-            guard previous.kind == next.kind else {
-                return nil
-            }
-            let touchingOrOverlapping = next.startedAtDate <= previous.endedAtDate
-                || abs(next.startedAtDate.timeIntervalSince(previous.endedAtDate)) < 1
-            guard touchingOrOverlapping else {
-                return nil
-            }
-            let canMerge: Bool
-            switch previous.kind {
-            case .stay:
-                canMerge = sharesStayAnchor(previous, next)
-            case .trip, .missing:
-                canMerge = true
-            case .anchor:
-                canMerge = false
-            }
-            guard canMerge else {
-                return nil
-            }
-            let mergedOrigin: MovementLifeTimelineItem.Origin
-            if previous.origin == .continuedStay || next.origin == .continuedStay {
-                mergedOrigin = .continuedStay
-            } else if previous.origin == .repairedGap || next.origin == .repairedGap {
-                mergedOrigin = .repairedGap
-            } else if previous.origin == .missing || next.origin == .missing {
-                mergedOrigin = .missing
-            } else {
-                mergedOrigin = .recorded
-            }
-            return MovementLifeTimelineItem(
-                id: "merged-\(previous.id)-\(next.id)",
-                source: mergedOrigin == .recorded ? previous.source : .derived("merged-\(previous.id)-\(next.id)"),
-                kind: previous.kind,
-                title: previous.placeLabel ?? next.placeLabel ?? previous.title,
-                subtitle:
-                    mergedOrigin == .continuedStay
-                    ? "Short stationary gap carried forward into one continuous stay."
-                    : previous.subtitle,
-                placeLabel: previous.placeLabel ?? next.placeLabel,
-                tags: Array(Set(previous.tags + next.tags)).sorted(),
-                syncSource: previous.syncSource == next.syncSource ? previous.syncSource : "display repair",
-                startedAtDate: min(previous.startedAtDate, next.startedAtDate),
-                endedAtDate: max(previous.endedAtDate, next.endedAtDate),
-                durationSeconds: max(
-                    60,
-                    Int(max(previous.endedAtDate, next.endedAtDate).timeIntervalSince(min(previous.startedAtDate, next.startedAtDate)))
-                ),
-                laneSide: previous.kind == .trip ? .right : .left,
-                connectorFromLane: previous.connectorFromLane,
-                connectorToLane: next.connectorToLane,
-                distanceMeters:
-                    previous.kind == .trip
-                    ? max(previous.distanceMeters ?? 0, next.distanceMeters ?? 0)
-                    : nil,
-                averageSpeedMps: previous.averageSpeedMps ?? next.averageSpeedMps,
-                origin: mergedOrigin,
-                editable: mergedOrigin == .recorded && previous.editable && next.editable,
-                isCurrent: previous.isCurrent || next.isCurrent
-            )
-        }
-
-        func trimmedItem(
-            _ item: MovementLifeTimelineItem,
-            startingAt newStart: Date
-        ) -> MovementLifeTimelineItem? {
-            guard item.endedAtDate > newStart else {
-                return nil
-            }
-            return MovementLifeTimelineItem(
-                id: "\(item.id)-trimmed-\(Int(newStart.timeIntervalSince1970))",
-                source: item.source,
-                kind: item.kind,
-                title: item.title,
-                subtitle: item.subtitle,
-                placeLabel: item.placeLabel,
-                tags: item.tags,
-                syncSource: item.syncSource,
-                startedAtDate: newStart,
-                endedAtDate: item.endedAtDate,
-                durationSeconds: max(60, Int(item.endedAtDate.timeIntervalSince(newStart))),
-                laneSide: item.laneSide,
-                connectorFromLane: item.connectorFromLane,
-                connectorToLane: item.connectorToLane,
-                distanceMeters: item.distanceMeters,
-                averageSpeedMps: item.averageSpeedMps,
-                origin: item.origin,
-                editable: item.editable,
-                isCurrent: item.isCurrent
-            )
-        }
-
-        var normalized: [MovementLifeTimelineItem] = []
-        for raw in sorted {
-            var current: MovementLifeTimelineItem? = raw
-            while let candidate = current, let previous = normalized.last {
-                if let merged = mergedItem(previous, candidate) {
-                    normalized[normalized.count - 1] = merged
-                    current = nil
-                    break
-                }
-
-                if candidate.startedAtDate > previous.endedAtDate,
-                   let gapItem = makeDerivedGapItem(from: previous, to: candidate)
-                {
-                    normalized.append(gapItem)
-                    continue
-                }
-
-                if candidate.startedAtDate < previous.endedAtDate {
-                    current = trimmedItem(candidate, startingAt: previous.endedAtDate)
-                    if current == nil {
-                        break
-                    }
-                    continue
-                }
-                break
-            }
-            if let current {
-                normalized.append(current)
-            }
-        }
-
-        if let last = normalized.last,
-           let trailingCoverage = makeTrailingCoverageItem(after: last)
-        {
-            if let merged = mergedItem(last, trailingCoverage) {
-                normalized[normalized.count - 1] = merged
-            } else {
-                normalized.append(trailingCoverage)
-            }
-        }
-
-        return normalized
+    private func canonicalTimelineItems(
+        _ items: [MovementLifeTimelineItem],
+        liveOverlay: MovementLifeTimelineItem?,
+        referenceDate: Date
+    ) -> [MovementLifeTimelineItem] {
+        MovementTimelineCanonicalNormalizer.normalize(
+            items: items,
+            liveOverlay: liveOverlay,
+            referenceDate: referenceDate
+        )
     }
 
     private func reload() async {
@@ -780,6 +656,7 @@ private struct MovementLifeTimelineView: View {
                 limit: 36
             )
             segments = page.segments.reversed()
+            appModel.movementStore.cacheCanonicalProjectedBoxes(page.segments)
             nextCursor = page.nextCursor
             hasMore = page.hasMore
             loadError = nil
@@ -797,6 +674,7 @@ private struct MovementLifeTimelineView: View {
                         limit: 36
                     )
                     segments = page.segments.reversed()
+                    appModel.movementStore.cacheCanonicalProjectedBoxes(page.segments)
                     nextCursor = page.nextCursor
                     hasMore = page.hasMore
                     loadError = nil
@@ -843,6 +721,9 @@ private struct MovementLifeTimelineView: View {
                 limit: 32
             )
             segments = page.segments.reversed() + segments
+            appModel.movementStore.cacheCanonicalProjectedBoxes(
+                page.segments + appModel.movementStore.cachedProjectedBoxes
+            )
             self.nextCursor = page.nextCursor
             hasMore = page.hasMore
             loadError = nil
@@ -860,6 +741,9 @@ private struct MovementLifeTimelineView: View {
                         limit: 32
                     )
                     segments = page.segments.reversed() + segments
+                    appModel.movementStore.cacheCanonicalProjectedBoxes(
+                        page.segments + appModel.movementStore.cachedProjectedBoxes
+                    )
                     self.nextCursor = page.nextCursor
                     hasMore = page.hasMore
                     loadError = nil
@@ -888,8 +772,24 @@ private struct MovementLifeTimelineView: View {
             .filter { $0.isEmpty == false }
 
         do {
+            let payload = ForgeMovementUserBoxPayload(
+                kind: draft.kind == .stay ? "stay" : draft.kind == .trip ? "trip" : "missing",
+                startedAt: MovementTimelineFormatting.isoFormatter.string(from: draft.startedAt),
+                endedAt: MovementTimelineFormatting.isoFormatter.string(from: draft.endedAt),
+                title: trimmedLabel,
+                subtitle:
+                    draft.kind == .missing
+                    ? "User-defined missing-data override."
+                    : "User-defined movement box.",
+                placeLabel: draft.kind == .trip ? nil : .some(trimmedPlace.isEmpty ? nil : trimmedPlace),
+                anchorExternalUid: nil,
+                tags: tags,
+                distanceMeters: draft.kind == .trip ? 150 : nil,
+                averageSpeedMps: nil,
+                metadata: ["updatedFrom": creatingDraft != nil ? "companion-create" : "companion-edit"]
+            )
             switch draft.item.source {
-            case .remoteStay(let stayId, let center):
+            case .remoteUserBox(let boxId, _):
                 guard let pairing = appModel.pairing else {
                     throw NSError(
                         domain: "MovementLifeTimeline",
@@ -897,34 +797,19 @@ private struct MovementLifeTimelineView: View {
                         userInfo: [NSLocalizedDescriptionKey: "Reconnect to Forge before editing historical movement."]
                     )
                 }
-                let resolvedPlaceExternalUid = try await resolveCanonicalPlaceExternalUid(
-                    label: trimmedPlace,
-                    tags: tags,
-                    coordinates: center,
-                    pairing: pairing
-                )
-                _ = try await appModel.syncClient.patchMovementStay(
-                    stayId: stayId,
-                    patch: ForgeMovementStayPatch(
-                        label: trimmedLabel,
-                        status: nil,
-                        classification: nil,
-                        startedAt: MovementTimelineFormatting.isoFormatter.string(from: draft.startedAt),
-                        endedAt: MovementTimelineFormatting.isoFormatter.string(from: draft.endedAt),
-                        centerLatitude: nil,
-                        centerLongitude: nil,
-                        radiusMeters: nil,
-                        sampleCount: nil,
-                        placeId: nil,
-                        placeExternalUid: resolvedPlaceExternalUid == nil ? nil : .some(resolvedPlaceExternalUid),
-                        placeLabel: trimmedPlace.isEmpty ? nil : trimmedPlace,
-                        tags: tags,
-                        metadata: nil
-                    ),
+                _ = try await appModel.syncClient.patchMovementUserBox(
+                    boxId: boxId,
+                    patch: payload,
                     pairing: pairing
                 )
                 await reload()
-            case .remoteTrip(let tripId):
+            case .remoteAutomatic:
+                throw NSError(
+                    domain: "MovementLifeTimeline",
+                    code: 4,
+                    userInfo: [NSLocalizedDescriptionKey: "Automatic movement boxes cannot be edited. Invalidate them into missing data instead."]
+                )
+            case .liveStay, .liveTrip:
                 guard let pairing = appModel.pairing else {
                     throw NSError(
                         domain: "MovementLifeTimeline",
@@ -932,73 +817,81 @@ private struct MovementLifeTimelineView: View {
                         userInfo: [NSLocalizedDescriptionKey: "Reconnect to Forge before editing historical movement."]
                     )
                 }
-                _ = try await appModel.syncClient.patchMovementTrip(
-                    tripId: tripId,
-                    patch: ForgeMovementTripPatch(
-                        label: trimmedLabel,
-                        status: nil,
-                        travelMode: nil,
-                        activityType: nil,
-                        startedAt: MovementTimelineFormatting.isoFormatter.string(from: draft.startedAt),
-                        endedAt: MovementTimelineFormatting.isoFormatter.string(from: draft.endedAt),
-                        startPlaceId: nil,
-                        endPlaceId: nil,
-                        startPlaceExternalUid: nil,
-                        endPlaceExternalUid: nil,
-                        distanceMeters: nil,
-                        movingSeconds: nil,
-                        idleSeconds: nil,
-                        averageSpeedMps: nil,
-                        maxSpeedMps: nil,
-                        caloriesKcal: nil,
-                        expectedMet: nil,
-                        tags: tags,
-                        metadata: nil
-                    ),
+                _ = try await appModel.syncClient.createMovementUserBox(
+                    box: payload,
                     pairing: pairing
                 )
                 await reload()
-            case .liveStay(let stayId, let center):
-                let resolvedLocalPlace = appModel.movementStore.addKnownPlace(
-                    label: trimmedPlace.isEmpty ? trimmedLabel : trimmedPlace,
-                    categoryTags: tags,
-                    latitude: center.latitude,
-                    longitude: center.longitude
-                )
-                appModel.movementStore.updateLocalStay(
-                    id: stayId,
-                    label: trimmedLabel,
-                    tags: tags,
-                    placeLabel: trimmedPlace,
-                    placeExternalUid: resolvedLocalPlace?.externalUid ?? ""
-                )
-            case .liveTrip(let tripId):
-                appModel.movementStore.updateLocalTrip(
-                    id: tripId,
-                    label: trimmedLabel,
-                    tags: tags
-                )
             case .derived:
-                throw NSError(
-                    domain: "MovementLifeTimeline",
-                    code: 3,
-                    userInfo: [NSLocalizedDescriptionKey: "Repaired segments are synthesized and cannot be edited."]
+                guard let pairing = appModel.pairing else {
+                    throw NSError(
+                        domain: "MovementLifeTimeline",
+                        code: 1,
+                        userInfo: [NSLocalizedDescriptionKey: "Reconnect to Forge before creating a canonical movement box."]
+                    )
+                }
+                _ = try await appModel.syncClient.createMovementUserBox(
+                    box: payload,
+                    pairing: pairing
                 )
-            case .remoteMissing:
-                throw NSError(
-                    domain: "MovementLifeTimeline",
-                    code: 2,
-                    userInfo: [NSLocalizedDescriptionKey: "Missing-data segments are synthesized and cannot be edited."]
-                )
+                await reload()
             case .anchor:
                 break
             }
             editorDraft = nil
+            creatingDraft = nil
         } catch {
             companionDebugLog(
                 "MovementLifeTimelineView",
                 "saveEditor failed error=\(error.localizedDescription)"
             )
+            loadError = error.localizedDescription
+        }
+    }
+
+    private func invalidateAutomaticItem(_ item: MovementLifeTimelineItem) async {
+        guard case let .remoteAutomatic(boxId, _) = item.source,
+              let pairing = appModel.pairing
+        else {
+            return
+        }
+        do {
+            _ = try await appModel.syncClient.invalidateAutomaticMovementBox(
+                boxId: boxId,
+                payload: ForgeMovementUserBoxPayload(
+                    kind: nil,
+                    startedAt: nil,
+                    endedAt: nil,
+                    title: "User invalidated automatic movement",
+                    subtitle: "Overrides this automatic movement box with missing data.",
+                    placeLabel: nil,
+                    anchorExternalUid: nil,
+                    tags: ["user-invalidated", "missing-data"],
+                    distanceMeters: nil,
+                    averageSpeedMps: nil,
+                    metadata: ["invalidatedFrom": "companion-life-timeline"]
+                ),
+                pairing: pairing
+            )
+            await reload()
+        } catch {
+            loadError = error.localizedDescription
+        }
+    }
+
+    private func deleteUserDefinedItem(_ item: MovementLifeTimelineItem) async {
+        guard case let .remoteUserBox(boxId, _) = item.source,
+              let pairing = appModel.pairing
+        else {
+            return
+        }
+        do {
+            _ = try await appModel.syncClient.deleteMovementUserBox(
+                boxId: boxId,
+                pairing: pairing
+            )
+            await reload()
+        } catch {
             loadError = error.localizedDescription
         }
     }
@@ -1040,6 +933,7 @@ private struct MovementTimelineRow: View {
     let isSelected: Bool
     let onSelect: () -> Void
     let onEdit: () -> Void
+    let onDelete: () -> Void
 
     var body: some View {
         HStack(alignment: .center, spacing: 12) {
@@ -1100,7 +994,7 @@ private struct MovementTimelineRow: View {
     private var detailPanel: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .center, spacing: 8) {
-                Text(item.title)
+                Text(item.displayTitle)
                     .font(.system(size: 15, weight: .bold, design: .rounded))
                     .foregroundStyle(CompanionStyle.textPrimary)
                 if item.origin == .continuedStay {
@@ -1118,6 +1012,14 @@ private struct MovementTimelineRow: View {
                         .padding(.horizontal, 8)
                         .padding(.vertical, 4)
                         .background(Color.white.opacity(0.08), in: Capsule())
+                }
+                if item.origin == .userDefined || item.origin == .userInvalidated {
+                    Text(item.origin == .userInvalidated ? "USER INVALIDATED" : "USER")
+                        .font(.system(size: 9, weight: .black, design: .rounded))
+                        .foregroundStyle(Color.white.opacity(0.74))
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(Color.pink.opacity(0.18), in: Capsule())
                 }
             }
             Text(item.subtitle)
@@ -1141,25 +1043,57 @@ private struct MovementTimelineRow: View {
                 detailRow("Avg speed", "\(String(format: "%.1f", speed)) m/s")
             }
             detailRow("Sync source", item.syncSource.capitalized)
+            detailRow("Box source", item.sourceKind == "user_defined" ? "User-defined" : "Automatic")
+            if item.overrideCount > 0 {
+                detailRow("Overrides", "\(item.overrideCount) automatic boxes")
+            }
+            detailRow(
+                "Projection",
+                "Raw phone measurements stay immutable. Forge projects automatic boxes from raw evidence, then overlays user-defined boxes without mutating the imported raw data."
+            )
+            detailRow("Raw stays", "\(item.rawStayIds.count)")
+            detailRow("Raw trips", "\(item.rawTripIds.count)")
+            detailRow("Raw points", "\(item.rawPointCount)")
+            if item.hasLegacyCorrections {
+                detailRow("Legacy corrections", "Present")
+            }
             if item.tags.isEmpty == false {
                 FlowTagCloud(tags: item.tags)
             }
             HStack {
                 Spacer()
-                Button("Edit") {
-                    onEdit()
+                HStack(spacing: 8) {
+                    if item.sourceKind == "user_defined" {
+                        Button("Delete") {
+                            onDelete()
+                        }
+                        .font(.system(size: 13, weight: .semibold, design: .rounded))
+                        .foregroundStyle(Color.red.opacity(0.92))
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 9)
+                        .background(Color.red.opacity(0.12), in: Capsule())
+                        .overlay(
+                            Capsule()
+                                .stroke(Color.red.opacity(0.18), lineWidth: 1)
+                        )
+                        .buttonStyle(.plain)
+                        .disabled(item.kind == .anchor || item.editable == false)
+                    }
+                    Button(item.sourceKind == "automatic" ? "Invalidate" : "Edit") {
+                        onEdit()
+                    }
+                    .font(.system(size: 13, weight: .semibold, design: .rounded))
+                    .foregroundStyle(CompanionStyle.textPrimary)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 9)
+                    .background(Color.white.opacity(0.08), in: Capsule())
+                    .overlay(
+                        Capsule()
+                            .stroke(Color.white.opacity(0.08), lineWidth: 1)
+                    )
+                    .buttonStyle(.plain)
+                    .disabled(item.kind == .anchor || (item.sourceKind != "automatic" && item.editable == false))
                 }
-                .font(.system(size: 13, weight: .semibold, design: .rounded))
-                .foregroundStyle(CompanionStyle.textPrimary)
-                .padding(.horizontal, 14)
-                .padding(.vertical, 9)
-                .background(Color.white.opacity(0.08), in: Capsule())
-                .overlay(
-                    Capsule()
-                        .stroke(Color.white.opacity(0.08), lineWidth: 1)
-                )
-                .buttonStyle(.plain)
-                .disabled(item.kind == .anchor || item.editable == false)
             }
         }
         .padding(16)
@@ -1222,18 +1156,13 @@ private struct MovementTimelineStayShape: View {
                             .font(.system(size: 10, weight: .bold, design: .rounded))
                             .foregroundStyle(CompanionStyle.textSecondary)
                             .tracking(2)
-                        Text("\(item.startedAtDate.formatted(.dateTime.hour().minute())) → \(item.endedAtDate.formatted(.dateTime.hour().minute()))")
+                        Text(
+                            "\(item.startedAtDate.formatted(.dateTime.hour().minute())) → \(item.isCurrent ? "Now" : item.endedAtDate.formatted(.dateTime.hour().minute()))"
+                        )
                             .font(.system(size: 11, weight: .medium, design: .rounded))
                             .foregroundStyle(CompanionStyle.textSecondary)
                     }
                     .padding(16)
-                }
-                .overlay {
-                    MovementTimelineTimeLadder(
-                        startedAt: item.startedAtDate,
-                        endedAt: item.endedAtDate,
-                        durationSeconds: item.durationSeconds
-                    )
                 }
                 .overlay(alignment: .topTrailing) {
                     if item.durationSeconds > 6 * 60 * 60 {
@@ -1265,12 +1194,6 @@ private struct MovementTimelineTripShape: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             ZStack {
-                MovementTimelineTimeLadder(
-                    startedAt: item.startedAtDate,
-                    endedAt: item.endedAtDate,
-                    durationSeconds: item.durationSeconds
-                )
-
                 if item.isCurrent {
                     RoundedRectangle(cornerRadius: 999, style: .continuous)
                         .fill(item.gradient)
@@ -1391,7 +1314,7 @@ private struct MovementTimelineMissingShape: View {
             }
             .overlay(alignment: .bottomLeading) {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(item.title)
+                    Text(item.displayTitle)
                         .font(.system(size: 13, weight: .bold, design: .rounded))
                         .foregroundStyle(CompanionStyle.textPrimary)
                     Text("\(item.startedAtDate.formatted(.dateTime.hour().minute())) → \(item.endedAtDate.formatted(.dateTime.hour().minute()))")
@@ -1402,6 +1325,274 @@ private struct MovementTimelineMissingShape: View {
             }
             .frame(width: 172, height: max(112, item.displayHeight * 0.72))
             .frame(maxWidth: .infinity, alignment: .center)
+    }
+}
+
+private enum MovementTimelineViewportLayout {
+    static let gridRowHeight: CGFloat = 64
+    static let historyLeadHours: Int = 5
+    static let futureGridHours: Int = 1
+    static let rowSpacing: CGFloat = 18
+    static let historyCapHeight: CGFloat = 64
+    static let historyCapBottomSpacing: CGFloat = 18
+
+    static func leadSpacerHeight(for viewportHeight: CGFloat) -> CGFloat {
+        max(viewportHeight * 0.42, 260)
+    }
+}
+
+private struct MovementTimelineViewportGridRowMetric {
+    let item: MovementLifeTimelineItem
+    let rowStart: CGFloat
+    let rowHeight: CGFloat
+    let displayHeight: CGFloat
+    let boxTop: CGFloat
+    let boxBottom: CGFloat
+}
+
+private struct MovementTimelineHourMarker: Identifiable {
+    let id: String
+    let y: CGFloat
+    let label: String
+    let strong: Bool
+}
+
+private func movementWarpDisplayRatio(_ ratio: CGFloat, severity: CGFloat) -> CGFloat {
+    let eased = ratio + ((sin((ratio - 0.5) * .pi) + 1) * 0.5) - ratio
+    let centered = ratio - 0.5
+    let cubicCompression =
+        centered * (1 - severity * 0.64)
+        + centered * centered * centered * severity * 2.56
+    let warped = 0.5 + cubicCompression
+    return max(0, min(1, warped - (eased - ratio) * severity * 0.08))
+}
+
+private func nextMovementHourBoundary(after date: Date) -> Date {
+    let calendar = Calendar.current
+    let components = calendar.dateComponents([.year, .month, .day, .hour], from: date)
+    let hourStart = calendar.date(from: components) ?? date
+    return hourStart <= date ? hourStart.addingTimeInterval(3600) : hourStart
+}
+
+private func movementHourMarkers(
+    startedAt: Date,
+    endedAt: Date,
+    durationSeconds: Int,
+    displayHeight: CGFloat
+) -> [MovementTimelineHourMarker] {
+    let maxDisplaySeconds = 6.0 * 60.0 * 60.0
+    let duration = max(1, durationSeconds)
+    let durationInterval = max(1, endedAt.timeIntervalSince(startedAt))
+    let compressionSeverity = max(
+        0,
+        1 - min(1, maxDisplaySeconds / Double(duration))
+    )
+    var markers: [MovementTimelineHourMarker] = []
+    var cursor = nextMovementHourBoundary(after: startedAt)
+    while cursor < endedAt {
+        let ratio = CGFloat(cursor.timeIntervalSince(startedAt) / durationInterval)
+        let displayRatio =
+            duration > Int(maxDisplaySeconds)
+            ? movementWarpDisplayRatio(ratio, severity: CGFloat(compressionSeverity))
+            : ratio
+        let isStrong = Calendar.current.component(.hour, from: cursor) == 0
+        markers.append(
+            MovementTimelineHourMarker(
+                id: "segment-\(startedAt.timeIntervalSince1970)-\(cursor.timeIntervalSince1970)",
+                y: displayHeight * displayRatio,
+                label: isStrong
+                    ? cursor.formatted(Date.FormatStyle().day(.twoDigits).month(.twoDigits).year(.twoDigits))
+                    : cursor.formatted(Date.FormatStyle().hour(.twoDigits(amPM: .omitted))),
+                strong: isStrong
+            )
+        )
+        cursor = cursor.addingTimeInterval(3600)
+    }
+    return markers
+}
+
+private func buildMovementViewportGridMetrics(
+    items: [MovementLifeTimelineItem],
+    viewportHeight: CGFloat,
+    safeTopInset: CGFloat
+) -> [MovementTimelineViewportGridRowMetric] {
+    let timelineItems = items.filter { $0.kind != .anchor }
+    let historyOffset =
+        timelineItems.isEmpty
+        ? 0
+        : safeTopInset
+            + 12
+            + MovementTimelineViewportLayout.historyCapHeight
+            + MovementTimelineViewportLayout.historyCapBottomSpacing
+    var cursor = historyOffset + MovementTimelineViewportLayout.leadSpacerHeight(for: viewportHeight)
+    return timelineItems.map { item in
+        let displayHeight = item.kind == .missing ? max(112, item.displayHeight * 0.72) : item.displayHeight
+        let rowStart = cursor
+        let rowHeight = displayHeight + MovementTimelineViewportLayout.rowSpacing
+        let metric = MovementTimelineViewportGridRowMetric(
+            item: item,
+            rowStart: rowStart,
+            rowHeight: rowHeight,
+            displayHeight: displayHeight,
+            boxTop: rowStart,
+            boxBottom: rowStart + displayHeight
+        )
+        cursor += rowHeight
+        return metric
+    }
+}
+
+private func buildMovementViewportHourMarkers(
+    items: [MovementLifeTimelineItem],
+    viewportHeight: CGFloat,
+    safeTopInset: CGFloat,
+    rangeEnd: Date
+) -> [MovementTimelineHourMarker] {
+    let rows = buildMovementViewportGridMetrics(
+        items: items,
+        viewportHeight: viewportHeight,
+        safeTopInset: safeTopInset
+    )
+    guard let first = rows.first else {
+        return []
+    }
+
+    var markers: [MovementTimelineHourMarker] = []
+    let firstStart = first.item.startedAtDate
+    var leadHour = nextMovementHourBoundary(
+        after: firstStart.addingTimeInterval(
+            TimeInterval(-MovementTimelineViewportLayout.historyLeadHours * 3600)
+        )
+    )
+    while leadHour < firstStart {
+        let hoursBeforeStart = firstStart.timeIntervalSince(leadHour) / 3600
+        markers.append(
+            MovementTimelineHourMarker(
+                id: "lead-\(leadHour.timeIntervalSince1970)",
+                y: first.boxTop - CGFloat(hoursBeforeStart) * MovementTimelineViewportLayout.gridRowHeight,
+                label: Calendar.current.component(.hour, from: leadHour) == 0
+                    ? leadHour.formatted(Date.FormatStyle().day(.twoDigits).month(.twoDigits).year(.twoDigits))
+                    : leadHour.formatted(Date.FormatStyle().hour(.twoDigits(amPM: .omitted))),
+                strong: Calendar.current.component(.hour, from: leadHour) == 0
+            )
+        )
+        leadHour = leadHour.addingTimeInterval(3600)
+    }
+
+    for index in rows.indices {
+        let row = rows[index]
+        let itemMarkers = movementHourMarkers(
+            startedAt: row.item.startedAtDate,
+            endedAt: row.item.endedAtDate,
+            durationSeconds: row.item.durationSeconds,
+            displayHeight: row.displayHeight
+        ).map { marker in
+            MovementTimelineHourMarker(
+                id: "row-\(row.item.id)-\(marker.id)",
+                y: row.boxTop + marker.y,
+                label: marker.label,
+                strong: marker.strong
+            )
+        }
+        markers.append(contentsOf: itemMarkers)
+
+        if index + 1 < rows.count {
+            let nextRow = rows[index + 1]
+            let gapStart = row.item.endedAtDate
+            let gapEnd = nextRow.item.startedAtDate
+            let gapDuration = gapEnd.timeIntervalSince(gapStart)
+            if gapDuration > 0 {
+                var hour = nextMovementHourBoundary(after: gapStart)
+                while hour < gapEnd {
+                    let ratio = hour.timeIntervalSince(gapStart) / gapDuration
+                    let y = row.boxBottom + (nextRow.boxTop - row.boxBottom) * CGFloat(ratio)
+                    let isStrong = Calendar.current.component(.hour, from: hour) == 0
+                    markers.append(
+                        MovementTimelineHourMarker(
+                            id: "gap-\(row.item.id)-\(nextRow.item.id)-\(hour.timeIntervalSince1970)",
+                            y: y,
+                            label: isStrong
+                                ? hour.formatted(Date.FormatStyle().day(.twoDigits).month(.twoDigits).year(.twoDigits))
+                                : hour.formatted(Date.FormatStyle().hour(.twoDigits(amPM: .omitted))),
+                            strong: isStrong
+                        )
+                    )
+                    hour = hour.addingTimeInterval(3600)
+                }
+            }
+            continue
+        }
+
+        var trailingHour = nextMovementHourBoundary(after: row.item.endedAtDate)
+        while trailingHour <= rangeEnd {
+            let y = row.boxBottom + CGFloat(trailingHour.timeIntervalSince(row.item.endedAtDate) / 3600) * MovementTimelineViewportLayout.gridRowHeight
+            let isStrong = Calendar.current.component(.hour, from: trailingHour) == 0
+            markers.append(
+                MovementTimelineHourMarker(
+                    id: "tail-\(row.item.id)-\(trailingHour.timeIntervalSince1970)",
+                    y: y,
+                    label: isStrong
+                        ? trailingHour.formatted(Date.FormatStyle().day(.twoDigits).month(.twoDigits).year(.twoDigits))
+                        : trailingHour.formatted(Date.FormatStyle().hour(.twoDigits(amPM: .omitted))),
+                    strong: isStrong
+                )
+            )
+            trailingHour = trailingHour.addingTimeInterval(3600)
+        }
+    }
+
+    return markers.sorted { left, right in
+        if left.y == right.y {
+            return left.label < right.label
+        }
+        return left.y < right.y
+    }
+}
+
+private struct MovementTimelineViewportGrid: View {
+    let items: [MovementLifeTimelineItem]
+    let viewportHeight: CGFloat
+    let safeTopInset: CGFloat
+    let bottomPadding: CGFloat
+    let rangeEnd: Date
+
+    var body: some View {
+        let rows = buildMovementViewportGridMetrics(
+            items: items,
+            viewportHeight: viewportHeight,
+            safeTopInset: safeTopInset
+        )
+        let markers = buildMovementViewportHourMarkers(
+            items: items,
+            viewportHeight: viewportHeight,
+            safeTopInset: safeTopInset,
+            rangeEnd: rangeEnd
+        )
+        let contentHeight =
+            (rows.last?.boxBottom ?? 0)
+            + max(
+                CGFloat(rangeEnd.timeIntervalSince(rows.last?.item.endedAtDate ?? rangeEnd) / 3600)
+                    * MovementTimelineViewportLayout.gridRowHeight,
+                CGFloat(MovementTimelineViewportLayout.futureGridHours) * MovementTimelineViewportLayout.gridRowHeight
+            )
+            + bottomPadding
+        ZStack(alignment: .topLeading) {
+            Rectangle()
+                .fill(Color.clear)
+                .frame(height: max(contentHeight, viewportHeight))
+            ForEach(markers) { marker in
+                VStack(alignment: .leading, spacing: 2) {
+                    Rectangle()
+                        .fill(Color.white.opacity(marker.strong ? 0.14 : 0.07))
+                        .frame(height: 1)
+                    Text(marker.label)
+                        .font(.system(size: 13, weight: .bold, design: .rounded))
+                        .foregroundStyle(Color.white.opacity(marker.strong ? 0.26 : 0.12))
+                }
+                .offset(x: 12, y: marker.y - 10)
+            }
+        }
+        .allowsHitTesting(false)
     }
 }
 
@@ -1420,90 +1611,6 @@ private struct MovementTimelineTripEndpointCapsule: View {
                     )
             )
             .shadow(color: Color.black.opacity(0.18), radius: 8, y: 3)
-    }
-}
-
-private struct MovementTimelineTimeLadder: View {
-    let startedAt: Date
-    let endedAt: Date
-    let durationSeconds: Int
-
-    var body: some View {
-        GeometryReader { proxy in
-            let markers = timelineMarkers(height: proxy.size.height)
-            ZStack(alignment: .topLeading) {
-                ForEach(markers) { marker in
-                    VStack(alignment: .leading, spacing: 2) {
-                        Rectangle()
-                            .fill(Color.white.opacity(marker.isDate ? 0.14 : 0.07))
-                            .frame(height: 1)
-                        Text(marker.label)
-                            .font(.system(size: marker.isDate ? 9 : 8, weight: .thin, design: .rounded))
-                            .foregroundStyle(Color.white.opacity(marker.isDate ? 0.26 : 0.12))
-                    }
-                    .offset(y: marker.y)
-                }
-            }
-        }
-        .allowsHitTesting(false)
-        .padding(.horizontal, 10)
-        .padding(.vertical, 10)
-    }
-
-    private func timelineMarkers(height: CGFloat) -> [MovementTimelineMarker] {
-        let maxDurationSeconds = 6 * 60 * 60
-        let effectiveHours = max(1, min(6, Int(ceil(Double(min(durationSeconds, maxDurationSeconds)) / 3600))))
-        var markers: [MovementTimelineMarker] = []
-        for hour in 0...effectiveHours {
-            let fraction = CGFloat(hour) / CGFloat(max(1, effectiveHours))
-            let y = height * fraction
-            let sourceDate: Date
-            if durationSeconds <= maxDurationSeconds {
-                sourceDate = endedAt.addingTimeInterval(-Double(hour) * 3600)
-            } else {
-                let compressedFraction = pow(fraction, 1.8)
-                sourceDate = endedAt.addingTimeInterval(-Double(durationSeconds) * Double(compressedFraction))
-            }
-            let isDate = Calendar.current.component(.hour, from: sourceDate) == 0 || hour == effectiveHours
-            markers.append(
-                MovementTimelineMarker(
-                    y: y,
-                    label: isDate
-                        ? sourceDate.formatted(Date.FormatStyle().day(.twoDigits).month(.twoDigits).year(.twoDigits))
-                        : sourceDate.formatted(Date.FormatStyle().hour(.twoDigits(amPM: .omitted))),
-                    isDate: isDate
-                )
-            )
-        }
-        return markers
-    }
-}
-
-private struct MovementTimelineBackdropGrid: View {
-    let anchorDate: Date
-
-    var body: some View {
-        GeometryReader { proxy in
-            let rows = Int(proxy.size.height / 42) + 8
-            ZStack(alignment: .topLeading) {
-                ForEach(0..<rows, id: \.self) { index in
-                    let date = anchorDate.addingTimeInterval(TimeInterval(-index * 3600))
-                    let y = CGFloat(index) * 42
-                    Rectangle()
-                        .fill(Color.white.opacity(index.isMultiple(of: 24) ? 0.08 : 0.04))
-                        .frame(height: 1)
-                        .offset(y: y)
-                    Text(index.isMultiple(of: 24)
-                         ? date.formatted(Date.FormatStyle().day(.twoDigits).month(.twoDigits).year(.twoDigits))
-                         : date.formatted(Date.FormatStyle().hour(.twoDigits(amPM: .omitted))))
-                        .font(.system(size: index.isMultiple(of: 24) ? 9 : 8, weight: .thin, design: .rounded))
-                        .foregroundStyle(Color.white.opacity(index.isMultiple(of: 24) ? 0.24 : 0.14))
-                        .offset(x: 12, y: y - 10)
-                }
-            }
-        }
-        .ignoresSafeArea()
-        .allowsHitTesting(false)
     }
 }
 
@@ -1529,6 +1636,7 @@ private struct MovementTimelineStatusCard: View {
 private struct MovementTimelineEditSheet: View {
     @State var draft: MovementTimelineEditorDraft
 
+    let creating: Bool
     let save: (MovementTimelineEditorDraft) async -> Void
     let close: () -> Void
 
@@ -1538,8 +1646,13 @@ private struct MovementTimelineEditSheet: View {
         NavigationStack {
             Form {
                 Section("Summary") {
+                    Picker("Kind", selection: $draft.kind) {
+                        Text("Stay").tag(MovementLifeTimelineItem.Kind.stay)
+                        Text("Move").tag(MovementLifeTimelineItem.Kind.trip)
+                        Text("Missing").tag(MovementLifeTimelineItem.Kind.missing)
+                    }
                     TextField("Label", text: $draft.label)
-                    if draft.item.kind == .stay {
+                    if draft.kind != .trip {
                         TextField("Place", text: $draft.placeLabel)
                     }
                     TextField("Tags", text: $draft.tags)
@@ -1557,11 +1670,20 @@ private struct MovementTimelineEditSheet: View {
                             .font(.system(size: 12, weight: .medium, design: .rounded))
                             .foregroundStyle(CompanionStyle.textSecondary)
                     }
+                    Text(
+                        creating
+                            ? "This will create a user-defined movement box that overrides automatic movement boxes without mutating raw phone measurements."
+                            : draft.item.sourceKind == "user_defined"
+                                ? "This edits a user-defined movement box and syncs the same canonical box to Forge web and iPhone."
+                                : "Automatic movement boxes are immutable. Create a user-defined box or invalidate an automatic box instead."
+                    )
+                    .font(.system(size: 12, weight: .medium, design: .rounded))
+                    .foregroundStyle(CompanionStyle.textSecondary)
                 }
             }
             .scrollContentBackground(.hidden)
             .background(CompanionStyle.background)
-            .navigationTitle("Edit segment")
+            .navigationTitle(creating ? "Create box" : "Edit box")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
@@ -1667,13 +1789,6 @@ private struct MovementTimelineHistoryCap: View {
     }
 }
 
-private struct MovementTimelineMarker: Identifiable {
-    let id = UUID()
-    let y: CGFloat
-    let label: String
-    let isDate: Bool
-}
-
 private struct MovementTimelineVisiblePositionKey: PreferenceKey {
     static var defaultValue: [String: CGFloat] = [:]
 
@@ -1682,7 +1797,7 @@ private struct MovementTimelineVisiblePositionKey: PreferenceKey {
     }
 }
 
-private struct MovementTimelineCoordinate: Hashable {
+struct MovementTimelineCoordinate: Hashable {
     let latitude: Double
     let longitude: Double
 }
@@ -1690,6 +1805,7 @@ private struct MovementTimelineCoordinate: Hashable {
 private struct MovementTimelineEditorDraft: Identifiable {
     let id: String
     let item: MovementLifeTimelineItem
+    var kind: MovementLifeTimelineItem.Kind
     var label: String
     var placeLabel: String
     var tags: String
@@ -1699,6 +1815,7 @@ private struct MovementTimelineEditorDraft: Identifiable {
     init(item: MovementLifeTimelineItem) {
         self.id = item.id
         self.item = item
+        self.kind = item.kind
         self.label = item.title
         self.placeLabel = item.placeLabel ?? ""
         self.tags = item.tags.joined(separator: ", ")
@@ -1707,7 +1824,608 @@ private struct MovementTimelineEditorDraft: Identifiable {
     }
 }
 
-private struct MovementLifeTimelineItem: Identifiable, Hashable {
+enum MovementTimelineDisplayNormalizer {
+    /*
+     Movement display repair rules are binding:
+
+     1. Every positive-duration interval in the rendered window must be labelled as
+        stay, trip, or missing. Blank time is a bug.
+     2. Missing is never allowed for gaps under 1 hour.
+     3. Any trip under 5 minutes is invalid and must be repaired into stay continuity.
+     4. Any trip under 100 meters cumulative distance is invalid and must be repaired
+        into stay continuity.
+     5. For gaps under 1 hour:
+        - same place -> continue stay
+        - different place -> repaired trip only if boundary displacement is clearly
+          meaningful and the gap is at least 5 minutes
+        - otherwise -> repaired stay
+     6. The tail must always stay labelled through Now. If the user is still at the
+        same place, the last stay should remain ongoing instead of fragmenting into
+        tiny stay/trip/stay boxes.
+     */
+
+    static func normalize(
+        items: [MovementLifeTimelineItem],
+        referenceDate: Date
+    ) -> [MovementLifeTimelineItem] {
+        let sorted = items
+            .filter { $0.kind != .anchor && $0.endedAtDate > $0.startedAtDate }
+            .sorted { left, right in
+                if left.startedAtDate == right.startedAtDate {
+                    return left.endedAtDate < right.endedAtDate
+                }
+                return left.startedAtDate < right.startedAtDate
+            }
+
+        guard sorted.isEmpty == false else {
+            return []
+        }
+
+        let preRepaired = sorted.enumerated().map { index, item in
+            repairedInvalidTripItem(item, index: index, items: sorted, referenceDate: referenceDate) ?? item
+        }
+
+        var normalized: [MovementLifeTimelineItem] = []
+        for raw in preRepaired {
+            var current: MovementLifeTimelineItem? = raw
+            while let candidate = current, let previous = normalized.last {
+                if let merged = mergedItem(previous, candidate) {
+                    normalized[normalized.count - 1] = merged
+                    current = nil
+                    break
+                }
+
+                if candidate.startedAtDate > previous.endedAtDate,
+                   let gapItem = makeDerivedGapItem(from: previous, to: candidate)
+                {
+                    normalized.append(gapItem)
+                    continue
+                }
+
+                if candidate.startedAtDate < previous.endedAtDate {
+                    current = trimmedItem(candidate, startingAt: previous.endedAtDate)
+                    if current == nil {
+                        break
+                    }
+                    continue
+                }
+                break
+            }
+            if let current {
+                normalized.append(current)
+            }
+        }
+
+        if let last = normalized.last,
+           let trailingCoverage = makeTrailingCoverageItem(after: last, referenceDate: referenceDate)
+        {
+            if let merged = mergedItem(last, trailingCoverage) {
+                normalized[normalized.count - 1] = merged
+            } else {
+                normalized.append(trailingCoverage)
+            }
+        }
+
+        if let last = normalized.last,
+           last.kind == .stay,
+           last.endedAtDate >= referenceDate.addingTimeInterval(-60 * 60)
+        {
+            normalized[normalized.count - 1] = last.promotedToCurrent(referenceDate: referenceDate)
+        }
+
+        return normalized
+    }
+
+    private static func stayAnchorKey(for item: MovementLifeTimelineItem) -> String? {
+        guard item.kind == .stay else {
+            return nil
+        }
+        let candidate = item.placeLabel?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+            ? item.placeLabel
+            : item.title
+        let normalized = candidate?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        return normalized?.isEmpty == false ? normalized : nil
+    }
+
+    private static func sharesStayAnchor(_ left: MovementLifeTimelineItem, _ right: MovementLifeTimelineItem) -> Bool {
+        guard left.kind == .stay, right.kind == .stay else {
+            return false
+        }
+        guard let leftAnchor = stayAnchorKey(for: left),
+              let rightAnchor = stayAnchorKey(for: right)
+        else {
+            return left.origin != .recorded || right.origin != .recorded
+        }
+        return leftAnchor == rightAnchor
+    }
+
+    private static func tripLooksInvalid(_ item: MovementLifeTimelineItem) -> Bool {
+        guard item.kind == .trip else {
+            return false
+        }
+        return item.durationSeconds < 5 * 60 || (item.distanceMeters ?? 0) < 100
+    }
+
+    private static func repairedInvalidTripItem(
+        _ item: MovementLifeTimelineItem,
+        index: Int,
+        items: [MovementLifeTimelineItem],
+        referenceDate: Date
+    ) -> MovementLifeTimelineItem? {
+        guard tripLooksInvalid(item) else {
+            return nil
+        }
+
+        let previousStay = items[..<index].reversed().first(where: { $0.kind == .stay })
+        let nextStay = items.dropFirst(index + 1).first(where: { $0.kind == .stay })
+        let preferredStay =
+            (previousStay != nil && nextStay != nil && sharesStayAnchor(previousStay!, nextStay!))
+            ? previousStay
+            : previousStay ?? nextStay
+
+        let title = preferredStay?.placeLabel ?? preferredStay?.title ?? item.placeLabel ?? item.title
+        let placeLabel = preferredStay?.placeLabel ?? item.placeLabel
+        let tags = Array(Set(item.tags + (preferredStay?.tags ?? []) + ["invalid-trip-display-repair"])).sorted()
+        let origin: MovementLifeTimelineItem.Origin =
+            preferredStay?.kind == .stay ? .continuedStay : .repairedGap
+        let isCurrent = item.isCurrent || item.endedAtDate >= referenceDate.addingTimeInterval(-5 * 60)
+
+        return MovementLifeTimelineItem(
+            id: "display-invalid-trip-stay-\(item.id)",
+            source: .derived("display-invalid-trip-stay-\(item.id)"),
+            kind: .stay,
+            title: title,
+            subtitle: "Invalid short-distance or short-duration trip repaired into stay continuity.",
+            placeLabel: placeLabel,
+            tags: tags,
+            syncSource: "display repair",
+            startedAtDate: item.startedAtDate,
+            endedAtDate: item.endedAtDate,
+            durationSeconds: max(60, Int(item.endedAtDate.timeIntervalSince(item.startedAtDate))),
+            laneSide: .left,
+            connectorFromLane: .left,
+            connectorToLane: .left,
+            distanceMeters: nil,
+            averageSpeedMps: nil,
+            origin: origin,
+            editable: false,
+            isCurrent: isCurrent
+        )
+    }
+
+    private static func makeDerivedGapItem(
+        from previous: MovementLifeTimelineItem,
+        to next: MovementLifeTimelineItem
+    ) -> MovementLifeTimelineItem? {
+        let gapSeconds = next.startedAtDate.timeIntervalSince(previous.endedAtDate)
+        guard gapSeconds > 0 else {
+            return nil
+        }
+        if gapSeconds <= 60 * 60, sharesStayAnchor(previous, next) {
+            return MovementLifeTimelineItem(
+                id: "display-continued-\(previous.id)-\(next.id)",
+                source: .derived("display-continued-\(previous.id)-\(next.id)"),
+                kind: .stay,
+                title: previous.placeLabel ?? next.placeLabel ?? previous.title,
+                subtitle: "Short stationary gap carried forward into one continuous stay.",
+                placeLabel: previous.placeLabel ?? next.placeLabel,
+                tags: Array(Set(previous.tags + next.tags + ["continued-stay"])).sorted(),
+                syncSource: "display repair",
+                startedAtDate: previous.endedAtDate,
+                endedAtDate: next.startedAtDate,
+                durationSeconds: max(60, Int(gapSeconds)),
+                laneSide: .left,
+                connectorFromLane: .left,
+                connectorToLane: .left,
+                distanceMeters: nil,
+                averageSpeedMps: nil,
+                origin: .continuedStay,
+                editable: false,
+                isCurrent: false
+            )
+        }
+        if gapSeconds <= 60 * 60 {
+            let previousPlace = previous.placeLabel?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            let nextPlace = next.placeLabel?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            if gapSeconds >= 5 * 60,
+               let previousPlace,
+               let nextPlace,
+               previousPlace.isEmpty == false,
+               nextPlace.isEmpty == false,
+               previousPlace != nextPlace
+            {
+                return MovementLifeTimelineItem(
+                    id: "display-repaired-trip-\(previous.id)-\(next.id)",
+                    source: .derived("display-repaired-trip-\(previous.id)-\(next.id)"),
+                    kind: .trip,
+                    title: "\(previous.placeLabel ?? previous.title) → \(next.placeLabel ?? next.title)",
+                    subtitle: "Short different-place gap repaired as a move between known anchors.",
+                    placeLabel: next.placeLabel ?? previous.placeLabel,
+                    tags: ["repaired-gap"],
+                    syncSource: "display repair",
+                    startedAtDate: previous.endedAtDate,
+                    endedAtDate: next.startedAtDate,
+                    durationSeconds: max(60, Int(gapSeconds)),
+                    laneSide: .right,
+                    connectorFromLane: previous.kind == .trip ? .right : .left,
+                    connectorToLane: next.kind == .trip ? .right : .left,
+                    distanceMeters: nil,
+                    averageSpeedMps: nil,
+                    origin: .repairedGap,
+                    editable: false,
+                    isCurrent: false
+                )
+            }
+            return MovementLifeTimelineItem(
+                id: "display-repaired-stay-\(previous.id)-\(next.id)",
+                source: .derived("display-repaired-stay-\(previous.id)-\(next.id)"),
+                kind: .stay,
+                title: previous.placeLabel ?? next.placeLabel ?? previous.title,
+                subtitle: "Short uncovered gap repaired into stay continuity so the timeline never goes silent.",
+                placeLabel: previous.placeLabel ?? next.placeLabel,
+                tags: Array(Set(previous.tags + next.tags + ["repaired-gap"])).sorted(),
+                syncSource: "display repair",
+                startedAtDate: previous.endedAtDate,
+                endedAtDate: next.startedAtDate,
+                durationSeconds: max(60, Int(gapSeconds)),
+                laneSide: .left,
+                connectorFromLane: .left,
+                connectorToLane: .left,
+                distanceMeters: nil,
+                averageSpeedMps: nil,
+                origin: .repairedGap,
+                editable: false,
+                isCurrent: false
+            )
+        }
+        return MovementLifeTimelineItem(
+            id: "display-missing-\(previous.id)-\(next.id)",
+            source: .derived("display-missing-\(previous.id)-\(next.id)"),
+            kind: .missing,
+            title: "Missing data",
+            subtitle: "Forge backfilled an uncovered interval so the timeline never goes silent.",
+            placeLabel: nil,
+            tags: ["missing-data", "display-repair"],
+            syncSource: "display repair",
+            startedAtDate: previous.endedAtDate,
+            endedAtDate: next.startedAtDate,
+            durationSeconds: max(60, Int(gapSeconds)),
+            laneSide: .left,
+            connectorFromLane: previous.kind == .trip ? .right : .left,
+            connectorToLane: next.kind == .trip ? .right : .left,
+            distanceMeters: nil,
+            averageSpeedMps: nil,
+            origin: .missing,
+            editable: false,
+            isCurrent: false
+        )
+    }
+
+    private static func makeTrailingCoverageItem(
+        after item: MovementLifeTimelineItem,
+        referenceDate: Date
+    ) -> MovementLifeTimelineItem? {
+        let gapSeconds = referenceDate.timeIntervalSince(item.endedAtDate)
+        guard gapSeconds > 0 else {
+            return nil
+        }
+        if gapSeconds <= 60 * 60 {
+            return MovementLifeTimelineItem(
+                id: "display-trailing-stay-\(item.id)",
+                source: .derived("display-trailing-stay-\(item.id)"),
+                kind: .stay,
+                title: item.placeLabel ?? item.title,
+                subtitle:
+                    item.kind == .stay
+                    ? "Short stationary gap carried forward into one continuous stay."
+                    : "Short trailing gap repaired into stay continuity until fresher signal arrives.",
+                placeLabel: item.placeLabel,
+                tags: Array(Set(item.tags + [item.kind == .stay ? "continued-stay" : "repaired-gap"])).sorted(),
+                syncSource: "display repair",
+                startedAtDate: item.endedAtDate,
+                endedAtDate: referenceDate,
+                durationSeconds: max(60, Int(gapSeconds)),
+                laneSide: .left,
+                connectorFromLane: .left,
+                connectorToLane: .left,
+                distanceMeters: nil,
+                averageSpeedMps: nil,
+                origin: item.kind == .stay ? .continuedStay : .repairedGap,
+                editable: false,
+                isCurrent: false
+            )
+        }
+        return MovementLifeTimelineItem(
+            id: "display-trailing-missing-\(item.id)",
+            source: .derived("display-trailing-missing-\(item.id)"),
+            kind: .missing,
+            title: "Missing data",
+            subtitle: "Forge backfilled the trailing interval so the view stays fully labelled.",
+            placeLabel: nil,
+            tags: ["missing-data", "display-repair"],
+            syncSource: "display repair",
+            startedAtDate: item.endedAtDate,
+            endedAtDate: referenceDate,
+            durationSeconds: max(60, Int(gapSeconds)),
+            laneSide: .left,
+            connectorFromLane: item.kind == .trip ? .right : .left,
+            connectorToLane: .left,
+            distanceMeters: nil,
+            averageSpeedMps: nil,
+            origin: .missing,
+            editable: false,
+            isCurrent: false
+        )
+    }
+
+    private static func mergedItem(
+        _ previous: MovementLifeTimelineItem,
+        _ next: MovementLifeTimelineItem
+    ) -> MovementLifeTimelineItem? {
+        guard previous.kind == next.kind else {
+            return nil
+        }
+        let touchingOrOverlapping = next.startedAtDate <= previous.endedAtDate
+            || abs(next.startedAtDate.timeIntervalSince(previous.endedAtDate)) < 1
+        guard touchingOrOverlapping else {
+            return nil
+        }
+        let canMerge: Bool
+        switch previous.kind {
+        case .stay:
+            canMerge = sharesStayAnchor(previous, next)
+        case .trip, .missing:
+            canMerge = true
+        case .anchor:
+            canMerge = false
+        }
+        guard canMerge else {
+            return nil
+        }
+        let mergedOrigin: MovementLifeTimelineItem.Origin
+        if previous.origin == .continuedStay || next.origin == .continuedStay {
+            mergedOrigin = .continuedStay
+        } else if previous.origin == .repairedGap || next.origin == .repairedGap {
+            mergedOrigin = .repairedGap
+        } else if previous.origin == .missing || next.origin == .missing {
+            mergedOrigin = .missing
+        } else {
+            mergedOrigin = .recorded
+        }
+        return MovementLifeTimelineItem(
+            id: "merged-\(previous.id)-\(next.id)",
+            source: mergedOrigin == .recorded ? previous.source : .derived("merged-\(previous.id)-\(next.id)"),
+            kind: previous.kind,
+            title: previous.placeLabel ?? next.placeLabel ?? previous.title,
+            subtitle:
+                mergedOrigin == .continuedStay
+                ? "Short stationary gap carried forward into one continuous stay."
+                : previous.subtitle,
+            placeLabel: previous.placeLabel ?? next.placeLabel,
+            tags: Array(Set(previous.tags + next.tags)).sorted(),
+            syncSource: previous.syncSource == next.syncSource ? previous.syncSource : "display repair",
+            startedAtDate: min(previous.startedAtDate, next.startedAtDate),
+            endedAtDate: max(previous.endedAtDate, next.endedAtDate),
+            durationSeconds: max(
+                60,
+                Int(max(previous.endedAtDate, next.endedAtDate).timeIntervalSince(min(previous.startedAtDate, next.startedAtDate)))
+            ),
+            laneSide: previous.kind == .trip ? .right : .left,
+            connectorFromLane: previous.connectorFromLane,
+            connectorToLane: next.connectorToLane,
+            distanceMeters:
+                previous.kind == .trip
+                ? max(previous.distanceMeters ?? 0, next.distanceMeters ?? 0)
+                : nil,
+            averageSpeedMps: previous.averageSpeedMps ?? next.averageSpeedMps,
+            origin: mergedOrigin,
+            editable: mergedOrigin == .recorded && previous.editable && next.editable,
+            isCurrent: previous.isCurrent || next.isCurrent
+        )
+    }
+
+    private static func trimmedItem(
+        _ item: MovementLifeTimelineItem,
+        startingAt newStart: Date
+    ) -> MovementLifeTimelineItem? {
+        guard item.endedAtDate > newStart else {
+            return nil
+        }
+        return MovementLifeTimelineItem(
+            id: "\(item.id)-trimmed-\(Int(newStart.timeIntervalSince1970))",
+            source: item.source,
+            kind: item.kind,
+            title: item.title,
+            subtitle: item.subtitle,
+            placeLabel: item.placeLabel,
+            tags: item.tags,
+            syncSource: item.syncSource,
+            startedAtDate: newStart,
+            endedAtDate: item.endedAtDate,
+            durationSeconds: max(60, Int(item.endedAtDate.timeIntervalSince(newStart))),
+            laneSide: item.laneSide,
+            connectorFromLane: item.connectorFromLane,
+            connectorToLane: item.connectorToLane,
+            distanceMeters: item.distanceMeters,
+            averageSpeedMps: item.averageSpeedMps,
+            origin: item.origin,
+            editable: item.editable,
+            isCurrent: item.isCurrent
+        )
+    }
+}
+
+enum MovementTimelineCanonicalNormalizer {
+    /*
+     Canonical movement timeline rules for synced rendering:
+
+     1. When Forge canonical boxes are available, iPhone renders those as the
+        source of truth.
+     2. The phone may only apply a limited local tail repair on top:
+        - dedupe duplicate canonical boxes
+        - merge same-place ongoing stay continuity
+        - extend the final stay to Now when it is still the same ongoing place
+     3. The phone must not invent a second product-divergent box history while
+        connected. Internal gaps and repair semantics come from Forge.
+     */
+
+    static func normalize(
+        items: [MovementLifeTimelineItem],
+        liveOverlay: MovementLifeTimelineItem?,
+        referenceDate: Date
+    ) -> [MovementLifeTimelineItem] {
+        let deduplicated = deduplicate(items)
+        guard deduplicated.isEmpty == false else {
+            return []
+        }
+
+        var canonical = deduplicated
+        if let liveOverlay {
+            canonical = applyLiveOverlay(liveOverlay, to: canonical, referenceDate: referenceDate)
+        } else if let last = canonical.last,
+                  last.kind == .stay,
+                  referenceDate.timeIntervalSince(last.endedAtDate) > 0,
+                  referenceDate.timeIntervalSince(last.endedAtDate) <= 60 * 60
+        {
+            canonical[canonical.count - 1] = last.promotedToCurrent(referenceDate: referenceDate)
+        }
+        return canonical
+    }
+
+    private static func deduplicate(
+        _ items: [MovementLifeTimelineItem]
+    ) -> [MovementLifeTimelineItem] {
+        var byId: [String: MovementLifeTimelineItem] = [:]
+        for item in items where item.kind != .anchor && item.endedAtDate > item.startedAtDate {
+            if let existing = byId[item.id] {
+                if item.startedAtDate < existing.startedAtDate || item.endedAtDate > existing.endedAtDate {
+                    byId[item.id] = item
+                }
+            } else {
+                byId[item.id] = item
+            }
+        }
+        return byId.values.sorted { left, right in
+            if left.startedAtDate == right.startedAtDate {
+                if left.endedAtDate == right.endedAtDate {
+                    return left.id < right.id
+                }
+                return left.endedAtDate < right.endedAtDate
+            }
+            return left.startedAtDate < right.startedAtDate
+        }
+    }
+
+    private static func stayAnchorKey(for item: MovementLifeTimelineItem) -> String? {
+        guard item.kind == .stay else {
+            return nil
+        }
+        let candidate = item.placeLabel?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+            ? item.placeLabel
+            : item.title
+        let normalized = candidate?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        return normalized?.isEmpty == false ? normalized : nil
+    }
+
+    private static func sharesStayAnchor(
+        _ left: MovementLifeTimelineItem,
+        _ right: MovementLifeTimelineItem
+    ) -> Bool {
+        guard left.kind == .stay, right.kind == .stay else {
+            return false
+        }
+        guard let leftAnchor = stayAnchorKey(for: left),
+              let rightAnchor = stayAnchorKey(for: right)
+        else {
+            return false
+        }
+        return leftAnchor == rightAnchor
+    }
+
+    private static func mergedCanonicalStay(
+        _ left: MovementLifeTimelineItem,
+        _ right: MovementLifeTimelineItem,
+        referenceDate: Date
+    ) -> MovementLifeTimelineItem {
+        let mergedEnd = max(max(left.endedAtDate, right.endedAtDate), referenceDate)
+        let mergedStart = min(left.startedAtDate, right.startedAtDate)
+        return MovementLifeTimelineItem(
+            id: left.id,
+            source: left.source,
+            kind: .stay,
+            title: left.placeLabel ?? right.placeLabel ?? left.title,
+            subtitle: left.subtitle,
+            placeLabel: left.placeLabel ?? right.placeLabel,
+            tags: Array(Set(left.tags + right.tags)).sorted(),
+            syncSource: left.syncSource == right.syncSource ? left.syncSource : "canonical",
+            startedAtDate: mergedStart,
+            endedAtDate: mergedEnd,
+            durationSeconds: max(
+                60,
+                Int(mergedEnd.timeIntervalSince(mergedStart))
+            ),
+            laneSide: .left,
+            connectorFromLane: .left,
+            connectorToLane: .left,
+            distanceMeters: nil,
+            averageSpeedMps: nil,
+            sourceKind: left.sourceKind,
+            overrideCount: max(left.overrideCount, right.overrideCount),
+            origin:
+                left.origin == .continuedStay || right.origin == .continuedStay
+                ? .continuedStay
+                : left.origin,
+            editable: left.editable && right.editable,
+            isCurrent: true
+        )
+    }
+
+    private static func applyLiveOverlay(
+        _ overlay: MovementLifeTimelineItem,
+        to items: [MovementLifeTimelineItem],
+        referenceDate: Date
+    ) -> [MovementLifeTimelineItem] {
+        guard var last = items.last else {
+            return [overlay.promotedToCurrent(referenceDate: referenceDate)]
+        }
+        let gapToOverlay = overlay.startedAtDate.timeIntervalSince(last.endedAtDate)
+        if overlay.kind == .stay,
+           last.kind == .stay,
+           sharesStayAnchor(last, overlay),
+           gapToOverlay <= 60 * 60
+        {
+            var merged = items
+            merged[merged.count - 1] = mergedCanonicalStay(last, overlay, referenceDate: referenceDate)
+            return merged
+        }
+        if overlay.startedAtDate <= last.endedAtDate {
+            if overlay.kind == .stay,
+               last.kind == .stay,
+               sharesStayAnchor(last, overlay)
+            {
+                var merged = items
+                merged[merged.count - 1] = mergedCanonicalStay(last, overlay, referenceDate: referenceDate)
+                return merged
+            }
+            return items
+        }
+        if last.kind == .stay,
+           overlay.kind == .stay,
+           gapToOverlay <= 60 * 60,
+           sharesStayAnchor(last, overlay)
+        {
+            var merged = items
+            last = mergedCanonicalStay(last, overlay, referenceDate: referenceDate)
+            merged[merged.count - 1] = last
+            return merged
+        }
+        var next = items
+        next.append(overlay.promotedToCurrent(referenceDate: referenceDate))
+        return next
+    }
+}
+
+struct MovementLifeTimelineItem: Identifiable, Hashable {
     enum Kind: Hashable {
         case stay
         case trip
@@ -1721,9 +2439,8 @@ private struct MovementLifeTimelineItem: Identifiable, Hashable {
     }
 
     enum Source: Hashable {
-        case remoteStay(String, MovementTimelineCoordinate?)
-        case remoteTrip(String)
-        case remoteMissing(String)
+        case remoteAutomatic(String, MovementTimelineCoordinate?)
+        case remoteUserBox(String, MovementTimelineCoordinate?)
         case liveStay(String, MovementTimelineCoordinate)
         case liveTrip(String)
         case derived(String)
@@ -1735,6 +2452,8 @@ private struct MovementLifeTimelineItem: Identifiable, Hashable {
         case continuedStay
         case repairedGap
         case missing
+        case userDefined
+        case userInvalidated
     }
 
     static let currentAnchorId = "life-timeline-current-anchor"
@@ -1774,6 +2493,12 @@ private struct MovementLifeTimelineItem: Identifiable, Hashable {
     let connectorToLane: MovementTimelineLaneSide
     let distanceMeters: Double?
     let averageSpeedMps: Double?
+    let sourceKind: String
+    let overrideCount: Int
+    let rawStayIds: [String]
+    let rawTripIds: [String]
+    let rawPointCount: Int
+    let hasLegacyCorrections: Bool
     let origin: Origin
     let editable: Bool
     let isCurrent: Bool
@@ -1795,6 +2520,12 @@ private struct MovementLifeTimelineItem: Identifiable, Hashable {
         connectorToLane: MovementTimelineLaneSide,
         distanceMeters: Double?,
         averageSpeedMps: Double?,
+        sourceKind: String = "automatic",
+        overrideCount: Int = 0,
+        rawStayIds: [String] = [],
+        rawTripIds: [String] = [],
+        rawPointCount: Int = 0,
+        hasLegacyCorrections: Bool = false,
         origin: Origin = .recorded,
         editable: Bool = true,
         isCurrent: Bool
@@ -1815,6 +2546,12 @@ private struct MovementLifeTimelineItem: Identifiable, Hashable {
         self.connectorToLane = connectorToLane
         self.distanceMeters = distanceMeters
         self.averageSpeedMps = averageSpeedMps
+        self.sourceKind = sourceKind
+        self.overrideCount = overrideCount
+        self.rawStayIds = rawStayIds
+        self.rawTripIds = rawTripIds
+        self.rawPointCount = rawPointCount
+        self.hasLegacyCorrections = hasLegacyCorrections
         self.origin = origin
         self.editable = editable
         self.isCurrent = isCurrent
@@ -1823,13 +2560,22 @@ private struct MovementLifeTimelineItem: Identifiable, Hashable {
     init?(remote segment: ForgeMovementTimelineSegment) {
         let startedAtDate = MovementTimelineFormatting.parse(segment.startedAt)
         let endedAtDate = MovementTimelineFormatting.parse(segment.endedAt)
-        if segment.kind == "stay", let stay = segment.stay {
+        if segment.kind == "stay" {
             self.init(
                 id: "remote-stay-\(segment.id)",
-                source: .remoteStay(
-                    stay.id,
-                    .init(latitude: stay.centerLatitude, longitude: stay.centerLongitude)
-                ),
+                source: segment.sourceKind == "user_defined"
+                    ? .remoteUserBox(
+                        segment.id,
+                        segment.stay.map {
+                            .init(latitude: $0.centerLatitude, longitude: $0.centerLongitude)
+                        }
+                    )
+                    : .remoteAutomatic(
+                        segment.id,
+                        segment.stay.map {
+                            .init(latitude: $0.centerLatitude, longitude: $0.centerLongitude)
+                        }
+                    ),
                 kind: .stay,
                 title: segment.title,
                 subtitle: segment.subtitle,
@@ -1844,21 +2590,33 @@ private struct MovementLifeTimelineItem: Identifiable, Hashable {
                 connectorToLane: segment.connectorToLane,
                 distanceMeters: nil,
                 averageSpeedMps: nil,
+                sourceKind: segment.sourceKind,
+                overrideCount: segment.overrideCount,
+                rawStayIds: segment.rawStayIds,
+                rawTripIds: segment.rawTripIds,
+                rawPointCount: segment.rawPointCount,
+                hasLegacyCorrections: segment.hasLegacyCorrections,
                 origin:
                     segment.origin == "continued_stay"
                     ? .continuedStay
                     : segment.origin == "repaired_gap"
                         ? .repairedGap
+                        : segment.origin == "user_defined"
+                            ? .userDefined
+                            : segment.origin == "user_invalidated"
+                                ? .userInvalidated
                         : .recorded,
-                editable: segment.origin == "recorded",
+                editable: segment.editable,
                 isCurrent: false
             )
             return
         }
-        if segment.kind == "trip", let trip = segment.trip {
+        if segment.kind == "trip" {
             self.init(
                 id: "remote-trip-\(segment.id)",
-                source: .remoteTrip(trip.id),
+                source: segment.sourceKind == "user_defined"
+                    ? .remoteUserBox(segment.id, nil)
+                    : .remoteAutomatic(segment.id, nil),
                 kind: .trip,
                 title: segment.title,
                 subtitle: segment.subtitle,
@@ -1871,15 +2629,25 @@ private struct MovementLifeTimelineItem: Identifiable, Hashable {
                 laneSide: segment.laneSide,
                 connectorFromLane: segment.connectorFromLane,
                 connectorToLane: segment.connectorToLane,
-                distanceMeters: trip.distanceMeters,
-                averageSpeedMps: trip.averageSpeedMps,
+                distanceMeters: segment.trip?.distanceMeters,
+                averageSpeedMps: segment.trip?.averageSpeedMps,
+                sourceKind: segment.sourceKind,
+                overrideCount: segment.overrideCount,
+                rawStayIds: segment.rawStayIds,
+                rawTripIds: segment.rawTripIds,
+                rawPointCount: segment.rawPointCount,
+                hasLegacyCorrections: segment.hasLegacyCorrections,
                 origin:
                     segment.origin == "continued_stay"
                     ? .continuedStay
                     : segment.origin == "repaired_gap"
                         ? .repairedGap
+                        : segment.origin == "user_defined"
+                            ? .userDefined
+                            : segment.origin == "user_invalidated"
+                                ? .userInvalidated
                         : .recorded,
-                editable: segment.origin == "recorded",
+                editable: segment.editable,
                 isCurrent: false
             )
             return
@@ -1887,7 +2655,9 @@ private struct MovementLifeTimelineItem: Identifiable, Hashable {
         if segment.kind == "missing" {
             self.init(
                 id: "remote-missing-\(segment.id)",
-                source: .remoteMissing(segment.id),
+                source: segment.sourceKind == "user_defined"
+                    ? .remoteUserBox(segment.id, nil)
+                    : .remoteAutomatic(segment.id, nil),
                 kind: .missing,
                 title: segment.title,
                 subtitle: segment.subtitle,
@@ -1902,8 +2672,19 @@ private struct MovementLifeTimelineItem: Identifiable, Hashable {
                 connectorToLane: segment.connectorToLane,
                 distanceMeters: nil,
                 averageSpeedMps: nil,
-                origin: .missing,
-                editable: false,
+                sourceKind: segment.sourceKind,
+                overrideCount: segment.overrideCount,
+                rawStayIds: segment.rawStayIds,
+                rawTripIds: segment.rawTripIds,
+                rawPointCount: segment.rawPointCount,
+                hasLegacyCorrections: segment.hasLegacyCorrections,
+                origin:
+                    segment.origin == "user_defined"
+                    ? .userDefined
+                    : segment.origin == "user_invalidated"
+                        ? .userInvalidated
+                        : .missing,
+                editable: segment.editable,
                 isCurrent: false
             )
             return
@@ -1933,6 +2714,8 @@ private struct MovementLifeTimelineItem: Identifiable, Hashable {
             connectorToLane: .left,
             distanceMeters: nil,
             averageSpeedMps: nil,
+            sourceKind: "automatic",
+            overrideCount: 0,
             origin: .recorded,
             editable: true,
             isCurrent: true
@@ -1957,6 +2740,8 @@ private struct MovementLifeTimelineItem: Identifiable, Hashable {
             connectorToLane: .right,
             distanceMeters: trip.distanceMeters,
             averageSpeedMps: trip.averageSpeedMps,
+            sourceKind: "automatic",
+            overrideCount: 0,
             origin: .recorded,
             editable: true,
             isCurrent: true
@@ -2007,6 +2792,8 @@ private struct MovementLifeTimelineItem: Identifiable, Hashable {
             connectorToLane: segment.kind == .trip ? .right : .left,
             distanceMeters: segment.distanceMeters,
             averageSpeedMps: segment.averageSpeedMps,
+            sourceKind: "automatic",
+            overrideCount: 0,
             origin:
                 segment.origin == .recorded
                 ? .recorded
@@ -2037,6 +2824,18 @@ private struct MovementLifeTimelineItem: Identifiable, Hashable {
             return "\(String(format: "%.1f", hours))h"
         }
         return "\(max(1, durationSeconds / 60))m"
+    }
+
+    var displayTitle: String {
+        if kind == .missing {
+            let normalized = title.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            if normalized.isEmpty || normalized == "stay" || normalized == "continued stay" || normalized == "repaired stay" {
+                return sourceKind == "user_defined"
+                    ? (origin == .userInvalidated ? "User invalidated movement" : "User-defined missing data")
+                    : "Missing data"
+            }
+        }
+        return title
     }
 
     var timeHeader: String {
@@ -2073,6 +2872,8 @@ private struct MovementLifeTimelineItem: Identifiable, Hashable {
             connectorToLane: connectorToLane,
             distanceMeters: distanceMeters,
             averageSpeedMps: averageSpeedMps,
+            sourceKind: sourceKind,
+            overrideCount: overrideCount,
             origin: origin,
             editable: editable,
             isCurrent: true

@@ -22,8 +22,8 @@ export function KnowledgeGraphFocusDrawer({
   onClose?: () => void;
 }) {
   return (
-    <aside className="grid h-full gap-3 rounded-[28px] border border-[var(--ui-border-subtle)] bg-[rgba(8,13,24,0.94)] p-3 shadow-[0_32px_110px_rgba(0,0,0,0.38)] backdrop-blur-xl">
-      <div className="flex items-center justify-between gap-3 rounded-[22px] border border-[var(--ui-border-subtle)] bg-[rgba(11,16,28,0.92)] px-3 py-2">
+    <aside className="flex h-full min-h-0 flex-col overflow-hidden">
+      <div className="flex items-center justify-between gap-3 border-b border-[var(--ui-border-subtle)] px-4 py-3">
         <div className="inline-flex items-center gap-2 text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-soft)]">
           <PanelRightOpen className="size-3.5" />
           Focus Node
@@ -35,14 +35,15 @@ export function KnowledgeGraphFocusDrawer({
           </Button>
         ) : null}
       </div>
-      <KnowledgeGraphEntityPanel
-        focus={focus}
-        onOpenPage={onOpenPage}
-        onOpenNotes={onOpenNotes}
-        onOpenHierarchy={onOpenHierarchy}
-        onSelectNode={onSelectNode}
-        className="h-full"
-      />
+      <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-4 pt-3">
+        <KnowledgeGraphEntityPanel
+          focus={focus}
+          onOpenPage={onOpenPage}
+          onOpenNotes={onOpenNotes}
+          onOpenHierarchy={onOpenHierarchy}
+          onSelectNode={onSelectNode}
+        />
+      </div>
     </aside>
   );
 }

@@ -6,6 +6,17 @@ import UIKit
 
 @MainActor
 final class MovementSyncStore: NSObject, ObservableObject, @preconcurrency CLLocationManagerDelegate {
+    // Movement repair rules are intentionally duplicated here and on the server.
+    // They are binding, and the tests are expected to enforce them:
+    // 1. Every positive-duration interval must be labeled as stay, trip, or missing.
+    // 2. Missing is never allowed for gaps under one hour.
+    // 3. Any move with cumulative distance under 100m is invalid and must be repaired into stay.
+    // 4. Any move with duration under 5 minutes is invalid and must be repaired into stay.
+    // 5. For gaps under one hour:
+    //    - same place / same anchor => continue stay
+    //    - different place => repaired trip only when boundary displacement is >100m
+    //      and the gap lasts at least 5 minutes
+    //    - otherwise => repaired stay
     private enum DetectionThresholds {
         static let stayRadiusMeters: Double = 100
         static let stayConfirmationSeconds: TimeInterval = 10 * 60
@@ -152,6 +163,7 @@ final class MovementSyncStore: NSObject, ObservableObject, @preconcurrency CLLoc
         var knownPlaces: [StoredKnownPlace]
         var stays: [StoredStay]
         var trips: [StoredTrip]
+        var projectedBoxes: [ForgeMovementTimelineSegment] = []
     }
 
     struct TimelineSegment: Identifiable {
@@ -232,6 +244,7 @@ final class MovementSyncStore: NSObject, ObservableObject, @preconcurrency CLLoc
     @Published private(set) var knownPlaces: [StoredKnownPlace] = []
     @Published private(set) var storedStays: [StoredStay] = []
     @Published private(set) var storedTrips: [StoredTrip] = []
+    @Published private(set) var cachedProjectedBoxes: [ForgeMovementTimelineSegment] = []
     @Published private(set) var latestLocationSummary = "No location yet"
     @Published private(set) var locationPermissionStatus = "not_determined"
     @Published private(set) var motionPermissionStatus = "unknown"
@@ -281,6 +294,7 @@ final class MovementSyncStore: NSObject, ObservableObject, @preconcurrency CLLoc
             knownPlaces = testingState.knownPlaces
             storedStays = testingState.stays
             storedTrips = testingState.trips
+            cachedProjectedBoxes = testingState.projectedBoxes
             currentStayId = storedStays.first(where: { $0.status == "active" })?.id
             currentTripId = storedTrips.first(where: { $0.status == "active" })?.id
             repairStoredTimelineState(referenceDate: testingReferenceDate(for: testingState))
@@ -291,6 +305,7 @@ final class MovementSyncStore: NSObject, ObservableObject, @preconcurrency CLLoc
             knownPlaces = []
             storedStays = []
             storedTrips = []
+            cachedProjectedBoxes = []
         }
         locationPermissionStatus = "always"
         motionPermissionStatus = "ready"
@@ -410,7 +425,25 @@ final class MovementSyncStore: NSObject, ObservableObject, @preconcurrency CLLoc
         bootstrap.tripOverrides.forEach { trip in
             reconcileCanonicalTrip(trip)
         }
+        cacheCanonicalProjectedBoxes(bootstrap.projectedBoxes)
         repairStoredTimelineState(referenceDate: Date())
+        persistState()
+    }
+
+    func cacheCanonicalProjectedBoxes(_ boxes: [ForgeMovementTimelineSegment]) {
+        var deduplicated: [String: ForgeMovementTimelineSegment] = [:]
+        for box in boxes {
+            if let existing = deduplicated[box.id] {
+                if box.startedAt < existing.startedAt || box.endedAt > existing.endedAt {
+                    deduplicated[box.id] = box
+                }
+            } else {
+                deduplicated[box.id] = box
+            }
+        }
+        cachedProjectedBoxes = deduplicated.values.sorted { left, right in
+            left.startedAt < right.startedAt
+        }
         persistState()
     }
 
@@ -435,9 +468,7 @@ final class MovementSyncStore: NSObject, ObservableObject, @preconcurrency CLLoc
                 trips: []
             )
         }
-        let syncableTrips = storedTrips.filter { trip in
-            trip.status == "active" ? tripQualifies(trip) : true
-        }
+        let syncableTrips = storedTrips.filter(tripQualifies)
         return CompanionSyncPayload.MovementPayload(
             settings: .init(
                 trackingEnabled: trackingEnabled,
@@ -825,17 +856,10 @@ final class MovementSyncStore: NSObject, ObservableObject, @preconcurrency CLLoc
                 )
             }
 
-            guard let displacement = distanceMeters(
+            let displacement = distanceMeters(
                 from: previous.endBoundary.coordinate,
                 to: next.startBoundary.coordinate
-            ) else {
-                return makeMissingSegment(
-                    id: "missing-\(previous.id)-\(next.id)",
-                    startedAt: previous.endedAt,
-                    endedAt: next.startedAt,
-                    subtitle: "Forge could not classify this short gap because the boundary points were incomplete."
-                )
-            }
+            )
 
             if gapSeconds < DetectionThresholds.tripMinimumSeconds {
                 let placeLabel = previous.endBoundary.placeLabel ?? next.startBoundary.placeLabel
@@ -853,6 +877,58 @@ final class MovementSyncStore: NSObject, ObservableObject, @preconcurrency CLLoc
                     anchorExternalUid: anchorExternalUid,
                     coordinate: previous.endBoundary.coordinate ?? next.startBoundary.coordinate,
                     tags: ["repaired-gap", "suppressed-short-jump"],
+                    distanceMeters: nil,
+                    averageSpeedMps: nil,
+                    stayId: nil,
+                    tripId: nil,
+                    editable: false,
+                    startBoundary: previous.endBoundary,
+                    endBoundary: next.startBoundary
+                )
+            }
+
+            guard let displacement else {
+                let placeLabel = previous.endBoundary.placeLabel ?? next.startBoundary.placeLabel
+                let anchorExternalUid =
+                    previous.endBoundary.placeExternalUid ?? next.startBoundary.placeExternalUid
+                return NormalizedSegment(
+                    id: "repaired-gap-stay-\(previous.id)-\(next.id)",
+                    kind: .stay,
+                    origin: .repairedGap,
+                    startedAt: previous.endedAt,
+                    endedAt: next.startedAt,
+                    title: placeLabel ?? "Repaired stay",
+                    subtitle: "Short gap defaulted to stay continuity because boundary movement evidence was incomplete.",
+                    placeLabel: placeLabel,
+                    anchorExternalUid: anchorExternalUid,
+                    coordinate: previous.endBoundary.coordinate ?? next.startBoundary.coordinate,
+                    tags: ["repaired-gap", "boundary-incomplete"],
+                    distanceMeters: nil,
+                    averageSpeedMps: nil,
+                    stayId: nil,
+                    tripId: nil,
+                    editable: false,
+                    startBoundary: previous.endBoundary,
+                    endBoundary: next.startBoundary
+                )
+            }
+
+            guard displacement > DetectionThresholds.tripMinimumDisplacementMeters else {
+                let placeLabel = previous.endBoundary.placeLabel ?? next.startBoundary.placeLabel
+                let anchorExternalUid =
+                    previous.endBoundary.placeExternalUid ?? next.startBoundary.placeExternalUid
+                return NormalizedSegment(
+                    id: "repaired-short-distance-\(previous.id)-\(next.id)",
+                    kind: .stay,
+                    origin: .repairedGap,
+                    startedAt: previous.endedAt,
+                    endedAt: next.startedAt,
+                    title: placeLabel ?? "Repaired stay",
+                    subtitle: "Short gap stayed under the 100m move threshold, so it was kept as stay continuity.",
+                    placeLabel: placeLabel,
+                    anchorExternalUid: anchorExternalUid,
+                    coordinate: previous.endBoundary.coordinate ?? next.startBoundary.coordinate,
+                    tags: ["repaired-gap", "under-distance-threshold"],
                     distanceMeters: nil,
                     averageSpeedMps: nil,
                     stayId: nil,
@@ -1096,23 +1172,25 @@ final class MovementSyncStore: NSObject, ObservableObject, @preconcurrency CLLoc
             if let latest = ensured.last {
                 let trailingGap = referenceDate.timeIntervalSince(latest.endedAt)
                 if trailingGap > 0 {
-                    if latest.kind == .stay,
-                       trailingGap <= DetectionThresholds.stayContinuityGapSeconds,
-                       latest.endBoundary.coordinate != nil
-                    {
+                    if trailingGap <= DetectionThresholds.stayContinuityGapSeconds {
+                        let trailingOrigin: TimelineSegment.Origin =
+                            latest.kind == .stay ? .continuedStay : .repairedGap
                         ensured.append(
                             NormalizedSegment(
                                 id: "continued-tail-\(latest.id)",
                                 kind: .stay,
-                                origin: .continuedStay,
+                                origin: trailingOrigin,
                                 startedAt: latest.endedAt,
                                 endedAt: referenceDate,
-                                title: latest.placeLabel ?? "Continued stay",
-                                subtitle: "Short stationary gap carried forward into one continuous stay.",
+                                title: latest.placeLabel ?? latest.title,
+                                subtitle:
+                                    latest.kind == .stay
+                                    ? "Short stationary gap carried forward into one continuous stay."
+                                    : "Short trailing gap repaired into stay continuity until newer movement evidence arrives.",
                                 placeLabel: latest.placeLabel,
                                 anchorExternalUid: latest.anchorExternalUid,
                                 coordinate: latest.endBoundary.coordinate,
-                                tags: ["continued-stay"],
+                                tags: latest.kind == .stay ? ["continued-stay"] : ["repaired-gap", "trailing-gap"],
                                 distanceMeters: nil,
                                 averageSpeedMps: nil,
                                 stayId: nil,
@@ -1770,27 +1848,19 @@ final class MovementSyncStore: NSObject, ObservableObject, @preconcurrency CLLoc
         )
     }
 
-    private func tripQualifies(_ trip: StoredTrip) -> Bool {
+    private func invalidTripReason(_ trip: StoredTrip) -> String? {
         let duration = trip.endedAt.timeIntervalSince(trip.startedAt)
-        guard duration >= DetectionThresholds.tripMinimumSeconds else {
-            return false
+        if duration < DetectionThresholds.tripMinimumSeconds {
+            return "under_duration_threshold"
         }
-        guard
-            let firstPoint = trip.points.first,
-            let lastPoint = trip.points.last
-        else {
-            return false
+        if trip.distanceMeters < DetectionThresholds.tripMinimumDisplacementMeters {
+            return "under_cumulative_distance_threshold"
         }
-        let displacement = CLLocation(
-            latitude: firstPoint.latitude,
-            longitude: firstPoint.longitude
-        ).distance(
-            from: CLLocation(
-                latitude: lastPoint.latitude,
-                longitude: lastPoint.longitude
-            )
-        )
-        return displacement >= DetectionThresholds.tripMinimumDisplacementMeters
+        return nil
+    }
+
+    private func tripQualifies(_ trip: StoredTrip) -> Bool {
+        invalidTripReason(trip) == nil
     }
 
     private func reviveSuspendedStayIfNeeded(with location: CLLocation) {
@@ -1869,6 +1939,7 @@ final class MovementSyncStore: NSObject, ObservableObject, @preconcurrency CLLoc
             }
         }
 
+        rewriteInvalidPersistedTrips(referenceDate: referenceDate)
         repairMissingStayContinuity(referenceDate: referenceDate)
 
         storedStays.sort { $0.startedAt > $1.startedAt }
@@ -1930,11 +2001,6 @@ final class MovementSyncStore: NSObject, ObservableObject, @preconcurrency CLLoc
         for trip in trips.sorted(by: { $0.startedAt < $1.startedAt }) {
             if trip.status != "active" && trip.endedAt <= trip.startedAt {
                 continue
-            }
-            if trip.status == "completed" {
-                if tripQualifies(trip) == false {
-                    continue
-                }
             }
             if let previous = normalized.last, trip.startedAt < previous.endedAt {
                 continue
@@ -2021,6 +2087,52 @@ final class MovementSyncStore: NSObject, ObservableObject, @preconcurrency CLLoc
         storedStays.insert(stay, at: 0)
     }
 
+    private func repairLocation(for trip: StoredTrip, referenceDate: Date) -> CLLocation? {
+        if let lastPoint = trip.points.last {
+            return CLLocation(
+                coordinate: CLLocationCoordinate2D(
+                    latitude: lastPoint.latitude,
+                    longitude: lastPoint.longitude
+                ),
+                altitude: lastPoint.altitudeMeters ?? 0,
+                horizontalAccuracy: lastPoint.accuracyMeters ?? DetectionThresholds.stayRadiusMeters,
+                verticalAccuracy: lastPoint.altitudeMeters == nil ? -1 : 0,
+                course: 0,
+                speed: lastPoint.speedMps ?? 0,
+                timestamp: max(referenceDate, lastPoint.recordedAt)
+            )
+        }
+        if let resolvedPlace = place(forExternalUid: trip.endPlaceExternalUid) ?? place(forExternalUid: trip.startPlaceExternalUid) {
+            return CLLocation(
+                coordinate: CLLocationCoordinate2D(
+                    latitude: resolvedPlace.latitude,
+                    longitude: resolvedPlace.longitude
+                ),
+                altitude: 0,
+                horizontalAccuracy: resolvedPlace.radiusMeters,
+                verticalAccuracy: -1,
+                course: 0,
+                speed: 0,
+                timestamp: referenceDate
+            )
+        }
+        if let firstPoint = trip.points.first {
+            return CLLocation(
+                coordinate: CLLocationCoordinate2D(
+                    latitude: firstPoint.latitude,
+                    longitude: firstPoint.longitude
+                ),
+                altitude: firstPoint.altitudeMeters ?? 0,
+                horizontalAccuracy: firstPoint.accuracyMeters ?? DetectionThresholds.stayRadiusMeters,
+                verticalAccuracy: firstPoint.altitudeMeters == nil ? -1 : 0,
+                course: 0,
+                speed: firstPoint.speedMps ?? 0,
+                timestamp: max(referenceDate, firstPoint.recordedAt)
+            )
+        }
+        return nil
+    }
+
     private func replaceInvalidTripWithStay(_ trip: StoredTrip, at location: CLLocation) {
         if suspendedStayIdBeforeTrip != nil {
             reviveSuspendedStayIfNeeded(with: location)
@@ -2049,12 +2161,34 @@ final class MovementSyncStore: NSObject, ObservableObject, @preconcurrency CLLoc
             tags: Array(Set((matchedPlace?.categoryTags ?? []) + ["movement", "stay", "invalid_trip_replaced"])),
             metadata: [
                 "derivedFrom": "invalid_trip",
-                "invalidTripReason": "under_duration_or_displacement_threshold"
+                "invalidTripReason": invalidTripReason(trip) ?? "under_duration_or_cumulative_distance_threshold"
             ]
         )
         currentStayId = stay.id
         storedStays.insert(stay, at: 0)
         suspendedStayIdBeforeTrip = nil
+    }
+
+    private func rewriteInvalidPersistedTrips(referenceDate: Date) {
+        let invalidTripIds = storedTrips.compactMap { trip -> String? in
+            guard trip.status == "completed" else {
+                return nil
+            }
+            return tripQualifies(trip) ? nil : trip.id
+        }
+        guard invalidTripIds.isEmpty == false else {
+            return
+        }
+        for tripId in invalidTripIds {
+            guard let index = storedTrips.firstIndex(where: { $0.id == tripId }) else {
+                continue
+            }
+            let trip = storedTrips.remove(at: index)
+            guard let location = repairLocation(for: trip, referenceDate: max(referenceDate, trip.endedAt)) else {
+                continue
+            }
+            replaceInvalidTripWithStay(trip, at: location)
+        }
     }
 
     private func startMotionUpdatesIfAvailable() {
@@ -2176,6 +2310,9 @@ final class MovementSyncStore: NSObject, ObservableObject, @preconcurrency CLLoc
         knownPlaces = decoded.knownPlaces
         storedStays = decoded.stays
         storedTrips = decoded.trips
+        cachedProjectedBoxes = decoded.projectedBoxes.sorted { left, right in
+            left.startedAt < right.startedAt
+        }
         currentStayId = storedStays.first(where: { $0.status == "active" })?.id
         currentTripId = storedTrips.first(where: { $0.status == "active" })?.id
         repairStoredTimelineState(referenceDate: Date())
@@ -2201,7 +2338,8 @@ final class MovementSyncStore: NSObject, ObservableObject, @preconcurrency CLLoc
             retentionMode: retentionMode,
             knownPlaces: knownPlaces,
             stays: storedStays,
-            trips: storedTrips
+            trips: storedTrips,
+            projectedBoxes: cachedProjectedBoxes
         )
         if let data = try? JSONEncoder().encode(state) {
             UserDefaults.standard.set(data, forKey: StorageKeys.movementState)

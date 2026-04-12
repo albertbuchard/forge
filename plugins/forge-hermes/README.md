@@ -18,6 +18,8 @@ lists, contextual profile slices, direct signals, and exact score overrides.
 It also exposes Forge's wiki memory surface plus the sleep and sports review
 models, so Hermes can inspect recent nights, review workout context, enrich
 health sessions with reflective links, and work with file-first wiki pages.
+It also exposes a dedicated `forge_get_doctor` diagnostic tool for runtime and
+config-file health checks.
 
 ## Install
 
@@ -53,6 +55,32 @@ If you want editable package mode while developing from this repo:
 - when Forge is local and not already running, the plugin calls the repo's tested Forge local-runtime bootstrap helper instead of maintaining a separate startup implementation
 - when port `4317` is busy and not explicitly pinned, the shared runtime helper can move Forge to the next free localhost port and remember that preferred port
 - if another Forge runtime is already serving the wrong storage root, startup fails loudly instead of attaching to the wrong database
+
+## Doctor And forge.json
+
+Hermes now reaches the same doctor surface through `forge_get_doctor`.
+
+That doctor output covers:
+
+- backend health and watchdog status
+- the resolved Forge storage root, data directory, and database path
+- `forge.json` validity, sync state, parse errors, and applied override keys
+- onboarding and overview reachability from the Hermes adapter
+
+Forge also maintains a runtime settings mirror at `<FORGE_DATA_ROOT>/forge.json`.
+This is not the same file as the Hermes plugin config at `~/.hermes/forge/config.json`.
+
+The split is intentional:
+
+- `~/.hermes/forge/config.json` configures the Hermes adapter itself
+- `<FORGE_DATA_ROOT>/forge.json` configures Forge runtime settings and mirrors the effective state
+
+Behavior:
+
+- Forge exports `forge.json` on startup when it is missing
+- valid settings in `forge.json` override persisted DB values
+- after applying precedence, Forge rewrites the file as a full snapshot
+- UI and API settings changes also rewrite `forge.json`, so the file, DB, and UI stay aligned
 
 ## Shared Multi-user Forge
 

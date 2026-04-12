@@ -593,7 +593,9 @@ import {
   updateWorkoutMetadataSchema
 } from "./health.js";
 import {
+  createMovementUserBox,
   createMovementPlace,
+  deleteMovementUserBox,
   getMovementAllTimeSummary,
   getMovementDayDetail,
   getMovementMobileBootstrap,
@@ -602,27 +604,33 @@ import {
   getMovementSettings,
   getMovementTripDetail,
   getMovementMonthSummary,
+  invalidateAutomaticMovementBox,
   listMovementPlaces,
+  movementAutomaticBoxInvalidateSchema,
   movementMobileBootstrapSchema,
   movementMobilePlaceMutationSchema,
-  movementMobileStayPatchSchema,
+  movementMobileUserBoxCreateSchema,
+  movementMobileUserBoxPatchSchema,
+  movementMobileAutomaticBoxInvalidateSchema,
   movementMobileTimelineSchema,
-  movementMobileTripPatchSchema,
   movementPlaceMutationSchema,
   movementPlacePatchSchema,
   movementSelectionAggregateSchema,
   movementStayPatchSchema,
+  movementTripPatchSchema,
+  movementUserBoxCreateSchema,
+  movementUserBoxPatchSchema,
   movementSettingsPatchSchema,
   movementTimelineQuerySchema,
   movementTripPointPatchSchema,
-  movementTripPatchSchema,
-  deleteMovementTripPoint,
   deleteMovementStay,
   deleteMovementTrip,
+  deleteMovementTripPoint,
   updateMovementPlace,
-  updateMovementStay,
   updateMovementSettings,
+  updateMovementStay,
   updateMovementTrip,
+  updateMovementUserBox,
   updateMovementTripPoint
 } from "./movement.js";
 import {
@@ -2576,7 +2584,9 @@ type OnboardingEntityClassification =
   | "action_workflow_entity"
   | "read_model_only_surface";
 
-function classifyOnboardingEntity(entityType: string): OnboardingEntityClassification {
+function classifyOnboardingEntity(
+  entityType: string
+): OnboardingEntityClassification {
   if (entityType in AGENT_ONBOARDING_BATCH_ROUTE_BASES) {
     return "batch_crud_entity";
   }
@@ -2733,17 +2743,79 @@ const AGENT_ONBOARDING_ENTITY_CATALOG = [
       '{"startedAt":"2026-04-10T22:45:00.000Z","endedAt":"2026-04-11T06:45:00.000Z","qualitySummary":"Slept cleanly after a light evening.","links":[{"entityType":"habit","entityId":"habit_sleep_hygiene","relationshipType":"supports"}]}'
     ],
     fieldGuide: [
-      { name: "startedAt", type: "ISO datetime", required: true, description: "Sleep start timestamp." },
-      { name: "endedAt", type: "ISO datetime", required: true, description: "Sleep end timestamp." },
-      { name: "timeInBedSeconds", type: "integer", required: false, description: "Defaults from startedAt and endedAt when omitted." },
-      { name: "asleepSeconds", type: "integer", required: false, description: "Defaults to timeInBedSeconds when omitted." },
-      { name: "awakeSeconds", type: "integer", required: false, description: "Defaults to the residual between timeInBedSeconds and asleepSeconds." },
-      { name: "stageBreakdown", type: "array", required: false, description: "Optional list of { stage, seconds } items.", defaultValue: [] },
-      { name: "recoveryMetrics", type: "object", required: false, description: "Optional metric bag attached to the night.", defaultValue: {} },
-      { name: "qualitySummary", type: "string", required: false, description: "Optional reflection summary.", defaultValue: "" },
-      { name: "notes", type: "string", required: false, description: "Optional longer reflective note.", defaultValue: "" },
-      { name: "tags", type: "string[]", required: false, description: "Optional review tags.", defaultValue: [] },
-      { name: "links", type: "array", required: false, description: "Linked Forge entities for context or support.", defaultValue: [] }
+      {
+        name: "startedAt",
+        type: "ISO datetime",
+        required: true,
+        description: "Sleep start timestamp."
+      },
+      {
+        name: "endedAt",
+        type: "ISO datetime",
+        required: true,
+        description: "Sleep end timestamp."
+      },
+      {
+        name: "timeInBedSeconds",
+        type: "integer",
+        required: false,
+        description: "Defaults from startedAt and endedAt when omitted."
+      },
+      {
+        name: "asleepSeconds",
+        type: "integer",
+        required: false,
+        description: "Defaults to timeInBedSeconds when omitted."
+      },
+      {
+        name: "awakeSeconds",
+        type: "integer",
+        required: false,
+        description:
+          "Defaults to the residual between timeInBedSeconds and asleepSeconds."
+      },
+      {
+        name: "stageBreakdown",
+        type: "array",
+        required: false,
+        description: "Optional list of { stage, seconds } items.",
+        defaultValue: []
+      },
+      {
+        name: "recoveryMetrics",
+        type: "object",
+        required: false,
+        description: "Optional metric bag attached to the night.",
+        defaultValue: {}
+      },
+      {
+        name: "qualitySummary",
+        type: "string",
+        required: false,
+        description: "Optional reflection summary.",
+        defaultValue: ""
+      },
+      {
+        name: "notes",
+        type: "string",
+        required: false,
+        description: "Optional longer reflective note.",
+        defaultValue: ""
+      },
+      {
+        name: "tags",
+        type: "string[]",
+        required: false,
+        description: "Optional review tags.",
+        defaultValue: []
+      },
+      {
+        name: "links",
+        type: "array",
+        required: false,
+        description: "Linked Forge entities for context or support.",
+        defaultValue: []
+      }
     ]
   }),
   enrichOnboardingEntityGuide({
@@ -2763,17 +2835,86 @@ const AGENT_ONBOARDING_ENTITY_CATALOG = [
       '{"workoutType":"walk","startedAt":"2026-04-11T10:00:00.000Z","endedAt":"2026-04-11T10:45:00.000Z","subjectiveEffort":6,"meaningText":"Reset after a long planning block."}'
     ],
     fieldGuide: [
-      { name: "workoutType", type: "string", required: true, description: "Canonical workout label such as walk, run, ride, or mobility." },
-      { name: "startedAt", type: "ISO datetime", required: true, description: "Workout start timestamp." },
-      { name: "endedAt", type: "ISO datetime", required: true, description: "Workout end timestamp." },
-      { name: "activeEnergyKcal", type: "number|null", required: false, description: "Optional active calories.", defaultValue: null, nullable: true },
-      { name: "totalEnergyKcal", type: "number|null", required: false, description: "Optional total calories.", defaultValue: null, nullable: true },
-      { name: "distanceMeters", type: "number|null", required: false, description: "Optional distance.", defaultValue: null, nullable: true },
-      { name: "exerciseMinutes", type: "number|null", required: false, description: "Optional exercise minutes.", defaultValue: null, nullable: true },
-      { name: "subjectiveEffort", type: "integer|null", required: false, description: "Optional subjective effort 1-10.", defaultValue: null, nullable: true },
-      { name: "meaningText", type: "string", required: false, description: "Optional reflective meaning or context.", defaultValue: "" },
-      { name: "tags", type: "string[]", required: false, description: "Optional workout tags.", defaultValue: [] },
-      { name: "links", type: "array", required: false, description: "Linked Forge entities for context or support.", defaultValue: [] }
+      {
+        name: "workoutType",
+        type: "string",
+        required: true,
+        description:
+          "Canonical workout label such as walk, run, ride, or mobility."
+      },
+      {
+        name: "startedAt",
+        type: "ISO datetime",
+        required: true,
+        description: "Workout start timestamp."
+      },
+      {
+        name: "endedAt",
+        type: "ISO datetime",
+        required: true,
+        description: "Workout end timestamp."
+      },
+      {
+        name: "activeEnergyKcal",
+        type: "number|null",
+        required: false,
+        description: "Optional active calories.",
+        defaultValue: null,
+        nullable: true
+      },
+      {
+        name: "totalEnergyKcal",
+        type: "number|null",
+        required: false,
+        description: "Optional total calories.",
+        defaultValue: null,
+        nullable: true
+      },
+      {
+        name: "distanceMeters",
+        type: "number|null",
+        required: false,
+        description: "Optional distance.",
+        defaultValue: null,
+        nullable: true
+      },
+      {
+        name: "exerciseMinutes",
+        type: "number|null",
+        required: false,
+        description: "Optional exercise minutes.",
+        defaultValue: null,
+        nullable: true
+      },
+      {
+        name: "subjectiveEffort",
+        type: "integer|null",
+        required: false,
+        description: "Optional subjective effort 1-10.",
+        defaultValue: null,
+        nullable: true
+      },
+      {
+        name: "meaningText",
+        type: "string",
+        required: false,
+        description: "Optional reflective meaning or context.",
+        defaultValue: ""
+      },
+      {
+        name: "tags",
+        type: "string[]",
+        required: false,
+        description: "Optional workout tags.",
+        defaultValue: []
+      },
+      {
+        name: "links",
+        type: "array",
+        required: false,
+        description: "Linked Forge entities for context or support.",
+        defaultValue: []
+      }
     ]
   }),
   enrichOnboardingEntityGuide({
@@ -2785,33 +2926,93 @@ const AGENT_ONBOARDING_ENTITY_CATALOG = [
       "Preference catalogs are simple entities and should default to batch CRUD.",
       "Catalog items belong to one preference_catalog through catalogId."
     ],
-    searchHints: ["Search by title and domain before creating another concept list."],
-    examples: ['{"userId":"user_operator","domain":"food","title":"Cafe shortlist"}'],
+    searchHints: [
+      "Search by title and domain before creating another concept list."
+    ],
+    examples: [
+      '{"userId":"user_operator","domain":"food","title":"Cafe shortlist"}'
+    ],
     fieldGuide: [
-      { name: "userId", type: "string", required: true, description: "Owner user id." },
-      { name: "domain", type: "string", required: true, description: "Preference domain such as food, places, tools, or custom." },
-      { name: "title", type: "string", required: true, description: "Catalog display title." },
-      { name: "description", type: "string", required: false, description: "Optional catalog summary.", defaultValue: "" },
-      { name: "slug", type: "string", required: false, description: "Optional stable slug.", defaultValue: "" }
+      {
+        name: "userId",
+        type: "string",
+        required: true,
+        description: "Owner user id."
+      },
+      {
+        name: "domain",
+        type: "string",
+        required: true,
+        description: "Preference domain such as food, places, tools, or custom."
+      },
+      {
+        name: "title",
+        type: "string",
+        required: true,
+        description: "Catalog display title."
+      },
+      {
+        name: "description",
+        type: "string",
+        required: false,
+        description: "Optional catalog summary.",
+        defaultValue: ""
+      },
+      {
+        name: "slug",
+        type: "string",
+        required: false,
+        description: "Optional stable slug.",
+        defaultValue: ""
+      }
     ]
   }),
   enrichOnboardingEntityGuide({
     entityType: "preference_catalog_item",
-    purpose:
-      "One comparable candidate inside a preference catalog.",
+    purpose: "One comparable candidate inside a preference catalog.",
     minimumCreateFields: ["catalogId", "label"],
     relationshipRules: [
       "Catalog items belong to a preference_catalog and use batch CRUD.",
       "They are concept seeds, not judgments or inferred scores."
     ],
-    searchHints: ["Search inside the catalog before creating another near-duplicate concept item."],
+    searchHints: [
+      "Search inside the catalog before creating another near-duplicate concept item."
+    ],
     examples: ['{"catalogId":"preference_catalog_123","label":"Flat white"}'],
     fieldGuide: [
-      { name: "catalogId", type: "string", required: true, description: "Parent catalog id." },
-      { name: "label", type: "string", required: true, description: "Candidate label." },
-      { name: "description", type: "string", required: false, description: "Optional description.", defaultValue: "" },
-      { name: "tags", type: "string[]", required: false, description: "Optional tags.", defaultValue: [] },
-      { name: "featureWeights", type: "object", required: false, description: "Optional interpretable feature weight hints.", defaultValue: {} }
+      {
+        name: "catalogId",
+        type: "string",
+        required: true,
+        description: "Parent catalog id."
+      },
+      {
+        name: "label",
+        type: "string",
+        required: true,
+        description: "Candidate label."
+      },
+      {
+        name: "description",
+        type: "string",
+        required: false,
+        description: "Optional description.",
+        defaultValue: ""
+      },
+      {
+        name: "tags",
+        type: "string[]",
+        required: false,
+        description: "Optional tags.",
+        defaultValue: []
+      },
+      {
+        name: "featureWeights",
+        type: "object",
+        required: false,
+        description: "Optional interpretable feature weight hints.",
+        defaultValue: {}
+      }
     ]
   }),
   enrichOnboardingEntityGuide({
@@ -2824,14 +3025,50 @@ const AGENT_ONBOARDING_ENTITY_CATALOG = [
       "Use the merge action only when the operator explicitly wants context consolidation."
     ],
     searchHints: ["Search by name and domain before creating another context."],
-    examples: ['{"userId":"user_operator","domain":"food","name":"Work breakfasts","shareMode":"blended"}'],
+    examples: [
+      '{"userId":"user_operator","domain":"food","name":"Work breakfasts","shareMode":"blended"}'
+    ],
     fieldGuide: [
-      { name: "userId", type: "string", required: true, description: "Owner user id." },
-      { name: "domain", type: "string", required: true, description: "Preference domain." },
-      { name: "name", type: "string", required: true, description: "Context display name." },
-      { name: "description", type: "string", required: false, description: "Optional summary.", defaultValue: "" },
-      { name: "shareMode", type: "shared|isolated|blended", required: false, description: "How this context mixes evidence with others.", enumValues: ["shared", "isolated", "blended"], defaultValue: "blended" },
-      { name: "active", type: "boolean", required: false, description: "Whether the context is active.", defaultValue: true }
+      {
+        name: "userId",
+        type: "string",
+        required: true,
+        description: "Owner user id."
+      },
+      {
+        name: "domain",
+        type: "string",
+        required: true,
+        description: "Preference domain."
+      },
+      {
+        name: "name",
+        type: "string",
+        required: true,
+        description: "Context display name."
+      },
+      {
+        name: "description",
+        type: "string",
+        required: false,
+        description: "Optional summary.",
+        defaultValue: ""
+      },
+      {
+        name: "shareMode",
+        type: "shared|isolated|blended",
+        required: false,
+        description: "How this context mixes evidence with others.",
+        enumValues: ["shared", "isolated", "blended"],
+        defaultValue: "blended"
+      },
+      {
+        name: "active",
+        type: "boolean",
+        required: false,
+        description: "Whether the context is active.",
+        defaultValue: true
+      }
     ]
   }),
   enrichOnboardingEntityGuide({
@@ -2843,50 +3080,149 @@ const AGENT_ONBOARDING_ENTITY_CATALOG = [
       "Preference items are simple entities and should default to batch CRUD.",
       "They can optionally point back to another Forge entity through sourceEntityType and sourceEntityId."
     ],
-    searchHints: ["Search by label, domain, or linked source entity before creating another preference item."],
-    examples: ['{"userId":"user_operator","domain":"tools","label":"Mechanical keyboard"}'],
+    searchHints: [
+      "Search by label, domain, or linked source entity before creating another preference item."
+    ],
+    examples: [
+      '{"userId":"user_operator","domain":"tools","label":"Mechanical keyboard"}'
+    ],
     fieldGuide: [
-      { name: "userId", type: "string", required: true, description: "Owner user id." },
-      { name: "domain", type: "string", required: true, description: "Preference domain." },
-      { name: "label", type: "string", required: true, description: "Item display label." },
-      { name: "description", type: "string", required: false, description: "Optional description.", defaultValue: "" },
-      { name: "sourceEntityType", type: "string|null", required: false, description: "Optional linked Forge entity type.", defaultValue: null, nullable: true },
-      { name: "sourceEntityId", type: "string|null", required: false, description: "Optional linked Forge entity id.", defaultValue: null, nullable: true },
-      { name: "tags", type: "string[]", required: false, description: "Optional tags.", defaultValue: [] }
+      {
+        name: "userId",
+        type: "string",
+        required: true,
+        description: "Owner user id."
+      },
+      {
+        name: "domain",
+        type: "string",
+        required: true,
+        description: "Preference domain."
+      },
+      {
+        name: "label",
+        type: "string",
+        required: true,
+        description: "Item display label."
+      },
+      {
+        name: "description",
+        type: "string",
+        required: false,
+        description: "Optional description.",
+        defaultValue: ""
+      },
+      {
+        name: "sourceEntityType",
+        type: "string|null",
+        required: false,
+        description: "Optional linked Forge entity type.",
+        defaultValue: null,
+        nullable: true
+      },
+      {
+        name: "sourceEntityId",
+        type: "string|null",
+        required: false,
+        description: "Optional linked Forge entity id.",
+        defaultValue: null,
+        nullable: true
+      },
+      {
+        name: "tags",
+        type: "string[]",
+        required: false,
+        description: "Optional tags.",
+        defaultValue: []
+      }
     ]
   }),
   enrichOnboardingEntityGuide({
     entityType: "questionnaire_instrument",
     purpose:
       "A reusable Psyche questionnaire instrument with versions, scoring rules, and provenance.",
-    minimumCreateFields: ["title", "sourceClass", "availability", "isSelfReport", "versionLabel", "definition", "scoring", "provenance"],
+    minimumCreateFields: [
+      "title",
+      "sourceClass",
+      "availability",
+      "isSelfReport",
+      "versionLabel",
+      "definition",
+      "scoring",
+      "provenance"
+    ],
     relationshipRules: [
       "Questionnaire instruments now default to batch CRUD for normal create, update, delete, and search work.",
       "Clone, ensure draft, and publish remain specialized actions because they operate on instrument version state."
     ],
-    searchHints: ["Search by title or key before creating a new custom instrument."],
-    examples: ['{"title":"Tiny weekly check-in","sourceClass":"secondary_verified","availability":"custom","isSelfReport":true,"versionLabel":"Draft 1","definition":{"locale":"en","instructions":"Rate how present this feels today.","completionNote":"","presentationMode":"single_question","responseStyle":"four_point_frequency","itemIds":[],"items":[],"sections":[],"pageSize":null},"scoring":{"scores":[]},"provenance":{"retrievalDate":"2026-04-06","sourceClass":"secondary_verified","scoringNotes":"","sources":[]}}'],
+    searchHints: [
+      "Search by title or key before creating a new custom instrument."
+    ],
+    examples: [
+      '{"title":"Tiny weekly check-in","sourceClass":"secondary_verified","availability":"custom","isSelfReport":true,"versionLabel":"Draft 1","definition":{"locale":"en","instructions":"Rate how present this feels today.","completionNote":"","presentationMode":"single_question","responseStyle":"four_point_frequency","itemIds":[],"items":[],"sections":[],"pageSize":null},"scoring":{"scores":[]},"provenance":{"retrievalDate":"2026-04-06","sourceClass":"secondary_verified","scoringNotes":"","sources":[]}}'
+    ],
     fieldGuide: [
-      { name: "title", type: "string", required: true, description: "Instrument title." },
-      { name: "sourceClass", type: "string", required: true, description: "Evidence or provenance class." },
-      { name: "availability", type: "string", required: true, description: "System or custom availability mode." },
-      { name: "isSelfReport", type: "boolean", required: true, description: "Whether the instrument is self-report." },
-      { name: "versionLabel", type: "string", required: true, description: "Initial draft version label on create." },
-      { name: "definition", type: "object", required: true, description: "Questionnaire definition payload." },
-      { name: "scoring", type: "object", required: true, description: "Scoring payload." },
-      { name: "provenance", type: "object", required: true, description: "Provenance payload." }
+      {
+        name: "title",
+        type: "string",
+        required: true,
+        description: "Instrument title."
+      },
+      {
+        name: "sourceClass",
+        type: "string",
+        required: true,
+        description: "Evidence or provenance class."
+      },
+      {
+        name: "availability",
+        type: "string",
+        required: true,
+        description: "System or custom availability mode."
+      },
+      {
+        name: "isSelfReport",
+        type: "boolean",
+        required: true,
+        description: "Whether the instrument is self-report."
+      },
+      {
+        name: "versionLabel",
+        type: "string",
+        required: true,
+        description: "Initial draft version label on create."
+      },
+      {
+        name: "definition",
+        type: "object",
+        required: true,
+        description: "Questionnaire definition payload."
+      },
+      {
+        name: "scoring",
+        type: "object",
+        required: true,
+        description: "Scoring payload."
+      },
+      {
+        name: "provenance",
+        type: "object",
+        required: true,
+        description: "Provenance payload."
+      }
     ]
   }),
   enrichOnboardingEntityGuide({
     entityType: "task_run",
-    purpose:
-      "A live timed work session attached to a task.",
+    purpose: "A live timed work session attached to a task.",
     minimumCreateFields: [],
     relationshipRules: [
       "Task runs are action-heavy records. Do not model them as ordinary CRUD entities.",
       "Start, focus, heartbeat, complete, or release them through the dedicated task-run routes."
     ],
-    searchHints: ["Read operator context before starting or altering live work."],
+    searchHints: [
+      "Read operator context before starting or altering live work."
+    ],
     fieldGuide: []
   }),
   enrichOnboardingEntityGuide({
@@ -2898,7 +3234,9 @@ const AGENT_ONBOARDING_ENTITY_CATALOG = [
       "Questionnaire runs are action-heavy records with a lifecycle of start, patch answers, and complete.",
       "Use the run routes instead of batch CRUD."
     ],
-    searchHints: ["Read the run detail when continuing or reviewing an in-flight answer session."],
+    searchHints: [
+      "Read the run detail when continuing or reviewing an in-flight answer session."
+    ],
     fieldGuide: []
   }),
   enrichOnboardingEntityGuide({
@@ -2910,22 +3248,35 @@ const AGENT_ONBOARDING_ENTITY_CATALOG = [
       "Calendar connections use specialized setup and sync flows rather than batch CRUD.",
       "Provider auth and writable Forge-calendar selection are part of the same specialized surface."
     ],
-    searchHints: ["Read the calendar overview before changing connections or sync state."],
+    searchHints: [
+      "Read the calendar overview before changing connections or sync state."
+    ],
     fieldGuide: []
   }),
   enrichOnboardingEntityGuide({
     entityType: "wiki_page",
-    purpose:
-      "A file-backed Forge wiki page or evidence page.",
+    purpose: "A file-backed Forge wiki page or evidence page.",
     minimumCreateFields: ["title", "contentMarkdown"],
     relationshipRules: [
       "Wiki pages live on the wiki surface and use specialized page upsert routes rather than batch CRUD.",
       "Entity links remain explicit inside the page link model."
     ],
-    searchHints: ["Search or list wiki pages before creating another page with the same topic."],
+    searchHints: [
+      "Search or list wiki pages before creating another page with the same topic."
+    ],
     fieldGuide: [
-      { name: "title", type: "string", required: true, description: "Page title." },
-      { name: "contentMarkdown", type: "string", required: true, description: "Markdown body." }
+      {
+        name: "title",
+        type: "string",
+        required: true,
+        description: "Page title."
+      },
+      {
+        name: "contentMarkdown",
+        type: "string",
+        required: true,
+        description: "Markdown body."
+      }
     ]
   }),
   enrichOnboardingEntityGuide({
@@ -2937,7 +3288,9 @@ const AGENT_ONBOARDING_ENTITY_CATALOG = [
       "This is a read model, not a standalone CRUD entity.",
       "Mutate it by creating or updating a note with frontmatter.observedAt."
     ],
-    searchHints: ["Read the self-observation calendar before proposing new reflected notes or edits."],
+    searchHints: [
+      "Read the self-observation calendar before proposing new reflected notes or edits."
+    ],
     fieldGuide: []
   }),
   enrichOnboardingEntityGuide({
@@ -2949,7 +3302,9 @@ const AGENT_ONBOARDING_ENTITY_CATALOG = [
       "Use this surface for review.",
       "Create, update, delete, or search the underlying sleep_session records through batch CRUD by default."
     ],
-    searchHints: ["Read this surface before suggesting reflective edits or health-planning follow-up."],
+    searchHints: [
+      "Read this surface before suggesting reflective edits or health-planning follow-up."
+    ],
     fieldGuide: []
   }),
   enrichOnboardingEntityGuide({
@@ -2961,7 +3316,9 @@ const AGENT_ONBOARDING_ENTITY_CATALOG = [
       "Use this surface for review.",
       "Create, update, delete, or search the underlying workout_session records through batch CRUD by default."
     ],
-    searchHints: ["Read this surface before suggesting workout reflections or recovery follow-up."],
+    searchHints: [
+      "Read this surface before suggesting workout reflections or recovery follow-up."
+    ],
     fieldGuide: []
   })
 ] as const;
@@ -2989,8 +3346,7 @@ const AGENT_ONBOARDING_CONVERSATION_RULES = [
 const AGENT_ONBOARDING_ENTITY_CONVERSATION_PLAYBOOKS = [
   {
     focus: "goal",
-    openingQuestion:
-      "What direction are you trying to keep hold of here?",
+    openingQuestion: "What direction are you trying to keep hold of here?",
     coachingGoal:
       "Clarify the direction and why it matters, not just produce a title.",
     askSequence: [
@@ -3032,8 +3388,7 @@ const AGENT_ONBOARDING_ENTITY_CONVERSATION_PLAYBOOKS = [
   },
   {
     focus: "task",
-    openingQuestion:
-      "What is the next concrete move here?",
+    openingQuestion: "What is the next concrete move here?",
     coachingGoal:
       "Identify the next concrete move, not just capture a vague obligation.",
     askSequence: [
@@ -3082,8 +3437,7 @@ const AGENT_ONBOARDING_ENTITY_CONVERSATION_PLAYBOOKS = [
   },
   {
     focus: "wiki_page",
-    openingQuestion:
-      "What should this page become the main reference for?",
+    openingQuestion: "What should this page become the main reference for?",
     coachingGoal:
       "Create a durable reference page with a clear scope instead of dumping raw notes into the wiki.",
     askSequence: [
@@ -3170,8 +3524,7 @@ const AGENT_ONBOARDING_ENTITY_CONVERSATION_PLAYBOOKS = [
   },
   {
     focus: "self_observation",
-    openingQuestion:
-      "What did you notice most clearly in that moment?",
+    openingQuestion: "What did you notice most clearly in that moment?",
     coachingGoal:
       "Capture one observation clearly enough that it can support later reflection without pretending it is already a full interpretation.",
     askSequence: [
@@ -3223,8 +3576,7 @@ const AGENT_ONBOARDING_ENTITY_CONVERSATION_PLAYBOOKS = [
   },
   {
     focus: "preference_catalog_item",
-    openingQuestion:
-      "What makes this option meaningfully worth comparing?",
+    openingQuestion: "What makes this option meaningfully worth comparing?",
     coachingGoal:
       "Add one candidate in a way that will make later comparisons feel clear and fair.",
     askSequence: [
@@ -5252,7 +5604,8 @@ export async function buildServer(
       try {
         const interval = CronExpressionParser.parse(processor.cronExpression, {
           currentDate:
-            processor.lastRunAt && Number.isFinite(Date.parse(processor.lastRunAt))
+            processor.lastRunAt &&
+            Number.isFinite(Date.parse(processor.lastRunAt))
               ? processor.lastRunAt
               : new Date(now.getTime() - 60_000).toISOString()
         });
@@ -5278,11 +5631,14 @@ export async function buildServer(
     }
   }, 30_000);
   cronSchedulerTimer.unref?.();
-  const dataBackupTimer = setInterval(() => {
-    void maybeRunAutomaticBackup().catch(() => {
-      // Automatic backup sweeps should never crash the runtime loop.
-    });
-  }, 5 * 60 * 1000);
+  const dataBackupTimer = setInterval(
+    () => {
+      void maybeRunAutomaticBackup().catch(() => {
+        // Automatic backup sweeps should never crash the runtime loop.
+      });
+    },
+    5 * 60 * 1000
+  );
   dataBackupTimer.unref?.();
   void maybeRunAutomaticBackup().catch(() => {
     // Ignore startup backup failures; the Data settings surface exposes recovery.
@@ -5324,8 +5680,9 @@ export async function buildServer(
   };
 
   app.addHook("onRequest", async (request) => {
-    (request as typeof request & { diagnosticStartedAt?: bigint }).diagnosticStartedAt =
-      process.hrtime.bigint();
+    (
+      request as typeof request & { diagnosticStartedAt?: bigint }
+    ).diagnosticStartedAt = process.hrtime.bigint();
   });
 
   app.addHook("onResponse", async (request, reply) => {
@@ -5838,9 +6195,7 @@ export async function buildServer(
       const value = query[key];
       const values = Array.isArray(value) ? value : [value];
       return values
-        .flatMap((entry) =>
-          typeof entry === "string" ? entry.split(",") : []
-        )
+        .flatMap((entry) => (typeof entry === "string" ? entry.split(",") : []))
         .map((entry) => entry.trim())
         .filter(Boolean);
     };
@@ -5851,22 +6206,21 @@ export async function buildServer(
         : null;
 
     return {
-      graph: buildKnowledgeGraph(
-        resolveScopedUserIds(query),
-        {
-          q: readString(query.q) || null,
-          entityKinds: readList("entityKind") as KnowledgeGraphQuery["entityKinds"],
-          relationKinds: readList(
-            "relationKind"
-          ) as KnowledgeGraphQuery["relationKinds"],
-          tags: readList("tag"),
-          owners: readList("owner"),
-          updatedFrom: readString(query.updatedFrom) || null,
-          updatedTo: readString(query.updatedTo) || null,
-          limit,
-          focusNodeId: readString(query.focusNodeId) || null
-        }
-      )
+      graph: buildKnowledgeGraph(resolveScopedUserIds(query), {
+        q: readString(query.q) || null,
+        entityKinds: readList(
+          "entityKind"
+        ) as KnowledgeGraphQuery["entityKinds"],
+        relationKinds: readList(
+          "relationKind"
+        ) as KnowledgeGraphQuery["relationKinds"],
+        tags: readList("tag"),
+        owners: readList("owner"),
+        updatedFrom: readString(query.updatedFrom) || null,
+        updatedTo: readString(query.updatedTo) || null,
+        limit,
+        focusNodeId: readString(query.focusNodeId) || null
+      })
     };
   });
   app.get("/api/v1/knowledge-graph/focus", async (request, reply) => {
@@ -6002,11 +6356,9 @@ export async function buildServer(
     )
   }));
   app.patch("/api/v1/screen-time/settings", async (request) => {
-    requireScopedAccess(
-      request.headers as Record<string, unknown>,
-      ["write"],
-      { route: "/api/v1/screen-time/settings" }
-    );
+    requireScopedAccess(request.headers as Record<string, unknown>, ["write"], {
+      route: "/api/v1/screen-time/settings"
+    });
     const userId =
       resolveScopedUserIds(request.query as Record<string, unknown>)?.[0] ??
       getDefaultUser().id;
@@ -6025,7 +6377,8 @@ export async function buildServer(
         userIds:
           parsed.userIds.length > 0
             ? parsed.userIds
-            : (resolveScopedUserIds(request.query as Record<string, unknown>) ?? [])
+            : (resolveScopedUserIds(request.query as Record<string, unknown>) ??
+              [])
       })
     };
   });
@@ -6095,6 +6448,91 @@ export async function buildServer(
     }
     return { place };
   });
+  app.post("/api/v1/movement/user-boxes", async (request, reply) => {
+    const auth = requireScopedAccess(
+      request.headers as Record<string, unknown>,
+      ["write"],
+      { route: "/api/v1/movement/user-boxes" }
+    );
+    const userId =
+      resolveScopedUserIds(request.query as Record<string, unknown>)?.[0] ??
+      getDefaultUser().id;
+    reply.code(201);
+    return {
+      box: createMovementUserBox(
+        {
+          ...movementUserBoxCreateSchema.parse(request.body ?? {}),
+          userId
+        },
+        toActivityContext(auth)
+      )
+    };
+  });
+  app.patch("/api/v1/movement/user-boxes/:id", async (request, reply) => {
+    const auth = requireScopedAccess(
+      request.headers as Record<string, unknown>,
+      ["write"],
+      { route: "/api/v1/movement/user-boxes/:id" }
+    );
+    const userId =
+      resolveScopedUserIds(request.query as Record<string, unknown>)?.[0] ??
+      getDefaultUser().id;
+    const { id } = request.params as { id: string };
+    const box = updateMovementUserBox(
+      id,
+      movementUserBoxPatchSchema.parse(request.body ?? {}),
+      toActivityContext(auth),
+      { userId }
+    );
+    if (!box) {
+      reply.code(404);
+      return { error: "Movement user box not found" };
+    }
+    return { box };
+  });
+  app.delete("/api/v1/movement/user-boxes/:id", async (request, reply) => {
+    const auth = requireScopedAccess(
+      request.headers as Record<string, unknown>,
+      ["write"],
+      { route: "/api/v1/movement/user-boxes/:id" }
+    );
+    const userId =
+      resolveScopedUserIds(request.query as Record<string, unknown>)?.[0] ??
+      getDefaultUser().id;
+    const { id } = request.params as { id: string };
+    const result = deleteMovementUserBox(id, toActivityContext(auth), { userId });
+    if (!result) {
+      reply.code(404);
+      return { error: "Movement user box not found" };
+    }
+    return result;
+  });
+  app.post(
+    "/api/v1/movement/automatic-boxes/:id/invalidate",
+    async (request, reply) => {
+      const auth = requireScopedAccess(
+        request.headers as Record<string, unknown>,
+        ["write"],
+        { route: "/api/v1/movement/automatic-boxes/:id/invalidate" }
+      );
+      const userId =
+        resolveScopedUserIds(request.query as Record<string, unknown>)?.[0] ??
+        getDefaultUser().id;
+      const { id } = request.params as { id: string };
+      const result = invalidateAutomaticMovementBox(
+        id,
+        movementAutomaticBoxInvalidateSchema.parse(request.body ?? {}),
+        toActivityContext(auth),
+        { userId }
+      );
+      if (!result) {
+        reply.code(404);
+        return { error: "Automatic movement box not found" };
+      }
+      reply.code(201);
+      return result;
+    }
+  );
   app.patch("/api/v1/movement/stays/:id", async (request, reply) => {
     const auth = requireScopedAccess(
       request.headers as Record<string, unknown>,
@@ -6159,39 +6597,49 @@ export async function buildServer(
     }
     return result;
   });
-  app.patch("/api/v1/movement/trips/:id/points/:pointId", async (request, reply) => {
-    const auth = requireScopedAccess(
-      request.headers as Record<string, unknown>,
-      ["write"],
-      { route: "/api/v1/movement/trips/:id/points/:pointId" }
-    );
-    const { id, pointId } = request.params as { id: string; pointId: string };
-    const result = updateMovementTripPoint(
-      id,
-      pointId,
-      movementTripPointPatchSchema.parse(request.body ?? {}),
-      toActivityContext(auth)
-    );
-    if (!result) {
-      reply.code(404);
-      return { error: "Movement datapoint not found" };
+  app.patch(
+    "/api/v1/movement/trips/:id/points/:pointId",
+    async (request, reply) => {
+      const auth = requireScopedAccess(
+        request.headers as Record<string, unknown>,
+        ["write"],
+        { route: "/api/v1/movement/trips/:id/points/:pointId" }
+      );
+      const { id, pointId } = request.params as { id: string; pointId: string };
+      const result = updateMovementTripPoint(
+        id,
+        pointId,
+        movementTripPointPatchSchema.parse(request.body ?? {}),
+        toActivityContext(auth)
+      );
+      if (!result) {
+        reply.code(404);
+        return { error: "Movement datapoint not found" };
+      }
+      return result;
     }
-    return result;
-  });
-  app.delete("/api/v1/movement/trips/:id/points/:pointId", async (request, reply) => {
-    const auth = requireScopedAccess(
-      request.headers as Record<string, unknown>,
-      ["write"],
-      { route: "/api/v1/movement/trips/:id/points/:pointId" }
-    );
-    const { id, pointId } = request.params as { id: string; pointId: string };
-    const result = deleteMovementTripPoint(id, pointId, toActivityContext(auth));
-    if (!result) {
-      reply.code(404);
-      return { error: "Movement datapoint not found" };
+  );
+  app.delete(
+    "/api/v1/movement/trips/:id/points/:pointId",
+    async (request, reply) => {
+      const auth = requireScopedAccess(
+        request.headers as Record<string, unknown>,
+        ["write"],
+        { route: "/api/v1/movement/trips/:id/points/:pointId" }
+      );
+      const { id, pointId } = request.params as { id: string; pointId: string };
+      const result = deleteMovementTripPoint(
+        id,
+        pointId,
+        toActivityContext(auth)
+      );
+      if (!result) {
+        reply.code(404);
+        return { error: "Movement datapoint not found" };
+      }
+      return result;
     }
-    return result;
-  });
+  );
   app.get("/api/v1/movement/trips/:id", async (request, reply) => {
     const { id } = request.params as { id: string };
     const movement = getMovementTripDetail(id);
@@ -6323,33 +6771,98 @@ export async function buildServer(
       })
     };
   });
-  app.patch("/api/v1/mobile/movement/stays/:id", async (request, reply) => {
-    const parsed = movementMobileStayPatchSchema.parse(request.body ?? {});
+  app.post("/api/v1/mobile/movement/user-boxes", async (request, reply) => {
+    const parsed = movementMobileUserBoxCreateSchema.parse(request.body ?? {});
+    const pairing = requireValidPairing(parsed.sessionId, parsed.pairingToken);
+    reply.code(201);
+    return {
+      box: createMovementUserBox(
+        {
+          ...parsed.box,
+          userId: pairing.user_id
+        },
+        {
+          actor: "Forge Companion",
+          source: "system"
+        }
+      )
+    };
+  });
+  app.patch("/api/v1/mobile/movement/user-boxes/:id", async (request, reply) => {
+    const parsed = movementMobileUserBoxPatchSchema.parse(request.body ?? {});
     const pairing = requireValidPairing(parsed.sessionId, parsed.pairingToken);
     const { id } = request.params as { id: string };
-    const stay = updateMovementStay(id, parsed.patch, {
-      actor: "Forge Companion",
-      source: "system"
-    }, { userId: pairing.user_id });
-    if (!stay) {
+    const box = updateMovementUserBox(
+      id,
+      parsed.patch,
+      {
+        actor: "Forge Companion",
+        source: "system"
+      },
+      { userId: pairing.user_id }
+    );
+    if (!box) {
       reply.code(404);
-      return { error: "Movement stay not found" };
+      return { error: "Movement user box not found" };
     }
-    return { stay };
+    return { box };
+  });
+  app.delete("/api/v1/mobile/movement/user-boxes/:id", async (request, reply) => {
+    const parsed = movementMobileBootstrapSchema.parse(request.body ?? {});
+    const pairing = requireValidPairing(parsed.sessionId, parsed.pairingToken);
+    const { id } = request.params as { id: string };
+    const result = deleteMovementUserBox(
+      id,
+      {
+        actor: "Forge Companion",
+        source: "system"
+      },
+      { userId: pairing.user_id }
+    );
+    if (!result) {
+      reply.code(404);
+      return { error: "Movement user box not found" };
+    }
+    return result;
+  });
+  app.post(
+    "/api/v1/mobile/movement/automatic-boxes/:id/invalidate",
+    async (request, reply) => {
+      const parsed = movementMobileAutomaticBoxInvalidateSchema.parse(
+        request.body ?? {}
+      );
+      const pairing = requireValidPairing(parsed.sessionId, parsed.pairingToken);
+      const { id } = request.params as { id: string };
+      const result = invalidateAutomaticMovementBox(
+        id,
+        parsed.invalidate,
+        {
+          actor: "Forge Companion",
+          source: "system"
+        },
+        { userId: pairing.user_id }
+      );
+      if (!result) {
+        reply.code(404);
+        return { error: "Automatic movement box not found" };
+      }
+      reply.code(201);
+      return result;
+    }
+  );
+  app.patch("/api/v1/mobile/movement/stays/:id", async (request, reply) => {
+    reply.code(409);
+    return {
+      error:
+        "Recorded stays are immutable in product UI. Create or edit a user-defined movement box instead."
+    };
   });
   app.patch("/api/v1/mobile/movement/trips/:id", async (request, reply) => {
-    const parsed = movementMobileTripPatchSchema.parse(request.body ?? {});
-    const pairing = requireValidPairing(parsed.sessionId, parsed.pairingToken);
-    const { id } = request.params as { id: string };
-    const trip = updateMovementTrip(id, parsed.patch, {
-      actor: "Forge Companion",
-      source: "system"
-    }, { userId: pairing.user_id });
-    if (!trip) {
-      reply.code(404);
-      return { error: "Movement trip not found" };
-    }
-    return { trip };
+    reply.code(409);
+    return {
+      error:
+        "Recorded moves are immutable in product UI. Create or edit a user-defined movement box instead."
+    };
   });
   app.post("/api/v1/mobile/watch/bootstrap", async (request) => {
     const parsed = mobileWatchBootstrapSchema.parse(request.body ?? {});
@@ -6359,32 +6872,38 @@ export async function buildServer(
       watch: buildWatchBootstrap(pairing)
     };
   });
-  app.post("/api/v1/mobile/watch/habits/:id/check-ins", async (request, reply) => {
-    const parsed = mobileWatchHabitCheckInSchema.parse(request.body ?? {});
-    const pairing = requireValidPairing(parsed.sessionId, parsed.pairingToken);
-    assertWatchReady(pairing);
-    const { id } = request.params as { id: string };
-    const habit = createHabitCheckIn(
-      id,
-      {
-        dateKey: parsed.dateKey,
-        status: parsed.status,
-        note: parsed.note
-      },
-      { source: "system", actor: `watch:${parsed.dedupeKey}` }
-    );
-    if (!habit) {
-      reply.code(404);
-      return { error: "Habit not found" };
+  app.post(
+    "/api/v1/mobile/watch/habits/:id/check-ins",
+    async (request, reply) => {
+      const parsed = mobileWatchHabitCheckInSchema.parse(request.body ?? {});
+      const pairing = requireValidPairing(
+        parsed.sessionId,
+        parsed.pairingToken
+      );
+      assertWatchReady(pairing);
+      const { id } = request.params as { id: string };
+      const habit = createHabitCheckIn(
+        id,
+        {
+          dateKey: parsed.dateKey,
+          status: parsed.status,
+          note: parsed.note
+        },
+        { source: "system", actor: `watch:${parsed.dedupeKey}` }
+      );
+      if (!habit) {
+        reply.code(404);
+        return { error: "Habit not found" };
+      }
+      return {
+        habit,
+        metrics: buildXpMetricsPayload(),
+        watch: buildWatchBootstrap(pairing, {
+          anchorDateKey: parsed.dateKey
+        })
+      };
     }
-    return {
-      habit,
-      metrics: buildXpMetricsPayload(),
-      watch: buildWatchBootstrap(pairing, {
-        anchorDateKey: parsed.dateKey
-      })
-    };
-  });
+  );
   app.post("/api/v1/mobile/watch/capture-events:batch", async (request) => {
     const parsed = mobileWatchCaptureBatchSchema.parse(request.body ?? {});
     const pairing = requireValidPairing(parsed.sessionId, parsed.pairingToken);
@@ -6562,29 +7081,39 @@ export async function buildServer(
       { route: "/api/v1/psyche/questionnaires/:id" }
     );
     const { id } = request.params as { id: string };
-    const instrument = deleteQuestionnaireInstrument(id, toActivityContext(auth));
+    const instrument = deleteQuestionnaireInstrument(
+      id,
+      toActivityContext(auth)
+    );
     if (!instrument) {
       reply.code(404);
       return { error: "Questionnaire instrument not found" };
     }
     return { instrument };
   });
-  app.post("/api/v1/psyche/questionnaires/:id/clone", async (request, reply) => {
-    const auth = requirePsycheScopedAccess(
-      request.headers as Record<string, unknown>,
-      ["psyche.write"],
-      { route: "/api/v1/psyche/questionnaires/:id/clone" }
-    );
-    const { id } = request.params as { id: string };
-    const body = (request.body ?? {}) as Record<string, unknown>;
-    const userId =
-      typeof body.userId === "string" && body.userId.trim().length > 0
-        ? body.userId.trim()
-        : null;
-    const result = cloneQuestionnaireInstrument(id, { userId }, toActivityContext(auth));
-    reply.code(201);
-    return result;
-  });
+  app.post(
+    "/api/v1/psyche/questionnaires/:id/clone",
+    async (request, reply) => {
+      const auth = requirePsycheScopedAccess(
+        request.headers as Record<string, unknown>,
+        ["psyche.write"],
+        { route: "/api/v1/psyche/questionnaires/:id/clone" }
+      );
+      const { id } = request.params as { id: string };
+      const body = (request.body ?? {}) as Record<string, unknown>;
+      const userId =
+        typeof body.userId === "string" && body.userId.trim().length > 0
+          ? body.userId.trim()
+          : null;
+      const result = cloneQuestionnaireInstrument(
+        id,
+        { userId },
+        toActivityContext(auth)
+      );
+      reply.code(201);
+      return result;
+    }
+  );
   app.post("/api/v1/psyche/questionnaires/:id/draft", async (request) => {
     const auth = requirePsycheScopedAccess(
       request.headers as Record<string, unknown>,
@@ -6660,15 +7189,18 @@ export async function buildServer(
       toActivityContext(auth)
     );
   });
-  app.post("/api/v1/psyche/questionnaire-runs/:id/complete", async (request) => {
-    const auth = requirePsycheScopedAccess(
-      request.headers as Record<string, unknown>,
-      ["psyche.write"],
-      { route: "/api/v1/psyche/questionnaire-runs/:id/complete" }
-    );
-    const { id } = request.params as { id: string };
-    return completeQuestionnaireRun(id, toActivityContext(auth));
-  });
+  app.post(
+    "/api/v1/psyche/questionnaire-runs/:id/complete",
+    async (request) => {
+      const auth = requirePsycheScopedAccess(
+        request.headers as Record<string, unknown>,
+        ["psyche.write"],
+        { route: "/api/v1/psyche/questionnaire-runs/:id/complete" }
+      );
+      const { id } = request.params as { id: string };
+      return completeQuestionnaireRun(id, toActivityContext(auth));
+    }
+  );
   app.get("/api/v1/psyche/self-observation/calendar", async (request) => {
     requirePsycheScopedAccess(
       request.headers as Record<string, unknown>,
@@ -7920,8 +8452,7 @@ export async function buildServer(
       reply.code(400);
       return { error: "The wiki home page cannot be deleted." };
     }
-    const linkedEntityType =
-      current.links[0]?.entityType ?? null;
+    const linkedEntityType = current.links[0]?.entityType ?? null;
     const auth = requireNoteAccess(
       request.headers as Record<string, unknown>,
       linkedEntityType,
@@ -8475,11 +9006,9 @@ export async function buildServer(
     return job;
   });
   app.post("/api/v1/wiki/ingest-jobs/:id/rerun", async (request, reply) => {
-    requireScopedAccess(
-      request.headers as Record<string, unknown>,
-      ["write"],
-      { route: "/api/v1/wiki/ingest-jobs/:id/rerun" }
-    );
+    requireScopedAccess(request.headers as Record<string, unknown>, ["write"], {
+      route: "/api/v1/wiki/ingest-jobs/:id/rerun"
+    });
     const { id } = request.params as { id: string };
     try {
       const result = await rerunWikiIngestJob(id, {
@@ -8511,11 +9040,9 @@ export async function buildServer(
     }
   });
   app.post("/api/v1/wiki/ingest-jobs/:id/resume", async (request, reply) => {
-    requireScopedAccess(
-      request.headers as Record<string, unknown>,
-      ["write"],
-      { route: "/api/v1/wiki/ingest-jobs/:id/resume" }
-    );
+    requireScopedAccess(request.headers as Record<string, unknown>, ["write"], {
+      route: "/api/v1/wiki/ingest-jobs/:id/resume"
+    });
     const { id } = request.params as { id: string };
     const job = getWikiIngestJob(id);
     if (!job) {
@@ -8523,9 +9050,7 @@ export async function buildServer(
       return { error: "Wiki ingest job not found" };
     }
     const hasRecoverableOpenAiResponse =
-      job.logs.some(
-        (entry) => typeof entry.metadata.responseId === "string"
-      ) ||
+      job.logs.some((entry) => typeof entry.metadata.responseId === "string") ||
       job.assets.some(
         (asset) =>
           typeof asset.metadata.openAiResponseId === "string" ||
@@ -8553,11 +9078,9 @@ export async function buildServer(
     };
   });
   app.delete("/api/v1/wiki/ingest-jobs/:id", async (request, reply) => {
-    requireScopedAccess(
-      request.headers as Record<string, unknown>,
-      ["write"],
-      { route: "/api/v1/wiki/ingest-jobs/:id" }
-    );
+    requireScopedAccess(request.headers as Record<string, unknown>, ["write"], {
+      route: "/api/v1/wiki/ingest-jobs/:id"
+    });
     const { id } = request.params as { id: string };
     try {
       const deleted = deleteWikiIngestJob(id);
@@ -8591,7 +9114,8 @@ export async function buildServer(
         createNote: (note) => createNote(note, toActivityContext(auth)),
         updateNote: (noteId, patch) =>
           updateNote(noteId, patch as any, toActivityContext(auth)),
-        publishEntity: (proposal) => publishIngestProposalEntity(proposal, auth),
+        publishEntity: (proposal) =>
+          publishIngestProposalEntity(proposal, auth),
         resolveMappedEntity: (entityType, entityId) =>
           resolveMappedIngestEntity(entityType, entityId)
       }
@@ -8679,8 +9203,8 @@ export async function buildServer(
       startGoogleCalendarOauthSchema.parse(request.body ?? {}),
       {
         browserOrigin:
-          typeof (request.body as { browserOrigin?: unknown } | null)?.browserOrigin ===
-          "string"
+          typeof (request.body as { browserOrigin?: unknown } | null)
+            ?.browserOrigin === "string"
             ? (request.body as { browserOrigin: string }).browserOrigin
             : null,
         openerOrigin:
@@ -8816,29 +9340,27 @@ export async function buildServer(
       return body;
     }
   );
-  app.get(
-    "/api/v1/calendar/oauth/google/callback",
-    async (request, reply) => {
-      const query = request.query as {
-        state?: string;
-        code?: string;
-        error?: string;
-        error_description?: string;
-      };
-      const result = await completeGoogleCalendarOauth({
-        state: query.state ?? null,
-        code: query.code ?? null,
-        error: query.error ?? null,
-        errorDescription: query.error_description ?? null
-      });
-      const session = result.session;
-      const escapedOrigin = JSON.stringify(result.openerOrigin || "*");
-      const escapedMessage = JSON.stringify({
-        type: "forge:google-calendar-auth",
-        sessionId: session.sessionId,
-        status: session.status
-      });
-      const body = `<!doctype html>
+  app.get("/api/v1/calendar/oauth/google/callback", async (request, reply) => {
+    const query = request.query as {
+      state?: string;
+      code?: string;
+      error?: string;
+      error_description?: string;
+    };
+    const result = await completeGoogleCalendarOauth({
+      state: query.state ?? null,
+      code: query.code ?? null,
+      error: query.error ?? null,
+      errorDescription: query.error_description ?? null
+    });
+    const session = result.session;
+    const escapedOrigin = JSON.stringify(result.openerOrigin || "*");
+    const escapedMessage = JSON.stringify({
+      type: "forge:google-calendar-auth",
+      sessionId: session.sessionId,
+      status: session.status
+    });
+    const body = `<!doctype html>
 <html lang="en">
   <head>
     <meta charset="utf-8" />
@@ -8868,10 +9390,9 @@ export async function buildServer(
     </script>
   </body>
 </html>`;
-      reply.type("text/html; charset=utf-8");
-      return body;
-    }
-  );
+    reply.type("text/html; charset=utf-8");
+    return body;
+  });
   app.post("/api/v1/calendar/discovery", async (request) => {
     const auth = requireScopedAccess(
       request.headers as Record<string, unknown>,
@@ -9622,11 +10143,9 @@ export async function buildServer(
     return { data: await getDataManagementState() };
   });
   app.patch("/api/v1/settings/data", async (request) => {
-    requireScopedAccess(
-      request.headers as Record<string, unknown>,
-      ["write"],
-      { route: "/api/v1/settings/data" }
-    );
+    requireScopedAccess(request.headers as Record<string, unknown>, ["write"], {
+      route: "/api/v1/settings/data"
+    });
     return {
       settings: await updateDataManagementSettings(
         updateDataManagementSettingsSchema.parse(request.body ?? {})
@@ -9643,11 +10162,9 @@ export async function buildServer(
     return { candidates: await scanForDataRecoveryCandidates() };
   });
   app.post("/api/v1/settings/data/backups", async (request, reply) => {
-    requireScopedAccess(
-      request.headers as Record<string, unknown>,
-      ["write"],
-      { route: "/api/v1/settings/data/backups" }
-    );
+    requireScopedAccess(request.headers as Record<string, unknown>, ["write"], {
+      route: "/api/v1/settings/data/backups"
+    });
     const backup = await createDataBackup(
       createDataBackupSchema.parse(request.body ?? {})
     );
@@ -9658,11 +10175,9 @@ export async function buildServer(
     };
   });
   app.post("/api/v1/settings/data/backups/:id/restore", async (request) => {
-    requireScopedAccess(
-      request.headers as Record<string, unknown>,
-      ["write"],
-      { route: "/api/v1/settings/data/backups/:id/restore" }
-    );
+    requireScopedAccess(request.headers as Record<string, unknown>, ["write"], {
+      route: "/api/v1/settings/data/backups/:id/restore"
+    });
     const { id } = request.params as { id: string };
     return {
       data: await restoreDataBackup(
@@ -9673,11 +10188,9 @@ export async function buildServer(
     };
   });
   app.post("/api/v1/settings/data/switch-root", async (request) => {
-    requireScopedAccess(
-      request.headers as Record<string, unknown>,
-      ["write"],
-      { route: "/api/v1/settings/data/switch-root" }
-    );
+    requireScopedAccess(request.headers as Record<string, unknown>, ["write"], {
+      route: "/api/v1/settings/data/switch-root"
+    });
     return {
       data: await switchDataRoot(
         switchDataRootSchema.parse(request.body ?? {}),
@@ -10321,13 +10834,10 @@ export async function buildServer(
       { route: "/api/v1/settings" }
     );
     return {
-      settings: updateSettings(
-        updateSettingsSchema.parse(request.body ?? {}),
-        {
-          activity: toActivityContext(auth),
-          secrets: managers.secrets
-        }
-      )
+      settings: updateSettings(updateSettingsSchema.parse(request.body ?? {}), {
+        activity: toActivityContext(auth),
+        secrets: managers.secrets
+      })
     };
   });
   app.post("/api/v1/settings/models/connections", async (request, reply) => {
@@ -10425,7 +10935,9 @@ export async function buildServer(
               request.headers["x-forge-source"]
             ),
             scope:
-              typeof details.scope === "string" ? details.scope : "model_settings",
+              typeof details.scope === "string"
+                ? details.scope
+                : "model_settings",
             eventKey:
               typeof details.eventKey === "string"
                 ? details.eventKey
@@ -10441,12 +10953,19 @@ export async function buildServer(
       return { result };
     }
   );
-  app.post("/api/v1/settings/models/oauth/openai-codex/start", async (request) => {
-    requireScopedAccess(request.headers as Record<string, unknown>, ["write"], {
-      route: "/api/v1/settings/models/oauth/openai-codex/start"
-    });
-    return { session: await startOpenAiCodexOauthSession() };
-  });
+  app.post(
+    "/api/v1/settings/models/oauth/openai-codex/start",
+    async (request) => {
+      requireScopedAccess(
+        request.headers as Record<string, unknown>,
+        ["write"],
+        {
+          route: "/api/v1/settings/models/oauth/openai-codex/start"
+        }
+      );
+      return { session: await startOpenAiCodexOauthSession() };
+    }
+  );
   app.get(
     "/api/v1/settings/models/oauth/openai-codex/session/:id",
     async (request, reply) => {
@@ -10479,7 +10998,9 @@ export async function buildServer(
       requireScopedAccess(
         request.headers as Record<string, unknown>,
         ["write"],
-        { route: "/api/v1/settings/models/oauth/openai-codex/session/:id/manual" }
+        {
+          route: "/api/v1/settings/models/oauth/openai-codex/session/:id/manual"
+        }
       );
       return {
         session: submitOpenAiCodexOauthManualInput(
@@ -10532,20 +11053,27 @@ export async function buildServer(
       )
     };
   });
-  app.post("/api/v1/surfaces/:surfaceId/ai-processors", async (request, reply) => {
-    requireScopedAccess(request.headers as Record<string, unknown>, ["write"], {
-      route: "/api/v1/surfaces/:surfaceId/ai-processors"
-    });
-    const body = createAiProcessorSchema.parse({
-      ...(request.body as Record<string, unknown> ?? {}),
-      surfaceId: (request.params as { surfaceId: string }).surfaceId
-    });
-    const processor = createAiProcessor({
-      ...body
-    });
-    reply.code(201);
-    return { processor };
-  });
+  app.post(
+    "/api/v1/surfaces/:surfaceId/ai-processors",
+    async (request, reply) => {
+      requireScopedAccess(
+        request.headers as Record<string, unknown>,
+        ["write"],
+        {
+          route: "/api/v1/surfaces/:surfaceId/ai-processors"
+        }
+      );
+      const body = createAiProcessorSchema.parse({
+        ...((request.body as Record<string, unknown>) ?? {}),
+        surfaceId: (request.params as { surfaceId: string }).surfaceId
+      });
+      const processor = createAiProcessor({
+        ...body
+      });
+      reply.code(201);
+      return { processor };
+    }
+  );
   app.patch("/api/v1/ai-processors/:id", async (request, reply) => {
     requireScopedAccess(request.headers as Record<string, unknown>, ["write"], {
       route: "/api/v1/ai-processors/:id"
@@ -10658,9 +11186,13 @@ export async function buildServer(
     const singularKey = options?.singularKey ?? "connector";
     const catalogPath = options?.catalogPath ?? `${basePath}/catalog/boxes`;
     app.get(catalogPath, async (request) => {
-      requireScopedAccess(request.headers as Record<string, unknown>, ["read"], {
-        route: catalogPath
-      });
+      requireScopedAccess(
+        request.headers as Record<string, unknown>,
+        ["read"],
+        {
+          route: catalogPath
+        }
+      );
       return {
         boxes: [
           ...listForgeBoxCatalog(),
@@ -10677,17 +11209,25 @@ export async function buildServer(
       };
     });
     app.get(basePath, async (request) => {
-      requireScopedAccess(request.headers as Record<string, unknown>, ["read"], {
-        route: basePath
-      });
+      requireScopedAccess(
+        request.headers as Record<string, unknown>,
+        ["read"],
+        {
+          route: basePath
+        }
+      );
       return {
         [collectionKey]: listAiConnectors()
       };
     });
     app.post(basePath, async (request, reply) => {
-      requireScopedAccess(request.headers as Record<string, unknown>, ["write"], {
-        route: basePath
-      });
+      requireScopedAccess(
+        request.headers as Record<string, unknown>,
+        ["write"],
+        {
+          route: basePath
+        }
+      );
       const connector = createAiConnector(
         createAiConnectorSchema.parse(request.body ?? {})
       );
@@ -10695,10 +11235,16 @@ export async function buildServer(
       return { [singularKey]: connector };
     });
     app.get(`${basePath}/:id`, async (request, reply) => {
-      requireScopedAccess(request.headers as Record<string, unknown>, ["read"], {
-        route: `${basePath}/:id`
-      });
-      const connector = getAiConnectorById((request.params as { id: string }).id);
+      requireScopedAccess(
+        request.headers as Record<string, unknown>,
+        ["read"],
+        {
+          route: `${basePath}/:id`
+        }
+      );
+      const connector = getAiConnectorById(
+        (request.params as { id: string }).id
+      );
       if (!connector) {
         reply.code(404);
         return { error: `${noun} not found` };
@@ -10710,9 +11256,13 @@ export async function buildServer(
       };
     });
     app.patch(`${basePath}/:id`, async (request, reply) => {
-      requireScopedAccess(request.headers as Record<string, unknown>, ["write"], {
-        route: `${basePath}/:id`
-      });
+      requireScopedAccess(
+        request.headers as Record<string, unknown>,
+        ["write"],
+        {
+          route: `${basePath}/:id`
+        }
+      );
       const connector = updateAiConnector(
         (request.params as { id: string }).id,
         updateAiConnectorSchema.parse(request.body ?? {})
@@ -10724,10 +11274,16 @@ export async function buildServer(
       return { [singularKey]: connector };
     });
     app.delete(`${basePath}/:id`, async (request, reply) => {
-      requireScopedAccess(request.headers as Record<string, unknown>, ["write"], {
-        route: `${basePath}/:id`
-      });
-      const connector = deleteAiConnector((request.params as { id: string }).id);
+      requireScopedAccess(
+        request.headers as Record<string, unknown>,
+        ["write"],
+        {
+          route: `${basePath}/:id`
+        }
+      );
+      const connector = deleteAiConnector(
+        (request.params as { id: string }).id
+      );
       if (!connector) {
         reply.code(404);
         return { error: `${noun} not found` };
@@ -10735,10 +11291,16 @@ export async function buildServer(
       return { [singularKey]: connector };
     });
     app.post(`${basePath}/:id/run`, async (request, reply) => {
-      requireScopedAccess(request.headers as Record<string, unknown>, ["write"], {
-        route: `${basePath}/:id/run`
-      });
-      const connector = getAiConnectorById((request.params as { id: string }).id);
+      requireScopedAccess(
+        request.headers as Record<string, unknown>,
+        ["write"],
+        {
+          route: `${basePath}/:id/run`
+        }
+      );
+      const connector = getAiConnectorById(
+        (request.params as { id: string }).id
+      );
       if (!connector) {
         reply.code(404);
         return { error: `${noun} not found` };
@@ -10759,10 +11321,16 @@ export async function buildServer(
       };
     });
     app.post(`${basePath}/:id/chat`, async (request, reply) => {
-      requireScopedAccess(request.headers as Record<string, unknown>, ["write"], {
-        route: `${basePath}/:id/chat`
-      });
-      const connector = getAiConnectorById((request.params as { id: string }).id);
+      requireScopedAccess(
+        request.headers as Record<string, unknown>,
+        ["write"],
+        {
+          route: `${basePath}/:id/chat`
+        }
+      );
+      const connector = getAiConnectorById(
+        (request.params as { id: string }).id
+      );
       if (!connector) {
         reply.code(404);
         return { error: `${noun} not found` };
@@ -10783,10 +11351,16 @@ export async function buildServer(
       };
     });
     app.get(`${basePath}/:id/output`, async (request, reply) => {
-      requireScopedAccess(request.headers as Record<string, unknown>, ["read"], {
-        route: `${basePath}/:id/output`
-      });
-      const connector = getAiConnectorById((request.params as { id: string }).id);
+      requireScopedAccess(
+        request.headers as Record<string, unknown>,
+        ["read"],
+        {
+          route: `${basePath}/:id/output`
+        }
+      );
+      const connector = getAiConnectorById(
+        (request.params as { id: string }).id
+      );
       if (!connector) {
         reply.code(404);
         return { error: `${noun} not found` };
@@ -10797,10 +11371,16 @@ export async function buildServer(
       };
     });
     app.get(`${basePath}/:id/runs`, async (request, reply) => {
-      requireScopedAccess(request.headers as Record<string, unknown>, ["read"], {
-        route: `${basePath}/:id/runs`
-      });
-      const connector = getAiConnectorById((request.params as { id: string }).id);
+      requireScopedAccess(
+        request.headers as Record<string, unknown>,
+        ["read"],
+        {
+          route: `${basePath}/:id/runs`
+        }
+      );
+      const connector = getAiConnectorById(
+        (request.params as { id: string }).id
+      );
       if (!connector) {
         reply.code(404);
         return { error: `${noun} not found` };
@@ -10810,9 +11390,13 @@ export async function buildServer(
       };
     });
     app.get(`${basePath}/:id/runs/:runId`, async (request, reply) => {
-      requireScopedAccess(request.headers as Record<string, unknown>, ["read"], {
-        route: `${basePath}/:id/runs/:runId`
-      });
+      requireScopedAccess(
+        request.headers as Record<string, unknown>,
+        ["read"],
+        {
+          route: `${basePath}/:id/runs/:runId`
+        }
+      );
       const params = request.params as { id: string; runId: string };
       const connector = getAiConnectorById(params.id);
       if (!connector) {
@@ -10830,16 +11414,23 @@ export async function buildServer(
       };
     });
     app.get(`${basePath}/:id/runs/:runId/nodes`, async (request, reply) => {
-      requireScopedAccess(request.headers as Record<string, unknown>, ["read"], {
-        route: `${basePath}/:id/runs/:runId/nodes`
-      });
+      requireScopedAccess(
+        request.headers as Record<string, unknown>,
+        ["read"],
+        {
+          route: `${basePath}/:id/runs/:runId/nodes`
+        }
+      );
       const params = request.params as { id: string; runId: string };
       const connector = getAiConnectorById(params.id);
       if (!connector) {
         reply.code(404);
         return { error: `${noun} not found` };
       }
-      const nodeResults = getAiConnectorRunNodeResults(connector.id, params.runId);
+      const nodeResults = getAiConnectorRunNodeResults(
+        connector.id,
+        params.runId
+      );
       if (!nodeResults) {
         reply.code(404);
         return { error: `${noun} run not found` };
@@ -10849,41 +11440,59 @@ export async function buildServer(
         nodeResults
       };
     });
-    app.get(`${basePath}/:id/runs/:runId/nodes/:nodeId`, async (request, reply) => {
-      requireScopedAccess(request.headers as Record<string, unknown>, ["read"], {
-        route: `${basePath}/:id/runs/:runId/nodes/:nodeId`
-      });
-      const params = request.params as { id: string; runId: string; nodeId: string };
-      const connector = getAiConnectorById(params.id);
-      if (!connector) {
-        reply.code(404);
-        return { error: `${noun} not found` };
+    app.get(
+      `${basePath}/:id/runs/:runId/nodes/:nodeId`,
+      async (request, reply) => {
+        requireScopedAccess(
+          request.headers as Record<string, unknown>,
+          ["read"],
+          {
+            route: `${basePath}/:id/runs/:runId/nodes/:nodeId`
+          }
+        );
+        const params = request.params as {
+          id: string;
+          runId: string;
+          nodeId: string;
+        };
+        const connector = getAiConnectorById(params.id);
+        if (!connector) {
+          reply.code(404);
+          return { error: `${noun} not found` };
+        }
+        const nodeResult = getAiConnectorRunNodeResult(
+          connector.id,
+          params.runId,
+          params.nodeId
+        );
+        if (!nodeResult) {
+          reply.code(404);
+          return { error: `${noun} node result not found` };
+        }
+        return {
+          [singularKey]: connector,
+          nodeResult
+        };
       }
-      const nodeResult = getAiConnectorRunNodeResult(
-        connector.id,
-        params.runId,
-        params.nodeId
-      );
-      if (!nodeResult) {
-        reply.code(404);
-        return { error: `${noun} node result not found` };
-      }
-      return {
-        [singularKey]: connector,
-        nodeResult
-      };
-    });
+    );
     app.get(`${basePath}/:id/nodes/:nodeId/output`, async (request, reply) => {
-      requireScopedAccess(request.headers as Record<string, unknown>, ["read"], {
-        route: `${basePath}/:id/nodes/:nodeId/output`
-      });
+      requireScopedAccess(
+        request.headers as Record<string, unknown>,
+        ["read"],
+        {
+          route: `${basePath}/:id/nodes/:nodeId/output`
+        }
+      );
       const params = request.params as { id: string; nodeId: string };
       const connector = getAiConnectorById(params.id);
       if (!connector) {
         reply.code(404);
         return { error: `${noun} not found` };
       }
-      const latest = getLatestAiConnectorNodeOutput(connector.id, params.nodeId);
+      const latest = getLatestAiConnectorNodeOutput(
+        connector.id,
+        params.nodeId
+      );
       if (!latest) {
         reply.code(404);
         return { error: `${noun} node output not found` };

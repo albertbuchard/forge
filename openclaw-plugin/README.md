@@ -268,6 +268,32 @@ If you want to move the data folder, edit the same config entry and set:
 }
 ```
 
+## Doctor And Runtime Config
+
+Forge now maintains a runtime settings mirror at `<dataRoot>/forge.json`.
+This is separate from the OpenClaw plugin config in `~/.openclaw/openclaw.json`.
+
+The distinction is:
+
+- OpenClaw plugin config decides how OpenClaw reaches Forge
+- `forge.json` inside the Forge data root decides what Forge's effective settings are
+
+Operational behavior:
+
+- if `forge.json` does not exist, Forge exports it on startup
+- UI and API settings changes update both the SQLite store and `forge.json`
+- valid values in `forge.json` take precedence over persisted DB values
+- the file is then rewritten as a full mirrored snapshot so the runtime converges again
+
+Diagnostic entrypoints:
+
+```bash
+openclaw forge doctor
+npm run doctor --prefix ./projects/forge
+```
+
+The doctor output now includes `settingsFile` details such as the resolved path, validity, sync state, parse errors, and which override keys were applied from `forge.json`.
+
 Then restart the gateway:
 
 ```bash

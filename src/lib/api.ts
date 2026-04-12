@@ -3166,12 +3166,32 @@ export function getMovementTimeline(input?: {
   );
 }
 
-export function patchMovementStay(
-  stayId: string,
-  patch: Record<string, unknown>
+export function createMovementUserBox(
+  input: Record<string, unknown>,
+  userIds?: string[] | unknown
 ) {
-  return request<{ stay: MovementTimelineData["segments"][number]["stay"] }>(
-    `/api/v1/movement/stays/${stayId}`,
+  const search = new URLSearchParams();
+  appendUserIds(search, coerceUserIds(userIds));
+  const suffix = search.size > 0 ? `?${search.toString()}` : "";
+  return request<{ box: MovementTimelineData["segments"][number] }>(
+    `/api/v1/movement/user-boxes${suffix}`,
+    {
+      method: "POST",
+      body: JSON.stringify(input)
+    }
+  );
+}
+
+export function patchMovementUserBox(
+  boxId: string,
+  patch: Record<string, unknown>,
+  userIds?: string[] | unknown
+) {
+  const search = new URLSearchParams();
+  appendUserIds(search, coerceUserIds(userIds));
+  const suffix = search.size > 0 ? `?${search.toString()}` : "";
+  return request<{ box: MovementTimelineData["segments"][number] }>(
+    `/api/v1/movement/user-boxes/${boxId}${suffix}`,
     {
       method: "PATCH",
       body: JSON.stringify(patch)
@@ -3179,59 +3199,36 @@ export function patchMovementStay(
   );
 }
 
-export function deleteMovementStay(stayId: string) {
-  return request<{ deletedStayId: string; deletedStayExternalUid: string }>(
-    `/api/v1/movement/stays/${stayId}`,
+export function deleteMovementUserBox(
+  boxId: string,
+  userIds?: string[] | unknown
+) {
+  const search = new URLSearchParams();
+  appendUserIds(search, coerceUserIds(userIds));
+  const suffix = search.size > 0 ? `?${search.toString()}` : "";
+  return request<{ deletedBoxId: string }>(
+    `/api/v1/movement/user-boxes/${boxId}${suffix}`,
     {
       method: "DELETE"
     }
   );
 }
 
-export function patchMovementTrip(
-  tripId: string,
-  patch: Record<string, unknown>
+export function invalidateAutomaticMovementBox(
+  boxId: string,
+  input: Record<string, unknown>,
+  userIds?: string[] | unknown
 ) {
-  return request<{ trip: MovementTimelineData["segments"][number]["trip"] }>(
-    `/api/v1/movement/trips/${tripId}`,
+  const search = new URLSearchParams();
+  appendUserIds(search, coerceUserIds(userIds));
+  const suffix = search.size > 0 ? `?${search.toString()}` : "";
+  return request<{ box: MovementTimelineData["segments"][number] }>(
+    `/api/v1/movement/automatic-boxes/${boxId}/invalidate${suffix}`,
     {
-      method: "PATCH",
-      body: JSON.stringify(patch)
+      method: "POST",
+      body: JSON.stringify(input)
     }
   );
-}
-
-export function deleteMovementTrip(tripId: string) {
-  return request<{ deletedTripId: string; deletedTripExternalUid: string }>(
-    `/api/v1/movement/trips/${tripId}`,
-    {
-      method: "DELETE"
-    }
-  );
-}
-
-export function patchMovementTripPoint(
-  tripId: string,
-  pointId: string,
-  patch: Record<string, unknown>
-) {
-  return request<{
-    point: MovementTripDetailData["trip"]["points"][number];
-    trip: MovementTripDetailData["trip"];
-  }>(`/api/v1/movement/trips/${tripId}/points/${pointId}`, {
-    method: "PATCH",
-    body: JSON.stringify(patch)
-  });
-}
-
-export function deleteMovementTripPoint(tripId: string, pointId: string) {
-  return request<{
-    deletedPointId: string;
-    deletedPointExternalUid: string;
-    trip: MovementTripDetailData["trip"];
-  }>(`/api/v1/movement/trips/${tripId}/points/${pointId}`, {
-    method: "DELETE"
-  });
 }
 
 export function getMovementSelectionAggregate(input: {

@@ -18,6 +18,7 @@
     "dev:server:openclaw-data": "node ./scripts/with-openclaw-plugin-data-root.mjs npm run dev:server",
     "demo:seed": "node ./scripts/with-monorepo-data-root.mjs node --import tsx server/src/seed-demo.ts",
     "demo:seed:openclaw-data": "node ./scripts/with-openclaw-plugin-data-root.mjs npm run demo:seed",
+    "doctor": "node --import tsx scripts/forge-doctor.ts",
     "docs:openapi": "node --import tsx scripts/export-openapi-docs.ts",
     "smoke:published-openclaw-plugin": "bash ./scripts/smoke-test-published-openclaw-plugin.sh",
     "start": "npm run build && npm run start:web",

@@ -1,6 +1,6 @@
 import * as Dialog from "@radix-ui/react-dialog";
 import { createPortal } from "react-dom";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Sparkles, X } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { GoalDialog } from "@/components/goal-dialog";
@@ -24,22 +24,45 @@ import type {
 } from "@/lib/types";
 
 const MOBILE_BREAKPOINT_QUERY = "(max-width: 1023px)";
+const CREATE_ACTION_GROUPS = ["Execution", "Psyche", "Knowledge"] as const;
 
-type CreateAction = {
-  id:
+export type ForgeCreateActionId =
+  | "goal"
+  | "project"
+  | "task"
+  | "strategy"
+  | "habit"
+  | "psyche_value"
+  | "behavior_pattern"
+  | "behavior"
+  | "trigger_report"
+  | "wiki_page";
+
+export type ForgeCreateActionGroup = (typeof CREATE_ACTION_GROUPS)[number];
+
+type ForgeCreateActionSpec = {
+  id: ForgeCreateActionId;
+  kind: EntityKind;
+  group: ForgeCreateActionGroup;
+  title: string;
+  quickActionTitle: string;
+  description: string;
+  aliases: string[];
+  filterIds: Array<
     | "goal"
     | "project"
     | "task"
     | "strategy"
     | "habit"
-    | "value"
-    | "pattern"
+    | "psyche_value"
+    | "behavior_pattern"
     | "behavior"
-    | "report";
-  kind: EntityKind;
-  group: "Execution" | "Psyche";
-  title: string;
-  description: string;
+    | "trigger_report"
+    | "wiki_page"
+  >;
+};
+
+export type ForgeCreateAction = ForgeCreateActionSpec & {
   onSelect: () => void;
 };
 
@@ -110,7 +133,119 @@ function CreateActionButton({
   );
 }
 
-export function CreateMenu({
+function buildForgeCreateActionSpecs(
+  t: ReturnType<typeof useI18n>["t"]
+): ForgeCreateActionSpec[] {
+  return [
+    {
+      id: "goal",
+      kind: "goal",
+      group: "Execution",
+      title: t("common.navigation.newGoal"),
+      quickActionTitle: "Create life goal",
+      description: t("common.navigation.newGoalDescription"),
+      aliases: ["goal", "life goal", "direction", "objective"],
+      filterIds: ["goal"]
+    },
+    {
+      id: "project",
+      kind: "project",
+      group: "Execution",
+      title: t("common.navigation.newProject"),
+      quickActionTitle: "Create project",
+      description: t("common.navigation.newProjectDescription"),
+      aliases: ["project", "initiative"],
+      filterIds: ["project"]
+    },
+    {
+      id: "task",
+      kind: "task",
+      group: "Execution",
+      title: t("common.navigation.newTask"),
+      quickActionTitle: "Create task",
+      description: t("common.navigation.newTaskDescription"),
+      aliases: ["task", "todo", "to-do", "action item"],
+      filterIds: ["task"]
+    },
+    {
+      id: "strategy",
+      kind: "strategy",
+      group: "Execution",
+      title: "Strategy",
+      quickActionTitle: "Create strategy",
+      description:
+        "Plan a directed path across projects and tasks toward a real end state.",
+      aliases: ["strategy", "plan", "roadmap"],
+      filterIds: ["strategy"]
+    },
+    {
+      id: "habit",
+      kind: "habit",
+      group: "Execution",
+      title: "Habit",
+      quickActionTitle: "Create habit",
+      description:
+        "Track a recurring commitment or recurring slip with explicit XP logic.",
+      aliases: ["habit", "routine", "recurring"],
+      filterIds: ["habit"]
+    },
+    {
+      id: "psyche_value",
+      kind: "value",
+      group: "Psyche",
+      title: "Value",
+      quickActionTitle: "Create value",
+      description:
+        "Place one value into the goal, project, and task constellation.",
+      aliases: ["value", "psyche value", "principle"],
+      filterIds: ["psyche_value"]
+    },
+    {
+      id: "behavior_pattern",
+      kind: "pattern",
+      group: "Psyche",
+      title: "Pattern",
+      quickActionTitle: "Create pattern",
+      description:
+        "Map a loop, its payoff, its cost, and the response you want.",
+      aliases: ["pattern", "loop", "behavior pattern", "psyche pattern"],
+      filterIds: ["behavior_pattern"]
+    },
+    {
+      id: "behavior",
+      kind: "behavior",
+      group: "Psyche",
+      title: "Behavior",
+      quickActionTitle: "Create behavior",
+      description: "Describe the move first, then classify it and link it.",
+      aliases: ["behavior", "psyche behavior", "behaviour"],
+      filterIds: ["behavior"]
+    },
+    {
+      id: "trigger_report",
+      kind: "report",
+      group: "Psyche",
+      title: "Report",
+      quickActionTitle: "Create report",
+      description: "Start a Spark-to-Pivot reflective chain.",
+      aliases: ["report", "trigger report", "psyche report"],
+      filterIds: ["trigger_report"]
+    },
+    {
+      id: "wiki_page",
+      kind: "wiki_page",
+      group: "Knowledge",
+      title: "Wiki page",
+      quickActionTitle: "Create wiki page",
+      description:
+        "Open a fresh KarpaWiki page draft in the current knowledge workspace.",
+      aliases: ["wiki", "wiki page", "karpawiki", "page", "article"],
+      filterIds: ["wiki_page"]
+    }
+  ];
+}
+
+export function useForgeCreateActions({
   goals,
   projects,
   tags,
@@ -118,8 +253,7 @@ export function CreateMenu({
   defaultUserId = null,
   onCreateGoal,
   onCreateProject,
-  onCreateTask,
-  className
+  onCreateTask
 }: {
   goals: DashboardGoal[];
   projects: ProjectSummary[];
@@ -129,7 +263,6 @@ export function CreateMenu({
   onCreateGoal: (input: GoalMutationInput) => Promise<void>;
   onCreateProject: (input: ProjectMutationInput) => Promise<void>;
   onCreateTask: (input: QuickTaskInput) => Promise<void>;
-  className?: string;
 }) {
   const { t } = useI18n();
   const navigate = useNavigate();
@@ -137,10 +270,113 @@ export function CreateMenu({
   const safeProjects = projects ?? [];
   const safeTags = tags ?? [];
   const safeUsers = users ?? [];
-  const [menuOpen, setMenuOpen] = useState(false);
   const [goalOpen, setGoalOpen] = useState(false);
   const [projectOpen, setProjectOpen] = useState(false);
   const [taskOpen, setTaskOpen] = useState(false);
+
+  const specs = useMemo(() => buildForgeCreateActionSpecs(t), [t]);
+
+  const actions = useMemo<ForgeCreateAction[]>(
+    () =>
+      specs.map((spec) => ({
+        ...spec,
+        onSelect: () => {
+          switch (spec.id) {
+            case "goal":
+              setGoalOpen(true);
+              return;
+            case "project":
+              setProjectOpen(true);
+              return;
+            case "task":
+              setTaskOpen(true);
+              return;
+            case "strategy":
+              navigate("/strategies?create=1");
+              return;
+            case "habit":
+              navigate("/habits?create=1");
+              return;
+            case "psyche_value":
+              navigate("/psyche/values?create=1");
+              return;
+            case "behavior_pattern":
+              navigate("/psyche/patterns?create=1");
+              return;
+            case "behavior":
+              navigate("/psyche/behaviors?create=1");
+              return;
+            case "trigger_report":
+              navigate("/psyche/reports?create=1");
+              return;
+            case "wiki_page":
+              navigate("/wiki/new");
+              return;
+            default:
+              return;
+          }
+        }
+      })),
+    [navigate, specs]
+  );
+
+  const dialogs: ReactNode = (
+    <>
+      <GoalDialog
+        open={goalOpen}
+        editingGoal={null}
+        tags={safeTags}
+        users={safeUsers}
+        defaultUserId={defaultUserId}
+        onOpenChange={setGoalOpen}
+        onSubmit={async (input) => {
+          await onCreateGoal(input);
+        }}
+      />
+
+      <ProjectDialog
+        open={projectOpen}
+        goals={safeGoals as Goal[]}
+        users={safeUsers}
+        editingProject={null}
+        defaultUserId={defaultUserId}
+        onOpenChange={setProjectOpen}
+        onSubmit={async (input) => {
+          await onCreateProject(input);
+        }}
+      />
+
+      <TaskDialog
+        open={taskOpen}
+        goals={safeGoals as Goal[]}
+        projects={safeProjects}
+        tags={safeTags}
+        users={safeUsers}
+        editingTask={null}
+        defaultUserId={defaultUserId}
+        onOpenChange={setTaskOpen}
+        onSubmit={async (input) => {
+          await onCreateTask(input);
+        }}
+      />
+    </>
+  );
+
+  return {
+    actions,
+    dialogs
+  };
+}
+
+export function CreateMenu({
+  actions,
+  className
+}: {
+  actions: ForgeCreateAction[];
+  className?: string;
+}) {
+  const { t } = useI18n();
+  const [menuOpen, setMenuOpen] = useState(false);
   const [desktopMenuPosition, setDesktopMenuPosition] = useState<{
     top: number;
     right: number;
@@ -196,112 +432,6 @@ export function CreateMenu({
     };
   }, [isMobile, menuOpen]);
 
-  const createActions: CreateAction[] = [
-    {
-      id: "goal",
-      kind: "goal",
-      group: "Execution",
-      title: t("common.navigation.newGoal"),
-      description: t("common.navigation.newGoalDescription"),
-      onSelect: () => {
-        setMenuOpen(false);
-        setGoalOpen(true);
-      }
-    },
-    {
-      id: "project",
-      kind: "project",
-      group: "Execution",
-      title: t("common.navigation.newProject"),
-      description: t("common.navigation.newProjectDescription"),
-      onSelect: () => {
-        setMenuOpen(false);
-        setProjectOpen(true);
-      }
-    },
-    {
-      id: "task",
-      kind: "task",
-      group: "Execution",
-      title: t("common.navigation.newTask"),
-      description: t("common.navigation.newTaskDescription"),
-      onSelect: () => {
-        setMenuOpen(false);
-        setTaskOpen(true);
-      }
-    },
-    {
-      id: "strategy",
-      kind: "strategy",
-      group: "Execution",
-      title: "Strategy",
-      description:
-        "Plan a directed path across projects and tasks toward a real end state.",
-      onSelect: () => {
-        setMenuOpen(false);
-        navigate("/strategies?create=1");
-      }
-    },
-    {
-      id: "habit",
-      kind: "habit",
-      group: "Execution",
-      title: "Habit",
-      description:
-        "Track a recurring commitment or recurring slip with explicit XP logic.",
-      onSelect: () => {
-        setMenuOpen(false);
-        navigate("/habits?create=1");
-      }
-    },
-    {
-      id: "value",
-      kind: "value",
-      group: "Psyche",
-      title: "Value",
-      description:
-        "Place one value into the goal, project, and task constellation.",
-      onSelect: () => {
-        setMenuOpen(false);
-        navigate("/psyche/values?create=1");
-      }
-    },
-    {
-      id: "pattern",
-      kind: "pattern",
-      group: "Psyche",
-      title: "Pattern",
-      description:
-        "Map a loop, its payoff, its cost, and the response you want.",
-      onSelect: () => {
-        setMenuOpen(false);
-        navigate("/psyche/patterns?create=1");
-      }
-    },
-    {
-      id: "behavior",
-      kind: "behavior",
-      group: "Psyche",
-      title: "Behavior",
-      description: "Describe the move first, then classify it and link it.",
-      onSelect: () => {
-        setMenuOpen(false);
-        navigate("/psyche/behaviors?create=1");
-      }
-    },
-    {
-      id: "report",
-      kind: "report",
-      group: "Psyche",
-      title: "Report",
-      description: "Start a Spark-to-Pivot reflective chain.",
-      onSelect: () => {
-        setMenuOpen(false);
-        navigate("/psyche/reports?create=1");
-      }
-    }
-  ];
-
   return (
     <>
       <div
@@ -356,13 +486,13 @@ export function CreateMenu({
                 Pick one thing to create. The flow keeps the first step light
                 and visible.
               </div>
-              {(["Execution", "Psyche"] as const).map((group) => (
+              {CREATE_ACTION_GROUPS.map((group) => (
                 <div key={group} className="mt-4">
                   <div className="text-[11px] uppercase tracking-[0.18em] text-white/38">
                     {group}
                   </div>
                   <div className="mt-2 grid gap-2">
-                    {createActions
+                    {actions
                       .filter((action) => action.group === group)
                       .map((action) => (
                         <CreateActionButton
@@ -370,7 +500,10 @@ export function CreateMenu({
                           kind={action.kind}
                           title={action.title}
                           description={action.description}
-                          onClick={action.onSelect}
+                          onClick={() => {
+                            setMenuOpen(false);
+                            action.onSelect();
+                          }}
                         />
                       ))}
                   </div>
@@ -416,12 +549,12 @@ export function CreateMenu({
               </Dialog.Close>
             </div>
             <div className="overflow-y-auto p-4 overscroll-contain">
-              {(["Execution", "Psyche"] as const).map((group) => (
+              {CREATE_ACTION_GROUPS.map((group) => (
                 <div key={group} className="mt-1 grid gap-2 first:mt-0">
                   <div className="px-1 text-[11px] uppercase tracking-[0.18em] text-white/38">
                     {group}
                   </div>
-                  {createActions
+                  {actions
                     .filter((action) => action.group === group)
                     .map((action) => (
                       <CreateActionButton
@@ -429,7 +562,10 @@ export function CreateMenu({
                         kind={action.kind}
                         title={action.title}
                         description={action.description}
-                        onClick={action.onSelect}
+                        onClick={() => {
+                          setMenuOpen(false);
+                          action.onSelect();
+                        }}
                       />
                     ))}
                 </div>
@@ -438,44 +574,6 @@ export function CreateMenu({
           </Dialog.Content>
         </Dialog.Portal>
       </Dialog.Root>
-
-      <GoalDialog
-        open={goalOpen}
-        editingGoal={null}
-        tags={safeTags}
-        users={safeUsers}
-        defaultUserId={defaultUserId}
-        onOpenChange={setGoalOpen}
-        onSubmit={async (input) => {
-          await onCreateGoal(input);
-        }}
-      />
-
-      <ProjectDialog
-        open={projectOpen}
-        goals={safeGoals as Goal[]}
-        users={safeUsers}
-        editingProject={null}
-        defaultUserId={defaultUserId}
-        onOpenChange={setProjectOpen}
-        onSubmit={async (input) => {
-          await onCreateProject(input);
-        }}
-      />
-
-      <TaskDialog
-        open={taskOpen}
-        goals={safeGoals as Goal[]}
-        projects={safeProjects}
-        tags={safeTags}
-        users={safeUsers}
-        editingTask={null}
-        defaultUserId={defaultUserId}
-        onOpenChange={setTaskOpen}
-        onSubmit={async (input) => {
-          await onCreateTask(input);
-        }}
-      />
     </>
   );
 }

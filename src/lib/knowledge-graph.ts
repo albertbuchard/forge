@@ -348,6 +348,18 @@ export function selectKnowledgeGraphVisibleNodeIds({
       frontier = Array.from(nextFrontier);
     }
 
+    if (visibleIds.size < limit) {
+      for (const node of [...nodes].sort(compareKnowledgeGraphNodes)) {
+        if (visibleIds.has(node.id)) {
+          continue;
+        }
+        visibleIds.add(node.id);
+        if (visibleIds.size >= limit) {
+          break;
+        }
+      }
+    }
+
     return visibleIds;
   }
 

@@ -21,14 +21,17 @@ test("managed dev web runtime starts Vite when the dev origin is down", async ()
     spawnImpl: ((command: string) => {
       spawnCalls.push(command);
       ready = true;
-      return Object.assign(new EventEmitter(), {
-        exitCode: null,
-        kill() {
-          this.exitCode = 0;
-          this.emit("exit", 0, null);
-          return true;
-        }
-      });
+      const mockProcess = new EventEmitter() as EventEmitter & {
+        exitCode: number | null;
+        kill: () => boolean;
+      };
+      mockProcess.exitCode = null;
+      mockProcess.kill = () => {
+        mockProcess.exitCode = 0;
+        mockProcess.emit("exit", 0, null);
+        return true;
+      };
+      return mockProcess;
     }) as typeof import("node:child_process").spawn
   });
 
@@ -48,10 +51,10 @@ test("managed dev web runtime does not autostart when disabled", async () => {
     fetchImpl: (async () => {
       throw new Error("dev web unavailable");
     }) as typeof fetch,
-    spawnImpl: ((() => {
+    spawnImpl: (() => {
       spawnCalled = true;
       throw new Error("spawn should not run");
-    }) as unknown) as typeof import("node:child_process").spawn
+    }) as unknown as typeof import("node:child_process").spawn
   });
 
   const origin = await runtime.ensureReady();

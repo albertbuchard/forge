@@ -397,6 +397,12 @@ TOOL_CATALOG: List[ToolSpec] = [
         "path": "/api/v1/agents/onboarding",
     },
     {
+        "name": "forge_get_doctor",
+        "description": "Run Forge runtime diagnostics, config-file sync checks, and onboarding reachability from the Hermes surface.",
+        "parameters": object_schema({}),
+        "custom_handler": "doctor",
+    },
+    {
         "name": "forge_get_user_directory",
         "description": "Read the current human and bot user directory, ownership counts, and directional relationship graph before cross-owner planning or mutation.",
         "parameters": object_schema({}),

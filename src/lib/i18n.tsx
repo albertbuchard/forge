@@ -86,7 +86,7 @@ function createEnglishDictionary() {
         appName: "The Kinetic Forge",
         appMark: "FORGE",
         more: "More",
-        command: "Power bar",
+        command: "Action bar",
         moreRoutesEyebrow: "More routes",
         moreRoutesTitle: "Move through Forge",
         moreRoutesDescription: "Use this sheet for secondary destinations so the bottom bar stays clean and easy to use.",
@@ -206,6 +206,29 @@ function createEnglishDictionary() {
       routeSettings: "Open settings.",
       openLifeGoal: "Open life goal",
       openFocusTask: "Open focus task"
+    },
+    actionBar: {
+      title: "Forge Action bar",
+      description:
+        "Search routes and Forge records, apply structured filters, or launch create actions from one command surface.",
+      searchPlaceholder: "Search anything in Forge or type create habit…",
+      idleHint:
+        "Search Forge records, routes, and recent work. Add entity-type badges when you want structured narrowing without losing free text.",
+      activeHint:
+        "Free text stays live while selected badges narrow the entity results. Type create plus an entity to jump into the right creation flow.",
+      filtersLabel: "Filter results",
+      filtersPlaceholder: "Add entity type filters…",
+      filtersEmpty: "No filter matches yet.",
+      searching: "Searching Forge...",
+      noResults: "No Forge result matches this search yet.",
+      noResultsWithFilters:
+        "No Forge record matches this query and filter combination yet.",
+      sections: {
+        routes: "Routes",
+        recent: "Recent",
+        quickActions: "Quick actions",
+        results: "Results"
+      }
     },
       pageState: {
         loadingTitle: "Getting things ready",
@@ -638,7 +661,7 @@ export const fr: typeof en = {
       appName: "The Kinetic Forge",
       appMark: "FORGE",
       more: "Plus",
-      command: "Barre de puissance",
+      command: "Barre d'action",
       moreRoutesEyebrow: "Autres vues",
       moreRoutesTitle: "Parcourir Forge",
       moreRoutesDescription: "Utilisez ce panneau pour accéder aux vues secondaires sans surcharger la barre inférieure.",
@@ -758,6 +781,30 @@ export const fr: typeof en = {
       routeSettings: "Ouvrir les réglages.",
       openLifeGoal: "Ouvrir l'objectif de vie",
       openFocusTask: "Ouvrir la tâche prioritaire"
+    },
+    actionBar: {
+      title: "Barre d'action Forge",
+      description:
+        "Recherchez des vues et des fiches Forge, ajoutez des filtres structurés ou lancez des actions de création depuis une seule surface.",
+      searchPlaceholder:
+        "Rechercher dans Forge ou taper créer habitude…",
+      idleHint:
+        "Recherchez les fiches, vues et éléments récents de Forge. Ajoutez des badges de type d'entité pour affiner la recherche sans perdre le texte libre.",
+      activeHint:
+        "Le texte libre reste actif pendant que les badges sélectionnés resserrent les résultats. Tapez créer plus un type d'entité pour ouvrir le bon flux de création.",
+      filtersLabel: "Filtrer les résultats",
+      filtersPlaceholder: "Ajouter des filtres de type d'entité…",
+      filtersEmpty: "Aucun filtre correspondant pour le moment.",
+      searching: "Recherche dans Forge...",
+      noResults: "Aucun résultat Forge ne correspond à cette recherche.",
+      noResultsWithFilters:
+        "Aucune fiche Forge ne correspond encore à cette combinaison de requête et de filtres.",
+      sections: {
+        routes: "Vues",
+        recent: "Récent",
+        quickActions: "Actions rapides",
+        results: "Résultats"
+      }
     },
     pageState: {
       loadingTitle: "Préparation en cours",

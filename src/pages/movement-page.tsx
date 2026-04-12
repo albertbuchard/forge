@@ -40,7 +40,6 @@ import {
 } from "@/components/workbench-boxes/movement/movement-boxes";
 import {
   createMovementPlace,
-  deleteMovementTripPoint,
   getMovementAllTime,
   getMovementDay,
   getMovementMonth,
@@ -48,7 +47,6 @@ import {
   getMovementTripDetail,
   getMovementSettings,
   listMovementPlaces,
-  patchMovementTripPoint,
   patchMovementPlace,
   patchMovementSettings
 } from "@/lib/api";
@@ -380,33 +378,23 @@ function ExactTripCard({ points }: { points: MovementTripPointRecord[] }) {
 
 function MovementPointEditor({
   point,
-  draft,
-  saving,
-  deleting,
-  onDraftChange,
-  onSave,
-  onDelete
+  draft
 }: {
   point: MovementTripPointRecord;
   draft: MovementPointDraft;
-  saving: boolean;
-  deleting: boolean;
-  onDraftChange: (patch: Partial<MovementPointDraft>) => void;
-  onSave: () => void;
-  onDelete: () => void;
 }) {
   return (
     <Card className="grid gap-4 rounded-[28px] border border-white/8 bg-[linear-gradient(180deg,rgba(12,18,32,0.98),rgba(8,13,24,0.98))] p-5">
       <div className="flex items-start justify-between gap-3">
         <div>
           <div className="font-label text-[11px] uppercase tracking-[0.2em] text-white/42">
-            Datapoint editor
+            Raw datapoint
           </div>
           <div className="mt-2 text-lg text-white">
             {formatPointTimestamp(point.recordedAt)}
           </div>
           <div className="mt-2 text-sm text-white/58">
-            Editing here changes the canonical trip path in Forge. Deleting the point also tombstones it so the companion will not re-upload it on the next sync.
+            Raw phone measurements are immutable in product UI. To change the visible movement story, create or edit user-defined boxes in the Life Timeline instead.
           </div>
         </div>
         <Badge tone={point.isStopAnchor ? "signal" : "meta"}>
@@ -422,7 +410,7 @@ function MovementPointEditor({
           <Input
             type="datetime-local"
             value={draft.recordedAt}
-            onChange={(event) => onDraftChange({ recordedAt: event.target.value })}
+            disabled
           />
         </div>
         <div className="grid gap-2">
@@ -431,7 +419,7 @@ function MovementPointEditor({
           </div>
           <Input
             value={draft.speedMps}
-            onChange={(event) => onDraftChange({ speedMps: event.target.value })}
+            disabled
             placeholder="Optional"
           />
         </div>
@@ -441,7 +429,7 @@ function MovementPointEditor({
           </div>
           <Input
             value={draft.latitude}
-            onChange={(event) => onDraftChange({ latitude: event.target.value })}
+            disabled
           />
         </div>
         <div className="grid gap-2">
@@ -450,7 +438,7 @@ function MovementPointEditor({
           </div>
           <Input
             value={draft.longitude}
-            onChange={(event) => onDraftChange({ longitude: event.target.value })}
+            disabled
           />
         </div>
         <div className="grid gap-2">
@@ -459,7 +447,7 @@ function MovementPointEditor({
           </div>
           <Input
             value={draft.accuracyMeters}
-            onChange={(event) => onDraftChange({ accuracyMeters: event.target.value })}
+            disabled
             placeholder="Optional"
           />
         </div>
@@ -469,7 +457,7 @@ function MovementPointEditor({
           </div>
           <Input
             value={draft.altitudeMeters}
-            onChange={(event) => onDraftChange({ altitudeMeters: event.target.value })}
+            disabled
             placeholder="Optional"
           />
         </div>
@@ -484,7 +472,7 @@ function MovementPointEditor({
               ? "border-[var(--primary)] bg-[var(--primary)]/16 text-white"
               : "border-white/10 bg-white/[0.04] text-white/64"
           )}
-          onClick={() => onDraftChange({ isStopAnchor: !draft.isStopAnchor })}
+          disabled
         >
           <Route className="mr-2 size-4" />
           {draft.isStopAnchor ? "Stop anchor" : "Path point"}
@@ -494,20 +482,8 @@ function MovementPointEditor({
         </div>
       </div>
 
-      <div className="flex flex-wrap justify-between gap-3 border-t border-white/8 pt-4">
-        <Button
-          variant="ghost"
-          className="h-10 rounded-full border border-[rgba(255,122,122,0.26)] bg-[rgba(255,122,122,0.08)] px-4 text-[rgba(255,198,198,0.94)] hover:bg-[rgba(255,122,122,0.14)]"
-          onClick={onDelete}
-          disabled={deleting || saving}
-        >
-          <Trash2 className="mr-2 size-4" />
-          {deleting ? "Deleting…" : "Delete datapoint"}
-        </Button>
-        <Button onClick={onSave} disabled={saving || deleting}>
-          <Save className="mr-2 size-4" />
-          {saving ? "Saving…" : "Save datapoint"}
-        </Button>
+      <div className="rounded-[20px] border border-white/8 bg-white/[0.03] px-4 py-3 text-sm leading-6 text-white/56">
+        This browser is read-only now. Raw points stay immutable so the web app and iPhone can both project the same repaired canonical boxes from the backend.
       </div>
     </Card>
   );
@@ -764,37 +740,6 @@ export function MovementPage() {
       await queryClient.invalidateQueries({ queryKey: ["forge-movement-places"] });
       await queryClient.invalidateQueries({ queryKey: ["forge-movement-day"] });
       await queryClient.invalidateQueries({ queryKey: ["forge-movement-all-time"] });
-    }
-  });
-
-  const pointMutation = useMutation({
-    mutationFn: async (input: {
-      tripId: string;
-      pointId: string;
-      patch: Record<string, unknown>;
-    }) => patchMovementTripPoint(input.tripId, input.pointId, input.patch),
-    onSuccess: async (_, variables) => {
-      await queryClient.invalidateQueries({
-        queryKey: ["forge-movement-trip", variables.tripId]
-      });
-      await queryClient.invalidateQueries({ queryKey: ["forge-movement-day"] });
-      await queryClient.invalidateQueries({ queryKey: ["forge-movement-month"] });
-      await queryClient.invalidateQueries({ queryKey: ["forge-movement-all-time"] });
-      await queryClient.invalidateQueries({ queryKey: ["forge-movement-selection"] });
-    }
-  });
-
-  const deletePointMutation = useMutation({
-    mutationFn: async (input: { tripId: string; pointId: string }) =>
-      deleteMovementTripPoint(input.tripId, input.pointId),
-    onSuccess: async (_, variables) => {
-      await queryClient.invalidateQueries({
-        queryKey: ["forge-movement-trip", variables.tripId]
-      });
-      await queryClient.invalidateQueries({ queryKey: ["forge-movement-day"] });
-      await queryClient.invalidateQueries({ queryKey: ["forge-movement-month"] });
-      await queryClient.invalidateQueries({ queryKey: ["forge-movement-all-time"] });
-      await queryClient.invalidateQueries({ queryKey: ["forge-movement-selection"] });
     }
   });
 
@@ -1737,7 +1682,7 @@ export function MovementPage() {
           }}
           eyebrow="Movement data"
           title={selectedTripQuery.data.trip.label || "Trip datapoints"}
-          description="Inspect the raw datapoints behind this trip, search them with time and quality filters, then edit or tombstone them without letting the companion re-upload the stale version."
+          description="Inspect the raw datapoints behind this trip. Raw measurements are read-only here; visible movement corrections now happen through canonical user-defined boxes."
         >
           <MovementDataBrowserBox>
             <div className="grid gap-4 xl:grid-cols-[minmax(0,24rem)_minmax(0,1fr)]">
@@ -1849,71 +1794,10 @@ export function MovementPage() {
               <MovementPointEditor
                 point={activePoint}
                 draft={pointDraft}
-                saving={
-                  pointMutation.isPending &&
-                  pointMutation.variables?.pointId === activePoint.id
-                }
-                deleting={
-                  deletePointMutation.isPending &&
-                  deletePointMutation.variables?.pointId === activePoint.id
-                }
-                onDraftChange={(patch) =>
-                  setPointDraft((current) =>
-                    current ? { ...current, ...patch } : current
-                  )
-                }
-                onSave={() => {
-                  if (!selectedTripId || !pointDraft) {
-                    return;
-                  }
-                  const recordedAt = fromLocalDateTimeInput(pointDraft.recordedAt);
-                  if (!recordedAt) {
-                    return;
-                  }
-                  void pointMutation.mutateAsync({
-                    tripId: selectedTripId,
-                    pointId: activePoint.id,
-                    patch: {
-                      recordedAt,
-                      latitude: Number(pointDraft.latitude),
-                      longitude: Number(pointDraft.longitude),
-                      accuracyMeters:
-                        pointDraft.accuracyMeters.trim().length > 0
-                          ? Number(pointDraft.accuracyMeters)
-                          : null,
-                      altitudeMeters:
-                        pointDraft.altitudeMeters.trim().length > 0
-                          ? Number(pointDraft.altitudeMeters)
-                          : null,
-                      speedMps:
-                        pointDraft.speedMps.trim().length > 0
-                          ? Number(pointDraft.speedMps)
-                          : null,
-                      isStopAnchor: pointDraft.isStopAnchor
-                    }
-                  });
-                }}
-                onDelete={() => {
-                  if (!selectedTripId) {
-                    return;
-                  }
-                  const nextPoint =
-                    filteredPoints.find((point) => point.id !== activePoint.id) ??
-                    selectedTripQuery.data?.trip.points.find(
-                      (point) => point.id !== activePoint.id
-                    ) ??
-                    null;
-                  setSelectedPointId(nextPoint?.id ?? null);
-                  setPointDraft(nextPoint ? buildPointDraft(nextPoint) : null);
-                  void deletePointMutation.mutateAsync({
-                    tripId: selectedTripId,
-                    pointId: activePoint.id
-                  });
-                }}
               />
             ) : (
               <Card className="rounded-[28px] border border-dashed border-white/12 bg-white/[0.03] p-6 text-white/56">
-                Pick a datapoint to edit or delete it. The canonical change will flow back to the companion on the next sync.
+                Pick a datapoint to inspect its raw measurement details. To correct what the user sees, use canonical user-defined movement boxes in the Life Timeline.
               </Card>
             )}
             </div>

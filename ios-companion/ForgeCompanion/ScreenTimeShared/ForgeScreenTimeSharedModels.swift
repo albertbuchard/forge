@@ -1,9 +1,15 @@
+import CoreFoundation
 import Foundation
 import _DeviceActivity_SwiftUI
 
 enum ForgeScreenTimeStorage {
     nonisolated static let appGroupId = "group.albertbuchard.ForgeCompanion"
     nonisolated static let snapshotKey = "forge_screen_time_snapshot_envelope"
+    nonisolated static let snapshotDidChangeNotificationName =
+        "group.albertbuchard.ForgeCompanion.forge_screen_time_snapshot_changed"
+    nonisolated static let snapshotDidChangeDarwinName = CFNotificationName(
+        rawValue: snapshotDidChangeNotificationName as CFString
+    )
 
     nonisolated static func sharedDefaults() -> UserDefaults {
         guard FileManager.default.containerURL(
@@ -103,5 +109,13 @@ enum ForgeScreenTimeSnapshotStore {
             return
         }
         defaults.set(data, forKey: ForgeScreenTimeStorage.snapshotKey)
+        defaults.synchronize()
+        CFNotificationCenterPostNotification(
+            CFNotificationCenterGetDarwinNotifyCenter(),
+            ForgeScreenTimeStorage.snapshotDidChangeDarwinName,
+            nil,
+            nil,
+            true
+        )
     }
 }

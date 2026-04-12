@@ -70,6 +70,7 @@ Set `FORGE_DATA_ROOT` or an explicit plugin `dataRoot` if you want another store
 - [What Forge Includes](#what-forge-includes)
 - [Current Stack](#current-stack)
 - [Runtime Surfaces](#runtime-surfaces)
+- [Forge.json Config](#forgejson-config)
 - [Repository Layout](#repository-layout)
 - [Development](#development)
 - [Verification](#verification)
@@ -101,20 +102,21 @@ Set `FORGE_DATA_ROOT` or an explicit plugin `dataRoot` if you want another store
 
 ## Current Stack
 
-| Layer | Stack | Notes |
-| --- | --- | --- |
-| Web UI | React 19, TypeScript 5.8, Vite 6, Tailwind CSS 4 | Main app served under `/forge/` |
-| Backend | Fastify 5, TypeScript, generated OpenAPI 3.1 | Main API served under `/api/v1/` |
-| Storage | SQLite + file-backed wiki storage | Local-first canonical store |
-| Desktop / native | Tauri 2 + Swift iOS companion | Desktop shell and HealthKit path |
-| Packages | OpenClaw plugin, Hermes plugin, Codex adapter | Shared runtime model across agent hosts |
-| Docs | GitHub Pages + rendered OpenAPI reference | Pages artifact includes engineering docs and API docs |
+| Layer            | Stack                                            | Notes                                                 |
+| ---------------- | ------------------------------------------------ | ----------------------------------------------------- |
+| Web UI           | React 19, TypeScript 5.8, Vite 6, Tailwind CSS 4 | Main app served under `/forge/`                       |
+| Backend          | Fastify 5, TypeScript, generated OpenAPI 3.1     | Main API served under `/api/v1/`                      |
+| Storage          | SQLite + file-backed wiki storage                | Local-first canonical store                           |
+| Desktop / native | Tauri 2 + Swift iOS companion                    | Desktop shell and HealthKit path                      |
+| Packages         | OpenClaw plugin, Hermes plugin, Codex adapter    | Shared runtime model across agent hosts               |
+| Docs             | GitHub Pages + rendered OpenAPI reference        | Pages artifact includes engineering docs and API docs |
 
 ## Runtime Surfaces
 
 - Web app: `/forge/`
 - API root: `/api/v1/`
 - OpenAPI JSON: `/api/v1/openapi.json`
+- Doctor diagnostics: `/api/v1/doctor`
 - Wiki routes: `/api/v1/wiki/*`
 - Preferences routes: `/api/v1/preferences/*`
 - Psyche routes: `/api/v1/psyche/*`
@@ -124,18 +126,89 @@ Set `FORGE_DATA_ROOT` or an explicit plugin `dataRoot` if you want another store
 The agent adapters intentionally expose a curated surface on top of this runtime
 instead of mirroring every internal route one to one.
 
+## Forge.json Config
+
+Forge now keeps a runtime-level settings mirror at:
+
+```text
+<dataRoot>/forge.json
+```
+
+Examples:
+
+- monorepo default: `/Users/omarclaw/Documents/aurel-monorepo/data/forge/forge.json`
+- Hermes default: `~/.hermes/forge/forge.json`
+- OpenClaw with explicit plugin `dataRoot`: `<that dataRoot>/forge.json`
+
+This file is part of the Forge runtime, not part of a specific adapter. If OpenClaw, Hermes, Codex, and the browser UI point at the same Forge `dataRoot`, they will all read and write the same `forge.json` and `forge.sqlite`.
+
+Behavior:
+
+- on startup, if `forge.json` is missing, Forge exports the current effective settings into it
+- on every UI or API settings change, Forge updates the database and immediately rewrites `forge.json`
+- on token and model-connection changes, Forge also rewrites `forge.json`
+- on reads, valid settings present in `forge.json` take precedence over the persisted database values
+- after precedence is applied, Forge rewrites the file as a full mirrored snapshot so the file, DB, and UI converge again
+
+Important nuance:
+
+- Forge mirrors the full settings payload into `forge.json`, including derived and operational fields such as integrity score, token lists, and active sessions
+- only writable settings are honored as file overrides on startup and reads
+- read-only or derived fields in `forge.json` are treated as mirrored output, not authoritative input
+
+If `forge.json` is invalid JSON or fails schema validation:
+
+- Forge does not apply file precedence
+- Forge keeps serving the database-backed settings
+- `/api/v1/doctor`, `openclaw forge doctor`, `forge_get_doctor`, and `npm run doctor` report the invalid file and the path that needs repair
+
+Minimal example:
+
+```json
+{
+  "profile": {
+    "operatorName": "Albert"
+  },
+  "execution": {
+    "maxActiveTasks": 3,
+    "timeAccountingMode": "parallel"
+  },
+  "themePreference": "solar",
+  "localePreference": "en"
+}
+```
+
+The file may be partial, but Forge will rewrite it as a full snapshot after the next successful load.
+
+Do not confuse this with adapter config files:
+
+- Hermes plugin config lives at `~/.hermes/forge/config.json` and tells Hermes how to reach Forge
+- OpenClaw plugin config lives in `~/.openclaw/openclaw.json` and tells OpenClaw how to reach Forge
+- `forge.json` lives inside the Forge `dataRoot` and controls Forge runtime settings themselves
+
+Useful diagnostics:
+
+```bash
+openclaw forge doctor
+npm run doctor
+~/.hermes/hermes-agent/venv/bin/python - <<'PY'
+from forge_hermes.tools import build_handler
+print(build_handler("forge_get_doctor")({}))
+PY
+```
+
 ## Repository Layout
 
-| Path | Purpose |
-| --- | --- |
-| [`src/`](./src) | React app routes, components, page logic, and shared frontend libraries |
-| [`server/src/`](./server/src) | Fastify app, repositories, platform managers, OpenAPI generator, and tests |
-| [`docs/`](./docs) | Longer engineering guides kept as Markdown |
-| [`openclaw-plugin/`](./openclaw-plugin) | Published OpenClaw package and GitHub Pages artifact |
-| [`plugins/forge-hermes/`](./plugins/forge-hermes) | Hermes plugin package |
-| [`plugins/forge-codex/`](./plugins/forge-codex) | Repo-local Codex adapter |
-| [`ios-companion/`](./ios-companion) | Swift iPhone companion |
-| [`src-tauri/`](./src-tauri) | Tauri desktop shell |
+| Path                                              | Purpose                                                                    |
+| ------------------------------------------------- | -------------------------------------------------------------------------- |
+| [`src/`](./src)                                   | React app routes, components, page logic, and shared frontend libraries    |
+| [`server/src/`](./server/src)                     | Fastify app, repositories, platform managers, OpenAPI generator, and tests |
+| [`docs/`](./docs)                                 | Longer engineering guides kept as Markdown                                 |
+| [`openclaw-plugin/`](./openclaw-plugin)           | Published OpenClaw package and GitHub Pages artifact                       |
+| [`plugins/forge-hermes/`](./plugins/forge-hermes) | Hermes plugin package                                                      |
+| [`plugins/forge-codex/`](./plugins/forge-codex)   | Repo-local Codex adapter                                                   |
+| [`ios-companion/`](./ios-companion)               | Swift iPhone companion                                                     |
+| [`src-tauri/`](./src-tauri)                       | Tauri desktop shell                                                        |
 
 ## Development
 
@@ -151,6 +224,7 @@ Useful additional commands:
 
 ```bash
 npm run build
+npm run doctor
 npm run build:openclaw-plugin
 npm run check:openclaw-plugin
 node --import tsx scripts/dedupe-wiki-pages.ts --apply

@@ -113,32 +113,34 @@ describe("SettingsPage theme persistence", () => {
         }
       }
     });
-    patchSettingsMock.mockImplementation(async (input: Record<string, unknown>) => ({
-      settings: {
-        profile: {
-          operatorName: "Albert",
-          operatorEmail: "architect@kineticforge.ai",
-          operatorTitle: "Local-first operator"
-        },
-        notifications: {
-          goalDriftAlerts: true,
-          dailyQuestReminders: true,
-          achievementCelebrations: true
-        },
-        execution: {
-          maxActiveTasks: 2,
-          timeAccountingMode: "split"
-        },
-        themePreference: input.themePreference ?? "obsidian",
-        customTheme: input.customTheme ?? null,
-        localePreference: "en",
-        security: {
-          integrityScore: 98,
-          storageMode: "local",
-          lastAuditAt: "2026-04-09T18:00:00.000Z"
+    patchSettingsMock.mockImplementation(
+      async (input: Record<string, unknown>) => ({
+        settings: {
+          profile: {
+            operatorName: "Albert",
+            operatorEmail: "architect@kineticforge.ai",
+            operatorTitle: "Local-first operator"
+          },
+          notifications: {
+            goalDriftAlerts: true,
+            dailyQuestReminders: true,
+            achievementCelebrations: true
+          },
+          execution: {
+            maxActiveTasks: 2,
+            timeAccountingMode: "split"
+          },
+          themePreference: input.themePreference ?? "obsidian",
+          customTheme: input.customTheme ?? null,
+          localePreference: "en",
+          security: {
+            integrityScore: 98,
+            storageMode: "local",
+            lastAuditAt: "2026-04-09T18:00:00.000Z"
+          }
         }
-      }
-    }));
+      })
+    );
     revokeOperatorSessionMock.mockResolvedValue(undefined);
   });
 
@@ -147,7 +149,9 @@ describe("SettingsPage theme persistence", () => {
 
     expect(await screen.findByText("Dev frontend")).toBeInTheDocument();
     expect(
-      screen.getByText("Forge UI is currently being served by the Vite dev server.")
+      screen.getByText(
+        "Forge UI is currently being served by the Vite dev server."
+      )
     ).toBeInTheDocument();
 
     fireEvent.click(await screen.findByText("Paper"));
@@ -162,8 +166,12 @@ describe("SettingsPage theme persistence", () => {
   it("persists custom theme saves immediately", async () => {
     renderSettingsPage();
 
-    fireEvent.click(await screen.findByRole("button", { name: "Create custom theme" }));
-    fireEvent.click(await screen.findByRole("button", { name: "Save custom theme" }));
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Create custom theme" })
+    );
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Save custom theme" })
+    );
 
     await waitFor(() =>
       expect(patchSettingsMock).toHaveBeenCalledWith(

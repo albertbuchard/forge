@@ -1,10 +1,5 @@
 import { createHash, randomBytes, randomUUID } from "node:crypto";
-import {
-  existsSync,
-  mkdirSync,
-  readFileSync,
-  writeFileSync
-} from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import type { SecretsManager } from "../managers/platform/secrets-manager.js";
 import { getDatabase, getEffectiveDataRoot, runInTransaction } from "../db.js";
@@ -158,10 +153,15 @@ function normalizeMicrosoftTenantId(value: string | null | undefined) {
 
 function normalizeMicrosoftRedirectUri(value: string | null | undefined) {
   const trimmed = value?.trim();
-  return trimmed && trimmed.length > 0 ? trimmed : defaultMicrosoftRedirectUri();
+  return trimmed && trimmed.length > 0
+    ? trimmed
+    : defaultMicrosoftRedirectUri();
 }
 
-function logCalendarSettingsDebug(message: string, details: Record<string, unknown>) {
+function logCalendarSettingsDebug(
+  message: string,
+  details: Record<string, unknown>
+) {
   const serialized = Object.entries(details)
     .map(([key, value]) => `${key}=${JSON.stringify(value)}`)
     .join(" ");
@@ -355,9 +355,7 @@ function toSettingsFileOverrideInput(
     };
     if (input.modelSettings.forgeAgent.basicChat) {
       next.modelSettings.forgeAgent.basicChat = {};
-      if (
-        input.modelSettings.forgeAgent.basicChat.connectionId !== undefined
-      ) {
+      if (input.modelSettings.forgeAgent.basicChat.connectionId !== undefined) {
         next.modelSettings.forgeAgent.basicChat.connectionId =
           input.modelSettings.forgeAgent.basicChat.connectionId;
       }
@@ -365,9 +363,7 @@ function toSettingsFileOverrideInput(
         next.modelSettings.forgeAgent.basicChat.model =
           input.modelSettings.forgeAgent.basicChat.model;
       }
-      if (
-        Object.keys(next.modelSettings.forgeAgent.basicChat).length === 0
-      ) {
+      if (Object.keys(next.modelSettings.forgeAgent.basicChat).length === 0) {
         delete next.modelSettings.forgeAgent.basicChat;
       }
     }
@@ -402,7 +398,10 @@ function listOverrideKeys(input: UpdateSettingsInput) {
         typeof nestedValue === "object" &&
         !Array.isArray(nestedValue)
       ) {
-        pushNestedKeys(`${prefix}.${key}`, nestedValue as Record<string, unknown>);
+        pushNestedKeys(
+          `${prefix}.${key}`,
+          nestedValue as Record<string, unknown>
+        );
       } else if (nestedValue !== undefined) {
         keys.push(`${prefix}.${key}`);
       }
@@ -418,6 +417,42 @@ function listOverrideKeys(input: UpdateSettingsInput) {
   }
 
   return keys.sort();
+}
+
+function pickComparableOverrideSubset(
+  source: UpdateSettingsInput,
+  template: UpdateSettingsInput
+): UpdateSettingsInput {
+  const picked: Record<string, unknown> = {};
+
+  for (const [key, templateValue] of Object.entries(template)) {
+    if (templateValue === undefined) {
+      continue;
+    }
+
+    const sourceValue = source[key as keyof UpdateSettingsInput];
+    if (
+      templateValue &&
+      typeof templateValue === "object" &&
+      !Array.isArray(templateValue) &&
+      sourceValue &&
+      typeof sourceValue === "object" &&
+      !Array.isArray(sourceValue)
+    ) {
+      const nested = pickComparableOverrideSubset(
+        sourceValue as UpdateSettingsInput,
+        templateValue as UpdateSettingsInput
+      );
+      if (Object.keys(nested).length > 0) {
+        picked[key] = nested;
+      }
+      continue;
+    }
+
+    picked[key] = sourceValue;
+  }
+
+  return picked as UpdateSettingsInput;
 }
 
 function mapAgent(row: AgentIdentityRow): AgentIdentity {
@@ -498,7 +533,15 @@ function upsertAgentIdentity(input: CreateAgentTokenInput): AgentIdentity {
          SET agent_type = ?, trust_level = ?, autonomy_mode = ?, approval_mode = ?, description = ?, updated_at = ?
          WHERE id = ?`
       )
-      .run(input.agentType, input.trustLevel, input.autonomyMode, input.approvalMode, input.description, now, existing.id);
+      .run(
+        input.agentType,
+        input.trustLevel,
+        input.autonomyMode,
+        input.approvalMode,
+        input.description,
+        now,
+        existing.id
+      );
     return findAgentIdentity(existing.id)!;
   }
 
@@ -612,7 +655,9 @@ export function listAgentIdentities(): AgentIdentity[] {
     )
     .all() as AgentIdentityRow[];
   const manualAgents = rows.map(mapAgent);
-  const modelAgents = listAiModelConnections().map(buildConnectionAgentIdentity);
+  const modelAgents = listAiModelConnections().map(
+    buildConnectionAgentIdentity
+  );
   const settings = readSettingsRow();
   const forgeAgent = agentIdentitySchema.parse({
     id: FORGE_DEFAULT_AGENT_ID,
@@ -656,11 +701,15 @@ function buildSettingsPayloadFromDatabase(): SettingsPayload {
   });
   const microsoftClientId = row.microsoft_client_id?.trim() ?? "";
   const microsoftTenantId = normalizeMicrosoftTenantId(row.microsoft_tenant_id);
-  const microsoftRedirectUri = normalizeMicrosoftRedirectUri(row.microsoft_redirect_uri);
+  const microsoftRedirectUri = normalizeMicrosoftRedirectUri(
+    row.microsoft_redirect_uri
+  );
   const basicChatConnectionId = normalizeModelConnectionId(
     row.forge_basic_chat_connection_id
   );
-  const wikiConnectionId = normalizeModelConnectionId(row.forge_wiki_connection_id);
+  const wikiConnectionId = normalizeModelConnectionId(
+    row.forge_wiki_connection_id
+  );
   const basicChatConnection =
     connections.find((entry) => entry.id === basicChatConnectionId) ?? null;
   const wikiConnection =
@@ -689,7 +738,8 @@ function buildSettingsPayloadFromDatabase(): SettingsPayload {
       lastAuditAt: row.last_audit_at,
       storageMode: "local-first",
       activeSessions: 1,
-      tokenCount: listAgentTokens().filter((token) => token.status === "active").length,
+      tokenCount: listAgentTokens().filter((token) => token.status === "active")
+        .length,
       psycheAuthRequired: boolFromInt(row.psyche_auth_required)
     },
     calendarProviders: {
@@ -716,14 +766,20 @@ function buildSettingsPayloadFromDatabase(): SettingsPayload {
           connectionLabel: basicChatConnection?.label ?? null,
           provider: basicChatConnection?.provider ?? null,
           baseUrl: basicChatConnection?.baseUrl ?? null,
-          model: row.forge_basic_chat_model?.trim() || basicChatConnection?.model || "gpt-5.4-mini"
+          model:
+            row.forge_basic_chat_model?.trim() ||
+            basicChatConnection?.model ||
+            "gpt-5.4-mini"
         },
         wiki: {
           connectionId: wikiConnection?.id ?? null,
           connectionLabel: wikiConnection?.label ?? null,
           provider: wikiConnection?.provider ?? null,
           baseUrl: wikiConnection?.baseUrl ?? null,
-          model: row.forge_wiki_model?.trim() || wikiConnection?.model || "gpt-5.4-mini"
+          model:
+            row.forge_wiki_model?.trim() ||
+            wikiConnection?.model ||
+            "gpt-5.4-mini"
         }
       },
       connections,
@@ -773,7 +829,10 @@ function reconcileSettingsFileWithDatabase(
   const overrideInput = toSettingsFileOverrideInput(fileState.settings);
   const overrideKeys = listOverrideKeys(overrideInput);
   let next = current;
-  const currentOverride = toSettingsFileOverrideInput(current);
+  const currentOverride = pickComparableOverrideSubset(
+    toSettingsFileOverrideInput(current),
+    overrideInput
+  );
   const overridesDiffer =
     JSON.stringify(currentOverride) !== JSON.stringify(overrideInput);
   if (overrideKeys.length > 0 && overridesDiffer) {
@@ -834,7 +893,9 @@ export function getSettings(): SettingsPayload {
   }
   settingsFileSyncDepth += 1;
   try {
-    return reconcileSettingsFileWithDatabase(buildSettingsPayloadFromDatabase());
+    return reconcileSettingsFileWithDatabase(
+      buildSettingsPayloadFromDatabase()
+    );
   } finally {
     settingsFileSyncDepth = Math.max(0, settingsFileSyncDepth - 1);
   }
@@ -859,7 +920,8 @@ function updateSettingsInternal(
       parsed.calendarProviders?.google?.clientSecret?.trim() ??
       current.calendarProviders.google.storedClientSecret;
     logCalendarSettingsDebug("update_settings_requested", {
-      requestedGoogleClientId: parsed.calendarProviders?.google?.clientId ?? null,
+      requestedGoogleClientId:
+        parsed.calendarProviders?.google?.clientId ?? null,
       requestedGoogleClientSecret:
         parsed.calendarProviders?.google?.clientSecret !== undefined
           ? parsed.calendarProviders.google.clientSecret.length > 0
@@ -872,24 +934,40 @@ function updateSettingsInternal(
     });
     const next = {
       profile: {
-        operatorName: parsed.profile?.operatorName ?? current.profile.operatorName,
-        operatorEmail: parsed.profile?.operatorEmail ?? current.profile.operatorEmail,
-        operatorTitle: parsed.profile?.operatorTitle ?? current.profile.operatorTitle
+        operatorName:
+          parsed.profile?.operatorName ?? current.profile.operatorName,
+        operatorEmail:
+          parsed.profile?.operatorEmail ?? current.profile.operatorEmail,
+        operatorTitle:
+          parsed.profile?.operatorTitle ?? current.profile.operatorTitle
       },
       notifications: {
-        goalDriftAlerts: parsed.notifications?.goalDriftAlerts ?? current.notifications.goalDriftAlerts,
-        dailyQuestReminders: parsed.notifications?.dailyQuestReminders ?? current.notifications.dailyQuestReminders,
-        achievementCelebrations: parsed.notifications?.achievementCelebrations ?? current.notifications.achievementCelebrations
+        goalDriftAlerts:
+          parsed.notifications?.goalDriftAlerts ??
+          current.notifications.goalDriftAlerts,
+        dailyQuestReminders:
+          parsed.notifications?.dailyQuestReminders ??
+          current.notifications.dailyQuestReminders,
+        achievementCelebrations:
+          parsed.notifications?.achievementCelebrations ??
+          current.notifications.achievementCelebrations
       },
       execution: {
-        maxActiveTasks: parsed.execution?.maxActiveTasks ?? current.execution.maxActiveTasks,
-        timeAccountingMode: parsed.execution?.timeAccountingMode ?? current.execution.timeAccountingMode
+        maxActiveTasks:
+          parsed.execution?.maxActiveTasks ?? current.execution.maxActiveTasks,
+        timeAccountingMode:
+          parsed.execution?.timeAccountingMode ??
+          current.execution.timeAccountingMode
       },
       themePreference: parsed.themePreference ?? current.themePreference,
       customTheme:
-        parsed.customTheme === undefined ? (current.customTheme ?? null) : parsed.customTheme,
+        parsed.customTheme === undefined
+          ? (current.customTheme ?? null)
+          : parsed.customTheme,
       localePreference: parsed.localePreference ?? current.localePreference,
-      psycheAuthRequired: parsed.security?.psycheAuthRequired ?? current.security.psycheAuthRequired,
+      psycheAuthRequired:
+        parsed.security?.psycheAuthRequired ??
+        current.security.psycheAuthRequired,
       calendarProviders: {
         google: resolveGoogleCalendarOauthPublicConfig(process.env, {
           clientId: nextGoogleClientId,
@@ -918,7 +996,8 @@ function updateSettingsInternal(
                 ? normalizeModelConnectionId(
                     parsed.modelSettings.forgeAgent.basicChat.connectionId
                   )
-                : current.modelSettings.forgeAgent.basicChat.connectionId ?? "",
+                : (current.modelSettings.forgeAgent.basicChat.connectionId ??
+                  ""),
             model:
               parsed.modelSettings?.forgeAgent?.basicChat?.model?.trim() ||
               current.modelSettings.forgeAgent.basicChat.model
@@ -929,7 +1008,7 @@ function updateSettingsInternal(
                 ? normalizeModelConnectionId(
                     parsed.modelSettings.forgeAgent.wiki.connectionId
                   )
-                : current.modelSettings.forgeAgent.wiki.connectionId ?? "",
+                : (current.modelSettings.forgeAgent.wiki.connectionId ?? ""),
             model:
               parsed.modelSettings?.forgeAgent?.wiki?.model?.trim() ||
               current.modelSettings.forgeAgent.wiki.model
@@ -1003,7 +1082,8 @@ function updateSettingsInternal(
           googleConfigured: next.calendarProviders.google.isConfigured,
           googleAppBaseUrl: next.calendarProviders.google.appBaseUrl,
           googleRedirectUri: next.calendarProviders.google.redirectUri,
-          microsoftConfigured: next.calendarProviders.microsoft.clientId.trim().length > 0,
+          microsoftConfigured:
+            next.calendarProviders.microsoft.clientId.trim().length > 0,
           microsoftTenantId: next.calendarProviders.microsoft.tenantId,
           forgeBasicChatModel: next.modelSettings.forgeAgent.basicChat.model,
           forgeWikiModel: next.modelSettings.forgeAgent.wiki.model,
@@ -1036,7 +1116,10 @@ export function updateSettings(
   });
 }
 
-export function createAgentToken(input: CreateAgentTokenInput, activity?: ActivityContext): AgentTokenMutationResult {
+export function createAgentToken(
+  input: CreateAgentTokenInput,
+  activity?: ActivityContext
+): AgentTokenMutationResult {
   const parsed = createAgentTokenSchema.parse(input);
   return runInTransaction(() => {
     const now = new Date().toISOString();
@@ -1105,7 +1188,10 @@ export function createAgentToken(input: CreateAgentTokenInput, activity?: Activi
   });
 }
 
-export function rotateAgentToken(tokenId: string, activity?: ActivityContext): AgentTokenMutationResult | null {
+export function rotateAgentToken(
+  tokenId: string,
+  activity?: ActivityContext
+): AgentTokenMutationResult | null {
   const existing = listAgentTokens().find((token) => token.id === tokenId);
   if (!existing) {
     return null;
@@ -1116,10 +1202,14 @@ export function rotateAgentToken(tokenId: string, activity?: ActivityContext): A
     const token = buildTokenSecret();
     const tokenPrefix = `${token.slice(0, 10)}••••`;
     getDatabase()
-      .prepare(`UPDATE agent_tokens SET token_hash = ?, token_prefix = ?, revoked_at = NULL, updated_at = ? WHERE id = ?`)
+      .prepare(
+        `UPDATE agent_tokens SET token_hash = ?, token_prefix = ?, revoked_at = NULL, updated_at = ? WHERE id = ?`
+      )
       .run(hashToken(token), tokenPrefix, now, tokenId);
 
-    const tokenSummary = listAgentTokens().find((entry) => entry.id === tokenId)!;
+    const tokenSummary = listAgentTokens().find(
+      (entry) => entry.id === tokenId
+    )!;
     if (activity) {
       recordActivityEvent({
         entityType: "system",
@@ -1148,7 +1238,10 @@ export function rotateAgentToken(tokenId: string, activity?: ActivityContext): A
   });
 }
 
-export function revokeAgentToken(tokenId: string, activity?: ActivityContext): AgentTokenSummary | null {
+export function revokeAgentToken(
+  tokenId: string,
+  activity?: ActivityContext
+): AgentTokenSummary | null {
   const existing = listAgentTokens().find((token) => token.id === tokenId);
   if (!existing) {
     return null;
@@ -1157,10 +1250,14 @@ export function revokeAgentToken(tokenId: string, activity?: ActivityContext): A
   return runInTransaction(() => {
     const now = new Date().toISOString();
     getDatabase()
-      .prepare(`UPDATE agent_tokens SET revoked_at = ?, updated_at = ? WHERE id = ?`)
+      .prepare(
+        `UPDATE agent_tokens SET revoked_at = ?, updated_at = ? WHERE id = ?`
+      )
       .run(now, now, tokenId);
 
-    const tokenSummary = listAgentTokens().find((entry) => entry.id === tokenId)!;
+    const tokenSummary = listAgentTokens().find(
+      (entry) => entry.id === tokenId
+    )!;
     if (activity) {
       recordActivityEvent({
         entityType: "system",
@@ -1184,7 +1281,9 @@ export function revokeAgentToken(tokenId: string, activity?: ActivityContext): A
   });
 }
 
-export function getAgentTokenById(tokenId: string): AgentTokenSummary | undefined {
+export function getAgentTokenById(
+  tokenId: string
+): AgentTokenSummary | undefined {
   return listAgentTokens().find((token) => token.id === tokenId);
 }
 
@@ -1217,10 +1316,10 @@ export function verifyAgentToken(token: string): AgentTokenSummary | null {
     return null;
   }
 
-  getDatabase().prepare(`UPDATE agent_tokens SET last_used_at = ?, updated_at = ? WHERE id = ?`).run(
-    new Date().toISOString(),
-    new Date().toISOString(),
-    row.id
-  );
+  getDatabase()
+    .prepare(
+      `UPDATE agent_tokens SET last_used_at = ?, updated_at = ? WHERE id = ?`
+    )
+    .run(new Date().toISOString(), new Date().toISOString(), row.id);
   return mapToken(row);
 }

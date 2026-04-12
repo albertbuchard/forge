@@ -371,7 +371,10 @@ export const FORGE_PLUGIN_ROUTE_GROUPS: RouteGroup[] = [
         requestBody: "json",
         requiresToken: true,
         target: (match: RegExpMatchArray, url: URL) =>
-          passthroughSearch(`/api/v1/preferences/catalog-items/${match[1]}`, url)
+          passthroughSearch(
+            `/api/v1/preferences/catalog-items/${match[1]}`,
+            url
+          )
       },
       {
         method: "DELETE",
@@ -379,7 +382,10 @@ export const FORGE_PLUGIN_ROUTE_GROUPS: RouteGroup[] = [
         upstreamPath: "/api/v1/preferences/catalog-items/:id",
         requiresToken: true,
         target: (match: RegExpMatchArray, url: URL) =>
-          passthroughSearch(`/api/v1/preferences/catalog-items/${match[1]}`, url)
+          passthroughSearch(
+            `/api/v1/preferences/catalog-items/${match[1]}`,
+            url
+          )
       },
       {
         method: "POST",
@@ -498,7 +504,10 @@ export const FORGE_PLUGIN_ROUTE_GROUPS: RouteGroup[] = [
         requestBody: "json",
         requiresToken: true,
         target: (match: RegExpMatchArray, url: URL) =>
-          passthroughSearch(`/api/v1/psyche/questionnaires/${match[1]}/clone`, url)
+          passthroughSearch(
+            `/api/v1/psyche/questionnaires/${match[1]}/clone`,
+            url
+          )
       },
       {
         method: "POST",
@@ -507,7 +516,10 @@ export const FORGE_PLUGIN_ROUTE_GROUPS: RouteGroup[] = [
         requestBody: "json",
         requiresToken: true,
         target: (match: RegExpMatchArray, url: URL) =>
-          passthroughSearch(`/api/v1/psyche/questionnaires/${match[1]}/draft`, url)
+          passthroughSearch(
+            `/api/v1/psyche/questionnaires/${match[1]}/draft`,
+            url
+          )
       },
       {
         method: "PATCH",
@@ -516,7 +528,10 @@ export const FORGE_PLUGIN_ROUTE_GROUPS: RouteGroup[] = [
         requestBody: "json",
         requiresToken: true,
         target: (match: RegExpMatchArray, url: URL) =>
-          passthroughSearch(`/api/v1/psyche/questionnaires/${match[1]}/draft`, url)
+          passthroughSearch(
+            `/api/v1/psyche/questionnaires/${match[1]}/draft`,
+            url
+          )
       },
       {
         method: "POST",
@@ -525,7 +540,10 @@ export const FORGE_PLUGIN_ROUTE_GROUPS: RouteGroup[] = [
         requestBody: "json",
         requiresToken: true,
         target: (match: RegExpMatchArray, url: URL) =>
-          passthroughSearch(`/api/v1/psyche/questionnaires/${match[1]}/publish`, url)
+          passthroughSearch(
+            `/api/v1/psyche/questionnaires/${match[1]}/publish`,
+            url
+          )
       },
       {
         method: "POST",
@@ -534,7 +552,10 @@ export const FORGE_PLUGIN_ROUTE_GROUPS: RouteGroup[] = [
         requestBody: "json",
         requiresToken: true,
         target: (match: RegExpMatchArray, url: URL) =>
-          passthroughSearch(`/api/v1/psyche/questionnaires/${match[1]}/runs`, url)
+          passthroughSearch(
+            `/api/v1/psyche/questionnaires/${match[1]}/runs`,
+            url
+          )
       }
     ]
   },
@@ -547,7 +568,10 @@ export const FORGE_PLUGIN_ROUTE_GROUPS: RouteGroup[] = [
         pattern: /^\/forge\/v1\/psyche\/questionnaire-runs\/([^/]+)$/,
         upstreamPath: "/api/v1/psyche/questionnaire-runs/:id",
         target: (match: RegExpMatchArray, url: URL) =>
-          passthroughSearch(`/api/v1/psyche/questionnaire-runs/${match[1]}`, url)
+          passthroughSearch(
+            `/api/v1/psyche/questionnaire-runs/${match[1]}`,
+            url
+          )
       },
       {
         method: "PATCH",
@@ -556,7 +580,10 @@ export const FORGE_PLUGIN_ROUTE_GROUPS: RouteGroup[] = [
         requestBody: "json",
         requiresToken: true,
         target: (match: RegExpMatchArray, url: URL) =>
-          passthroughSearch(`/api/v1/psyche/questionnaire-runs/${match[1]}`, url)
+          passthroughSearch(
+            `/api/v1/psyche/questionnaire-runs/${match[1]}`,
+            url
+          )
       },
       {
         method: "POST",
@@ -565,7 +592,10 @@ export const FORGE_PLUGIN_ROUTE_GROUPS: RouteGroup[] = [
         requestBody: "json",
         requiresToken: true,
         target: (match: RegExpMatchArray, url: URL) =>
-          passthroughSearch(`/api/v1/psyche/questionnaire-runs/${match[1]}/complete`, url)
+          passthroughSearch(
+            `/api/v1/psyche/questionnaire-runs/${match[1]}/complete`,
+            url
+          )
       }
     ]
   },

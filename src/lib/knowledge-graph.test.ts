@@ -307,6 +307,36 @@ describe("knowledge graph helpers", () => {
     expect(renderedEdges[0]?.label).toContain("+1");
   });
 
+  it("fills remaining focused capacity by stable importance when BFS shells do not fill the cap", () => {
+    const detachedNode: KnowledgeGraphNode = {
+      ...wikiNode,
+      id: buildKnowledgeGraphNodeId("note", "note-detached"),
+      entityId: "note-detached",
+      title: "Detached evidence",
+      importance: 58
+    };
+    const detachedNodeLow: KnowledgeGraphNode = {
+      ...wikiNode,
+      id: buildKnowledgeGraphNodeId("note", "note-detached-low"),
+      entityId: "note-detached-low",
+      title: "Detached evidence low",
+      importance: 21
+    };
+    const visibleIds = selectKnowledgeGraphVisibleNodeIds({
+      nodes: [goalNode, projectNode, wikiNode, detachedNode, detachedNodeLow],
+      edges,
+      limit: 4,
+      focusNodeId: projectNode.id
+    });
+
+    expect(Array.from(visibleIds)).toEqual([
+      projectNode.id,
+      goalNode.id,
+      wikiNode.id,
+      detachedNode.id
+    ]);
+  });
+
   it("keeps the dataset signature stable when only generatedAt would differ", () => {
     const firstSignature = buildKnowledgeGraphDatasetSignature(
       [goalNode, projectNode, wikiNode],

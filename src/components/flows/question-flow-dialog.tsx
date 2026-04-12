@@ -21,6 +21,56 @@ export type QuestionFlowStep<TValue> = {
   ) => ReactNode;
 };
 
+type QuestionFlowStepIndexResolution = {
+  open: boolean;
+  wasOpen: boolean;
+  initialStepId?: string;
+  previousInitialStepId?: string;
+  currentStepIndex: number;
+  steps: Array<{ id: string }>;
+};
+
+export function resolveQuestionFlowStepIndex({
+  open,
+  wasOpen,
+  initialStepId,
+  previousInitialStepId,
+  currentStepIndex,
+  steps
+}: QuestionFlowStepIndexResolution) {
+  if (!open) {
+    return 0;
+  }
+
+  const resolveInitialIndex = () => {
+    if (!initialStepId) {
+      return 0;
+    }
+    const nextIndex = steps.findIndex((candidate) => candidate.id === initialStepId);
+    return nextIndex >= 0 ? nextIndex : 0;
+  };
+
+  const initialStepChanged = previousInitialStepId !== initialStepId;
+
+  if (!wasOpen || initialStepChanged) {
+    return resolveInitialIndex();
+  }
+
+  if (steps.length === 0) {
+    return 0;
+  }
+
+  if (currentStepIndex >= steps.length) {
+    return Math.max(0, steps.length - 1);
+  }
+
+  if (currentStepIndex < 0) {
+    return 0;
+  }
+
+  return currentStepIndex;
+}
+
 function renderDialogMessageBlock(message: string) {
   const sections = message
     .split(/\n\s*\n/g)
@@ -223,41 +273,23 @@ export function QuestionFlowDialog<TValue>({
 
   useEffect(() => {
     const wasOpen = previousOpenRef.current;
-    const initialStepChanged =
-      previousInitialStepIdRef.current !== initialStepId;
+    const previousInitialStepId = previousInitialStepIdRef.current;
+    const nextStepIndex = resolveQuestionFlowStepIndex({
+      open,
+      wasOpen,
+      initialStepId,
+      previousInitialStepId,
+      currentStepIndex: stepIndex,
+      steps
+    });
 
     previousOpenRef.current = open;
     previousInitialStepIdRef.current = initialStepId;
 
-    if (!open) {
-      setStepIndex(0);
-      return;
+    if (nextStepIndex !== stepIndex) {
+      setStepIndex(nextStepIndex);
     }
-
-    if (!wasOpen || initialStepChanged) {
-      if (initialStepId) {
-        const nextIndex = steps.findIndex(
-          (candidate) => candidate.id === initialStepId
-        );
-        setStepIndex(nextIndex >= 0 ? nextIndex : 0);
-        return;
-      }
-      setStepIndex(0);
-      return;
-    }
-
-    if (stepIndex >= steps.length) {
-      setStepIndex(Math.max(0, steps.length - 1));
-      return;
-    }
-
-    if (!step && initialStepId) {
-      const nextIndex = steps.findIndex(
-        (candidate) => candidate.id === initialStepId
-      );
-      setStepIndex(nextIndex >= 0 ? nextIndex : 0);
-    }
-  }, [initialStepId, open, step, stepIndex, steps]);
+  }, [initialStepId, open, stepIndex, steps]);
 
   const setValue = (patch: Partial<TValue>) => {
     onChange({ ...value, ...patch });
