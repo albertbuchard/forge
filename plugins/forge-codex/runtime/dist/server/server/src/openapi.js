@@ -2591,9 +2591,15 @@ export function buildOpenApiDocument() {
             "conceptModel",
             "psycheSubmoduleModel",
             "psycheCoachingPlaybooks",
+            "conversationRules",
+            "entityConversationPlaybooks",
             "relationshipModel",
+            "entityRouteModel",
+            "multiUserModel",
+            "strategyContractModel",
             "entityCatalog",
             "toolInputCatalog",
+            "connectionGuides",
             "verificationPaths",
             "recommendedPluginTools",
             "interactionGuidance",
@@ -2690,6 +2696,12 @@ export function buildOpenApiDocument() {
                     "task",
                     "taskRun",
                     "note",
+                    "wiki",
+                    "sleepSession",
+                    "workoutSession",
+                    "preferences",
+                    "questionnaire",
+                    "selfObservation",
                     "insight",
                     "calendar",
                     "workBlock",
@@ -2702,6 +2714,12 @@ export function buildOpenApiDocument() {
                     task: { type: "string" },
                     taskRun: { type: "string" },
                     note: { type: "string" },
+                    wiki: { type: "string" },
+                    sleepSession: { type: "string" },
+                    workoutSession: { type: "string" },
+                    preferences: { type: "string" },
+                    questionnaire: { type: "string" },
+                    selfObservation: { type: "string" },
                     insight: { type: "string" },
                     calendar: { type: "string" },
                     workBlock: { type: "string" },
@@ -2761,24 +2779,130 @@ export function buildOpenApiDocument() {
                     notes: arrayOf({ type: "string" })
                 }
             }),
+            conversationRules: arrayOf({ type: "string" }),
+            entityConversationPlaybooks: arrayOf({
+                type: "object",
+                additionalProperties: false,
+                required: ["focus", "openingQuestion", "coachingGoal", "askSequence"],
+                properties: {
+                    focus: { type: "string" },
+                    openingQuestion: { type: "string" },
+                    coachingGoal: { type: "string" },
+                    askSequence: arrayOf({ type: "string" })
+                }
+            }),
             relationshipModel: arrayOf({ type: "string" }),
+            entityRouteModel: {
+                type: "object",
+                additionalProperties: false,
+                required: [
+                    "batchCrudEntities",
+                    "batchRoutes",
+                    "specializedCrudEntities",
+                    "actionEntities",
+                    "readModelOnlySurfaces"
+                ],
+                properties: {
+                    batchCrudEntities: arrayOf({ type: "string" }),
+                    batchRoutes: {
+                        type: "object",
+                        additionalProperties: false,
+                        required: ["search", "create", "update", "delete", "restore"],
+                        properties: {
+                            search: { type: "string" },
+                            create: { type: "string" },
+                            update: { type: "string" },
+                            delete: { type: "string" },
+                            restore: { type: "string" }
+                        }
+                    },
+                    specializedCrudEntities: {
+                        type: "object",
+                        additionalProperties: {
+                            type: "object",
+                            additionalProperties: { type: "string" }
+                        }
+                    },
+                    actionEntities: {
+                        type: "object",
+                        additionalProperties: {
+                            type: "object",
+                            additionalProperties: true
+                        }
+                    },
+                    readModelOnlySurfaces: {
+                        type: "object",
+                        additionalProperties: { type: "string" }
+                    }
+                }
+            },
+            multiUserModel: {
+                type: "object",
+                additionalProperties: false,
+                required: [
+                    "summary",
+                    "defaultUserScopeBehavior",
+                    "routeScoping",
+                    "relationshipGraphDefaults"
+                ],
+                properties: {
+                    summary: { type: "string" },
+                    defaultUserScopeBehavior: { type: "string" },
+                    routeScoping: arrayOf({ type: "string" }),
+                    relationshipGraphDefaults: arrayOf({ type: "string" })
+                }
+            },
+            strategyContractModel: {
+                type: "object",
+                additionalProperties: false,
+                required: [
+                    "draftSummary",
+                    "lockSummary",
+                    "unlockSummary",
+                    "alignmentSummary",
+                    "metricBreakdown"
+                ],
+                properties: {
+                    draftSummary: { type: "string" },
+                    lockSummary: { type: "string" },
+                    unlockSummary: { type: "string" },
+                    alignmentSummary: { type: "string" },
+                    metricBreakdown: arrayOf({ type: "string" })
+                }
+            },
             entityCatalog: arrayOf({
                 type: "object",
                 additionalProperties: false,
                 required: [
                     "entityType",
+                    "classification",
                     "purpose",
                     "minimumCreateFields",
                     "relationshipRules",
                     "searchHints",
-                    "fieldGuide"
+                    "fieldGuide",
+                    "preferredMutationPath"
                 ],
                 properties: {
                     entityType: { type: "string" },
+                    classification: {
+                        type: "string",
+                        enum: [
+                            "batch_crud_entity",
+                            "specialized_crud_entity",
+                            "action_workflow_entity",
+                            "read_model_only_surface"
+                        ]
+                    },
                     purpose: { type: "string" },
                     minimumCreateFields: arrayOf({ type: "string" }),
                     relationshipRules: arrayOf({ type: "string" }),
                     searchHints: arrayOf({ type: "string" }),
+                    routeBase: nullable({ type: "string" }),
+                    preferredMutationPath: { type: "string" },
+                    preferredReadPath: nullable({ type: "string" }),
+                    preferredMutationTool: nullable({ type: "string" }),
+                    examples: arrayOf({ type: "string" }),
                     fieldGuide: arrayOf({
                         type: "object",
                         additionalProperties: false,
@@ -2831,6 +2955,11 @@ export function buildOpenApiDocument() {
                     "context",
                     "xpMetrics",
                     "weeklyReview",
+                    "sleepOverview",
+                    "sportsOverview",
+                    "wikiSettings",
+                    "wikiSearch",
+                    "wikiHealth",
                     "calendarOverview",
                     "settingsBin",
                     "batchSearch",
@@ -2842,6 +2971,11 @@ export function buildOpenApiDocument() {
                     context: { type: "string" },
                     xpMetrics: { type: "string" },
                     weeklyReview: { type: "string" },
+                    sleepOverview: { type: "string" },
+                    sportsOverview: { type: "string" },
+                    wikiSettings: { type: "string" },
+                    wikiSearch: { type: "string" },
+                    wikiHealth: { type: "string" },
                     calendarOverview: { type: "string" },
                     settingsBin: { type: "string" },
                     batchSearch: { type: "string" },
@@ -2858,6 +2992,9 @@ export function buildOpenApiDocument() {
                     "readModels",
                     "uiWorkflow",
                     "entityWorkflow",
+                    "wikiWorkflow",
+                    "healthWorkflow",
+                    "rewardWorkflow",
                     "workWorkflow",
                     "calendarWorkflow",
                     "insightWorkflow"
@@ -2867,6 +3004,9 @@ export function buildOpenApiDocument() {
                     readModels: arrayOf({ type: "string" }),
                     uiWorkflow: arrayOf({ type: "string" }),
                     entityWorkflow: arrayOf({ type: "string" }),
+                    wikiWorkflow: arrayOf({ type: "string" }),
+                    healthWorkflow: arrayOf({ type: "string" }),
+                    rewardWorkflow: arrayOf({ type: "string" }),
                     workWorkflow: arrayOf({ type: "string" }),
                     calendarWorkflow: arrayOf({ type: "string" }),
                     insightWorkflow: arrayOf({ type: "string" })
@@ -2880,6 +3020,8 @@ export function buildOpenApiDocument() {
                     "saveSuggestionPlacement",
                     "saveSuggestionTone",
                     "maxQuestionsPerTurn",
+                    "psycheExplorationRule",
+                    "psycheOpeningQuestionRule",
                     "duplicateCheckRoute",
                     "uiSuggestionRule",
                     "browserFallbackRule",
@@ -2890,10 +3032,26 @@ export function buildOpenApiDocument() {
                     saveSuggestionPlacement: { type: "string" },
                     saveSuggestionTone: { type: "string" },
                     maxQuestionsPerTurn: { type: "integer" },
+                    psycheExplorationRule: { type: "string" },
+                    psycheOpeningQuestionRule: { type: "string" },
                     duplicateCheckRoute: { type: "string" },
                     uiSuggestionRule: { type: "string" },
                     browserFallbackRule: { type: "string" },
                     writeConsentRule: { type: "string" }
+                }
+            },
+            connectionGuides: {
+                type: "object",
+                additionalProperties: {
+                    type: "object",
+                    additionalProperties: false,
+                    required: ["label", "installSteps", "verifyCommands", "configNotes"],
+                    properties: {
+                        label: { type: "string" },
+                        installSteps: arrayOf({ type: "string" }),
+                        verifyCommands: arrayOf({ type: "string" }),
+                        configNotes: arrayOf({ type: "string" })
+                    }
                 }
             },
             mutationGuidance: {
@@ -3843,6 +4001,19 @@ export function buildOpenApiDocument() {
                             }
                         }, "Sleep overview")
                     }
+                },
+                post: {
+                    summary: "Create one manual sleep session",
+                    responses: {
+                        "201": jsonResponse({
+                            type: "object",
+                            required: ["sleep"],
+                            properties: {
+                                sleep: { $ref: "#/components/schemas/SleepSession" }
+                            }
+                        }, "Created sleep session"),
+                        default: { $ref: "#/components/responses/Error" }
+                    }
                 }
             },
             "/api/v1/health/fitness": {
@@ -3859,7 +4030,35 @@ export function buildOpenApiDocument() {
                     }
                 }
             },
+            "/api/v1/health/workouts": {
+                post: {
+                    summary: "Create one manual workout session",
+                    responses: {
+                        "201": jsonResponse({
+                            type: "object",
+                            required: ["workout"],
+                            properties: {
+                                workout: { $ref: "#/components/schemas/WorkoutSession" }
+                            }
+                        }, "Created workout session"),
+                        default: { $ref: "#/components/responses/Error" }
+                    }
+                }
+            },
             "/api/v1/health/workouts/{id}": {
+                get: {
+                    summary: "Read one workout session",
+                    responses: {
+                        "200": jsonResponse({
+                            type: "object",
+                            required: ["workout"],
+                            properties: {
+                                workout: { $ref: "#/components/schemas/WorkoutSession" }
+                            }
+                        }, "Workout session"),
+                        "404": { $ref: "#/components/responses/Error" }
+                    }
+                },
                 patch: {
                     summary: "Update one workout session's reflective metadata",
                     responses: {
@@ -3872,9 +4071,35 @@ export function buildOpenApiDocument() {
                         }, "Updated workout session"),
                         "404": { $ref: "#/components/responses/Error" }
                     }
+                },
+                delete: {
+                    summary: "Delete one workout session immediately",
+                    responses: {
+                        "200": jsonResponse({
+                            type: "object",
+                            required: ["workout"],
+                            properties: {
+                                workout: { $ref: "#/components/schemas/WorkoutSession" }
+                            }
+                        }, "Deleted workout session"),
+                        "404": { $ref: "#/components/responses/Error" }
+                    }
                 }
             },
             "/api/v1/health/sleep/{id}": {
+                get: {
+                    summary: "Read one sleep session",
+                    responses: {
+                        "200": jsonResponse({
+                            type: "object",
+                            required: ["sleep"],
+                            properties: {
+                                sleep: { $ref: "#/components/schemas/SleepSession" }
+                            }
+                        }, "Sleep session"),
+                        "404": { $ref: "#/components/responses/Error" }
+                    }
+                },
                 patch: {
                     summary: "Update one sleep session's reflective metadata",
                     responses: {
@@ -3885,6 +4110,19 @@ export function buildOpenApiDocument() {
                                 sleep: { $ref: "#/components/schemas/SleepSession" }
                             }
                         }, "Updated sleep session"),
+                        "404": { $ref: "#/components/responses/Error" }
+                    }
+                },
+                delete: {
+                    summary: "Delete one sleep session immediately",
+                    responses: {
+                        "200": jsonResponse({
+                            type: "object",
+                            required: ["sleep"],
+                            properties: {
+                                sleep: { $ref: "#/components/schemas/SleepSession" }
+                            }
+                        }, "Deleted sleep session"),
                         "404": { $ref: "#/components/responses/Error" }
                     }
                 }
@@ -4107,6 +4345,22 @@ export function buildOpenApiDocument() {
                 }
             },
             "/api/v1/preferences/catalogs": {
+                get: {
+                    summary: "List Preferences concept lists",
+                    responses: {
+                        "200": jsonResponse({
+                            type: "object",
+                            required: ["catalogs"],
+                            properties: {
+                                catalogs: arrayOf({
+                                    type: "object",
+                                    additionalProperties: true
+                                })
+                            }
+                        }, "Preferences catalogs"),
+                        default: { $ref: "#/components/responses/Error" }
+                    }
+                },
                 post: {
                     summary: "Create a Preferences concept list",
                     responses: {
@@ -4125,6 +4379,22 @@ export function buildOpenApiDocument() {
                 }
             },
             "/api/v1/preferences/catalogs/{id}": {
+                get: {
+                    summary: "Get one Preferences concept list",
+                    responses: {
+                        "200": jsonResponse({
+                            type: "object",
+                            required: ["catalog"],
+                            properties: {
+                                catalog: {
+                                    type: "object",
+                                    additionalProperties: true
+                                }
+                            }
+                        }, "Preferences catalog"),
+                        default: { $ref: "#/components/responses/Error" }
+                    }
+                },
                 patch: {
                     summary: "Update a Preferences concept list",
                     responses: {
@@ -4159,6 +4429,22 @@ export function buildOpenApiDocument() {
                 }
             },
             "/api/v1/preferences/catalog-items": {
+                get: {
+                    summary: "List Preferences concept entries",
+                    responses: {
+                        "200": jsonResponse({
+                            type: "object",
+                            required: ["items"],
+                            properties: {
+                                items: arrayOf({
+                                    type: "object",
+                                    additionalProperties: true
+                                })
+                            }
+                        }, "Preferences catalog items"),
+                        default: { $ref: "#/components/responses/Error" }
+                    }
+                },
                 post: {
                     summary: "Create a Preferences concept entry",
                     responses: {
@@ -4177,6 +4463,22 @@ export function buildOpenApiDocument() {
                 }
             },
             "/api/v1/preferences/catalog-items/{id}": {
+                get: {
+                    summary: "Get one Preferences concept entry",
+                    responses: {
+                        "200": jsonResponse({
+                            type: "object",
+                            required: ["item"],
+                            properties: {
+                                item: {
+                                    type: "object",
+                                    additionalProperties: true
+                                }
+                            }
+                        }, "Preferences catalog item"),
+                        default: { $ref: "#/components/responses/Error" }
+                    }
+                },
                 patch: {
                     summary: "Update a Preferences concept entry",
                     responses: {
@@ -4211,6 +4513,22 @@ export function buildOpenApiDocument() {
                 }
             },
             "/api/v1/preferences/contexts": {
+                get: {
+                    summary: "List Preferences contexts",
+                    responses: {
+                        "200": jsonResponse({
+                            type: "object",
+                            required: ["contexts"],
+                            properties: {
+                                contexts: arrayOf({
+                                    type: "object",
+                                    additionalProperties: true
+                                })
+                            }
+                        }, "Preferences contexts"),
+                        default: { $ref: "#/components/responses/Error" }
+                    }
+                },
                 post: {
                     summary: "Create a Preferences context",
                     responses: {
@@ -4229,6 +4547,22 @@ export function buildOpenApiDocument() {
                 }
             },
             "/api/v1/preferences/contexts/{id}": {
+                get: {
+                    summary: "Get one Preferences context",
+                    responses: {
+                        "200": jsonResponse({
+                            type: "object",
+                            required: ["context"],
+                            properties: {
+                                context: {
+                                    type: "object",
+                                    additionalProperties: true
+                                }
+                            }
+                        }, "Preferences context"),
+                        default: { $ref: "#/components/responses/Error" }
+                    }
+                },
                 patch: {
                     summary: "Update a Preferences context",
                     responses: {
@@ -4242,6 +4576,22 @@ export function buildOpenApiDocument() {
                                 }
                             }
                         }, "Updated Preferences context"),
+                        default: { $ref: "#/components/responses/Error" }
+                    }
+                },
+                delete: {
+                    summary: "Delete a Preferences context",
+                    responses: {
+                        "200": jsonResponse({
+                            type: "object",
+                            required: ["context"],
+                            properties: {
+                                context: {
+                                    type: "object",
+                                    additionalProperties: true
+                                }
+                            }
+                        }, "Deleted Preferences context"),
                         default: { $ref: "#/components/responses/Error" }
                     }
                 }
@@ -4265,6 +4615,22 @@ export function buildOpenApiDocument() {
                 }
             },
             "/api/v1/preferences/items": {
+                get: {
+                    summary: "List Preferences items",
+                    responses: {
+                        "200": jsonResponse({
+                            type: "object",
+                            required: ["items"],
+                            properties: {
+                                items: arrayOf({
+                                    type: "object",
+                                    additionalProperties: true
+                                })
+                            }
+                        }, "Preferences items"),
+                        default: { $ref: "#/components/responses/Error" }
+                    }
+                },
                 post: {
                     summary: "Create a standalone Preferences item",
                     responses: {
@@ -4283,6 +4649,22 @@ export function buildOpenApiDocument() {
                 }
             },
             "/api/v1/preferences/items/{id}": {
+                get: {
+                    summary: "Get one Preferences item",
+                    responses: {
+                        "200": jsonResponse({
+                            type: "object",
+                            required: ["item"],
+                            properties: {
+                                item: {
+                                    type: "object",
+                                    additionalProperties: true
+                                }
+                            }
+                        }, "Preferences item"),
+                        default: { $ref: "#/components/responses/Error" }
+                    }
+                },
                 patch: {
                     summary: "Update a Preferences item",
                     responses: {
@@ -4296,6 +4678,22 @@ export function buildOpenApiDocument() {
                                 }
                             }
                         }, "Updated Preferences item"),
+                        default: { $ref: "#/components/responses/Error" }
+                    }
+                },
+                delete: {
+                    summary: "Delete a Preferences item",
+                    responses: {
+                        "200": jsonResponse({
+                            type: "object",
+                            required: ["item"],
+                            properties: {
+                                item: {
+                                    type: "object",
+                                    additionalProperties: true
+                                }
+                            }
+                        }, "Deleted Preferences item"),
                         default: { $ref: "#/components/responses/Error" }
                     }
                 }
@@ -4420,6 +4818,38 @@ export function buildOpenApiDocument() {
                                 }
                             }
                         }, "Questionnaire instrument detail"),
+                        default: { $ref: "#/components/responses/Error" }
+                    }
+                },
+                patch: {
+                    summary: "Update one questionnaire instrument through the direct route",
+                    responses: {
+                        "200": jsonResponse({
+                            type: "object",
+                            required: ["instrument"],
+                            properties: {
+                                instrument: {
+                                    type: "object",
+                                    additionalProperties: true
+                                }
+                            }
+                        }, "Updated questionnaire instrument"),
+                        default: { $ref: "#/components/responses/Error" }
+                    }
+                },
+                delete: {
+                    summary: "Archive one questionnaire instrument through the direct route",
+                    responses: {
+                        "200": jsonResponse({
+                            type: "object",
+                            required: ["instrument"],
+                            properties: {
+                                instrument: {
+                                    type: "object",
+                                    additionalProperties: true
+                                }
+                            }
+                        }, "Archived questionnaire instrument"),
                         default: { $ref: "#/components/responses/Error" }
                     }
                 }
@@ -5611,6 +6041,21 @@ export function buildOpenApiDocument() {
                     }
                 }
             },
+            "/api/v1/calendar/work-block-templates/{id}": {
+                get: {
+                    summary: "Get one recurring work-block template",
+                    responses: {
+                        "200": jsonResponse({
+                            type: "object",
+                            required: ["template"],
+                            properties: {
+                                template: { $ref: "#/components/schemas/WorkBlockTemplate" }
+                            }
+                        }, "Work-block template"),
+                        default: { $ref: "#/components/responses/Error" }
+                    }
+                }
+            },
             "/api/v1/calendar/timeboxes": {
                 get: {
                     summary: "List task timeboxes",
@@ -5641,6 +6086,21 @@ export function buildOpenApiDocument() {
                     }
                 }
             },
+            "/api/v1/calendar/timeboxes/{id}": {
+                get: {
+                    summary: "Get one task timebox",
+                    responses: {
+                        "200": jsonResponse({
+                            type: "object",
+                            required: ["timebox"],
+                            properties: {
+                                timebox: { $ref: "#/components/schemas/TaskTimebox" }
+                            }
+                        }, "Task timebox"),
+                        default: { $ref: "#/components/responses/Error" }
+                    }
+                }
+            },
             "/api/v1/calendar/timeboxes/recommend": {
                 post: {
                     summary: "Suggest future timeboxes for a task",
@@ -5660,6 +6120,21 @@ export function buildOpenApiDocument() {
                 }
             },
             "/api/v1/calendar/events": {
+                get: {
+                    summary: "List native and mirrored calendar events for a range",
+                    responses: {
+                        "200": jsonResponse({
+                            type: "object",
+                            required: ["events"],
+                            properties: {
+                                events: arrayOf({
+                                    $ref: "#/components/schemas/CalendarEvent"
+                                })
+                            }
+                        }, "Calendar events"),
+                        default: { $ref: "#/components/responses/Error" }
+                    }
+                },
                 post: {
                     summary: "Create a native Forge calendar event",
                     description: "Forge stores the event canonically first, then projects it to a connected writable calendar when a preferred calendar is selected.",
@@ -5676,6 +6151,19 @@ export function buildOpenApiDocument() {
                 }
             },
             "/api/v1/calendar/events/{id}": {
+                get: {
+                    summary: "Get one Forge calendar event",
+                    responses: {
+                        "200": jsonResponse({
+                            type: "object",
+                            required: ["event"],
+                            properties: {
+                                event: { $ref: "#/components/schemas/CalendarEvent" }
+                            }
+                        }, "Calendar event"),
+                        default: { $ref: "#/components/responses/Error" }
+                    }
+                },
                 patch: {
                     summary: "Update a Forge calendar event and sync remote projections",
                     responses: {

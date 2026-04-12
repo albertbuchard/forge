@@ -291,7 +291,7 @@ final class ForgeCompanionTests: XCTestCase {
         XCTAssertEqual(store.captureState, "waiting_for_snapshot")
         XCTAssertFalse(store.readyForSync)
         XCTAssertEqual(store.captureFreshness, "empty")
-        XCTAssertEqual(store.latestCaptureSummary, "Waiting for first Screen Time snapshot")
+        XCTAssertEqual(store.latestCaptureSummary, "Waiting for the report extension to write Screen Time data")
     }
 
     func testScreenTimeStoreWaitsForFirstSnapshotBeforeReadyForSync() async {
@@ -328,6 +328,64 @@ final class ForgeCompanionTests: XCTestCase {
         XCTAssertEqual(store.captureState, "ready")
         XCTAssertEqual(store.capturedHourCount, 1)
         XCTAssertEqual(store.latestCaptureSummary, "1 days · 1 hourly slices · fresh")
+    }
+
+    func testScreenTimeStoreUsesVisibleReportFallbackWhenSharedSnapshotStaysEmpty() async {
+        let emptySnapshot = makeScreenTimeSnapshot(generatedAt: "2026-04-11T10:00:00.000Z")
+        let visibleReportSnapshot = ForgeCompanion.ForgeScreenTimeSnapshotEnvelope(
+            generatedAt: "2026-04-11T10:07:00.000Z",
+            source: "visible_report_ocr",
+            segmentKind: "visible_report_daily_export",
+            daySummaries: [makeSampleDaySummary()],
+            hourlySegments: []
+        )
+
+        let store = ScreenTimeStore(
+            snapshotLoader: { emptySnapshot },
+            nowProvider: {
+                ISO8601DateFormatter().date(from: "2026-04-11T12:00:00Z") ?? Date()
+            },
+            sleepForSeconds: { _ in },
+            visibleReportSnapshotCapture: { visibleReportSnapshot },
+            storedStateOverride: .init(
+                trackingEnabled: true,
+                syncEnabled: true,
+                metadata: [:]
+            ),
+            authorizationStatusOverride: "approved",
+            bindAuthorizationUpdates: false
+        )
+
+        await store.prepareSnapshotForSync(reason: "unit test visible report")
+
+        XCTAssertTrue(store.readyForSync)
+        XCTAssertEqual(store.capturedDayCount, 1)
+        XCTAssertEqual(store.capturedHourCount, 0)
+        XCTAssertEqual(store.metadata["snapshot_source"], "visible_report_ocr")
+        XCTAssertTrue(store.latestCaptureSummary.contains("day summaries only"))
+    }
+
+    func testScreenTimeVisibleReportExportParsingBuildsDaySummaries() {
+        let export = """
+        heading
+        FORGESYNCV1
+        GENERATED 2026-04-11T10:07:00.000Z
+        TOTAL 10800
+        DAYS 2
+        SLICES 0
+        DAY 2026-04-11 7200 8 12 1800
+        DAY 2026-04-10 3600 4 6 1200
+        FORGESYNCEND
+        footer
+        """
+
+        let snapshot = ScreenTimeStore.parseVisibleReportExport(export)
+
+        XCTAssertEqual(snapshot?.source, "visible_report_ocr")
+        XCTAssertEqual(snapshot?.daySummaries.count, 2)
+        XCTAssertEqual(snapshot?.daySummaries.first?.dateKey, "2026-04-11")
+        XCTAssertEqual(snapshot?.daySummaries.first?.totalActivitySeconds, 7200)
+        XCTAssertEqual(snapshot?.daySummaries.last?.pickupCount, 4)
     }
 
     func testScreenTimeAuthorizationNormalizationTreatsApprovedWithDataAccessAsApproved() {

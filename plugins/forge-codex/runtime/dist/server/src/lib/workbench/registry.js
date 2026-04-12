@@ -1,22 +1,49 @@
 import { MiniCalendarWidget, QuickCaptureWidget, SpotifyWidget, TimeWidget, WeatherWidget } from "../../components/customization/utility-widgets.js";
+import { InsightsCoachingBox, InsightsFeedBox } from "../../components/workbench-boxes/insights/insights-boxes.js";
 import { KanbanBoardBox, KanbanFiltersBox, KanbanSummaryBox } from "../../components/workbench-boxes/kanban/kanban-boxes.js";
+import { CalendarEventsBox, CalendarOverviewBox, CalendarPlanningBox } from "../../components/workbench-boxes/calendar/calendar-boxes.js";
+import { GoalsHeroBox, GoalsSearchResultsBox, GoalsSummaryBox } from "../../components/workbench-boxes/goals/goals-boxes.js";
+import { HabitsHeroBox, HabitsSearchResultsBox, HabitsSummaryBox } from "../../components/workbench-boxes/habits/habits-boxes.js";
 import { SleepBrowserBox, SleepPatternsBox, SleepSummaryBox, SportsBrowserBox, SportsCompositionBox, SportsSummaryBox } from "../../components/workbench-boxes/health/health-boxes.js";
 import { MovementDataBrowserBox, MovementPlacesBox, MovementSelectionBox, MovementSummaryBox, MovementTimelineBox } from "../../components/workbench-boxes/movement/movement-boxes.js";
 import { NoteComposerBox, NoteFiltersBox, NotesLibraryBox } from "../../components/workbench-boxes/notes/notes-boxes.js";
+import { OverviewInsightsBox, OverviewMomentumBox, OverviewSnapshotBox } from "../../components/workbench-boxes/overview/overview-boxes.js";
 import { ProjectsHeroBox, ProjectsSearchResultsBox, ProjectsSummaryBox } from "../../components/workbench-boxes/projects/projects-boxes.js";
+import { PreferencesContextsBox, PreferencesItemsBox, PreferencesWorkspaceBox } from "../../components/workbench-boxes/preferences/preferences-boxes.js";
+import { PsycheOverviewBox, PsycheReportsBox, PsycheValuesBox } from "../../components/workbench-boxes/psyche/psyche-boxes.js";
+import { QuestionnairesDraftingBox, QuestionnairesLibraryBox, QuestionnairesObservationBox } from "../../components/workbench-boxes/questionnaires/questionnaires-boxes.js";
+import { WeeklyReviewRewardBox, WeeklyReviewSummaryBox } from "../../components/workbench-boxes/review/review-boxes.js";
+import { StrategiesHeroBox, StrategiesSearchResultsBox, StrategiesSummaryBox } from "../../components/workbench-boxes/strategies/strategies-boxes.js";
+import { TasksFocusBox, TasksInboxBox, TasksSummaryBox } from "../../components/workbench-boxes/tasks/tasks-boxes.js";
 import { TodayCalendarBox, TodayFocusBox, TodayHeroBox, TodayMetricsBox, TodayRunwayBox } from "../../components/workbench-boxes/today/today-boxes.js";
+import { WikiAuthoringBox, WikiHealthBox, WikiPagesBox } from "../../components/workbench-boxes/wiki/wiki-boxes.js";
+import { normalizeWorkbenchPortDefinitions } from "./nodes.js";
 export const WORKBENCH_COMPONENT_AUTOLOAD = [
     TimeWidget,
     MiniCalendarWidget,
     SpotifyWidget,
     WeatherWidget,
     QuickCaptureWidget,
+    CalendarOverviewBox,
+    CalendarEventsBox,
+    CalendarPlanningBox,
+    GoalsHeroBox,
+    GoalsSearchResultsBox,
+    GoalsSummaryBox,
+    HabitsHeroBox,
+    HabitsSearchResultsBox,
+    HabitsSummaryBox,
+    InsightsFeedBox,
+    InsightsCoachingBox,
     KanbanSummaryBox,
     KanbanFiltersBox,
     KanbanBoardBox,
     NoteFiltersBox,
     NoteComposerBox,
     NotesLibraryBox,
+    OverviewSnapshotBox,
+    OverviewMomentumBox,
+    OverviewInsightsBox,
     MovementSummaryBox,
     MovementSelectionBox,
     MovementTimelineBox,
@@ -31,11 +58,31 @@ export const WORKBENCH_COMPONENT_AUTOLOAD = [
     ProjectsHeroBox,
     ProjectsSearchResultsBox,
     ProjectsSummaryBox,
+    PreferencesWorkspaceBox,
+    PreferencesContextsBox,
+    PreferencesItemsBox,
+    PsycheOverviewBox,
+    PsycheValuesBox,
+    PsycheReportsBox,
+    QuestionnairesLibraryBox,
+    QuestionnairesDraftingBox,
+    QuestionnairesObservationBox,
+    WeeklyReviewSummaryBox,
+    WeeklyReviewRewardBox,
+    StrategiesHeroBox,
+    StrategiesSearchResultsBox,
+    StrategiesSummaryBox,
+    TasksInboxBox,
+    TasksFocusBox,
+    TasksSummaryBox,
     TodayHeroBox,
     TodayMetricsBox,
     TodayRunwayBox,
     TodayCalendarBox,
-    TodayFocusBox
+    TodayFocusBox,
+    WikiPagesBox,
+    WikiHealthBox,
+    WikiAuthoringBox
 ];
 const REGISTRY = new Map(WORKBENCH_COMPONENT_AUTOLOAD
     .filter((component) => component.workbench)
@@ -62,11 +109,11 @@ export function getWorkbenchNodeCatalog() {
             "content",
             ...(definition.tools.length > 0 ? ["tool"] : [])
         ],
-        inputs: definition.inputs,
-        params: definition.params,
-        output: definition.output,
+        inputs: normalizeWorkbenchPortDefinitions(definition.inputs),
+        params: normalizeWorkbenchPortDefinitions(definition.params),
+        output: normalizeWorkbenchPortDefinitions(definition.output),
         tools: definition.tools,
-        outputs: definition.output,
+        outputs: normalizeWorkbenchPortDefinitions(definition.output),
         toolAdapters: definition.tools,
         snapshotResolverKey: undefined
     }));

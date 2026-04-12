@@ -1,10 +1,22 @@
 import { Fragment as _Fragment, jsx as _jsx } from "react/jsx-runtime";
 import { buildSearchWorkbenchExecution } from "../../../lib/workbench/runtime.js";
+import { createSearchEntitiesTool, createSearchInputs, createSearchOutputs, createSearchParams, createSummaryOutput, createTaskStatusTool } from "../../../lib/workbench/contracts.js";
 import { createGenericWorkbenchNodeView } from "../shared/generic-node-view.js";
 import { defineWorkbenchBox } from "../shared/define-workbench-box.js";
 function Slot({ children }) {
     return _jsx(_Fragment, { children: children });
 }
+const kanbanSearchInputs = createSearchInputs({
+    itemKind: "task",
+    itemLabel: "Task",
+    defaultEntityTypes: ["task"],
+    defaultLimit: 24
+});
+const kanbanSearchParams = createSearchParams({
+    itemKind: "task",
+    defaultEntityTypes: ["task"],
+    defaultLimit: 24
+});
 export const KanbanSummaryBox = defineWorkbenchBox(Slot, {
     id: "surface:kanban-index:summary",
     surfaceId: "kanban-index",
@@ -14,16 +26,26 @@ export const KanbanSummaryBox = defineWorkbenchBox(Slot, {
     description: "Board summary and execution posture.",
     category: "Execution",
     tags: ["kanban", "summary"],
-    inputs: [],
-    params: [],
-    output: [{ key: "primary", label: "Kanban summary", kind: "content" }],
+    inputs: kanbanSearchInputs,
+    params: kanbanSearchParams,
+    output: [
+        createSummaryOutput({
+            label: "Kanban summary",
+            description: "Summary of board posture and execution pressure."
+        })
+    ],
     tools: [],
     NodeView: createGenericWorkbenchNodeView({
         title: "Kanban summary",
         description: "Board summary and execution posture.",
-        inputs: [],
-        params: [],
-        output: [{ key: "primary", label: "Kanban summary", kind: "content" }],
+        inputs: kanbanSearchInputs,
+        params: kanbanSearchParams,
+        output: [
+            createSummaryOutput({
+                label: "Kanban summary",
+                description: "Summary of board posture and execution pressure."
+            })
+        ],
         tools: []
     }),
     execute: (input) => buildSearchWorkbenchExecution(input, {
@@ -41,30 +63,30 @@ export const KanbanFiltersBox = defineWorkbenchBox(Slot, {
     description: "Goal, owner, and tag filters for board scope.",
     category: "Execution",
     tags: ["kanban", "filters"],
-    inputs: [],
-    params: [],
-    output: [{ key: "primary", label: "Kanban filters", kind: "content" }],
+    inputs: kanbanSearchInputs,
+    params: kanbanSearchParams,
+    output: [
+        createSummaryOutput({
+            label: "Filter summary",
+            description: "Summary of the current Kanban filters and scope."
+        })
+    ],
     tools: [
-        {
-            key: "forge.search_entities",
-            label: "Search Forge entities",
-            description: "Search Forge entities by query and entity types.",
-            accessMode: "read"
-        }
+        createSearchEntitiesTool("Search Forge entities by query and entity types.")
     ],
     NodeView: createGenericWorkbenchNodeView({
         title: "Kanban filters",
         description: "Goal, owner, and tag filters for board scope.",
-        inputs: [],
-        params: [],
-        output: [{ key: "primary", label: "Kanban filters", kind: "content" }],
+        inputs: kanbanSearchInputs,
+        params: kanbanSearchParams,
+        output: [
+            createSummaryOutput({
+                label: "Filter summary",
+                description: "Summary of the current Kanban filters and scope."
+            })
+        ],
         tools: [
-            {
-                key: "forge.search_entities",
-                label: "Search Forge entities",
-                description: "Search Forge entities by query and entity types.",
-                accessMode: "read"
-            }
+            createSearchEntitiesTool("Search Forge entities by query and entity types.")
         ]
     }),
     execute: (input) => buildSearchWorkbenchExecution(input, {
@@ -82,42 +104,28 @@ export const KanbanBoardBox = defineWorkbenchBox(Slot, {
     description: "Task board with move and execution actions.",
     category: "Execution",
     tags: ["kanban", "board", "tasks"],
-    inputs: [],
-    params: [],
-    output: [{ key: "primary", label: "Kanban board", kind: "content" }],
+    inputs: kanbanSearchInputs,
+    params: kanbanSearchParams,
+    output: createSearchOutputs({
+        itemKind: "kanban_task",
+        itemLabel: "Kanban task"
+    }),
     tools: [
-        {
-            key: "forge.search_entities",
-            label: "Search Forge entities",
-            description: "Search Forge entities by query and entity types.",
-            accessMode: "read"
-        },
-        {
-            key: "forge.update_task_status",
-            label: "Move task",
-            description: "Update a task status.",
-            accessMode: "write"
-        }
+        createSearchEntitiesTool("Search Forge entities by query and entity types."),
+        createTaskStatusTool("Update a task status.")
     ],
     NodeView: createGenericWorkbenchNodeView({
         title: "Kanban board",
         description: "Task board with move and execution actions.",
-        inputs: [],
-        params: [],
-        output: [{ key: "primary", label: "Kanban board", kind: "content" }],
+        inputs: kanbanSearchInputs,
+        params: kanbanSearchParams,
+        output: createSearchOutputs({
+            itemKind: "kanban_task",
+            itemLabel: "Kanban task"
+        }),
         tools: [
-            {
-                key: "forge.search_entities",
-                label: "Search Forge entities",
-                description: "Search Forge entities by query and entity types.",
-                accessMode: "read"
-            },
-            {
-                key: "forge.update_task_status",
-                label: "Move task",
-                description: "Update a task status.",
-                accessMode: "write"
-            }
+            createSearchEntitiesTool("Search Forge entities by query and entity types."),
+            createTaskStatusTool("Update a task status.")
         ]
     }),
     execute: (input) => buildSearchWorkbenchExecution(input, {

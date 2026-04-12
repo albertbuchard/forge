@@ -681,7 +681,7 @@ async function runReadOnly(config, path) {
         path
     }));
 }
-async function runRouteCheck(config) {
+export async function runRouteCheck(config) {
     const openapi = await runReadOnly(config, "/api/v1/openapi.json");
     const pathMap = typeof openapi === "object" &&
         openapi !== null &&
@@ -692,14 +692,21 @@ async function runRouteCheck(config) {
         : {};
     return buildRouteParityReport(pathMap);
 }
-async function runDoctor(config) {
-    const [health, overview, onboarding, routeParity, uiUrl] = await Promise.all([
-        runReadOnly(config, "/api/v1/health"),
+export async function runDoctor(config) {
+    const [doctorResponse, overview, onboarding, routeParity, uiUrl] = await Promise.all([
+        runReadOnly(config, "/api/v1/doctor"),
         runReadOnly(config, "/api/v1/operator/overview"),
         runReadOnly(config, "/api/v1/agents/onboarding"),
         runRouteCheck(config),
         resolveForgeUiUrl(config)
     ]);
+    const doctorBody = typeof doctorResponse === "object" &&
+        doctorResponse !== null &&
+        "doctor" in doctorResponse &&
+        typeof doctorResponse.doctor === "object" &&
+        doctorResponse.doctor !== null
+        ? doctorResponse.doctor
+        : null;
     const overviewBody = typeof overview === "object" &&
         overview !== null &&
         "overview" in overview &&
@@ -712,19 +719,15 @@ async function runDoctor(config) {
         overviewBody.capabilities !== null
         ? overviewBody.capabilities
         : null;
-    const overviewWarnings = Array.isArray(overviewBody?.warnings)
-        ? overviewBody.warnings.filter((entry) => typeof entry === "string")
+    const warnings = Array.isArray(doctorBody?.warnings)
+        ? doctorBody.warnings.filter((entry) => typeof entry === "string")
         : [];
-    const warnings = [];
     const canBootstrap = canBootstrapOperatorSession(config.baseUrl);
     if (config.apiToken.trim().length === 0 && canBootstrap) {
         warnings.push("Forge apiToken is blank, but this target can bootstrap a local or Tailscale operator session for protected reads and writes.");
     }
     else if (config.apiToken.trim().length === 0) {
         warnings.push("Forge apiToken is missing, and this target cannot use local or Tailscale operator-session bootstrap. Protected writes will fail.");
-    }
-    if (overviewWarnings.length > 0) {
-        warnings.push(...overviewWarnings);
     }
     if (capabilities && capabilities.canReadPsyche === false) {
         warnings.push("The configured token cannot read Psyche state. Sensitive reflection summaries will stay partial.");
@@ -739,7 +742,9 @@ async function runDoctor(config) {
         warnings.push(`Plugin still mirrors ${routeParity.unexpectedMirrors.length} unexpected route${routeParity.unexpectedMirrors.length === 1 ? "" : "s"} outside the curated contract.`);
     }
     return {
-        ok: (config.apiToken.trim().length > 0 || canBootstrap) &&
+        ...(doctorBody ?? {}),
+        ok: doctorBody?.ok === true &&
+            (config.apiToken.trim().length > 0 || canBootstrap) &&
             routeParity.missingFromPlugin.length === 0 &&
             routeParity.missingFromOpenApi.length === 0 &&
             routeParity.unexpectedMirrors.length === 0,
@@ -751,7 +756,6 @@ async function runDoctor(config) {
         apiTokenConfigured: config.apiToken.trim().length > 0,
         operatorSessionBootstrapAvailable: canBootstrap,
         warnings,
-        health,
         overview,
         onboarding,
         routeParity

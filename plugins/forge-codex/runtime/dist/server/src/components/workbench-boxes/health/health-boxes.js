@@ -1,5 +1,6 @@
 import { Fragment as _Fragment, jsx as _jsx } from "react/jsx-runtime";
 import { buildSleepWorkbenchExecution, buildSportsWorkbenchExecution } from "../../../lib/workbench/runtime.js";
+import { createContextOutput, createSummaryOutput } from "../../../lib/workbench/contracts.js";
 import { createGenericWorkbenchNodeView } from "../shared/generic-node-view.js";
 import { defineWorkbenchBox } from "../shared/define-workbench-box.js";
 function Slot({ children }) {
@@ -17,14 +18,14 @@ function defineHealthBox(input) {
         tags: input.tags,
         inputs: [],
         params: [],
-        output: [{ key: "primary", label: input.title, kind: "content" }],
+        output: input.output,
         tools: [],
         NodeView: createGenericWorkbenchNodeView({
             title: input.title,
             description: input.description,
             inputs: [],
             params: [],
-            output: [{ key: "primary", label: input.title, kind: "content" }],
+            output: input.output,
             tools: []
         }),
         execute: input.execute
@@ -38,7 +39,16 @@ export const SleepSummaryBox = defineHealthBox({
     description: "Recent nightly sleep metrics and recovery posture.",
     category: "Sleep",
     tags: ["sleep", "summary"],
-    execute: (input) => buildSleepWorkbenchExecution(input)
+    execute: (input) => buildSleepWorkbenchExecution(input),
+    output: [
+        createSummaryOutput({ label: "Sleep summary", description: "Summary of recent sleep and recovery posture." }),
+        createContextOutput({
+            key: "sleepView",
+            label: "Sleep view",
+            description: "Structured sleep history and derived sleep patterns.",
+            modelName: "ForgeSleepView"
+        })
+    ]
 });
 export const SleepPatternsBox = defineHealthBox({
     id: "surface:sleep-index:patterns",
@@ -48,7 +58,16 @@ export const SleepPatternsBox = defineHealthBox({
     description: "Trend, stage averages, recovery state, and timing patterns.",
     category: "Sleep",
     tags: ["sleep", "patterns"],
-    execute: (input) => buildSleepWorkbenchExecution(input)
+    execute: (input) => buildSleepWorkbenchExecution(input),
+    output: [
+        createSummaryOutput({ label: "Sleep pattern summary", description: "Summary of trend, stage averages, and recovery state." }),
+        createContextOutput({
+            key: "sleepView",
+            label: "Sleep view",
+            description: "Structured sleep trend, stage averages, and recovery signals.",
+            modelName: "ForgeSleepView"
+        })
+    ]
 });
 export const SleepBrowserBox = defineHealthBox({
     id: "surface:sleep-index:browser",
@@ -58,7 +77,16 @@ export const SleepBrowserBox = defineHealthBox({
     description: "Searchable and virtualized sleep history browser.",
     category: "Sleep",
     tags: ["sleep", "browser", "history"],
-    execute: (input) => buildSleepWorkbenchExecution(input)
+    execute: (input) => buildSleepWorkbenchExecution(input),
+    output: [
+        createSummaryOutput({ label: "Night browser summary", description: "Summary of searchable sleep history." }),
+        createContextOutput({
+            key: "sleepView",
+            label: "Sleep view",
+            description: "Structured sleep history for browsing and analysis.",
+            modelName: "ForgeSleepView"
+        })
+    ]
 });
 export const SportsSummaryBox = defineHealthBox({
     id: "surface:sports-index:summary",
@@ -68,7 +96,16 @@ export const SportsSummaryBox = defineHealthBox({
     description: "Recent workout metrics, streaks, and linked-session totals.",
     category: "Sports",
     tags: ["sports", "summary"],
-    execute: (input) => buildSportsWorkbenchExecution(input)
+    execute: (input) => buildSportsWorkbenchExecution(input),
+    output: [
+        createSummaryOutput({ label: "Sports summary", description: "Summary of recent workout metrics and streaks." }),
+        createContextOutput({
+            key: "sportsView",
+            label: "Sports view",
+            description: "Structured workout metrics, streaks, and linked session totals.",
+            modelName: "ForgeSportsView"
+        })
+    ]
 });
 export const SportsCompositionBox = defineHealthBox({
     id: "surface:sports-index:composition",
@@ -78,7 +115,16 @@ export const SportsCompositionBox = defineHealthBox({
     description: "Workout mix, trend, and session composition context.",
     category: "Sports",
     tags: ["sports", "composition", "trend"],
-    execute: (input) => buildSportsWorkbenchExecution(input)
+    execute: (input) => buildSportsWorkbenchExecution(input),
+    output: [
+        createSummaryOutput({ label: "Composition summary", description: "Summary of workout mix, trend, and session composition." }),
+        createContextOutput({
+            key: "sportsView",
+            label: "Sports view",
+            description: "Structured workout mix, trend, and session composition data.",
+            modelName: "ForgeSportsView"
+        })
+    ]
 });
 export const SportsBrowserBox = defineHealthBox({
     id: "surface:sports-index:browser",
@@ -88,5 +134,14 @@ export const SportsBrowserBox = defineHealthBox({
     description: "Searchable and virtualized workout history browser.",
     category: "Sports",
     tags: ["sports", "browser", "history"],
-    execute: (input) => buildSportsWorkbenchExecution(input)
+    execute: (input) => buildSportsWorkbenchExecution(input),
+    output: [
+        createSummaryOutput({ label: "Session browser summary", description: "Summary of searchable workout history." }),
+        createContextOutput({
+            key: "sportsView",
+            label: "Sports view",
+            description: "Structured workout history for browsing and analysis.",
+            modelName: "ForgeSportsView"
+        })
+    ]
 });

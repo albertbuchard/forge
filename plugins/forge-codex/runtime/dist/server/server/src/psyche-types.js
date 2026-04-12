@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { noteSchema, userSummarySchema } from "./types.js";
+import { activityEventSchema, noteSchema, userSummarySchema } from "./types.js";
 const trimmedString = z.string().trim();
 const nonEmptyTrimmedString = trimmedString.min(1);
 const uniqueStringArraySchema = z.array(nonEmptyTrimmedString);
@@ -261,15 +261,23 @@ export const psycheOverviewPayloadSchema = z.object({
 export const psycheObservationEntrySchema = z.object({
     id: z.string(),
     observedAt: z.string(),
+    tags: z.array(trimmedString).default([]),
     note: noteSchema,
     linkedPatterns: z.array(behaviorPatternSchema),
     linkedReports: z.array(triggerReportSchema)
+});
+export const psycheObservationActivityEntrySchema = z.object({
+    id: z.string(),
+    observedAt: z.string(),
+    tags: z.array(trimmedString).default([]),
+    event: activityEventSchema
 });
 export const psycheObservationCalendarPayloadSchema = z.object({
     generatedAt: z.string(),
     from: z.string(),
     to: z.string(),
     observations: z.array(psycheObservationEntrySchema),
+    activity: z.array(psycheObservationActivityEntrySchema).default([]),
     availableTags: z.array(trimmedString)
 });
 export const createPsycheValueSchema = z.object({

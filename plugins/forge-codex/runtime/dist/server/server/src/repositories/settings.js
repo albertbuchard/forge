@@ -1,11 +1,23 @@
 import { createHash, randomBytes, randomUUID } from "node:crypto";
-import { getDatabase, runInTransaction } from "../db.js";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import path from "node:path";
+import { getDatabase, getEffectiveDataRoot, runInTransaction } from "../db.js";
 import { logForgeDebug } from "../debug.js";
 import { recordActivityEvent } from "./activity-events.js";
 import { recordEventLog } from "./event-log.js";
 import { resolveGoogleCalendarOauthPublicConfig } from "../services/google-calendar-oauth-config.js";
 import { buildConnectionAgentIdentity, FORGE_DEFAULT_AGENT_ID, listAiModelConnections, syncForgeManagedWikiProfile } from "./model-settings.js";
 import { createAgentTokenSchema, agentIdentitySchema, customThemeSchema, settingsPayloadSchema, updateSettingsSchema } from "../types.js";
+const settingsFileSchema = settingsPayloadSchema.deepPartial();
+let settingsFileSyncDepth = 0;
+let lastSettingsFileStatus = {
+    path: path.join(getEffectiveDataRoot(), "forge.json"),
+    exists: false,
+    valid: false,
+    syncState: "uninitialized",
+    parseError: null,
+    overrideKeys: []
+};
 function boolFromInt(value) {
     return value === 1;
 }
@@ -25,7 +37,9 @@ function normalizeMicrosoftTenantId(value) {
 }
 function normalizeMicrosoftRedirectUri(value) {
     const trimmed = value?.trim();
-    return trimmed && trimmed.length > 0 ? trimmed : defaultMicrosoftRedirectUri();
+    return trimmed && trimmed.length > 0
+        ? trimmed
+        : defaultMicrosoftRedirectUri();
 }
 function logCalendarSettingsDebug(message, details) {
     const serialized = Object.entries(details)
@@ -51,6 +65,237 @@ function parseCustomThemeJson(raw) {
     catch {
         return null;
     }
+}
+function getForgeSettingsFilePath() {
+    return path.join(getEffectiveDataRoot(), "forge.json");
+}
+function writeForgeSettingsFileSnapshot(payload) {
+    const filePath = getForgeSettingsFilePath();
+    mkdirSync(path.dirname(filePath), { recursive: true });
+    writeFileSync(filePath, `${JSON.stringify(payload, null, 2)}\n`, "utf8");
+    lastSettingsFileStatus = {
+        path: filePath,
+        exists: true,
+        valid: true,
+        syncState: "mirrored_from_database",
+        parseError: null,
+        overrideKeys: []
+    };
+}
+function readForgeSettingsFile() {
+    const filePath = getForgeSettingsFilePath();
+    if (!existsSync(filePath)) {
+        return {
+            filePath,
+            exists: false,
+            valid: false,
+            settings: null,
+            parseError: null
+        };
+    }
+    try {
+        const raw = readFileSync(filePath, "utf8");
+        const parsed = JSON.parse(raw);
+        const settings = settingsFileSchema.parse(parsed);
+        return {
+            filePath,
+            exists: true,
+            valid: true,
+            settings,
+            parseError: null
+        };
+    }
+    catch (error) {
+        return {
+            filePath,
+            exists: true,
+            valid: false,
+            settings: null,
+            parseError: error instanceof Error ? error.message : String(error)
+        };
+    }
+}
+function toSettingsFileOverrideInput(input) {
+    const next = {};
+    if (input.profile) {
+        next.profile = {};
+        if (input.profile.operatorName !== undefined) {
+            next.profile.operatorName = input.profile.operatorName;
+        }
+        if (input.profile.operatorEmail !== undefined) {
+            next.profile.operatorEmail = input.profile.operatorEmail;
+        }
+        if (input.profile.operatorTitle !== undefined) {
+            next.profile.operatorTitle = input.profile.operatorTitle;
+        }
+        if (Object.keys(next.profile).length === 0) {
+            delete next.profile;
+        }
+    }
+    if (input.notifications) {
+        next.notifications = {};
+        if (input.notifications.goalDriftAlerts !== undefined) {
+            next.notifications.goalDriftAlerts = input.notifications.goalDriftAlerts;
+        }
+        if (input.notifications.dailyQuestReminders !== undefined) {
+            next.notifications.dailyQuestReminders =
+                input.notifications.dailyQuestReminders;
+        }
+        if (input.notifications.achievementCelebrations !== undefined) {
+            next.notifications.achievementCelebrations =
+                input.notifications.achievementCelebrations;
+        }
+        if (Object.keys(next.notifications).length === 0) {
+            delete next.notifications;
+        }
+    }
+    if (input.execution) {
+        next.execution = {};
+        if (input.execution.maxActiveTasks !== undefined) {
+            next.execution.maxActiveTasks = input.execution.maxActiveTasks;
+        }
+        if (input.execution.timeAccountingMode !== undefined) {
+            next.execution.timeAccountingMode = input.execution.timeAccountingMode;
+        }
+        if (Object.keys(next.execution).length === 0) {
+            delete next.execution;
+        }
+    }
+    if (input.themePreference !== undefined) {
+        next.themePreference = input.themePreference;
+    }
+    if (input.customTheme !== undefined) {
+        next.customTheme = input.customTheme;
+    }
+    if (input.localePreference !== undefined) {
+        next.localePreference = input.localePreference;
+    }
+    if (input.security?.psycheAuthRequired !== undefined) {
+        next.security = {
+            psycheAuthRequired: input.security.psycheAuthRequired
+        };
+    }
+    if (input.calendarProviders) {
+        next.calendarProviders = {};
+        if (input.calendarProviders.google) {
+            next.calendarProviders.google = {};
+            if (input.calendarProviders.google.clientId !== undefined) {
+                next.calendarProviders.google.clientId =
+                    input.calendarProviders.google.clientId;
+            }
+            if (input.calendarProviders.google.clientSecret !== undefined) {
+                next.calendarProviders.google.clientSecret =
+                    input.calendarProviders.google.clientSecret;
+            }
+            if (Object.keys(next.calendarProviders.google).length === 0) {
+                delete next.calendarProviders.google;
+            }
+        }
+        if (input.calendarProviders.microsoft) {
+            next.calendarProviders.microsoft = {};
+            if (input.calendarProviders.microsoft.clientId !== undefined) {
+                next.calendarProviders.microsoft.clientId =
+                    input.calendarProviders.microsoft.clientId;
+            }
+            if (input.calendarProviders.microsoft.tenantId !== undefined) {
+                next.calendarProviders.microsoft.tenantId =
+                    input.calendarProviders.microsoft.tenantId;
+            }
+            if (input.calendarProviders.microsoft.redirectUri !== undefined) {
+                next.calendarProviders.microsoft.redirectUri =
+                    input.calendarProviders.microsoft.redirectUri;
+            }
+            if (Object.keys(next.calendarProviders.microsoft).length === 0) {
+                delete next.calendarProviders.microsoft;
+            }
+        }
+        if (Object.keys(next.calendarProviders).length === 0) {
+            delete next.calendarProviders;
+        }
+    }
+    if (input.modelSettings?.forgeAgent) {
+        next.modelSettings = {
+            forgeAgent: {}
+        };
+        if (input.modelSettings.forgeAgent.basicChat) {
+            next.modelSettings.forgeAgent.basicChat = {};
+            if (input.modelSettings.forgeAgent.basicChat.connectionId !== undefined) {
+                next.modelSettings.forgeAgent.basicChat.connectionId =
+                    input.modelSettings.forgeAgent.basicChat.connectionId;
+            }
+            if (input.modelSettings.forgeAgent.basicChat.model !== undefined) {
+                next.modelSettings.forgeAgent.basicChat.model =
+                    input.modelSettings.forgeAgent.basicChat.model;
+            }
+            if (Object.keys(next.modelSettings.forgeAgent.basicChat).length === 0) {
+                delete next.modelSettings.forgeAgent.basicChat;
+            }
+        }
+        if (input.modelSettings.forgeAgent.wiki) {
+            next.modelSettings.forgeAgent.wiki = {};
+            if (input.modelSettings.forgeAgent.wiki.connectionId !== undefined) {
+                next.modelSettings.forgeAgent.wiki.connectionId =
+                    input.modelSettings.forgeAgent.wiki.connectionId;
+            }
+            if (input.modelSettings.forgeAgent.wiki.model !== undefined) {
+                next.modelSettings.forgeAgent.wiki.model =
+                    input.modelSettings.forgeAgent.wiki.model;
+            }
+            if (Object.keys(next.modelSettings.forgeAgent.wiki).length === 0) {
+                delete next.modelSettings.forgeAgent.wiki;
+            }
+        }
+        if (Object.keys(next.modelSettings.forgeAgent).length === 0) {
+            delete next.modelSettings;
+        }
+    }
+    return next;
+}
+function listOverrideKeys(input) {
+    const keys = [];
+    const pushNestedKeys = (prefix, value) => {
+        for (const [key, nestedValue] of Object.entries(value)) {
+            if (nestedValue &&
+                typeof nestedValue === "object" &&
+                !Array.isArray(nestedValue)) {
+                pushNestedKeys(`${prefix}.${key}`, nestedValue);
+            }
+            else if (nestedValue !== undefined) {
+                keys.push(`${prefix}.${key}`);
+            }
+        }
+    };
+    for (const [key, value] of Object.entries(input)) {
+        if (!value || typeof value !== "object" || Array.isArray(value)) {
+            keys.push(key);
+            continue;
+        }
+        pushNestedKeys(key, value);
+    }
+    return keys.sort();
+}
+function pickComparableOverrideSubset(source, template) {
+    const picked = {};
+    for (const [key, templateValue] of Object.entries(template)) {
+        if (templateValue === undefined) {
+            continue;
+        }
+        const sourceValue = source[key];
+        if (templateValue &&
+            typeof templateValue === "object" &&
+            !Array.isArray(templateValue) &&
+            sourceValue &&
+            typeof sourceValue === "object" &&
+            !Array.isArray(sourceValue)) {
+            const nested = pickComparableOverrideSubset(sourceValue, templateValue);
+            if (Object.keys(nested).length > 0) {
+                picked[key] = nested;
+            }
+            continue;
+        }
+        picked[key] = sourceValue;
+    }
+    return picked;
 }
 function mapAgent(row) {
     return agentIdentitySchema.parse({
@@ -218,7 +463,7 @@ export function isPsycheAuthRequired() {
         .get();
     return row ? boolFromInt(row.psyche_auth_required) : false;
 }
-export function getSettings() {
+function buildSettingsPayloadFromDatabase() {
     const row = readSettingsRow();
     const connections = listAiModelConnections();
     const googleConfig = resolveGoogleCalendarOauthPublicConfig(process.env, {
@@ -264,7 +509,8 @@ export function getSettings() {
             lastAuditAt: row.last_audit_at,
             storageMode: "local-first",
             activeSessions: 1,
-            tokenCount: listAgentTokens().filter((token) => token.status === "active").length,
+            tokenCount: listAgentTokens().filter((token) => token.status === "active")
+                .length,
             psycheAuthRequired: boolFromInt(row.psyche_auth_required)
         },
         calendarProviders: {
@@ -290,14 +536,18 @@ export function getSettings() {
                     connectionLabel: basicChatConnection?.label ?? null,
                     provider: basicChatConnection?.provider ?? null,
                     baseUrl: basicChatConnection?.baseUrl ?? null,
-                    model: row.forge_basic_chat_model?.trim() || basicChatConnection?.model || "gpt-5.4-mini"
+                    model: row.forge_basic_chat_model?.trim() ||
+                        basicChatConnection?.model ||
+                        "gpt-5.4-mini"
                 },
                 wiki: {
                     connectionId: wikiConnection?.id ?? null,
                     connectionLabel: wikiConnection?.label ?? null,
                     provider: wikiConnection?.provider ?? null,
                     baseUrl: wikiConnection?.baseUrl ?? null,
-                    model: row.forge_wiki_model?.trim() || wikiConnection?.model || "gpt-5.4-mini"
+                    model: row.forge_wiki_model?.trim() ||
+                        wikiConnection?.model ||
+                        "gpt-5.4-mini"
                 }
             },
             connections,
@@ -313,10 +563,99 @@ export function getSettings() {
         agentTokens: listAgentTokens()
     });
 }
-export function updateSettings(input, options = {}) {
+function reconcileSettingsFileWithDatabase(current) {
+    const fileState = readForgeSettingsFile();
+    if (!fileState.exists) {
+        writeForgeSettingsFileSnapshot(current);
+        lastSettingsFileStatus = {
+            path: fileState.filePath,
+            exists: true,
+            valid: true,
+            syncState: "created_from_database",
+            parseError: null,
+            overrideKeys: []
+        };
+        return current;
+    }
+    if (!fileState.valid || !fileState.settings) {
+        lastSettingsFileStatus = {
+            path: fileState.filePath,
+            exists: true,
+            valid: false,
+            syncState: "invalid",
+            parseError: fileState.parseError,
+            overrideKeys: []
+        };
+        return current;
+    }
+    const overrideInput = toSettingsFileOverrideInput(fileState.settings);
+    const overrideKeys = listOverrideKeys(overrideInput);
+    let next = current;
+    const currentOverride = pickComparableOverrideSubset(toSettingsFileOverrideInput(current), overrideInput);
+    const overridesDiffer = JSON.stringify(currentOverride) !== JSON.stringify(overrideInput);
+    if (overrideKeys.length > 0 && overridesDiffer) {
+        next = updateSettingsInternal(overrideInput, {
+            mirrorSettingsFile: false
+        });
+    }
+    const serialized = `${JSON.stringify(next, null, 2)}\n`;
+    let syncState = overrideKeys.length > 0 && overridesDiffer
+        ? "applied_file_overrides"
+        : "up_to_date";
+    try {
+        const existing = readFileSync(fileState.filePath, "utf8");
+        if (existing !== serialized) {
+            mkdirSync(path.dirname(fileState.filePath), { recursive: true });
+            writeFileSync(fileState.filePath, serialized, "utf8");
+            if (syncState !== "applied_file_overrides") {
+                syncState = "mirrored_from_database";
+            }
+        }
+    }
+    catch {
+        mkdirSync(path.dirname(fileState.filePath), { recursive: true });
+        writeFileSync(fileState.filePath, serialized, "utf8");
+        if (syncState !== "applied_file_overrides") {
+            syncState = "mirrored_from_database";
+        }
+    }
+    lastSettingsFileStatus = {
+        path: fileState.filePath,
+        exists: true,
+        valid: true,
+        syncState,
+        parseError: null,
+        overrideKeys
+    };
+    return next;
+}
+export function getSettingsFileStatus() {
+    return {
+        ...lastSettingsFileStatus,
+        path: getForgeSettingsFilePath()
+    };
+}
+export function mirrorSettingsFileFromCurrentState() {
+    const current = buildSettingsPayloadFromDatabase();
+    writeForgeSettingsFileSnapshot(current);
+    return current;
+}
+export function getSettings() {
+    if (settingsFileSyncDepth > 0) {
+        return buildSettingsPayloadFromDatabase();
+    }
+    settingsFileSyncDepth += 1;
+    try {
+        return reconcileSettingsFileWithDatabase(buildSettingsPayloadFromDatabase());
+    }
+    finally {
+        settingsFileSyncDepth = Math.max(0, settingsFileSyncDepth - 1);
+    }
+}
+function updateSettingsInternal(input, options = {}) {
     const parsed = updateSettingsSchema.parse(input);
     return runInTransaction(() => {
-        const current = getSettings();
+        const current = buildSettingsPayloadFromDatabase();
         const now = new Date().toISOString();
         const nextGoogleClientId = parsed.calendarProviders?.google?.clientId?.trim() ??
             current.calendarProviders.google.storedClientId;
@@ -339,18 +678,25 @@ export function updateSettings(input, options = {}) {
                 operatorTitle: parsed.profile?.operatorTitle ?? current.profile.operatorTitle
             },
             notifications: {
-                goalDriftAlerts: parsed.notifications?.goalDriftAlerts ?? current.notifications.goalDriftAlerts,
-                dailyQuestReminders: parsed.notifications?.dailyQuestReminders ?? current.notifications.dailyQuestReminders,
-                achievementCelebrations: parsed.notifications?.achievementCelebrations ?? current.notifications.achievementCelebrations
+                goalDriftAlerts: parsed.notifications?.goalDriftAlerts ??
+                    current.notifications.goalDriftAlerts,
+                dailyQuestReminders: parsed.notifications?.dailyQuestReminders ??
+                    current.notifications.dailyQuestReminders,
+                achievementCelebrations: parsed.notifications?.achievementCelebrations ??
+                    current.notifications.achievementCelebrations
             },
             execution: {
                 maxActiveTasks: parsed.execution?.maxActiveTasks ?? current.execution.maxActiveTasks,
-                timeAccountingMode: parsed.execution?.timeAccountingMode ?? current.execution.timeAccountingMode
+                timeAccountingMode: parsed.execution?.timeAccountingMode ??
+                    current.execution.timeAccountingMode
             },
             themePreference: parsed.themePreference ?? current.themePreference,
-            customTheme: parsed.customTheme === undefined ? (current.customTheme ?? null) : parsed.customTheme,
+            customTheme: parsed.customTheme === undefined
+                ? (current.customTheme ?? null)
+                : parsed.customTheme,
             localePreference: parsed.localePreference ?? current.localePreference,
-            psycheAuthRequired: parsed.security?.psycheAuthRequired ?? current.security.psycheAuthRequired,
+            psycheAuthRequired: parsed.security?.psycheAuthRequired ??
+                current.security.psycheAuthRequired,
             calendarProviders: {
                 google: resolveGoogleCalendarOauthPublicConfig(process.env, {
                     clientId: nextGoogleClientId,
@@ -371,14 +717,15 @@ export function updateSettings(input, options = {}) {
                         connectionId: parsed.modelSettings?.forgeAgent?.basicChat?.connectionId !==
                             undefined
                             ? normalizeModelConnectionId(parsed.modelSettings.forgeAgent.basicChat.connectionId)
-                            : current.modelSettings.forgeAgent.basicChat.connectionId ?? "",
+                            : (current.modelSettings.forgeAgent.basicChat.connectionId ??
+                                ""),
                         model: parsed.modelSettings?.forgeAgent?.basicChat?.model?.trim() ||
                             current.modelSettings.forgeAgent.basicChat.model
                     },
                     wiki: {
                         connectionId: parsed.modelSettings?.forgeAgent?.wiki?.connectionId !== undefined
                             ? normalizeModelConnectionId(parsed.modelSettings.forgeAgent.wiki.connectionId)
-                            : current.modelSettings.forgeAgent.wiki.connectionId ?? "",
+                            : (current.modelSettings.forgeAgent.wiki.connectionId ?? ""),
                         model: parsed.modelSettings?.forgeAgent?.wiki?.model?.trim() ||
                             current.modelSettings.forgeAgent.wiki.model
                     }
@@ -431,7 +778,17 @@ export function updateSettings(input, options = {}) {
                 }
             });
         }
-        return getSettings();
+        const updated = buildSettingsPayloadFromDatabase();
+        if (options.mirrorSettingsFile !== false) {
+            writeForgeSettingsFileSnapshot(updated);
+        }
+        return updated;
+    });
+}
+export function updateSettings(input, options = {}) {
+    return updateSettingsInternal(input, {
+        ...options,
+        mirrorSettingsFile: true
     });
 }
 export function createAgentToken(input, activity) {
@@ -477,6 +834,7 @@ export function createAgentToken(input, activity) {
                 }
             });
         }
+        mirrorSettingsFileFromCurrentState();
         return {
             token,
             tokenSummary
@@ -514,6 +872,7 @@ export function rotateAgentToken(tokenId, activity) {
                 source: activity.source
             });
         }
+        mirrorSettingsFileFromCurrentState();
         return {
             token,
             tokenSummary
@@ -549,6 +908,7 @@ export function revokeAgentToken(tokenId, activity) {
                 source: activity.source
             });
         }
+        mirrorSettingsFileFromCurrentState();
         return tokenSummary;
     });
 }
@@ -580,6 +940,8 @@ export function verifyAgentToken(token) {
     if (!row || row.revoked_at) {
         return null;
     }
-    getDatabase().prepare(`UPDATE agent_tokens SET last_used_at = ?, updated_at = ? WHERE id = ?`).run(new Date().toISOString(), new Date().toISOString(), row.id);
+    getDatabase()
+        .prepare(`UPDATE agent_tokens SET last_used_at = ?, updated_at = ? WHERE id = ?`)
+        .run(new Date().toISOString(), new Date().toISOString(), row.id);
     return mapToken(row);
 }

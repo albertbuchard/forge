@@ -1228,7 +1228,8 @@ final class CompanionAppModel: ObservableObject {
                 movementTrips: receipt.imported.movementTrips ?? 0,
                 movementKnownPlaces: receipt.imported.movementKnownPlaces ?? 0,
                 screenTimeDaySummaries: receipt.imported.screenTimeDaySummaries ?? 0,
-                screenTimeHourlySegments: receipt.imported.screenTimeHourlySegments ?? 0
+                screenTimeHourlySegments: receipt.imported.screenTimeHourlySegments ?? 0,
+                screenTimeTotalActivitySeconds: payloadSummary.screenTimeTotalActivitySeconds
             )
             latestSyncReport = report
             persistSyncState(report: report, payloadSummary: payloadSummary)
@@ -1658,6 +1659,9 @@ final class CompanionAppModel: ObservableObject {
             movementTripStops: payload.movement.trips.reduce(0) { $0 + $1.stops.count },
             screenTimeDaySummaries: payload.screenTime.daySummaries.count,
             screenTimeHourlySegments: payload.screenTime.hourlySegments.count,
+            screenTimeTotalActivitySeconds: payload.screenTime.daySummaries.isEmpty == false
+                ? payload.screenTime.daySummaries.reduce(0) { $0 + $1.totalActivitySeconds }
+                : payload.screenTime.hourlySegments.reduce(0) { $0 + $1.totalActivitySeconds },
             rawHeartRateDatapointsSynced: 0
         )
     }
@@ -2081,6 +2085,7 @@ private struct PersistedSyncReport: Codable {
     let movementKnownPlaces: Int
     let screenTimeDaySummaries: Int
     let screenTimeHourlySegments: Int
+    let screenTimeTotalActivitySeconds: Int
 
     private enum CodingKeys: String, CodingKey {
         case syncedAt
@@ -2094,6 +2099,7 @@ private struct PersistedSyncReport: Codable {
         case movementKnownPlaces
         case screenTimeDaySummaries
         case screenTimeHourlySegments
+        case screenTimeTotalActivitySeconds
     }
 
     init(report: SyncReport) {
@@ -2108,6 +2114,7 @@ private struct PersistedSyncReport: Codable {
         movementKnownPlaces = report.movementKnownPlaces
         screenTimeDaySummaries = report.screenTimeDaySummaries
         screenTimeHourlySegments = report.screenTimeHourlySegments
+        screenTimeTotalActivitySeconds = report.screenTimeTotalActivitySeconds
     }
 
     init(from decoder: Decoder) throws {
@@ -2123,6 +2130,7 @@ private struct PersistedSyncReport: Codable {
         movementKnownPlaces = try container.decodeIfPresent(Int.self, forKey: .movementKnownPlaces) ?? 0
         screenTimeDaySummaries = try container.decodeIfPresent(Int.self, forKey: .screenTimeDaySummaries) ?? 0
         screenTimeHourlySegments = try container.decodeIfPresent(Int.self, forKey: .screenTimeHourlySegments) ?? 0
+        screenTimeTotalActivitySeconds = try container.decodeIfPresent(Int.self, forKey: .screenTimeTotalActivitySeconds) ?? 0
     }
 
     var asSyncReport: SyncReport {
@@ -2137,7 +2145,8 @@ private struct PersistedSyncReport: Codable {
             movementTrips: movementTrips,
             movementKnownPlaces: movementKnownPlaces,
             screenTimeDaySummaries: screenTimeDaySummaries,
-            screenTimeHourlySegments: screenTimeHourlySegments
+            screenTimeHourlySegments: screenTimeHourlySegments,
+            screenTimeTotalActivitySeconds: screenTimeTotalActivitySeconds
         )
     }
 }

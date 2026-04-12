@@ -264,7 +264,7 @@ function makeNode(input: {
 
 function addEdge(
   edgeIndex: Map<string, KnowledgeGraphEdge>,
-  input: Omit<KnowledgeGraphEdge, "id">
+  input: Omit<KnowledgeGraphEdge, "id" | "family">
 ) {
   if (input.source === input.target) {
     return;

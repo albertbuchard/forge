@@ -143,6 +143,7 @@ struct PairedForgeScreen: View {
                 screenTimeStore: appModel.screenTimeStore,
                 close: { screenTimeSettingsVisible = false }
             )
+            .environmentObject(appModel)
             .presentationDetents([.large])
             .presentationDragIndicator(.visible)
         }

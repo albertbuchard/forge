@@ -168,6 +168,23 @@ private struct ForgeScreenTimeReportView: View {
         return Array(aggregates.prefix(4))
     }
 
+    private var syncExportLines: [String] {
+        var lines = [
+            "FORGESYNCV1",
+            "GENERATED \(snapshot.generatedAt)",
+            "TOTAL \(totalActivitySeconds)",
+            "DAYS \(snapshot.daySummaries.count)",
+            "SLICES \(snapshot.hourlySegments.count)"
+        ]
+        for day in snapshot.daySummaries.prefix(7) {
+            lines.append(
+                "DAY \(day.dateKey) \(day.totalActivitySeconds) \(day.pickupCount) \(day.notificationCount) \(day.longestActivitySeconds)"
+            )
+        }
+        lines.append("FORGESYNCEND")
+        return lines
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             Text("Screen Time")
@@ -216,6 +233,22 @@ private struct ForgeScreenTimeReportView: View {
                             .font(.subheadline)
                         }
                     }
+                }
+
+                Divider()
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Forge sync export")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                    Text(syncExportLines.joined(separator: "\n"))
+                        .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                        .foregroundStyle(Color.black)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(10)
+                        .background(
+                            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                .fill(Color.white)
+                        )
                 }
             }
         }

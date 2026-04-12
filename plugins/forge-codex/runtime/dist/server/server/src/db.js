@@ -1,10 +1,11 @@
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { mkdir, readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { DatabaseSync } from "node:sqlite";
 import { logForgeDebug } from "./debug.js";
 import { ensureQuestionnaireSeeds } from "./repositories/questionnaires.js";
+import { getMonorepoRuntimePreferencePath } from "./runtime-data-root.js";
 function nowIso() {
     return new Date().toISOString();
 }
@@ -56,6 +57,18 @@ export function resolveDefaultDataRoot(currentWorkingDir = process.cwd()) {
     if (configured) {
         return path.resolve(configured);
     }
+    if (existsSync(getMonorepoRuntimePreferencePath())) {
+        try {
+            const raw = readFileSync(getMonorepoRuntimePreferencePath(), "utf8");
+            const parsed = JSON.parse(raw);
+            if (typeof parsed.dataRoot === "string" && parsed.dataRoot.trim().length > 0) {
+                return path.resolve(parsed.dataRoot);
+            }
+        }
+        catch {
+            // Ignore invalid local runtime preference files and continue to defaults.
+        }
+    }
     // Inside the private monorepo, prefer the tracked shared Forge data root so
     // the local app, Hermes, OpenClaw, and repo-managed data all point at the
     // same state by default.
@@ -87,6 +100,9 @@ function getDataDir() {
 }
 export function resolveDataDir() {
     return getDataDir();
+}
+export function getEffectiveDataRoot() {
+    return dataRoot;
 }
 function getDatabasePath() {
     return resolveDatabasePathForDataRoot();

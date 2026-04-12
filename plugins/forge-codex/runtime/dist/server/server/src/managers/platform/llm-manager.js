@@ -4,6 +4,9 @@ import { readEncryptedSecret, storeEncryptedSecret } from "../../repositories/ca
 function emitDiagnostic(logger, input) {
     logger?.(input);
 }
+function providerAllowsCredentiallessPrompt(provider) {
+    return provider === "mock";
+}
 export class LlmManager extends AbstractManager {
     secretsManager;
     name = "LlmManager";
@@ -74,7 +77,7 @@ export class LlmManager extends AbstractManager {
             throw new Error("Unsupported LLM provider.");
         }
         const apiKey = explicitApiKey?.trim() || (await this.readApiKey(profile.secretId));
-        if (!apiKey) {
+        if (!apiKey && !providerAllowsCredentiallessPrompt(profile.provider)) {
             emitDiagnostic(logger, {
                 level: "error",
                 message: "Wiki LLM connection test is missing an API key.",
@@ -90,7 +93,7 @@ export class LlmManager extends AbstractManager {
             throw new Error("Save an OpenAI API key first.");
         }
         const result = await provider.testConnection({
-            apiKey,
+            apiKey: apiKey ?? "mock",
             profile,
             logger
         });
@@ -114,11 +117,11 @@ export class LlmManager extends AbstractManager {
             throw new Error("This LLM provider does not support text prompt execution.");
         }
         const apiKey = input.explicitApiKey?.trim() || (await this.readApiKey(profile.secretId));
-        if (!apiKey) {
+        if (!apiKey && !providerAllowsCredentiallessPrompt(profile.provider)) {
             throw new Error("Missing provider credential for prompt execution.");
         }
         return await provider.runText({
-            apiKey,
+            apiKey: apiKey ?? "mock",
             profile,
             systemPrompt: input.systemPrompt,
             prompt: input.prompt,

@@ -1,5 +1,8 @@
+import { spawn } from "node:child_process";
+import { existsSync } from "node:fs";
 import { access, readFile } from "node:fs/promises";
 import path from "node:path";
+import { setTimeout as delay } from "node:timers/promises";
 const distDir = path.join(process.cwd(), "dist");
 const packagedRuntimeDistDir = path.join(process.cwd(), "plugins", "forge-codex", "runtime", "dist");
 const contentTypes = {
@@ -17,7 +20,9 @@ function normalizeBasePath(value) {
         return "/";
     }
     const withLeadingSlash = value.startsWith("/") ? value : `/${value}`;
-    return withLeadingSlash.endsWith("/") ? withLeadingSlash : `${withLeadingSlash}/`;
+    return withLeadingSlash.endsWith("/")
+        ? withLeadingSlash
+        : `${withLeadingSlash}/`;
 }
 function normalizeAbsoluteUrl(value) {
     const url = new URL(value);
@@ -30,6 +35,56 @@ function getDefaultBasePath() {
 function getDevWebOrigin() {
     const value = process.env.FORGE_DEV_WEB_ORIGIN?.trim();
     return value && value.length > 0 ? value : null;
+}
+function shouldAutostartDevWeb(env) {
+    const value = env.FORGE_DEV_WEB_AUTOSTART?.trim().toLowerCase();
+    return value !== "0" && value !== "false" && value !== "no";
+}
+function getDevWebCommand(env) {
+    const value = env.FORGE_DEV_WEB_COMMAND?.trim();
+    return value && value.length > 0 ? value : "npm run dev:web";
+}
+function getDefaultDevWebOriginPort(origin) {
+    if (origin?.port && origin.port.trim().length > 0) {
+        return origin.port;
+    }
+    if (origin?.protocol === "https:") {
+        return "443";
+    }
+    return "3027";
+}
+function getDefaultViteCliPath(cwd) {
+    const candidate = path.join(cwd, "node_modules", "vite", "bin", "vite.js");
+    return existsSync(candidate) ? candidate : null;
+}
+function buildManagedDevWebLaunch(input) {
+    const explicitCommand = input.env.FORGE_DEV_WEB_COMMAND?.trim();
+    if (explicitCommand && explicitCommand.length > 0) {
+        return {
+            command: explicitCommand,
+            env: input.env,
+            shell: true
+        };
+    }
+    const viteCliPath = getDefaultViteCliPath(input.cwd);
+    if (!viteCliPath) {
+        return {
+            command: getDevWebCommand(input.env),
+            env: input.env,
+            shell: true
+        };
+    }
+    const host = input.env.FORGE_DEV_WEB_HOST?.trim() || "127.0.0.1";
+    const port = input.env.FORGE_DEV_WEB_PORT?.trim() || getDefaultDevWebOriginPort(input.origin);
+    return {
+        command: process.execPath,
+        args: [viteCliPath, "--host", host, "--port", port],
+        env: {
+            ...input.env,
+            FORGE_BASE_PATH: getDefaultBasePath()
+        },
+        shell: false
+    };
 }
 function stripBasePath(requestPath, basePath) {
     const normalizedBasePath = normalizeBasePath(basePath);
@@ -63,19 +118,174 @@ async function getClientDir() {
         return packagedRuntimeDistDir;
     }
 }
-async function serveAsset(requestPath, reply) {
-    if (requestPath.startsWith("/api")) {
+function parseRequestTarget(requestPath) {
+    return new URL(requestPath, "http://forge.local");
+}
+function copyProxyHeaders(response, reply) {
+    for (const [name, value] of response.headers) {
+        const lowerName = name.toLowerCase();
+        if (lowerName === "connection" ||
+            lowerName === "content-length" ||
+            lowerName === "keep-alive" ||
+            lowerName === "transfer-encoding") {
+            continue;
+        }
+        reply.header(name, value);
+    }
+}
+async function proxyDevAsset(input) {
+    const target = new URL(input.pathname.startsWith("/") ? input.pathname.slice(1) : input.pathname, input.origin);
+    target.search = input.search;
+    const response = await input.fetchImpl(target, { redirect: "manual" });
+    input.reply.code(response.status);
+    copyProxyHeaders(response, input.reply);
+    if (!response.headers.has("cache-control")) {
+        input.reply.header("Cache-Control", "no-store, max-age=0, must-revalidate");
+    }
+    if (!response.body) {
+        return "";
+    }
+    return Buffer.from(await response.arrayBuffer());
+}
+async function waitForProcessExit(child, timeoutMs = 5_000) {
+    if (child.exitCode !== null) {
+        return;
+    }
+    await Promise.race([
+        new Promise((resolve) => {
+            child.once("exit", () => resolve());
+            child.once("close", () => resolve());
+        }),
+        delay(timeoutMs).then(() => { })
+    ]);
+}
+export function createManagedDevWebRuntime(options = {}) {
+    const env = options.env ?? process.env;
+    const originValue = env.FORGE_DEV_WEB_ORIGIN?.trim();
+    const origin = originValue ? normalizeAbsoluteUrl(originValue) : null;
+    const cwd = options.cwd ?? process.cwd();
+    const fetchImpl = options.fetchImpl ?? fetch;
+    const spawnImpl = options.spawnImpl ?? spawn;
+    const autostart = shouldAutostartDevWeb(env);
+    const waitTimeoutMs = Number(env.FORGE_DEV_WEB_START_TIMEOUT_MS ?? 30_000);
+    const pollIntervalMs = 500;
+    let child = null;
+    let startupPromise = null;
+    async function probe() {
+        if (!origin) {
+            return null;
+        }
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 1_500);
+        try {
+            const response = await fetchImpl(origin, {
+                method: "GET",
+                redirect: "manual",
+                signal: controller.signal
+            });
+            return response.status < 500 ? origin : null;
+        }
+        catch {
+            return null;
+        }
+        finally {
+            clearTimeout(timeout);
+        }
+    }
+    async function waitUntilReady(processRef) {
+        const startedAt = Date.now();
+        while (Date.now() - startedAt < waitTimeoutMs) {
+            const readyOrigin = await probe();
+            if (readyOrigin) {
+                return readyOrigin;
+            }
+            if (processRef.exitCode !== null) {
+                break;
+            }
+            await delay(pollIntervalMs);
+        }
+        return null;
+    }
+    async function ensureReady() {
+        if (!origin) {
+            return null;
+        }
+        const readyOrigin = await probe();
+        if (readyOrigin || !autostart) {
+            return readyOrigin;
+        }
+        if (!startupPromise) {
+            startupPromise = (async () => {
+                if (!child || child.exitCode !== null) {
+                    const launch = buildManagedDevWebLaunch({ cwd, env, origin });
+                    const nextChild = launch.shell
+                        ? spawnImpl(launch.command, {
+                            cwd,
+                            env: launch.env,
+                            shell: true,
+                            stdio: "inherit"
+                        })
+                        : spawnImpl(launch.command, launch.args ?? [], {
+                            cwd,
+                            env: launch.env,
+                            stdio: "inherit"
+                        });
+                    child = nextChild;
+                    nextChild.once("exit", () => {
+                        if (child === nextChild) {
+                            child = null;
+                        }
+                    });
+                }
+                const startedOrigin = await waitUntilReady(child);
+                startupPromise = null;
+                return startedOrigin;
+            })().catch((error) => {
+                startupPromise = null;
+                throw error;
+            });
+        }
+        return startupPromise;
+    }
+    async function stop() {
+        if (!child || child.exitCode !== null) {
+            return;
+        }
+        const childRef = child;
+        childRef.kill("SIGTERM");
+        await waitForProcessExit(childRef);
+        if (childRef.exitCode === null) {
+            childRef.kill("SIGKILL");
+            await waitForProcessExit(childRef, 1_000);
+        }
+        child = null;
+    }
+    return {
+        ensureReady,
+        stop
+    };
+}
+async function serveAsset(requestPath, reply, options) {
+    const requestTarget = parseRequestTarget(requestPath);
+    if (requestTarget.pathname.startsWith("/api")) {
         reply.code(404);
         return { error: "Not found" };
     }
-    const normalizedRequestPath = stripBasePath(requestPath, getDefaultBasePath());
-    const devWebOrigin = getDevWebOrigin();
+    const normalizedRequestPath = stripBasePath(requestTarget.pathname, getDefaultBasePath());
+    const devWebOrigin = await options.devWebRuntime.ensureReady();
     if (devWebOrigin) {
-        const target = new URL(normalizedRequestPath.startsWith("/")
-            ? normalizedRequestPath.slice(1)
-            : normalizedRequestPath, normalizeAbsoluteUrl(devWebOrigin));
-        reply.code(307).redirect(target.toString());
-        return reply;
+        try {
+            return await proxyDevAsset({
+                origin: devWebOrigin,
+                pathname: normalizedRequestPath,
+                search: requestTarget.search,
+                reply,
+                fetchImpl: options.fetchImpl
+            });
+        }
+        catch {
+            reply.header("X-Forge-Web-Fallback", "built");
+        }
     }
     const clientDir = await getClientDir();
     const assetPath = resolveAsset(clientDir, normalizedRequestPath);
@@ -111,7 +321,12 @@ async function serveAsset(requestPath, reply) {
         return { error: "Asset not found" };
     }
 }
-export async function registerWebRoutes(app) {
-    app.get("/", async (_request, reply) => serveAsset("/", reply));
-    app.get("/*", async (request, reply) => serveAsset(request.url, reply));
+export async function registerWebRoutes(app, options = {}) {
+    const devWebRuntime = options.devWebRuntime ?? createManagedDevWebRuntime();
+    const fetchImpl = options.fetchImpl ?? fetch;
+    app.addHook("onClose", async () => {
+        await devWebRuntime.stop();
+    });
+    app.get("/", async (_request, reply) => serveAsset("/", reply, { devWebRuntime, fetchImpl }));
+    app.get("/*", async (request, reply) => serveAsset(request.url, reply, { devWebRuntime, fetchImpl }));
 }

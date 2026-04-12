@@ -10,6 +10,9 @@ function normalizeAnchorKey(anchorKey) {
     return anchorKey.trim().length > 0 ? anchorKey : null;
 }
 function normalizeLinks(links) {
+    if (!links) {
+        return [];
+    }
     const seen = new Set();
     return links.filter((link) => {
         const key = `${link.entityType}:${link.entityId}:${link.anchorKey ?? ""}`;

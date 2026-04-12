@@ -3,11 +3,11 @@ import cors from "@fastify/cors";
 import multipart from "@fastify/multipart";
 import { CronExpressionParser } from "cron-parser";
 import { z, ZodError } from "zod";
-import { configureDatabase, configureDatabaseSeeding, runInTransaction } from "./db.js";
+import { configureDatabase, configureDatabaseSeeding, getEffectiveDataRoot, resolveDataDir, resolveDatabasePathForDataRoot, runInTransaction } from "./db.js";
 import { HttpError, isHttpError } from "./errors.js";
 import { listActivityEvents, listActivityEventsForTask, recordActivityEvent, removeActivityEvent } from "./repositories/activity-events.js";
 import { approveApprovalRequest, createAgentAction, createInsight, createInsightFeedback, deleteInsight, getInsightById, listAgentActions, listApprovalRequests, listInsights, rejectApprovalRequest, updateInsight } from "./repositories/collaboration.js";
-import { createAiConnector, deleteAiConnector, getAiConnectorById, getAiConnectorBySlug, getAiConnectorConversationForConnector, listAiConnectorRuns, listAiConnectors, runAiConnector, updateAiConnector } from "./repositories/ai-connectors.js";
+import { createAiConnector, deleteAiConnector, getAiConnectorById, getAiConnectorRunById, getAiConnectorRunNodeResult, getAiConnectorRunNodeResults, getLatestAiConnectorNodeOutput, getAiConnectorBySlug, getAiConnectorConversationForConnector, listAiConnectorRuns, listAiConnectors, runAiConnector, updateAiConnector } from "./repositories/ai-connectors.js";
 import { createAiProcessor, createAiProcessorLink, deleteAiProcessor, deleteAiProcessorLink, getAiProcessorById, getAiProcessorBySlug, listAiProcessors, getSurfaceProcessorGraph, runAiProcessor, updateAiProcessor } from "./repositories/ai-processors.js";
 import { listEventLog } from "./repositories/event-log.js";
 import { createDiagnosticMessage, DIAGNOSTIC_LOG_RETENTION_SWEEP_INTERVAL_MS, enforceDiagnosticLogRetention, listDiagnosticLogs, normalizeDiagnosticSource, recordDiagnosticLog, serializeDiagnosticError } from "./repositories/diagnostic-logs.js";
@@ -20,27 +20,30 @@ import { buildNotesSummaryByEntity, createNote, getNoteById, listNotes, updateNo
 import { createWikiIngestJobSchema, createUploadedWikiIngestJob, createWikiSpace, createWikiSpaceSchema, deleteWikiIngestJob, deleteWikiProfile, getWikiHealth, getWikiIngestJob, getWikiHomePageDetail, getWikiPageDetail, getWikiPageDetailBySlug, getWikiSettingsPayload, ingestWikiSource, listWikiIngestJobs, listWikiLlmProfiles, listWikiPageTree, listWikiPages, listWikiSpaces, processWikiIngestJob, reindexWikiEmbeddings, reindexWikiEmbeddingsSchema, rerunWikiIngestJob, reviewWikiIngestJob, reviewWikiIngestJobSchema, searchWikiPages, syncWikiVaultFromDisk, syncWikiVaultSchema, testWikiLlmProfileSchema, upsertWikiEmbeddingProfile, upsertWikiEmbeddingProfileSchema, upsertWikiLlmProfile, upsertWikiLlmProfileSchema, wikiSearchQuerySchema } from "./repositories/wiki-memory.js";
 import { filterOwnedEntities, setEntityOwner } from "./repositories/entity-ownership.js";
 import { createBehavior, createBehaviorPattern, createBeliefEntry, createEmotionDefinition, createEventType, createModeGuideSession, createModeProfile, createPsycheValue, createTriggerReport, getBehaviorById, getBehaviorPatternById, getBeliefEntryById, getEmotionDefinitionById, getEventTypeById, getModeGuideSessionById, getModeProfileById, getPsycheValueById, getTriggerReportById, listBehaviors, listBehaviorPatterns, listBeliefEntries, listEmotionDefinitions, listEventTypes, listModeGuideSessions, listModeProfiles, listPsycheValues, listSchemaCatalog, listTriggerReports, updateBehavior, updateBehaviorPattern, updateBeliefEntry, updateEmotionDefinition, updateEventType, updateModeGuideSession, updateModeProfile, updatePsycheValue, updateTriggerReport } from "./repositories/psyche.js";
-import { cloneQuestionnaireInstrument, completeQuestionnaireRun, createQuestionnaireInstrument, ensureQuestionnaireDraftVersion, getQuestionnaireInstrumentDetail, getQuestionnaireRunDetail, listQuestionnaireInstruments, publishQuestionnaireDraftVersion, startQuestionnaireRun, updateQuestionnaireDraftVersion, updateQuestionnaireRun } from "./repositories/questionnaires.js";
+import { cloneQuestionnaireInstrument, completeQuestionnaireRun, createQuestionnaireInstrument, deleteQuestionnaireInstrument, ensureQuestionnaireDraftVersion, getQuestionnaireInstrumentDetail, getQuestionnaireRunDetail, listQuestionnaireInstruments, publishQuestionnaireDraftVersion, startQuestionnaireRun, updateQuestionnaireInstrument, updateQuestionnaireInstrumentSchema, updateQuestionnaireDraftVersion, updateQuestionnaireRun } from "./repositories/questionnaires.js";
 import { createProject, updateProject } from "./repositories/projects.js";
-import { createPreferenceCatalog, createPreferenceCatalogItem, createPreferenceContext, createPreferenceItem, createPreferenceItemFromEntity, deletePreferenceCatalog, deletePreferenceCatalogItem, getPreferenceWorkspace, mergePreferenceContexts, startPreferenceGame, submitAbsoluteSignal, submitPairwiseJudgment, updatePreferenceCatalog, updatePreferenceCatalogItem, updatePreferenceContext, updatePreferenceItem, updatePreferenceScore } from "./repositories/preferences.js";
+import { createPreferenceCatalog, createPreferenceCatalogItem, createPreferenceContext, createPreferenceItem, createPreferenceItemFromEntity, deletePreferenceCatalog, deletePreferenceCatalogItem, deletePreferenceContext, deletePreferenceItem, getPreferenceCatalogById, getPreferenceCatalogItemById, getPreferenceContextById, getPreferenceItemById, getPreferenceWorkspace, listPreferenceCatalogItems, listPreferenceCatalogs, listPreferenceContexts, listPreferenceItems, mergePreferenceContexts, startPreferenceGame, submitAbsoluteSignal, submitPairwiseJudgment, updatePreferenceCatalog, updatePreferenceCatalogItem, updatePreferenceContext, updatePreferenceItem, updatePreferenceScore } from "./repositories/preferences.js";
 import { createStrategy, getStrategyById, listStrategies, updateStrategy } from "./repositories/strategies.js";
+import { buildKnowledgeGraph, buildKnowledgeGraphFocus } from "./services/knowledge-graph.js";
 import { createManualRewardGrant, getDailyAmbientXp, getRewardRuleById, listRewardLedger, listRewardRules, recordWorkAdjustmentReward, recordSessionEvent, updateRewardRule } from "./repositories/rewards.js";
-import { listAgentIdentities, getSettings, isPsycheAuthRequired, updateSettings, verifyAgentToken } from "./repositories/settings.js";
+import { getSettingsFileStatus, listAgentIdentities, getSettings, isPsycheAuthRequired, mirrorSettingsFileFromCurrentState, updateSettings, verifyAgentToken } from "./repositories/settings.js";
 import { deleteAiModelConnection, getAiModelConnectionById, readModelConnectionCredential, upsertAiModelConnection } from "./repositories/model-settings.js";
 import { createTag, getTagById, listTags, updateTag } from "./repositories/tags.js";
 import { createUser, ensureSystemUsers, getDefaultUser, getUserById, listUserAccessGrants, listUserOwnershipSummaries, listUserXpSummaries, listUsers, resolveUserForMutation, updateUserAccessGrant, updateUser } from "./repositories/users.js";
 import { claimTaskRun, completeTaskRun, focusTaskRun, heartbeatTaskRun, listTaskRuns, recoverTimedOutTaskRuns, releaseTaskRun } from "./repositories/task-runs.js";
-import { createTask, createTaskWithIdempotency, getTaskById, listTasks, uncompleteTask, updateTask } from "./repositories/tasks.js";
+import { createTask, createTaskWithIdempotency, getTaskById, listTasks, splitTask, uncompleteTask, updateTask } from "./repositories/tasks.js";
 import { createWorkAdjustment } from "./repositories/work-adjustments.js";
-import { createCalendarEvent, createTaskTimebox, createWorkBlockTemplate, deleteCalendarEvent, deleteTaskTimebox, deleteWorkBlockTemplate, getCalendarConnectionById, getCalendarEventById, listCalendars, listCalendarEvents, listTaskTimeboxes, suggestTaskTimeboxes, listWorkBlockInstances, listWorkBlockTemplates, updateCalendarEvent, updateTaskTimebox, updateWorkBlockTemplate } from "./repositories/calendar.js";
+import { createCalendarEvent, createTaskTimebox, createWorkBlockTemplate, deleteCalendarEvent, deleteTaskTimebox, deleteWorkBlockTemplate, getCalendarConnectionById, getCalendarEventById, getTaskTimeboxById, getWorkBlockTemplateById, listCalendars, listCalendarEvents, listTaskTimeboxes, suggestTaskTimeboxes, listWorkBlockInstances, listWorkBlockTemplates, updateCalendarEvent, updateTaskTimebox, updateWorkBlockTemplate } from "./repositories/calendar.js";
 import { getDashboard } from "./services/dashboard.js";
 import { getOverviewContext, getRiskContext, getTodayContext } from "./services/context.js";
 import { buildGamificationOverview, buildGamificationProfile, buildXpMomentumPulse } from "./services/gamification.js";
 import { getInsightsPayload } from "./services/insights.js";
+import { buildLifeForcePayload, createFatigueSignal, listLifeForceTemplates, resolveLifeForceUser, updateLifeForceProfile, updateLifeForceTemplate } from "./services/life-force.js";
 import { createEntities, deleteEntities, deleteEntity, getSettingsBinPayload, restoreEntities, searchEntities, updateEntities } from "./services/entity-crud.js";
 import { getPsycheOverview } from "./services/psyche.js";
-import { getPsycheObservationCalendar } from "./services/psyche-observation-calendar.js";
+import { exportPsycheObservationCalendar, getPsycheObservationCalendar } from "./services/psyche-observation-calendar.js";
 import { getProjectBoard, getProjectSummary, listProjectSummaries } from "./services/projects.js";
+import { createDataBackup, exportData, getDataManagementState, maybeRunAutomaticBackup, restoreDataBackup, scanForDataRecoveryCandidates, switchDataRoot, updateDataManagementSettings } from "./services/data-management.js";
 import { getWeeklyReviewPayload } from "./services/reviews.js";
 import { finalizeWeeklyReviewClosure } from "./repositories/weekly-reviews.js";
 import { createTaskRunWatchdog } from "./services/task-run-watchdog.js";
@@ -50,13 +53,15 @@ import { consumeOpenAiCodexOauthCredentials, getOpenAiCodexOauthSession, startOp
 import { PSYCHE_ENTITY_TYPES, createBehaviorSchema, createBeliefEntrySchema, createBehaviorPatternSchema, createEmotionDefinitionSchema, createEventTypeSchema, createModeGuideSessionSchema, createModeProfileSchema, createPsycheValueSchema, createTriggerReportSchema, updateBehaviorSchema, updateBeliefEntrySchema, updateBehaviorPatternSchema, updateEmotionDefinitionSchema, updateEventTypeSchema, updateModeGuideSessionSchema, updateModeProfileSchema, updatePsycheValueSchema, updateTriggerReportSchema } from "./psyche-types.js";
 import { createQuestionnaireInstrumentSchema, publishQuestionnaireVersionSchema, startQuestionnaireRunSchema, updateQuestionnaireRunSchema, updateQuestionnaireVersionSchema } from "./questionnaire-types.js";
 import { createPreferenceCatalogItemSchema, createPreferenceCatalogSchema, createPreferenceContextSchema, createPreferenceItemSchema, enqueueEntityPreferenceItemSchema, mergePreferenceContextsSchema, preferenceWorkspaceQuerySchema, startPreferenceGameSchema, submitAbsoluteSignalSchema, submitPairwiseJudgmentSchema, updatePreferenceCatalogItemSchema, updatePreferenceCatalogSchema, updatePreferenceContextSchema, updatePreferenceItemSchema, updatePreferenceScoreSchema } from "./preferences-types.js";
-import { activityListQuerySchema, activitySourceSchema, createAgentActionSchema, createAgentTokenSchema, createAiConnectorSchema, createAiProcessorLinkSchema, createAiProcessorSchema, runAiConnectorSchema, writeSurfaceLayoutSchema, upsertAiModelConnectionSchema, testAiModelConnectionSchema, submitOpenAiCodexOauthManualCodeSchema, batchCreateEntitiesSchema, batchDeleteEntitiesSchema, batchRestoreEntitiesSchema, batchSearchEntitiesSchema, batchUpdateEntitiesSchema, createGoalSchema, createInsightFeedbackSchema, createInsightSchema, createStrategySchema, createUserSchema, createNoteSchema, createProjectSchema, createManualRewardGrantSchema, createCalendarEventSchema, createHabitCheckInSchema, createCalendarConnectionSchema, createDiagnosticLogSchema, discoverCalendarConnectionSchema, startGoogleCalendarOauthSchema, startMicrosoftCalendarOauthSchema, testMicrosoftCalendarOauthConfigurationSchema, createHabitSchema, createTaskTimeboxSchema, createWorkBlockTemplateSchema, createSessionEventSchema, createWorkAdjustmentSchema, createTagSchema, calendarOverviewQuerySchema, notesListQuerySchema, updateTagSchema, createTaskSchema, diagnosticLogListQuerySchema, eventsListQuerySchema, operatorLogWorkSchema, projectBoardPayloadSchema, projectListQuerySchema, entityDeleteQuerySchema, removeActivityEventSchema, resolveApprovalRequestSchema, rewardsLedgerQuerySchema, habitListQuerySchema, taskContextPayloadSchema, taskRunClaimSchema, taskRunFocusSchema, taskRunFinishSchema, taskRunHeartbeatSchema, taskRunListQuerySchema, taskListQuerySchema, tagSuggestionRequestSchema, uncompleteTaskSchema, updateSettingsSchema, updateGoalSchema, updateHabitSchema, updateInsightSchema, updateStrategySchema, updateUserSchema, updateCalendarConnectionSchema, updateCalendarEventSchema, updateNoteSchema, updateProjectSchema, updateRewardRuleSchema, updateTaskTimeboxSchema, updateTaskSchema, updateUserAccessGrantSchema, updateWorkBlockTemplateSchema, updateAiConnectorSchema, updateAiProcessorSchema, runAiProcessorSchema, workAdjustmentResultSchema, finalizeWeeklyReviewResultSchema, goalListQuerySchema, recommendTaskTimeboxesSchema, strategyListQuerySchema } from "./types.js";
+import { createDataBackupSchema, dataExportQuerySchema, restoreDataBackupSchema, switchDataRootSchema, updateDataManagementSettingsSchema } from "./data-management-types.js";
+import { activityListQuerySchema, activitySourceSchema, createAgentActionSchema, createAgentTokenSchema, createAiConnectorSchema, createAiProcessorLinkSchema, createAiProcessorSchema, runAiConnectorSchema, writeSurfaceLayoutSchema, upsertAiModelConnectionSchema, testAiModelConnectionSchema, submitOpenAiCodexOauthManualCodeSchema, batchCreateEntitiesSchema, batchDeleteEntitiesSchema, batchRestoreEntitiesSchema, batchSearchEntitiesSchema, batchUpdateEntitiesSchema, createGoalSchema, createInsightFeedbackSchema, createInsightSchema, createStrategySchema, createUserSchema, createNoteSchema, createProjectSchema, createManualRewardGrantSchema, createCalendarEventSchema, createHabitCheckInSchema, createCalendarConnectionSchema, createDiagnosticLogSchema, discoverCalendarConnectionSchema, startGoogleCalendarOauthSchema, startMicrosoftCalendarOauthSchema, testMicrosoftCalendarOauthConfigurationSchema, createHabitSchema, createTaskTimeboxSchema, createWorkBlockTemplateSchema, createSessionEventSchema, createWorkAdjustmentSchema, createTagSchema, calendarOverviewQuerySchema, psycheObservationCalendarExportQuerySchema, notesListQuerySchema, updateTagSchema, createTaskSchema, diagnosticLogListQuerySchema, eventsListQuerySchema, operatorLogWorkSchema, projectBoardPayloadSchema, projectListQuerySchema, entityDeleteQuerySchema, removeActivityEventSchema, resolveApprovalRequestSchema, rewardsLedgerQuerySchema, habitListQuerySchema, taskContextPayloadSchema, taskRunClaimSchema, taskRunFocusSchema, taskRunFinishSchema, taskRunHeartbeatSchema, taskRunListQuerySchema, taskSplitCreateSchema, taskListQuerySchema, tagSuggestionRequestSchema, uncompleteTaskSchema, updateSettingsSchema, updateGoalSchema, updateHabitSchema, updateInsightSchema, updateStrategySchema, updateUserSchema, updateCalendarConnectionSchema, updateCalendarEventSchema, updateNoteSchema, updateProjectSchema, updateRewardRuleSchema, updateTaskTimeboxSchema, updateTaskSchema, lifeForceProfilePatchSchema, lifeForceTemplateUpdateSchema, fatigueSignalCreateSchema, updateUserAccessGrantSchema, updateWorkBlockTemplateSchema, updateAiConnectorSchema, updateAiProcessorSchema, runAiProcessorSchema, workAdjustmentResultSchema, finalizeWeeklyReviewResultSchema, goalListQuerySchema, recommendTaskTimeboxesSchema, strategyListQuerySchema } from "./types.js";
 import { buildOpenApiDocument } from "./openapi.js";
 import { registerWebRoutes } from "./web.js";
 import { createManagerRuntime } from "./managers/runtime.js";
 import { isManagerError } from "./managers/type-guards.js";
-import { createCompanionPairingSession, createCompanionPairingSessionSchema, getCompanionOverview, getFitnessViewData, getSleepViewData, ingestMobileHealthSync, mobileHealthSyncSchema, requireValidPairing, revokeAllCompanionPairingSessions, revokeAllCompanionPairingSessionsSchema, revokeCompanionPairingSession, verifyCompanionPairing, verifyCompanionPairingSchema, updateSleepMetadata, updateSleepMetadataSchema, updateWorkoutMetadata, updateWorkoutMetadataSchema } from "./health.js";
-import { createMovementPlace, getMovementAllTimeSummary, getMovementDayDetail, getMovementMobileBootstrap, getMovementTimeline, getMovementSelectionAggregate, getMovementSettings, getMovementTripDetail, getMovementMonthSummary, listMovementPlaces, movementMobileBootstrapSchema, movementMobilePlaceMutationSchema, movementMobileStayPatchSchema, movementMobileTimelineSchema, movementMobileTripPatchSchema, movementPlaceMutationSchema, movementPlacePatchSchema, movementSelectionAggregateSchema, movementStayPatchSchema, movementSettingsPatchSchema, movementTimelineQuerySchema, movementTripPointPatchSchema, movementTripPatchSchema, deleteMovementTripPoint, deleteMovementStay, deleteMovementTrip, updateMovementPlace, updateMovementStay, updateMovementSettings, updateMovementTrip, updateMovementTripPoint } from "./movement.js";
+import { createCompanionPairingSession, createCompanionPairingSessionSchema, createSleepSession, createSleepSessionSchema, createWorkoutSession, createWorkoutSessionSchema, deleteSleepSession, deleteWorkoutSession, getCompanionPairingSessionById, getCompanionOverview, getFitnessViewData, getSleepSessionById, getSleepViewData, getWorkoutSessionById, ingestMobileHealthSync, mobileHealthSyncSchema, patchCompanionPairingSourceState, patchCompanionPairingSourceStateSchema, companionSourceKeySchema, requireValidPairing, revokeAllCompanionPairingSessions, revokeAllCompanionPairingSessionsSchema, revokeCompanionPairingSession, updateMobileCompanionSourceState, updateMobileCompanionSourceStateSchema, verifyCompanionPairing, verifyCompanionPairingSchema, updateSleepMetadata, updateSleepMetadataSchema, updateWorkoutMetadata, updateWorkoutMetadataSchema } from "./health.js";
+import { analyzeMovementUserBoxPreflight, createMovementUserBox, createMovementPlace, deleteMovementUserBox, getMovementAllTimeSummary, getMovementDayDetail, getMovementMobileBootstrap, getMovementTimeline, getMovementSelectionAggregate, getMovementSettings, getMovementTripDetail, getMovementMonthSummary, invalidateAutomaticMovementBox, listMovementPlaces, movementAutomaticBoxInvalidateSchema, movementMobileBootstrapSchema, movementMobilePlaceMutationSchema, movementMobileUserBoxCreateSchema, movementMobileUserBoxPreflightSchema, movementMobileUserBoxPatchSchema, movementMobileAutomaticBoxInvalidateSchema, movementMobileTimelineSchema, movementPlaceMutationSchema, movementPlacePatchSchema, movementSelectionAggregateSchema, movementStayPatchSchema, movementTripPatchSchema, movementUserBoxCreateSchema, movementUserBoxPreflightSchema, movementUserBoxPatchSchema, movementSettingsPatchSchema, movementTimelineQuerySchema, movementTripPointPatchSchema, deleteMovementStay, deleteMovementTrip, deleteMovementTripPoint, updateMovementPlace, updateMovementSettings, updateMovementStay, updateMovementTrip, updateMovementUserBox, updateMovementTripPoint, resolveMovementTimelineSegmentForBox } from "./movement.js";
+import { getScreenTimeAllTimeSummary, getScreenTimeDayDetail, getScreenTimeMonthSummary, getScreenTimeSettings, screenTimeSettingsPatchSchema, updateScreenTimeSettings } from "./screen-time.js";
 import { assertWatchReady, buildWatchBootstrap, ingestWatchCaptureBatch, mobileWatchBootstrapSchema, mobileWatchCaptureBatchSchema, mobileWatchHabitCheckInSchema } from "./watch-mobile.js";
 const COMPATIBILITY_SUNSET = "transitional-node";
 function markCompatibilityRoute(reply) {
@@ -162,7 +167,7 @@ function getRequestOrigin(request) {
         request.hostname;
     return `${protocol}://${host}`;
 }
-const AGENT_ONBOARDING_ENTITY_CATALOG = [
+const AGENT_ONBOARDING_ENTITY_CATALOG_BASE = [
     {
         entityType: "goal",
         purpose: "A long-horizon outcome or direction. Goals anchor projects and tasks.",
@@ -1888,25 +1893,762 @@ const AGENT_ONBOARDING_ENTITY_CATALOG = [
         ]
     }
 ];
+const AGENT_ONBOARDING_BATCH_ROUTE_BASES = {
+    goal: "/api/v1/goals",
+    project: "/api/v1/projects",
+    task: "/api/v1/tasks",
+    strategy: "/api/v1/strategies",
+    habit: "/api/v1/habits",
+    tag: "/api/v1/tags",
+    note: "/api/v1/notes",
+    insight: "/api/v1/insights",
+    calendar_event: "/api/v1/calendar/events",
+    work_block_template: "/api/v1/calendar/work-block-templates",
+    task_timebox: "/api/v1/calendar/timeboxes",
+    sleep_session: "/api/v1/health/sleep",
+    workout_session: "/api/v1/health/workouts",
+    psyche_value: "/api/v1/psyche/values",
+    behavior_pattern: "/api/v1/psyche/patterns",
+    behavior: "/api/v1/psyche/behaviors",
+    belief_entry: "/api/v1/psyche/beliefs",
+    mode_profile: "/api/v1/psyche/modes",
+    mode_guide_session: "/api/v1/psyche/mode-guides",
+    event_type: "/api/v1/psyche/event-types",
+    emotion_definition: "/api/v1/psyche/emotions",
+    trigger_report: "/api/v1/psyche/reports",
+    preference_catalog: "/api/v1/preferences/catalogs",
+    preference_catalog_item: "/api/v1/preferences/catalog-items",
+    preference_context: "/api/v1/preferences/contexts",
+    preference_item: "/api/v1/preferences/items",
+    questionnaire_instrument: "/api/v1/psyche/questionnaires"
+};
+function classifyOnboardingEntity(entityType) {
+    if (entityType in AGENT_ONBOARDING_BATCH_ROUTE_BASES) {
+        return "batch_crud_entity";
+    }
+    if (entityType === "wiki_page" || entityType === "calendar_connection") {
+        return "specialized_crud_entity";
+    }
+    if (entityType === "task_run" ||
+        entityType === "questionnaire_run" ||
+        entityType === "preference_judgment" ||
+        entityType === "preference_signal" ||
+        entityType === "work_adjustment") {
+        return "action_workflow_entity";
+    }
+    return "read_model_only_surface";
+}
+function buildPreferredMutationPath(entityType) {
+    if (entityType in AGENT_ONBOARDING_BATCH_ROUTE_BASES) {
+        return "/api/v1/entities/create | /api/v1/entities/update | /api/v1/entities/delete | /api/v1/entities/search";
+    }
+    switch (entityType) {
+        case "wiki_page":
+            return "Use /api/v1/wiki/pages with POST or PATCH for page CRUD.";
+        case "calendar_connection":
+            return "Use /api/v1/calendar/connections plus provider-specific setup flows.";
+        case "task_run":
+            return "Use the task-run action routes to start, heartbeat, focus, complete, or release live work.";
+        case "questionnaire_run":
+            return "Use the questionnaire-run action routes to start, patch answers, and complete the run.";
+        case "preference_judgment":
+            return "Use /api/v1/preferences/judgments to record one pairwise comparison.";
+        case "preference_signal":
+            return "Use /api/v1/preferences/signals to record one direct signal such as favorite or veto.";
+        case "work_adjustment":
+            return "Use /api/v1/work-adjustments to apply an explicit operator adjustment.";
+        case "self_observation":
+            return "Read the calendar surface; mutate it by creating or updating note-backed observations with frontmatter.observedAt.";
+        case "sleep_overview":
+            return "Read-only surface. Use batch CRUD for sleep_session records or the review enrichment route for reflective notes.";
+        case "sports_overview":
+            return "Read-only surface. Use batch CRUD for workout_session records or the review enrichment route for reflective notes.";
+        default:
+            return "Read-only surface.";
+    }
+}
+function buildPreferredReadPath(entityType) {
+    if (entityType in AGENT_ONBOARDING_BATCH_ROUTE_BASES) {
+        return AGENT_ONBOARDING_BATCH_ROUTE_BASES[entityType];
+    }
+    switch (entityType) {
+        case "wiki_page":
+            return "/api/v1/wiki/pages/:id";
+        case "calendar_connection":
+            return "/api/v1/calendar/connections";
+        case "task_run":
+            return "/api/v1/operator/context";
+        case "questionnaire_run":
+            return "/api/v1/psyche/questionnaire-runs/:id";
+        case "preference_judgment":
+        case "preference_signal":
+            return "/api/v1/preferences/workspace";
+        case "work_adjustment":
+            return "/api/v1/operator/context";
+        case "self_observation":
+            return "/api/v1/psyche/self-observation/calendar";
+        case "sleep_overview":
+            return "/api/v1/health/sleep";
+        case "sports_overview":
+            return "/api/v1/health/fitness";
+        default:
+            return null;
+    }
+}
+function enrichOnboardingEntityGuide(entry) {
+    const classification = classifyOnboardingEntity(entry.entityType);
+    return {
+        ...entry,
+        classification,
+        routeBase: classification === "batch_crud_entity"
+            ? AGENT_ONBOARDING_BATCH_ROUTE_BASES[entry.entityType]
+            : null,
+        preferredMutationPath: buildPreferredMutationPath(entry.entityType),
+        preferredReadPath: buildPreferredReadPath(entry.entityType),
+        preferredMutationTool: classification === "batch_crud_entity"
+            ? "forge_create_entities | forge_update_entities | forge_delete_entities | forge_search_entities"
+            : null
+    };
+}
+const AGENT_ONBOARDING_ENTITY_CATALOG = [
+    ...AGENT_ONBOARDING_ENTITY_CATALOG_BASE.map(enrichOnboardingEntityGuide),
+    enrichOnboardingEntityGuide({
+        entityType: "tag",
+        purpose: "A shared classification label used across Forge entities and notes.",
+        minimumCreateFields: ["label"],
+        relationshipRules: [
+            "Tags are simple reusable labels, not a substitute for richer entity links.",
+            "They use batch CRUD like other simple entities."
+        ],
+        searchHints: ["Search by label before creating a near-duplicate tag."],
+        examples: ['{"label":"Deep work","kind":"execution"}'],
+        fieldGuide: [
+            {
+                name: "label",
+                type: "string",
+                required: true,
+                description: "Human-readable tag label."
+            },
+            {
+                name: "kind",
+                type: "value|category|execution",
+                required: false,
+                description: "Optional tag family.",
+                enumValues: ["value", "category", "execution"],
+                defaultValue: "category"
+            }
+        ]
+    }),
+    enrichOnboardingEntityGuide({
+        entityType: "sleep_session",
+        purpose: "A first-class health record for one night with timing, derived sleep scores, optional stage detail, and reflective links back into Forge.",
+        minimumCreateFields: ["startedAt", "endedAt"],
+        relationshipRules: [
+            "Use batch CRUD for ordinary sleep_session create, update, delete, and search work.",
+            "The direct PATCH route is still available when enriching an existing night with reflective notes after review.",
+            "Sleep deletions are immediate and do not go through the settings bin."
+        ],
+        searchHints: [
+            "Search by linked entities or date window before creating a duplicate manual night."
+        ],
+        examples: [
+            '{"startedAt":"2026-04-10T22:45:00.000Z","endedAt":"2026-04-11T06:45:00.000Z","qualitySummary":"Slept cleanly after a light evening.","links":[{"entityType":"habit","entityId":"habit_sleep_hygiene","relationshipType":"supports"}]}'
+        ],
+        fieldGuide: [
+            {
+                name: "startedAt",
+                type: "ISO datetime",
+                required: true,
+                description: "Sleep start timestamp."
+            },
+            {
+                name: "endedAt",
+                type: "ISO datetime",
+                required: true,
+                description: "Sleep end timestamp."
+            },
+            {
+                name: "timeInBedSeconds",
+                type: "integer",
+                required: false,
+                description: "Defaults from startedAt and endedAt when omitted."
+            },
+            {
+                name: "asleepSeconds",
+                type: "integer",
+                required: false,
+                description: "Defaults to timeInBedSeconds when omitted."
+            },
+            {
+                name: "awakeSeconds",
+                type: "integer",
+                required: false,
+                description: "Defaults to the residual between timeInBedSeconds and asleepSeconds."
+            },
+            {
+                name: "stageBreakdown",
+                type: "array",
+                required: false,
+                description: "Optional list of { stage, seconds } items.",
+                defaultValue: []
+            },
+            {
+                name: "recoveryMetrics",
+                type: "object",
+                required: false,
+                description: "Optional metric bag attached to the night.",
+                defaultValue: {}
+            },
+            {
+                name: "qualitySummary",
+                type: "string",
+                required: false,
+                description: "Optional reflection summary.",
+                defaultValue: ""
+            },
+            {
+                name: "notes",
+                type: "string",
+                required: false,
+                description: "Optional longer reflective note.",
+                defaultValue: ""
+            },
+            {
+                name: "tags",
+                type: "string[]",
+                required: false,
+                description: "Optional review tags.",
+                defaultValue: []
+            },
+            {
+                name: "links",
+                type: "array",
+                required: false,
+                description: "Linked Forge entities for context or support.",
+                defaultValue: []
+            }
+        ]
+    }),
+    enrichOnboardingEntityGuide({
+        entityType: "workout_session",
+        purpose: "A first-class sports record with workout type, timing, optional effort or biometric detail, and linked Forge context.",
+        minimumCreateFields: ["workoutType", "startedAt", "endedAt"],
+        relationshipRules: [
+            "Use batch CRUD for ordinary workout_session create, update, delete, and search work.",
+            "The direct PATCH route remains useful for reflective enrichment after reviewing an existing imported or habit-generated workout.",
+            "Workout deletions are immediate and do not go through the settings bin."
+        ],
+        searchHints: [
+            "Search by workoutType, linked entity, or nearby timestamps before creating another manual workout."
+        ],
+        examples: [
+            '{"workoutType":"walk","startedAt":"2026-04-11T10:00:00.000Z","endedAt":"2026-04-11T10:45:00.000Z","subjectiveEffort":6,"meaningText":"Reset after a long planning block."}'
+        ],
+        fieldGuide: [
+            {
+                name: "workoutType",
+                type: "string",
+                required: true,
+                description: "Canonical workout label such as walk, run, ride, or mobility."
+            },
+            {
+                name: "startedAt",
+                type: "ISO datetime",
+                required: true,
+                description: "Workout start timestamp."
+            },
+            {
+                name: "endedAt",
+                type: "ISO datetime",
+                required: true,
+                description: "Workout end timestamp."
+            },
+            {
+                name: "activeEnergyKcal",
+                type: "number|null",
+                required: false,
+                description: "Optional active calories.",
+                defaultValue: null,
+                nullable: true
+            },
+            {
+                name: "totalEnergyKcal",
+                type: "number|null",
+                required: false,
+                description: "Optional total calories.",
+                defaultValue: null,
+                nullable: true
+            },
+            {
+                name: "distanceMeters",
+                type: "number|null",
+                required: false,
+                description: "Optional distance.",
+                defaultValue: null,
+                nullable: true
+            },
+            {
+                name: "exerciseMinutes",
+                type: "number|null",
+                required: false,
+                description: "Optional exercise minutes.",
+                defaultValue: null,
+                nullable: true
+            },
+            {
+                name: "subjectiveEffort",
+                type: "integer|null",
+                required: false,
+                description: "Optional subjective effort 1-10.",
+                defaultValue: null,
+                nullable: true
+            },
+            {
+                name: "meaningText",
+                type: "string",
+                required: false,
+                description: "Optional reflective meaning or context.",
+                defaultValue: ""
+            },
+            {
+                name: "tags",
+                type: "string[]",
+                required: false,
+                description: "Optional workout tags.",
+                defaultValue: []
+            },
+            {
+                name: "links",
+                type: "array",
+                required: false,
+                description: "Linked Forge entities for context or support.",
+                defaultValue: []
+            }
+        ]
+    }),
+    enrichOnboardingEntityGuide({
+        entityType: "preference_catalog",
+        purpose: "A reusable concept list inside one preference domain, used to seed or organize comparison candidates.",
+        minimumCreateFields: ["userId", "domain", "title"],
+        relationshipRules: [
+            "Preference catalogs are simple entities and should default to batch CRUD.",
+            "Catalog items belong to one preference_catalog through catalogId."
+        ],
+        searchHints: [
+            "Search by title and domain before creating another concept list."
+        ],
+        examples: [
+            '{"userId":"user_operator","domain":"food","title":"Cafe shortlist"}'
+        ],
+        fieldGuide: [
+            {
+                name: "userId",
+                type: "string",
+                required: true,
+                description: "Owner user id."
+            },
+            {
+                name: "domain",
+                type: "string",
+                required: true,
+                description: "Preference domain such as food, places, tools, or custom."
+            },
+            {
+                name: "title",
+                type: "string",
+                required: true,
+                description: "Catalog display title."
+            },
+            {
+                name: "description",
+                type: "string",
+                required: false,
+                description: "Optional catalog summary.",
+                defaultValue: ""
+            },
+            {
+                name: "slug",
+                type: "string",
+                required: false,
+                description: "Optional stable slug.",
+                defaultValue: ""
+            }
+        ]
+    }),
+    enrichOnboardingEntityGuide({
+        entityType: "preference_catalog_item",
+        purpose: "One comparable candidate inside a preference catalog.",
+        minimumCreateFields: ["catalogId", "label"],
+        relationshipRules: [
+            "Catalog items belong to a preference_catalog and use batch CRUD.",
+            "They are concept seeds, not judgments or inferred scores."
+        ],
+        searchHints: [
+            "Search inside the catalog before creating another near-duplicate concept item."
+        ],
+        examples: ['{"catalogId":"preference_catalog_123","label":"Flat white"}'],
+        fieldGuide: [
+            {
+                name: "catalogId",
+                type: "string",
+                required: true,
+                description: "Parent catalog id."
+            },
+            {
+                name: "label",
+                type: "string",
+                required: true,
+                description: "Candidate label."
+            },
+            {
+                name: "description",
+                type: "string",
+                required: false,
+                description: "Optional description.",
+                defaultValue: ""
+            },
+            {
+                name: "tags",
+                type: "string[]",
+                required: false,
+                description: "Optional tags.",
+                defaultValue: []
+            },
+            {
+                name: "featureWeights",
+                type: "object",
+                required: false,
+                description: "Optional interpretable feature weight hints.",
+                defaultValue: {}
+            }
+        ]
+    }),
+    enrichOnboardingEntityGuide({
+        entityType: "preference_context",
+        purpose: "A named preference mode such as Work, Personal, or Discovery under one user and domain.",
+        minimumCreateFields: ["userId", "domain", "name"],
+        relationshipRules: [
+            "Preference contexts are simple entities and should default to batch CRUD.",
+            "Use the merge action only when the operator explicitly wants context consolidation."
+        ],
+        searchHints: ["Search by name and domain before creating another context."],
+        examples: [
+            '{"userId":"user_operator","domain":"food","name":"Work breakfasts","shareMode":"blended"}'
+        ],
+        fieldGuide: [
+            {
+                name: "userId",
+                type: "string",
+                required: true,
+                description: "Owner user id."
+            },
+            {
+                name: "domain",
+                type: "string",
+                required: true,
+                description: "Preference domain."
+            },
+            {
+                name: "name",
+                type: "string",
+                required: true,
+                description: "Context display name."
+            },
+            {
+                name: "description",
+                type: "string",
+                required: false,
+                description: "Optional summary.",
+                defaultValue: ""
+            },
+            {
+                name: "shareMode",
+                type: "shared|isolated|blended",
+                required: false,
+                description: "How this context mixes evidence with others.",
+                enumValues: ["shared", "isolated", "blended"],
+                defaultValue: "blended"
+            },
+            {
+                name: "active",
+                type: "boolean",
+                required: false,
+                description: "Whether the context is active.",
+                defaultValue: true
+            }
+        ]
+    }),
+    enrichOnboardingEntityGuide({
+        entityType: "preference_item",
+        purpose: "One modeled preference candidate that may stand alone or point back to another Forge entity.",
+        minimumCreateFields: ["userId", "domain", "label"],
+        relationshipRules: [
+            "Preference items are simple entities and should default to batch CRUD.",
+            "They can optionally point back to another Forge entity through sourceEntityType and sourceEntityId."
+        ],
+        searchHints: [
+            "Search by label, domain, or linked source entity before creating another preference item."
+        ],
+        examples: [
+            '{"userId":"user_operator","domain":"tools","label":"Mechanical keyboard"}'
+        ],
+        fieldGuide: [
+            {
+                name: "userId",
+                type: "string",
+                required: true,
+                description: "Owner user id."
+            },
+            {
+                name: "domain",
+                type: "string",
+                required: true,
+                description: "Preference domain."
+            },
+            {
+                name: "label",
+                type: "string",
+                required: true,
+                description: "Item display label."
+            },
+            {
+                name: "description",
+                type: "string",
+                required: false,
+                description: "Optional description.",
+                defaultValue: ""
+            },
+            {
+                name: "sourceEntityType",
+                type: "string|null",
+                required: false,
+                description: "Optional linked Forge entity type.",
+                defaultValue: null,
+                nullable: true
+            },
+            {
+                name: "sourceEntityId",
+                type: "string|null",
+                required: false,
+                description: "Optional linked Forge entity id.",
+                defaultValue: null,
+                nullable: true
+            },
+            {
+                name: "tags",
+                type: "string[]",
+                required: false,
+                description: "Optional tags.",
+                defaultValue: []
+            }
+        ]
+    }),
+    enrichOnboardingEntityGuide({
+        entityType: "questionnaire_instrument",
+        purpose: "A reusable Psyche questionnaire instrument with versions, scoring rules, and provenance.",
+        minimumCreateFields: [
+            "title",
+            "sourceClass",
+            "availability",
+            "isSelfReport",
+            "versionLabel",
+            "definition",
+            "scoring",
+            "provenance"
+        ],
+        relationshipRules: [
+            "Questionnaire instruments now default to batch CRUD for normal create, update, delete, and search work.",
+            "Clone, ensure draft, and publish remain specialized actions because they operate on instrument version state."
+        ],
+        searchHints: [
+            "Search by title or key before creating a new custom instrument."
+        ],
+        examples: [
+            '{"title":"Tiny weekly check-in","sourceClass":"secondary_verified","availability":"custom","isSelfReport":true,"versionLabel":"Draft 1","definition":{"locale":"en","instructions":"Rate how present this feels today.","completionNote":"","presentationMode":"single_question","responseStyle":"four_point_frequency","itemIds":[],"items":[],"sections":[],"pageSize":null},"scoring":{"scores":[]},"provenance":{"retrievalDate":"2026-04-06","sourceClass":"secondary_verified","scoringNotes":"","sources":[]}}'
+        ],
+        fieldGuide: [
+            {
+                name: "title",
+                type: "string",
+                required: true,
+                description: "Instrument title."
+            },
+            {
+                name: "sourceClass",
+                type: "string",
+                required: true,
+                description: "Evidence or provenance class."
+            },
+            {
+                name: "availability",
+                type: "string",
+                required: true,
+                description: "System or custom availability mode."
+            },
+            {
+                name: "isSelfReport",
+                type: "boolean",
+                required: true,
+                description: "Whether the instrument is self-report."
+            },
+            {
+                name: "versionLabel",
+                type: "string",
+                required: true,
+                description: "Initial draft version label on create."
+            },
+            {
+                name: "definition",
+                type: "object",
+                required: true,
+                description: "Questionnaire definition payload."
+            },
+            {
+                name: "scoring",
+                type: "object",
+                required: true,
+                description: "Scoring payload."
+            },
+            {
+                name: "provenance",
+                type: "object",
+                required: true,
+                description: "Provenance payload."
+            }
+        ]
+    }),
+    enrichOnboardingEntityGuide({
+        entityType: "task_run",
+        purpose: "A live timed work session attached to a task.",
+        minimumCreateFields: [],
+        relationshipRules: [
+            "Task runs are action-heavy records. Do not model them as ordinary CRUD entities.",
+            "Start, focus, heartbeat, complete, or release them through the dedicated task-run routes."
+        ],
+        searchHints: [
+            "Read operator context before starting or altering live work."
+        ],
+        fieldGuide: []
+    }),
+    enrichOnboardingEntityGuide({
+        entityType: "questionnaire_run",
+        purpose: "One user-owned answer session against a questionnaire instrument version.",
+        minimumCreateFields: [],
+        relationshipRules: [
+            "Questionnaire runs are action-heavy records with a lifecycle of start, patch answers, and complete.",
+            "Use the run routes instead of batch CRUD."
+        ],
+        searchHints: [
+            "Read the run detail when continuing or reviewing an in-flight answer session."
+        ],
+        fieldGuide: []
+    }),
+    enrichOnboardingEntityGuide({
+        entityType: "calendar_connection",
+        purpose: "A stored external calendar provider connection and its selected calendars.",
+        minimumCreateFields: [],
+        relationshipRules: [
+            "Calendar connections use specialized setup and sync flows rather than batch CRUD.",
+            "Provider auth and writable Forge-calendar selection are part of the same specialized surface."
+        ],
+        searchHints: [
+            "Read the calendar overview before changing connections or sync state."
+        ],
+        fieldGuide: []
+    }),
+    enrichOnboardingEntityGuide({
+        entityType: "wiki_page",
+        purpose: "A file-backed Forge wiki page or evidence page.",
+        minimumCreateFields: ["title", "contentMarkdown"],
+        relationshipRules: [
+            "Wiki pages live on the wiki surface and use specialized page upsert routes rather than batch CRUD.",
+            "Entity links remain explicit inside the page link model."
+        ],
+        searchHints: [
+            "Search or list wiki pages before creating another page with the same topic."
+        ],
+        fieldGuide: [
+            {
+                name: "title",
+                type: "string",
+                required: true,
+                description: "Page title."
+            },
+            {
+                name: "contentMarkdown",
+                type: "string",
+                required: true,
+                description: "Markdown body."
+            }
+        ]
+    }),
+    enrichOnboardingEntityGuide({
+        entityType: "self_observation",
+        purpose: "The note-backed Psyche self-observation calendar surface for observed events and reflections.",
+        minimumCreateFields: [],
+        relationshipRules: [
+            "This is a read model, not a standalone CRUD entity.",
+            "Mutate it by creating or updating a note with frontmatter.observedAt."
+        ],
+        searchHints: [
+            "Read the self-observation calendar before proposing new reflected notes or edits."
+        ],
+        fieldGuide: []
+    }),
+    enrichOnboardingEntityGuide({
+        entityType: "sleep_overview",
+        purpose: "The read-model sleep workspace that summarizes recent sleep sessions, trends, and stage averages.",
+        minimumCreateFields: [],
+        relationshipRules: [
+            "Use this surface for review.",
+            "Create, update, delete, or search the underlying sleep_session records through batch CRUD by default."
+        ],
+        searchHints: [
+            "Read this surface before suggesting reflective edits or health-planning follow-up."
+        ],
+        fieldGuide: []
+    }),
+    enrichOnboardingEntityGuide({
+        entityType: "sports_overview",
+        purpose: "The read-model sports workspace that summarizes recent workout sessions and training load.",
+        minimumCreateFields: [],
+        relationshipRules: [
+            "Use this surface for review.",
+            "Create, update, delete, or search the underlying workout_session records through batch CRUD by default."
+        ],
+        searchHints: [
+            "Read this surface before suggesting workout reflections or recovery follow-up."
+        ],
+        fieldGuide: []
+    })
+];
 const AGENT_ONBOARDING_CONVERSATION_RULES = [
     "Ask only for what is missing or unclear instead of walking the user through every optional field.",
+    "Start by saying what seems to matter here or what the record is becoming, then ask the next useful question.",
     "Before each question, decide the one missing thing you are trying to clarify and why it matters for the record.",
     "Use a progression of concrete example or intent, working name, purpose or meaning, placement in Forge, operational details, and linked context.",
     "Ask one to three focused questions at a time. One is usually best when the user is uncertain or emotionally loaded.",
+    "One focused question is the default. Only stack a second question when both serve the same clarification job and the user is steady enough for it.",
     "If the user already answered the normal opening question, do not repeat it. Move to the next missing clarification.",
     "Do not over-therapize logistical entities. For tasks, calendar events, work blocks, timeboxes, and task runs, one brief confirming sentence plus one question is usually enough.",
+    "After each substantive answer, briefly say what is becoming clearer and ask only for the next thing that still changes the record shape or usefulness.",
+    "For reusable records such as tags, event types, emotion definitions, preference contexts, or questionnaires, ask what distinction or decision the record should help with before you ask for wording.",
+    "When useful, help the user name, define, and connect the record in that order: offer a working label, clarify what belongs inside it, then ask about links only after the record itself feels steady.",
     "When the meaning is clearer than the wording, offer a tentative title or formulation yourself and invite correction instead of forcing the user to wordsmith alone.",
     "Before saving, briefly summarize the working formulation in the user's own language when that would reduce ambiguity.",
     "Once the record is clear enough to name, stop exploring broadly and ask only for the last structural detail that still matters.",
+    "If the record is already clear enough to save, save it instead of performing a ceremonial extra question.",
+    "If the user accepts the wording or record shape, move to the write instead of reopening the intake.",
     "When updating an entity, start with what is changing, what should stay true, and what prompted the update now."
 ];
 const AGENT_ONBOARDING_ENTITY_CONVERSATION_PLAYBOOKS = [
     {
         focus: "goal",
-        openingQuestion: "What direction here feels important enough that you want to keep it in view?",
+        openingQuestion: "What direction are you trying to keep hold of here?",
         coachingGoal: "Clarify the direction and why it matters, not just produce a title.",
         askSequence: [
             "Ask what direction or outcome the user wants to keep in view.",
+            "Reflect the deeper stake in plain language before moving on.",
             "Ask why it matters now.",
             "Distinguish the goal from a project or task.",
             "Clarify horizon and status only after the meaning is clear."
@@ -1914,10 +2656,11 @@ const AGENT_ONBOARDING_ENTITY_CONVERSATION_PLAYBOOKS = [
     },
     {
         focus: "project",
-        openingQuestion: "If this became a real project, what would you be trying to make true?",
+        openingQuestion: "If this became a real project, what would you be trying to make true in your life or work?",
         coachingGoal: "Turn an intention into a bounded workstream with a clear outcome.",
         askSequence: [
             "Ask what this piece of work is trying to make true.",
+            "Reflect the emerging boundary so the user can hear what is in scope.",
             "Ask what outcome would make the project feel real or complete for now.",
             "Ask which goal it belongs under.",
             "Land on a working name once the scope is clear.",
@@ -1926,10 +2669,11 @@ const AGENT_ONBOARDING_ENTITY_CONVERSATION_PLAYBOOKS = [
     },
     {
         focus: "strategy",
-        openingQuestion: "What future state is this strategy supposed to make real?",
+        openingQuestion: "What future state are you actually trying to arrive at with this strategy?",
         coachingGoal: "Turn a vague plan into a deliberate sequence toward a real end state.",
         askSequence: [
             "Ask what end state the strategy is trying to land.",
+            "Reflect the destination in plain language so the user can correct it early.",
             "Ask which goals or projects are the true targets.",
             "Ask what the major steps or nodes are.",
             "Ask about order, dependencies, and anything that must not be skipped."
@@ -1937,7 +2681,7 @@ const AGENT_ONBOARDING_ENTITY_CONVERSATION_PLAYBOOKS = [
     },
     {
         focus: "task",
-        openingQuestion: "What is the next concrete move you want to remember or do?",
+        openingQuestion: "What is the next concrete move here?",
         coachingGoal: "Identify the next concrete move, not just capture a vague obligation.",
         askSequence: [
             "Ask what the next concrete action is.",
@@ -1947,7 +2691,7 @@ const AGENT_ONBOARDING_ENTITY_CONVERSATION_PLAYBOOKS = [
     },
     {
         focus: "habit",
-        openingQuestion: "What recurring move are you trying to strengthen or loosen?",
+        openingQuestion: "What recurring move are you trying to strengthen or interrupt?",
         coachingGoal: "Define the recurring behavior and cadence clearly enough for honest later check-ins.",
         askSequence: [
             "Ask what the recurring behavior is in plain language.",
@@ -1969,7 +2713,7 @@ const AGENT_ONBOARDING_ENTITY_CONVERSATION_PLAYBOOKS = [
     },
     {
         focus: "note",
-        openingQuestion: "What feels important to preserve from this?",
+        openingQuestion: "What about this feels worth preserving in a note?",
         coachingGoal: "Preserve the useful context and link it to the right places without turning the note into a dump.",
         askSequence: [
             "Ask what the note needs to preserve.",
@@ -1991,7 +2735,7 @@ const AGENT_ONBOARDING_ENTITY_CONVERSATION_PLAYBOOKS = [
     },
     {
         focus: "insight",
-        openingQuestion: "What observation or recommendation do you want Forge to remember?",
+        openingQuestion: "What is the clearest thing you want future-you or the agent to remember from this?",
         coachingGoal: "Capture one grounded observation or recommendation clearly enough that it remains useful later.",
         askSequence: [
             "Ask what pattern, tension, or observation should be remembered.",
@@ -2059,6 +2803,7 @@ const AGENT_ONBOARDING_ENTITY_CONVERSATION_PLAYBOOKS = [
         coachingGoal: "Capture one observation clearly enough that it can support later reflection without pretending it is already a full interpretation.",
         askSequence: [
             "Ask what was observed.",
+            "Reflect the moment without pretending it is already a finished interpretation.",
             "Ask when it happened or became noticeable unless timing is already clear.",
             "Ask what it may connect to: pattern, belief, value, mode, task, project, or note.",
             "Ask for tags or extra context only if that will help later review."
@@ -2114,6 +2859,7 @@ const AGENT_ONBOARDING_ENTITY_CONVERSATION_PLAYBOOKS = [
         coachingGoal: "Define a real operating mode for preferences instead of a decorative label.",
         askSequence: [
             "Ask what situation or mode this context is meant to represent.",
+            "Ask what decisions or comparisons should feel different inside that context.",
             "Ask what should count inside that context and what should stay outside it.",
             "Ask whether it should be active, default, or kept separate from other evidence.",
             "Offer a concise name if the mode is clearer than the wording."
@@ -2138,6 +2884,7 @@ const AGENT_ONBOARDING_ENTITY_CONVERSATION_PLAYBOOKS = [
             "Ask what the questionnaire is meant to measure or surface.",
             "Ask who it is for and when it should be used.",
             "Ask what kind of honest moment or decision it should help someone answer before getting into item wording.",
+            "Reflect the practical use case back in plain language.",
             "Move to draft creation once the purpose is clear."
         ]
     },
@@ -2477,7 +3224,7 @@ const AGENT_ONBOARDING_TOOL_INPUT_CATALOG = [
     {
         toolName: "forge_create_entities",
         summary: "Create one or more entities in one ordered batch.",
-        whenToUse: "Use after explicit save intent and after duplicate checks when needed.",
+        whenToUse: "Use after explicit save intent and after duplicate checks when needed. This is the default create path for simple Forge entities; do not spray one-off direct mutation routes when the batch contract already covers the record.",
         inputShape: "{ atomic?: boolean, operations: Array<{ entityType: CrudEntityType, clientRef?: string, data: object }> }",
         requiredFields: [
             "operations",
@@ -2488,7 +3235,7 @@ const AGENT_ONBOARDING_TOOL_INPUT_CATALOG = [
             "entityType alone is never enough; full data is required.",
             "Batch multiple related creates together when they come from one user ask.",
             "Goal, project, and task creates can include notes: [{ contentMarkdown, author?, tags?, destroyAt?, links? }] and Forge will auto-link those notes to the newly created entity.",
-            "The same batch create route also handles calendar_event, work_block_template, task_timebox, preference_catalog, preference_catalog_item, preference_context, preference_item, and questionnaire_instrument.",
+            "The same batch create route also handles calendar_event, work_block_template, task_timebox, sleep_session, workout_session, preference_catalog, preference_catalog_item, preference_context, preference_item, and questionnaire_instrument.",
             "Calendar-event creates still trigger downstream projection sync when a writable provider calendar is selected."
         ],
         example: '{"operations":[{"entityType":"task","data":{"title":"Write the public release notes","projectId":"project_123","status":"focus","notes":[{"contentMarkdown":"Starting from the changelog draft and the last QA pass."}]},"clientRef":"task-1"}]}'
@@ -2496,7 +3243,7 @@ const AGENT_ONBOARDING_TOOL_INPUT_CATALOG = [
     {
         toolName: "forge_update_entities",
         summary: "Patch one or more entities in one ordered batch.",
-        whenToUse: "Use when ids are known and the user explicitly wants a change persisted.",
+        whenToUse: "Use when ids are known and the user explicitly wants a change persisted. This is the default update path for simple Forge entities, including manual health-session CRUD.",
         inputShape: "{ atomic?: boolean, operations: Array<{ entityType: CrudEntityType, id: string, clientRef?: string, patch: object }> }",
         requiredFields: [
             "operations",
@@ -2509,7 +3256,7 @@ const AGENT_ONBOARDING_TOOL_INPUT_CATALOG = [
             "Project lifecycle is status-driven: patch project.status to active, paused, or completed instead of looking for separate suspend, restart, or finish routes.",
             "Setting project.status to completed finishes the project and auto-completes linked unfinished tasks through the normal task completion path.",
             "Task and project scheduling rules stay on these same entity patches. Update task.schedulingRules, task.plannedDurationSeconds, or project.schedulingRules here.",
-            "Use this same route to move or relink calendar_event records, edit work_block_template or task_timebox records, and do normal field updates on preference_catalog, preference_catalog_item, preference_context, preference_item, and questionnaire_instrument."
+            "Use this same route to move or relink calendar_event records, edit work_block_template, task_timebox, sleep_session, or workout_session records, and do normal field updates on preference_catalog, preference_catalog_item, preference_context, preference_item, and questionnaire_instrument."
         ],
         example: '{"operations":[{"entityType":"project","id":"project_123","patch":{"status":"completed"},"clientRef":"project-finish-1"}]}'
     },
@@ -2527,7 +3274,7 @@ const AGENT_ONBOARDING_TOOL_INPUT_CATALOG = [
             "Delete defaults to soft.",
             "Use mode=hard only for explicit permanent removal.",
             "Restoration is only possible after soft delete.",
-            "calendar_event, work_block_template, and task_timebox are immediate calendar-domain deletions: calendar events delete remote projections too, and these records do not go through the settings bin."
+            "calendar_event, work_block_template, task_timebox, sleep_session, and workout_session are immediate deletions: calendar events delete remote projections too, and these records do not go through the settings bin."
         ],
         example: '{"operations":[{"entityType":"task","id":"task_123","mode":"soft","reason":"Merged into another task"}]}'
     },
@@ -2678,7 +3425,7 @@ const AGENT_ONBOARDING_TOOL_INPUT_CATALOG = [
     {
         toolName: "forge_update_sleep_session",
         summary: "Patch one sleep session with reflective notes, tags, or linked Forge context.",
-        whenToUse: "Use after reviewing a specific night when the operator wants richer context stored on that sleep record.",
+        whenToUse: "Use after reviewing a specific night when the operator wants richer context stored on that sleep record. Do not use this as the primary CRUD path when batch entity mutation already fits the job.",
         inputShape: "{ sleepId: string, qualitySummary?: string, notes?: string, tags?: string[], links?: Array<{ entityType, entityId, relationshipType? }> }",
         requiredFields: ["sleepId"],
         notes: [
@@ -2690,7 +3437,7 @@ const AGENT_ONBOARDING_TOOL_INPUT_CATALOG = [
     {
         toolName: "forge_update_workout_session",
         summary: "Patch one workout session with subjective effort, mood, meaning, tags, or linked Forge context.",
-        whenToUse: "Use after reviewing one sports session when the operator wants the workout record to carry narrative or planning context.",
+        whenToUse: "Use after reviewing one sports session when the operator wants the workout record to carry narrative or planning context. Do not use this as the primary CRUD path when batch entity mutation already fits the job.",
         inputShape: "{ workoutId: string, subjectiveEffort?: integer|null, moodBefore?: string, moodAfter?: string, meaningText?: string, plannedContext?: string, socialContext?: string, tags?: string[], links?: Array<{ entityType, entityId, relationshipType? }> }",
         requiredFields: ["workoutId"],
         notes: [
@@ -3010,7 +3757,9 @@ function buildAgentOnboardingPayload(request) {
                 "preference_catalog_item",
                 "preference_context",
                 "preference_item",
-                "questionnaire_instrument"
+                "questionnaire_instrument",
+                "sleep_session",
+                "workout_session"
             ],
             batchRoutes: {
                 search: "/api/v1/entities/search",
@@ -3018,6 +3767,19 @@ function buildAgentOnboardingPayload(request) {
                 update: "/api/v1/entities/update",
                 delete: "/api/v1/entities/delete",
                 restore: "/api/v1/entities/restore"
+            },
+            specializedCrudEntities: {
+                wiki_page: {
+                    create: "/api/v1/wiki/pages",
+                    update: "/api/v1/wiki/pages/:id",
+                    read: "/api/v1/wiki/pages/:id"
+                },
+                calendar_connection: {
+                    list: "/api/v1/calendar/connections",
+                    create: "/api/v1/calendar/connections",
+                    update: "/api/v1/calendar/connections/:id",
+                    delete: "/api/v1/calendar/connections/:id"
+                }
             },
             actionEntities: {
                 task_run: {
@@ -3061,15 +3823,15 @@ function buildAgentOnboardingPayload(request) {
                 selfObservation: {
                     read: "/api/v1/psyche/self-observation/calendar",
                     writeModel: "Create or update an observed note with frontmatter.observedAt. Manual reflections usually carry the Self-observation tag, while movement sync can also publish rolling observed notes tagged movement."
-                },
-                sleep_session: {
-                    read: "/api/v1/health/sleep",
-                    update: "/api/v1/health/sleep/:id"
-                },
-                workout_session: {
-                    read: "/api/v1/health/fitness",
-                    update: "/api/v1/health/workouts/:id"
                 }
+            },
+            readModelOnlySurfaces: {
+                sleepOverview: "/api/v1/health/sleep",
+                sportsOverview: "/api/v1/health/fitness",
+                selfObservation: "/api/v1/psyche/self-observation/calendar",
+                calendarOverview: "/api/v1/calendar/overview",
+                operatorOverview: "/api/v1/operator/overview",
+                operatorContext: "/api/v1/operator/context"
             }
         },
         multiUserModel: {
@@ -3218,11 +3980,11 @@ function buildAgentOnboardingPayload(request) {
             saveSuggestionPlacement: "end_of_message",
             saveSuggestionTone: "gentle_optional",
             maxQuestionsPerTurn: 1,
-            psycheExplorationRule: "When a Psyche entity needs understanding first, begin with one exploratory question before any working formulation, replacement belief, suggested title, or save pitch. Keep the opening reflection to one or two short sentences, stay in plain prose instead of bullets or numbered lists, keep that first reply short, do not mention Forge search or save structure yet, avoid colons or list-shaped phrasing, prefer what/when/how over why until the experience is grounded, wait for the user's answer before offering a fuller formulation, and once the lived experience is coherent stop deepening and help the user name it cleanly.",
-            psycheOpeningQuestionRule: "Prefer a concrete opening question tied to the entity: ask when the value mattered, what happened the last time the pattern appeared, what cue or body signal came first before the behavior, what the belief starts saying about self or outcome, what feels most at risk inside the mode, what the part is trying to get the user to do or stop doing, or where the shift began in the incident. Reflect briefly before the question, choose one follow-up lane at a time, and if several Psyche entities are visible hold the adjacent ones lightly until the main container is clear.",
+            psycheExplorationRule: "When a Psyche entity needs understanding first, begin with one exploratory question before any working formulation, replacement belief, suggested title, or save pitch. Keep the opening reflection to one or two short sentences, stay in plain prose instead of bullets or numbered lists, keep that first reply short, do not mention Forge search or save structure yet, avoid colons or list-shaped phrasing, prefer what/when/how over why until the experience is grounded, wait for the user's answer before offering a fuller formulation, ask permission before moving from charged exploration into naming or challenge when needed, do not widen into adjacent entities until the current one has a working sentence the user recognizes, and once the lived experience is coherent stop deepening and help the user name it cleanly. If the user accepts the wording, move toward the save instead of reopening deeper exploration.",
+            psycheOpeningQuestionRule: "Prefer a concrete opening question tied to the entity: ask when the value mattered, what happened the last time the pattern appeared, what cue or body signal came first before the behavior, what the belief starts saying about self or outcome, what feels most at risk inside the mode, what the part is trying to get the user to do or stop doing, or where the shift began in the incident. Reflect briefly before the question, choose one follow-up lane at a time, say what is becoming clearer before the next deeper question, and if several Psyche entities are visible hold the adjacent ones lightly until the main container is clear.",
             duplicateCheckRoute: "/api/v1/entities/search",
             uiSuggestionRule: "offer_visual_ui_when_review_or_editing_would_be_easier",
-            browserFallbackRule: "Do not open the Forge UI or a browser just to create or update normal entities when the batch entity tools can do the job.",
+            browserFallbackRule: "Do not open the Forge UI or a browser just to create or update normal entities when the batch entity tools can do the job. Batch CRUD is the default for simple entities; avoid spamming the agent with a large one-route-per-entity mental model.",
             writeConsentRule: "If an entity is only implied, keep helping in the main conversation and offer Forge lightly at the end. Only write after explicit save intent or after the user accepts the Forge save offer."
         },
         mutationGuidance: {
@@ -3235,12 +3997,12 @@ function buildAgentOnboardingPayload(request) {
             },
             deleteDefault: "soft",
             hardDeleteRequiresExplicitMode: true,
-            restoreSummary: "Restore soft-deleted entities through the restore route or the settings bin. Calendar-domain deletes for calendar_event, work_block_template, and task_timebox are immediate and do not enter the bin.",
-            entityDeleteSummary: "Entity DELETE routes default to soft delete. Pass mode=hard only when permanent removal is intended. Calendar-event deletes still remove remote projections downstream.",
-            batchingRule: "forge_create_entities, forge_update_entities, forge_delete_entities, and forge_restore_entities all accept operations as arrays. Batch multiple related mutations together in one request when possible.",
+            restoreSummary: "Restore soft-deleted entities through the restore route or the settings bin. Immediate-delete entities such as calendar_event, work_block_template, task_timebox, sleep_session, and workout_session do not enter the bin.",
+            entityDeleteSummary: "Entity DELETE routes default to soft delete. Pass mode=hard only when permanent removal is intended. Immediate-delete entities skip the bin, and calendar-event deletes still remove remote projections downstream.",
+            batchingRule: "forge_create_entities, forge_update_entities, forge_delete_entities, and forge_restore_entities all accept operations as arrays. Batch CRUD is the default for simple entities, so batch multiple related mutations together instead of reaching for a long list of entity-specific routes.",
             searchRule: "forge_search_entities accepts searches as an array. Search before create or update when duplicate risk exists.",
-            createRule: "Each create operation must include entityType and full data. entityType alone is not enough. This includes calendar_event, work_block_template, and task_timebox alongside the usual planning and Psyche entities.",
-            updateRule: "Each update operation must include entityType, id, and patch. For projects, lifecycle changes are status patches: active to restart, paused to suspend, completed to finish. Keep task and project scheduling rules on those same patch payloads. Calendar-event updates still run downstream provider projection sync.",
+            createRule: "Each create operation must include entityType and full data. entityType alone is not enough. This includes calendar_event, work_block_template, task_timebox, sleep_session, workout_session, preference CRUD entities, and questionnaire_instrument alongside the usual planning and Psyche entities.",
+            updateRule: "Each update operation must include entityType, id, and patch. For projects, lifecycle changes are status patches: active to restart, paused to suspend, completed to finish. Keep task and project scheduling rules on those same patch payloads. Calendar-event updates still run downstream provider projection sync, and manual health-session field edits belong on the batch route by default rather than on the reflective review helpers.",
             createExample: '{"operations":[{"entityType":"goal","data":{"title":"Create meaningfully"},"clientRef":"goal-create-1"},{"entityType":"goal","data":{"title":"Build a beautiful family"},"clientRef":"goal-create-2"}]}',
             updateExample: '{"operations":[{"entityType":"project","id":"project_123","patch":{"status":"paused","schedulingRules":{"blockWorkBlockKinds":["main_activity"],"allowWorkBlockKinds":["secondary_activity"]}},"clientRef":"project-suspend-1"},{"entityType":"task","id":"task_456","patch":{"plannedDurationSeconds":5400,"schedulingRules":{"allowEventKeywords":["creative"],"blockEventKeywords":["clinic"]}},"clientRef":"task-scheduling-1"}]}'
         }
@@ -3455,6 +4217,7 @@ function buildV1Context(userIds) {
     const tasks = filterOwnedEntities("task", listTasks(), userIds);
     const habits = filterOwnedEntities("habit", listHabits(), userIds);
     const users = listUsers();
+    const dashboard = getDashboard({ userIds });
     const selectedUsers = userIds && userIds.length > 0
         ? users.filter((user) => userIds.includes(user.id))
         : users;
@@ -3467,7 +4230,7 @@ function buildV1Context(userIds) {
             mode: "transitional-node"
         },
         metrics: buildGamificationProfile(goals, tasks, habits),
-        dashboard: getDashboard({ userIds }),
+        dashboard,
         overview: getOverviewContext(new Date(), { userIds }),
         today: getTodayContext(new Date(), { userIds }),
         risk: getRiskContext(new Date(), { userIds }),
@@ -3483,7 +4246,8 @@ function buildV1Context(userIds) {
             selectedUsers
         },
         activeTaskRuns: listTaskRuns({ active: true, limit: 25 }),
-        activity: getDashboard({ userIds }).recentActivity
+        activity: dashboard.recentActivity,
+        lifeForce: buildLifeForcePayload(new Date(), userIds)
     };
 }
 function buildXpMetricsPayload() {
@@ -3760,6 +4524,7 @@ export async function buildServer(options = {}) {
     configureDatabaseSeeding(options.seedDemoData ?? false);
     await managers.migration.initialize();
     ensureSystemUsers();
+    getSettings();
     const app = Fastify({
         logger: false,
         rewriteUrl: (request) => rewriteMountPath(request.url ?? "/")
@@ -3800,7 +4565,8 @@ export async function buildServer(options = {}) {
             }
             try {
                 const interval = CronExpressionParser.parse(processor.cronExpression, {
-                    currentDate: processor.lastRunAt && Number.isFinite(Date.parse(processor.lastRunAt))
+                    currentDate: processor.lastRunAt &&
+                        Number.isFinite(Date.parse(processor.lastRunAt))
                         ? processor.lastRunAt
                         : new Date(now.getTime() - 60_000).toISOString()
                 });
@@ -3822,9 +4588,19 @@ export async function buildServer(options = {}) {
         }
     }, 30_000);
     cronSchedulerTimer.unref?.();
+    const dataBackupTimer = setInterval(() => {
+        void maybeRunAutomaticBackup().catch(() => {
+            // Automatic backup sweeps should never crash the runtime loop.
+        });
+    }, 5 * 60 * 1000);
+    dataBackupTimer.unref?.();
+    void maybeRunAutomaticBackup().catch(() => {
+        // Ignore startup backup failures; the Data settings surface exposes recovery.
+    });
     app.addHook("onClose", async () => {
         clearInterval(diagnosticRetentionTimer);
         clearInterval(cronSchedulerTimer);
+        clearInterval(dataBackupTimer);
         taskRunWatchdog?.stop();
         await managers.backgroundJobs.stop();
     });
@@ -3852,8 +4628,7 @@ export async function buildServer(options = {}) {
             url.startsWith("/api/v1/events/meta"));
     };
     app.addHook("onRequest", async (request) => {
-        request.diagnosticStartedAt =
-            process.hrtime.bigint();
+        request.diagnosticStartedAt = process.hrtime.bigint();
     });
     app.addHook("onResponse", async (request, reply) => {
         const routeUrl = request.routeOptions.url || request.url;
@@ -4130,12 +4905,59 @@ export async function buildServer(options = {}) {
             ? {
                 runtime: {
                     pid: process.pid,
-                    storageRoot: runtimeConfig.dataRoot ?? process.cwd(),
+                    storageRoot: getEffectiveDataRoot(),
                     basePath: runtimeConfig.basePath
                 }
             }
             : {})
     }));
+    app.get("/api/v1/doctor", async (request) => {
+        requireScopedAccess(request.headers, ["read", "write"], { route: "/api/v1/doctor" });
+        const settings = getSettings();
+        const settingsFile = getSettingsFileStatus();
+        const runtime = {
+            pid: process.pid,
+            storageRoot: getEffectiveDataRoot(),
+            dataDir: resolveDataDir(),
+            databasePath: resolveDatabasePathForDataRoot(),
+            basePath: runtimeConfig.basePath,
+            devWebOrigin: process.env.FORGE_DEV_WEB_ORIGIN?.trim() || null
+        };
+        const health = buildHealthPayload(taskRunWatchdog, {
+            apiVersion: "v1",
+            backend: "forge-node-runtime",
+            runtime
+        });
+        const warnings = [];
+        if (!settingsFile.valid) {
+            warnings.push(`forge.json is invalid at ${settingsFile.path}. Forge ignored file precedence until the JSON is repaired or rewritten.`);
+        }
+        if (settingsFile.syncState === "applied_file_overrides") {
+            warnings.push("forge.json overrode one or more persisted database settings on this run.");
+        }
+        if (health.ok === false) {
+            warnings.push("The task-run watchdog reported degraded health.");
+        }
+        return {
+            doctor: {
+                ok: health.ok && settingsFile.valid,
+                now: new Date().toISOString(),
+                runtime,
+                health,
+                settingsFile,
+                settingsSummary: {
+                    themePreference: settings.themePreference,
+                    localePreference: settings.localePreference,
+                    operatorName: settings.profile.operatorName,
+                    maxActiveTasks: settings.execution.maxActiveTasks,
+                    timeAccountingMode: settings.execution.timeAccountingMode,
+                    psycheAuthRequired: settings.security.psycheAuthRequired,
+                    webAppUrl: `http://127.0.0.1:${runtimeConfig.port}${runtimeConfig.basePath}`
+                },
+                warnings
+            }
+        };
+    });
     app.get("/api/v1/auth/operator-session", async (request, reply) => ({
         session: managers.session.ensureLocalOperatorSession(request.headers, reply)
     }));
@@ -4144,15 +4966,116 @@ export async function buildServer(options = {}) {
     }));
     app.get("/api/v1/openapi.json", async () => buildOpenApiDocument());
     app.get("/api/v1/context", async (request) => buildV1Context(resolveScopedUserIds(request.query)));
+    app.get("/api/v1/life-force", async (request) => ({
+        lifeForce: buildLifeForcePayload(new Date(), resolveScopedUserIds(request.query)),
+        templates: listLifeForceTemplates(resolveLifeForceUser(resolveScopedUserIds(request.query)).id)
+    }));
+    app.patch("/api/v1/life-force/profile", async (request) => {
+        const auth = requireScopedAccess(request.headers, ["write"], { route: "/api/v1/life-force/profile" });
+        const userId = resolveLifeForceUser(resolveScopedUserIds(request.query)).id;
+        return {
+            lifeForce: updateLifeForceProfile(userId, lifeForceProfilePatchSchema.parse(request.body ?? {})),
+            actor: auth.session?.actorLabel ?? auth.actor ?? "Forge"
+        };
+    });
+    app.put("/api/v1/life-force/templates/:weekday", async (request) => {
+        const auth = requireScopedAccess(request.headers, ["write"], { route: "/api/v1/life-force/templates/:weekday" });
+        const weekday = Number(request.params.weekday);
+        return {
+            weekday,
+            points: updateLifeForceTemplate(resolveLifeForceUser(resolveScopedUserIds(request.query)).id, weekday, lifeForceTemplateUpdateSchema.parse(request.body ?? {})),
+            actor: auth.session?.actorLabel ?? auth.actor ?? "Forge"
+        };
+    });
+    app.post("/api/v1/life-force/fatigue-signals", async (request) => {
+        const auth = requireScopedAccess(request.headers, ["write"], { route: "/api/v1/life-force/fatigue-signals" });
+        return {
+            lifeForce: createFatigueSignal(resolveLifeForceUser(resolveScopedUserIds(request.query)).id, fatigueSignalCreateSchema.parse(request.body ?? {})),
+            actor: auth.session?.actorLabel ?? auth.actor ?? "Forge"
+        };
+    });
+    app.get("/api/v1/knowledge-graph", async (request) => {
+        const query = request.query;
+        const readString = (value) => typeof value === "string" ? value.trim() : "";
+        const readList = (key) => {
+            const value = query[key];
+            const values = Array.isArray(value) ? value : [value];
+            return values
+                .flatMap((entry) => (typeof entry === "string" ? entry.split(",") : []))
+                .map((entry) => entry.trim())
+                .filter(Boolean);
+        };
+        const limitRaw = readString(query.limit);
+        const limit = limitRaw.length > 0 && Number.isFinite(Number(limitRaw))
+            ? Math.max(1, Math.min(2000, Math.round(Number(limitRaw))))
+            : null;
+        return {
+            graph: buildKnowledgeGraph(resolveScopedUserIds(query), {
+                q: readString(query.q) || null,
+                entityKinds: readList("entityKind"),
+                relationKinds: readList("relationKind"),
+                tags: readList("tag"),
+                owners: readList("owner"),
+                updatedFrom: readString(query.updatedFrom) || null,
+                updatedTo: readString(query.updatedTo) || null,
+                limit,
+                focusNodeId: readString(query.focusNodeId) || null
+            })
+        };
+    });
+    app.get("/api/v1/knowledge-graph/focus", async (request, reply) => {
+        const query = request.query;
+        const entityType = typeof query.entityType === "string" ? query.entityType.trim() : "";
+        const entityId = typeof query.entityId === "string" ? query.entityId.trim() : "";
+        if (!entityType || !entityId) {
+            reply.code(400);
+            return {
+                error: "entityType and entityId are required."
+            };
+        }
+        return {
+            focus: buildKnowledgeGraphFocus(entityType, entityId, resolveScopedUserIds(query))
+        };
+    });
     app.get("/api/v1/health/overview", async (request) => ({
         overview: getCompanionOverview(resolveScopedUserIds(request.query))
     }));
     app.get("/api/v1/health/sleep", async (request) => ({
         sleep: getSleepViewData(resolveScopedUserIds(request.query))
     }));
+    app.post("/api/v1/health/sleep", async (request, reply) => {
+        const auth = requireScopedAccess(request.headers, ["write"], { route: "/api/v1/health/sleep" });
+        const sleep = createSleepSession(createSleepSessionSchema.parse(request.body ?? {}), toActivityContext(auth));
+        reply.code(201);
+        return { sleep };
+    });
+    app.get("/api/v1/health/sleep/:id", async (request, reply) => {
+        const { id } = request.params;
+        const sleep = getSleepSessionById(id);
+        if (!sleep) {
+            reply.code(404);
+            return { error: "Sleep session not found" };
+        }
+        return { sleep };
+    });
     app.get("/api/v1/health/fitness", async (request) => ({
         fitness: getFitnessViewData(resolveScopedUserIds(request.query))
     }));
+    app.post("/api/v1/health/workouts", async (request, reply) => {
+        const auth = requireScopedAccess(request.headers, ["write"], { route: "/api/v1/health/workouts" });
+        const workout = createWorkoutSession(createWorkoutSessionSchema.parse(request.body ?? {}), toActivityContext(auth));
+        reply.code(201);
+        return { workout };
+    });
+    app.get("/api/v1/health/workouts/:id", async (request, reply) => {
+        const { id } = request.params;
+        const workout = getWorkoutSessionById(id);
+        if (!workout) {
+            reply.code(404);
+            return { error: "Workout session not found" };
+        }
+        return { workout };
+    });
     app.get("/api/v1/movement/day", async (request) => {
         const query = request.query;
         return {
@@ -4174,6 +5097,40 @@ export async function buildServer(options = {}) {
     app.get("/api/v1/movement/all-time", async (request) => ({
         movement: getMovementAllTimeSummary(resolveScopedUserIds(request.query))
     }));
+    app.get("/api/v1/screen-time/day", async (request) => {
+        const query = request.query;
+        return {
+            screenTime: getScreenTimeDayDetail({
+                date: typeof query.date === "string" ? query.date : undefined,
+                userIds: resolveScopedUserIds(query)
+            })
+        };
+    });
+    app.get("/api/v1/screen-time/month", async (request) => {
+        const query = request.query;
+        return {
+            screenTime: getScreenTimeMonthSummary({
+                month: typeof query.month === "string" ? query.month : undefined,
+                userIds: resolveScopedUserIds(query)
+            })
+        };
+    });
+    app.get("/api/v1/screen-time/all-time", async (request) => ({
+        screenTime: getScreenTimeAllTimeSummary(resolveScopedUserIds(request.query))
+    }));
+    app.get("/api/v1/screen-time/settings", async (request) => ({
+        settings: getScreenTimeSettings(resolveScopedUserIds(request.query))
+    }));
+    app.patch("/api/v1/screen-time/settings", async (request) => {
+        requireScopedAccess(request.headers, ["write"], {
+            route: "/api/v1/screen-time/settings"
+        });
+        const userId = resolveScopedUserIds(request.query)?.[0] ??
+            getDefaultUser().id;
+        return {
+            settings: updateScreenTimeSettings(userId, screenTimeSettingsPatchSchema.parse(request.body ?? {}))
+        };
+    });
     app.get("/api/v1/movement/timeline", async (request) => {
         const parsed = movementTimelineQuerySchema.parse(request.query ?? {});
         return {
@@ -4181,7 +5138,8 @@ export async function buildServer(options = {}) {
                 ...parsed,
                 userIds: parsed.userIds.length > 0
                     ? parsed.userIds
-                    : (resolveScopedUserIds(request.query) ?? [])
+                    : (resolveScopedUserIds(request.query) ??
+                        [])
             })
         };
     });
@@ -4221,6 +5179,71 @@ export async function buildServer(options = {}) {
             return { error: "Movement place not found" };
         }
         return { place };
+    });
+    app.post("/api/v1/movement/user-boxes", async (request, reply) => {
+        const auth = requireScopedAccess(request.headers, ["write"], { route: "/api/v1/movement/user-boxes" });
+        const userId = resolveScopedUserIds(request.query)?.[0] ??
+            getDefaultUser().id;
+        reply.code(201);
+        const created = createMovementUserBox({
+            ...movementUserBoxCreateSchema.parse(request.body ?? {}),
+            userId
+        }, toActivityContext(auth));
+        return {
+            box: resolveMovementTimelineSegmentForBox(userId, created.id) ?? created
+        };
+    });
+    app.post("/api/v1/movement/user-boxes/preflight", async (request) => {
+        requireScopedAccess(request.headers, ["write"], { route: "/api/v1/movement/user-boxes/preflight" });
+        const userId = resolveScopedUserIds(request.query)?.[0] ??
+            getDefaultUser().id;
+        return {
+            preflight: analyzeMovementUserBoxPreflight({
+                ...movementUserBoxPreflightSchema.parse(request.body ?? {}),
+                userId
+            })
+        };
+    });
+    app.patch("/api/v1/movement/user-boxes/:id", async (request, reply) => {
+        const auth = requireScopedAccess(request.headers, ["write"], { route: "/api/v1/movement/user-boxes/:id" });
+        const userId = resolveScopedUserIds(request.query)?.[0] ??
+            getDefaultUser().id;
+        const { id } = request.params;
+        const box = updateMovementUserBox(id, movementUserBoxPatchSchema.parse(request.body ?? {}), toActivityContext(auth), { userId });
+        if (!box) {
+            reply.code(404);
+            return { error: "Movement user box not found" };
+        }
+        return {
+            box: resolveMovementTimelineSegmentForBox(userId, box.id) ?? box
+        };
+    });
+    app.delete("/api/v1/movement/user-boxes/:id", async (request, reply) => {
+        const auth = requireScopedAccess(request.headers, ["write"], { route: "/api/v1/movement/user-boxes/:id" });
+        const userId = resolveScopedUserIds(request.query)?.[0] ??
+            getDefaultUser().id;
+        const { id } = request.params;
+        const result = deleteMovementUserBox(id, toActivityContext(auth), { userId });
+        if (!result) {
+            reply.code(404);
+            return { error: "Movement user box not found" };
+        }
+        return result;
+    });
+    app.post("/api/v1/movement/automatic-boxes/:id/invalidate", async (request, reply) => {
+        const auth = requireScopedAccess(request.headers, ["write"], { route: "/api/v1/movement/automatic-boxes/:id/invalidate" });
+        const userId = resolveScopedUserIds(request.query)?.[0] ??
+            getDefaultUser().id;
+        const { id } = request.params;
+        const result = invalidateAutomaticMovementBox(id, movementAutomaticBoxInvalidateSchema.parse(request.body ?? {}), toActivityContext(auth), { userId });
+        if (!result) {
+            reply.code(404);
+            return { error: "Automatic movement box not found" };
+        }
+        reply.code(201);
+        return {
+            box: resolveMovementTimelineSegmentForBox(userId, result.box.id) ?? result.box
+        };
     });
     app.patch("/api/v1/movement/stays/:id", async (request, reply) => {
         const auth = requireScopedAccess(request.headers, ["write"], { route: "/api/v1/movement/stays/:id" });
@@ -4319,6 +5342,23 @@ export async function buildServer(options = {}) {
         }
         return { session };
     });
+    app.patch("/api/v1/health/pairing-sessions/:id/sources/:source", async (request, reply) => {
+        requireOperatorSession(request.headers, {
+            route: "/api/v1/health/pairing-sessions/:id/sources/:source"
+        });
+        const params = z
+            .object({
+            id: z.string().trim().min(1),
+            source: companionSourceKeySchema
+        })
+            .parse(request.params ?? {});
+        const session = patchCompanionPairingSourceState(params.id, params.source, patchCompanionPairingSourceStateSchema.parse(request.body ?? {}));
+        if (!session) {
+            reply.code(404);
+            return { error: "Companion pairing session not found" };
+        }
+        return { session };
+    });
     app.post("/api/v1/health/pairing-sessions/revoke-all", async (request) => {
         const auth = requireOperatorSession(request.headers, {
             route: "/api/v1/health/pairing-sessions/revoke-all"
@@ -4335,9 +5375,13 @@ export async function buildServer(options = {}) {
         const parsed = movementMobileBootstrapSchema.parse(request.body ?? {});
         const pairing = requireValidPairing(parsed.sessionId, parsed.pairingToken);
         return {
+            pairingSession: getCompanionPairingSessionById(pairing.id),
             movement: getMovementMobileBootstrap(pairing)
         };
     });
+    app.post("/api/v1/mobile/source-state", async (request) => ({
+        pairingSession: updateMobileCompanionSourceState(updateMobileCompanionSourceStateSchema.parse(request.body ?? {}))
+    }));
     app.post("/api/v1/mobile/movement/places", async (request, reply) => {
         const parsed = movementMobilePlaceMutationSchema.parse(request.body ?? {});
         const pairing = requireValidPairing(parsed.sessionId, parsed.pairingToken);
@@ -4364,33 +5408,90 @@ export async function buildServer(options = {}) {
             })
         };
     });
-    app.patch("/api/v1/mobile/movement/stays/:id", async (request, reply) => {
-        const parsed = movementMobileStayPatchSchema.parse(request.body ?? {});
+    app.post("/api/v1/mobile/movement/user-boxes", async (request, reply) => {
+        const parsed = movementMobileUserBoxCreateSchema.parse(request.body ?? {});
+        const pairing = requireValidPairing(parsed.sessionId, parsed.pairingToken);
+        reply.code(201);
+        const created = createMovementUserBox({
+            ...parsed.box,
+            userId: pairing.user_id
+        }, {
+            actor: "Forge Companion",
+            source: "system"
+        });
+        return {
+            box: resolveMovementTimelineSegmentForBox(pairing.user_id, created.id) ?? created
+        };
+    });
+    app.post("/api/v1/mobile/movement/user-boxes/preflight", async (request) => {
+        const parsed = movementMobileUserBoxPreflightSchema.parse(request.body ?? {});
+        const pairing = requireValidPairing(parsed.sessionId, parsed.pairingToken);
+        return {
+            preflight: analyzeMovementUserBoxPreflight({
+                ...parsed.draft,
+                userId: pairing.user_id
+            })
+        };
+    });
+    app.patch("/api/v1/mobile/movement/user-boxes/:id", async (request, reply) => {
+        const parsed = movementMobileUserBoxPatchSchema.parse(request.body ?? {});
         const pairing = requireValidPairing(parsed.sessionId, parsed.pairingToken);
         const { id } = request.params;
-        const stay = updateMovementStay(id, parsed.patch, {
+        const box = updateMovementUserBox(id, parsed.patch, {
             actor: "Forge Companion",
             source: "system"
         }, { userId: pairing.user_id });
-        if (!stay) {
+        if (!box) {
             reply.code(404);
-            return { error: "Movement stay not found" };
+            return { error: "Movement user box not found" };
         }
-        return { stay };
+        return {
+            box: resolveMovementTimelineSegmentForBox(pairing.user_id, box.id) ?? box
+        };
+    });
+    app.delete("/api/v1/mobile/movement/user-boxes/:id", async (request, reply) => {
+        const parsed = movementMobileBootstrapSchema.parse(request.body ?? {});
+        const pairing = requireValidPairing(parsed.sessionId, parsed.pairingToken);
+        const { id } = request.params;
+        const result = deleteMovementUserBox(id, {
+            actor: "Forge Companion",
+            source: "system"
+        }, { userId: pairing.user_id });
+        if (!result) {
+            reply.code(404);
+            return { error: "Movement user box not found" };
+        }
+        return result;
+    });
+    app.post("/api/v1/mobile/movement/automatic-boxes/:id/invalidate", async (request, reply) => {
+        const parsed = movementMobileAutomaticBoxInvalidateSchema.parse(request.body ?? {});
+        const pairing = requireValidPairing(parsed.sessionId, parsed.pairingToken);
+        const { id } = request.params;
+        const result = invalidateAutomaticMovementBox(id, parsed.invalidate, {
+            actor: "Forge Companion",
+            source: "system"
+        }, { userId: pairing.user_id });
+        if (!result) {
+            reply.code(404);
+            return { error: "Automatic movement box not found" };
+        }
+        reply.code(201);
+        return {
+            box: resolveMovementTimelineSegmentForBox(pairing.user_id, result.box.id) ??
+                result.box
+        };
+    });
+    app.patch("/api/v1/mobile/movement/stays/:id", async (request, reply) => {
+        reply.code(409);
+        return {
+            error: "Recorded stays are immutable in product UI. Create or edit a user-defined movement box instead."
+        };
     });
     app.patch("/api/v1/mobile/movement/trips/:id", async (request, reply) => {
-        const parsed = movementMobileTripPatchSchema.parse(request.body ?? {});
-        const pairing = requireValidPairing(parsed.sessionId, parsed.pairingToken);
-        const { id } = request.params;
-        const trip = updateMovementTrip(id, parsed.patch, {
-            actor: "Forge Companion",
-            source: "system"
-        }, { userId: pairing.user_id });
-        if (!trip) {
-            reply.code(404);
-            return { error: "Movement trip not found" };
-        }
-        return { trip };
+        reply.code(409);
+        return {
+            error: "Recorded moves are immutable in product UI. Create or edit a user-defined movement box instead."
+        };
     });
     app.post("/api/v1/mobile/watch/bootstrap", async (request) => {
         const parsed = mobileWatchBootstrapSchema.parse(request.body ?? {});
@@ -4444,10 +5545,30 @@ export async function buildServer(options = {}) {
         }
         return { workout };
     });
+    app.delete("/api/v1/health/workouts/:id", async (request, reply) => {
+        const auth = requireScopedAccess(request.headers, ["write"], { route: "/api/v1/health/workouts/:id" });
+        const { id } = request.params;
+        const workout = deleteWorkoutSession(id, toActivityContext(auth));
+        if (!workout) {
+            reply.code(404);
+            return { error: "Workout session not found" };
+        }
+        return { workout };
+    });
     app.patch("/api/v1/health/sleep/:id", async (request, reply) => {
         const auth = requireScopedAccess(request.headers, ["write"], { route: "/api/v1/health/sleep/:id" });
         const { id } = request.params;
         const sleep = updateSleepMetadata(id, updateSleepMetadataSchema.parse(request.body ?? {}), toActivityContext(auth));
+        if (!sleep) {
+            reply.code(404);
+            return { error: "Sleep session not found" };
+        }
+        return { sleep };
+    });
+    app.delete("/api/v1/health/sleep/:id", async (request, reply) => {
+        const auth = requireScopedAccess(request.headers, ["write"], { route: "/api/v1/health/sleep/:id" });
+        const { id } = request.params;
+        const sleep = deleteSleepSession(id, toActivityContext(auth));
         if (!sleep) {
             reply.code(404);
             return { error: "Sleep session not found" };
@@ -4500,6 +5621,26 @@ export async function buildServer(options = {}) {
         const { id } = request.params;
         const userIds = resolveScopedUserIds(request.query);
         return getQuestionnaireInstrumentDetail(id, { userIds });
+    });
+    app.patch("/api/v1/psyche/questionnaires/:id", async (request, reply) => {
+        const auth = requirePsycheScopedAccess(request.headers, ["psyche.write"], { route: "/api/v1/psyche/questionnaires/:id" });
+        const { id } = request.params;
+        const instrument = updateQuestionnaireInstrument(id, updateQuestionnaireInstrumentSchema.parse(request.body ?? {}), toActivityContext(auth));
+        if (!instrument) {
+            reply.code(404);
+            return { error: "Questionnaire instrument not found" };
+        }
+        return { instrument };
+    });
+    app.delete("/api/v1/psyche/questionnaires/:id", async (request, reply) => {
+        const auth = requirePsycheScopedAccess(request.headers, ["psyche.write"], { route: "/api/v1/psyche/questionnaires/:id" });
+        const { id } = request.params;
+        const instrument = deleteQuestionnaireInstrument(id, toActivityContext(auth));
+        if (!instrument) {
+            reply.code(404);
+            return { error: "Questionnaire instrument not found" };
+        }
+        return { instrument };
     });
     app.post("/api/v1/psyche/questionnaires/:id/clone", async (request, reply) => {
         const auth = requirePsycheScopedAccess(request.headers, ["psyche.write"], { route: "/api/v1/psyche/questionnaires/:id/clone" });
@@ -4565,6 +5706,29 @@ export async function buildServer(options = {}) {
                 userIds: query.userIds
             })
         };
+    });
+    app.get("/api/v1/psyche/self-observation/calendar/export", async (request, reply) => {
+        requirePsycheScopedAccess(request.headers, ["psyche.read"], { route: "/api/v1/psyche/self-observation/calendar/export" });
+        const query = psycheObservationCalendarExportQuerySchema.parse(request.query ?? {});
+        const now = new Date();
+        const from = query.from ??
+            new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString();
+        const to = query.to ??
+            new Date(now.getTime() + 21 * 24 * 60 * 60 * 1000).toISOString();
+        const exported = exportPsycheObservationCalendar({
+            from,
+            to,
+            userIds: query.userIds,
+            format: query.format,
+            tags: query.tags,
+            includeObservations: query.includeObservations,
+            includeActivity: query.includeActivity,
+            onlyHumanOwned: query.onlyHumanOwned,
+            search: query.search
+        });
+        reply.header("Content-Disposition", `attachment; filename="${exported.fileName}"`);
+        reply.type(exported.mimeType);
+        return reply.send(exported.body);
     });
     app.get("/api/v1/psyche/values", async (request) => {
         requirePsycheScopedAccess(request.headers, ["psyche.read"], { route: "/api/v1/psyche/values" });
@@ -5475,6 +6639,7 @@ export async function buildServer(options = {}) {
                     plannedDurationSeconds: null,
                     schedulingRules: null,
                     tagIds: readStringArrayField(suggestedFields, "tagIds"),
+                    actionCostBand: "standard",
                     notes: []
                 }, toActivityContext(auth));
                 return { entityType: "task", entityId: task.id };
@@ -5703,7 +6868,9 @@ export async function buildServer(options = {}) {
         return job;
     });
     app.post("/api/v1/wiki/ingest-jobs/:id/rerun", async (request, reply) => {
-        requireScopedAccess(request.headers, ["write"], { route: "/api/v1/wiki/ingest-jobs/:id/rerun" });
+        requireScopedAccess(request.headers, ["write"], {
+            route: "/api/v1/wiki/ingest-jobs/:id/rerun"
+        });
         const { id } = request.params;
         try {
             const result = await rerunWikiIngestJob(id, {
@@ -5730,7 +6897,9 @@ export async function buildServer(options = {}) {
         }
     });
     app.post("/api/v1/wiki/ingest-jobs/:id/resume", async (request, reply) => {
-        requireScopedAccess(request.headers, ["write"], { route: "/api/v1/wiki/ingest-jobs/:id/resume" });
+        requireScopedAccess(request.headers, ["write"], {
+            route: "/api/v1/wiki/ingest-jobs/:id/resume"
+        });
         const { id } = request.params;
         const job = getWikiIngestJob(id);
         if (!job) {
@@ -5760,7 +6929,9 @@ export async function buildServer(options = {}) {
         };
     });
     app.delete("/api/v1/wiki/ingest-jobs/:id", async (request, reply) => {
-        requireScopedAccess(request.headers, ["write"], { route: "/api/v1/wiki/ingest-jobs/:id" });
+        requireScopedAccess(request.headers, ["write"], {
+            route: "/api/v1/wiki/ingest-jobs/:id"
+        });
         const { id } = request.params;
         try {
             const deleted = deleteWikiIngestJob(id);
@@ -5862,8 +7033,8 @@ export async function buildServer(options = {}) {
             route: "/api/v1/calendar/oauth/google/start"
         });
         return await startGoogleCalendarOauth(startGoogleCalendarOauthSchema.parse(request.body ?? {}), {
-            browserOrigin: typeof request.body?.browserOrigin ===
-                "string"
+            browserOrigin: typeof request.body
+                ?.browserOrigin === "string"
                 ? request.body.browserOrigin
                 : null,
             openerOrigin: typeof request.headers.origin === "string"
@@ -6141,12 +7312,24 @@ export async function buildServer(options = {}) {
             workspace: startPreferenceGame(startPreferenceGameSchema.parse(request.body ?? {}))
         };
     });
+    app.get("/api/v1/preferences/catalogs", async () => ({
+        catalogs: listPreferenceCatalogs()
+    }));
     app.post("/api/v1/preferences/catalogs", async (request, reply) => {
         requireScopedAccess(request.headers, ["write"], {
             route: "/api/v1/preferences/catalogs"
         });
         const catalog = createPreferenceCatalog(createPreferenceCatalogSchema.parse(request.body ?? {}));
         reply.code(201);
+        return { catalog };
+    });
+    app.get("/api/v1/preferences/catalogs/:id", async (request, reply) => {
+        const { id } = request.params;
+        const catalog = getPreferenceCatalogById(id);
+        if (!catalog) {
+            reply.code(404);
+            return { error: "Preferences catalog not found" };
+        }
         return { catalog };
     });
     app.patch("/api/v1/preferences/catalogs/:id", async (request) => {
@@ -6165,12 +7348,24 @@ export async function buildServer(options = {}) {
         const { id } = request.params;
         return { catalog: deletePreferenceCatalog(id) };
     });
+    app.get("/api/v1/preferences/catalog-items", async () => ({
+        items: listPreferenceCatalogItems()
+    }));
     app.post("/api/v1/preferences/catalog-items", async (request, reply) => {
         requireScopedAccess(request.headers, ["write"], {
             route: "/api/v1/preferences/catalog-items"
         });
         const item = createPreferenceCatalogItem(createPreferenceCatalogItemSchema.parse(request.body ?? {}));
         reply.code(201);
+        return { item };
+    });
+    app.get("/api/v1/preferences/catalog-items/:id", async (request, reply) => {
+        const { id } = request.params;
+        const item = getPreferenceCatalogItemById(id);
+        if (!item) {
+            reply.code(404);
+            return { error: "Preferences catalog item not found" };
+        }
         return { item };
     });
     app.patch("/api/v1/preferences/catalog-items/:id", async (request) => {
@@ -6189,12 +7384,24 @@ export async function buildServer(options = {}) {
         const { id } = request.params;
         return { item: deletePreferenceCatalogItem(id) };
     });
+    app.get("/api/v1/preferences/contexts", async () => ({
+        contexts: listPreferenceContexts()
+    }));
     app.post("/api/v1/preferences/contexts", async (request, reply) => {
         requireScopedAccess(request.headers, ["write"], {
             route: "/api/v1/preferences/contexts"
         });
         const context = createPreferenceContext(createPreferenceContextSchema.parse(request.body ?? {}));
         reply.code(201);
+        return { context };
+    });
+    app.get("/api/v1/preferences/contexts/:id", async (request, reply) => {
+        const { id } = request.params;
+        const context = getPreferenceContextById(id);
+        if (!context) {
+            reply.code(404);
+            return { error: "Preferences context not found" };
+        }
         return { context };
     });
     app.patch("/api/v1/preferences/contexts/:id", async (request) => {
@@ -6206,6 +7413,13 @@ export async function buildServer(options = {}) {
             context: updatePreferenceContext(id, updatePreferenceContextSchema.parse(request.body ?? {}))
         };
     });
+    app.delete("/api/v1/preferences/contexts/:id", async (request) => {
+        requireScopedAccess(request.headers, ["write"], {
+            route: "/api/v1/preferences/contexts/:id"
+        });
+        const { id } = request.params;
+        return { context: deletePreferenceContext(id) };
+    });
     app.post("/api/v1/preferences/contexts/merge", async (request) => {
         requireScopedAccess(request.headers, ["write"], {
             route: "/api/v1/preferences/contexts/merge"
@@ -6214,12 +7428,24 @@ export async function buildServer(options = {}) {
             merge: mergePreferenceContexts(mergePreferenceContextsSchema.parse(request.body ?? {}))
         };
     });
+    app.get("/api/v1/preferences/items", async () => ({
+        items: listPreferenceItems()
+    }));
     app.post("/api/v1/preferences/items", async (request, reply) => {
         requireScopedAccess(request.headers, ["write"], {
             route: "/api/v1/preferences/items"
         });
         const item = createPreferenceItem(createPreferenceItemSchema.parse(request.body ?? {}));
         reply.code(201);
+        return { item };
+    });
+    app.get("/api/v1/preferences/items/:id", async (request, reply) => {
+        const { id } = request.params;
+        const item = getPreferenceItemById(id);
+        if (!item) {
+            reply.code(404);
+            return { error: "Preferences item not found" };
+        }
         return { item };
     });
     app.patch("/api/v1/preferences/items/:id", async (request) => {
@@ -6230,6 +7456,13 @@ export async function buildServer(options = {}) {
         return {
             item: updatePreferenceItem(id, updatePreferenceItemSchema.parse(request.body ?? {}))
         };
+    });
+    app.delete("/api/v1/preferences/items/:id", async (request) => {
+        requireScopedAccess(request.headers, ["write"], {
+            route: "/api/v1/preferences/items/:id"
+        });
+        const { id } = request.params;
+        return { item: deletePreferenceItem(id) };
     });
     app.post("/api/v1/preferences/items/from-entity", async (request, reply) => {
         requireScopedAccess(request.headers, ["write"], {
@@ -6546,6 +7779,59 @@ export async function buildServer(options = {}) {
         requireScopedAccess(request.headers, ["read", "write"], { route: "/api/v1/settings/bin" });
         return { bin: getSettingsBinPayload() };
     });
+    app.get("/api/v1/settings/data", async (request) => {
+        requireScopedAccess(request.headers, ["read", "write"], { route: "/api/v1/settings/data" });
+        return { data: await getDataManagementState() };
+    });
+    app.patch("/api/v1/settings/data", async (request) => {
+        requireScopedAccess(request.headers, ["write"], {
+            route: "/api/v1/settings/data"
+        });
+        return {
+            settings: await updateDataManagementSettings(updateDataManagementSettingsSchema.parse(request.body ?? {})),
+            data: await getDataManagementState()
+        };
+    });
+    app.post("/api/v1/settings/data/scan", async (request) => {
+        requireScopedAccess(request.headers, ["read", "write"], { route: "/api/v1/settings/data/scan" });
+        return { candidates: await scanForDataRecoveryCandidates() };
+    });
+    app.post("/api/v1/settings/data/backups", async (request, reply) => {
+        requireScopedAccess(request.headers, ["write"], {
+            route: "/api/v1/settings/data/backups"
+        });
+        const backup = await createDataBackup(createDataBackupSchema.parse(request.body ?? {}));
+        reply.code(201);
+        return {
+            backup,
+            data: await getDataManagementState()
+        };
+    });
+    app.post("/api/v1/settings/data/backups/:id/restore", async (request) => {
+        requireScopedAccess(request.headers, ["write"], {
+            route: "/api/v1/settings/data/backups/:id/restore"
+        });
+        const { id } = request.params;
+        return {
+            data: await restoreDataBackup(id, restoreDataBackupSchema.parse(request.body ?? {}), { secretsManager: managers.secrets })
+        };
+    });
+    app.post("/api/v1/settings/data/switch-root", async (request) => {
+        requireScopedAccess(request.headers, ["write"], {
+            route: "/api/v1/settings/data/switch-root"
+        });
+        return {
+            data: await switchDataRoot(switchDataRootSchema.parse(request.body ?? {}), { secretsManager: managers.secrets })
+        };
+    });
+    app.get("/api/v1/settings/data/export", async (request, reply) => {
+        requireScopedAccess(request.headers, ["read", "write"], { route: "/api/v1/settings/data/export" });
+        const query = dataExportQuerySchema.parse(request.query ?? {});
+        const exported = await exportData(query.format);
+        reply.header("Content-Disposition", `attachment; filename="${exported.fileName}"`);
+        reply.type(exported.mimeType);
+        return reply.send(exported.body);
+    });
     app.post("/api/v1/projects", async (request, reply) => {
         const auth = requireScopedAccess(request.headers, ["write"], { route: "/api/v1/projects" });
         const project = createProject(createProjectSchema.parse(request.body ?? {}), toActivityContext(auth));
@@ -6634,6 +7920,15 @@ export async function buildServer(options = {}) {
             userIds: resolveScopedUserIds(request.query)
         })
     }));
+    app.get("/api/v1/calendar/work-block-templates/:id", async (request, reply) => {
+        const { id } = request.params;
+        const template = getWorkBlockTemplateById(id);
+        if (!template) {
+            reply.code(404);
+            return { error: "Work block template not found" };
+        }
+        return { template };
+    });
     app.post("/api/v1/calendar/work-block-templates", async (request, reply) => {
         const auth = requireScopedAccess(request.headers, ["write"], { route: "/api/v1/calendar/work-block-templates" });
         const template = createWorkBlockTemplate(createWorkBlockTemplateSchema.parse(request.body ?? {}));
@@ -6709,6 +8004,15 @@ export async function buildServer(options = {}) {
             timeboxes: listTaskTimeboxes({ from, to, userIds: query.userIds })
         };
     });
+    app.get("/api/v1/calendar/timeboxes/:id", async (request, reply) => {
+        const { id } = request.params;
+        const timebox = getTaskTimeboxById(id);
+        if (!timebox) {
+            reply.code(404);
+            return { error: "Task timebox not found" };
+        }
+        return { timebox };
+    });
     app.post("/api/v1/calendar/timeboxes", async (request, reply) => {
         const auth = requireScopedAccess(request.headers, ["write"], { route: "/api/v1/calendar/timeboxes" });
         const timebox = createTaskTimebox(createTaskTimeboxSchema.parse(request.body ?? {}));
@@ -6783,6 +8087,17 @@ export async function buildServer(options = {}) {
             })
         };
     });
+    app.get("/api/v1/calendar/events", async (request) => {
+        const query = calendarOverviewQuerySchema.parse(request.query ?? {});
+        const now = new Date();
+        const from = query.from ??
+            new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString();
+        const to = query.to ??
+            new Date(now.getTime() + 21 * 24 * 60 * 60 * 1000).toISOString();
+        return {
+            events: listCalendarEvents({ from, to, userIds: query.userIds })
+        };
+    });
     app.post("/api/v1/calendar/events", async (request, reply) => {
         const auth = requireScopedAccess(request.headers, ["write"], { route: "/api/v1/calendar/events" });
         const event = createCalendarEvent(createCalendarEventSchema.parse(request.body ?? {}));
@@ -6803,6 +8118,15 @@ export async function buildServer(options = {}) {
         });
         reply.code(201);
         return { event: refreshed };
+    });
+    app.get("/api/v1/calendar/events/:id", async (request, reply) => {
+        const { id } = request.params;
+        const event = getCalendarEventById(id);
+        if (!event) {
+            reply.code(404);
+            return { error: "Calendar event not found" };
+        }
+        return { event };
     });
     app.patch("/api/v1/calendar/events/:id", async (request, reply) => {
         const auth = requireScopedAccess(request.headers, ["write"], { route: "/api/v1/calendar/events/:id" });
@@ -6975,6 +8299,7 @@ export async function buildServer(options = {}) {
                 }
             }, { secrets: managers.secrets });
         }
+        mirrorSettingsFileFromCurrentState();
         reply.code(201);
         return { connection };
     });
@@ -6985,6 +8310,7 @@ export async function buildServer(options = {}) {
             reply.code(404);
             return { error: "AI model connection not found" };
         }
+        mirrorSettingsFileFromCurrentState();
         return { deletedId };
     });
     app.post("/api/v1/settings/models/connections/test", async (request, reply) => {
@@ -7015,7 +8341,9 @@ export async function buildServer(options = {}) {
             recordDiagnosticLog({
                 level,
                 source: normalizeDiagnosticSource(request.headers["x-forge-source"]),
-                scope: typeof details.scope === "string" ? details.scope : "model_settings",
+                scope: typeof details.scope === "string"
+                    ? details.scope
+                    : "model_settings",
                 eventKey: typeof details.eventKey === "string"
                     ? details.eventKey
                     : "model_connection_test",
@@ -7051,7 +8379,9 @@ export async function buildServer(options = {}) {
         }
     });
     app.post("/api/v1/settings/models/oauth/openai-codex/session/:id/manual", async (request) => {
-        requireScopedAccess(request.headers, ["write"], { route: "/api/v1/settings/models/oauth/openai-codex/session/:id/manual" });
+        requireScopedAccess(request.headers, ["write"], {
+            route: "/api/v1/settings/models/oauth/openai-codex/session/:id/manual"
+        });
         return {
             session: submitOpenAiCodexOauthManualInput(request.params.id, submitOpenAiCodexOauthManualCodeSchema.parse(request.body ?? {})
                 .codeOrUrl)
@@ -7319,6 +8649,87 @@ export async function buildServer(options = {}) {
             }
             return {
                 runs: listAiConnectorRuns(connector.id)
+            };
+        });
+        app.get(`${basePath}/:id/runs/:runId`, async (request, reply) => {
+            requireScopedAccess(request.headers, ["read"], {
+                route: `${basePath}/:id/runs/:runId`
+            });
+            const params = request.params;
+            const connector = getAiConnectorById(params.id);
+            if (!connector) {
+                reply.code(404);
+                return { error: `${noun} not found` };
+            }
+            const run = getAiConnectorRunById(connector.id, params.runId);
+            if (!run) {
+                reply.code(404);
+                return { error: `${noun} run not found` };
+            }
+            return {
+                [singularKey]: connector,
+                run
+            };
+        });
+        app.get(`${basePath}/:id/runs/:runId/nodes`, async (request, reply) => {
+            requireScopedAccess(request.headers, ["read"], {
+                route: `${basePath}/:id/runs/:runId/nodes`
+            });
+            const params = request.params;
+            const connector = getAiConnectorById(params.id);
+            if (!connector) {
+                reply.code(404);
+                return { error: `${noun} not found` };
+            }
+            const nodeResults = getAiConnectorRunNodeResults(connector.id, params.runId);
+            if (!nodeResults) {
+                reply.code(404);
+                return { error: `${noun} run not found` };
+            }
+            return {
+                [singularKey]: connector,
+                nodeResults
+            };
+        });
+        app.get(`${basePath}/:id/runs/:runId/nodes/:nodeId`, async (request, reply) => {
+            requireScopedAccess(request.headers, ["read"], {
+                route: `${basePath}/:id/runs/:runId/nodes/:nodeId`
+            });
+            const params = request.params;
+            const connector = getAiConnectorById(params.id);
+            if (!connector) {
+                reply.code(404);
+                return { error: `${noun} not found` };
+            }
+            const nodeResult = getAiConnectorRunNodeResult(connector.id, params.runId, params.nodeId);
+            if (!nodeResult) {
+                reply.code(404);
+                return { error: `${noun} node result not found` };
+            }
+            return {
+                [singularKey]: connector,
+                nodeResult
+            };
+        });
+        app.get(`${basePath}/:id/nodes/:nodeId/output`, async (request, reply) => {
+            requireScopedAccess(request.headers, ["read"], {
+                route: `${basePath}/:id/nodes/:nodeId/output`
+            });
+            const params = request.params;
+            const connector = getAiConnectorById(params.id);
+            if (!connector) {
+                reply.code(404);
+                return { error: `${noun} not found` };
+            }
+            const latest = getLatestAiConnectorNodeOutput(connector.id, params.nodeId);
+            if (!latest) {
+                reply.code(404);
+                return { error: `${noun} node output not found` };
+            }
+            return {
+                [singularKey]: connector,
+                run: latest.run,
+                nodeResult: latest.nodeResult
             };
         });
     };
@@ -7722,6 +9133,16 @@ export async function buildServer(options = {}) {
             return { error: "Task not found" };
         }
         return { task };
+    });
+    app.post("/api/v1/tasks/:id/split", async (request, reply) => {
+        const auth = requireScopedAccess(request.headers, ["write"], { route: "/api/v1/tasks/:id/split" });
+        const { id } = request.params;
+        const result = splitTask(id, taskSplitCreateSchema.parse(request.body ?? {}), toActivityContext(auth));
+        if (!result) {
+            reply.code(404);
+            return { error: "Task not found" };
+        }
+        return result;
     });
     app.delete("/api/v1/tasks/:id", async (request, reply) => {
         const auth = requireScopedAccess(request.headers, ["write"], { route: "/api/v1/tasks/:id" });

@@ -238,7 +238,7 @@ import {
 import type {
   KnowledgeGraphEntityType,
   KnowledgeGraphQuery
-} from "../../../src/lib/knowledge-graph-types.js";
+} from "../../src/lib/knowledge-graph-types.js";
 import {
   createManualRewardGrant,
   getDailyAmbientXp,
@@ -2674,9 +2674,9 @@ function enrichOnboardingEntityGuide<
   T extends {
     entityType: string;
     purpose: string;
-    minimumCreateFields: string[];
-    relationshipRules: string[];
-    searchHints: string[];
+    minimumCreateFields: readonly string[];
+    relationshipRules: readonly string[];
+    searchHints: readonly string[];
     fieldGuide: readonly unknown[];
     examples?: readonly string[];
   }
@@ -6063,17 +6063,18 @@ export async function buildServer(
     );
     const settings = getSettings();
     const settingsFile = getSettingsFileStatus();
+    const runtime = {
+      pid: process.pid,
+      storageRoot: getEffectiveDataRoot(),
+      dataDir: resolveDataDir(),
+      databasePath: resolveDatabasePathForDataRoot(),
+      basePath: runtimeConfig.basePath,
+      devWebOrigin: process.env.FORGE_DEV_WEB_ORIGIN?.trim() || null
+    };
     const health = buildHealthPayload(taskRunWatchdog, {
       apiVersion: "v1",
       backend: "forge-node-runtime",
-      runtime: {
-        pid: process.pid,
-        storageRoot: getEffectiveDataRoot(),
-        dataDir: resolveDataDir(),
-        databasePath: resolveDatabasePathForDataRoot(),
-        basePath: runtimeConfig.basePath,
-        devWebOrigin: process.env.FORGE_DEV_WEB_ORIGIN?.trim() || null
-      }
+      runtime
     });
     const warnings: string[] = [];
     if (!settingsFile.valid) {
@@ -6093,7 +6094,7 @@ export async function buildServer(
       doctor: {
         ok: health.ok && settingsFile.valid,
         now: new Date().toISOString(),
-        runtime: health.runtime,
+        runtime,
         health,
         settingsFile,
         settingsSummary: {
@@ -6153,7 +6154,7 @@ export async function buildServer(
         userId,
         lifeForceProfilePatchSchema.parse(request.body ?? {})
       ),
-      actor: auth.operatorName
+      actor: auth.session?.actorLabel ?? auth.actor ?? "Forge"
     };
   });
   app.put("/api/v1/life-force/templates/:weekday", async (request) => {
@@ -6172,7 +6173,7 @@ export async function buildServer(
         weekday,
         lifeForceTemplateUpdateSchema.parse(request.body ?? {})
       ),
-      actor: auth.operatorName
+      actor: auth.session?.actorLabel ?? auth.actor ?? "Forge"
     };
   });
   app.post("/api/v1/life-force/fatigue-signals", async (request) => {
@@ -6188,7 +6189,7 @@ export async function buildServer(
         ).id,
         fatigueSignalCreateSchema.parse(request.body ?? {})
       ),
-      actor: auth.operatorName
+      actor: auth.session?.actorLabel ?? auth.actor ?? "Forge"
     };
   });
   app.get("/api/v1/knowledge-graph", async (request) => {
@@ -8729,6 +8730,7 @@ export async function buildServer(
             plannedDurationSeconds: null,
             schedulingRules: null,
             tagIds: readStringArrayField(suggestedFields, "tagIds"),
+            actionCostBand: "standard",
             notes: []
           },
           toActivityContext(auth)

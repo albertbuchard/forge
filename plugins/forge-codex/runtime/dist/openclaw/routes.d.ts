@@ -32,5 +32,32 @@ export declare function buildRouteParityReport(pathMap: Record<string, Record<st
     unexpectedMirrors: `${Uppercase<string>} ${string}`[];
 };
 export declare function registerForgePluginRoutes(api: ForgePluginRouteApi, config: ForgePluginConfig): void;
+export declare function runRouteCheck(config: ForgePluginConfig): Promise<{
+    supported: `${Uppercase<string>} ${string}`[];
+    mirrored: `${Uppercase<string>} ${string}`[];
+    missingFromPlugin: `${Uppercase<string>} ${string}`[];
+    missingFromOpenApi: `${Uppercase<string>} ${string}`[];
+    unexpectedMirrors: `${Uppercase<string>} ${string}`[];
+}>;
+export declare function runDoctor(config: ForgePluginConfig): Promise<{
+    ok: boolean;
+    origin: string;
+    port: number;
+    baseUrl: string;
+    webAppUrl: string;
+    actorLabel: string;
+    apiTokenConfigured: boolean;
+    operatorSessionBootstrapAvailable: boolean;
+    warnings: string[];
+    overview: unknown;
+    onboarding: unknown;
+    routeParity: {
+        supported: `${Uppercase<string>} ${string}`[];
+        mirrored: `${Uppercase<string>} ${string}`[];
+        missingFromPlugin: `${Uppercase<string>} ${string}`[];
+        missingFromOpenApi: `${Uppercase<string>} ${string}`[];
+        unexpectedMirrors: `${Uppercase<string>} ${string}`[];
+    };
+}>;
 export declare function registerForgePluginCli(api: ForgePluginCliApi, config: ForgePluginConfig): void;
 export {};

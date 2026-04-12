@@ -1,10 +1,22 @@
 import { Fragment as _Fragment, jsx as _jsx } from "react/jsx-runtime";
 import { buildSearchWorkbenchExecution, buildStaticWorkbenchExecution } from "../../../lib/workbench/runtime.js";
+import { createNoteTool, createSearchEntitiesTool, createSearchInputs, createSearchOutputs, createSearchParams, createSummaryOutput } from "../../../lib/workbench/contracts.js";
 import { createGenericWorkbenchNodeView } from "../shared/generic-node-view.js";
 import { defineWorkbenchBox } from "../shared/define-workbench-box.js";
 function Slot({ children }) {
     return _jsx(_Fragment, { children: children });
 }
+const noteSearchInputs = createSearchInputs({
+    itemKind: "note",
+    itemLabel: "Note",
+    defaultEntityTypes: ["note"],
+    defaultLimit: 20
+});
+const noteSearchParams = createSearchParams({
+    itemKind: "note",
+    defaultEntityTypes: ["note"],
+    defaultLimit: 20
+});
 export const NoteFiltersBox = defineWorkbenchBox(Slot, {
     id: "surface:notes-index:filters",
     surfaceId: "notes-index",
@@ -14,30 +26,30 @@ export const NoteFiltersBox = defineWorkbenchBox(Slot, {
     description: "Entity, tag, text, author, and date filters for notes.",
     category: "Notes",
     tags: ["notes", "filters", "search"],
-    inputs: [],
-    params: [],
-    output: [{ key: "primary", label: "Note filters", kind: "content" }],
+    inputs: noteSearchInputs,
+    params: noteSearchParams,
+    output: [
+        createSummaryOutput({
+            label: "Filter summary",
+            description: "Summary of the current note filters and search scope."
+        })
+    ],
     tools: [
-        {
-            key: "forge.search_entities",
-            label: "Search Forge entities",
-            description: "Search Forge entities by query and entity types.",
-            accessMode: "read"
-        }
+        createSearchEntitiesTool("Search Forge entities by query and entity types.")
     ],
     NodeView: createGenericWorkbenchNodeView({
         title: "Note filters",
         description: "Entity, tag, text, author, and date filters for notes.",
-        inputs: [],
-        params: [],
-        output: [{ key: "primary", label: "Note filters", kind: "content" }],
+        inputs: noteSearchInputs,
+        params: noteSearchParams,
+        output: [
+            createSummaryOutput({
+                label: "Filter summary",
+                description: "Summary of the current note filters and search scope."
+            })
+        ],
         tools: [
-            {
-                key: "forge.search_entities",
-                label: "Search Forge entities",
-                description: "Search Forge entities by query and entity types.",
-                accessMode: "read"
-            }
+            createSearchEntitiesTool("Search Forge entities by query and entity types.")
         ]
     }),
     execute: (input) => buildSearchWorkbenchExecution(input, {
@@ -55,30 +67,30 @@ export const NoteComposerBox = defineWorkbenchBox(Slot, {
     description: "Markdown note composer with links, tags, and capture actions.",
     category: "Notes",
     tags: ["notes", "composer", "capture"],
-    inputs: [],
-    params: [],
-    output: [{ key: "primary", label: "Note draft", kind: "content" }],
+    inputs: noteSearchInputs,
+    params: noteSearchParams,
+    output: [
+        createSummaryOutput({
+            label: "Draft summary",
+            description: "Summary of the current note drafting surface."
+        })
+    ],
     tools: [
-        {
-            key: "forge.create_note",
-            label: "Create note",
-            description: "Create an evidence note from markdown content.",
-            accessMode: "write"
-        }
+        createNoteTool("Create an evidence note from markdown content.")
     ],
     NodeView: createGenericWorkbenchNodeView({
         title: "Note composer",
         description: "Markdown note composer with links, tags, and capture actions.",
-        inputs: [],
-        params: [],
-        output: [{ key: "primary", label: "Note draft", kind: "content" }],
+        inputs: noteSearchInputs,
+        params: noteSearchParams,
+        output: [
+            createSummaryOutput({
+                label: "Draft summary",
+                description: "Summary of the current note drafting surface."
+            })
+        ],
         tools: [
-            {
-                key: "forge.create_note",
-                label: "Create note",
-                description: "Create an evidence note from markdown content.",
-                accessMode: "write"
-            }
+            createNoteTool("Create an evidence note from markdown content.")
         ]
     }),
     execute: (input) => buildStaticWorkbenchExecution(input, {
@@ -96,14 +108,20 @@ export const NotesLibraryBox = defineWorkbenchBox(Slot, {
     tags: ["notes", "library", "history"],
     inputs: [],
     params: [],
-    output: [{ key: "primary", label: "Notes library", kind: "content" }],
+    output: createSearchOutputs({
+        itemKind: "note",
+        itemLabel: "Note"
+    }),
     tools: [],
     NodeView: createGenericWorkbenchNodeView({
         title: "Notes library",
         description: "Filtered library of Forge notes and linked evidence.",
         inputs: [],
         params: [],
-        output: [{ key: "primary", label: "Notes library", kind: "content" }],
+        output: createSearchOutputs({
+            itemKind: "note",
+            itemLabel: "Note"
+        }),
         tools: []
     }),
     execute: (input) => buildSearchWorkbenchExecution(input, {

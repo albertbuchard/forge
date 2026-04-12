@@ -135,6 +135,43 @@ async function request(path, init) {
     }
     return body;
 }
+async function requestBlob(path, init) {
+    const headers = new Headers(init?.headers);
+    headers.set("x-forge-source", "ui");
+    const response = await fetch(resolveForgePath(path), {
+        credentials: "same-origin",
+        headers,
+        ...init
+    });
+    if (!response.ok) {
+        const body = await parseResponseBody(response);
+        const maybeBody = typeof body === "object" && body !== null
+            ? body
+            : null;
+        throw new ForgeApiError({
+            status: response.status,
+            code: typeof maybeBody?.code === "string"
+                ? maybeBody.code
+                : typeof maybeBody?.error === "string"
+                    ? maybeBody.error
+                    : "request_failed",
+            message: typeof maybeBody?.error === "string"
+                ? maybeBody.error
+                : typeof maybeBody?.message === "string"
+                    ? maybeBody.message
+                    : `Request failed: ${response.status}`,
+            requestPath: path,
+            details: []
+        });
+    }
+    const disposition = response.headers.get("content-disposition");
+    const fileNameMatch = disposition?.match(/filename=\"([^\"]+)\"/i);
+    return {
+        blob: await response.blob(),
+        fileName: fileNameMatch?.[1] ?? null,
+        mimeType: response.headers.get("content-type") || "application/octet-stream"
+    };
+}
 function normalizeNestedNotes(notes) {
     return notes
         .map((note) => ({
@@ -194,6 +231,79 @@ export function getForgeSnapshot(userIds) {
     appendUserIds(search, coerceUserIds(userIds));
     const suffix = search.size > 0 ? `?${search.toString()}` : "";
     return request(`/api/v1/context${suffix}`).then(normalizeForgeSnapshot);
+}
+export function getLifeForce(userIds) {
+    const search = new URLSearchParams();
+    appendUserIds(search, coerceUserIds(userIds));
+    const suffix = search.size > 0 ? `?${search.toString()}` : "";
+    return request(`/api/v1/life-force${suffix}`);
+}
+export function patchLifeForceProfile(patch, userIds) {
+    const search = new URLSearchParams();
+    appendUserIds(search, coerceUserIds(userIds));
+    const suffix = search.size > 0 ? `?${search.toString()}` : "";
+    return request(`/api/v1/life-force/profile${suffix}`, {
+        method: "PATCH",
+        body: JSON.stringify(patch)
+    });
+}
+export function updateLifeForceTemplate(weekday, input, userIds) {
+    const search = new URLSearchParams();
+    appendUserIds(search, coerceUserIds(userIds));
+    const suffix = search.size > 0 ? `?${search.toString()}` : "";
+    return request(`/api/v1/life-force/templates/${weekday}${suffix}`, {
+        method: "PUT",
+        body: JSON.stringify(input)
+    });
+}
+export function createFatigueSignal(input, userIds) {
+    const search = new URLSearchParams();
+    appendUserIds(search, coerceUserIds(userIds));
+    const suffix = search.size > 0 ? `?${search.toString()}` : "";
+    return request(`/api/v1/life-force/fatigue-signals${suffix}`, {
+        method: "POST",
+        body: JSON.stringify(input)
+    });
+}
+export function getKnowledgeGraph(userIds, query) {
+    const search = new URLSearchParams();
+    appendUserIds(search, coerceUserIds(userIds));
+    if (query?.q?.trim()) {
+        search.set("q", query.q.trim());
+    }
+    for (const kind of query?.entityKinds ?? []) {
+        search.append("entityKind", kind);
+    }
+    for (const relationKind of query?.relationKinds ?? []) {
+        search.append("relationKind", relationKind);
+    }
+    for (const tag of query?.tags ?? []) {
+        search.append("tag", tag);
+    }
+    for (const owner of query?.owners ?? []) {
+        search.append("owner", owner);
+    }
+    if (query?.updatedFrom) {
+        search.set("updatedFrom", query.updatedFrom);
+    }
+    if (query?.updatedTo) {
+        search.set("updatedTo", query.updatedTo);
+    }
+    if (typeof query?.limit === "number" && Number.isFinite(query.limit)) {
+        search.set("limit", String(query.limit));
+    }
+    if (query?.focusNodeId) {
+        search.set("focusNodeId", query.focusNodeId);
+    }
+    const suffix = search.size > 0 ? `?${search.toString()}` : "";
+    return request(`/api/v1/knowledge-graph${suffix}`).then((response) => response.graph);
+}
+export function getKnowledgeGraphFocus(entityType, entityId, userIds) {
+    const search = new URLSearchParams();
+    search.set("entityType", entityType);
+    search.set("entityId", entityId);
+    appendUserIds(search, coerceUserIds(userIds));
+    return request(`/api/v1/knowledge-graph/focus?${search.toString()}`).then((response) => response.focus);
 }
 export function getPreferenceWorkspace(query) {
     const search = new URLSearchParams();
@@ -957,6 +1067,36 @@ export function getPsycheObservationCalendar(input = {}) {
     const suffix = search.size > 0 ? `?${search.toString()}` : "";
     return request(`/api/v1/psyche/self-observation/calendar${suffix}`);
 }
+export function exportPsycheObservationCalendar(input) {
+    const search = new URLSearchParams();
+    if (input.from) {
+        search.set("from", input.from);
+    }
+    if (input.to) {
+        search.set("to", input.to);
+    }
+    if (input.search?.trim()) {
+        search.set("search", input.search.trim());
+    }
+    if (input.includeObservations !== undefined) {
+        search.set("includeObservations", String(input.includeObservations));
+    }
+    if (input.includeActivity !== undefined) {
+        search.set("includeActivity", String(input.includeActivity));
+    }
+    if (input.onlyHumanOwned !== undefined) {
+        search.set("onlyHumanOwned", String(input.onlyHumanOwned));
+    }
+    for (const tag of input.tags ?? []) {
+        const trimmed = tag.trim();
+        if (trimmed) {
+            search.append("tags", trimmed);
+        }
+    }
+    search.set("format", input.format);
+    appendUserIds(search, coerceUserIds(input.userIds));
+    return requestBlob(`/api/v1/psyche/self-observation/calendar/export?${search.toString()}`);
+}
 export function listCalendarConnections() {
     return request("/api/v1/calendar/connections");
 }
@@ -1135,6 +1275,9 @@ export function listHabits(input = {}) {
     }
     if (input.dueToday) {
         search.set("dueToday", "true");
+    }
+    if (input.orderBy) {
+        search.set("orderBy", input.orderBy);
     }
     if (input.limit) {
         search.set("limit", String(input.limit));
@@ -1348,6 +1491,18 @@ export function getWorkbenchFlowOutput(connectorId) {
 export function getWorkbenchFlowRuns(connectorId) {
     return request(`/api/v1/workbench/flows/${connectorId}/runs`);
 }
+export function getWorkbenchFlowRun(connectorId, runId) {
+    return request(`/api/v1/workbench/flows/${connectorId}/runs/${runId}`);
+}
+export function getWorkbenchFlowRunNodes(connectorId, runId) {
+    return request(`/api/v1/workbench/flows/${connectorId}/runs/${runId}/nodes`);
+}
+export function getWorkbenchFlowRunNode(connectorId, runId, nodeId) {
+    return request(`/api/v1/workbench/flows/${connectorId}/runs/${runId}/nodes/${nodeId}`);
+}
+export function getWorkbenchFlowNodeOutput(connectorId, nodeId) {
+    return request(`/api/v1/workbench/flows/${connectorId}/nodes/${nodeId}/output`);
+}
 export function getCompanionOverview(userIds) {
     const search = new URLSearchParams();
     appendUserIds(search, coerceUserIds(userIds));
@@ -1389,6 +1544,45 @@ export function getMovementAllTime(userIds) {
     appendUserIds(search, coerceUserIds(userIds));
     const suffix = search.size > 0 ? `?${search.toString()}` : "";
     return request(`/api/v1/movement/all-time${suffix}`);
+}
+export function getScreenTimeDay(input) {
+    const search = new URLSearchParams();
+    if (input?.date) {
+        search.set("date", input.date);
+    }
+    appendUserIds(search, coerceUserIds(input?.userIds));
+    const suffix = search.size > 0 ? `?${search.toString()}` : "";
+    return request(`/api/v1/screen-time/day${suffix}`);
+}
+export function getScreenTimeMonth(input) {
+    const search = new URLSearchParams();
+    if (input?.month) {
+        search.set("month", input.month);
+    }
+    appendUserIds(search, coerceUserIds(input?.userIds));
+    const suffix = search.size > 0 ? `?${search.toString()}` : "";
+    return request(`/api/v1/screen-time/month${suffix}`);
+}
+export function getScreenTimeAllTime(userIds) {
+    const search = new URLSearchParams();
+    appendUserIds(search, coerceUserIds(userIds));
+    const suffix = search.size > 0 ? `?${search.toString()}` : "";
+    return request(`/api/v1/screen-time/all-time${suffix}`);
+}
+export function getScreenTimeSettings(userIds) {
+    const search = new URLSearchParams();
+    appendUserIds(search, coerceUserIds(userIds));
+    const suffix = search.size > 0 ? `?${search.toString()}` : "";
+    return request(`/api/v1/screen-time/settings${suffix}`);
+}
+export function patchScreenTimeSettings(patch, userIds) {
+    const search = new URLSearchParams();
+    appendUserIds(search, coerceUserIds(userIds));
+    const suffix = search.size > 0 ? `?${search.toString()}` : "";
+    return request(`/api/v1/screen-time/settings${suffix}`, {
+        method: "PATCH",
+        body: JSON.stringify(patch)
+    });
 }
 export function getMovementSettings(userIds) {
     const search = new URLSearchParams();
@@ -1444,37 +1638,48 @@ export function getMovementTimeline(input) {
     const suffix = search.size > 0 ? `?${search.toString()}` : "";
     return request(`/api/v1/movement/timeline${suffix}`);
 }
-export function patchMovementStay(stayId, patch) {
-    return request(`/api/v1/movement/stays/${stayId}`, {
+export function createMovementUserBox(input, userIds) {
+    const search = new URLSearchParams();
+    appendUserIds(search, coerceUserIds(userIds));
+    const suffix = search.size > 0 ? `?${search.toString()}` : "";
+    return request(`/api/v1/movement/user-boxes${suffix}`, {
+        method: "POST",
+        body: JSON.stringify(input)
+    });
+}
+export function preflightMovementUserBox(input, userIds) {
+    const search = new URLSearchParams();
+    appendUserIds(search, coerceUserIds(userIds));
+    const suffix = search.size > 0 ? `?${search.toString()}` : "";
+    return request(`/api/v1/movement/user-boxes/preflight${suffix}`, {
+        method: "POST",
+        body: JSON.stringify(input)
+    });
+}
+export function patchMovementUserBox(boxId, patch, userIds) {
+    const search = new URLSearchParams();
+    appendUserIds(search, coerceUserIds(userIds));
+    const suffix = search.size > 0 ? `?${search.toString()}` : "";
+    return request(`/api/v1/movement/user-boxes/${boxId}${suffix}`, {
         method: "PATCH",
         body: JSON.stringify(patch)
     });
 }
-export function deleteMovementStay(stayId) {
-    return request(`/api/v1/movement/stays/${stayId}`, {
+export function deleteMovementUserBox(boxId, userIds) {
+    const search = new URLSearchParams();
+    appendUserIds(search, coerceUserIds(userIds));
+    const suffix = search.size > 0 ? `?${search.toString()}` : "";
+    return request(`/api/v1/movement/user-boxes/${boxId}${suffix}`, {
         method: "DELETE"
     });
 }
-export function patchMovementTrip(tripId, patch) {
-    return request(`/api/v1/movement/trips/${tripId}`, {
-        method: "PATCH",
-        body: JSON.stringify(patch)
-    });
-}
-export function deleteMovementTrip(tripId) {
-    return request(`/api/v1/movement/trips/${tripId}`, {
-        method: "DELETE"
-    });
-}
-export function patchMovementTripPoint(tripId, pointId, patch) {
-    return request(`/api/v1/movement/trips/${tripId}/points/${pointId}`, {
-        method: "PATCH",
-        body: JSON.stringify(patch)
-    });
-}
-export function deleteMovementTripPoint(tripId, pointId) {
-    return request(`/api/v1/movement/trips/${tripId}/points/${pointId}`, {
-        method: "DELETE"
+export function invalidateAutomaticMovementBox(boxId, input, userIds) {
+    const search = new URLSearchParams();
+    appendUserIds(search, coerceUserIds(userIds));
+    const suffix = search.size > 0 ? `?${search.toString()}` : "";
+    return request(`/api/v1/movement/automatic-boxes/${boxId}/invalidate${suffix}`, {
+        method: "POST",
+        body: JSON.stringify(input)
     });
 }
 export function getMovementSelectionAggregate(input) {
@@ -1492,6 +1697,12 @@ export function createCompanionPairingSession(input) {
 export function revokeCompanionPairingSession(pairingSessionId) {
     return request(`/api/v1/health/pairing-sessions/${pairingSessionId}`, {
         method: "DELETE"
+    });
+}
+export function patchCompanionPairingSourceState(pairingSessionId, source, desiredEnabled) {
+    return request(`/api/v1/health/pairing-sessions/${pairingSessionId}/sources/${source}`, {
+        method: "PATCH",
+        body: JSON.stringify({ desiredEnabled })
     });
 }
 export function revokeAllCompanionPairingSessions(input) {
@@ -1564,6 +1775,42 @@ export function deleteStrategy(strategyId) {
 }
 export function getSettingsBin() {
     return request("/api/v1/settings/bin");
+}
+export function getDataManagementState() {
+    return request("/api/v1/settings/data");
+}
+export function patchDataManagementSettings(input) {
+    return request("/api/v1/settings/data", {
+        method: "PATCH",
+        body: JSON.stringify(input)
+    });
+}
+export function scanDataRecoveryCandidates() {
+    return request("/api/v1/settings/data/scan", {
+        method: "POST",
+        body: JSON.stringify({})
+    });
+}
+export function createRuntimeDataBackup(note = "") {
+    return request("/api/v1/settings/data/backups", {
+        method: "POST",
+        body: JSON.stringify({ note })
+    });
+}
+export function restoreRuntimeDataBackup(backupId, createSafetyBackup = true) {
+    return request(`/api/v1/settings/data/backups/${backupId}/restore`, {
+        method: "POST",
+        body: JSON.stringify({ createSafetyBackup })
+    });
+}
+export function switchRuntimeDataRoot(input) {
+    return request("/api/v1/settings/data/switch-root", {
+        method: "POST",
+        body: JSON.stringify(input)
+    });
+}
+export function downloadDataExport(format) {
+    return requestBlob(`/api/v1/settings/data/export?format=${format}`);
 }
 export function listAgents() {
     return request("/api/v1/agents");
@@ -1771,6 +2018,9 @@ export function createTask(input) {
         goalId: input.goalId || null,
         projectId: input.projectId || null,
         dueDate: input.dueDate || null,
+        plannedDurationSeconds: input.plannedDurationSeconds === undefined
+            ? null
+            : input.plannedDurationSeconds,
         notes: normalizeNestedNotes(input.notes)
     };
     return request("/api/v1/tasks", {
@@ -1785,8 +2035,17 @@ export function patchTask(taskId, patch) {
             ...patch,
             goalId: patch.goalId === "" ? null : patch.goalId,
             projectId: patch.projectId === "" ? null : patch.projectId,
-            dueDate: patch.dueDate === "" ? null : patch.dueDate
+            dueDate: patch.dueDate === "" ? null : patch.dueDate,
+            plannedDurationSeconds: patch.plannedDurationSeconds === undefined
+                ? undefined
+                : patch.plannedDurationSeconds
         })
+    });
+}
+export function splitTask(taskId, input) {
+    return request(`/api/v1/tasks/${taskId}/split`, {
+        method: "POST",
+        body: JSON.stringify(input)
     });
 }
 export function deleteTask(taskId) {

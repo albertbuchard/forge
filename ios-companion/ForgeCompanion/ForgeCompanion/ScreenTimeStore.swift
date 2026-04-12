@@ -2,6 +2,8 @@ import CoreFoundation
 import Foundation
 import Combine
 import FamilyControls
+import UIKit
+@preconcurrency import Vision
 
 @MainActor
 final class ScreenTimeStore: ObservableObject {
@@ -13,6 +15,7 @@ final class ScreenTimeStore: ObservableObject {
 
     private enum StorageKeys {
         static let screenTimeState = "forge_companion_screen_time_state"
+        static let localScreenTimeSnapshot = "forge_companion_screen_time_local_snapshot"
     }
 
     @Published private(set) var trackingEnabled = false
@@ -31,6 +34,7 @@ final class ScreenTimeStore: ObservableObject {
     private let snapshotLoader: () -> ForgeScreenTimeSnapshotEnvelope
     private let nowProvider: () -> Date
     private let sleepForSeconds: @Sendable (TimeInterval) async -> Void
+    private let visibleReportSnapshotCapture: () async -> ForgeScreenTimeSnapshotEnvelope?
     private let storedStateOverride: PersistedState?
     private let authorizationStatusOverride: String?
     private let bindAuthorizationUpdates: Bool
@@ -49,6 +53,9 @@ final class ScreenTimeStore: ObservableObject {
             let nanoseconds = UInt64((seconds * 1_000_000_000).rounded())
             try? await Task.sleep(nanoseconds: nanoseconds)
         },
+        visibleReportSnapshotCapture: @escaping () async -> ForgeScreenTimeSnapshotEnvelope? = {
+            await ScreenTimeStore.captureVisibleReportSnapshotFromKeyWindow()
+        },
         storedStateOverride: PersistedState? = nil,
         authorizationStatusOverride: String? = nil,
         bindAuthorizationUpdates: Bool = true
@@ -56,6 +63,7 @@ final class ScreenTimeStore: ObservableObject {
         self.snapshotLoader = snapshotLoader
         self.nowProvider = nowProvider
         self.sleepForSeconds = sleepForSeconds
+        self.visibleReportSnapshotCapture = visibleReportSnapshotCapture
         self.storedStateOverride = storedStateOverride
         self.authorizationStatusOverride = authorizationStatusOverride
         self.bindAuthorizationUpdates = bindAuthorizationUpdates
@@ -89,6 +97,14 @@ final class ScreenTimeStore: ObservableObject {
 
     func requestAuthorization() async {
         companionDebugLog("ScreenTimeStore", "requestAuthorization start")
+        refreshAuthorizationStatus()
+        if authorizationStatus == "approved" {
+            ingestSharedSnapshots()
+            refreshCaptureState()
+            triggerCaptureRefresh(reason: "authorization already approved")
+            companionDebugLog("ScreenTimeStore", "requestAuthorization skipped already approved")
+            return
+        }
         do {
             try await AuthorizationCenter.shared.requestAuthorization(for: .individual)
             refreshAuthorizationStatus()
@@ -146,7 +162,7 @@ final class ScreenTimeStore: ObservableObject {
     }
 
     func ingestSharedSnapshots() {
-        let snapshot = snapshotLoader()
+        let snapshot = preferredAvailableSnapshot()
         let sortedDaySummaries = snapshot.daySummaries.sorted { $0.dateKey > $1.dateKey }
         let sortedHourlySegments = snapshot.hourlySegments.sorted { lhs, rhs in
             if lhs.startedAt == rhs.startedAt {
@@ -221,7 +237,10 @@ final class ScreenTimeStore: ObservableObject {
                     "capturedDayCount": "\(capturedDayCount)",
                     "capturedHourCount": "\(capturedHourCount)",
                     "captureWindowDays": "\(captureWindowDays)",
-                    "deliveryMode": "device_activity_report_extension"
+                    "deliveryMode": metadata["deliveryMode"]
+                        ?? (metadata["snapshot_source"] == "visible_report_ocr"
+                            ? "visible_report_ocr"
+                            : "device_activity_report_extension")
                 ]) { _, new in new }
             ),
             daySummaries: daySummaries.map { summary in
@@ -323,6 +342,21 @@ final class ScreenTimeStore: ObservableObject {
         return max(1, Int((delta / 86_400).rounded()))
     }
 
+    var totalCapturedActivitySeconds: Int {
+        if daySummaries.isEmpty == false {
+            return daySummaries.reduce(0) { $0 + $1.totalActivitySeconds }
+        }
+        return hourlySegments.reduce(0) { $0 + $1.totalActivitySeconds }
+    }
+
+    var totalCapturedActivityHours: Double {
+        Double(totalCapturedActivitySeconds) / 3600
+    }
+
+    var totalCapturedHoursLabel: String {
+        totalCapturedActivityHours.formatted(.number.precision(.fractionLength(0...1)))
+    }
+
     var trackedRangeSummary: String {
         guard
             let startedAt = lastCaptureStartedAt.flatMap(Self.parseIso),
@@ -360,7 +394,7 @@ final class ScreenTimeStore: ObservableObject {
         if authorizationStatus == "unavailable" {
             return "Entitlement unavailable"
         }
-        if hourlySegments.isEmpty {
+        if hasCapturedData == false {
             if captureRefreshInFlight {
                 return "Capturing first Screen Time snapshot"
             }
@@ -368,6 +402,9 @@ final class ScreenTimeStore: ObservableObject {
                 return "Waiting for the report extension to write Screen Time data"
             }
             return enabled ? "Waiting for Screen Time authorization" : "Screen Time off"
+        }
+        if hourlySegments.isEmpty {
+            return "\(capturedDayCount) days · day summaries only · \(captureFreshness)"
         }
         return "\(capturedDayCount) days · \(capturedHourCount) hourly slices · \(captureFreshness)"
     }
@@ -555,6 +592,64 @@ final class ScreenTimeStore: ObservableObject {
             "ScreenTimeStore",
             "pollForInitialSnapshot timed out reason=\(reason) days=\(daySummaries.count) hours=\(hourlySegments.count)"
         )
+        if await captureVisibleReportSnapshotIfPossible(reason: reason) {
+            return readyForSync
+        }
+        return readyForSync
+    }
+
+    private func preferredAvailableSnapshot() -> ForgeScreenTimeSnapshotEnvelope {
+        let sharedSnapshot = snapshotLoader()
+        let localSnapshot = loadLocalSnapshot() ?? .empty
+        return Self.preferredSnapshot(shared: sharedSnapshot, local: localSnapshot)
+    }
+
+    private func loadLocalSnapshot() -> ForgeScreenTimeSnapshotEnvelope? {
+        guard
+            let data = UserDefaults.standard.data(forKey: StorageKeys.localScreenTimeSnapshot),
+            let snapshot = try? JSONDecoder().decode(
+                ForgeScreenTimeSnapshotEnvelope.self,
+                from: data
+            )
+        else {
+            return nil
+        }
+        return snapshot
+    }
+
+    private func saveLocalSnapshot(_ snapshot: ForgeScreenTimeSnapshotEnvelope) {
+        guard let data = try? JSONEncoder().encode(snapshot) else {
+            return
+        }
+        UserDefaults.standard.set(data, forKey: StorageKeys.localScreenTimeSnapshot)
+    }
+
+    private func captureVisibleReportSnapshotIfPossible(reason: String) async -> Bool {
+        companionDebugLog(
+            "ScreenTimeStore",
+            "captureVisibleReportSnapshotIfPossible start reason=\(reason)"
+        )
+        guard let snapshot = await visibleReportSnapshotCapture() else {
+            companionDebugLog(
+                "ScreenTimeStore",
+                "captureVisibleReportSnapshotIfPossible noVisibleExport reason=\(reason)"
+            )
+            return false
+        }
+        guard snapshot.daySummaries.isEmpty == false || snapshot.hourlySegments.isEmpty == false else {
+            companionDebugLog(
+                "ScreenTimeStore",
+                "captureVisibleReportSnapshotIfPossible emptyVisibleExport reason=\(reason)"
+            )
+            return false
+        }
+        saveLocalSnapshot(snapshot)
+        ingestSharedSnapshots()
+        refreshCaptureState()
+        companionDebugLog(
+            "ScreenTimeStore",
+            "captureVisibleReportSnapshotIfPossible success reason=\(reason) days=\(daySummaries.count) hours=\(hourlySegments.count)"
+        )
         return readyForSync
     }
 
@@ -644,6 +739,163 @@ final class ScreenTimeStore: ObservableObject {
 
     private static func shortDateTime(_ date: Date) -> String {
         shortDateFormatter.string(from: date)
+    }
+
+    private static func preferredSnapshot(
+        shared: ForgeScreenTimeSnapshotEnvelope,
+        local: ForgeScreenTimeSnapshotEnvelope
+    ) -> ForgeScreenTimeSnapshotEnvelope {
+        let sharedHasData = shared.daySummaries.isEmpty == false || shared.hourlySegments.isEmpty == false
+        let localHasData = local.daySummaries.isEmpty == false || local.hourlySegments.isEmpty == false
+
+        switch (sharedHasData, localHasData) {
+        case (true, false):
+            return shared
+        case (false, true):
+            return local
+        case (false, false):
+            return shared
+        case (true, true):
+            if shared.hourlySegments.isEmpty != local.hourlySegments.isEmpty {
+                return shared.hourlySegments.isEmpty ? local : shared
+            }
+            let sharedGeneratedAt = parseIso(shared.generatedAt) ?? .distantPast
+            let localGeneratedAt = parseIso(local.generatedAt) ?? .distantPast
+            return sharedGeneratedAt >= localGeneratedAt ? shared : local
+        }
+    }
+
+    nonisolated private static func captureVisibleReportSnapshotFromKeyWindow() async -> ForgeScreenTimeSnapshotEnvelope? {
+        guard let image = await MainActor.run(body: { Self.captureKeyWindowImage() }) else {
+            return nil
+        }
+        guard let recognizedText = await recognizeText(in: image) else {
+            return nil
+        }
+        return parseVisibleReportExport(recognizedText, now: Date())
+    }
+
+    @MainActor
+    private static func captureKeyWindowImage() -> UIImage? {
+        let scenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
+        let keyWindow = scenes
+            .flatMap(\.windows)
+            .first { $0.isKeyWindow }
+        guard let keyWindow else {
+            return nil
+        }
+
+        let format = UIGraphicsImageRendererFormat.default()
+        format.scale = keyWindow.screen.scale
+        let renderer = UIGraphicsImageRenderer(bounds: keyWindow.bounds, format: format)
+        return renderer.image { _ in
+            keyWindow.drawHierarchy(in: keyWindow.bounds, afterScreenUpdates: true)
+        }
+    }
+
+    nonisolated private static func recognizeText(in image: UIImage) async -> String? {
+        guard let cgImage = image.cgImage else {
+            return nil
+        }
+
+        return await withCheckedContinuation { continuation in
+            let request = VNRecognizeTextRequest { request, _ in
+                let observations = (request.results as? [VNRecognizedTextObservation]) ?? []
+                let lines = observations.compactMap { observation in
+                    observation.topCandidates(1).first?.string
+                }
+                continuation.resume(
+                    returning: lines.isEmpty ? nil : lines.joined(separator: "\n")
+                )
+            }
+            request.recognitionLevel = .accurate
+            request.usesLanguageCorrection = false
+            request.recognitionLanguages = ["en-US"]
+
+            let handler = VNImageRequestHandler(cgImage: cgImage, options: [:])
+            DispatchQueue.global(qos: .userInitiated).async {
+                do {
+                    try handler.perform([request])
+                } catch {
+                    continuation.resume(returning: nil)
+                }
+            }
+        }
+    }
+
+    nonisolated static func parseVisibleReportExport(
+        _ recognizedText: String,
+        now: Date = Date()
+    ) -> ForgeScreenTimeSnapshotEnvelope? {
+        let normalizedLines = recognizedText
+            .replacingOccurrences(of: "\r", with: "\n")
+            .components(separatedBy: "\n")
+            .map {
+                $0
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                    .replacingOccurrences(of: "|", with: " ")
+                    .replacingOccurrences(of: "  +", with: " ", options: .regularExpression)
+            }
+            .filter { $0.isEmpty == false }
+
+        guard
+            let startIndex = normalizedLines.firstIndex(where: { $0.contains("FORGESYNCV1") }),
+            let endIndex = normalizedLines[startIndex...].firstIndex(where: { $0.contains("FORGESYNCEND") })
+        else {
+            return nil
+        }
+
+        let exportLines = Array(normalizedLines[startIndex...endIndex])
+        let generatedAtFallback: String = {
+            let formatter = ISO8601DateFormatter()
+            formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+            return formatter.string(from: now)
+        }()
+        let generatedAt = exportLines.first(where: { $0.hasPrefix("GENERATED ") })
+            .map { String($0.dropFirst("GENERATED ".count)) }
+            ?? generatedAtFallback
+
+        let daySummaries = exportLines.compactMap { line -> ForgeScreenTimeDaySummarySnapshot? in
+            let components = line.components(separatedBy: " ")
+            guard components.count >= 6, components.first == "DAY" else {
+                return nil
+            }
+            guard
+                let totalActivitySeconds = Int(components[2]),
+                let pickupCount = Int(components[3]),
+                let notificationCount = Int(components[4]),
+                let longestActivitySeconds = Int(components[5])
+            else {
+                return nil
+            }
+            return ForgeScreenTimeDaySummarySnapshot(
+                id: components[1],
+                dateKey: components[1],
+                totalActivitySeconds: totalActivitySeconds,
+                pickupCount: pickupCount,
+                notificationCount: notificationCount,
+                firstPickupAt: nil,
+                longestActivitySeconds: longestActivitySeconds,
+                topAppBundleIdentifiers: [],
+                topCategoryLabels: [],
+                metadata: [
+                    "source": "visible_report_ocr"
+                ]
+            )
+        }
+        .sorted { $0.dateKey > $1.dateKey }
+
+        guard daySummaries.isEmpty == false else {
+            return nil
+        }
+
+        return ForgeScreenTimeSnapshotEnvelope(
+            generatedAt: generatedAt,
+            source: "visible_report_ocr",
+            segmentKind: "visible_report_daily_export",
+            daySummaries: daySummaries,
+            hourlySegments: []
+        )
     }
 
     private static let isoFormatterWithFractional: ISO8601DateFormatter = {

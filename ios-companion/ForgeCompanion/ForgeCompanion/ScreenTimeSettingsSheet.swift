@@ -2,6 +2,7 @@ import SwiftUI
 import DeviceActivity
 
 struct ScreenTimeSettingsSheet: View {
+    @EnvironmentObject private var appModel: CompanionAppModel
     @ObservedObject var screenTimeStore: ScreenTimeStore
     let close: () -> Void
 
@@ -45,8 +46,11 @@ struct ScreenTimeSettingsSheet: View {
 
             VStack(alignment: .leading, spacing: 10) {
                 statusRow("Access", accessLabel)
-                statusRow("Source", screenTimeStore.enabled ? "Enabled" : "Disabled")
+                statusRow("Source", sourceLabel)
                 statusRow("Latest", screenTimeStore.latestCaptureSummary)
+                statusRow("Last sync", lastScreenTimeSyncLabel)
+                statusRow("Last synced", lastScreenTimeSyncCountsLabel)
+                statusRow("Hours synced", lastScreenTimeHoursLabel)
             }
 
             if screenTimeStore.enabled && screenTimeStore.authorizationStatus != "approved" {
@@ -60,10 +64,11 @@ struct ScreenTimeSettingsSheet: View {
                 .buttonStyle(CompanionFilledButtonStyle())
                 .disabled(enabling || screenTimeStore.authorizationStatus == "unavailable")
             } else if screenTimeStore.enabled && screenTimeStore.authorizationStatus == "approved" {
-                Button("Reload Live Report") {
+                Button("Reload Report + Sync to Forge") {
                     enabling = true
                     Task {
                         await screenTimeStore.refreshCaptureNow()
+                        await appModel.runManualSync()
                         enabling = false
                     }
                 }
@@ -121,7 +126,7 @@ struct ScreenTimeSettingsSheet: View {
                 .foregroundStyle(CompanionStyle.textPrimary)
 
             statusRow("Access", accessLabel)
-            statusRow("Source", screenTimeStore.enabled ? "On-device report" : "Disabled")
+            statusRow("Source", sourceLabel)
             statusRow("Availability", screenTimeStore.latestCaptureSummary)
             Text("Apple renders detailed Screen Time usage inside the Device Activity report extension. Forge extracts summarized day and hour data from that report and syncs it to the server once the snapshot is captured.")
                 .font(.system(size: 13, weight: .medium, design: .rounded))
@@ -159,6 +164,35 @@ struct ScreenTimeSettingsSheet: View {
                 .foregroundStyle(CompanionStyle.textSecondary)
                 .multilineTextAlignment(.trailing)
         }
+    }
+
+    private var lastScreenTimeSyncLabel: String {
+        guard appModel.lastSuccessfulSyncAt != nil else {
+            return "Never"
+        }
+        return appModel.lastSuccessfulSyncLabel
+    }
+
+    private var lastScreenTimeSyncCountsLabel: String {
+        let report = appModel.latestSyncReport
+        return "\(report?.screenTimeDaySummaries ?? 0) days · \(report?.screenTimeHourlySegments ?? 0) hourly slices"
+    }
+
+    private var lastScreenTimeHoursLabel: String {
+        guard let report = appModel.latestSyncReport else {
+            return "0 h"
+        }
+        let hours = Double(report.screenTimeTotalActivitySeconds) / 3600
+        return "\(hours.formatted(.number.precision(.fractionLength(0...1)))) h"
+    }
+
+    private var sourceLabel: String {
+        guard screenTimeStore.enabled else {
+            return "Disabled"
+        }
+        return screenTimeStore.metadata["snapshot_source"] == "visible_report_ocr"
+            ? "Visible report text extraction"
+            : "On-device report extension"
     }
 
     private func chipWrap(title: String, items: [String]) -> some View {

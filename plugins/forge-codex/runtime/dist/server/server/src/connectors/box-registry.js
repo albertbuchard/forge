@@ -1,11 +1,16 @@
 import { getDatabase } from "../db.js";
 import { getFitnessViewData, getSleepViewData } from "../health.js";
 import { listMovementPlaces } from "../movement.js";
+import { getInsightsPayload } from "../services/insights.js";
+import { getWeeklyReviewPayload } from "../services/reviews.js";
 import { createNote, listNotes } from "../repositories/notes.js";
 import { updateTask } from "../repositories/tasks.js";
+import { getOverviewContext } from "../services/context.js";
 import { searchEntities } from "../services/entity-crud.js";
+import { getWikiHealth, listWikiPages } from "../repositories/wiki-memory.js";
 import { executeCommonWorkbenchTool, mapWorkbenchTools } from "../../../src/lib/workbench/runtime.js";
 import { getWorkbenchNodeCatalog, getWorkbenchNodeDefinition } from "../../../src/lib/workbench/registry.js";
+import { normalizeWorkbenchPortDefinition } from "../../../src/lib/workbench/nodes.js";
 function createSnapshotForConnectorOutput(boxId) {
     const outputId = boxId.replace(/^connector-output:/, "");
     const rows = getDatabase()
@@ -38,7 +43,10 @@ function createRuntimeContext(input) {
             search: searchEntities
         },
         notes: {
-            create: createNote,
+            create: ((input) => createNote(input, {
+                source: "agent",
+                actor: "Workbench"
+            })),
             list: listNotes
         },
         movement: {
@@ -47,6 +55,19 @@ function createRuntimeContext(input) {
         health: {
             getSleepViewData: getSleepViewData,
             getFitnessViewData: getFitnessViewData
+        },
+        overview: {
+            getContext: (() => getOverviewContext()),
+            getWeeklyReview: (() => getWeeklyReviewPayload()),
+            getInsights: (() => getInsightsPayload())
+        },
+        wiki: {
+            listPages: ((input) => listWikiPages({
+                spaceId: typeof input?.spaceId === "string" ? input.spaceId : undefined,
+                kind: typeof input?.kind === "string" ? input.kind : undefined,
+                limit: typeof input?.limit === "number" ? input.limit : undefined
+            })),
+            getHealth: (() => getWikiHealth())
         },
         tasks: {
             update: ((taskId, patch) => updateTask(taskId, patch, { source: "agent", actor: "Workbench" }))
@@ -64,12 +85,22 @@ function toCatalogEntry(definition) {
     if (!definition) {
         return null;
     }
-    const toPortDefinition = (port) => ({
+    const toPortDefinition = (port) => normalizeWorkbenchPortDefinition({
         key: port.key,
         label: port.label,
         kind: port.kind,
+        description: "description" in port ? port.description : undefined,
         required: port.required ?? false,
-        expandableKeys: "expandableKeys" in port ? (port.expandableKeys ?? []) : []
+        expandableKeys: "expandableKeys" in port ? (port.expandableKeys ?? []) : [],
+        modelName: "modelName" in port ? port.modelName : undefined,
+        itemKind: "itemKind" in port ? port.itemKind : undefined,
+        shape: "shape" in port
+            ? (port.shape ?? []).map((field) => ({
+                ...field,
+                required: field.required ?? false
+            }))
+            : [],
+        exampleValue: "exampleValue" in port ? port.exampleValue : undefined
     });
     return {
         id: definition.id,
@@ -118,21 +149,25 @@ export function buildConnectorOutputCatalogEntry(input) {
         params: [],
         output: [
             {
-                key: "primary",
+                key: input.outputId,
                 label: "Published output",
-                kind: "content",
+                kind: "record",
+                description: "Published output record exposed by this Workbench flow.",
                 required: false,
-                expandableKeys: []
+                expandableKeys: [],
+                modelName: "WorkbenchPublishedOutput"
             }
         ],
         tools: [],
         outputs: [
             {
-                key: "primary",
+                key: input.outputId,
                 label: "Published output",
-                kind: "content",
+                kind: "record",
+                description: "Published output record exposed by this Workbench flow.",
                 required: false,
-                expandableKeys: []
+                expandableKeys: [],
+                modelName: "WorkbenchPublishedOutput"
             }
         ],
         toolAdapters: []

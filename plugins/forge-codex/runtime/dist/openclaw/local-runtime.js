@@ -165,6 +165,16 @@ function isLocalOrigin(origin) {
         return false;
     }
 }
+function isTruthyEnvFlag(value) {
+    if (!value) {
+        return false;
+    }
+    const normalized = value.trim().toLowerCase();
+    return normalized === "1" || normalized === "true" || normalized === "yes";
+}
+function shouldEnableManagedDevWeb(plan, env = process.env) {
+    return plan.mode === "source" || isTruthyEnvFlag(env.FORGE_OPENCLAW_DEV);
+}
 function getCurrentModuleRoot() {
     return path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 }
@@ -368,6 +378,7 @@ async function spawnManagedRuntime(config, plan) {
         : [plan.entryFile, plan.sourceEntryFile ?? path.join(plan.packageRoot, "server", "src", "index.ts")];
     const logPath = getRuntimeLogPath(config);
     const logFd = openRuntimeLogFile(logPath);
+    const enableManagedDevWeb = shouldEnableManagedDevWeb(plan);
     const child = spawn(process.execPath, args, {
         cwd: plan.packageRoot,
         env: {
@@ -375,6 +386,11 @@ async function spawnManagedRuntime(config, plan) {
             HOST: "127.0.0.1",
             PORT: String(config.port),
             FORGE_BASE_PATH: "/forge/",
+            ...(enableManagedDevWeb
+                ? {
+                    FORGE_DEV_WEB_ORIGIN: process.env.FORGE_DEV_WEB_ORIGIN ?? "http://127.0.0.1:3027/forge/"
+                }
+                : {}),
             ...(config.dataRoot ? { FORGE_DATA_ROOT: config.dataRoot } : {})
         },
         stdio: ["ignore", logFd, logFd],

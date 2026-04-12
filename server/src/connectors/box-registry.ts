@@ -157,7 +157,13 @@ function toCatalogEntry(definition: ReturnType<typeof getWorkbenchNodeDefinition
       expandableKeys: "expandableKeys" in port ? (port.expandableKeys ?? []) : [],
       modelName: "modelName" in port ? port.modelName : undefined,
       itemKind: "itemKind" in port ? port.itemKind : undefined,
-      shape: "shape" in port ? (port.shape ?? []) : [],
+      shape:
+        "shape" in port
+          ? (port.shape ?? []).map((field) => ({
+              ...field,
+              required: field.required ?? false
+            }))
+          : [],
       exampleValue: "exampleValue" in port ? port.exampleValue : undefined
     });
   return {

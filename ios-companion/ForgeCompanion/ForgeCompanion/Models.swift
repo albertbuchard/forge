@@ -381,6 +381,7 @@ struct SyncReport {
     let movementKnownPlaces: Int
     let screenTimeDaySummaries: Int
     let screenTimeHourlySegments: Int
+    let screenTimeTotalActivitySeconds: Int
 }
 
 struct SyncPayloadSummary: Codable {
@@ -398,6 +399,7 @@ struct SyncPayloadSummary: Codable {
     let movementTripStops: Int
     let screenTimeDaySummaries: Int
     let screenTimeHourlySegments: Int
+    let screenTimeTotalActivitySeconds: Int
     let rawHeartRateDatapointsSynced: Int
 }
 

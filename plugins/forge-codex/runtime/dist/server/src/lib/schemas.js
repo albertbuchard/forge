@@ -164,6 +164,10 @@ export const quickTaskSchema = z.object({
     energy: z.enum(["low", "steady", "high"]),
     dueDate: z.string().trim(),
     points: z.coerce.number().int().min(5).max(500),
+    plannedDurationSeconds: z.coerce.number().int().min(60).max(7 * 86_400).nullable().optional(),
+    actionCostBand: z
+        .enum(["tiny", "light", "standard", "heavy", "brutal"])
+        .optional(),
     tagIds: z.array(z.string()),
     notes: z.array(inlineCreateNoteSchema)
 });

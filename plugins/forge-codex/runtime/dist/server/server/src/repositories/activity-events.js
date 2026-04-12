@@ -103,6 +103,14 @@ export function listActivityEvents(filters = {}) {
         whereClauses.push("source = ?");
         params.push(filters.source);
     }
+    if (filters.from) {
+        whereClauses.push("created_at >= ?");
+        params.push(filters.from);
+    }
+    if (filters.to) {
+        whereClauses.push("created_at < ?");
+        params.push(filters.to);
+    }
     if (!filters.includeCorrected) {
         whereClauses.push("event_type != 'activity_corrected'");
         whereClauses.push("NOT EXISTS (SELECT 1 FROM activity_event_corrections WHERE activity_event_corrections.corrected_event_id = activity_events.id)");

@@ -328,7 +328,8 @@ enum CompanionScreenshotFixtures {
             movementTrips: 2,
             movementKnownPlaces: 2,
             screenTimeDaySummaries: 3,
-            screenTimeHourlySegments: 12
+            screenTimeHourlySegments: 12,
+            screenTimeTotalActivitySeconds: 15_300
         )
     }
 
@@ -348,6 +349,7 @@ enum CompanionScreenshotFixtures {
             movementTripStops: 0,
             screenTimeDaySummaries: 3,
             screenTimeHourlySegments: 12,
+            screenTimeTotalActivitySeconds: 15_300,
             rawHeartRateDatapointsSynced: 0
         )
     }
