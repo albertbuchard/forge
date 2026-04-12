@@ -235,6 +235,15 @@ NODE
 }
 
 run_verification_suite() {
+  if is_publish_from_tag_mode; then
+    echo "+ npm run build:openclaw-plugin"
+    (
+      cd "${FORGE_DIR}"
+      npm run build:openclaw-plugin
+    )
+    return 0
+  fi
+
   local command_text
   for command_text in "${VERIFY_TESTS[@]}"; do
     echo "+ ${command_text}"

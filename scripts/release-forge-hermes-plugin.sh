@@ -243,6 +243,26 @@ run_verification_suite() {
     cd "${FORGE_DIR}"
     node ./plugins/forge-hermes/scripts/build-package-runtime.mjs
   )
+  if is_publish_from_tag_mode; then
+    echo "+ python3 -m py_compile plugins/forge-hermes/__init__.py plugins/forge-hermes/forge_hermes/*.py"
+    (
+      cd "${FORGE_DIR}"
+      python3 -m py_compile plugins/forge-hermes/__init__.py plugins/forge-hermes/forge_hermes/*.py
+    )
+    ensure_packaging_env
+    echo "+ ${PACKAGING_PYTHON} -m build --sdist --wheel --outdir plugins/forge-hermes/python-dist plugins/forge-hermes"
+    (
+      cd "${FORGE_DIR}"
+      "${PACKAGING_PYTHON}" -m build --sdist --wheel --outdir plugins/forge-hermes/python-dist plugins/forge-hermes
+    )
+    echo "+ ${PACKAGING_PYTHON} -m twine check plugins/forge-hermes/python-dist/*"
+    (
+      cd "${FORGE_DIR}"
+      "${PACKAGING_PYTHON}" -m twine check plugins/forge-hermes/python-dist/*
+    )
+    return 0
+  fi
+
   echo "+ npm exec -- vitest run src/openclaw/parity.test.ts src/openclaw/index.test.ts src/openclaw/api-client.test.ts src/openclaw/manifest.test.ts"
   (
     cd "${FORGE_DIR}"
