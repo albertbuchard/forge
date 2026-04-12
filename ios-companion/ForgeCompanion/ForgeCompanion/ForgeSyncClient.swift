@@ -158,8 +158,18 @@ struct ForgeSyncClient {
         let patch: ForgeMovementUserBoxPayload
     }
 
+    private struct MovementUserBoxPreflightDraftRequest: Encodable {
+        let sessionId: String
+        let pairingToken: String
+        let draft: ForgeMovementUserBoxPreflightPayload
+    }
+
     private struct MovementUserBoxEnvelope: Decodable {
         let box: ForgeMovementTimelineSegment
+    }
+
+    private struct MovementUserBoxPreflightEnvelope: Decodable {
+        let preflight: ForgeMovementUserBoxPreflight
     }
 
     private struct MovementUserBoxDeleteRequest: Encodable {
@@ -409,6 +419,26 @@ struct ForgeSyncClient {
             "patchMovementUserBox success box=\(boxId)"
         )
         return envelope.box
+    }
+
+    func preflightMovementUserBox(
+        draft: ForgeMovementUserBoxPreflightPayload,
+        pairing: PairingPayload
+    ) async throws -> ForgeMovementUserBoxPreflight {
+        companionDebugLog(
+            "ForgeSyncClient",
+            "preflightMovementUserBox start session=\(pairing.sessionId)"
+        )
+        let envelope: MovementUserBoxPreflightEnvelope = try await sendRequest(
+            path: "/mobile/movement/user-boxes/preflight",
+            apiBaseUrl: pairing.apiBaseUrl,
+            body: MovementUserBoxPreflightDraftRequest(
+                sessionId: pairing.sessionId,
+                pairingToken: pairing.pairingToken,
+                draft: draft
+            )
+        )
+        return envelope.preflight
     }
 
     func deleteMovementUserBox(
