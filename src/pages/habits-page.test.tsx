@@ -1,5 +1,6 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import type { ReactNode } from "react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -11,6 +12,7 @@ const {
   createHabitMock,
   deleteHabitCheckInMock,
   deleteHabitMock,
+  getLifeForceMock,
   getPsycheOverviewMock,
   listHabitsMock,
   patchHabitMock,
@@ -20,6 +22,7 @@ const {
   createHabitMock: vi.fn(),
   deleteHabitCheckInMock: vi.fn(),
   deleteHabitMock: vi.fn(),
+  getLifeForceMock: vi.fn(),
   getPsycheOverviewMock: vi.fn(),
   listHabitsMock: vi.fn(),
   patchHabitMock: vi.fn(),
@@ -31,6 +34,7 @@ vi.mock("@/lib/api", () => ({
   createHabitCheckIn: createHabitCheckInMock,
   deleteHabitCheckIn: deleteHabitCheckInMock,
   deleteHabit: deleteHabitMock,
+  getLifeForce: getLifeForceMock,
   getPsycheOverview: getPsycheOverviewMock,
   listHabits: listHabitsMock,
   patchHabit: patchHabitMock
@@ -65,7 +69,7 @@ vi.mock("@/components/shell/page-hero", () => ({
     titleText: string;
     description: string;
     badge?: string;
-    actions?: React.ReactNode;
+    actions?: ReactNode;
   }) => (
     <div>
       <div>{titleText}</div>
@@ -173,9 +177,7 @@ describe("HabitsPage", () => {
     vi.clearAllMocks();
   });
 
-  it("opens a delete confirmation dialog and removes the habit after confirm", async () => {
-    let currentHabits = [createHabit()];
-    listHabitsMock.mockImplementation(async () => ({ habits: currentHabits }));
+  function primeSharedMocks() {
     getPsycheOverviewMock.mockResolvedValue({
       overview: {
         values: [],
@@ -186,6 +188,43 @@ describe("HabitsPage", () => {
         reports: []
       }
     });
+    getLifeForceMock.mockResolvedValue({
+      lifeForce: {
+        userId: "user_1",
+        dateKey: "2026-04-11",
+        baselineDailyAp: 200,
+        dailyBudgetAp: 210,
+        spentTodayAp: 72,
+        remainingAp: 138,
+        forecastAp: 126,
+        plannedRemainingAp: 20,
+        targetBandMinAp: 178.5,
+        targetBandMaxAp: 210,
+        instantCapacityApPerHour: 10,
+        instantFreeApPerHour: 4.2,
+        overloadApPerHour: 0,
+        currentDrainApPerHour: 4.8,
+        fatigueBufferApPerHour: 1,
+        sleepRecoveryMultiplier: 1,
+        readinessMultiplier: 1,
+        fatigueDebtCarry: 0,
+        stats: [],
+        currentCurve: [],
+        activeDrains: [],
+        plannedDrains: [],
+        warnings: [],
+        recommendations: [],
+        topTaskIdsNeedingSplit: [],
+        updatedAt: "2026-04-11T12:00:00.000Z"
+      },
+      templates: []
+    });
+  }
+
+  it("opens a delete confirmation dialog and removes the habit after confirm", async () => {
+    let currentHabits = [createHabit()];
+    listHabitsMock.mockImplementation(async () => ({ habits: currentHabits }));
+    primeSharedMocks();
     deleteHabitMock.mockImplementation(async () => {
       currentHabits = [];
       return { habit: null };
@@ -235,16 +274,7 @@ describe("HabitsPage", () => {
         createHabit({ id: "habit_a", title: "Meditation" })
       ]
     });
-    getPsycheOverviewMock.mockResolvedValue({
-      overview: {
-        values: [],
-        patterns: [],
-        behaviors: [],
-        beliefs: [],
-        modes: [],
-        reports: []
-      }
-    });
+    primeSharedMocks();
     useForgeShellMock.mockReturnValue({
       selectedUserIds: [],
       refresh: vi.fn().mockResolvedValue(undefined),
@@ -306,16 +336,7 @@ describe("HabitsPage", () => {
         })
       ]
     });
-    getPsycheOverviewMock.mockResolvedValue({
-      overview: {
-        values: [],
-        patterns: [],
-        behaviors: [],
-        beliefs: [],
-        modes: [],
-        reports: []
-      }
-    });
+    primeSharedMocks();
     useForgeShellMock.mockReturnValue({
       selectedUserIds: [],
       refresh: vi.fn().mockResolvedValue(undefined),
@@ -375,16 +396,7 @@ describe("HabitsPage", () => {
         })
       ]
     });
-    getPsycheOverviewMock.mockResolvedValue({
-      overview: {
-        values: [],
-        patterns: [],
-        behaviors: [],
-        beliefs: [],
-        modes: [],
-        reports: []
-      }
-    });
+    primeSharedMocks();
     useForgeShellMock.mockReturnValue({
       selectedUserIds: [],
       refresh: vi.fn().mockResolvedValue(undefined),
@@ -412,5 +424,48 @@ describe("HabitsPage", () => {
         note: undefined
       });
     });
+  });
+
+  it("surfaces habit AP cost and workout-linked AP in the habits UI", async () => {
+    listHabitsMock.mockResolvedValue({
+      habits: [
+        createHabit({
+          generatedHealthEventTemplate: {
+            enabled: true,
+            workoutType: "mobility",
+            title: "Mobility flow",
+            durationMinutes: 45,
+            xpReward: 0,
+            tags: [],
+            links: [],
+            notesTemplate: ""
+          }
+        })
+      ]
+    });
+    primeSharedMocks();
+    useForgeShellMock.mockReturnValue({
+      selectedUserIds: [],
+      refresh: vi.fn().mockResolvedValue(undefined),
+      snapshot: {
+        goals: [],
+        tasks: [],
+        users: [habitUser],
+        dashboard: {
+          goals: [],
+          projects: [],
+          notesSummaryByEntity: {}
+        }
+      }
+    });
+
+    renderWithProviders();
+
+    expect((await screen.findAllByText("Habit AP due")).length).toBeGreaterThan(0);
+    expect((await screen.findAllByText("Life Force sync")).length).toBeGreaterThan(0);
+    expect((await screen.findAllByText("3 AP check-in")).length).toBeGreaterThan(0);
+    expect((await screen.findAllByText("18 AP workout")).length).toBeGreaterThan(0);
+    expect((await screen.findAllByText("24 AP/h")).length).toBeGreaterThan(0);
+    expect((await screen.findAllByText("72 AP / 210 AP")).length).toBeGreaterThan(0);
   });
 });

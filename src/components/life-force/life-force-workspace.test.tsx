@@ -38,6 +38,7 @@ function createLifeForcePayload(): LifeForcePayload {
     spentTodayAp: 120,
     remainingAp: 90,
     forecastAp: 188,
+    plannedRemainingAp: 68,
     targetBandMinAp: 178.5,
     targetBandMaxAp: 210,
     instantCapacityApPerHour: 10,
@@ -131,6 +132,20 @@ function createLifeForcePayload(): LifeForcePayload {
         endsAt: "2026-04-11T11:30:00.000Z"
       }
     ],
+    plannedDrains: [
+      {
+        id: "timebox:timebox_1",
+        sourceType: "task_timebox",
+        sourceId: "timebox_1",
+        title: "Afternoon planning block",
+        role: "secondary",
+        apPerHour: 4.17,
+        instantAp: 8.34,
+        why: "Planned task timeboxes forecast how much Action Point throughput is still booked today.",
+        startedAt: "2026-04-11T14:00:00.000Z",
+        endsAt: "2026-04-11T16:00:00.000Z"
+      }
+    ],
     warnings: [
       {
         id: "lf_split",
@@ -163,13 +178,14 @@ describe("Life Force workspace", () => {
     const payload = createLifeForcePayload();
     getLifeForceMock.mockResolvedValue({
       lifeForce: payload,
-      templates: [
-        {
-          weekday: new Date().getDay(),
-          baselineDailyAp: payload.baselineDailyAp,
-          points: payload.currentCurve
-        }
-      ]
+      templates: Array.from({ length: 7 }, (_, weekday) => ({
+        weekday,
+        baselineDailyAp: payload.baselineDailyAp,
+        points: payload.currentCurve.map((point) => ({
+          ...point,
+          locked: weekday === new Date().getDay() ? point.locked : false
+        }))
+      }))
     });
     createFatigueSignalMock.mockResolvedValue({
       lifeForce: {
@@ -197,8 +213,10 @@ describe("Life Force workspace", () => {
 
     expect(screen.getByText("Daily AP")).toBeInTheDocument();
     expect(screen.getByText("Current drains")).toBeInTheDocument();
+    expect(screen.getByText("Planned drains")).toBeInTheDocument();
     expect(screen.getByText("A task wants to be split")).toBeInTheDocument();
     expect(screen.getByText("Deep work block")).toBeInTheDocument();
+    expect(screen.getByText("Afternoon planning block")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: /i'm getting tired/i }));
 
@@ -221,22 +239,11 @@ describe("Life Force workspace", () => {
       />
     );
 
-    const curveSection = screen.getAllByRole("img", {
-      name: "Life Force capacity curve editor"
-    })[0];
-    const svg = curveSection;
-    Object.defineProperty(svg, "getBoundingClientRect", {
-      value: () => ({
-        left: 0,
-        top: 0,
-        width: 100,
-        height: 56,
-        right: 100,
-        bottom: 56
-      })
+    const turnPoint = screen.getByRole("button", {
+      name: /Turn point at 12:00 PM/i
     });
-
-    fireEvent.click(svg, { clientX: 42, clientY: 18 });
+    fireEvent.contextMenu(turnPoint);
+    fireEvent.click(await screen.findByText("Remove point"));
 
     const saveButton = screen.getByRole("button", { name: /save curve/i });
     await waitFor(() => {
@@ -246,6 +253,41 @@ describe("Life Force workspace", () => {
 
     await waitFor(() => {
       expect(updateLifeForceTemplateMock).toHaveBeenCalled();
+    });
+  });
+
+  it("supports weekday-specific editing and right-click delete actions", async () => {
+    renderWithQueryClient(
+      <LifeForceOverviewWorkspace
+        selectedUserIds={["user_operator"]}
+        fallbackLifeForce={createLifeForcePayload()}
+      />
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Tue" }));
+
+    const turnPoint = screen.getByRole("button", {
+      name: /Turn point at 12:00 PM/i
+    });
+    fireEvent.contextMenu(turnPoint);
+
+    expect(await screen.findByText("Turn point actions")).toBeInTheDocument();
+    fireEvent.click(await screen.findByText("Remove point"));
+
+    const saveButton = screen.getByRole("button", { name: /save curve/i });
+    await waitFor(() => {
+      expect(saveButton).not.toBeDisabled();
+    });
+    fireEvent.click(saveButton);
+
+    await waitFor(() => {
+      expect(updateLifeForceTemplateMock).toHaveBeenCalledWith(
+        2,
+        expect.objectContaining({
+          points: expect.any(Array)
+        }),
+        ["user_operator"]
+      );
     });
   });
 

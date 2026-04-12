@@ -35,6 +35,10 @@ does want to save or update something, ask only for what is missing or unclear.
 - Use a natural progression of:
   concrete example or intent -> working name -> purpose or meaning -> placement in
   Forge -> operational details -> linked context.
+- Use those same playbooks for action-heavy non-Psyche flows such as
+  `work_adjustment`, `preference_judgment`, `preference_signal`, and specialized
+  `movement`, `life_force`, or `workbench` work so Codex starts from the user's real
+  job before choosing the route family.
 - For emotionally meaningful non-Psyche records such as goals, habits, and notes,
   reflect the meaning before you ask for the structure.
 - When updating, start with what is changing, what should stay true, and what prompted
@@ -105,11 +109,22 @@ does want to save or update something, ask only for what is missing or unclear.
    - `forge_release_task_run`
    - include `closeoutNote` when the work summary should become a durable linked note
 9. Store structured recommendations with `forge_post_insight`.
-10. Use `forge_get_sleep_overview` and `forge_get_sports_overview` for health read
+10. Use `forge_adjust_work_minutes` for `work_adjustment` when the user wants a
+    truthful signed minute correction on an existing task or project.
+11. Use the dedicated Preferences action tools for `preference_judgment` and
+    `preference_signal` rather than forcing those decisions through batch CRUD.
+12. Use `forge_get_sleep_overview` and `forge_get_sports_overview` for health read
     models, and use `forge_update_sleep_session` and `forge_update_workout_session`
     only for reflective enrichment on one already-existing record. Ordinary
     `sleep_session` and `workout_session` CRUD belongs on the shared batch routes.
-11. Use `forge_get_ui_entrypoint` when the Forge UI is the better surface for Kanban,
+13. Movement, Life Force, and Workbench are specialized Forge API surfaces rather
+    than simple batch entities. For Movement in particular, treat the surface as a
+    timeline of stays and trips that supports time-in-place questions, travel-history
+    review, manual overlays, edits, and links to other Forge records.
+    When those domains matter, consult
+    `forge_get_agent_onboarding` and follow its `entityRouteModel.specializedDomainSurfaces`
+    route families instead of trying to squeeze them through generic CRUD.
+14. Use `forge_get_ui_entrypoint` when the Forge UI is the better surface for Kanban,
    detailed review, graph exploration, or complex Psyche work.
 
 ## Entity contract
@@ -127,6 +142,8 @@ does want to save or update something, ask only for what is missing or unclear.
   `questionnaire_instrument`, and use the run, clone, draft, and publish tools for
   questionnaire workflows.
 - Preferred mutation path for wiki content: use the wiki tools instead of batch CRUD.
+- Preferred API path for Movement, Life Force, and Workbench: use the dedicated
+  route families published in `forge_get_agent_onboarding.entityRouteModel.specializedDomainSurfaces`.
 - Exact create-shape expectations live in `forge_get_agent_onboarding`. Use its
   `entityCatalog` as the schema source of truth for `minimumCreateFields`,
   `fieldGuide`, examples, classification, and preferred mutation path.

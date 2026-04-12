@@ -4,6 +4,7 @@ import { recordActivityEvent } from "./activity-events.js";
 import { decorateOwnedEntity, filterOwnedEntities, inferFirstOwnedUserId, setEntityOwner } from "./entity-ownership.js";
 import { getProjectById } from "./projects.js";
 import { getTaskById } from "./tasks.js";
+import { buildCalendarEventActionProfile, buildTaskTimeboxActionProfile, buildWorkBlockTemplateActionProfile, readEntityActionProfile, upsertEntityActionProfile } from "../services/life-force.js";
 import { calendarConnectionSchema, calendarContextConflictSchema, calendarEventSchema, calendarEventLinkSchema, calendarEventSourceSchema, calendarOverviewPayloadSchema, calendarSchema, calendarSchedulingRulesSchema, taskTimeboxSchema, workBlockInstanceSchema, workBlockTemplateSchema } from "../types.js";
 const DEFAULT_SCHEDULING_RULES = {
     allowWorkBlockKinds: [],
@@ -149,6 +150,11 @@ function mapEvent(row) {
         categories: JSON.parse(row.categories_json || "[]"),
         sourceMappings,
         links: listEventLinksForEvent(row.id),
+        actionProfile: readEntityActionProfile("calendar_event", row.id, {
+            profileKey: `calendar_event_${row.id}`,
+            title: row.title,
+            entityType: "calendar_event"
+        }),
         remoteUpdatedAt: primarySource?.lastSyncedAt ?? null,
         deletedAt: row.deleted_at,
         createdAt: row.created_at,
@@ -168,11 +174,17 @@ function mapWorkBlockTemplate(row) {
         startsOn: row.starts_on,
         endsOn: row.ends_on,
         blockingState: row.blocking_state,
+        actionProfile: readEntityActionProfile("work_block_template", row.id, {
+            profileKey: `work_block_template_${row.id}`,
+            title: row.title,
+            entityType: "work_block_template"
+        }),
         createdAt: row.created_at,
         updatedAt: row.updated_at
     });
 }
 function mapTimebox(row) {
+    const task = getTaskById(row.task_id);
     return taskTimeboxSchema.parse({
         id: row.id,
         taskId: row.task_id,
@@ -187,6 +199,21 @@ function mapTimebox(row) {
         startsAt: row.starts_at,
         endsAt: row.ends_at,
         overrideReason: row.override_reason,
+        actionProfile: readEntityActionProfile("task_timebox", row.id, {
+            profileKey: `task_timebox_${row.id}`,
+            title: row.title,
+            entityType: "task_timebox"
+        }) ??
+            (task
+                ? buildTaskTimeboxActionProfile({
+                    timeboxId: row.id,
+                    title: row.title,
+                    taskId: row.task_id,
+                    taskPlannedDurationSeconds: task.plannedDurationSeconds,
+                    startsAt: row.starts_at,
+                    endsAt: row.ends_at
+                })
+                : null),
         createdAt: row.created_at,
         updatedAt: row.updated_at
     });
@@ -597,6 +624,20 @@ export function createCalendarEvent(input) {
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
         .run(id, preferredCalendar?.connectionId ?? null, preferredCalendar?.id ?? null, "forge", "native", "confirmed", input.title, input.description, input.location, place.label || input.location, place.address, place.timezone, place.latitude, place.longitude, place.source, place.externalPlaceId, input.startAt, input.endAt, normalizeTimezone(input.timezone), input.isAllDay ? 1 : 0, input.availability, input.eventType, JSON.stringify(input.categories), now, now);
     replaceEventLinks(id, input.links);
+    upsertEntityActionProfile({
+        entityType: "calendar_event",
+        entityId: id,
+        profile: buildCalendarEventActionProfile({
+            eventId: id,
+            title: input.title,
+            eventType: input.eventType,
+            availability: input.availability,
+            startAt: input.startAt,
+            endAt: input.endAt,
+            activityPresetKey: input.activityPresetKey ?? null,
+            customSustainRateApPerHour: input.customSustainRateApPerHour ?? null
+        })
+    });
     setEntityOwner("calendar_event", id, inferCalendarEventOwnerId(input));
     return getCalendarEventById(id);
 }
@@ -652,6 +693,34 @@ export function updateCalendarEvent(eventId, patch) {
     if (patch.links) {
         replaceEventLinks(eventId, patch.links);
     }
+    if (patch.title !== undefined ||
+        patch.startAt !== undefined ||
+        patch.endAt !== undefined ||
+        patch.availability !== undefined ||
+        patch.eventType !== undefined ||
+        patch.activityPresetKey !== undefined ||
+        patch.customSustainRateApPerHour !== undefined) {
+        upsertEntityActionProfile({
+            entityType: "calendar_event",
+            entityId: eventId,
+            profile: buildCalendarEventActionProfile({
+                eventId,
+                title: next.title,
+                eventType: next.eventType,
+                availability: next.availability,
+                startAt: next.startAt,
+                endAt: next.endAt,
+                activityPresetKey: patch.activityPresetKey === undefined
+                    ? current.actionProfile?.metadata?.activityPresetKey
+                    : patch.activityPresetKey,
+                customSustainRateApPerHour: patch.customSustainRateApPerHour === undefined
+                    ? (typeof current.actionProfile?.metadata?.customSustainRateApPerHour === "number"
+                        ? current.actionProfile.metadata.customSustainRateApPerHour
+                        : null)
+                    : patch.customSustainRateApPerHour
+            })
+        });
+    }
     if (patch.userId !== undefined || patch.links !== undefined) {
         setEntityOwner("calendar_event", eventId, patch.userId === undefined
             ? inferCalendarEventOwnerId({
@@ -699,6 +768,19 @@ export function createWorkBlockTemplate(input) {
          )
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
             .run(id, input.title, input.kind, input.color, normalizeTimezone(input.timezone), JSON.stringify(input.weekDays), input.startMinute, input.endMinute, input.startsOn ?? null, input.endsOn ?? null, input.blockingState, now, now);
+        upsertEntityActionProfile({
+            entityType: "work_block_template",
+            entityId: id,
+            profile: buildWorkBlockTemplateActionProfile({
+                templateId: id,
+                title: input.title,
+                kind: input.kind,
+                startMinute: input.startMinute,
+                endMinute: input.endMinute,
+                activityPresetKey: input.activityPresetKey ?? null,
+                customSustainRateApPerHour: input.customSustainRateApPerHour ?? null
+            })
+        });
         setEntityOwner("work_block_template", id, input.userId);
         return getWorkBlockTemplateById(id);
     });
@@ -744,6 +826,32 @@ export function updateWorkBlockTemplate(templateId, patch) {
        SET title = ?, kind = ?, color = ?, timezone = ?, weekdays_json = ?, start_minute = ?, end_minute = ?, starts_on = ?, ends_on = ?, blocking_state = ?, updated_at = ?
        WHERE id = ?`)
         .run(next.title, next.kind, next.color, next.timezone, JSON.stringify(next.weekDays), next.startMinute, next.endMinute, next.startsOn, next.endsOn, next.blockingState, next.updatedAt, templateId);
+    if (patch.title !== undefined ||
+        patch.kind !== undefined ||
+        patch.startMinute !== undefined ||
+        patch.endMinute !== undefined ||
+        patch.activityPresetKey !== undefined ||
+        patch.customSustainRateApPerHour !== undefined) {
+        upsertEntityActionProfile({
+            entityType: "work_block_template",
+            entityId: templateId,
+            profile: buildWorkBlockTemplateActionProfile({
+                templateId,
+                title: next.title,
+                kind: next.kind,
+                startMinute: next.startMinute,
+                endMinute: next.endMinute,
+                activityPresetKey: patch.activityPresetKey === undefined
+                    ? current.actionProfile?.metadata?.activityPresetKey
+                    : patch.activityPresetKey,
+                customSustainRateApPerHour: patch.customSustainRateApPerHour === undefined
+                    ? (typeof current.actionProfile?.metadata?.customSustainRateApPerHour === "number"
+                        ? current.actionProfile.metadata.customSustainRateApPerHour
+                        : null)
+                    : patch.customSustainRateApPerHour
+            })
+        });
+    }
     if (patch.userId !== undefined) {
         setEntityOwner("work_block_template", templateId, patch.userId);
     }
@@ -790,6 +898,7 @@ function deriveWorkBlockInstances(template, query) {
             color: template.color,
             blockingState: template.blockingState,
             calendarEventId: null,
+            actionProfile: template.actionProfile ?? null,
             createdAt: template.createdAt,
             updatedAt: template.updatedAt
         }));
@@ -836,12 +945,27 @@ export function getTaskTimeboxById(timeboxId) {
 export function createTaskTimebox(input) {
     const now = nowIso();
     const id = `timebox_${randomUUID().replaceAll("-", "").slice(0, 10)}`;
+    const task = getTaskById(input.taskId);
     getDatabase()
         .prepare(`INSERT INTO task_timeboxes (
          id, task_id, project_id, connection_id, calendar_id, linked_task_run_id, status, source, title, starts_at, ends_at, override_reason, created_at, updated_at
        )
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
         .run(id, input.taskId, input.projectId ?? null, input.connectionId ?? null, input.calendarId ?? null, input.linkedTaskRunId ?? null, input.status ?? "planned", input.source ?? "manual", input.title, input.startsAt, input.endsAt, input.overrideReason ?? null, now, now);
+    upsertEntityActionProfile({
+        entityType: "task_timebox",
+        entityId: id,
+        profile: buildTaskTimeboxActionProfile({
+            timeboxId: id,
+            title: input.title,
+            taskId: input.taskId,
+            taskPlannedDurationSeconds: task?.plannedDurationSeconds ?? null,
+            startsAt: input.startsAt,
+            endsAt: input.endsAt,
+            activityPresetKey: input.activityPresetKey ?? null,
+            customSustainRateApPerHour: input.customSustainRateApPerHour ?? null
+        })
+    });
     setEntityOwner("task_timebox", id, inferTaskTimeboxOwnerId(input));
     return getTaskTimeboxById(id);
 }
@@ -869,6 +993,33 @@ export function updateTaskTimebox(timeboxId, patch) {
            starts_at = ?, ends_at = ?, override_reason = ?, updated_at = ?
        WHERE id = ?`)
         .run(next.connectionId, next.calendarId, next.remoteEventId, next.linkedTaskRunId, next.status, next.source, next.title, next.startsAt, next.endsAt, next.overrideReason, next.updatedAt, timeboxId);
+    if (patch.title !== undefined ||
+        patch.startsAt !== undefined ||
+        patch.endsAt !== undefined ||
+        patch.activityPresetKey !== undefined ||
+        patch.customSustainRateApPerHour !== undefined) {
+        const task = getTaskById(current.taskId);
+        upsertEntityActionProfile({
+            entityType: "task_timebox",
+            entityId: timeboxId,
+            profile: buildTaskTimeboxActionProfile({
+                timeboxId,
+                title: next.title,
+                taskId: current.taskId,
+                taskPlannedDurationSeconds: task?.plannedDurationSeconds ?? null,
+                startsAt: next.startsAt,
+                endsAt: next.endsAt,
+                activityPresetKey: patch.activityPresetKey === undefined
+                    ? current.actionProfile?.metadata?.activityPresetKey
+                    : patch.activityPresetKey,
+                customSustainRateApPerHour: patch.customSustainRateApPerHour === undefined
+                    ? (typeof current.actionProfile?.metadata?.customSustainRateApPerHour === "number"
+                        ? current.actionProfile.metadata.customSustainRateApPerHour
+                        : null)
+                    : patch.customSustainRateApPerHour
+            })
+        });
+    }
     if (patch.userId !== undefined) {
         setEntityOwner("task_timebox", timeboxId, patch.userId);
     }

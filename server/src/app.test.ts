@@ -6104,6 +6104,10 @@ test("openapi document exposes schema-backed versioned contracts", async () => {
     assert.ok(body.paths?.["/api/v1/psyche/emotions/{id}"]);
     assert.ok(body.paths?.["/api/v1/psyche/reports"]);
     assert.ok(body.paths?.["/api/v1/psyche/reports/{id}"]);
+    assert.ok(body.paths?.["/api/v1/life-force"]);
+    assert.ok(body.paths?.["/api/v1/movement/day"]);
+    assert.ok(body.paths?.["/api/v1/movement/timeline"]);
+    assert.ok(body.paths?.["/api/v1/workbench/flows"]);
     assert.ok(body.paths?.["/api/v1/notes"]);
     assert.ok(body.paths?.["/api/v1/notes/{id}"]);
     assert.ok(body.paths?.["/api/v1/health/sleep"]);
@@ -6136,6 +6140,19 @@ test("openapi document exposes schema-backed versioned contracts", async () => {
       projectPatchOperation.delete?.description ?? "",
       /soft delete/
     );
+    const lifeForceGet = body.paths?.["/api/v1/life-force"] as
+      | { get?: { tags?: string[] } }
+      | undefined;
+    const movementDayGet = body.paths?.["/api/v1/movement/day"] as
+      | { get?: { tags?: string[] } }
+      | undefined;
+    const workbenchFlows = body.paths?.["/api/v1/workbench/flows"] as
+      | { get?: { tags?: string[] }; post?: { tags?: string[] } }
+      | undefined;
+    assert.deepEqual(lifeForceGet?.get?.tags, ["Life Force"]);
+    assert.deepEqual(movementDayGet?.get?.tags, ["Movement"]);
+    assert.deepEqual(workbenchFlows?.get?.tags, ["Workbench"]);
+    assert.deepEqual(workbenchFlows?.post?.tags, ["Workbench"]);
     assert.ok(body.paths?.["/api/v1/tasks/{id}/context"]);
     assert.ok(body.paths?.["/api/v1/tasks/{id}/uncomplete"]);
     assert.ok(body.paths?.["/api/v1/activity/{id}/remove"]);
@@ -13040,6 +13057,9 @@ test("settings and local agent token management persist through the versioned AP
           preferences: string;
           questionnaire: string;
           selfObservation: string;
+          movement: string;
+          lifeForce: string;
+          workbench: string;
           psyche: string;
         };
         psycheSubmoduleModel: {
@@ -13076,6 +13096,15 @@ test("settings and local agent token management persist through the versioned AP
           batchCrudEntities: string[];
           specializedCrudEntities: Record<string, Record<string, string>>;
           actionEntities: Record<string, unknown>;
+          specializedDomainSurfaces: Record<
+            string,
+            {
+              summary: string;
+              readRoutes: Record<string, string>;
+              writeRoutes: Record<string, string>;
+              notes: string[];
+            }
+          >;
           readModelOnlySurfaces: Record<string, string>;
         };
         toolInputCatalog: Array<{
@@ -13089,6 +13118,10 @@ test("settings and local agent token management persist through the versioned AP
           psycheSchemaCatalog: string;
           psycheEventTypes: string;
           psycheEmotions: string;
+          lifeForce: string;
+          movementTimeline: string;
+          movementAllTime: string;
+          workbenchFlows: string;
         };
         recommendedPluginTools: {
           bootstrap: string[];
@@ -13202,6 +13235,18 @@ test("settings and local agent token management persist through the versioned AP
     assert.match(
       onboardingBody.onboarding.conceptModel.selfObservation,
       /backed by observed notes/i
+    );
+    assert.match(
+      onboardingBody.onboarding.conceptModel.movement,
+      /first-class mobility surface/i
+    );
+    assert.match(
+      onboardingBody.onboarding.conceptModel.lifeForce,
+      /energy-budget and fatigue model/i
+    );
+    assert.match(
+      onboardingBody.onboarding.conceptModel.workbench,
+      /graph-flow execution system/i
     );
     assert.match(onboardingBody.onboarding.conceptModel.psyche, /sensitive/);
     assert.match(
@@ -13651,6 +13696,82 @@ test("settings and local agent token management persist through the versioned AP
     assert.equal(
       onboardingBody.onboarding.verificationPaths.psycheEmotions,
       "/api/v1/psyche/emotions"
+    );
+    assert.equal(
+      onboardingBody.onboarding.verificationPaths.lifeForce,
+      "/api/v1/life-force"
+    );
+    assert.equal(
+      onboardingBody.onboarding.verificationPaths.movementTimeline,
+      "/api/v1/movement/timeline"
+    );
+    assert.equal(
+      onboardingBody.onboarding.verificationPaths.movementAllTime,
+      "/api/v1/movement/all-time"
+    );
+    assert.equal(
+      onboardingBody.onboarding.verificationPaths.workbenchFlows,
+      "/api/v1/workbench/flows"
+    );
+    const movementSurface =
+      onboardingBody.onboarding.entityRouteModel.specializedDomainSurfaces
+        .movement;
+    assert.ok(movementSurface);
+    assert.match(movementSurface.summary, /movement workspace API/i);
+    assert.equal(movementSurface.readRoutes.day, "/api/v1/movement/day");
+    assert.equal(
+      movementSurface.readRoutes.timeline,
+      "/api/v1/movement/timeline"
+    );
+    assert.equal(
+      movementSurface.writeRoutes.userBoxPreflight,
+      "/api/v1/movement/user-boxes/preflight"
+    );
+    assert.ok(
+      movementSurface.notes.some((note) => /batch CRUD entity family/i.test(note))
+    );
+    const lifeForceSurface =
+      onboardingBody.onboarding.entityRouteModel.specializedDomainSurfaces
+        .lifeForce;
+    assert.ok(lifeForceSurface);
+    assert.match(lifeForceSurface.summary, /life-force API/i);
+    assert.equal(lifeForceSurface.readRoutes.overview, "/api/v1/life-force");
+    assert.equal(
+      lifeForceSurface.writeRoutes.profile,
+      "/api/v1/life-force/profile"
+    );
+    assert.equal(
+      lifeForceSurface.writeRoutes.weekdayTemplate,
+      "/api/v1/life-force/templates/:weekday"
+    );
+    assert.ok(
+      lifeForceSurface.notes.some((note) => /current overview payload/i.test(note))
+    );
+    const workbenchSurface =
+      onboardingBody.onboarding.entityRouteModel.specializedDomainSurfaces
+        .workbench;
+    assert.ok(workbenchSurface);
+    assert.match(workbenchSurface.summary, /graph-flow API/i);
+    assert.equal(
+      workbenchSurface.readRoutes.listFlows,
+      "/api/v1/workbench/flows"
+    );
+    assert.equal(
+      workbenchSurface.readRoutes.latestNodeOutput,
+      "/api/v1/workbench/flows/:id/nodes/:nodeId/output"
+    );
+    assert.equal(
+      workbenchSurface.writeRoutes.runFlow,
+      "/api/v1/workbench/flows/:id/run"
+    );
+    assert.equal(
+      workbenchSurface.writeRoutes.runByPayload,
+      "/api/v1/workbench/run"
+    );
+    assert.ok(
+      workbenchSurface.notes.some((note) =>
+        /node-result routes over reverse-engineering raw traces/i.test(note)
+      )
     );
     assert.deepEqual(
       onboardingBody.onboarding.recommendedPluginTools.bootstrap,

@@ -1,7 +1,9 @@
 import type {
+  ActionDemandWeights,
   ActionCostBand,
   ActionProfile,
   LifeForceCurvePoint,
+  LifeForceStatKey,
   TaskActionPointSummary,
   TaskSplitSuggestion
 } from "../types.js";
@@ -11,6 +13,14 @@ export const DEFAULT_TASK_TOTAL_AP = 100;
 export const DEFAULT_TASK_EXPECTED_DURATION_SECONDS = 24 * 60 * 60;
 export const TASK_SPLIT_THRESHOLD_SECONDS = 2 * DEFAULT_TASK_EXPECTED_DURATION_SECONDS;
 export const MIN_LIFE_FORCE_POINT_GAP_MINUTES = 20;
+
+const COST_RELEVANT_STAT_KEYS: Array<Exclude<LifeForceStatKey, "life_force">> = [
+  "activation",
+  "focus",
+  "vigor",
+  "composure",
+  "flow"
+];
 
 export function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
@@ -167,6 +177,25 @@ export function buildTaskSplitSuggestion(input: {
     reason: null,
     thresholdSeconds
   };
+}
+
+export function computeLifeForceLevelMultiplier(level: number) {
+  return 1 + Math.max(0, level - 1) * 0.03;
+}
+
+export function computeStatCostModifier(level: number) {
+  return clamp(1 - Math.max(0, level - 1) * 0.02, 0.55, 1.25);
+}
+
+export function computeActionCostModifier(
+  weights: ActionDemandWeights,
+  levels: Partial<Record<LifeForceStatKey, number>>
+) {
+  const relief = COST_RELEVANT_STAT_KEYS.reduce((sum, key) => {
+    const level = Math.max(1, levels[key] ?? 1);
+    return sum + weights[key] * Math.max(0, level - 1) * 0.02;
+  }, 0);
+  return clamp(Number((1 - relief).toFixed(4)), 0.55, 1.25);
 }
 
 export function computeCurveArea(points: LifeForceCurvePoint[]): number {

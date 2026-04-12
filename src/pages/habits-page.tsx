@@ -39,10 +39,17 @@ import {
   createHabitCheckIn,
   deleteHabitCheckIn,
   deleteHabit,
+  getLifeForce,
   getPsycheOverview,
   listHabits,
   patchHabit
 } from "@/lib/api";
+import {
+  estimateHabitCheckInActionPointLoad,
+  estimateHabitGeneratedWorkoutActionPointLoad,
+  formatLifeForceAp,
+  formatLifeForceRate
+} from "@/lib/life-force-display";
 import type { HabitMutationInput } from "@/lib/schemas";
 import type { Habit } from "@/lib/types";
 import { ForgeApiError } from "@/lib/api-error";
@@ -537,6 +544,10 @@ export function HabitsPage() {
     queryKey: ["forge-psyche-overview", ...selectedUserIds],
     queryFn: async () => (await getPsycheOverview(selectedUserIds)).overview
   });
+  const lifeForceQuery = useQuery({
+    queryKey: ["forge-life-force", ...selectedUserIds],
+    queryFn: async () => (await getLifeForce(selectedUserIds)).lifeForce
+  });
 
   useEffect(() => {
     if (searchParams.get("create") === "1") {
@@ -638,6 +649,26 @@ export function HabitsPage() {
     () => activeHabits.filter((habit) => habit.dueToday),
     [activeHabits]
   );
+  const dueHabitsActionPointLoad = useMemo(
+    () =>
+      dueHabits.reduce((sum, habit) => {
+        const checkInLoad = estimateHabitCheckInActionPointLoad(habit).totalAp;
+        const workoutLoad =
+          estimateHabitGeneratedWorkoutActionPointLoad(habit)?.totalAp ?? 0;
+        return sum + checkInLoad + workoutLoad;
+      }, 0),
+    [dueHabits]
+  );
+  const generatedWorkoutLoad = useMemo(
+    () =>
+      activeHabits.reduce((sum, habit) => {
+        return (
+          sum +
+          (estimateHabitGeneratedWorkoutActionPointLoad(habit)?.totalAp ?? 0)
+        );
+      }, 0),
+    [activeHabits]
+  );
   const selectedHistoryCheckIn = useMemo(() => {
     if (!historyEditor) {
       return null;
@@ -719,7 +750,7 @@ export function HabitsPage() {
         </Card>
       ) : null}
 
-      <section className="grid gap-4 lg:grid-cols-3">
+      <section className="grid gap-4 lg:grid-cols-4">
         <Card className="border-amber-300/16 shadow-[0_0_0_1px_rgba(251,191,36,0.08)]">
           <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">
             Due today
@@ -729,6 +760,17 @@ export function HabitsPage() {
           </div>
           <div className="mt-2 text-sm text-white/58">
             Habits that still need a check-in today.
+          </div>
+        </Card>
+        <Card className="border-[var(--primary)]/16 shadow-[0_0_0_1px_rgba(245,158,11,0.08)]">
+          <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">
+            Habit AP due
+          </div>
+          <div className="mt-3 font-display text-4xl text-[var(--primary)]">
+            {formatLifeForceAp(dueHabitsActionPointLoad)}
+          </div>
+          <div className="mt-2 text-sm text-white/58">
+            Default Action Point load if every due habit is logged today.
           </div>
         </Card>
         <Card className="border-emerald-300/16 shadow-[0_0_0_1px_rgba(52,211,153,0.08)]">
@@ -759,6 +801,49 @@ export function HabitsPage() {
           </div>
           <div className="mt-2 text-sm text-white/58">
             Share of recent habit check-ins that matched the intended direction.
+          </div>
+        </Card>
+      </section>
+
+      <section className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)]">
+        <Card>
+          <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">
+            Life Force sync
+          </div>
+          <div className="mt-3 text-2xl font-display text-white">
+            {lifeForceQuery.data
+              ? `${formatLifeForceAp(lifeForceQuery.data.spentTodayAp)} / ${formatLifeForceAp(lifeForceQuery.data.dailyBudgetAp)}`
+              : "Loading..."}
+          </div>
+          <div className="mt-2 text-sm text-white/58">
+            Habit check-ins debit the same Action Point ledger as work, notes,
+            movement, and workouts.
+          </div>
+        </Card>
+        <Card>
+          <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">
+            Instant headroom
+          </div>
+          <div className="mt-3 text-2xl font-display text-white">
+            {lifeForceQuery.data
+              ? formatLifeForceRate(lifeForceQuery.data.instantFreeApPerHour)
+              : "Loading..."}
+          </div>
+          <div className="mt-2 text-sm text-white/58">
+            Use this to tell whether now is a good moment for heavier habits or
+            just a light check-in.
+          </div>
+        </Card>
+        <Card>
+          <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">
+            Workout-linked load
+          </div>
+          <div className="mt-3 text-2xl font-display text-white">
+            {formatLifeForceAp(generatedWorkoutLoad)}
+          </div>
+          <div className="mt-2 text-sm text-white/58">
+            Habit-generated workout templates stay visible as Action Point cost
+            instead of hiding behind the XP reward.
           </div>
         </Card>
       </section>
@@ -807,6 +892,9 @@ export function HabitsPage() {
             const visualState = getHabitVisualState(habit);
             const streak = getStreakPresentation(habit.streakCount);
             const StreakIcon = streak.Icon;
+            const habitActionLoad = estimateHabitCheckInActionPointLoad(habit);
+            const generatedWorkoutActionLoad =
+              estimateHabitGeneratedWorkoutActionPointLoad(habit);
             const noteCount = getEntityNotesSummary(
               shell.snapshot.dashboard.notesSummaryByEntity,
               "habit",
@@ -1025,6 +1113,22 @@ export function HabitsPage() {
                           ? `-${habit.penaltyXp} XP missed`
                           : `-${habit.penaltyXp} XP performed`}
                       </Badge>
+                      <Badge className="bg-[var(--primary)]/12 text-[var(--primary)]">
+                        {formatLifeForceAp(habitActionLoad.totalAp)} check-in
+                      </Badge>
+                      {generatedWorkoutActionLoad ? (
+                        <Badge className="bg-orange-400/12 text-orange-100">
+                          {formatLifeForceAp(generatedWorkoutActionLoad.totalAp)}{" "}
+                          workout
+                        </Badge>
+                      ) : null}
+                      {generatedWorkoutActionLoad ? (
+                        <Badge className="bg-white/[0.08] text-white/72">
+                          {formatLifeForceRate(
+                            generatedWorkoutActionLoad.rateApPerHour
+                          )}
+                        </Badge>
+                      ) : null}
                       <EntityNoteCountLink
                         entityType="habit"
                         entityId={habit.id}

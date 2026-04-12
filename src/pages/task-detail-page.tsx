@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import {
   BriefcaseBusiness,
+  CalendarDays,
   CheckCheck,
   CircleAlert,
   Clock3,
@@ -12,6 +13,7 @@ import {
 } from "lucide-react";
 import { SurfaceSkeleton } from "@/components/experience/surface-skeleton";
 import { SchedulingRulesEditor } from "@/components/calendar/scheduling-rules-editor";
+import { TimeboxPlanningDialog } from "@/components/calendar/timebox-planning-dialog";
 import { SheetScaffold } from "@/components/experience/sheet-scaffold";
 import { OpenInGraphButton } from "@/components/knowledge-graph/open-in-graph-button";
 import { NoteMarkdown } from "@/components/notes/note-markdown";
@@ -30,9 +32,11 @@ import { ErrorState } from "@/components/ui/page-state";
 import { UserBadge } from "@/components/ui/user-badge";
 import {
   completeTaskRun,
+  createTaskTimebox,
   createWorkAdjustment,
   deleteTask,
   getCalendarOverview,
+  getLifeForce,
   getTaskContext,
   patchTask,
   releaseTaskRun,
@@ -52,6 +56,10 @@ import {
   getActivityEventHref
 } from "@/lib/entity-links";
 import { useI18n } from "@/lib/i18n";
+import {
+  formatLifeForceAp,
+  formatLifeForceRate
+} from "@/lib/life-force-display";
 import { useForgeShell } from "@/components/shell/app-shell";
 import type { TaskStatus } from "@/lib/types";
 import { getSingleSelectedUserId } from "@/lib/user-ownership";
@@ -115,6 +123,7 @@ export function TaskDetailPage() {
   const defaultUserId = getSingleSelectedUserId(selectedUserIds);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [workAdjustmentOpen, setWorkAdjustmentOpen] = useState(false);
+  const [timeboxDialogOpen, setTimeboxDialogOpen] = useState(false);
   const [statusSheetOpen, setStatusSheetOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(() =>
     typeof window !== "undefined"
@@ -126,6 +135,18 @@ export function TaskDetailPage() {
     const from = new Date(now);
     from.setHours(0, 0, 0, 0);
     const to = new Date(now);
+    to.setHours(23, 59, 59, 999);
+    return {
+      from: from.toISOString(),
+      to: to.toISOString()
+    };
+  });
+  const [planningWindow] = useState(() => {
+    const now = new Date();
+    const from = new Date(now);
+    from.setHours(0, 0, 0, 0);
+    const to = new Date(from);
+    to.setDate(to.getDate() + 7);
     to.setHours(23, 59, 59, 999);
     return {
       from: from.toISOString(),
@@ -171,6 +192,10 @@ export function TaskDetailPage() {
       }),
     enabled: Boolean(params.taskId)
   });
+  const lifeForceQuery = useQuery({
+    queryKey: ["forge-life-force", ...selectedUserIds],
+    queryFn: async () => (await getLifeForce(selectedUserIds)).lifeForce
+  });
 
   const invalidateAll = async () => {
     await Promise.all([
@@ -182,7 +207,11 @@ export function TaskDetailPage() {
       queryClient.invalidateQueries({ queryKey: ["project-board"] }),
       queryClient.invalidateQueries({ queryKey: ["forge-xp-metrics"] }),
       queryClient.invalidateQueries({ queryKey: ["forge-reward-ledger"] }),
-      queryClient.invalidateQueries({ queryKey: ["forge-operator-context"] })
+      queryClient.invalidateQueries({ queryKey: ["forge-operator-context"] }),
+      queryClient.invalidateQueries({
+        queryKey: ["task-calendar-overview", params.taskId]
+      }),
+      queryClient.invalidateQueries({ queryKey: ["forge-calendar-overview"] })
     ]);
   };
 
@@ -236,6 +265,10 @@ export function TaskDetailPage() {
     mutationFn: (taskId: string) => deleteTask(taskId),
     onSuccess: invalidateAll
   });
+  const createTimeboxMutation = useMutation({
+    mutationFn: createTaskTimebox,
+    onSuccess: invalidateAll
+  });
 
   const payload = taskContextQuery.data;
 
@@ -264,6 +297,7 @@ export function TaskDetailPage() {
   }
 
   const currentRun = payload.activeTaskRun ?? null;
+  const actionPointSummary = payload.task.actionPointSummary ?? null;
   const currentStatus =
     STATUS_META.find((entry) => entry.status === payload.task.status) ??
     STATUS_META[0];
@@ -347,7 +381,11 @@ export function TaskDetailPage() {
             "Edit the task, change its status, start work, and review its history from one page."
           )
         }
-        badge={`${payload.task.points} xp`}
+        badge={
+          actionPointSummary
+            ? `${payload.task.points} xp · ${Math.round(actionPointSummary.totalCostAp)} AP`
+            : `${payload.task.points} xp`
+        }
         actions={
           <div className="flex flex-wrap gap-2">
             <PreferenceEntityHandoffButton
@@ -448,6 +486,15 @@ export function TaskDetailPage() {
             >
               <Clock3 className="size-4" />
               Adjust work
+            </Button>
+            <Button
+              variant="secondary"
+              pending={createTimeboxMutation.isPending}
+              pendingLabel="Planning"
+              onClick={() => setTimeboxDialogOpen(true)}
+            >
+              <CalendarDays className="size-4" />
+              Time Box
             </Button>
             {isMobile ? (
               <>
@@ -666,6 +713,108 @@ export function TaskDetailPage() {
         </div>
 
         <div className="mt-5 rounded-[20px] bg-white/[0.04] p-4">
+          <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">
+            Action Point load
+          </div>
+          <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            <div className="rounded-[16px] bg-white/[0.03] px-3.5 py-3">
+              <DetailLabel label="Total cost" />
+              <div className="mt-2 text-lg text-white">
+                {actionPointSummary
+                  ? formatLifeForceAp(actionPointSummary.totalCostAp)
+                  : "Not calibrated"}
+              </div>
+            </div>
+            <div className="rounded-[16px] bg-white/[0.03] px-3.5 py-3">
+              <DetailLabel label="Today debit" />
+              <div className="mt-2 text-lg text-white">
+                {actionPointSummary
+                  ? formatLifeForceAp(actionPointSummary.spentTodayAp)
+                  : "0 AP"}
+              </div>
+            </div>
+            <div className="rounded-[16px] bg-white/[0.03] px-3.5 py-3">
+              <DetailLabel label="Sustain rate" />
+              <div className="mt-2 text-lg text-white">
+                {actionPointSummary
+                  ? formatLifeForceRate(
+                      actionPointSummary.sustainRateApPerHour
+                    )
+                  : "0 AP/h"}
+              </div>
+            </div>
+            <div className="rounded-[16px] bg-white/[0.03] px-3.5 py-3">
+              <DetailLabel label="Expected duration" />
+              <div className="mt-2 text-lg text-white">
+                {actionPointSummary
+                  ? `${Math.round(
+                      actionPointSummary.expectedDurationSeconds / 3600
+                    )} h`
+                  : "No target"}
+              </div>
+            </div>
+          </div>
+          <div className="mt-3 flex flex-wrap gap-2">
+            {payload.task.splitSuggestion?.shouldSplit ? (
+              <Badge className="bg-amber-400/12 text-amber-100">
+                Split it
+              </Badge>
+            ) : null}
+            {actionPointSummary ? (
+              <Badge className="bg-white/[0.08] text-white/72">
+                Remaining {formatLifeForceAp(actionPointSummary.remainingAp)}
+              </Badge>
+            ) : null}
+            {actionPointSummary ? (
+              <Badge className="bg-white/[0.08] text-white/72">
+                Spent total {formatLifeForceAp(actionPointSummary.spentTotalAp)}
+              </Badge>
+            ) : null}
+            {actionPointSummary ? (
+              <Badge className="bg-white/[0.08] text-white/72">
+                {actionPointSummary.costBand}
+              </Badge>
+            ) : null}
+          </div>
+          <p className="mt-3 text-sm leading-6 text-white/58">
+            This task only debits the Action Points you actually worked today.
+            Marking it done does not consume the full estimate by itself.
+          </p>
+        </div>
+
+        <div className="mt-5 rounded-[20px] bg-white/[0.04] p-4">
+          <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">
+            Today&apos;s Life Force context
+          </div>
+          <div className="mt-4 grid gap-3 sm:grid-cols-3">
+            <div className="rounded-[16px] bg-white/[0.03] px-3.5 py-3">
+              <DetailLabel label="Daily AP" />
+              <div className="mt-2 text-lg text-white">
+                {lifeForceQuery.data
+                  ? `${formatLifeForceAp(lifeForceQuery.data.spentTodayAp)} / ${formatLifeForceAp(lifeForceQuery.data.dailyBudgetAp)}`
+                  : "Loading..."}
+              </div>
+            </div>
+            <div className="rounded-[16px] bg-white/[0.03] px-3.5 py-3">
+              <DetailLabel label="Instant headroom" />
+              <div className="mt-2 text-lg text-white">
+                {lifeForceQuery.data
+                  ? formatLifeForceRate(lifeForceQuery.data.instantFreeApPerHour)
+                  : "Loading..."}
+              </div>
+            </div>
+            <div className="rounded-[16px] bg-white/[0.03] px-3.5 py-3">
+              <DetailLabel label="Forecast" />
+              <div className="mt-2 text-lg text-white">
+                {lifeForceQuery.data
+                  ? `${formatLifeForceAp(lifeForceQuery.data.forecastAp)} / ${formatLifeForceAp(lifeForceQuery.data.dailyBudgetAp)}`
+                  : "Loading..."}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-5 rounded-[20px] bg-white/[0.04] p-4">
           <div className="flex items-center gap-2 text-sm text-white/58">
             <span>Current timer</span>
             <InfoTooltip
@@ -764,7 +913,15 @@ export function TaskDetailPage() {
                 ))}
               </div>
             ) : null}
-            <div className="mt-4">
+            <div className="mt-4 flex flex-wrap gap-2">
+              <Button
+                pending={createTimeboxMutation.isPending}
+                pendingLabel="Planning"
+                onClick={() => setTimeboxDialogOpen(true)}
+              >
+                <CalendarDays className="size-4" />
+                Time Box
+              </Button>
               <Link to="/calendar">
                 <Button variant="secondary">Open calendar workspace</Button>
               </Link>
@@ -893,6 +1050,23 @@ export function TaskDetailPage() {
         pending={workAdjustmentMutation.isPending}
         onSubmit={async (input) => {
           await workAdjustmentMutation.mutateAsync(input);
+        }}
+      />
+
+      <TimeboxPlanningDialog
+        open={timeboxDialogOpen}
+        onOpenChange={setTimeboxDialogOpen}
+        tasks={[payload.task]}
+        initialTaskId={payload.task.id}
+        lockedTaskId={payload.task.id}
+        from={planningWindow.from}
+        to={planningWindow.to}
+        userIds={selectedUserIds}
+        onCreateTimebox={async (input) => {
+          await createTimeboxMutation.mutateAsync({
+            ...input,
+            userId: defaultUserId ?? undefined
+          });
         }}
       />
 

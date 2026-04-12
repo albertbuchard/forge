@@ -10,6 +10,7 @@ import type { ForgeSnapshot } from "@/lib/types";
 
 const {
   useForgeShellMock,
+  getLifeForceMock,
   getCalendarOverviewMock,
   createWorkBlockTemplateMock,
   patchWorkBlockTemplateMock,
@@ -38,6 +39,7 @@ const {
   deleteCalendarConnectionMock
 } = vi.hoisted(() => ({
   useForgeShellMock: vi.fn(),
+  getLifeForceMock: vi.fn(),
   getCalendarOverviewMock: vi.fn(),
   createWorkBlockTemplateMock: vi.fn(),
   patchWorkBlockTemplateMock: vi.fn(),
@@ -89,6 +91,7 @@ vi.mock("@/components/shell/page-hero", () => ({
 }));
 
 vi.mock("@/lib/api", () => ({
+  getLifeForce: getLifeForceMock,
   getCalendarOverview: getCalendarOverviewMock,
   createWorkBlockTemplate: createWorkBlockTemplateMock,
   patchWorkBlockTemplate: patchWorkBlockTemplateMock,
@@ -269,6 +272,107 @@ function createSnapshot(): ForgeSnapshot {
   };
 }
 
+function createLifeForceResponse() {
+  return {
+    lifeForce: {
+      userId: "user_operator",
+      dateKey: "2026-04-11",
+      baselineDailyAp: 200,
+      dailyBudgetAp: 220,
+      spentTodayAp: 86,
+      remainingAp: 134,
+      forecastAp: 172,
+      plannedRemainingAp: 86,
+      targetBandMinAp: 187,
+      targetBandMaxAp: 220,
+      instantCapacityApPerHour: 12,
+      instantFreeApPerHour: 3.5,
+      overloadApPerHour: 0,
+      currentDrainApPerHour: 6.2,
+      fatigueBufferApPerHour: 2.3,
+      sleepRecoveryMultiplier: 1.04,
+      readinessMultiplier: 1,
+      fatigueDebtCarry: 0,
+      stats: [
+        {
+          key: "life_force",
+          label: "Life Force",
+          level: 3,
+          xp: 12,
+          xpToNextLevel: 120,
+          costModifier: 1.09
+        },
+        {
+          key: "activation",
+          label: "Activation",
+          level: 2,
+          xp: 9,
+          xpToNextLevel: 90,
+          costModifier: 0.98
+        },
+        {
+          key: "focus",
+          label: "Focus",
+          level: 2,
+          xp: 9,
+          xpToNextLevel: 90,
+          costModifier: 0.98
+        },
+        {
+          key: "vigor",
+          label: "Vigor",
+          level: 2,
+          xp: 9,
+          xpToNextLevel: 90,
+          costModifier: 0.98
+        },
+        {
+          key: "composure",
+          label: "Composure",
+          level: 2,
+          xp: 9,
+          xpToNextLevel: 90,
+          costModifier: 0.98
+        },
+        {
+          key: "flow",
+          label: "Flow",
+          level: 2,
+          xp: 9,
+          xpToNextLevel: 90,
+          costModifier: 0.98
+        }
+      ],
+      currentCurve: [
+        { minuteOfDay: 0, rateApPerHour: 0, locked: true },
+        { minuteOfDay: 480, rateApPerHour: 8, locked: true },
+        { minuteOfDay: 720, rateApPerHour: 12, locked: false },
+        { minuteOfDay: 1080, rateApPerHour: 8, locked: false },
+        { minuteOfDay: 1440, rateApPerHour: 0, locked: false }
+      ],
+      activeDrains: [],
+      plannedDrains: [],
+      warnings: [],
+      recommendations: ["This is a good moment for deep work."],
+      topTaskIdsNeedingSplit: [],
+      updatedAt: "2026-04-11T12:00:00.000Z"
+    },
+    templates: [
+      {
+        weekday: 6,
+        baselineDailyAp: 200,
+        points: [
+          { minuteOfDay: 0, rateApPerHour: 0, locked: false },
+          { minuteOfDay: 480, rateApPerHour: 8, locked: false },
+          { minuteOfDay: 720, rateApPerHour: 12, locked: false },
+          { minuteOfDay: 1080, rateApPerHour: 8, locked: false },
+          { minuteOfDay: 1440, rateApPerHour: 0, locked: false }
+        ]
+      }
+    ]
+  };
+}
+
 function renderWithRouter(element: React.ReactNode, initialEntry: string) {
   const client = new QueryClient({
     defaultOptions: {
@@ -319,6 +423,7 @@ beforeEach(() => {
       timeboxes: []
     }
   });
+  getLifeForceMock.mockResolvedValue(createLifeForceResponse());
   createWorkBlockTemplateMock.mockResolvedValue({
     template: { id: "wbtpl_new" }
   });
@@ -612,6 +717,135 @@ describe("calendar routing surfaces", () => {
     ).toBeInTheDocument();
   });
 
+  it("surfaces Life Force summary and AP badges across work blocks, events, and timeboxes", async () => {
+    getCalendarOverviewMock.mockResolvedValueOnce({
+      calendar: {
+        generatedAt: "2026-04-03T08:00:00.000Z",
+        providers: [],
+        connections: [],
+        calendars: [
+          {
+            id: "calendar_work",
+            connectionId: "conn_1",
+            remoteId: "remote_calendar_work",
+            title: "Work",
+            description: "",
+            color: "#7dd3fc",
+            timezone: "Europe/Zurich",
+            isPrimary: true,
+            canWrite: true,
+            selectedForSync: true,
+            forgeManaged: false,
+            lastSyncedAt: null,
+            createdAt: "2026-04-03T08:00:00.000Z",
+            updatedAt: "2026-04-03T08:00:00.000Z"
+          }
+        ],
+        events: [
+          {
+            id: "event_meeting",
+            connectionId: "conn_1",
+            calendarId: "calendar_work",
+            remoteId: "remote_event_1",
+            ownership: "external",
+            originType: "google",
+            status: "confirmed",
+            title: "Hiring meeting",
+            description: "",
+            location: "",
+            place: {
+              label: "",
+              address: "",
+              timezone: "Europe/Zurich",
+              latitude: null,
+              longitude: null,
+              source: "",
+              externalPlaceId: ""
+            },
+            startAt: "2026-04-06T10:00:00.000Z",
+            endAt: "2026-04-06T11:00:00.000Z",
+            timezone: "Europe/Zurich",
+            isAllDay: false,
+            availability: "busy",
+            eventType: "meeting",
+            categories: [],
+            sourceMappings: [],
+            links: [],
+            remoteUpdatedAt: null,
+            deletedAt: null,
+            createdAt: "2026-04-03T08:00:00.000Z",
+            updatedAt: "2026-04-03T08:00:00.000Z"
+          }
+        ],
+        workBlockTemplates: [
+          {
+            id: "wbtpl_focus",
+            title: "Focus block",
+            kind: "main_activity",
+            color: "#8b5cf6",
+            timezone: "Europe/Zurich",
+            weekDays: [1],
+            startMinute: 8 * 60,
+            endMinute: 10 * 60,
+            startsOn: null,
+            endsOn: null,
+            blockingState: "allowed",
+            createdAt: "2026-04-03T08:00:00.000Z",
+            updatedAt: "2026-04-03T08:00:00.000Z"
+          }
+        ],
+        workBlockInstances: [
+          {
+            id: "wbinst_focus_2026-04-06",
+            templateId: "wbtpl_focus",
+            dateKey: "2026-04-06",
+            startAt: "2026-04-06T08:00:00.000Z",
+            endAt: "2026-04-06T10:00:00.000Z",
+            title: "Focus block",
+            kind: "main_activity",
+            color: "#8b5cf6",
+            blockingState: "allowed",
+            calendarEventId: null,
+            createdAt: "2026-04-03T08:00:00.000Z",
+            updatedAt: "2026-04-03T08:00:00.000Z"
+          }
+        ],
+        timeboxes: [
+          {
+            id: "timebox_planning",
+            taskId: "task_1",
+            projectId: "project_1",
+            title: "Planning window",
+            startsAt: "2026-04-06T12:00:00.000Z",
+            endsAt: "2026-04-06T14:00:00.000Z",
+            status: "planned",
+            source: "manual",
+            linkedTaskRunId: null,
+            createdAt: "2026-04-03T08:00:00.000Z",
+            updatedAt: "2026-04-03T08:00:00.000Z"
+          }
+        ]
+      }
+    });
+
+    renderWithRouter(<CalendarPage />, "/calendar");
+
+    expect(await screen.findByText("Life Force today")).toBeInTheDocument();
+    expect(
+      screen.getAllByText((_content, element) => {
+        const text = element?.textContent?.replace(/\s+/g, " ").trim() ?? "";
+        return text.includes("86 / 220 AP") || text.includes("86/220 AP");
+      }).length
+    ).toBeGreaterThan(0);
+    expect(screen.getByText(/planned remaining 86 ap/i)).toBeInTheDocument();
+    expect(screen.getAllByText("13 AP/h").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("14 AP/h").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("4.2 AP/h").length).toBeGreaterThan(0);
+    expect(screen.getByText("Hiring meeting")).toBeInTheDocument();
+    expect(screen.getAllByText("Focus block").length).toBeGreaterThan(0);
+    expect(screen.getByText("Planning window")).toBeInTheDocument();
+  });
+
   it("lets the user edit and delete recurring work blocks from the calendar surface", async () => {
     const calendarFixture = {
       calendar: {
@@ -692,7 +926,9 @@ describe("calendar routing surfaces", () => {
         endMinute: 1440,
         startsOn: "2026-04-01",
         endsOn: "2026-04-10",
-        blockingState: "blocked"
+        blockingState: "blocked",
+        activityPresetKey: null,
+        customSustainRateApPerHour: null
       });
     });
 

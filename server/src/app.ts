@@ -3230,6 +3230,20 @@ const AGENT_ONBOARDING_ENTITY_CATALOG = [
     fieldGuide: []
   }),
   enrichOnboardingEntityGuide({
+    entityType: "work_adjustment",
+    purpose:
+      "A truthful signed minute correction on an existing task or project when work happened outside a live run.",
+    minimumCreateFields: [],
+    relationshipRules: [
+      "Work adjustments are action-heavy corrections, not normal CRUD entities.",
+      "Use forge_adjust_work_minutes when the target task or project already exists and only tracked minutes need to change."
+    ],
+    searchHints: [
+      "Confirm the target task or project first, then apply only the signed minute delta that is actually true."
+    ],
+    fieldGuide: []
+  }),
+  enrichOnboardingEntityGuide({
     entityType: "questionnaire_run",
     purpose:
       "One user-owned answer session against a questionnaire instrument version.",
@@ -3240,6 +3254,34 @@ const AGENT_ONBOARDING_ENTITY_CATALOG = [
     ],
     searchHints: [
       "Read the run detail when continuing or reviewing an in-flight answer session."
+    ],
+    fieldGuide: []
+  }),
+  enrichOnboardingEntityGuide({
+    entityType: "preference_judgment",
+    purpose:
+      "One pairwise preference outcome between two items inside a domain and context.",
+    minimumCreateFields: [],
+    relationshipRules: [
+      "Preference judgments are action-heavy records, not batch CRUD entities.",
+      "Use the dedicated judgment route so the profile, evidence, and comparison history stay aligned."
+    ],
+    searchHints: [
+      "Confirm the left and right items, the outcome, and the active context before storing a new judgment."
+    ],
+    fieldGuide: []
+  }),
+  enrichOnboardingEntityGuide({
+    entityType: "preference_signal",
+    purpose:
+      "One direct preference signal such as favorite, veto, bookmark, neutral, or compare-later.",
+    minimumCreateFields: [],
+    relationshipRules: [
+      "Preference signals are action-heavy records, not batch CRUD entities.",
+      "Use the dedicated signal route so the profile and evidence model stay aligned."
+    ],
+    searchHints: [
+      "Confirm the item, signal type, and context before storing a new direct signal."
     ],
     fieldGuide: []
   }),
@@ -3282,6 +3324,48 @@ const AGENT_ONBOARDING_ENTITY_CATALOG = [
         description: "Markdown body."
       }
     ]
+  }),
+  enrichOnboardingEntityGuide({
+    entityType: "movement",
+    purpose:
+      "The specialized Movement surface for day, month, all-time, timeline, trip, place, selection, and manual overlay work.",
+    minimumCreateFields: [],
+    relationshipRules: [
+      "Movement is a specialized domain surface, not a normal batch CRUD entity family.",
+      "Read and mutate it through the dedicated movement routes published under specializedDomainSurfaces."
+    ],
+    searchHints: [
+      "Clarify whether the user wants a behavioral query, one trip or place, a missing-gap overlay, a manual add or update, or a link before choosing the route."
+    ],
+    fieldGuide: []
+  }),
+  enrichOnboardingEntityGuide({
+    entityType: "life_force",
+    purpose:
+      "The specialized Life Force surface for the current energy overview, profile edits, weekday templates, and fatigue signals.",
+    minimumCreateFields: [],
+    relationshipRules: [
+      "Life Force is a specialized domain surface, not a normal batch CRUD entity family.",
+      "Use the dedicated overview, profile, weekday-template, and fatigue-signal routes."
+    ],
+    searchHints: [
+      "Clarify whether the user wants explanation, durable model changes, or a real-time tired or recovered signal before choosing the route."
+    ],
+    fieldGuide: []
+  }),
+  enrichOnboardingEntityGuide({
+    entityType: "workbench",
+    purpose:
+      "The specialized Workbench surface for flow catalog work, flow CRUD, execution, run history, published outputs, node results, and latest-node-output reads.",
+    minimumCreateFields: [],
+    relationshipRules: [
+      "Workbench is a specialized execution surface, not a normal batch CRUD entity family.",
+      "Use the dedicated workbench flow, run, output, and node-result routes."
+    ],
+    searchHints: [
+      "Clarify whether the user wants flow discovery, editing, execution, published output, run inspection, or node-level output before choosing the route."
+    ],
+    fieldGuide: []
   }),
   enrichOnboardingEntityGuide({
     entityType: "self_observation",
@@ -3330,6 +3414,7 @@ const AGENT_ONBOARDING_ENTITY_CATALOG = [
 const AGENT_ONBOARDING_CONVERSATION_RULES = [
   "Ask only for what is missing or unclear instead of walking the user through every optional field.",
   "Start by saying what seems to matter here or what the record is becoming, then ask the next useful question.",
+  "Whenever possible, make the direction of the intake visible before the question by naming what you think the user is trying to preserve, clarify, decide, schedule, or make easier.",
   "Before each question, decide the one missing thing you are trying to clarify and why it matters for the record.",
   "Use a progression of concrete example or intent, working name, purpose or meaning, placement in Forge, operational details, and linked context.",
   "Ask one to three focused questions at a time. One is usually best when the user is uncertain or emotionally loaded.",
@@ -3337,6 +3422,7 @@ const AGENT_ONBOARDING_CONVERSATION_RULES = [
   "If the user already answered the normal opening question, do not repeat it. Move to the next missing clarification.",
   "Do not over-therapize logistical entities. For tasks, calendar events, work blocks, timeboxes, and task runs, one brief confirming sentence plus one question is usually enough.",
   "After each substantive answer, briefly say what is becoming clearer and ask only for the next thing that still changes the record shape or usefulness.",
+  "For strategic, reflective, or emotionally meaningful non-Psyche records, ask what feels important to keep true before you ask for labels, dates, or taxonomy.",
   "For reusable records such as tags, event types, emotion definitions, preference contexts, or questionnaires, ask what distinction or decision the record should help with before you ask for wording.",
   "When useful, help the user name, define, and connect the record in that order: offer a working label, clarify what belongs inside it, then ask about links only after the record itself feels steady.",
   "When the meaning is clearer than the wording, offer a tentative title or formulation yourself and invite correction instead of forcing the user to wordsmith alone.",
@@ -3344,7 +3430,9 @@ const AGENT_ONBOARDING_CONVERSATION_RULES = [
   "Once the record is clear enough to name, stop exploring broadly and ask only for the last structural detail that still matters.",
   "If the record is already clear enough to save, save it instead of performing a ceremonial extra question.",
   "If the user accepts the wording or record shape, move to the write instead of reopening the intake.",
-  "When updating an entity, start with what is changing, what should stay true, and what prompted the update now."
+  "When updating an entity, start with what is changing, what should stay true, and what prompted the update now.",
+  "For action-heavy flows such as work adjustments, preference judgments, preference signals, and specialized Movement, Life Force, or Workbench work, first ask what the user is trying to understand, change, add, update, link, or run, then choose the dedicated action or surface route instead of forcing the request into generic CRUD.",
+  "For Movement specifically, treat missing-data corrections as user-defined overlay boxes unless the user is editing an already-recorded stay or trip. When the user already gave a clear instruction like 'that missing block was home', act after only the last ambiguity is resolved."
 ] as const;
 
 const AGENT_ONBOARDING_ENTITY_CONVERSATION_PLAYBOOKS = [
@@ -3371,6 +3459,7 @@ const AGENT_ONBOARDING_ENTITY_CONVERSATION_PLAYBOOKS = [
       "Ask what this piece of work is trying to make true.",
       "Reflect the emerging boundary so the user can hear what is in scope.",
       "Ask what outcome would make the project feel real or complete for now.",
+      "Ask what belongs inside the boundary and what can stay out if the scope still feels muddy.",
       "Ask which goal it belongs under.",
       "Land on a working name once the scope is clear.",
       "Clarify status, owner, and notes only after the scope is clear."
@@ -3410,6 +3499,7 @@ const AGENT_ONBOARDING_ENTITY_CONVERSATION_PLAYBOOKS = [
     askSequence: [
       "Ask what the recurring behavior is in plain language.",
       "Ask whether doing it is aligned or a slip.",
+      "Ask what an honest hit or miss would look like in an ordinary week.",
       "Ask about cadence and what counts as an honest check-in in practice.",
       "Ask about links only if they will help later review."
     ]
@@ -3434,6 +3524,7 @@ const AGENT_ONBOARDING_ENTITY_CONVERSATION_PLAYBOOKS = [
       "Preserve the useful context and link it to the right places without turning the note into a dump.",
     askSequence: [
       "Ask what the note needs to preserve.",
+      "Ask what sentence future-you would need to recover from this note later.",
       "Ask what entities it should stay attached to.",
       "Ask whether it should be durable or temporary.",
       "Ask about tags or author only if they help retrieval or handoff."
@@ -3527,6 +3618,19 @@ const AGENT_ONBOARDING_ENTITY_CONVERSATION_PLAYBOOKS = [
     ]
   },
   {
+    focus: "work_adjustment",
+    openingQuestion:
+      "Which task or project should this time correction belong to?",
+    coachingGoal:
+      "Correct tracked minutes truthfully without pretending a live run happened.",
+    askSequence: [
+      "Ask what existing task or project the minutes belong to.",
+      "Ask whether time should be added or removed.",
+      "Ask what real work or correction the adjustment is meant to capture.",
+      "Ask for a short audit note only if the reason would otherwise be unclear later."
+    ]
+  },
+  {
     focus: "self_observation",
     openingQuestion: "What did you notice most clearly in that moment?",
     coachingGoal:
@@ -3534,6 +3638,7 @@ const AGENT_ONBOARDING_ENTITY_CONVERSATION_PLAYBOOKS = [
     askSequence: [
       "Ask what was observed.",
       "Reflect the moment without pretending it is already a finished interpretation.",
+      "Ask for the smallest concrete slice if the observation still feels vague or global.",
       "Ask when it happened or became noticeable unless timing is already clear.",
       "Ask what it may connect to: pattern, belief, value, mode, task, project, or note.",
       "Ask for tags or extra context only if that will help later review."
@@ -3586,6 +3691,7 @@ const AGENT_ONBOARDING_ENTITY_CONVERSATION_PLAYBOOKS = [
     askSequence: [
       "Ask what makes this item worth including in the catalog.",
       "Ask what catalog or domain it belongs to if that is still unclear.",
+      "Ask what would make the comparison confusing or unfair if the label stayed as-is.",
       "Ask for a short clarifying description only if the label would be ambiguous later.",
       "Ask about aliases or tags only if they help retrieval."
     ]
@@ -3618,6 +3724,31 @@ const AGENT_ONBOARDING_ENTITY_CONVERSATION_PLAYBOOKS = [
     ]
   },
   {
+    focus: "preference_judgment",
+    openingQuestion: "What comparison are you actually trying to settle here?",
+    coachingGoal:
+      "Capture one pairwise preference decision with the right context instead of only logging a left-versus-right click.",
+    askSequence: [
+      "Ask what comparison the user is actually trying to settle.",
+      "Ask which context or domain this judgment belongs to.",
+      "Ask whether the result is left, right, tie, or skip.",
+      "Ask for reason tags or strength only if they will improve later interpretation."
+    ]
+  },
+  {
+    focus: "preference_signal",
+    openingQuestion:
+      "What do you want Forge to remember about this item right now?",
+    coachingGoal:
+      "Store a direct preference signal such as favorite, veto, bookmark, or compare-later with enough context to interpret it later.",
+    askSequence: [
+      "Ask what item the user wants to mark.",
+      "Ask what signal they want to give it.",
+      "Ask what domain or context this belongs to if that is still unclear.",
+      "Ask about strength only if the user is expressing a gradient rather than a simple mark."
+    ]
+  },
+  {
     focus: "questionnaire_instrument",
     openingQuestion:
       "What would this questionnaire help someone notice or track?",
@@ -3640,7 +3771,49 @@ const AGENT_ONBOARDING_ENTITY_CONVERSATION_PLAYBOOKS = [
     askSequence: [
       "Ask which questionnaire run this is about.",
       "Ask whether the user wants to start, continue, review, or complete it.",
+      "If the user wants to continue or finish, ask what state they are in right now before asking for more content.",
       "If answering is still in progress, ask only for the next answer or note that matters."
+    ]
+  },
+  {
+    focus: "movement",
+    openingQuestion:
+      "Are you trying to understand where you stayed and traveled, change one stay or trip, or answer a question about your movement behavior?",
+    coachingGoal:
+      "Clarify whether the user wants a time-in-place query, travel-history review, a missing-gap overlay, one stay or trip change, one place summary, or a link before choosing the dedicated movement route.",
+    askSequence: [
+      "Ask whether the user is trying to query behavior, add something manually, update an existing movement item, or link movement to another Forge entity.",
+      "Ask whether the focus is a stay, a trip, a place, a timeline window, or a selected span.",
+      "Ask for the time window, place, or movement item that makes the question concrete.",
+      "Ask what they are trying to notice, preserve, or answer through that movement context.",
+      "If the request is filling a missing-data gap, use a user-defined movement box rather than a raw stay or trip patch.",
+      "When the user already gave a concrete correction like 'I stayed home during that missing block', confirm only the interval or place if needed, then create the overlay and read the timeline back."
+    ]
+  },
+  {
+    focus: "life_force",
+    openingQuestion:
+      "Do you want to understand the current energy picture, change how Forge models it, or log how you feel right now?",
+    coachingGoal:
+      "Clarify whether the job is overview, profile change, weekday-template editing, or a real-time fatigue signal before choosing the dedicated life-force route.",
+    askSequence: [
+      "Ask whether the job is overview, profile change, weekday-template change, or fatigue signaling.",
+      "Ask what part of the current energy picture feels most important or inaccurate.",
+      "Ask what should stay true if they are changing profile or template assumptions.",
+      "Route to the dedicated life-force path once the lane is clear."
+    ]
+  },
+  {
+    focus: "workbench",
+    openingQuestion:
+      "Are you trying to inspect a flow, change it, run it, or inspect one run's outputs?",
+    coachingGoal:
+      "Clarify whether the user wants flow discovery, editing, execution, run history, published outputs, or node-level inspection before using the dedicated workbench route family.",
+    askSequence: [
+      "Ask whether the job is flow discovery, one flow edit, execution, run history, published output, node-level inspection, or latest-node-output lookup.",
+      "Ask which flow, slug, run, or node the request is about.",
+      "Ask what the user is trying to learn, repair, or publish through that flow.",
+      "Route to the dedicated workbench route family once the execution lane is clear."
     ]
   },
   {
@@ -3704,6 +3877,7 @@ const AGENT_ONBOARDING_PSYCHE_PLAYBOOKS = [
     notes: [
       "Use an ACT-style values clarification stance: values are directions to live toward, not boxes to complete.",
       "Ask one or two questions at a time, reflect back the user's language, and only then move toward naming committed actions or linked work items.",
+      "Reflect the pain, longing, or importance that makes the value alive before narrowing to action.",
       "If the user says they want to understand it first, start with one orienting question before offering a formulation or save suggestion."
     ]
   },
@@ -3792,7 +3966,8 @@ const AGENT_ONBOARDING_PSYCHE_PLAYBOOKS = [
       "Keep the user close to observable behavior rather than jumping straight to labels.",
       "When the behavior clearly belongs inside a larger loop, suggest linking or also mapping the related behavior_pattern.",
       "If the user asks for understanding before storage, ask about the recent example and function of the move before classifying it.",
-      "Ask what the move is trying to do for the user before moving into replacement planning."
+      "Ask what the move is trying to do for the user before moving into replacement planning.",
+      "Name the immediate protective job before discussing costs or alternatives."
     ]
   },
   {
@@ -4577,6 +4752,14 @@ function buildAgentOnboardingPayload(request: {
         "A recurring half-day or custom time window such as Main Activity, Secondary Activity, Third Activity, Rest, Holiday, or Custom. Work blocks can allow or block work by default, can define active date bounds, and remain editable through the calendar surface.",
       taskTimebox:
         "A planned or live calendar slot tied to a task. Timeboxes can be suggested in advance or created automatically from active task runs.",
+      workAdjustment:
+        "A work adjustment is a truthful signed minute correction on an existing task or project when real work happened but no live run was active.",
+      movement:
+        "Forge Movement is the first-class mobility surface. It is a timeline of stays and trips: stays capture time spent in the same place, and trips capture travel between places. Use it for time-in-place questions, travel-history review, specific stay or trip edits, selected-span aggregates, known places, and links to other Forge records rather than pretending stays and trips are normal batch CRUD entities.",
+      lifeForce:
+        "Life Force is Forge's energy-budget and fatigue model. Read it through the dedicated life-force payload and update it through focused profile, weekday-template, and fatigue-signal routes rather than generic entity CRUD.",
+      workbench:
+        "Workbench is Forge's graph-flow execution system. Treat flows, runs, published outputs, node results, and latest-node-output reads as a dedicated API family instead of a normal entity-batch surface.",
       psyche:
         "Forge Psyche is the reflective domain for values, patterns, behaviors, beliefs, modes, and trigger reports. It is sensitive and should be handled deliberately."
     },
@@ -4716,6 +4899,88 @@ function buildAgentOnboardingPayload(request: {
             "Create or update an observed note with frontmatter.observedAt. Manual reflections usually carry the Self-observation tag, while movement sync can also publish rolling observed notes tagged movement."
         }
       },
+      specializedDomainSurfaces: {
+        movement: {
+          summary:
+            "Dedicated movement workspace API. Use these routes for stays, trips, time-in-place questions, visited places, trip detail, selected-span aggregates, and user-defined overlays.",
+          readRoutes: {
+            day: "/api/v1/movement/day",
+            month: "/api/v1/movement/month",
+            allTime: "/api/v1/movement/all-time",
+            timeline: "/api/v1/movement/timeline",
+            places: "/api/v1/movement/places",
+            tripDetail: "/api/v1/movement/trips/:id",
+            selection: "/api/v1/movement/selection",
+            settings: "/api/v1/movement/settings"
+          },
+          writeRoutes: {
+            placeCreate: "/api/v1/movement/places",
+            placeUpdate: "/api/v1/movement/places/:id",
+            userBoxCreate: "/api/v1/movement/user-boxes",
+            userBoxPreflight: "/api/v1/movement/user-boxes/preflight",
+            userBoxUpdate: "/api/v1/movement/user-boxes/:id",
+            automaticBoxInvalidate:
+              "/api/v1/movement/automatic-boxes/:id/invalidate",
+            stayUpdate: "/api/v1/movement/stays/:id",
+            tripUpdate: "/api/v1/movement/trips/:id",
+            tripPointUpdate: "/api/v1/movement/trips/:id/points/:pointId"
+          },
+          notes: [
+            "Movement is not a normal batch CRUD entity family. It is a dedicated record of stays and trips: a stay means the user remained in the same place for a span of time, and a trip means they traveled between places.",
+            "Use /api/v1/movement/day, /month, /all-time, /timeline, or /selection when the user wants behavioral answers such as how long they stayed at home, when they traveled, which places dominated a period, or what happened across a selected span.",
+            "Use the movement write routes when the user wants to add a place or manual overlay, update a specific stay or trip, or attach movement context to another Forge record. If the user is filling a missing-data gap, the usual write path is a user-defined overlay box rather than a raw stay or trip patch.",
+            "For an explicit statement like 'that missing block was me staying home', do not reopen broad intake. Preflight only if timing overlap is unclear, then create a user-defined `stay` box for that interval and read the updated timeline back."
+          ]
+        },
+        lifeForce: {
+          summary:
+            "Dedicated life-force API. Use it to read the current energy budget, drains, recommendations, and warnings, then patch only the parts that are meant to be user-controlled.",
+          readRoutes: {
+            overview: "/api/v1/life-force"
+          },
+          writeRoutes: {
+            profile: "/api/v1/life-force/profile",
+            weekdayTemplate: "/api/v1/life-force/templates/:weekday",
+            fatigueSignal: "/api/v1/life-force/fatigue-signals"
+          },
+          notes: [
+            "Life Force is a focused domain surface, not a batch CRUD entity type.",
+            "Use GET /api/v1/life-force for the current overview payload with stats, drains, recommendations, and current-curve state.",
+            "Patch the profile only for durable personal settings, update weekday templates only for the curve itself, and post fatigue signals for real-time tired or recovered observations."
+          ]
+        },
+        workbench: {
+          summary:
+            "Dedicated graph-flow API. Use it for flow catalog reads, flow CRUD, execution, run history, published outputs, node results, and latest successful node outputs.",
+          readRoutes: {
+            listFlows: "/api/v1/workbench/flows",
+            flowById: "/api/v1/workbench/flows/:id",
+            flowBySlug: "/api/v1/workbench/flows/by-slug/:slug",
+            publishedOutput: "/api/v1/workbench/flows/:id/output",
+            runs: "/api/v1/workbench/flows/:id/runs",
+            runDetail: "/api/v1/workbench/flows/:id/runs/:runId",
+            runNodes: "/api/v1/workbench/flows/:id/runs/:runId/nodes",
+            nodeResult:
+              "/api/v1/workbench/flows/:id/runs/:runId/nodes/:nodeId",
+            latestNodeOutput:
+              "/api/v1/workbench/flows/:id/nodes/:nodeId/output",
+            boxCatalog: "/api/v1/workbench/catalog/boxes"
+          },
+          writeRoutes: {
+            createFlow: "/api/v1/workbench/flows",
+            updateFlow: "/api/v1/workbench/flows/:id",
+            deleteFlow: "/api/v1/workbench/flows/:id",
+            runFlow: "/api/v1/workbench/flows/:id/run",
+            runByPayload: "/api/v1/workbench/run",
+            chatFlow: "/api/v1/workbench/flows/:id/chat"
+          },
+          notes: [
+            "Workbench is a dedicated execution surface, not a batch CRUD entity family.",
+            "Use the flow routes when the agent needs stable public input contracts, published outputs, node-level results, or reusable execution history.",
+            "Prefer the dedicated output and node-result routes over reverse-engineering raw traces."
+          ]
+        }
+      },
       readModelOnlySurfaces: {
         sleepOverview: "/api/v1/health/sleep",
         sportsOverview: "/api/v1/health/fitness",
@@ -4805,6 +5070,10 @@ function buildAgentOnboardingPayload(request: {
       weeklyReview: "/api/v1/reviews/weekly",
       sleepOverview: "/api/v1/health/sleep",
       sportsOverview: "/api/v1/health/fitness",
+      lifeForce: "/api/v1/life-force",
+      movementTimeline: "/api/v1/movement/timeline",
+      movementAllTime: "/api/v1/movement/all-time",
+      workbenchFlows: "/api/v1/workbench/flows",
       wikiSettings: "/api/v1/wiki/settings",
       wikiSearch: "/api/v1/wiki/search",
       wikiHealth: "/api/v1/wiki/health",

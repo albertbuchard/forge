@@ -369,6 +369,7 @@ The live onboarding payload is the deep contract for agents. It now includes:
 - `psycheCoachingPlaybooks`: how to guide users through values work, functional analysis, behavior mapping, belief/schema intake, mode work, mode-guide sessions, and trigger reports with active listening instead of raw form prompts
 - `relationshipModel`: how goals, projects, tasks, task runs, Psyche entities, and insights connect
 - `entityCatalog`: exact field-level definitions for real Forge entity payloads
+- `entityRouteModel.specializedDomainSurfaces`: the dedicated route families for Movement, Life Force, and Workbench, including when not to use generic batch CRUD
 - `toolInputCatalog`: exact mutation and live-work input shapes with examples
 
 That means the agent should use the real route-facing fields, for example:

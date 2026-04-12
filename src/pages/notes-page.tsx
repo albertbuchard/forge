@@ -34,6 +34,7 @@ import { EmptyState, ErrorState } from "@/components/ui/page-state";
 import { Textarea } from "@/components/ui/textarea";
 import {
   createNote,
+  getLifeForce,
   listBehaviors,
   listBehaviorPatterns,
   listBeliefs,
@@ -45,6 +46,11 @@ import {
   deleteNote
 } from "@/lib/api";
 import { getEntityKindForCrudEntityType } from "@/lib/entity-visuals";
+import {
+  estimateQuickNoteActionPointLoad,
+  formatLifeForceAp,
+  formatLifeForceRate
+} from "@/lib/life-force-display";
 import {
   buildDestroyAtFromDelay,
   formatNoteDestroyAtInput,
@@ -239,6 +245,13 @@ export function NotesPage() {
   const reportsQuery = useQuery({
     queryKey: ["forge-psyche-reports"],
     queryFn: listTriggerReports
+  });
+  const selectedUserIds = Array.isArray(shell.selectedUserIds)
+    ? shell.selectedUserIds
+    : [];
+  const lifeForceQuery = useQuery({
+    queryKey: ["forge-life-force", ...selectedUserIds],
+    queryFn: async () => (await getLifeForce(selectedUserIds)).lifeForce
   });
 
   useEffect(() => {
@@ -565,6 +578,12 @@ export function NotesPage() {
   });
 
   const visibleNotes = notesQuery.data?.notes ?? [];
+  const todayKey = new Date().toISOString().slice(0, 10);
+  const notesCreatedToday = visibleNotes.filter(
+    (note) => note.createdAt.slice(0, 10) === todayKey
+  );
+  const todayNoteAp =
+    notesCreatedToday.length * estimateQuickNoteActionPointLoad().totalAp;
   const activeMenuNote = menuState
     ? (visibleNotes.find((note) => note.id === menuState.noteId) ?? null)
     : null;
@@ -656,6 +675,61 @@ export function NotesPage() {
         }
       />
 
+      <section className="grid gap-4 lg:grid-cols-4">
+        <Card className="border-[var(--primary)]/16 shadow-[0_0_0_1px_rgba(245,158,11,0.08)]">
+          <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">
+            Quick note default
+          </div>
+          <div className="mt-3 font-display text-4xl text-[var(--primary)]">
+            {formatLifeForceAp(estimateQuickNoteActionPointLoad().totalAp)}
+          </div>
+          <div className="mt-2 text-sm text-white/58">
+            Standalone notes count as a tiny Action Point impulse unless a
+            richer active work context already covers them.
+          </div>
+        </Card>
+        <Card>
+          <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">
+            Notes created today
+          </div>
+          <div className="mt-3 font-display text-4xl text-white">
+            {formatLifeForceAp(todayNoteAp)}
+          </div>
+          <div className="mt-2 text-sm text-white/58">
+            Visible notes created today in this workspace at the default quick
+            note cost.
+          </div>
+        </Card>
+        <Card>
+          <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">
+            Life Force sync
+          </div>
+          <div className="mt-3 text-2xl font-display text-white">
+            {lifeForceQuery.data
+              ? `${formatLifeForceAp(lifeForceQuery.data.spentTodayAp)} / ${formatLifeForceAp(lifeForceQuery.data.dailyBudgetAp)}`
+              : "Loading..."}
+          </div>
+          <div className="mt-2 text-sm text-white/58">
+            Notes participate in the same Action Point ledger as tasks, habits,
+            movement, and calendar work.
+          </div>
+        </Card>
+        <Card>
+          <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">
+            Instant headroom
+          </div>
+          <div className="mt-3 text-2xl font-display text-white">
+            {lifeForceQuery.data
+              ? formatLifeForceRate(lifeForceQuery.data.instantFreeApPerHour)
+              : "Loading..."}
+          </div>
+          <div className="mt-2 text-sm text-white/58">
+            Useful when deciding whether to just capture a quick note or stay
+            inside a heavier work stream.
+          </div>
+        </Card>
+      </section>
+
       <NoteFiltersBox>
         <Card className="grid gap-4">
         <NoteFilterInput
@@ -704,6 +778,8 @@ export function NotesPage() {
                 Notes are independent Markdown entities. Link them to one or
                 more real records, add memory-system or custom tags, and
                 optionally make them ephemeral with an automatic destroy time.
+                Standalone notes default to{" "}
+                {formatLifeForceAp(estimateQuickNoteActionPointLoad().totalAp)}.
               </div>
             </div>
             <Button
@@ -871,6 +947,15 @@ export function NotesPage() {
                       {new Date(note.updatedAt).toLocaleString()}
                     </div>
                     <div className="mt-3 flex flex-wrap gap-2">
+                      <Badge
+                        className="bg-[var(--primary)]/12 text-[var(--primary)]"
+                        wrap
+                      >
+                        {formatLifeForceAp(
+                          estimateQuickNoteActionPointLoad(note).totalAp
+                        )}{" "}
+                        quick note
+                      </Badge>
                       {note.links.map((link) => (
                         <Badge
                           key={`${note.id}-${link.entityType}-${link.entityId}-${link.anchorKey ?? ""}`}

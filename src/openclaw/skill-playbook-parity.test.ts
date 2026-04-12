@@ -74,6 +74,12 @@ describe("forge skill playbook parity", () => {
     expect(openclawSkill).toMatch(/Self-observation/);
     expect(openclawSkill).toMatch(/sleep_session/i);
     expect(openclawSkill).toMatch(/workout_session/i);
+    expect(openclawSkill).toMatch(/\/api\/v1\/movement/i);
+    expect(openclawSkill).toMatch(/\/api\/v1\/life-force/i);
+    expect(openclawSkill).toMatch(/\/api\/v1\/workbench/i);
+    expect(openclawSkill).toMatch(/forge_adjust_work_minutes/);
+    expect(openclawSkill).toMatch(/forge_submit_preferences_judgment/);
+    expect(openclawSkill).toMatch(/forge_submit_preferences_signal/);
     expect(openclawSkill).toMatch(/Batch CRUD is the default for simple entities|shared batch entity tools/i);
 
     expect(hermesSkill).toMatch(/high-level batch routes for basic Preferences CRUD/i);
@@ -81,10 +87,18 @@ describe("forge skill playbook parity", () => {
     expect(hermesSkill).toMatch(/Self-observation is note-backed/i);
     expect(hermesSkill).toMatch(/Batch CRUD is the default for simple entities/i);
     expect(hermesSkill).toMatch(/route jungle|one-route-per-entity/i);
+    expect(hermesSkill).toMatch(/specializedDomainSurfaces/i);
+    expect(hermesSkill).toMatch(/work_adjustment/i);
+    expect(hermesSkill).toMatch(/preference_judgment/i);
+    expect(hermesSkill).toMatch(/preference_signal/i);
     expect(codexSkill).toMatch(/sleep_session/i);
     expect(codexSkill).toMatch(/workout_session/i);
     expect(codexSkill).toMatch(/simple entities/i);
     expect(codexSkill).toMatch(/hundreds of individual CRUD routes|route jungle/i);
+    expect(codexSkill).toMatch(/specializedDomainSurfaces/i);
+    expect(codexSkill).toMatch(/forge_adjust_work_minutes/);
+    expect(codexSkill).toMatch(/preference_judgment/i);
+    expect(codexSkill).toMatch(/preference_signal/i);
   });
 
   it("keeps the canonical playbooks focused on guided, one-lane questioning", () => {
@@ -125,9 +139,16 @@ describe("forge skill playbook parity", () => {
     expect(entityPlaybook).toMatch(/## Preference Catalog Item/);
     expect(entityPlaybook).toMatch(/## Preference Context/);
     expect(entityPlaybook).toMatch(/## Preference Item/);
+    expect(entityPlaybook).toMatch(/## Preference Judgment/);
+    expect(entityPlaybook).toMatch(/## Preference Signal/);
     expect(entityPlaybook).toMatch(/## Wiki Page/);
     expect(entityPlaybook).toMatch(/## Calendar Connection/);
+    expect(entityPlaybook).toMatch(/## Work Adjustment/);
+    expect(entityPlaybook).toMatch(/## Movement/);
+    expect(entityPlaybook).toMatch(/## Life Force/);
+    expect(entityPlaybook).toMatch(/## Workbench/);
     expect(entityPlaybook).toMatch(/favorite, veto, or compare-later/i);
+    expect(entityPlaybook).toMatch(/specialized surface work in Movement, Life Force, or Workbench/i);
     expect(entityPlaybook).toMatch(/candidate label[\s\S]*what kinds of moments belong inside it/i);
     expect(entityPlaybook).toMatch(/keep it provisional[\s\S]*future use are clear/i);
     expect(entityPlaybook).toMatch(/When the record is already clear enough to save, save it/i);
@@ -257,5 +278,36 @@ describe("forge skill playbook parity", () => {
         ).toBe(true);
       }
     }
+  });
+
+  it("keeps onboarding source and OpenAPI schema aligned for specialized surfaces and action-heavy flows", () => {
+    const appSource = readRepoFile("server/src/app.ts");
+    const openApiSource = readRepoFile("server/src/openapi.ts");
+
+    expect(appSource).toMatch(/focus:\s*"work_adjustment"/);
+    expect(appSource).toMatch(/focus:\s*"preference_judgment"/);
+    expect(appSource).toMatch(/focus:\s*"preference_signal"/);
+    expect(appSource).toMatch(/focus:\s*"movement"/);
+    expect(appSource).toMatch(/focus:\s*"life_force"/);
+    expect(appSource).toMatch(/focus:\s*"workbench"/);
+    expect(appSource).toMatch(/entityType:\s*"work_adjustment"/);
+    expect(appSource).toMatch(/entityType:\s*"preference_judgment"/);
+    expect(appSource).toMatch(/entityType:\s*"preference_signal"/);
+    expect(appSource).toMatch(/entityType:\s*"movement"/);
+    expect(appSource).toMatch(/entityType:\s*"life_force"/);
+    expect(appSource).toMatch(/entityType:\s*"workbench"/);
+    expect(appSource).toMatch(/workAdjustment:/);
+    expect(appSource).toMatch(/specializedDomainSurfaces:/);
+    expect(appSource).toMatch(/movementAllTime:/);
+    expect(appSource).toMatch(/workbenchFlows:/);
+
+    expect(openApiSource).toMatch(/"workAdjustment"/);
+    expect(openApiSource).toMatch(/"movement"/);
+    expect(openApiSource).toMatch(/"lifeForce"/);
+    expect(openApiSource).toMatch(/"workbench"/);
+    expect(openApiSource).toMatch(/"specializedDomainSurfaces"/);
+    expect(openApiSource).toMatch(/"movementTimeline"/);
+    expect(openApiSource).toMatch(/"movementAllTime"/);
+    expect(openApiSource).toMatch(/"workbenchFlows"/);
   });
 });

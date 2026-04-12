@@ -16,6 +16,7 @@ import { HabitsPage } from "@/pages/habits-page";
 import { InsightsPage } from "@/pages/insights-page";
 import { KanbanPage } from "@/pages/kanban-page";
 import { KnowledgeGraphPage } from "@/pages/knowledge-graph-page";
+import { LifeForcePage } from "@/pages/life-force-page";
 import { MovementPage } from "@/pages/movement-page";
 import { NotesPage } from "@/pages/notes-page";
 import { OverviewPage } from "@/pages/overview-page";
@@ -150,6 +151,15 @@ export function App() {
         <Route element={<AppShell />}>
           <Route index element={<Navigate to="/overview" replace />} />
           <Route path="overview" element={<OverviewPage />} />
+          <Route
+            path="life-force"
+            element={surface(
+              "life-force-index",
+              "Life Force",
+              "Action Point capacity, weekday curves, and dynamic drains.",
+              <LifeForcePage />
+            )}
+          />
           <Route
             path="goals"
             element={surface(

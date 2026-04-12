@@ -40,6 +40,7 @@ import {
 } from "@/components/workbench-boxes/movement/movement-boxes";
 import {
   createMovementPlace,
+  getLifeForce,
   getMovementAllTime,
   getMovementDay,
   getMovementMonth,
@@ -50,6 +51,11 @@ import {
   patchMovementPlace,
   patchMovementSettings
 } from "@/lib/api";
+import {
+  estimateMovementTripActionPointLoad,
+  formatLifeForceAp,
+  formatLifeForceRate
+} from "@/lib/life-force-display";
 import { cn } from "@/lib/utils";
 import type { MovementKnownPlace, MovementTripPointRecord } from "@/lib/types";
 
@@ -681,6 +687,10 @@ export function MovementPage() {
     queryKey: ["forge-movement-all-time", ...selectedUserIds],
     queryFn: async () => (await getMovementAllTime(selectedUserIds)).movement
   });
+  const lifeForceQuery = useQuery({
+    queryKey: ["forge-life-force", ...selectedUserIds],
+    queryFn: async () => (await getLifeForce(selectedUserIds)).lifeForce
+  });
   const movementSettingsQuery = useQuery({
     queryKey: ["forge-movement-settings", ...selectedUserIds],
     queryFn: async () => (await getMovementSettings(selectedUserIds)).settings
@@ -888,6 +898,10 @@ export function MovementPage() {
   const movementSettings = movementSettingsQuery.data;
   const selectionAggregate =
     selectionAggregateQuery.data ?? movementDay.selectionAggregate;
+  const movementDayAp = movementDay.trips.reduce(
+    (sum, trip) => sum + estimateMovementTripActionPointLoad(trip).totalAp,
+    0
+  );
 
   return (
     <div className="grid gap-5">
@@ -920,6 +934,50 @@ export function MovementPage() {
           </div>
         }
       />
+
+      <Card className="grid gap-3 rounded-[28px] border border-white/8 bg-[linear-gradient(180deg,rgba(12,20,34,0.98),rgba(8,14,25,0.96))] p-4 md:grid-cols-3">
+        <div>
+          <div className="text-[11px] uppercase tracking-[0.18em] text-white/40">
+            Movement AP today
+          </div>
+          <div className="mt-2 text-3xl font-semibold text-white">
+            {formatLifeForceAp(movementDayAp)}
+          </div>
+          <div className="mt-2 text-sm text-white/58">
+            Trips and transitions now contribute to the same Action Point ledger as work, habits, and notes.
+          </div>
+        </div>
+        <div>
+          <div className="text-[11px] uppercase tracking-[0.18em] text-white/40">
+            Typical trip drain
+          </div>
+          <div className="mt-2 text-2xl font-semibold text-[var(--primary)]">
+            {movementDay.trips[0]
+              ? formatLifeForceRate(
+                  estimateMovementTripActionPointLoad(movementDay.trips[0]).rateApPerHour
+                )
+              : "0 AP/h"}
+          </div>
+          <div className="mt-2 text-sm text-white/58">
+            Movement uses a MET-like drain under the hood, translated into Forge Action Points.
+          </div>
+        </div>
+        <div>
+          <div className="text-[11px] uppercase tracking-[0.18em] text-white/40">
+            Life Force sync
+          </div>
+          <div className="mt-2 text-2xl font-semibold text-white">
+            {lifeForceQuery.data
+              ? `${Math.round(lifeForceQuery.data.spentTodayAp)}/${Math.round(lifeForceQuery.data.dailyBudgetAp)} AP`
+              : "Loading..."}
+          </div>
+          <div className="mt-2 text-sm text-white/58">
+            {lifeForceQuery.data
+              ? `${lifeForceQuery.data.instantFreeApPerHour.toFixed(1)} AP/h free right now`
+              : "Movement can now be read against today’s live capacity."}
+          </div>
+        </div>
+      </Card>
 
       <section className="grid gap-4 xl:grid-cols-[minmax(0,1.65fr)_minmax(20rem,0.95fr)]">
         <MovementSummaryBox>
@@ -1312,17 +1370,30 @@ export function MovementPage() {
                   <div className="font-label text-[11px] uppercase tracking-[0.2em] text-white/42">
                     Trip context
                   </div>
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    <Badge tone="signal">
-                      {distanceLabel(selectedTripQuery.data.trip.distanceMeters)}
-                    </Badge>
-                    <Badge tone="default" className="bg-white/[0.06] text-white/74">
-                      {selectedTripQuery.data.trip.activityType || selectedTripQuery.data.trip.travelMode}
-                    </Badge>
-                    <Badge tone="default" className="bg-white/[0.06] text-white/74">
-                      {durationLabel(selectedTripQuery.data.trip.durationSeconds)}
-                    </Badge>
-                  </div>
+                  {(() => {
+                    const apLoad = estimateMovementTripActionPointLoad(selectedTripQuery.data.trip);
+                    return (
+                      <>
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          <Badge tone="signal">
+                            {distanceLabel(selectedTripQuery.data.trip.distanceMeters)}
+                          </Badge>
+                          <Badge tone="default" className="bg-white/[0.06] text-white/74">
+                            {selectedTripQuery.data.trip.activityType || selectedTripQuery.data.trip.travelMode}
+                          </Badge>
+                          <Badge tone="default" className="bg-white/[0.06] text-white/74">
+                            {durationLabel(selectedTripQuery.data.trip.durationSeconds)}
+                          </Badge>
+                          <Badge tone="default" className="bg-[var(--primary)]/14 text-[var(--primary)]">
+                            {formatLifeForceRate(apLoad.rateApPerHour)}
+                          </Badge>
+                          <Badge tone="default" className="bg-white/[0.06] text-white/74">
+                            {formatLifeForceAp(apLoad.totalAp)}
+                          </Badge>
+                        </div>
+                      </>
+                    );
+                  })()}
                   <div className="mt-4 text-sm leading-6 text-white/58">
                     {formatTimeRange(
                       selectedTripQuery.data.trip.startedAt,
@@ -1558,13 +1629,29 @@ export function MovementPage() {
                     setSelectedTripId(trip.id);
                   }}
                 >
-                  <div className="text-xs uppercase tracking-[0.18em] text-white/36">
-                    Recent travel
-                  </div>
-                  <div className="mt-2 text-lg text-white">{trip.label || "Untitled trip"}</div>
-                  <div className="mt-1 text-sm text-white/56">
-                    {distanceLabel(trip.distanceMeters)} · {trip.activityType || "travel"}
-                  </div>
+                  {(() => {
+                    const apLoad = estimateMovementTripActionPointLoad({
+                      startedAt: trip.startedAt,
+                      endedAt: new Date(new Date(trip.startedAt).getTime() + 60 * 60 * 1000).toISOString(),
+                      expectedMet: 2
+                    });
+                    return (
+                      <>
+                        <div className="text-xs uppercase tracking-[0.18em] text-white/36">
+                          Recent travel
+                        </div>
+                        <div className="mt-2 text-lg text-white">{trip.label || "Untitled trip"}</div>
+                        <div className="mt-1 text-sm text-white/56">
+                          {distanceLabel(trip.distanceMeters)} · {trip.activityType || "travel"}
+                        </div>
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          <Badge tone="default" className="bg-[var(--primary)]/14 text-[var(--primary)]">
+                            {formatLifeForceRate(apLoad.rateApPerHour)}
+                          </Badge>
+                        </div>
+                      </>
+                    );
+                  })()}
                 </button>
               ))}
             </div>

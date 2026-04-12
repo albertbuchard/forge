@@ -578,6 +578,7 @@ export const lifeForcePayloadSchema = z.object({
     spentTodayAp: z.number(),
     remainingAp: z.number(),
     forecastAp: z.number(),
+    plannedRemainingAp: z.number(),
     targetBandMinAp: z.number().min(0),
     targetBandMaxAp: z.number().min(0),
     instantCapacityApPerHour: z.number().min(0),
@@ -591,6 +592,7 @@ export const lifeForcePayloadSchema = z.object({
     stats: z.array(lifeForceStatStateSchema),
     currentCurve: z.array(lifeForceCurvePointSchema),
     activeDrains: z.array(lifeForceDrainEntrySchema),
+    plannedDrains: z.array(lifeForceDrainEntrySchema),
     warnings: z.array(lifeForceWarningSchema),
     recommendations: z.array(trimmedString),
     topTaskIdsNeedingSplit: z.array(z.string()),
@@ -887,6 +889,7 @@ export const calendarEventSchema = z.object({
     categories: z.array(z.string()).default([]),
     sourceMappings: z.array(calendarEventSourceSchema).default([]),
     links: z.array(calendarEventLinkSchema).default([]),
+    actionProfile: actionProfileSchema.nullable().default(null),
     remoteUpdatedAt: z.string().nullable(),
     deletedAt: z.string().nullable(),
     createdAt: z.string(),
@@ -906,6 +909,7 @@ export const workBlockTemplateSchema = z
     startsOn: dateOnlySchema.nullable().default(null),
     endsOn: dateOnlySchema.nullable().default(null),
     blockingState: z.enum(["allowed", "blocked"]),
+    actionProfile: actionProfileSchema.nullable().default(null),
     createdAt: z.string(),
     updatedAt: z.string(),
     ...ownershipShape
@@ -937,6 +941,7 @@ export const workBlockInstanceSchema = z.object({
     color: z.string(),
     blockingState: z.enum(["allowed", "blocked"]),
     calendarEventId: z.string().nullable(),
+    actionProfile: actionProfileSchema.nullable().default(null),
     createdAt: z.string(),
     updatedAt: z.string()
 });
@@ -954,6 +959,7 @@ export const taskTimeboxSchema = z.object({
     startsAt: z.string(),
     endsAt: z.string(),
     overrideReason: trimmedString.nullable(),
+    actionProfile: actionProfileSchema.nullable().default(null),
     createdAt: z.string(),
     updatedAt: z.string(),
     ...ownershipShape
@@ -2416,7 +2422,11 @@ const workBlockTemplateMutationShape = {
     userId: nonEmptyTrimmedString.nullable().optional()
 };
 export const createWorkBlockTemplateSchema = z
-    .object(workBlockTemplateMutationShape)
+    .object({
+    ...workBlockTemplateMutationShape,
+    activityPresetKey: trimmedString.nullable().optional(),
+    customSustainRateApPerHour: z.number().min(0).nullable().optional()
+})
     .superRefine((value, context) => {
     if (value.endMinute <= value.startMinute) {
         context.addIssue({
@@ -2448,6 +2458,8 @@ export const updateWorkBlockTemplateSchema = z
     startsOn: dateOnlySchema.nullable().optional(),
     endsOn: dateOnlySchema.nullable().optional(),
     blockingState: z.enum(["allowed", "blocked"]).optional(),
+    activityPresetKey: trimmedString.nullable().optional(),
+    customSustainRateApPerHour: z.number().min(0).nullable().optional(),
     userId: nonEmptyTrimmedString.nullable().optional()
 })
     .superRefine((value, context) => {
@@ -2482,6 +2494,8 @@ export const createTaskTimeboxSchema = z
     source: calendarTimeboxSourceSchema.default("manual"),
     status: calendarTimeboxStatusSchema.default("planned"),
     overrideReason: trimmedString.nullable().default(null),
+    activityPresetKey: trimmedString.nullable().optional(),
+    customSustainRateApPerHour: z.number().min(0).nullable().optional(),
     userId: nonEmptyTrimmedString.nullable().optional()
 })
     .superRefine((value, context) => {
@@ -2499,6 +2513,8 @@ export const updateTaskTimeboxSchema = z.object({
     endsAt: z.string().datetime().optional(),
     status: calendarTimeboxStatusSchema.optional(),
     overrideReason: trimmedString.nullable().optional(),
+    activityPresetKey: trimmedString.nullable().optional(),
+    customSustainRateApPerHour: z.number().min(0).nullable().optional(),
     userId: nonEmptyTrimmedString.nullable().optional()
 });
 export const recommendTaskTimeboxesSchema = z.object({
@@ -2530,6 +2546,8 @@ export const updateCalendarEventSchema = z
     availability: calendarAvailabilitySchema.optional(),
     eventType: trimmedString.optional(),
     categories: z.array(trimmedString).optional(),
+    activityPresetKey: trimmedString.nullable().optional(),
+    customSustainRateApPerHour: z.number().min(0).nullable().optional(),
     preferredCalendarId: nonEmptyTrimmedString.nullable().optional(),
     userId: nonEmptyTrimmedString.nullable().optional(),
     links: z
@@ -2582,6 +2600,8 @@ export const createCalendarEventSchema = z
     availability: calendarAvailabilitySchema.default("busy"),
     eventType: trimmedString.default(""),
     categories: z.array(trimmedString).default([]),
+    activityPresetKey: trimmedString.nullable().optional(),
+    customSustainRateApPerHour: z.number().min(0).nullable().optional(),
     preferredCalendarId: nonEmptyTrimmedString.nullable().optional(),
     userId: nonEmptyTrimmedString.nullable().optional(),
     links: z

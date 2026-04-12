@@ -56,6 +56,7 @@ Entity conversation rule:
 - Before you ask, decide the exact missing thing you need and how that answer will help you name, place, or save the record.
 - Prefer a progression of:
   concrete example or intent -> working name -> purpose or meaning -> placement in Forge -> operational details -> linked context.
+- Use those same playbooks for action-heavy non-Psyche flows such as `work_adjustment`, `preference_judgment`, `preference_signal`, and specialized `movement`, `life_force`, or `workbench` requests so the conversation starts from what the user is trying to understand, change, add, update, link, or run before you choose the route.
 - For emotionally meaningful non-Psyche records such as goals, habits, and notes, reflect the meaning before you ask for structure.
 - When the user is vague, ask for one small concrete example, stake, or desired outcome before you ask them to name the record.
 - When the user is clear, say what the record seems to be becoming and ask only for the last missing detail.
@@ -291,8 +292,24 @@ Use the wiki tools for file-first memory work:
 Use the health tools for review and reflective enrichment, not as the default CRUD architecture:
 `forge_get_sleep_overview`, `forge_get_sports_overview`, `forge_update_sleep_session`, `forge_update_workout_session`
 
+Use the dedicated domain routes for specialized surfaces that are not simple batch entities:
+
+- Movement lives under `/api/v1/movement/*`. Treat it as a dedicated timeline of `stays` and `trips`, not as generic batch CRUD. A `stay` means the user remained in the same place for a span of time. A `trip` means the user traveled between places. Use the movement routes when the user wants to understand time in place, travel behavior, specific stays or trips, known places, or selected-span aggregates such as "how long was I at home in the past 2 weeks?" or "when did I travel last month?".
+- Movement user actions are: query movement behavior, add a place or manual stay/trip overlay, update an existing stay/trip/place, or link a specific movement item to another Forge entity. Keep the explanation user-facing: where they stayed, when they traveled, what changed, and what this movement should be linked to.
+- When the user is filling a missing-data gap, the default write path is a user-defined overlay box, not a raw stay or trip patch. Use `POST /api/v1/movement/user-boxes/preflight` if you need to confirm overlap or snap to the nearest missing interval, then `POST /api/v1/movement/user-boxes` with `kind: "stay"` or `kind: "trip"`.
+- Use `PATCH /api/v1/movement/stays/:id` or `PATCH /api/v1/movement/trips/:id` only when the user is editing an existing recorded stay or recorded trip. Do not use those routes to fill a missing span.
+- If the user says something as explicit as "that missing block was me staying home", do not reopen broad intake. Confirm the interval or place only if it is still ambiguous, then create the overlay and read the timeline back.
+- Life Force lives under `/api/v1/life-force*`. Use `GET /api/v1/life-force` for the current energy overview, `PATCH /api/v1/life-force/profile` for durable profile changes, `PUT /api/v1/life-force/templates/:weekday` for weekday curve edits, and `POST /api/v1/life-force/fatigue-signals` for real-time tired or recovered signals.
+- Workbench lives under `/api/v1/workbench/*`. Use those dedicated routes for flow catalog reads, flow CRUD, runs, published outputs, node results, and latest-node-output reads instead of trying to force Workbench through the batch entity routes.
+- If you are unsure which specialized route family applies, check `forge_get_agent_onboarding` and use its `entityRouteModel.specializedDomainSurfaces` section before guessing.
+
 Use live work tools for `task_run`:
 `forge_log_work`, `forge_start_task_run`, `forge_heartbeat_task_run`, `forge_focus_task_run`, `forge_complete_task_run`, `forge_release_task_run`
+
+Use `forge_adjust_work_minutes` for `work_adjustment` when the user wants a truthful signed minute correction on an existing task or project rather than a fake live run or a retroactive new task.
+
+Use the dedicated Preferences action tools for `preference_judgment` and `preference_signal`:
+`forge_submit_preferences_judgment`, `forge_submit_preferences_signal`, `forge_update_preferences_score`
 
 Use `forge_post_insight` for `insight`.
 Use the calendar tools for provider sync and planning:

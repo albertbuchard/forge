@@ -318,6 +318,7 @@ export interface LifeForcePayload {
   spentTodayAp: number;
   remainingAp: number;
   forecastAp: number;
+  plannedRemainingAp: number;
   targetBandMinAp: number;
   targetBandMaxAp: number;
   instantCapacityApPerHour: number;
@@ -331,6 +332,7 @@ export interface LifeForcePayload {
   stats: LifeForceStatState[];
   currentCurve: LifeForceCurvePoint[];
   activeDrains: LifeForceDrainEntry[];
+  plannedDrains: LifeForceDrainEntry[];
   warnings: LifeForceWarning[];
   recommendations: string[];
   topTaskIdsNeedingSplit: string[];
@@ -893,6 +895,7 @@ export interface CalendarEvent extends OwnedEntity {
   categories: string[];
   sourceMappings: CalendarEventSource[];
   links: CalendarEventLink[];
+  actionProfile: ActionProfile | null;
   remoteUpdatedAt: string | null;
   deletedAt: string | null;
   createdAt: string;
@@ -944,6 +947,7 @@ export interface WorkBlockTemplate extends OwnedEntity {
   startsOn: string | null;
   endsOn: string | null;
   blockingState: "allowed" | "blocked";
+  actionProfile: ActionProfile | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -959,6 +963,7 @@ export interface WorkBlockInstance {
   color: string;
   blockingState: "allowed" | "blocked";
   calendarEventId: string | null;
+  actionProfile: ActionProfile | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -977,6 +982,7 @@ export interface TaskTimebox extends OwnedEntity {
   startsAt: string;
   endsAt: string;
   overrideReason: string | null;
+  actionProfile: ActionProfile | null;
   createdAt: string;
   updatedAt: string;
 }

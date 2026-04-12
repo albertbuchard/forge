@@ -38,6 +38,7 @@ import {
   BookCopy,
   BrainCircuit,
   BriefcaseBusiness,
+  BatteryCharging,
   CalendarDays,
   Check,
   ChevronsLeft,
@@ -249,6 +250,13 @@ const PRIMARY_ROUTES: ShellRouteDefinition[] = [
     icon: LayoutDashboard
   },
   {
+    id: "life-force",
+    to: "/life-force",
+    label: "Life Force",
+    detail: "Action Point capacity, weekday curves, and instant drains",
+    icon: BatteryCharging
+  },
+  {
     id: "goals",
     to: "/goals",
     labelKey: "common.routeLabels.goals",
@@ -443,6 +451,8 @@ const USER_SCOPE_STORAGE_KEY = "forge.selected-user-ids";
 const DESKTOP_NAV_STORAGE_KEY = "forge.desktop-nav-layout";
 const MOBILE_NAV_STORAGE_KEY = "forge.mobile-nav-layout";
 const NAV_MIGRATION_STORAGE_KEY = "forge.nav-layout-migrations";
+const DESKTOP_SIDEBAR_METRICS_POSITION_STORAGE_KEY =
+  "forge.desktop-sidebar-metrics-position";
 const DESKTOP_KNOWLEDGE_GRAPH_MIGRATION = "desktop-knowledge-graph-default-v1";
 const MOBILE_KNOWLEDGE_GRAPH_MIGRATION = "mobile-knowledge-graph-default-v1";
 
@@ -1230,6 +1240,8 @@ function ShellNavEditor({
   onOpenChange,
   desktopNavIds,
   onDesktopNavIdsChange,
+  desktopSidebarMetricsPosition,
+  onDesktopSidebarMetricsPositionChange,
   mobileNavIds,
   onMobileNavIdsChange
 }: {
@@ -1237,6 +1249,8 @@ function ShellNavEditor({
   onOpenChange: (open: boolean) => void;
   desktopNavIds: string[];
   onDesktopNavIdsChange: (ids: string[]) => void;
+  desktopSidebarMetricsPosition: "above" | "below";
+  onDesktopSidebarMetricsPositionChange: (position: "above" | "below") => void;
   mobileNavIds: string[];
   onMobileNavIdsChange: (ids: string[]) => void;
 }) {
@@ -1358,6 +1372,31 @@ function ShellNavEditor({
         <div className="grid gap-3">
           <div className="text-[11px] uppercase tracking-[0.16em] text-white/38">
             Desktop sidebar
+          </div>
+          <div className="rounded-[20px] bg-white/[0.03] p-3">
+            <div className="text-[11px] uppercase tracking-[0.14em] text-white/38">
+              Metric strip position
+            </div>
+            <div className="mt-3 flex flex-wrap gap-2">
+              {([
+                ["above", "Above navigation"],
+                ["below", "Below navigation"]
+              ] as const).map(([value, label]) => (
+                <button
+                  key={value}
+                  type="button"
+                  className={cn(
+                    "rounded-full px-3 py-1.5 text-[12px] transition",
+                    desktopSidebarMetricsPosition === value
+                      ? "bg-[var(--primary)] text-slate-950"
+                      : "bg-white/[0.05] text-white/70 hover:bg-white/[0.08]"
+                  )}
+                  onClick={() => onDesktopSidebarMetricsPositionChange(value)}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
           </div>
           <div className="grid gap-2">
             {renderSlots(
@@ -1550,6 +1589,20 @@ function ShellFrame({
     ])
   );
   const [navEditorOpen, setNavEditorOpen] = useState(false);
+  const [desktopSidebarMetricsPosition, setDesktopSidebarMetricsPosition] =
+    useState<"above" | "below">(() => {
+      if (typeof window === "undefined") {
+        return "above";
+      }
+      try {
+        const stored = window.localStorage.getItem(
+          DESKTOP_SIDEBAR_METRICS_POSITION_STORAGE_KEY
+        );
+        return stored === "below" ? "below" : "above";
+      } catch {
+        return "above";
+      }
+    });
   const autoCollapseAppliedRef = useRef(false);
   const preAutoCollapseRef = useRef(false);
   const skipNavPersistenceRef = useRef(false);
@@ -1583,6 +1636,17 @@ function ShellFrame({
     t
   });
   const sidebarMetrics = [
+    {
+      id: "ap",
+      label: "AP",
+      compactValue: shell.snapshot.lifeForce
+        ? String(Math.round(shell.snapshot.lifeForce.remainingAp))
+        : "0",
+      expandedValue: shell.snapshot.lifeForce
+        ? `${Math.round(shell.snapshot.lifeForce.remainingAp)} AP left`
+        : "AP unavailable",
+      icon: BatteryCharging
+    },
     {
       id: "streak",
       label: t("common.shell.momentum.streak"),
@@ -1727,6 +1791,17 @@ function ShellFrame({
   }, [navCollapsed]);
 
   useEffect(() => {
+    try {
+      window.localStorage.setItem(
+        DESKTOP_SIDEBAR_METRICS_POSITION_STORAGE_KEY,
+        desktopSidebarMetricsPosition
+      );
+    } catch {
+      return;
+    }
+  }, [desktopSidebarMetricsPosition]);
+
+  useEffect(() => {
     writeStoredNavIds(DESKTOP_NAV_STORAGE_KEY, desktopNavIds);
   }, [desktopNavIds]);
 
@@ -1787,6 +1862,49 @@ function ShellFrame({
         "--forge-shell-hero-description-translate-y": "0px"
       }) as CSSProperties,
     []
+  );
+  const sidebarMetricsPanel = (
+    <div className={cn(navCollapsed ? "mt-4" : "mt-6")}>
+      <div
+        className={cn(
+          "rounded-[24px] bg-white/[0.04]",
+          navCollapsed ? "px-2 py-2.5" : "p-4"
+        )}
+      >
+        {!navCollapsed ? (
+          <div className="type-label text-white/40">Live metrics</div>
+        ) : null}
+        <div className={cn("grid", navCollapsed ? "gap-1.5" : "mt-3 gap-3")}>
+          {sidebarMetrics.map((metric) => {
+            const Icon = metric.icon;
+            return navCollapsed ? (
+              <div
+                key={metric.id}
+                title={`${metric.label}: ${metric.compactValue}`}
+                className="flex min-w-0 flex-col items-center gap-1 rounded-[16px] bg-white/[0.04] px-1 py-2.5 text-center"
+              >
+                <Icon className="size-3.5 shrink-0 text-white/42" />
+                <div className="max-w-full text-[12px] font-semibold leading-none text-white">
+                  {metric.compactValue}
+                </div>
+              </div>
+            ) : (
+              <div
+                key={metric.id}
+                className="rounded-[18px] bg-white/[0.04] px-3 py-3"
+              >
+                <div className="text-[11px] uppercase tracking-[0.14em] text-white/42">
+                  {metric.label}
+                </div>
+                <div className="mt-1 text-lg font-semibold leading-tight text-white">
+                  {metric.expandedValue}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
   );
 
   return (
@@ -1887,57 +2005,15 @@ function ShellFrame({
             {!navCollapsed ? "Customize nav" : null}
           </Button>
 
+          {desktopSidebarMetricsPosition === "above" ? sidebarMetricsPanel : null}
+
           <div className={cn("grid gap-2", navCollapsed ? "mt-6" : "mt-8")}>
             {desktopRoutes.map((route) => (
               <NavItem key={route.id} route={route} compact={navCollapsed} />
             ))}
           </div>
 
-          <div className={cn(navCollapsed ? "mt-4" : "mt-6")}>
-            <div
-              className={cn(
-                "rounded-[24px] bg-white/[0.04]",
-                navCollapsed ? "px-2 py-2.5" : "p-4"
-              )}
-            >
-              {!navCollapsed ? (
-                <div className="type-label text-white/40">
-                  {t("common.shell.momentum.title")}
-                </div>
-              ) : null}
-              <div
-                className={cn("grid", navCollapsed ? "gap-1.5" : "mt-3 gap-3")}
-              >
-                {sidebarMetrics.map((metric) => {
-                  const Icon = metric.icon;
-                  return navCollapsed ? (
-                    <div
-                      key={metric.id}
-                      title={`${metric.label}: ${metric.compactValue}`}
-                      className="flex min-w-0 flex-col items-center gap-1 rounded-[16px] bg-white/[0.04] px-1 py-2.5 text-center"
-                    >
-                      <Icon className="size-3.5 shrink-0 text-white/42" />
-                      <div className="max-w-full text-[12px] font-semibold leading-none text-white">
-                        {metric.compactValue}
-                      </div>
-                    </div>
-                  ) : (
-                    <div
-                      key={metric.id}
-                      className="rounded-[18px] bg-white/[0.04] px-3 py-3"
-                    >
-                      <div className="text-[11px] uppercase tracking-[0.14em] text-white/42">
-                        {metric.label}
-                      </div>
-                      <div className="mt-1 text-lg font-semibold leading-tight text-white">
-                        {metric.expandedValue}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          </div>
+          {desktopSidebarMetricsPosition === "below" ? sidebarMetricsPanel : null}
         </aside>
 
         <div className="min-h-screen">
@@ -2278,6 +2354,8 @@ function ShellFrame({
           onOpenChange={setNavEditorOpen}
           desktopNavIds={desktopNavIds}
           onDesktopNavIdsChange={setDesktopNavIds}
+          desktopSidebarMetricsPosition={desktopSidebarMetricsPosition}
+          onDesktopSidebarMetricsPositionChange={setDesktopSidebarMetricsPosition}
           mobileNavIds={mobileNavIds}
           onMobileNavIdsChange={setMobileNavIds}
         />

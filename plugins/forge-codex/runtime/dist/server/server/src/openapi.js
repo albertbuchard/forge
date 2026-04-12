@@ -38,6 +38,14 @@ const API_TAGS = [
         description: "Runtime health, sleep, sports, workout, and mobile sync surfaces."
     },
     {
+        name: "Movement",
+        description: "Movement overviews, timeline history, known places, stays, trips, selection aggregates, and user-defined overlay routes."
+    },
+    {
+        name: "Life Force",
+        description: "Energy-budget, fatigue, and action-point modeling routes."
+    },
+    {
         name: "Auth",
         description: "Operator session bootstrapping for trusted local usage."
     },
@@ -126,6 +134,10 @@ const API_TAGS = [
         description: "Stored insights and structured feedback on them."
     },
     {
+        name: "Workbench",
+        description: "Graph-flow catalog, execution, published outputs, and node-result routes."
+    },
+    {
         name: "Metrics",
         description: "XP, reward-ledger, and runtime metric surfaces."
     },
@@ -145,7 +157,11 @@ const API_TAGS = [
 const API_TAG_GROUPS = [
     {
         name: "Runtime",
-        tags: ["Meta", "Health", "Auth", "Platform", "Operator", "Diagnostics"]
+        tags: ["Meta", "Auth", "Platform", "Operator", "Diagnostics"]
+    },
+    {
+        name: "Embodied Context",
+        tags: ["Health", "Movement", "Life Force"]
     },
     {
         name: "Core Work",
@@ -162,7 +178,8 @@ const API_TAG_GROUPS = [
             "Activity",
             "Metrics",
             "Reviews",
-            "Insights"
+            "Insights",
+            "Workbench"
         ]
     },
     {
@@ -186,6 +203,18 @@ function resolveTagsForPath(path) {
     }
     if (path.startsWith("/api/v1/health") ||
         path.startsWith("/api/v1/mobile")) {
+        return ["Health"];
+    }
+    if (path.startsWith("/api/v1/movement")) {
+        return ["Movement"];
+    }
+    if (path.startsWith("/api/v1/life-force")) {
+        return ["Life Force"];
+    }
+    if (path.startsWith("/api/v1/workbench")) {
+        return ["Workbench"];
+    }
+    if (path.startsWith("/api/v1/screen-time")) {
         return ["Health"];
     }
     if (path === "/api/v1/context" || path.startsWith("/api/v1/domains")) {
@@ -2706,6 +2735,10 @@ export function buildOpenApiDocument() {
                     "calendar",
                     "workBlock",
                     "taskTimebox",
+                    "workAdjustment",
+                    "movement",
+                    "lifeForce",
+                    "workbench",
                     "psyche"
                 ],
                 properties: {
@@ -2724,6 +2757,10 @@ export function buildOpenApiDocument() {
                     calendar: { type: "string" },
                     workBlock: { type: "string" },
                     taskTimebox: { type: "string" },
+                    workAdjustment: { type: "string" },
+                    movement: { type: "string" },
+                    lifeForce: { type: "string" },
+                    workbench: { type: "string" },
                     psyche: { type: "string" }
                 }
             },
@@ -2800,6 +2837,7 @@ export function buildOpenApiDocument() {
                     "batchRoutes",
                     "specializedCrudEntities",
                     "actionEntities",
+                    "specializedDomainSurfaces",
                     "readModelOnlySurfaces"
                 ],
                 properties: {
@@ -2824,6 +2862,13 @@ export function buildOpenApiDocument() {
                         }
                     },
                     actionEntities: {
+                        type: "object",
+                        additionalProperties: {
+                            type: "object",
+                            additionalProperties: true
+                        }
+                    },
+                    specializedDomainSurfaces: {
                         type: "object",
                         additionalProperties: {
                             type: "object",
@@ -2957,6 +3002,10 @@ export function buildOpenApiDocument() {
                     "weeklyReview",
                     "sleepOverview",
                     "sportsOverview",
+                    "lifeForce",
+                    "movementTimeline",
+                    "movementAllTime",
+                    "workbenchFlows",
                     "wikiSettings",
                     "wikiSearch",
                     "wikiHealth",
@@ -2973,6 +3022,10 @@ export function buildOpenApiDocument() {
                     weeklyReview: { type: "string" },
                     sleepOverview: { type: "string" },
                     sportsOverview: { type: "string" },
+                    lifeForce: { type: "string" },
+                    movementTimeline: { type: "string" },
+                    movementAllTime: { type: "string" },
+                    workbenchFlows: { type: "string" },
                     wikiSettings: { type: "string" },
                     wikiSearch: { type: "string" },
                     wikiHealth: { type: "string" },
@@ -4123,6 +4176,750 @@ export function buildOpenApiDocument() {
                                 sleep: { $ref: "#/components/schemas/SleepSession" }
                             }
                         }, "Deleted sleep session"),
+                        "404": { $ref: "#/components/responses/Error" }
+                    }
+                }
+            },
+            "/api/v1/life-force": {
+                get: {
+                    summary: "Read the current life-force overview with stats, drains, curve state, warnings, and recommendations",
+                    responses: {
+                        "200": jsonResponse({
+                            type: "object",
+                            required: ["lifeForce", "templates"],
+                            properties: {
+                                lifeForce: {
+                                    type: "object",
+                                    additionalProperties: true
+                                },
+                                templates: arrayOf({
+                                    type: "object",
+                                    additionalProperties: true
+                                })
+                            }
+                        }, "Life-force overview"),
+                        default: { $ref: "#/components/responses/Error" }
+                    }
+                }
+            },
+            "/api/v1/life-force/profile": {
+                patch: {
+                    summary: "Update the user-controlled life-force profile settings",
+                    responses: {
+                        "200": jsonResponse({
+                            type: "object",
+                            required: ["lifeForce", "actor"],
+                            properties: {
+                                lifeForce: {
+                                    type: "object",
+                                    additionalProperties: true
+                                },
+                                actor: { type: "string" }
+                            }
+                        }, "Updated life-force profile"),
+                        default: { $ref: "#/components/responses/Error" }
+                    }
+                }
+            },
+            "/api/v1/life-force/templates/{weekday}": {
+                put: {
+                    summary: "Replace one weekday life-force curve template",
+                    responses: {
+                        "200": jsonResponse({
+                            type: "object",
+                            required: ["weekday", "points", "actor"],
+                            properties: {
+                                weekday: { type: "integer" },
+                                points: arrayOf({
+                                    type: "object",
+                                    additionalProperties: true
+                                }),
+                                actor: { type: "string" }
+                            }
+                        }, "Updated weekday curve template"),
+                        default: { $ref: "#/components/responses/Error" }
+                    }
+                }
+            },
+            "/api/v1/life-force/fatigue-signals": {
+                post: {
+                    summary: "Record a tired or recovered fatigue signal and rebuild life-force state",
+                    responses: {
+                        "200": jsonResponse({
+                            type: "object",
+                            required: ["lifeForce", "actor"],
+                            properties: {
+                                lifeForce: {
+                                    type: "object",
+                                    additionalProperties: true
+                                },
+                                actor: { type: "string" }
+                            }
+                        }, "Updated life-force state after fatigue signal"),
+                        default: { $ref: "#/components/responses/Error" }
+                    }
+                }
+            },
+            "/api/v1/movement/day": {
+                get: {
+                    summary: "Read one day of movement detail with distance, stays, trips, gaps, and summaries",
+                    responses: {
+                        "200": jsonResponse({
+                            type: "object",
+                            required: ["movement"],
+                            properties: {
+                                movement: {
+                                    type: "object",
+                                    additionalProperties: true
+                                }
+                            }
+                        }, "Movement day detail"),
+                        default: { $ref: "#/components/responses/Error" }
+                    }
+                }
+            },
+            "/api/v1/movement/month": {
+                get: {
+                    summary: "Read one month of movement summary",
+                    responses: {
+                        "200": jsonResponse({
+                            type: "object",
+                            required: ["movement"],
+                            properties: {
+                                movement: {
+                                    type: "object",
+                                    additionalProperties: true
+                                }
+                            }
+                        }, "Movement month summary"),
+                        default: { $ref: "#/components/responses/Error" }
+                    }
+                }
+            },
+            "/api/v1/movement/all-time": {
+                get: {
+                    summary: "Read all-time movement summary including place and trip distribution",
+                    responses: {
+                        "200": jsonResponse({
+                            type: "object",
+                            required: ["movement"],
+                            properties: {
+                                movement: {
+                                    type: "object",
+                                    additionalProperties: true
+                                }
+                            }
+                        }, "Movement all-time summary"),
+                        default: { $ref: "#/components/responses/Error" }
+                    }
+                }
+            },
+            "/api/v1/movement/timeline": {
+                get: {
+                    summary: "Read the paginated movement timeline with stays, trips, missing spans, and projected boxes",
+                    responses: {
+                        "200": jsonResponse({
+                            type: "object",
+                            required: ["movement"],
+                            properties: {
+                                movement: {
+                                    type: "object",
+                                    additionalProperties: true
+                                }
+                            }
+                        }, "Movement timeline"),
+                        default: { $ref: "#/components/responses/Error" }
+                    }
+                }
+            },
+            "/api/v1/movement/settings": {
+                get: {
+                    summary: "Read movement capture settings",
+                    responses: {
+                        "200": jsonResponse({
+                            type: "object",
+                            required: ["settings"],
+                            properties: {
+                                settings: {
+                                    type: "object",
+                                    additionalProperties: true
+                                }
+                            }
+                        }, "Movement settings"),
+                        default: { $ref: "#/components/responses/Error" }
+                    }
+                },
+                patch: {
+                    summary: "Update movement capture settings",
+                    responses: {
+                        "200": jsonResponse({
+                            type: "object",
+                            required: ["settings"],
+                            properties: {
+                                settings: {
+                                    type: "object",
+                                    additionalProperties: true
+                                }
+                            }
+                        }, "Updated movement settings"),
+                        default: { $ref: "#/components/responses/Error" }
+                    }
+                }
+            },
+            "/api/v1/movement/places": {
+                get: {
+                    summary: "List known movement places",
+                    responses: {
+                        "200": jsonResponse({
+                            type: "object",
+                            required: ["places"],
+                            properties: {
+                                places: arrayOf({
+                                    type: "object",
+                                    additionalProperties: true
+                                })
+                            }
+                        }, "Movement places"),
+                        default: { $ref: "#/components/responses/Error" }
+                    }
+                },
+                post: {
+                    summary: "Create one user-defined movement place",
+                    responses: {
+                        "201": jsonResponse({
+                            type: "object",
+                            required: ["place"],
+                            properties: {
+                                place: {
+                                    type: "object",
+                                    additionalProperties: true
+                                }
+                            }
+                        }, "Created movement place"),
+                        default: { $ref: "#/components/responses/Error" }
+                    }
+                }
+            },
+            "/api/v1/movement/places/{id}": {
+                patch: {
+                    summary: "Update one known movement place",
+                    responses: {
+                        "200": jsonResponse({
+                            type: "object",
+                            required: ["place"],
+                            properties: {
+                                place: {
+                                    type: "object",
+                                    additionalProperties: true
+                                }
+                            }
+                        }, "Updated movement place"),
+                        "404": { $ref: "#/components/responses/Error" }
+                    }
+                }
+            },
+            "/api/v1/movement/user-boxes": {
+                post: {
+                    summary: "Create a user-defined movement overlay box such as a manual stay, trip, or missing-data override",
+                    responses: {
+                        "201": jsonResponse({
+                            type: "object",
+                            required: ["box"],
+                            properties: {
+                                box: {
+                                    type: "object",
+                                    additionalProperties: true
+                                }
+                            }
+                        }, "Created movement user box"),
+                        default: { $ref: "#/components/responses/Error" }
+                    }
+                }
+            },
+            "/api/v1/movement/user-boxes/preflight": {
+                post: {
+                    summary: "Analyze a proposed movement overlay before saving it, especially when replacing a missing gap or overlapping another box",
+                    responses: {
+                        "200": jsonResponse({
+                            type: "object",
+                            required: ["preflight"],
+                            properties: {
+                                preflight: {
+                                    type: "object",
+                                    additionalProperties: true
+                                }
+                            }
+                        }, "Movement user-box preflight"),
+                        default: { $ref: "#/components/responses/Error" }
+                    }
+                }
+            },
+            "/api/v1/movement/user-boxes/{id}": {
+                patch: {
+                    summary: "Update one user-defined movement overlay box",
+                    responses: {
+                        "200": jsonResponse({
+                            type: "object",
+                            required: ["box"],
+                            properties: {
+                                box: {
+                                    type: "object",
+                                    additionalProperties: true
+                                }
+                            }
+                        }, "Updated movement user box"),
+                        "404": { $ref: "#/components/responses/Error" }
+                    }
+                },
+                delete: {
+                    summary: "Delete one user-defined movement box",
+                    responses: {
+                        "200": jsonResponse({
+                            type: "object",
+                            additionalProperties: true
+                        }, "Deleted movement user box"),
+                        "404": { $ref: "#/components/responses/Error" }
+                    }
+                }
+            },
+            "/api/v1/movement/automatic-boxes/{id}/invalidate": {
+                post: {
+                    summary: "Hide one automatic movement box and project the resulting user-defined overlay",
+                    responses: {
+                        "201": jsonResponse({
+                            type: "object",
+                            required: ["box"],
+                            properties: {
+                                box: {
+                                    type: "object",
+                                    additionalProperties: true
+                                }
+                            }
+                        }, "Invalidated automatic movement box"),
+                        "404": { $ref: "#/components/responses/Error" }
+                    }
+                }
+            },
+            "/api/v1/movement/stays/{id}": {
+                patch: {
+                    summary: "Update one recorded movement stay",
+                    responses: {
+                        "200": jsonResponse({
+                            type: "object",
+                            required: ["stay"],
+                            properties: {
+                                stay: {
+                                    type: "object",
+                                    additionalProperties: true
+                                }
+                            }
+                        }, "Updated movement stay"),
+                        "404": { $ref: "#/components/responses/Error" }
+                    }
+                },
+                delete: {
+                    summary: "Delete one recorded movement stay",
+                    responses: {
+                        "200": jsonResponse({
+                            type: "object",
+                            additionalProperties: true
+                        }, "Deleted movement stay"),
+                        "404": { $ref: "#/components/responses/Error" }
+                    }
+                }
+            },
+            "/api/v1/movement/trips/{id}": {
+                get: {
+                    summary: "Read one movement trip with its full detail",
+                    responses: {
+                        "200": jsonResponse({
+                            type: "object",
+                            required: ["movement"],
+                            properties: {
+                                movement: {
+                                    type: "object",
+                                    additionalProperties: true
+                                }
+                            }
+                        }, "Movement trip detail"),
+                        "404": { $ref: "#/components/responses/Error" }
+                    }
+                },
+                patch: {
+                    summary: "Update one movement trip",
+                    responses: {
+                        "200": jsonResponse({
+                            type: "object",
+                            required: ["trip"],
+                            properties: {
+                                trip: {
+                                    type: "object",
+                                    additionalProperties: true
+                                }
+                            }
+                        }, "Updated movement trip"),
+                        "404": { $ref: "#/components/responses/Error" }
+                    }
+                },
+                delete: {
+                    summary: "Delete one movement trip",
+                    responses: {
+                        "200": jsonResponse({
+                            type: "object",
+                            additionalProperties: true
+                        }, "Deleted movement trip"),
+                        "404": { $ref: "#/components/responses/Error" }
+                    }
+                }
+            },
+            "/api/v1/movement/trips/{id}/points/{pointId}": {
+                patch: {
+                    summary: "Update one movement trip datapoint",
+                    responses: {
+                        "200": jsonResponse({
+                            type: "object",
+                            additionalProperties: true
+                        }, "Updated movement trip point"),
+                        "404": { $ref: "#/components/responses/Error" }
+                    }
+                },
+                delete: {
+                    summary: "Delete one movement trip datapoint",
+                    responses: {
+                        "200": jsonResponse({
+                            type: "object",
+                            additionalProperties: true
+                        }, "Deleted movement trip point"),
+                        "404": { $ref: "#/components/responses/Error" }
+                    }
+                }
+            },
+            "/api/v1/movement/selection": {
+                post: {
+                    summary: "Aggregate one selected movement range or set of segments",
+                    responses: {
+                        "200": jsonResponse({
+                            type: "object",
+                            required: ["movement"],
+                            properties: {
+                                movement: {
+                                    type: "object",
+                                    additionalProperties: true
+                                }
+                            }
+                        }, "Movement selection aggregate"),
+                        default: { $ref: "#/components/responses/Error" }
+                    }
+                }
+            },
+            "/api/v1/workbench/catalog/boxes": {
+                get: {
+                    summary: "List registered Workbench boxes and their contracts",
+                    responses: {
+                        "200": jsonResponse({
+                            type: "object",
+                            required: ["boxes"],
+                            properties: {
+                                boxes: arrayOf({
+                                    type: "object",
+                                    additionalProperties: true
+                                })
+                            }
+                        }, "Workbench box catalog"),
+                        default: { $ref: "#/components/responses/Error" }
+                    }
+                }
+            },
+            "/api/v1/workbench/flows": {
+                get: {
+                    summary: "List Workbench flows and recent execution summaries",
+                    responses: {
+                        "200": jsonResponse({
+                            type: "object",
+                            required: ["flows"],
+                            properties: {
+                                flows: arrayOf({
+                                    type: "object",
+                                    additionalProperties: true
+                                })
+                            }
+                        }, "Workbench flow collection"),
+                        default: { $ref: "#/components/responses/Error" }
+                    }
+                },
+                post: {
+                    summary: "Create one Workbench flow",
+                    responses: {
+                        "201": jsonResponse({
+                            type: "object",
+                            required: ["flow"],
+                            properties: {
+                                flow: {
+                                    type: "object",
+                                    additionalProperties: true
+                                }
+                            }
+                        }, "Created Workbench flow"),
+                        default: { $ref: "#/components/responses/Error" }
+                    }
+                }
+            },
+            "/api/v1/workbench/flows/{id}": {
+                get: {
+                    summary: "Read one Workbench flow with runs",
+                    responses: {
+                        "200": jsonResponse({
+                            type: "object",
+                            required: ["flow", "runs"],
+                            properties: {
+                                flow: {
+                                    type: "object",
+                                    additionalProperties: true
+                                },
+                                runs: arrayOf({
+                                    type: "object",
+                                    additionalProperties: true
+                                })
+                            }
+                        }, "Workbench flow detail"),
+                        "404": { $ref: "#/components/responses/Error" }
+                    }
+                },
+                patch: {
+                    summary: "Update one Workbench flow",
+                    responses: {
+                        "200": jsonResponse({
+                            type: "object",
+                            required: ["flow"],
+                            properties: {
+                                flow: {
+                                    type: "object",
+                                    additionalProperties: true
+                                }
+                            }
+                        }, "Updated Workbench flow"),
+                        "404": { $ref: "#/components/responses/Error" }
+                    }
+                },
+                delete: {
+                    summary: "Delete one Workbench flow",
+                    responses: {
+                        "200": jsonResponse({
+                            type: "object",
+                            additionalProperties: true
+                        }, "Deleted Workbench flow"),
+                        "404": { $ref: "#/components/responses/Error" }
+                    }
+                }
+            },
+            "/api/v1/workbench/flows/by-slug/{slug}": {
+                get: {
+                    summary: "Read one Workbench flow by slug",
+                    responses: {
+                        "200": jsonResponse({
+                            type: "object",
+                            required: ["flow"],
+                            properties: {
+                                flow: {
+                                    type: "object",
+                                    additionalProperties: true
+                                }
+                            }
+                        }, "Workbench flow by slug"),
+                        "404": { $ref: "#/components/responses/Error" }
+                    }
+                }
+            },
+            "/api/v1/workbench/flows/{id}/run": {
+                post: {
+                    summary: "Run one Workbench flow by id",
+                    responses: {
+                        "200": jsonResponse({
+                            type: "object",
+                            required: ["flow", "run", "conversation"],
+                            properties: {
+                                flow: {
+                                    type: "object",
+                                    additionalProperties: true
+                                },
+                                run: {
+                                    type: "object",
+                                    additionalProperties: true
+                                },
+                                conversation: {
+                                    type: "object",
+                                    additionalProperties: true
+                                }
+                            }
+                        }, "Workbench flow execution"),
+                        "404": { $ref: "#/components/responses/Error" }
+                    }
+                }
+            },
+            "/api/v1/workbench/run": {
+                post: {
+                    summary: "Run one Workbench flow by payload with flowId",
+                    responses: {
+                        "200": jsonResponse({
+                            type: "object",
+                            required: ["flow", "run", "conversation"],
+                            properties: {
+                                flow: {
+                                    type: "object",
+                                    additionalProperties: true
+                                },
+                                run: {
+                                    type: "object",
+                                    additionalProperties: true
+                                },
+                                conversation: {
+                                    type: "object",
+                                    additionalProperties: true
+                                }
+                            }
+                        }, "Workbench flow execution"),
+                        "404": { $ref: "#/components/responses/Error" }
+                    }
+                }
+            },
+            "/api/v1/workbench/flows/{id}/chat": {
+                post: {
+                    summary: "Continue or start one Workbench chat flow",
+                    responses: {
+                        "200": jsonResponse({
+                            type: "object",
+                            additionalProperties: true
+                        }, "Workbench chat response"),
+                        "404": { $ref: "#/components/responses/Error" }
+                    }
+                }
+            },
+            "/api/v1/workbench/flows/{id}/output": {
+                get: {
+                    summary: "Read the latest published whole-flow output",
+                    responses: {
+                        "200": jsonResponse({
+                            type: "object",
+                            additionalProperties: true
+                        }, "Workbench published output"),
+                        "404": { $ref: "#/components/responses/Error" }
+                    }
+                }
+            },
+            "/api/v1/workbench/flows/{id}/runs": {
+                get: {
+                    summary: "List Workbench runs for one flow",
+                    responses: {
+                        "200": jsonResponse({
+                            type: "object",
+                            required: ["flow", "runs"],
+                            properties: {
+                                flow: {
+                                    type: "object",
+                                    additionalProperties: true
+                                },
+                                runs: arrayOf({
+                                    type: "object",
+                                    additionalProperties: true
+                                })
+                            }
+                        }, "Workbench run list"),
+                        "404": { $ref: "#/components/responses/Error" }
+                    }
+                }
+            },
+            "/api/v1/workbench/flows/{id}/runs/{runId}": {
+                get: {
+                    summary: "Read one Workbench run detail",
+                    responses: {
+                        "200": jsonResponse({
+                            type: "object",
+                            required: ["flow", "run"],
+                            properties: {
+                                flow: {
+                                    type: "object",
+                                    additionalProperties: true
+                                },
+                                run: {
+                                    type: "object",
+                                    additionalProperties: true
+                                }
+                            }
+                        }, "Workbench run detail"),
+                        "404": { $ref: "#/components/responses/Error" }
+                    }
+                }
+            },
+            "/api/v1/workbench/flows/{id}/runs/{runId}/nodes": {
+                get: {
+                    summary: "List node results for one Workbench run",
+                    responses: {
+                        "200": jsonResponse({
+                            type: "object",
+                            required: ["flow", "run", "nodeResults"],
+                            properties: {
+                                flow: {
+                                    type: "object",
+                                    additionalProperties: true
+                                },
+                                run: {
+                                    type: "object",
+                                    additionalProperties: true
+                                },
+                                nodeResults: arrayOf({
+                                    type: "object",
+                                    additionalProperties: true
+                                })
+                            }
+                        }, "Workbench node results"),
+                        "404": { $ref: "#/components/responses/Error" }
+                    }
+                }
+            },
+            "/api/v1/workbench/flows/{id}/runs/{runId}/nodes/{nodeId}": {
+                get: {
+                    summary: "Read one node result for one Workbench run",
+                    responses: {
+                        "200": jsonResponse({
+                            type: "object",
+                            required: ["flow", "nodeResult"],
+                            properties: {
+                                flow: {
+                                    type: "object",
+                                    additionalProperties: true
+                                },
+                                nodeResult: {
+                                    type: "object",
+                                    additionalProperties: true
+                                }
+                            }
+                        }, "Workbench node result"),
+                        "404": { $ref: "#/components/responses/Error" }
+                    }
+                }
+            },
+            "/api/v1/workbench/flows/{id}/nodes/{nodeId}/output": {
+                get: {
+                    summary: "Read the latest successful output for one Workbench node",
+                    responses: {
+                        "200": jsonResponse({
+                            type: "object",
+                            required: ["flow", "run", "nodeResult"],
+                            properties: {
+                                flow: {
+                                    type: "object",
+                                    additionalProperties: true
+                                },
+                                run: {
+                                    type: "object",
+                                    additionalProperties: true
+                                },
+                                nodeResult: {
+                                    type: "object",
+                                    additionalProperties: true
+                                }
+                            }
+                        }, "Workbench latest node output"),
                         "404": { $ref: "#/components/responses/Error" }
                     }
                 }

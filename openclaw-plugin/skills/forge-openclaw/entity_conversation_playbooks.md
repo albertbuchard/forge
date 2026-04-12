@@ -11,6 +11,9 @@ Forge correctly, and gather only the structure that still matters.
   with the entity label.
 - Start by saying what seems to matter here or what the record is becoming, then ask
   the next useful question.
+- Whenever you can, make the direction of the intake visible before the question by
+  naming what you think the user is trying to preserve, clarify, decide, schedule, or
+  make easier.
 - Ask only for what is missing or still unclear.
 - Before every question, decide the one missing thing you are trying to clarify.
 - Ask first for the missing thing that would change the record shape, title, or next
@@ -28,6 +31,8 @@ Forge correctly, and gather only the structure that still matters.
   short reflection -> one orienting question.
 - When the user is vague, ask for the smallest real example, desired outcome, or stake
   before you ask for wording.
+- For strategic, reflective, or emotionally meaningful non-Psyche records, ask what
+  feels important to keep true before you ask for labels, dates, or taxonomy.
 - When the user is clear, say what the record seems to be becoming and move straight to
   the last missing structural detail.
 - For straightforward logistical entities such as tasks, calendar events, work blocks,
@@ -36,6 +41,11 @@ Forge correctly, and gather only the structure that still matters.
 - For logistical records such as tasks, calendar events, work blocks, timeboxes, and
   task runs, use a fast path:
   one brief confirming sentence -> one operational question.
+- For action-heavy flows such as work adjustments, preference judgments, preference
+  signals, and specialized surface work in Movement, Life Force, or Workbench, first
+  ask what the user is trying to understand, change, add, update, link, or run, then
+  route to the dedicated action or surface path instead of pretending it is normal
+  CRUD.
 - Do not read schema fields out loud unless the user explicitly wants a checklist.
 - One focused question is the default. Ask two only when both questions serve the same
   job and the user is steady enough for it.
@@ -191,6 +201,35 @@ reusable records.
 - Once the distinction is clear, offer a candidate label yourself and invite
   correction instead of making the user wordsmith alone.
 
+## Opening move recipes
+
+Use these when you want the first turn to feel more guided and less form-like.
+
+Strategic record:
+
+- "This sounds like something you want to hold onto directionally, not just list.
+  What would feel important to keep true here?"
+
+Bounded-work record:
+
+- "This sounds like it wants to become a real piece of work. What outcome would make
+  it feel meaningfully real for now?"
+
+Reflective record:
+
+- "There is something here you do not want to lose. What feels most worth capturing
+  before we decide where to store it?"
+
+Reusable record:
+
+- "Before we settle the label, what future decision, comparison, or retrieval moment
+  should this help with?"
+
+Operational record:
+
+- "I can turn that into a concrete Forge action. What is the one timing, owner, or
+  placement detail that still needs to be decided?"
+
 ## Name, Define, Connect
 
 Once the core record is visible, use this short checkpoint.
@@ -207,6 +246,17 @@ Connect:
 
 - ask about links only after the record itself feels named and defined enough to stay
   stable
+
+## Close cleanly
+
+- Once the record has a working shape, tell the user what is now clear and what one
+  detail, if any, is still worth deciding.
+- If no detail is still decision-relevant, summarize the record in plain language and
+  move to the save.
+- Prefer "what I have now is..." or "what seems clear now is..." over a cold final
+  field check.
+- If the user gives a correction, revise the working formulation once and close again
+  instead of reopening the whole intake.
 
 ## Question design rules
 
@@ -249,6 +299,8 @@ Connect:
   inside them.
 - After the user answers, prefer "what is becoming clearer is..." over a cold jump to
   the next field.
+- For reusable or abstract records, it is often better to say "what this would help
+  you decide later is..." before asking for the final wording.
 
 ## Ready-to-save check
 
@@ -644,6 +696,33 @@ Preferred opening question:
 
 - "Which task should I start?"
 
+## Work Adjustment
+
+Aim: correct tracked minutes truthfully without pretending a live run happened.
+
+Arc:
+
+1. Ask what existing task or project the minutes belong to.
+2. Ask whether time should be added or removed.
+3. Ask what real work or correction the adjustment is meant to capture.
+4. Ask for a short audit note only if the reason would otherwise be unclear later.
+
+Helpful follow-up lanes:
+
+- what record the correction belongs to
+- whether the adjustment is positive or negative
+- what truthful reason should stay attached to the correction
+
+Ready to act when:
+
+- the target task or project is clear
+- the minute delta is clear
+- the note is clear enough when an audit trail matters
+
+Preferred opening question:
+
+- "Which task or project should this time correction belong to?"
+
 ## Self Observation
 
 Aim: capture one observation clearly enough that it can support later reflection
@@ -740,6 +819,165 @@ Ready to act when:
 Preferred opening question:
 
 - "Which calendar provider are you trying to connect, and what do you want Forge to do with it?"
+
+## Preference Judgment
+
+Aim: capture one pairwise preference decision with the right context, not just log a
+left-versus-right click.
+
+Arc:
+
+1. Ask what comparison the user is actually trying to settle.
+2. Ask which context or domain this judgment belongs to.
+3. Ask whether the result is left, right, tie, or skip.
+4. Ask for reason tags or strength only if they will improve later interpretation.
+
+Helpful follow-up lanes:
+
+- what the comparison is really about
+- which preference context should own the signal
+- whether the choice feels decisive, weak, tied, or not ready
+
+Ready to act when:
+
+- the left and right items are clear
+- the outcome is clear
+- the relevant context or profile is clear enough
+
+Preferred opening question:
+
+- "What comparison are you actually trying to settle here?"
+
+## Preference Signal
+
+Aim: store a direct preference signal such as favorite, veto, bookmark, or
+compare-later with the context that makes it interpretable later.
+
+Arc:
+
+1. Ask what item the user wants to mark.
+2. Ask what signal they want to give it.
+3. Ask what domain or context this belongs to if that is still unclear.
+4. Ask about strength only if the user is expressing a gradient rather than a simple mark.
+
+Helpful follow-up lanes:
+
+- what item is being marked
+- whether this is a favorite, veto, bookmark, neutral, or compare-later signal
+- what context makes the signal meaningful
+
+Ready to act when:
+
+- the item is clear
+- the signal type is clear
+- the context is clear enough if it changes interpretation
+
+Preferred opening question:
+
+- "What do you want Forge to remember about this item right now?"
+
+## Movement
+
+Aim: clarify whether the user wants to understand time in place, review travel
+behavior, add or update a stay or trip, inspect one place, or link movement context to
+another Forge record before choosing the dedicated route family.
+
+Arc:
+
+1. Ask whether the user is trying to query behavior, add something manually, update an existing movement item, or link movement to another Forge entity.
+2. Ask whether the focus is a stay, a trip, a place, a timeline window, or a selected span.
+3. Ask for the time window, place, or movement item that makes the question concrete.
+4. Ask what they are trying to notice, preserve, or answer through that movement context.
+5. Route to the dedicated movement read or write path once the surface is clear.
+
+Direct action rules:
+
+- If the user is clearly talking about a missing-data gap that should become a stay or
+  trip, use a user-defined movement box.
+- Preflight with `/api/v1/movement/user-boxes/preflight` when overlap or exact timing
+  is unclear, then create the overlay with `/api/v1/movement/user-boxes`.
+- Use `kind: "stay"` when the user stayed in one place and `kind: "trip"` when they
+  traveled.
+- Use raw `PATCH /api/v1/movement/stays/:id` or `/api/v1/movement/trips/:id` only for
+  editing an already-recorded stay or trip, not for filling a missing span.
+- When the user has already given the real answer, for example "I stayed home during
+  that missing block", do not ask a broad review question again. Confirm only the
+  interval or place if that is still ambiguous, then act.
+
+Helpful follow-up lanes:
+
+- whether the user wants time-in-place, travel history, one specific stay or trip, a
+  place summary, or a link
+- what time window, place, stay, trip, or selection is in scope
+- whether the question is behavioral, such as time at home, travel frequency, or place
+  distribution, versus an edit
+- whether the edit is a missing-gap overlay versus a true recorded stay/trip patch
+
+Ready to act when:
+
+- the movement surface is clear
+- the time range, place, stay, trip, or selection is clear enough
+- the user goal is clear enough to choose the route
+
+Preferred opening question:
+
+- "Are you trying to understand where you stayed and traveled, change one stay or trip, or answer a question about your movement behavior?"
+
+## Life Force
+
+Aim: clarify whether the user wants to review current energy state, change durable
+profile assumptions, edit weekday curves, or log a real-time fatigue signal.
+
+Arc:
+
+1. Ask whether the job is overview, profile change, weekday-template change, or fatigue signaling.
+2. Ask what part of the current energy picture feels most important or inaccurate.
+3. Ask what should stay true if they are changing profile or template assumptions.
+4. Route to the dedicated life-force path once the lane is clear.
+
+Helpful follow-up lanes:
+
+- whether the user wants explanation, editing, or signaling
+- what part of the energy model feels off or useful
+- what durable assumption versus real-time state is being changed
+
+Ready to act when:
+
+- the life-force lane is clear
+- the relevant weekday, profile field, or signal is clear enough
+- the user intent is clear enough to choose overview versus mutation
+
+Preferred opening question:
+
+- "Do you want to understand the current energy picture, change how Forge models it, or log how you feel right now?"
+
+## Workbench
+
+Aim: clarify whether the user wants to inspect a flow, edit it, run it, or inspect
+results so the agent uses the dedicated workbench contract instead of vague CRUD.
+
+Arc:
+
+1. Ask whether the job is flow discovery, one flow edit, execution, run history, published output, node-level inspection, or latest-node-output lookup.
+2. Ask which flow, slug, run, or node the request is about.
+3. Ask what the user is trying to learn, repair, or publish through that flow.
+4. Route to the dedicated workbench route family once the execution lane is clear.
+
+Helpful follow-up lanes:
+
+- whether the user wants structure, execution, or results
+- what exact flow or run is in scope
+- whether they need whole-flow output or node-level detail
+
+Ready to act when:
+
+- the workbench lane is clear
+- the flow, run, or node is clear enough
+- the requested read or mutation is clear enough to choose the route
+
+Preferred opening question:
+
+- "Are you trying to inspect a flow, change it, run it, or inspect one run's outputs?"
 
 ## Preference Catalog
 

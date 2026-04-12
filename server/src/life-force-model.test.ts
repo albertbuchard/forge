@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   buildTaskActionPointSummary,
   buildTaskSplitSuggestion,
+  computeActionCostModifier,
   computeCurveArea,
   computeCurveHandleMaxRate,
   normalizeCurveToBudget
@@ -68,4 +69,28 @@ test("task split suggestion triggers from actual or projected work crossing twic
   });
   assert.equal(projected.shouldSplit, true);
   assert.match(projected.reason ?? "", /current live plan/i);
+});
+
+test("stat modifiers reduce action cost without breaking the AP economy", () => {
+  const modifier = computeActionCostModifier(
+    {
+      activation: 0.2,
+      focus: 0.5,
+      vigor: 0.05,
+      composure: 0.05,
+      flow: 0.2
+    },
+    {
+      life_force: 4,
+      activation: 2,
+      focus: 6,
+      vigor: 1,
+      composure: 1,
+      flow: 3
+    }
+  );
+
+  assert.equal(Number(modifier.toFixed(2)), 0.94);
+  assert.ok(modifier >= 0.55);
+  assert.ok(modifier <= 1.25);
 });

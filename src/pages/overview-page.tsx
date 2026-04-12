@@ -21,13 +21,17 @@ import { EmptyState } from "@/components/ui/page-state";
 import { ProgressMeter } from "@/components/ui/progress-meter";
 import { EntityBadge } from "@/components/ui/entity-badge";
 import { EntityName } from "@/components/ui/entity-name";
-import { MetricTile } from "@/components/ui/metric-tile";
 import {
   getReadableActivityDescription,
   getReadableActivityTitle
 } from "@/lib/activity-copy";
+import {
+  formatLifeForceAp,
+  formatLifeForceRate
+} from "@/lib/life-force-display";
 import { getEntityNotesSummary } from "@/lib/note-helpers";
 import { useI18n } from "@/lib/i18n";
+import { cn } from "@/lib/utils";
 
 export function OverviewPage() {
   const { t } = useI18n();
@@ -58,6 +62,54 @@ export function OverviewPage() {
     snapshot.overview.recentEvidence.length > 0 ||
     snapshot.overview.dueHabits.length > 0 ||
     snapshot.overview.neglectedGoals.length > 0;
+  const summaryMetrics = snapshot.lifeForce
+    ? [
+        {
+          label: "Life Force",
+          value: `${Math.round(snapshot.lifeForce.spentTodayAp)} / ${Math.round(snapshot.lifeForce.dailyBudgetAp)} AP`,
+          detail: `Remaining ${formatLifeForceAp(snapshot.lifeForce.remainingAp)}`
+        },
+        {
+          label: "Momentum",
+          value: `${snapshot.metrics.momentumScore}`,
+          detail: `${heroStatus} · ${snapshot.metrics.streakDays} day streak`
+        },
+        {
+          label: "Instant",
+          value: formatLifeForceRate(snapshot.lifeForce.instantFreeApPerHour),
+          detail:
+            snapshot.lifeForce.overloadApPerHour > 0
+              ? `${formatLifeForceRate(snapshot.lifeForce.overloadApPerHour)} overload`
+              : "Headroom right now"
+        },
+        {
+          label: "Level",
+          value: `L${snapshot.metrics.level}`,
+          detail: `${snapshot.metrics.currentLevelXp} XP in level`
+        },
+        {
+          label: "Weekly XP",
+          value: `${snapshot.metrics.weeklyXp}`,
+          detail: `${snapshot.metrics.totalXp} total XP`
+        }
+      ]
+    : [
+        {
+          label: "Level",
+          value: `L${snapshot.metrics.level}`,
+          detail: `${snapshot.metrics.currentLevelXp} XP in level`
+        },
+        {
+          label: "Weekly XP",
+          value: `${snapshot.metrics.weeklyXp}`,
+          detail: `${snapshot.metrics.totalXp} total XP`
+        },
+        {
+          label: "Momentum",
+          value: `${snapshot.metrics.momentumScore}`,
+          detail: `${heroStatus} · ${snapshot.metrics.streakDays} day streak`
+        }
+      ];
 
   function activityLink(
     event: (typeof snapshot.overview.recentEvidence)[number]
@@ -127,9 +179,83 @@ export function OverviewPage() {
         <PageHero
           title="Overview"
           titleText="Overview"
-          description={`${heroStatus}. Core goals, active projects, top tasks, and momentum are all here.`}
-          badge={`${snapshot.metrics.streakDays} day streak`}
+          description={`${heroStatus}. Life Force, momentum, XP, goals, active projects, and top tasks all start here.`}
+          badge={`Momentum ${snapshot.metrics.momentumScore}`}
         />
+      )
+    },
+    {
+      id: "summary",
+      title: "Momentum summary",
+      description:
+        "Smaller titles and denser metrics free space for the widgets themselves.",
+      defaultWidth: 12,
+      defaultHeight: 4,
+      minWidth: 6,
+      render: ({ compact }) => (
+        <div className="grid h-full gap-3 xl:grid-cols-[minmax(0,1.4fr)_minmax(0,0.8fr)]">
+          <div className="rounded-[24px] bg-white/[0.04] p-4">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <div className="text-[11px] uppercase tracking-[0.16em] text-white/38">
+                  Momentum summary
+                </div>
+                <div className="mt-2 text-lg font-semibold text-white">
+                  Core live metrics
+                </div>
+                <div className="mt-1 text-sm leading-6 text-white/56">
+                  Life Force, momentum, XP, and instant headroom stay grouped
+                  here so the title bar can stay clean.
+                </div>
+              </div>
+              <Badge className="bg-white/[0.08] text-white/70">
+                {heroStatus}
+              </Badge>
+            </div>
+            <div
+              className={cn(
+                "mt-4 grid gap-3",
+                compact
+                  ? "grid-cols-2"
+                  : "sm:grid-cols-2 xl:grid-cols-5"
+              )}
+            >
+              {summaryMetrics.map((metric) => (
+                <div
+                  key={metric.label}
+                  className="rounded-[20px] border border-white/8 bg-white/[0.04] px-4 py-3"
+                >
+                  <div className="text-[10px] uppercase tracking-[0.16em] text-white/40">
+                    {metric.label}
+                  </div>
+                  <div className="mt-1 text-lg font-semibold text-white">
+                    {metric.value}
+                  </div>
+                  <div className="mt-1 text-xs leading-5 text-white/54">
+                    {metric.detail}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className="rounded-[20px] bg-white/[0.04] p-4">
+            <div className="flex items-center justify-between gap-3">
+              <div className="text-[12px] uppercase tracking-[0.16em] text-white/38">
+                Goal needing attention
+              </div>
+              <Badge className="bg-white/[0.08] text-white/70">
+                {driftGoal?.risk ?? "stable"}
+              </Badge>
+            </div>
+            <div className="mt-3 text-base font-semibold text-white">
+              {driftGoal?.title ?? "No goal is drifting hard right now"}
+            </div>
+            <div className="mt-2 text-sm leading-6 text-white/58">
+              {driftGoal?.summary ??
+                `Only ${snapshot.overview.strategicHeader.overdueTasks} overdue task${snapshot.overview.strategicHeader.overdueTasks === 1 ? "" : "s"} are slowing the system.`}
+            </div>
+          </div>
+        </div>
       )
     },
     {
@@ -145,6 +271,7 @@ export function OverviewPage() {
           selectedUserIds={shell.selectedUserIds}
           fallbackLifeForce={snapshot.lifeForce!}
           onRefresh={shell.refresh}
+          showEditor={false}
         />
       )
     },
@@ -218,50 +345,6 @@ export function OverviewPage() {
             }
           ]}
         />
-      )
-    },
-    {
-      id: "summary",
-      title: "Momentum summary",
-      description:
-        "Smaller titles and denser metrics free space for the widgets themselves.",
-      defaultWidth: 5,
-      defaultHeight: 4,
-      minWidth: 4,
-      render: ({ compact }) => (
-        <div className="grid h-full gap-3">
-          <div className={compact ? "grid gap-3" : "grid gap-3 sm:grid-cols-2"}>
-            <MetricTile
-              label="Level"
-              value={snapshot.metrics.level}
-              tone="core"
-              detail={`${snapshot.metrics.currentLevelXp} XP in the current level`}
-            />
-            <MetricTile
-              label="Weekly XP"
-              value={snapshot.metrics.weeklyXp}
-              tone="core"
-              detail={`${snapshot.metrics.totalXp} total XP recorded`}
-            />
-          </div>
-          <div className="rounded-[20px] bg-white/[0.04] p-4">
-            <div className="flex items-center justify-between gap-3">
-              <div className="text-[12px] uppercase tracking-[0.16em] text-white/38">
-                Goal needing attention
-              </div>
-              <Badge className="bg-white/[0.08] text-white/70">
-                {driftGoal?.risk ?? "stable"}
-              </Badge>
-            </div>
-            <div className="mt-3 text-base font-semibold text-white">
-              {driftGoal?.title ?? "No goal is drifting hard right now"}
-            </div>
-            <div className="mt-2 text-sm leading-6 text-white/58">
-              {driftGoal?.summary ??
-                `Only ${snapshot.overview.strategicHeader.overdueTasks} overdue task${snapshot.overview.strategicHeader.overdueTasks === 1 ? "" : "s"} are slowing the system.`}
-            </div>
-          </div>
-        </div>
       )
     },
     {

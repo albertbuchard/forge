@@ -10,11 +10,20 @@ import {
   EntityLinkMultiSelect,
   type EntityLinkOption
 } from "@/components/psyche/entity-link-multiselect";
+import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { EntityBadge } from "@/components/ui/entity-badge";
 import { readCalendarDisplayName } from "@/lib/calendar-name-deduper";
 import { getEntityKindForCrudEntityType } from "@/lib/entity-visuals";
+import {
+  estimateCalendarEventActionPointLoad,
+  formatLifeForceAp,
+  formatLifeForceRate,
+  getCalendarActivityCustomRate,
+  getCalendarActivityPresetKey,
+  getCalendarActivityPresetOptions
+} from "@/lib/life-force-display";
 import type {
   CalendarAvailability,
   CalendarEvent,
@@ -41,6 +50,8 @@ type EventDraft = {
   availability: CalendarAvailability;
   preferredCalendarId: string | null | undefined;
   categoriesText: string;
+  activityPresetKey: string | null;
+  customSustainRateApPerHour: number | null;
   linkQuery: string;
   links: EventLinkDraft[];
 };
@@ -51,6 +62,11 @@ type LinkOption = {
   label: string;
   subtitle: string;
 };
+
+function toSafeIsoOrFallback(value: string, fallback: string) {
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? fallback : parsed.toISOString();
+}
 
 function toLocalInputValue(value: string) {
   const date = new Date(value);
@@ -107,6 +123,8 @@ function createDraft(
       Intl.DateTimeFormat().resolvedOptions().timeZone ??
       "UTC",
     availability: seed?.availability ?? event?.availability ?? "busy",
+    activityPresetKey: getCalendarActivityPresetKey(event?.actionProfile),
+    customSustainRateApPerHour: getCalendarActivityCustomRate(event?.actionProfile),
     preferredCalendarId:
       seed && "preferredCalendarId" in seed
         ? seed.preferredCalendarId
@@ -177,6 +195,8 @@ export function CalendarEventFlowDialog({
     endAt: string;
     timezone?: string;
     availability?: CalendarAvailability;
+    activityPresetKey?: string | null;
+    customSustainRateApPerHour?: number | null;
     preferredCalendarId?: string | null;
     categories?: string[];
     links?: Array<{
@@ -275,6 +295,69 @@ export function CalendarEventFlowDialog({
           "Forge stores the real event window, timezone, and whether it should behave like a busy or free slot for scheduling rules.",
         render: (value, setValue) => (
           <div className="grid gap-4">
+            {(() => {
+              const fallbackStart = new Date().toISOString();
+              const fallbackEnd = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+              const preview = estimateCalendarEventActionPointLoad({
+                title: value.title,
+                availability: value.availability,
+                activityPresetKey: value.activityPresetKey as never,
+                customSustainRateApPerHour: value.customSustainRateApPerHour,
+                startAt: toSafeIsoOrFallback(value.startAtLocal, fallbackStart),
+                endAt: toSafeIsoOrFallback(value.endAtLocal, fallbackEnd)
+              });
+              return (
+                <div className="rounded-[22px] border border-white/8 bg-white/[0.04] p-4">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Badge className="bg-white/[0.08] text-white/74">
+                      {formatLifeForceRate(preview.rateApPerHour)}
+                    </Badge>
+                    <Badge className="bg-white/[0.08] text-white/74">
+                      {formatLifeForceAp(preview.totalAp)}
+                    </Badge>
+                  </div>
+                  <div className="mt-3 text-sm leading-6 text-white/58">
+                    Availability controls whether the event blocks planning. The
+                    activity profile controls AP drain, and you can override it
+                    with a custom AP per hour.
+                  </div>
+                </div>
+              );
+            })()}
+            <FlowField label="Activity profile">
+              <FlowChoiceGrid
+                value={
+                  value.activityPresetKey ??
+                  (value.availability === "busy" ? "meeting" : "light_context")
+                }
+                columns={3}
+                onChange={(next) => setValue({ activityPresetKey: next })}
+                options={getCalendarActivityPresetOptions()
+                  .filter((preset) => preset.key !== "task_inherited")
+                  .map((preset) => ({
+                    value: preset.key,
+                    label: preset.label,
+                    description: `${formatLifeForceRate(preset.defaultRateApPerHour)} · ${preset.description}`
+                  }))}
+              />
+            </FlowField>
+            <FlowField label="Custom AP per hour">
+              <Input
+                type="number"
+                min={0}
+                step={0.5}
+                value={value.customSustainRateApPerHour ?? ""}
+                onChange={(next) =>
+                  setValue({
+                    customSustainRateApPerHour:
+                      next.target.value.trim() === ""
+                        ? null
+                        : Number(next.target.value)
+                  })
+                }
+                placeholder="Leave empty to use the activity default"
+              />
+            </FlowField>
             <div className="grid gap-4 md:grid-cols-2">
               <FlowField label="Starts">
                 <Input
@@ -491,6 +574,8 @@ export function CalendarEventFlowDialog({
           endAt: new Date(draft.endAtLocal).toISOString(),
           timezone: draft.timezone.trim() || "UTC",
           availability: draft.availability,
+          activityPresetKey: draft.activityPresetKey,
+          customSustainRateApPerHour: draft.customSustainRateApPerHour,
           categories: draft.categoriesText
             .split(",")
             .map((value) => value.trim())

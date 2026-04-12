@@ -5,8 +5,17 @@ import {
   QuestionFlowDialog,
   type QuestionFlowStep
 } from "@/components/flows/question-flow-dialog";
+import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { WORK_BLOCK_PRESETS, WEEKDAY_LABELS, minutesToLabel } from "@/lib/calendar-ui";
+import {
+  estimateWorkBlockTemplateActionPointLoad,
+  formatLifeForceAp,
+  formatLifeForceRate,
+  getCalendarActivityCustomRate,
+  getCalendarActivityPresetKey,
+  getCalendarActivityPresetOptions
+} from "@/lib/life-force-display";
 import type { WorkBlockKind, WorkBlockTemplate } from "@/lib/types";
 
 type WorkBlockDraft = {
@@ -20,6 +29,8 @@ type WorkBlockDraft = {
   startsOn: string | null;
   endsOn: string | null;
   blockingState: "allowed" | "blocked";
+  activityPresetKey: string | null;
+  customSustainRateApPerHour: number | null;
 };
 
 function buildDraft(template?: WorkBlockTemplate | null): WorkBlockDraft {
@@ -34,7 +45,9 @@ function buildDraft(template?: WorkBlockTemplate | null): WorkBlockDraft {
       endMinute: template.endMinute,
       startsOn: template.startsOn,
       endsOn: template.endsOn,
-      blockingState: template.blockingState
+      blockingState: template.blockingState,
+      activityPresetKey: getCalendarActivityPresetKey(template.actionProfile),
+      customSustainRateApPerHour: getCalendarActivityCustomRate(template.actionProfile)
     };
   }
 
@@ -52,12 +65,58 @@ function buildDraft(template?: WorkBlockTemplate | null): WorkBlockDraft {
     endMinute: preset.endMinute,
     startsOn: null,
     endsOn: null,
-    blockingState: preset.blockingState
+    blockingState: preset.blockingState,
+    activityPresetKey:
+      preset.kind === "main_activity"
+        ? "deep_work"
+        : preset.kind === "secondary_activity"
+          ? "admin"
+          : preset.kind === "holiday"
+            ? "holiday_leisure"
+            : preset.kind === "rest"
+              ? "recovery_break"
+              : "maintenance",
+    customSustainRateApPerHour: null
   };
 }
 
 function asDateInputValue(value: string | null) {
   return value ?? "";
+}
+
+function WorkBlockApPreview({ draft }: { draft: WorkBlockDraft }) {
+  const preview = estimateWorkBlockTemplateActionPointLoad({
+    kind: draft.kind,
+    startMinute: draft.startMinute,
+    endMinute: draft.endMinute,
+    activityPresetKey: draft.activityPresetKey as never,
+    customSustainRateApPerHour: draft.customSustainRateApPerHour
+  });
+  const durationMinutes =
+    draft.endMinute > draft.startMinute
+      ? draft.endMinute - draft.startMinute
+      : 1440 - draft.startMinute + draft.endMinute;
+
+  return (
+    <div className="rounded-[22px] border border-white/8 bg-white/[0.04] p-4">
+      <div className="flex flex-wrap items-center gap-2">
+        <Badge className="bg-white/[0.08] text-white/74">
+          {formatLifeForceRate(preview.rateApPerHour)}
+        </Badge>
+        <Badge className="bg-white/[0.08] text-white/74">
+          {formatLifeForceAp(preview.totalAp)} / block
+        </Badge>
+        <Badge className="bg-white/[0.08] text-white/74">
+          {Math.round(durationMinutes / 60)}h {durationMinutes % 60}m
+        </Badge>
+      </div>
+      <div className="mt-3 text-sm leading-6 text-white/58">
+        This is the default Life Force container drain for each occurrence of
+        the block when no richer task run or timebox already covers that
+        window.
+      </div>
+    </div>
+  );
 }
 
 export function WorkBlockFlowDialog({
@@ -95,6 +154,43 @@ export function WorkBlockFlowDialog({
           "Use a preset to seed the schedule, then tune the dates and recurrence in the next step.",
         render: (value, setValue) => (
           <div className="grid gap-4">
+            <WorkBlockApPreview draft={value} />
+            <FlowField label="Activity profile">
+              <FlowChoiceGrid
+                value={value.activityPresetKey ?? "maintenance"}
+                columns={3}
+                onChange={(next) =>
+                  setValue({
+                    activityPresetKey: next,
+                    customSustainRateApPerHour: value.customSustainRateApPerHour
+                  })
+                }
+                options={getCalendarActivityPresetOptions()
+                  .filter((preset) => preset.key !== "task_inherited")
+                  .map((preset) => ({
+                    value: preset.key,
+                    label: preset.label,
+                    description: `${formatLifeForceRate(preset.defaultRateApPerHour)} · ${preset.description}`
+                  }))}
+              />
+            </FlowField>
+            <FlowField label="Custom AP per hour">
+              <Input
+                type="number"
+                min={0}
+                step={0.5}
+                value={value.customSustainRateApPerHour ?? ""}
+                onChange={(event) =>
+                  setValue({
+                    customSustainRateApPerHour:
+                      event.target.value.trim() === ""
+                        ? null
+                        : Number(event.target.value)
+                  })
+                }
+                placeholder="Leave empty to use the activity default"
+              />
+            </FlowField>
             <FlowField label="Block type">
               <FlowChoiceGrid
                 value={value.kind}
@@ -111,14 +207,27 @@ export function WorkBlockFlowDialog({
                       weekDays: defaultWeekDays,
                       startMinute: preset.startMinute,
                       endMinute: preset.endMinute,
-                      blockingState: preset.blockingState
+                      blockingState: preset.blockingState,
+                      activityPresetKey:
+                        preset.kind === "main_activity"
+                          ? "deep_work"
+                          : preset.kind === "secondary_activity"
+                            ? "admin"
+                            : preset.kind === "holiday"
+                              ? "holiday_leisure"
+                              : preset.kind === "rest"
+                                ? "recovery_break"
+                                : "maintenance",
+                      customSustainRateApPerHour: null
                     });
                     return;
                   }
                   setValue({
                     kind: "custom",
                     title: "Custom block",
-                    color: "#7dd3fc"
+                    color: "#7dd3fc",
+                    activityPresetKey: "maintenance",
+                    customSustainRateApPerHour: null
                   });
                 }}
                 options={[
@@ -146,6 +255,7 @@ export function WorkBlockFlowDialog({
           "Weekdays and times describe the recurring pattern. Optional start and end dates bound when the template is active.",
         render: (value, setValue) => (
           <div className="grid gap-4">
+            <WorkBlockApPreview draft={value} />
             <FlowField label="Block title">
               <Input
                 value={value.title}
@@ -197,7 +307,8 @@ export function WorkBlockFlowDialog({
             </div>
             <div className="text-sm leading-6 text-white/54">
               Leave the end date empty to keep repeating indefinitely. Holiday blocks work well
-              with all seven weekdays and `0-1440`.
+              with all seven weekdays and `0-1440`, and they still carry AP load because
+              leisure and holiday time are real activities.
             </div>
             <FlowField label="Weekdays">
               <div className="flex flex-wrap gap-2">
@@ -237,6 +348,7 @@ export function WorkBlockFlowDialog({
           "Use blocked mode for time that should normally stop optional work. Use allowed mode for protected focus windows.",
         render: (value, setValue) => (
           <div className="grid gap-4">
+            <WorkBlockApPreview draft={value} />
             <FlowField label="Work effect">
               <FlowChoiceGrid
                 value={value.blockingState}

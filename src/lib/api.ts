@@ -2195,6 +2195,8 @@ export function createWorkBlockTemplate(input: {
   startsOn?: string | null;
   endsOn?: string | null;
   blockingState: WorkBlockTemplate["blockingState"];
+  activityPresetKey?: string | null;
+  customSustainRateApPerHour?: number | null;
   userId?: string | null;
 }) {
   return request<{ template: WorkBlockTemplate }>(
@@ -2219,6 +2221,8 @@ export function patchWorkBlockTemplate(
     startsOn: string | null;
     endsOn: string | null;
     blockingState: WorkBlockTemplate["blockingState"];
+    activityPresetKey: string | null;
+    customSustainRateApPerHour: number | null;
     userId: string | null;
   }>
 ) {
@@ -2281,6 +2285,8 @@ export function createCalendarEvent(input: {
   availability?: CalendarAvailability;
   eventType?: string;
   categories?: string[];
+  activityPresetKey?: string | null;
+  customSustainRateApPerHour?: number | null;
   preferredCalendarId?: string | null;
   userId?: string | null;
   links?: Array<{
@@ -2320,6 +2326,8 @@ export function patchCalendarEvent(
     availability: CalendarAvailability;
     eventType: string;
     categories: string[];
+    activityPresetKey: string | null;
+    customSustainRateApPerHour: number | null;
     preferredCalendarId: string | null;
     userId: string | null;
     links: Array<{
@@ -2359,6 +2367,8 @@ export function createTaskTimebox(input: {
   source?: TaskTimebox["source"];
   status?: TaskTimebox["status"];
   overrideReason?: string | null;
+  activityPresetKey?: string | null;
+  customSustainRateApPerHour?: number | null;
   userId?: string | null;
 }) {
   return request<{ timebox: TaskTimebox }>("/api/v1/calendar/timeboxes", {
@@ -2375,6 +2385,8 @@ export function patchTaskTimebox(
     endsAt: string;
     status: TaskTimebox["status"];
     overrideReason: string | null;
+    activityPresetKey: string | null;
+    customSustainRateApPerHour: number | null;
     userId: string | null;
   }>
 ) {

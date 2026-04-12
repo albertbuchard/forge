@@ -10,6 +10,13 @@ import {
 import { getProjectById } from "./projects.js";
 import { getTaskById } from "./tasks.js";
 import {
+  buildCalendarEventActionProfile,
+  buildTaskTimeboxActionProfile,
+  buildWorkBlockTemplateActionProfile,
+  readEntityActionProfile,
+  upsertEntityActionProfile
+} from "../services/life-force.js";
+import {
   calendarConnectionSchema,
   calendarContextConflictSchema,
   calendarEventSchema,
@@ -32,6 +39,7 @@ import {
   type CalendarTimeboxStatus,
   type CalendarTimeboxSource,
   type CreateCalendarEventInput,
+  type CreateTaskTimeboxInput,
   type CreateWorkBlockTemplateInput,
   type Task,
   type TaskTimebox,
@@ -393,6 +401,11 @@ function mapEvent(row: CalendarEventRow) {
     categories: JSON.parse(row.categories_json || "[]"),
     sourceMappings,
     links: listEventLinksForEvent(row.id),
+    actionProfile: readEntityActionProfile("calendar_event", row.id, {
+      profileKey: `calendar_event_${row.id}`,
+      title: row.title,
+      entityType: "calendar_event"
+    }),
     remoteUpdatedAt: primarySource?.lastSyncedAt ?? null,
     deletedAt: row.deleted_at,
     createdAt: row.created_at,
@@ -413,12 +426,18 @@ function mapWorkBlockTemplate(row: WorkBlockTemplateRow) {
     startsOn: row.starts_on,
     endsOn: row.ends_on,
     blockingState: row.blocking_state,
+    actionProfile: readEntityActionProfile("work_block_template", row.id, {
+      profileKey: `work_block_template_${row.id}`,
+      title: row.title,
+      entityType: "work_block_template"
+    }),
     createdAt: row.created_at,
     updatedAt: row.updated_at
   });
 }
 
 function mapTimebox(row: TaskTimeboxRow) {
+  const task = getTaskById(row.task_id);
   return taskTimeboxSchema.parse({
     id: row.id,
     taskId: row.task_id,
@@ -433,6 +452,22 @@ function mapTimebox(row: TaskTimeboxRow) {
     startsAt: row.starts_at,
     endsAt: row.ends_at,
     overrideReason: row.override_reason,
+    actionProfile:
+      readEntityActionProfile("task_timebox", row.id, {
+        profileKey: `task_timebox_${row.id}`,
+        title: row.title,
+        entityType: "task_timebox"
+      }) ??
+      (task
+        ? buildTaskTimeboxActionProfile({
+            timeboxId: row.id,
+            title: row.title,
+            taskId: row.task_id,
+            taskPlannedDurationSeconds: task.plannedDurationSeconds,
+            startsAt: row.starts_at,
+            endsAt: row.ends_at
+          })
+        : null),
     createdAt: row.created_at,
     updatedAt: row.updated_at
   });
@@ -1201,6 +1236,20 @@ export function createCalendarEvent(input: CreateCalendarEventInput) {
     );
 
   replaceEventLinks(id, input.links);
+  upsertEntityActionProfile({
+    entityType: "calendar_event",
+    entityId: id,
+    profile: buildCalendarEventActionProfile({
+      eventId: id,
+      title: input.title,
+      eventType: input.eventType,
+      availability: input.availability,
+      startAt: input.startAt,
+      endAt: input.endAt,
+      activityPresetKey: input.activityPresetKey ?? null,
+      customSustainRateApPerHour: input.customSustainRateApPerHour ?? null
+    })
+  });
   setEntityOwner(
     "calendar_event",
     id,
@@ -1298,6 +1347,39 @@ export function updateCalendarEvent(
     replaceEventLinks(eventId, patch.links);
   }
 
+  if (
+    patch.title !== undefined ||
+    patch.startAt !== undefined ||
+    patch.endAt !== undefined ||
+    patch.availability !== undefined ||
+    patch.eventType !== undefined ||
+    patch.activityPresetKey !== undefined ||
+    patch.customSustainRateApPerHour !== undefined
+  ) {
+    upsertEntityActionProfile({
+      entityType: "calendar_event",
+      entityId: eventId,
+      profile: buildCalendarEventActionProfile({
+        eventId,
+        title: next.title,
+        eventType: next.eventType,
+        availability: next.availability,
+        startAt: next.startAt,
+        endAt: next.endAt,
+        activityPresetKey:
+          patch.activityPresetKey === undefined
+            ? current.actionProfile?.metadata?.activityPresetKey as string | null | undefined
+            : patch.activityPresetKey,
+        customSustainRateApPerHour:
+          patch.customSustainRateApPerHour === undefined
+            ? (typeof current.actionProfile?.metadata?.customSustainRateApPerHour === "number"
+                ? current.actionProfile.metadata.customSustainRateApPerHour
+                : null)
+            : patch.customSustainRateApPerHour
+      })
+    });
+  }
+
   if (patch.userId !== undefined || patch.links !== undefined) {
     setEntityOwner(
       "calendar_event",
@@ -1378,6 +1460,19 @@ export function createWorkBlockTemplate(
         now,
         now
       );
+    upsertEntityActionProfile({
+      entityType: "work_block_template",
+      entityId: id,
+      profile: buildWorkBlockTemplateActionProfile({
+        templateId: id,
+        title: input.title,
+        kind: input.kind,
+        startMinute: input.startMinute,
+        endMinute: input.endMinute,
+        activityPresetKey: input.activityPresetKey ?? null,
+        customSustainRateApPerHour: input.customSustainRateApPerHour ?? null
+      })
+    });
     setEntityOwner("work_block_template", id, input.userId);
     return getWorkBlockTemplateById(id)!;
   });
@@ -1453,6 +1548,36 @@ export function updateWorkBlockTemplate(
       next.updatedAt,
       templateId
     );
+  if (
+    patch.title !== undefined ||
+    patch.kind !== undefined ||
+    patch.startMinute !== undefined ||
+    patch.endMinute !== undefined ||
+    patch.activityPresetKey !== undefined ||
+    patch.customSustainRateApPerHour !== undefined
+  ) {
+    upsertEntityActionProfile({
+      entityType: "work_block_template",
+      entityId: templateId,
+      profile: buildWorkBlockTemplateActionProfile({
+        templateId,
+        title: next.title,
+        kind: next.kind,
+        startMinute: next.startMinute,
+        endMinute: next.endMinute,
+        activityPresetKey:
+          patch.activityPresetKey === undefined
+            ? current.actionProfile?.metadata?.activityPresetKey as string | null | undefined
+            : patch.activityPresetKey,
+        customSustainRateApPerHour:
+          patch.customSustainRateApPerHour === undefined
+            ? (typeof current.actionProfile?.metadata?.customSustainRateApPerHour === "number"
+                ? current.actionProfile.metadata.customSustainRateApPerHour
+                : null)
+            : patch.customSustainRateApPerHour
+      })
+    });
+  }
   if (patch.userId !== undefined) {
     setEntityOwner("work_block_template", templateId, patch.userId);
   }
@@ -1509,6 +1634,7 @@ function deriveWorkBlockInstances(
         color: template.color,
         blockingState: template.blockingState,
         calendarEventId: null,
+        actionProfile: template.actionProfile ?? null,
         createdAt: template.createdAt,
         updatedAt: template.updatedAt
       })
@@ -1570,22 +1696,16 @@ export function getTaskTimeboxById(timeboxId: string) {
   return row ? decorateOwnedEntity("task_timebox", mapTimebox(row)) : undefined;
 }
 
-export function createTaskTimebox(input: {
-  taskId: string;
-  projectId?: string | null;
-  connectionId?: string | null;
-  calendarId?: string | null;
-  status?: CalendarTimeboxStatus;
-  source?: CalendarTimeboxSource;
-  title: string;
-  startsAt: string;
-  endsAt: string;
-  overrideReason?: string | null;
-  linkedTaskRunId?: string | null;
-  userId?: string | null;
-}) {
+export function createTaskTimebox(
+  input: CreateTaskTimeboxInput & {
+    connectionId?: string | null;
+    calendarId?: string | null;
+    linkedTaskRunId?: string | null;
+  }
+) {
   const now = nowIso();
   const id = `timebox_${randomUUID().replaceAll("-", "").slice(0, 10)}`;
+  const task = getTaskById(input.taskId);
   getDatabase()
     .prepare(
       `INSERT INTO task_timeboxes (
@@ -1609,6 +1729,20 @@ export function createTaskTimebox(input: {
       now,
       now
     );
+  upsertEntityActionProfile({
+    entityType: "task_timebox",
+    entityId: id,
+    profile: buildTaskTimeboxActionProfile({
+      timeboxId: id,
+      title: input.title,
+      taskId: input.taskId,
+      taskPlannedDurationSeconds: task?.plannedDurationSeconds ?? null,
+      startsAt: input.startsAt,
+      endsAt: input.endsAt,
+      activityPresetKey: input.activityPresetKey ?? null,
+      customSustainRateApPerHour: input.customSustainRateApPerHour ?? null
+    })
+  });
   setEntityOwner("task_timebox", id, inferTaskTimeboxOwnerId(input));
   return getTaskTimeboxById(id)!;
 }
@@ -1626,6 +1760,8 @@ export function updateTaskTimebox(
     startsAt: string;
     endsAt: string;
     overrideReason: string | null;
+    activityPresetKey: string | null;
+    customSustainRateApPerHour: number | null;
     userId: string | null;
   }>
 ) {
@@ -1670,6 +1806,38 @@ export function updateTaskTimebox(
       next.updatedAt,
       timeboxId
     );
+
+  if (
+    patch.title !== undefined ||
+    patch.startsAt !== undefined ||
+    patch.endsAt !== undefined ||
+    patch.activityPresetKey !== undefined ||
+    patch.customSustainRateApPerHour !== undefined
+  ) {
+    const task = getTaskById(current.taskId);
+    upsertEntityActionProfile({
+      entityType: "task_timebox",
+      entityId: timeboxId,
+      profile: buildTaskTimeboxActionProfile({
+        timeboxId,
+        title: next.title,
+        taskId: current.taskId,
+        taskPlannedDurationSeconds: task?.plannedDurationSeconds ?? null,
+        startsAt: next.startsAt,
+        endsAt: next.endsAt,
+        activityPresetKey:
+          patch.activityPresetKey === undefined
+            ? current.actionProfile?.metadata?.activityPresetKey as string | null | undefined
+            : patch.activityPresetKey,
+        customSustainRateApPerHour:
+          patch.customSustainRateApPerHour === undefined
+            ? (typeof current.actionProfile?.metadata?.customSustainRateApPerHour === "number"
+                ? current.actionProfile.metadata.customSustainRateApPerHour
+                : null)
+            : patch.customSustainRateApPerHour
+      })
+    });
+  }
   if (patch.userId !== undefined) {
     setEntityOwner("task_timebox", timeboxId, patch.userId);
   }

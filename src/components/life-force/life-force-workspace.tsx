@@ -7,6 +7,17 @@ import {
 } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
+  Area,
+  AreaChart,
+  CartesianGrid,
+  Label,
+  Line,
+  ReferenceLine,
+  Tooltip,
+  XAxis,
+  YAxis
+} from "recharts";
+import {
   Activity,
   BatteryCharging,
   Coffee,
@@ -17,6 +28,7 @@ import {
   Trash2,
   Zap
 } from "lucide-react";
+import { Link } from "react-router-dom";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -37,9 +49,29 @@ import type {
 } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
-const SVG_WIDTH = 100;
-const SVG_HEIGHT = 56;
 const MIN_POINT_GAP_MINUTES = 20;
+const CURVE_CHART_HEIGHT = 288;
+const CURVE_CHART_MARGIN = {
+  top: 16,
+  right: 18,
+  bottom: 28,
+  left: 42
+} as const;
+const WEEKDAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] as const;
+
+function buildFallbackTemplates(
+  lifeForce: LifeForcePayload,
+  todayWeekday: number
+) {
+  return WEEKDAY_LABELS.map((_, weekday) => ({
+    weekday,
+    baselineDailyAp: lifeForce.baselineDailyAp,
+    points: lifeForce.currentCurve.map((point) => ({
+      ...point,
+      locked: weekday === todayWeekday ? point.locked : false
+    }))
+  }));
+}
 
 function formatAp(value: number) {
   return `${Number(value.toFixed(1))} AP`;
@@ -54,6 +86,13 @@ function formatMinuteOfDay(minuteOfDay: number) {
   return new Intl.DateTimeFormat(undefined, {
     hour: "numeric",
     minute: "2-digit"
+  }).format(date);
+}
+
+function formatMinuteTick(minuteOfDay: number) {
+  const date = new Date(2026, 0, 1, 0, minuteOfDay, 0, 0);
+  return new Intl.DateTimeFormat(undefined, {
+    hour: "numeric"
   }).format(date);
 }
 
@@ -150,14 +189,6 @@ function computeHandleMaxRate(
       next.rateApPerHour * rightHours) /
       (leftHours + rightHours)
   );
-}
-
-function curveToPath(points: Array<{ x: number; y: number }>) {
-  return points
-    .map((point, index) =>
-      `${index === 0 ? "M" : "L"} ${point.x.toFixed(2)} ${point.y.toFixed(2)}`
-    )
-    .join(" ");
 }
 
 function toneClass(tone: LifeForceWarning["tone"]) {
@@ -265,6 +296,9 @@ function LifeForceHeaderCards({ lifeForce }: { lifeForce: LifeForcePayload }) {
           {Math.round(lifeForce.forecastAp)}
         </div>
         <div className="mt-2 text-sm text-white/58">
+          Planned remaining {formatAp(lifeForce.plannedRemainingAp)}
+        </div>
+        <div className="mt-2 text-xs uppercase tracking-[0.14em] text-white/38">
           Remaining {formatAp(lifeForce.remainingAp)}
         </div>
       </Card>
@@ -301,15 +335,18 @@ function LifeForceStatsStrip({ lifeForce }: { lifeForce: LifeForcePayload }) {
 
 function LifeForceCurveEditor({
   lifeForce,
+  weekday,
   points,
   baselineDailyAp,
   isDirty,
   isSaving,
   onChange,
   onReset,
-  onSave
+  onSave,
+  onWeekdayChange
 }: {
   lifeForce: LifeForcePayload;
+  weekday: number;
   points: LifeForceCurvePoint[];
   baselineDailyAp: number;
   isDirty: boolean;
@@ -317,13 +354,16 @@ function LifeForceCurveEditor({
   onChange: (points: LifeForceCurvePoint[]) => void;
   onReset: () => void;
   onSave: () => void;
+  onWeekdayChange: (weekday: number) => void;
 }) {
-  const containerRef = useRef<SVGSVGElement | null>(null);
+  const containerRef = useRef<HTMLDivElement | null>(null);
   const [dragIndex, setDragIndex] = useState<number | null>(null);
+  const [containerWidth, setContainerWidth] = useState(720);
   const [menuState, setMenuState] = useState<{
     index: number;
     position: { x: number; y: number };
   } | null>(null);
+  const todayWeekday = useMemo(() => new Date().getDay(), []);
   const minuteOfDayNow = useMemo(() => {
     const now = new Date();
     return now.getHours() * 60 + now.getMinutes();
@@ -332,57 +372,108 @@ function LifeForceCurveEditor({
     () => [...points].sort((left, right) => left.minuteOfDay - right.minuteOfDay),
     [points]
   );
-  const yMax = useMemo(() => {
-    const biggest = Math.max(
-      lifeForce.instantCapacityApPerHour,
-      ...orderedPoints.map((point) => point.rateApPerHour),
-      8
-    );
-    return Math.max(12, Math.ceil(biggest * 1.25));
-  }, [lifeForce.instantCapacityApPerHour, orderedPoints]);
-  const renderedPoints = useMemo(
+  const visiblePoints = useMemo(
     () =>
       orderedPoints.map((point) => ({
         ...point,
-        x: (point.minuteOfDay / 1440) * SVG_WIDTH,
-        y: SVG_HEIGHT - (point.rateApPerHour / yMax) * SVG_HEIGHT
+        locked:
+          weekday === todayWeekday
+            ? point.minuteOfDay <= minuteOfDayNow
+            : false
       })),
-    [orderedPoints, yMax]
+    [minuteOfDayNow, orderedPoints, todayWeekday, weekday]
   );
-  const curvePath = useMemo(() => curveToPath(renderedPoints), [renderedPoints]);
-  const usedRatio = clamp(
-    lifeForce.spentTodayAp / Math.max(1, lifeForce.dailyBudgetAp),
-    0,
-    1.15
+  const yMax = useMemo(() => {
+    const biggest = Math.max(
+      lifeForce.instantCapacityApPerHour,
+      ...visiblePoints.map((point) => point.rateApPerHour),
+      8
+    );
+    return Math.max(12, Math.ceil(biggest * 1.25));
+  }, [lifeForce.instantCapacityApPerHour, visiblePoints]);
+  const chartData = useMemo(
+    () =>
+      visiblePoints.map((point) => ({
+        ...point,
+        label: formatMinuteOfDay(point.minuteOfDay)
+      })),
+    [visiblePoints]
   );
-  const usedWidth = SVG_WIDTH * clamp(usedRatio, 0, 1);
-  const nowX = (minuteOfDayNow / 1440) * SVG_WIDTH;
+  const xTicks = useMemo(() => [0, 240, 480, 720, 960, 1200, 1440], []);
+  const yTicks = useMemo(
+    () =>
+      Array.from(
+        new Set([
+          0,
+          Math.max(2, Math.round(yMax / 3)),
+          Math.max(4, Math.round((2 * yMax) / 3)),
+          yMax
+        ])
+      ).sort((left, right) => left - right),
+    [yMax]
+  );
+  const plotWidth = Math.max(
+    160,
+    containerWidth - CURVE_CHART_MARGIN.left - CURVE_CHART_MARGIN.right
+  );
+  const plotHeight =
+    CURVE_CHART_HEIGHT - CURVE_CHART_MARGIN.top - CURVE_CHART_MARGIN.bottom;
+
+  useEffect(() => {
+    const updateWidth = () => {
+      const nextWidth = containerRef.current?.clientWidth ?? 0;
+      setContainerWidth(nextWidth > 0 ? nextWidth : 720);
+    };
+    updateWidth();
+    window.addEventListener("resize", updateWidth);
+    return () => window.removeEventListener("resize", updateWidth);
+  }, []);
 
   useEffect(() => {
     if (dragIndex === null || !containerRef.current) {
       return;
     }
-    const svg = containerRef.current;
+    const chart = containerRef.current;
     const onPointerMove = (event: PointerEvent) => {
-      const rect = svg.getBoundingClientRect();
-      const x = clamp(event.clientX - rect.left, 0, rect.width);
-      const y = clamp(event.clientY - rect.top, 0, rect.height);
+      const rect = chart.getBoundingClientRect();
+      const x = clamp(
+        event.clientX - rect.left - CURVE_CHART_MARGIN.left,
+        0,
+        plotWidth
+      );
+      const y = clamp(
+        event.clientY - rect.top - CURVE_CHART_MARGIN.top,
+        0,
+        plotHeight
+      );
       onChange(
-        orderedPoints.map((point, index) => {
+        visiblePoints.map((point, index) => {
           if (index !== dragIndex) {
-            return point;
+            return {
+              minuteOfDay: point.minuteOfDay,
+              rateApPerHour: point.rateApPerHour,
+              locked: point.locked
+            };
           }
-          if (index === 0 || index === orderedPoints.length - 1) {
-            return point;
+          if (point.locked || index === 0 || index === visiblePoints.length - 1) {
+            return {
+              minuteOfDay: point.minuteOfDay,
+              rateApPerHour: point.rateApPerHour,
+              locked: point.locked
+            };
           }
           const leftBound =
-            orderedPoints[index - 1]!.minuteOfDay + MIN_POINT_GAP_MINUTES;
+            visiblePoints[index - 1]!.minuteOfDay + MIN_POINT_GAP_MINUTES;
           const rightBound =
-            orderedPoints[index + 1]!.minuteOfDay - MIN_POINT_GAP_MINUTES;
+            visiblePoints[index + 1]!.minuteOfDay - MIN_POINT_GAP_MINUTES;
           const minuteOfDay = Math.round(
-            clamp((x / rect.width) * 1440, leftBound, rightBound)
+            clamp((x / plotWidth) * 1440, leftBound, rightBound)
           );
-          const draft = orderedPoints.map((entry) => ({ ...entry }));
+          const draft = visiblePoints.map((entry) => ({
+            minuteOfDay: entry.minuteOfDay,
+            rateApPerHour: entry.rateApPerHour,
+            locked: entry.locked
+          }));
           draft[index] = {
             ...draft[index]!,
             minuteOfDay
@@ -393,7 +484,7 @@ function LifeForceCurveEditor({
             baselineDailyAp
           );
           const rateApPerHour = clamp(
-            ((rect.height - y) / rect.height) * yMax,
+            ((plotHeight - y) / plotHeight) * yMax,
             0,
             Math.max(0, provisionalMax)
           );
@@ -412,13 +503,13 @@ function LifeForceCurveEditor({
       window.removeEventListener("pointermove", onPointerMove);
       window.removeEventListener("pointerup", stopDragging);
     };
-  }, [baselineDailyAp, dragIndex, onChange, orderedPoints, yMax]);
+  }, [baselineDailyAp, dragIndex, onChange, plotHeight, plotWidth, visiblePoints, yMax]);
 
   const activeMenuItems = useMemo<FloatingActionMenuItem[]>(() => {
     if (!menuState) {
       return [];
     }
-    const point = orderedPoints[menuState.index] ?? null;
+    const point = visiblePoints[menuState.index] ?? null;
     return [
       {
         id: "remove-point",
@@ -432,9 +523,9 @@ function LifeForceCurveEditor({
         disabled:
           point === null ||
           menuState.index === 0 ||
-          menuState.index === orderedPoints.length - 1,
+          menuState.index === visiblePoints.length - 1,
         onSelect: () => {
-          onChange(orderedPoints.filter((_, index) => index !== menuState.index));
+          onChange(visiblePoints.filter((_, index) => index !== menuState.index));
         }
       },
       {
@@ -448,16 +539,16 @@ function LifeForceCurveEditor({
         disabled:
           point === null ||
           menuState.index === 0 ||
-          menuState.index === orderedPoints.length - 1,
+          menuState.index === visiblePoints.length - 1,
         onSelect: () => {
-          const previous = orderedPoints[menuState.index - 1]!;
-          const next = orderedPoints[menuState.index + 1]!;
+          const previous = visiblePoints[menuState.index - 1]!;
+          const next = visiblePoints[menuState.index + 1]!;
           const rateApPerHour = interpolateRate(
             [previous, next],
             point!.minuteOfDay
           );
           onChange(
-            orderedPoints.map((entry, index) =>
+            visiblePoints.map((entry, index) =>
               index === menuState.index
                 ? { ...entry, rateApPerHour: Number(rateApPerHour.toFixed(3)) }
                 : entry
@@ -466,14 +557,28 @@ function LifeForceCurveEditor({
         }
       }
     ];
-  }, [menuState, onChange, orderedPoints]);
+  }, [menuState, onChange, visiblePoints]);
+
+  const handlePositions = useMemo(
+    () =>
+      visiblePoints.map((point) => ({
+        ...point,
+        x:
+          CURVE_CHART_MARGIN.left + (point.minuteOfDay / 1440) * plotWidth,
+        y:
+          CURVE_CHART_MARGIN.top +
+          (1 - point.rateApPerHour / Math.max(1, yMax)) * plotHeight
+      })),
+    [plotHeight, plotWidth, visiblePoints, yMax]
+  );
 
   return (
-    <Card className="overflow-hidden p-4">
+    <>
+      <Card className="overflow-hidden p-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="text-[11px] uppercase tracking-[0.18em] text-white/40">
-            Today&apos;s curve
+            Life Force view
           </div>
           <div className="mt-2 text-xl font-semibold text-white">
             Instant Life Force editor
@@ -484,7 +589,24 @@ function LifeForceCurveEditor({
             baseline daily AP budget while you edit.
           </div>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          <div className="flex flex-wrap items-center gap-1 rounded-full bg-white/[0.04] p-1">
+            {WEEKDAY_LABELS.map((label, index) => (
+              <button
+                key={label}
+                type="button"
+                className={cn(
+                  "rounded-full px-3 py-1.5 text-[11px] font-medium transition",
+                  weekday === index
+                    ? "bg-[var(--primary)] text-slate-950"
+                    : "text-white/60 hover:bg-white/[0.05] hover:text-white"
+                )}
+                onClick={() => onWeekdayChange(index)}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
           <Button variant="secondary" onClick={onReset}>
             Reset
           </Button>
@@ -496,135 +618,226 @@ function LifeForceCurveEditor({
       </div>
 
       <div className="mt-4 rounded-[24px] bg-[linear-gradient(180deg,rgba(192,193,255,0.08),rgba(192,193,255,0.02))] p-3">
-        <svg
+        <div
           ref={containerRef}
-          viewBox={`0 0 ${SVG_WIDTH} ${SVG_HEIGHT}`}
-          className="h-64 w-full cursor-crosshair overflow-visible"
+          className="relative h-72 w-full overflow-hidden rounded-[20px] bg-[rgba(255,255,255,0.02)]"
           role="img"
           aria-label="Life Force capacity curve editor"
           onClick={(event) => {
             if (dragIndex !== null || !containerRef.current) {
               return;
             }
+            if (event.target !== event.currentTarget) {
+              return;
+            }
             const rect = containerRef.current.getBoundingClientRect();
-            const x = clamp(event.clientX - rect.left, 0, rect.width);
-            const minuteOfDay = Math.round((x / rect.width) * 1440);
-            const insertAt = orderedPoints.findIndex(
+            const x = clamp(
+              event.clientX - rect.left - CURVE_CHART_MARGIN.left,
+              0,
+              plotWidth
+            );
+            const minuteOfDay = Math.round((x / plotWidth) * 1440);
+            const insertAt = visiblePoints.findIndex(
               (point) => point.minuteOfDay > minuteOfDay
             );
             if (insertAt <= 0) {
               return;
             }
-            const previous = orderedPoints[insertAt - 1]!;
-            const next = orderedPoints[insertAt]!;
+            const previous = visiblePoints[insertAt - 1]!;
+            const next = visiblePoints[insertAt]!;
             if (
               minuteOfDay - previous.minuteOfDay < MIN_POINT_GAP_MINUTES ||
               next.minuteOfDay - minuteOfDay < MIN_POINT_GAP_MINUTES
             ) {
               return;
             }
-            const rateApPerHour = interpolateRate(orderedPoints, minuteOfDay);
-            const nextPoints = [...orderedPoints];
+            const rateApPerHour = interpolateRate(visiblePoints, minuteOfDay);
+            const nextPoints = [...visiblePoints];
             nextPoints.splice(insertAt, 0, {
               minuteOfDay,
               rateApPerHour: Number(rateApPerHour.toFixed(3)),
-              locked: minuteOfDay <= minuteOfDayNow
+              locked: weekday === todayWeekday && minuteOfDay <= minuteOfDayNow
             });
             onChange(nextPoints);
           }}
         >
-          <defs>
-            <linearGradient id="life-force-curve-fill" x1="0" x2="0" y1="0" y2="1">
-              <stop offset="0%" stopColor="rgba(192,193,255,0.34)" />
-              <stop offset="100%" stopColor="rgba(192,193,255,0.02)" />
-            </linearGradient>
-          </defs>
-          <rect width={SVG_WIDTH} height={SVG_HEIGHT} rx="7" fill="rgba(255,255,255,0.02)" />
-          {[0.25, 0.5, 0.75].map((ratio) => (
-            <line
-              key={ratio}
-              x1="0"
-              x2={String(SVG_WIDTH)}
-              y1={String(SVG_HEIGHT * ratio)}
-              y2={String(SVG_HEIGHT * ratio)}
+          <AreaChart
+            width={Math.max(containerWidth, 320)}
+            height={CURVE_CHART_HEIGHT}
+            data={chartData}
+            margin={CURVE_CHART_MARGIN}
+          >
+            <defs>
+              <linearGradient id="life-force-chart-fill" x1="0" x2="0" y1="0" y2="1">
+                <stop offset="0%" stopColor="rgba(192,193,255,0.24)" />
+                <stop offset="100%" stopColor="rgba(192,193,255,0.02)" />
+              </linearGradient>
+            </defs>
+            <CartesianGrid
+              vertical={false}
               stroke="rgba(255,255,255,0.08)"
-              strokeDasharray="1.6 2.2"
+              strokeDasharray="3 4"
             />
-          ))}
-          <rect
-            x="0"
-            y={String(SVG_HEIGHT - 2.8)}
-            width={String(usedWidth)}
-            height="2.8"
-            fill="rgba(78,222,163,0.24)"
-          />
-          <line
-            x1={String(nowX)}
-            x2={String(nowX)}
-            y1="0"
-            y2={String(SVG_HEIGHT)}
-            stroke="rgba(255,255,255,0.22)"
-            strokeDasharray="2 2"
-          />
-          <path
-            d={`${curvePath} L ${SVG_WIDTH} ${SVG_HEIGHT} L 0 ${SVG_HEIGHT} Z`}
-            fill="url(#life-force-curve-fill)"
-          />
-          <path
-            d={curvePath}
-            fill="none"
-            stroke="rgba(192,193,255,0.96)"
-            strokeWidth="1.8"
-            strokeLinejoin="round"
-            strokeLinecap="round"
-          />
-          {renderedPoints.map((point, index) => {
-            const isLocked = point.minuteOfDay <= minuteOfDayNow;
+            <XAxis
+              dataKey="minuteOfDay"
+              type="number"
+              domain={[0, 1440]}
+              ticks={xTicks}
+              tickFormatter={formatMinuteTick}
+              tick={{ fill: "rgba(255,255,255,0.48)", fontSize: 10 }}
+              tickLine={false}
+              axisLine={{ stroke: "rgba(255,255,255,0.12)" }}
+            >
+              <Label
+                value="Time"
+                position="insideBottom"
+                offset={-10}
+                fill="rgba(255,255,255,0.38)"
+                fontSize={10}
+              />
+            </XAxis>
+            <YAxis
+              type="number"
+              domain={[0, yMax]}
+              ticks={yTicks}
+              tick={{ fill: "rgba(255,255,255,0.48)", fontSize: 10 }}
+              tickLine={false}
+              axisLine={{ stroke: "rgba(255,255,255,0.12)" }}
+              width={34}
+            >
+              <Label
+                value="AP/h"
+                angle={-90}
+                position="insideLeft"
+                fill="rgba(255,255,255,0.38)"
+                fontSize={10}
+                style={{ textAnchor: "middle" }}
+              />
+            </YAxis>
+            <Tooltip
+              cursor={{
+                stroke: "rgba(255,255,255,0.18)",
+                strokeDasharray: "3 4"
+              }}
+              content={({ active, payload }) => {
+                const point = active ? payload?.[0]?.payload : null;
+                if (!point) {
+                  return null;
+                }
+                return (
+                  <div className="rounded-[16px] border border-white/10 bg-[rgba(10,15,27,0.95)] px-3 py-2 text-xs text-white shadow-[0_18px_50px_rgba(4,8,18,0.3)] backdrop-blur-xl">
+                    <div className="font-medium text-white">{point.label}</div>
+                    <div className="mt-1 text-white/60">
+                      {formatRate(point.rateApPerHour)}
+                    </div>
+                  </div>
+                );
+              }}
+            />
+            {weekday === todayWeekday ? (
+              <ReferenceLine
+                x={minuteOfDayNow}
+                stroke="rgba(255,255,255,0.22)"
+                strokeDasharray="3 4"
+              />
+            ) : null}
+            <Area
+              type="linear"
+              dataKey="rateApPerHour"
+              stroke="none"
+              fill="url(#life-force-chart-fill)"
+              isAnimationActive={false}
+            />
+            <Line
+              type="linear"
+              dataKey="rateApPerHour"
+              stroke="rgba(214,215,255,0.95)"
+              strokeWidth={1.5}
+              dot={false}
+              activeDot={false}
+              isAnimationActive={false}
+            />
+          </AreaChart>
+          {handlePositions.map((point, index) => {
+            const isEndpoint = index === 0 || index === handlePositions.length - 1;
             return (
-              <g key={`${point.minuteOfDay}-${index}`}>
-                <circle
-                  cx={point.x}
-                  cy={point.y}
-                  r={index === 0 || index === renderedPoints.length - 1 ? 2.4 : 2.1}
-                  fill={isLocked ? "rgba(255,255,255,0.45)" : "rgba(255,255,255,0.95)"}
-                  stroke="rgba(10,15,27,0.9)"
-                  strokeWidth="0.9"
-                  onPointerDown={(event: ReactPointerEvent<SVGCircleElement>) => {
-                    event.preventDefault();
-                    event.stopPropagation();
-                    if (isLocked || index === 0 || index === renderedPoints.length - 1) {
-                      return;
-                    }
-                    setDragIndex(index);
-                  }}
-                  onContextMenu={(event) => {
-                    event.preventDefault();
-                    event.stopPropagation();
-                    setMenuState({
-                      index,
-                      position: { x: event.clientX + 6, y: event.clientY + 6 }
-                    });
-                  }}
-                  className={cn(
-                    "transition",
-                    isLocked ? "cursor-not-allowed" : "cursor-grab active:cursor-grabbing"
-                  )}
-                />
-                {index > 0 && index < renderedPoints.length - 1 ? (
-                  <text
-                    x={point.x}
-                    y={Math.max(8, point.y - 3.2)}
-                    textAnchor="middle"
-                    fontSize="3.4"
-                    fill="rgba(255,255,255,0.52)"
-                  >
-                    {formatMinuteOfDay(point.minuteOfDay)}
-                  </text>
-                ) : null}
-              </g>
+              <button
+                key={`${point.minuteOfDay}-${index}`}
+                type="button"
+                aria-label={`Turn point at ${formatMinuteOfDay(point.minuteOfDay)}`}
+                className={cn(
+                  "absolute z-10 rounded-full border border-[rgba(10,15,27,0.9)] transition",
+                  point.locked || isEndpoint
+                    ? "cursor-not-allowed bg-white/45"
+                    : "cursor-grab bg-white active:cursor-grabbing"
+                )}
+                style={{
+                  left: point.x - (isEndpoint ? 6 : 5),
+                  top: point.y - (isEndpoint ? 6 : 5),
+                  width: isEndpoint ? 12 : 10,
+                  height: isEndpoint ? 12 : 10
+                }}
+                onPointerDown={(event: ReactPointerEvent<HTMLButtonElement>) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  if (point.locked || isEndpoint) {
+                    return;
+                  }
+                  setDragIndex(index);
+                }}
+                onContextMenu={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  setMenuState({
+                    index,
+                    position: { x: event.clientX + 6, y: event.clientY + 6 }
+                  });
+                }}
+              />
             );
           })}
-        </svg>
+        </div>
+        <div className="mt-3 flex flex-wrap items-center justify-between gap-2 px-1 text-[11px] text-white/42">
+          <div>Editing {WEEKDAY_LABELS[weekday]} curve</div>
+          <div>{Math.round(baselineDailyAp)} AP/day baseline</div>
+        </div>
+      </div>
+      </Card>
+      <FloatingActionMenu
+        open={menuState !== null}
+        title="Turn point actions"
+        subtitle="Delete the turn point or flatten it back onto the surrounding segment."
+        items={activeMenuItems}
+        position={menuState?.position ?? null}
+        onClose={() => setMenuState(null)}
+      />
+    </>
+  );
+}
+
+function LifeForceStudioCard() {
+  return (
+    <Card className="overflow-hidden p-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="text-[11px] uppercase tracking-[0.18em] text-white/40">
+            Life Force studio
+          </div>
+          <div className="mt-2 text-xl font-semibold text-white">
+            Edit weekday curves in the dedicated view
+          </div>
+          <div className="mt-2 max-w-3xl text-sm leading-6 text-white/56">
+            The full weekday editor, turn-point menu, and curve calibration now
+            live in their own page so Overview can stay fast and readable.
+          </div>
+        </div>
+        <Link
+          to="/life-force"
+          className="inline-flex min-h-10 min-w-0 max-w-full items-center justify-center gap-2 overflow-hidden whitespace-nowrap rounded-[var(--radius-control)] border border-[var(--primary)]/14 bg-[var(--ui-accent-soft)] px-3 py-2 text-[13px] font-medium text-[var(--ui-ink-on-accent)] shadow-[var(--ui-shadow-soft)] transition hover:bg-[var(--ui-accent-soft-hover)]"
+        >
+          <Zap className="size-4" />
+          Open Life Force studio
+        </Link>
       </div>
     </Card>
   );
@@ -632,64 +845,113 @@ function LifeForceCurveEditor({
 
 function LifeForceDrains({
   drains,
+  plannedDrains,
   warnings,
   recommendations
 }: {
   drains: LifeForceDrainEntry[];
+  plannedDrains: LifeForceDrainEntry[];
   warnings: LifeForceWarning[];
   recommendations: string[];
 }) {
   return (
     <div className="grid gap-4 xl:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)]">
-      <Card className="p-4">
-        <div className="flex items-center justify-between gap-3">
-          <div>
-            <div className="text-[11px] uppercase tracking-[0.18em] text-white/40">
-              Current drains
+      <div className="grid gap-4">
+        <Card className="p-4">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <div className="text-[11px] uppercase tracking-[0.18em] text-white/40">
+                Current drains
+              </div>
+              <div className="mt-2 text-xl font-semibold text-white">
+                What is consuming Life Force now
+              </div>
             </div>
-            <div className="mt-2 text-xl font-semibold text-white">
-              What is consuming Life Force now
-            </div>
+            <Badge className="bg-white/[0.08] text-white/70">
+              {drains.length} active
+            </Badge>
           </div>
-          <Badge className="bg-white/[0.08] text-white/70">
-            {drains.length} active
-          </Badge>
-        </div>
-        <div className="mt-4 grid gap-3">
-          {drains.length === 0 ? (
-            <div className="rounded-[18px] bg-white/[0.04] px-4 py-4 text-sm text-white/58">
-              No current drainers are active. This is a good moment to choose
-              your next intentional action.
-            </div>
-          ) : (
-            drains.map((drain) => (
-              <div
-                key={drain.id}
-                className="rounded-[18px] bg-white/[0.04] px-4 py-4"
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <div className="text-base font-semibold text-white">
-                      {drain.title}
+          <div className="mt-4 grid gap-3">
+            {drains.length === 0 ? (
+              <div className="rounded-[18px] bg-white/[0.04] px-4 py-4 text-sm text-white/58">
+                No current drainers are active. This is a good moment to choose
+                your next intentional action.
+              </div>
+            ) : (
+              drains.map((drain) => (
+                <div
+                  key={drain.id}
+                  className="rounded-[18px] bg-white/[0.04] px-4 py-4"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="text-base font-semibold text-white">
+                        {drain.title}
+                      </div>
+                      <div className="mt-1 text-sm text-white/54">
+                        {drain.why}
+                      </div>
                     </div>
-                    <div className="mt-1 text-sm text-white/54">
-                      {drain.why}
-                    </div>
-                  </div>
-                  <div className="shrink-0 text-right">
-                    <div className="text-base font-semibold text-[var(--primary)]">
-                      {formatRate(drain.apPerHour)}
-                    </div>
-                    <div className="mt-1 text-xs uppercase tracking-[0.14em] text-white/38">
-                      {summarizeDrainRole(drain.role)}
+                    <div className="shrink-0 text-right">
+                      <div className="text-base font-semibold text-[var(--primary)]">
+                        {formatRate(drain.apPerHour)}
+                      </div>
+                      <div className="mt-1 text-xs uppercase tracking-[0.14em] text-white/38">
+                        {summarizeDrainRole(drain.role)}
+                      </div>
                     </div>
                   </div>
                 </div>
+              ))
+            )}
+          </div>
+        </Card>
+        <Card className="p-4">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <div className="text-[11px] uppercase tracking-[0.18em] text-white/40">
+                Planned drains
               </div>
-            ))
-          )}
-        </div>
-      </Card>
+              <div className="mt-2 text-xl font-semibold text-white">
+                What the rest of today is already asking from you
+              </div>
+            </div>
+            <Badge className="bg-white/[0.08] text-white/70">
+              {plannedDrains.length} planned
+            </Badge>
+          </div>
+          <div className="mt-4 grid gap-3">
+            {plannedDrains.length === 0 ? (
+              <div className="rounded-[18px] bg-white/[0.04] px-4 py-4 text-sm text-white/58">
+                No future AP load has been forecast yet. The day is still open.
+              </div>
+            ) : (
+              plannedDrains.slice(0, 6).map((drain) => (
+                <div key={drain.id} className="rounded-[18px] bg-white/[0.04] px-4 py-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="text-base font-semibold text-white">
+                        {drain.title}
+                      </div>
+                      <div className="mt-1 text-sm text-white/54">
+                        {drain.why}
+                      </div>
+                    </div>
+                    <div className="shrink-0 text-right">
+                      <div className="text-base font-semibold text-[var(--primary)]">
+                        {formatAp(drain.instantAp)}
+                      </div>
+                      <div className="mt-1 text-xs uppercase tracking-[0.14em] text-white/38">
+                        {formatRate(drain.apPerHour)}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </Card>
+      </div>
 
       <div className="grid gap-4">
         <Card className="p-4">
@@ -832,14 +1094,17 @@ function LifeForceCompact({
 export function LifeForceOverviewWorkspace({
   selectedUserIds,
   fallbackLifeForce,
-  onRefresh
+  onRefresh,
+  showEditor = true
 }: {
   selectedUserIds: string[];
   fallbackLifeForce: LifeForcePayload;
   onRefresh?: () => Promise<void>;
+  showEditor?: boolean;
 }) {
   const queryClient = useQueryClient();
-  const weekday = new Date().getDay();
+  const todayWeekday = new Date().getDay();
+  const [weekday, setWeekday] = useState(todayWeekday);
   const lifeForceQuery = useQuery({
     queryKey: ["forge-life-force", ...selectedUserIds],
     queryFn: () => getLifeForce(selectedUserIds),
@@ -848,18 +1113,21 @@ export function LifeForceOverviewWorkspace({
         ? undefined
         : {
             lifeForce: fallbackLifeForce,
-            templates: [
-              {
-                weekday,
-                baselineDailyAp: fallbackLifeForce.baselineDailyAp,
-                points: fallbackLifeForce.currentCurve
-              }
-            ]
+            templates: WEEKDAY_LABELS.map((_, templateWeekday) => ({
+              weekday: templateWeekday,
+              baselineDailyAp: fallbackLifeForce.baselineDailyAp,
+              points: fallbackLifeForce.currentCurve.map((point) => ({
+                ...point,
+                locked: templateWeekday === todayWeekday ? point.locked : false
+              }))
+            }))
           }
   });
   const payload = lifeForceQuery.data?.lifeForce ?? fallbackLifeForce;
+  const templates =
+    lifeForceQuery.data?.templates ?? buildFallbackTemplates(payload, todayWeekday);
   const currentTemplate =
-    lifeForceQuery.data?.templates.find((entry) => entry.weekday === weekday) ??
+    templates.find((entry) => entry.weekday === weekday) ??
     {
       weekday,
       baselineDailyAp: payload.baselineDailyAp,
@@ -934,26 +1202,33 @@ export function LifeForceOverviewWorkspace({
         okayPending={okayAgainMutation.isPending}
         feedback={feedback}
       />
-      <LifeForceCurveEditor
-        lifeForce={payload}
-        points={draftPoints}
-        baselineDailyAp={currentTemplate.baselineDailyAp}
-        isDirty={dirty}
-        isSaving={updateTemplateMutation.isPending}
-        onChange={(points) => {
-          setDraftPoints(points);
-          setDirty(true);
-        }}
-        onReset={() => {
-          setDraftPoints(currentTemplate.points);
-          setDirty(false);
-        }}
-        onSave={() => {
-          void updateTemplateMutation.mutateAsync(draftPoints);
-        }}
-      />
+      {showEditor ? (
+        <LifeForceCurveEditor
+          lifeForce={payload}
+          weekday={weekday}
+          points={draftPoints}
+          baselineDailyAp={currentTemplate.baselineDailyAp}
+          isDirty={dirty}
+          isSaving={updateTemplateMutation.isPending}
+          onWeekdayChange={setWeekday}
+          onChange={(points) => {
+            setDraftPoints(points);
+            setDirty(true);
+          }}
+          onReset={() => {
+            setDraftPoints(currentTemplate.points);
+            setDirty(false);
+          }}
+          onSave={() => {
+            void updateTemplateMutation.mutateAsync(draftPoints);
+          }}
+        />
+      ) : (
+        <LifeForceStudioCard />
+      )}
       <LifeForceDrains
         drains={payload.activeDrains}
+        plannedDrains={payload.plannedDrains}
         warnings={payload.warnings}
         recommendations={payload.recommendations}
       />
@@ -982,13 +1257,14 @@ export function LifeForceTodayCard({
   onRefresh
 }: {
   selectedUserIds: string[];
-  fallbackLifeForce: LifeForcePayload;
+  fallbackLifeForce?: LifeForcePayload;
   onRefresh?: () => Promise<void>;
 }) {
+  const resolvedUserIds = Array.isArray(selectedUserIds) ? selectedUserIds : [];
   const queryClient = useQueryClient();
   const lifeForceQuery = useQuery({
-    queryKey: ["forge-life-force", ...selectedUserIds],
-    queryFn: () => getLifeForce(selectedUserIds),
+    queryKey: ["forge-life-force", ...resolvedUserIds],
+    queryFn: () => getLifeForce(resolvedUserIds),
     initialData:
       fallbackLifeForce === undefined
         ? undefined
@@ -998,10 +1274,26 @@ export function LifeForceTodayCard({
           }
   });
   const payload = lifeForceQuery.data?.lifeForce ?? fallbackLifeForce;
+  if (!payload) {
+    return (
+      <Card className="p-4">
+        <div className="text-[11px] uppercase tracking-[0.18em] text-white/40">
+          Life Force
+        </div>
+        <div className="mt-2 text-lg font-semibold text-white">
+          Not calibrated yet
+        </div>
+        <div className="mt-2 text-sm leading-6 text-white/58">
+          Today can still load without a Life Force snapshot, but the AP and
+          instant headroom model is not available for this state yet.
+        </div>
+      </Card>
+    );
+  }
   const [feedback, setFeedback] = useState<string | null>(null);
   const tiredMutation = useMutation({
     mutationFn: () =>
-      createFatigueSignal({ signalType: "tired" }, selectedUserIds),
+      createFatigueSignal({ signalType: "tired" }, resolvedUserIds),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["forge-life-force"] });
       await queryClient.invalidateQueries({ queryKey: ["forge-snapshot"] });
@@ -1013,7 +1305,7 @@ export function LifeForceTodayCard({
   });
   const okayAgainMutation = useMutation({
     mutationFn: () =>
-      createFatigueSignal({ signalType: "okay_again" }, selectedUserIds),
+      createFatigueSignal({ signalType: "okay_again" }, resolvedUserIds),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["forge-life-force"] });
       await queryClient.invalidateQueries({ queryKey: ["forge-snapshot"] });

@@ -41,6 +41,7 @@ import {
   deleteCalendarEvent,
   deleteWorkBlockTemplate,
   getCalendarOverview,
+  getLifeForce,
   patchCalendarEvent,
   patchTask,
   patchWorkBlockTemplate,
@@ -51,10 +52,25 @@ import {
   getFallbackCalendarColor,
   readCalendarDisplayPreferences
 } from "@/lib/calendar-display-preferences";
+import {
+  estimateCalendarEventActionPointLoad,
+  getCalendarActivityPresetOptions,
+  estimateTaskTimeboxActionPointLoad,
+  estimateWorkBlockActionPointLoad,
+  formatLifeForceAp,
+  formatLifeForceRate
+} from "@/lib/life-force-display";
 import { readCalendarDisplayName } from "@/lib/calendar-name-deduper";
 import { addDays, buildWeekDays, formatWeekday, startOfWeek } from "@/lib/calendar-ui";
 import { getEntityKindForCrudEntityType } from "@/lib/entity-visuals";
-import type { CalendarEvent, CalendarEventLink, TaskTimebox, WorkBlockKind, WorkBlockTemplate } from "@/lib/types";
+import type {
+  ActionProfile,
+  CalendarEvent,
+  CalendarEventLink,
+  TaskTimebox,
+  WorkBlockKind,
+  WorkBlockTemplate
+} from "@/lib/types";
 import {
   formatUserSummaryLine,
   getSingleSelectedUserId
@@ -97,6 +113,65 @@ function buildDefaultEventSeed(day: Date) {
     timezone: Intl.DateTimeFormat().resolvedOptions().timeZone ?? "UTC",
     availability: "busy" as const
   };
+}
+
+function buildPreviewActionProfile(input: {
+  entityType: ActionProfile["entityType"];
+  entityId: string;
+  title: string;
+  startsAt: string;
+  endsAt: string;
+  activityPresetKey?: string | null;
+  customSustainRateApPerHour?: number | null;
+}) {
+  const durationSeconds = Math.max(
+    60,
+    Math.floor((Date.parse(input.endsAt) - Date.parse(input.startsAt)) / 1000)
+  );
+  const presetRate =
+    getCalendarActivityPresetOptions().find(
+      (preset) => preset.key === input.activityPresetKey
+    )?.defaultRateApPerHour ?? 100 / 24;
+  const sustainRateApPerHour =
+    input.customSustainRateApPerHour ?? presetRate;
+  const totalCostAp = Number(
+    ((durationSeconds / 3600) * sustainRateApPerHour).toFixed(2)
+  );
+  const now = new Date().toISOString();
+  return {
+    id: `preview_${input.entityType}_${input.entityId}`,
+    profileKey: `${String(input.entityType)}_${input.entityId}`,
+    title: input.title,
+    entityType: input.entityType,
+    mode: "container",
+    startupAp: 0,
+    totalCostAp,
+    expectedDurationSeconds: durationSeconds,
+    sustainRateApPerHour,
+    demandWeights: {
+      activation: 0.1,
+      focus: 0.35,
+      vigor: 0.1,
+      composure: 0.15,
+      flow: 0.3
+    },
+    doubleCountPolicy: "container_only",
+    sourceMethod:
+      input.customSustainRateApPerHour !== null &&
+      input.customSustainRateApPerHour !== undefined
+        ? "manual"
+        : input.activityPresetKey
+          ? "seeded"
+          : "inferred",
+    costBand: sustainRateApPerHour >= 10 ? "standard" : "light",
+    recoveryEffect: 0,
+    metadata: {
+      activityPresetKey: input.activityPresetKey ?? null,
+      customSustainRateApPerHour: input.customSustainRateApPerHour ?? null
+    },
+    createdAt: now,
+    updatedAt: now
+  } satisfies ActionProfile;
 }
 
 function normalizeCalendarEventPlace(event: CalendarEvent): CalendarEvent {
@@ -278,6 +353,10 @@ export function CalendarPage() {
         userIds: selectedUserIds
       })
   });
+  const lifeForceQuery = useQuery({
+    queryKey: ["forge-life-force", ...selectedUserIds],
+    queryFn: () => getLifeForce(selectedUserIds)
+  });
   const calendarOverviewQueryKey = [
     "forge-calendar-overview",
     range.from,
@@ -352,6 +431,9 @@ export function CalendarPage() {
       startsAt: string;
       endsAt: string;
       source?: TaskTimebox["source"];
+      overrideReason?: string | null;
+      activityPresetKey?: string | null;
+      customSustainRateApPerHour?: number | null;
     }) =>
       createTaskTimebox({
         ...timebox,
@@ -392,8 +474,9 @@ export function CalendarPage() {
         previous?.calendar.calendars.find((calendar) => calendar.canWrite) ??
         null;
       const now = new Date().toISOString();
+      const optimisticEventId = `calendar_event_optimistic_${Date.now()}`;
       const optimisticEvent: CalendarEvent = {
-        id: `calendar_event_optimistic_${Date.now()}`,
+        id: optimisticEventId,
         connectionId: defaultWritableCalendar?.connectionId ?? null,
         calendarId:
           input.preferredCalendarId === undefined
@@ -438,6 +521,15 @@ export function CalendarPage() {
           createdAt: now,
           updatedAt: now
         })),
+        actionProfile: buildPreviewActionProfile({
+          entityType: "calendar_event",
+          entityId: optimisticEventId,
+          title: input.title,
+          startsAt: input.startAt,
+          endsAt: input.endAt,
+          activityPresetKey: input.activityPresetKey ?? null,
+          customSustainRateApPerHour: input.customSustainRateApPerHour ?? null
+        }),
         remoteUpdatedAt: null,
         deletedAt: null,
         createdAt: now,
@@ -543,6 +635,26 @@ export function CalendarPage() {
                   normalizedExistingEvent.createdAt,
                 updatedAt: new Date().toISOString()
               })) ?? normalizedExistingEvent.links,
+            actionProfile: buildPreviewActionProfile({
+              entityType: "calendar_event",
+              entityId: eventId,
+              title: patch.title ?? normalizedExistingEvent.title,
+              startsAt: patch.startAt ?? normalizedExistingEvent.startAt,
+              endsAt: patch.endAt ?? normalizedExistingEvent.endAt,
+              activityPresetKey:
+                patch.activityPresetKey === undefined
+                  ? normalizedExistingEvent.actionProfile?.metadata
+                      ?.activityPresetKey as string | null | undefined
+                  : patch.activityPresetKey,
+              customSustainRateApPerHour:
+                patch.customSustainRateApPerHour === undefined
+                  ? (typeof normalizedExistingEvent.actionProfile?.metadata
+                      ?.customSustainRateApPerHour === "number"
+                      ? normalizedExistingEvent.actionProfile.metadata
+                          .customSustainRateApPerHour
+                      : null)
+                  : patch.customSustainRateApPerHour
+            }),
             updatedAt: new Date().toISOString()
           };
           return {
@@ -948,6 +1060,44 @@ export function CalendarPage() {
         badge={`${overview.connections.length} connection${overview.connections.length === 1 ? "" : "s"}`}
       />
 
+      {lifeForceQuery.data?.lifeForce ? (
+        <Card className="grid gap-3 rounded-[28px] border border-white/8 bg-[linear-gradient(180deg,rgba(15,25,36,0.98),rgba(9,15,26,0.96))] p-4 md:grid-cols-3">
+          <div>
+            <div className="text-[11px] uppercase tracking-[0.18em] text-white/40">
+              Life Force today
+            </div>
+            <div className="mt-2 text-3xl font-semibold text-white">
+              {Math.round(lifeForceQuery.data.lifeForce.spentTodayAp)}
+              <span className="ml-2 text-lg text-white/44">
+                / {Math.round(lifeForceQuery.data.lifeForce.dailyBudgetAp)} AP
+              </span>
+            </div>
+          </div>
+          <div>
+            <div className="text-[11px] uppercase tracking-[0.18em] text-white/40">
+              Instant headroom
+            </div>
+            <div className="mt-2 text-2xl font-semibold text-[var(--primary)]">
+              {lifeForceQuery.data.lifeForce.instantFreeApPerHour.toFixed(1)} AP/h
+            </div>
+            <div className="mt-2 text-sm text-white/58">
+              Calendar containers now speak the same AP language as live work.
+            </div>
+          </div>
+          <div>
+            <div className="text-[11px] uppercase tracking-[0.18em] text-white/40">
+              Forecast
+            </div>
+            <div className="mt-2 text-2xl font-semibold text-white">
+              {Math.round(lifeForceQuery.data.lifeForce.forecastAp)} AP
+            </div>
+            <div className="mt-2 text-sm text-white/58">
+              Planned remaining {formatLifeForceAp(lifeForceQuery.data.lifeForce.plannedRemainingAp)}
+            </div>
+          </div>
+        </Card>
+      ) : null}
+
       <Card className="grid gap-4 rounded-[32px] border border-white/8 bg-[linear-gradient(180deg,rgba(17,28,39,0.985),rgba(10,17,29,0.985))]">
         <CalendarWeekToolbar
           description="The calendar is the priority surface here. Connected provider events, recurring work blocks, and owned task timeboxes all stay visible together."
@@ -967,6 +1117,12 @@ export function CalendarPage() {
           }
           badges={
             <>
+              {lifeForceQuery.data?.lifeForce ? (
+                <Badge className="bg-white/[0.08] text-white/74">
+                  {Math.round(lifeForceQuery.data.lifeForce.spentTodayAp)}/
+                  {Math.round(lifeForceQuery.data.lifeForce.dailyBudgetAp)} AP
+                </Badge>
+              ) : null}
               {eventSyncPending ? (
                 <Badge className="bg-white/[0.08] text-white/78">
                   <RefreshCcw className="mr-1 size-3.5 animate-spin" />
@@ -1086,6 +1242,9 @@ export function CalendarPage() {
                         border: `1px solid ${block.color}55`
                       }}
                     >
+                      {(() => {
+                        const actionLoad = estimateWorkBlockActionPointLoad(block);
+                        return (
                       <div className="flex min-w-0 items-start justify-between gap-2">
                         <div className="min-w-0 flex-1">
                           <div className="min-w-0 [overflow-wrap:anywhere] font-medium">{block.title}</div>
@@ -1096,6 +1255,20 @@ export function CalendarPage() {
                             <Badge size="sm" className="shrink-0 bg-white/[0.08] text-white/78">
                               {formatWorkBlockKindLabel(block.kind)}
                             </Badge>
+                            {actionLoad.rateApPerHour > 0 ? (
+                              <>
+                                <Badge size="sm" className="shrink-0 bg-[var(--primary)]/14 text-[var(--primary)]">
+                                  {formatLifeForceRate(actionLoad.rateApPerHour)}
+                                </Badge>
+                                <Badge size="sm" className="shrink-0 bg-white/[0.08] text-white/72">
+                                  {formatLifeForceAp(actionLoad.totalAp)}
+                                </Badge>
+                              </>
+                            ) : (
+                              <Badge size="sm" className="shrink-0 bg-emerald-400/12 text-emerald-100">
+                                Recovery
+                              </Badge>
+                            )}
                           </div>
                         </div>
                         <button
@@ -1114,6 +1287,8 @@ export function CalendarPage() {
                           <MoreHorizontal className="size-4" />
                         </button>
                       </div>
+                        );
+                      })()}
                       <div className="mt-1 text-white/60">
                         {new Date(block.startAt).toLocaleTimeString([], {
                           hour: "2-digit",
@@ -1139,6 +1314,7 @@ export function CalendarPage() {
                             startsOn: null,
                             endsOn: null,
                             blockingState: block.blockingState,
+                            actionProfile: null,
                             createdAt: block.createdAt,
                             updatedAt: block.updatedAt
                           }
@@ -1176,6 +1352,9 @@ export function CalendarPage() {
                           : undefined
                       }
                     >
+                      {(() => {
+                        const actionLoad = estimateCalendarEventActionPointLoad(event);
+                        return (
                       <div className="flex min-w-0 items-start justify-between gap-2">
                         <div className="min-w-0 flex-1">
                           <div className="line-clamp-2 [overflow-wrap:anywhere] font-medium">{event.title}</div>
@@ -1209,10 +1388,22 @@ export function CalendarPage() {
                           </button>
                         </div>
                       </div>
+                        );
+                      })()}
                       <div className="mt-2 flex min-w-0 flex-wrap items-center gap-1.5">
                         <Badge size="sm" className="max-w-full bg-white/[0.08] px-2 py-0.5 text-[10px] uppercase tracking-[0.14em] text-white/70">
                           {getEventBadgeLabel(event, calendarTitleById)}
                         </Badge>
+                        {estimateCalendarEventActionPointLoad(event).rateApPerHour > 0 ? (
+                          <>
+                            <Badge size="sm" className="bg-[var(--primary)]/14 px-2 py-0.5 text-[10px] uppercase tracking-[0.14em] text-[var(--primary)]">
+                              {formatLifeForceRate(estimateCalendarEventActionPointLoad(event).rateApPerHour)}
+                            </Badge>
+                            <Badge size="sm" className="bg-white/[0.08] px-2 py-0.5 text-[10px] uppercase tracking-[0.14em] text-white/70">
+                              {formatLifeForceAp(estimateCalendarEventActionPointLoad(event).totalAp)}
+                            </Badge>
+                          </>
+                        ) : null}
                         {event.calendarId && displayPreferences.useCalendarColors ? (
                           <span
                             aria-hidden="true"
@@ -1269,12 +1460,22 @@ export function CalendarPage() {
                       }}
                       className="min-w-0 overflow-hidden cursor-move rounded-[18px] bg-[var(--primary)]/14 px-3 py-2 text-sm text-[var(--primary)] shadow-[inset_0_0_0_1px_rgba(192,193,255,0.18)]"
                     >
+                      {(() => {
+                        const actionLoad = estimateTaskTimeboxActionPointLoad(timebox);
+                        return (
                       <div className="flex min-w-0 items-center justify-between gap-2">
                         <div className="min-w-0 [overflow-wrap:anywhere] font-medium">{timebox.title}</div>
-                        <Badge size="sm" className="shrink-0 bg-white/[0.08] text-white/78">
-                          {timebox.status}
-                        </Badge>
+                        <div className="flex shrink-0 items-center gap-1.5">
+                          <Badge size="sm" className="shrink-0 bg-white/[0.08] text-white/78">
+                            {timebox.status}
+                          </Badge>
+                          <Badge size="sm" className="shrink-0 bg-white/[0.08] text-white/78">
+                            {formatLifeForceRate(actionLoad.rateApPerHour)}
+                          </Badge>
+                        </div>
                       </div>
+                        );
+                      })()}
                       <div className="mt-1 flex items-center gap-2 text-white/70">
                         <Clock3 className="size-3.5" />
                         {new Date(timebox.startsAt).toLocaleTimeString([], {
@@ -1286,6 +1487,9 @@ export function CalendarPage() {
                           hour: "2-digit",
                           minute: "2-digit"
                         })}
+                      </div>
+                      <div className="mt-2 text-xs uppercase tracking-[0.14em] text-white/56">
+                        {formatLifeForceAp(estimateTaskTimeboxActionPointLoad(timebox).totalAp)}
                       </div>
                     </div>
                   ))}

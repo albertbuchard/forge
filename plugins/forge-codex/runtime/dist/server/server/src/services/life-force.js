@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { getDatabase, runInTransaction } from "../db.js";
 import { getDefaultUser, getUserById } from "../repositories/users.js";
 import { actionProfileSchema, fatigueSignalCreateSchema, lifeForcePayloadSchema, lifeForceProfilePatchSchema, lifeForceTemplateUpdateSchema } from "../types.js";
-import { DEFAULT_TASK_TOTAL_AP, LIFE_FORCE_BASELINE_DAILY_AP, buildDefaultTaskActionProfile, buildTaskActionPointSummary, buildTaskSplitSuggestion, clamp, interpolateCurveRate, normalizeCurveToBudget, resolveBandTotalCostAp, resolveTaskExpectedDurationSeconds } from "./life-force-model.js";
+import { LIFE_FORCE_BASELINE_DAILY_AP, buildDefaultTaskActionProfile, buildTaskActionPointSummary, buildTaskSplitSuggestion, clamp, computeActionCostModifier, computeLifeForceLevelMultiplier, computeStatCostModifier, interpolateCurveRate, normalizeCurveToBudget, resolveBandTotalCostAp, resolveTaskExpectedDurationSeconds } from "./life-force-model.js";
 import { computeWorkTime } from "./work-time.js";
 const DEFAULT_TEMPLATE_POINTS = [
     { minuteOfDay: 0, rateApPerHour: 0 },
@@ -23,6 +23,217 @@ const LIFE_FORCE_STAT_LABELS = {
     composure: "Composure",
     flow: "Flow"
 };
+const CALENDAR_ACTIVITY_PRESETS = {
+    deep_work: {
+        title: "Deep work",
+        mode: "container",
+        sustainRateApPerHour: 14,
+        demandWeights: {
+            activation: 0.1,
+            focus: 0.55,
+            vigor: 0.05,
+            composure: 0.05,
+            flow: 0.25
+        },
+        doubleCountPolicy: "container_only",
+        costBand: "light",
+        recoveryEffect: 0,
+        metadata: {
+            physicalIntensity: 0.15,
+            cognitiveDemand: 0.9,
+            socialLoad: 0.1,
+            switchingLoad: 0.2
+        }
+    },
+    admin: {
+        title: "Admin and coordination",
+        mode: "container",
+        sustainRateApPerHour: 9,
+        demandWeights: {
+            activation: 0.15,
+            focus: 0.3,
+            vigor: 0.05,
+            composure: 0.1,
+            flow: 0.4
+        },
+        doubleCountPolicy: "container_only",
+        costBand: "light",
+        recoveryEffect: 0,
+        metadata: {
+            physicalIntensity: 0.1,
+            cognitiveDemand: 0.45,
+            socialLoad: 0.25,
+            switchingLoad: 0.7
+        }
+    },
+    maintenance: {
+        title: "Maintenance and light activity",
+        mode: "container",
+        sustainRateApPerHour: 6,
+        demandWeights: {
+            activation: 0.15,
+            focus: 0.2,
+            vigor: 0.1,
+            composure: 0.05,
+            flow: 0.5
+        },
+        doubleCountPolicy: "container_only",
+        costBand: "light",
+        recoveryEffect: 0,
+        metadata: {
+            physicalIntensity: 0.2,
+            cognitiveDemand: 0.25,
+            socialLoad: 0.1,
+            switchingLoad: 0.5
+        }
+    },
+    meeting: {
+        title: "Meeting or social commitment",
+        mode: "container",
+        sustainRateApPerHour: 13,
+        demandWeights: {
+            activation: 0.05,
+            focus: 0.25,
+            vigor: 0.05,
+            composure: 0.45,
+            flow: 0.2
+        },
+        doubleCountPolicy: "container_only",
+        costBand: "standard",
+        recoveryEffect: 0,
+        metadata: {
+            physicalIntensity: 0.1,
+            cognitiveDemand: 0.45,
+            socialLoad: 0.85,
+            switchingLoad: 0.35
+        }
+    },
+    recovery_break: {
+        title: "Rest and recovery",
+        mode: "recovery",
+        sustainRateApPerHour: 3,
+        demandWeights: {
+            activation: 0.05,
+            focus: 0.05,
+            vigor: 0.15,
+            composure: 0.15,
+            flow: 0.1
+        },
+        doubleCountPolicy: "container_only",
+        costBand: "tiny",
+        recoveryEffect: 4,
+        metadata: {
+            physicalIntensity: 0.1,
+            cognitiveDemand: 0.05,
+            socialLoad: 0.1,
+            switchingLoad: 0.05
+        }
+    },
+    holiday_leisure: {
+        title: "Holiday or leisure time",
+        mode: "container",
+        sustainRateApPerHour: 4,
+        demandWeights: {
+            activation: 0.05,
+            focus: 0.05,
+            vigor: 0.15,
+            composure: 0.25,
+            flow: 0.1
+        },
+        doubleCountPolicy: "container_only",
+        costBand: "tiny",
+        recoveryEffect: 2,
+        metadata: {
+            physicalIntensity: 0.15,
+            cognitiveDemand: 0.1,
+            socialLoad: 0.35,
+            switchingLoad: 0.1
+        }
+    },
+    light_context: {
+        title: "Light context",
+        mode: "container",
+        sustainRateApPerHour: 2,
+        demandWeights: {
+            activation: 0.05,
+            focus: 0.1,
+            vigor: 0.05,
+            composure: 0.15,
+            flow: 0.15
+        },
+        doubleCountPolicy: "container_only",
+        costBand: "tiny",
+        recoveryEffect: 0,
+        metadata: {
+            physicalIntensity: 0.05,
+            cognitiveDemand: 0.15,
+            socialLoad: 0.2,
+            switchingLoad: 0.15
+        }
+    }
+};
+function buildStatLevels(profile) {
+    return {
+        life_force: profile.life_force_level,
+        activation: profile.activation_level,
+        focus: profile.focus_level,
+        vigor: profile.vigor_level,
+        composure: profile.composure_level,
+        flow: profile.flow_level
+    };
+}
+function buildEffectiveProfile(profile, lifeForceProfile) {
+    const costModifier = computeActionCostModifier(profile.demandWeights, buildStatLevels(lifeForceProfile));
+    return {
+        ...profile,
+        startupAp: Number((profile.startupAp * costModifier).toFixed(4)),
+        totalCostAp: Number((profile.totalCostAp * costModifier).toFixed(4)),
+        sustainRateApPerHour: Number((profile.sustainRateApPerHour * costModifier).toFixed(4)),
+        metadata: {
+            ...profile.metadata,
+            costModifier
+        }
+    };
+}
+function rateToTotalAp(rateApPerHour, durationSeconds) {
+    return Number(((durationSeconds / 3600) * rateApPerHour).toFixed(4));
+}
+function overlapsWindow(leftStartIso, leftEndIso, rightStartIso, rightEndIso) {
+    return (Date.parse(leftStartIso) < Date.parse(rightEndIso) &&
+        Date.parse(leftEndIso) > Date.parse(rightStartIso));
+}
+function clipWindowToRange(window, range) {
+    const startMs = Math.max(Date.parse(window.startAt), Date.parse(range.startAt));
+    const endMs = Math.min(Date.parse(window.endAt), Date.parse(range.endAt));
+    if (!Number.isFinite(startMs) || !Number.isFinite(endMs) || endMs <= startMs) {
+        return null;
+    }
+    return { startMs, endMs };
+}
+function computeUncoveredSeconds(window, blockingWindows) {
+    const clippedBlocks = blockingWindows
+        .map((candidate) => clipWindowToRange(candidate, window))
+        .filter((candidate) => candidate !== null)
+        .sort((left, right) => left.startMs - right.startMs);
+    const totalSeconds = Math.max(0, Math.floor((Date.parse(window.endAt) - Date.parse(window.startAt)) / 1000));
+    if (totalSeconds <= 0 || clippedBlocks.length === 0) {
+        return totalSeconds;
+    }
+    let coveredMs = 0;
+    let activeStartMs = clippedBlocks[0].startMs;
+    let activeEndMs = clippedBlocks[0].endMs;
+    for (const block of clippedBlocks.slice(1)) {
+        if (block.startMs <= activeEndMs) {
+            activeEndMs = Math.max(activeEndMs, block.endMs);
+            continue;
+        }
+        coveredMs += activeEndMs - activeStartMs;
+        activeStartMs = block.startMs;
+        activeEndMs = block.endMs;
+    }
+    coveredMs += activeEndMs - activeStartMs;
+    return Math.max(0, totalSeconds - Math.floor(coveredMs / 1000));
+}
 function nowIso() {
     return new Date().toISOString();
 }
@@ -68,6 +279,125 @@ function parseCurvePoints(raw) {
 }
 function defaultTemplatePoints() {
     return normalizeCurveToBudget(DEFAULT_TEMPLATE_POINTS, LIFE_FORCE_BASELINE_DAILY_AP);
+}
+function resolveWorkBlockPresetKey(kind) {
+    if (kind === "main_activity") {
+        return "deep_work";
+    }
+    if (kind === "secondary_activity") {
+        return "admin";
+    }
+    if (kind === "third_activity" || kind === "custom") {
+        return "maintenance";
+    }
+    if (kind === "holiday") {
+        return "holiday_leisure";
+    }
+    return "recovery_break";
+}
+function resolveCalendarEventPresetKey(input) {
+    const searchable = `${input.title} ${input.eventType ?? ""}`.toLowerCase();
+    if (searchable.includes("meeting") || searchable.includes("call") || searchable.includes("interview")) {
+        return "meeting";
+    }
+    if (searchable.includes("deep work") || searchable.includes("focus")) {
+        return "deep_work";
+    }
+    if (searchable.includes("admin") || searchable.includes("email") || searchable.includes("inbox")) {
+        return "admin";
+    }
+    if (searchable.includes("lunch") ||
+        searchable.includes("break") ||
+        searchable.includes("rest")) {
+        return "recovery_break";
+    }
+    if (searchable.includes("holiday") || searchable.includes("vacation")) {
+        return "holiday_leisure";
+    }
+    return input.availability === "busy" ? "meeting" : "light_context";
+}
+function buildCalendarActivityProfile(input) {
+    const durationSeconds = Math.max(1, input.expectedDurationSeconds);
+    const presetDefinition = input.activityPresetKey === "task_inherited"
+        ? null
+        : CALENDAR_ACTIVITY_PRESETS[input.activityPresetKey];
+    const inheritedProfile = input.fallbackProfile;
+    const baseProfile = presetDefinition === null
+        ? inheritedProfile
+        : actionProfileSchema.parse({
+            id: `profile_${input.entityType}_${input.entityId}`,
+            profileKey: `${String(input.entityType)}_${input.entityId}`,
+            title: input.title || presetDefinition.title,
+            entityType: input.entityType,
+            mode: presetDefinition.mode,
+            startupAp: 0,
+            totalCostAp: rateToTotalAp(presetDefinition.sustainRateApPerHour, durationSeconds),
+            expectedDurationSeconds: durationSeconds,
+            sustainRateApPerHour: presetDefinition.sustainRateApPerHour,
+            demandWeights: presetDefinition.demandWeights,
+            doubleCountPolicy: presetDefinition.doubleCountPolicy,
+            sourceMethod: input.sourceMethod ?? "inferred",
+            costBand: presetDefinition.costBand,
+            recoveryEffect: presetDefinition.recoveryEffect,
+            metadata: {
+                activityPresetKey: input.activityPresetKey,
+                ...presetDefinition.metadata,
+                ...(input.metadata ?? {})
+            },
+            createdAt: nowIso(),
+            updatedAt: nowIso()
+        });
+    const base = baseProfile ??
+        actionProfileSchema.parse({
+            id: `profile_${input.entityType}_${input.entityId}`,
+            profileKey: `${String(input.entityType)}_${input.entityId}`,
+            title: input.title || "Activity",
+            entityType: input.entityType,
+            mode: "container",
+            startupAp: 0,
+            totalCostAp: rateToTotalAp(8, durationSeconds),
+            expectedDurationSeconds: durationSeconds,
+            sustainRateApPerHour: 8,
+            demandWeights: {
+                activation: 0.1,
+                focus: 0.3,
+                vigor: 0.1,
+                composure: 0.1,
+                flow: 0.4
+            },
+            doubleCountPolicy: "container_only",
+            sourceMethod: input.sourceMethod ?? "inferred",
+            costBand: "light",
+            recoveryEffect: 0,
+            metadata: {
+                activityPresetKey: "maintenance",
+                ...(input.metadata ?? {})
+            },
+            createdAt: nowIso(),
+            updatedAt: nowIso()
+        });
+    const sustainRateApPerHour = input.customSustainRateApPerHour ?? base.sustainRateApPerHour;
+    return actionProfileSchema.parse({
+        ...base,
+        id: `profile_${input.entityType}_${input.entityId}`,
+        profileKey: `${String(input.entityType)}_${input.entityId}`,
+        title: input.title || base.title,
+        entityType: input.entityType,
+        expectedDurationSeconds: durationSeconds,
+        totalCostAp: rateToTotalAp(sustainRateApPerHour, durationSeconds),
+        sustainRateApPerHour,
+        sourceMethod: input.customSustainRateApPerHour !== null &&
+            input.customSustainRateApPerHour !== undefined
+            ? "manual"
+            : input.sourceMethod ?? base.sourceMethod,
+        metadata: {
+            ...base.metadata,
+            activityPresetKey: input.activityPresetKey,
+            customSustainRateApPerHour: input.customSustainRateApPerHour ?? null,
+            ...(input.metadata ?? {})
+        },
+        updatedAt: nowIso()
+    });
 }
 function seededActionProfiles() {
     const now = nowIso();
@@ -198,6 +528,206 @@ function seededActionProfiles() {
             metadata: {},
             createdAt: now,
             updatedAt: now
+        }),
+        actionProfileSchema.parse({
+            id: "profile_wake_start",
+            profileKey: "wake_start",
+            title: "Get out of bed",
+            entityType: "sleep_session",
+            mode: "impulse",
+            startupAp: 5,
+            totalCostAp: 5,
+            expectedDurationSeconds: null,
+            sustainRateApPerHour: 0,
+            demandWeights: {
+                activation: 0.75,
+                focus: 0.05,
+                vigor: 0.1,
+                composure: 0,
+                flow: 0.1
+            },
+            doubleCountPolicy: "primary_only",
+            sourceMethod: "seeded",
+            costBand: "light",
+            recoveryEffect: 0,
+            metadata: {},
+            createdAt: now,
+            updatedAt: now
+        }),
+        actionProfileSchema.parse({
+            id: "profile_timebox_default",
+            profileKey: "task_timebox_default",
+            title: "Task timebox",
+            entityType: "task_timebox",
+            mode: "container",
+            startupAp: 0,
+            totalCostAp: 12,
+            expectedDurationSeconds: 3_600,
+            sustainRateApPerHour: 12,
+            demandWeights: {
+                activation: 0.15,
+                focus: 0.45,
+                vigor: 0.05,
+                composure: 0.05,
+                flow: 0.3
+            },
+            doubleCountPolicy: "container_only",
+            sourceMethod: "seeded",
+            costBand: "light",
+            recoveryEffect: 0,
+            metadata: {},
+            createdAt: now,
+            updatedAt: now
+        }),
+        actionProfileSchema.parse({
+            id: "profile_work_block_main",
+            profileKey: "work_block_main",
+            title: "Main activity block",
+            entityType: "work_block",
+            mode: "container",
+            startupAp: 0,
+            totalCostAp: 14,
+            expectedDurationSeconds: 3_600,
+            sustainRateApPerHour: 14,
+            demandWeights: {
+                activation: 0.1,
+                focus: 0.5,
+                vigor: 0.1,
+                composure: 0.05,
+                flow: 0.25
+            },
+            doubleCountPolicy: "container_only",
+            sourceMethod: "seeded",
+            costBand: "light",
+            recoveryEffect: 0,
+            metadata: { kind: "main_activity" },
+            createdAt: now,
+            updatedAt: now
+        }),
+        actionProfileSchema.parse({
+            id: "profile_work_block_secondary",
+            profileKey: "work_block_secondary",
+            title: "Secondary activity block",
+            entityType: "work_block",
+            mode: "container",
+            startupAp: 0,
+            totalCostAp: 9,
+            expectedDurationSeconds: 3_600,
+            sustainRateApPerHour: 9,
+            demandWeights: {
+                activation: 0.15,
+                focus: 0.3,
+                vigor: 0.1,
+                composure: 0.05,
+                flow: 0.4
+            },
+            doubleCountPolicy: "container_only",
+            sourceMethod: "seeded",
+            costBand: "light",
+            recoveryEffect: 0,
+            metadata: { kind: "secondary_activity" },
+            createdAt: now,
+            updatedAt: now
+        }),
+        actionProfileSchema.parse({
+            id: "profile_work_block_third",
+            profileKey: "work_block_third",
+            title: "Third activity block",
+            entityType: "work_block",
+            mode: "container",
+            startupAp: 0,
+            totalCostAp: 6,
+            expectedDurationSeconds: 3_600,
+            sustainRateApPerHour: 6,
+            demandWeights: {
+                activation: 0.15,
+                focus: 0.2,
+                vigor: 0.1,
+                composure: 0.05,
+                flow: 0.5
+            },
+            doubleCountPolicy: "container_only",
+            sourceMethod: "seeded",
+            costBand: "light",
+            recoveryEffect: 0,
+            metadata: { kind: "third_activity" },
+            createdAt: now,
+            updatedAt: now
+        }),
+        actionProfileSchema.parse({
+            id: "profile_work_block_rest",
+            profileKey: "work_block_rest",
+            title: "Rest block",
+            entityType: "work_block",
+            mode: "recovery",
+            startupAp: 0,
+            totalCostAp: 3,
+            expectedDurationSeconds: 3_600,
+            sustainRateApPerHour: 3,
+            demandWeights: {
+                activation: 0.05,
+                focus: 0.05,
+                vigor: 0.15,
+                composure: 0.15,
+                flow: 0.1
+            },
+            doubleCountPolicy: "container_only",
+            sourceMethod: "seeded",
+            costBand: "tiny",
+            recoveryEffect: 4,
+            metadata: { kind: "rest", activityPresetKey: "recovery_break" },
+            createdAt: now,
+            updatedAt: now
+        }),
+        actionProfileSchema.parse({
+            id: "profile_work_block_holiday",
+            profileKey: "work_block_holiday",
+            title: "Holiday block",
+            entityType: "work_block",
+            mode: "container",
+            startupAp: 0,
+            totalCostAp: 4,
+            expectedDurationSeconds: 3_600,
+            sustainRateApPerHour: 4,
+            demandWeights: {
+                activation: 0.05,
+                focus: 0.05,
+                vigor: 0.15,
+                composure: 0.25,
+                flow: 0.1
+            },
+            doubleCountPolicy: "container_only",
+            sourceMethod: "seeded",
+            costBand: "tiny",
+            recoveryEffect: 2,
+            metadata: { kind: "holiday", activityPresetKey: "holiday_leisure" },
+            createdAt: now,
+            updatedAt: now
+        }),
+        actionProfileSchema.parse({
+            id: "profile_movement_trip",
+            profileKey: "movement_trip_default",
+            title: "Movement trip",
+            entityType: "movement_trip",
+            mode: "rate",
+            startupAp: 0,
+            totalCostAp: 8,
+            expectedDurationSeconds: 3_600,
+            sustainRateApPerHour: 8,
+            demandWeights: {
+                activation: 0.05,
+                focus: 0.15,
+                vigor: 0.55,
+                composure: 0,
+                flow: 0.25
+            },
+            doubleCountPolicy: "primary_only",
+            sourceMethod: "seeded",
+            costBand: "light",
+            recoveryEffect: 0,
+            metadata: {},
+            createdAt: now,
+            updatedAt: now
         })
     ];
 }
@@ -222,6 +752,17 @@ function mapEntityProfileRow(row, fallback) {
         updatedAt: row.updated_at,
         ...JSON.parse(row.profile_json)
     });
+}
+function readEntityActionProfileRow(entityType, entityId) {
+    return getDatabase()
+        .prepare(`SELECT id, entity_type, entity_id, profile_json, created_at, updated_at
+       FROM entity_action_profiles
+       WHERE entity_type = ? AND entity_id = ?`)
+        .get(entityType, entityId);
+}
+export function readEntityActionProfile(entityType, entityId, fallback) {
+    const row = readEntityActionProfileRow(entityType, entityId);
+    return row ? mapEntityProfileRow(row, fallback) : null;
 }
 function ensureActionProfileTemplates() {
     const database = getDatabase();
@@ -289,6 +830,80 @@ export function upsertTaskActionProfile(input) {
         recoveryEffect: profile.recoveryEffect,
         metadata: profile.metadata
     }), now, now);
+}
+export function upsertEntityActionProfile(input) {
+    const now = nowIso();
+    getDatabase()
+        .prepare(`INSERT INTO entity_action_profiles (
+         id,
+         entity_type,
+         entity_id,
+         profile_json,
+         created_at,
+         updated_at
+       ) VALUES (?, ?, ?, ?, ?, ?)
+       ON CONFLICT(entity_type, entity_id) DO UPDATE SET
+         profile_json = excluded.profile_json,
+         updated_at = excluded.updated_at`)
+        .run(input.profile.id, input.entityType, input.entityId, JSON.stringify({
+        mode: input.profile.mode,
+        startupAp: input.profile.startupAp,
+        totalCostAp: input.profile.totalCostAp,
+        expectedDurationSeconds: input.profile.expectedDurationSeconds,
+        sustainRateApPerHour: input.profile.sustainRateApPerHour,
+        demandWeights: input.profile.demandWeights,
+        doubleCountPolicy: input.profile.doubleCountPolicy,
+        sourceMethod: input.profile.sourceMethod,
+        costBand: input.profile.costBand,
+        recoveryEffect: input.profile.recoveryEffect,
+        metadata: input.profile.metadata
+    }), now, now);
+}
+export function buildWorkBlockTemplateActionProfile(input) {
+    const durationMinutes = input.endMinute > input.startMinute
+        ? input.endMinute - input.startMinute
+        : 24 * 60 - input.startMinute + input.endMinute;
+    const activityPresetKey = input.activityPresetKey ??
+        resolveWorkBlockPresetKey(input.kind);
+    return buildCalendarActivityProfile({
+        entityType: "work_block_template",
+        entityId: input.templateId,
+        title: input.title,
+        expectedDurationSeconds: durationMinutes * 60,
+        activityPresetKey,
+        customSustainRateApPerHour: input.customSustainRateApPerHour,
+        sourceMethod: input.customSustainRateApPerHour !== null &&
+            input.customSustainRateApPerHour !== undefined
+            ? "manual"
+            : "inferred",
+        metadata: {
+            kind: input.kind
+        }
+    });
+}
+export function buildCalendarEventActionProfile(input) {
+    const activityPresetKey = input.activityPresetKey ??
+        resolveCalendarEventPresetKey({
+            title: input.title,
+            eventType: input.eventType,
+            availability: input.availability
+        });
+    return buildCalendarActivityProfile({
+        entityType: "calendar_event",
+        entityId: input.eventId,
+        title: input.title,
+        expectedDurationSeconds: Math.max(60, Math.floor((Date.parse(input.endAt) - Date.parse(input.startAt)) / 1000)),
+        activityPresetKey,
+        customSustainRateApPerHour: input.customSustainRateApPerHour,
+        sourceMethod: input.customSustainRateApPerHour !== null &&
+            input.customSustainRateApPerHour !== undefined
+            ? "manual"
+            : "inferred",
+        metadata: {
+            availability: input.availability,
+            eventType: input.eventType ?? ""
+        }
+    });
 }
 function ensureLifeForceProfile(userId) {
     const database = getDatabase();
@@ -404,14 +1019,7 @@ function readStatXpByKey(userId) {
 }
 function buildStats(profile, userId) {
     const xpByKey = readStatXpByKey(userId);
-    const levelByKey = {
-        life_force: profile.life_force_level,
-        activation: profile.activation_level,
-        focus: profile.focus_level,
-        vigor: profile.vigor_level,
-        composure: profile.composure_level,
-        flow: profile.flow_level
-    };
+    const levelByKey = buildStatLevels(profile);
     return Object.keys(levelByKey).map((key) => {
         const level = levelByKey[key];
         return {
@@ -421,16 +1029,43 @@ function buildStats(profile, userId) {
             xp: xpByKey.get(key) ?? 0,
             xpToNextLevel: level * 100,
             costModifier: key === "life_force"
-                ? 1 + level * 0.03
-                : Math.max(0.55, Number((1 - level * 0.02).toFixed(3)))
+                ? Number(computeLifeForceLevelMultiplier(level).toFixed(3))
+                : Number(computeStatCostModifier(level).toFixed(3))
         };
     });
 }
 function computeLifeForceMultiplier(profile) {
-    return 1 + (profile.life_force_level - 1) * 0.03;
+    return computeLifeForceLevelMultiplier(profile.life_force_level);
 }
-function computeSleepRecoveryMultiplier() {
-    return 1;
+function readPrimarySleepSessionForDate(userId, date) {
+    const range = buildDayRange(date);
+    const lookback = new Date(range.startMs - 18 * 60 * 60 * 1000).toISOString();
+    try {
+        return getDatabase()
+            .prepare(`SELECT id, started_at, ended_at, asleep_seconds, sleep_score
+           FROM health_sleep_sessions
+           WHERE user_id = ?
+             AND ended_at >= ?
+             AND ended_at < ?
+           ORDER BY asleep_seconds DESC, ended_at DESC
+           LIMIT 1`)
+            .get(userId, lookback, range.to);
+    }
+    catch {
+        return undefined;
+    }
+}
+function computeSleepRecoveryMultiplier(userId, date) {
+    const session = readPrimarySleepSessionForDate(userId, date);
+    if (!session) {
+        return 1;
+    }
+    const sleepHours = session.asleep_seconds / 3600;
+    const durationFactor = clamp(0.82 + ((sleepHours - 4.5) / 4.5) * 0.22, 0.85, 1.1);
+    const scoreFactor = session.sleep_score === null
+        ? 1
+        : clamp(0.92 + (session.sleep_score / 100) * 0.16, 0.9, 1.08);
+    return Number((durationFactor * scoreFactor).toFixed(3));
 }
 function computeFatigueDebtCarry(userId, date) {
     const previous = new Date(date);
@@ -463,7 +1098,7 @@ function getOrCreateDaySnapshot(userId, date) {
     }
     const profile = ensureLifeForceProfile(userId);
     const template = readWeekdayTemplate(userId, date.getUTCDay());
-    const sleepRecoveryMultiplier = computeSleepRecoveryMultiplier();
+    const sleepRecoveryMultiplier = computeSleepRecoveryMultiplier(userId, date);
     const fatigueDebtCarry = computeFatigueDebtCarry(userId, date);
     const readinessMultiplier = profile.readiness_multiplier;
     const dailyBudgetAp = Math.max(40, Math.round(profile.base_daily_ap *
@@ -493,27 +1128,50 @@ function getOrCreateDaySnapshot(userId, date) {
        WHERE id = ?`)
         .get(id);
 }
-function resolveTaskActionProfile(task) {
-    const row = getDatabase()
-        .prepare(`SELECT id, entity_type, entity_id, profile_json, created_at, updated_at
-       FROM entity_action_profiles
-       WHERE entity_type = 'task' AND entity_id = ?`)
-        .get(task.id);
-    if (!row) {
-        return buildDefaultTaskActionProfile({
+export function resolveTaskActionProfile(task, lifeForceProfile) {
+    const row = readEntityActionProfileRow("task", task.id);
+    const baseProfile = !row
+        ? buildDefaultTaskActionProfile({
             id: `profile_task_${task.id}`,
             expectedDurationSeconds: task.plannedDurationSeconds
+        })
+        : mapEntityProfileRow(row, {
+            profileKey: `task_${task.id}`,
+            title: "Task",
+            entityType: "task"
         });
-    }
-    const profile = mapEntityProfileRow(row, {
-        profileKey: `task_${task.id}`,
-        title: "Task",
-        entityType: "task"
-    });
-    return {
-        ...profile,
-        expectedDurationSeconds: resolveTaskExpectedDurationSeconds(profile.expectedDurationSeconds ?? task.plannedDurationSeconds)
+    const profile = {
+        ...baseProfile,
+        expectedDurationSeconds: resolveTaskExpectedDurationSeconds(baseProfile.expectedDurationSeconds ?? task.plannedDurationSeconds)
     };
+    return lifeForceProfile ? buildEffectiveProfile(profile, lifeForceProfile) : profile;
+}
+export function buildTaskTimeboxActionProfile(input) {
+    const durationSeconds = Math.max(60, Math.floor((Date.parse(input.endsAt) - Date.parse(input.startsAt)) / 1000));
+    const fallbackTaskProfile = resolveTaskActionProfile({
+        id: input.taskId,
+        plannedDurationSeconds: input.taskPlannedDurationSeconds ?? null
+    });
+    const activityPresetKey = input.activityPresetKey ??
+        "task_inherited";
+    return buildCalendarActivityProfile({
+        entityType: "task_timebox",
+        entityId: input.timeboxId,
+        title: input.title,
+        expectedDurationSeconds: durationSeconds,
+        activityPresetKey,
+        customSustainRateApPerHour: input.customSustainRateApPerHour,
+        sourceMethod: input.customSustainRateApPerHour !== null &&
+            input.customSustainRateApPerHour !== undefined
+            ? "manual"
+            : activityPresetKey === "task_inherited"
+                ? "inferred"
+                : "manual",
+        fallbackProfile: fallbackTaskProfile,
+        metadata: {
+            taskId: input.taskId
+        }
+    });
 }
 function readTodayAdjustmentRows(userId, range) {
     return getDatabase()
@@ -538,17 +1196,18 @@ function readTodayAdjustmentRows(userId, range) {
          AND work_adjustments.created_at < ?`)
         .all(userId, range.from, range.to);
 }
-function readTodayAdjustmentApByTaskId(userId, range) {
+function readTodayAdjustmentApByTaskId(userId, range, lifeForceProfile) {
     const rows = readTodayAdjustmentRows(userId, range);
     const totals = new Map();
     for (const row of rows) {
         if (row.entity_type !== "task") {
             continue;
         }
-        const expectedDurationSeconds = resolveTaskExpectedDurationSeconds(row.planned_duration_seconds);
-        const deltaAp = (DEFAULT_TASK_TOTAL_AP / expectedDurationSeconds) *
-            row.applied_delta_minutes *
-            60;
+        const profile = resolveTaskActionProfile({
+            id: row.entity_id,
+            plannedDurationSeconds: row.planned_duration_seconds
+        }, lifeForceProfile);
+        const deltaAp = rateToTotalAp(profile.sustainRateApPerHour, row.applied_delta_minutes * 60);
         totals.set(row.entity_id, (totals.get(row.entity_id) ?? 0) + deltaAp);
     }
     return totals;
@@ -587,9 +1246,9 @@ function computeProjectedRemainingSeconds(row, now) {
     const elapsedWallSeconds = Math.max(0, Math.floor((endMs - Date.parse(row.claimed_at)) / 1000));
     return Math.max(0, row.planned_duration_seconds - elapsedWallSeconds);
 }
-function buildTaskLifeForceRuntime(task, userId, now = new Date()) {
+function buildTaskLifeForceRuntime(task, userId, now = new Date(), lifeForceProfile = ensureLifeForceProfile(userId)) {
     const range = buildDayRange(now);
-    const profile = resolveTaskActionProfile(task);
+    const profile = resolveTaskActionProfile(task, lifeForceProfile);
     const todayRunSeconds = readTaskRunRows(range, userId)
         .filter((row) => row.task_id === task.id)
         .reduce((sum, row) => sum + overlapSeconds(range, row, now), 0);
@@ -624,14 +1283,15 @@ function readTaskRunWindowsByTaskId(userId, range, now) {
     }
     return windows;
 }
-function buildWorkAdjustmentContributions(userId, range) {
+function buildWorkAdjustmentContributions(userId, range, lifeForceProfile) {
     return readTodayAdjustmentRows(userId, range)
         .filter((row) => row.entity_type === "task")
         .map((row) => {
-        const expectedDurationSeconds = resolveTaskExpectedDurationSeconds(row.planned_duration_seconds);
-        const totalAp = (DEFAULT_TASK_TOTAL_AP / expectedDurationSeconds) *
-            row.applied_delta_minutes *
-            60;
+        const profile = resolveTaskActionProfile({
+            id: row.entity_id,
+            plannedDurationSeconds: row.planned_duration_seconds
+        }, lifeForceProfile);
+        const totalAp = rateToTotalAp(profile.sustainRateApPerHour, row.applied_delta_minutes * 60);
         return {
             entityType: "task",
             entityId: row.entity_id,
@@ -651,7 +1311,7 @@ function buildWorkAdjustmentContributions(userId, range) {
         };
     });
 }
-function buildTaskRunContributions(userId, range, now) {
+function buildTaskRunContributions(userId, range, now, lifeForceProfile) {
     const contributions = [];
     const totalsByTaskId = new Map();
     const activeDrains = [];
@@ -663,8 +1323,8 @@ function buildTaskRunContributions(userId, range, now) {
         const profile = resolveTaskActionProfile({
             id: row.task_id,
             plannedDurationSeconds: row.task_expected_duration_seconds ?? row.planned_duration_seconds
-        });
-        const totalAp = (seconds / 3600) * profile.sustainRateApPerHour;
+        }, lifeForceProfile);
+        const totalAp = rateToTotalAp(profile.sustainRateApPerHour, seconds);
         const startsAt = new Date(Math.max(range.startMs, Date.parse(row.claimed_at))).toISOString();
         const endsAt = new Date(Math.min(range.endMs, terminalRunMs(row, now))).toISOString();
         const contribution = {
@@ -695,8 +1355,9 @@ function buildTaskRunContributions(userId, range, now) {
     }
     return { contributions, totalsByTaskId, activeDrains };
 }
-function buildNoteContributions(userId, range, now) {
+function buildNoteContributions(userId, range, now, lifeForceProfile) {
     try {
+        const noteProfile = buildEffectiveProfile(seededActionProfiles().find((entry) => entry.profileKey === "note_quick"), lifeForceProfile);
         const taskRunWindowsByTaskId = readTaskRunWindowsByTaskId(userId, range, now);
         const rows = getDatabase()
             .prepare(`SELECT
@@ -734,7 +1395,7 @@ function buildNoteContributions(userId, range, now) {
             entityId: row.id,
             eventKind: "note_created",
             sourceKind: "note",
-            totalAp: 1,
+            totalAp: noteProfile.totalCostAp,
             rateApPerHour: null,
             title: row.title || "Note",
             why: "Standalone capture takes a small impulse of activation and focus.",
@@ -747,8 +1408,9 @@ function buildNoteContributions(userId, range, now) {
         return [];
     }
 }
-function buildHabitContributions(userId, range) {
+function buildHabitContributions(userId, range, lifeForceProfile) {
     try {
+        const habitProfile = buildEffectiveProfile(seededActionProfiles().find((entry) => entry.profileKey === "habit_default"), lifeForceProfile);
         const rows = getDatabase()
             .prepare(`SELECT
            habits.id,
@@ -774,7 +1436,7 @@ function buildHabitContributions(userId, range) {
             entityId: row.id,
             eventKind: "habit_check_in",
             sourceKind: "habit",
-            totalAp: 3,
+            totalAp: habitProfile.totalCostAp,
             rateApPerHour: null,
             title: row.title,
             why: "Habit execution still costs activation even when the action is short.",
@@ -787,7 +1449,7 @@ function buildHabitContributions(userId, range) {
         return [];
     }
 }
-function buildWorkoutContributions(userId, range, now) {
+function buildWorkoutContributions(userId, range, now, lifeForceProfile) {
     let rows = [];
     try {
         rows = getDatabase()
@@ -803,6 +1465,7 @@ function buildWorkoutContributions(userId, range, now) {
     }
     const contributions = [];
     const activeDrains = [];
+    const workoutProfile = buildEffectiveProfile(seededActionProfiles().find((entry) => entry.profileKey === "workout_default"), lifeForceProfile);
     for (const row of rows) {
         const startMs = Math.max(range.startMs, Date.parse(row.started_at));
         const endMs = Math.min(range.endMs, Date.parse(row.ended_at));
@@ -813,13 +1476,13 @@ function buildWorkoutContributions(userId, range, now) {
         const effortMultiplier = row.subjective_effort
             ? clamp(row.subjective_effort / 6, 0.8, 1.6)
             : 1;
-        const rateApPerHour = 24 * effortMultiplier;
+        const rateApPerHour = Number((workoutProfile.sustainRateApPerHour * effortMultiplier).toFixed(4));
         const contribution = {
             entityType: "workout_session",
             entityId: row.id,
             eventKind: "workout_session",
             sourceKind: "workout",
-            totalAp: (seconds / 3600) * rateApPerHour,
+            totalAp: rateToTotalAp(rateApPerHour, seconds),
             rateApPerHour,
             title: row.workout_type,
             why: "Workout sessions consume real physical capacity and should affect current load.",
@@ -828,47 +1491,529 @@ function buildWorkoutContributions(userId, range, now) {
             role: "secondary"
         };
         contributions.push(contribution);
-        if (Date.parse(row.ended_at) > now.getTime()) {
+        if (Date.parse(row.started_at) <= now.getTime() && Date.parse(row.ended_at) > now.getTime()) {
             activeDrains.push({ ...contribution, totalAp: 0 });
         }
     }
     return { contributions, activeDrains };
 }
-function buildCalendarDrains(userId, now) {
-    const nowIsoValue = now.toISOString();
+function buildWakeImpulseContributions(userId, range, lifeForceProfile) {
+    const primarySleep = readPrimarySleepSessionForDate(userId, new Date(range.startMs));
+    if (!primarySleep) {
+        return [];
+    }
+    const endedAtMs = Date.parse(primarySleep.ended_at);
+    if (endedAtMs < range.startMs || endedAtMs >= range.endMs) {
+        return [];
+    }
+    const wakeProfile = buildEffectiveProfile(seededActionProfiles().find((entry) => entry.profileKey === "wake_start"), lifeForceProfile);
+    return [
+        {
+            entityType: "sleep_session",
+            entityId: primarySleep.id,
+            eventKind: "wake_start",
+            sourceKind: "wake",
+            totalAp: wakeProfile.totalCostAp,
+            rateApPerHour: null,
+            title: "Get out of bed",
+            why: "Starting the day takes real activation and should count as an Action Point impulse.",
+            startsAt: primarySleep.ended_at,
+            endsAt: primarySleep.ended_at,
+            role: "background"
+        }
+    ];
+}
+function buildMovementTripProfile(trip) {
+    const baseProfile = seededActionProfiles().find((entry) => entry.profileKey === "movement_trip_default");
+    const expectedMet = trip.expected_met ?? 2;
+    const baseRateApPerHour = clamp(expectedMet * 4, 4, 22);
+    const lowerTitle = `${trip.activity_type} ${trip.travel_mode}`.toLowerCase();
+    const vigor = lowerTitle.includes("walk") || lowerTitle.includes("run") || lowerTitle.includes("bike")
+        ? 0.65
+        : lowerTitle.includes("drive") || lowerTitle.includes("train")
+            ? 0.2
+            : 0.45;
+    const focus = lowerTitle.includes("drive") ? 0.35 : 0.15;
+    const flow = 1 - vigor - focus;
+    return actionProfileSchema.parse({
+        ...baseProfile,
+        id: `${baseProfile.id}_${trip.travel_mode}_${trip.activity_type || "travel"}`,
+        profileKey: `${baseProfile.profileKey}_${trip.travel_mode}_${trip.activity_type || "travel"}`,
+        title: trip.activity_type?.trim() || trip.travel_mode || "Movement trip",
+        sustainRateApPerHour: Number(baseRateApPerHour.toFixed(4)),
+        totalCostAp: Number(baseRateApPerHour.toFixed(4)),
+        demandWeights: {
+            activation: 0.05,
+            focus,
+            vigor,
+            composure: 0,
+            flow: Math.max(0.05, Number(flow.toFixed(3)))
+        }
+    });
+}
+function buildMovementTripContributions(userId, range, now, lifeForceProfile) {
+    let rows = [];
     try {
-        const rows = getDatabase()
-            .prepare(`SELECT calendar_events.id, calendar_events.title, calendar_events.start_at, calendar_events.end_at
-         FROM calendar_events
-         INNER JOIN calendar_event_links
-           ON calendar_event_links.forge_event_id = calendar_events.id
+        rows = getDatabase()
+            .prepare(`SELECT
+           id,
+           label,
+           status,
+           travel_mode,
+           activity_type,
+           started_at,
+           ended_at,
+           moving_seconds,
+           idle_seconds,
+           expected_met,
+           distance_meters
+         FROM movement_trips
+         WHERE user_id = ?
+           AND started_at < ?
+           AND ended_at >= ?`)
+            .all(userId, range.to, range.from);
+    }
+    catch {
+        rows = [];
+    }
+    const contributions = [];
+    const activeDrains = [];
+    for (const row of rows) {
+        const seconds = Math.max(0, Math.floor((Math.min(range.endMs, Date.parse(row.ended_at)) -
+            Math.max(range.startMs, Date.parse(row.started_at))) /
+            1000));
+        if (seconds <= 0) {
+            continue;
+        }
+        const profile = buildEffectiveProfile(buildMovementTripProfile(row), lifeForceProfile);
+        const contribution = {
+            entityType: "movement_trip",
+            entityId: row.id,
+            eventKind: "movement_trip",
+            sourceKind: "movement",
+            totalAp: rateToTotalAp(profile.sustainRateApPerHour, seconds),
+            rateApPerHour: profile.sustainRateApPerHour,
+            title: row.label || row.activity_type || row.travel_mode || "Movement trip",
+            why: "Movement and commuting consume current capacity through physical effort, attention, and switching overhead.",
+            startsAt: new Date(Math.max(range.startMs, Date.parse(row.started_at))).toISOString(),
+            endsAt: new Date(Math.min(range.endMs, Date.parse(row.ended_at))).toISOString(),
+            role: "secondary"
+        };
+        contributions.push(contribution);
+        if (Date.parse(row.started_at) <= now.getTime() && Date.parse(row.ended_at) > now.getTime()) {
+            activeDrains.push({ ...contribution, totalAp: 0 });
+        }
+    }
+    return { contributions, activeDrains };
+}
+function readTaskTimeboxLifeForceRows(userId, range) {
+    try {
+        return getDatabase()
+            .prepare(`SELECT
+           task_timeboxes.id,
+           task_timeboxes.task_id,
+           task_timeboxes.linked_task_run_id,
+           task_timeboxes.status,
+           task_timeboxes.source,
+           task_timeboxes.title,
+           task_timeboxes.starts_at,
+           task_timeboxes.ends_at,
+           tasks.planned_duration_seconds AS task_planned_duration_seconds
+         FROM task_timeboxes
+         INNER JOIN tasks ON tasks.id = task_timeboxes.task_id
          INNER JOIN entity_owners
-           ON entity_owners.entity_type = calendar_event_links.entity_type
-          AND entity_owners.entity_id = calendar_event_links.entity_id
+           ON entity_owners.entity_type = 'task_timebox'
+          AND entity_owners.entity_id = task_timeboxes.id
           AND entity_owners.role = 'owner'
          WHERE entity_owners.user_id = ?
-           AND calendar_events.deleted_at IS NULL
-           AND calendar_events.start_at <= ?
-           AND calendar_events.end_at > ?
-         GROUP BY calendar_events.id, calendar_events.title, calendar_events.start_at, calendar_events.end_at`)
-            .all(userId, nowIsoValue, nowIsoValue);
-        return rows.map((row) => ({
-            entityType: "calendar_event",
-            entityId: row.id,
-            eventKind: "calendar_context",
-            sourceKind: "calendar",
-            totalAp: 0,
-            rateApPerHour: 12,
-            title: row.title,
-            why: "Calendar context occupies mental and social capacity even before task work is logged.",
-            startsAt: row.start_at,
-            endsAt: row.end_at,
-            role: "background"
-        }));
+           AND task_timeboxes.ends_at > ?
+           AND task_timeboxes.starts_at < ?
+         ORDER BY task_timeboxes.starts_at ASC`)
+            .all(userId, range.from, range.to);
     }
     catch {
         return [];
     }
+}
+function readWorkBlockTemplateLifeForceRows(userId) {
+    try {
+        return getDatabase()
+            .prepare(`SELECT
+           work_block_templates.id,
+           work_block_templates.title,
+           work_block_templates.kind,
+           work_block_templates.color,
+           work_block_templates.weekdays_json,
+           work_block_templates.start_minute,
+           work_block_templates.end_minute,
+           work_block_templates.starts_on,
+           work_block_templates.ends_on,
+           work_block_templates.blocking_state,
+           work_block_templates.created_at,
+           work_block_templates.updated_at
+         FROM work_block_templates
+         INNER JOIN entity_owners
+           ON entity_owners.entity_type = 'work_block_template'
+          AND entity_owners.entity_id = work_block_templates.id
+          AND entity_owners.role = 'owner'
+         WHERE entity_owners.user_id = ?`)
+            .all(userId);
+    }
+    catch {
+        return [];
+    }
+}
+function parseWeekdaysJson(raw) {
+    try {
+        const parsed = JSON.parse(raw);
+        return Array.isArray(parsed)
+            ? parsed.filter((entry) => Number.isInteger(entry))
+            : [];
+    }
+    catch {
+        return [];
+    }
+}
+function deriveTodayWorkBlocks(userId, range) {
+    const dayDate = new Date(range.startMs);
+    const dayKey = range.dateKey;
+    return readWorkBlockTemplateLifeForceRows(userId)
+        .filter((template) => {
+        if (template.starts_on && dayKey < template.starts_on) {
+            return false;
+        }
+        if (template.ends_on && dayKey > template.ends_on) {
+            return false;
+        }
+        return parseWeekdaysJson(template.weekdays_json).includes(dayDate.getUTCDay());
+    })
+        .map((template) => {
+        const startAt = new Date(range.startMs + template.start_minute * 60_000).toISOString();
+        const endAt = new Date(range.startMs + template.end_minute * 60_000).toISOString();
+        return {
+            ...template,
+            instance_id: `wbinst_${template.id}_${dayKey}`,
+            start_at: startAt,
+            end_at: endAt
+        };
+    });
+}
+function buildWorkBlockProfile(input) {
+    const storedProfile = readEntityActionProfile("work_block_template", input.templateId, {
+        profileKey: `work_block_template_${input.templateId}`,
+        title: input.title,
+        entityType: "work_block_template"
+    });
+    if (storedProfile) {
+        return storedProfile;
+    }
+    const startMinute = new Date(input.startAt).getUTCHours() * 60 + new Date(input.startAt).getUTCMinutes();
+    const endMinute = new Date(input.endAt).getUTCHours() * 60 + new Date(input.endAt).getUTCMinutes();
+    return buildWorkBlockTemplateActionProfile({
+        templateId: input.templateId,
+        title: input.title,
+        kind: input.kind,
+        startMinute,
+        endMinute
+    });
+}
+function buildTimeboxAndWorkBlockDrains(userId, range, now, lifeForceProfile, activeTaskRunTaskIds, actualSourceWindows) {
+    const actualContributions = [];
+    const plannedDrains = [];
+    const activeDrains = [];
+    const timeboxWindows = [];
+    const workBlockWindows = [];
+    const timeboxes = readTaskTimeboxLifeForceRows(userId, range);
+    for (const row of timeboxes) {
+        if (row.linked_task_run_id || row.status === "cancelled") {
+            continue;
+        }
+        timeboxWindows.push({
+            startAt: row.starts_at,
+            endAt: row.ends_at
+        });
+        const storedProfile = readEntityActionProfile("task_timebox", row.id, {
+            profileKey: `task_timebox_${row.id}`,
+            title: row.title,
+            entityType: "task_timebox"
+        });
+        const profile = lifeForceProfile
+            ? buildEffectiveProfile(storedProfile ??
+                buildTaskTimeboxActionProfile({
+                    timeboxId: row.id,
+                    title: row.title,
+                    taskId: row.task_id,
+                    taskPlannedDurationSeconds: row.task_planned_duration_seconds,
+                    startsAt: row.starts_at,
+                    endsAt: row.ends_at
+                }), lifeForceProfile)
+            : storedProfile ??
+                buildTaskTimeboxActionProfile({
+                    timeboxId: row.id,
+                    title: row.title,
+                    taskId: row.task_id,
+                    taskPlannedDurationSeconds: row.task_planned_duration_seconds,
+                    startsAt: row.starts_at,
+                    endsAt: row.ends_at
+                });
+        const elapsedWindow = {
+            startAt: row.starts_at,
+            endAt: new Date(Math.min(now.getTime(), Date.parse(row.ends_at))).toISOString()
+        };
+        const elapsedSeconds = computeUncoveredSeconds(elapsedWindow, actualSourceWindows);
+        if (elapsedSeconds > 0) {
+            actualContributions.push({
+                entityType: "task_timebox",
+                entityId: row.id,
+                eventKind: "task_timebox_actual",
+                sourceKind: "task_timebox",
+                totalAp: rateToTotalAp(profile.sustainRateApPerHour, elapsedSeconds),
+                rateApPerHour: profile.sustainRateApPerHour,
+                title: row.title,
+                why: "Elapsed timeboxes count toward today's Action Point spend when no richer timed source covered that window.",
+                startsAt: row.starts_at,
+                endsAt: elapsedWindow.endAt,
+                role: "background"
+            });
+        }
+        const remainingStartMs = Math.max(now.getTime(), Date.parse(row.starts_at));
+        const remainingEndMs = Math.min(range.endMs, Date.parse(row.ends_at));
+        const remainingSeconds = Math.max(0, Math.floor((remainingEndMs - remainingStartMs) / 1000));
+        if (remainingSeconds > 0) {
+            plannedDrains.push({
+                entityType: "task_timebox",
+                entityId: row.id,
+                eventKind: "task_timebox_plan",
+                sourceKind: "task_timebox",
+                totalAp: rateToTotalAp(profile.sustainRateApPerHour, remainingSeconds),
+                rateApPerHour: profile.sustainRateApPerHour,
+                title: row.title,
+                why: "Planned task timeboxes forecast how much Action Point throughput is still booked today.",
+                startsAt: row.starts_at,
+                endsAt: row.ends_at,
+                role: "secondary"
+            });
+        }
+        if (Date.parse(row.starts_at) <= now.getTime() &&
+            Date.parse(row.ends_at) > now.getTime() &&
+            !activeTaskRunTaskIds.has(row.task_id) &&
+            !actualSourceWindows.some((window) => overlapsWindow(row.starts_at, row.ends_at, window.startAt, window.endAt))) {
+            activeDrains.push({
+                entityType: "task_timebox",
+                entityId: row.id,
+                eventKind: "task_timebox_context",
+                sourceKind: "task_timebox",
+                totalAp: 0,
+                rateApPerHour: profile.sustainRateApPerHour,
+                title: row.title,
+                why: "An active timebox still occupies current capacity even before live work logging starts.",
+                startsAt: row.starts_at,
+                endsAt: row.ends_at,
+                role: "background"
+            });
+        }
+    }
+    const workBlocks = deriveTodayWorkBlocks(userId, range);
+    for (const block of workBlocks) {
+        workBlockWindows.push({
+            startAt: block.start_at,
+            endAt: block.end_at
+        });
+        const overlapsTimebox = timeboxes.some((timebox) => timebox.status !== "cancelled" &&
+            overlapsWindow(block.start_at, block.end_at, timebox.starts_at, timebox.ends_at));
+        const profile = buildEffectiveProfile(buildWorkBlockProfile({
+            templateId: block.id,
+            title: block.title,
+            kind: block.kind,
+            startAt: block.start_at,
+            endAt: block.end_at
+        }), lifeForceProfile);
+        const elapsedWindow = {
+            startAt: block.start_at,
+            endAt: new Date(Math.min(now.getTime(), Date.parse(block.end_at))).toISOString()
+        };
+        const elapsedSeconds = computeUncoveredSeconds(elapsedWindow, [
+            ...actualSourceWindows,
+            ...timeboxWindows
+        ]);
+        if (elapsedSeconds > 0 && !overlapsTimebox) {
+            actualContributions.push({
+                entityType: "work_block",
+                entityId: block.instance_id,
+                eventKind: "work_block_actual",
+                sourceKind: "work_block",
+                totalAp: rateToTotalAp(profile.sustainRateApPerHour, elapsedSeconds),
+                rateApPerHour: profile.sustainRateApPerHour,
+                title: block.title,
+                why: "Elapsed work blocks count toward today's spend when no specific task run or timebox covered that work window.",
+                startsAt: block.start_at,
+                endsAt: elapsedWindow.endAt,
+                role: "background",
+                metadata: {
+                    templateId: block.id,
+                    kind: block.kind
+                }
+            });
+        }
+        const remainingStartMs = Math.max(now.getTime(), Date.parse(block.start_at));
+        const remainingEndMs = Math.min(range.endMs, Date.parse(block.end_at));
+        const remainingSeconds = Math.max(0, Math.floor((remainingEndMs - remainingStartMs) / 1000));
+        if (remainingSeconds > 0 && !overlapsTimebox) {
+            plannedDrains.push({
+                entityType: "work_block",
+                entityId: block.instance_id,
+                eventKind: "work_block_plan",
+                sourceKind: "work_block",
+                totalAp: rateToTotalAp(profile.sustainRateApPerHour, remainingSeconds),
+                rateApPerHour: profile.sustainRateApPerHour,
+                title: block.title,
+                why: "Work blocks act as planning containers and forecast background load when no richer task plan exists.",
+                startsAt: block.start_at,
+                endsAt: block.end_at,
+                role: "background",
+                metadata: {
+                    templateId: block.id,
+                    kind: block.kind
+                }
+            });
+        }
+        if (Date.parse(block.start_at) <= now.getTime() &&
+            Date.parse(block.end_at) > now.getTime() &&
+            !overlapsTimebox &&
+            activeTaskRunTaskIds.size === 0 &&
+            !actualSourceWindows.some((window) => overlapsWindow(block.start_at, block.end_at, window.startAt, window.endAt))) {
+            activeDrains.push({
+                entityType: "work_block",
+                entityId: block.instance_id,
+                eventKind: "work_block_context",
+                sourceKind: "work_block",
+                totalAp: 0,
+                rateApPerHour: profile.sustainRateApPerHour,
+                title: block.title,
+                why: "The current work block still claims capacity as a container for focused effort.",
+                startsAt: block.start_at,
+                endsAt: block.end_at,
+                role: "background",
+                metadata: {
+                    templateId: block.id,
+                    kind: block.kind
+                }
+            });
+        }
+    }
+    return {
+        actualContributions,
+        plannedDrains,
+        activeDrains,
+        timeboxWindows,
+        workBlockWindows
+    };
+}
+function buildCalendarDrains(userId, now, range, lifeForceProfile, blockingWindows) {
+    const actualContributions = [];
+    const nowIsoValue = now.toISOString();
+    const activeDrains = [];
+    const plannedDrains = [];
+    try {
+        const rows = getDatabase()
+            .prepare(`SELECT
+           forge_events.id,
+           forge_events.title,
+           forge_events.start_at,
+           forge_events.end_at,
+           forge_events.availability,
+           forge_events.event_type,
+           COUNT(forge_event_links.id) AS link_count
+         FROM forge_events
+         LEFT JOIN forge_event_links
+           ON forge_event_links.forge_event_id = forge_events.id
+         WHERE forge_events.deleted_at IS NULL
+           AND forge_events.end_at > ?
+           AND forge_events.start_at < ?
+         GROUP BY
+           forge_events.id,
+           forge_events.title,
+           forge_events.start_at,
+           forge_events.end_at,
+           forge_events.availability,
+           forge_events.event_type`)
+            .all(range.from, range.to);
+        for (const row of rows) {
+            const calendarProfile = buildEffectiveProfile(readEntityActionProfile("calendar_event", row.id, {
+                profileKey: `calendar_event_${row.id}`,
+                title: row.title,
+                entityType: "calendar_event"
+            }) ??
+                buildCalendarEventActionProfile({
+                    eventId: row.id,
+                    title: row.title,
+                    eventType: row.event_type,
+                    availability: row.availability,
+                    startAt: row.start_at,
+                    endAt: row.end_at
+                }), lifeForceProfile);
+            const overlapsBlockingWindow = blockingWindows.some((window) => overlapsWindow(row.start_at, row.end_at, window.startAt, window.endAt));
+            const elapsedWindow = {
+                startAt: row.start_at,
+                endAt: new Date(Math.min(now.getTime(), Date.parse(row.end_at))).toISOString()
+            };
+            const elapsedSeconds = computeUncoveredSeconds(elapsedWindow, blockingWindows);
+            if (elapsedSeconds > 0 && row.link_count === 0) {
+                actualContributions.push({
+                    entityType: "calendar_event",
+                    entityId: row.id,
+                    eventKind: "calendar_event_actual",
+                    sourceKind: "calendar",
+                    totalAp: rateToTotalAp(calendarProfile.sustainRateApPerHour, elapsedSeconds),
+                    rateApPerHour: calendarProfile.sustainRateApPerHour,
+                    title: row.title,
+                    why: "Busy calendar events debit today's AP when they were real containers and nothing richer occupied the same window.",
+                    startsAt: row.start_at,
+                    endsAt: elapsedWindow.endAt,
+                    role: "background"
+                });
+            }
+            const remainingStartMs = Math.max(now.getTime(), Date.parse(row.start_at));
+            const remainingEndMs = Math.min(range.endMs, Date.parse(row.end_at));
+            const remainingSeconds = Math.max(0, Math.floor((remainingEndMs - remainingStartMs) / 1000));
+            if (remainingSeconds > 0 && row.link_count === 0) {
+                plannedDrains.push({
+                    entityType: "calendar_event",
+                    entityId: row.id,
+                    eventKind: "calendar_event_plan",
+                    sourceKind: "calendar",
+                    totalAp: rateToTotalAp(calendarProfile.sustainRateApPerHour, remainingSeconds),
+                    rateApPerHour: calendarProfile.sustainRateApPerHour,
+                    title: row.title,
+                    why: "Busy calendar events reserve attention and social bandwidth even before deeper work is linked to them.",
+                    startsAt: row.start_at,
+                    endsAt: row.end_at,
+                    role: "background"
+                });
+            }
+            if (row.start_at <= nowIsoValue &&
+                row.end_at > nowIsoValue &&
+                !overlapsBlockingWindow) {
+                activeDrains.push({
+                    entityType: "calendar_event",
+                    entityId: row.id,
+                    eventKind: "calendar_context",
+                    sourceKind: "calendar",
+                    totalAp: 0,
+                    rateApPerHour: calendarProfile.sustainRateApPerHour,
+                    title: row.title,
+                    why: "Calendar context occupies mental and social capacity even before task work is logged.",
+                    startsAt: row.start_at,
+                    endsAt: row.end_at,
+                    role: "background"
+                });
+            }
+        }
+    }
+    catch {
+        return { actualContributions, activeDrains, plannedDrains };
+    }
+    return { actualContributions, activeDrains, plannedDrains };
 }
 function syncApLedger(userId, range, contributions) {
     runInTransaction(() => {
@@ -1010,17 +2155,41 @@ export function buildLifeForcePayload(now = new Date(), userIds) {
     const profile = ensureLifeForceProfile(user.id);
     const snapshot = getOrCreateDaySnapshot(user.id, now);
     const range = buildDayRange(now);
-    const taskRuns = buildTaskRunContributions(user.id, range, now);
-    const notes = buildNoteContributions(user.id, range, now);
-    const habits = buildHabitContributions(user.id, range);
-    const workouts = buildWorkoutContributions(user.id, range, now);
-    const adjustments = buildWorkAdjustmentContributions(user.id, range);
+    const taskRuns = buildTaskRunContributions(user.id, range, now, profile);
+    const notes = buildNoteContributions(user.id, range, now, profile);
+    const habits = buildHabitContributions(user.id, range, profile);
+    const workouts = buildWorkoutContributions(user.id, range, now, profile);
+    const movement = buildMovementTripContributions(user.id, range, now, profile);
+    const wakeImpulses = buildWakeImpulseContributions(user.id, range, profile);
+    const adjustments = buildWorkAdjustmentContributions(user.id, range, profile);
+    const actualSourceWindows = [
+        ...taskRuns.contributions,
+        ...workouts.contributions,
+        ...movement.contributions
+    ]
+        .filter((entry) => Boolean(entry.startsAt && entry.endsAt))
+        .map((entry) => ({
+        startAt: entry.startsAt,
+        endAt: entry.endsAt
+    }));
+    const activeTaskRunTaskIds = new Set(taskRuns.activeDrains.map((entry) => entry.entityId));
+    const plannedContainers = buildTimeboxAndWorkBlockDrains(user.id, range, now, profile, activeTaskRunTaskIds, actualSourceWindows);
+    const calendarBlockingWindows = [
+        ...actualSourceWindows,
+        ...plannedContainers.timeboxWindows,
+        ...plannedContainers.workBlockWindows
+    ];
+    const calendarDrains = buildCalendarDrains(user.id, now, range, profile, calendarBlockingWindows);
     const contributions = [
         ...taskRuns.contributions,
         ...adjustments,
         ...notes,
         ...habits,
-        ...workouts.contributions
+        ...workouts.contributions,
+        ...movement.contributions,
+        ...wakeImpulses,
+        ...plannedContainers.actualContributions,
+        ...calendarDrains.actualContributions
     ];
     const seededProfilesByKey = new Map(seededActionProfiles().map((entry) => [entry.profileKey, entry]));
     const taskDurationRows = getDatabase()
@@ -1034,22 +2203,60 @@ export function buildLifeForcePayload(now = new Date(), userIds) {
             profileLookup.set(`${contribution.entityType}:${contribution.entityId}`, resolveTaskActionProfile({
                 id: contribution.entityId,
                 plannedDurationSeconds: taskDurationById.get(contribution.entityId) ?? null
-            }));
+            }, profile));
             continue;
         }
         if (contribution.entityType === "note") {
-            profileLookup.set(`${contribution.entityType}:${contribution.entityId}`, seededProfilesByKey.get("note_quick") ?? null);
+            profileLookup.set(`${contribution.entityType}:${contribution.entityId}`, buildEffectiveProfile(seededProfilesByKey.get("note_quick") ?? seededActionProfiles()[0], profile));
             continue;
         }
         if (contribution.entityType === "habit") {
-            profileLookup.set(`${contribution.entityType}:${contribution.entityId}`, seededProfilesByKey.get("habit_default") ?? null);
+            profileLookup.set(`${contribution.entityType}:${contribution.entityId}`, buildEffectiveProfile(seededProfilesByKey.get("habit_default") ?? seededActionProfiles()[0], profile));
             continue;
         }
         if (contribution.entityType === "workout_session") {
-            profileLookup.set(`${contribution.entityType}:${contribution.entityId}`, seededProfilesByKey.get("workout_default") ?? null);
+            profileLookup.set(`${contribution.entityType}:${contribution.entityId}`, buildEffectiveProfile(seededProfilesByKey.get("workout_default") ?? seededActionProfiles()[0], profile));
+            continue;
+        }
+        if (contribution.entityType === "movement_trip") {
+            profileLookup.set(`${contribution.entityType}:${contribution.entityId}`, buildEffectiveProfile(seededProfilesByKey.get("movement_trip_default") ?? seededActionProfiles()[0], profile));
+            continue;
+        }
+        if (contribution.entityType === "task_timebox") {
+            profileLookup.set(`${contribution.entityType}:${contribution.entityId}`, buildEffectiveProfile(readEntityActionProfile("task_timebox", contribution.entityId, {
+                profileKey: `task_timebox_${contribution.entityId}`,
+                title: contribution.title,
+                entityType: "task_timebox"
+            }) ??
+                (seededProfilesByKey.get("task_timebox_default") ?? seededActionProfiles()[0]), profile));
+            continue;
+        }
+        if (contribution.entityType === "work_block") {
+            const templateId = typeof contribution.metadata?.templateId === "string"
+                ? contribution.metadata.templateId
+                : contribution.entityId;
+            profileLookup.set(`${contribution.entityType}:${contribution.entityId}`, buildEffectiveProfile(readEntityActionProfile("work_block_template", templateId, {
+                profileKey: `work_block_template_${templateId}`,
+                title: contribution.title,
+                entityType: "work_block_template"
+            }) ??
+                (seededProfilesByKey.get("work_block_main") ?? seededActionProfiles()[0]), profile));
+            continue;
+        }
+        if (contribution.entityType === "calendar_event") {
+            profileLookup.set(`${contribution.entityType}:${contribution.entityId}`, buildEffectiveProfile(readEntityActionProfile("calendar_event", contribution.entityId, {
+                profileKey: `calendar_event_${contribution.entityId}`,
+                title: contribution.title,
+                entityType: "calendar_event"
+            }) ??
+                (seededProfilesByKey.get("calendar_event_default") ?? seededActionProfiles()[0]), profile));
+            continue;
+        }
+        if (contribution.eventKind === "wake_start") {
+            profileLookup.set(`${contribution.entityType}:${contribution.entityId}`, buildEffectiveProfile(seededProfilesByKey.get("wake_start") ?? seededActionProfiles()[0], profile));
         }
     }
-    const adjustmentApByTaskId = readTodayAdjustmentApByTaskId(user.id, range);
+    const adjustmentApByTaskId = readTodayAdjustmentApByTaskId(user.id, range, profile);
     for (const [taskId, adjustmentAp] of adjustmentApByTaskId.entries()) {
         const existing = taskRuns.totalsByTaskId.get(taskId) ?? { todayAp: 0, totalAp: 0 };
         existing.todayAp += adjustmentAp;
@@ -1066,12 +2273,21 @@ export function buildLifeForcePayload(now = new Date(), userIds) {
     const currentCurve = parseCurvePoints(snapshot.points_json);
     const minuteOfDay = now.getUTCHours() * 60 + now.getUTCMinutes();
     const instantCapacityApPerHour = interpolateCurveRate(currentCurve, minuteOfDay);
+    const activeSourceWindows = [
+        ...taskRuns.activeDrains,
+        ...workouts.activeDrains,
+        ...movement.activeDrains,
+        ...plannedContainers.activeDrains
+    ].map((entry) => ({
+        startAt: entry.startsAt ?? now.toISOString(),
+        endAt: entry.endsAt ?? now.toISOString()
+    }));
     const activeDrains = [
         ...taskRuns.activeDrains,
         ...workouts.activeDrains,
-        ...(taskRuns.activeDrains.length === 0 && workouts.activeDrains.length === 0
-            ? buildCalendarDrains(user.id, now)
-            : [])
+        ...movement.activeDrains,
+        ...plannedContainers.activeDrains,
+        ...calendarDrains.activeDrains
     ]
         .sort((left, right) => (right.rateApPerHour ?? 0) - (left.rateApPerHour ?? 0))
         .map((entry, index) => ({
@@ -1080,6 +2296,23 @@ export function buildLifeForcePayload(now = new Date(), userIds) {
         sourceId: entry.entityId,
         title: entry.title,
         role: index === 0 ? "primary" : entry.role,
+        apPerHour: Number((entry.rateApPerHour ?? 0).toFixed(2)),
+        instantAp: Number((entry.totalAp ?? 0).toFixed(2)),
+        why: entry.why,
+        startedAt: entry.startsAt,
+        endsAt: entry.endsAt
+    }));
+    const plannedDrains = [
+        ...plannedContainers.plannedDrains,
+        ...calendarDrains.plannedDrains
+    ]
+        .sort((left, right) => Date.parse(left.startsAt ?? now.toISOString()) - Date.parse(right.startsAt ?? now.toISOString()))
+        .map((entry) => ({
+        id: `${entry.sourceKind}:${entry.entityId}`,
+        sourceType: entry.entityType,
+        sourceId: entry.entityId,
+        title: entry.title,
+        role: entry.role,
         apPerHour: Number((entry.rateApPerHour ?? 0).toFixed(2)),
         instantAp: Number((entry.totalAp ?? 0).toFixed(2)),
         why: entry.why,
@@ -1099,7 +2332,8 @@ export function buildLifeForcePayload(now = new Date(), userIds) {
     const instantFreeApPerHour = Math.max(0, rawInstantFreeApPerHour);
     const overloadApPerHour = Math.max(0, Number((-rawInstantFreeApPerHour).toFixed(2)));
     const remainingAp = Number((snapshot.daily_budget_ap - spentTodayAp).toFixed(2));
-    const forecastAp = Number((spentTodayAp + currentDrainApPerHour * 2).toFixed(2));
+    const plannedRemainingAp = Number(plannedDrains.reduce((sum, entry) => sum + entry.instantAp, 0).toFixed(2));
+    const forecastAp = Number((spentTodayAp + plannedRemainingAp).toFixed(2));
     const targetBandMinAp = Number((snapshot.daily_budget_ap * 0.85).toFixed(2));
     const targetBandMaxAp = Number(snapshot.daily_budget_ap.toFixed(2));
     const workTime = computeWorkTime(now);
@@ -1132,6 +2366,7 @@ export function buildLifeForcePayload(now = new Date(), userIds) {
         spentTodayAp: Number(spentTodayAp.toFixed(2)),
         remainingAp,
         forecastAp,
+        plannedRemainingAp,
         targetBandMinAp,
         targetBandMaxAp,
         instantCapacityApPerHour: Number(instantCapacityApPerHour.toFixed(2)),
@@ -1148,6 +2383,7 @@ export function buildLifeForcePayload(now = new Date(), userIds) {
             locked: point.minuteOfDay <= minuteOfDay
         })),
         activeDrains,
+        plannedDrains,
         warnings: buildWarnings({
             spentTodayAp,
             dailyBudgetAp: snapshot.daily_budget_ap,
