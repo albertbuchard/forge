@@ -5,6 +5,7 @@ import {
   ChevronUp,
   Pencil,
   Play,
+  Scissors,
   Trash2
 } from "lucide-react";
 import {
@@ -125,6 +126,7 @@ function TaskCardShell({
   onStepTask,
   onOpenTask,
   onEditTask,
+  onSplitTask,
   notesSummaryByEntity
 }: {
   task: Task;
@@ -144,6 +146,7 @@ function TaskCardShell({
   onStepTask?: (taskId: string, direction: "previous" | "next") => Promise<void>;
   onOpenTask?: (taskId: string) => void;
   onEditTask?: (taskId: string) => void;
+  onSplitTask?: (taskId: string) => void;
   notesSummaryByEntity?: NotesSummaryByEntity;
 }) {
   const { t, formatDate } = useI18n();
@@ -245,6 +248,21 @@ function TaskCardShell({
               <Play className="size-4 fill-current" />
             </button>
           ) : null}
+          {task.splitSuggestion?.shouldSplit && onSplitTask ? (
+            <button
+              type="button"
+              aria-label={`Split ${task.title}`}
+              className="inline-flex items-center gap-1 rounded-full bg-amber-400/12 px-2.5 py-1 text-[10px] font-medium tracking-[0.14em] text-amber-100 transition hover:bg-amber-400/18"
+              onClick={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                onSplitTask(task.id);
+              }}
+            >
+              <Scissors className="size-3.5" />
+              Split it
+            </button>
+          ) : null}
           <span className="text-[11px] text-white/44">{task.points} xp</span>
         </div>
       </div>
@@ -254,6 +272,21 @@ function TaskCardShell({
         {goal ? <EntityBadge kind="goal" label={goal.title} compact wrap className="min-w-0 max-w-full" /> : null}
         <UserBadge user={task.user} compact />
         <EntityNoteCountLink entityType="task" entityId={task.id} count={noteCount} />
+        {task.actionPointSummary ? (
+          <Badge className="bg-[var(--primary)]/12 text-[var(--primary)]">
+            {Math.round(task.actionPointSummary.totalCostAp)} AP
+          </Badge>
+        ) : null}
+        {task.actionPointSummary ? (
+          <Badge className="bg-white/8 text-white/72">
+            {task.actionPointSummary.costBand}
+          </Badge>
+        ) : null}
+        {task.actionPointSummary ? (
+          <Badge className="bg-white/8 text-white/72">
+            {Math.round(task.actionPointSummary.expectedDurationSeconds / 3600)} h target
+          </Badge>
+        ) : null}
         {task.time.totalCreditedSeconds > 0 ? <Badge className="bg-white/8 text-white/72">{Math.floor(task.time.totalCreditedSeconds / 60)} min</Badge> : null}
         {task.time.activeRunCount > 0 ? <Badge className="bg-emerald-500/12 text-emerald-200">{task.time.activeRunCount} live</Badge> : null}
         {tags.slice(0, 2).map((tag) => (
@@ -300,6 +333,7 @@ function SortableTaskCard(props: {
   onStepTask?: (taskId: string, direction: "previous" | "next") => Promise<void>;
   onOpenTask?: (taskId: string) => void;
   onEditTask?: (taskId: string) => void;
+  onSplitTask?: (taskId: string) => void;
   notesSummaryByEntity?: NotesSummaryByEntity;
 }) {
   const { task, sortableId } = props;
@@ -322,6 +356,7 @@ function SortableTaskCard(props: {
       isMobile={props.isMobile}
       onStartTask={props.onStartTask}
       onStepTask={props.onStepTask}
+      onSplitTask={props.onSplitTask}
       notesSummaryByEntity={props.notesSummaryByEntity}
       style={{
         transform: CSS.Transform.toString(transform),
@@ -451,6 +486,7 @@ export function ExecutionBoard({
   onDeleteTask,
   onOpenTask,
   onEditTask,
+  onSplitTask,
   notesSummaryByEntity
 }: {
   tasks: Task[];
@@ -464,6 +500,7 @@ export function ExecutionBoard({
   onDeleteTask?: (taskId: string) => Promise<void>;
   onOpenTask?: (taskId: string) => void;
   onEditTask?: (taskId: string) => void;
+  onSplitTask?: (taskId: string) => void;
   notesSummaryByEntity?: NotesSummaryByEntity;
 }) {
   const { t } = useI18n();
@@ -730,6 +767,7 @@ export function ExecutionBoard({
                         onStepTask={handleStepTask}
                         onOpenTask={onOpenTask}
                         onEditTask={onEditTask}
+                        onSplitTask={onSplitTask}
                         notesSummaryByEntity={notesSummaryByEntity}
                       />
                     ))}
@@ -771,6 +809,7 @@ export function ExecutionBoard({
                         onStepTask={handleStepTask}
                         onOpenTask={onOpenTask}
                         onEditTask={onEditTask}
+                        onSplitTask={onSplitTask}
                         notesSummaryByEntity={notesSummaryByEntity}
                       />
                     ))}
@@ -799,6 +838,7 @@ export function ExecutionBoard({
               isMobile={isMobileBoard}
               onSelect={() => {}}
               onStartTask={onStartTask}
+              onSplitTask={onSplitTask}
               notesSummaryByEntity={notesSummaryByEntity}
             />
           </div>

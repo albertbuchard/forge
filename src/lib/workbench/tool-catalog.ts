@@ -5,6 +5,7 @@ export type WorkbenchToolOption = {
   label: string;
   description: string;
   accessMode: "read" | "write" | "read_write" | "exec";
+  argsSchema?: Record<string, unknown>;
   sources: string[];
   sourceSurfaceIds: string[];
 };
@@ -57,6 +58,7 @@ export function buildWorkbenchToolCatalog(
           label: tool.label,
           description: normalizeToolDescription(tool.key, [tool.description]),
           accessMode: tool.accessMode,
+          argsSchema: tool.argsSchema,
           sources: [box.title],
           sourceSurfaceIds: box.surfaceId ? [box.surfaceId] : []
         });
@@ -69,6 +71,7 @@ export function buildWorkbenchToolCatalog(
         current.description,
         tool.description
       ]);
+      current.argsSchema = current.argsSchema ?? tool.argsSchema;
       if (!current.sources.includes(box.title)) {
         current.sources.push(box.title);
       }

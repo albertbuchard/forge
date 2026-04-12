@@ -13,6 +13,7 @@ import {
 import { SurfaceSkeleton } from "@/components/experience/surface-skeleton";
 import { SchedulingRulesEditor } from "@/components/calendar/scheduling-rules-editor";
 import { SheetScaffold } from "@/components/experience/sheet-scaffold";
+import { OpenInGraphButton } from "@/components/knowledge-graph/open-in-graph-button";
 import { NoteMarkdown } from "@/components/notes/note-markdown";
 import { EntityNotesSurface } from "@/components/notes/entity-notes-surface";
 import { PreferenceEntityHandoffButton } from "@/components/preferences/preference-entity-handoff-button";
@@ -296,10 +297,8 @@ export function TaskDetailPage() {
   };
 
   const handleStatusChange = async (status: TaskStatus) => {
-    await updateTaskMutation.mutateAsync({
-      taskId: payload.task.id,
-      patch: { status }
-    });
+    await shell.patchTaskStatus(payload.task.id, status);
+    await invalidateAll();
     setStatusSheetOpen(false);
   };
 
@@ -350,14 +349,17 @@ export function TaskDetailPage() {
         }
         badge={`${payload.task.points} xp`}
         actions={
-          <PreferenceEntityHandoffButton
-            userId={defaultUserId}
-            domain="tasks"
-            entityType="task"
-            entityId={payload.task.id}
-            label={payload.task.title}
-            description={payload.task.description}
-          />
+          <div className="flex flex-wrap gap-2">
+            <PreferenceEntityHandoffButton
+              userId={defaultUserId}
+              domain="tasks"
+              entityType="task"
+              entityId={payload.task.id}
+              label={payload.task.title}
+              description={payload.task.description}
+            />
+            <OpenInGraphButton entityType="task" entityId={payload.task.id} />
+          </div>
         }
       />
 

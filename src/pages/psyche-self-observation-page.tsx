@@ -1,6 +1,13 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowUpRight, Plus, Sparkles, StickyNote, Trash2 } from "lucide-react";
+import {
+  ArrowUpRight,
+  Download,
+  Plus,
+  Sparkles,
+  StickyNote,
+  Trash2
+} from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import {
   EntityLinkMultiSelect,
@@ -18,6 +25,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { ErrorState } from "@/components/ui/page-state";
+import { SelectMenu, type SelectMenuOption } from "@/components/ui/select-menu";
 import { Textarea } from "@/components/ui/textarea";
 import { EntityBadge } from "@/components/ui/entity-badge";
 import { UserBadge } from "@/components/ui/user-badge";
@@ -25,6 +33,7 @@ import { UserSelectField } from "@/components/ui/user-select-field";
 import {
   createNote,
   deleteNote,
+  exportPsycheObservationCalendar,
   getPsycheObservationCalendar,
   listBehaviors,
   listBehaviorPatterns,
@@ -42,6 +51,10 @@ import {
   startOfWeek
 } from "@/lib/calendar-ui";
 import {
+  getActivityEventCtaLabel,
+  getActivityEventHref
+} from "@/lib/entity-links";
+import {
   normalizeNoteTags,
   parseDateTimeLocalToIso
 } from "@/lib/note-memory-tags";
@@ -52,11 +65,12 @@ import type {
   BehaviorPattern,
   BeliefEntry,
   ModeProfile,
+  PsycheObservationActivityEntry,
   PsycheObservationEntry,
   PsycheValue,
   TriggerReport
 } from "@/lib/psyche-types";
-import type { CrudEntityType, Note, NoteLink } from "@/lib/types";
+import type { ActivityEvent, CrudEntityType, Note, NoteLink } from "@/lib/types";
 import {
   buildOwnedEntitySearchText,
   formatOwnedEntityDescription,
@@ -66,6 +80,53 @@ import {
 } from "@/lib/user-ownership";
 
 const SELF_OBSERVATION_TAG = "Self-observation";
+const FORGE_ACTIVITY_TAG = "Forge activity";
+const ENTITY_TAG_PREFIX = "Entity · ";
+const ALL_ENTITY_FILTER = "all";
+
+type CalendarExportFormat = "markdown" | "csv" | "json" | "ics";
+type ObservationViewMode = "compact" | "informative" | "extended";
+
+const OBSERVATION_VIEW_OPTIONS: SelectMenuOption<ObservationViewMode>[] = [
+  {
+    value: "compact",
+    label: "Compact",
+    description: "One row per entry: time, entity, title."
+  },
+  {
+    value: "informative",
+    label: "Informative",
+    description: "Adds one short preview line and key context."
+  },
+  {
+    value: "extended",
+    label: "Extended",
+    description: "Adds a little more context with a hard text cap."
+  }
+];
+
+const CALENDAR_EXPORT_OPTIONS: SelectMenuOption<CalendarExportFormat>[] = [
+  {
+    value: "markdown",
+    label: "Markdown brief",
+    description: "Readable weekly notes for sharing with a therapist."
+  },
+  {
+    value: "csv",
+    label: "CSV table",
+    description: "Structured rows for spreadsheet review."
+  },
+  {
+    value: "json",
+    label: "JSON archive",
+    description: "Full structured payload with filters and metadata."
+  },
+  {
+    value: "ics",
+    label: "Calendar file",
+    description: "Importable weekly timeline in calendar apps."
+  }
+];
 
 const LINKABLE_ENTITY_TYPES = new Set<CrudEntityType>([
   "goal",
@@ -174,19 +235,161 @@ function formatClock(value: string) {
   });
 }
 
-function summarizeNote(note: Note) {
-  const text = (note.contentPlain || note.contentMarkdown)
-    .replace(/\s+/g, " ")
-    .trim();
-  if (text.length <= 120) {
+function truncateText(value: string, maxChars: number) {
+  const text = value.replace(/\s+/g, " ").trim();
+  if (text.length <= maxChars) {
     return text;
   }
-  return `${text.slice(0, 117).trimEnd()}...`;
+  return `${text.slice(0, Math.max(0, maxChars - 3)).trimEnd()}...`;
+}
+
+function summarizeNote(note: Note, maxChars = 120) {
+  return truncateText(note.contentPlain || note.contentMarkdown, maxChars);
 }
 
 function isMovementObservation(observation: PsycheObservationEntry) {
   const movement = observation.note.frontmatter.movement;
   return !!movement && typeof movement === "object" && !Array.isArray(movement);
+}
+
+type TimelineEntry =
+  | {
+      kind: "observation";
+      id: string;
+      observedAt: string;
+      tags: string[];
+      observation: PsycheObservationEntry;
+    }
+  | {
+      kind: "activity";
+      id: string;
+      observedAt: string;
+      tags: string[];
+      activity: PsycheObservationActivityEntry;
+    };
+
+function isObservationEntry(
+  entry: TimelineEntry
+): entry is Extract<TimelineEntry, { kind: "observation" }> {
+  return entry.kind === "observation";
+}
+
+function getTimelineOwner(entry: TimelineEntry) {
+  return isObservationEntry(entry)
+    ? entry.observation.note.user
+    : entry.activity.event.user;
+}
+
+function getTimelineSearchText(entry: TimelineEntry) {
+  if (isObservationEntry(entry)) {
+    const observation = entry.observation;
+    return [
+      observation.note.contentPlain,
+      observation.note.contentMarkdown,
+      observation.note.author ?? "",
+      observation.tags.join(" "),
+      observation.linkedPatterns.map((pattern) => pattern.title).join(" "),
+      observation.linkedReports.map((report) => report.title).join(" ")
+    ]
+      .join(" ")
+      .toLowerCase();
+  }
+
+  const event = entry.activity.event;
+  return [
+    event.title,
+    event.description,
+    event.actor ?? "",
+    event.eventType,
+    event.entityType,
+    entry.tags.join(" ")
+  ]
+    .join(" ")
+    .toLowerCase();
+}
+
+function matchesSelectedTags(entryTags: string[], selectedTags: string[]) {
+  if (selectedTags.length === 0) {
+    return true;
+  }
+  const normalizedEntryTags = new Set(
+    entryTags.map((tag) => tag.toLowerCase())
+  );
+  return selectedTags.some((tag) => normalizedEntryTags.has(tag.toLowerCase()));
+}
+
+function summarizeActivityEvent(event: ActivityEvent, maxChars = 160) {
+  const summary = [event.title, event.description].filter(Boolean).join(". ");
+  return truncateText(summary, maxChars);
+}
+
+function getObservationTitle(
+  observation: PsycheObservationEntry,
+  maxChars: number
+) {
+  const text = observation.note.contentPlain || observation.note.contentMarkdown;
+  return truncateText(text || "Observation", maxChars);
+}
+
+function getObservationEntityLabel(observation: PsycheObservationEntry) {
+  if (isMovementObservation(observation)) {
+    return "Movement";
+  }
+  const linkedEntity = observation.note.links.find(
+    (link) =>
+      link.entityType !== "behavior_pattern" &&
+      link.entityType !== "trigger_report"
+  );
+  if (linkedEntity) {
+    return formatEntityTypeLabel(linkedEntity.entityType);
+  }
+  if (observation.linkedPatterns.length > 0) {
+    return "Pattern";
+  }
+  if (observation.linkedReports.length > 0) {
+    return "Trigger report";
+  }
+  return "Observation";
+}
+
+function getActivityEntityLabel(activity: PsycheObservationActivityEntry) {
+  const taggedEntity = activity.tags.find((tag) =>
+    tag.startsWith(ENTITY_TAG_PREFIX)
+  );
+  if (taggedEntity) {
+    return taggedEntity.replace(`${ENTITY_TAG_PREFIX}`, "");
+  }
+  return truncateText(activity.event.entityType || "Activity", 32);
+}
+
+function buildEntityFilterOptions(
+  availableTags: string[]
+): SelectMenuOption<string>[] {
+  const entityTags = availableTags
+    .filter((tag) => tag.startsWith(ENTITY_TAG_PREFIX))
+    .sort((left, right) => left.localeCompare(right));
+
+  return [
+    {
+      value: ALL_ENTITY_FILTER,
+      label: "All entities",
+      description: "Show every entity kind across the week."
+    },
+    ...entityTags.map((tag) => ({
+      value: tag,
+      label: tag.replace(`${ENTITY_TAG_PREFIX}`, ""),
+      description: `Only entries tagged ${tag}.`
+    }))
+  ];
+}
+
+function downloadBlob(blob: Blob, fileName: string) {
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = fileName;
+  anchor.click();
+  URL.revokeObjectURL(url);
 }
 
 function moveObservedAtToSlot(sourceIso: string, day: Date, hour: number) {
@@ -489,11 +692,16 @@ export function PsycheSelfObservationPage() {
     : [];
   const defaultUserId = getSingleSelectedUserId(selectedUserIds);
   const [weekStart, setWeekStart] = useState(() => startOfWeek());
-  const [selectedTags, setSelectedTags] = useState<string[]>([
-    SELF_OBSERVATION_TAG
-  ]);
-  const [authorFilter, setAuthorFilter] = useState("");
+  const [selectedTags, setSelectedTags] = useState<string[]>([]);
+  const [entityFilter, setEntityFilter] = useState<string>(ALL_ENTITY_FILTER);
+  const [searchFilter, setSearchFilter] = useState("");
   const [onlyHumanOwned, setOnlyHumanOwned] = useState(false);
+  const [showObservations, setShowObservations] = useState(true);
+  const [showActivity, setShowActivity] = useState(true);
+  const [viewMode, setViewMode] =
+    useState<ObservationViewMode>("informative");
+  const [exportFormat, setExportFormat] =
+    useState<CalendarExportFormat>("markdown");
   const [sheetOpen, setSheetOpen] = useState(false);
   const [draft, setDraft] = useState<ObservationDraft>({
     ...EMPTY_DRAFT,
@@ -547,6 +755,31 @@ export function PsycheSelfObservationPage() {
   const reportsQuery = useQuery({
     queryKey: ["forge-psyche-reports", ...selectedUserIds],
     queryFn: () => listTriggerReports(selectedUserIds)
+  });
+
+  const exportCalendarMutation = useMutation({
+    mutationFn: () =>
+      exportPsycheObservationCalendar({
+        from: weekStart.toISOString(),
+        to: weekEnd.toISOString(),
+        userIds: selectedUserIds,
+        tags: normalizeNoteTags(
+          entityFilter === ALL_ENTITY_FILTER
+            ? selectedTags
+            : [...selectedTags, entityFilter]
+        ),
+        includeObservations: showObservations,
+        includeActivity: showActivity,
+        onlyHumanOwned,
+        search: searchFilter.trim(),
+        format: exportFormat
+      }),
+    onSuccess: (result) => {
+      downloadBlob(
+        result.blob,
+        result.fileName ?? `forge-self-observation.${exportFormat}`
+      );
+    }
   });
 
   const saveObservationMutation = useMutation({
@@ -660,6 +893,7 @@ export function PsycheSelfObservationPage() {
     () =>
       normalizeNoteTags([
         SELF_OBSERVATION_TAG,
+        FORGE_ACTIVITY_TAG,
         ...(observationQuery.data?.calendar.availableTags ?? [])
       ]),
     [observationQuery.data?.calendar.availableTags]
@@ -667,6 +901,10 @@ export function PsycheSelfObservationPage() {
   const patternOptions = useMemo(
     () => buildPatternOptions(patternsQuery.data?.patterns ?? []),
     [patternsQuery.data?.patterns]
+  );
+  const entityFilterOptions = useMemo(
+    () => buildEntityFilterOptions(availableTags),
+    [availableTags]
   );
   const reportOptions = useMemo(
     () => buildReportOptions(reportsQuery.data?.reports ?? []),
@@ -709,55 +947,312 @@ export function PsycheSelfObservationPage() {
         ? formatUserSummaryLine(scopeUsers[0] ?? null)
         : `${selectedUserIds.length} owners selected`;
 
-  const visibleObservations = useMemo(() => {
-    const observations = observationQuery.data?.calendar.observations ?? [];
-    return observations.filter((observation) => {
-      if (onlyHumanOwned && observation.note.user?.kind !== "human") {
-        return false;
-      }
-      if (
-        authorFilter.trim() &&
-        !(observation.note.author ?? "")
-          .toLowerCase()
-          .includes(authorFilter.trim().toLowerCase())
-      ) {
-        return false;
-      }
-      if (
-        selectedTags.length > 0 &&
-        !selectedTags.every((tag) =>
-          (observation.note.tags ?? []).some(
-            (noteTag) => noteTag.toLowerCase() === tag.toLowerCase()
-          )
-        )
-      ) {
-        return false;
-      }
-      return true;
-    });
+  const visibleEntries = useMemo(() => {
+    const activeTagFilters = normalizeNoteTags(
+      entityFilter === ALL_ENTITY_FILTER
+        ? selectedTags
+        : [...selectedTags, entityFilter]
+    );
+    const entries: TimelineEntry[] = [
+      ...(observationQuery.data?.calendar.observations ?? []).map(
+        (observation) => ({
+          kind: "observation" as const,
+          id: observation.note.id,
+          observedAt: observation.observedAt,
+          tags: observation.tags,
+          observation
+        })
+      ),
+      ...(observationQuery.data?.calendar.activity ?? []).map((activity) => ({
+        kind: "activity" as const,
+        id: activity.id,
+        observedAt: activity.observedAt,
+        tags: activity.tags,
+        activity
+      }))
+    ];
+
+    return entries
+      .filter((entry) => {
+        if (isObservationEntry(entry) && !showObservations) {
+          return false;
+        }
+        if (!isObservationEntry(entry) && !showActivity) {
+          return false;
+        }
+        if (onlyHumanOwned && getTimelineOwner(entry)?.kind !== "human") {
+          return false;
+        }
+        if (!matchesSelectedTags(entry.tags, activeTagFilters)) {
+          return false;
+        }
+        const trimmedSearch = searchFilter.trim().toLowerCase();
+        if (trimmedSearch && !getTimelineSearchText(entry).includes(trimmedSearch)) {
+          return false;
+        }
+        return true;
+      })
+      .sort((left, right) => left.observedAt.localeCompare(right.observedAt));
   }, [
-    authorFilter,
+    entityFilter,
+    observationQuery.data?.calendar.activity,
     observationQuery.data?.calendar.observations,
     onlyHumanOwned,
-    selectedTags
+    searchFilter,
+    selectedTags,
+    showActivity,
+    showObservations
   ]);
 
-  const observationsBySlot = useMemo(() => {
-    const map = new Map<string, PsycheObservationEntry[]>();
-    for (const observation of visibleObservations) {
-      const observedAt = new Date(observation.observedAt);
+  const visibleObservationCount = useMemo(
+    () => visibleEntries.filter(isObservationEntry).length,
+    [visibleEntries]
+  );
+  const visibleActivityCount = useMemo(
+    () => visibleEntries.filter((entry) => !isObservationEntry(entry)).length,
+    [visibleEntries]
+  );
+
+  const entriesBySlot = useMemo(() => {
+    const map = new Map<string, TimelineEntry[]>();
+    for (const entry of visibleEntries) {
+      const observedAt = new Date(entry.observedAt);
       const slotKey = `${formatLocalDayKey(observedAt)}:${observedAt.getHours()}`;
       const current = map.get(slotKey) ?? [];
-      current.push(observation);
+      current.push(entry);
       map.set(slotKey, current);
     }
     for (const entries of map.values()) {
-      entries.sort((left, right) =>
-        left.observedAt.localeCompare(right.observedAt)
-      );
+      entries.sort((left, right) => left.observedAt.localeCompare(right.observedAt));
     }
     return map;
-  }, [visibleObservations]);
+  }, [visibleEntries]);
+
+  const renderObservationCard = (observation: PsycheObservationEntry) => {
+    const compact = viewMode === "compact";
+    const extended = viewMode === "extended";
+    const title = getObservationTitle(
+      observation,
+      compact ? 92 : extended ? 144 : 112
+    );
+    const preview = compact
+      ? ""
+      : summarizeNote(observation.note, extended ? 220 : 120);
+    const entityLabel = getObservationEntityLabel(observation);
+    const visibleTagCount = extended ? 4 : 2;
+
+    return (
+      <div
+        key={observation.id}
+        draggable={!compact}
+      data-self-observation-card={observation.note.id}
+      onDragStart={(event) => {
+        if (compact) {
+          return;
+        }
+        setDraggedObservationId(observation.note.id);
+        event.dataTransfer.setData(
+          "text/forge-self-observation-id",
+          observation.note.id
+        );
+      }}
+      onDragEnd={() => setDraggedObservationId(null)}
+      className={cn(
+        "rounded-[22px] border p-3 text-white transition hover:border-white/18",
+        isMovementObservation(observation)
+          ? "border-[rgba(126,229,255,0.14)] bg-[rgba(126,229,255,0.08)] hover:bg-[rgba(126,229,255,0.12)]"
+          : "border-white/10 bg-[rgba(110,231,183,0.08)] hover:bg-[rgba(110,231,183,0.12)]",
+        compact && "rounded-[16px] px-2.5 py-2"
+      )}
+    >
+      <div className="flex items-start justify-between gap-2">
+        <button
+          type="button"
+          className="min-w-0 flex-1 text-left"
+          onClick={() => openComposerForObservation(observation)}
+        >
+          {compact ? (
+            <div className="flex items-center gap-2 overflow-hidden">
+              <div className="shrink-0 text-[11px] uppercase tracking-[0.16em] text-[rgba(110,231,183,0.82)]">
+                {formatClock(observation.observedAt)}
+              </div>
+              <Badge className="shrink-0 bg-cyan-400/12 text-cyan-100">
+                {entityLabel}
+              </Badge>
+              <div className="min-w-0 truncate text-sm font-medium text-white/86">
+                {title}
+              </div>
+            </div>
+          ) : (
+            <>
+              <div className="flex flex-wrap items-start justify-between gap-2">
+                <div className="flex flex-wrap items-center gap-2">
+                  <div className="text-xs uppercase tracking-[0.16em] text-[rgba(110,231,183,0.82)]">
+                    {formatClock(observation.observedAt)}
+                  </div>
+                  <Badge className="bg-cyan-400/12 text-cyan-100">
+                    {entityLabel}
+                  </Badge>
+                  <UserBadge user={observation.note.user} compact />
+                </div>
+              </div>
+              <div className="mt-2 text-sm font-medium text-white">{title}</div>
+              <div
+                className={cn(
+                  "mt-1 text-sm leading-6 text-white/72",
+                  extended ? "line-clamp-3" : "line-clamp-1"
+                )}
+              >
+                {preview}
+              </div>
+              <div className="mt-3 flex flex-wrap gap-1.5">
+                {observation.note.author ? (
+                  <Badge className="bg-white/[0.08] text-white/72">
+                    {observation.note.author}
+                  </Badge>
+                ) : null}
+                {observation.tags.slice(0, visibleTagCount).map((tag) => (
+                  <Badge
+                    key={`${observation.id}-${tag}`}
+                    className="bg-cyan-400/10 text-cyan-50"
+                  >
+                    {tag}
+                  </Badge>
+                ))}
+                {renderOtherLinkBadges(observation)}
+                {observation.linkedPatterns
+                  .slice(0, extended ? 2 : 1)
+                  .map((pattern) => (
+                    <EntityBadge
+                      key={pattern.id}
+                      kind="pattern"
+                      label={pattern.title}
+                      compact
+                      gradient={false}
+                    />
+                  ))}
+                {observation.linkedReports.slice(0, 1).map((report) => (
+                  <EntityBadge
+                    key={report.id}
+                    kind="report"
+                    label={report.title}
+                    compact
+                    gradient={false}
+                  />
+                ))}
+              </div>
+            </>
+          )}
+        </button>
+        {!compact ? (
+          <button
+            type="button"
+            className="rounded-full border border-white/8 bg-white/[0.04] p-2 text-white/54 transition hover:bg-rose-500/18 hover:text-rose-100"
+            aria-label={`Delete observation ${observation.note.id}`}
+            onClick={(event) => {
+              event.stopPropagation();
+              void deleteObservationMutation.mutateAsync(observation.note.id);
+            }}
+          >
+            <Trash2 className="size-3.5" />
+          </button>
+        ) : null}
+      </div>
+    </div>
+    );
+  };
+
+  const renderActivityCard = (activity: PsycheObservationActivityEntry) => {
+    const compact = viewMode === "compact";
+    const extended = viewMode === "extended";
+    const href = getActivityEventHref(activity.event);
+    const ctaLabel = getActivityEventCtaLabel(activity.event);
+    const title = truncateText(
+      activity.event.title || "Forge activity",
+      compact ? 92 : extended ? 144 : 112
+    );
+    const summary = compact
+      ? ""
+      : summarizeActivityEvent(activity.event, extended ? 220 : 120);
+    const visibleTagCount = extended ? 4 : 2;
+    return (
+      <div
+        key={activity.id}
+        role={compact && href ? "button" : undefined}
+        tabIndex={compact && href ? 0 : undefined}
+        className={cn(
+          "rounded-[22px] border border-white/8 bg-[rgba(255,255,255,0.04)] p-3 text-white/80",
+          compact && "rounded-[16px] px-2.5 py-2",
+          compact && href && "cursor-pointer"
+        )}
+        onClick={compact && href ? () => navigate(href) : undefined}
+      >
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0 flex-1">
+            {compact ? (
+              <div className="flex items-center gap-2 overflow-hidden">
+                <div className="shrink-0 text-[11px] uppercase tracking-[0.16em] text-white/42">
+                  {formatClock(activity.observedAt)}
+                </div>
+                <Badge className="shrink-0 bg-amber-300/12 text-amber-100">
+                  {getActivityEntityLabel(activity)}
+                </Badge>
+                <div className="min-w-0 truncate text-sm font-medium text-white">
+                  {title}
+                </div>
+              </div>
+            ) : (
+              <>
+                <div className="flex flex-wrap items-center gap-2">
+                  <div className="text-xs uppercase tracking-[0.16em] text-white/42">
+                    {formatClock(activity.observedAt)}
+                  </div>
+                  <Badge className="bg-amber-300/12 text-amber-100">
+                    {getActivityEntityLabel(activity)}
+                  </Badge>
+                  <UserBadge user={activity.event.user} compact />
+                </div>
+                <div className="mt-2 text-sm font-medium text-white">
+                  {title}
+                </div>
+                {activity.event.description ? (
+                  <div
+                    className={cn(
+                      "mt-1 text-sm leading-6 text-white/60",
+                      extended ? "line-clamp-3" : "line-clamp-1"
+                    )}
+                  >
+                    {summary}
+                  </div>
+                ) : null}
+                <div className="mt-3 flex flex-wrap gap-1.5">
+                  {activity.tags.slice(0, visibleTagCount).map((tag) => (
+                    <Badge
+                      key={`${activity.id}-${tag}`}
+                      className="bg-white/[0.08] text-white/68"
+                    >
+                      {tag}
+                    </Badge>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
+          {!compact && href && ctaLabel ? (
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={() => navigate(href)}
+              className="shrink-0"
+            >
+              <ArrowUpRight className="size-4" />
+              {ctaLabel}
+            </Button>
+          ) : null}
+        </div>
+      </div>
+    );
+  };
 
   const resetDraft = (seedDate?: Date) => {
     setDraft({
@@ -826,8 +1321,8 @@ export function PsycheSelfObservationPage() {
       <PageHero
         title="Self Observation"
         titleText="Self Observation"
-        description="Map observed notes onto the real week by hour, including handwritten reflections plus rolling movement stays and trips coming from Forge Companion."
-        badge={`${visibleObservations.length} visible`}
+        description="Map handwritten reflections and lower-priority Forge activity onto the real week by hour, so the calendar shows both what you noticed and what the system recorded you doing."
+        badge={`${visibleEntries.length} visible this week`}
         actions={
           <Button
             onClick={() =>
@@ -845,7 +1340,7 @@ export function PsycheSelfObservationPage() {
       <Card className="grid gap-4 rounded-[32px] border border-white/8 bg-[linear-gradient(180deg,rgba(18,31,34,0.96),rgba(13,24,27,0.94))]">
         <CalendarWeekToolbar
           eyebrow="Observation week"
-          description="Every observed note can live at the hour it actually happened. Filter reflections and movement together, move through weeks, and keep pattern plus trigger links visible on the same card."
+          description="True self-observation stays primary. Forge activity sits underneath it as supporting context, so you can review the week as lived evidence and export exactly the slice you want to share."
           weekStart={weekStart}
           badges={
             <>
@@ -853,7 +1348,13 @@ export function PsycheSelfObservationPage() {
                 {scopeSummary}
               </Badge>
               <Badge className="bg-[rgba(110,231,183,0.14)] text-[var(--tertiary)]">
-                {onlyHumanOwned ? "Human-owned only" : "All note owners"}
+                {visibleObservationCount} observations
+              </Badge>
+              <Badge className="bg-amber-300/14 text-amber-100">
+                {visibleActivityCount} activity
+              </Badge>
+              <Badge className="bg-white/[0.08] text-white/62">
+                {onlyHumanOwned ? "Human-owned only" : "All owners"}
               </Badge>
             </>
           }
@@ -862,30 +1363,105 @@ export function PsycheSelfObservationPage() {
           onNext={() => setWeekStart(addDays(weekStart, 7))}
         />
 
-        <div className="grid gap-3 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)_auto]">
-          <Input
-            value={authorFilter}
-            onChange={(event) => setAuthorFilter(event.target.value)}
-            placeholder="Filter by free-text author"
-          />
-          <NoteTagsInput
-            value={selectedTags}
-            onChange={setSelectedTags}
-            availableTags={availableTags}
-            placeholder="Filter by note tag"
-          />
-          <div className="flex flex-wrap gap-2">
+        <div className="grid gap-4 xl:grid-cols-[minmax(0,1.4fr)_minmax(18rem,0.8fr)]">
+          <div className="grid gap-3 rounded-[24px] border border-white/8 bg-white/[0.03] p-4">
+            <div>
+              <div className="text-[11px] font-medium uppercase tracking-[0.18em] text-white/42">
+                Filter timeline
+              </div>
+              <div className="mt-1 text-sm text-white/58">
+                Search the week, focus a specific entity kind, switch density,
+                and narrow the timeline before you review it.
+              </div>
+            </div>
+
+            <div className="grid gap-3 lg:grid-cols-[minmax(0,1.1fr)_minmax(15rem,0.8fr)_minmax(15rem,0.8fr)]">
+              <Input
+                value={searchFilter}
+                onChange={(event) => setSearchFilter(event.target.value)}
+                placeholder="Search notes, authors, activity, or entity labels"
+              />
+              <SelectMenu
+                label="Entity kind"
+                value={entityFilter}
+                options={entityFilterOptions}
+                onChange={setEntityFilter}
+              />
+              <SelectMenu
+                label="Entry view"
+                value={viewMode}
+                options={OBSERVATION_VIEW_OPTIONS}
+                onChange={setViewMode}
+              />
+            </div>
+
+            <div className="grid gap-2">
+              <div className="text-[11px] font-medium uppercase tracking-[0.18em] text-white/42">
+                Extra tags
+              </div>
+              <div className="text-xs text-white/48">
+                Add narrower filters like `focus`, `Forge activity`, or `Source · UI`.
+              </div>
+              <NoteTagsInput
+                value={selectedTags}
+                onChange={setSelectedTags}
+                availableTags={availableTags}
+                placeholder="Filter by tag"
+              />
+            </div>
+
+            <div className="flex flex-wrap gap-2">
+              <Button
+                variant={showObservations ? "primary" : "ghost"}
+                onClick={() => setShowObservations((current) => !current)}
+              >
+                {showObservations ? "Hide observations" : "Show observations"}
+              </Button>
+              <Button
+                variant={showActivity ? "secondary" : "ghost"}
+                onClick={() => setShowActivity((current) => !current)}
+              >
+                {showActivity ? "Hide Forge activity" : "Show Forge activity"}
+              </Button>
+              <Button
+                variant={onlyHumanOwned ? "secondary" : "primary"}
+                onClick={() => setOnlyHumanOwned(false)}
+              >
+                All owners
+              </Button>
+              <Button
+                variant={onlyHumanOwned ? "primary" : "ghost"}
+                onClick={() => setOnlyHumanOwned(true)}
+              >
+                Human only
+              </Button>
+            </div>
+          </div>
+
+          <div className="grid gap-3 rounded-[24px] border border-white/8 bg-[rgba(255,255,255,0.035)] p-4">
+            <div>
+              <div className="text-[11px] font-medium uppercase tracking-[0.18em] text-white/42">
+                Export week
+              </div>
+              <div className="mt-1 text-sm text-white/58">
+                Export respects the current search, entity, tag, owner, and
+                observation/activity filters.
+              </div>
+            </div>
+            <SelectMenu
+              label="Export format"
+              value={exportFormat}
+              options={CALENDAR_EXPORT_OPTIONS}
+              onChange={setExportFormat}
+            />
             <Button
-              variant={onlyHumanOwned ? "secondary" : "primary"}
-              onClick={() => setOnlyHumanOwned(false)}
+              variant="secondary"
+              pending={exportCalendarMutation.isPending}
+              pendingLabel="Exporting"
+              onClick={() => void exportCalendarMutation.mutateAsync()}
             >
-              All notes
-            </Button>
-            <Button
-              variant={onlyHumanOwned ? "primary" : "ghost"}
-              onClick={() => setOnlyHumanOwned(true)}
-            >
-              Human only
+              <Download className="size-4" />
+              Export week
             </Button>
           </div>
         </div>
@@ -924,13 +1500,19 @@ export function PsycheSelfObservationPage() {
                 {days.map((day) => {
                   const dayKey = formatLocalDayKey(day);
                   const slotKey = `${dayKey}:${hour}`;
-                  const slotObservations =
-                    observationsBySlot.get(slotKey) ?? [];
+                  const slotEntries = entriesBySlot.get(slotKey) ?? [];
                   return (
                     <div
                       key={slotKey}
                       data-self-observation-slot={slotKey}
-                      className="min-h-[7rem] border-r border-white/6 px-2 py-2 last:border-r-0"
+                      className={cn(
+                        "border-r border-white/6 px-2 py-2 last:border-r-0",
+                        viewMode === "compact"
+                          ? "min-h-[4.25rem]"
+                          : viewMode === "extended"
+                            ? "min-h-[7rem]"
+                            : "min-h-[5.5rem]"
+                      )}
                       onDragOver={(event) => event.preventDefault()}
                       onDrop={(event) => {
                         event.preventDefault();
@@ -941,18 +1523,23 @@ export function PsycheSelfObservationPage() {
                         if (!noteId) {
                           return;
                         }
-                        const observation = visibleObservations.find(
-                          (entry) => entry.note.id === noteId
+                        const observationEntry = visibleEntries.find(
+                          (entry) =>
+                            isObservationEntry(entry) &&
+                            entry.observation.note.id === noteId
                         );
-                        if (!observation) {
+                        if (
+                          !observationEntry ||
+                          !isObservationEntry(observationEntry)
+                        ) {
                           return;
                         }
-                        void handleDrop(observation, day, hour);
+                        void handleDrop(observationEntry.observation, day, hour);
                         setDraggedObservationId(null);
                       }}
                     >
                       <div className="grid gap-2">
-                        {slotObservations.length > 0 ? (
+                        {slotEntries.length > 0 ? (
                           <div className="flex justify-end">
                             <button
                               type="button"
@@ -965,116 +1552,24 @@ export function PsycheSelfObservationPage() {
                           </div>
                         ) : null}
 
-                        {slotObservations.map((observation) => (
-                          <div
-                            key={observation.id}
-                            draggable
-                            data-self-observation-card={observation.note.id}
-                            onDragStart={(event) => {
-                              setDraggedObservationId(observation.note.id);
-                              event.dataTransfer.setData(
-                                "text/forge-self-observation-id",
-                                observation.note.id
-                              );
-                            }}
-                            onDragEnd={() => setDraggedObservationId(null)}
-                            className={cn(
-                              "rounded-[22px] border p-3 text-white transition hover:border-white/18",
-                              isMovementObservation(observation)
-                                ? "border-[rgba(126,229,255,0.14)] bg-[rgba(126,229,255,0.08)] hover:bg-[rgba(126,229,255,0.12)]"
-                                : "border-white/10 bg-[rgba(110,231,183,0.08)] hover:bg-[rgba(110,231,183,0.12)]"
-                            )}
-                          >
-                            <div className="flex items-start justify-between gap-2">
-                              <button
-                                type="button"
-                                className="min-w-0 flex-1 text-left"
-                                onClick={() =>
-                                  openComposerForObservation(observation)
-                                }
-                              >
-                                <div className="flex flex-wrap items-start justify-between gap-2">
-                                  <div className="text-xs uppercase tracking-[0.16em] text-[rgba(110,231,183,0.82)]">
-                                    {formatClock(observation.observedAt)}
-                                  </div>
-                                  {isMovementObservation(observation) ? (
-                                    <Badge className="bg-cyan-400/12 text-cyan-100">
-                                      Movement
-                                    </Badge>
-                                  ) : null}
-                                  <UserBadge
-                                    user={observation.note.user}
-                                    compact
-                                  />
-                                </div>
-                                <div className="mt-2 line-clamp-3 text-sm leading-6 text-white/78">
-                                  {summarizeNote(observation.note)}
-                                </div>
-                                <div className="mt-3 flex flex-wrap gap-1.5">
-                                  {observation.note.author ? (
-                                    <Badge className="bg-white/[0.08] text-white/72">
-                                      {observation.note.author}
-                                    </Badge>
-                                  ) : null}
-                                  {(observation.note.tags ?? [])
-                                    .slice(0, 2)
-                                    .map((tag) => (
-                                      <Badge
-                                        key={`${observation.id}-${tag}`}
-                                        className="bg-cyan-400/10 text-cyan-50"
-                                      >
-                                        {tag}
-                                      </Badge>
-                                    ))}
-                                  {renderOtherLinkBadges(observation)}
-                                  {observation.linkedPatterns
-                                    .slice(0, 2)
-                                    .map((pattern) => (
-                                      <EntityBadge
-                                        key={pattern.id}
-                                        kind="pattern"
-                                        label={pattern.title}
-                                        compact
-                                        gradient={false}
-                                      />
-                                    ))}
-                                  {observation.linkedReports
-                                    .slice(0, 1)
-                                    .map((report) => (
-                                      <EntityBadge
-                                        key={report.id}
-                                        kind="report"
-                                        label={report.title}
-                                        compact
-                                        gradient={false}
-                                      />
-                                    ))}
-                                </div>
-                              </button>
-                              <button
-                                type="button"
-                                className="rounded-full border border-white/8 bg-white/[0.04] p-2 text-white/54 transition hover:bg-rose-500/18 hover:text-rose-100"
-                                aria-label={`Delete observation ${observation.note.id}`}
-                                onClick={(event) => {
-                                  event.stopPropagation();
-                                  void deleteObservationMutation.mutateAsync(
-                                    observation.note.id
-                                  );
-                                }}
-                              >
-                                <Trash2 className="size-3.5" />
-                              </button>
-                            </div>
-                          </div>
-                        ))}
+                        {slotEntries.map((entry) =>
+                          isObservationEntry(entry)
+                            ? renderObservationCard(entry.observation)
+                            : renderActivityCard(entry.activity)
+                        )}
 
-                        {slotObservations.length === 0 ? (
+                        {slotEntries.length === 0 ? (
                           <button
                             type="button"
-                            className="rounded-[18px] border border-dashed border-white/8 px-3 py-4 text-left text-sm text-white/34 transition hover:border-white/16 hover:text-white/56"
+                            className={cn(
+                              "rounded-[18px] border border-dashed border-white/8 text-left text-sm text-white/34 transition hover:border-white/16 hover:text-white/56",
+                              viewMode === "compact"
+                                ? "px-3 py-2"
+                                : "px-3 py-4"
+                            )}
                             onClick={() => openComposerForSlot(day, hour)}
                           >
-                            Add observation
+                            {viewMode === "compact" ? "Add" : "Add observation"}
                           </button>
                         ) : null}
                       </div>
@@ -1115,8 +1610,7 @@ export function PsycheSelfObservationPage() {
                 <div className="mt-3 grid gap-2">
                   {hours.map((hour) => {
                     const slotKey = `${dayKey}:${hour}`;
-                    const slotObservations =
-                      observationsBySlot.get(slotKey) ?? [];
+                    const slotEntries = entriesBySlot.get(slotKey) ?? [];
                     return (
                       <div
                         key={slotKey}
@@ -1137,85 +1631,25 @@ export function PsycheSelfObservationPage() {
                           </button>
                         </div>
                         <div className="mt-2 grid gap-2">
-                          {slotObservations.length === 0 ? (
+                          {slotEntries.length === 0 ? (
                             <button
                               type="button"
-                              className="rounded-[16px] border border-dashed border-white/8 px-3 py-3 text-left text-sm text-white/38 transition hover:border-white/16 hover:text-white/56"
+                              className={cn(
+                                "rounded-[16px] border border-dashed border-white/8 text-left text-sm text-white/38 transition hover:border-white/16 hover:text-white/56",
+                                viewMode === "compact"
+                                  ? "px-3 py-2"
+                                  : "px-3 py-3"
+                              )}
                               onClick={() => openComposerForSlot(day, hour)}
                             >
-                              Add observation
+                              {viewMode === "compact" ? "Add" : "Add observation"}
                             </button>
                           ) : (
-                            slotObservations.map((observation) => (
-                              <div
-                                key={observation.id}
-                                className={cn(
-                                  "rounded-[16px] p-3",
-                                  isMovementObservation(observation)
-                                    ? "bg-[rgba(126,229,255,0.1)]"
-                                    : "bg-[rgba(110,231,183,0.1)]"
-                                )}
-                              >
-                                <div className="flex items-start justify-between gap-2">
-                                  <button
-                                    type="button"
-                                    className="min-w-0 flex-1 text-left"
-                                    onClick={() =>
-                                      openComposerForObservation(observation)
-                                    }
-                                  >
-                                    <div className="flex flex-wrap items-center gap-2">
-                                      {isMovementObservation(observation) ? (
-                                        <Badge className="bg-cyan-400/12 text-cyan-100">
-                                          Movement
-                                        </Badge>
-                                      ) : null}
-                                      <UserBadge
-                                        user={observation.note.user}
-                                        compact
-                                      />
-                                      {observation.linkedPatterns
-                                        .slice(0, 1)
-                                        .map((pattern) => (
-                                          <EntityBadge
-                                            key={pattern.id}
-                                            kind="pattern"
-                                            label={pattern.title}
-                                            compact
-                                            gradient={false}
-                                          />
-                                        ))}
-                                      {observation.linkedReports
-                                        .slice(0, 1)
-                                        .map((report) => (
-                                          <EntityBadge
-                                            key={report.id}
-                                            kind="report"
-                                            label={report.title}
-                                            compact
-                                            gradient={false}
-                                          />
-                                        ))}
-                                    </div>
-                                    <div className="mt-2 text-sm leading-6 text-white/78">
-                                      {summarizeNote(observation.note)}
-                                    </div>
-                                  </button>
-                                  <button
-                                    type="button"
-                                    className="rounded-full border border-white/8 bg-white/[0.04] p-2 text-white/54 transition hover:bg-rose-500/18 hover:text-rose-100"
-                                    aria-label={`Delete observation ${observation.note.id}`}
-                                    onClick={() =>
-                                      void deleteObservationMutation.mutateAsync(
-                                        observation.note.id
-                                      )
-                                    }
-                                  >
-                                    <Trash2 className="size-3.5" />
-                                  </button>
-                                </div>
-                              </div>
-                            ))
+                            slotEntries.map((entry) =>
+                              isObservationEntry(entry)
+                                ? renderObservationCard(entry.observation)
+                                : renderActivityCard(entry.activity)
+                            )
                           )}
                         </div>
                       </div>

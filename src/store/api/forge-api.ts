@@ -26,6 +26,10 @@ import {
   getSettings,
   getSleepView,
   getWorkbenchFlow,
+  getWorkbenchFlowNodeOutput,
+  getWorkbenchFlowRun,
+  getWorkbenchFlowRunNode,
+  getWorkbenchFlowRunNodes,
   listWorkbenchFlows,
   heartbeatTaskRun,
   listBehaviorPatterns,
@@ -96,6 +100,45 @@ export const forgeApi = createApi({
         "WorkbenchFlows"
       ]
     }),
+    getWorkbenchFlowRun: builder.query<
+      AsyncResult<typeof getWorkbenchFlowRun>,
+      { flowId: string; runId: string }
+    >({
+      queryFn: ({ flowId, runId }) => resolveResult(() => getWorkbenchFlowRun(flowId, runId)),
+      providesTags: (_result, _error, { flowId }) => [
+        { type: "WorkbenchFlow", id: flowId }
+      ]
+    }),
+    getWorkbenchFlowRunNodes: builder.query<
+      AsyncResult<typeof getWorkbenchFlowRunNodes>,
+      { flowId: string; runId: string }
+    >({
+      queryFn: ({ flowId, runId }) =>
+        resolveResult(() => getWorkbenchFlowRunNodes(flowId, runId)),
+      providesTags: (_result, _error, { flowId }) => [
+        { type: "WorkbenchFlow", id: flowId }
+      ]
+    }),
+    getWorkbenchFlowRunNode: builder.query<
+      AsyncResult<typeof getWorkbenchFlowRunNode>,
+      { flowId: string; runId: string; nodeId: string }
+    >({
+      queryFn: ({ flowId, runId, nodeId }) =>
+        resolveResult(() => getWorkbenchFlowRunNode(flowId, runId, nodeId)),
+      providesTags: (_result, _error, { flowId }) => [
+        { type: "WorkbenchFlow", id: flowId }
+      ]
+    }),
+    getWorkbenchFlowNodeOutput: builder.query<
+      AsyncResult<typeof getWorkbenchFlowNodeOutput>,
+      { flowId: string; nodeId: string }
+    >({
+      queryFn: ({ flowId, nodeId }) =>
+        resolveResult(() => getWorkbenchFlowNodeOutput(flowId, nodeId)),
+      providesTags: (_result, _error, { flowId }) => [
+        { type: "WorkbenchFlow", id: flowId }
+      ]
+    }),
     getSnapshot: builder.query<ForgeSnapshot, string[] | void>({
       queryFn: (userIds) => resolveResult(() => getForgeSnapshot(userIds)),
       providesTags: ["Snapshot"]
@@ -142,10 +185,23 @@ export const forgeApi = createApi({
       {
         taskId: string;
         status: "backlog" | "focus" | "in_progress" | "blocked" | "done";
+        enforceTodayWorkLog?: boolean;
+        completedTodayWorkSeconds?: number;
       }
     >({
-      queryFn: ({ taskId, status }) =>
-        resolveResult(() => patchTask(taskId, { status })),
+      queryFn: ({
+        taskId,
+        status,
+        enforceTodayWorkLog,
+        completedTodayWorkSeconds
+      }) =>
+        resolveResult(() =>
+          patchTask(taskId, {
+            status,
+            enforceTodayWorkLog,
+            completedTodayWorkSeconds
+          })
+        ),
       invalidatesTags: ["Snapshot"]
     }),
     claimTaskRun: builder.mutation<
@@ -294,8 +350,12 @@ export const {
   useGetSettingsQuery,
   useGetSleepViewQuery,
   useGetSnapshotQuery,
+  useGetWorkbenchFlowNodeOutputQuery,
   useGetTriggerReportsQuery,
   useGetWorkbenchFlowQuery,
+  useGetWorkbenchFlowRunNodeQuery,
+  useGetWorkbenchFlowRunNodesQuery,
+  useGetWorkbenchFlowRunQuery,
   useListWikiIngestJobsQuery,
   useListWorkbenchFlowsQuery,
   useHeartbeatTaskRunMutation,

@@ -53,6 +53,7 @@ import {
   Network,
   Moon,
   NotebookPen,
+  Orbit,
   Radar,
   RefreshCcw,
   Repeat,
@@ -170,7 +171,10 @@ type ShellContextValue = {
   ) => Promise<void>;
   patchTaskStatus: (
     taskId: string,
-    status: "backlog" | "focus" | "in_progress" | "blocked" | "done"
+    status: "backlog" | "focus" | "in_progress" | "blocked" | "done",
+    options?: {
+      completedTodayWorkSeconds?: number;
+    }
   ) => Promise<void>;
   openStartWork: (defaults?: {
     taskId?: string | null;
@@ -239,6 +243,13 @@ const PRIMARY_ROUTES: ShellRouteDefinition[] = [
     labelKey: "common.routeLabels.calendar",
     detailKey: "common.routeDetails.calendar",
     icon: CalendarDays
+  },
+  {
+    id: "knowledge-graph",
+    to: "/knowledge-graph",
+    label: "Knowledge Graph",
+    detail: "A living graph of Forge entities, links, and structural layers",
+    icon: Orbit
   },
   {
     id: "workbench",
@@ -372,6 +383,7 @@ const MOBILE_MORE_ROUTES = [
   requirePrimaryRoute("projects"),
   requirePrimaryRoute("strategies"),
   requirePrimaryRoute("calendar"),
+  requirePrimaryRoute("knowledge-graph"),
   requirePrimaryRoute("workbench"),
   requirePrimaryRoute("movement"),
   requirePrimaryRoute("sports"),
@@ -384,6 +396,9 @@ const MOBILE_MORE_ROUTES = [
 const USER_SCOPE_STORAGE_KEY = "forge.selected-user-ids";
 const DESKTOP_NAV_STORAGE_KEY = "forge.desktop-nav-layout";
 const MOBILE_NAV_STORAGE_KEY = "forge.mobile-nav-layout";
+const NAV_MIGRATION_STORAGE_KEY = "forge.nav-layout-migrations";
+const DESKTOP_KNOWLEDGE_GRAPH_MIGRATION = "desktop-knowledge-graph-default-v1";
+const MOBILE_KNOWLEDGE_GRAPH_MIGRATION = "mobile-knowledge-graph-default-v1";
 
 function clamp(value: number, minimum: number, maximum: number) {
   return Math.min(Math.max(value, minimum), maximum);
@@ -654,7 +669,79 @@ function readStoredNavIds(storageKey: string, defaults: string[]) {
       (entry): entry is string =>
         typeof entry === "string" && validIds.has(entry)
     );
-    return filtered.length > 0 ? filtered : defaults;
+    const resolved = filtered.length > 0 ? filtered : defaults;
+    const readMigrationState = () => {
+      try {
+        const rawMigrations = window.localStorage.getItem(
+          NAV_MIGRATION_STORAGE_KEY
+        );
+        if (!rawMigrations) {
+          return {} as Record<string, boolean>;
+        }
+        const parsedMigrations = JSON.parse(rawMigrations) as unknown;
+        return parsedMigrations &&
+          typeof parsedMigrations === "object" &&
+          !Array.isArray(parsedMigrations)
+          ? (parsedMigrations as Record<string, boolean>)
+          : ({} as Record<string, boolean>);
+      } catch {
+        return {} as Record<string, boolean>;
+      }
+    };
+    const writeMigrationState = (nextState: Record<string, boolean>) => {
+      try {
+        window.localStorage.setItem(
+          NAV_MIGRATION_STORAGE_KEY,
+          JSON.stringify(nextState)
+        );
+      } catch {
+        return;
+      }
+    };
+    const applyKnowledgeGraphMigration = (
+      ids: string[],
+      migrationKey: string,
+      insertAfterId: string
+    ) => {
+      const migrationState = readMigrationState();
+      if (migrationState[migrationKey]) {
+        return ids;
+      }
+      const nextIds = ids.includes("knowledge-graph")
+        ? ids
+        : (() => {
+            const insertIndex = ids.indexOf(insertAfterId);
+            if (insertIndex < 0) {
+              return [...ids, "knowledge-graph"];
+            }
+            return [
+              ...ids.slice(0, insertIndex + 1),
+              "knowledge-graph",
+              ...ids.slice(insertIndex + 1)
+            ];
+          })();
+      writeMigrationState({
+        ...migrationState,
+        [migrationKey]: true
+      });
+      return nextIds;
+    };
+
+    if (storageKey === DESKTOP_NAV_STORAGE_KEY) {
+      return applyKnowledgeGraphMigration(
+        resolved,
+        DESKTOP_KNOWLEDGE_GRAPH_MIGRATION,
+        "calendar"
+      );
+    }
+    if (storageKey === MOBILE_NAV_STORAGE_KEY) {
+      return applyKnowledgeGraphMigration(
+        resolved,
+        MOBILE_KNOWLEDGE_GRAPH_MIGRATION,
+        "notes"
+      );
+    }
+    return resolved;
   } catch {
     return defaults;
   }
@@ -1412,7 +1499,8 @@ function ShellFrame({
       requirePrimaryRoute("overview").id,
       requirePrimaryRoute("today").id,
       requirePrimaryRoute("kanban").id,
-      requirePrimaryRoute("notes").id
+      requirePrimaryRoute("notes").id,
+      requirePrimaryRoute("knowledge-graph").id
     ])
   );
   const [navEditorOpen, setNavEditorOpen] = useState(false);
@@ -1423,7 +1511,9 @@ function ShellFrame({
   const wikiSurface = isWikiRoute(routeLocation.pathname);
   const psycheSurface = isPsycheRoute(routeLocation.pathname);
   const workbenchSurface = routeLocation.pathname.startsWith("/workbench");
-  const autoCollapseSurface = wikiSurface || psycheSurface || workbenchSurface;
+  const knowledgeGraphSurface = routeLocation.pathname.startsWith("/knowledge-graph");
+  const autoCollapseSurface =
+    wikiSurface || psycheSurface || workbenchSurface || knowledgeGraphSurface;
   const desktopRoutes = desktopNavIds
     .map((id) => NAV_ROUTE_REGISTRY.find((route) => route.id === id) ?? null)
     .filter((route): route is ShellRouteDefinition => route !== null);
@@ -2131,7 +2221,7 @@ function ShellFrame({
                   Background activity
                 </Dialog.Title>
                 <Dialog.Description className="mt-1 text-[13px] leading-6 text-white/56">
-                  Follow active wiki ingest jobs and reopen completed reviews
+                  Follow active KarpaWiki ingest jobs and reopen completed reviews
                   without leaving your current context.
                 </Dialog.Description>
               </div>
@@ -2173,7 +2263,7 @@ function ShellFrame({
                         <div className="flex items-start justify-between gap-3">
                           <div className="min-w-0">
                             <div className="text-[11px] uppercase tracking-[0.16em] text-white/42">
-                              Wiki ingest
+                              KarpaWiki ingest
                             </div>
                             <div className="mt-2 text-[14px] font-semibold text-white">
                               {job.job.titleHint ||
@@ -2248,6 +2338,13 @@ export function AppShell() {
     projectId?: string | null;
   }>({});
   const [startWorkError, setStartWorkError] = useState<string | null>(null);
+  const [taskCompletionPrompt, setTaskCompletionPrompt] = useState<{
+    taskId: string;
+    title: string;
+    status: "done";
+    customMinutes: string;
+    error: string | null;
+  } | null>(null);
   const [xpNotice, setXpNotice] = useState<{
     deltaXp: number;
     totalXp: number;
@@ -2362,6 +2459,67 @@ export function AppShell() {
     useCompleteTaskRunMutation();
   const refreshLegacySnapshotQueries = async () => {
     await queryClient.invalidateQueries({ queryKey: ["forge-snapshot"] });
+  };
+  const submitTaskStatusPatch = async (
+    taskId: string,
+    status: "backlog" | "focus" | "in_progress" | "blocked" | "done",
+    options?: {
+      completedTodayWorkSeconds?: number;
+    }
+  ) => {
+    try {
+      await patchTaskMutation({
+        taskId,
+        status,
+        enforceTodayWorkLog:
+          status === "done" && options?.completedTodayWorkSeconds === undefined,
+        completedTodayWorkSeconds: options?.completedTodayWorkSeconds
+      }).unwrap();
+      await refreshLegacySnapshotQueries();
+    } catch (error) {
+      if (
+        error instanceof ForgeApiError &&
+        error.code === "task_completion_work_log_required" &&
+        status === "done" &&
+        options?.completedTodayWorkSeconds === undefined
+      ) {
+        const taskTitle =
+          snapshotQuery.data?.tasks.find((entry) => entry.id === taskId)?.title ??
+          "this task";
+        setTaskCompletionPrompt({
+          taskId,
+          title: taskTitle,
+          status,
+          customMinutes: "",
+          error: null
+        });
+        return;
+      }
+      throw error;
+    }
+  };
+  const submitCompletionPrompt = async (completedTodayWorkSeconds: number) => {
+    if (!taskCompletionPrompt) {
+      return;
+    }
+    try {
+      await submitTaskStatusPatch(taskCompletionPrompt.taskId, taskCompletionPrompt.status, {
+        completedTodayWorkSeconds
+      });
+      setTaskCompletionPrompt(null);
+    } catch (error) {
+      setTaskCompletionPrompt((current) =>
+        current
+          ? {
+              ...current,
+              error:
+                error instanceof Error
+                  ? error.message
+                  : "Could not close the task right now."
+            }
+          : current
+      );
+    }
   };
 
   const createAndStartTaskMutation = useMutation({
@@ -2545,9 +2703,8 @@ export function AppShell() {
       await patchProjectMutation({ projectId, patch }).unwrap();
       await refreshLegacySnapshotQueries();
     },
-    patchTaskStatus: async (taskId, status) => {
-      await patchTaskMutation({ taskId, status }).unwrap();
-      await refreshLegacySnapshotQueries();
+    patchTaskStatus: async (taskId, status, options) => {
+      await submitTaskStatusPatch(taskId, status, options);
     },
     openStartWork: (defaults = {}) => {
       setStartWorkDefaults(defaults);
@@ -2672,6 +2829,132 @@ export function AppShell() {
               ) : null}
             </div>
           </ShellFrame>
+          <Dialog.Root
+            open={taskCompletionPrompt !== null}
+            onOpenChange={(open) => {
+              if (!open) {
+                setTaskCompletionPrompt(null);
+              }
+            }}
+          >
+            <Dialog.Portal>
+              <Dialog.Overlay className="fixed inset-0 z-[70] bg-[rgba(5,8,18,0.74)] backdrop-blur-xl" />
+              <Dialog.Content className="fixed left-1/2 top-1/2 z-[71] w-[min(92vw,34rem)] -translate-x-1/2 -translate-y-1/2 rounded-[28px] border border-white/10 bg-[linear-gradient(180deg,rgba(16,22,36,0.98),rgba(9,13,22,0.99))] p-6 shadow-[0_32px_90px_rgba(5,8,18,0.58)]">
+                <div className="flex items-start justify-between gap-4">
+                  <div className="min-w-0">
+                    <Dialog.Title className="font-display text-[1.35rem] leading-tight text-white">
+                      Log today&apos;s work before closing
+                    </Dialog.Title>
+                    <Dialog.Description className="mt-2 text-sm leading-6 text-white/64">
+                      Forge closes tasks from actual time worked today, not from the
+                      checkbox itself. Add the time you spent on{" "}
+                      <span className="font-medium text-white">
+                        {taskCompletionPrompt?.title ?? "this task"}
+                      </span>{" "}
+                      today, or confirm that you did not work on it today.
+                    </Dialog.Description>
+                  </div>
+                  <ModalCloseButton onClick={() => setTaskCompletionPrompt(null)} />
+                </div>
+
+                <div className="mt-5">
+                  <div className="text-[11px] uppercase tracking-[0.16em] text-white/40">
+                    Quick amounts
+                  </div>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {[
+                      { label: "5m", seconds: 5 * 60 },
+                      { label: "15m", seconds: 15 * 60 },
+                      { label: "30m", seconds: 30 * 60 },
+                      { label: "1h", seconds: 60 * 60 },
+                      { label: "2h", seconds: 2 * 60 * 60 }
+                    ].map((entry) => (
+                      <Button
+                        key={entry.label}
+                        variant="secondary"
+                        onClick={() => {
+                          void submitCompletionPrompt(entry.seconds);
+                        }}
+                      >
+                        {entry.label}
+                      </Button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="mt-5 grid gap-3 rounded-[20px] bg-white/[0.04] p-4">
+                  <label className="grid gap-2 text-sm text-white/72">
+                    <span className="text-[11px] uppercase tracking-[0.16em] text-white/40">
+                      Custom minutes
+                    </span>
+                    <input
+                      type="number"
+                      min={0}
+                      step={5}
+                      value={taskCompletionPrompt?.customMinutes ?? ""}
+                      onChange={(event) => {
+                        setTaskCompletionPrompt((current) =>
+                          current
+                            ? {
+                                ...current,
+                                customMinutes: event.target.value,
+                                error: null
+                              }
+                            : current
+                        );
+                      }}
+                      className="h-11 rounded-[16px] border border-white/10 bg-white/[0.04] px-3 text-sm text-white outline-none transition focus:border-[var(--primary)]/40 focus:bg-white/[0.06]"
+                      placeholder="45"
+                    />
+                  </label>
+                  {taskCompletionPrompt?.error ? (
+                    <div className="text-sm text-rose-200">
+                      {taskCompletionPrompt.error}
+                    </div>
+                  ) : null}
+                </div>
+
+                <div className="mt-5 flex flex-wrap justify-end gap-3">
+                  <Button
+                    variant="secondary"
+                    onClick={() => setTaskCompletionPrompt(null)}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    onClick={() => {
+                      void submitCompletionPrompt(0);
+                    }}
+                  >
+                    No work today
+                  </Button>
+                  <Button
+                    onClick={() => {
+                      if (!taskCompletionPrompt) {
+                        return;
+                      }
+                      const minutes = Number(taskCompletionPrompt.customMinutes);
+                      if (!Number.isFinite(minutes) || minutes < 0) {
+                        setTaskCompletionPrompt((current) =>
+                          current
+                            ? {
+                                ...current,
+                                error: "Enter a valid number of minutes."
+                              }
+                            : current
+                        );
+                        return;
+                      }
+                      void submitCompletionPrompt(Math.round(minutes * 60));
+                    }}
+                  >
+                    Close with logged time
+                  </Button>
+                </div>
+              </Dialog.Content>
+            </Dialog.Portal>
+          </Dialog.Root>
           {xpNotice ? (
             <div className="pointer-events-none fixed inset-x-0 bottom-24 z-50 flex justify-center px-4 lg:bottom-6">
               <div

@@ -17,6 +17,10 @@ export function getActivityEventHref(event: ActivityEvent): string | null {
     return `/strategies/${event.entityId}`;
   }
 
+  if (event.entityType === "habit") {
+    return "/habits";
+  }
+
   if (event.entityType === "task_run" && typeof event.metadata.taskId === "string") {
     return `/tasks/${event.metadata.taskId}`;
   }
@@ -35,6 +39,10 @@ export function getActivityEventCtaLabel(event: ActivityEvent): string | null {
 
   if (event.entityType === "strategy") {
     return "Open strategy";
+  }
+
+  if (event.entityType === "habit") {
+    return "Open habits";
   }
 
   if (event.entityType === "task" || event.entityType === "task_run") {

@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { SchedulingRulesEditor } from "@/components/calendar/scheduling-rules-editor";
 import { SurfaceSkeleton } from "@/components/experience/surface-skeleton";
+import { OpenInGraphButton } from "@/components/knowledge-graph/open-in-graph-button";
 import { ProjectDialog } from "@/components/project-dialog";
 import { TaskDialog } from "@/components/task-dialog";
 import { WorkAdjustmentDialog } from "@/components/work-adjustment-dialog";
@@ -282,14 +283,17 @@ export function ProjectDetailPage() {
           />
         }
         actions={
-          <PreferenceEntityHandoffButton
-            userId={defaultUserId}
-            domain="projects"
-            entityType="project"
-            entityId={payload.project.id}
-            label={payload.project.title}
-            description={payload.project.description}
-          />
+          <div className="flex flex-wrap gap-2">
+            <PreferenceEntityHandoffButton
+              userId={defaultUserId}
+              domain="projects"
+              entityType="project"
+              entityId={payload.project.id}
+              label={payload.project.title}
+              description={payload.project.description}
+            />
+            <OpenInGraphButton entityType="project" entityId={payload.project.id} />
+          </div>
         }
       />
 

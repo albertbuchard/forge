@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Forge | Celestial Archive</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&amp;family=Manrope:wght@300;400;500;600;700;800&amp;family=Inter:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+          darkMode: "class",
+          theme: {
+            extend: {
+              "colors": {
+                      "primary": "#c0c1ff",
+                      "secondary": "#4edea3",
+                      "background": "#0b1326",
+                      "surface": "#171f33",
+                      "on-surface": "#eef2ff",
+                      "on-surface-variant": "#eef2ff/60",
+                      "outline": "#222a3e",
+                      "surface-container": "#171f33",
+                      "surface-container-high": "#222a3e",
+                      "surface-container-low": "#111827"
+              },
+              "borderRadius": {
+                      "DEFAULT": "0.25rem",
+                      "lg": "0.5rem",
+                      "xl": "0.75rem",
+                      "full": "9999px"
+              },
+              "fontFamily": {
+                      "headline": ["Space Grotesk"],
+                      "body": ["Space Grotesk"],
+                      "label": ["Space Grotesk"]
+              }
+            },
+          },
+        }
+    </script>
+<style>
+        .material-symbols-outlined {
+          font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .node-glow-primary {
+          box-shadow: 0 0 30px rgba(192, 193, 255, 0.4);
+        }
+        .line-glow-primary {
+          filter: drop-shadow(0 0 3px #c0c1ff);
+        }
+        .glass-panel {
+          background: rgba(23, 31, 51, 0.85);
+          backdrop-filter: blur(24px);
+          border-left: 1px solid rgba(255, 255, 255, 0.05);
+        }
+    </style>
+</head>
+<body class="bg-background text-on-surface font-body selection:bg-primary/30">
+<!-- TopNavBar Implementation -->
+<header class="fixed top-0 w-full z-50 flex justify-between items-center px-8 h-16 w-full bg-[#0b1326] font-['Space_Grotesk'] tracking-tight border-b border-[#171f33]">
+<div class="flex items-center gap-8">
+<span class="text-xl font-bold text-[#eef2ff]">Celestial Archive</span>
+<nav class="hidden md:flex gap-6">
+<a class="text-[#c0c1ff] font-bold border-b-2 border-[#c0c1ff] transition-colors" href="#">Knowledge Graph</a>
+</nav>
+</div>
+<div class="flex items-center gap-4">
+<button class="text-[#eef2ff]/60 hover:text-[#c0c1ff] transition-colors duration-200 ease-in-out">
+<span class="material-symbols-outlined" data-icon="notifications">notifications</span>
+</button>
+<button class="text-[#eef2ff]/60 hover:text-[#c0c1ff] transition-colors duration-200 ease-in-out">
+<span class="material-symbols-outlined" data-icon="history">history</span>
+</button>
+<div class="h-8 w-8 rounded overflow-hidden bg-[#222a3e]">
+<img alt="User profile" src="https://lh3.googleusercontent.com/aida-public/AB6AXuB5yZgUAwmYhsXQpk0jodAEYLJZjq-o49205zklj_DwiZ969Gx551Lptcw0CMRyUmLXDkgeJIe3XrUxBGwZL3EuG9OJCwOVtZ6-L2lIxmYCxDgeNycS5ASq-QpER0r93fl8n3VDGFOElDT4PajC0hxm10Xj3wl4WbqRqO-eqUqvJNHppl0fga1VZcicsCZGQjJdFILiX43FE4LiMC1BhiHzSBDHYZppM7ewLDXQrsOWnG7gmTarYS-kdsySdq_qqwdZBHryaSYb4U9v"/>
+</div>
+</div>
+</header>
+<!-- SideNavBar Implementation -->
+<aside class="fixed left-0 top-0 h-full w-64 z-40 bg-[#171f33] flex flex-col py-8 gap-4 border-r border-[#0b1326]">
+<div class="px-6 flex items-center gap-3 mb-4">
+<div class="w-10 h-10 bg-[#c0c1ff] rounded flex items-center justify-center">
+<span class="material-symbols-outlined text-[#0b1326] text-2xl" data-icon="auto_awesome">auto_awesome</span>
+</div>
+<div>
+<h2 class="font-['Space_Grotesk'] font-black text-[#c0c1ff] leading-none text-lg">The Forge</h2>
+<p class="text-[10px] text-[#eef2ff]/50 uppercase tracking-widest mt-1">Knowledge Graph</p>
+</div>
+</div>
+<nav class="flex-1">
+<ul class="space-y-1">
+<li class="px-4">
+<a class="flex items-center gap-4 p-3 rounded text-[#eef2ff]/50 hover:bg-[#222a3e] hover:text-[#c0c1ff] scale-95 transition-transform duration-150" href="#">
+<span class="material-symbols-outlined" data-icon="dashboard">dashboard</span>
+<span class="font-['Space_Grotesk'] text-[0.75rem] uppercase tracking-widest">Overview</span>
+</a>
+</li>
+<li class="px-4">
+<a class="flex items-center gap-4 p-3 rounded text-[#eef2ff]/50 hover:bg-[#222a3e] hover:text-[#c0c1ff] scale-95 transition-transform duration-150" href="#">
+<span class="material-symbols-outlined" data-icon="flag">flag</span>
+<span class="font-['Space_Grotesk'] text-[0.75rem] uppercase tracking-widest">Goals</span>
+</a>
+</li>
+<li class="px-4">
+<a class="flex items-center gap-4 p-3 rounded-r-full text-[#4edea3] shadow-[0_0_10px_rgba(78,222,163,0.3)] bg-[#222a3e] scale-95 transition-transform duration-150" href="#">
+<span class="material-symbols-outlined" data-icon="inventory_2">inventory_2</span>
+<span class="font-['Space_Grotesk'] text-[0.75rem] uppercase tracking-widest">Projects</span>
+</a>
+</li>
+<li class="px-4">
+<a class="flex items-center gap-4 p-3 rounded text-[#eef2ff]/50 hover:bg-[#222a3e] hover:text-[#c0c1ff] scale-95 transition-transform duration-150" href="#">
+<span class="material-symbols-outlined" data-icon="settings">settings</span>
+<span class="font-['Space_Grotesk'] text-[0.75rem] uppercase tracking-widest">Settings</span>
+</a>
+</li>
+</ul>
+</nav>
+<div class="mt-auto space-y-1">
+<li class="px-4 list-none">
+<a class="flex items-center gap-4 p-3 rounded text-[#eef2ff]/50 hover:bg-[#222a3e] hover:text-[#c0c1ff] scale-95 transition-transform duration-150" href="#">
+<span class="material-symbols-outlined" data-icon="help">help</span>
+<span class="font-['Space_Grotesk'] text-[0.75rem] uppercase tracking-widest">Support</span>
+</a>
+</li>
+<li class="px-4 list-none">
+<a class="flex items-center gap-4 p-3 rounded text-[#eef2ff]/50 hover:bg-[#222a3e] hover:text-[#c0c1ff] scale-95 transition-transform duration-150" href="#">
+<span class="material-symbols-outlined" data-icon="auto_stories">auto_stories</span>
+<span class="font-['Space_Grotesk'] text-[0.75rem] uppercase tracking-widest">Archive</span>
+</a>
+</li>
+</div>
+</aside>
+<!-- Main Content Area -->
+<main class="ml-64 min-h-screen relative overflow-hidden bg-background">
+<!-- Knowledge Graph Background Layer -->
+<svg class="absolute inset-0 w-full h-full pointer-events-none opacity-20">
+<defs>
+<radialgradient cx="50%" cy="50%" fx="50%" fy="50%" id="nodeGlow" r="50%">
+<stop offset="0%" stop-color="#c0c1ff" stop-opacity="0.2"></stop>
+<stop offset="100%" stop-color="#c0c1ff" stop-opacity="0"></stop>
+</radialgradient>
+</defs>
+<line stroke="#222a3e" stroke-width="0.5" x1="20%" x2="40%" y1="30%" y2="50%"></line>
+<line stroke="#222a3e" stroke-width="0.5" x1="60%" x2="50%" y1="20%" y2="50%"></line>
+<circle cx="20%" cy="30%" fill="transparent" r="4" stroke="#222a3e"></circle>
+<circle cx="60%" cy="20%" fill="transparent" r="4" stroke="#222a3e"></circle>
+<circle cx="80%" cy="70%" fill="transparent" r="4" stroke="#222a3e"></circle>
+<line class="line-glow-primary" stroke="#c0c1ff" stroke-opacity="0.6" stroke-width="2" x1="50%" x2="30%" y1="50%" y2="20%"></line>
+<line class="line-glow-primary" stroke="#c0c1ff" stroke-opacity="0.6" stroke-width="2" x1="50%" x2="70%" y1="50%" y2="40%"></line>
+<line class="line-glow-primary" stroke="#c0c1ff" stroke-opacity="0.6" stroke-width="2" x1="50%" x2="40%" y1="50%" y2="80%"></line>
+</svg>
+<!-- Interactive Nodes Layer -->
+<div class="relative w-full h-screen flex items-center justify-center p-20">
+<!-- Focused Project Node -->
+<div class="relative z-20 flex flex-col items-center">
+<div class="w-32 h-32 rounded-full bg-primary/20 border-2 border-primary node-glow-primary flex items-center justify-center backdrop-blur-sm">
+<span class="material-symbols-outlined text-primary text-5xl" style="font-variation-settings: 'FILL' 1;">inventory_2</span>
+</div>
+<div class="mt-6 text-center">
+<h1 class="font-headline font-extrabold text-2xl text-on-surface tracking-tight">Shape the FMH thesis draft</h1>
+<span class="mt-2 inline-block px-3 py-0.5 rounded-full bg-primary/10 border border-primary/20 text-[10px] font-bold tracking-widest text-primary uppercase">Project</span>
+</div>
+</div>
+<!-- Connected Goal Node -->
+<div class="absolute top-[20%] left-[30%] z-10 flex flex-col items-center opacity-80">
+<div class="w-16 h-16 rounded-full border border-secondary/50 flex items-center justify-center bg-secondary/5">
+<span class="material-symbols-outlined text-secondary text-2xl">flag</span>
+</div>
+<span class="mt-2 font-label text-[10px] text-secondary font-bold uppercase tracking-wider">Full autonomy</span>
+</div>
+<!-- Connected Task Node -->
+<div class="absolute top-[40%] left-[70%] z-10 flex flex-col items-center opacity-80">
+<div class="w-12 h-12 rounded-full border border-primary/50 flex items-center justify-center bg-primary/10">
+<span class="material-symbols-outlined text-primary text-xl">checklist</span>
+</div>
+<span class="mt-2 font-label text-[10px] text-primary font-bold uppercase tracking-wider">Draft abstract</span>
+</div>
+<!-- Connected Task Node -->
+<div class="absolute bottom-[20%] left-[40%] z-10 flex flex-col items-center opacity-80">
+<div class="w-12 h-12 rounded-full border border-primary/50 flex items-center justify-center bg-primary/10">
+<span class="material-symbols-outlined text-primary text-xl">checklist</span>
+</div>
+<span class="mt-2 font-label text-[10px] text-primary font-bold uppercase tracking-wider">Literature Review</span>
+</div>
+</div>
+<!-- Floating Navigation Controls -->
+<div class="absolute bottom-8 left-8 flex gap-2">
+<div class="glass-panel rounded-lg p-2 flex flex-col gap-2 border border-white/5">
+<button class="w-10 h-10 flex items-center justify-center rounded hover:bg-white/10 text-on-surface/60 hover:text-on-surface transition-colors">
+<span class="material-symbols-outlined">add</span>
+</button>
+<button class="w-10 h-10 flex items-center justify-center rounded hover:bg-white/10 text-on-surface/60 hover:text-on-surface transition-colors">
+<span class="material-symbols-outlined">remove</span>
+</button>
+<div class="h-px bg-outline/30 mx-2"></div>
+<button class="w-10 h-10 flex items-center justify-center rounded hover:bg-white/10 text-on-surface/60 hover:text-on-surface transition-colors">
+<span class="material-symbols-outlined">center_focus_strong</span>
+</button>
+</div>
+</div>
+<!-- Right Sidebar: Selection Detail Panel -->
+<aside class="fixed top-0 right-0 h-full w-[35%] glass-panel z-50 p-12 overflow-y-auto">
+<div class="flex justify-between items-start mb-12">
+<span class="px-4 py-1 rounded bg-primary/10 text-primary font-bold text-[10px] tracking-[0.2em] border border-primary/20">PROJECT</span>
+<button class="text-on-surface/60 hover:text-on-surface transition-colors">
+<span class="material-symbols-outlined">close</span>
+</button>
+</div>
+<header class="space-y-4 mb-10">
+<h2 class="font-headline text-4xl font-extrabold tracking-tighter text-on-surface">Shape the FMH thesis draft</h2>
+<div class="flex items-center gap-2 text-on-surface/60">
+<span class="material-symbols-outlined text-sm">schedule</span>
+<span class="text-xs font-label uppercase tracking-widest">Updated 2 hours ago</span>
+</div>
+</header>
+<section class="mb-12">
+<h3 class="font-label text-[10px] font-black text-on-surface/40 uppercase tracking-[0.3em] mb-4">Description</h3>
+<p class="text-on-surface/80 leading-relaxed font-body">
+              Keep the FMH thesis concept clear and move it forward. This project involves synthesizing the initial research phase into a cohesive narrative structure for the final defense. Focus on the intersections of cognitive architecture and digital autonomy.
+            </p>
+</section>
+<section class="grid grid-cols-2 gap-8 mb-12">
+<div class="space-y-1">
+<h3 class="font-label text-[10px] font-black text-on-surface/40 uppercase tracking-[0.3em]">Progress</h3>
+<p class="text-2xl font-headline font-bold text-on-surface">0%</p>
+<div class="h-1 w-full bg-surface-container-high rounded-full overflow-hidden mt-2">
+<div class="h-full bg-primary/20 w-0"></div>
+</div>
+</div>
+<div class="space-y-1">
+<h3 class="font-label text-[10px] font-black text-on-surface/40 uppercase tracking-[0.3em]">Active Tasks</h3>
+<p class="text-2xl font-headline font-bold text-on-surface">0</p>
+</div>
+</section>
+<section class="mb-12">
+<h3 class="font-label text-[10px] font-black text-on-surface/40 uppercase tracking-[0.3em] mb-6">Connections</h3>
+<div class="space-y-4">
+<div class="flex items-center gap-4 p-4 rounded bg-surface-container-low hover:bg-surface-container-high transition-colors group cursor-pointer border border-[#222a3e]">
+<div class="w-10 h-10 rounded bg-secondary/10 flex items-center justify-center text-secondary">
+<span class="material-symbols-outlined">flag</span>
+</div>
+<div class="flex-1">
+<p class="text-sm font-semibold text-on-surface">Full autonomy</p>
+<p class="text-[10px] text-on-surface/50 uppercase tracking-wider">Goal</p>
+</div>
+<span class="material-symbols-outlined text-on-surface/40 opacity-0 group-hover:opacity-100 transition-opacity">arrow_forward_ios</span>
+</div>
+<div class="flex items-center gap-4 p-4 rounded bg-surface-container-low hover:bg-surface-container-high transition-colors group cursor-pointer border border-[#222a3e]">
+<div class="w-10 h-10 rounded bg-primary/10 flex items-center justify-center text-primary">
+<span class="material-symbols-outlined">checklist</span>
+</div>
+<div class="flex-1">
+<p class="text-sm font-semibold text-on-surface">Draft abstract</p>
+<p class="text-[10px] text-on-surface/50 uppercase tracking-wider">Task</p>
+</div>
+<span class="material-symbols-outlined text-on-surface/40 opacity-0 group-hover:opacity-100 transition-opacity">arrow_forward_ios</span>
+</div>
+</div>
+</section>
+<div class="mt-auto pt-8">
+<button class="w-full py-4 bg-primary rounded text-[#0b1326] font-bold text-sm uppercase tracking-widest hover:brightness-110 transition-all flex items-center justify-center gap-2">
+<span>Open Project</span>
+<span class="material-symbols-outlined text-lg">open_in_new</span>
+</button>
+</div>
+</aside>
+</main>
+<!-- Background Ambience -->
+<div class="fixed inset-0 pointer-events-none z-0">
+<div class="absolute top-[-10%] right-[-5%] w-[600px] h-[600px] bg-primary/5 rounded-full blur-[120px]"></div>
+<div class="absolute bottom-[-10%] left-[10%] w-[400px] h-[400px] bg-secondary/5 rounded-full blur-[100px]"></div>
+</div>
+</body></html>

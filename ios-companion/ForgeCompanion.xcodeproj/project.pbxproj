@@ -7,399 +7,648 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		0227317AAEFF79CB045458C5 /* solarized-light.json in Resources */ = {isa = PBXBuildFile; fileRef = 931C1688CBF05AF2C3B6080E /* solarized-light.json */; };
-		03AFAA4817ED63ACA34F81ED /* dracula-soft.json in Resources */ = {isa = PBXBuildFile; fileRef = 035C132374C9D43B33A66C2A /* dracula-soft.json */; };
-		03E97C443B503F4B425BA477 /* sentry-dark.json in Resources */ = {isa = PBXBuildFile; fileRef = 531C6E0D528DB5E283023813 /* sentry-dark.json */; };
-		0445303A7608423CB02C8C4D /* matrix-dark.json in Resources */ = {isa = PBXBuildFile; fileRef = 1005A9DDD08CA115B98915CD /* matrix-dark.json */; };
-		05617CAB71D3D6509C731200 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 9BCF8A15494B22091C3454E0 /* Assets.xcassets */; };
-		0DBA8E9802E4573EBDD196F2 /* SetupQRScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1E98D87B79F7D59EB7BE050 /* SetupQRScreen.swift */; };
-		10D32EA5151CCCA0D930309A /* github-light-high-contrast.json in Resources */ = {isa = PBXBuildFile; fileRef = A8C09BD2B766E68C8036C62F /* github-light-high-contrast.json */; };
-		1302906E6C5B857FFBDA0622 /* ForgeServerDiscovery.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6744ACE08894FD6E80A93E20 /* ForgeServerDiscovery.swift */; };
-		13773DF313E902316539F5B0 /* theme-manifest.json in Resources */ = {isa = PBXBuildFile; fileRef = 0D8459E84A99927586568C85 /* theme-manifest.json */; };
-		1392E1D7D281F3CCF8AB7D5F /* absolutely-dark.json in Resources */ = {isa = PBXBuildFile; fileRef = 42E438ADEB52E141BCC97A8A /* absolutely-dark.json */; };
-		1404D750C54C26D9A18F7CA9 /* MovementSettingsSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 08EBD4D7617D074D802191F9 /* MovementSettingsSheet.swift */; };
-		1715A52F0B312250703E4AB4 /* ForgeCompanionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E28B6BA5C905DCE11D19BAB /* ForgeCompanionTests.swift */; };
-		1E1BFFC7B198319E86FE36C2 /* laserwave.json in Resources */ = {isa = PBXBuildFile; fileRef = 614F684DCD7439CBE517781F /* laserwave.json */; };
-		26ED65ECF8BF191035801EDB /* CompanionSetupFlow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8C4DBC75E583E793AFD211DA /* CompanionSetupFlow.swift */; };
-		27DBD85ECF86A87CE8D3343A /* everforest-light.json in Resources */ = {isa = PBXBuildFile; fileRef = ECFCB9E9747A398BB683D03A /* everforest-light.json */; };
-		2B7E9F875C6C434F12CC72DB /* gruvbox-light-medium.json in Resources */ = {isa = PBXBuildFile; fileRef = 09996B4E7C1A6E7712E6E849 /* gruvbox-light-medium.json */; };
-		2BEF8CEAAE58F3C877EDF476 /* everforest-dark.json in Resources */ = {isa = PBXBuildFile; fileRef = C3AED35B770DBA83276E12AA /* everforest-dark.json */; };
-		2F9693D994D28E1845C0C8BD /* KeychainStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8D60D54BA88A829A976A748D /* KeychainStore.swift */; };
-		308C360498BEDB2AEE99FAA6 /* linear-light.json in Resources */ = {isa = PBXBuildFile; fileRef = E3B76E08C65327CC53268C13 /* linear-light.json */; };
-		3541414071DB333835804DD0 /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = 380A6F99669127337E7F423D /* Models.swift */; };
-		36FA7B26FC1BB408FE557252 /* github-dark-default.json in Resources */ = {isa = PBXBuildFile; fileRef = 2D5D444EBD2928C4200EFFB3 /* github-dark-default.json */; };
-		3913802EFB56937605A54F17 /* github-light-default.json in Resources */ = {isa = PBXBuildFile; fileRef = D4B23F5DA1C0B066CBA6DE29 /* github-light-default.json */; };
-		3B2906B447256EB6E67544C0 /* dark-plus-B1yOZ-Hy.json in Resources */ = {isa = PBXBuildFile; fileRef = F39EA07C16BAEB142D3A16AC /* dark-plus-B1yOZ-Hy.json */; };
-		3D090A820B1A741DF7BC9E15 /* vitesse-light.json in Resources */ = {isa = PBXBuildFile; fileRef = 3B059A1A692CD7F846C930B4 /* vitesse-light.json */; };
-		3D67F5A790D4A39FE0233EB5 /* tokyo-night.json in Resources */ = {isa = PBXBuildFile; fileRef = 4ADDDB7BAE6271CB4FA1772C /* tokyo-night.json */; };
-		3D87665C914A74E205FD8B67 /* ForgeSyncClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3C82396DEF68744B2F29AC3E /* ForgeSyncClient.swift */; };
-		3EC08C2374225916A24444C7 /* ForgeCompanionApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0C60F828383583C5869A72C /* ForgeCompanionApp.swift */; };
-		3FE0D1122718BDDF3B018740 /* codex-light.json in Resources */ = {isa = PBXBuildFile; fileRef = 0CF13A076E55AB584242A8E0 /* codex-light.json */; };
-		412134A75337D5B891B558C1 /* light-plus.json in Resources */ = {isa = PBXBuildFile; fileRef = 9DC04A62F879EC081DD9B1C2 /* light-plus.json */; };
-		4240F983DFEC69AF10D721E2 /* linear-dark.json in Resources */ = {isa = PBXBuildFile; fileRef = 2CC7F3FBDB3AB6F1E9907640 /* linear-dark.json */; };
-		4761750AE82C1B0E9B4E2A29 /* ForgeCompanionUITestsLaunchTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 204ACBF3D7D072C8FF7B03EE /* ForgeCompanionUITestsLaunchTests.swift */; };
-		491FF3A7EE4B40907C7B4228 /* slack-ochin-CRg.json in Resources */ = {isa = PBXBuildFile; fileRef = 81DCEAA8A6026E500E330F08 /* slack-ochin-CRg.json */; };
-		4E143E559E22EEF79E6624E6 /* monokai.json in Resources */ = {isa = PBXBuildFile; fileRef = A37BD2A849CB3A3CB7CC1887 /* monokai.json */; };
-		4F5D3B8E4938A9EC7DB00701 /* poimandres.json in Resources */ = {isa = PBXBuildFile; fileRef = 3076CB7081D75DAC68B4680B /* poimandres.json */; };
-		508CE5AA70E5B40A2F8245D4 /* one-dark-pro-D.json in Resources */ = {isa = PBXBuildFile; fileRef = 2B5416684CF5E8A56282B072 /* one-dark-pro-D.json */; };
-		51C1AE90A6D56C9DBC31ECAC /* oscurange-C.json in Resources */ = {isa = PBXBuildFile; fileRef = E6071ED7AED22914F8C84892 /* oscurange-C.json */; };
-		5226986F2DC8B80FBC76045B /* SetupManualScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = E8407EED652D1D871F0F8FE2 /* SetupManualScreen.swift */; };
-		568A0248DFBE6E8262408EA8 /* QRPairingScanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1DA35ED2DAA820FB81C14F6F /* QRPairingScanner.swift */; };
-		5726E121DD13E4296152ABB1 /* github-dark.json in Resources */ = {isa = PBXBuildFile; fileRef = D4FBC6718D5E1C6C8DFF3434 /* github-dark.json */; };
-		58DE7C8E7E0F1A8C56F586D7 /* notion-light.json in Resources */ = {isa = PBXBuildFile; fileRef = D165D61953834BA4A9B5B7EA /* notion-light.json */; };
-		5AFDD566E1D37AAC507EA148 /* nord.json in Resources */ = {isa = PBXBuildFile; fileRef = 4BD036F2034D09CD3C43723B /* nord.json */; };
-		5F27B32CC4CAAEF02511D2A9 /* github-light.json in Resources */ = {isa = PBXBuildFile; fileRef = 00069E942662D0F7ADD560B8 /* github-light.json */; };
-		625930CFFCC857D3E9DC7D95 /* catppuccin-macchiato.json in Resources */ = {isa = PBXBuildFile; fileRef = CFA45100E8F01A8700B0BAEA /* catppuccin-macchiato.json */; };
-		62F81192C64A3E631D4991E8 /* rose-pine-x.json in Resources */ = {isa = PBXBuildFile; fileRef = 1EF14A6D60A832B1F35F02E0 /* rose-pine-x.json */; };
-		6372299254B19EE0A0A44C29 /* material-theme-ocean.json in Resources */ = {isa = PBXBuildFile; fileRef = 0C74271E103D074375185B33 /* material-theme-ocean.json */; };
-		64471274341CD18D0172EDEA /* catppuccin-frappe.json in Resources */ = {isa = PBXBuildFile; fileRef = 538B218497F75CC70CF33FC0 /* catppuccin-frappe.json */; };
-		6852C3BD60F38A5302A9C635 /* gruvbox-light-soft.json in Resources */ = {isa = PBXBuildFile; fileRef = 9CCB4447E140D424F8B78668 /* gruvbox-light-soft.json */; };
-		6A15F3CD51D519FEDA55DFA1 /* PairedForgeScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9C75516EEA731CB6C306232D /* PairedForgeScreen.swift */; };
-		6B3F684077319404E5B1E35C /* codex-dark.json in Resources */ = {isa = PBXBuildFile; fileRef = 0A309FBB37A5CEC49FF9D63D /* codex-dark.json */; };
-		6BC488528D2F2DC091AFA119 /* kanagawa-wave.json in Resources */ = {isa = PBXBuildFile; fileRef = 7C755DB532CDC1D90A61F05B /* kanagawa-wave.json */; };
-		6BDD64791A29483720621099 /* absolutely-light.json in Resources */ = {isa = PBXBuildFile; fileRef = 9D38C3D772905A5D933179CC /* absolutely-light.json */; };
-		6C3483FD5BE4A4E7807933B3 /* ForgeCompanionUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9444DBDF98D11B27B530480D /* ForgeCompanionUITests.swift */; };
-		6F47281004EBEE4EB7B4819A /* material-theme-darker-D.json in Resources */ = {isa = PBXBuildFile; fileRef = 8EBE7B92A6304E555BCC1D6D /* material-theme-darker-D.json */; };
-		7199D595C418DCCA3D6B676F /* min-light.json in Resources */ = {isa = PBXBuildFile; fileRef = 264AFBEA5F101E41F8398200 /* min-light.json */; };
-		71CDF1994B6A1BE00A59739D /* vitesse-black.json in Resources */ = {isa = PBXBuildFile; fileRef = FAECD142BA900902838D1ED9 /* vitesse-black.json */; };
-		733CCED4CA1EF86A260E85F8 /* ForgeCompanion.xcodeproj in Resources */ = {isa = PBXBuildFile; fileRef = 4D7C7FE6C7255061B47B1B26 /* ForgeCompanion.xcodeproj */; };
-		7528B50367ED8CABF0EC748D /* material-theme-palenight.json in Resources */ = {isa = PBXBuildFile; fileRef = BF62B9557A1B4613CBF957E1 /* material-theme-palenight.json */; };
-		77EBA97A7E23D94B18F47FD3 /* kanagawa-dragon-VscOyZL-.json in Resources */ = {isa = PBXBuildFile; fileRef = CF000B2C502117967A5627CC /* kanagawa-dragon-VscOyZL-.json */; };
-		7C43F27B0637CA6DC1ED36D0 /* vesper.json in Resources */ = {isa = PBXBuildFile; fileRef = ECF5C2385C6DE828B455D6F9 /* vesper.json */; };
-		7E18F587204FB088B42A9258 /* snazzy-light.json in Resources */ = {isa = PBXBuildFile; fileRef = 4E10C43A6389AB957EE59EB2 /* snazzy-light.json */; };
-		8BE7264A99DC00BA6E213A31 /* CompanionBackgroundScheduler.swift in Sources */ = {isa = PBXBuildFile; fileRef = 782821863879F77D3FE4AACF /* CompanionBackgroundScheduler.swift */; };
-		8D5526E749C17258C46ADAE3 /* vitesse-dark.json in Resources */ = {isa = PBXBuildFile; fileRef = F6B88D3C0ABB7A376D9C5D72 /* vitesse-dark.json */; };
-		8D57AED7B8A3C5018050486A /* dracula.json in Resources */ = {isa = PBXBuildFile; fileRef = FDA8323EC0C4C2A1C8CF27C8 /* dracula.json */; };
-		91596CB430E9320345547B49 /* material-theme.json in Resources */ = {isa = PBXBuildFile; fileRef = 386D634BBCBEDCACF819E1C7 /* material-theme.json */; };
-		933D75EFBAE8E5A5A1A1B2FE /* HealthSyncStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 14B9DCF4EDFA56DC1C9C34E5 /* HealthSyncStore.swift */; };
-		933F55BB4A50DDD5E5D3C6B7 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 12FA6272CC36ACFD7A30796C /* ContentView.swift */; };
-		93E26877DE032468BBC1083F /* CompanionAppModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 02F562FCE196BF8DFF433C4D /* CompanionAppModel.swift */; };
-		9443AA4637A7D89D920930C3 /* night-owl.json in Resources */ = {isa = PBXBuildFile; fileRef = 74AAF176DB3A50947565C8DB /* night-owl.json */; };
-		98D12E711818537ED8008792 /* pierre-light.json in Resources */ = {isa = PBXBuildFile; fileRef = 7722BB232F2591E783897FE5 /* pierre-light.json */; };
-		9B04372A972BC8B9216912F6 /* SetupDiscoveryScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 02747A05B1BAE9D2DD5482AC /* SetupDiscoveryScreen.swift */; };
-		9CA792CE74889A54A7706FCD /* rose-pine-moon.json in Resources */ = {isa = PBXBuildFile; fileRef = 68B0BA20F081DEF3A8AB9E4D /* rose-pine-moon.json */; };
-		9D8A53F33998634B81EDD539 /* min-dark-.json in Resources */ = {isa = PBXBuildFile; fileRef = BAD9F69C52F56086F7ADEB43 /* min-dark-.json */; };
-		9EB9D620252C9FFA37283BDE /* slack-dark.json in Resources */ = {isa = PBXBuildFile; fileRef = 535C50F607154AF5F1CC676E /* slack-dark.json */; };
-		A343517C7661513250C6D4EC /* rose-pine-dawn.json in Resources */ = {isa = PBXBuildFile; fileRef = DDCF2EB020AF5BFDA667438D /* rose-pine-dawn.json */; };
-		A80D2B859439B0825E66E022 /* github-dark-high-contrast.json in Resources */ = {isa = PBXBuildFile; fileRef = A54E8D248436BF9943B06E4B /* github-dark-high-contrast.json */; };
-		ABE4CF57EFBDF59FAF99F8D2 /* ayu-dark.json in Resources */ = {isa = PBXBuildFile; fileRef = D5A2A15C2DA637E11E0DB4F0 /* ayu-dark.json */; };
-		B2AE7F49D418F0085F721591 /* SetupHealthScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = E4BB895B44CA6A00E73F33E3 /* SetupHealthScreen.swift */; };
-		B81D7C2C81DFC719EF398AD3 /* github-dark-dimmed.json in Resources */ = {isa = PBXBuildFile; fileRef = 5C515EA047FDC5D67CD9EE50 /* github-dark-dimmed.json */; };
-		BD876E60BE14F6A797C84400 /* one-light.json in Resources */ = {isa = PBXBuildFile; fileRef = F6709AA3A25DACA04C92A857 /* one-light.json */; };
-		BE486F24A130A943D3FE9027 /* gruvbox-dark-soft.json in Resources */ = {isa = PBXBuildFile; fileRef = 9D98EE56C9FB7CB850652DC0 /* gruvbox-dark-soft.json */; };
-		BF197596092DC5DC1F267097 /* material-theme-lighter.json in Resources */ = {isa = PBXBuildFile; fileRef = 747CC75D80A33FD1EE1816DD /* material-theme-lighter.json */; };
-		BFAFDC9F95066281EEBE2684 /* gruvbox-light-hard.json in Resources */ = {isa = PBXBuildFile; fileRef = BF8DF423EDFBC4326669D5CA /* gruvbox-light-hard.json */; };
-		C0DFB72DB00CBB425186E62C /* catppuccin-mocha-Ry8aD-5u.json in Resources */ = {isa = PBXBuildFile; fileRef = BFCC2081AE4F187A2146D07C /* catppuccin-mocha-Ry8aD-5u.json */; };
-		C319150C5478E648D4176E66 /* proof-light.json in Resources */ = {isa = PBXBuildFile; fileRef = 57B60BAC19F63C0C6255CBCB /* proof-light.json */; };
-		C58DDA0831D060D30080083B /* QRScannerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 30619511D8D70CF1FCF54F2D /* QRScannerView.swift */; };
-		C7BA24AFF59FA87F87208B89 /* CompanionStyle.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36F5DD9FF11BDCC355FA72F2 /* CompanionStyle.swift */; };
-		C8C5E1C364A356DC76EE29AE /* DebugLog.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA3E9377FB559DF9D96F0B66 /* DebugLog.swift */; };
-		C90E12FA8ECDFF7214CC508F /* temple-dark.json in Resources */ = {isa = PBXBuildFile; fileRef = FA1B604B998B86390064CF35 /* temple-dark.json */; };
-		C96EFA56873BDC26889347CC /* gruvbox-dark-medium.json in Resources */ = {isa = PBXBuildFile; fileRef = BC92CA266C72E6406B835FA3 /* gruvbox-dark-medium.json */; };
-		D30E0C78A192CED8023D800A /* gruvbox-dark-hard.json in Resources */ = {isa = PBXBuildFile; fileRef = FE9C87EF5FB8A7DB2C32DD1C /* gruvbox-dark-hard.json */; };
-		D97740F51A55BD2C209152EA /* CompanionAppRoot.swift in Sources */ = {isa = PBXBuildFile; fileRef = F69B66D6F7F82EB52A3919E8 /* CompanionAppRoot.swift */; };
-		DCF024831CB9AF1AAA1163DA /* solarized-dark.json in Resources */ = {isa = PBXBuildFile; fileRef = 1FB0EFB4E598D990B93161A0 /* solarized-dark.json */; };
-		DF8BB02CBD011B2791C2230B /* kanagawa-lotus.json in Resources */ = {isa = PBXBuildFile; fileRef = EBD0158F009FFC7E8131E3CC /* kanagawa-lotus.json */; };
-		E096F9786A99E795443E7B37 /* ForgeWebView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DFCF38F8FCB2A92AE73956DE /* ForgeWebView.swift */; };
-		E41D1D4C96979669855BA3FD /* houston.json in Resources */ = {isa = PBXBuildFile; fileRef = 7B39A2584C9B905E4C668F99 /* houston.json */; };
-		E571A37B09D04331EA6E41E4 /* MovementSyncStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = D7FC387296843249FB11B85F /* MovementSyncStore.swift */; };
-		E656D85B73AF061F8BD9A495 /* notion-dark-BTRKJ-yg.json in Resources */ = {isa = PBXBuildFile; fileRef = 2E85C7B6AEB2CFF03D21995D /* notion-dark-BTRKJ-yg.json */; };
-		E75A1D098B581E024AD5C477 /* UnpairedHeroScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA102D16EEB2213C7AF8BD49 /* UnpairedHeroScreen.swift */; };
-		E8B52695891EA26FECAE8A14 /* CompanionMenuSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2B54234F4A43D98698E8FE5 /* CompanionMenuSheet.swift */; };
-		ECD043E0D14E9E4AB3B49F49 /* catppuccin-latte-Bd1wq-gC.json in Resources */ = {isa = PBXBuildFile; fileRef = 11EA3517B34D36E74E130986 /* catppuccin-latte-Bd1wq-gC.json */; };
-		ED7C20FBE80C021E993B0E04 /* pierre-dark.json in Resources */ = {isa = PBXBuildFile; fileRef = D466EC844AFD47609DF52240 /* pierre-dark.json */; };
-		FD1D7EF37F9DFD15336D6B16 /* lobster-dark-dxSKfHK-.json in Resources */ = {isa = PBXBuildFile; fileRef = 5E5E8C99FB3252A49E1CCA26 /* lobster-dark-dxSKfHK-.json */; };
+		026ADCCD654CFCD77957E9CC /* rose-pine-x.json in Resources */ = {isa = PBXBuildFile; fileRef = 8ABBADB2AB81FE641E5B2527 /* rose-pine-x.json */; };
+		063708E0646D9174E0F996C7 /* rose-pine-dawn.json in Resources */ = {isa = PBXBuildFile; fileRef = AF3C1DCE3B23349C44A0E440 /* rose-pine-dawn.json */; };
+		0930DC4787D88701DFCD9AEE /* monokai.json in Resources */ = {isa = PBXBuildFile; fileRef = 332518473332E14C70DA35AF /* monokai.json */; };
+		0D7E9B2D867932D79F1E7C34 /* ayu-dark.json in Resources */ = {isa = PBXBuildFile; fileRef = 939E144FF96935181C082489 /* ayu-dark.json */; };
+		0DED9B561FA0304091A36357 /* gruvbox-dark-medium.json in Resources */ = {isa = PBXBuildFile; fileRef = 42969C3AE526BAB1BCE9BAD3 /* gruvbox-dark-medium.json */; };
+		0E259A61B9D31A6660E59812 /* slack-ochin-CRg.json in Resources */ = {isa = PBXBuildFile; fileRef = 0BB7C4D639104DAE20AB76F2 /* slack-ochin-CRg.json */; };
+		0E4B969BFDF12D7F235CFC68 /* FamilyControls.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 4DD2A3B790D968098D39D5A7 /* FamilyControls.framework */; };
+		0E62F33331B1CB6F4828C78E /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7F55D66195D4477566E9C379 /* Models.swift */; };
+		0F46F826ED9393E9820DF7D0 /* ManagedSettings.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 4B1CB3E6790DB1D4A37C3D34 /* ManagedSettings.framework */; };
+		11A5CF96FDEF553EFF861B84 /* WatchCheckInView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10F1932A79199E826E23023A /* WatchCheckInView.swift */; };
+		17D03007115057EE8D4A0DF8 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = E3301829CAC26D5E4B3E797F /* Assets.xcassets */; };
+		182189FC59058A0FCC3299E9 /* ForgeSyncClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 508A7FDE47AAB237525B75FA /* ForgeSyncClient.swift */; };
+		1C25C8EF318715F075E06060 /* pierre-light.json in Resources */ = {isa = PBXBuildFile; fileRef = 8AE22BAF07847D34507268A5 /* pierre-light.json */; };
+		1FA86FA89A93065F3DFB6E40 /* github-light.json in Resources */ = {isa = PBXBuildFile; fileRef = 96D7DAF444A0D52A81F2C001 /* github-light.json */; };
+		2112E15E7A348BD74D701850 /* github-light-default.json in Resources */ = {isa = PBXBuildFile; fileRef = A2E1434263F464480FBDE76E /* github-light-default.json */; };
+		22E07C06FD6B0D232511EFD0 /* pierre-dark.json in Resources */ = {isa = PBXBuildFile; fileRef = 78630201FCE545DCC738F612 /* pierre-dark.json */; };
+		24E1C4FF625BDFED356BDB34 /* WatchSharedModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = A6120EB5C78BCED8AE64C820 /* WatchSharedModels.swift */; };
+		25A73518E1599A6BFB27080C /* solarized-light.json in Resources */ = {isa = PBXBuildFile; fileRef = 981F5275D642B9EB0002BDBC /* solarized-light.json */; };
+		28661A5954950848945D43EB /* _DeviceActivity_SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 3BF036CEAA0847EFD0BEA723 /* _DeviceActivity_SwiftUI.framework */; };
+		2A6671BF5103E278278769B5 /* houston.json in Resources */ = {isa = PBXBuildFile; fileRef = 67C9347A6520CAD1AEBFD089 /* houston.json */; };
+		2DF519C50022351269EA4FF3 /* material-theme.json in Resources */ = {isa = PBXBuildFile; fileRef = B67FFECF009F247E5AF99E2F /* material-theme.json */; };
+		30322A59BA901E3B472ECDBA /* ManagedSettings.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 4B1CB3E6790DB1D4A37C3D34 /* ManagedSettings.framework */; };
+		31DD17A609B0896155384020 /* CompanionAppModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = EB6330E339B74351A9737AEF /* CompanionAppModel.swift */; };
+		328D513B6DD0899F4F511A33 /* absolutely-light.json in Resources */ = {isa = PBXBuildFile; fileRef = B8B5D8C70B4B433853C995CE /* absolutely-light.json */; };
+		339A8EC2255659B63A8FF0D3 /* github-dark-default.json in Resources */ = {isa = PBXBuildFile; fileRef = 9D8E4DB589D76206AFE274F2 /* github-dark-default.json */; };
+		34D23AEAFF591904DCEAFA41 /* PairedForgeScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0289C0EB6BFA22514FE6E019 /* PairedForgeScreen.swift */; };
+		383BE6BEE9F5637EAECCDA3F /* night-owl.json in Resources */ = {isa = PBXBuildFile; fileRef = CFC91F75587B00C6F04C9098 /* night-owl.json */; };
+		3845399BD282CA9148B9DA9C /* DeviceActivity.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 7EB1A9C94E6090E79774F711 /* DeviceActivity.framework */; };
+		39EC5ED38B1335A358EB8DCB /* github-dark-dimmed.json in Resources */ = {isa = PBXBuildFile; fileRef = 2190CE0FC5F9176B0C740D0E /* github-dark-dimmed.json */; };
+		39F95BE8A62307BBF3147F44 /* DeviceActivity.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 7EB1A9C94E6090E79774F711 /* DeviceActivity.framework */; };
+		39F9E5C28A63D131EED95C7D /* ForgeWebView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A28AC152FF4863B5D716F40 /* ForgeWebView.swift */; };
+		3B98589423316C410EFC2442 /* CompanionAppRoot.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2E3B5D8FC9E40AE175BE3227 /* CompanionAppRoot.swift */; };
+		3BCEBD6145DE933FAC4760F1 /* linear-light.json in Resources */ = {isa = PBXBuildFile; fileRef = 25AEF76C312959F8456FF6BB /* linear-light.json */; };
+		3DA9E9D5BB9DC9AFAE03A0BF /* WatchSessionManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 26FDBECF668AEBC7B1D819C0 /* WatchSessionManager.swift */; };
+		3EA51158CD2B94564493777D /* ForgeWatchApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = C774B7DC1641F7B73C53087C /* ForgeWatchApp.swift */; };
+		3F10F96B9C2C07531C16B9AC /* UnpairedHeroScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1888282FD5F1CA2A97B43B8 /* UnpairedHeroScreen.swift */; };
+		41871B301221A3D7554F44F8 /* gruvbox-dark-hard.json in Resources */ = {isa = PBXBuildFile; fileRef = 50A6D20A029C08AB4EA10B31 /* gruvbox-dark-hard.json */; };
+		42097E36F9FB6D3EE6C611C0 /* WatchComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = 039C36D8E30A3B07C3440B41 /* WatchComponents.swift */; };
+		43094AC60C266A1057B74281 /* light-plus.json in Resources */ = {isa = PBXBuildFile; fileRef = FA16DA13A8E1ACE9812BA184 /* light-plus.json */; };
+		4482EEB11B69F4DA7C7352DE /* WatchHabitsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 24B3F3B220747765ACA926E8 /* WatchHabitsView.swift */; };
+		469371D3997E457D3492808B /* WatchAppModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 442250B4A055510386087866 /* WatchAppModel.swift */; };
+		4A6F0CF5DE73BBD37BC35759 /* ForgeScreenTimeReportExtension.swift in Sources */ = {isa = PBXBuildFile; fileRef = 826A9CCC0D85B6BD614796B1 /* ForgeScreenTimeReportExtension.swift */; };
+		4DF09CE80D72852ACCA1C2DA /* kanagawa-dragon-VscOyZL-.json in Resources */ = {isa = PBXBuildFile; fileRef = E77CF69FAEDB6990BDE2CE5F /* kanagawa-dragon-VscOyZL-.json */; };
+		4DFA96F1114B86315608985C /* CompanionScreenshotSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = A338AA98AF807B0E65966B73 /* CompanionScreenshotSupport.swift */; };
+		4ED6DAE3583C4E963266F1C6 /* WidgetKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 2061FB4FDC62526EAB585B70 /* WidgetKit.framework */; };
+		4F15DD357D9E1B4289F2EBED /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 993F6F1A53311219E315BBF3 /* Assets.xcassets */; };
+		4F24388BC2FC9FDD7A97BD39 /* CompanionSetupFlow.swift in Sources */ = {isa = PBXBuildFile; fileRef = FED8AED443BA8FD8D08D3F32 /* CompanionSetupFlow.swift */; };
+		50B134A8C511A812A587A922 /* catppuccin-mocha-Ry8aD-5u.json in Resources */ = {isa = PBXBuildFile; fileRef = 5A81D17F91FE89E11DBB93E0 /* catppuccin-mocha-Ry8aD-5u.json */; };
+		51A86A3F992FD5D14E542DC6 /* WatchMarkMomentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FC17986B56F2BD2558DB6E1D /* WatchMarkMomentView.swift */; };
+		54EC98AB6FF037580A4C38DB /* dracula-soft.json in Resources */ = {isa = PBXBuildFile; fileRef = 1BEBACBC0C8EA707FCD5C248 /* dracula-soft.json */; };
+		55CB27166468731082C0BBDB /* ForgeWatch.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2F44C43CE27EC6BB4AE07B8B /* ForgeWatch.swift */; };
+		5AA524338B3F8935798CFBD3 /* codex-light.json in Resources */ = {isa = PBXBuildFile; fileRef = 14239158BB642B26FE6D796E /* codex-light.json */; };
+		5C23DA1D8383E9663D508069 /* codex-dark.json in Resources */ = {isa = PBXBuildFile; fileRef = 29ED0365D12A44207BFCDAC0 /* codex-dark.json */; };
+		622884FB2C7F4915E75B3E2F /* AppIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 17A70C1857380E071D589108 /* AppIntent.swift */; };
+		641311D8EF5DB5E2D303C022 /* ForgeWatchControl.swift in Sources */ = {isa = PBXBuildFile; fileRef = 171F05A34E92FDE3047869AB /* ForgeWatchControl.swift */; };
+		65775A14A34E3203237E72CB /* ForgeScreenTimeReportExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 8FA0A1EC0034341F6FD6810C /* ForgeScreenTimeReportExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		67B41083E274E59323E36713 /* absolutely-dark.json in Resources */ = {isa = PBXBuildFile; fileRef = 3BF2ABD66087D489A3DEB85A /* absolutely-dark.json */; };
+		68D7CBD349B0578FE0D9FCA6 /* SetupQRScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 73007370F8148A2BF315B2D0 /* SetupQRScreen.swift */; };
+		6A2E87B1A44D71B76ACC631D /* gruvbox-light-medium.json in Resources */ = {isa = PBXBuildFile; fileRef = AB2728B8CA817BC8E6441B54 /* gruvbox-light-medium.json */; };
+		6B3DD5C61DA38BE2383E24C4 /* ForgeScreenTimeSharedModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 607137CA9797BD48AB4341BB /* ForgeScreenTimeSharedModels.swift */; };
+		6C15AF0194225C8636F44AD6 /* theme-manifest.json in Resources */ = {isa = PBXBuildFile; fileRef = CC721B1B1892E8EB40A6846A /* theme-manifest.json */; };
+		6C7A3B9F0209D681DD2D5863 /* ForgeScreenTimeSharedModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 607137CA9797BD48AB4341BB /* ForgeScreenTimeSharedModels.swift */; };
+		6D0F9D9182BD033054675108 /* one-light.json in Resources */ = {isa = PBXBuildFile; fileRef = 28C6D29BE853E1781D93339A /* one-light.json */; };
+		6DE7D860A474AC5BDA176EF8 /* CompanionDiagnosticsSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF0F3F99DCEE623FFA4EF5AC /* CompanionDiagnosticsSheet.swift */; };
+		6E159D8AD1846EC8F3A05C43 /* QRPairingScanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 39F4CD09294333626B5F8D79 /* QRPairingScanner.swift */; };
+		704D63E5799EB42E76F1C3C4 /* material-theme-lighter.json in Resources */ = {isa = PBXBuildFile; fileRef = C6C8D78EF0B918F858B27FAC /* material-theme-lighter.json */; };
+		723852B9E8F0DE81E6A0E03F /* everforest-light.json in Resources */ = {isa = PBXBuildFile; fileRef = E9D69C46B7D263FDC6472BEA /* everforest-light.json */; };
+		72D8C98811F8983956A378AD /* SetupDiscoveryScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 406EDD3C9275931E8F3A6635 /* SetupDiscoveryScreen.swift */; };
+		7303D1D2F6454A807CE2C281 /* DebugLog.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2D5086EEE13CF08C9AD12398 /* DebugLog.swift */; };
+		73BBD188ADA406DB65F9F14B /* vesper.json in Resources */ = {isa = PBXBuildFile; fileRef = 624E50210143FF77C726A6D6 /* vesper.json */; };
+		75A76BDBA4705C8FDDA1A250 /* CompanionBackgroundScheduler.swift in Sources */ = {isa = PBXBuildFile; fileRef = C513AA0B589621B7306006D7 /* CompanionBackgroundScheduler.swift */; };
+		76CF3A360D6F72DD1EE7017C /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3F472916D6315CAF87EA6577 /* ContentView.swift */; };
+		76F296D46E124D93C1D3C1C3 /* min-dark-.json in Resources */ = {isa = PBXBuildFile; fileRef = 1BE1776E02C9FA605C8A81FC /* min-dark-.json */; };
+		770E5FA69800C610CBDD3DC1 /* CompanionMenuSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9EDBE380934D1C0F028D57F9 /* CompanionMenuSheet.swift */; };
+		7934A72CDD7482F777F1F204 /* poimandres.json in Resources */ = {isa = PBXBuildFile; fileRef = C18203C8A83DC0C911DF20B8 /* poimandres.json */; };
+		7AF2F63C9746CF230775C42B /* catppuccin-latte-Bd1wq-gC.json in Resources */ = {isa = PBXBuildFile; fileRef = CE87DF61ACB333870B748E37 /* catppuccin-latte-Bd1wq-gC.json */; };
+		7C4971089367E1FAD47BB8F5 /* ScreenTimeSettingsSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 965ABC2E8A2C966EDD4A3F93 /* ScreenTimeSettingsSheet.swift */; };
+		864F4340B9DA562F51A2492B /* HealthSyncStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 56063BD0CBF3B6186A5AC8DF /* HealthSyncStore.swift */; };
+		868C49660369E99134CA7D1F /* github-dark-high-contrast.json in Resources */ = {isa = PBXBuildFile; fileRef = 87F320FF3E0E717C6F0BA8C5 /* github-dark-high-contrast.json */; };
+		884B407C19CF3635DE3A87E0 /* laserwave.json in Resources */ = {isa = PBXBuildFile; fileRef = FE25294B2E1BE0D4F8DEEE5A /* laserwave.json */; };
+		8C7CF2331F28E470BF950B68 /* MovementSettingsSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA4B31A97CE450C024D3EB8C /* MovementSettingsSheet.swift */; };
+		8D1F48512202759FA9B8DF1E /* WatchSharedModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = D662C6927F2A924DC7DA82B8 /* WatchSharedModels.swift */; };
+		8E649F5BFBF69A4A23C5DC67 /* FamilyControls.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 4DD2A3B790D968098D39D5A7 /* FamilyControls.framework */; };
+		905F77BEC01F3B520C44A83D /* ForgeCompanionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1445CEF627878D05ACAD5821 /* ForgeCompanionTests.swift */; };
+		9466F6DDD59D46CFF4474A36 /* material-theme-darker-D.json in Resources */ = {isa = PBXBuildFile; fileRef = F4921C634DCE88CC5277950E /* material-theme-darker-D.json */; };
+		947CA83023368F473276855A /* QRScannerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB2B85CDC2A05B34389D84B7 /* QRScannerView.swift */; };
+		94E537014E73F57A6C1DC199 /* solarized-dark.json in Resources */ = {isa = PBXBuildFile; fileRef = 7C547AADA2A068E6842000F2 /* solarized-dark.json */; };
+		94EC5E5C1CDAEEF245BEDE03 /* CompanionStyle.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8B6E10A66DA56D9BF5CC4237 /* CompanionStyle.swift */; };
+		956F6951305AA41B11C3EC8B /* github-dark.json in Resources */ = {isa = PBXBuildFile; fileRef = 749845DB8B75676500B84932 /* github-dark.json */; };
+		95CB103A56B1A9A0B502F192 /* vitesse-black.json in Resources */ = {isa = PBXBuildFile; fileRef = C7FEA151F0257B65D58F52FE /* vitesse-black.json */; };
+		994978D8CD08859187B7FE58 /* dracula.json in Resources */ = {isa = PBXBuildFile; fileRef = 31A83A563B26CCDA7F1721B6 /* dracula.json */; };
+		9F986E5B0046BCA20652BE4C /* rose-pine-moon.json in Resources */ = {isa = PBXBuildFile; fileRef = CEC035122131067EB6564289 /* rose-pine-moon.json */; };
+		A0D29BA35E3F456EF59A51AA /* one-dark-pro-D.json in Resources */ = {isa = PBXBuildFile; fileRef = B581CDAE6D6E5B9AB7C8B4D4 /* one-dark-pro-D.json */; };
+		A1F53A485A7E1BA560A3F4DF /* gruvbox-dark-soft.json in Resources */ = {isa = PBXBuildFile; fileRef = DB9C2430B57AD5C324EA2346 /* gruvbox-dark-soft.json */; };
+		A395943C15CABF29A6B60BA1 /* oscurange-C.json in Resources */ = {isa = PBXBuildFile; fileRef = 994F4CFD9D237C208A6485FE /* oscurange-C.json */; };
+		A4FFAD65585480CCAAF6ED11 /* ScreenTimeStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2327ADEA6C0795C6628C4268 /* ScreenTimeStore.swift */; };
+		A825683E59F07F9EE37CA360 /* AppIntents.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 99479E5F7A837885AA5945E8 /* AppIntents.framework */; };
+		AB11C6E633BBE1DF046DE8F9 /* notion-light.json in Resources */ = {isa = PBXBuildFile; fileRef = DFCE6EDC33B6AB68DB394942 /* notion-light.json */; };
+		AE7794F2FBF25CACC5183CC6 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = DBA50F60729F0219A8082AB9 /* Assets.xcassets */; };
+		B04FDEA7F9698DFD1FECF388 /* kanagawa-wave.json in Resources */ = {isa = PBXBuildFile; fileRef = 4488FD3178035D328C1AA09D /* kanagawa-wave.json */; };
+		B309098295E42F4EB0211F0C /* ForgeCompanionApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = ABF7DD37703C59A9A9CF7873 /* ForgeCompanionApp.swift */; };
+		B3EB0EFE3A40A7E6E403E56C /* _DeviceActivity_SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 3BF036CEAA0847EFD0BEA723 /* _DeviceActivity_SwiftUI.framework */; };
+		B42AF7527075F3325E9B653C /* matrix-dark.json in Resources */ = {isa = PBXBuildFile; fileRef = 137AF77ADC4D773B632201D1 /* matrix-dark.json */; };
+		B5D1EC12920874C35CD51368 /* vitesse-dark.json in Resources */ = {isa = PBXBuildFile; fileRef = A26AE0320EA50826185C8D03 /* vitesse-dark.json */; };
+		B62611EFCA1D0D35226A546E /* catppuccin-frappe.json in Resources */ = {isa = PBXBuildFile; fileRef = 774FDBFB6C1AC4DD7633342F /* catppuccin-frappe.json */; };
+		B7D55BA2FE1D5E0332C79D04 /* everforest-dark.json in Resources */ = {isa = PBXBuildFile; fileRef = C8233D4B14B5B6AB75F150E8 /* everforest-dark.json */; };
+		B8C3EE240F17FC1D0AAA9549 /* gruvbox-light-hard.json in Resources */ = {isa = PBXBuildFile; fileRef = 954DCD7221B52502035E15E9 /* gruvbox-light-hard.json */; };
+		BB56E1A9D179EF58252EBCE7 /* gruvbox-light-soft.json in Resources */ = {isa = PBXBuildFile; fileRef = E4FA151C38C40FEED37BAE5A /* gruvbox-light-soft.json */; };
+		BC7794489214AD7B42B9E642 /* lobster-dark-dxSKfHK-.json in Resources */ = {isa = PBXBuildFile; fileRef = 0273258C74CFF59B515D3923 /* lobster-dark-dxSKfHK-.json */; };
+		BF1A9D82FAF626A426C345D9 /* SetupHealthScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2120623119E0AE90C2331F3 /* SetupHealthScreen.swift */; };
+		BF7A8412432A8FBD611B69AC /* notion-dark-BTRKJ-yg.json in Resources */ = {isa = PBXBuildFile; fileRef = 7A582034D0397AF67063A223 /* notion-dark-BTRKJ-yg.json */; };
+		BFA9D37DB2B8A659029682F1 /* github-light-high-contrast.json in Resources */ = {isa = PBXBuildFile; fileRef = 4F94FB086CBD734970306FC2 /* github-light-high-contrast.json */; };
+		BFDA82CEC15E6464966F3FB5 /* WatchConnectivity.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 3A8301B47CD4E8160DE71A11 /* WatchConnectivity.framework */; };
+		C077AC5A77E343A669130237 /* SetupManualScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 821F0E988CBBF75B7935C8BA /* SetupManualScreen.swift */; };
+		C224862477CF7D3F1A2E0253 /* proof-light.json in Resources */ = {isa = PBXBuildFile; fileRef = D51F734BE700F50B999ADC66 /* proof-light.json */; };
+		C456398A5AA670F146063B1E /* MovementSyncStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1D58974CBFD49611754BECE2 /* MovementSyncStore.swift */; };
+		C75975A0534324588D5C55B4 /* material-theme-ocean.json in Resources */ = {isa = PBXBuildFile; fileRef = A72370BD020E096D2388F265 /* material-theme-ocean.json */; };
+		C7ABF7112F39AD6D2661ECEB /* tokyo-night.json in Resources */ = {isa = PBXBuildFile; fileRef = FF2731A57CE0EB5B0912A9E8 /* tokyo-night.json */; };
+		CC9A0068DC77A7E82B6A0880 /* temple-dark.json in Resources */ = {isa = PBXBuildFile; fileRef = 0B16BD6500AACAA761DED54F /* temple-dark.json */; };
+		CF8F0C8D933EAB6EC1490385 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 241D94C087657D64581778E9 /* ContentView.swift */; };
+		D08E08B37039E8C7AFEEF81A /* snazzy-light.json in Resources */ = {isa = PBXBuildFile; fileRef = 1FEEA5648138BE47517BFEED /* snazzy-light.json */; };
+		D2F313010BAF6726C0A06D7C /* ForgeWatchBundle.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10872B0DA517770C134D17B7 /* ForgeWatchBundle.swift */; };
+		D4EFEB208CBD72DD38FB9BB8 /* linear-dark.json in Resources */ = {isa = PBXBuildFile; fileRef = A9240E32D00C9ECAF7AB77AD /* linear-dark.json */; };
+		E1EA50CBD62FEE2B0DC99CCD /* min-light.json in Resources */ = {isa = PBXBuildFile; fileRef = D8D7131F7DBAA1EC2C524CEA /* min-light.json */; };
+		E2440B6AED366192C7BA8277 /* catppuccin-macchiato.json in Resources */ = {isa = PBXBuildFile; fileRef = F0B2526F6221F71F732C9C47 /* catppuccin-macchiato.json */; };
+		E3A68EA577E407FC74123D04 /* sentry-dark.json in Resources */ = {isa = PBXBuildFile; fileRef = F44D1B7A42D8B8D6246BBA68 /* sentry-dark.json */; };
+		E418E51D4143EDEC83653517 /* slack-dark.json in Resources */ = {isa = PBXBuildFile; fileRef = 152C42F1046FDFCF9374C42E /* slack-dark.json */; };
+		E487330DCD37579C3DD1A4F4 /* material-theme-palenight.json in Resources */ = {isa = PBXBuildFile; fileRef = DDD85F6CB7391C290F4358C9 /* material-theme-palenight.json */; };
+		E5E0F5A7CE1D866094AC8849 /* ForgeWatchExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 969FEA21AED198B191D1E324 /* ForgeWatchExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		EC3152FFCEAE190363A06005 /* vitesse-light.json in Resources */ = {isa = PBXBuildFile; fileRef = 294B09B389B47F3FEAD94754 /* vitesse-light.json */; };
+		EE203EA205DFA06989C2A6D8 /* nord.json in Resources */ = {isa = PBXBuildFile; fileRef = C023F3CC2759D8D7357E64D5 /* nord.json */; };
+		F3B8DD1C0C182ACEC3A14A72 /* ScreenTimeCaptureHost.swift in Sources */ = {isa = PBXBuildFile; fileRef = 904B4E418155C5513933917C /* ScreenTimeCaptureHost.swift */; };
+		F82484FE33E4A387450E476E /* ForgeServerDiscovery.swift in Sources */ = {isa = PBXBuildFile; fileRef = 40C0BC58EF0F564EC56A2872 /* ForgeServerDiscovery.swift */; };
+		FBF22DC744C4219AB6198086 /* kanagawa-lotus.json in Resources */ = {isa = PBXBuildFile; fileRef = 86DEEC3EAA36A1DBE267C9AE /* kanagawa-lotus.json */; };
+		FF4A3FAF66EB69EEFED1F856 /* WatchPromptInboxView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00E73F45F82A77F382467A7 /* WatchPromptInboxView.swift */; };
+		FF9DDFA763FBB5C2AFA3C08B /* dark-plus-B1yOZ-Hy.json in Resources */ = {isa = PBXBuildFile; fileRef = BADCB3D405F7D0B39595A524 /* dark-plus-B1yOZ-Hy.json */; };
+		FFC74D999642D85B9CE4F7DC /* KeychainStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B3FA09B9E9E577F61C32E2C /* KeychainStore.swift */; };
 /* End PBXBuildFile section */
 
+/* Begin PBXContainerItemProxy section */
+		59A2508E530D6D8B95677332 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 4F8558956D3C63F60D8E5542 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = A3D7B3F69A15FB337E820D99;
+			remoteInfo = ForgeCompanion;
+		};
+		8D0A71F59D5E5A3E360216E6 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 4F8558956D3C63F60D8E5542 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = D7BDBCC2AC0457C8DAB50B41;
+			remoteInfo = ForgeScreenTimeReportExtension;
+		};
+		CE220BB95379375A2C32B5DB /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 4F8558956D3C63F60D8E5542 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 7716D39194A1C5D167013748;
+			remoteInfo = ForgeWatchExtension;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		305455263BA131047F22AAED /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				E5E0F5A7CE1D866094AC8849 /* ForgeWatchExtension.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		9603692E0E02F211246EA460 /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				65775A14A34E3203237E72CB /* ForgeScreenTimeReportExtension.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
 /* Begin PBXFileReference section */
-		00069E942662D0F7ADD560B8 /* github-light.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "github-light.json"; sourceTree = "<group>"; };
-		02747A05B1BAE9D2DD5482AC /* SetupDiscoveryScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SetupDiscoveryScreen.swift; sourceTree = "<group>"; };
-		02F562FCE196BF8DFF433C4D /* CompanionAppModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompanionAppModel.swift; sourceTree = "<group>"; };
-		035C132374C9D43B33A66C2A /* dracula-soft.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "dracula-soft.json"; sourceTree = "<group>"; };
-		08EBD4D7617D074D802191F9 /* MovementSettingsSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MovementSettingsSheet.swift; sourceTree = "<group>"; };
-		09996B4E7C1A6E7712E6E849 /* gruvbox-light-medium.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "gruvbox-light-medium.json"; sourceTree = "<group>"; };
-		0A309FBB37A5CEC49FF9D63D /* codex-dark.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "codex-dark.json"; sourceTree = "<group>"; };
-		0C74271E103D074375185B33 /* material-theme-ocean.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "material-theme-ocean.json"; sourceTree = "<group>"; };
-		0CF13A076E55AB584242A8E0 /* codex-light.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "codex-light.json"; sourceTree = "<group>"; };
-		0D8459E84A99927586568C85 /* theme-manifest.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "theme-manifest.json"; sourceTree = "<group>"; };
-		1005A9DDD08CA115B98915CD /* matrix-dark.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "matrix-dark.json"; sourceTree = "<group>"; };
-		11EA3517B34D36E74E130986 /* catppuccin-latte-Bd1wq-gC.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "catppuccin-latte-Bd1wq-gC.json"; sourceTree = "<group>"; };
-		12FA6272CC36ACFD7A30796C /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
-		14B9DCF4EDFA56DC1C9C34E5 /* HealthSyncStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HealthSyncStore.swift; sourceTree = "<group>"; };
-		1DA35ED2DAA820FB81C14F6F /* QRPairingScanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QRPairingScanner.swift; sourceTree = "<group>"; };
-		1EF14A6D60A832B1F35F02E0 /* rose-pine-x.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "rose-pine-x.json"; sourceTree = "<group>"; };
-		1FB0EFB4E598D990B93161A0 /* solarized-dark.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "solarized-dark.json"; sourceTree = "<group>"; };
-		204ACBF3D7D072C8FF7B03EE /* ForgeCompanionUITestsLaunchTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ForgeCompanionUITestsLaunchTests.swift; sourceTree = "<group>"; };
-		264AFBEA5F101E41F8398200 /* min-light.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "min-light.json"; sourceTree = "<group>"; };
-		2B5416684CF5E8A56282B072 /* one-dark-pro-D.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "one-dark-pro-D.json"; sourceTree = "<group>"; };
-		2CC7F3FBDB3AB6F1E9907640 /* linear-dark.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "linear-dark.json"; sourceTree = "<group>"; };
-		2D5D444EBD2928C4200EFFB3 /* github-dark-default.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "github-dark-default.json"; sourceTree = "<group>"; };
-		2E85C7B6AEB2CFF03D21995D /* notion-dark-BTRKJ-yg.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "notion-dark-BTRKJ-yg.json"; sourceTree = "<group>"; };
-		30619511D8D70CF1FCF54F2D /* QRScannerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QRScannerView.swift; sourceTree = "<group>"; };
-		3076CB7081D75DAC68B4680B /* poimandres.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = poimandres.json; sourceTree = "<group>"; };
-		36F5DD9FF11BDCC355FA72F2 /* CompanionStyle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompanionStyle.swift; sourceTree = "<group>"; };
-		380A6F99669127337E7F423D /* Models.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models.swift; sourceTree = "<group>"; };
-		386D634BBCBEDCACF819E1C7 /* material-theme.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "material-theme.json"; sourceTree = "<group>"; };
-		3B059A1A692CD7F846C930B4 /* vitesse-light.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "vitesse-light.json"; sourceTree = "<group>"; };
-		3C82396DEF68744B2F29AC3E /* ForgeSyncClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ForgeSyncClient.swift; sourceTree = "<group>"; };
-		42E438ADEB52E141BCC97A8A /* absolutely-dark.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "absolutely-dark.json"; sourceTree = "<group>"; };
-		4ADDDB7BAE6271CB4FA1772C /* tokyo-night.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "tokyo-night.json"; sourceTree = "<group>"; };
-		4BD036F2034D09CD3C43723B /* nord.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = nord.json; sourceTree = "<group>"; };
-		4D7C7FE6C7255061B47B1B26 /* ForgeCompanion.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; path = ForgeCompanion.xcodeproj; sourceTree = "<group>"; };
-		4DAF0C8E8C800CFBC5854095 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
-		4E10C43A6389AB957EE59EB2 /* snazzy-light.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "snazzy-light.json"; sourceTree = "<group>"; };
-		531C6E0D528DB5E283023813 /* sentry-dark.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "sentry-dark.json"; sourceTree = "<group>"; };
-		535C50F607154AF5F1CC676E /* slack-dark.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "slack-dark.json"; sourceTree = "<group>"; };
-		538B218497F75CC70CF33FC0 /* catppuccin-frappe.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "catppuccin-frappe.json"; sourceTree = "<group>"; };
-		57B60BAC19F63C0C6255CBCB /* proof-light.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "proof-light.json"; sourceTree = "<group>"; };
-		5C515EA047FDC5D67CD9EE50 /* github-dark-dimmed.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "github-dark-dimmed.json"; sourceTree = "<group>"; };
-		5E28B6BA5C905DCE11D19BAB /* ForgeCompanionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ForgeCompanionTests.swift; sourceTree = "<group>"; };
-		5E5E8C99FB3252A49E1CCA26 /* lobster-dark-dxSKfHK-.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "lobster-dark-dxSKfHK-.json"; sourceTree = "<group>"; };
-		614F684DCD7439CBE517781F /* laserwave.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = laserwave.json; sourceTree = "<group>"; };
-		6744ACE08894FD6E80A93E20 /* ForgeServerDiscovery.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ForgeServerDiscovery.swift; sourceTree = "<group>"; };
-		68B0BA20F081DEF3A8AB9E4D /* rose-pine-moon.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "rose-pine-moon.json"; sourceTree = "<group>"; };
-		747CC75D80A33FD1EE1816DD /* material-theme-lighter.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "material-theme-lighter.json"; sourceTree = "<group>"; };
-		74AAF176DB3A50947565C8DB /* night-owl.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "night-owl.json"; sourceTree = "<group>"; };
-		7722BB232F2591E783897FE5 /* pierre-light.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "pierre-light.json"; sourceTree = "<group>"; };
-		782821863879F77D3FE4AACF /* CompanionBackgroundScheduler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompanionBackgroundScheduler.swift; sourceTree = "<group>"; };
-		7B39A2584C9B905E4C668F99 /* houston.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = houston.json; sourceTree = "<group>"; };
-		7C755DB532CDC1D90A61F05B /* kanagawa-wave.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "kanagawa-wave.json"; sourceTree = "<group>"; };
-		81DCEAA8A6026E500E330F08 /* slack-ochin-CRg.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "slack-ochin-CRg.json"; sourceTree = "<group>"; };
-		8C4DBC75E583E793AFD211DA /* CompanionSetupFlow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompanionSetupFlow.swift; sourceTree = "<group>"; };
-		8D60D54BA88A829A976A748D /* KeychainStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainStore.swift; sourceTree = "<group>"; };
-		8EBE7B92A6304E555BCC1D6D /* material-theme-darker-D.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "material-theme-darker-D.json"; sourceTree = "<group>"; };
-		931C1688CBF05AF2C3B6080E /* solarized-light.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "solarized-light.json"; sourceTree = "<group>"; };
-		9444DBDF98D11B27B530480D /* ForgeCompanionUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ForgeCompanionUITests.swift; sourceTree = "<group>"; };
-		9BCF8A15494B22091C3454E0 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
-		9C75516EEA731CB6C306232D /* PairedForgeScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PairedForgeScreen.swift; sourceTree = "<group>"; };
-		9CCB4447E140D424F8B78668 /* gruvbox-light-soft.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "gruvbox-light-soft.json"; sourceTree = "<group>"; };
-		9D38C3D772905A5D933179CC /* absolutely-light.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "absolutely-light.json"; sourceTree = "<group>"; };
-		9D98EE56C9FB7CB850652DC0 /* gruvbox-dark-soft.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "gruvbox-dark-soft.json"; sourceTree = "<group>"; };
-		9DC04A62F879EC081DD9B1C2 /* light-plus.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "light-plus.json"; sourceTree = "<group>"; };
-		A37BD2A849CB3A3CB7CC1887 /* monokai.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = monokai.json; sourceTree = "<group>"; };
-		A54E8D248436BF9943B06E4B /* github-dark-high-contrast.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "github-dark-high-contrast.json"; sourceTree = "<group>"; };
-		A8C09BD2B766E68C8036C62F /* github-light-high-contrast.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "github-light-high-contrast.json"; sourceTree = "<group>"; };
-		ACEB1A921AA1A77453B0A927 /* ForgeCompanion.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = ForgeCompanion.entitlements; sourceTree = "<group>"; };
-		B1E98D87B79F7D59EB7BE050 /* SetupQRScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SetupQRScreen.swift; sourceTree = "<group>"; };
-		BAD9F69C52F56086F7ADEB43 /* min-dark-.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "min-dark-.json"; sourceTree = "<group>"; };
-		BC92CA266C72E6406B835FA3 /* gruvbox-dark-medium.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "gruvbox-dark-medium.json"; sourceTree = "<group>"; };
-		BF62B9557A1B4613CBF957E1 /* material-theme-palenight.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "material-theme-palenight.json"; sourceTree = "<group>"; };
-		BF8DF423EDFBC4326669D5CA /* gruvbox-light-hard.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "gruvbox-light-hard.json"; sourceTree = "<group>"; };
-		BFCC2081AE4F187A2146D07C /* catppuccin-mocha-Ry8aD-5u.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "catppuccin-mocha-Ry8aD-5u.json"; sourceTree = "<group>"; };
+		0273258C74CFF59B515D3923 /* lobster-dark-dxSKfHK-.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "lobster-dark-dxSKfHK-.json"; sourceTree = "<group>"; };
+		0289C0EB6BFA22514FE6E019 /* PairedForgeScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PairedForgeScreen.swift; sourceTree = "<group>"; };
+		039C36D8E30A3B07C3440B41 /* WatchComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchComponents.swift; sourceTree = "<group>"; };
+		0B16BD6500AACAA761DED54F /* temple-dark.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "temple-dark.json"; sourceTree = "<group>"; };
+		0BB7C4D639104DAE20AB76F2 /* slack-ochin-CRg.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "slack-ochin-CRg.json"; sourceTree = "<group>"; };
+		10872B0DA517770C134D17B7 /* ForgeWatchBundle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ForgeWatchBundle.swift; sourceTree = "<group>"; };
+		10F1932A79199E826E23023A /* WatchCheckInView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchCheckInView.swift; sourceTree = "<group>"; };
+		137AF77ADC4D773B632201D1 /* matrix-dark.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "matrix-dark.json"; sourceTree = "<group>"; };
+		14239158BB642B26FE6D796E /* codex-light.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "codex-light.json"; sourceTree = "<group>"; };
+		1445CEF627878D05ACAD5821 /* ForgeCompanionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ForgeCompanionTests.swift; sourceTree = "<group>"; };
+		152C42F1046FDFCF9374C42E /* slack-dark.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "slack-dark.json"; sourceTree = "<group>"; };
+		171F05A34E92FDE3047869AB /* ForgeWatchControl.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ForgeWatchControl.swift; sourceTree = "<group>"; };
+		17A70C1857380E071D589108 /* AppIntent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppIntent.swift; sourceTree = "<group>"; };
+		1BE1776E02C9FA605C8A81FC /* min-dark-.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "min-dark-.json"; sourceTree = "<group>"; };
+		1BEBACBC0C8EA707FCD5C248 /* dracula-soft.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "dracula-soft.json"; sourceTree = "<group>"; };
+		1D58974CBFD49611754BECE2 /* MovementSyncStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MovementSyncStore.swift; sourceTree = "<group>"; };
+		1FEEA5648138BE47517BFEED /* snazzy-light.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "snazzy-light.json"; sourceTree = "<group>"; };
+		2061FB4FDC62526EAB585B70 /* WidgetKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WidgetKit.framework; path = System/Library/Frameworks/WidgetKit.framework; sourceTree = SDKROOT; };
+		2190CE0FC5F9176B0C740D0E /* github-dark-dimmed.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "github-dark-dimmed.json"; sourceTree = "<group>"; };
+		2327ADEA6C0795C6628C4268 /* ScreenTimeStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenTimeStore.swift; sourceTree = "<group>"; };
+		241D94C087657D64581778E9 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		24B3F3B220747765ACA926E8 /* WatchHabitsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchHabitsView.swift; sourceTree = "<group>"; };
+		25AEF76C312959F8456FF6BB /* linear-light.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "linear-light.json"; sourceTree = "<group>"; };
+		26FDBECF668AEBC7B1D819C0 /* WatchSessionManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchSessionManager.swift; sourceTree = "<group>"; };
+		28C6D29BE853E1781D93339A /* one-light.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "one-light.json"; sourceTree = "<group>"; };
+		294B09B389B47F3FEAD94754 /* vitesse-light.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "vitesse-light.json"; sourceTree = "<group>"; };
+		29ED0365D12A44207BFCDAC0 /* codex-dark.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "codex-dark.json"; sourceTree = "<group>"; };
+		2D5086EEE13CF08C9AD12398 /* DebugLog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DebugLog.swift; sourceTree = "<group>"; };
+		2E3B5D8FC9E40AE175BE3227 /* CompanionAppRoot.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompanionAppRoot.swift; sourceTree = "<group>"; };
+		2F44C43CE27EC6BB4AE07B8B /* ForgeWatch.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ForgeWatch.swift; sourceTree = "<group>"; };
+		2F8724E4FB8BE98D88523A61 /* ForgeCompanionTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = ForgeCompanionTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		31A83A563B26CCDA7F1721B6 /* dracula.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = dracula.json; sourceTree = "<group>"; };
+		332518473332E14C70DA35AF /* monokai.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = monokai.json; sourceTree = "<group>"; };
+		39F4CD09294333626B5F8D79 /* QRPairingScanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QRPairingScanner.swift; sourceTree = "<group>"; };
+		3A8301B47CD4E8160DE71A11 /* WatchConnectivity.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WatchConnectivity.framework; path = System/Library/Frameworks/WatchConnectivity.framework; sourceTree = SDKROOT; };
+		3BF036CEAA0847EFD0BEA723 /* _DeviceActivity_SwiftUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = _DeviceActivity_SwiftUI.framework; path = System/Library/Frameworks/_DeviceActivity_SwiftUI.framework; sourceTree = SDKROOT; };
+		3BF2ABD66087D489A3DEB85A /* absolutely-dark.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "absolutely-dark.json"; sourceTree = "<group>"; };
+		3F472916D6315CAF87EA6577 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		406EDD3C9275931E8F3A6635 /* SetupDiscoveryScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SetupDiscoveryScreen.swift; sourceTree = "<group>"; };
+		40C0BC58EF0F564EC56A2872 /* ForgeServerDiscovery.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ForgeServerDiscovery.swift; sourceTree = "<group>"; };
+		42969C3AE526BAB1BCE9BAD3 /* gruvbox-dark-medium.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "gruvbox-dark-medium.json"; sourceTree = "<group>"; };
+		442250B4A055510386087866 /* WatchAppModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchAppModel.swift; sourceTree = "<group>"; };
+		4488FD3178035D328C1AA09D /* kanagawa-wave.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "kanagawa-wave.json"; sourceTree = "<group>"; };
+		4B1CB3E6790DB1D4A37C3D34 /* ManagedSettings.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = ManagedSettings.framework; path = System/Library/Frameworks/ManagedSettings.framework; sourceTree = SDKROOT; };
+		4DD2A3B790D968098D39D5A7 /* FamilyControls.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = FamilyControls.framework; path = System/Library/Frameworks/FamilyControls.framework; sourceTree = SDKROOT; };
+		4F94FB086CBD734970306FC2 /* github-light-high-contrast.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "github-light-high-contrast.json"; sourceTree = "<group>"; };
+		508A7FDE47AAB237525B75FA /* ForgeSyncClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ForgeSyncClient.swift; sourceTree = "<group>"; };
+		50A6D20A029C08AB4EA10B31 /* gruvbox-dark-hard.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "gruvbox-dark-hard.json"; sourceTree = "<group>"; };
+		56063BD0CBF3B6186A5AC8DF /* HealthSyncStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HealthSyncStore.swift; sourceTree = "<group>"; };
+		5A28AC152FF4863B5D716F40 /* ForgeWebView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ForgeWebView.swift; sourceTree = "<group>"; };
+		5A81D17F91FE89E11DBB93E0 /* catppuccin-mocha-Ry8aD-5u.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "catppuccin-mocha-Ry8aD-5u.json"; sourceTree = "<group>"; };
+		607137CA9797BD48AB4341BB /* ForgeScreenTimeSharedModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ForgeScreenTimeSharedModels.swift; sourceTree = "<group>"; };
+		624E50210143FF77C726A6D6 /* vesper.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = vesper.json; sourceTree = "<group>"; };
+		67C9347A6520CAD1AEBFD089 /* houston.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = houston.json; sourceTree = "<group>"; };
+		73007370F8148A2BF315B2D0 /* SetupQRScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SetupQRScreen.swift; sourceTree = "<group>"; };
+		749845DB8B75676500B84932 /* github-dark.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "github-dark.json"; sourceTree = "<group>"; };
+		774FDBFB6C1AC4DD7633342F /* catppuccin-frappe.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "catppuccin-frappe.json"; sourceTree = "<group>"; };
+		78630201FCE545DCC738F612 /* pierre-dark.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "pierre-dark.json"; sourceTree = "<group>"; };
+		7A582034D0397AF67063A223 /* notion-dark-BTRKJ-yg.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "notion-dark-BTRKJ-yg.json"; sourceTree = "<group>"; };
+		7B3FA09B9E9E577F61C32E2C /* KeychainStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainStore.swift; sourceTree = "<group>"; };
+		7C547AADA2A068E6842000F2 /* solarized-dark.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "solarized-dark.json"; sourceTree = "<group>"; };
+		7EB1A9C94E6090E79774F711 /* DeviceActivity.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = DeviceActivity.framework; path = System/Library/Frameworks/DeviceActivity.framework; sourceTree = SDKROOT; };
+		7F55D66195D4477566E9C379 /* Models.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models.swift; sourceTree = "<group>"; };
+		821F0E988CBBF75B7935C8BA /* SetupManualScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SetupManualScreen.swift; sourceTree = "<group>"; };
+		826A9CCC0D85B6BD614796B1 /* ForgeScreenTimeReportExtension.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ForgeScreenTimeReportExtension.swift; sourceTree = "<group>"; };
+		86DEEC3EAA36A1DBE267C9AE /* kanagawa-lotus.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "kanagawa-lotus.json"; sourceTree = "<group>"; };
+		87F320FF3E0E717C6F0BA8C5 /* github-dark-high-contrast.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "github-dark-high-contrast.json"; sourceTree = "<group>"; };
+		8933BA68703A3C4D4539E369 /* ForgeWatch Watch App.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "ForgeWatch Watch App.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		8ABBADB2AB81FE641E5B2527 /* rose-pine-x.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "rose-pine-x.json"; sourceTree = "<group>"; };
+		8AE22BAF07847D34507268A5 /* pierre-light.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "pierre-light.json"; sourceTree = "<group>"; };
+		8B6E10A66DA56D9BF5CC4237 /* CompanionStyle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompanionStyle.swift; sourceTree = "<group>"; };
+		8FA0A1EC0034341F6FD6810C /* ForgeScreenTimeReportExtension.appex */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = "wrapper.app-extension"; path = ForgeScreenTimeReportExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		904B4E418155C5513933917C /* ScreenTimeCaptureHost.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenTimeCaptureHost.swift; sourceTree = "<group>"; };
+		939E144FF96935181C082489 /* ayu-dark.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "ayu-dark.json"; sourceTree = "<group>"; };
+		954DCD7221B52502035E15E9 /* gruvbox-light-hard.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "gruvbox-light-hard.json"; sourceTree = "<group>"; };
+		965ABC2E8A2C966EDD4A3F93 /* ScreenTimeSettingsSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenTimeSettingsSheet.swift; sourceTree = "<group>"; };
+		969FEA21AED198B191D1E324 /* ForgeWatchExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = ForgeWatchExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		96D7DAF444A0D52A81F2C001 /* github-light.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "github-light.json"; sourceTree = "<group>"; };
+		981F5275D642B9EB0002BDBC /* solarized-light.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "solarized-light.json"; sourceTree = "<group>"; };
+		993F6F1A53311219E315BBF3 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		99479E5F7A837885AA5945E8 /* AppIntents.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AppIntents.framework; path = System/Library/Frameworks/AppIntents.framework; sourceTree = SDKROOT; };
+		994F4CFD9D237C208A6485FE /* oscurange-C.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "oscurange-C.json"; sourceTree = "<group>"; };
+		9D8E4DB589D76206AFE274F2 /* github-dark-default.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "github-dark-default.json"; sourceTree = "<group>"; };
+		9EDBE380934D1C0F028D57F9 /* CompanionMenuSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompanionMenuSheet.swift; sourceTree = "<group>"; };
+		A26AE0320EA50826185C8D03 /* vitesse-dark.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "vitesse-dark.json"; sourceTree = "<group>"; };
+		A2E1434263F464480FBDE76E /* github-light-default.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "github-light-default.json"; sourceTree = "<group>"; };
+		A338AA98AF807B0E65966B73 /* CompanionScreenshotSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompanionScreenshotSupport.swift; sourceTree = "<group>"; };
+		A6120EB5C78BCED8AE64C820 /* WatchSharedModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchSharedModels.swift; sourceTree = "<group>"; };
+		A72370BD020E096D2388F265 /* material-theme-ocean.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "material-theme-ocean.json"; sourceTree = "<group>"; };
+		A9240E32D00C9ECAF7AB77AD /* linear-dark.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "linear-dark.json"; sourceTree = "<group>"; };
+		AA4B31A97CE450C024D3EB8C /* MovementSettingsSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MovementSettingsSheet.swift; sourceTree = "<group>"; };
+		AB2728B8CA817BC8E6441B54 /* gruvbox-light-medium.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "gruvbox-light-medium.json"; sourceTree = "<group>"; };
+		ABF7DD37703C59A9A9CF7873 /* ForgeCompanionApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ForgeCompanionApp.swift; sourceTree = "<group>"; };
+		AF3C1DCE3B23349C44A0E440 /* rose-pine-dawn.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "rose-pine-dawn.json"; sourceTree = "<group>"; };
+		B581CDAE6D6E5B9AB7C8B4D4 /* one-dark-pro-D.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "one-dark-pro-D.json"; sourceTree = "<group>"; };
+		B67FFECF009F247E5AF99E2F /* material-theme.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "material-theme.json"; sourceTree = "<group>"; };
+		B8B5D8C70B4B433853C995CE /* absolutely-light.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "absolutely-light.json"; sourceTree = "<group>"; };
+		BADCB3D405F7D0B39595A524 /* dark-plus-B1yOZ-Hy.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "dark-plus-B1yOZ-Hy.json"; sourceTree = "<group>"; };
+		C023F3CC2759D8D7357E64D5 /* nord.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = nord.json; sourceTree = "<group>"; };
+		C18203C8A83DC0C911DF20B8 /* poimandres.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = poimandres.json; sourceTree = "<group>"; };
+		C1888282FD5F1CA2A97B43B8 /* UnpairedHeroScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UnpairedHeroScreen.swift; sourceTree = "<group>"; };
 		C1A9435D3CAA407E2081FE14 /* ForgeCompanion.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = ForgeCompanion.app; sourceTree = BUILT_PRODUCTS_DIR; };
-		C3AED35B770DBA83276E12AA /* everforest-dark.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "everforest-dark.json"; sourceTree = "<group>"; };
-		CA102D16EEB2213C7AF8BD49 /* UnpairedHeroScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UnpairedHeroScreen.swift; sourceTree = "<group>"; };
-		CF000B2C502117967A5627CC /* kanagawa-dragon-VscOyZL-.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "kanagawa-dragon-VscOyZL-.json"; sourceTree = "<group>"; };
-		CFA45100E8F01A8700B0BAEA /* catppuccin-macchiato.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "catppuccin-macchiato.json"; sourceTree = "<group>"; };
-		D165D61953834BA4A9B5B7EA /* notion-light.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "notion-light.json"; sourceTree = "<group>"; };
-		D466EC844AFD47609DF52240 /* pierre-dark.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "pierre-dark.json"; sourceTree = "<group>"; };
-		D4B23F5DA1C0B066CBA6DE29 /* github-light-default.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "github-light-default.json"; sourceTree = "<group>"; };
-		D4FBC6718D5E1C6C8DFF3434 /* github-dark.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "github-dark.json"; sourceTree = "<group>"; };
-		D5A2A15C2DA637E11E0DB4F0 /* ayu-dark.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "ayu-dark.json"; sourceTree = "<group>"; };
-		D7FC387296843249FB11B85F /* MovementSyncStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MovementSyncStore.swift; sourceTree = "<group>"; };
-		DA3E9377FB559DF9D96F0B66 /* DebugLog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DebugLog.swift; sourceTree = "<group>"; };
-		DDCF2EB020AF5BFDA667438D /* rose-pine-dawn.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "rose-pine-dawn.json"; sourceTree = "<group>"; };
-		DFCF38F8FCB2A92AE73956DE /* ForgeWebView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ForgeWebView.swift; sourceTree = "<group>"; };
-		E0C60F828383583C5869A72C /* ForgeCompanionApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ForgeCompanionApp.swift; sourceTree = "<group>"; };
-		E2B54234F4A43D98698E8FE5 /* CompanionMenuSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompanionMenuSheet.swift; sourceTree = "<group>"; };
-		E3B76E08C65327CC53268C13 /* linear-light.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "linear-light.json"; sourceTree = "<group>"; };
-		E4BB895B44CA6A00E73F33E3 /* SetupHealthScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SetupHealthScreen.swift; sourceTree = "<group>"; };
-		E6071ED7AED22914F8C84892 /* oscurange-C.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "oscurange-C.json"; sourceTree = "<group>"; };
-		E8407EED652D1D871F0F8FE2 /* SetupManualScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SetupManualScreen.swift; sourceTree = "<group>"; };
-		EBD0158F009FFC7E8131E3CC /* kanagawa-lotus.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "kanagawa-lotus.json"; sourceTree = "<group>"; };
-		ECF5C2385C6DE828B455D6F9 /* vesper.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = vesper.json; sourceTree = "<group>"; };
-		ECFCB9E9747A398BB683D03A /* everforest-light.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "everforest-light.json"; sourceTree = "<group>"; };
-		F39EA07C16BAEB142D3A16AC /* dark-plus-B1yOZ-Hy.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "dark-plus-B1yOZ-Hy.json"; sourceTree = "<group>"; };
-		F6709AA3A25DACA04C92A857 /* one-light.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "one-light.json"; sourceTree = "<group>"; };
-		F69B66D6F7F82EB52A3919E8 /* CompanionAppRoot.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompanionAppRoot.swift; sourceTree = "<group>"; };
-		F6B88D3C0ABB7A376D9C5D72 /* vitesse-dark.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "vitesse-dark.json"; sourceTree = "<group>"; };
-		FA1B604B998B86390064CF35 /* temple-dark.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "temple-dark.json"; sourceTree = "<group>"; };
-		FAECD142BA900902838D1ED9 /* vitesse-black.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "vitesse-black.json"; sourceTree = "<group>"; };
-		FDA8323EC0C4C2A1C8CF27C8 /* dracula.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = dracula.json; sourceTree = "<group>"; };
-		FE9C87EF5FB8A7DB2C32DD1C /* gruvbox-dark-hard.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "gruvbox-dark-hard.json"; sourceTree = "<group>"; };
+		C513AA0B589621B7306006D7 /* CompanionBackgroundScheduler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompanionBackgroundScheduler.swift; sourceTree = "<group>"; };
+		C6C8D78EF0B918F858B27FAC /* material-theme-lighter.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "material-theme-lighter.json"; sourceTree = "<group>"; };
+		C774B7DC1641F7B73C53087C /* ForgeWatchApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ForgeWatchApp.swift; sourceTree = "<group>"; };
+		C7FEA151F0257B65D58F52FE /* vitesse-black.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "vitesse-black.json"; sourceTree = "<group>"; };
+		C8233D4B14B5B6AB75F150E8 /* everforest-dark.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "everforest-dark.json"; sourceTree = "<group>"; };
+		CC721B1B1892E8EB40A6846A /* theme-manifest.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "theme-manifest.json"; sourceTree = "<group>"; };
+		CE87DF61ACB333870B748E37 /* catppuccin-latte-Bd1wq-gC.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "catppuccin-latte-Bd1wq-gC.json"; sourceTree = "<group>"; };
+		CEC035122131067EB6564289 /* rose-pine-moon.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "rose-pine-moon.json"; sourceTree = "<group>"; };
+		CFC91F75587B00C6F04C9098 /* night-owl.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "night-owl.json"; sourceTree = "<group>"; };
+		D2120623119E0AE90C2331F3 /* SetupHealthScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SetupHealthScreen.swift; sourceTree = "<group>"; };
+		D51F734BE700F50B999ADC66 /* proof-light.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "proof-light.json"; sourceTree = "<group>"; };
+		D662C6927F2A924DC7DA82B8 /* WatchSharedModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchSharedModels.swift; sourceTree = "<group>"; };
+		D8D7131F7DBAA1EC2C524CEA /* min-light.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "min-light.json"; sourceTree = "<group>"; };
+		DB2B85CDC2A05B34389D84B7 /* QRScannerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QRScannerView.swift; sourceTree = "<group>"; };
+		DB9C2430B57AD5C324EA2346 /* gruvbox-dark-soft.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "gruvbox-dark-soft.json"; sourceTree = "<group>"; };
+		DBA50F60729F0219A8082AB9 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		DDD85F6CB7391C290F4358C9 /* material-theme-palenight.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "material-theme-palenight.json"; sourceTree = "<group>"; };
+		DFCE6EDC33B6AB68DB394942 /* notion-light.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "notion-light.json"; sourceTree = "<group>"; };
+		E3301829CAC26D5E4B3E797F /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		E4FA151C38C40FEED37BAE5A /* gruvbox-light-soft.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "gruvbox-light-soft.json"; sourceTree = "<group>"; };
+		E77CF69FAEDB6990BDE2CE5F /* kanagawa-dragon-VscOyZL-.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "kanagawa-dragon-VscOyZL-.json"; sourceTree = "<group>"; };
+		E9D69C46B7D263FDC6472BEA /* everforest-light.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "everforest-light.json"; sourceTree = "<group>"; };
+		EB6330E339B74351A9737AEF /* CompanionAppModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompanionAppModel.swift; sourceTree = "<group>"; };
+		F00E73F45F82A77F382467A7 /* WatchPromptInboxView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchPromptInboxView.swift; sourceTree = "<group>"; };
+		F0B2526F6221F71F732C9C47 /* catppuccin-macchiato.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "catppuccin-macchiato.json"; sourceTree = "<group>"; };
+		F44D1B7A42D8B8D6246BBA68 /* sentry-dark.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "sentry-dark.json"; sourceTree = "<group>"; };
+		F4921C634DCE88CC5277950E /* material-theme-darker-D.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "material-theme-darker-D.json"; sourceTree = "<group>"; };
+		FA16DA13A8E1ACE9812BA184 /* light-plus.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "light-plus.json"; sourceTree = "<group>"; };
+		FC17986B56F2BD2558DB6E1D /* WatchMarkMomentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchMarkMomentView.swift; sourceTree = "<group>"; };
+		FE25294B2E1BE0D4F8DEEE5A /* laserwave.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = laserwave.json; sourceTree = "<group>"; };
+		FED8AED443BA8FD8D08D3F32 /* CompanionSetupFlow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompanionSetupFlow.swift; sourceTree = "<group>"; };
+		FF0F3F99DCEE623FFA4EF5AC /* CompanionDiagnosticsSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompanionDiagnosticsSheet.swift; sourceTree = "<group>"; };
+		FF2731A57CE0EB5B0912A9E8 /* tokyo-night.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "tokyo-night.json"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
+/* Begin PBXFrameworksBuildPhase section */
+		5FC5F9DD2F880AA4A26023CD /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				0E4B969BFDF12D7F235CFC68 /* FamilyControls.framework in Frameworks */,
+				39F95BE8A62307BBF3147F44 /* DeviceActivity.framework in Frameworks */,
+				0F46F826ED9393E9820DF7D0 /* ManagedSettings.framework in Frameworks */,
+				28661A5954950848945D43EB /* _DeviceActivity_SwiftUI.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		ACD5BC0A9881069976E522A7 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				8E649F5BFBF69A4A23C5DC67 /* FamilyControls.framework in Frameworks */,
+				3845399BD282CA9148B9DA9C /* DeviceActivity.framework in Frameworks */,
+				30322A59BA901E3B472ECDBA /* ManagedSettings.framework in Frameworks */,
+				B3EB0EFE3A40A7E6E403E56C /* _DeviceActivity_SwiftUI.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		C0A70BC7C331E844C18583F4 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				4ED6DAE3583C4E963266F1C6 /* WidgetKit.framework in Frameworks */,
+				A825683E59F07F9EE37CA360 /* AppIntents.framework in Frameworks */,
+				BFDA82CEC15E6464966F3FB5 /* WatchConnectivity.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
 /* Begin PBXGroup section */
-		203CB8C202E2975AE264ADCD /* ForgeCompanionUITests */ = {
+		0278F021C1813799D6A2CEF5 /* ScreenTimeShared */ = {
 			isa = PBXGroup;
 			children = (
-				9444DBDF98D11B27B530480D /* ForgeCompanionUITests.swift */,
-				204ACBF3D7D072C8FF7B03EE /* ForgeCompanionUITestsLaunchTests.swift */,
+				607137CA9797BD48AB4341BB /* ForgeScreenTimeSharedModels.swift */,
 			);
-			path = ForgeCompanionUITests;
+			name = ScreenTimeShared;
+			path = ForgeCompanion/ScreenTimeShared;
+			sourceTree = "<group>";
+		};
+		0352916F17F356F395F4B0A6 /* ForgeWatch */ = {
+			isa = PBXGroup;
+			children = (
+				17A70C1857380E071D589108 /* AppIntent.swift */,
+				E3301829CAC26D5E4B3E797F /* Assets.xcassets */,
+				2F44C43CE27EC6BB4AE07B8B /* ForgeWatch.swift */,
+				10872B0DA517770C134D17B7 /* ForgeWatchBundle.swift */,
+				171F05A34E92FDE3047869AB /* ForgeWatchControl.swift */,
+			);
+			name = ForgeWatch;
+			path = ForgeCompanion/ForgeWatch;
+			sourceTree = "<group>";
+		};
+		1339B98A2F5CC52D81EAF3EE /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				812F59107704B8E2BB165615 /* Themes */,
+			);
+			path = Resources;
+			sourceTree = "<group>";
+		};
+		207D8E352315772E3DFC19B1 /* ForgeCompanionTests */ = {
+			isa = PBXGroup;
+			children = (
+				1445CEF627878D05ACAD5821 /* ForgeCompanionTests.swift */,
+			);
+			name = ForgeCompanionTests;
+			path = ForgeCompanion/ForgeCompanionTests;
+			sourceTree = "<group>";
+		};
+		241801ADB48EE78E3F5836EA /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				3BF036CEAA0847EFD0BEA723 /* _DeviceActivity_SwiftUI.framework */,
+				99479E5F7A837885AA5945E8 /* AppIntents.framework */,
+				7EB1A9C94E6090E79774F711 /* DeviceActivity.framework */,
+				4DD2A3B790D968098D39D5A7 /* FamilyControls.framework */,
+				4B1CB3E6790DB1D4A37C3D34 /* ManagedSettings.framework */,
+				3A8301B47CD4E8160DE71A11 /* WatchConnectivity.framework */,
+				2061FB4FDC62526EAB585B70 /* WidgetKit.framework */,
+			);
+			name = Frameworks;
 			sourceTree = "<group>";
 		};
 		2EC5B307B0F081E32DA4D076 /* Products */ = {
 			isa = PBXGroup;
 			children = (
 				C1A9435D3CAA407E2081FE14 /* ForgeCompanion.app */,
+				2F8724E4FB8BE98D88523A61 /* ForgeCompanionTests.xctest */,
+				8FA0A1EC0034341F6FD6810C /* ForgeScreenTimeReportExtension.appex */,
+				8933BA68703A3C4D4539E369 /* ForgeWatch Watch App.app */,
+				969FEA21AED198B191D1E324 /* ForgeWatchExtension.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
 		};
-		5166D7C9B1D84CC20D21DCCF /* ForgeCompanion */ = {
+		4157539215B987FC1188BD08 /* ForgeWatch Watch App */ = {
 			isa = PBXGroup;
 			children = (
-				9BCF8A15494B22091C3454E0 /* Assets.xcassets */,
-				02F562FCE196BF8DFF433C4D /* CompanionAppModel.swift */,
-				F69B66D6F7F82EB52A3919E8 /* CompanionAppRoot.swift */,
-				782821863879F77D3FE4AACF /* CompanionBackgroundScheduler.swift */,
-				E2B54234F4A43D98698E8FE5 /* CompanionMenuSheet.swift */,
-				8C4DBC75E583E793AFD211DA /* CompanionSetupFlow.swift */,
-				36F5DD9FF11BDCC355FA72F2 /* CompanionStyle.swift */,
-				12FA6272CC36ACFD7A30796C /* ContentView.swift */,
-				DA3E9377FB559DF9D96F0B66 /* DebugLog.swift */,
-				ACEB1A921AA1A77453B0A927 /* ForgeCompanion.entitlements */,
-				E0C60F828383583C5869A72C /* ForgeCompanionApp.swift */,
-				6744ACE08894FD6E80A93E20 /* ForgeServerDiscovery.swift */,
-				3C82396DEF68744B2F29AC3E /* ForgeSyncClient.swift */,
-				DFCF38F8FCB2A92AE73956DE /* ForgeWebView.swift */,
-				14B9DCF4EDFA56DC1C9C34E5 /* HealthSyncStore.swift */,
-				8D60D54BA88A829A976A748D /* KeychainStore.swift */,
-				380A6F99669127337E7F423D /* Models.swift */,
-				08EBD4D7617D074D802191F9 /* MovementSettingsSheet.swift */,
-				D7FC387296843249FB11B85F /* MovementSyncStore.swift */,
-				9C75516EEA731CB6C306232D /* PairedForgeScreen.swift */,
-				1DA35ED2DAA820FB81C14F6F /* QRPairingScanner.swift */,
-				30619511D8D70CF1FCF54F2D /* QRScannerView.swift */,
-				02747A05B1BAE9D2DD5482AC /* SetupDiscoveryScreen.swift */,
-				E4BB895B44CA6A00E73F33E3 /* SetupHealthScreen.swift */,
-				E8407EED652D1D871F0F8FE2 /* SetupManualScreen.swift */,
-				B1E98D87B79F7D59EB7BE050 /* SetupQRScreen.swift */,
-				CA102D16EEB2213C7AF8BD49 /* UnpairedHeroScreen.swift */,
-				638AA970DB27EABAD7D99A00 /* Resources */,
+				DBA50F60729F0219A8082AB9 /* Assets.xcassets */,
+				3F472916D6315CAF87EA6577 /* ContentView.swift */,
+				C774B7DC1641F7B73C53087C /* ForgeWatchApp.swift */,
+				442250B4A055510386087866 /* WatchAppModel.swift */,
+				10F1932A79199E826E23023A /* WatchCheckInView.swift */,
+				039C36D8E30A3B07C3440B41 /* WatchComponents.swift */,
+				24B3F3B220747765ACA926E8 /* WatchHabitsView.swift */,
+				FC17986B56F2BD2558DB6E1D /* WatchMarkMomentView.swift */,
+				F00E73F45F82A77F382467A7 /* WatchPromptInboxView.swift */,
+				A6120EB5C78BCED8AE64C820 /* WatchSharedModels.swift */,
 			);
-			path = ForgeCompanion;
-			sourceTree = "<group>";
-		};
-		603E0416E006CBDCF388E41B /* Themes */ = {
-			isa = PBXGroup;
-			children = (
-				42E438ADEB52E141BCC97A8A /* absolutely-dark.json */,
-				9D38C3D772905A5D933179CC /* absolutely-light.json */,
-				D5A2A15C2DA637E11E0DB4F0 /* ayu-dark.json */,
-				538B218497F75CC70CF33FC0 /* catppuccin-frappe.json */,
-				11EA3517B34D36E74E130986 /* catppuccin-latte-Bd1wq-gC.json */,
-				CFA45100E8F01A8700B0BAEA /* catppuccin-macchiato.json */,
-				BFCC2081AE4F187A2146D07C /* catppuccin-mocha-Ry8aD-5u.json */,
-				0A309FBB37A5CEC49FF9D63D /* codex-dark.json */,
-				0CF13A076E55AB584242A8E0 /* codex-light.json */,
-				F39EA07C16BAEB142D3A16AC /* dark-plus-B1yOZ-Hy.json */,
-				035C132374C9D43B33A66C2A /* dracula-soft.json */,
-				FDA8323EC0C4C2A1C8CF27C8 /* dracula.json */,
-				C3AED35B770DBA83276E12AA /* everforest-dark.json */,
-				ECFCB9E9747A398BB683D03A /* everforest-light.json */,
-				2D5D444EBD2928C4200EFFB3 /* github-dark-default.json */,
-				5C515EA047FDC5D67CD9EE50 /* github-dark-dimmed.json */,
-				A54E8D248436BF9943B06E4B /* github-dark-high-contrast.json */,
-				D4FBC6718D5E1C6C8DFF3434 /* github-dark.json */,
-				D4B23F5DA1C0B066CBA6DE29 /* github-light-default.json */,
-				A8C09BD2B766E68C8036C62F /* github-light-high-contrast.json */,
-				00069E942662D0F7ADD560B8 /* github-light.json */,
-				FE9C87EF5FB8A7DB2C32DD1C /* gruvbox-dark-hard.json */,
-				BC92CA266C72E6406B835FA3 /* gruvbox-dark-medium.json */,
-				9D98EE56C9FB7CB850652DC0 /* gruvbox-dark-soft.json */,
-				BF8DF423EDFBC4326669D5CA /* gruvbox-light-hard.json */,
-				09996B4E7C1A6E7712E6E849 /* gruvbox-light-medium.json */,
-				9CCB4447E140D424F8B78668 /* gruvbox-light-soft.json */,
-				7B39A2584C9B905E4C668F99 /* houston.json */,
-				CF000B2C502117967A5627CC /* kanagawa-dragon-VscOyZL-.json */,
-				EBD0158F009FFC7E8131E3CC /* kanagawa-lotus.json */,
-				7C755DB532CDC1D90A61F05B /* kanagawa-wave.json */,
-				614F684DCD7439CBE517781F /* laserwave.json */,
-				9DC04A62F879EC081DD9B1C2 /* light-plus.json */,
-				2CC7F3FBDB3AB6F1E9907640 /* linear-dark.json */,
-				E3B76E08C65327CC53268C13 /* linear-light.json */,
-				5E5E8C99FB3252A49E1CCA26 /* lobster-dark-dxSKfHK-.json */,
-				8EBE7B92A6304E555BCC1D6D /* material-theme-darker-D.json */,
-				747CC75D80A33FD1EE1816DD /* material-theme-lighter.json */,
-				0C74271E103D074375185B33 /* material-theme-ocean.json */,
-				BF62B9557A1B4613CBF957E1 /* material-theme-palenight.json */,
-				386D634BBCBEDCACF819E1C7 /* material-theme.json */,
-				1005A9DDD08CA115B98915CD /* matrix-dark.json */,
-				BAD9F69C52F56086F7ADEB43 /* min-dark-.json */,
-				264AFBEA5F101E41F8398200 /* min-light.json */,
-				A37BD2A849CB3A3CB7CC1887 /* monokai.json */,
-				74AAF176DB3A50947565C8DB /* night-owl.json */,
-				4BD036F2034D09CD3C43723B /* nord.json */,
-				2E85C7B6AEB2CFF03D21995D /* notion-dark-BTRKJ-yg.json */,
-				D165D61953834BA4A9B5B7EA /* notion-light.json */,
-				2B5416684CF5E8A56282B072 /* one-dark-pro-D.json */,
-				F6709AA3A25DACA04C92A857 /* one-light.json */,
-				E6071ED7AED22914F8C84892 /* oscurange-C.json */,
-				D466EC844AFD47609DF52240 /* pierre-dark.json */,
-				7722BB232F2591E783897FE5 /* pierre-light.json */,
-				3076CB7081D75DAC68B4680B /* poimandres.json */,
-				57B60BAC19F63C0C6255CBCB /* proof-light.json */,
-				DDCF2EB020AF5BFDA667438D /* rose-pine-dawn.json */,
-				68B0BA20F081DEF3A8AB9E4D /* rose-pine-moon.json */,
-				1EF14A6D60A832B1F35F02E0 /* rose-pine-x.json */,
-				531C6E0D528DB5E283023813 /* sentry-dark.json */,
-				535C50F607154AF5F1CC676E /* slack-dark.json */,
-				81DCEAA8A6026E500E330F08 /* slack-ochin-CRg.json */,
-				4E10C43A6389AB957EE59EB2 /* snazzy-light.json */,
-				1FB0EFB4E598D990B93161A0 /* solarized-dark.json */,
-				931C1688CBF05AF2C3B6080E /* solarized-light.json */,
-				FA1B604B998B86390064CF35 /* temple-dark.json */,
-				0D8459E84A99927586568C85 /* theme-manifest.json */,
-				4ADDDB7BAE6271CB4FA1772C /* tokyo-night.json */,
-				ECF5C2385C6DE828B455D6F9 /* vesper.json */,
-				FAECD142BA900902838D1ED9 /* vitesse-black.json */,
-				F6B88D3C0ABB7A376D9C5D72 /* vitesse-dark.json */,
-				3B059A1A692CD7F846C930B4 /* vitesse-light.json */,
-			);
-			path = Themes;
-			sourceTree = "<group>";
-		};
-		638AA970DB27EABAD7D99A00 /* Resources */ = {
-			isa = PBXGroup;
-			children = (
-				603E0416E006CBDCF388E41B /* Themes */,
-			);
-			path = Resources;
+			name = "ForgeWatch Watch App";
+			path = "ForgeCompanion/ForgeWatch Watch App";
 			sourceTree = "<group>";
 		};
 		6731BAF5E5A28D30558D535E /* ForgeCompanion */ = {
 			isa = PBXGroup;
 			children = (
-				4D7C7FE6C7255061B47B1B26 /* ForgeCompanion.xcodeproj */,
-				4DAF0C8E8C800CFBC5854095 /* Info.plist */,
-				5166D7C9B1D84CC20D21DCCF /* ForgeCompanion */,
-				F8DDC28AF82E078C4DFB7D7C /* ForgeCompanionTests */,
-				203CB8C202E2975AE264ADCD /* ForgeCompanionUITests */,
+				993F6F1A53311219E315BBF3 /* Assets.xcassets */,
+				EB6330E339B74351A9737AEF /* CompanionAppModel.swift */,
+				2E3B5D8FC9E40AE175BE3227 /* CompanionAppRoot.swift */,
+				C513AA0B589621B7306006D7 /* CompanionBackgroundScheduler.swift */,
+				FF0F3F99DCEE623FFA4EF5AC /* CompanionDiagnosticsSheet.swift */,
+				9EDBE380934D1C0F028D57F9 /* CompanionMenuSheet.swift */,
+				A338AA98AF807B0E65966B73 /* CompanionScreenshotSupport.swift */,
+				FED8AED443BA8FD8D08D3F32 /* CompanionSetupFlow.swift */,
+				8B6E10A66DA56D9BF5CC4237 /* CompanionStyle.swift */,
+				241D94C087657D64581778E9 /* ContentView.swift */,
+				2D5086EEE13CF08C9AD12398 /* DebugLog.swift */,
+				ABF7DD37703C59A9A9CF7873 /* ForgeCompanionApp.swift */,
+				40C0BC58EF0F564EC56A2872 /* ForgeServerDiscovery.swift */,
+				508A7FDE47AAB237525B75FA /* ForgeSyncClient.swift */,
+				5A28AC152FF4863B5D716F40 /* ForgeWebView.swift */,
+				56063BD0CBF3B6186A5AC8DF /* HealthSyncStore.swift */,
+				7B3FA09B9E9E577F61C32E2C /* KeychainStore.swift */,
+				7F55D66195D4477566E9C379 /* Models.swift */,
+				AA4B31A97CE450C024D3EB8C /* MovementSettingsSheet.swift */,
+				1D58974CBFD49611754BECE2 /* MovementSyncStore.swift */,
+				0289C0EB6BFA22514FE6E019 /* PairedForgeScreen.swift */,
+				39F4CD09294333626B5F8D79 /* QRPairingScanner.swift */,
+				DB2B85CDC2A05B34389D84B7 /* QRScannerView.swift */,
+				904B4E418155C5513933917C /* ScreenTimeCaptureHost.swift */,
+				965ABC2E8A2C966EDD4A3F93 /* ScreenTimeSettingsSheet.swift */,
+				2327ADEA6C0795C6628C4268 /* ScreenTimeStore.swift */,
+				406EDD3C9275931E8F3A6635 /* SetupDiscoveryScreen.swift */,
+				D2120623119E0AE90C2331F3 /* SetupHealthScreen.swift */,
+				821F0E988CBBF75B7935C8BA /* SetupManualScreen.swift */,
+				73007370F8148A2BF315B2D0 /* SetupQRScreen.swift */,
+				C1888282FD5F1CA2A97B43B8 /* UnpairedHeroScreen.swift */,
+				26FDBECF668AEBC7B1D819C0 /* WatchSessionManager.swift */,
+				D662C6927F2A924DC7DA82B8 /* WatchSharedModels.swift */,
+				1339B98A2F5CC52D81EAF3EE /* Resources */,
 			);
-			path = ForgeCompanion;
+			name = ForgeCompanion;
+			path = ForgeCompanion/ForgeCompanion;
+			sourceTree = "<group>";
+		};
+		812F59107704B8E2BB165615 /* Themes */ = {
+			isa = PBXGroup;
+			children = (
+				3BF2ABD66087D489A3DEB85A /* absolutely-dark.json */,
+				B8B5D8C70B4B433853C995CE /* absolutely-light.json */,
+				939E144FF96935181C082489 /* ayu-dark.json */,
+				774FDBFB6C1AC4DD7633342F /* catppuccin-frappe.json */,
+				CE87DF61ACB333870B748E37 /* catppuccin-latte-Bd1wq-gC.json */,
+				F0B2526F6221F71F732C9C47 /* catppuccin-macchiato.json */,
+				5A81D17F91FE89E11DBB93E0 /* catppuccin-mocha-Ry8aD-5u.json */,
+				29ED0365D12A44207BFCDAC0 /* codex-dark.json */,
+				14239158BB642B26FE6D796E /* codex-light.json */,
+				BADCB3D405F7D0B39595A524 /* dark-plus-B1yOZ-Hy.json */,
+				1BEBACBC0C8EA707FCD5C248 /* dracula-soft.json */,
+				31A83A563B26CCDA7F1721B6 /* dracula.json */,
+				C8233D4B14B5B6AB75F150E8 /* everforest-dark.json */,
+				E9D69C46B7D263FDC6472BEA /* everforest-light.json */,
+				9D8E4DB589D76206AFE274F2 /* github-dark-default.json */,
+				2190CE0FC5F9176B0C740D0E /* github-dark-dimmed.json */,
+				87F320FF3E0E717C6F0BA8C5 /* github-dark-high-contrast.json */,
+				749845DB8B75676500B84932 /* github-dark.json */,
+				A2E1434263F464480FBDE76E /* github-light-default.json */,
+				4F94FB086CBD734970306FC2 /* github-light-high-contrast.json */,
+				96D7DAF444A0D52A81F2C001 /* github-light.json */,
+				50A6D20A029C08AB4EA10B31 /* gruvbox-dark-hard.json */,
+				42969C3AE526BAB1BCE9BAD3 /* gruvbox-dark-medium.json */,
+				DB9C2430B57AD5C324EA2346 /* gruvbox-dark-soft.json */,
+				954DCD7221B52502035E15E9 /* gruvbox-light-hard.json */,
+				AB2728B8CA817BC8E6441B54 /* gruvbox-light-medium.json */,
+				E4FA151C38C40FEED37BAE5A /* gruvbox-light-soft.json */,
+				67C9347A6520CAD1AEBFD089 /* houston.json */,
+				E77CF69FAEDB6990BDE2CE5F /* kanagawa-dragon-VscOyZL-.json */,
+				86DEEC3EAA36A1DBE267C9AE /* kanagawa-lotus.json */,
+				4488FD3178035D328C1AA09D /* kanagawa-wave.json */,
+				FE25294B2E1BE0D4F8DEEE5A /* laserwave.json */,
+				FA16DA13A8E1ACE9812BA184 /* light-plus.json */,
+				A9240E32D00C9ECAF7AB77AD /* linear-dark.json */,
+				25AEF76C312959F8456FF6BB /* linear-light.json */,
+				0273258C74CFF59B515D3923 /* lobster-dark-dxSKfHK-.json */,
+				F4921C634DCE88CC5277950E /* material-theme-darker-D.json */,
+				C6C8D78EF0B918F858B27FAC /* material-theme-lighter.json */,
+				A72370BD020E096D2388F265 /* material-theme-ocean.json */,
+				DDD85F6CB7391C290F4358C9 /* material-theme-palenight.json */,
+				B67FFECF009F247E5AF99E2F /* material-theme.json */,
+				137AF77ADC4D773B632201D1 /* matrix-dark.json */,
+				1BE1776E02C9FA605C8A81FC /* min-dark-.json */,
+				D8D7131F7DBAA1EC2C524CEA /* min-light.json */,
+				332518473332E14C70DA35AF /* monokai.json */,
+				CFC91F75587B00C6F04C9098 /* night-owl.json */,
+				C023F3CC2759D8D7357E64D5 /* nord.json */,
+				7A582034D0397AF67063A223 /* notion-dark-BTRKJ-yg.json */,
+				DFCE6EDC33B6AB68DB394942 /* notion-light.json */,
+				B581CDAE6D6E5B9AB7C8B4D4 /* one-dark-pro-D.json */,
+				28C6D29BE853E1781D93339A /* one-light.json */,
+				994F4CFD9D237C208A6485FE /* oscurange-C.json */,
+				78630201FCE545DCC738F612 /* pierre-dark.json */,
+				8AE22BAF07847D34507268A5 /* pierre-light.json */,
+				C18203C8A83DC0C911DF20B8 /* poimandres.json */,
+				D51F734BE700F50B999ADC66 /* proof-light.json */,
+				AF3C1DCE3B23349C44A0E440 /* rose-pine-dawn.json */,
+				CEC035122131067EB6564289 /* rose-pine-moon.json */,
+				8ABBADB2AB81FE641E5B2527 /* rose-pine-x.json */,
+				F44D1B7A42D8B8D6246BBA68 /* sentry-dark.json */,
+				152C42F1046FDFCF9374C42E /* slack-dark.json */,
+				0BB7C4D639104DAE20AB76F2 /* slack-ochin-CRg.json */,
+				1FEEA5648138BE47517BFEED /* snazzy-light.json */,
+				7C547AADA2A068E6842000F2 /* solarized-dark.json */,
+				981F5275D642B9EB0002BDBC /* solarized-light.json */,
+				0B16BD6500AACAA761DED54F /* temple-dark.json */,
+				CC721B1B1892E8EB40A6846A /* theme-manifest.json */,
+				FF2731A57CE0EB5B0912A9E8 /* tokyo-night.json */,
+				624E50210143FF77C726A6D6 /* vesper.json */,
+				C7FEA151F0257B65D58F52FE /* vitesse-black.json */,
+				A26AE0320EA50826185C8D03 /* vitesse-dark.json */,
+				294B09B389B47F3FEAD94754 /* vitesse-light.json */,
+			);
+			path = Themes;
 			sourceTree = "<group>";
 		};
 		DEADB038720040B65D496C71 = {
 			isa = PBXGroup;
 			children = (
 				6731BAF5E5A28D30558D535E /* ForgeCompanion */,
+				207D8E352315772E3DFC19B1 /* ForgeCompanionTests */,
+				FE31BB24B5DE005C2F6A3F07 /* ForgeScreenTimeReportExtension */,
+				0352916F17F356F395F4B0A6 /* ForgeWatch */,
+				4157539215B987FC1188BD08 /* ForgeWatch Watch App */,
+				0278F021C1813799D6A2CEF5 /* ScreenTimeShared */,
+				241801ADB48EE78E3F5836EA /* Frameworks */,
 				2EC5B307B0F081E32DA4D076 /* Products */,
 			);
 			sourceTree = "<group>";
 		};
-		F8DDC28AF82E078C4DFB7D7C /* ForgeCompanionTests */ = {
+		FE31BB24B5DE005C2F6A3F07 /* ForgeScreenTimeReportExtension */ = {
 			isa = PBXGroup;
 			children = (
-				5E28B6BA5C905DCE11D19BAB /* ForgeCompanionTests.swift */,
+				826A9CCC0D85B6BD614796B1 /* ForgeScreenTimeReportExtension.swift */,
 			);
-			path = ForgeCompanionTests;
+			name = ForgeScreenTimeReportExtension;
+			path = ForgeCompanion/ForgeScreenTimeReportExtension;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
+		7716D39194A1C5D167013748 /* ForgeWatchExtension */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 2288277C5FCF65B552E2EB34 /* Build configuration list for PBXNativeTarget "ForgeWatchExtension" */;
+			buildPhases = (
+				5EF65B71314440D7DFE428D0 /* Sources */,
+				E755D47E4576A13699D85003 /* Resources */,
+				C0A70BC7C331E844C18583F4 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = ForgeWatchExtension;
+			packageProductDependencies = (
+			);
+			productName = ForgeWatchExtension;
+			productReference = 969FEA21AED198B191D1E324 /* ForgeWatchExtension.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
+		8FD7D58A7178F1BDF93DBE66 /* ForgeCompanionTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = CCB60A255C5A94AAE47DD090 /* Build configuration list for PBXNativeTarget "ForgeCompanionTests" */;
+			buildPhases = (
+				517AF1935D4434CC0768EB72 /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				4586B3F28F466F7A9A8C8310 /* PBXTargetDependency */,
+			);
+			name = ForgeCompanionTests;
+			packageProductDependencies = (
+			);
+			productName = ForgeCompanionTests;
+			productReference = 2F8724E4FB8BE98D88523A61 /* ForgeCompanionTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
 		A3D7B3F69A15FB337E820D99 /* ForgeCompanion */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = 4B6A8665FA9D46B6EF70435A /* Build configuration list for PBXNativeTarget "ForgeCompanion" */;
 			buildPhases = (
 				8A44D08DB737DE4FD062D54F /* Sources */,
 				CCF67C05D25DFD6505CD9782 /* Resources */,
+				ACD5BC0A9881069976E522A7 /* Frameworks */,
+				9603692E0E02F211246EA460 /* Embed Foundation Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				A8047ED2446EA4190B6CD569 /* PBXTargetDependency */,
 			);
 			name = ForgeCompanion;
 			packageProductDependencies = (
@@ -407,6 +656,44 @@
 			productName = ForgeCompanion;
 			productReference = C1A9435D3CAA407E2081FE14 /* ForgeCompanion.app */;
 			productType = "com.apple.product-type.application";
+		};
+		CE0FC6E6FCEABEEC93BE5F8D /* ForgeWatch Watch App */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 6AC7D3A775D471D323BCEC67 /* Build configuration list for PBXNativeTarget "ForgeWatch Watch App" */;
+			buildPhases = (
+				9A4FDB3F16BFBFEA89BE7789 /* Sources */,
+				528A73085AF02EA4C270121C /* Resources */,
+				305455263BA131047F22AAED /* Embed Foundation Extensions */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				F2A7D809B1659085AF87DF01 /* PBXTargetDependency */,
+			);
+			name = "ForgeWatch Watch App";
+			packageProductDependencies = (
+			);
+			productName = "ForgeWatch Watch App";
+			productReference = 8933BA68703A3C4D4539E369 /* ForgeWatch Watch App.app */;
+			productType = "com.apple.product-type.application.watchapp2";
+		};
+		D7BDBCC2AC0457C8DAB50B41 /* ForgeScreenTimeReportExtension */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 2CD0269CF73A6E1BDD5E8446 /* Build configuration list for PBXNativeTarget "ForgeScreenTimeReportExtension" */;
+			buildPhases = (
+				BC8ACA2FC4FF5FCC071CDB67 /* Sources */,
+				5FC5F9DD2F880AA4A26023CD /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = ForgeScreenTimeReportExtension;
+			packageProductDependencies = (
+			);
+			productName = ForgeScreenTimeReportExtension;
+			productReference = 8FA0A1EC0034341F6FD6810C /* ForgeScreenTimeReportExtension.appex */;
+			productType = "com.apple.product-type.app-extension";
 		};
 /* End PBXNativeTarget section */
 
@@ -417,7 +704,24 @@
 				BuildIndependentTargetsInParallel = YES;
 				LastUpgradeCheck = 1430;
 				TargetAttributes = {
+					7716D39194A1C5D167013748 = {
+						DevelopmentTeam = KZ65F7924F;
+						ProvisioningStyle = Automatic;
+					};
+					8FD7D58A7178F1BDF93DBE66 = {
+						DevelopmentTeam = KZ65F7924F;
+						ProvisioningStyle = Automatic;
+					};
 					A3D7B3F69A15FB337E820D99 = {
+						DevelopmentTeam = KZ65F7924F;
+						ProvisioningStyle = Automatic;
+					};
+					CE0FC6E6FCEABEEC93BE5F8D = {
+						DevelopmentTeam = KZ65F7924F;
+						ProvisioningStyle = Automatic;
+					};
+					D7BDBCC2AC0457C8DAB50B41 = {
+						DevelopmentTeam = KZ65F7924F;
 						ProvisioningStyle = Automatic;
 					};
 				};
@@ -437,133 +741,233 @@
 			projectRoot = "";
 			targets = (
 				A3D7B3F69A15FB337E820D99 /* ForgeCompanion */,
+				8FD7D58A7178F1BDF93DBE66 /* ForgeCompanionTests */,
+				D7BDBCC2AC0457C8DAB50B41 /* ForgeScreenTimeReportExtension */,
+				CE0FC6E6FCEABEEC93BE5F8D /* ForgeWatch Watch App */,
+				7716D39194A1C5D167013748 /* ForgeWatchExtension */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
+		528A73085AF02EA4C270121C /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				AE7794F2FBF25CACC5183CC6 /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		CCF67C05D25DFD6505CD9782 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				05617CAB71D3D6509C731200 /* Assets.xcassets in Resources */,
-				733CCED4CA1EF86A260E85F8 /* ForgeCompanion.xcodeproj in Resources */,
-				1392E1D7D281F3CCF8AB7D5F /* absolutely-dark.json in Resources */,
-				6BDD64791A29483720621099 /* absolutely-light.json in Resources */,
-				ABE4CF57EFBDF59FAF99F8D2 /* ayu-dark.json in Resources */,
-				64471274341CD18D0172EDEA /* catppuccin-frappe.json in Resources */,
-				ECD043E0D14E9E4AB3B49F49 /* catppuccin-latte-Bd1wq-gC.json in Resources */,
-				625930CFFCC857D3E9DC7D95 /* catppuccin-macchiato.json in Resources */,
-				C0DFB72DB00CBB425186E62C /* catppuccin-mocha-Ry8aD-5u.json in Resources */,
-				6B3F684077319404E5B1E35C /* codex-dark.json in Resources */,
-				3FE0D1122718BDDF3B018740 /* codex-light.json in Resources */,
-				3B2906B447256EB6E67544C0 /* dark-plus-B1yOZ-Hy.json in Resources */,
-				03AFAA4817ED63ACA34F81ED /* dracula-soft.json in Resources */,
-				8D57AED7B8A3C5018050486A /* dracula.json in Resources */,
-				2BEF8CEAAE58F3C877EDF476 /* everforest-dark.json in Resources */,
-				27DBD85ECF86A87CE8D3343A /* everforest-light.json in Resources */,
-				36FA7B26FC1BB408FE557252 /* github-dark-default.json in Resources */,
-				B81D7C2C81DFC719EF398AD3 /* github-dark-dimmed.json in Resources */,
-				A80D2B859439B0825E66E022 /* github-dark-high-contrast.json in Resources */,
-				5726E121DD13E4296152ABB1 /* github-dark.json in Resources */,
-				3913802EFB56937605A54F17 /* github-light-default.json in Resources */,
-				10D32EA5151CCCA0D930309A /* github-light-high-contrast.json in Resources */,
-				5F27B32CC4CAAEF02511D2A9 /* github-light.json in Resources */,
-				D30E0C78A192CED8023D800A /* gruvbox-dark-hard.json in Resources */,
-				C96EFA56873BDC26889347CC /* gruvbox-dark-medium.json in Resources */,
-				BE486F24A130A943D3FE9027 /* gruvbox-dark-soft.json in Resources */,
-				BFAFDC9F95066281EEBE2684 /* gruvbox-light-hard.json in Resources */,
-				2B7E9F875C6C434F12CC72DB /* gruvbox-light-medium.json in Resources */,
-				6852C3BD60F38A5302A9C635 /* gruvbox-light-soft.json in Resources */,
-				E41D1D4C96979669855BA3FD /* houston.json in Resources */,
-				77EBA97A7E23D94B18F47FD3 /* kanagawa-dragon-VscOyZL-.json in Resources */,
-				DF8BB02CBD011B2791C2230B /* kanagawa-lotus.json in Resources */,
-				6BC488528D2F2DC091AFA119 /* kanagawa-wave.json in Resources */,
-				1E1BFFC7B198319E86FE36C2 /* laserwave.json in Resources */,
-				412134A75337D5B891B558C1 /* light-plus.json in Resources */,
-				4240F983DFEC69AF10D721E2 /* linear-dark.json in Resources */,
-				308C360498BEDB2AEE99FAA6 /* linear-light.json in Resources */,
-				FD1D7EF37F9DFD15336D6B16 /* lobster-dark-dxSKfHK-.json in Resources */,
-				6F47281004EBEE4EB7B4819A /* material-theme-darker-D.json in Resources */,
-				BF197596092DC5DC1F267097 /* material-theme-lighter.json in Resources */,
-				6372299254B19EE0A0A44C29 /* material-theme-ocean.json in Resources */,
-				7528B50367ED8CABF0EC748D /* material-theme-palenight.json in Resources */,
-				91596CB430E9320345547B49 /* material-theme.json in Resources */,
-				0445303A7608423CB02C8C4D /* matrix-dark.json in Resources */,
-				9D8A53F33998634B81EDD539 /* min-dark-.json in Resources */,
-				7199D595C418DCCA3D6B676F /* min-light.json in Resources */,
-				4E143E559E22EEF79E6624E6 /* monokai.json in Resources */,
-				9443AA4637A7D89D920930C3 /* night-owl.json in Resources */,
-				5AFDD566E1D37AAC507EA148 /* nord.json in Resources */,
-				E656D85B73AF061F8BD9A495 /* notion-dark-BTRKJ-yg.json in Resources */,
-				58DE7C8E7E0F1A8C56F586D7 /* notion-light.json in Resources */,
-				508CE5AA70E5B40A2F8245D4 /* one-dark-pro-D.json in Resources */,
-				BD876E60BE14F6A797C84400 /* one-light.json in Resources */,
-				51C1AE90A6D56C9DBC31ECAC /* oscurange-C.json in Resources */,
-				ED7C20FBE80C021E993B0E04 /* pierre-dark.json in Resources */,
-				98D12E711818537ED8008792 /* pierre-light.json in Resources */,
-				4F5D3B8E4938A9EC7DB00701 /* poimandres.json in Resources */,
-				C319150C5478E648D4176E66 /* proof-light.json in Resources */,
-				A343517C7661513250C6D4EC /* rose-pine-dawn.json in Resources */,
-				9CA792CE74889A54A7706FCD /* rose-pine-moon.json in Resources */,
-				62F81192C64A3E631D4991E8 /* rose-pine-x.json in Resources */,
-				03E97C443B503F4B425BA477 /* sentry-dark.json in Resources */,
-				9EB9D620252C9FFA37283BDE /* slack-dark.json in Resources */,
-				491FF3A7EE4B40907C7B4228 /* slack-ochin-CRg.json in Resources */,
-				7E18F587204FB088B42A9258 /* snazzy-light.json in Resources */,
-				DCF024831CB9AF1AAA1163DA /* solarized-dark.json in Resources */,
-				0227317AAEFF79CB045458C5 /* solarized-light.json in Resources */,
-				C90E12FA8ECDFF7214CC508F /* temple-dark.json in Resources */,
-				13773DF313E902316539F5B0 /* theme-manifest.json in Resources */,
-				3D67F5A790D4A39FE0233EB5 /* tokyo-night.json in Resources */,
-				7C43F27B0637CA6DC1ED36D0 /* vesper.json in Resources */,
-				71CDF1994B6A1BE00A59739D /* vitesse-black.json in Resources */,
-				8D5526E749C17258C46ADAE3 /* vitesse-dark.json in Resources */,
-				3D090A820B1A741DF7BC9E15 /* vitesse-light.json in Resources */,
+				4F15DD357D9E1B4289F2EBED /* Assets.xcassets in Resources */,
+				67B41083E274E59323E36713 /* absolutely-dark.json in Resources */,
+				328D513B6DD0899F4F511A33 /* absolutely-light.json in Resources */,
+				0D7E9B2D867932D79F1E7C34 /* ayu-dark.json in Resources */,
+				B62611EFCA1D0D35226A546E /* catppuccin-frappe.json in Resources */,
+				7AF2F63C9746CF230775C42B /* catppuccin-latte-Bd1wq-gC.json in Resources */,
+				E2440B6AED366192C7BA8277 /* catppuccin-macchiato.json in Resources */,
+				50B134A8C511A812A587A922 /* catppuccin-mocha-Ry8aD-5u.json in Resources */,
+				5C23DA1D8383E9663D508069 /* codex-dark.json in Resources */,
+				5AA524338B3F8935798CFBD3 /* codex-light.json in Resources */,
+				FF9DDFA763FBB5C2AFA3C08B /* dark-plus-B1yOZ-Hy.json in Resources */,
+				54EC98AB6FF037580A4C38DB /* dracula-soft.json in Resources */,
+				994978D8CD08859187B7FE58 /* dracula.json in Resources */,
+				B7D55BA2FE1D5E0332C79D04 /* everforest-dark.json in Resources */,
+				723852B9E8F0DE81E6A0E03F /* everforest-light.json in Resources */,
+				339A8EC2255659B63A8FF0D3 /* github-dark-default.json in Resources */,
+				39EC5ED38B1335A358EB8DCB /* github-dark-dimmed.json in Resources */,
+				868C49660369E99134CA7D1F /* github-dark-high-contrast.json in Resources */,
+				956F6951305AA41B11C3EC8B /* github-dark.json in Resources */,
+				2112E15E7A348BD74D701850 /* github-light-default.json in Resources */,
+				BFA9D37DB2B8A659029682F1 /* github-light-high-contrast.json in Resources */,
+				1FA86FA89A93065F3DFB6E40 /* github-light.json in Resources */,
+				41871B301221A3D7554F44F8 /* gruvbox-dark-hard.json in Resources */,
+				0DED9B561FA0304091A36357 /* gruvbox-dark-medium.json in Resources */,
+				A1F53A485A7E1BA560A3F4DF /* gruvbox-dark-soft.json in Resources */,
+				B8C3EE240F17FC1D0AAA9549 /* gruvbox-light-hard.json in Resources */,
+				6A2E87B1A44D71B76ACC631D /* gruvbox-light-medium.json in Resources */,
+				BB56E1A9D179EF58252EBCE7 /* gruvbox-light-soft.json in Resources */,
+				2A6671BF5103E278278769B5 /* houston.json in Resources */,
+				4DF09CE80D72852ACCA1C2DA /* kanagawa-dragon-VscOyZL-.json in Resources */,
+				FBF22DC744C4219AB6198086 /* kanagawa-lotus.json in Resources */,
+				B04FDEA7F9698DFD1FECF388 /* kanagawa-wave.json in Resources */,
+				884B407C19CF3635DE3A87E0 /* laserwave.json in Resources */,
+				43094AC60C266A1057B74281 /* light-plus.json in Resources */,
+				D4EFEB208CBD72DD38FB9BB8 /* linear-dark.json in Resources */,
+				3BCEBD6145DE933FAC4760F1 /* linear-light.json in Resources */,
+				BC7794489214AD7B42B9E642 /* lobster-dark-dxSKfHK-.json in Resources */,
+				9466F6DDD59D46CFF4474A36 /* material-theme-darker-D.json in Resources */,
+				704D63E5799EB42E76F1C3C4 /* material-theme-lighter.json in Resources */,
+				C75975A0534324588D5C55B4 /* material-theme-ocean.json in Resources */,
+				E487330DCD37579C3DD1A4F4 /* material-theme-palenight.json in Resources */,
+				2DF519C50022351269EA4FF3 /* material-theme.json in Resources */,
+				B42AF7527075F3325E9B653C /* matrix-dark.json in Resources */,
+				76F296D46E124D93C1D3C1C3 /* min-dark-.json in Resources */,
+				E1EA50CBD62FEE2B0DC99CCD /* min-light.json in Resources */,
+				0930DC4787D88701DFCD9AEE /* monokai.json in Resources */,
+				383BE6BEE9F5637EAECCDA3F /* night-owl.json in Resources */,
+				EE203EA205DFA06989C2A6D8 /* nord.json in Resources */,
+				BF7A8412432A8FBD611B69AC /* notion-dark-BTRKJ-yg.json in Resources */,
+				AB11C6E633BBE1DF046DE8F9 /* notion-light.json in Resources */,
+				A0D29BA35E3F456EF59A51AA /* one-dark-pro-D.json in Resources */,
+				6D0F9D9182BD033054675108 /* one-light.json in Resources */,
+				A395943C15CABF29A6B60BA1 /* oscurange-C.json in Resources */,
+				22E07C06FD6B0D232511EFD0 /* pierre-dark.json in Resources */,
+				1C25C8EF318715F075E06060 /* pierre-light.json in Resources */,
+				7934A72CDD7482F777F1F204 /* poimandres.json in Resources */,
+				C224862477CF7D3F1A2E0253 /* proof-light.json in Resources */,
+				063708E0646D9174E0F996C7 /* rose-pine-dawn.json in Resources */,
+				9F986E5B0046BCA20652BE4C /* rose-pine-moon.json in Resources */,
+				026ADCCD654CFCD77957E9CC /* rose-pine-x.json in Resources */,
+				E3A68EA577E407FC74123D04 /* sentry-dark.json in Resources */,
+				E418E51D4143EDEC83653517 /* slack-dark.json in Resources */,
+				0E259A61B9D31A6660E59812 /* slack-ochin-CRg.json in Resources */,
+				D08E08B37039E8C7AFEEF81A /* snazzy-light.json in Resources */,
+				94E537014E73F57A6C1DC199 /* solarized-dark.json in Resources */,
+				25A73518E1599A6BFB27080C /* solarized-light.json in Resources */,
+				CC9A0068DC77A7E82B6A0880 /* temple-dark.json in Resources */,
+				6C15AF0194225C8636F44AD6 /* theme-manifest.json in Resources */,
+				C7ABF7112F39AD6D2661ECEB /* tokyo-night.json in Resources */,
+				73BBD188ADA406DB65F9F14B /* vesper.json in Resources */,
+				95CB103A56B1A9A0B502F192 /* vitesse-black.json in Resources */,
+				B5D1EC12920874C35CD51368 /* vitesse-dark.json in Resources */,
+				EC3152FFCEAE190363A06005 /* vitesse-light.json in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		E755D47E4576A13699D85003 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				17D03007115057EE8D4A0DF8 /* Assets.xcassets in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
+		517AF1935D4434CC0768EB72 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				905F77BEC01F3B520C44A83D /* ForgeCompanionTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		5EF65B71314440D7DFE428D0 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				622884FB2C7F4915E75B3E2F /* AppIntent.swift in Sources */,
+				55CB27166468731082C0BBDB /* ForgeWatch.swift in Sources */,
+				D2F313010BAF6726C0A06D7C /* ForgeWatchBundle.swift in Sources */,
+				641311D8EF5DB5E2D303C022 /* ForgeWatchControl.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		8A44D08DB737DE4FD062D54F /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				93E26877DE032468BBC1083F /* CompanionAppModel.swift in Sources */,
-				D97740F51A55BD2C209152EA /* CompanionAppRoot.swift in Sources */,
-				8BE7264A99DC00BA6E213A31 /* CompanionBackgroundScheduler.swift in Sources */,
-				E8B52695891EA26FECAE8A14 /* CompanionMenuSheet.swift in Sources */,
-				26ED65ECF8BF191035801EDB /* CompanionSetupFlow.swift in Sources */,
-				C7BA24AFF59FA87F87208B89 /* CompanionStyle.swift in Sources */,
-				933F55BB4A50DDD5E5D3C6B7 /* ContentView.swift in Sources */,
-				C8C5E1C364A356DC76EE29AE /* DebugLog.swift in Sources */,
-				3EC08C2374225916A24444C7 /* ForgeCompanionApp.swift in Sources */,
-				1715A52F0B312250703E4AB4 /* ForgeCompanionTests.swift in Sources */,
-				6C3483FD5BE4A4E7807933B3 /* ForgeCompanionUITests.swift in Sources */,
-				4761750AE82C1B0E9B4E2A29 /* ForgeCompanionUITestsLaunchTests.swift in Sources */,
-				1302906E6C5B857FFBDA0622 /* ForgeServerDiscovery.swift in Sources */,
-				3D87665C914A74E205FD8B67 /* ForgeSyncClient.swift in Sources */,
-				E096F9786A99E795443E7B37 /* ForgeWebView.swift in Sources */,
-				933D75EFBAE8E5A5A1A1B2FE /* HealthSyncStore.swift in Sources */,
-				2F9693D994D28E1845C0C8BD /* KeychainStore.swift in Sources */,
-				3541414071DB333835804DD0 /* Models.swift in Sources */,
-				1404D750C54C26D9A18F7CA9 /* MovementSettingsSheet.swift in Sources */,
-				E571A37B09D04331EA6E41E4 /* MovementSyncStore.swift in Sources */,
-				6A15F3CD51D519FEDA55DFA1 /* PairedForgeScreen.swift in Sources */,
-				568A0248DFBE6E8262408EA8 /* QRPairingScanner.swift in Sources */,
-				C58DDA0831D060D30080083B /* QRScannerView.swift in Sources */,
-				9B04372A972BC8B9216912F6 /* SetupDiscoveryScreen.swift in Sources */,
-				B2AE7F49D418F0085F721591 /* SetupHealthScreen.swift in Sources */,
-				5226986F2DC8B80FBC76045B /* SetupManualScreen.swift in Sources */,
-				0DBA8E9802E4573EBDD196F2 /* SetupQRScreen.swift in Sources */,
-				E75A1D098B581E024AD5C477 /* UnpairedHeroScreen.swift in Sources */,
+				31DD17A609B0896155384020 /* CompanionAppModel.swift in Sources */,
+				3B98589423316C410EFC2442 /* CompanionAppRoot.swift in Sources */,
+				75A76BDBA4705C8FDDA1A250 /* CompanionBackgroundScheduler.swift in Sources */,
+				6DE7D860A474AC5BDA176EF8 /* CompanionDiagnosticsSheet.swift in Sources */,
+				770E5FA69800C610CBDD3DC1 /* CompanionMenuSheet.swift in Sources */,
+				4DFA96F1114B86315608985C /* CompanionScreenshotSupport.swift in Sources */,
+				4F24388BC2FC9FDD7A97BD39 /* CompanionSetupFlow.swift in Sources */,
+				94EC5E5C1CDAEEF245BEDE03 /* CompanionStyle.swift in Sources */,
+				CF8F0C8D933EAB6EC1490385 /* ContentView.swift in Sources */,
+				7303D1D2F6454A807CE2C281 /* DebugLog.swift in Sources */,
+				B309098295E42F4EB0211F0C /* ForgeCompanionApp.swift in Sources */,
+				6B3DD5C61DA38BE2383E24C4 /* ForgeScreenTimeSharedModels.swift in Sources */,
+				F82484FE33E4A387450E476E /* ForgeServerDiscovery.swift in Sources */,
+				182189FC59058A0FCC3299E9 /* ForgeSyncClient.swift in Sources */,
+				39F9E5C28A63D131EED95C7D /* ForgeWebView.swift in Sources */,
+				864F4340B9DA562F51A2492B /* HealthSyncStore.swift in Sources */,
+				FFC74D999642D85B9CE4F7DC /* KeychainStore.swift in Sources */,
+				0E62F33331B1CB6F4828C78E /* Models.swift in Sources */,
+				8C7CF2331F28E470BF950B68 /* MovementSettingsSheet.swift in Sources */,
+				C456398A5AA670F146063B1E /* MovementSyncStore.swift in Sources */,
+				34D23AEAFF591904DCEAFA41 /* PairedForgeScreen.swift in Sources */,
+				6E159D8AD1846EC8F3A05C43 /* QRPairingScanner.swift in Sources */,
+				947CA83023368F473276855A /* QRScannerView.swift in Sources */,
+				F3B8DD1C0C182ACEC3A14A72 /* ScreenTimeCaptureHost.swift in Sources */,
+				7C4971089367E1FAD47BB8F5 /* ScreenTimeSettingsSheet.swift in Sources */,
+				A4FFAD65585480CCAAF6ED11 /* ScreenTimeStore.swift in Sources */,
+				72D8C98811F8983956A378AD /* SetupDiscoveryScreen.swift in Sources */,
+				BF1A9D82FAF626A426C345D9 /* SetupHealthScreen.swift in Sources */,
+				C077AC5A77E343A669130237 /* SetupManualScreen.swift in Sources */,
+				68D7CBD349B0578FE0D9FCA6 /* SetupQRScreen.swift in Sources */,
+				3F10F96B9C2C07531C16B9AC /* UnpairedHeroScreen.swift in Sources */,
+				3DA9E9D5BB9DC9AFAE03A0BF /* WatchSessionManager.swift in Sources */,
+				8D1F48512202759FA9B8DF1E /* WatchSharedModels.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		9A4FDB3F16BFBFEA89BE7789 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				76CF3A360D6F72DD1EE7017C /* ContentView.swift in Sources */,
+				3EA51158CD2B94564493777D /* ForgeWatchApp.swift in Sources */,
+				469371D3997E457D3492808B /* WatchAppModel.swift in Sources */,
+				11A5CF96FDEF553EFF861B84 /* WatchCheckInView.swift in Sources */,
+				42097E36F9FB6D3EE6C611C0 /* WatchComponents.swift in Sources */,
+				4482EEB11B69F4DA7C7352DE /* WatchHabitsView.swift in Sources */,
+				51A86A3F992FD5D14E542DC6 /* WatchMarkMomentView.swift in Sources */,
+				FF4A3FAF66EB69EEFED1F856 /* WatchPromptInboxView.swift in Sources */,
+				24E1C4FF625BDFED356BDB34 /* WatchSharedModels.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		BC8ACA2FC4FF5FCC071CDB67 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				4A6F0CF5DE73BBD37BC35759 /* ForgeScreenTimeReportExtension.swift in Sources */,
+				6C7A3B9F0209D681DD2D5863 /* ForgeScreenTimeSharedModels.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXSourcesBuildPhase section */
 
+/* Begin PBXTargetDependency section */
+		4586B3F28F466F7A9A8C8310 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = A3D7B3F69A15FB337E820D99 /* ForgeCompanion */;
+			targetProxy = 59A2508E530D6D8B95677332 /* PBXContainerItemProxy */;
+		};
+		A8047ED2446EA4190B6CD569 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = D7BDBCC2AC0457C8DAB50B41 /* ForgeScreenTimeReportExtension */;
+			targetProxy = 8D0A71F59D5E5A3E360216E6 /* PBXContainerItemProxy */;
+		};
+		F2A7D809B1659085AF87DF01 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 7716D39194A1C5D167013748 /* ForgeWatchExtension */;
+			targetProxy = CE220BB95379375A2C32B5DB /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
 /* Begin XCBuildConfiguration section */
+		017FD4D8634CEF57DEB8E39A /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = "ForgeCompanion/ForgeWatch Watch App/ForgeWatch Watch App.entitlements";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = KZ65F7924F;
+				GENERATE_INFOPLIST_FILE = YES;
+				PRODUCT_BUNDLE_IDENTIFIER = com.albertbuchard.ForgeCompanion.watchkitapp;
+				SDKROOT = watchos;
+				SKIP_INSTALL = YES;
+				TARGETED_DEVICE_FAMILY = 4;
+			};
+			name = Debug;
+		};
 		2877BA24F6AEA51F7CB2920F /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -612,10 +1016,100 @@
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				PRODUCT_NAME = "$(TARGET_NAME)";
-				SDKROOT = iphoneos;
 				SWIFT_COMPILATION_MODE = wholemodule;
 				SWIFT_OPTIMIZATION_LEVEL = "-O";
 				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+		362A96B1DD1305531940A990 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = "ForgeCompanion/ForgeWatch Watch App/ForgeWatch Watch App.entitlements";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = KZ65F7924F;
+				GENERATE_INFOPLIST_FILE = YES;
+				PRODUCT_BUNDLE_IDENTIFIER = com.albertbuchard.ForgeCompanion.watchkitapp;
+				SDKROOT = watchos;
+				SKIP_INSTALL = YES;
+				TARGETED_DEVICE_FAMILY = 4;
+			};
+			name = Release;
+		};
+		37563695B02B5AC9F8698770 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = KZ65F7924F;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.albertbuchard.ForgeCompanionTests;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/ForgeCompanion.app/ForgeCompanion";
+			};
+			name = Debug;
+		};
+		37FDBE659FC5D9F9D7A9087E /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = ForgeCompanion/ForgeWatchExtension.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = KZ65F7924F;
+				INFOPLIST_FILE = ForgeCompanion/ForgeWatch/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.albertbuchard.ForgeCompanion.watchkitapp.ForgeWatch;
+				SDKROOT = watchos;
+				SKIP_INSTALL = YES;
+				TARGETED_DEVICE_FAMILY = 4;
+			};
+			name = Debug;
+		};
+		5900F9AC90473A351222C509 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = ForgeCompanion/ForgeScreenTimeReportExtension/ForgeScreenTimeReportExtension.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = KZ65F7924F;
+				INFOPLIST_FILE = ForgeCompanion/ForgeScreenTimeReportExtension/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.albertbuchard.ForgeCompanion.ForgeScreenTimeReportExtension;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		63C9686AE4CB7A6EA76C3B97 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = ForgeCompanion/ForgeWatchExtension.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = KZ65F7924F;
+				INFOPLIST_FILE = ForgeCompanion/ForgeWatch/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.albertbuchard.ForgeCompanion.watchkitapp.ForgeWatch;
+				SDKROOT = watchos;
+				SKIP_INSTALL = YES;
+				TARGETED_DEVICE_FAMILY = 4;
 			};
 			name = Release;
 		};
@@ -623,11 +1117,16 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = ForgeCompanion/ForgeCompanion/ForgeCompanion.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = KZ65F7924F;
 				INFOPLIST_FILE = ForgeCompanion/Info.plist;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UIRequiresFullScreen = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = (
 					UIInterfaceOrientationPortrait,
 				);
@@ -636,9 +1135,29 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.aurel.forgecompanion;
+				PRODUCT_BUNDLE_IDENTIFIER = com.albertbuchard.ForgeCompanion;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Release;
+		};
+		8B9DFB010DABAB7A2F0F4452 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = KZ65F7924F;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.albertbuchard.ForgeCompanionTests;
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/ForgeCompanion.app/ForgeCompanion";
 			};
 			name = Release;
 		};
@@ -646,11 +1165,16 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = ForgeCompanion/ForgeCompanion/ForgeCompanion.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = KZ65F7924F;
 				INFOPLIST_FILE = ForgeCompanion/Info.plist;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UIRequiresFullScreen = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = (
 					UIInterfaceOrientationPortrait,
 				);
@@ -659,7 +1183,26 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.aurel.forgecompanion;
+				PRODUCT_BUNDLE_IDENTIFIER = com.albertbuchard.ForgeCompanion;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Debug;
+		};
+		CC147B4ED8C0AB5B3FC1081E /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = ForgeCompanion/ForgeScreenTimeReportExtension/ForgeScreenTimeReportExtension.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = KZ65F7924F;
+				INFOPLIST_FILE = ForgeCompanion/ForgeScreenTimeReportExtension/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.albertbuchard.ForgeCompanion.ForgeScreenTimeReportExtension;
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = "1,2";
 			};
@@ -720,7 +1263,6 @@
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
 				PRODUCT_NAME = "$(TARGET_NAME)";
-				SDKROOT = iphoneos;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 				SWIFT_VERSION = 5.0;
@@ -730,6 +1272,24 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
+		2288277C5FCF65B552E2EB34 /* Build configuration list for PBXNativeTarget "ForgeWatchExtension" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				37FDBE659FC5D9F9D7A9087E /* Debug */,
+				63C9686AE4CB7A6EA76C3B97 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		2CD0269CF73A6E1BDD5E8446 /* Build configuration list for PBXNativeTarget "ForgeScreenTimeReportExtension" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				CC147B4ED8C0AB5B3FC1081E /* Debug */,
+				5900F9AC90473A351222C509 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
 		4B6A8665FA9D46B6EF70435A /* Build configuration list for PBXNativeTarget "ForgeCompanion" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
@@ -744,6 +1304,24 @@
 			buildConfigurations = (
 				E00C9304447EA1CC9D981AB6 /* Debug */,
 				2877BA24F6AEA51F7CB2920F /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		6AC7D3A775D471D323BCEC67 /* Build configuration list for PBXNativeTarget "ForgeWatch Watch App" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				017FD4D8634CEF57DEB8E39A /* Debug */,
+				362A96B1DD1305531940A990 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		CCB60A255C5A94AAE47DD090 /* Build configuration list for PBXNativeTarget "ForgeCompanionTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				37563695B02B5AC9F8698770 /* Debug */,
+				8B9DFB010DABAB7A2F0F4452 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Debug;

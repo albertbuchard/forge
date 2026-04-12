@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Forge | Celestial Archive</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&amp;family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+                    "inverse-surface": "#f9f9ff",
+                    "on-surface-variant": "#eef2ff99",
+                    "tertiary": "#4edea3",
+                    "on-tertiary-container": "#ffffff",
+                    "secondary-dim": "#4edea3",
+                    "surface-container": "#171f33",
+                    "surface": "#0b1326",
+                    "tertiary-fixed-dim": "#4edea3",
+                    "on-primary-container": "#0b1326",
+                    "on-surface": "#eef2ff",
+                    "on-secondary-fixed": "#0b1326",
+                    "on-secondary-fixed-variant": "#0b1326",
+                    "on-primary-fixed-variant": "#0b1326",
+                    "secondary-fixed-dim": "#4edea3",
+                    "surface-bright": "#222a3e",
+                    "outline": "#46484d",
+                    "tertiary-fixed": "#4edea3",
+                    "on-tertiary-fixed-variant": "#0b1326",
+                    "on-error-container": "#ffa8a3",
+                    "surface-container-highest": "#222a3e",
+                    "on-error": "#490006",
+                    "surface-variant": "#171f33",
+                    "on-secondary": "#0b1326",
+                    "secondary-fixed": "#4edea3",
+                    "secondary": "#4edea3",
+                    "tertiary-dim": "#4edea3",
+                    "on-background": "#eef2ff",
+                    "inverse-primary": "#c0c1ff",
+                    "background": "#0b1326",
+                    "on-secondary-container": "#eef2ff",
+                    "inverse-on-surface": "#0b1326",
+                    "secondary-container": "#4edea3",
+                    "primary-fixed": "#c0c1ff",
+                    "surface-tint": "#c0c1ff",
+                    "tertiary-container": "#4edea3",
+                    "primary-container": "#c0c1ff",
+                    "surface-container-high": "#171f33",
+                    "primary-dim": "#c0c1ff",
+                    "surface-container-low": "#0b1326",
+                    "error": "#ff716c",
+                    "error-dim": "#d7383b",
+                    "on-primary-fixed": "#0b1326",
+                    "on-tertiary": "#0b1326",
+                    "surface-container-lowest": "#000000",
+                    "primary": "#c0c1ff",
+                    "outline-variant": "#46484d",
+                    "surface-dim": "#0b1326",
+                    "primary-fixed-dim": "#c0c1ff",
+                    "on-tertiary-fixed": "#0b1326",
+                    "error-container": "#9f0519"
+            },
+            "borderRadius": {
+                    "DEFAULT": "0.25rem",
+                    "lg": "0.5rem",
+                    "xl": "0.75rem",
+                    "full": "9999px"
+            },
+            "fontFamily": {
+                    "headline": ["Space Grotesk"],
+                    "body": ["Space Grotesk"],
+                    "label": ["Space Grotesk"]
+            }
+          },
+        },
+      }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .starfield {
+            background-image: radial-gradient(circle at 2px 2px, rgba(192,193,255,0.08) 1px, transparent 0);
+            background-size: 50px 50px;
+        }
+        .node-glow-amber { box-shadow: 0 0 15px 2px rgba(251, 191, 36, 0.4); }
+        .node-glow-sky { box-shadow: 0 0 15px 2px rgba(56, 189, 248, 0.4); }
+        .node-glow-indigo { box-shadow: 0 0 15px 2px rgba(129, 140, 248, 0.4); }
+        .node-glow-cyan { box-shadow: 0 0 15px 2px rgba(34, 209, 238, 0.4); }
+        .node-glow-teal { box-shadow: 0 0 15px 2px rgba(45, 212, 191, 0.4); }
+        .node-glow-emerald { box-shadow: 0 0 15px 2px rgba(52, 211, 153, 0.4); }
+        .node-glow-rose { box-shadow: 0 0 15px 2px rgba(251, 113, 133, 0.4); }
+        .node-glow-orange { box-shadow: 0 0 15px 2px rgba(251, 146, 60, 0.4); }
+        .node-glow-violet { box-shadow: 0 0 15px 2px rgba(167, 139, 250, 0.4); }
+        .node-glow-fuchsia { box-shadow: 0 0 15px 2px rgba(217, 70, 239, 0.4); }
+        .node-glow-blue { box-shadow: 0 0 15px 2px rgba(96, 165, 250, 0.4); }
+    </style>
+</head>
+<body class="bg-background text-on-surface font-body selection:bg-primary/30 overflow-hidden">
+<!-- SideNavBar -->
+<aside class="fixed left-0 top-0 h-full flex flex-col z-40 bg-[#171f33] w-20 hover:w-64 transition-all duration-500 ease-in-out shadow-[20px_0_80px_rgba(0,0,0,0.45)] group">
+<div class="flex items-center px-6 py-8 space-x-4">
+<div class="w-10 h-10 rounded-lg bg-[#c0c1ff] flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-[#0b1326]" data-icon="auto_awesome">auto_awesome</span>
+</div>
+<div class="opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+<h1 class="font-headline font-black text-[#c0c1ff] text-lg leading-tight">The Forge</h1>
+<p class="font-body text-[10px] uppercase tracking-widest text-[#eef2ff]/50">Knowledge Graph</p>
+</div>
+</div>
+<nav class="flex-1 px-4 space-y-3 mt-4">
+<!-- Active: Overview -->
+<a class="flex items-center h-12 px-3 transition-all duration-150 text-[#4edea3] shadow-[0_0_10px_rgba(78,222,163,0.3)] bg-[#222a3e] rounded-r-full group/nav scale-95" href="#">
+<span class="material-symbols-outlined shrink-0" data-icon="dashboard">dashboard</span>
+<span class="ml-4 font-body text-[0.75rem] uppercase tracking-widest opacity-0 group-hover:opacity-100 whitespace-nowrap">Overview</span>
+</a>
+<a class="flex items-center h-12 px-3 rounded-xl transition-all duration-150 text-[#eef2ff]/50 hover:bg-[#222a3e] hover:text-[#c0c1ff] group/nav scale-95" href="#">
+<span class="material-symbols-outlined shrink-0" data-icon="flag">flag</span>
+<span class="ml-4 font-body text-[0.75rem] uppercase tracking-widest opacity-0 group-hover:opacity-100 whitespace-nowrap">Goals</span>
+</a>
+<a class="flex items-center h-12 px-3 rounded-xl transition-all duration-150 text-[#eef2ff]/50 hover:bg-[#222a3e] hover:text-[#c0c1ff] group/nav scale-95" href="#">
+<span class="material-symbols-outlined shrink-0" data-icon="inventory_2">inventory_2</span>
+<span class="ml-4 font-body text-[0.75rem] uppercase tracking-widest opacity-0 group-hover:opacity-100 whitespace-nowrap">Projects</span>
+</a>
+<a class="flex items-center h-12 px-3 rounded-xl transition-all duration-150 text-[#eef2ff]/50 hover:bg-[#222a3e] hover:text-[#c0c1ff] group/nav scale-95" href="#">
+<span class="material-symbols-outlined shrink-0" data-icon="settings">settings</span>
+<span class="ml-4 font-body text-[0.75rem] uppercase tracking-widest opacity-0 group-hover:opacity-100 whitespace-nowrap">Settings</span>
+</a>
+</nav>
+<div class="px-4 pb-8 space-y-3">
+<a class="flex items-center h-12 px-3 rounded-xl transition-all duration-150 text-[#eef2ff]/50 hover:bg-[#222a3e] hover:text-[#c0c1ff] group/nav scale-95" href="#">
+<span class="material-symbols-outlined shrink-0" data-icon="auto_stories">auto_stories</span>
+<span class="ml-4 font-body text-[0.75rem] uppercase tracking-widest opacity-0 group-hover:opacity-100 whitespace-nowrap">Archive</span>
+</a>
+<a class="flex items-center h-12 px-3 rounded-xl transition-all duration-150 text-[#eef2ff]/50 hover:bg-[#222a3e] hover:text-[#c0c1ff] group/nav scale-95" href="#">
+<span class="material-symbols-outlined shrink-0" data-icon="help">help</span>
+<span class="ml-4 font-body text-[0.75rem] uppercase tracking-widest opacity-0 group-hover:opacity-100 whitespace-nowrap">Support</span>
+</a>
+</div>
+</aside>
+<!-- Main Canvas Area -->
+<main class="relative w-screen h-screen ml-20 bg-[#0b1326] overflow-hidden cursor-grab active:cursor-grabbing">
+<!-- Background Grid/Starfield -->
+<div class="absolute inset-0 starfield opacity-40"></div>
+<!-- The Knowledge Graph Mockup -->
+<div class="absolute inset-0 flex items-center justify-center pointer-events-none">
+<div class="relative w-[2000px] h-[1200px]">
+<!-- SVG Connections -->
+<svg class="absolute inset-0 w-full h-full opacity-30">
+<line stroke="#FBBF24" stroke-width="0.75" x1="400" x2="600" y1="300" y2="450"></line>
+<line stroke="#38BDF8" stroke-width="0.75" x1="600" x2="550" y1="450" y2="600"></line>
+<line stroke="#818CF8" stroke-width="0.75" x1="600" x2="800" y1="450" y2="420"></line>
+<line stroke="#22D1EE" stroke-width="0.75" x1="800" x2="950" y1="420" y2="380"></line>
+<line stroke="#34D399" stroke-width="0.75" x1="950" x2="1100" y1="380" y2="450"></line>
+<line stroke="#A78BFA" stroke-width="0.75" x1="1100" x2="1050" y1="450" y2="620"></line>
+<line stroke="#FB923C" stroke-width="0.75" x1="1050" x2="850" y1="620" y2="700"></line>
+<circle class="opacity-10" cx="950" cy="500" fill="none" r="150" stroke="#c0c1ff" stroke-dasharray="4 4" stroke-width="1"></circle>
+</svg>
+<!-- Representative Nodes -->
+<!-- Goal (Amber) -->
+<div class="absolute top-[280px] left-[390px] group/node pointer-events-auto cursor-pointer">
+<div class="w-3.5 h-3.5 rounded-full bg-[#FBBF24] node-glow-amber flex items-center justify-center">
+<span class="material-symbols-outlined text-[#0b1326] text-[8px] font-bold" data-icon="target">target</span>
+</div>
+<span class="absolute top-6 left-1/2 -translate-x-1/2 text-[10px] font-medium text-[#FBBF24] opacity-0 group-hover/node:opacity-100 transition-opacity bg-[#171f33]/90 px-2 py-0.5 rounded border border-[#FBBF24]/20 whitespace-nowrap">Annual Growth</span>
+</div>
+<!-- Project (Sky) -->
+<div class="absolute top-[440px] left-[590px] group/node pointer-events-auto cursor-pointer">
+<div class="w-5 h-5 rounded-full bg-[#38BDF8] node-glow-sky flex items-center justify-center">
+<span class="material-symbols-outlined text-[#0b1326] text-[10px] font-bold" data-icon="folder_open">folder_open</span>
+</div>
+<div class="absolute top-7 left-1/2 -translate-x-1/2 text-[11px] font-bold text-[#38BDF8] bg-[#171f33]/90 px-3 py-1 rounded border border-[#38BDF8]/30 whitespace-nowrap">Project Chimera</div>
+</div>
+<!-- Task (Indigo) -->
+<div class="absolute top-[590px] left-[540px] group/node pointer-events-auto cursor-pointer">
+<div class="w-3 h-3 rounded-full bg-[#818CF8] node-glow-indigo flex items-center justify-center">
+<span class="material-symbols-outlined text-[#0b1326] text-[8px]" data-icon="list_alt">list_alt</span>
+</div>
+</div>
+<!-- Strategy (Cyan) -->
+<div class="absolute top-[410px] left-[790px] group/node pointer-events-auto cursor-pointer">
+<div class="w-3.5 h-3.5 rounded-full bg-[#22D1EE] node-glow-cyan flex items-center justify-center">
+<span class="material-symbols-outlined text-[#0b1326] text-[8px]" data-icon="account_tree">account_tree</span>
+</div>
+<span class="absolute top-5 left-1/2 -translate-x-1/2 text-[10px] text-[#22D1EE] opacity-0 group-hover/node:opacity-100 transition-opacity bg-[#171f33]/90 px-2 py-0.5 rounded whitespace-nowrap">Market Analysis v2</span>
+</div>
+<!-- Value (Emerald) -->
+<div class="absolute top-[370px] left-[940px] group/node pointer-events-auto cursor-pointer">
+<div class="w-4 h-4 rounded-full bg-[#34D399] node-glow-emerald flex items-center justify-center">
+<span class="material-symbols-outlined text-[#0b1326] text-[10px]" data-icon="favorite">favorite</span>
+</div>
+<span class="absolute -top-6 left-1/2 -translate-x-1/2 text-[10px] text-[#34D399] font-semibold uppercase tracking-tighter opacity-0 group-hover/node:opacity-100 transition-opacity whitespace-nowrap">Core Values</span>
+</div>
+<!-- Scattered background nodes -->
+<div class="absolute top-[10%] left-[20%] w-1.5 h-1.5 rounded-full bg-[#FB7185]/40 blur-[1px]"></div>
+<div class="absolute top-[60%] left-[80%] w-1.5 h-1.5 rounded-full bg-[#D946EF]/40 blur-[1px]"></div>
+<div class="absolute top-[85%] left-[50%] w-1.5 h-1.5 rounded-full bg-[#60A5FA]/40 blur-[1px]"></div>
+</div>
+</div>
+<!-- OVERLAYS -->
+<!-- Top Center Search Bar -->
+<div class="absolute top-20 left-1/2 -translate-x-1/2 w-full max-w-lg px-4 z-50">
+<div class="bg-[#171f33]/70 backdrop-blur-xl rounded-lg border border-[#c0c1ff]/10 flex items-center px-6 h-12 shadow-2xl transition-all focus-within:bg-[#222a3e] focus-within:border-[#c0c1ff]/30">
+<span class="material-symbols-outlined text-[#eef2ff]/40" data-icon="search">search</span>
+<input class="bg-transparent border-none focus:ring-0 text-[#eef2ff] placeholder:text-[#eef2ff]/30 w-full ml-4 font-body text-sm" placeholder="Search the Archive..." type="text"/>
+<div class="flex items-center space-x-2">
+<span class="px-2 py-1 rounded bg-[#0b1326] text-[10px] font-mono text-[#c0c1ff]/50 border border-[#c0c1ff]/10">⌘ K</span>
+</div>
+</div>
+</div>
+<!-- Bottom Left Legend -->
+<div class="absolute bottom-8 left-8 z-50">
+<div class="bg-[#171f33]/80 backdrop-blur-md p-5 rounded border border-[#c0c1ff]/10 shadow-2xl max-h-[400px] overflow-y-auto custom-scrollbar">
+<p class="text-[10px] font-mono text-[#c0c1ff]/50 uppercase tracking-[0.2em] mb-4">Archive Legend</p>
+<div class="grid grid-cols-1 gap-y-2.5">
+<div class="flex items-center space-x-3">
+<div class="w-3 h-3 rounded-full bg-[#FBBF24] flex items-center justify-center"><span class="material-symbols-outlined text-[7px] text-black" data-icon="target">target</span></div>
+<span class="text-[11px] text-[#eef2ff]/70 font-medium">Goal</span>
+</div>
+<div class="flex items-center space-x-3">
+<div class="w-3 h-3 rounded-full bg-[#38BDF8] flex items-center justify-center"><span class="material-symbols-outlined text-[7px] text-black" data-icon="folder_open">folder_open</span></div>
+<span class="text-[11px] text-[#eef2ff]/70 font-medium">Project</span>
+</div>
+<div class="flex items-center space-x-3">
+<div class="w-3 h-3 rounded-full bg-[#818CF8] flex items-center justify-center"><span class="material-symbols-outlined text-[7px] text-black" data-icon="list_alt">list_alt</span></div>
+<span class="text-[11px] text-[#eef2ff]/70 font-medium">Task</span>
+</div>
+<div class="flex items-center space-x-3">
+<div class="w-3 h-3 rounded-full bg-[#22D1EE] flex items-center justify-center"><span class="material-symbols-outlined text-[7px] text-black" data-icon="account_tree">account_tree</span></div>
+<span class="text-[11px] text-[#eef2ff]/70 font-medium">Strategy</span>
+</div>
+<div class="flex items-center space-x-3">
+<div class="w-3 h-3 rounded-full bg-[#2DD4BF] flex items-center justify-center"><span class="material-symbols-outlined text-[7px] text-black" data-icon="refresh">refresh</span></div>
+<span class="text-[11px] text-[#eef2ff]/70 font-medium">Habit</span>
+</div>
+<div class="flex items-center space-x-3">
+<div class="w-3 h-3 rounded-full bg-[#34D399] flex items-center justify-center"><span class="material-symbols-outlined text-[7px] text-black" data-icon="favorite">favorite</span></div>
+<span class="text-[11px] text-[#eef2ff]/70 font-medium">Value</span>
+</div>
+<div class="flex items-center space-x-3">
+<div class="w-3 h-3 rounded-full bg-[#FB7185] flex items-center justify-center"><span class="material-symbols-outlined text-[7px] text-black" data-icon="repeat">repeat</span></div>
+<span class="text-[11px] text-[#eef2ff]/70 font-medium">Pattern</span>
+</div>
+<div class="flex items-center space-x-3">
+<div class="w-3 h-3 rounded-full bg-[#FB923C] flex items-center justify-center"><span class="material-symbols-outlined text-[7px] text-black" data-icon="route">route</span></div>
+<span class="text-[11px] text-[#eef2ff]/70 font-medium">Behavior</span>
+</div>
+<div class="flex items-center space-x-3">
+<div class="w-3 h-3 rounded-full bg-[#A78BFA] flex items-center justify-center"><span class="material-symbols-outlined text-[7px] text-black" data-icon="format_quote">format_quote</span></div>
+<span class="text-[11px] text-[#eef2ff]/70 font-medium">Belief</span>
+</div>
+<div class="flex items-center space-x-3">
+<div class="w-3 h-3 rounded-full bg-[#D946EF] flex items-center justify-center"><span class="material-symbols-outlined text-[7px] text-black" data-icon="category">category</span></div>
+<span class="text-[11px] text-[#eef2ff]/70 font-medium">Mode</span>
+</div>
+<div class="flex items-center space-x-3">
+<div class="w-3 h-3 rounded-full bg-[#60A5FA] flex items-center justify-center"><span class="material-symbols-outlined text-[7px] text-black" data-icon="description">description</span></div>
+<span class="text-[11px] text-[#eef2ff]/70 font-medium">Report</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Bottom Right Controls -->
+<div class="absolute bottom-8 right-8 z-50 flex flex-col space-y-4">
+<div class="bg-[#171f33]/80 backdrop-blur-md rounded border border-[#c0c1ff]/10 shadow-xl flex flex-col p-1">
+<button class="w-10 h-10 flex items-center justify-center rounded hover:bg-[#222a3e] text-[#eef2ff]/50 hover:text-[#c0c1ff] transition-all">
+<span class="material-symbols-outlined" data-icon="add">add</span>
+</button>
+<div class="h-px bg-[#c0c1ff]/5 mx-2"></div>
+<button class="w-10 h-10 flex items-center justify-center rounded hover:bg-[#222a3e] text-[#eef2ff]/50 hover:text-[#c0c1ff] transition-all">
+<span class="material-symbols-outlined" data-icon="remove">remove</span>
+</button>
+</div>
+<button class="bg-[#c0c1ff] text-[#0b1326] h-12 w-12 rounded flex items-center justify-center shadow-lg shadow-[#c0c1ff]/20 hover:scale-105 transition-transform">
+<span class="material-symbols-outlined" data-icon="edit">edit</span>
+</button>
+</div>
+</main>
+<!-- TopNavBar -->
+<header class="fixed top-0 left-0 right-0 h-16 z-50 flex justify-between items-center px-8 bg-[#0b1326] w-full">
+<div class="flex items-center space-x-8">
+<div class="flex items-center space-x-3">
+<span class="text-xl font-bold text-[#eef2ff] tracking-tight font-headline">Celestial Archive</span>
+</div>
+<nav class="hidden md:flex space-x-8">
+<a class="text-[#c0c1ff] font-bold border-b-2 border-[#c0c1ff] h-16 flex items-center px-1" href="#">Knowledge Graph</a>
+<a class="text-[#eef2ff]/60 hover:text-[#c0c1ff] transition-colors duration-200 h-16 flex items-center px-1" href="#">Neural Assets</a>
+<a class="text-[#eef2ff]/60 hover:text-[#c0c1ff] transition-colors duration-200 h-16 flex items-center px-1" href="#">Curator Log</a>
+</nav>
+</div>
+<div class="flex items-center space-x-6">
+<div class="flex items-center space-x-4 text-[#eef2ff]/60">
+<button class="hover:text-[#c0c1ff] transition-colors duration-200">
+<span class="material-symbols-outlined" data-icon="history">history</span>
+</button>
+<button class="hover:text-[#c0c1ff] transition-colors duration-200">
+<span class="material-symbols-outlined" data-icon="notifications">notifications</span>
+</button>
+</div>
+<button class="bg-[#c0c1ff] text-[#0b1326] px-4 py-1.5 rounded font-bold text-sm hover:opacity-90 transition-opacity">
+            Sync
+        </button>
+<div class="w-8 h-8 rounded-full overflow-hidden border border-[#c0c1ff]/20">
+<img alt="User profile" class="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuD1uvR53vLpI_3pyjw4IrADibApbHBm_kxR7Rw2MIzg8NYOnSZPbDx8YhDWQ82UwCnq7T6_ORXj4iTXBzH_2u37mOFpsF4HoZ7ZMeFJr0ZwC5I9Cvj-3xECfvvNBXiqt5CFze3DSzH9TmxvqL04RmCn3zuJfwtDNAoMgIO1KrAnikt9fygPNIlGkFAeGP42UOb8jmibY1-S4d6Pe404mobBCzL9xZBg4Ne-kv5TuqeFW3Nu3a7LJyDVTpNpg27D5rbN_-0w2XBKOXKT"/>
+</div>
+</div>
+<!-- Separation Line -->
+<div class="absolute bottom-0 left-0 w-full bg-[#171f33] h-px"></div>
+</header>
+</body></html>

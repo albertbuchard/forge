@@ -38,7 +38,7 @@ struct CompanionSetupFlow: View {
                     openHealth: { step = .health }
                 )
             case .health:
-                SetupHealthScreen(
+                SetupPermissionsScreen(
                     close: finish
                 )
             }

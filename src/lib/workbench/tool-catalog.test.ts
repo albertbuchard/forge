@@ -20,7 +20,13 @@ describe("workbench tool catalog", () => {
             key: "forge.search_entities",
             label: "Search Forge entities",
             description: "Search Forge entities by query and entity types.",
-            accessMode: "read"
+            accessMode: "read",
+            argsSchema: {
+              type: "object",
+              properties: {
+                query: { type: "string" }
+              }
+            }
           }
         ]
       },
@@ -69,7 +75,13 @@ describe("workbench tool catalog", () => {
     expect(catalog).toHaveLength(2);
     expect(catalog.find((tool) => tool.key === "forge.search_entities")).toMatchObject({
       sources: ["Goals list and results", "Habits list and results"],
-      accessMode: "read"
+      accessMode: "read",
+      argsSchema: {
+        type: "object",
+        properties: {
+          query: { type: "string" }
+        }
+      }
     });
     expect(catalog.find((tool) => tool.key === "forge.create_note")).toMatchObject({
       sources: ["Note composer"],

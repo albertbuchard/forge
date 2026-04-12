@@ -52,16 +52,38 @@ enum CompanionStyle {
 
 struct CompanionFilledButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .font(.system(size: 16, weight: .semibold, design: .rounded))
-            .foregroundStyle(Color(red: 13 / 255, green: 20 / 255, blue: 37 / 255))
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 15)
-            .background(
-                CompanionStyle.accentStrong.opacity(configuration.isPressed ? 0.86 : 1),
-                in: RoundedRectangle(cornerRadius: 18, style: .continuous)
-            )
-            .scaleEffect(configuration.isPressed ? 0.99 : 1)
+        FilledButtonBody(configuration: configuration)
+    }
+
+    private struct FilledButtonBody: View {
+        @Environment(\.isEnabled) private var isEnabled
+
+        let configuration: Configuration
+
+        var body: some View {
+            configuration.label
+                .font(.system(size: 16, weight: .semibold, design: .rounded))
+                .foregroundStyle(
+                    isEnabled
+                        ? Color(red: 13 / 255, green: 20 / 255, blue: 37 / 255)
+                        : Color(red: 13 / 255, green: 20 / 255, blue: 37 / 255).opacity(0.58)
+                )
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 15)
+                .background(
+                    CompanionStyle.accentStrong.opacity(
+                        isEnabled
+                            ? (configuration.isPressed ? 0.86 : 1)
+                            : 0.42
+                    ),
+                    in: RoundedRectangle(cornerRadius: 18, style: .continuous)
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                        .stroke(Color.white.opacity(isEnabled ? 0 : 0.08), lineWidth: 1)
+                )
+                .scaleEffect(configuration.isPressed && isEnabled ? 0.99 : 1)
+        }
     }
 }
 
@@ -69,20 +91,41 @@ struct CompanionGhostButtonStyle: ButtonStyle {
     var destructive = false
 
     func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .font(.system(size: 15, weight: .semibold, design: .rounded))
-            .foregroundStyle(destructive ? CompanionStyle.destructive : CompanionStyle.textPrimary)
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 14)
-            .background(
-                Color.white.opacity(configuration.isPressed ? 0.12 : 0.08),
-                in: RoundedRectangle(cornerRadius: 18, style: .continuous)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 18, style: .continuous)
-                    .stroke(Color.white.opacity(0.08), lineWidth: 1)
-            )
-            .scaleEffect(configuration.isPressed ? 0.99 : 1)
+        GhostButtonBody(configuration: configuration, destructive: destructive)
+    }
+
+    private struct GhostButtonBody: View {
+        @Environment(\.isEnabled) private var isEnabled
+
+        let configuration: Configuration
+        let destructive: Bool
+
+        var body: some View {
+            configuration.label
+                .font(.system(size: 15, weight: .semibold, design: .rounded))
+                .foregroundStyle(foregroundColor)
+                .frame(maxWidth: .infinity)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 14)
+                .background(
+                    Color.white.opacity(
+                        isEnabled
+                            ? (configuration.isPressed ? 0.12 : 0.08)
+                            : 0.04
+                    ),
+                    in: RoundedRectangle(cornerRadius: 18, style: .continuous)
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                        .stroke(Color.white.opacity(isEnabled ? 0.08 : 0.05), lineWidth: 1)
+                )
+                .scaleEffect(configuration.isPressed && isEnabled ? 0.99 : 1)
+        }
+
+        private var foregroundColor: Color {
+            let base = destructive ? CompanionStyle.destructive : CompanionStyle.textPrimary
+            return base.opacity(isEnabled ? 1 : 0.42)
+        }
     }
 }
 

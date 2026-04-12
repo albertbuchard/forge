@@ -1,10 +1,11 @@
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { mkdir, readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { DatabaseSync } from "node:sqlite";
 import { logForgeDebug } from "./debug.js";
 import { ensureQuestionnaireSeeds } from "./repositories/questionnaires.js";
+import { getMonorepoRuntimePreferencePath } from "./runtime-data-root.js";
 
 function nowIso(): string {
   return new Date().toISOString();
@@ -20,16 +21,74 @@ const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "
 const migrationsDir = path.join(projectRoot, "server", "migrations");
 const monorepoForgeDataRoot = path.resolve(projectRoot, "..", "..", "data", "forge");
 
+function resolveCanonicalDataDir(root = dataRoot): string {
+  return path.resolve(root);
+}
+
+function resolveLegacyDataDir(root = dataRoot): string {
+  return path.join(path.resolve(root), "data");
+}
+
+function resolveCanonicalDatabasePath(root = dataRoot): string {
+  return path.join(resolveCanonicalDataDir(root), "forge.sqlite");
+}
+
+function resolveLegacyDatabasePath(root = dataRoot): string {
+  return path.join(resolveLegacyDataDir(root), "forge.sqlite");
+}
+
+function hasCanonicalRuntimeLayout(root = dataRoot): boolean {
+  const canonicalRoot = resolveCanonicalDataDir(root);
+  return (
+    existsSync(resolveCanonicalDatabasePath(root)) ||
+    existsSync(path.join(canonicalRoot, "wiki")) ||
+    existsSync(path.join(canonicalRoot, "wiki-ingest")) ||
+    existsSync(path.join(canonicalRoot, ".forge-secrets.key"))
+  );
+}
+
+function hasLegacyRuntimeLayout(root = dataRoot): boolean {
+  const legacyRoot = resolveLegacyDataDir(root);
+  return (
+    existsSync(resolveLegacyDatabasePath(root)) ||
+    existsSync(path.join(legacyRoot, "wiki")) ||
+    existsSync(path.join(legacyRoot, "wiki-ingest")) ||
+    existsSync(path.join(legacyRoot, ".forge-secrets.key"))
+  );
+}
+
+export function resolveDatabasePathForDataRoot(root = dataRoot): string {
+  if (existsSync(resolveCanonicalDatabasePath(root))) {
+    return resolveCanonicalDatabasePath(root);
+  }
+  if (existsSync(resolveLegacyDatabasePath(root))) {
+    return resolveLegacyDatabasePath(root);
+  }
+  return resolveCanonicalDatabasePath(root);
+}
+
 export function resolveDefaultDataRoot(currentWorkingDir = process.cwd()): string {
   const configured = process.env.FORGE_DATA_ROOT?.trim();
   if (configured) {
     return path.resolve(configured);
   }
 
+  if (existsSync(getMonorepoRuntimePreferencePath())) {
+    try {
+      const raw = readFileSync(getMonorepoRuntimePreferencePath(), "utf8");
+      const parsed = JSON.parse(raw) as { dataRoot?: unknown };
+      if (typeof parsed.dataRoot === "string" && parsed.dataRoot.trim().length > 0) {
+        return path.resolve(parsed.dataRoot);
+      }
+    } catch {
+      // Ignore invalid local runtime preference files and continue to defaults.
+    }
+  }
+
   // Inside the private monorepo, prefer the tracked shared Forge data root so
   // the local app, Hermes, OpenClaw, and repo-managed data all point at the
   // same state by default.
-  if (existsSync(path.join(monorepoForgeDataRoot, "data"))) {
+  if (existsSync(monorepoForgeDataRoot)) {
     return monorepoForgeDataRoot;
   }
 
@@ -44,15 +103,32 @@ let transactionDepth = 0;
 let savepointCounter = 0;
 
 function getDataDir(): string {
-  return path.join(dataRoot, "data");
+  const databasePath = resolveDatabasePathForDataRoot();
+  if (databasePath === resolveCanonicalDatabasePath()) {
+    return resolveCanonicalDataDir();
+  }
+  if (databasePath === resolveLegacyDatabasePath()) {
+    return resolveLegacyDataDir();
+  }
+  if (hasCanonicalRuntimeLayout()) {
+    return resolveCanonicalDataDir();
+  }
+  if (hasLegacyRuntimeLayout()) {
+    return resolveLegacyDataDir();
+  }
+  return resolveCanonicalDataDir();
 }
 
 export function resolveDataDir(): string {
   return getDataDir();
 }
 
+export function getEffectiveDataRoot(): string {
+  return dataRoot;
+}
+
 function getDatabasePath(): string {
-  return path.join(getDataDir(), "forge.sqlite");
+  return resolveDatabasePathForDataRoot();
 }
 
 export function getDatabase(): DatabaseSync {

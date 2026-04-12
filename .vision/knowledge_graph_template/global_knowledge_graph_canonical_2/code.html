@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Forge | Hierarchical Outline</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&amp;family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+                    "inverse-surface": "#f9f9ff",
+                    "on-surface-variant": "#eef2ff99",
+                    "tertiary": "#4edea3",
+                    "on-tertiary-container": "#ffffff",
+                    "secondary-dim": "#4edea3",
+                    "surface-container": "#171f33",
+                    "surface": "#0b1326",
+                    "tertiary-fixed-dim": "#4edea3",
+                    "on-primary-container": "#0b1326",
+                    "on-surface": "#eef2ff",
+                    "on-secondary-fixed": "#0b1326",
+                    "on-secondary-fixed-variant": "#0b1326",
+                    "on-primary-fixed-variant": "#0b1326",
+                    "secondary-fixed-dim": "#4edea3",
+                    "surface-bright": "#222a3e",
+                    "outline": "#46484d",
+                    "tertiary-fixed": "#4edea3",
+                    "on-tertiary-fixed-variant": "#0b1326",
+                    "on-error-container": "#ffa8a3",
+                    "surface-container-highest": "#222a3e",
+                    "on-error": "#490006",
+                    "surface-variant": "#171f33",
+                    "on-secondary": "#0b1326",
+                    "secondary-fixed": "#4edea3",
+                    "secondary": "#4edea3",
+                    "tertiary-dim": "#4edea3",
+                    "on-background": "#eef2ff",
+                    "inverse-primary": "#c0c1ff",
+                    "background": "#0b1326",
+                    "on-secondary-container": "#eef2ff",
+                    "inverse-on-surface": "#0b1326",
+                    "secondary-container": "#4edea3",
+                    "primary-fixed": "#c0c1ff",
+                    "surface-tint": "#c0c1ff",
+                    "tertiary-container": "#4edea3",
+                    "primary-container": "#c0c1ff",
+                    "surface-container-high": "#171f33",
+                    "primary-dim": "#c0c1ff",
+                    "surface-container-low": "#0b1326",
+                    "error": "#ff716c",
+                    "error-dim": "#d7383b",
+                    "on-primary-fixed": "#0b1326",
+                    "on-tertiary": "#0b1326",
+                    "surface-container-lowest": "#000000",
+                    "primary": "#c0c1ff",
+                    "outline-variant": "#46484d",
+                    "surface-dim": "#0b1326",
+                    "primary-fixed-dim": "#c0c1ff",
+                    "on-tertiary-fixed": "#0b1326",
+                    "error-container": "#9f0519"
+            },
+            "borderRadius": {
+                    "DEFAULT": "0.25rem",
+                    "lg": "0.5rem",
+                    "xl": "0.75rem",
+                    "full": "9999px"
+            },
+            "fontFamily": {
+                    "headline": ["Space Grotesk"],
+                    "body": ["Space Grotesk"],
+                    "label": ["Space Grotesk"]
+            }
+          },
+        },
+      }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .starfield {
+            background-image: radial-gradient(circle at 2px 2px, rgba(192,193,255,0.08) 1px, transparent 0);
+            background-size: 50px 50px;
+        }
+        .custom-scrollbar::-webkit-scrollbar { width: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(192,193,255,0.1); border-radius: 10px; }.glow-amber { box-shadow: 0 0 12px rgba(251, 191, 36, 0.3); }
+        .glow-sky { box-shadow: 0 0 12px rgba(56, 189, 248, 0.3); }
+        .glow-indigo { box-shadow: 0 0 12px rgba(129, 140, 248, 0.3); }
+        .glow-cyan { box-shadow: 0 0 12px rgba(34, 209, 238, 0.3); }
+        .glow-teal { box-shadow: 0 0 12px rgba(45, 212, 191, 0.3); }
+        .glow-emerald { box-shadow: 0 0 12px rgba(52, 211, 153, 0.3); }
+        .glow-rose { box-shadow: 0 0 12px rgba(251, 113, 133, 0.3); }
+        .glow-orange { box-shadow: 0 0 12px rgba(251, 146, 60, 0.3); }
+        .glow-violet { box-shadow: 0 0 12px rgba(167, 139, 250, 0.3); }
+        .glow-fuchsia { box-shadow: 0 0 12px rgba(217, 70, 239, 0.3); }
+        .glow-blue { box-shadow: 0 0 12px rgba(96, 165, 250, 0.3); }
+    </style>
+</head>
+<body class="bg-background text-on-surface font-body selection:bg-primary/30 overflow-hidden">
+<header class="fixed top-0 left-0 right-0 h-16 z-50 flex justify-between items-center px-8 bg-[#0b1326] w-full">
+<div class="flex items-center space-x-8">
+<div class="flex items-center space-x-3">
+<span class="text-xl font-bold text-[#eef2ff] tracking-tight font-headline">Forge</span>
+</div>
+<nav class="hidden md:flex space-x-8">
+<a class="text-[#eef2ff]/60 hover:text-[#c0c1ff] transition-colors duration-200 h-16 flex items-center px-1" href="#">Knowledge Graph</a>
+<a class="text-[#c0c1ff] font-bold border-b-2 border-[#c0c1ff] h-16 flex items-center px-1" href="#">Hierarchical Outline</a>
+<a class="text-[#eef2ff]/60 hover:text-[#c0c1ff] transition-colors duration-200 h-16 flex items-center px-1" href="#">Neural Assets</a>
+</nav>
+</div>
+<div class="flex items-center space-x-6">
+<div class="flex items-center space-x-4 text-[#eef2ff]/60">
+<button class="hover:text-[#c0c1ff] transition-colors duration-200">
+<span class="material-symbols-outlined" data-icon="history">history</span>
+</button>
+<button class="hover:text-[#c0c1ff] transition-colors duration-200">
+<span class="material-symbols-outlined" data-icon="notifications">notifications</span>
+</button>
+</div>
+<button class="bg-[#c0c1ff] text-[#0b1326] px-4 py-1.5 rounded font-bold text-sm hover:opacity-90 transition-opacity">
+                Sync
+            </button>
+<div class="w-8 h-8 rounded-full overflow-hidden border border-[#c0c1ff]/20">
+<img alt="User profile" class="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuD1uvR53vLpI_3pyjw4IrADibApbHBm_kxR7Rw2MIzg8NYOnSZPbDx8YhDWQ82UwCnq7T6_ORXj4iTXBzH_2u37mOFpsF4HoZ7ZMeFJr0ZwC5I9Cvj-3xECfvvNBXiqt5CFze3DSzH9TmxvqL04RmCn3zuJfwtDNAoMgIO1KrAnikt9fygPNIlGkFAeGP42UOb8jmibY1-S4d6Pe404mobBCzL9xZBg4Ne-kv5TuqeFW3Nu3a7LJyDVTpNpg27D5rbN_-0w2XBKOXKT"/>
+</div>
+</div>
+<div class="absolute bottom-0 left-0 w-full bg-[#171f33] h-px"></div>
+</header>
+<aside class="fixed left-0 top-16 h-[calc(100%-4rem)] flex flex-col z-40 bg-[#171f33] w-20 hover:w-64 transition-all duration-500 ease-in-out shadow-[20px_0_80px_rgba(0,0,0,0.45)] group">
+<div class="flex items-center px-6 py-6 space-x-4">
+<div class="w-10 h-10 rounded-lg bg-[#c0c1ff] flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-[#0b1326]" data-icon="auto_awesome">auto_awesome</span>
+</div>
+<div class="opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+<h1 class="font-headline font-black text-[#c0c1ff] text-lg leading-tight">Forge</h1>
+<p class="font-body text-[10px] uppercase tracking-widest text-[#eef2ff]/50">Hierarchy View</p>
+</div>
+</div>
+<nav class="flex-1 px-4 space-y-3 mt-4">
+<a class="flex items-center h-12 px-3 transition-all duration-150 text-[#4edea3] shadow-[0_0_10px_rgba(78,222,163,0.3)] bg-[#222a3e] rounded-r-full group/nav scale-95" href="#">
+<span class="material-symbols-outlined shrink-0" data-icon="account_tree">account_tree</span>
+<span class="ml-4 font-body text-[0.75rem] uppercase tracking-widest opacity-0 group-hover:opacity-100 whitespace-nowrap">Outline</span>
+</a>
+<a class="flex items-center h-12 px-3 rounded-xl transition-all duration-150 text-[#eef2ff]/50 hover:bg-[#222a3e] hover:text-[#c0c1ff] group/nav scale-95" href="#">
+<span class="material-symbols-outlined shrink-0" data-icon="flag">flag</span>
+<span class="ml-4 font-body text-[0.75rem] uppercase tracking-widest opacity-0 group-hover:opacity-100 whitespace-nowrap">Goals</span>
+</a>
+<a class="flex items-center h-12 px-3 rounded-xl transition-all duration-150 text-[#eef2ff]/50 hover:bg-[#222a3e] hover:text-[#c0c1ff] group/nav scale-95" href="#">
+<span class="material-symbols-outlined shrink-0" data-icon="inventory_2">inventory_2</span>
+<span class="ml-4 font-body text-[0.75rem] uppercase tracking-widest opacity-0 group-hover:opacity-100 whitespace-nowrap">Projects</span>
+</a>
+</nav>
+<div class="px-4 pb-8 space-y-3">
+<a class="flex items-center h-12 px-3 rounded-xl transition-all duration-150 text-[#eef2ff]/50 hover:bg-[#222a3e] hover:text-[#c0c1ff] group/nav scale-95" href="#">
+<span class="material-symbols-outlined shrink-0" data-icon="auto_stories">auto_stories</span>
+<span class="ml-4 font-body text-[0.75rem] uppercase tracking-widest opacity-0 group-hover:opacity-100 whitespace-nowrap">Archive</span>
+</a>
+</div>
+</aside>
+<main class="relative w-[calc(100vw-5rem)] h-[calc(100vh-4rem)] ml-20 mt-16 bg-[#0b1326] overflow-y-auto custom-scrollbar">
+<div class="absolute inset-0 starfield opacity-40 pointer-events-none"></div>
+<div class="max-w-4xl mx-auto py-12 px-12 relative z-10">
+<div class="flex items-center justify-between mb-8">
+<div class="flex items-center space-x-2 text-[10px] font-mono text-[#c0c1ff]/50 uppercase tracking-widest">
+<span>Forge</span>
+<span class="material-symbols-outlined text-[12px]" data-icon="chevron_right">chevron_right</span>
+<span class="text-[#c0c1ff]">Hierarchical Outline</span>
+</div>
+<div class="flex items-center space-x-4">
+<button class="bg-[#171f33] border border-[#c0c1ff]/10 text-[#eef2ff]/60 px-3 py-1.5 rounded flex items-center space-x-2 text-xs hover:text-[#c0c1ff] transition-colors">
+<span class="material-symbols-outlined text-sm" data-icon="filter_list">filter_list</span>
+<span>Filter</span>
+</button>
+<button class="bg-[#c0c1ff] text-[#0b1326] px-3 py-1.5 rounded flex items-center space-x-2 text-xs font-bold hover:opacity-90 transition-opacity">
+<span class="material-symbols-outlined text-sm" data-icon="unfold_less">unfold_less</span>
+<span>Collapse All</span>
+</button>
+</div>
+</div>
+<div class="space-y-4">
+<div class="group/item border-l-2 border-[#FBBF24]/20 pl-4 py-1">
+<div class="flex items-center group/row cursor-pointer hover:bg-[#171f33]/40 p-2 rounded-lg -ml-10 transition-colors">
+<span class="material-symbols-outlined text-[#eef2ff]/20 w-8 text-center rotate-90" data-icon="chevron_right">chevron_right</span>
+<div class="w-8 h-8 rounded bg-[#FBBF24]/10 border border-[#FBBF24]/30 flex items-center justify-center glow-amber mr-4">
+<span class="material-symbols-outlined text-[#FBBF24] text-lg" data-icon="target">target</span>
+</div>
+<div class="flex-1">
+<h3 class="text-[#eef2ff] font-bold text-lg leading-none">Global Market Domination 2024</h3>
+<p class="text-[#FBBF24]/60 text-[10px] uppercase tracking-tighter mt-1">Goal · High Priority</p>
+</div>
+<span class="material-symbols-outlined text-[#eef2ff]/20 opacity-0 group-hover/row:opacity-100" data-icon="more_vert">more_vert</span>
+</div>
+<div class="mt-4 ml-6 space-y-4 border-l border-[#22D1EE]/20 pl-6">
+<div class="group/item">
+<div class="flex items-center group/row cursor-pointer hover:bg-[#171f33]/40 p-2 rounded-lg -ml-10 transition-colors">
+<span class="material-symbols-outlined text-[#eef2ff]/20 w-8 text-center rotate-90" data-icon="chevron_right">chevron_right</span>
+<div class="w-7 h-7 rounded bg-[#22D1EE]/10 border border-[#22D1EE]/30 flex items-center justify-center glow-cyan mr-3">
+<span class="material-symbols-outlined text-[#22D1EE] text-md" data-icon="git_branch">rebase</span>
+</div>
+<div class="flex-1">
+<h4 class="text-[#eef2ff] font-semibold text-base">Regional Expansion Strategy</h4>
+<p class="text-[#22D1EE]/60 text-[9px] uppercase tracking-widest">Strategy</p>
+</div>
+</div>
+<div class="mt-3 ml-6 space-y-3 border-l border-[#38BDF8]/20 pl-6">
+<div class="group/item">
+<div class="flex items-center group/row cursor-pointer hover:bg-[#171f33]/40 p-2 rounded-lg -ml-10 transition-colors">
+<span class="material-symbols-outlined text-[#eef2ff]/20 w-8 text-center rotate-90" data-icon="chevron_right">chevron_right</span>
+<div class="w-6 h-6 rounded bg-[#38BDF8]/10 border border-[#38BDF8]/30 flex items-center justify-center glow-sky mr-3">
+<span class="material-symbols-outlined text-[#38BDF8] text-sm" data-icon="folder_open">folder_open</span>
+</div>
+<div class="flex-1">
+<h5 class="text-[#eef2ff] font-medium text-sm">Project Chimera</h5>
+<p class="text-[#38BDF8]/60 text-[8px] uppercase tracking-widest">Project</p>
+</div>
+</div>
+<div class="mt-2 ml-6 space-y-2 border-l border-[#818CF8]/20 pl-6">
+<div class="flex items-center p-2 rounded-lg -ml-10 hover:bg-[#171f33]/40 group/row cursor-pointer">
+<span class="w-8"></span>
+<div class="w-5 h-5 rounded bg-[#818CF8]/10 border border-[#818CF8]/30 flex items-center justify-center glow-indigo mr-3">
+<span class="material-symbols-outlined text-[#818CF8] text-[12px]" data-icon="list_todo">lists</span>
+</div>
+<div class="flex-1">
+<span class="text-[#eef2ff]/80 text-sm">Draft localization roadmap</span>
+</div>
+<span class="text-[9px] text-[#818CF8]/40 font-mono">TASK</span>
+</div>
+<div class="flex items-center p-2 rounded-lg -ml-10 hover:bg-[#171f33]/40 group/row cursor-pointer">
+<span class="w-8"></span>
+<div class="w-5 h-5 rounded bg-[#2DD4BF]/10 border border-[#2DD4BF]/30 flex items-center justify-center glow-teal mr-3">
+<span class="material-symbols-outlined text-[#2DD4BF] text-[12px]" data-icon="refresh">refresh</span>
+</div>
+<div class="flex-1">
+<span class="text-[#eef2ff]/80 text-sm">Daily market pulse check</span>
+</div>
+<span class="text-[9px] text-[#2DD4BF]/40 font-mono">HABIT</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="group/item">
+<div class="flex items-center group/row cursor-pointer hover:bg-[#171f33]/40 p-2 rounded-lg -ml-10 transition-colors">
+<span class="material-symbols-outlined text-[#eef2ff]/20 w-8 text-center rotate-90" data-icon="chevron_right">chevron_right</span>
+<div class="w-7 h-7 rounded bg-[#22D1EE]/10 border border-[#22D1EE]/30 flex items-center justify-center glow-cyan mr-3">
+<span class="material-symbols-outlined text-[#22D1EE] text-md" data-icon="git_branch">rebase</span>
+</div>
+<div class="flex-1">
+<h4 class="text-[#eef2ff] font-semibold text-base">Direct Response Architecture</h4>
+<p class="text-[#22D1EE]/60 text-[9px] uppercase tracking-widest">Strategy</p>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="group/item border-l-2 border-[#FBBF24]/20 pl-4 py-1">
+<div class="flex items-center group/row cursor-pointer hover:bg-[#171f33]/40 p-2 rounded-lg -ml-10 transition-colors">
+<span class="material-symbols-outlined text-[#eef2ff]/20 w-8 text-center rotate-90" data-icon="chevron_right">chevron_right</span>
+<div class="w-8 h-8 rounded bg-[#FBBF24]/10 border border-[#FBBF24]/30 flex items-center justify-center glow-amber mr-4">
+<span class="material-symbols-outlined text-[#FBBF24] text-lg" data-icon="target">target</span>
+</div>
+<div class="flex-1">
+<h3 class="text-[#eef2ff] font-bold text-lg leading-none">Internal System Resilience</h3>
+<p class="text-[#FBBF24]/60 text-[10px] uppercase tracking-tighter mt-1">Goal · Ongoing</p>
+</div>
+</div>
+</div>
+<div class="pt-8 border-t border-[#c0c1ff]/5">
+<p class="text-[10px] font-mono text-[#c0c1ff]/30 uppercase tracking-[0.3em] mb-4">Values &amp; Principles</p>
+<div class="grid grid-cols-2 gap-4">
+<div class="bg-[#171f33]/40 border border-[#34D399]/20 p-4 rounded-xl flex items-start space-x-4 hover:bg-[#171f33]/60 transition-colors cursor-pointer">
+<div class="w-8 h-8 rounded bg-[#34D399]/10 flex items-center justify-center glow-emerald shrink-0">
+<span class="material-symbols-outlined text-[#34D399]" data-icon="heart">person_heart</span>
+</div>
+<div>
+<h6 class="text-[#eef2ff] font-bold text-sm">Radical Transparency</h6>
+<p class="text-[10px] text-[#eef2ff]/40 mt-1 uppercase">Core Value</p>
+</div>
+</div>
+<div class="bg-[#171f33]/40 border border-[#FB7185]/20 p-4 rounded-xl flex items-start space-x-4 hover:bg-[#171f33]/60 transition-colors cursor-pointer">
+<div class="w-8 h-8 rounded bg-[#FB7185]/10 flex items-center justify-center glow-rose shrink-0">
+<span class="material-symbols-outlined text-[#FB7185]" data-icon="repeat">repeat</span>
+</div>
+<div>
+<h6 class="text-[#eef2ff] font-bold text-sm">Feedback Loops</h6>
+<p class="text-[10px] text-[#eef2ff]/40 mt-1 uppercase">Pattern</p>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="fixed bottom-8 right-8 z-50 flex flex-col space-y-4">
+<div class="bg-[#171f33]/80 backdrop-blur-md rounded border border-[#c0c1ff]/10 shadow-xl flex flex-col p-1">
+<button class="w-10 h-10 flex items-center justify-center rounded hover:bg-[#222a3e] text-[#eef2ff]/50 hover:text-[#c0c1ff] transition-all">
+<span class="material-symbols-outlined" data-icon="add">add</span>
+</button>
+<div class="h-px bg-[#c0c1ff]/5 mx-2"></div>
+<button class="w-10 h-10 flex items-center justify-center rounded hover:bg-[#222a3e] text-[#eef2ff]/50 hover:text-[#c0c1ff] transition-all">
+<span class="material-symbols-outlined" data-icon="search">search</span>
+</button>
+</div>
+<button class="bg-[#c0c1ff] text-[#0b1326] h-12 w-12 rounded flex items-center justify-center shadow-lg shadow-[#c0c1ff]/20 hover:scale-105 transition-transform">
+<span class="material-symbols-outlined" data-icon="edit">edit</span>
+</button>
+</div>
+<div class="fixed bottom-8 left-28 z-50">
+<div class="bg-[#171f33]/80 backdrop-blur-md p-4 rounded-xl border border-[#c0c1ff]/10 shadow-2xl max-h-[300px] overflow-y-auto custom-scrollbar w-48">
+<p class="text-[9px] font-mono text-[#c0c1ff]/50 uppercase tracking-[0.2em] mb-3">Entity Key</p>
+<div class="space-y-2">
+<div class="flex items-center space-x-3">
+<div class="w-2.5 h-2.5 rounded-full bg-[#FBBF24]"></div>
+<span class="text-[10px] text-[#eef2ff]/70">Goal</span>
+</div>
+<div class="flex items-center space-x-3">
+<div class="w-2.5 h-2.5 rounded-full bg-[#22D1EE]"></div>
+<span class="text-[10px] text-[#eef2ff]/70">Strategy</span>
+</div>
+<div class="flex items-center space-x-3">
+<div class="w-2.5 h-2.5 rounded-full bg-[#38BDF8]"></div>
+<span class="text-[10px] text-[#eef2ff]/70">Project</span>
+</div>
+<div class="flex items-center space-x-3">
+<div class="w-2.5 h-2.5 rounded-full bg-[#818CF8]"></div>
+<span class="text-[10px] text-[#eef2ff]/70">Task</span>
+</div>
+<div class="flex items-center space-x-3">
+<div class="w-2.5 h-2.5 rounded-full bg-[#2DD4BF]"></div>
+<span class="text-[10px] text-[#eef2ff]/70">Habit</span>
+</div>
+</div>
+</div>
+</div>
+</main>
+
+</body></html>

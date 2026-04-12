@@ -5,6 +5,7 @@ import {
   HeartHandshake,
   ListChecks,
   Moon,
+  MonitorSmartphone,
   Orbit,
   SlidersHorizontal,
   Sparkles,
@@ -38,6 +39,7 @@ export const PSYCHE_SECTIONS = [
     icon: UnfoldVertical
   },
   { to: "/psyche/modes", label: "Modes", icon: HeartHandshake },
+  { to: "/psyche/screen-time", label: "Screen Time", icon: MonitorSmartphone },
   { to: "/preferences", label: "Preferences", icon: SlidersHorizontal },
   { to: "/sleep", label: "Sleep", icon: Moon }
 ] as const;

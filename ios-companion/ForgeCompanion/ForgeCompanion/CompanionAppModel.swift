@@ -97,6 +97,141 @@ enum CompanionPairingURLResolver {
     }
 }
 
+enum CompanionOperationalStatus: String {
+    case ok = "OK"
+    case warning = "Warning"
+    case error = "Error"
+}
+
+enum CompanionPermissionSyncPhase: Equatable {
+    case idle
+    case requestingHealth
+    case requestingLocation
+    case requestingScreenTime
+    case preparingSync
+    case syncing
+    case completed
+    case failed
+
+    var isBusy: Bool {
+        switch self {
+        case .requestingHealth, .requestingLocation, .requestingScreenTime, .preparingSync, .syncing:
+            return true
+        case .idle, .completed, .failed:
+            return false
+        }
+    }
+
+    var buttonLabel: String {
+        switch self {
+        case .idle:
+            return "Authorize + Sync"
+        case .requestingHealth:
+            return "Requesting Health…"
+        case .requestingLocation:
+            return "Requesting Location…"
+        case .requestingScreenTime:
+            return "Requesting Screen Time…"
+        case .preparingSync:
+            return "Preparing sync…"
+        case .syncing:
+            return "Syncing now…"
+        case .completed:
+            return "Synced"
+        case .failed:
+            return "Try again"
+        }
+    }
+
+    var progressDetail: String? {
+        switch self {
+        case .idle:
+            return nil
+        case .requestingHealth:
+            return "Waiting for Health access."
+        case .requestingLocation:
+            return "Opening location and motion access."
+        case .requestingScreenTime:
+            return "Opening Screen Time access."
+        case .preparingSync:
+            return "Checking the latest device signals."
+        case .syncing:
+            return "Sending the latest payload to Forge."
+        case .completed:
+            return "Everything available has been sent."
+        case .failed:
+            return "The action did not finish. You can retry."
+        }
+    }
+}
+
+enum CompanionSourceKey: String, CaseIterable, Identifiable {
+    case health
+    case movement
+    case screenTime
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .health:
+            return "Health"
+        case .movement:
+            return "Movement"
+        case .screenTime:
+            return "Screen Time"
+        }
+    }
+}
+
+struct CompanionOperationalSummary {
+    let status: CompanionOperationalStatus
+    let detail: String
+
+    static func derive(
+        syncState: SyncState,
+        latestError: String?,
+        healthSyncEnabled: Bool,
+        healthAccessStatus: HealthAccessStatus,
+        movementEnabled: Bool,
+        movementPermissionStatus: String,
+        movementBackgroundReady: Bool,
+        screenTimeEnabled: Bool,
+        screenTimeAuthorizationStatus: String
+    ) -> CompanionOperationalSummary {
+        if latestError?.isEmpty == false || syncState == .error {
+            return .init(status: .error, detail: latestError ?? "Sync error")
+        }
+        let missingAuthorization =
+            (healthSyncEnabled && healthAccessStatus == .notSet)
+            || (movementEnabled && (
+                movementPermissionStatus == "not_determined"
+                    || movementPermissionStatus == "denied"
+                    || movementPermissionStatus == "restricted"
+                    || movementBackgroundReady == false
+            ))
+            || (screenTimeEnabled && (
+                screenTimeAuthorizationStatus == "not_determined"
+                    || screenTimeAuthorizationStatus == "denied"
+                    || screenTimeAuthorizationStatus == "unavailable"
+            ))
+        if missingAuthorization || syncState == .permissionDenied || syncState == .stale {
+            return .init(status: .warning, detail: "Missing authorization")
+        }
+        return .init(status: .ok, detail: "All core signals ready")
+    }
+}
+
+struct CompanionSourceDiagnosticsRow: Identifiable {
+    let id: String
+    let title: String
+    let desiredEnabled: Bool
+    let appliedEnabled: Bool
+    let authorizationStatus: String
+    let syncEligible: Bool
+    let lastObservedAt: String?
+}
+
 @MainActor
 final class CompanionAppModel: ObservableObject {
     private enum AutoSyncPolicy {
@@ -128,6 +263,7 @@ final class CompanionAppModel: ObservableObject {
         static let latestSyncReport = "forge_companion_latest_sync_report"
         static let latestSyncPayloadSummary = "forge_companion_latest_sync_payload_summary"
         static let lastSuccessfulSyncAt = "forge_companion_last_successful_sync_at"
+        static let healthSyncEnabled = "forge_companion_health_sync_enabled"
         static let healthAuthorizationGranted = "forge_companion_health_authorized"
         static let healthAccessStatus = "forge_companion_health_access_status"
         static let deferredHealthPrompt = "forge_companion_deferred_health_prompt"
@@ -159,6 +295,15 @@ final class CompanionAppModel: ObservableObject {
     }
     @Published var latestSyncReport: SyncReport?
     @Published var latestSyncPayloadSummary: SyncPayloadSummary?
+    @Published var healthSyncEnabled = true {
+        didSet {
+            UserDefaults.standard.set(healthSyncEnabled, forKey: StorageKeys.healthSyncEnabled)
+            companionDebugLog(
+                "CompanionAppModel",
+                "healthSyncEnabled -> \(healthSyncEnabled)"
+            )
+        }
+    }
     @Published var healthAuthorizationGranted = false
     @Published var healthAccessStatus: HealthAccessStatus = .notSet {
         didSet {
@@ -171,6 +316,7 @@ final class CompanionAppModel: ObservableObject {
     @Published var lastSuccessfulSyncAt: Date?
     @Published var healthPermissionPromptDeferred = false
     @Published var movementPermissionPromptDeferred = false
+    @Published private(set) var permissionSyncPhase: CompanionPermissionSyncPhase = .idle
     @Published var discoveredServers: [DiscoveredForgeServer] = [] {
         didSet {
             companionDebugLog(
@@ -209,6 +355,7 @@ final class CompanionAppModel: ObservableObject {
     let screenshotScenario: CompanionScreenshotScenario?
     let healthStore: HealthSyncStore
     let movementStore: MovementSyncStore
+    let screenTimeStore: ScreenTimeStore
     let syncClient: ForgeSyncClient
     let watchSessionManager: WatchSessionManager
     let qrScanner = QRPairingScanner()
@@ -217,6 +364,9 @@ final class CompanionAppModel: ObservableObject {
     private let keychain = KeychainStore(service: "com.aurel.forgecompanion")
     private var cancellables: Set<AnyCancellable> = []
     private var autoSyncDebounceTask: Task<Void, Never>?
+    private var deferredStartupRefreshTask: Task<Void, Never>?
+    private var remoteSourceReconciliationTask: Task<Void, Never>?
+    private var pendingRemoteSourceReconciliation: Set<CompanionSourceKey> = []
     private var lastAutoSyncAttemptAt: Date?
 
     init() {
@@ -235,6 +385,7 @@ final class CompanionAppModel: ObservableObject {
 #else
         self.movementStore = MovementSyncStore()
 #endif
+        self.screenTimeStore = ScreenTimeStore()
         let syncClient = ForgeSyncClient()
         self.syncClient = syncClient
         watchSessionManager = WatchSessionManager(syncClient: syncClient)
@@ -245,6 +396,17 @@ final class CompanionAppModel: ObservableObject {
                 self?.objectWillChange.send()
                 self?.scheduleAutomaticSync(
                     reason: "movement change",
+                    debounceNanoseconds: AutoSyncPolicy.movementDebounceNanoseconds,
+                    minimumInterval: AutoSyncPolicy.movementMinimumInterval
+                )
+            }
+            .store(in: &cancellables)
+        screenTimeStore.objectWillChange
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] in
+                self?.objectWillChange.send()
+                self?.scheduleAutomaticSync(
+                    reason: "screen time change",
                     debounceNanoseconds: AutoSyncPolicy.movementDebounceNanoseconds,
                     minimumInterval: AutoSyncPolicy.movementMinimumInterval
                 )
@@ -290,11 +452,9 @@ final class CompanionAppModel: ObservableObject {
         Task {
             companionDebugLog("CompanionAppModel", "startup task begin")
             await attemptLocalSimulatorBootstrapIfNeeded()
-            _ = await ensureActivePairingIfPossible(reason: "startup")
-            await refreshMovementBootstrap()
             await refreshHealthAccessStatus()
-            await refreshWatchBootstrap(reason: "startup")
             refreshSyncState()
+            scheduleDeferredStartupRefresh()
             scheduleAutomaticSync(
                 reason: "startup",
                 debounceNanoseconds: AutoSyncPolicy.immediateDebounceNanoseconds,
@@ -372,6 +532,10 @@ final class CompanionAppModel: ObservableObject {
     }
 
     func requestHealthPermissions() async {
+        guard healthSyncEnabled else {
+            companionDebugLog("CompanionAppModel", "requestHealthPermissions skipped health disabled")
+            return
+        }
         companionDebugLog("CompanionAppModel", "requestHealthPermissions start")
         do {
             let granted = try await healthStore.requestAuthorization()
@@ -426,8 +590,79 @@ final class CompanionAppModel: ObservableObject {
     }
 
     func requestRecommendedPermissions() async {
-        await requestHealthPermissions()
-        requestMovementPermissions()
+        await requestCombinedPermissionsAndSync()
+    }
+
+    func requestCombinedPermissionsAndSync() async {
+        companionDebugLog("CompanionAppModel", "requestCombinedPermissionsAndSync start")
+        if healthSyncEnabled {
+            permissionSyncPhase = .requestingHealth
+            await Task.yield()
+            await requestHealthPermissions()
+        }
+        if movementStore.trackingEnabled {
+            permissionSyncPhase = .requestingLocation
+            await Task.yield()
+            requestMovementPermissions()
+        }
+        if screenTimeStore.enabled {
+            permissionSyncPhase = .requestingScreenTime
+            await Task.yield()
+            await screenTimeStore.enableAndAuthorize()
+        }
+        permissionSyncPhase = .preparingSync
+        await Task.yield()
+        await refreshHealthAccessStatus()
+        refreshSyncState()
+        permissionSyncPhase = .syncing
+        await Task.yield()
+        let syncSucceeded = await performSync(trigger: "manual")
+        permissionSyncPhase = syncSucceeded ? .completed : .failed
+        if syncSucceeded {
+            try? await Task.sleep(for: .milliseconds(900))
+            if permissionSyncPhase == .completed {
+                permissionSyncPhase = .idle
+            }
+        }
+        companionDebugLog("CompanionAppModel", "requestCombinedPermissionsAndSync complete")
+    }
+
+    func setSourceEnabled(_ source: CompanionSourceKey, enabled: Bool) {
+        companionDebugLog(
+            "CompanionAppModel",
+            "setSourceEnabled source=\(source.rawValue) enabled=\(enabled)"
+        )
+        switch source {
+        case .health:
+            healthSyncEnabled = enabled
+            if enabled == false {
+                healthPermissionPromptDeferred = false
+                UserDefaults.standard.set(false, forKey: StorageKeys.deferredHealthPrompt)
+            }
+        case .movement:
+            movementStore.setTrackingEnabled(enabled)
+            if enabled == false {
+                movementPermissionPromptDeferred = false
+                UserDefaults.standard.set(false, forKey: StorageKeys.movementPromptDeferred)
+            }
+        case .screenTime:
+            screenTimeStore.setEnabled(enabled)
+        }
+        refreshSyncState()
+        Task {
+            await pushCurrentSourceState(source)
+            if enabled {
+                switch source {
+                case .health:
+                    await requestHealthPermissions()
+                case .movement:
+                    requestMovementPermissions()
+                case .screenTime:
+                    await screenTimeStore.enableAndAuthorize()
+                }
+                _ = await performSync(trigger: "\(source.rawValue) enabled")
+            }
+        }
     }
 
     func runManualSync() async {
@@ -437,6 +672,8 @@ final class CompanionAppModel: ObservableObject {
 
     func handleAppDidBecomeActive() {
         companionDebugLog("CompanionAppModel", "handleAppDidBecomeActive")
+        screenTimeStore.handleAppDidBecomeActive()
+        scheduleRemoteSourceReconciliation(reason: "app became active")
         scheduleAutomaticSync(
             reason: "app became active",
             debounceNanoseconds: AutoSyncPolicy.immediateDebounceNanoseconds,
@@ -455,7 +692,7 @@ final class CompanionAppModel: ObservableObject {
         tailscaleDiscoveryMessage = report.tailscaleStatusMessage
         discoveryInFlight = false
         discoveryMessage = report.servers.isEmpty
-            ? "No Forge runtime found yet. Keep Forge running and try again."
+            ? "No Forge runtime found yet. Keep Forge running, or use Manual setup if you know the machine name."
             : "Found \(report.servers.count) Forge runtime\(report.servers.count == 1 ? "" : "s")."
         companionDebugLog(
             "CompanionAppModel",
@@ -483,7 +720,30 @@ final class CompanionAppModel: ObservableObject {
             preferredApiBaseUrl: server.apiBaseUrl
         )
         lastSyncMessage = "Connected to \(server.name)"
+        ForgeServerDiscovery.rememberSuccessfulServer(server)
         companionDebugLog("CompanionAppModel", "bootstrapPairing complete")
+    }
+
+    func connectToManualRuntime(_ rawInput: String) async throws {
+        companionDebugLog("CompanionAppModel", "connectToManualRuntime start raw=\(rawInput)")
+        guard let server = await discoveryService.probeManualRuntime(rawInput) else {
+            companionDebugLog("CompanionAppModel", "connectToManualRuntime no runtime found")
+            throw NSError(
+                domain: "ForgeCompanion",
+                code: 404,
+                userInfo: [NSLocalizedDescriptionKey: "No Forge runtime answered there. Check the machine name and make sure Forge is running."]
+            )
+        }
+
+        if server.canBootstrapPairing {
+            try await bootstrapPairing(for: server)
+        } else {
+            throw NSError(
+                domain: "ForgeCompanion",
+                code: 400,
+                userInfo: [NSLocalizedDescriptionKey: "That host answered, but one-tap pairing is not available there yet. Use a pairing code for local-network targets."]
+            )
+        }
     }
 
     func ensureActivePairingIfPossible(
@@ -550,6 +810,13 @@ final class CompanionAppModel: ObservableObject {
 
     private func restoreCachedState() {
         companionDebugLog("CompanionAppModel", "restoreCachedState start")
+        if UserDefaults.standard.object(forKey: StorageKeys.healthSyncEnabled) != nil {
+            healthSyncEnabled = UserDefaults.standard.bool(
+                forKey: StorageKeys.healthSyncEnabled
+            )
+        } else {
+            healthSyncEnabled = true
+        }
         healthAuthorizationGranted = UserDefaults.standard.bool(
             forKey: StorageKeys.healthAuthorizationGranted
         )
@@ -679,7 +946,7 @@ final class CompanionAppModel: ObservableObject {
             companionDebugLog("CompanionAppModel", "refreshSyncState -> disconnected")
             return
         }
-        if healthAccessStatus == .notSet {
+        if missingRequiredAuthorization {
             syncState = .permissionDenied
             companionDebugLog("CompanionAppModel", "refreshSyncState -> permissionDenied")
             return
@@ -710,8 +977,8 @@ final class CompanionAppModel: ObservableObject {
             "completeConnection start session=\(payload.sessionId) apiBaseUrl=\(payload.apiBaseUrl)"
         )
         pairing = normalizedPairingPayload(payload, preferredUiBaseUrl: preferredUiBaseUrl)
-        if movementStore.trackingEnabled == false {
-            movementStore.setTrackingEnabled(true)
+        if let host = URL(string: pairing?.apiBaseUrl ?? payload.apiBaseUrl)?.host {
+            ForgeServerDiscovery.rememberSuccessfulHost(host)
         }
         healthPermissionPromptDeferred = false
         movementPermissionPromptDeferred = false
@@ -726,6 +993,22 @@ final class CompanionAppModel: ObservableObject {
             refreshSyncState()
         }
         companionDebugLog("CompanionAppModel", "completeConnection scheduled follow-up refresh")
+    }
+
+    private func scheduleDeferredStartupRefresh() {
+        guard pairing != nil else {
+            return
+        }
+        deferredStartupRefreshTask?.cancel()
+        deferredStartupRefreshTask = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 2_000_000_000)
+            guard let self, Task.isCancelled == false else { return }
+            companionDebugLog("CompanionAppModel", "deferred startup refresh begin")
+            _ = await self.ensureActivePairingIfPossible(reason: "startup-deferred")
+            await self.refreshMovementBootstrap()
+            await self.refreshWatchBootstrap(reason: "startup-deferred")
+            companionDebugLog("CompanionAppModel", "deferred startup refresh complete")
+        }
     }
 
     private func scheduleAutomaticSync(
@@ -768,10 +1051,10 @@ final class CompanionAppModel: ObservableObject {
         guard syncState != .syncing else {
             return
         }
-        guard healthAccessStatus != .notSet else {
+        guard hasAnyEnabledSource else {
             companionDebugLog(
                 "CompanionAppModel",
-                "performAutomaticSyncIfNeeded skipped reason=\(reason) healthAccessStatus=not_set"
+                "performAutomaticSyncIfNeeded skipped reason=\(reason) all sources disabled"
             )
             return
         }
@@ -908,11 +1191,15 @@ final class CompanionAppModel: ObservableObject {
         syncState = .syncing
         do {
             let movementPayload = movementStore.buildMovementPayload()
+            let screenTimePayload = screenTimeStore.buildScreenTimePayload()
             let buildResult = try await healthStore.buildSyncPayload(
                 pairing: pairing,
                 healthKitAuthorized: healthAuthorizationGranted,
+                healthSyncEnabled: healthSyncEnabled,
                 lastSuccessfulSyncAt: lastSuccessfulSyncAt,
-                movementPayload: movementPayload
+                sourceStates: currentSourceStates,
+                movementPayload: movementPayload,
+                screenTimePayload: screenTimePayload
             )
             let payload = buildResult.payload
             let payloadSummary = buildPayloadSummary(from: payload)
@@ -921,7 +1208,14 @@ final class CompanionAppModel: ObservableObject {
                 payload: payload,
                 apiBaseUrl: pairing.apiBaseUrl
             )
+            if let pairingSession = receipt.pairingSession {
+                applyRemoteSourceStates(pairingSession.sourceStates)
+            }
             movementStore.mergeBootstrap(receipt.movement)
+            _ = movementStore.runCoverageRepair(
+                reason: "sync \(trigger)",
+                referenceDate: Date()
+            )
             let report = SyncReport(
                 syncedAt: Date.now,
                 sleepSessions: receipt.imported.sleepSessions,
@@ -931,7 +1225,9 @@ final class CompanionAppModel: ObservableObject {
                 mergedCount: receipt.imported.mergedCount,
                 movementStays: receipt.imported.movementStays ?? 0,
                 movementTrips: receipt.imported.movementTrips ?? 0,
-                movementKnownPlaces: receipt.imported.movementKnownPlaces ?? 0
+                movementKnownPlaces: receipt.imported.movementKnownPlaces ?? 0,
+                screenTimeDaySummaries: receipt.imported.screenTimeDaySummaries ?? 0,
+                screenTimeHourlySegments: receipt.imported.screenTimeHourlySegments ?? 0
             )
             latestSyncReport = report
             persistSyncState(report: report, payloadSummary: payloadSummary)
@@ -940,10 +1236,11 @@ final class CompanionAppModel: ObservableObject {
                     "Synced movement while HealthKit stayed locked. Health data will resume after unlock."
             } else {
                 lastSyncMessage =
-                    "Synced \(receipt.imported.sleepSessions) sleep, \(receipt.imported.workouts) workouts, and \(receipt.imported.movementTrips ?? 0) trips via \(trigger)"
+                    "Synced \(receipt.imported.sleepSessions) sleep, \(receipt.imported.workouts) workouts, \(receipt.imported.movementTrips ?? 0) trips, and \(receipt.imported.screenTimeHourlySegments ?? 0) Screen Time hours via \(trigger)"
             }
             latestError = nil
             await refreshHealthAccessStatus()
+            await pushAllCurrentSourceStatesIfNeeded()
             await refreshWatchBootstrap(reason: trigger)
             refreshSyncState()
             backgroundScheduler.schedule()
@@ -993,8 +1290,16 @@ final class CompanionAppModel: ObservableObject {
             return
         }
         do {
-            let movement = try await syncClient.fetchMovementBootstrap(payload: pairing)
-            movementStore.mergeBootstrap(movement)
+            let bootstrap = try await syncClient.fetchMovementBootstrap(payload: pairing)
+            if let pairingSession = bootstrap.pairingSession {
+                applyRemoteSourceStates(pairingSession.sourceStates)
+            }
+            movementStore.mergeBootstrap(bootstrap.movement)
+            _ = movementStore.runCoverageRepair(
+                reason: "movement bootstrap",
+                referenceDate: Date()
+            )
+            await pushAllCurrentSourceStatesIfNeeded()
             await refreshWatchBootstrap(reason: "movement refresh")
         } catch {
             companionDebugLog(
@@ -1010,12 +1315,14 @@ final class CompanionAppModel: ObservableObject {
 
     var shouldPromptForHealthAccess: Bool {
         pairing != nil
+            && healthSyncEnabled
             && healthAccessStatus == .notSet
             && !healthPermissionPromptDeferred
     }
 
     var shouldPromptForMovementAccess: Bool {
         pairing != nil
+            && movementStore.trackingEnabled
             && movementStore.locationPermissionStatus == "not_determined"
             && !movementPermissionPromptDeferred
     }
@@ -1027,8 +1334,8 @@ final class CompanionAppModel: ObservableObject {
         if syncState == .syncing {
             return "Syncing now"
         }
-        if healthAccessStatus == .notSet {
-            return "Needs Health access"
+        if missingRequiredAuthorization {
+            return "Needs authorization"
         }
         if latestSyncReport == nil {
             return "Ready to sync"
@@ -1043,6 +1350,9 @@ final class CompanionAppModel: ObservableObject {
     }
 
     var healthAccessLabel: String {
+        if healthSyncEnabled == false {
+            return "Health off"
+        }
         switch healthAccessStatus {
         case .fullAccess:
             return "HealthKit full access"
@@ -1055,9 +1365,19 @@ final class CompanionAppModel: ObservableObject {
 
     var movementAccessLabel: String {
         if movementStore.trackingEnabled == false {
-            return "Movement tracking off"
+            return "Movement off"
         }
         return movementStore.locationPermissionStatus.replacingOccurrences(
+            of: "_",
+            with: " "
+        )
+    }
+
+    var screenTimeAccessLabel: String {
+        if screenTimeStore.enabled == false {
+            return "Screen Time off"
+        }
+        return screenTimeStore.authorizationStatus.replacingOccurrences(
             of: "_",
             with: " "
         )
@@ -1102,17 +1422,119 @@ final class CompanionAppModel: ObservableObject {
     }
 
     var needsNativeAttention: Bool {
-        healthAccessStatus == .notSet
-            || movementStore.locationPermissionStatus == "not_determined"
-            || syncState == .stale
-            || syncState == .error
+        companionOperationalSummary.status != .ok
+    }
+
+    var companionOperationalSummary: CompanionOperationalSummary {
+        CompanionOperationalSummary.derive(
+            syncState: syncState,
+            latestError: latestError,
+            healthSyncEnabled: healthSyncEnabled,
+            healthAccessStatus: healthAccessStatus,
+            movementEnabled: movementStore.trackingEnabled,
+            movementPermissionStatus: movementStore.locationPermissionStatus,
+            movementBackgroundReady: movementStore.backgroundTrackingReady,
+            screenTimeEnabled: screenTimeStore.enabled,
+            screenTimeAuthorizationStatus: screenTimeStore.authorizationStatus
+        )
+    }
+
+    var companionOperationalStatusLabel: String {
+        companionOperationalSummary.status.rawValue
+    }
+
+    var permissionSyncButtonLabel: String {
+        permissionSyncPhase.buttonLabel
+    }
+
+    var permissionSyncProgressDetail: String? {
+        permissionSyncPhase.progressDetail
+    }
+
+    var permissionSyncInFlight: Bool {
+        permissionSyncPhase.isBusy
+    }
+
+    var companionOperationalDetailLabel: String {
+        companionOperationalSummary.detail
+    }
+
+    var hasMissingRequiredAuthorization: Bool {
+        companionOperationalSummary.status == .warning
+    }
+
+    var permissionGateStatusRows: [SyncCoverageRow] {
+        [
+            SyncCoverageRow(
+                id: "health",
+                title: "Health",
+                value: healthAccessLabel,
+                detail: "Sleep and workouts",
+                isMissing: healthSyncEnabled && healthAccessStatus == .notSet
+            ),
+            SyncCoverageRow(
+                id: "movement",
+                title: "Location",
+                value: movementPermissionGateLabel,
+                detail: movementStore.backgroundTrackingReady ? "Background ready" : "Background not ready",
+                isMissing: movementStore.trackingEnabled && movementStore.backgroundTrackingReady == false
+            ),
+            SyncCoverageRow(
+                id: "motion",
+                title: "Motion",
+                value: movementStore.motionPermissionStatus.replacingOccurrences(of: "_", with: " "),
+                detail: "Movement context",
+                isMissing: movementStore.motionPermissionStatus == "unavailable"
+            ),
+            SyncCoverageRow(
+                id: "screen_time",
+                title: "Screen Time",
+                value: screenTimePermissionGateLabel,
+                detail: screenTimeStore.enabled ? "Will sync when available" : "Off",
+                isMissing: screenTimeStore.enabled && screenTimeStore.authorizationStatus != "approved"
+            )
+        ]
+    }
+
+    var movementPermissionGateLabel: String {
+        if movementStore.trackingEnabled == false {
+            return "Off"
+        }
+        switch movementStore.locationPermissionStatus {
+        case "always":
+            return "Authorized"
+        case "when_in_use":
+            return "While open only"
+        case "denied":
+            return "Denied"
+        case "restricted":
+            return "Restricted"
+        default:
+            return "Not authorized"
+        }
+    }
+
+    var screenTimePermissionGateLabel: String {
+        if screenTimeStore.enabled == false {
+            return "Off"
+        }
+        switch screenTimeStore.authorizationStatus {
+        case "approved":
+            return "Authorized"
+        case "unavailable":
+            return "Unavailable"
+        case "denied":
+            return "Denied"
+        default:
+            return "Not authorized"
+        }
     }
 
     var latestImportSummary: String {
         guard let report = latestSyncReport else {
             return "No sync yet"
         }
-        return "\(report.sleepSessions) sleep, \(report.workouts) workouts, \(report.movementTrips) trips"
+        return "\(report.sleepSessions) sleep, \(report.workouts) workouts, \(report.movementTrips) trips, \(report.screenTimeHourlySegments) screen hours"
     }
 
     var lastSuccessfulSyncLabel: String {
@@ -1160,11 +1582,51 @@ final class CompanionAppModel: ObservableObject {
                 isMissing: (payloadSummary?.movementStays ?? 0) == 0 && (payloadSummary?.movementTrips ?? 0) == 0
             ),
             SyncCoverageRow(
+                id: "screen-time",
+                title: "Screen Time",
+                value: "\(payloadSummary?.screenTimeDaySummaries ?? 0) days, \(payloadSummary?.screenTimeHourlySegments ?? 0) hourly slices",
+                detail: "Screen Time sync carries Apple-compliant day summaries plus hourly app and category aggregates, not fabricated per-app second-by-second traces.",
+                isMissing: screenTimeStore.enabled && (payloadSummary?.screenTimeHourlySegments ?? 0) == 0
+            ),
+            SyncCoverageRow(
                 id: "watch",
                 title: "Watch",
                 value: watchSyncLabel,
                 detail: "The watch uses the phone bridge and does not sync directly to Forge.",
                 isMissing: false
+            )
+        ]
+    }
+
+    var sourceDiagnosticsRows: [CompanionSourceDiagnosticsRow] {
+        let states = currentSourceStates
+        return [
+            CompanionSourceDiagnosticsRow(
+                id: CompanionSourceKey.health.rawValue,
+                title: CompanionSourceKey.health.title,
+                desiredEnabled: states.health.desiredEnabled,
+                appliedEnabled: states.health.appliedEnabled,
+                authorizationStatus: states.health.authorizationStatus,
+                syncEligible: states.health.syncEligible,
+                lastObservedAt: states.health.lastObservedAt
+            ),
+            CompanionSourceDiagnosticsRow(
+                id: CompanionSourceKey.movement.rawValue,
+                title: CompanionSourceKey.movement.title,
+                desiredEnabled: states.movement.desiredEnabled,
+                appliedEnabled: states.movement.appliedEnabled,
+                authorizationStatus: states.movement.authorizationStatus,
+                syncEligible: states.movement.syncEligible,
+                lastObservedAt: states.movement.lastObservedAt
+            ),
+            CompanionSourceDiagnosticsRow(
+                id: CompanionSourceKey.screenTime.rawValue,
+                title: CompanionSourceKey.screenTime.title,
+                desiredEnabled: states.screenTime.desiredEnabled,
+                appliedEnabled: states.screenTime.appliedEnabled,
+                authorizationStatus: states.screenTime.authorizationStatus,
+                syncEligible: states.screenTime.syncEligible,
+                lastObservedAt: states.screenTime.lastObservedAt
             )
         ]
     }
@@ -1187,6 +1649,8 @@ final class CompanionAppModel: ObservableObject {
             movementTrips: payload.movement.trips.count,
             movementTripPoints: payload.movement.trips.reduce(0) { $0 + $1.points.count },
             movementTripStops: payload.movement.trips.reduce(0) { $0 + $1.stops.count },
+            screenTimeDaySummaries: payload.screenTime.daySummaries.count,
+            screenTimeHourlySegments: payload.screenTime.hourlySegments.count,
             rawHeartRateDatapointsSynced: 0
         )
     }
@@ -1310,6 +1774,292 @@ final class CompanionAppModel: ObservableObject {
             detail: "Stored trusted Tailscale Forge target"
         )
     }
+
+    private var hasAnyEnabledSource: Bool {
+        healthSyncEnabled || movementStore.trackingEnabled || screenTimeStore.enabled
+    }
+
+    private var missingRequiredAuthorization: Bool {
+        (healthSyncEnabled && healthAccessStatus == .notSet)
+            || (movementStore.trackingEnabled && (
+                movementStore.locationPermissionStatus == "not_determined"
+                    || movementStore.locationPermissionStatus == "denied"
+                    || movementStore.locationPermissionStatus == "restricted"
+                    || movementStore.backgroundTrackingReady == false
+            ))
+            || (screenTimeStore.enabled && screenTimeStore.authorizationStatus != "approved")
+    }
+
+    private var currentSourceStates: CompanionSourceStates {
+        let now = ISO8601DateFormatter().string(from: Date())
+        return CompanionSourceStates(
+            health: CompanionSourceState(
+                desiredEnabled: healthSyncEnabled,
+                appliedEnabled: healthSyncEnabled,
+                authorizationStatus: sourceAuthorizationStatus(for: .health),
+                syncEligible: healthSyncEnabled && healthAccessStatus != .notSet,
+                lastObservedAt: now,
+                metadata: LooseJSONObject(values: [
+                    "healthAccessStatus": healthAccessStatus.rawValue
+                ])
+            ),
+            movement: CompanionSourceState(
+                desiredEnabled: movementStore.trackingEnabled,
+                appliedEnabled: movementStore.trackingEnabled,
+                authorizationStatus: sourceAuthorizationStatus(for: .movement),
+                syncEligible: movementStore.trackingEnabled && movementStore.backgroundTrackingReady,
+                lastObservedAt: now,
+                metadata: LooseJSONObject(values: [
+                    "locationPermissionStatus": movementStore.locationPermissionStatus,
+                    "motionPermissionStatus": movementStore.motionPermissionStatus
+                ])
+            ),
+            screenTime: CompanionSourceState(
+                desiredEnabled: screenTimeStore.enabled,
+                appliedEnabled: screenTimeStore.enabled,
+                authorizationStatus: sourceAuthorizationStatus(for: .screenTime),
+                syncEligible: screenTimeStore.enabled && screenTimeStore.authorizationStatus == "approved",
+                lastObservedAt: now,
+                metadata: LooseJSONObject(values: [
+                    "captureState": screenTimeStore.captureState,
+                    "captureFreshness": screenTimeStore.captureFreshness
+                ])
+            )
+        )
+    }
+
+    private func sourceAuthorizationStatus(for source: CompanionSourceKey) -> String {
+        switch source {
+        case .health:
+            guard healthSyncEnabled else { return "disabled" }
+            switch healthAccessStatus {
+            case .fullAccess, .customAccess:
+                return "approved"
+            case .notSet:
+                return "not_determined"
+            }
+        case .movement:
+            guard movementStore.trackingEnabled else { return "disabled" }
+            switch movementStore.locationPermissionStatus {
+            case "always":
+                return "approved"
+            case "when_in_use":
+                return "pending"
+            case "denied":
+                return "denied"
+            case "restricted":
+                return "restricted"
+            default:
+                return "not_determined"
+            }
+        case .screenTime:
+            guard screenTimeStore.enabled else { return "disabled" }
+            switch screenTimeStore.authorizationStatus {
+            case "approved":
+                return "approved"
+            case "denied":
+                return "denied"
+            case "unavailable":
+                return "unavailable"
+            default:
+                return "not_determined"
+            }
+        }
+    }
+
+    private var canPresentPermissionPrompts: Bool {
+        UIApplication.shared.applicationState == .active
+    }
+
+    private func isSourceEnabled(_ source: CompanionSourceKey) -> Bool {
+        switch source {
+        case .health:
+            return healthSyncEnabled
+        case .movement:
+            return movementStore.trackingEnabled
+        case .screenTime:
+            return screenTimeStore.enabled
+        }
+    }
+
+    private func applyLocalSourceEnabledState(
+        _ source: CompanionSourceKey,
+        enabled: Bool
+    ) {
+        switch source {
+        case .health:
+            healthSyncEnabled = enabled
+            if enabled == false {
+                healthPermissionPromptDeferred = false
+                UserDefaults.standard.set(false, forKey: StorageKeys.deferredHealthPrompt)
+            }
+        case .movement:
+            if movementStore.trackingEnabled != enabled {
+                movementStore.setTrackingEnabled(enabled)
+            }
+            if enabled == false {
+                movementPermissionPromptDeferred = false
+                UserDefaults.standard.set(false, forKey: StorageKeys.movementPromptDeferred)
+            }
+        case .screenTime:
+            if screenTimeStore.enabled != enabled {
+                screenTimeStore.setEnabled(enabled)
+            }
+        }
+    }
+
+    private func applyRemoteSourceStates(_ sourceStates: CompanionSourceStates) {
+        var sourcesToPushImmediately: [CompanionSourceKey] = []
+        for source in CompanionSourceKey.allCases {
+            let remoteState: CompanionSourceState
+            switch source {
+            case .health:
+                remoteState = sourceStates.health
+            case .movement:
+                remoteState = sourceStates.movement
+            case .screenTime:
+                remoteState = sourceStates.screenTime
+            }
+
+            let localEnabled = isSourceEnabled(source)
+            if remoteState.desiredEnabled == false {
+                if localEnabled {
+                    applyLocalSourceEnabledState(source, enabled: false)
+                    sourcesToPushImmediately.append(source)
+                }
+                pendingRemoteSourceReconciliation.remove(source)
+                continue
+            }
+
+            if localEnabled == false {
+                applyLocalSourceEnabledState(source, enabled: true)
+            }
+
+            if remoteState.desiredEnabled != remoteState.appliedEnabled {
+                pendingRemoteSourceReconciliation.insert(source)
+                continue
+            }
+
+            pendingRemoteSourceReconciliation.remove(source)
+            if localEnabled == false {
+                sourcesToPushImmediately.append(source)
+            }
+        }
+        refreshSyncState()
+        if sourcesToPushImmediately.isEmpty == false {
+            Task {
+                for source in sourcesToPushImmediately {
+                    await pushCurrentSourceState(source)
+                }
+            }
+        }
+        scheduleRemoteSourceReconciliation(reason: "remote source state update")
+    }
+
+    private func scheduleRemoteSourceReconciliation(reason: String) {
+        guard pendingRemoteSourceReconciliation.isEmpty == false else {
+            return
+        }
+        remoteSourceReconciliationTask?.cancel()
+        remoteSourceReconciliationTask = Task { [weak self] in
+            await self?.reconcileRemoteSourceStateIfNeeded(reason: reason)
+        }
+    }
+
+    private func reconcileRemoteSourceStateIfNeeded(reason: String) async {
+        guard pendingRemoteSourceReconciliation.isEmpty == false else {
+            return
+        }
+        guard canPresentPermissionPrompts else {
+            let pendingLabels = pendingRemoteSourceReconciliation
+                .map(\.rawValue)
+                .joined(separator: ",")
+            companionDebugLog(
+                "CompanionAppModel",
+                "reconcileRemoteSourceStateIfNeeded deferred reason=\(reason) pending=\(pendingLabels)"
+            )
+            return
+        }
+
+        let sources = CompanionSourceKey.allCases.filter {
+            pendingRemoteSourceReconciliation.contains($0)
+        }
+        guard sources.isEmpty == false else {
+            return
+        }
+
+        let sourceLabels = sources.map(\.rawValue).joined(separator: ",")
+        companionDebugLog(
+            "CompanionAppModel",
+            "reconcileRemoteSourceStateIfNeeded start reason=\(reason) sources=\(sourceLabels)"
+        )
+
+        var shouldSync = false
+        for source in sources {
+            guard pendingRemoteSourceReconciliation.contains(source) else {
+                continue
+            }
+            applyLocalSourceEnabledState(source, enabled: true)
+            switch source {
+            case .health:
+                await requestHealthPermissions()
+            case .movement:
+                requestMovementPermissions()
+            case .screenTime:
+                await screenTimeStore.enableAndAuthorize()
+            }
+            await pushCurrentSourceState(source)
+            pendingRemoteSourceReconciliation.remove(source)
+            shouldSync = true
+        }
+
+        refreshSyncState()
+        if shouldSync && hasAnyEnabledSource {
+            _ = await performSync(trigger: "remote \(reason)")
+        }
+    }
+
+    private func pushCurrentSourceState(_ source: CompanionSourceKey) async {
+        guard let pairing else {
+            return
+        }
+        do {
+            let state: CompanionSourceState
+            switch source {
+            case .health:
+                state = currentSourceStates.health
+            case .movement:
+                state = currentSourceStates.movement
+            case .screenTime:
+                state = currentSourceStates.screenTime
+            }
+            let session = try await syncClient.updateSourceState(
+                payload: pairing,
+                source: source.rawValue,
+                desiredEnabled: state.desiredEnabled,
+                appliedEnabled: state.appliedEnabled,
+                authorizationStatus: state.authorizationStatus,
+                syncEligible: state.syncEligible,
+                lastObservedAt: state.lastObservedAt,
+                metadata: state.metadata.values
+            )
+            applyRemoteSourceStates(session.sourceStates)
+        } catch {
+            companionDebugLog(
+                "CompanionAppModel",
+                "pushCurrentSourceState failed source=\(source.rawValue) error=\(error.localizedDescription)"
+            )
+        }
+    }
+
+    private func pushAllCurrentSourceStatesIfNeeded() async {
+        guard pairing != nil else {
+            return
+        }
+        for source in CompanionSourceKey.allCases {
+            await pushCurrentSourceState(source)
+        }
+    }
 }
 
 private struct PersistedSyncReport: Codable {
@@ -1322,6 +2072,8 @@ private struct PersistedSyncReport: Codable {
     let movementStays: Int
     let movementTrips: Int
     let movementKnownPlaces: Int
+    let screenTimeDaySummaries: Int
+    let screenTimeHourlySegments: Int
 
     private enum CodingKeys: String, CodingKey {
         case syncedAt
@@ -1333,6 +2085,8 @@ private struct PersistedSyncReport: Codable {
         case movementStays
         case movementTrips
         case movementKnownPlaces
+        case screenTimeDaySummaries
+        case screenTimeHourlySegments
     }
 
     init(report: SyncReport) {
@@ -1345,6 +2099,8 @@ private struct PersistedSyncReport: Codable {
         movementStays = report.movementStays
         movementTrips = report.movementTrips
         movementKnownPlaces = report.movementKnownPlaces
+        screenTimeDaySummaries = report.screenTimeDaySummaries
+        screenTimeHourlySegments = report.screenTimeHourlySegments
     }
 
     init(from decoder: Decoder) throws {
@@ -1358,6 +2114,8 @@ private struct PersistedSyncReport: Codable {
         movementStays = try container.decodeIfPresent(Int.self, forKey: .movementStays) ?? 0
         movementTrips = try container.decodeIfPresent(Int.self, forKey: .movementTrips) ?? 0
         movementKnownPlaces = try container.decodeIfPresent(Int.self, forKey: .movementKnownPlaces) ?? 0
+        screenTimeDaySummaries = try container.decodeIfPresent(Int.self, forKey: .screenTimeDaySummaries) ?? 0
+        screenTimeHourlySegments = try container.decodeIfPresent(Int.self, forKey: .screenTimeHourlySegments) ?? 0
     }
 
     var asSyncReport: SyncReport {
@@ -1370,7 +2128,9 @@ private struct PersistedSyncReport: Codable {
             mergedCount: mergedCount,
             movementStays: movementStays,
             movementTrips: movementTrips,
-            movementKnownPlaces: movementKnownPlaces
+            movementKnownPlaces: movementKnownPlaces,
+            screenTimeDaySummaries: screenTimeDaySummaries,
+            screenTimeHourlySegments: screenTimeHourlySegments
         )
     }
 }

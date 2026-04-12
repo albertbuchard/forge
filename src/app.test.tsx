@@ -121,6 +121,10 @@ vi.mock("@/pages/psyche-self-observation-page", () => ({
   PsycheSelfObservationPage: () => <div>Psyche self observation route</div>
 }));
 
+vi.mock("@/pages/psyche-screen-time-page", () => ({
+  PsycheScreenTimePage: () => <div>Psyche screen time route</div>
+}));
+
 vi.mock("@/pages/psyche-behaviors-page", () => ({
   PsycheBehaviorsPage: () => <div>Psyche behaviors route</div>
 }));
@@ -151,6 +155,10 @@ vi.mock("@/pages/psyche-mode-guide-page", () => ({
 
 vi.mock("@/pages/settings-page", () => ({
   SettingsPage: () => <div>Settings route</div>
+}));
+
+vi.mock("@/pages/settings-data-page", () => ({
+  SettingsDataPage: () => <div>Settings data route</div>
 }));
 
 vi.mock("@/pages/goal-detail-page", () => ({
@@ -188,6 +196,13 @@ describe("App routing", () => {
     expect(await screen.findByText("Settings route")).toBeInTheDocument();
   });
 
+  it("renders the data settings route inside the shell", async () => {
+    renderApp("/settings/data");
+
+    expect(await screen.findByText("Forge shell")).toBeInTheDocument();
+    expect(await screen.findByText("Settings data route")).toBeInTheDocument();
+  });
+
   it("renders the preferences route inside the shell", async () => {
     renderApp("/preferences");
 
@@ -222,6 +237,9 @@ describe("App routing", () => {
 
     renderApp("/psyche/self-observation");
     expect(await screen.findByText("Psyche self observation route")).toBeInTheDocument();
+
+    renderApp("/psyche/screen-time");
+    expect(await screen.findByText("Psyche screen time route")).toBeInTheDocument();
 
     render(
       <MemoryRouter initialEntries={["/psyche/schemas-beliefs"]}>

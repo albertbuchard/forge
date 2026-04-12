@@ -76,6 +76,9 @@ function normalizeAnchorKey(anchorKey: string): string | null {
 function normalizeLinks(
   links: CreateNoteInput["links"]
 ): CreateNoteInput["links"] {
+  if (!links) {
+    return [];
+  }
   const seen = new Set<string>();
   return links.filter((link) => {
     const key = `${link.entityType}:${link.entityId}:${link.anchorKey ?? ""}`;

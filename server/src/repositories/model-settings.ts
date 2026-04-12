@@ -19,6 +19,7 @@ import { upsertWikiLlmProfile } from "./wiki-memory.js";
 
 export const DEFAULT_OPENAI_BASE_URL = "https://api.openai.com/v1";
 export const DEFAULT_OPENAI_CODEX_BASE_URL = "https://chatgpt.com/backend-api";
+export const DEFAULT_MOCK_LLM_BASE_URL = "mock://workbench";
 export const FORGE_MANAGED_WIKI_PROFILE_ID = "wiki_llm_forge_managed";
 export const FORGE_DEFAULT_AGENT_ID = "agt_forge_default";
 
@@ -74,6 +75,9 @@ export function defaultBaseUrlForProvider(provider: AiModelProvider) {
   if (provider === "openai-compatible") {
     return "http://127.0.0.1:11434/v1";
   }
+  if (provider === "mock") {
+    return DEFAULT_MOCK_LLM_BASE_URL;
+  }
   return DEFAULT_OPENAI_BASE_URL;
 }
 
@@ -88,7 +92,9 @@ export function buildConnectionAgentIdentity(
     connection.provider === "openai-codex"
       ? "Chat agent backed by OpenAI Codex OAuth."
       : connection.provider === "openai-compatible"
-        ? "Chat agent backed by a local or OpenAI-compatible endpoint."
+      ? "Chat agent backed by a local or OpenAI-compatible endpoint."
+      : connection.provider === "mock"
+        ? "Chat agent backed by Forge's deterministic mock workflow runtime."
         : "Chat agent backed by the OpenAI API.";
   return {
     id: connection.agentId,
@@ -107,7 +113,8 @@ export function buildConnectionAgentIdentity(
 
 function mapConnection(row: AiModelConnectionRow): AiModelConnection {
   const hasStoredCredential =
-    Boolean(row.secret_id) && Boolean(readEncryptedSecret(row.secret_id!));
+    row.provider === "mock" ||
+    (Boolean(row.secret_id) && Boolean(readEncryptedSecret(row.secret_id!)));
   return aiModelConnectionSchema.parse({
     id: row.id,
     label: row.label,
@@ -201,7 +208,9 @@ export function upsertAiModelConnection(
   let secretId = existing?.secret_id ?? null;
   let accountLabel = existing?.account_label ?? null;
 
-  if (parsed.apiKey?.trim()) {
+  if (parsed.provider === "mock") {
+    secretId = null;
+  } else if (parsed.apiKey?.trim()) {
     secretId =
       secretId ?? `mdl_secret_${randomUUID().replaceAll("-", "").slice(0, 10)}`;
     storeEncryptedSecret(

@@ -28,12 +28,6 @@
 	<array>
 		<string>tailscale</string>
 	</array>
-	<key>NSBonjourServices</key>
-	<array>
-		<string>_forge._tcp</string>
-	</array>
-	<key>NSCameraUsageDescription</key>
-	<string>Forge Companion uses the camera to scan the pairing QR code from Forge Settings.</string>
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<key>NSAllowsLocalNetworking</key>
@@ -49,30 +43,43 @@
 			</dict>
 		</dict>
 	</dict>
+	<key>NSBonjourServices</key>
+	<array>
+		<string>_forge._tcp</string>
+	</array>
+	<key>NSCameraUsageDescription</key>
+	<string>Forge Companion uses the camera to scan the pairing QR code from Forge Settings.</string>
 	<key>NSHealthShareUsageDescription</key>
 	<string>Forge Companion reads Health data to sync sleep, workouts, and recovery into Forge.</string>
 	<key>NSHealthUpdateUsageDescription</key>
 	<string>Forge Companion may write reconciliation metadata in future milestones.</string>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>Forge Companion scans your local network to find Forge runtimes during setup.</string>
-	<key>NSMotionUsageDescription</key>
-	<string>Forge Companion uses motion activity to distinguish travel, walking, stationary periods, and movement context for truthful trip and stay capture.</string>
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
 	<string>Forge Companion uses background location to detect stays, trips, and stops so Forge can build a truthful movement timeline even when the app is not open.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Forge Companion uses location to detect stays, trips, and meaningful places for reflective movement history in Forge.</string>
+	<key>NSMotionUsageDescription</key>
+	<string>Forge Companion uses motion activity to distinguish travel, walking, stationary periods, and movement context for truthful trip and stay capture.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>
 		<false/>
 	</dict>
-	<key>UIRequiresFullScreen</key>
+	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
+	<key>UILaunchScreen</key>
+	<dict>
+		<key>UIImageName</key>
+		<string></string>
+	</dict>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>fetch</string>
 		<string>location</string>
 	</array>
+	<key>UIRequiresFullScreen</key>
+	<true/>
 	<key>UISupportedInterfaceOrientations</key>
 	<array>
 		<string>UIInterfaceOrientationPortrait</string>

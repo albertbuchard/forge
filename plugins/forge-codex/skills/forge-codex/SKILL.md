@@ -3,11 +3,16 @@
 Use this plugin when you want Codex to work directly with Forge through the curated
 MCP tool surface.
 
-Forge has two major domains. The planning side covers goals, projects, strategies,
-tasks, habits, notes, calendar events, recurring work blocks, task timeboxes, live
-task runs, and agent-authored insights. The Psyche side covers values, patterns,
-behaviors, beliefs, modes, guided mode sessions, trigger reports, event types, and
-reusable emotion definitions. Forge is explicitly multi-user: every stored entity can
+Forge has planning, health, preferences, Psyche, questionnaire, self-observation,
+and wiki surfaces. The planning side covers goals, projects, strategies, tasks,
+habits, tags, notes, calendar events, recurring work blocks, task timeboxes, live
+task runs, and agent-authored insights. The health side covers `sleep_session` and
+`workout_session`. The preferences side covers `preference_catalog`,
+`preference_catalog_item`, `preference_context`, and `preference_item` plus the game,
+judgments, and signals. The Psyche side covers values, patterns, behaviors, beliefs,
+modes, guided mode sessions, trigger reports, event types, reusable emotion
+definitions, `questionnaire_instrument`, `questionnaire_run`, and the note-backed
+self-observation calendar. Forge is explicitly multi-user: every stored entity can
 belong to a typed `human` or `bot` user through `userId`, reads can scope to one or
 many users with `userId` or repeated `userIds`, and cross-user links are valid when
 the request is intentional.
@@ -70,26 +75,84 @@ does want to save or update something, ask only for what is missing or unclear.
 1. Start with `forge_get_operator_overview` unless the user is asking for one exact
    known write.
 2. Search before creating duplicates with `forge_search_entities`.
-3. Use batch tools for normal stored-entity work:
+3. Use batch tools for normal stored-entity work. Batch CRUD is the default for
+   simple entities, so do not spam the agent with hundreds of individual CRUD routes
+   when the shared routes already cover the job:
    - `forge_create_entities`
    - `forge_update_entities`
    - `forge_delete_entities`
    - `forge_restore_entities`
-4. Use the task-run tools for truthful live work:
+4. Batch CRUD entities are:
+   - `goal`, `project`, `strategy`, `task`, `habit`, `tag`, `note`, `insight`
+   - `calendar_event`, `work_block_template`, `task_timebox`
+   - `psyche_value`, `behavior_pattern`, `behavior`, `belief_entry`,
+     `mode_profile`, `mode_guide_session`, `trigger_report`, `event_type`,
+     `emotion_definition`
+   - `preference_catalog`, `preference_catalog_item`, `preference_context`,
+     `preference_item`
+   - `questionnaire_instrument`, `sleep_session`, `workout_session`
+5. Specialized CRUD entities are `wiki_page` and `calendar_connection`.
+6. Action and workflow entities are `task_run`, `questionnaire_run`, the
+   preferences game and judgment/signal tools, calendar sync/setup flows, work-log
+   adjustments, and similar action-heavy operations.
+7. Read-model-only surfaces include operator overview/context, sleep overview,
+   sports overview, self-observation calendar, and calendar overview.
+8. Use the task-run tools for truthful live work:
    - `forge_start_task_run`
    - `forge_heartbeat_task_run`
    - `forge_focus_task_run`
    - `forge_complete_task_run`
    - `forge_release_task_run`
    - include `closeoutNote` when the work summary should become a durable linked note
-5. Store structured recommendations with `forge_post_insight`.
-6. Use `forge_get_ui_entrypoint` when the Forge UI is the better surface for Kanban,
+9. Store structured recommendations with `forge_post_insight`.
+10. Use `forge_get_sleep_overview` and `forge_get_sports_overview` for health read
+    models, and use `forge_update_sleep_session` and `forge_update_workout_session`
+    only for reflective enrichment on one already-existing record. Ordinary
+    `sleep_session` and `workout_session` CRUD belongs on the shared batch routes.
+11. Use `forge_get_ui_entrypoint` when the Forge UI is the better surface for Kanban,
    detailed review, graph exploration, or complex Psyche work.
+
+## Entity contract
+
+- Preferred mutation path for simple entities: `forge_search_entities`,
+  `forge_create_entities`, `forge_update_entities`, `forge_delete_entities`,
+  `forge_restore_entities`.
+- Preferred mutation path for `sleep_session` and `workout_session`: the same batch
+  CRUD tools. Dedicated health tools are for review and post-review enrichment, not
+  the default write model.
+- Preferred mutation path for Preferences actions: keep the batch tools for the
+  simple entities and use the dedicated game, judgment, signal, merge, enqueue, and
+  score tools only for those action-heavy flows.
+- Preferred mutation path for questionnaires: use batch CRUD for
+  `questionnaire_instrument`, and use the run, clone, draft, and publish tools for
+  questionnaire workflows.
+- Preferred mutation path for wiki content: use the wiki tools instead of batch CRUD.
+- Exact create-shape expectations live in `forge_get_agent_onboarding`. Use its
+  `entityCatalog` as the schema source of truth for `minimumCreateFields`,
+  `fieldGuide`, examples, classification, and preferred mutation path.
+- High-signal minimums worth remembering:
+  `goal { title }`, `project { goalId, title }`, `strategy { title, graph }`,
+  `task { title }`, `habit { title }`, `tag { label }`,
+  `note { contentMarkdown, links }`, `calendar_event { title, startAt, endAt }`,
+  `work_block_template { title, kind, timezone, weekDays, startMinute, endMinute, blockingState }`,
+  `task_timebox { taskId, title, startsAt, endsAt }`, `psyche_value { title }`,
+  `behavior_pattern { title }`, `behavior { kind, title }`,
+  `belief_entry { statement, beliefType }`, `mode_profile { family, title }`,
+  `mode_guide_session { summary, answers }`, `trigger_report { title }`,
+  `event_type { label }`, `emotion_definition { label }`,
+  `preference_catalog { userId, domain, title }`,
+  `preference_catalog_item { catalogId, label }`,
+  `preference_context { userId, domain, name }`,
+  `preference_item { userId, domain, label }`,
+  `questionnaire_instrument { title, sourceClass, availability, isSelfReport, versionLabel, definition, scoring, provenance }`,
+  `sleep_session { startedAt, endedAt }`,
+  `workout_session { workoutType, startedAt, endedAt }`.
 
 ## Behavioral rules
 
 - Prefer the operator overview before mutating Forge.
-- Prefer batch entity tools for multi-entity work.
+- Prefer batch entity tools for simple entities. The point is to keep the agent out
+  of a route jungle, not to memorize every direct CRUD endpoint in the server.
 - When ownership matters, set `userId` deliberately instead of assuming the current
   operator is the only namespace.
 - Use `note` as the first-class Markdown evidence record for context, reflection,

@@ -43,8 +43,8 @@ Use the UI route or tool when the user wants visual review, Kanban movement, gra
 
 By default, Forge stores its SQLite data under the active runtime root:
 
-- normal npm/OpenClaw install: usually `~/.openclaw/extensions/forge-openclaw-plugin/data/forge.sqlite`
-- linked repo-local plugin install: usually `<repo>/openclaw-plugin/data/forge.sqlite`
+- normal npm/OpenClaw install: usually `~/.openclaw/extensions/forge-openclaw-plugin/forge.sqlite`
+- linked repo-local plugin install: usually `<repo>/openclaw-plugin/forge.sqlite`
 
 If the user wants the data somewhere else for persistence, backup, or manual control, set `dataRoot` in the Forge plugin config and restart the gateway.
 

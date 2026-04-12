@@ -2,6 +2,7 @@ import type {
   WorkbenchNodeDefinition,
   WorkbenchNodeExecutionInput,
   WorkbenchNodeExecutionValue,
+  WorkbenchOutputDefinition,
   WorkbenchRuntimeContext,
   WorkbenchToolDefinition
 } from "./nodes.js";
@@ -12,10 +13,74 @@ function asRecord(value: unknown) {
     : null;
 }
 
+function readTextValue(...values: unknown[]) {
+  for (const value of values) {
+    if (typeof value === "string") {
+      return value;
+    }
+  }
+  return "";
+}
+
+function readNumberValue(...values: unknown[]) {
+  for (const value of values) {
+    if (typeof value === "number" && Number.isFinite(value)) {
+      return value;
+    }
+    if (typeof value === "string") {
+      const parsed = Number(value);
+      if (Number.isFinite(parsed)) {
+        return parsed;
+      }
+    }
+  }
+  return null;
+}
+
+function readStringArrayValue(...values: unknown[]) {
+  for (const value of values) {
+    if (Array.isArray(value)) {
+      const normalized = value.filter(
+        (entry): entry is string => typeof entry === "string" && entry.trim().length > 0
+      );
+      if (normalized.length > 0) {
+        return normalized;
+      }
+      continue;
+    }
+    if (typeof value === "string") {
+      const trimmed = value.trim();
+      if (!trimmed) {
+        continue;
+      }
+      try {
+        const parsed = JSON.parse(trimmed);
+        if (Array.isArray(parsed)) {
+          const normalized = parsed.filter(
+            (entry): entry is string => typeof entry === "string" && entry.trim().length > 0
+          );
+          if (normalized.length > 0) {
+            return normalized;
+          }
+        }
+      } catch {
+        const normalized = trimmed
+          .split(",")
+          .map((entry) => entry.trim())
+          .filter((entry) => entry.length > 0);
+        if (normalized.length > 0) {
+          return normalized;
+        }
+      }
+    }
+  }
+  return [];
+}
+
 export function buildWorkbenchOutputMap(
   text: string,
   json: Record<string, unknown> | null,
-  keys: string[]
+  outputs: WorkbenchOutputDefinition[]
 ) {
   const outputMap: Record<
     string,
@@ -23,32 +88,51 @@ export function buildWorkbenchOutputMap(
       text: string;
       json: Record<string, unknown> | null;
     }
-  > = {
-    primary: {
-      text,
-      json
-    }
-  };
-  for (const key of keys) {
-    if (!json || !(key in json)) {
-      outputMap[key] = {
-        text,
-        json
-      };
-      continue;
-    }
-    const value = json[key];
-    outputMap[key] = {
+  > = {};
+  const declaredOutputs = outputs.length > 0 ? outputs : [{ key: "summary" } as WorkbenchOutputDefinition];
+  declaredOutputs.forEach((output, index) => {
+    const rawValue =
+      json && output.key in json
+        ? json[output.key]
+        : index === 0 || output.key === "summary"
+          ? text
+          : null;
+    outputMap[output.key] = {
       text:
-        typeof value === "string"
-          ? value
-          : Array.isArray(value) || asRecord(value)
-            ? JSON.stringify(value, null, 2)
-            : String(value ?? ""),
-      json: asRecord(value)
+        typeof rawValue === "string"
+          ? rawValue
+          : Array.isArray(rawValue) || asRecord(rawValue)
+            ? JSON.stringify(rawValue, null, 2)
+            : String(rawValue ?? ""),
+      json: asRecord(rawValue)
     };
-  }
+  });
   return outputMap;
+}
+
+function normalizeWorkbenchOutputPayload(
+  definition: WorkbenchNodeDefinition,
+  output: Record<string, unknown> | null,
+  primaryText: string
+) {
+  const declaredOutputs = definition.output ?? [];
+  if (!output && declaredOutputs.length === 0) {
+    return null;
+  }
+  const normalized: Record<string, unknown> = output ? { ...output } : {};
+  if (declaredOutputs.length > 0) {
+    const leadKey = declaredOutputs[0]?.key;
+    if (leadKey && !(leadKey in normalized)) {
+      normalized[leadKey] = primaryText;
+    }
+    if (
+      declaredOutputs.some((entry) => entry.key === "summary") &&
+      !("summary" in normalized)
+    ) {
+      normalized.summary = primaryText;
+    }
+  }
+  return normalized;
 }
 
 export function buildWorkbenchExecutionEnvelope(
@@ -59,24 +143,16 @@ export function buildWorkbenchExecutionEnvelope(
     logs?: string[];
   }
 ): WorkbenchNodeExecutionValue {
-  const payload = {
-    nodeId: input.nodeId,
-    nodeType: input.definition.id,
-    title: input.definition.title,
-    inputs: input.inputs,
-    params: input.params,
-    output: value.output,
-    logs: value.logs ?? []
-  };
+  const payload = normalizeWorkbenchOutputPayload(
+    input.definition,
+    value.output,
+    value.primaryText
+  );
   return {
     primaryText: value.primaryText,
     payload,
     logs: value.logs ?? [],
-    outputMap: buildWorkbenchOutputMap(
-      value.primaryText,
-      payload,
-      Object.keys(value.output ?? {})
-    )
+    outputMap: buildWorkbenchOutputMap(value.primaryText, payload, input.definition.output)
   };
 }
 
@@ -137,7 +213,8 @@ export function searchWorkbenchEntities(
       summaryLines.length > 0
         ? summaryLines.join("\n")
         : `No ${definition.title.toLowerCase()} matches found.`,
-    limit
+    limit,
+    query: input.query
   };
 }
 
@@ -149,13 +226,25 @@ export function buildSearchWorkbenchExecution(
     limit?: number;
   }
 ) {
-  const summary = searchWorkbenchEntities(input.context, input.definition, config);
+  const query = readTextValue(input.inputs.query, input.params.query, config.query).trim();
+  const entityTypes = readStringArrayValue(
+    input.inputs.entityTypes,
+    input.params.entityTypes,
+    config.entityTypes
+  );
+  const limit =
+    readNumberValue(input.inputs.limit, input.params.limit, config.limit) ?? config.limit ?? 12;
+  const summary = searchWorkbenchEntities(input.context, input.definition, {
+    query,
+    entityTypes,
+    limit
+  });
   return buildWorkbenchExecutionEnvelope(input, {
     primaryText: summary.summaryText,
     output: {
+      summary: summary.summaryText,
       matches: summary.matches,
-      limit: summary.limit,
-      entityTypes: config.entityTypes
+      matchCount: summary.matches.length
     }
   });
 }
@@ -179,6 +268,10 @@ export function buildMovementPlacesExecution(input: WorkbenchNodeExecutionInput)
             .join("\n")
         : "No known places are stored yet.",
     output: {
+      summary:
+        places.length > 0
+          ? `${places.length} place${places.length === 1 ? "" : "s"} available.`
+          : "No known places are stored yet.",
       places
     }
   });
@@ -191,7 +284,14 @@ export function buildSleepWorkbenchExecution(input: WorkbenchNodeExecutionInput)
       payload && typeof payload === "object"
         ? "Sleep history and derived patterns are available."
         : "No sleep data is available.",
-    output: asRecord(payload)
+    output: payload && typeof payload === "object"
+      ? {
+          summary: "Sleep history and derived patterns are available.",
+          sleepView: payload
+        }
+      : {
+          summary: "No sleep data is available."
+        }
   });
 }
 
@@ -202,7 +302,14 @@ export function buildSportsWorkbenchExecution(input: WorkbenchNodeExecutionInput
       payload && typeof payload === "object"
         ? "Workout history and composition are available."
         : "No sports data is available.",
-    output: asRecord(payload)
+    output: payload && typeof payload === "object"
+      ? {
+          summary: "Workout history and composition are available.",
+          sportsView: payload
+        }
+      : {
+          summary: "No sports data is available."
+        }
   });
 }
 
@@ -220,6 +327,13 @@ export function buildOverviewWorkbenchExecution(input: WorkbenchNodeExecutionInp
   return buildWorkbenchExecutionEnvelope(input, {
     primaryText: summary,
     output: record
+      ? {
+          summary,
+          context: record
+        }
+      : {
+          summary
+        }
   });
 }
 
@@ -240,6 +354,13 @@ export function buildInsightsWorkbenchExecution(input: WorkbenchNodeExecutionInp
   return buildWorkbenchExecutionEnvelope(input, {
     primaryText: summary,
     output: record
+      ? {
+          summary,
+          insights: record
+        }
+      : {
+          summary
+        }
   });
 }
 
@@ -261,6 +382,13 @@ export function buildWeeklyReviewWorkbenchExecution(input: WorkbenchNodeExecutio
   return buildWorkbenchExecutionEnvelope(input, {
     primaryText: summary,
     output: record
+      ? {
+          summary,
+          weeklyReview: record
+        }
+      : {
+          summary
+        }
   });
 }
 
@@ -284,6 +412,7 @@ export function buildWikiPagesWorkbenchExecution(input: WorkbenchNodeExecutionIn
   return buildWorkbenchExecutionEnvelope(input, {
     primaryText: summary,
     output: {
+      summary,
       pages
     }
   });
@@ -310,13 +439,20 @@ export function buildWikiHealthWorkbenchExecution(input: WorkbenchNodeExecutionI
   return buildWorkbenchExecutionEnvelope(input, {
     primaryText: summary,
     output: record
+      ? {
+          summary,
+          health: record
+        }
+      : {
+          summary
+        }
   });
 }
 
 export function mapWorkbenchTools(
   tools: WorkbenchToolDefinition[]
 ) {
-  return tools.map(({ argsSchema: _argsSchema, ...tool }) => tool);
+  return tools.map((tool) => tool);
 }
 
 export function executeCommonWorkbenchTool(
@@ -363,6 +499,8 @@ export function executeCommonWorkbenchTool(
         typeof args.markdown === "string" ? args.markdown : "",
       summary:
         typeof args.summary === "string" ? args.summary : "",
+      links: [],
+      tags: [],
       sourcePath: "workbench",
       author: "Workbench"
     });

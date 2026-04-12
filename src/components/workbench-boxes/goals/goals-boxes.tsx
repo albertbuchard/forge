@@ -5,8 +5,19 @@ import {
 } from "../../../lib/workbench/runtime.js";
 import type {
   WorkbenchExecutionFunction,
-  WorkbenchNodeExecutionInput
+  WorkbenchInputDefinition,
+  WorkbenchNodeExecutionInput,
+  WorkbenchOutputDefinition,
+  WorkbenchParamDefinition,
+  WorkbenchToolDefinition
 } from "../../../lib/workbench/nodes.js";
+import {
+  createSearchEntitiesTool,
+  createSearchInputs,
+  createSearchOutputs,
+  createSearchParams,
+  createSummaryOutput
+} from "../../../lib/workbench/contracts.js";
 import { createGenericWorkbenchNodeView } from "../shared/generic-node-view.js";
 import { defineWorkbenchBox } from "../shared/define-workbench-box.js";
 
@@ -21,8 +32,15 @@ function defineGoalBox(
   description: string,
   tags: string[],
   execute: WorkbenchExecutionFunction,
-  withSearchTool = false
+  output: WorkbenchOutputDefinition[],
+  tools: WorkbenchToolDefinition[] = [],
+  options?: {
+    inputs?: WorkbenchInputDefinition[];
+    params?: WorkbenchParamDefinition[];
+  }
 ) {
+  const inputs = options?.inputs ?? [];
+  const params = options?.params ?? [];
   return defineWorkbenchBox(Slot, {
     id,
     surfaceId: "goals",
@@ -32,35 +50,17 @@ function defineGoalBox(
     description,
     category: "Goals",
     tags,
-    inputs: [],
-    params: [],
-    output: [{ key: "primary", label: title, kind: "content" }],
-    tools: withSearchTool
-      ? [
-          {
-            key: "forge.search_entities",
-            label: "Search Forge entities",
-            description: "Search Forge entities by query and entity types.",
-            accessMode: "read"
-          }
-        ]
-      : [],
+    inputs,
+    params,
+    output,
+    tools,
     NodeView: createGenericWorkbenchNodeView({
       title,
       description,
-      inputs: [],
-      params: [],
-      output: [{ key: "primary", label: title, kind: "content" }],
-      tools: withSearchTool
-        ? [
-            {
-              key: "forge.search_entities",
-              label: "Search Forge entities",
-              description: "Search Forge entities by query and entity types.",
-              accessMode: "read"
-            }
-          ]
-        : []
+      inputs,
+      params,
+      output,
+      tools
     }),
     execute
   });
@@ -72,7 +72,8 @@ export const GoalsHeroBox = defineGoalBox(
   "Goals page header and long-horizon direction context.",
   ["goals", "hero"],
   (input: WorkbenchNodeExecutionInput) =>
-    buildStaticWorkbenchExecution(input, null, "Goals page header.")
+    buildStaticWorkbenchExecution(input, null, "Goals page header."),
+  [createSummaryOutput({ label: "Goals summary", description: "High-level goals page framing." })]
 );
 
 export const GoalsSearchResultsBox = defineGoalBox(
@@ -86,7 +87,24 @@ export const GoalsSearchResultsBox = defineGoalBox(
       entityTypes: ["goal"],
       limit: 20
     }),
-  true
+  createSearchOutputs({
+    itemKind: "goal",
+    itemLabel: "Goal"
+  }),
+  [createSearchEntitiesTool("Search goal entities by query and entity types.")],
+  {
+    inputs: createSearchInputs({
+      itemKind: "goal",
+      itemLabel: "Goal",
+      defaultEntityTypes: ["goal"],
+      defaultLimit: 20
+    }),
+    params: createSearchParams({
+      itemKind: "goal",
+      defaultEntityTypes: ["goal"],
+      defaultLimit: 20
+    })
+  }
 );
 
 export const GoalsSummaryBox = defineGoalBox(
@@ -95,5 +113,11 @@ export const GoalsSummaryBox = defineGoalBox(
   "Goal collection summary and state context.",
   ["goals", "summary"],
   (input: WorkbenchNodeExecutionInput) =>
-    buildStaticWorkbenchExecution(input, null, "Goal collection summary.")
+    buildStaticWorkbenchExecution(input, null, "Goal collection summary."),
+  [
+    createSummaryOutput({
+      label: "Goals summary",
+      description: "Summary of the goal collection and its current state."
+    })
+  ]
 );

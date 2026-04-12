@@ -6,8 +6,14 @@ import {
 } from "../../../lib/workbench/runtime.js";
 import type {
   WorkbenchExecutionFunction,
-  WorkbenchNodeExecutionInput
+  WorkbenchNodeExecutionInput,
+  WorkbenchOutputDefinition
 } from "../../../lib/workbench/nodes.js";
+import {
+  createContextOutput,
+  createRecordListOutput,
+  createSummaryOutput
+} from "../../../lib/workbench/contracts.js";
 import { createGenericWorkbenchNodeView } from "../shared/generic-node-view.js";
 import { defineWorkbenchBox } from "../shared/define-workbench-box.js";
 
@@ -21,7 +27,8 @@ function defineWikiBox(
   title: string,
   description: string,
   tags: string[],
-  execute: WorkbenchExecutionFunction
+  execute: WorkbenchExecutionFunction,
+  output: WorkbenchOutputDefinition[]
 ) {
   return defineWorkbenchBox(Slot, {
     id,
@@ -34,14 +41,14 @@ function defineWikiBox(
     tags,
     inputs: [],
     params: [],
-    output: [{ key: "primary", label: title, kind: "content" }],
+    output,
     tools: [],
     NodeView: createGenericWorkbenchNodeView({
       title,
       description,
       inputs: [],
       params: [],
-      output: [{ key: "primary", label: title, kind: "content" }],
+      output,
       tools: []
     }),
     execute
@@ -53,7 +60,17 @@ export const WikiPagesBox = defineWikiBox(
   "Wiki pages",
   "Live list of wiki pages that can be used as memory or authored knowledge.",
   ["wiki", "pages"],
-  (input: WorkbenchNodeExecutionInput) => buildWikiPagesWorkbenchExecution(input)
+  (input: WorkbenchNodeExecutionInput) => buildWikiPagesWorkbenchExecution(input),
+  [
+    createSummaryOutput({ label: "Wiki page summary", description: "Summary of the currently available wiki pages." }),
+    createRecordListOutput({
+      key: "pages",
+      label: "Wiki pages",
+      description: "Structured wiki page records available in Forge memory.",
+      modelName: "ForgeWikiPages",
+      itemKind: "wiki_page"
+    })
+  ]
 );
 
 export const WikiHealthBox = defineWikiBox(
@@ -61,7 +78,16 @@ export const WikiHealthBox = defineWikiBox(
   "Wiki health",
   "Index health, unresolved links, and orphaned-page signals for the wiki.",
   ["wiki", "health"],
-  (input: WorkbenchNodeExecutionInput) => buildWikiHealthWorkbenchExecution(input)
+  (input: WorkbenchNodeExecutionInput) => buildWikiHealthWorkbenchExecution(input),
+  [
+    createSummaryOutput({ label: "Wiki health summary", description: "Summary of unresolved links and orphaned-page signals." }),
+    createContextOutput({
+      key: "health",
+      label: "Wiki health",
+      description: "Structured wiki health payload returned by Forge.",
+      modelName: "ForgeWikiHealth"
+    })
+  ]
 );
 
 export const WikiAuthoringBox = defineWikiBox(
@@ -76,5 +102,11 @@ export const WikiAuthoringBox = defineWikiBox(
         actions: ["upsert", "ingest", "reindex"]
       },
       "Wiki authoring surface for ingesting sources and maintaining memory pages."
-    )
+    ),
+  [
+    createSummaryOutput({
+      label: "Wiki authoring summary",
+      description: "Summary of wiki authoring and ingest actions available on this surface."
+    })
+  ]
 );

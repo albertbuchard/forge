@@ -5,8 +5,19 @@ import {
 } from "../../../lib/workbench/runtime.js";
 import type {
   WorkbenchExecutionFunction,
-  WorkbenchNodeExecutionInput
+  WorkbenchInputDefinition,
+  WorkbenchNodeExecutionInput,
+  WorkbenchOutputDefinition,
+  WorkbenchParamDefinition,
+  WorkbenchToolDefinition
 } from "../../../lib/workbench/nodes.js";
+import {
+  createSearchEntitiesTool,
+  createSearchInputs,
+  createSearchOutputs,
+  createSearchParams,
+  createSummaryOutput
+} from "../../../lib/workbench/contracts.js";
 import { createGenericWorkbenchNodeView } from "../shared/generic-node-view.js";
 import { defineWorkbenchBox } from "../shared/define-workbench-box.js";
 
@@ -21,8 +32,15 @@ function defineHabitBox(
   description: string,
   tags: string[],
   execute: WorkbenchExecutionFunction,
-  withSearchTool = false
+  output: WorkbenchOutputDefinition[],
+  tools: WorkbenchToolDefinition[] = [],
+  options?: {
+    inputs?: WorkbenchInputDefinition[];
+    params?: WorkbenchParamDefinition[];
+  }
 ) {
+  const inputs = options?.inputs ?? [];
+  const params = options?.params ?? [];
   return defineWorkbenchBox(Slot, {
     id,
     surfaceId: "habits",
@@ -32,35 +50,17 @@ function defineHabitBox(
     description,
     category: "Habits",
     tags,
-    inputs: [],
-    params: [],
-    output: [{ key: "primary", label: title, kind: "content" }],
-    tools: withSearchTool
-      ? [
-          {
-            key: "forge.search_entities",
-            label: "Search Forge entities",
-            description: "Search Forge entities by query and entity types.",
-            accessMode: "read"
-          }
-        ]
-      : [],
+    inputs,
+    params,
+    output,
+    tools,
     NodeView: createGenericWorkbenchNodeView({
       title,
       description,
-      inputs: [],
-      params: [],
-      output: [{ key: "primary", label: title, kind: "content" }],
-      tools: withSearchTool
-        ? [
-            {
-              key: "forge.search_entities",
-              label: "Search Forge entities",
-              description: "Search Forge entities by query and entity types.",
-              accessMode: "read"
-            }
-          ]
-        : []
+      inputs,
+      params,
+      output,
+      tools
     }),
     execute
   });
@@ -72,7 +72,8 @@ export const HabitsHeroBox = defineHabitBox(
   "Habits page header and recurring execution context.",
   ["habits", "hero"],
   (input: WorkbenchNodeExecutionInput) =>
-    buildStaticWorkbenchExecution(input, null, "Habits page header.")
+    buildStaticWorkbenchExecution(input, null, "Habits page header."),
+  [createSummaryOutput({ label: "Habits summary", description: "High-level habits page framing." })]
 );
 
 export const HabitsSearchResultsBox = defineHabitBox(
@@ -86,7 +87,24 @@ export const HabitsSearchResultsBox = defineHabitBox(
       entityTypes: ["habit"],
       limit: 20
     }),
-  true
+  createSearchOutputs({
+    itemKind: "habit",
+    itemLabel: "Habit"
+  }),
+  [createSearchEntitiesTool("Search habit entities by query and entity types.")],
+  {
+    inputs: createSearchInputs({
+      itemKind: "habit",
+      itemLabel: "Habit",
+      defaultEntityTypes: ["habit"],
+      defaultLimit: 20
+    }),
+    params: createSearchParams({
+      itemKind: "habit",
+      defaultEntityTypes: ["habit"],
+      defaultLimit: 20
+    })
+  }
 );
 
 export const HabitsSummaryBox = defineHabitBox(
@@ -95,5 +113,11 @@ export const HabitsSummaryBox = defineHabitBox(
   "Habit streaks, due state, and collection-level rhythm context.",
   ["habits", "summary", "streaks"],
   (input: WorkbenchNodeExecutionInput) =>
-    buildStaticWorkbenchExecution(input, null, "Habit collection summary.")
+    buildStaticWorkbenchExecution(input, null, "Habit collection summary."),
+  [
+    createSummaryOutput({
+      label: "Habit summary",
+      description: "Summary of habit streaks, due state, and collection rhythm."
+    })
+  ]
 );

@@ -1,4 +1,4 @@
-import type { Insight, Note, OwnedEntity } from "./types";
+import type { ActivityEvent, Insight, Note, OwnedEntity } from "./types";
 
 export interface Domain {
   id: string;
@@ -257,9 +257,17 @@ export interface TriggerReportDetailPayload {
 export interface PsycheObservationEntry {
   id: string;
   observedAt: string;
+  tags: string[];
   note: Note;
   linkedPatterns: BehaviorPattern[];
   linkedReports: TriggerReport[];
+}
+
+export interface PsycheObservationActivityEntry {
+  id: string;
+  observedAt: string;
+  tags: string[];
+  event: ActivityEvent;
 }
 
 export interface PsycheObservationCalendarPayload {
@@ -267,6 +275,7 @@ export interface PsycheObservationCalendarPayload {
   from: string;
   to: string;
   observations: PsycheObservationEntry[];
+  activity: PsycheObservationActivityEntry[];
   availableTags: string[];
 }
 

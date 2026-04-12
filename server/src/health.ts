@@ -7,8 +7,10 @@ import {
   ingestMovementSync,
   movementSyncPayloadSchema
 } from "./movement.js";
+import { ingestScreenTimeSync, screenTimeSyncPayloadSchema } from "./screen-time.js";
 import { recordActivityEvent } from "./repositories/activity-events.js";
 import { recordHabitGeneratedWorkoutReward } from "./repositories/rewards.js";
+import { resolveUserForMutation } from "./repositories/users.js";
 
 const healthLinkSchema = z.object({
   entityType: z.string().trim().min(1),
@@ -65,6 +67,40 @@ const pairingStatusSchema = z.enum([
   "revoked"
 ]);
 
+export const companionSourceKeySchema = z.enum([
+  "health",
+  "movement",
+  "screenTime"
+]);
+
+const companionSourceAuthorizationStatusSchema = z.enum([
+  "not_determined",
+  "pending",
+  "approved",
+  "denied",
+  "restricted",
+  "unavailable",
+  "partial",
+  "disabled"
+]);
+
+const companionSourceStateSchema = z.object({
+  desiredEnabled: z.boolean().default(true),
+  appliedEnabled: z.boolean().default(false),
+  authorizationStatus: companionSourceAuthorizationStatusSchema.default(
+    "not_determined"
+  ),
+  syncEligible: z.boolean().default(false),
+  lastObservedAt: z.string().datetime().nullable().default(null),
+  metadata: z.record(z.string(), z.unknown()).default({})
+});
+
+const companionSourceStatesSchema = z.object({
+  health: companionSourceStateSchema.default({}),
+  movement: companionSourceStateSchema.default({}),
+  screenTime: companionSourceStateSchema.default({})
+});
+
 export const createCompanionPairingSessionSchema = z.object({
   label: z.string().trim().default("Forge Companion"),
   userId: z.string().trim().nullable().optional(),
@@ -93,6 +129,22 @@ export const revokeAllCompanionPairingSessionsSchema = z.object({
   includeRevoked: z.boolean().default(false)
 });
 
+export const patchCompanionPairingSourceStateSchema = z.object({
+  desiredEnabled: z.boolean()
+});
+
+export const updateMobileCompanionSourceStateSchema = z.object({
+  sessionId: z.string().trim().min(1),
+  pairingToken: z.string().trim().min(1),
+  source: companionSourceKeySchema,
+  desiredEnabled: z.boolean(),
+  appliedEnabled: z.boolean(),
+  authorizationStatus: companionSourceAuthorizationStatusSchema,
+  syncEligible: z.boolean().default(false),
+  lastObservedAt: z.string().datetime().nullable().optional(),
+  metadata: z.record(z.string(), z.unknown()).default({})
+});
+
 export const mobileHealthSyncSchema = z.object({
   sessionId: z.string().trim().min(1),
   pairingToken: z.string().trim().min(1),
@@ -106,7 +158,8 @@ export const mobileHealthSyncSchema = z.object({
     healthKitAuthorized: z.boolean().default(false),
     backgroundRefreshEnabled: z.boolean().default(false),
     motionReady: z.boolean().default(false),
-    locationReady: z.boolean().default(false)
+    locationReady: z.boolean().default(false),
+    screenTimeReady: z.boolean().default(false)
   }),
   sleepSessions: z
     .array(
@@ -144,7 +197,9 @@ export const mobileHealthSyncSchema = z.object({
       })
     )
     .default([]),
-  movement: movementSyncPayloadSchema.default({})
+  sourceStates: companionSourceStatesSchema.default({}),
+  movement: movementSyncPayloadSchema.default({}),
+  screenTime: screenTimeSyncPayloadSchema.default({})
 });
 
 export const verifyCompanionPairingSchema = z.object({
@@ -176,6 +231,66 @@ export const updateSleepMetadataSchema = z.object({
   links: z.array(healthLinkSchema).optional()
 });
 
+const manualHealthProvenanceSchema = z.record(
+  z.string(),
+  z.union([z.string(), z.number(), z.boolean(), z.null()])
+);
+
+export const createSleepSessionSchema = z.object({
+  userId: z.string().trim().min(1).nullable().optional(),
+  externalUid: z.string().trim().min(1).optional(),
+  source: z.string().trim().min(1).default("manual"),
+  sourceType: z.string().trim().min(1).default("manual"),
+  sourceDevice: z.string().trim().min(1).default("Forge"),
+  startedAt: z.string().datetime(),
+  endedAt: z.string().datetime(),
+  timeInBedSeconds: z.number().int().nonnegative().optional(),
+  asleepSeconds: z.number().int().nonnegative().optional(),
+  awakeSeconds: z.number().int().nonnegative().optional(),
+  stageBreakdown: z.array(healthStageSchema).default([]),
+  recoveryMetrics: sleepRecoveryMetricSchema.default({}),
+  qualitySummary: z.string().trim().default(""),
+  notes: z.string().trim().default(""),
+  tags: z.array(z.string().trim()).default([]),
+  links: z.array(healthLinkSchema).default([]),
+  provenance: manualHealthProvenanceSchema.default({})
+});
+
+export const updateSleepSessionSchema = createSleepSessionSchema
+  .omit({ userId: true })
+  .partial();
+
+export const createWorkoutSessionSchema = z.object({
+  userId: z.string().trim().min(1).nullable().optional(),
+  externalUid: z.string().trim().min(1).optional(),
+  source: z.string().trim().min(1).default("manual"),
+  sourceType: z.string().trim().min(1).default("manual"),
+  sourceDevice: z.string().trim().min(1).default("Forge"),
+  workoutType: z.string().trim().min(1),
+  startedAt: z.string().datetime(),
+  endedAt: z.string().datetime(),
+  activeEnergyKcal: z.number().nonnegative().nullable().optional(),
+  totalEnergyKcal: z.number().nonnegative().nullable().optional(),
+  distanceMeters: z.number().nonnegative().nullable().optional(),
+  stepCount: z.number().int().nonnegative().nullable().optional(),
+  exerciseMinutes: z.number().nonnegative().nullable().optional(),
+  averageHeartRate: z.number().nonnegative().nullable().optional(),
+  maxHeartRate: z.number().nonnegative().nullable().optional(),
+  subjectiveEffort: z.number().int().min(1).max(10).nullable().optional(),
+  moodBefore: z.string().trim().default(""),
+  moodAfter: z.string().trim().default(""),
+  meaningText: z.string().trim().default(""),
+  plannedContext: z.string().trim().default(""),
+  socialContext: z.string().trim().default(""),
+  tags: z.array(z.string().trim()).default([]),
+  links: z.array(healthLinkSchema).default([]),
+  provenance: manualHealthProvenanceSchema.default({})
+});
+
+export const updateWorkoutSessionSchema = createWorkoutSessionSchema
+  .omit({ userId: true })
+  .partial();
+
 type ActivitySource = "ui" | "openclaw" | "agent" | "system";
 
 type ActivityContext = {
@@ -199,6 +314,23 @@ type PairingSessionRow = {
   last_sync_error: string | null;
   paired_at: string | null;
   expires_at: string;
+  created_at: string;
+  updated_at: string;
+};
+
+type PairingSourceStateRow = {
+  id: string;
+  pairing_session_id: string;
+  user_id: string;
+  source_key: z.infer<typeof companionSourceKeySchema>;
+  desired_enabled: number;
+  applied_enabled: number;
+  authorization_status: z.infer<
+    typeof companionSourceAuthorizationStatusSchema
+  >;
+  sync_eligible: number;
+  last_observed_at: string | null;
+  metadata_json: string;
   created_at: string;
   updated_at: string;
 };
@@ -301,6 +433,17 @@ function nowIso() {
   return new Date().toISOString();
 }
 
+function durationSecondsBetween(startedAt: string, endedAt: string) {
+  return Math.max(
+    0,
+    Math.round((Date.parse(endedAt) - Date.parse(startedAt)) / 1000)
+  );
+}
+
+function resolveHealthUserId(userId?: string | null) {
+  return resolveUserForMutation(userId ?? null).id;
+}
+
 function safeJsonParse<T>(value: string | null | undefined, fallback: T): T {
   if (!value) {
     return fallback;
@@ -310,6 +453,138 @@ function safeJsonParse<T>(value: string | null | undefined, fallback: T): T {
   } catch {
     return fallback;
   }
+}
+
+function listPairingSourceStateRows(pairingSessionId: string) {
+  return getDatabase()
+    .prepare(
+      `SELECT *
+       FROM companion_pairing_source_states
+       WHERE pairing_session_id = ?
+       ORDER BY source_key ASC`
+    )
+    .all(pairingSessionId) as PairingSourceStateRow[];
+}
+
+function defaultCompanionSourceState(
+  source: z.infer<typeof companionSourceKeySchema>,
+  pairing: Pick<PairingSessionRow, "id" | "user_id" | "paired_at" | "updated_at">
+) {
+  const defaultAuthorizationStatus =
+    source === "screenTime" ? "not_determined" : "pending";
+  return {
+    id: `pairsrc_${randomUUID().replaceAll("-", "").slice(0, 12)}`,
+    pairing_session_id: pairing.id,
+    user_id: pairing.user_id,
+    source_key: source,
+    desired_enabled: 1,
+    applied_enabled: pairing.paired_at ? 1 : 0,
+    authorization_status: defaultAuthorizationStatus,
+    sync_eligible: 0,
+    last_observed_at: pairing.paired_at ?? null,
+    metadata_json: "{}",
+    created_at: pairing.updated_at,
+    updated_at: pairing.updated_at
+  } satisfies PairingSourceStateRow;
+}
+
+function ensurePairingSourceStates(pairing: PairingSessionRow) {
+  const existing = listPairingSourceStateRows(pairing.id);
+  const bySource = new Map(existing.map((row) => [row.source_key, row]));
+  const missing = companionSourceKeySchema.options.filter(
+    (source) => bySource.has(source) === false
+  );
+  if (missing.length > 0) {
+    const insert = getDatabase().prepare(
+      `INSERT INTO companion_pairing_source_states (
+         id, pairing_session_id, user_id, source_key, desired_enabled, applied_enabled,
+         authorization_status, sync_eligible, last_observed_at, metadata_json, created_at, updated_at
+       )
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    );
+    for (const source of missing) {
+      const row = defaultCompanionSourceState(source, pairing);
+      insert.run(
+        row.id,
+        row.pairing_session_id,
+        row.user_id,
+        row.source_key,
+        row.desired_enabled,
+        row.applied_enabled,
+        row.authorization_status,
+        row.sync_eligible,
+        row.last_observed_at,
+        row.metadata_json,
+        row.created_at,
+        row.updated_at
+      );
+    }
+  }
+  const refreshed = listPairingSourceStateRows(pairing.id);
+  return companionSourceStatesSchema.parse(
+    refreshed.reduce<Record<string, unknown>>((accumulator, row) => {
+      accumulator[row.source_key] = {
+        desiredEnabled: row.desired_enabled === 1,
+        appliedEnabled: row.applied_enabled === 1,
+        authorizationStatus: row.authorization_status,
+        syncEligible: row.sync_eligible === 1,
+        lastObservedAt: row.last_observed_at,
+        metadata: safeJsonParse<Record<string, unknown>>(row.metadata_json, {})
+      };
+      return accumulator;
+    }, {})
+  );
+}
+
+function upsertPairingSourceState(
+  pairing: PairingSessionRow,
+  source: z.infer<typeof companionSourceKeySchema>,
+  patch: Partial<
+    z.infer<typeof companionSourceStateSchema> & { metadata: Record<string, unknown> }
+  >
+) {
+  ensurePairingSourceStates(pairing);
+  const current = listPairingSourceStateRows(pairing.id).find(
+    (row) => row.source_key === source
+  );
+  if (!current) {
+    throw new Error(`Missing companion pairing source state for ${source}`);
+  }
+  const nextMetadata =
+    patch.metadata != null
+      ? {
+          ...safeJsonParse<Record<string, unknown>>(current.metadata_json, {}),
+          ...patch.metadata
+        }
+      : safeJsonParse<Record<string, unknown>>(current.metadata_json, {});
+  const nextDesiredEnabled =
+    patch.desiredEnabled ?? (current.desired_enabled === 1);
+  const nextAppliedEnabled =
+    patch.appliedEnabled ?? (current.applied_enabled === 1);
+  const nextSyncEligible = patch.syncEligible ?? (current.sync_eligible === 1);
+  const nextUpdatedAt = nowIso();
+  getDatabase()
+    .prepare(
+      `UPDATE companion_pairing_source_states
+       SET desired_enabled = ?, applied_enabled = ?, authorization_status = ?,
+           sync_eligible = ?, last_observed_at = ?, metadata_json = ?, updated_at = ?
+       WHERE pairing_session_id = ? AND source_key = ?`
+    )
+    .run(
+      nextDesiredEnabled ? 1 : 0,
+      nextAppliedEnabled ? 1 : 0,
+      patch.authorizationStatus ?? current.authorization_status,
+      nextSyncEligible ? 1 : 0,
+      patch.lastObservedAt ?? current.last_observed_at,
+      JSON.stringify(nextMetadata),
+      nextUpdatedAt,
+      pairing.id,
+      source
+    );
+  const refreshedPairing = getDatabase()
+    .prepare(`SELECT * FROM companion_pairing_sessions WHERE id = ?`)
+    .get(pairing.id) as PairingSessionRow;
+  return mapPairingSession(refreshedPairing);
 }
 
 function dayKey(value: string) {
@@ -531,6 +806,7 @@ function mapPairingSession(row: PairingSessionRow) {
     Date.now() - Date.parse(row.last_sync_at) > 1000 * 60 * 60 * 24;
   const effectiveStatus =
     row.status === "healthy" && stale ? "stale" : row.status;
+  const sourceStates = ensurePairingSourceStates(row);
   return {
     id: row.id,
     userId: row.user_id,
@@ -545,6 +821,7 @@ function mapPairingSession(row: PairingSessionRow) {
     lastSyncAt: row.last_sync_at,
     lastSyncError: row.last_sync_error,
     pairedAt: row.paired_at,
+    sourceStates,
     expiresAt: row.expires_at,
     createdAt: row.created_at,
     updatedAt: row.updated_at
@@ -692,6 +969,28 @@ function listWorkoutRows(userIds?: string[]) {
     .all(...params) as WorkoutSessionRow[];
 }
 
+export function listSleepSessions(userIds?: string[]) {
+  return listSleepRows(userIds).map(mapSleepSession);
+}
+
+export function listWorkoutSessions(userIds?: string[]) {
+  return listWorkoutRows(userIds).map(mapWorkoutSession);
+}
+
+export function getSleepSessionById(sleepId: string) {
+  const row = getDatabase()
+    .prepare(`SELECT * FROM health_sleep_sessions WHERE id = ?`)
+    .get(sleepId) as SleepSessionRow | undefined;
+  return row ? mapSleepSession(row) : undefined;
+}
+
+export function getWorkoutSessionById(workoutId: string) {
+  const row = getDatabase()
+    .prepare(`SELECT * FROM health_workout_sessions WHERE id = ?`)
+    .get(workoutId) as WorkoutSessionRow | undefined;
+  return row ? mapWorkoutSession(row) : undefined;
+}
+
 function listPairingRows(userIds?: string[]) {
   const params: Array<string> = [];
   const where =
@@ -778,6 +1077,13 @@ export function listPairingSessions(userIds?: string[]) {
   return listPairingRows(userIds).map(mapPairingSession);
 }
 
+export function getCompanionPairingSessionById(pairingSessionId: string) {
+  const row = getDatabase()
+    .prepare(`SELECT * FROM companion_pairing_sessions WHERE id = ?`)
+    .get(pairingSessionId) as PairingSessionRow | undefined;
+  return row ? mapPairingSession(row) : undefined;
+}
+
 export function revokeCompanionPairingSession(
   pairingSessionId: string,
   activity?: ActivityContext
@@ -807,6 +1113,44 @@ export function revokeAllCompanionPairingSessions(
     revokedCount: sessions.length,
     sessions
   };
+}
+
+export function patchCompanionPairingSourceState(
+  pairingSessionId: string,
+  source: z.infer<typeof companionSourceKeySchema>,
+  patch: z.infer<typeof patchCompanionPairingSourceStateSchema>
+) {
+  const pairing = getDatabase()
+    .prepare(`SELECT * FROM companion_pairing_sessions WHERE id = ?`)
+    .get(pairingSessionId) as PairingSessionRow | undefined;
+  if (!pairing) {
+    return undefined;
+  }
+  return upsertPairingSourceState(pairing, source, {
+    desiredEnabled: patch.desiredEnabled,
+    metadata: {
+      desiredEnabledUpdatedAt: nowIso(),
+      desiredEnabledUpdatedBy: "forge_web"
+    }
+  });
+}
+
+export function updateMobileCompanionSourceState(
+  payload: z.infer<typeof updateMobileCompanionSourceStateSchema>
+) {
+  const parsed = updateMobileCompanionSourceStateSchema.parse(payload);
+  const pairing = requireValidPairing(parsed.sessionId, parsed.pairingToken);
+  return upsertPairingSourceState(pairing, parsed.source, {
+    desiredEnabled: parsed.desiredEnabled,
+    appliedEnabled: parsed.appliedEnabled,
+    authorizationStatus: parsed.authorizationStatus,
+    syncEligible: parsed.syncEligible,
+    lastObservedAt: parsed.lastObservedAt ?? nowIso(),
+    metadata: {
+      ...parsed.metadata,
+      source: "companion"
+    }
+  });
 }
 
 export function createCompanionPairingSession(
@@ -845,25 +1189,32 @@ export function createCompanionPairingSession(
       reason: "Superseded by a newer pairing QR"
     });
   }
-  getDatabase()
-    .prepare(
-      `INSERT INTO companion_pairing_sessions (
-         id, user_id, label, pairing_token, status, capability_flags_json, api_base_url,
-         expires_at, created_at, updated_at
-       )
-       VALUES (?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?)`
-    )
-    .run(
-      id,
-      userId,
-      parsed.label,
-      pairingToken,
-      serializedCapabilities,
-      baseApiUrl,
-      expiresAt,
-      now.toISOString(),
-      now.toISOString()
+  runInTransaction(() => {
+    getDatabase()
+      .prepare(
+        `INSERT INTO companion_pairing_sessions (
+           id, user_id, label, pairing_token, status, capability_flags_json, api_base_url,
+           expires_at, created_at, updated_at
+         )
+         VALUES (?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?)`
+      )
+      .run(
+        id,
+        userId,
+        parsed.label,
+        pairingToken,
+        serializedCapabilities,
+        baseApiUrl,
+        expiresAt,
+        now.toISOString(),
+        now.toISOString()
+      );
+    ensurePairingSourceStates(
+      getDatabase()
+        .prepare(`SELECT * FROM companion_pairing_sessions WHERE id = ?`)
+        .get(id) as PairingSessionRow
     );
+  });
 
   const qrPayload = {
     kind: "forge-companion-pairing",
@@ -941,6 +1292,12 @@ export function verifyCompanionPairing(
     }
   }
 
+  ensurePairingSourceStates(
+    getDatabase()
+      .prepare(`SELECT * FROM companion_pairing_sessions WHERE id = ?`)
+      .get(pairing.id) as PairingSessionRow
+  );
+
   return {
     pairingSession: mapPairingSession(
       getDatabase()
@@ -976,6 +1333,76 @@ export function requireValidPairing(sessionId: string, pairingToken: string) {
     );
   }
   return row;
+}
+
+function normalizeHealthAuthorizationStatus(
+  healthAccessAuthorized: boolean,
+  sleepCount: number,
+  workoutCount: number
+): z.infer<typeof companionSourceAuthorizationStatusSchema> {
+  if (healthAccessAuthorized) {
+    return "approved";
+  }
+  if (sleepCount > 0 || workoutCount > 0) {
+    return "partial";
+  }
+  return "not_determined";
+}
+
+function syncPairingSourceStatesFromPayload(
+  pairing: PairingSessionRow,
+  payload: z.infer<typeof mobileHealthSyncSchema>
+) {
+  upsertPairingSourceState(pairing, "health", {
+    desiredEnabled: payload.sourceStates.health.desiredEnabled,
+    appliedEnabled: payload.sourceStates.health.appliedEnabled,
+    authorizationStatus: normalizeHealthAuthorizationStatus(
+      payload.permissions.healthKitAuthorized,
+      payload.sleepSessions.length,
+      payload.workouts.length
+    ),
+    syncEligible: payload.sourceStates.health.syncEligible,
+    lastObservedAt: payload.sourceStates.health.lastObservedAt ?? nowIso(),
+    metadata: payload.sourceStates.health.metadata
+  });
+  upsertPairingSourceState(pairing, "movement", {
+    desiredEnabled: payload.sourceStates.movement.desiredEnabled,
+    appliedEnabled: payload.sourceStates.movement.appliedEnabled,
+    authorizationStatus:
+      payload.movement.settings.locationPermissionStatus === "always" ||
+      payload.movement.settings.locationPermissionStatus === "when_in_use"
+        ? "approved"
+        : payload.movement.settings.locationPermissionStatus === "restricted"
+          ? "restricted"
+          : payload.movement.settings.locationPermissionStatus === "denied"
+            ? "denied"
+            : "not_determined",
+    syncEligible: payload.sourceStates.movement.syncEligible,
+    lastObservedAt: payload.sourceStates.movement.lastObservedAt ?? nowIso(),
+    metadata: {
+      ...payload.sourceStates.movement.metadata,
+      motionPermissionStatus: payload.movement.settings.motionPermissionStatus,
+      backgroundTrackingReady: payload.movement.settings.backgroundTrackingReady
+    }
+  });
+  upsertPairingSourceState(pairing, "screenTime", {
+    desiredEnabled: payload.sourceStates.screenTime.desiredEnabled,
+    appliedEnabled: payload.sourceStates.screenTime.appliedEnabled,
+    authorizationStatus:
+      payload.screenTime.settings.authorizationStatus === "approved"
+        ? "approved"
+        : payload.screenTime.settings.authorizationStatus === "denied"
+          ? "denied"
+          : payload.screenTime.settings.authorizationStatus === "unavailable"
+            ? "unavailable"
+            : "not_determined",
+    syncEligible: payload.sourceStates.screenTime.syncEligible,
+    lastObservedAt: payload.sourceStates.screenTime.lastObservedAt ?? nowIso(),
+    metadata: {
+      ...payload.sourceStates.screenTime.metadata,
+      captureState: payload.screenTime.settings.captureState
+    }
+  });
 }
 
 function findMatchingGeneratedWorkout(input: {
@@ -1401,7 +1828,13 @@ export function ingestMobileHealthSync(
     let createdCount = 0;
     let updatedCount = 0;
     let mergedCount = 0;
+    syncPairingSourceStatesFromPayload(pairing, parsed);
     const movementSync = ingestMovementSync(pairing, parsed.movement);
+    const screenTimeSync = ingestScreenTimeSync(
+      pairing,
+      parsed.screenTime,
+      parsed.device.sourceDevice
+    );
 
     for (const sleep of parsed.sleepSessions) {
       const result = insertOrUpdateSleepSession(pairing, sleep);
@@ -1469,14 +1902,22 @@ export function ingestMobileHealthSync(
             knownPlaces: parsed.movement.knownPlaces.length,
             stays: parsed.movement.stays.length,
             trips: parsed.movement.trips.length
+          },
+          screenTime: {
+            daySummaries: parsed.screenTime.daySummaries.length,
+            hourlySegments: parsed.screenTime.hourlySegments.length,
+            authorizationStatus: parsed.screenTime.settings.authorizationStatus,
+            captureState: parsed.screenTime.settings.captureState
           }
         }),
         parsed.sleepSessions.length +
           parsed.workouts.length +
           parsed.movement.stays.length +
-          parsed.movement.trips.length,
-        createdCount + movementSync.createdCount,
-        updatedCount + movementSync.updatedCount,
+          parsed.movement.trips.length +
+          parsed.screenTime.daySummaries.length +
+          parsed.screenTime.hourlySegments.length,
+        createdCount + movementSync.createdCount + screenTimeSync.createdCount,
+        updatedCount + movementSync.updatedCount + screenTimeSync.updatedCount,
         mergedCount,
         now,
         now,
@@ -1497,8 +1938,10 @@ export function ingestMobileHealthSync(
         workouts: parsed.workouts.length,
         movementStays: parsed.movement.stays.length,
         movementTrips: parsed.movement.trips.length,
+        screenTimeDaySummaries: parsed.screenTime.daySummaries.length,
+        screenTimeHourlySegments: parsed.screenTime.hourlySegments.length,
         createdCount: createdCount + movementSync.createdCount,
-        updatedCount: updatedCount + movementSync.updatedCount,
+        updatedCount: updatedCount + movementSync.updatedCount + screenTimeSync.updatedCount,
         mergedCount
       }
     });
@@ -1512,12 +1955,16 @@ export function ingestMobileHealthSync(
       imported: {
         sleepSessions: parsed.sleepSessions.length,
         workouts: parsed.workouts.length,
-        createdCount: createdCount + movementSync.createdCount,
-        updatedCount: updatedCount + movementSync.updatedCount,
+        createdCount:
+          createdCount + movementSync.createdCount + screenTimeSync.createdCount,
+        updatedCount:
+          updatedCount + movementSync.updatedCount + screenTimeSync.updatedCount,
         mergedCount,
         movementStays: parsed.movement.stays.length,
         movementTrips: parsed.movement.trips.length,
-        movementKnownPlaces: parsed.movement.knownPlaces.length
+        movementKnownPlaces: parsed.movement.knownPlaces.length,
+        screenTimeDaySummaries: parsed.screenTime.daySummaries.length,
+        screenTimeHourlySegments: parsed.screenTime.hourlySegments.length
       },
       movement: getMovementMobileBootstrap(pairing)
     };
@@ -1539,10 +1986,22 @@ export function getCompanionOverview(userIds?: string[]) {
       return {
         knownPlaces: totals.knownPlaces + (movement.knownPlaces ?? 0),
         stays: totals.stays + (movement.stays ?? 0),
-        trips: totals.trips + (movement.trips ?? 0)
+        trips: totals.trips + (movement.trips ?? 0),
+        screenTimeDays:
+          totals.screenTimeDays +
+          (((run.payloadSummary as Record<string, unknown>).screenTime as Record<string, number> | undefined)?.daySummaries ?? 0),
+        screenTimeHourlySegments:
+          totals.screenTimeHourlySegments +
+          (((run.payloadSummary as Record<string, unknown>).screenTime as Record<string, number> | undefined)?.hourlySegments ?? 0)
       };
     },
-    { knownPlaces: 0, stays: 0, trips: 0 }
+    {
+      knownPlaces: 0,
+      stays: 0,
+      trips: 0,
+      screenTimeDays: 0,
+      screenTimeHourlySegments: 0
+    }
   );
   const activePairings = pairings.filter((pairing) => pairing.status !== "revoked");
   const recentPermissionStates = importRuns
@@ -1597,7 +2056,9 @@ export function getCompanionOverview(userIds?: string[]) {
       ).length,
       movementKnownPlaces: movementSummary.knownPlaces,
       movementStays: movementSummary.stays,
-      movementTrips: movementSummary.trips
+      movementTrips: movementSummary.trips,
+      screenTimeDaySummaries: movementSummary.screenTimeDays,
+      screenTimeHourlySegments: movementSummary.screenTimeHourlySegments
     },
     permissions: {
       healthKitAuthorized: recentPermissionStates.some(
@@ -1611,6 +2072,9 @@ export function getCompanionOverview(userIds?: string[]) {
       ),
       motionReady: recentPermissionStates.some(
         (state) => state.motionReady === true
+      ),
+      screenTimeReady: recentPermissionStates.some(
+        (state) => state.screenTimeReady === true
       )
     }
   };
@@ -1848,6 +2312,549 @@ export function getFitnessViewData(userIds?: string[]) {
     })),
     sessions: recent
   };
+}
+
+export function createSleepSession(
+  input: z.infer<typeof createSleepSessionSchema>,
+  activity?: ActivityContext
+) {
+  const parsed = createSleepSessionSchema.parse(input);
+  const userId = resolveHealthUserId(parsed.userId);
+  const now = nowIso();
+  const id = `sleep_${randomUUID().replaceAll("-", "").slice(0, 10)}`;
+  const externalUid =
+    parsed.externalUid ??
+    `manual_sleep_${randomUUID().replaceAll("-", "").slice(0, 12)}`;
+  const timeInBedSeconds =
+    parsed.timeInBedSeconds ??
+    durationSecondsBetween(parsed.startedAt, parsed.endedAt);
+  const asleepSeconds = parsed.asleepSeconds ?? timeInBedSeconds;
+  const awakeSeconds =
+    parsed.awakeSeconds ?? Math.max(0, timeInBedSeconds - asleepSeconds);
+  const sleepScore = computeSleepScore({
+    asleepSeconds,
+    timeInBedSeconds,
+    awakeSeconds,
+    stageBreakdown: parsed.stageBreakdown
+  });
+  const timingMetrics = computeSleepTimingMetrics({
+    userId,
+    startedAt: parsed.startedAt,
+    endedAt: parsed.endedAt
+  });
+  const annotations = {
+    qualitySummary: parsed.qualitySummary,
+    notes: parsed.notes,
+    tags: parsed.tags,
+    links: parsed.links
+  };
+  const derived = computeSleepDerivedMetrics({
+    asleepSeconds,
+    timeInBedSeconds,
+    awakeSeconds,
+    sleepScore,
+    stageBreakdown: parsed.stageBreakdown
+  });
+
+  getDatabase()
+    .prepare(
+      `INSERT INTO health_sleep_sessions (
+         id, external_uid, pairing_session_id, user_id, source, source_type, source_device,
+         started_at, ended_at, time_in_bed_seconds, asleep_seconds, awake_seconds,
+         sleep_score, regularity_score, bedtime_consistency_minutes, wake_consistency_minutes,
+         stage_breakdown_json, recovery_metrics_json, links_json, annotations_json,
+         provenance_json, derived_json, created_at, updated_at
+       )
+       VALUES (?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    )
+    .run(
+      id,
+      externalUid,
+      userId,
+      parsed.source,
+      parsed.sourceType,
+      parsed.sourceDevice,
+      parsed.startedAt,
+      parsed.endedAt,
+      timeInBedSeconds,
+      asleepSeconds,
+      awakeSeconds,
+      sleepScore,
+      timingMetrics.regularityScore,
+      timingMetrics.bedtimeConsistencyMinutes,
+      timingMetrics.wakeConsistencyMinutes,
+      JSON.stringify(parsed.stageBreakdown),
+      JSON.stringify(parsed.recoveryMetrics),
+      JSON.stringify(parsed.links),
+      JSON.stringify(annotations),
+      JSON.stringify({
+        manualEntry: true,
+        entryMode: "local",
+        source: parsed.source,
+        sourceType: parsed.sourceType,
+        sourceDevice: parsed.sourceDevice,
+        actor: activity?.actor ?? null,
+        createdAt: now,
+        ...parsed.provenance
+      }),
+      JSON.stringify(derived),
+      now,
+      now
+    );
+
+  summarizeUserHealthDay(userId, dayKey(parsed.endedAt));
+  recordActivityEvent({
+    entityType: "sleep_session",
+    entityId: id,
+    eventType: "sleep_session_created",
+    title: "Sleep session created",
+    description: "A manual sleep session was created in Forge.",
+    actor: activity?.actor ?? null,
+    source: activity?.source ?? "ui",
+    metadata: {
+      userId,
+      startedAt: parsed.startedAt,
+      endedAt: parsed.endedAt
+    }
+  });
+
+  return getSleepSessionById(id)!;
+}
+
+export function updateSleepSession(
+  sleepId: string,
+  patch: z.infer<typeof updateSleepSessionSchema>,
+  activity?: ActivityContext
+) {
+  const parsed = updateSleepSessionSchema.parse(patch);
+  const current = getDatabase()
+    .prepare(`SELECT * FROM health_sleep_sessions WHERE id = ?`)
+    .get(sleepId) as SleepSessionRow | undefined;
+  if (!current) {
+    return undefined;
+  }
+  const now = nowIso();
+  const startedAt = parsed.startedAt ?? current.started_at;
+  const endedAt = parsed.endedAt ?? current.ended_at;
+  const timeInBedSeconds =
+    parsed.timeInBedSeconds ??
+    (parsed.startedAt !== undefined || parsed.endedAt !== undefined
+      ? durationSecondsBetween(startedAt, endedAt)
+      : current.time_in_bed_seconds);
+  const asleepSeconds = parsed.asleepSeconds ?? current.asleep_seconds;
+  const awakeSeconds =
+    parsed.awakeSeconds ?? Math.max(0, timeInBedSeconds - asleepSeconds);
+  const stageBreakdown =
+    parsed.stageBreakdown ?? safeJsonParse(current.stage_breakdown_json, []);
+  const recoveryMetrics =
+    parsed.recoveryMetrics ?? safeJsonParse(current.recovery_metrics_json, {});
+  const currentAnnotations = safeJsonParse<Record<string, unknown>>(
+    current.annotations_json,
+    {}
+  );
+  const links = parsed.links ?? safeJsonParse(current.links_json, []);
+  const annotations = {
+    qualitySummary:
+      parsed.qualitySummary ??
+      (typeof currentAnnotations.qualitySummary === "string"
+        ? currentAnnotations.qualitySummary
+        : ""),
+    notes:
+      parsed.notes ??
+      (typeof currentAnnotations.notes === "string"
+        ? currentAnnotations.notes
+        : ""),
+    tags:
+      parsed.tags ??
+      (Array.isArray(currentAnnotations.tags)
+        ? (currentAnnotations.tags as string[])
+        : []),
+    links
+  };
+  const sleepScore = computeSleepScore({
+    asleepSeconds,
+    timeInBedSeconds,
+    awakeSeconds,
+    stageBreakdown
+  });
+  const timingMetrics = computeSleepTimingMetrics({
+    userId: current.user_id,
+    startedAt,
+    endedAt,
+    excludeSleepId: current.id
+  });
+  const derived = computeSleepDerivedMetrics({
+    asleepSeconds,
+    timeInBedSeconds,
+    awakeSeconds,
+    sleepScore,
+    stageBreakdown
+  });
+  const currentProvenance = safeJsonParse<Record<string, unknown>>(
+    current.provenance_json,
+    {}
+  );
+
+  getDatabase()
+    .prepare(
+      `UPDATE health_sleep_sessions
+       SET external_uid = ?, source = ?, source_type = ?, source_device = ?,
+           started_at = ?, ended_at = ?, time_in_bed_seconds = ?, asleep_seconds = ?, awake_seconds = ?,
+           sleep_score = ?, regularity_score = ?, bedtime_consistency_minutes = ?, wake_consistency_minutes = ?,
+           stage_breakdown_json = ?, recovery_metrics_json = ?, links_json = ?, annotations_json = ?,
+           provenance_json = ?, derived_json = ?, updated_at = ?
+       WHERE id = ?`
+    )
+    .run(
+      parsed.externalUid ?? current.external_uid,
+      parsed.source ?? current.source,
+      parsed.sourceType ?? current.source_type,
+      parsed.sourceDevice ?? current.source_device,
+      startedAt,
+      endedAt,
+      timeInBedSeconds,
+      asleepSeconds,
+      awakeSeconds,
+      sleepScore,
+      timingMetrics.regularityScore,
+      timingMetrics.bedtimeConsistencyMinutes,
+      timingMetrics.wakeConsistencyMinutes,
+      JSON.stringify(stageBreakdown),
+      JSON.stringify(recoveryMetrics),
+      JSON.stringify(links),
+      JSON.stringify(annotations),
+      JSON.stringify({
+        ...currentProvenance,
+        ...(parsed.provenance ?? {}),
+        updatedAt: now,
+        updatedByActor: activity?.actor ?? null
+      }),
+      JSON.stringify(derived),
+      now,
+      sleepId
+    );
+
+  summarizeUserHealthDay(current.user_id, dayKey(current.ended_at));
+  summarizeUserHealthDay(current.user_id, dayKey(endedAt));
+  recordActivityEvent({
+    entityType: "sleep_session",
+    entityId: sleepId,
+    eventType: "sleep_session_updated",
+    title: "Sleep session updated",
+    description: "A sleep session was updated through Forge CRUD.",
+    actor: activity?.actor ?? null,
+    source: activity?.source ?? "ui",
+    metadata: {
+      startedAt,
+      endedAt
+    }
+  });
+
+  return getSleepSessionById(sleepId)!;
+}
+
+export function deleteSleepSession(
+  sleepId: string,
+  activity?: ActivityContext
+) {
+  const current = getDatabase()
+    .prepare(`SELECT * FROM health_sleep_sessions WHERE id = ?`)
+    .get(sleepId) as SleepSessionRow | undefined;
+  if (!current) {
+    return undefined;
+  }
+  getDatabase()
+    .prepare(`DELETE FROM health_sleep_sessions WHERE id = ?`)
+    .run(sleepId);
+  summarizeUserHealthDay(current.user_id, dayKey(current.ended_at));
+  recordActivityEvent({
+    entityType: "sleep_session",
+    entityId: sleepId,
+    eventType: "sleep_session_deleted",
+    title: "Sleep session deleted",
+    description: "A sleep session was permanently removed from Forge.",
+    actor: activity?.actor ?? null,
+    source: activity?.source ?? "ui",
+    metadata: {
+      startedAt: current.started_at,
+      endedAt: current.ended_at
+    }
+  });
+  return mapSleepSession(current);
+}
+
+export function createWorkoutSession(
+  input: z.infer<typeof createWorkoutSessionSchema>,
+  activity?: ActivityContext
+) {
+  const parsed = createWorkoutSessionSchema.parse(input);
+  const userId = resolveHealthUserId(parsed.userId);
+  const now = nowIso();
+  const id = `workout_${randomUUID().replaceAll("-", "").slice(0, 10)}`;
+  const externalUid =
+    parsed.externalUid ??
+    `manual_workout_${randomUUID().replaceAll("-", "").slice(0, 12)}`;
+  const durationSeconds = durationSecondsBetween(parsed.startedAt, parsed.endedAt);
+  const annotations = {
+    subjectiveEffort: parsed.subjectiveEffort ?? null,
+    moodBefore: parsed.moodBefore,
+    moodAfter: parsed.moodAfter,
+    meaningText: parsed.meaningText,
+    plannedContext: parsed.plannedContext,
+    socialContext: parsed.socialContext,
+    tags: parsed.tags,
+    links: parsed.links
+  };
+
+  getDatabase()
+    .prepare(
+      `INSERT INTO health_workout_sessions (
+         id, external_uid, pairing_session_id, user_id, source, source_type, workout_type, source_device,
+         started_at, ended_at, duration_seconds, active_energy_kcal, total_energy_kcal, distance_meters,
+         step_count, exercise_minutes, average_heart_rate, max_heart_rate, subjective_effort, mood_before,
+         mood_after, meaning_text, planned_context, social_context, links_json, tags_json, annotations_json,
+         provenance_json, derived_json, reconciliation_status, created_at, updated_at
+       )
+       VALUES (?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'standalone', ?, ?)`
+    )
+    .run(
+      id,
+      externalUid,
+      userId,
+      parsed.source,
+      parsed.sourceType,
+      parsed.workoutType,
+      parsed.sourceDevice,
+      parsed.startedAt,
+      parsed.endedAt,
+      durationSeconds,
+      parsed.activeEnergyKcal ?? null,
+      parsed.totalEnergyKcal ?? null,
+      parsed.distanceMeters ?? null,
+      parsed.stepCount ?? null,
+      parsed.exerciseMinutes ?? null,
+      parsed.averageHeartRate ?? null,
+      parsed.maxHeartRate ?? null,
+      parsed.subjectiveEffort ?? null,
+      parsed.moodBefore,
+      parsed.moodAfter,
+      parsed.meaningText,
+      parsed.plannedContext,
+      parsed.socialContext,
+      JSON.stringify(parsed.links),
+      JSON.stringify(parsed.tags),
+      JSON.stringify(annotations),
+      JSON.stringify({
+        manualEntry: true,
+        entryMode: "local",
+        source: parsed.source,
+        sourceType: parsed.sourceType,
+        sourceDevice: parsed.sourceDevice,
+        actor: activity?.actor ?? null,
+        createdAt: now,
+        ...parsed.provenance
+      }),
+      JSON.stringify({
+        paceMetersPerMinute:
+          parsed.distanceMeters && parsed.exerciseMinutes
+            ? Number((parsed.distanceMeters / parsed.exerciseMinutes).toFixed(2))
+            : null
+      }),
+      now,
+      now
+    );
+
+  summarizeUserHealthDay(userId, dayKey(parsed.startedAt));
+  recordActivityEvent({
+    entityType: "workout_session",
+    entityId: id,
+    eventType: "workout_session_created",
+    title: "Workout session created",
+    description: "A manual workout session was created in Forge.",
+    actor: activity?.actor ?? null,
+    source: activity?.source ?? "ui",
+    metadata: {
+      userId,
+      workoutType: parsed.workoutType
+    }
+  });
+
+  return getWorkoutSessionById(id)!;
+}
+
+export function updateWorkoutSession(
+  workoutId: string,
+  patch: z.infer<typeof updateWorkoutSessionSchema>,
+  activity?: ActivityContext
+) {
+  const parsed = updateWorkoutSessionSchema.parse(patch);
+  const current = getDatabase()
+    .prepare(`SELECT * FROM health_workout_sessions WHERE id = ?`)
+    .get(workoutId) as WorkoutSessionRow | undefined;
+  if (!current) {
+    return undefined;
+  }
+  const now = nowIso();
+  const startedAt = parsed.startedAt ?? current.started_at;
+  const endedAt = parsed.endedAt ?? current.ended_at;
+  const durationSeconds =
+    parsed.startedAt !== undefined || parsed.endedAt !== undefined
+      ? durationSecondsBetween(startedAt, endedAt)
+      : current.duration_seconds;
+  const currentAnnotations = safeJsonParse<Record<string, unknown>>(
+    current.annotations_json,
+    {}
+  );
+  const tags =
+    parsed.tags ??
+    safeJsonParse<string[]>(current.tags_json, []) ??
+    [];
+  const links =
+    parsed.links ??
+    safeJsonParse<Array<z.infer<typeof healthLinkSchema>>>(
+      current.links_json,
+      []
+    );
+  const annotations = {
+    subjectiveEffort:
+      parsed.subjectiveEffort ??
+      (typeof currentAnnotations.subjectiveEffort === "number"
+        ? currentAnnotations.subjectiveEffort
+        : current.subjective_effort),
+    moodBefore:
+      parsed.moodBefore ??
+      (typeof currentAnnotations.moodBefore === "string"
+        ? currentAnnotations.moodBefore
+        : current.mood_before),
+    moodAfter:
+      parsed.moodAfter ??
+      (typeof currentAnnotations.moodAfter === "string"
+        ? currentAnnotations.moodAfter
+        : current.mood_after),
+    meaningText:
+      parsed.meaningText ??
+      (typeof currentAnnotations.meaningText === "string"
+        ? currentAnnotations.meaningText
+        : current.meaning_text),
+    plannedContext:
+      parsed.plannedContext ??
+      (typeof currentAnnotations.plannedContext === "string"
+        ? currentAnnotations.plannedContext
+        : current.planned_context),
+    socialContext:
+      parsed.socialContext ??
+      (typeof currentAnnotations.socialContext === "string"
+        ? currentAnnotations.socialContext
+        : current.social_context),
+    tags,
+    links
+  };
+  const currentProvenance = safeJsonParse<Record<string, unknown>>(
+    current.provenance_json,
+    {}
+  );
+  const nextExerciseMinutes =
+    parsed.exerciseMinutes ?? current.exercise_minutes;
+  const nextDistanceMeters = parsed.distanceMeters ?? current.distance_meters;
+
+  getDatabase()
+    .prepare(
+      `UPDATE health_workout_sessions
+       SET external_uid = ?, source = ?, source_type = ?, workout_type = ?, source_device = ?,
+           started_at = ?, ended_at = ?, duration_seconds = ?, active_energy_kcal = ?, total_energy_kcal = ?,
+           distance_meters = ?, step_count = ?, exercise_minutes = ?, average_heart_rate = ?, max_heart_rate = ?,
+           subjective_effort = ?, mood_before = ?, mood_after = ?, meaning_text = ?, planned_context = ?,
+           social_context = ?, links_json = ?, tags_json = ?, annotations_json = ?, provenance_json = ?,
+           derived_json = ?, updated_at = ?
+       WHERE id = ?`
+    )
+    .run(
+      parsed.externalUid ?? current.external_uid,
+      parsed.source ?? current.source,
+      parsed.sourceType ?? current.source_type,
+      parsed.workoutType ?? current.workout_type,
+      parsed.sourceDevice ?? current.source_device,
+      startedAt,
+      endedAt,
+      durationSeconds,
+      parsed.activeEnergyKcal ?? current.active_energy_kcal,
+      parsed.totalEnergyKcal ?? current.total_energy_kcal,
+      nextDistanceMeters,
+      parsed.stepCount ?? current.step_count,
+      nextExerciseMinutes,
+      parsed.averageHeartRate ?? current.average_heart_rate,
+      parsed.maxHeartRate ?? current.max_heart_rate,
+      annotations.subjectiveEffort,
+      annotations.moodBefore,
+      annotations.moodAfter,
+      annotations.meaningText,
+      annotations.plannedContext,
+      annotations.socialContext,
+      JSON.stringify(links),
+      JSON.stringify(tags),
+      JSON.stringify(annotations),
+      JSON.stringify({
+        ...currentProvenance,
+        ...(parsed.provenance ?? {}),
+        updatedAt: now,
+        updatedByActor: activity?.actor ?? null
+      }),
+      JSON.stringify({
+        paceMetersPerMinute:
+          nextDistanceMeters && nextExerciseMinutes
+            ? Number((nextDistanceMeters / nextExerciseMinutes).toFixed(2))
+            : null
+      }),
+      now,
+      workoutId
+    );
+
+  summarizeUserHealthDay(current.user_id, dayKey(current.started_at));
+  summarizeUserHealthDay(current.user_id, dayKey(startedAt));
+  recordActivityEvent({
+    entityType: "workout_session",
+    entityId: workoutId,
+    eventType: "workout_session_updated",
+    title: "Workout session updated",
+    description: "A workout session was updated through Forge CRUD.",
+    actor: activity?.actor ?? null,
+    source: activity?.source ?? "ui",
+    metadata: {
+      workoutType: parsed.workoutType ?? current.workout_type
+    }
+  });
+
+  return getWorkoutSessionById(workoutId)!;
+}
+
+export function deleteWorkoutSession(
+  workoutId: string,
+  activity?: ActivityContext
+) {
+  const current = getDatabase()
+    .prepare(`SELECT * FROM health_workout_sessions WHERE id = ?`)
+    .get(workoutId) as WorkoutSessionRow | undefined;
+  if (!current) {
+    return undefined;
+  }
+  getDatabase()
+    .prepare(`DELETE FROM health_workout_sessions WHERE id = ?`)
+    .run(workoutId);
+  summarizeUserHealthDay(current.user_id, dayKey(current.started_at));
+  recordActivityEvent({
+    entityType: "workout_session",
+    entityId: workoutId,
+    eventType: "workout_session_deleted",
+    title: "Workout session deleted",
+    description: "A workout session was permanently removed from Forge.",
+    actor: activity?.actor ?? null,
+    source: activity?.source ?? "ui",
+    metadata: {
+      workoutType: current.workout_type,
+      startedAt: current.started_at
+    }
+  });
+  return mapWorkoutSession(current);
 }
 
 export function updateWorkoutMetadata(

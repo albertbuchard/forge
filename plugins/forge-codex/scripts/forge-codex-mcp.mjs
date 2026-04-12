@@ -1,3 +1,5 @@
+import { existsSync, readFileSync } from "node:fs";
+import path from "node:path";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { CallToolRequestSchema, ErrorCode, ListToolsRequestSchema, McpError } from "@modelcontextprotocol/sdk/types.js";
@@ -15,10 +17,34 @@ function normalizeEnvNumber(value, fallback) {
   return Number.isFinite(parsed) ? parsed : fallback;
 }
 
+function resolveSharedDataRoot() {
+  if (process.env.FORGE_DATA_ROOT?.trim()) {
+    return process.env.FORGE_DATA_ROOT.trim();
+  }
+  const projectRoot = path.resolve(import.meta.dirname, "..", "..", "..");
+  const runtimePreferencePath = path.resolve(projectRoot, "..", "..", "data", "forge-runtime.json");
+  const monorepoDataRoot = path.resolve(projectRoot, "..", "..", "data", "forge");
+  if (existsSync(runtimePreferencePath)) {
+    try {
+      const parsed = JSON.parse(readFileSync(runtimePreferencePath, "utf8"));
+      if (typeof parsed?.dataRoot === "string" && parsed.dataRoot.trim().length > 0) {
+        return path.resolve(parsed.dataRoot.trim());
+      }
+    } catch {
+      // Ignore invalid local runtime preference files and continue to defaults.
+    }
+  }
+  if (existsSync(monorepoDataRoot)) {
+    return monorepoDataRoot;
+  }
+  return monorepoDataRoot;
+}
+
 function buildPluginConfigFromEnv() {
   return resolveForgePluginConfig({
     origin: process.env.FORGE_ORIGIN ?? "http://127.0.0.1",
     port: normalizeEnvNumber(process.env.FORGE_PORT, 4317),
+    dataRoot: resolveSharedDataRoot(),
     apiToken: process.env.FORGE_API_TOKEN ?? "",
     actorLabel: process.env.FORGE_ACTOR_LABEL ?? "codex",
     timeoutMs: normalizeEnvNumber(process.env.FORGE_TIMEOUT_MS, 15_000)

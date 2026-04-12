@@ -192,6 +192,17 @@ export function SettingsPage() {
         badge={`${settings.security.integrityScore}% integrity`}
       />
 
+      {import.meta.env.DEV ? (
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="rounded-full border border-amber-400/25 bg-amber-500/[0.1] px-3 py-1 text-[11px] font-medium uppercase tracking-[0.16em] text-amber-100/92">
+            Dev frontend
+          </span>
+          <span className="text-sm text-white/50">
+            Forge UI is currently being served by the Vite dev server.
+          </span>
+        </div>
+      ) : null}
+
       <SettingsSectionNav />
 
       {operatorSessionQuery.data?.session ? (

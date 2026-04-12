@@ -62,6 +62,7 @@ struct CompanionDiagnosticsSheet: View {
                     overviewMetricRow("Connection", appModel.syncStateLabel)
                     overviewMetricRow("Health", appModel.healthAccessLabel)
                     overviewMetricRow("Movement", appModel.movementAccessLabel)
+                    overviewMetricRow("Screen Time", appModel.screenTimeAccessLabel)
                     overviewMetricRow("Watch", appModel.watchSyncLabel)
                     overviewMetricRow("Last sync", appModel.latestImportSummary)
                     overviewMetricRow("Last message", appModel.lastSyncMessage)
@@ -84,6 +85,8 @@ struct CompanionDiagnosticsSheet: View {
                         overviewMetricRow("Trips", "\(summary.movementTrips)")
                         overviewMetricRow("Trip points", "\(summary.movementTripPoints)")
                         overviewMetricRow("Trip stops", "\(summary.movementTripStops)")
+                        overviewMetricRow("Screen Time days", "\(summary.screenTimeDaySummaries)")
+                        overviewMetricRow("Screen Time hours", "\(summary.screenTimeHourlySegments)")
                     } else {
                         mutedBody("No sync payload has been built yet.")
                     }
@@ -115,6 +118,31 @@ struct CompanionDiagnosticsSheet: View {
 
             CompanionSectionCard {
                 VStack(alignment: .leading, spacing: 12) {
+                    sectionTitle("Source states")
+                    ForEach(appModel.sourceDiagnosticsRows) { row in
+                        VStack(alignment: .leading, spacing: 4) {
+                            HStack(alignment: .firstTextBaseline, spacing: 10) {
+                                Text(row.title)
+                                    .font(.system(size: 13, weight: .bold, design: .rounded))
+                                    .foregroundStyle(CompanionStyle.textPrimary)
+                                Spacer(minLength: 8)
+                                Text(row.desiredEnabled ? "Enabled" : "Off")
+                                    .font(.system(size: 12, weight: .semibold, design: .rounded))
+                                    .foregroundStyle(row.syncEligible ? CompanionStyle.accentStrong : CompanionStyle.textSecondary)
+                            }
+                            overviewMetricRow("Desired", row.desiredEnabled ? "On" : "Off")
+                            overviewMetricRow("Applied", row.appliedEnabled ? "On" : "Off")
+                            overviewMetricRow("Authorization", row.authorizationStatus.replacingOccurrences(of: "_", with: " "))
+                            overviewMetricRow("Sync eligible", row.syncEligible ? "Yes" : "No")
+                            overviewMetricRow("Observed", row.lastObservedAt ?? "Waiting for device update")
+                        }
+                        .padding(.vertical, 4)
+                    }
+                }
+            }
+
+            CompanionSectionCard {
+                VStack(alignment: .leading, spacing: 12) {
                     sectionTitle("Latest receipt")
                     if let report = appModel.latestSyncReport {
                         overviewMetricRow("Synced at", report.syncedAt.formatted(date: .omitted, time: .shortened))
@@ -124,6 +152,8 @@ struct CompanionDiagnosticsSheet: View {
                         overviewMetricRow("Movement stays", "\(report.movementStays)")
                         overviewMetricRow("Movement trips", "\(report.movementTrips)")
                         overviewMetricRow("Movement places", "\(report.movementKnownPlaces)")
+                        overviewMetricRow("Screen Time days", "\(report.screenTimeDaySummaries)")
+                        overviewMetricRow("Screen Time hours", "\(report.screenTimeHourlySegments)")
                     } else {
                         mutedBody("No successful sync receipt yet.")
                     }
@@ -156,6 +186,26 @@ struct CompanionDiagnosticsSheet: View {
                     overviewMetricRow("Stays", "\(appModel.movementStore.storedStays.count)")
                     overviewMetricRow("Trips", "\(appModel.movementStore.storedTrips.count)")
                     overviewMetricRow("Latest location", appModel.movementStore.latestLocationSummary)
+                    overviewMetricRow("Screen Time status", appModel.screenTimeAccessLabel)
+                    overviewMetricRow("Screen Time capture", appModel.screenTimeStore.latestCaptureSummary)
+                }
+            }
+
+            CompanionSectionCard {
+                VStack(alignment: .leading, spacing: 12) {
+                    sectionTitle("Gap repair")
+                    let repairDiagnostics = appModel.movementStore.recentRepairDiagnostics
+                    if repairDiagnostics.isEmpty {
+                        mutedBody("No repaired or missing movement spans have been synthesized recently.")
+                    } else {
+                        ForEach(repairDiagnostics, id: \.self) { entry in
+                            Text(entry)
+                                .font(.system(size: 12, weight: .medium, design: .rounded))
+                                .foregroundStyle(CompanionStyle.textSecondary)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(.vertical, 2)
+                        }
+                    }
                 }
             }
 

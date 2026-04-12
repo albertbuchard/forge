@@ -53,7 +53,7 @@ import {
 } from "@/lib/calendar-display-preferences";
 import { readCalendarDisplayName } from "@/lib/calendar-name-deduper";
 import { addDays, buildWeekDays, formatWeekday, startOfWeek } from "@/lib/calendar-ui";
-import type { EntityKind } from "@/lib/entity-visuals";
+import { getEntityKindForCrudEntityType } from "@/lib/entity-visuals";
 import type { CalendarEvent, CalendarEventLink, TaskTimebox, WorkBlockKind, WorkBlockTemplate } from "@/lib/types";
 import {
   formatUserSummaryLine,
@@ -85,13 +85,6 @@ type CalendarOverviewQueryData = Awaited<ReturnType<typeof getCalendarOverview>>
 type EventSyncStatus = {
   tone: "saving" | "error";
   message: string;
-};
-
-const ENTITY_KIND_BY_TYPE: Partial<Record<CalendarEventLink["entityType"], EntityKind>> = {
-  goal: "goal",
-  project: "project",
-  task: "task",
-  habit: "habit"
 };
 
 function buildDefaultEventSeed(day: Date) {
@@ -1240,7 +1233,9 @@ export function CalendarPage() {
                       {event.links.length > 0 ? (
                         <div className="mt-2 flex min-w-0 flex-wrap gap-1.5">
                           {event.links.slice(0, 3).map((link) => {
-                            const entityKind = ENTITY_KIND_BY_TYPE[link.entityType];
+                            const entityKind = getEntityKindForCrudEntityType(
+                              link.entityType
+                            );
                             return entityKind ? (
                               <EntityBadge
                                 key={link.id}

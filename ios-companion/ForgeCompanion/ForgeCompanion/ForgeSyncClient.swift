@@ -2,6 +2,17 @@ import Foundation
 import UIKit
 
 struct ForgeSyncClient {
+    private static let bootstrapSession: URLSession = {
+        let configuration = URLSessionConfiguration.default
+        configuration.httpCookieAcceptPolicy = .always
+        configuration.httpShouldSetCookies = true
+        configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
+        configuration.timeoutIntervalForRequest = 12
+        configuration.timeoutIntervalForResource = 20
+        configuration.waitsForConnectivity = false
+        return URLSession(configuration: configuration)
+    }()
+
     private struct PairingSessionRequest: Encodable {
         let label: String
         let capabilities: [String]
@@ -37,7 +48,24 @@ struct ForgeSyncClient {
     }
 
     private struct MovementBootstrapEnvelope: Decodable {
+        let pairingSession: CompanionPairingSessionState?
         let movement: SyncReceipt.MovementBootstrapEnvelope
+    }
+
+    private struct SourceStateUpdateRequest: Encodable {
+        let sessionId: String
+        let pairingToken: String
+        let source: String
+        let desiredEnabled: Bool
+        let appliedEnabled: Bool
+        let authorizationStatus: String
+        let syncEligible: Bool
+        let lastObservedAt: String?
+        let metadata: [String: String]
+    }
+
+    private struct SourceStateUpdateEnvelope: Decodable {
+        let pairingSession: CompanionPairingSessionState
     }
 
     private struct WatchBootstrapRequest: Encodable {
@@ -226,7 +254,9 @@ struct ForgeSyncClient {
         return envelope.sync
     }
 
-    func fetchMovementBootstrap(payload: PairingPayload) async throws -> SyncReceipt.MovementBootstrapEnvelope {
+    func fetchMovementBootstrap(
+        payload: PairingPayload
+    ) async throws -> (pairingSession: CompanionPairingSessionState?, movement: SyncReceipt.MovementBootstrapEnvelope) {
         companionDebugLog(
             "ForgeSyncClient",
             "fetchMovementBootstrap start session=\(payload.sessionId)"
@@ -243,7 +273,35 @@ struct ForgeSyncClient {
             "ForgeSyncClient",
             "fetchMovementBootstrap success places=\(envelope.movement.places.count)"
         )
-        return envelope.movement
+        return (pairingSession: envelope.pairingSession, movement: envelope.movement)
+    }
+
+    func updateSourceState(
+        payload: PairingPayload,
+        source: String,
+        desiredEnabled: Bool,
+        appliedEnabled: Bool,
+        authorizationStatus: String,
+        syncEligible: Bool,
+        lastObservedAt: String?,
+        metadata: [String: String] = [:]
+    ) async throws -> CompanionPairingSessionState {
+        let envelope: SourceStateUpdateEnvelope = try await sendRequest(
+            path: "/mobile/source-state",
+            apiBaseUrl: payload.apiBaseUrl,
+            body: SourceStateUpdateRequest(
+                sessionId: payload.sessionId,
+                pairingToken: payload.pairingToken,
+                source: source,
+                desiredEnabled: desiredEnabled,
+                appliedEnabled: appliedEnabled,
+                authorizationStatus: authorizationStatus,
+                syncEligible: syncEligible,
+                lastObservedAt: lastObservedAt,
+                metadata: metadata
+            )
+        )
+        return envelope.pairingSession
     }
 
     func fetchWatchBootstrap(payload: PairingPayload) async throws -> ForgeWatchBootstrap {
@@ -516,13 +574,8 @@ struct ForgeSyncClient {
     }
 
     private func makeSession() -> URLSession {
-        companionDebugLog("ForgeSyncClient", "makeSession ephemeral")
-        let configuration = URLSessionConfiguration.ephemeral
-        configuration.httpCookieAcceptPolicy = .always
-        configuration.httpShouldSetCookies = true
-        configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
-        configuration.urlCache = nil
-        return URLSession(configuration: configuration)
+        companionDebugLog("ForgeSyncClient", "makeSession persistent")
+        return Self.bootstrapSession
     }
 
     private func normalizedApiBaseUrl(from rawValue: String) -> String {

@@ -26,12 +26,12 @@ http://127.0.0.1:4317/forge/
 
 You can also ask the agent to call the UI entry tool and return the exact current address.
 
-If you want Forge to use a specific local data folder, set `dataRoot` in the plugin config. The local runtime will then store its database under `data/forge.sqlite` inside that folder instead of using the runtime working directory.
+If you want Forge to use a specific local data folder, set `dataRoot` in the plugin config. The local runtime will then store its database as `forge.sqlite` directly inside that folder instead of using the runtime working directory.
 
 Default data path:
 
-- normal npm/OpenClaw install: usually `~/.openclaw/extensions/forge-openclaw-plugin/data/forge.sqlite`
-- linked repo-local install: usually `<your-repo>/openclaw-plugin/data/forge.sqlite`
+- normal npm/OpenClaw install: usually `~/.openclaw/extensions/forge-openclaw-plugin/forge.sqlite`
+- linked repo-local install: usually `<your-repo>/openclaw-plugin/forge.sqlite`
 
 If you want the data to live somewhere else for persistence or backup reasons, set `dataRoot` explicitly in the plugin config and restart the gateway.
 
@@ -410,6 +410,31 @@ The reliable publication path for the Forge plugin is:
 1. publish `forge-openclaw-plugin` to npm
 2. verify `openclaw plugins install forge-openclaw-plugin`
 3. add Forge to the OpenClaw community plugin listing with the npm package and GitHub repo
+
+The repo now supports a tag-driven GitHub Actions release path for step 1. The normal
+prep flow from a clean checkout on `main` is:
+
+```bash
+FORGE_RELEASE_MODE=prepare ./scripts/release-forge-openclaw-plugin.sh patch
+```
+
+That command bumps the aligned plugin versions, runs the verification suite, commits
+the release, and pushes `main` plus a matching tag like `v0.2.27`. The
+`.github/workflows/release-openclaw-plugin.yml` workflow then publishes the package
+from that tag.
+
+One-time npm setup for CI:
+
+- configure npm Trusted Publishing for this GitHub repository and the
+  `release-openclaw-plugin.yml` workflow
+- keep using GitHub-hosted runners for the publish job, because npm Trusted Publishing
+  does not support self-hosted runners yet
+
+If you explicitly want the old laptop-driven publish path, run the same script without
+`FORGE_RELEASE_MODE=prepare` and it will still publish directly after pushing.
+
+For the exact prerequisites, tags, and GitHub secret names, use
+`docs/release-cheat-sheet.md`.
 
 ClawHub note:
 

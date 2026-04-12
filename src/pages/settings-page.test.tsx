@@ -145,6 +145,11 @@ describe("SettingsPage theme persistence", () => {
   it("persists preset theme selection immediately", async () => {
     renderSettingsPage();
 
+    expect(await screen.findByText("Dev frontend")).toBeInTheDocument();
+    expect(
+      screen.getByText("Forge UI is currently being served by the Vite dev server.")
+    ).toBeInTheDocument();
+
     fireEvent.click(await screen.findByText("Paper"));
 
     await waitFor(() =>

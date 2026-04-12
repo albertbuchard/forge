@@ -5,6 +5,7 @@ import {
   Bot,
   CalendarDays,
   Cpu,
+  Database,
   ScrollText,
   Settings2,
   Smartphone,
@@ -19,12 +20,13 @@ import { cn } from "@/lib/utils";
 
 export const SETTINGS_SECTIONS = [
   { to: "/settings", label: "General", icon: Settings2 },
+  { to: "/settings/data", label: "Data", icon: Database },
   { to: "/settings/users", label: "Users", icon: Users },
   { to: "/settings/calendar", label: "Calendar", icon: CalendarDays },
   { to: "/settings/mobile", label: "Mobile", icon: Smartphone },
   { to: "/settings/models", label: "Models", icon: Cpu },
   { to: "/settings/agents", label: "Agents", icon: Bot },
-  { to: "/settings/wiki", label: "Wiki", icon: BookCopy },
+  { to: "/settings/wiki", label: "KarpaWiki", icon: BookCopy },
   { to: "/settings/logs", label: "Logs", icon: ScrollText },
   { to: "/settings/rewards", label: "Rewards", icon: Trophy },
   { to: "/settings/bin", label: "Bin", icon: ArchiveRestore }

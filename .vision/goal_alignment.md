@@ -83,7 +83,38 @@ page-local AI widgets. A Workbench flow must be able to consume registered Forge
 from any view, use box snapshots and tool adapters as graph inputs, run as a functor
 or chat flow, persist run history and optional conversation memory, and publish outputs
 through dedicated Workbench API routes while older connector routes remain temporary
-compatibility aliases.
+compatibility aliases. Workbench boxes and AI nodes must publish semantic input and
+output contracts with truthful key names and typed model metadata, not generic
+`primary` or `content` placeholders. The graph editor must show those contracts clearly
+through collapsed previews, tooltips, and explicit tool argument schemas so a user can
+understand what a node consumes, what it emits, and what tools it can call before
+running the flow. The editor must also autosave draft changes within a few seconds,
+save the current draft before every Run attempt, and stop treating a simple node click
+as an implicit command to open a modal. Selecting a node and editing a node are
+different actions. The node card itself must expose explicit affordances for editing,
+contract inspection, and parameter editing without blocking richer in-node controls.
+Workbench must also expose a real top-level public input contract for every flow. A
+flow is not allowed to depend only on an implicit `userInput` blob when it is meant to
+be called through the API or reused by agents. Public flow inputs must declare their
+key, label, description, kind, required flag, semantic model metadata, optional shape,
+and optional default value, then bind those public inputs explicitly to node inputs or
+node parameters. The Run modal and the public Workbench API must both treat those
+declared public inputs as the primary contract, with generic context fields reserved as
+an advanced escape hatch rather than the default surface.
+Workbench must also expose stable run-scoped and node-scoped result APIs instead of
+hiding node outputs inside a debug-only trace. A caller should be able to run a flow,
+retrieve the published whole-flow output, list the semantic outputs of every node for
+that run, fetch one specific node result, and ask for the latest successful output of
+one node without reverse-engineering internal trace structures. Those node results must
+carry resolved inputs, semantic output maps, payloads, tool exposure, logs, timing, and
+plain-language error state. Debug traces may still exist for diagnostics, but they are
+not the canonical API.
+Workbench must also ship with a dedicated mock runtime for local development and tests.
+That mock runtime is not a production model provider. It exists so Forge can exercise
+full graph execution, conversation continuity, tool-calling behavior, error paths, and
+structured outputs through the same execution seam in automated tests and local manual
+QA. The product should be able to verify Workbench behavior end to end without relying
+on ad hoc fetch monkeypatches or a live external LLM provider.
 Thirteenth, it must enforce a smooth route-handoff contract across the whole web app.
 When the user switches views, Forge should keep the previous page visible until the
 next page has finished the route-critical fetch work needed for first render. The
@@ -300,8 +331,8 @@ also be durable or ephemeral: if a destroy time is set, Forge must automatically
 remove the note once that time passes instead of leaving expired scratch context
 behind indefinitely.
 
-That document layer must now grow into a first-class Wiki memory system instead of
-remaining only an evidence log. Forge needs a dedicated Wiki workspace where canonical
+That document layer must now grow into a first-class KarpaWiki memory system instead of
+remaining only an evidence log. Forge needs a dedicated KarpaWiki workspace where canonical
 knowledge lives as local markdown files plus media assets on disk, while Forge keeps a
 synced SQLite metadata, backlink, and search index on top. Evidence notes and richer
 wiki pages are two kinds of the same local-first document system, not two unrelated
@@ -459,14 +490,15 @@ Redux Toolkit slices plus RTK Query for server-state ownership and cache invalid
 TanStack Query remains present as a temporary migration bridge on routes that have not
 yet moved to RTK Query. Forms and validation use React Hook Form and Zod, board
 interactions use dnd-kit, motion uses Framer Motion, charts use Recharts, connector
-graphs use `@xyflow/react`, and Lucide provides the entity iconography. The server
+graphs use `@xyflow/react`, the Knowledge Graph uses Sigma 3 + Graphology +
+ForceAtlas2 workers for large-network rendering, and Lucide provides the entity iconography. The server
 runtime is a Fastify 5 API served from `server/src`, started with `tsx`, and exposed
 locally on port `4317` by default with the web app mounted under `/forge/`. The public
 contract is a versioned REST API with an OpenAPI 3.1 document at `/api/v1/openapi.json`.
 Agent adapters currently span the published
 OpenClaw plugin, a Hermes Agent plugin packaged as a Python distribution with a
 `hermes_agent.plugins` entry point plus bundled runtime assets, and a repo-local Codex
-MCP plugin. The Wiki memory layer is part of that same stack: markdown and media files
+MCP plugin. The KarpaWiki memory layer is part of that same stack: markdown and media files
 are canonical on the local filesystem, while Fastify and SQLite provide metadata,
 backlinks, search indexes, ingest jobs, and optional embedding-profile state.
 Project documentation is also part of the production stack now. Forge publishes an

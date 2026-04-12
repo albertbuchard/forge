@@ -44,7 +44,7 @@ import {
   listWikiPages,
   patchWikiPage
 } from "@/lib/api";
-import type { EntityKind } from "@/lib/entity-visuals";
+import { getEntityKindForCrudEntityType } from "@/lib/entity-visuals";
 import type { CrudEntityType, Note } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -73,14 +73,6 @@ type HelperDialogKind =
   | "admonition"
   | "related"
   | "media";
-
-const ENTITY_KIND_BY_TYPE: Partial<Record<CrudEntityType, EntityKind>> = {
-  goal: "goal",
-  project: "project",
-  task: "task",
-  strategy: "strategy",
-  habit: "habit"
-};
 
 function encodeLinkedValue(entityType: CrudEntityType, entityId: string) {
   return `${entityType}:${entityId}`;
@@ -466,7 +458,7 @@ export function WikiEditorPage() {
       label: goal.title,
       description: goal.description,
       searchText: `${goal.title} ${goal.description}`,
-      kind: ENTITY_KIND_BY_TYPE.goal
+      kind: getEntityKindForCrudEntityType("goal") ?? undefined
     }));
     const projects = shell.snapshot.dashboard.projects.map((project) => ({
       value: encodeLinkedValue("project", project.id),
@@ -475,28 +467,28 @@ export function WikiEditorPage() {
         .filter(Boolean)
         .join(" · "),
       searchText: `${project.title} ${project.goalTitle} ${project.description}`,
-      kind: ENTITY_KIND_BY_TYPE.project
+      kind: getEntityKindForCrudEntityType("project") ?? undefined
     }));
     const tasks = shell.snapshot.tasks.map((task) => ({
       value: encodeLinkedValue("task", task.id),
       label: task.title,
       description: task.owner || task.description,
       searchText: `${task.title} ${task.owner} ${task.description}`,
-      kind: ENTITY_KIND_BY_TYPE.task
+      kind: getEntityKindForCrudEntityType("task") ?? undefined
     }));
     const strategies = shell.snapshot.strategies.map((strategy) => ({
       value: encodeLinkedValue("strategy", strategy.id),
       label: strategy.title,
       description: strategy.overview,
       searchText: `${strategy.title} ${strategy.overview} ${strategy.endStateDescription}`,
-      kind: ENTITY_KIND_BY_TYPE.strategy
+      kind: getEntityKindForCrudEntityType("strategy") ?? undefined
     }));
     const habits = shell.snapshot.habits.map((habit) => ({
       value: encodeLinkedValue("habit", habit.id),
       label: habit.title,
       description: habit.description,
       searchText: `${habit.title} ${habit.description}`,
-      kind: ENTITY_KIND_BY_TYPE.habit
+      kind: getEntityKindForCrudEntityType("habit") ?? undefined
     }));
 
     return [...goals, ...projects, ...tasks, ...strategies, ...habits].sort(

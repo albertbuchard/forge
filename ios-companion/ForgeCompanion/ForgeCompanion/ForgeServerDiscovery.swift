@@ -2,6 +2,19 @@ import Foundation
 import UIKit
 
 final class ForgeServerDiscovery {
+    struct ManualProbeCandidate: Hashable {
+        let host: String
+        let apiBaseUrl: String
+        let uiBaseUrl: String
+        let source: ForgeDiscoverySource
+        let detail: String
+        let canBootstrapPairing: Bool
+    }
+
+    private enum StorageKeys {
+        static let recentHosts = "forge_companion_recent_runtime_hosts"
+    }
+
     private struct TailscalePeerFetchResult {
         let peers: [TailscalePeer]
         let statusMessage: String
@@ -28,6 +41,42 @@ final class ForgeServerDiscovery {
     private static let forgeUiPort = 3027
     private static let maxConcurrentProbes = 40
     private static let maxConcurrentTailscalePeerProbes = 8
+    private static let maxRememberedHosts = 6
+
+    func probeManualRuntime(_ rawInput: String) async -> DiscoveredForgeServer? {
+        let candidates = Self.manualProbeCandidates(for: rawInput)
+        companionDebugLog(
+            "ForgeServerDiscovery",
+            "probeManualRuntime start raw=\(rawInput) candidates=\(candidates.count)"
+        )
+
+        for candidate in candidates {
+            async let apiProbe = Self.probeForgeHealth(apiBaseUrl: candidate.apiBaseUrl)
+            async let uiProbe = Self.probeForgeUi(uiBaseUrl: candidate.uiBaseUrl)
+            let apiReachable = await apiProbe
+            let uiReachable = await uiProbe
+            if apiReachable && uiReachable {
+                let server = DiscoveredForgeServer(
+                    id: "forge-manual-\(candidate.host)",
+                    name: candidate.host,
+                    host: candidate.host,
+                    apiBaseUrl: candidate.apiBaseUrl,
+                    uiBaseUrl: candidate.uiBaseUrl,
+                    source: candidate.source,
+                    canBootstrapPairing: candidate.canBootstrapPairing,
+                    detail: candidate.detail
+                )
+                companionDebugLog(
+                    "ForgeServerDiscovery",
+                    "probeManualRuntime success host=\(candidate.host) api=\(candidate.apiBaseUrl)"
+                )
+                return server
+            }
+        }
+
+        companionDebugLog("ForgeServerDiscovery", "probeManualRuntime no match raw=\(rawInput)")
+        return nil
+    }
 
     func discoverEnvironment() async -> ForgeDiscoveryReport {
         companionDebugLog("ForgeServerDiscovery", "discoverEnvironment start")
@@ -69,6 +118,15 @@ final class ForgeServerDiscovery {
 
         if candidates.contains(where: { $0.source == .tailscale }) {
             companionDebugLog("ForgeServerDiscovery", "discoverEnvironment tailscale candidate available")
+        }
+
+        if candidates.isEmpty {
+            let rememberedCandidates = await Self.probeRememberedHosts()
+            candidates.append(contentsOf: rememberedCandidates)
+            companionDebugLog(
+                "ForgeServerDiscovery",
+                "discoverEnvironment rememberedCandidates=\(rememberedCandidates.count)"
+            )
         }
 
         if candidates.isEmpty {
@@ -194,7 +252,8 @@ final class ForgeServerDiscovery {
             return nil
         }
 
-        let apiBaseUrl = "http://\(trimmedHost):\(forgeApiPort)"
+        let requestHost = formattedHostForURL(trimmedHost)
+        let apiBaseUrl = "http://\(requestHost):\(forgeApiPort)"
         companionDebugLog(
             "ForgeServerDiscovery",
             "probeForgeHost start host=\(trimmedHost) source=\(source)"
@@ -217,7 +276,7 @@ final class ForgeServerDiscovery {
             name: displayName,
             host: trimmedHost,
             apiBaseUrl: apiBaseUrl,
-            uiBaseUrl: "http://\(trimmedHost):\(forgeUiPort)/forge/",
+            uiBaseUrl: "http://\(requestHost):\(forgeUiPort)/forge/",
             source: source,
             canBootstrapPairing: canBootstrap,
             detail: detail
@@ -459,14 +518,14 @@ final class ForgeServerDiscovery {
         let prefix = "\(octets[0]).\(octets[1]).\(octets[2])."
         let localLast = octets[3]
         let limiter = ProbeLimiter(maxConcurrentProbes)
-        companionDebugLog("ForgeServerDiscovery", "scanLanForForge start prefix=\(prefix) localLast=\(localLast)")
+        let candidateHosts = lanCandidateHosts(prefix: prefix, localLast: localLast)
+        companionDebugLog(
+            "ForgeServerDiscovery",
+            "scanLanForForge start prefix=\(prefix) localLast=\(localLast) candidates=\(candidateHosts.count)"
+        )
 
         let discovered = await withTaskGroup(of: DiscoveredForgeServer?.self, returning: [DiscoveredForgeServer].self) { group in
-            for lastOctet in 1...254 {
-                guard lastOctet != localLast else {
-                    continue
-                }
-                let host = "\(prefix)\(lastOctet)"
+            for host in candidateHosts {
                 group.addTask {
                     await limiter.acquire()
                     let result = await probeForgeHost(host: host, name: host, source: .lan)
@@ -561,9 +620,108 @@ final class ForgeServerDiscovery {
             )
             return TailscalePeerFetchResult(
                 peers: [],
-                statusMessage: "Tailscale peer list unavailable on this device right now."
+                statusMessage: "This iPhone cannot read the Tailscale app peer list here. Use Manual setup with a known .ts.net machine name."
             )
         }
+    }
+
+    static func manualProbeCandidates(for rawInput: String) -> [ManualProbeCandidate] {
+        let trimmed = rawInput.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            return []
+        }
+
+        let lowered = trimmed.lowercased()
+        let hasExplicitScheme = lowered.hasPrefix("http://") || lowered.hasPrefix("https://")
+        let inferredHost = hasExplicitScheme ? (URL(string: trimmed)?.host ?? trimmed) : trimmed
+        let normalizedHost = normalizedHostKey(inferredHost)
+        guard !normalizedHost.isEmpty else {
+            return []
+        }
+
+        let isMagicDNS = normalizedHost.contains(".ts.net")
+        if !hasExplicitScheme {
+            if isMagicDNS {
+                return [
+                    ManualProbeCandidate(
+                        host: normalizedHost,
+                        apiBaseUrl: "https://\(normalizedHost)/api/v1",
+                        uiBaseUrl: "https://\(normalizedHost)/forge/",
+                        source: .tailscale,
+                        detail: "Manual Tailscale target via tailscale serve",
+                        canBootstrapPairing: true
+                    )
+                ]
+            }
+
+            let requestHost = formattedHostForURL(normalizedHost)
+            return [
+                ManualProbeCandidate(
+                    host: normalizedHost,
+                    apiBaseUrl: "http://\(requestHost):\(forgeApiPort)",
+                    uiBaseUrl: "http://\(requestHost):\(forgeUiPort)/forge/",
+                    source: .lan,
+                    detail: "Manual Forge host on your local network",
+                    canBootstrapPairing: false
+                )
+            ]
+        }
+
+        guard let explicitUrl = URL(string: trimmed) else {
+            return []
+        }
+
+        var candidates: [ManualProbeCandidate] = []
+
+        let normalizedApiBaseUrl = CompanionPairingURLResolver.normalizeApiBaseUrl(explicitUrl.absoluteString)
+        let normalizedUiBaseUrl = CompanionPairingURLResolver.normalizeUiBaseUrl(explicitUrl.absoluteString)
+        candidates.append(
+            ManualProbeCandidate(
+                host: normalizedHost,
+                apiBaseUrl: normalizedApiBaseUrl,
+                uiBaseUrl: normalizedUiBaseUrl,
+                source: isMagicDNS ? .tailscale : .lan,
+                detail: isMagicDNS
+                    ? "Manual Tailscale target via a known machine name"
+                    : "Manual Forge host on your local network",
+                canBootstrapPairing: isMagicDNS
+            )
+        )
+
+        if isMagicDNS {
+            candidates.append(
+                ManualProbeCandidate(
+                    host: normalizedHost,
+                    apiBaseUrl: "https://\(normalizedHost)/api/v1",
+                    uiBaseUrl: "https://\(normalizedHost)/forge/",
+                    source: .tailscale,
+                    detail: "Manual Tailscale target via tailscale serve",
+                    canBootstrapPairing: true
+                )
+            )
+        } else {
+            let requestHost = formattedHostForURL(normalizedHost)
+            candidates.append(
+                ManualProbeCandidate(
+                    host: normalizedHost,
+                    apiBaseUrl: "http://\(requestHost):\(forgeApiPort)",
+                    uiBaseUrl: "http://\(requestHost):\(forgeUiPort)/forge/",
+                    source: .lan,
+                    detail: "Manual Forge host on your local network",
+                    canBootstrapPairing: false
+                )
+            )
+        }
+
+        var deduped: [ManualProbeCandidate] = []
+        var seen: Set<String> = []
+        for candidate in candidates {
+            let key = "\(candidate.apiBaseUrl)|\(candidate.uiBaseUrl)"
+            if seen.insert(key).inserted {
+                deduped.append(candidate)
+            }
+        }
+        return deduped
     }
 
     private static func parseTailscalePeers(data: Data) -> [TailscalePeer] {
@@ -666,6 +824,87 @@ final class ForgeServerDiscovery {
         return nil
     }
 
+    private static func lanCandidateHosts(prefix: String, localLast: Int) -> [String] {
+        var candidates: [Int] = []
+        let commonHosts = [1, 2, 10, 20, 30, 40, 50, 60, 75, 80, 90, 100, 110, 120, 150, 180, 200, 220, 240, 254]
+        candidates.append(contentsOf: commonHosts)
+
+        let nearbyRange = max(1, localLast - 16)...min(254, localLast + 16)
+        candidates.append(contentsOf: nearbyRange)
+
+        let remembered = recentHosts()
+            .compactMap { host -> Int? in
+                let parts = host.split(separator: ".")
+                guard parts.count == 4 else { return nil }
+                let rememberedPrefix = parts.prefix(3).joined(separator: ".")
+                guard rememberedPrefix == prefix.dropLast() else { return nil }
+                return Int(parts[3])
+            }
+        candidates.append(contentsOf: remembered)
+
+        let ordered = Array(
+            Set(candidates.filter { $0 != localLast && (1...254).contains($0) })
+        ).sorted()
+        return ordered.map { "\(prefix)\($0)" }
+    }
+
+    private static func recentHosts() -> [String] {
+        (UserDefaults.standard.array(forKey: StorageKeys.recentHosts) as? [String] ?? [])
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
+            .filter { $0.isEmpty == false }
+    }
+
+    private static func probeRememberedHosts() async -> [DiscoveredForgeServer] {
+        let rememberedHosts = recentHosts()
+        guard rememberedHosts.isEmpty == false else {
+            return []
+        }
+
+        return await withTaskGroup(of: DiscoveredForgeServer?.self, returning: [DiscoveredForgeServer].self) { group in
+            for host in rememberedHosts {
+                group.addTask {
+                    if host.contains(".ts.net") {
+                        return await ForgeServerDiscovery().probeManualRuntime(host)
+                    }
+                    return await probeForgeHost(host: host, name: host, source: .lan)
+                }
+            }
+
+            var servers: [DiscoveredForgeServer] = []
+            for await server in group {
+                if let server {
+                    servers.append(server)
+                }
+            }
+            return servers
+        }
+    }
+
+    static func rememberSuccessfulServer(_ server: DiscoveredForgeServer) {
+        rememberSuccessfulHost(server.host)
+    }
+
+    static func rememberSuccessfulHost(_ host: String) {
+        let trimmedHost = host.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard trimmedHost.isEmpty == false else {
+            return
+        }
+
+        var hosts = recentHosts().filter { $0 != trimmedHost }
+        hosts.insert(trimmedHost, at: 0)
+        if hosts.count > maxRememberedHosts {
+            hosts = Array(hosts.prefix(maxRememberedHosts))
+        }
+        UserDefaults.standard.set(hosts, forKey: StorageKeys.recentHosts)
+    }
+
+    private static func formattedHostForURL(_ host: String) -> String {
+        guard host.contains(":"), host.hasPrefix("[") == false else {
+            return host
+        }
+        return "[\(host)]"
+    }
+
     private static func discoverBonjourSeeds(timeout: TimeInterval) async -> [BonjourSeed] {
         let browser = await MainActor.run {
             BonjourServiceDiscoverer(serviceType: "_forge._tcp.")
@@ -738,15 +977,33 @@ private final class BonjourServiceDiscoverer: NSObject, @preconcurrency NetServi
 
     func netServiceDidResolveAddress(_ sender: NetService) {
         pendingServices.remove(ObjectIdentifier(sender))
-        for address in sender.addresses ?? [] {
-            guard let ip = ipv4Address(fromSockaddrData: address) else { continue }
-            results[ip] = ForgeServerDiscovery.BonjourSeed(
+        let resolvedHostName = sender.hostName?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .trimmingCharacters(in: CharacterSet(charactersIn: "."))
+
+        if let resolvedHostName, resolvedHostName.isEmpty == false {
+            results[resolvedHostName] = ForgeServerDiscovery.BonjourSeed(
                 name: sender.name,
-                host: ip,
+                host: resolvedHostName,
                 txtRecords: txtRecords(from: sender)
             )
-            companionDebugLog("BonjourServiceDiscoverer", "resolved service=\(sender.name) ip=\(ip)")
-            break
+            companionDebugLog(
+                "BonjourServiceDiscoverer",
+                "resolved service=\(sender.name) hostname=\(resolvedHostName)"
+            )
+        }
+
+        for address in sender.addresses ?? [] {
+            guard let hostAddress = ipAddress(fromSockaddrData: address) else { continue }
+            results[hostAddress] = ForgeServerDiscovery.BonjourSeed(
+                name: sender.name,
+                host: hostAddress,
+                txtRecords: txtRecords(from: sender)
+            )
+            companionDebugLog(
+                "BonjourServiceDiscoverer",
+                "resolved service=\(sender.name) host=\(hostAddress)"
+            )
         }
         if requestedStop, pendingServices.isEmpty {
             finish()
@@ -771,15 +1028,29 @@ private final class BonjourServiceDiscoverer: NSObject, @preconcurrency NetServi
         finish()
     }
 
-    private func ipv4Address(fromSockaddrData data: Data) -> String? {
+    private func ipAddress(fromSockaddrData data: Data) -> String? {
         data.withUnsafeBytes { bytes in
             guard let base = bytes.baseAddress else { return nil }
             let sockaddrPtr = base.assumingMemoryBound(to: sockaddr.self)
-            guard sockaddrPtr.pointee.sa_family == sa_family_t(AF_INET) else { return nil }
-            let sinPtr = base.assumingMemoryBound(to: sockaddr_in.self)
-            var addr = sinPtr.pointee.sin_addr
-            var buffer = [CChar](repeating: 0, count: Int(INET_ADDRSTRLEN))
-            guard inet_ntop(AF_INET, &addr, &buffer, socklen_t(INET_ADDRSTRLEN)) != nil else {
+            let family = sockaddrPtr.pointee.sa_family
+
+            if family == sa_family_t(AF_INET) {
+                let sinPtr = base.assumingMemoryBound(to: sockaddr_in.self)
+                var addr = sinPtr.pointee.sin_addr
+                var buffer = [CChar](repeating: 0, count: Int(INET_ADDRSTRLEN))
+                guard inet_ntop(AF_INET, &addr, &buffer, socklen_t(INET_ADDRSTRLEN)) != nil else {
+                    return nil
+                }
+                return String(cString: buffer)
+            }
+
+            guard family == sa_family_t(AF_INET6) else {
+                return nil
+            }
+            let sin6Ptr = base.assumingMemoryBound(to: sockaddr_in6.self)
+            var addr6 = sin6Ptr.pointee.sin6_addr
+            var buffer = [CChar](repeating: 0, count: Int(INET6_ADDRSTRLEN))
+            guard inet_ntop(AF_INET6, &addr6, &buffer, socklen_t(INET6_ADDRSTRLEN)) != nil else {
                 return nil
             }
             return String(cString: buffer)

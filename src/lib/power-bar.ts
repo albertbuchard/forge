@@ -1,4 +1,7 @@
-import type { EntityKind } from "@/lib/entity-visuals";
+import {
+  getEntityKindForCrudEntityType,
+  type EntityKind
+} from "@/lib/entity-visuals";
 import type { CrudEntityType, UserSummary } from "@/lib/types";
 import { formatUserSummaryLine } from "@/lib/user-ownership";
 
@@ -66,30 +69,15 @@ export function normalizePowerBarQuery(value: string) {
 }
 
 export function powerBarEntityTypeToKind(
-  entityType: CrudEntityType
+  entityType: CrudEntityType,
+  entity?: Record<string, unknown>
 ): EntityKind | null {
-  switch (entityType) {
-    case "goal":
-    case "project":
-    case "task":
-    case "strategy":
-    case "habit":
-      return entityType;
-    case "psyche_value":
-      return "value";
-    case "behavior_pattern":
-      return "pattern";
-    case "behavior":
-      return "behavior";
-    case "belief_entry":
-      return "belief";
-    case "mode_profile":
-      return "mode";
-    case "trigger_report":
-      return "report";
-    default:
-      return null;
+  if (entityType === "note") {
+    return getEntityKindForCrudEntityType(entityType, {
+      noteKind: readString(entity?.kind) === "wiki" ? "wiki" : "evidence"
+    });
   }
+  return getEntityKindForCrudEntityType(entityType);
 }
 
 export function powerBarEntityTypeLabel(

@@ -174,7 +174,9 @@ export function EntityNotesSurface({
     queryFn: listTriggerReports
   });
 
-  const entityOptionsByType = useMemo(
+  const entityOptionsByType = useMemo<
+    Partial<Record<CrudEntityType, Array<{ id: string; label: string }>>>
+  >(
     () => ({
       goal: shell.snapshot.goals.map((goal) => ({
         id: goal.id,
@@ -234,7 +236,14 @@ export function EntityNotesSurface({
       })),
       calendar_event: [],
       work_block_template: [],
-      task_timebox: []
+      task_timebox: [],
+      preference_catalog: [],
+      preference_catalog_item: [],
+      preference_context: [],
+      preference_item: [],
+      questionnaire_instrument: [],
+      sleep_session: [],
+      workout_session: []
     }),
     [
       behaviorsQuery.data?.behaviors,
@@ -490,7 +499,7 @@ export function EntityNotesSurface({
               ? "Choose linked item"
               : "No linked items available"}
           </option>
-          {(entityOptionsByType[draft.entityType] ?? []).map((option) => (
+          {(entityOptionsByType[draft.entityType] ?? []).map((option: { id: string; label: string }) => (
             <option key={option.id} value={option.id}>
               {option.label}
             </option>

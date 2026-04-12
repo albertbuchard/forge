@@ -4,7 +4,9 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { FacetedTokenSearch, type FacetedTokenOption } from "@/components/search/faceted-token-search";
 import { PageHero } from "@/components/shell/page-hero";
 import { Button } from "@/components/ui/button";
+import { EntityBadge } from "@/components/ui/entity-badge";
 import { createWorkbenchFlow, listWorkbenchFlows } from "@/lib/api";
+import { getEntityKindForWorkbenchFlowKind } from "@/lib/entity-visuals";
 
 export function WorkbenchPage() {
   const navigate = useNavigate();
@@ -93,6 +95,7 @@ export function WorkbenchPage() {
   return (
     <div className="grid gap-5">
       <PageHero
+        entityKind="workbench"
         title="Workbench"
         titleText="Workbench"
         description="Search and launch reusable Forge flows, then open a flow to edit its graph, tools, prompts, and outputs."
@@ -145,9 +148,12 @@ export function WorkbenchPage() {
                   {flow.description || "No description yet."}
                 </div>
               </div>
-              <div className="rounded-full bg-white/[0.06] px-3 py-1 text-[11px] uppercase tracking-[0.16em] text-white/56">
-                {flow.kind}
-              </div>
+              <EntityBadge
+                kind={getEntityKindForWorkbenchFlowKind(flow.kind)}
+                label={flow.kind === "chat" ? "Chat flow" : "Functor flow"}
+                compact
+                gradient={false}
+              />
             </div>
             <div className="mt-4 flex flex-wrap gap-2 text-[12px] text-white/44">
               <span>{flow.graph.nodes.length} nodes</span>

@@ -1,11 +1,13 @@
 import assert from "node:assert/strict";
 import { access, mkdtemp, readFile, rm } from "node:fs/promises";
+import http from "node:http";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { buildServer } from "./app.js";
-import { closeDatabase, getDatabase } from "./db.js";
+import { closeDatabase, configureDatabase, getDatabase } from "./db.js";
 import { BackgroundJobManager } from "./managers/platform/background-job-manager.js";
+import { recordActivityEvent } from "./repositories/activity-events.js";
 import { createCalendarEvent } from "./repositories/calendar.js";
 import { upsertDeletedEntityRecord } from "./repositories/deleted-entities.js";
 import {
@@ -178,6 +180,395 @@ test("companion pairings collapse stale duplicates and support bulk revoke", asy
   }
 });
 
+test("companion source routes reconcile desired and applied state and reject invalid source params", async () => {
+  const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-companion-source-state-"));
+  const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
+
+  try {
+    const operatorCookie = await issueOperatorSessionCookie(app);
+    const pairingResponse = await app.inject({
+      method: "POST",
+      url: "/api/v1/health/pairing-sessions",
+      headers: {
+        cookie: operatorCookie,
+        host: "127.0.0.1:4317"
+      },
+      payload: {
+        userId: "user_operator"
+      }
+    });
+    assert.equal(pairingResponse.statusCode, 201);
+    const pairingPayload = pairingResponse.json() as {
+      session: { id: string };
+      qrPayload: { sessionId: string; pairingToken: string };
+    };
+
+    const verifyResponse = await app.inject({
+      method: "POST",
+      url: "/api/v1/mobile/pairing/verify",
+      payload: {
+        sessionId: pairingPayload.qrPayload.sessionId,
+        pairingToken: pairingPayload.qrPayload.pairingToken,
+        device: {
+          name: "Omar iPhone",
+          platform: "ios",
+          appVersion: "1.0",
+          sourceDevice: "iPhone"
+        }
+      }
+    });
+    assert.equal(verifyResponse.statusCode, 200);
+
+    const patchSourceResponse = await app.inject({
+      method: "PATCH",
+      url: `/api/v1/health/pairing-sessions/${pairingPayload.session.id}/sources/movement`,
+      headers: {
+        cookie: operatorCookie
+      },
+      payload: {
+        desiredEnabled: false
+      }
+    });
+    assert.equal(patchSourceResponse.statusCode, 200);
+    const patchedSession = patchSourceResponse.json() as {
+      session: {
+        sourceStates: {
+          movement: {
+            desiredEnabled: boolean;
+            appliedEnabled: boolean;
+          };
+        };
+      };
+    };
+    assert.equal(patchedSession.session.sourceStates.movement.desiredEnabled, false);
+    assert.equal(patchedSession.session.sourceStates.movement.appliedEnabled, false);
+
+    const invalidSourceResponse = await app.inject({
+      method: "PATCH",
+      url: `/api/v1/health/pairing-sessions/${pairingPayload.session.id}/sources/focus`,
+      headers: {
+        cookie: operatorCookie
+      },
+      payload: {
+        desiredEnabled: true
+      }
+    });
+    assert.equal(invalidSourceResponse.statusCode, 400);
+
+    const mobileStateResponse = await app.inject({
+      method: "POST",
+      url: "/api/v1/mobile/source-state",
+      payload: {
+        sessionId: pairingPayload.qrPayload.sessionId,
+        pairingToken: pairingPayload.qrPayload.pairingToken,
+        source: "movement",
+        desiredEnabled: true,
+        appliedEnabled: false,
+        authorizationStatus: "pending",
+        syncEligible: false,
+        lastObservedAt: "2026-04-12T08:00:00.000Z",
+        metadata: {
+          source: "test"
+        }
+      }
+    });
+    assert.equal(mobileStateResponse.statusCode, 200);
+    const mobileState = mobileStateResponse.json() as {
+      pairingSession: {
+        sourceStates: {
+          movement: {
+            desiredEnabled: boolean;
+            appliedEnabled: boolean;
+            authorizationStatus: string;
+            syncEligible: boolean;
+            lastObservedAt: string | null;
+          };
+        };
+      };
+    };
+    assert.equal(mobileState.pairingSession.sourceStates.movement.desiredEnabled, true);
+    assert.equal(mobileState.pairingSession.sourceStates.movement.appliedEnabled, false);
+    assert.equal(mobileState.pairingSession.sourceStates.movement.authorizationStatus, "pending");
+    assert.equal(mobileState.pairingSession.sourceStates.movement.syncEligible, false);
+    assert.equal(
+      mobileState.pairingSession.sourceStates.movement.lastObservedAt,
+      "2026-04-12T08:00:00.000Z"
+    );
+
+    const overviewResponse = await app.inject({
+      method: "GET",
+      url: "/api/v1/health/overview",
+      headers: {
+        cookie: operatorCookie
+      }
+    });
+    assert.equal(overviewResponse.statusCode, 200);
+    const overview = overviewResponse.json() as {
+      overview: {
+        pairings: Array<{
+          id: string;
+          sourceStates: {
+            health: object;
+            movement: {
+              desiredEnabled: boolean;
+              appliedEnabled: boolean;
+              authorizationStatus: string;
+            };
+            screenTime: object;
+          };
+        }>;
+      };
+    };
+    const pairing = overview.overview.pairings.find(
+      (entry) => entry.id === pairingPayload.session.id
+    );
+    assert.ok(pairing);
+    assert.equal(pairing?.sourceStates.movement.desiredEnabled, true);
+    assert.equal(pairing?.sourceStates.movement.appliedEnabled, false);
+    assert.equal(pairing?.sourceStates.movement.authorizationStatus, "pending");
+  } finally {
+    await app.close();
+    closeDatabase();
+    await rm(rootDir, { recursive: true, force: true });
+  }
+});
+
+test("life force routes return stable stats and accept profile, template, and fatigue updates", async () => {
+  const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-life-force-routes-"));
+  const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
+
+  try {
+    const operatorCookie = await issueOperatorSessionCookie(app);
+
+    const initial = await app.inject({
+      method: "GET",
+      url: "/api/v1/life-force",
+      headers: { cookie: operatorCookie }
+    });
+    assert.equal(initial.statusCode, 200);
+    const initialBody = initial.json() as {
+      lifeForce: {
+        stats: Array<{ key: string }>;
+        warnings: Array<{ id: string }>;
+        currentCurve: Array<{ minuteOfDay: number; rateApPerHour: number }>;
+      };
+      templates: Array<{ weekday: number; points: Array<{ minuteOfDay: number }> }>;
+    };
+    assert.equal(initialBody.lifeForce.stats.length, 6);
+    assert.equal(initialBody.templates.length, 7);
+
+    const profilePatch = await app.inject({
+      method: "PATCH",
+      url: "/api/v1/life-force/profile",
+      headers: { cookie: operatorCookie },
+      payload: {
+        baseDailyAp: 230,
+        readinessMultiplier: 1.05,
+        stats: {
+          life_force: 3,
+          activation: 2,
+          focus: 4,
+          vigor: 2,
+          composure: 2,
+          flow: 3
+        }
+      }
+    });
+    assert.equal(profilePatch.statusCode, 200);
+    const patchedProfile = profilePatch.json() as {
+      lifeForce: { baselineDailyAp: number; readinessMultiplier: number; stats: Array<{ key: string; level: number }> };
+    };
+    assert.equal(patchedProfile.lifeForce.baselineDailyAp, 230);
+    assert.equal(patchedProfile.lifeForce.readinessMultiplier, 1.05);
+    assert.equal(
+      patchedProfile.lifeForce.stats.find((entry) => entry.key === "focus")?.level,
+      4
+    );
+
+    const templateUpdate = await app.inject({
+      method: "PUT",
+      url: `/api/v1/life-force/templates/${new Date().getUTCDay()}`,
+      headers: { cookie: operatorCookie },
+      payload: {
+        points: [
+          { minuteOfDay: 0, rateApPerHour: 0 },
+          { minuteOfDay: 8 * 60, rateApPerHour: 8 },
+          { minuteOfDay: 12 * 60, rateApPerHour: 12 },
+          { minuteOfDay: 18 * 60, rateApPerHour: 8 },
+          { minuteOfDay: 24 * 60, rateApPerHour: 0 }
+        ]
+      }
+    });
+    assert.equal(templateUpdate.statusCode, 200);
+    const templateBody = templateUpdate.json() as {
+      weekday: number;
+      points: Array<{ minuteOfDay: number; rateApPerHour: number }>;
+    };
+    assert.equal(templateBody.points.length, 5);
+
+    const fatigueResponse = await app.inject({
+      method: "POST",
+      url: "/api/v1/life-force/fatigue-signals",
+      headers: { cookie: operatorCookie },
+      payload: { signalType: "tired" }
+    });
+    assert.equal(fatigueResponse.statusCode, 200);
+    const fatigueBody = fatigueResponse.json() as {
+      lifeForce: { fatigueBufferApPerHour: number; warnings: Array<{ id: string }> };
+    };
+    assert.ok(fatigueBody.lifeForce.fatigueBufferApPerHour >= 4);
+    assert.ok(Array.isArray(fatigueBody.lifeForce.warnings));
+  } finally {
+    await app.close();
+    closeDatabase();
+    await rm(rootDir, { recursive: true, force: true });
+  }
+});
+
+test("task close flow requires a work log and split route marks the parent without completion rewards", async () => {
+  const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-life-force-task-close-"));
+  const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
+
+  try {
+    const operatorCookie = await issueOperatorSessionCookie(app);
+    const snapshotResponse = await app.inject({
+      method: "GET",
+      url: "/api/v1/context",
+      headers: { cookie: operatorCookie }
+    });
+    assert.equal(snapshotResponse.statusCode, 200);
+    const snapshot = snapshotResponse.json() as {
+      dashboard: { projects: Array<{ id: string; goalId: string }> };
+    };
+    const project = snapshot.dashboard.projects[0]!;
+
+    const createResponse = await app.inject({
+      method: "POST",
+      url: "/api/v1/tasks",
+      headers: { cookie: operatorCookie },
+      payload: {
+        title: "Close-flow life force task",
+        description: "",
+        status: "focus",
+        priority: "medium",
+        owner: "Albert",
+        userId: "user_operator",
+        goalId: project.goalId,
+        projectId: project.id,
+        dueDate: null,
+        effort: "deep",
+        energy: "steady",
+        points: 60,
+        plannedDurationSeconds: 86_400,
+        tagIds: [],
+        actionCostBand: "standard",
+        notes: []
+      }
+    });
+    assert.equal(createResponse.statusCode, 201);
+    const createdTask = createResponse.json() as { task: { id: string } };
+
+    const deniedClose = await app.inject({
+      method: "PATCH",
+      url: `/api/v1/tasks/${createdTask.task.id}`,
+      headers: { cookie: operatorCookie },
+      payload: { status: "done", enforceTodayWorkLog: true }
+    });
+    assert.equal(deniedClose.statusCode, 409);
+    const deniedBody = deniedClose.json() as { code: string };
+    assert.equal(deniedBody.code, "task_completion_work_log_required");
+
+    const completedClose = await app.inject({
+      method: "PATCH",
+      url: `/api/v1/tasks/${createdTask.task.id}`,
+      headers: { cookie: operatorCookie },
+      payload: {
+        status: "done",
+        completedTodayWorkSeconds: 30 * 60
+      }
+    });
+    assert.equal(completedClose.statusCode, 200);
+    const completedTask = completedClose.json() as {
+      task: {
+        status: string;
+        actionPointSummary: { spentTodayAp: number };
+      };
+    };
+    assert.equal(completedTask.task.status, "done");
+    assert.ok(completedTask.task.actionPointSummary.spentTodayAp > 0);
+
+    const splitCreateResponse = await app.inject({
+      method: "POST",
+      url: "/api/v1/tasks",
+      headers: { cookie: operatorCookie },
+      payload: {
+        title: "Split-flow life force task",
+        description: "",
+        status: "focus",
+        priority: "medium",
+        owner: "Albert",
+        userId: "user_operator",
+        goalId: project.goalId,
+        projectId: project.id,
+        dueDate: null,
+        effort: "deep",
+        energy: "steady",
+        points: 90,
+        plannedDurationSeconds: 86_400,
+        tagIds: [],
+        actionCostBand: "standard",
+        notes: []
+      }
+    });
+    assert.equal(splitCreateResponse.statusCode, 201);
+    const splitTaskCreated = splitCreateResponse.json() as { task: { id: string } };
+
+    const splitResponse = await app.inject({
+      method: "POST",
+      url: `/api/v1/tasks/${splitTaskCreated.task.id}/split`,
+      headers: { cookie: operatorCookie },
+      payload: {
+        firstTitle: "Split child one",
+        secondTitle: "Split child two",
+        remainingRatio: 0.6
+      }
+    });
+    assert.equal(splitResponse.statusCode, 200);
+    const splitBody = splitResponse.json() as {
+      parent: { id: string; resolutionKind: string | null; status: string };
+      children: Array<{
+        splitParentTaskId: string | null;
+        actionPointSummary: { totalCostAp: number };
+      }>;
+    };
+    assert.equal(splitBody.parent.status, "done");
+    assert.equal(splitBody.parent.resolutionKind, "split");
+    assert.equal(splitBody.children.length, 2);
+    assert.ok(
+      splitBody.children.every(
+        (child) => child.splitParentTaskId === splitBody.parent.id
+      )
+    );
+
+    const rewardCount = (
+      getDatabase()
+        .prepare(
+          `SELECT COUNT(*) AS count
+           FROM reward_ledger
+           WHERE entity_type = 'task'
+             AND entity_id = ?
+             AND reversed_by_reward_id IS NULL`
+        )
+        .get(splitBody.parent.id) as { count: number }
+    ).count;
+    assert.equal(rewardCount, 0);
+  } finally {
+    await app.close();
+    closeDatabase();
+    await rm(rootDir, { recursive: true, force: true });
+  }
+});
+
 test("dashboard bootstraps goals, tasks, tags, and premium stats", async () => {
   const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-dashboard-"));
   const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
@@ -277,6 +668,98 @@ test("task creation and column movement persist through the API", async () => {
     ).task;
     assert.equal(movedTask.status, "done");
     assert.ok(movedTask.completedAt);
+  } finally {
+    await app.close();
+    closeDatabase();
+    await rm(rootDir, { recursive: true, force: true });
+  }
+});
+
+test("knowledge graph routes return a unified graph and focused neighborhood", async () => {
+  const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-knowledge-graph-"));
+  const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
+
+  try {
+    const graphResponse = await app.inject({
+      method: "GET",
+      url: "/api/v1/knowledge-graph"
+    });
+
+    assert.equal(graphResponse.statusCode, 200);
+    const graphPayload = graphResponse.json() as {
+      graph: {
+        nodes: Array<{
+          id: string;
+          entityType: string;
+          entityId: string;
+          entityKind: string;
+          graphHref: string;
+          iconName: string | null;
+          accentToken: string | null;
+        }>;
+        edges: Array<{
+          id: string;
+          source: string;
+          target: string;
+          family: string;
+        }>;
+      };
+    };
+
+    assert.ok(graphPayload.graph.nodes.length > 0);
+    assert.ok(graphPayload.graph.edges.length > 0);
+    assert.ok(
+      graphPayload.graph.nodes.some((node) => node.entityType === "tag")
+    );
+    assert.ok(
+      graphPayload.graph.nodes.some(
+        (node) =>
+          node.entityType === "workbench_surface" &&
+          node.entityId === "workbench"
+      )
+    );
+    assert.ok(
+      graphPayload.graph.nodes.every(
+        (node) => node.graphHref.startsWith("/knowledge-graph?focus=") && node.iconName
+      )
+    );
+    assert.ok(
+      graphPayload.graph.edges.some((edge) => edge.family === "structural")
+    );
+
+    const focusCandidate =
+      graphPayload.graph.nodes.find((node) => node.entityType === "goal") ??
+      graphPayload.graph.nodes[0];
+
+    assert.ok(focusCandidate);
+
+    const focusResponse = await app.inject({
+      method: "GET",
+      url: `/api/v1/knowledge-graph/focus?entityType=${encodeURIComponent(
+        focusCandidate.entityType
+      )}&entityId=${encodeURIComponent(focusCandidate.entityId)}`
+    });
+
+    assert.equal(focusResponse.statusCode, 200);
+    const focusPayload = focusResponse.json() as {
+      focus: {
+        focusNode: { id: string } | null;
+        firstRingNodes: Array<{ id: string }>;
+        neighborhoodEdges: Array<{ source: string; target: string }>;
+        familyGroups: Array<{ family: string }>;
+      };
+    };
+
+    assert.equal(focusPayload.focus.focusNode?.id, focusCandidate.id);
+    assert.ok(focusPayload.focus.firstRingNodes.length > 0);
+    assert.ok(focusPayload.focus.neighborhoodEdges.length > 0);
+    assert.ok(focusPayload.focus.familyGroups.length > 0);
+    assert.ok(
+      focusPayload.focus.neighborhoodEdges.every(
+        (edge) =>
+          edge.source === focusCandidate.id || edge.target === focusCandidate.id
+      )
+    );
   } finally {
     await app.close();
     closeDatabase();
@@ -644,7 +1127,128 @@ test("mobile health sync builds richer summaries and reconciles habit-generated 
           healthKitAuthorized: true,
           backgroundRefreshEnabled: true,
           motionReady: false,
-          locationReady: false
+          locationReady: false,
+          screenTimeReady: true
+        },
+        screenTime: {
+          settings: {
+            trackingEnabled: true,
+            syncEnabled: true,
+            authorizationStatus: "approved",
+            captureState: "ready",
+            lastCapturedDayKey: "2026-04-05",
+            lastCaptureStartedAt: "2026-04-05T07:00:00.000Z",
+            lastCaptureEndedAt: "2026-04-05T09:00:00.000Z",
+            metadata: {
+              source: "test_fixture"
+            }
+          },
+          daySummaries: [
+            {
+              dateKey: "2026-04-05",
+              totalActivitySeconds: 5400,
+              pickupCount: 14,
+              notificationCount: 8,
+              firstPickupAt: "2026-04-05T07:12:00.000Z",
+              longestActivitySeconds: 2100,
+              topAppBundleIdentifiers: [
+                "com.apple.mobilesafari",
+                "com.apple.MobileSMS"
+              ],
+              topCategoryLabels: ["Productivity", "Social"],
+              metadata: {
+                capture: "hourly_backfill"
+              }
+            }
+          ],
+          hourlySegments: [
+            {
+              dateKey: "2026-04-05",
+              hourIndex: 7,
+              startedAt: "2026-04-05T07:00:00.000Z",
+              endedAt: "2026-04-05T08:00:00.000Z",
+              totalActivitySeconds: 2700,
+              pickupCount: 6,
+              notificationCount: 3,
+              firstPickupAt: "2026-04-05T07:12:00.000Z",
+              longestActivityStartedAt: "2026-04-05T07:18:00.000Z",
+              longestActivityEndedAt: "2026-04-05T07:45:00.000Z",
+              metadata: {
+                source: "test_fixture"
+              },
+              apps: [
+                {
+                  bundleIdentifier: "com.apple.mobilesafari",
+                  displayName: "Safari",
+                  categoryLabel: "Productivity",
+                  totalActivitySeconds: 1800,
+                  pickupCount: 4,
+                  notificationCount: 0
+                },
+                {
+                  bundleIdentifier: "com.apple.MobileSMS",
+                  displayName: "Messages",
+                  categoryLabel: "Social",
+                  totalActivitySeconds: 600,
+                  pickupCount: 2,
+                  notificationCount: 3
+                }
+              ],
+              categories: [
+                {
+                  categoryLabel: "Productivity",
+                  totalActivitySeconds: 1800
+                },
+                {
+                  categoryLabel: "Social",
+                  totalActivitySeconds: 600
+                }
+              ]
+            },
+            {
+              dateKey: "2026-04-05",
+              hourIndex: 8,
+              startedAt: "2026-04-05T08:00:00.000Z",
+              endedAt: "2026-04-05T09:00:00.000Z",
+              totalActivitySeconds: 2700,
+              pickupCount: 8,
+              notificationCount: 5,
+              firstPickupAt: "2026-04-05T08:05:00.000Z",
+              longestActivityStartedAt: "2026-04-05T08:10:00.000Z",
+              longestActivityEndedAt: "2026-04-05T08:45:00.000Z",
+              metadata: {
+                source: "test_fixture"
+              },
+              apps: [
+                {
+                  bundleIdentifier: "com.apple.MobileSMS",
+                  displayName: "Messages",
+                  categoryLabel: "Social",
+                  totalActivitySeconds: 1200,
+                  pickupCount: 5,
+                  notificationCount: 5
+                },
+                {
+                  bundleIdentifier: "com.apple.mobilesafari",
+                  displayName: "Safari",
+                  categoryLabel: "Productivity",
+                  totalActivitySeconds: 900,
+                  pickupCount: 3,
+                  notificationCount: 0
+                }
+              ],
+              categories: [
+                {
+                  categoryLabel: "Social",
+                  totalActivitySeconds: 1200
+                },
+                {
+                  categoryLabel: "Productivity",
+                  totalActivitySeconds: 900
+                }
+              ]
+            }
+          ]
         },
         sleepSessions: [
           {
@@ -726,10 +1330,13 @@ test("mobile health sync builds richer summaries and reconciles habit-generated 
           counts: {
             reflectiveSleepSessions: number;
             reconciledWorkouts: number;
+            screenTimeDaySummaries?: number;
+            screenTimeHourlySegments?: number;
           };
           permissions: {
             healthKitAuthorized: boolean;
             backgroundRefreshEnabled: boolean;
+            screenTimeReady?: boolean;
           };
         };
       }
@@ -737,8 +1344,11 @@ test("mobile health sync builds richer summaries and reconciles habit-generated 
     assert.equal(overview.healthState, "healthy_sync");
     assert.equal(overview.counts.reflectiveSleepSessions, 1);
     assert.equal(overview.counts.reconciledWorkouts, 1);
+    assert.equal(overview.counts.screenTimeDaySummaries, 1);
+    assert.equal(overview.counts.screenTimeHourlySegments, 2);
     assert.equal(overview.permissions.healthKitAuthorized, true);
     assert.equal(overview.permissions.backgroundRefreshEnabled, true);
+    assert.equal(overview.permissions.screenTimeReady, true);
 
     const sleepResponse = await app.inject({
       method: "GET",
@@ -791,6 +1401,306 @@ test("mobile health sync builds richer summaries and reconciles habit-generated 
         (entry) => entry.workoutType === "walk" && entry.totalMinutes >= 40
       )
     );
+
+    const screenTimeSettingsResponse = await app.inject({
+      method: "GET",
+      url: "/api/v1/screen-time/settings"
+    });
+    assert.equal(screenTimeSettingsResponse.statusCode, 200);
+    const screenTimeSettings = (
+      screenTimeSettingsResponse.json() as {
+        settings: {
+          authorizationStatus: string;
+          captureState: string;
+          trackingEnabled: boolean;
+          syncEnabled: boolean;
+          captureFreshness: string;
+          capturedDayCount: number;
+          capturedHourCount: number;
+        };
+      }
+    ).settings;
+    assert.equal(screenTimeSettings.authorizationStatus, "approved");
+    assert.equal(screenTimeSettings.captureState, "ready");
+    assert.equal(screenTimeSettings.trackingEnabled, true);
+    assert.equal(screenTimeSettings.syncEnabled, true);
+    assert.equal(screenTimeSettings.captureFreshness, "stale");
+    assert.equal(screenTimeSettings.capturedDayCount, 1);
+    assert.equal(screenTimeSettings.capturedHourCount, 2);
+
+    const screenTimeDayResponse = await app.inject({
+      method: "GET",
+      url: "/api/v1/screen-time/day?date=2026-04-05"
+    });
+    assert.equal(screenTimeDayResponse.statusCode, 200);
+    const screenTimeDay = (
+      screenTimeDayResponse.json() as {
+        screenTime: {
+          summary: {
+            totalActivitySeconds: number;
+            pickupCount: number;
+            notificationCount: number;
+            activeHourCount: number;
+          };
+          topApps: Array<{
+            displayName: string;
+            totalActivitySeconds: number;
+          }>;
+        };
+      }
+    ).screenTime;
+    assert.equal(screenTimeDay.summary.totalActivitySeconds, 5400);
+    assert.equal(screenTimeDay.summary.pickupCount, 14);
+    assert.equal(screenTimeDay.summary.notificationCount, 8);
+    assert.equal(screenTimeDay.summary.activeHourCount, 2);
+    assert.ok(
+      screenTimeDay.topApps.some(
+        (app) =>
+          app.displayName === "Safari" && app.totalActivitySeconds >= 1800
+      )
+    );
+    assert.ok(
+      screenTimeDay.topApps.some(
+        (app) =>
+          app.displayName === "Messages" && app.totalActivitySeconds >= 1800
+      )
+    );
+
+    const screenTimeMonthResponse = await app.inject({
+      method: "GET",
+      url: "/api/v1/screen-time/month?month=2026-04"
+    });
+    assert.equal(screenTimeMonthResponse.statusCode, 200);
+    const screenTimeMonth = (
+      screenTimeMonthResponse.json() as {
+        screenTime: {
+          totals: {
+            totalActivitySeconds: number;
+            pickupCount: number;
+            notificationCount: number;
+            activeDays: number;
+          };
+        };
+      }
+    ).screenTime;
+    assert.equal(screenTimeMonth.totals.totalActivitySeconds, 5400);
+    assert.equal(screenTimeMonth.totals.pickupCount, 14);
+    assert.equal(screenTimeMonth.totals.notificationCount, 8);
+    assert.equal(screenTimeMonth.totals.activeDays, 1);
+
+    const screenTimeAllTimeResponse = await app.inject({
+      method: "GET",
+      url: "/api/v1/screen-time/all-time"
+    });
+    assert.equal(screenTimeAllTimeResponse.statusCode, 200);
+    const screenTimeAllTime = (
+      screenTimeAllTimeResponse.json() as {
+        screenTime: {
+          summary: {
+            dayCount: number;
+            totalActivitySeconds: number;
+            totalPickups: number;
+          };
+          topCategories: Array<{
+            categoryLabel: string;
+          }>;
+        };
+      }
+    ).screenTime;
+    assert.equal(screenTimeAllTime.summary.dayCount, 1);
+    assert.equal(screenTimeAllTime.summary.totalActivitySeconds, 5400);
+    assert.equal(screenTimeAllTime.summary.totalPickups, 14);
+    assert.ok(
+      screenTimeAllTime.topCategories.some(
+        (category) => category.categoryLabel === "Productivity"
+      )
+    );
+  } finally {
+    await app.close();
+    closeDatabase();
+    await rm(rootDir, { recursive: true, force: true });
+  }
+});
+
+test("mobile health sync accepts screen time warning paths and records warning diagnostics", async () => {
+  const rootDir = await mkdtemp(
+    path.join(os.tmpdir(), "forge-mobile-health-screen-time-warning-")
+  );
+  const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
+
+  try {
+    const operatorCookie = await issueOperatorSessionCookie(app);
+    const pairingResponse = await app.inject({
+      method: "POST",
+      url: "/api/v1/health/pairing-sessions",
+      headers: {
+        cookie: operatorCookie,
+        host: "127.0.0.1:4317"
+      },
+      payload: {
+        userId: "user_operator"
+      }
+    });
+    assert.equal(pairingResponse.statusCode, 201);
+    const qrPayload = (
+      pairingResponse.json() as {
+        qrPayload: {
+          sessionId: string;
+          pairingToken: string;
+        };
+      }
+    ).qrPayload;
+
+    const approvedEmptyResponse = await app.inject({
+      method: "POST",
+      url: "/api/v1/mobile/healthkit/sync",
+      payload: {
+        sessionId: qrPayload.sessionId,
+        pairingToken: qrPayload.pairingToken,
+        device: {
+          name: "Omar iPhone",
+          platform: "ios",
+          appVersion: "1.0",
+          sourceDevice: "iPhone"
+        },
+        permissions: {
+          healthKitAuthorized: true,
+          backgroundRefreshEnabled: true,
+          motionReady: false,
+          locationReady: false,
+          screenTimeReady: true
+        },
+        sleepSessions: [],
+        workouts: [],
+        screenTime: {
+          settings: {
+            trackingEnabled: true,
+            syncEnabled: true,
+            authorizationStatus: "approved",
+            captureState: "ready",
+            lastCapturedDayKey: "2026-04-11",
+            lastCaptureStartedAt: "2026-04-11T08:00:00.000Z",
+            lastCaptureEndedAt: "2026-04-11T08:00:00.000Z",
+            metadata: {
+              source: "warning_test"
+            }
+          },
+          daySummaries: [],
+          hourlySegments: []
+        }
+      }
+    });
+    assert.equal(approvedEmptyResponse.statusCode, 200);
+
+    const unavailableResponse = await app.inject({
+      method: "POST",
+      url: "/api/v1/mobile/healthkit/sync",
+      payload: {
+        sessionId: qrPayload.sessionId,
+        pairingToken: qrPayload.pairingToken,
+        device: {
+          name: "Omar iPhone",
+          platform: "ios",
+          appVersion: "1.0",
+          sourceDevice: "iPhone"
+        },
+        permissions: {
+          healthKitAuthorized: true,
+          backgroundRefreshEnabled: true,
+          motionReady: false,
+          locationReady: false,
+          screenTimeReady: false
+        },
+        sleepSessions: [],
+        workouts: [],
+        screenTime: {
+          settings: {
+            trackingEnabled: true,
+            syncEnabled: false,
+            authorizationStatus: "unavailable",
+            captureState: "needs_authorization",
+            lastCapturedDayKey: null,
+            lastCaptureStartedAt: null,
+            lastCaptureEndedAt: null,
+            metadata: {
+              source: "warning_test"
+            }
+          },
+          daySummaries: [],
+          hourlySegments: []
+        }
+      }
+    });
+    assert.equal(unavailableResponse.statusCode, 200);
+
+    const logsResponse = await app.inject({
+      method: "GET",
+      url: "/api/v1/diagnostics/logs?scope=screen_time_sync&limit=20",
+      headers: {
+        cookie: operatorCookie
+      }
+    });
+    assert.equal(logsResponse.statusCode, 200);
+    const logsBody = logsResponse.json() as {
+      logs: Array<{
+        eventKey: string;
+        level: string;
+        message: string;
+      }>;
+    };
+
+    assert.ok(
+      logsBody.logs.some(
+        (entry) =>
+          entry.eventKey === "screen_time_capture_empty" &&
+          entry.level === "warning"
+      )
+    );
+    assert.ok(
+      logsBody.logs.some(
+        (entry) =>
+          entry.eventKey === "screen_time_sync_ingested" &&
+          entry.level === "warning" &&
+          entry.message.includes("unavailable")
+      )
+    );
+  } finally {
+    await app.close();
+    closeDatabase();
+    await rm(rootDir, { recursive: true, force: true });
+  }
+});
+
+test("diagnostic log schema accepts warn as a warning alias", async () => {
+  const rootDir = await mkdtemp(
+    path.join(os.tmpdir(), "forge-diagnostic-warn-alias-")
+  );
+  const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
+
+  try {
+    const operatorCookie = await issueOperatorSessionCookie(app);
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/v1/diagnostics/logs",
+      headers: {
+        cookie: operatorCookie
+      },
+      payload: {
+        level: "warn",
+        scope: "diagnostic_alias_test",
+        eventKey: "warn_alias",
+        message: "Legacy warn payload should normalize to warning.",
+        details: {}
+      }
+    });
+
+    assert.equal(response.statusCode, 201);
+    const body = response.json() as {
+      log: {
+        level: string;
+      };
+    };
+    assert.equal(body.log.level, "warning");
   } finally {
     await app.close();
     closeDatabase();
@@ -842,10 +1752,81 @@ test("movement sync stores places, stays, trips, and serves the movement workspa
           healthKitAuthorized: true,
           backgroundRefreshEnabled: true,
           motionReady: true,
-          locationReady: true
+          locationReady: true,
+          screenTimeReady: true
         },
         sleepSessions: [],
         workouts: [],
+        screenTime: {
+          settings: {
+            trackingEnabled: true,
+            syncEnabled: true,
+            authorizationStatus: "approved",
+            captureState: "ready",
+            lastCapturedDayKey: "2026-04-06",
+            lastCaptureStartedAt: "2026-04-06T08:00:00.000Z",
+            lastCaptureEndedAt: "2026-04-06T09:00:00.000Z",
+            metadata: {
+              source: "movement_test_fixture"
+            }
+          },
+          daySummaries: [
+            {
+              dateKey: "2026-04-06",
+              totalActivitySeconds: 2400,
+              pickupCount: 6,
+              notificationCount: 2,
+              firstPickupAt: "2026-04-06T08:04:00.000Z",
+              longestActivitySeconds: 1200,
+              topAppBundleIdentifiers: ["com.apple.mobilesafari"],
+              topCategoryLabels: ["Navigation"],
+              metadata: {}
+            }
+          ],
+          hourlySegments: [
+            {
+              dateKey: "2026-04-06",
+              hourIndex: 8,
+              startedAt: "2026-04-06T08:00:00.000Z",
+              endedAt: "2026-04-06T09:00:00.000Z",
+              totalActivitySeconds: 2400,
+              pickupCount: 6,
+              notificationCount: 2,
+              firstPickupAt: "2026-04-06T08:04:00.000Z",
+              longestActivityStartedAt: "2026-04-06T08:08:00.000Z",
+              longestActivityEndedAt: "2026-04-06T08:28:00.000Z",
+              metadata: {},
+              apps: [
+                {
+                  bundleIdentifier: "com.apple.mobilesafari",
+                  displayName: "Safari",
+                  categoryLabel: "Navigation",
+                  totalActivitySeconds: 1800,
+                  pickupCount: 5,
+                  notificationCount: 0
+                },
+                {
+                  bundleIdentifier: "com.apple.MobileSMS",
+                  displayName: "Messages",
+                  categoryLabel: "Social",
+                  totalActivitySeconds: 600,
+                  pickupCount: 1,
+                  notificationCount: 2
+                }
+              ],
+              categories: [
+                {
+                  categoryLabel: "Navigation",
+                  totalActivitySeconds: 1800
+                },
+                {
+                  categoryLabel: "Social",
+                  totalActivitySeconds: 600
+                }
+              ]
+            }
+          ]
+        },
         movement: {
           settings: {
             trackingEnabled: true,
@@ -1039,7 +2020,8 @@ test("movement sync stores places, stays, trips, and serves the movement workspa
           healthKitAuthorized: true,
           backgroundRefreshEnabled: true,
           motionReady: true,
-          locationReady: true
+          locationReady: true,
+          screenTimeReady: true
         },
         sleepSessions: [],
         workouts: [],
@@ -1131,19 +2113,30 @@ test("movement sync stores places, stays, trips, and serves the movement workspa
     assert.equal(dayResponse.statusCode, 200);
     const day = (dayResponse.json() as {
       movement: {
-        summary: { tripCount: number; stayCount: number };
+        summary: {
+          tripCount: number;
+          stayCount: number;
+          estimatedScreenTimeSeconds: number;
+        };
         places: Array<{ label: string }>;
         trips: Array<{
           id: string;
           externalUid: string;
           label: string;
           distanceMeters: number;
+          estimatedScreenTimeSeconds: number;
+          topApps: Array<{ displayName: string }>;
         }>;
-        stays: Array<{ id: string; label: string }>;
+        stays: Array<{
+          id: string;
+          label: string;
+          estimatedScreenTimeSeconds: number;
+        }>;
       };
     }).movement;
     assert.equal(day.summary.tripCount, 2);
     assert.equal(day.summary.stayCount, 2);
+    assert.ok(day.summary.estimatedScreenTimeSeconds > 0);
     assert.ok(day.places.some((place) => place.label === "Home"));
     const homePlace = day.places.find((place) => place.label === "Home") as
       | { label: string; categoryTags?: string[] }
@@ -1171,6 +2164,10 @@ test("movement sync stores places, stays, trips, and serves the movement workspa
           trip: {
             id: string;
             externalUid: string;
+            estimatedScreenTimeSeconds: number;
+            topApps: Array<{
+              displayName: string;
+            }>;
             points: Array<{
               id: string;
               externalUid: string;
@@ -1195,6 +2192,17 @@ test("movement sync stores places, stays, trips, and serves the movement workspa
     assert.ok(syncedHomePlace?.categoryTags.includes("home"));
     assert.ok(syncedHomePlace?.categoryTags.includes("gym"));
     assert.ok(syncedHomePlace?.categoryTags.includes("parents-house"));
+    assert.ok(day.trips.some((trip) => trip.estimatedScreenTimeSeconds > 0));
+    assert.ok(
+      day.trips.some((trip) =>
+        trip.topApps.some((app) => app.displayName === "Safari")
+      )
+    );
+    assert.ok(day.stays.some((stay) => stay.estimatedScreenTimeSeconds > 0));
+    assert.ok(tripDetail.trip.estimatedScreenTimeSeconds > 0);
+    assert.ok(
+      tripDetail.trip.topApps.some((app) => app.displayName === "Safari")
+    );
 
     const timelineResponse = await app.inject({
       method: "GET",
@@ -1892,7 +2900,8 @@ test("movement timeline hides overlapping stays and trips and flags them invalid
       movement: {
         invalidSegmentCount: number;
         segments: Array<{
-          kind: "stay" | "trip";
+          kind: "stay" | "trip" | "missing";
+          origin?: "recorded" | "continued_stay" | "repaired_gap" | "missing";
           isInvalid: boolean;
           stay: { label: string } | null;
           trip: { label: string } | null;
@@ -1900,11 +2909,17 @@ test("movement timeline hides overlapping stays and trips and flags them invalid
       };
     };
     assert.equal(timelineWithInvalid.movement.invalidSegmentCount, 2);
-    assert.equal(timelineWithInvalid.movement.segments.length, 3);
+    assert.ok(timelineWithInvalid.movement.segments.length >= 2);
     assert.equal(
       timelineWithInvalid.movement.segments.filter((segment) => segment.isInvalid)
         .length,
       2
+    );
+    assert.equal(
+      timelineWithInvalid.movement.segments.filter(
+        (segment) => segment.origin === "repaired_gap" && segment.kind === "stay"
+      ).length,
+      1
     );
 
     const invalidStay = getDatabase()
@@ -1950,11 +2965,20 @@ test("movement timeline hides overlapping stays and trips and flags them invalid
     const healedTimeline = healedTimelineResponse.json() as {
       movement: {
         invalidSegmentCount: number;
-        segments: Array<{ id: string; kind: "stay" | "trip" }>;
+        segments: Array<{
+          id: string;
+          kind: "stay" | "trip" | "missing";
+          origin?: "recorded" | "repaired_gap" | "missing";
+        }>;
       };
     };
     assert.equal(healedTimeline.movement.invalidSegmentCount, 0);
-    assert.equal(healedTimeline.movement.segments.length, 3);
+    assert.ok(healedTimeline.movement.segments.length >= 2);
+    assert.ok(
+      healedTimeline.movement.segments.filter(
+        (segment) => segment.origin === "repaired_gap" && segment.kind === "stay"
+      ).length >= 1
+    );
   } finally {
     await app.close();
     closeDatabase();
@@ -2102,6 +3126,500 @@ test("movement timeline hides tiny trips under the minimum distance or duration"
     assert.equal(tripMetadata.validation?.invalid, true);
     assert.equal(tripMetadata.validation?.invalidTinyMove, true);
     assert.ok((tripMetadata.validation?.tinyMoveIssues?.length ?? 0) >= 1);
+  } finally {
+    await app.close();
+    closeDatabase();
+    await rm(rootDir, { recursive: true, force: true });
+  }
+});
+
+test("movement day and timeline classify short gaps into repaired stays, repaired trips, and missing spans", async () => {
+  const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-movement-gap-classifier-"));
+  const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
+
+  try {
+    const operatorCookie = await issueOperatorSessionCookie(app);
+    const pairingResponse = await app.inject({
+      method: "POST",
+      url: "/api/v1/health/pairing-sessions",
+      headers: {
+        cookie: operatorCookie,
+        host: "127.0.0.1:4317"
+      },
+      payload: {
+        userId: "user_operator"
+      }
+    });
+    assert.equal(pairingResponse.statusCode, 201);
+    const qrPayload = (
+      pairingResponse.json() as {
+        qrPayload: {
+          sessionId: string;
+          pairingToken: string;
+        };
+      }
+    ).qrPayload;
+
+    const syncResponse = await app.inject({
+      method: "POST",
+      url: "/api/v1/mobile/healthkit/sync",
+      payload: {
+        sessionId: qrPayload.sessionId,
+        pairingToken: qrPayload.pairingToken,
+        device: {
+          name: "Gap Test iPhone",
+          platform: "ios",
+          appVersion: "1.0",
+          sourceDevice: "iPhone"
+        },
+        permissions: {
+          healthKitAuthorized: true,
+          backgroundRefreshEnabled: true,
+          motionReady: true,
+          locationReady: true
+        },
+        sleepSessions: [],
+        workouts: [],
+        movement: {
+          settings: {
+            trackingEnabled: true,
+            publishMode: "auto_publish",
+            retentionMode: "aggregates_only",
+            locationPermissionStatus: "always",
+            motionPermissionStatus: "ready",
+            backgroundTrackingReady: true,
+            metadata: {}
+          },
+          knownPlaces: [
+            {
+              externalUid: "place_home_classifier",
+              label: "Home",
+              aliases: [],
+              latitude: 46.5191,
+              longitude: 6.6323,
+              radiusMeters: 100,
+              categoryTags: ["home"],
+              visibility: "shared",
+              wikiNoteId: null,
+              linkedEntities: [],
+              linkedPeople: [],
+              metadata: {}
+            },
+            {
+              externalUid: "place_cafe_classifier",
+              label: "Cafe",
+              aliases: [],
+              latitude: 46.5218,
+              longitude: 6.6418,
+              radiusMeters: 90,
+              categoryTags: ["cafe"],
+              visibility: "shared",
+              wikiNoteId: null,
+              linkedEntities: [],
+              linkedPeople: [],
+              metadata: {}
+            }
+          ],
+          stays: [
+            {
+              externalUid: "stay_home_1",
+              label: "Home",
+              status: "completed",
+              classification: "stationary",
+              startedAt: "2026-04-05T07:00:00.000Z",
+              endedAt: "2026-04-05T08:00:00.000Z",
+              centerLatitude: 46.5191,
+              centerLongitude: 6.6323,
+              radiusMeters: 100,
+              sampleCount: 8,
+              placeExternalUid: "place_home_classifier",
+              placeLabel: "Home",
+              tags: ["home"],
+              metadata: {}
+            },
+            {
+              externalUid: "stay_home_2",
+              label: "Home",
+              status: "completed",
+              classification: "stationary",
+              startedAt: "2026-04-05T08:20:00.000Z",
+              endedAt: "2026-04-05T08:40:00.000Z",
+              centerLatitude: 46.51911,
+              centerLongitude: 6.63228,
+              radiusMeters: 100,
+              sampleCount: 6,
+              placeExternalUid: "place_home_classifier",
+              placeLabel: "Home",
+              tags: ["home"],
+              metadata: {}
+            },
+            {
+              externalUid: "stay_cafe",
+              label: "Cafe",
+              status: "completed",
+              classification: "stationary",
+              startedAt: "2026-04-05T09:30:00.000Z",
+              endedAt: "2026-04-05T10:00:00.000Z",
+              centerLatitude: 46.5218,
+              centerLongitude: 6.6418,
+              radiusMeters: 90,
+              sampleCount: 5,
+              placeExternalUid: "place_cafe_classifier",
+              placeLabel: "Cafe",
+              tags: ["cafe"],
+              metadata: {}
+            }
+          ],
+          trips: [
+            {
+              externalUid: "trip_repaired_gap_case",
+              label: "Office to park",
+              status: "completed",
+              travelMode: "travel",
+              activityType: "walking",
+              startedAt: "2026-04-05T08:44:00.000Z",
+              endedAt: "2026-04-05T09:10:00.000Z",
+              startPlaceExternalUid: "",
+              endPlaceExternalUid: "",
+              distanceMeters: 1600,
+              movingSeconds: 1300,
+              idleSeconds: 60,
+              averageSpeedMps: 1.3,
+              maxSpeedMps: 2.1,
+              caloriesKcal: 78,
+              expectedMet: 2.7,
+              tags: ["movement"],
+              linkedEntities: [],
+              linkedPeople: [],
+              metadata: {},
+              points: [
+                {
+                  recordedAt: "2026-04-05T08:44:00.000Z",
+                  latitude: 46.5252,
+                  longitude: 6.6492,
+                  accuracyMeters: 10,
+                  altitudeMeters: null,
+                  speedMps: 1.2,
+                  isStopAnchor: false
+                },
+                {
+                  recordedAt: "2026-04-05T09:10:00.000Z",
+                  latitude: 46.5236,
+                  longitude: 6.6458,
+                  accuracyMeters: 10,
+                  altitudeMeters: null,
+                  speedMps: 1.5,
+                  isStopAnchor: true
+                }
+              ],
+              stops: []
+            }
+          ]
+        }
+      }
+    });
+    assert.equal(syncResponse.statusCode, 200);
+
+    const dayResponse = await app.inject({
+      method: "GET",
+      url: "/api/v1/movement/day?date=2026-04-05"
+    });
+    assert.equal(dayResponse.statusCode, 200);
+    const day = dayResponse.json() as {
+      movement: {
+        summary: {
+          repairedGapCount: number;
+          repairedGapDurationSeconds: number;
+          continuedStayCount: number;
+          continuedStayDurationSeconds: number;
+          missingCount: number;
+          missingDurationSeconds: number;
+        };
+        segments: Array<{
+          kind: "stay" | "trip" | "missing";
+          origin: "recorded" | "continued_stay" | "repaired_gap" | "missing";
+          editable: boolean;
+          startedAt: string;
+          endedAt: string;
+          subtitle: string;
+        }>;
+      };
+    };
+    assert.equal(day.movement.summary.repairedGapCount, 2);
+    assert.ok(day.movement.summary.repairedGapDurationSeconds > 0);
+    assert.equal(day.movement.summary.continuedStayCount, 0);
+    assert.equal(day.movement.summary.continuedStayDurationSeconds, 0);
+    assert.equal(day.movement.summary.missingCount, 2);
+    assert.ok(day.movement.summary.missingDurationSeconds > 0);
+    assert.equal(
+      day.movement.segments.filter(
+        (segment) => segment.origin === "repaired_gap" && segment.kind === "stay"
+      ).length,
+      1
+    );
+    assert.equal(
+      day.movement.segments.filter(
+        (segment) => segment.origin === "repaired_gap" && segment.kind === "trip"
+      ).length,
+      1
+    );
+    assert.equal(
+      day.movement.segments.filter(
+        (segment) => segment.kind === "missing" && segment.origin === "missing"
+      ).length,
+      2
+    );
+    assert.ok(
+      day.movement.segments.some((segment) =>
+        segment.subtitle.includes("suppressed into stay continuity")
+      )
+    );
+    assert.ok(
+      day.movement.segments.every((segment) =>
+        segment.origin === "recorded" ? segment.editable : !segment.editable
+      )
+    );
+    const dayCoverage = [...day.movement.segments].sort((left, right) =>
+      left.startedAt.localeCompare(right.startedAt)
+    );
+    assert.equal(dayCoverage[0]?.startedAt, "2026-04-05T00:00:00.000Z");
+    assert.equal(dayCoverage[dayCoverage.length - 1]?.endedAt, "2026-04-05T23:59:59.999Z");
+    for (let index = 1; index < dayCoverage.length; index += 1) {
+      assert.equal(dayCoverage[index - 1]?.endedAt, dayCoverage[index]?.startedAt);
+    }
+
+    const timelineResponse = await app.inject({
+      method: "GET",
+      url: "/api/v1/movement/timeline?includeInvalid=true"
+    });
+    assert.equal(timelineResponse.statusCode, 200);
+    const timeline = timelineResponse.json() as {
+      movement: {
+        segments: Array<{
+          kind: "stay" | "trip" | "missing";
+          origin: "recorded" | "continued_stay" | "repaired_gap" | "missing";
+          editable: boolean;
+        }>;
+      };
+    };
+    assert.ok(
+      timeline.movement.segments.filter(
+        (segment) => segment.origin === "repaired_gap" && segment.kind === "stay"
+      ).length >= 1
+    );
+    assert.equal(
+      timeline.movement.segments.filter(
+        (segment) => segment.origin === "repaired_gap" && segment.kind === "trip"
+      ).length,
+      1
+    );
+    assert.ok(
+      timeline.movement.segments.every((segment) =>
+        segment.origin === "recorded" ? segment.editable : !segment.editable
+      )
+    );
+  } finally {
+    await app.close();
+    closeDatabase();
+    await rm(rootDir, { recursive: true, force: true });
+  }
+});
+
+test("movement timeline makes long overnight gaps explicit instead of leaving blank coverage", async () => {
+  const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-movement-gap-coverage-"));
+  const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
+
+  try {
+    const operatorCookie = await issueOperatorSessionCookie(app);
+    const pairingResponse = await app.inject({
+      method: "POST",
+      url: "/api/v1/health/pairing-sessions",
+      headers: {
+        cookie: operatorCookie,
+        host: "127.0.0.1:4317"
+      },
+      payload: {
+        userId: "user_operator"
+      }
+    });
+    assert.equal(pairingResponse.statusCode, 201);
+    const qrPayload = (
+      pairingResponse.json() as {
+        qrPayload: {
+          sessionId: string;
+          pairingToken: string;
+        };
+      }
+    ).qrPayload;
+
+    const syncResponse = await app.inject({
+      method: "POST",
+      url: "/api/v1/mobile/healthkit/sync",
+      payload: {
+        sessionId: qrPayload.sessionId,
+        pairingToken: qrPayload.pairingToken,
+        device: {
+          name: "Coverage Test iPhone",
+          platform: "ios",
+          appVersion: "1.0",
+          sourceDevice: "iPhone"
+        },
+        permissions: {
+          healthKitAuthorized: true,
+          backgroundRefreshEnabled: true,
+          motionReady: true,
+          locationReady: true
+        },
+        sleepSessions: [],
+        workouts: [],
+        movement: {
+          settings: {
+            trackingEnabled: true,
+            publishMode: "auto_publish",
+            retentionMode: "aggregates_only",
+            locationPermissionStatus: "always",
+            motionPermissionStatus: "ready",
+            backgroundTrackingReady: true,
+            metadata: {}
+          },
+          knownPlaces: [
+            {
+              externalUid: "place_home_coverage",
+              label: "Home",
+              aliases: [],
+              latitude: 46.5191,
+              longitude: 6.6323,
+              radiusMeters: 100,
+              categoryTags: ["home"],
+              visibility: "shared",
+              wikiNoteId: null,
+              linkedEntities: [],
+              linkedPeople: [],
+              metadata: {}
+            }
+          ],
+          stays: [
+            {
+              externalUid: "stay_home_evening",
+              label: "Home",
+              status: "completed",
+              classification: "stationary",
+              startedAt: "2026-04-05T21:15:00.000Z",
+              endedAt: "2026-04-05T21:30:00.000Z",
+              centerLatitude: 46.5191,
+              centerLongitude: 6.6323,
+              radiusMeters: 100,
+              sampleCount: 5,
+              placeExternalUid: "place_home_coverage",
+              placeLabel: "Home",
+              tags: ["home"],
+              metadata: {}
+            }
+          ],
+          trips: [
+            {
+              externalUid: "trip_night_move",
+              label: "Night move",
+              status: "completed",
+              travelMode: "travel",
+              activityType: "walking",
+              startedAt: "2026-04-06T02:34:00.000Z",
+              endedAt: "2026-04-06T02:40:00.000Z",
+              startPlaceExternalUid: "",
+              endPlaceExternalUid: "",
+              distanceMeters: 650,
+              movingSeconds: 300,
+              idleSeconds: 60,
+              averageSpeedMps: 1.8,
+              maxSpeedMps: 2.5,
+              caloriesKcal: 36,
+              expectedMet: 2.0,
+              tags: ["movement"],
+              linkedEntities: [],
+              linkedPeople: [],
+              metadata: {},
+              points: [
+                {
+                  recordedAt: "2026-04-06T02:34:00.000Z",
+                  latitude: 46.5216,
+                  longitude: 6.6404,
+                  accuracyMeters: 10,
+                  altitudeMeters: null,
+                  speedMps: 1.6,
+                  isStopAnchor: false
+                },
+                {
+                  recordedAt: "2026-04-06T02:40:00.000Z",
+                  latitude: 46.5226,
+                  longitude: 6.6424,
+                  accuracyMeters: 10,
+                  altitudeMeters: null,
+                  speedMps: 1.9,
+                  isStopAnchor: true
+                }
+              ],
+              stops: []
+            }
+          ]
+        }
+      }
+    });
+    assert.equal(syncResponse.statusCode, 200);
+
+    const timelineResponse = await app.inject({
+      method: "GET",
+      url: "/api/v1/movement/timeline?limit=12"
+    });
+    assert.equal(timelineResponse.statusCode, 200);
+    const timeline = timelineResponse.json() as {
+      movement: {
+        segments: Array<{
+          kind: "stay" | "trip" | "missing";
+          origin: "recorded" | "continued_stay" | "repaired_gap" | "missing";
+          startedAt: string;
+          endedAt: string;
+        }>;
+      };
+    };
+    const relevant = [...timeline.movement.segments]
+      .sort((left, right) => left.startedAt.localeCompare(right.startedAt))
+      .filter(
+        (segment) =>
+          segment.startedAt >= "2026-04-05T21:15:00.000Z" &&
+          segment.endedAt <= "2026-04-06T02:40:00.000Z"
+      );
+
+    assert.deepEqual(
+      relevant.map((segment) => ({
+        kind: segment.kind,
+        origin: segment.origin,
+        startedAt: segment.startedAt,
+        endedAt: segment.endedAt
+      })),
+      [
+        {
+          kind: "stay",
+          origin: "recorded",
+          startedAt: "2026-04-05T21:15:00.000Z",
+          endedAt: "2026-04-05T21:30:00.000Z"
+        },
+        {
+          kind: "missing",
+          origin: "missing",
+          startedAt: "2026-04-05T21:30:00.000Z",
+          endedAt: "2026-04-06T02:34:00.000Z"
+        },
+        {
+          kind: "trip",
+          origin: "recorded",
+          startedAt: "2026-04-06T02:34:00.000Z",
+          endedAt: "2026-04-06T02:40:00.000Z"
+        }
+      ]
+    );
+    for (let index = 1; index < relevant.length; index += 1) {
+      assert.equal(relevant[index - 1]?.endedAt, relevant[index]?.startedAt);
+    }
   } finally {
     await app.close();
     closeDatabase();
@@ -3190,6 +4708,40 @@ test("health probe can expose the effective runtime storage root for OpenClaw ru
   }
 });
 
+test("health probe reports the effective database root even when FORGE_DATA_ROOT is implicit", async () => {
+  const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-health-implicit-root-"));
+  configureDatabase({ dataRoot: rootDir, seedDemoData: true });
+  const app = await buildServer();
+
+  try {
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/v1/health",
+      headers: {
+        "x-forge-runtime-probe": "1"
+      }
+    });
+
+    assert.equal(response.statusCode, 200);
+    const body = response.json() as {
+      ok: boolean;
+      runtime?: {
+        pid: number;
+        storageRoot: string;
+        basePath: string;
+      };
+    };
+    assert.equal(body.ok, true);
+    assert.equal(body.runtime?.pid, process.pid);
+    assert.equal(body.runtime?.storageRoot, rootDir);
+    assert.equal(body.runtime?.basePath, "/forge/");
+  } finally {
+    await app.close();
+    closeDatabase();
+    await rm(rootDir, { recursive: true, force: true });
+  }
+});
+
 test("work adjustments add and remove signed minutes on tasks and projects with symmetric XP", async () => {
   const rootDir = await mkdtemp(
     path.join(os.tmpdir(), "forge-work-adjustments-")
@@ -3389,10 +4941,20 @@ test("built frontend assets are served correctly from the /forge base path", asy
   }
 });
 
-test("dev web origin redirects /forge routes to the live Vite app", async () => {
+test("dev web origin proxies /forge routes through the backend", async () => {
   const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-web-dev-redirect-"));
   const previousDevWebOrigin = process.env.FORGE_DEV_WEB_ORIGIN;
-  process.env.FORGE_DEV_WEB_ORIGIN = "http://127.0.0.1:3027/forge/";
+  const previousDevWebAutostart = process.env.FORGE_DEV_WEB_AUTOSTART;
+  const devServer = http.createServer((request, response) => {
+    response.statusCode = 200;
+    response.setHeader("content-type", "text/html; charset=utf-8");
+    response.end(`<html><body>proxied ${request.url}</body></html>`);
+  });
+  await new Promise<void>((resolve) => devServer.listen(0, "127.0.0.1", resolve));
+  const address = devServer.address();
+  assert.ok(address && typeof address !== "string");
+  process.env.FORGE_DEV_WEB_ORIGIN = `http://127.0.0.1:${address.port}/forge/`;
+  process.env.FORGE_DEV_WEB_AUTOSTART = "0";
   const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
 
   try {
@@ -3400,19 +4962,25 @@ test("dev web origin redirects /forge routes to the live Vite app", async () => 
       method: "GET",
       url: "/forge/settings/calendar?view=debug"
     });
-    assert.equal(response.statusCode, 307);
-    assert.equal(
-      response.headers.location,
-      "http://127.0.0.1:3027/forge/settings/calendar?view=debug"
-    );
+    assert.equal(response.statusCode, 200);
+    assert.match(response.headers["content-type"] ?? "", /text\/html/);
+    assert.match(response.body, /proxied \/forge\/settings\/calendar\?view=debug/);
   } finally {
     if (previousDevWebOrigin === undefined) {
       delete process.env.FORGE_DEV_WEB_ORIGIN;
     } else {
       process.env.FORGE_DEV_WEB_ORIGIN = previousDevWebOrigin;
     }
+    if (previousDevWebAutostart === undefined) {
+      delete process.env.FORGE_DEV_WEB_AUTOSTART;
+    } else {
+      process.env.FORGE_DEV_WEB_AUTOSTART = previousDevWebAutostart;
+    }
     await app.close();
     closeDatabase();
+    await new Promise<void>((resolve, reject) =>
+      devServer.close((error) => (error ? reject(error) : resolve()))
+    );
     await rm(rootDir, { recursive: true, force: true });
   }
 });
@@ -4183,6 +5751,7 @@ test("openapi document exposes schema-backed versioned contracts", async () => {
     assert.ok(body.paths?.["/api/v1/health/sleep"]);
     assert.ok(body.paths?.["/api/v1/health/sleep/{id}"]);
     assert.ok(body.paths?.["/api/v1/health/fitness"]);
+    assert.ok(body.paths?.["/api/v1/health/workouts"]);
     assert.ok(body.paths?.["/api/v1/health/workouts/{id}"]);
     assert.ok(body.paths?.["/api/v1/habits"]);
     assert.ok(body.paths?.["/api/v1/habits/{id}"]);
@@ -4223,6 +5792,19 @@ test("openapi document exposes schema-backed versioned contracts", async () => {
     assert.ok(body.paths?.["/api/v1/entities/delete"]);
     assert.ok(body.paths?.["/api/v1/entities/restore"]);
     assert.ok(body.paths?.["/api/v1/entities/search"]);
+    assert.ok(body.paths?.["/api/v1/calendar/events"]);
+    assert.ok(body.paths?.["/api/v1/calendar/events/{id}"]);
+    assert.ok(body.paths?.["/api/v1/calendar/work-block-templates/{id}"]);
+    assert.ok(body.paths?.["/api/v1/calendar/timeboxes/{id}"]);
+    assert.ok(body.paths?.["/api/v1/preferences/catalogs"]);
+    assert.ok(body.paths?.["/api/v1/preferences/catalogs/{id}"]);
+    assert.ok(body.paths?.["/api/v1/preferences/catalog-items"]);
+    assert.ok(body.paths?.["/api/v1/preferences/catalog-items/{id}"]);
+    assert.ok(body.paths?.["/api/v1/preferences/contexts"]);
+    assert.ok(body.paths?.["/api/v1/preferences/contexts/{id}"]);
+    assert.ok(body.paths?.["/api/v1/preferences/items"]);
+    assert.ok(body.paths?.["/api/v1/preferences/items/{id}"]);
+    assert.ok(body.paths?.["/api/v1/psyche/questionnaires/{id}"]);
     assert.ok(body.paths?.["/api/v1/approval-requests"]);
     assert.ok(body.paths?.["/api/v1/agent-actions"]);
     assert.ok(body.paths?.["/api/v1/rewards/rules"]);
@@ -5332,6 +6914,80 @@ test("misaligned habit penalties do not break the context payload", async () => 
     };
     assert.equal(contextBody.metrics.totalXp, 0);
     assert.equal(contextBody.metrics.weeklyXp, 0);
+  } finally {
+    await app.close();
+    closeDatabase();
+    await rm(rootDir, { recursive: true, force: true });
+  }
+});
+
+test("habit list supports explicit ordering modes", async () => {
+  const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-habit-ordering-"));
+  const app = await buildServer({ dataRoot: rootDir, seedDemoData: false });
+
+  try {
+    const operatorCookie = await issueOperatorSessionCookie(app);
+
+    const alphaResponse = await app.inject({
+      method: "POST",
+      url: "/api/v1/habits",
+      headers: { cookie: operatorCookie },
+      payload: {
+        title: "Alpha stretch",
+        frequency: "daily",
+        polarity: "positive",
+        targetCount: 1
+      }
+    });
+    assert.equal(alphaResponse.statusCode, 201);
+    const alphaHabit = (alphaResponse.json() as { habit: { id: string } }).habit;
+
+    const zenResponse = await app.inject({
+      method: "POST",
+      url: "/api/v1/habits",
+      headers: { cookie: operatorCookie },
+      payload: {
+        title: "Zen walk",
+        frequency: "daily",
+        polarity: "positive",
+        targetCount: 1
+      }
+    });
+    assert.equal(zenResponse.statusCode, 201);
+    const zenHabit = (zenResponse.json() as { habit: { id: string } }).habit;
+
+    const orderByName = await app.inject({
+      method: "GET",
+      url: "/api/v1/habits?orderBy=name"
+    });
+    assert.equal(orderByName.statusCode, 200);
+    const orderByNameBody = orderByName.json() as {
+      habits: Array<{ id: string; title: string }>;
+    };
+    assert.deepEqual(
+      orderByNameBody.habits.slice(0, 2).map((habit) => habit.title),
+      ["Alpha stretch", "Zen walk"]
+    );
+
+    await app.inject({
+      method: "POST",
+      url: `/api/v1/habits/${zenHabit.id}/check-ins`,
+      headers: { cookie: operatorCookie },
+      payload: {
+        dateKey: "2026-04-10",
+        status: "done"
+      }
+    });
+
+    const orderByAttention = await app.inject({
+      method: "GET",
+      url: "/api/v1/habits?orderBy=needs_attention"
+    });
+    assert.equal(orderByAttention.statusCode, 200);
+    const orderByAttentionBody = orderByAttention.json() as {
+      habits: Array<{ id: string }>;
+    };
+    assert.equal(orderByAttentionBody.habits[0]?.id, alphaHabit.id);
   } finally {
     await app.close();
     closeDatabase();
@@ -9271,7 +10927,7 @@ test("atomic batch create rolls back earlier successes when a later operation fa
     assert.equal(createBody.results[0]?.ok, false);
     assert.equal(createBody.results[0]?.error?.code, "rolled_back");
     assert.equal(createBody.results[1]?.ok, false);
-    assert.equal(createBody.results[1]?.error?.code, "create_failed");
+    assert.equal(createBody.results[1]?.error?.code, "validation_failed");
 
     const afterResponse = await app.inject({
       method: "GET",
@@ -9283,6 +10939,545 @@ test("atomic batch create rolls back earlier successes when a later operation fa
     assert.equal(afterGoals.length, beforeCount);
     assert.ok(
       !afterGoals.some((goal) => goal.title === "Atomic rollback guardrail")
+    );
+  } finally {
+    await app.close();
+    closeDatabase();
+    await rm(rootDir, { recursive: true, force: true });
+  }
+});
+
+test("direct health CRUD routes create, read, and delete manual sleep and workout sessions", async () => {
+  const rootDir = await mkdtemp(
+    path.join(os.tmpdir(), "forge-direct-health-crud-")
+  );
+  const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
+
+  try {
+    const operatorCookie = await issueOperatorSessionCookie(app);
+
+    const createSleep = await app.inject({
+      method: "POST",
+      url: "/api/v1/health/sleep",
+      headers: { cookie: operatorCookie },
+      payload: {
+        startedAt: "2026-04-10T22:45:00.000Z",
+        endedAt: "2026-04-11T06:45:00.000Z",
+        qualitySummary: "Slept cleanly after a light evening.",
+        tags: ["recovered"]
+      }
+    });
+    assert.equal(createSleep.statusCode, 201);
+    const createSleepBody = createSleep.json() as {
+      sleep: {
+        id: string;
+        externalUid: string;
+        source: string;
+        sourceType: string;
+        timeInBedSeconds: number;
+        asleepSeconds: number;
+      };
+    };
+    assert.equal(createSleepBody.sleep.source, "manual");
+    assert.equal(createSleepBody.sleep.sourceType, "manual");
+    assert.ok(createSleepBody.sleep.externalUid.length > 0);
+    assert.equal(createSleepBody.sleep.timeInBedSeconds, 8 * 60 * 60);
+    assert.equal(createSleepBody.sleep.asleepSeconds, 8 * 60 * 60);
+
+    const getSleep = await app.inject({
+      method: "GET",
+      url: `/api/v1/health/sleep/${createSleepBody.sleep.id}`
+    });
+    assert.equal(getSleep.statusCode, 200);
+    const getSleepBody = getSleep.json() as {
+      sleep: { id: string; annotations?: { qualitySummary?: string } };
+    };
+    assert.equal(getSleepBody.sleep.id, createSleepBody.sleep.id);
+    assert.equal(
+      getSleepBody.sleep.annotations?.qualitySummary,
+      "Slept cleanly after a light evening."
+    );
+
+    const deleteSleep = await app.inject({
+      method: "DELETE",
+      url: `/api/v1/health/sleep/${createSleepBody.sleep.id}`,
+      headers: { cookie: operatorCookie }
+    });
+    assert.equal(deleteSleep.statusCode, 200);
+
+    const missingSleep = await app.inject({
+      method: "GET",
+      url: `/api/v1/health/sleep/${createSleepBody.sleep.id}`
+    });
+    assert.equal(missingSleep.statusCode, 404);
+
+    const createWorkout = await app.inject({
+      method: "POST",
+      url: "/api/v1/health/workouts",
+      headers: { cookie: operatorCookie },
+      payload: {
+        workoutType: "walk",
+        startedAt: "2026-04-11T10:00:00.000Z",
+        endedAt: "2026-04-11T10:45:00.000Z",
+        subjectiveEffort: 6,
+        meaningText: "Reset after a long planning block."
+      }
+    });
+    assert.equal(createWorkout.statusCode, 201);
+    const createWorkoutBody = createWorkout.json() as {
+      workout: {
+        id: string;
+        externalUid: string;
+        source: string;
+        sourceType: string;
+        durationSeconds: number;
+      };
+    };
+    assert.equal(createWorkoutBody.workout.source, "manual");
+    assert.equal(createWorkoutBody.workout.sourceType, "manual");
+    assert.ok(createWorkoutBody.workout.externalUid.length > 0);
+    assert.equal(createWorkoutBody.workout.durationSeconds, 45 * 60);
+
+    const getWorkout = await app.inject({
+      method: "GET",
+      url: `/api/v1/health/workouts/${createWorkoutBody.workout.id}`
+    });
+    assert.equal(getWorkout.statusCode, 200);
+    const getWorkoutBody = getWorkout.json() as {
+      workout: { id: string; meaningText: string };
+    };
+    assert.equal(getWorkoutBody.workout.id, createWorkoutBody.workout.id);
+    assert.equal(
+      getWorkoutBody.workout.meaningText,
+      "Reset after a long planning block."
+    );
+
+    const deleteWorkout = await app.inject({
+      method: "DELETE",
+      url: `/api/v1/health/workouts/${createWorkoutBody.workout.id}`,
+      headers: { cookie: operatorCookie }
+    });
+    assert.equal(deleteWorkout.statusCode, 200);
+
+    const missingWorkout = await app.inject({
+      method: "GET",
+      url: `/api/v1/health/workouts/${createWorkoutBody.workout.id}`
+    });
+    assert.equal(missingWorkout.statusCode, 404);
+  } finally {
+    await app.close();
+    closeDatabase();
+    await rm(rootDir, { recursive: true, force: true });
+  }
+});
+
+test("direct calendar get routes list and fetch events, work blocks, and timeboxes", async () => {
+  const rootDir = await mkdtemp(
+    path.join(os.tmpdir(), "forge-direct-calendar-get-")
+  );
+  const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
+
+  try {
+    const operatorCookie = await issueOperatorSessionCookie(app);
+    const taskId = (
+      (
+        await app.inject({
+          method: "GET",
+          url: "/api/v1/tasks"
+        })
+      ).json() as { tasks: Array<{ id: string }> }
+    ).tasks[0]!.id;
+    const projectId = (
+      (
+        await app.inject({
+          method: "GET",
+          url: "/api/v1/projects"
+        })
+      ).json() as { projects: Array<{ id: string }> }
+    ).projects[0]!.id;
+
+    const templateResponse = await app.inject({
+      method: "POST",
+      url: "/api/v1/calendar/work-block-templates",
+      headers: { cookie: operatorCookie },
+      payload: {
+        title: "Secondary Activity",
+        kind: "secondary_activity",
+        color: "#38bdf8",
+        timezone: "Europe/Zurich",
+        weekDays: [1, 3, 5],
+        startMinute: 780,
+        endMinute: 1020,
+        blockingState: "allowed"
+      }
+    });
+    assert.equal(templateResponse.statusCode, 201);
+    const templateId = (
+      templateResponse.json() as { template: { id: string } }
+    ).template.id;
+
+    const timeboxResponse = await app.inject({
+      method: "POST",
+      url: "/api/v1/calendar/timeboxes",
+      headers: { cookie: operatorCookie },
+      payload: {
+        taskId,
+        projectId,
+        title: "Draft the paper outline",
+        startsAt: "2026-04-07T09:30:00.000Z",
+        endsAt: "2026-04-07T10:30:00.000Z",
+        source: "suggested"
+      }
+    });
+    assert.equal(timeboxResponse.statusCode, 201);
+    const timeboxId = (
+      timeboxResponse.json() as { timebox: { id: string } }
+    ).timebox.id;
+
+    const eventResponse = await app.inject({
+      method: "POST",
+      url: "/api/v1/calendar/events",
+      headers: { cookie: operatorCookie },
+      payload: {
+        title: "Generic batch planning review",
+        startAt: "2026-04-07T08:00:00.000Z",
+        endAt: "2026-04-07T09:00:00.000Z",
+        timezone: "Europe/Zurich",
+        links: [
+          {
+            entityType: "project",
+            entityId: projectId,
+            relationshipType: "meeting_for"
+          }
+        ]
+      }
+    });
+    assert.equal(eventResponse.statusCode, 201);
+    const eventId = (eventResponse.json() as { event: { id: string } }).event.id;
+
+    const listEvents = await app.inject({
+      method: "GET",
+      url: "/api/v1/calendar/events?from=2026-04-06T00:00:00.000Z&to=2026-04-08T00:00:00.000Z"
+    });
+    assert.equal(listEvents.statusCode, 200);
+    const listEventsBody = listEvents.json() as {
+      events: Array<{ id: string }>;
+    };
+    assert.ok(listEventsBody.events.some((event) => event.id === eventId));
+
+    const getEvent = await app.inject({
+      method: "GET",
+      url: `/api/v1/calendar/events/${eventId}`
+    });
+    assert.equal(getEvent.statusCode, 200);
+    assert.equal(
+      (getEvent.json() as { event: { id: string } }).event.id,
+      eventId
+    );
+
+    const getTemplate = await app.inject({
+      method: "GET",
+      url: `/api/v1/calendar/work-block-templates/${templateId}`
+    });
+    assert.equal(getTemplate.statusCode, 200);
+    assert.equal(
+      (getTemplate.json() as { template: { id: string } }).template.id,
+      templateId
+    );
+
+    const getTimebox = await app.inject({
+      method: "GET",
+      url: `/api/v1/calendar/timeboxes/${timeboxId}`
+    });
+    assert.equal(getTimebox.statusCode, 200);
+    assert.equal(
+      (getTimebox.json() as { timebox: { id: string } }).timebox.id,
+      timeboxId
+    );
+  } finally {
+    await app.close();
+    closeDatabase();
+    await rm(rootDir, { recursive: true, force: true });
+  }
+});
+
+test("direct preferences list and get routes work, and questionnaire instruments patch and delete through the direct route", async () => {
+  const rootDir = await mkdtemp(
+    path.join(os.tmpdir(), "forge-direct-preferences-questionnaires-")
+  );
+  const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
+
+  try {
+    const operatorCookie = await issueOperatorSessionCookie(app);
+
+    const createCatalog = await app.inject({
+      method: "POST",
+      url: "/api/v1/preferences/catalogs",
+      headers: { cookie: operatorCookie },
+      payload: {
+        userId: "user_operator",
+        domain: "food",
+        title: "Cafe shortlist",
+        description: "Places to compare for breakfast meetings.",
+        slug: "cafe-shortlist"
+      }
+    });
+    assert.equal(createCatalog.statusCode, 201);
+    const catalogId = (
+      createCatalog.json() as { catalog: { id: string } }
+    ).catalog.id;
+
+    const createCatalogItem = await app.inject({
+      method: "POST",
+      url: "/api/v1/preferences/catalog-items",
+      headers: { cookie: operatorCookie },
+      payload: {
+        catalogId,
+        label: "Neighborhood bakery",
+        description: "A comparison candidate.",
+        tags: ["bakery"],
+        featureWeights: {
+          novelty: 0.2,
+          simplicity: 0.4,
+          rigor: 0,
+          aesthetics: 0.3,
+          depth: 0,
+          structure: 0.1,
+          familiarity: 0.6,
+          surprise: 0.1
+        },
+        position: 0
+      }
+    });
+    assert.equal(createCatalogItem.statusCode, 201);
+    const catalogItemId = (
+      createCatalogItem.json() as { item: { id: string } }
+    ).item.id;
+
+    const createContext = await app.inject({
+      method: "POST",
+      url: "/api/v1/preferences/contexts",
+      headers: { cookie: operatorCookie },
+      payload: {
+        userId: "user_operator",
+        domain: "food",
+        name: "Work breakfasts",
+        description: "Preference slice for work-day breakfast choices.",
+        shareMode: "blended",
+        active: true,
+        isDefault: false,
+        decayDays: 60
+      }
+    });
+    assert.equal(createContext.statusCode, 201);
+    const contextId = (
+      createContext.json() as { context: { id: string } }
+    ).context.id;
+
+    const createItem = await app.inject({
+      method: "POST",
+      url: "/api/v1/preferences/items",
+      headers: { cookie: operatorCookie },
+      payload: {
+        userId: "user_operator",
+        domain: "food",
+        label: "Flat white",
+        description: "Reliable coffee choice.",
+        tags: ["coffee"],
+        featureWeights: {
+          novelty: 0,
+          simplicity: 0.7,
+          rigor: 0,
+          aesthetics: 0.1,
+          depth: 0,
+          structure: 0.2,
+          familiarity: 0.9,
+          surprise: -0.3
+        }
+      }
+    });
+    assert.equal(createItem.statusCode, 201);
+    const itemId = (createItem.json() as { item: { id: string } }).item.id;
+
+    const listCatalogs = await app.inject({
+      method: "GET",
+      url: "/api/v1/preferences/catalogs"
+    });
+    assert.equal(listCatalogs.statusCode, 200);
+    assert.ok(
+      (listCatalogs.json() as { catalogs: Array<{ id: string }> }).catalogs.some(
+        (catalog) => catalog.id === catalogId
+      )
+    );
+
+    const listCatalogItems = await app.inject({
+      method: "GET",
+      url: "/api/v1/preferences/catalog-items"
+    });
+    assert.equal(listCatalogItems.statusCode, 200);
+    assert.ok(
+      (listCatalogItems.json() as { items: Array<{ id: string }> }).items.some(
+        (item) => item.id === catalogItemId
+      )
+    );
+
+    const listContexts = await app.inject({
+      method: "GET",
+      url: "/api/v1/preferences/contexts"
+    });
+    assert.equal(listContexts.statusCode, 200);
+    assert.ok(
+      (listContexts.json() as { contexts: Array<{ id: string }> }).contexts.some(
+        (context) => context.id === contextId
+      )
+    );
+
+    const listItems = await app.inject({
+      method: "GET",
+      url: "/api/v1/preferences/items"
+    });
+    assert.equal(listItems.statusCode, 200);
+    assert.ok(
+      (listItems.json() as { items: Array<{ id: string }> }).items.some(
+        (item) => item.id === itemId
+      )
+    );
+
+    const getCatalog = await app.inject({
+      method: "GET",
+      url: `/api/v1/preferences/catalogs/${catalogId}`
+    });
+    assert.equal(getCatalog.statusCode, 200);
+
+    const getCatalogItem = await app.inject({
+      method: "GET",
+      url: `/api/v1/preferences/catalog-items/${catalogItemId}`
+    });
+    assert.equal(getCatalogItem.statusCode, 200);
+
+    const getContext = await app.inject({
+      method: "GET",
+      url: `/api/v1/preferences/contexts/${contextId}`
+    });
+    assert.equal(getContext.statusCode, 200);
+
+    const getItem = await app.inject({
+      method: "GET",
+      url: `/api/v1/preferences/items/${itemId}`
+    });
+    assert.equal(getItem.statusCode, 200);
+
+    const createQuestionnaire = await app.inject({
+      method: "POST",
+      url: "/api/v1/psyche/questionnaires",
+      headers: { cookie: operatorCookie },
+      payload: {
+        title: "Tiny check-in",
+        subtitle: "Custom",
+        description: "One question custom instrument.",
+        aliases: [],
+        symptomDomains: ["check-in"],
+        tags: ["custom"],
+        sourceClass: "secondary_verified",
+        availability: "custom",
+        isSelfReport: true,
+        userId: "user_operator",
+        versionLabel: "Draft 1",
+        definition: {
+          locale: "en",
+          instructions: "Rate how present this feels today.",
+          completionNote: "",
+          presentationMode: "single_question",
+          responseStyle: "four_point_frequency",
+          itemIds: ["check_1"],
+          items: [
+            {
+              id: "check_1",
+              prompt: "I feel grounded.",
+              shortLabel: "",
+              description: "",
+              helperText: "",
+              required: true,
+              tags: [],
+              options: [
+                { key: "0", label: "Not at all", value: 0, description: "" },
+                { key: "1", label: "A little", value: 1, description: "" },
+                { key: "2", label: "Mostly", value: 2, description: "" },
+                { key: "3", label: "Strongly", value: 3, description: "" }
+              ]
+            }
+          ],
+          sections: [
+            {
+              id: "check",
+              title: "Check",
+              description: "",
+              itemIds: ["check_1"]
+            }
+          ],
+          pageSize: null
+        },
+        scoring: {
+          scores: [
+            {
+              key: "total",
+              label: "Total",
+              description: "",
+              valueType: "number",
+              expression: { kind: "sum", itemIds: ["check_1"] },
+              dependsOnItemIds: ["check_1"],
+              missingPolicy: { mode: "require_all" },
+              bands: [{ label: "Strong", min: 3, max: 3, severity: "" }],
+              roundTo: null,
+              unitLabel: ""
+            }
+          ]
+        },
+        provenance: {
+          retrievalDate: "2026-04-06",
+          sourceClass: "secondary_verified",
+          scoringNotes: "Sum the one item.",
+          sources: [
+            {
+              label: "Local draft",
+              url: "https://example.com/draft",
+              citation: "Local draft questionnaire",
+              notes: ""
+            }
+          ]
+        }
+      }
+    });
+    assert.equal(createQuestionnaire.statusCode, 201);
+    const questionnaireId = (
+      createQuestionnaire.json() as { instrument: { id: string } }
+    ).instrument.id;
+
+    const patchQuestionnaire = await app.inject({
+      method: "PATCH",
+      url: `/api/v1/psyche/questionnaires/${questionnaireId}`,
+      headers: { cookie: operatorCookie },
+      payload: {
+        title: "Tiny weekly check-in"
+      }
+    });
+    assert.equal(patchQuestionnaire.statusCode, 200);
+    assert.equal(
+      (patchQuestionnaire.json() as { instrument: { title: string } }).instrument
+        .title,
+      "Tiny weekly check-in"
+    );
+
+    const deleteQuestionnaire = await app.inject({
+      method: "DELETE",
+      url: `/api/v1/psyche/questionnaires/${questionnaireId}`,
+      headers: { cookie: operatorCookie }
+    });
+    assert.equal(deleteQuestionnaire.statusCode, 200);
+    assert.equal(
+      (deleteQuestionnaire.json() as { instrument: { id: string } }).instrument
+        .id,
+      questionnaireId
     );
   } finally {
     await app.close();
@@ -10190,12 +12385,14 @@ test("CRUD capability matrix keeps user-facing delete/bin entities explicit", ()
     "project",
     "psyche_value",
     "questionnaire_instrument",
+    "sleep_session",
     "strategy",
     "tag",
     "task",
     "task_timebox",
     "trigger_report",
-    "work_block_template"
+    "work_block_template",
+    "workout_session"
   ]);
   assert.ok(matrix.every((entry) => entry.pluginExposed === true));
   const immediateDeleteTypes = matrix
@@ -10209,8 +12406,10 @@ test("CRUD capability matrix keeps user-facing delete/bin entities explicit", ()
     "preference_context",
     "preference_item",
     "questionnaire_instrument",
+    "sleep_session",
     "task_timebox",
-    "work_block_template"
+    "work_block_template",
+    "workout_session"
   ]);
   const binTypes = matrix
     .filter((entry) => entry.inBin)
@@ -10218,6 +12417,16 @@ test("CRUD capability matrix keeps user-facing delete/bin entities explicit", ()
   assert.ok(!binTypes.includes("calendar_event"));
   assert.ok(!binTypes.includes("work_block_template"));
   assert.ok(!binTypes.includes("task_timebox"));
+  assert.ok(!binTypes.includes("sleep_session"));
+  assert.ok(!binTypes.includes("workout_session"));
+  assert.equal(
+    matrix.find((entry) => entry.entityType === "sleep_session")?.routeBase,
+    "/api/v1/health/sleep"
+  );
+  assert.equal(
+    matrix.find((entry) => entry.entityType === "workout_session")?.routeBase,
+    "/api/v1/health/workouts"
+  );
 });
 
 test("settings and local agent token management persist through the versioned API", async () => {
@@ -10459,6 +12668,11 @@ test("settings and local agent token management persist through the versioned AP
           goal: string;
           taskRun: string;
           note: string;
+          sleepSession: string;
+          workoutSession: string;
+          preferences: string;
+          questionnaire: string;
+          selfObservation: string;
           psyche: string;
         };
         psycheSubmoduleModel: {
@@ -10484,10 +12698,19 @@ test("settings and local agent token management persist through the versioned AP
         relationshipModel: string[];
         entityCatalog: Array<{
           entityType: string;
+          classification?: string;
+          preferredMutationPath?: string;
+          preferredReadPath?: string | null;
           minimumCreateFields: string[];
           relationshipRules: string[];
           fieldGuide: Array<{ name: string; required: boolean }>;
         }>;
+        entityRouteModel: {
+          batchCrudEntities: string[];
+          specializedCrudEntities: Record<string, Record<string, string>>;
+          actionEntities: Record<string, unknown>;
+          readModelOnlySurfaces: Record<string, string>;
+        };
         toolInputCatalog: Array<{
           toolName: string;
           requiredFields: string[];
@@ -10505,6 +12728,7 @@ test("settings and local agent token management persist through the versioned AP
           readModels: string[];
           uiWorkflow: string[];
           entityWorkflow: string[];
+          healthWorkflow?: string[];
           calendarWorkflow: string[];
           workWorkflow: string[];
           insightWorkflow: string[];
@@ -10513,6 +12737,7 @@ test("settings and local agent token management persist through the versioned AP
           saveSuggestionPlacement: string;
           maxQuestionsPerTurn: number;
           psycheExplorationRule: string;
+          psycheOpeningQuestionRule: string;
           duplicateCheckRoute: string;
           uiSuggestionRule: string;
           browserFallbackRule: string;
@@ -10591,6 +12816,26 @@ test("settings and local agent token management persist through the versioned AP
       onboardingBody.onboarding.conceptModel.note,
       /Markdown work note/
     );
+    assert.match(
+      onboardingBody.onboarding.conceptModel.sleepSession,
+      /first-class health record/i
+    );
+    assert.match(
+      onboardingBody.onboarding.conceptModel.workoutSession,
+      /first-class sports record/i
+    );
+    assert.match(
+      onboardingBody.onboarding.conceptModel.preferences,
+      /pairwise judgments/i
+    );
+    assert.match(
+      onboardingBody.onboarding.conceptModel.questionnaire,
+      /structured reusable instruments/i
+    );
+    assert.match(
+      onboardingBody.onboarding.conceptModel.selfObservation,
+      /backed by observed notes/i
+    );
     assert.match(onboardingBody.onboarding.conceptModel.psyche, /sensitive/);
     assert.match(
       onboardingBody.onboarding.psycheSubmoduleModel.behaviorPattern,
@@ -10613,6 +12858,41 @@ test("settings and local agent token management persist through the versioned AP
         /missing or unclear/i.test(rule)
       )
     );
+    assert.ok(
+      onboardingBody.onboarding.conversationRules.some((rule) =>
+        /one missing thing you are trying to clarify/i.test(rule)
+      )
+    );
+    assert.ok(
+      onboardingBody.onboarding.conversationRules.some((rule) =>
+        /tentative title or formulation/i.test(rule)
+      )
+    );
+    assert.ok(
+      onboardingBody.onboarding.conversationRules.some((rule) =>
+        /what the record is becoming/i.test(rule)
+      )
+    );
+    assert.ok(
+      onboardingBody.onboarding.conversationRules.some((rule) =>
+        /distinction or decision the record should help with/i.test(rule)
+      )
+    );
+    assert.ok(
+      onboardingBody.onboarding.conversationRules.some((rule) =>
+        /One focused question is the default/i.test(rule)
+      )
+    );
+    assert.ok(
+      onboardingBody.onboarding.conversationRules.some((rule) =>
+        /name, define, and connect the record/i.test(rule)
+      )
+    );
+    assert.ok(
+      onboardingBody.onboarding.conversationRules.some((rule) =>
+        /move to the write instead of reopening the intake/i.test(rule)
+      )
+    );
     const goalConversationPlaybook =
       onboardingBody.onboarding.entityConversationPlaybooks.find(
         (playbook) => playbook.focus === "goal"
@@ -10620,7 +12900,7 @@ test("settings and local agent token management persist through the versioned AP
     assert.ok(goalConversationPlaybook);
     assert.match(
       goalConversationPlaybook.openingQuestion,
-      /feels important enough.*keep it in view/i
+      /trying to keep hold of here/i
     );
     const taskConversationPlaybook =
       onboardingBody.onboarding.entityConversationPlaybooks.find(
@@ -10637,10 +12917,23 @@ test("settings and local agent token management persist through the versioned AP
         (playbook) => playbook.focus === "note"
       );
     assert.ok(noteConversationPlaybook);
+    assert.match(
+      noteConversationPlaybook.openingQuestion,
+      /worth preserving in a note/i
+    );
     assert.ok(
       noteConversationPlaybook.askSequence.some((step) =>
         /durable or temporary/i.test(step)
       )
+    );
+    const wikiConversationPlaybook =
+      onboardingBody.onboarding.entityConversationPlaybooks.find(
+        (playbook) => playbook.focus === "wiki_page"
+      );
+    assert.ok(wikiConversationPlaybook);
+    assert.match(
+      wikiConversationPlaybook.openingQuestion,
+      /main reference for/i
     );
     const insightConversationPlaybook =
       onboardingBody.onboarding.entityConversationPlaybooks.find(
@@ -10649,7 +12942,118 @@ test("settings and local agent token management persist through the versioned AP
     assert.ok(insightConversationPlaybook);
     assert.match(
       insightConversationPlaybook.openingQuestion,
-      /observation or recommendation/i
+      /future-you or the agent/i
+    );
+    const tagConversationPlaybook =
+      onboardingBody.onboarding.entityConversationPlaybooks.find(
+        (playbook) => playbook.focus === "tag"
+      );
+    assert.ok(tagConversationPlaybook);
+    assert.match(tagConversationPlaybook.openingQuestion, /notice or find again later/i);
+    const taskRunConversationPlaybook =
+      onboardingBody.onboarding.entityConversationPlaybooks.find(
+        (playbook) => playbook.focus === "task_run"
+      );
+    assert.ok(taskRunConversationPlaybook);
+    assert.ok(
+      taskRunConversationPlaybook.askSequence.some((step) =>
+        /Start the run instead of turning it into a longer intake/i.test(step)
+      )
+    );
+    const calendarConnectionConversationPlaybook =
+      onboardingBody.onboarding.entityConversationPlaybooks.find(
+        (playbook) => playbook.focus === "calendar_connection"
+      );
+    assert.ok(calendarConnectionConversationPlaybook);
+    assert.ok(
+      calendarConnectionConversationPlaybook.askSequence.some((step) =>
+        /read-only visibility, writable planning, or both/i.test(step)
+      )
+    );
+    const selfObservationConversationPlaybook =
+      onboardingBody.onboarding.entityConversationPlaybooks.find(
+        (playbook) => playbook.focus === "self_observation"
+      );
+    assert.ok(selfObservationConversationPlaybook);
+    assert.match(
+      selfObservationConversationPlaybook.openingQuestion,
+      /notice most clearly in that moment/i
+    );
+    assert.ok(
+      selfObservationConversationPlaybook.askSequence.some((step) =>
+        /finished interpretation/i.test(step)
+      )
+    );
+    const sleepConversationPlaybook =
+      onboardingBody.onboarding.entityConversationPlaybooks.find(
+        (playbook) => playbook.focus === "sleep_session"
+      );
+    assert.ok(sleepConversationPlaybook);
+    assert.ok(
+      sleepConversationPlaybook.askSequence.some((step) =>
+        /quality, pattern, context, meaning, or links/i.test(step)
+      )
+    );
+    const workoutConversationPlaybook =
+      onboardingBody.onboarding.entityConversationPlaybooks.find(
+        (playbook) => playbook.focus === "workout_session"
+      );
+    assert.ok(workoutConversationPlaybook);
+    assert.match(
+      workoutConversationPlaybook.openingQuestion,
+      /workout feels most worth remembering or connecting/i
+    );
+    const preferenceCatalogConversationPlaybook =
+      onboardingBody.onboarding.entityConversationPlaybooks.find(
+        (playbook) => playbook.focus === "preference_catalog"
+      );
+    assert.ok(preferenceCatalogConversationPlaybook);
+    assert.match(
+      preferenceCatalogConversationPlaybook.openingQuestion,
+      /decision or taste question/i
+    );
+    const preferenceContextConversationPlaybook =
+      onboardingBody.onboarding.entityConversationPlaybooks.find(
+        (playbook) => playbook.focus === "preference_context"
+      );
+    assert.ok(preferenceContextConversationPlaybook);
+    assert.ok(
+      preferenceContextConversationPlaybook.askSequence.some((step) =>
+        /decisions or comparisons should feel different/i.test(step)
+      )
+    );
+    const preferenceItemConversationPlaybook =
+      onboardingBody.onboarding.entityConversationPlaybooks.find(
+        (playbook) => playbook.focus === "preference_item"
+      );
+    assert.ok(preferenceItemConversationPlaybook);
+    assert.ok(
+      preferenceItemConversationPlaybook.askSequence.some((step) =>
+        /favorite, veto, or compare-later/i.test(step)
+      )
+    );
+    const questionnaireConversationPlaybook =
+      onboardingBody.onboarding.entityConversationPlaybooks.find(
+        (playbook) => playbook.focus === "questionnaire_instrument"
+      );
+    assert.ok(questionnaireConversationPlaybook);
+    assert.match(
+      questionnaireConversationPlaybook.openingQuestion,
+      /help someone notice or track/i
+    );
+    assert.ok(
+      questionnaireConversationPlaybook.askSequence.some((step) =>
+        /practical use case back in plain language/i.test(step)
+      )
+    );
+    const questionnaireRunConversationPlaybook =
+      onboardingBody.onboarding.entityConversationPlaybooks.find(
+        (playbook) => playbook.focus === "questionnaire_run"
+      );
+    assert.ok(questionnaireRunConversationPlaybook);
+    assert.match(
+      questionnaireRunConversationPlaybook.openingQuestion,
+      /start, continue, review, or finish/i
     );
     const valuePlaybook =
       onboardingBody.onboarding.psycheCoachingPlaybooks.find(
@@ -10736,6 +13140,11 @@ test("settings and local agent token management persist through the versioned AP
       (entity) => entity.entityType === "calendar_event"
     );
     assert.ok(calendarEventEntity);
+    assert.equal(calendarEventEntity.classification, "batch_crud_entity");
+    assert.match(
+      calendarEventEntity.preferredMutationPath ?? "",
+      /\/api\/v1\/entities\/create/
+    );
     assert.ok(calendarEventEntity.minimumCreateFields.includes("title"));
     assert.ok(
       calendarEventEntity.fieldGuide.some(
@@ -10758,6 +13167,51 @@ test("settings and local agent token management persist through the versioned AP
     assert.ok(emotionEntity);
     assert.ok(
       emotionEntity.fieldGuide.some((field) => field.name === "category")
+    );
+    const sleepEntity = onboardingBody.onboarding.entityCatalog.find(
+      (entity) => entity.entityType === "sleep_session"
+    );
+    assert.ok(sleepEntity);
+    assert.equal(sleepEntity.classification, "batch_crud_entity");
+    assert.deepEqual(sleepEntity.minimumCreateFields, ["startedAt", "endedAt"]);
+    assert.match(
+      sleepEntity.preferredMutationPath ?? "",
+      /\/api\/v1\/entities\/create/
+    );
+    const workoutEntity = onboardingBody.onboarding.entityCatalog.find(
+      (entity) => entity.entityType === "workout_session"
+    );
+    assert.ok(workoutEntity);
+    assert.equal(workoutEntity.classification, "batch_crud_entity");
+    assert.deepEqual(workoutEntity.minimumCreateFields, [
+      "workoutType",
+      "startedAt",
+      "endedAt"
+    ]);
+    assert.match(
+      workoutEntity.preferredMutationPath ?? "",
+      /\/api\/v1\/entities\/create/
+    );
+    const preferenceCatalogEntity =
+      onboardingBody.onboarding.entityCatalog.find(
+        (entity) => entity.entityType === "preference_catalog"
+      );
+    assert.ok(preferenceCatalogEntity);
+    assert.equal(
+      preferenceCatalogEntity.classification,
+      "batch_crud_entity"
+    );
+    assert.ok(
+      preferenceCatalogEntity.minimumCreateFields.includes("userId")
+    );
+    const questionnaireEntity = onboardingBody.onboarding.entityCatalog.find(
+      (entity) => entity.entityType === "questionnaire_instrument"
+    );
+    assert.ok(questionnaireEntity);
+    assert.equal(questionnaireEntity.classification, "batch_crud_entity");
+    assert.match(
+      questionnaireEntity.preferredMutationPath ?? "",
+      /\/api\/v1\/entities\/create/
     );
     const modeGuideEntity = onboardingBody.onboarding.entityCatalog.find(
       (entity) => entity.entityType === "mode_guide_session"
@@ -10865,6 +13319,15 @@ test("settings and local agent token management persist through the versioned AP
       ]
     );
     assert.deepEqual(
+      onboardingBody.onboarding.recommendedPluginTools.healthWorkflow,
+      [
+        "forge_get_sleep_overview",
+        "forge_get_sports_overview",
+        "forge_update_sleep_session",
+        "forge_update_workout_session"
+      ]
+    );
+    assert.deepEqual(
       onboardingBody.onboarding.recommendedPluginTools.calendarWorkflow,
       [
         "forge_get_calendar_overview",
@@ -10903,6 +13366,18 @@ test("settings and local agent token management persist through the versioned AP
       onboardingBody.onboarding.interactionGuidance.psycheExplorationRule,
       /one exploratory question/i
     );
+    assert.match(
+      onboardingBody.onboarding.interactionGuidance.psycheExplorationRule,
+      /wait for the user's answer before offering a fuller formulation/i
+    );
+    assert.match(
+      onboardingBody.onboarding.interactionGuidance.psycheExplorationRule,
+      /stop deepening and help the user name it cleanly/i
+    );
+    assert.match(
+      onboardingBody.onboarding.interactionGuidance.psycheOpeningQuestionRule,
+      /hold the adjacent ones lightly until the main container is clear/i
+    );
     assert.equal(
       onboardingBody.onboarding.interactionGuidance.duplicateCheckRoute,
       "/api/v1/entities/search"
@@ -10914,6 +13389,14 @@ test("settings and local agent token management persist through the versioned AP
     assert.match(
       onboardingBody.onboarding.interactionGuidance.browserFallbackRule,
       /Do not open the Forge UI or a browser/
+    );
+    assert.match(
+      onboardingBody.onboarding.interactionGuidance.browserFallbackRule,
+      /Batch CRUD is the default for simple entities/i
+    );
+    assert.match(
+      onboardingBody.onboarding.interactionGuidance.browserFallbackRule,
+      /one-route-per-entity mental model/i
     );
     assert.match(
       onboardingBody.onboarding.interactionGuidance.writeConsentRule,
@@ -10948,6 +13431,10 @@ test("settings and local agent token management persist through the versioned AP
       /accept operations as arrays/
     );
     assert.match(
+      onboardingBody.onboarding.mutationGuidance.batchingRule,
+      /Batch CRUD is the default for simple entities/i
+    );
+    assert.match(
       onboardingBody.onboarding.mutationGuidance.searchRule,
       /accepts searches as an array/
     );
@@ -10960,6 +13447,14 @@ test("settings and local agent token management persist through the versioned AP
       /calendar_event/
     );
     assert.match(
+      onboardingBody.onboarding.mutationGuidance.createRule,
+      /sleep_session/
+    );
+    assert.match(
+      onboardingBody.onboarding.mutationGuidance.createRule,
+      /workout_session/
+    );
+    assert.match(
       onboardingBody.onboarding.mutationGuidance.updateRule,
       /entityType, id, and patch/
     );
@@ -10970,6 +13465,43 @@ test("settings and local agent token management persist through the versioned AP
     assert.match(
       onboardingBody.onboarding.mutationGuidance.updateRule,
       /Calendar-event updates/
+    );
+    assert.match(
+      onboardingBody.onboarding.mutationGuidance.updateRule,
+      /health-session field edits belong on the batch route by default/i
+    );
+    assert.ok(
+      onboardingBody.onboarding.entityRouteModel.batchCrudEntities.includes(
+        "sleep_session"
+      )
+    );
+    assert.ok(
+      onboardingBody.onboarding.entityRouteModel.batchCrudEntities.includes(
+        "workout_session"
+      )
+    );
+    assert.ok(
+      onboardingBody.onboarding.entityRouteModel.batchCrudEntities.includes(
+        "preference_catalog"
+      )
+    );
+    assert.ok(
+      onboardingBody.onboarding.entityRouteModel.batchCrudEntities.includes(
+        "questionnaire_instrument"
+      )
+    );
+    assert.equal(
+      onboardingBody.onboarding.entityRouteModel.readModelOnlySurfaces.sleepOverview,
+      "/api/v1/health/sleep"
+    );
+    assert.equal(
+      onboardingBody.onboarding.entityRouteModel.readModelOnlySurfaces.sportsOverview,
+      "/api/v1/health/fitness"
+    );
+    assert.equal(
+      onboardingBody.onboarding.entityRouteModel.specializedCrudEntities
+        .wiki_page?.create,
+      "/api/v1/wiki/pages"
     );
     assert.match(
       onboardingBody.onboarding.mutationGuidance.createExample,
@@ -13098,6 +15630,52 @@ test("self observation calendar returns observed notes with linked psyche contex
     });
     assert.equal(noteResponse.statusCode, 201);
 
+    const habitId = createHabit({
+      title: "Doomscrolling",
+      description: "Do not sink into reactive scrolling.",
+      status: "active",
+      polarity: "negative",
+      frequency: "daily",
+      targetCount: 1,
+      weekDays: [],
+      linkedGoalIds: [],
+      linkedProjectIds: [],
+      linkedTaskIds: [],
+      linkedValueIds: [],
+      linkedPatternIds: [],
+      linkedBehaviorIds: [],
+      linkedBeliefIds: [],
+      linkedModeIds: [],
+      linkedReportIds: [],
+      linkedBehaviorId: null,
+      rewardXp: 12,
+      penaltyXp: 8,
+      userId: "user_operator",
+      generatedHealthEventTemplate: {
+        enabled: false,
+        workoutType: "walk",
+        title: "",
+        durationMinutes: 30,
+        xpReward: 0,
+        tags: [],
+        links: [],
+        notesTemplate: ""
+      }
+    }).id;
+
+    recordActivityEvent(
+      {
+        entityType: "habit",
+        entityId: habitId,
+        eventType: "habit_check_in_created",
+        title: "Resisted Doomscrolling",
+        description: "Resisted the pull and stayed present.",
+        actor: "operator",
+        source: "ui"
+      },
+      new Date("2026-04-06T09:20:00.000Z")
+    );
+
     const calendarResponse = await app.inject({
       method: "GET",
       url:
@@ -13110,14 +15688,21 @@ test("self observation calendar returns observed notes with linked psyche contex
       calendar: {
         observations: Array<{
           observedAt: string;
+          tags: string[];
           note: { contentMarkdown: string; userId: string | null };
           linkedPatterns: Array<{ id: string }>;
           linkedReports: Array<{ id: string }>;
+        }>;
+        activity: Array<{
+          observedAt: string;
+          tags: string[];
+          event: { title: string; entityType: string };
         }>;
         availableTags: string[];
       };
     };
     assert.equal(body.calendar.observations.length, 1);
+    assert.equal(body.calendar.activity.length, 1);
     assert.equal(
       body.calendar.observations[0]?.note.contentMarkdown,
       "Noticed the retreat impulse immediately."
@@ -13134,7 +15719,36 @@ test("self observation calendar returns observed notes with linked psyche contex
       body.calendar.observations[0]?.linkedReports[0]?.id,
       reportId
     );
-    assert.deepEqual(body.calendar.availableTags, ["focus"]);
+    assert.equal(body.calendar.activity[0]?.event.title, "Resisted Doomscrolling");
+    assert.equal(body.calendar.activity[0]?.event.entityType, "habit");
+    assert.ok(body.calendar.activity[0]?.tags.includes("Forge activity"));
+    assert.ok(body.calendar.observations[0]?.tags.includes("Self-observation"));
+    assert.deepEqual(body.calendar.availableTags, [
+      "Entity · Habit",
+      "focus",
+      "Forge activity",
+      "Self-observation",
+      "Source · UI"
+    ]);
+
+    const exportResponse = await app.inject({
+      method: "GET",
+      url:
+        "/api/v1/psyche/self-observation/calendar/export" +
+        "?from=2026-04-06T00:00:00.000Z&to=2026-04-07T00:00:00.000Z&userIds=user_operator&tags=Forge%20activity&format=markdown",
+      headers: { cookie: operatorCookie }
+    });
+    assert.equal(exportResponse.statusCode, 200);
+    assert.match(
+      exportResponse.headers["content-type"] ?? "",
+      /text\/markdown/
+    );
+    assert.match(exportResponse.body, /Forge activity/);
+    assert.match(exportResponse.body, /Resisted Doomscrolling/);
+    assert.doesNotMatch(
+      exportResponse.body,
+      /Noticed the retreat impulse immediately\./
+    );
   } finally {
     await app.close();
     closeDatabase();

@@ -1,19 +1,38 @@
 name: ForgeCompanion
 options:
   bundleIdPrefix: com.albertbuchard
+schemes:
+  ForgeCompanion:
+    build:
+      targets:
+        ForgeCompanion: all
+        ForgeScreenTimeReportExtension: [build]
+    test:
+      targets:
+        - ForgeCompanionTests
 targets:
   ForgeCompanion:
     type: application
     platform: iOS
     deploymentTarget: "17.0"
     sources:
-      - ForgeCompanion/ForgeCompanion
+      - path: ForgeCompanion/ForgeCompanion
+        excludes:
+          - Info.plist
+          - ForgeCompanion.entitlements
+      - ForgeCompanion/ScreenTimeShared
     dependencies:
-      - target: ForgeWatch Watch App
+      - target: ForgeScreenTimeReportExtension
+      - sdk: FamilyControls.framework
+      - sdk: DeviceActivity.framework
+      - sdk: ManagedSettings.framework
+      - sdk: _DeviceActivity_SwiftUI.framework
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.albertbuchard.ForgeCompanion
         CODE_SIGN_ENTITLEMENTS: ForgeCompanion/ForgeCompanion/ForgeCompanion.entitlements
+        TARGETED_DEVICE_FAMILY: "1"
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
         INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
         INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone:
           - UIInterfaceOrientationPortrait
@@ -54,20 +73,25 @@ targets:
     type: application.watchapp2
     platform: watchOS
     sources:
-      - ForgeCompanion/ForgeWatch Watch App
+      - path: ForgeCompanion/ForgeWatch Watch App
+        excludes:
+          - ForgeWatch Watch App.entitlements
     dependencies:
       - target: ForgeWatchExtension
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.albertbuchard.ForgeCompanion.watchkitapp
         CODE_SIGN_ENTITLEMENTS: ForgeCompanion/ForgeWatch Watch App/ForgeWatch Watch App.entitlements
+        GENERATE_INFOPLIST_FILE: YES
         CODE_SIGN_STYLE: Automatic
         DEVELOPMENT_TEAM: KZ65F7924F
   ForgeWatchExtension:
     type: app-extension
     platform: watchOS
     sources:
-      - ForgeCompanion/ForgeWatch
+      - path: ForgeCompanion/ForgeWatch
+        excludes:
+          - Info.plist
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.albertbuchard.ForgeCompanion.watchkitapp.ForgeWatch
@@ -84,3 +108,45 @@ targets:
       - sdk: WidgetKit.framework
       - sdk: AppIntents.framework
       - sdk: WatchConnectivity.framework
+  ForgeScreenTimeReportExtension:
+    type: app-extension
+    platform: iOS
+    deploymentTarget: "17.0"
+    sources:
+      - path: ForgeCompanion/ForgeScreenTimeReportExtension
+        excludes:
+          - Info.plist
+          - ForgeScreenTimeReportExtension.entitlements
+      - ForgeCompanion/ScreenTimeShared
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.albertbuchard.ForgeCompanion.ForgeScreenTimeReportExtension
+        CODE_SIGN_ENTITLEMENTS: ForgeCompanion/ForgeScreenTimeReportExtension/ForgeScreenTimeReportExtension.entitlements
+        INFOPLIST_FILE: ForgeCompanion/ForgeScreenTimeReportExtension/Info.plist
+        CODE_SIGN_STYLE: Automatic
+        DEVELOPMENT_TEAM: KZ65F7924F
+    info:
+      path: ForgeCompanion/ForgeScreenTimeReportExtension/Info.plist
+      properties:
+        CFBundleDisplayName: Screen Time Report
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.deviceactivityui.report-extension
+    dependencies:
+      - sdk: FamilyControls.framework
+      - sdk: DeviceActivity.framework
+      - sdk: ManagedSettings.framework
+      - sdk: _DeviceActivity_SwiftUI.framework
+  ForgeCompanionTests:
+    type: bundle.unit-test
+    platform: iOS
+    deploymentTarget: "17.0"
+    sources:
+      - ForgeCompanion/ForgeCompanionTests
+    dependencies:
+      - target: ForgeCompanion
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.albertbuchard.ForgeCompanionTests
+        GENERATE_INFOPLIST_FILE: YES
+        CODE_SIGN_STYLE: Automatic
+        DEVELOPMENT_TEAM: KZ65F7924F

@@ -24,6 +24,11 @@ struct CompanionAppRoot: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background {
+            if #available(iOS 16.0, *) {
+                ScreenTimeCaptureHost(screenTimeStore: appModel.screenTimeStore)
+            }
+        }
         .fullScreenCover(isPresented: $setupVisible) {
             CompanionSetupFlow {
                 setupVisible = false

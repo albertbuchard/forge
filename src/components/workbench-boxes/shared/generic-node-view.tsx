@@ -2,10 +2,24 @@ import { Handle, Position } from "@xyflow/react";
 import { useState } from "react";
 import type {
   WorkbenchNodeComponentProps,
-  WorkbenchNodeDefinition
+  WorkbenchNodeDefinition,
+  WorkbenchOutputDefinition
 } from "../../../lib/workbench/nodes.js";
 import { InfoTooltip } from "../../../components/ui/info-tooltip.js";
 import { cn } from "../../../lib/utils.js";
+
+function describePort(port: {
+  key: string;
+  label: string;
+  kind: string;
+  modelName?: string;
+  itemKind?: string;
+  description?: string;
+}) {
+  return [port.kind, port.modelName, port.itemKind ? `item:${port.itemKind}` : null]
+    .filter(Boolean)
+    .join(" · ");
+}
 
 function PortList({
   title,
@@ -13,7 +27,14 @@ function PortList({
   align
 }: {
   title: string;
-  ports: Array<{ key: string; label: string }>;
+  ports: Array<{
+    key: string;
+    label: string;
+    kind: string;
+    modelName?: string;
+    itemKind?: string;
+    description?: string;
+  }>;
   align: "left" | "right";
 }) {
   return (
@@ -43,7 +64,7 @@ function PortList({
         <div
           key={port.key}
           className={cn(
-            "relative rounded-full bg-white/[0.05] px-3 py-1.5 text-[11px] text-white/62",
+            "relative rounded-[16px] bg-white/[0.05] px-3 py-2 text-[11px] text-white/62",
             align === "left" ? "pl-5 text-left" : "pr-5 text-right"
           )}
         >
@@ -56,7 +77,8 @@ function PortList({
               [align]: 6
             }}
           />
-          {port.label}
+          <div>{port.label}</div>
+          <div className="mt-1 text-[10px] text-white/38">{describePort(port)}</div>
         </div>
       ))}
     </div>
@@ -128,19 +150,52 @@ export function createGenericWorkbenchNodeView(
             <pre className="mt-2 overflow-auto whitespace-pre-wrap text-[11px] leading-5 text-white/64">
               {JSON.stringify(
                 {
-                  inputs: definition.inputs.map(({ key, kind, required }) => ({
+                  inputs: definition.inputs.map(
+                    ({
+                      key,
+                      kind,
+                      required,
+                      description,
+                      modelName,
+                      itemKind,
+                      shape,
+                      exampleValue
+                    }) => ({
                     key,
                     kind,
-                    required: Boolean(required)
-                  })),
-                  outputs: definition.output.map(({ key, kind, required }) => ({
+                    required: Boolean(required),
+                    description,
+                    modelName,
+                    itemKind,
+                    shape,
+                    exampleValue
+                  })
+                  ),
+                  outputs: definition.output.map(
+                    ({
+                      key,
+                      kind,
+                      required,
+                      description,
+                      modelName,
+                      itemKind,
+                      shape,
+                      exampleValue
+                    }: WorkbenchOutputDefinition) => ({
                     key,
                     kind,
-                    required: Boolean(required)
-                  })),
-                  tools: definition.tools.map(({ key, accessMode }) => ({
+                    required: Boolean(required),
+                    description,
+                    modelName,
+                    itemKind,
+                    shape,
+                    exampleValue
+                  })
+                  ),
+                  tools: definition.tools.map(({ key, accessMode, argsSchema }) => ({
                     key,
-                    accessMode
+                    accessMode,
+                    argsSchema
                   }))
                 },
                 null,

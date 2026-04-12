@@ -1,19 +1,16 @@
 import SwiftUI
 
-struct SetupHealthScreen: View {
+struct SetupPermissionsScreen: View {
     @EnvironmentObject private var appModel: CompanionAppModel
 
     let close: () -> Void
-
-    @State private var requesting = false
-    @State private var requestingMovement = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack {
                 Spacer()
                 CompanionIconButton(systemName: "xmark") {
-                    companionDebugLog("SetupHealthScreen", "tap Close")
+                    companionDebugLog("SetupPermissionsScreen", "tap Close")
                     close()
                 }
             }
@@ -23,62 +20,65 @@ struct SetupHealthScreen: View {
             Spacer(minLength: 0)
 
             VStack(alignment: .leading, spacing: 18) {
-                Text("Device permissions")
+                Text("Authorize device signals")
                     .font(.system(size: 30, weight: .bold, design: .rounded))
                     .foregroundStyle(CompanionStyle.textPrimary)
 
-                Text("Grant HealthKit and passive location before opening Forge so sleep, workouts, stays, and trips can sync truthfully.")
+                Text("Grant the companion access once, sync the essentials, then open Forge.")
                     .font(.system(size: 15, weight: .medium, design: .rounded))
                     .foregroundStyle(CompanionStyle.textSecondary)
 
                 CompanionSectionCard {
                     VStack(alignment: .leading, spacing: 12) {
-                        statusRow("Health", appModel.healthAccessLabel)
-                        statusRow("Location", appModel.movementStore.locationPermissionStatus.replacingOccurrences(of: "_", with: " "))
-                        statusRow("Background", appModel.movementStore.backgroundTrackingReady ? "ready" : "not ready")
-                        statusRow("Sync", appModel.syncStateLabel)
+                        statusRow("Status", "\(appModel.companionOperationalStatusLabel) · \(appModel.companionOperationalDetailLabel)")
+
+                        ForEach(appModel.permissionGateStatusRows, id: \.id) { row in
+                            statusRow(row.title, row.value)
+                        }
                     }
                 }
 
-                Button("Grant recommended permissions") {
-                    companionDebugLog("SetupHealthScreen", "tap Grant recommended permissions")
-                    requesting = true
+                Button {
+                    companionDebugLog("SetupPermissionsScreen", "tap Authorize + Sync")
                     Task {
-                        await appModel.requestRecommendedPermissions()
-                        requesting = false
+                        await appModel.requestCombinedPermissionsAndSync()
+                    }
+                }
+                label: {
+                    HStack(spacing: 10) {
+                        if appModel.permissionSyncInFlight {
+                            ProgressView()
+                                .tint(Color(red: 13 / 255, green: 20 / 255, blue: 37 / 255))
+                        }
+
+                        Text(appModel.permissionSyncButtonLabel)
                     }
                 }
                 .buttonStyle(CompanionFilledButtonStyle())
-                .disabled(requesting || requestingMovement)
+                .disabled(appModel.permissionSyncInFlight)
 
-                Button("Request Health access") {
-                    companionDebugLog("SetupHealthScreen", "tap Request Health access")
-                    requesting = true
-                    Task {
-                        await appModel.requestHealthPermissions()
-                        requesting = false
+                if let progressDetail = appModel.permissionSyncProgressDetail {
+                    HStack(spacing: 10) {
+                        if appModel.permissionSyncInFlight {
+                            ProgressView()
+                                .tint(CompanionStyle.accentStrong)
+                                .scaleEffect(0.82)
+                        }
+
+                        Text(progressDetail)
+                            .font(.system(size: 13, weight: .medium, design: .rounded))
+                            .foregroundStyle(CompanionStyle.textSecondary)
                     }
+                    .padding(.horizontal, 4)
+                    .transition(.opacity)
                 }
-                .buttonStyle(CompanionGhostButtonStyle())
-                .disabled(requesting || requestingMovement)
 
-                Button("Request passive location") {
-                    companionDebugLog("SetupHealthScreen", "tap Request passive location")
-                    requestingMovement = true
-                    appModel.requestMovementPermissions()
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
-                        requestingMovement = false
-                    }
-                }
-                .buttonStyle(CompanionGhostButtonStyle())
-                .disabled(requesting || requestingMovement)
-
-                Button("Continue to Forge") {
+                Button(appModel.permissionSyncInFlight ? "Continue without waiting" : "Continue to Forge") {
                     companionDebugLog(
-                        "SetupHealthScreen",
-                        "tap Continue to Forge healthAccessStatus=\(appModel.healthAccessStatus.rawValue) locationStatus=\(appModel.movementStore.locationPermissionStatus)"
+                        "SetupPermissionsScreen",
+                        "tap Continue to Forge status=\(appModel.companionOperationalStatusLabel)"
                     )
-                    if appModel.healthAccessStatus == .notSet {
+                    if appModel.healthSyncEnabled && appModel.healthAccessStatus == .notSet {
                         appModel.deferHealthPermissionPrompt()
                     }
                     if appModel.movementStore.locationPermissionStatus == "not_determined" {
@@ -102,7 +102,7 @@ struct SetupHealthScreen: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .onAppear {
             companionDebugLog(
-                "SetupHealthScreen",
+                "SetupPermissionsScreen",
                 "onAppear healthAccessStatus=\(appModel.healthAccessStatus.rawValue) syncState=\(appModel.syncState.rawValue)"
             )
             Task {

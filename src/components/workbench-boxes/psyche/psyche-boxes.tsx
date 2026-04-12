@@ -5,8 +5,19 @@ import {
 } from "../../../lib/workbench/runtime.js";
 import type {
   WorkbenchExecutionFunction,
-  WorkbenchNodeExecutionInput
+  WorkbenchInputDefinition,
+  WorkbenchNodeExecutionInput,
+  WorkbenchOutputDefinition,
+  WorkbenchParamDefinition,
+  WorkbenchToolDefinition
 } from "../../../lib/workbench/nodes.js";
+import {
+  createSearchEntitiesTool,
+  createSearchInputs,
+  createSearchOutputs,
+  createSearchParams,
+  createSummaryOutput
+} from "../../../lib/workbench/contracts.js";
 import { createGenericWorkbenchNodeView } from "../shared/generic-node-view.js";
 import { defineWorkbenchBox } from "../shared/define-workbench-box.js";
 
@@ -21,19 +32,15 @@ function definePsycheBox(
   description: string,
   tags: string[],
   execute: WorkbenchExecutionFunction,
-  entityTypes: string[] = []
+  output: WorkbenchOutputDefinition[],
+  tools: WorkbenchToolDefinition[] = [],
+  options?: {
+    inputs?: WorkbenchInputDefinition[];
+    params?: WorkbenchParamDefinition[];
+  }
 ) {
-  const tools =
-    entityTypes.length > 0
-      ? [
-          {
-            key: "forge.search_entities",
-            label: "Search Forge entities",
-            description: "Search psyche entities and reflective records.",
-            accessMode: "read" as const
-          }
-        ]
-      : [];
+  const inputs = options?.inputs ?? [];
+  const params = options?.params ?? [];
   return defineWorkbenchBox(Slot, {
     id,
     surfaceId: "psyche",
@@ -43,16 +50,16 @@ function definePsycheBox(
     description,
     category: "Psyche",
     tags,
-    inputs: [],
-    params: [],
-    output: [{ key: "primary", label: title, kind: "content" }],
+    inputs,
+    params,
+    output,
     tools,
     NodeView: createGenericWorkbenchNodeView({
       title,
       description,
-      inputs: [],
-      params: [],
-      output: [{ key: "primary", label: title, kind: "content" }],
+      inputs,
+      params,
+      output,
       tools
     }),
     execute
@@ -71,7 +78,8 @@ export const PsycheOverviewBox = definePsycheBox(
         surfaces: ["values", "patterns", "beliefs", "modes", "reports"]
       },
       "Psyche overview spanning values, patterns, beliefs, modes, and reports."
-    )
+    ),
+  [createSummaryOutput({ label: "Psyche summary", description: "Summary of values, patterns, beliefs, modes, and reports." })]
 );
 
 export const PsycheValuesBox = definePsycheBox(
@@ -85,7 +93,24 @@ export const PsycheValuesBox = definePsycheBox(
       entityTypes: ["psyche_value"],
       limit: 20
     }),
-  ["psyche_value"]
+  createSearchOutputs({
+    itemKind: "psyche_value",
+    itemLabel: "Psyche value"
+  }),
+  [createSearchEntitiesTool("Search psyche entities and reflective records.")],
+  {
+    inputs: createSearchInputs({
+      itemKind: "psyche_value",
+      itemLabel: "Psyche value",
+      defaultEntityTypes: ["psyche_value"],
+      defaultLimit: 20
+    }),
+    params: createSearchParams({
+      itemKind: "psyche_value",
+      defaultEntityTypes: ["psyche_value"],
+      defaultLimit: 20
+    })
+  }
 );
 
 export const PsycheReportsBox = definePsycheBox(
@@ -99,5 +124,32 @@ export const PsycheReportsBox = definePsycheBox(
       entityTypes: ["trigger_report", "behavior_pattern", "belief_entry", "mode_profile"],
       limit: 20
     }),
-  ["trigger_report", "behavior_pattern", "belief_entry", "mode_profile"]
+  createSearchOutputs({
+    itemKind: "psyche_record",
+    itemLabel: "Psyche record"
+  }),
+  [createSearchEntitiesTool("Search psyche entities and reflective records.")],
+  {
+    inputs: createSearchInputs({
+      itemKind: "psyche_record",
+      itemLabel: "Psyche record",
+      defaultEntityTypes: [
+        "trigger_report",
+        "behavior_pattern",
+        "belief_entry",
+        "mode_profile"
+      ],
+      defaultLimit: 20
+    }),
+    params: createSearchParams({
+      itemKind: "psyche_record",
+      defaultEntityTypes: [
+        "trigger_report",
+        "behavior_pattern",
+        "belief_entry",
+        "mode_profile"
+      ],
+      defaultLimit: 20
+    })
+  }
 );

@@ -14,6 +14,7 @@ import {
   WeatherWidget
 } from "@/components/customization/utility-widgets";
 import { DailyRunway } from "@/components/daily-runway";
+import { LifeForceTodayCard } from "@/components/life-force/life-force-workspace";
 import { EntityNoteCountLink } from "@/components/notes/entity-note-count-link";
 import { useForgeShell } from "@/components/shell/app-shell";
 import { PageHero } from "@/components/shell/page-hero";
@@ -114,6 +115,7 @@ export function TodayPage() {
   );
   const visibleTodayEvents = todayEvents.slice(0, MAX_VISIBLE_TODAY_EVENTS);
   const hasTodayData =
+    shell.snapshot.lifeForce !== undefined ||
     directive !== null ||
     shell.snapshot.overview.topTasks.length > 0 ||
     shell.snapshot.today.dueHabits.length > 0 ||
@@ -170,6 +172,21 @@ export function TodayPage() {
             badge={`${shell.snapshot.metrics.weeklyXp} weekly xp`}
           />
         </TodayHeroBox>
+      )
+    },
+    {
+      id: "life-force",
+      title: "Life Force",
+      description: "Instant headroom, AP use today, and tiredness signals.",
+      defaultWidth: 12,
+      defaultHeight: 3,
+      minWidth: 5,
+      render: () => (
+        <LifeForceTodayCard
+          selectedUserIds={shell.selectedUserIds}
+          fallbackLifeForce={shell.snapshot.lifeForce!}
+          onRefresh={shell.refresh}
+        />
       )
     },
     {

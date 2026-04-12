@@ -25,7 +25,8 @@ export function FacetedTokenSearch({
   resultSummary,
   clearLabel = "Clear filters",
   placeholder = "Search title, alias, domain, source, or filter chip",
-  emptyStateMessage = "Keep typing to search the library or pick one of the suggested filter chips."
+  emptyStateMessage = "Keep typing to search the library or pick one of the suggested filter chips.",
+  compact = false
 }: {
   title: string;
   description: string;
@@ -38,6 +39,7 @@ export function FacetedTokenSearch({
   clearLabel?: string;
   placeholder?: string;
   emptyStateMessage?: string;
+  compact?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [highlightedIndex, setHighlightedIndex] = useState(0);
@@ -87,7 +89,12 @@ export function FacetedTokenSearch({
   };
 
   return (
-    <div className="rounded-[28px] border border-white/8 bg-[linear-gradient(135deg,rgba(19,30,42,0.92),rgba(9,15,24,0.98))] p-4 shadow-[0_30px_80px_rgba(3,8,18,0.28)] sm:p-5">
+    <div
+      className={cn(
+        "rounded-[28px] border border-white/8 bg-[linear-gradient(135deg,rgba(19,30,42,0.92),rgba(9,15,24,0.98))] shadow-[0_30px_80px_rgba(3,8,18,0.28)]",
+        compact ? "rounded-[24px] p-2.5" : "p-4 sm:p-5"
+      )}
+    >
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           {title.trim().length > 0 ? (
@@ -105,20 +112,31 @@ export function FacetedTokenSearch({
           <button
             type="button"
             onClick={clearFilters}
-            className="rounded-full border border-white/8 bg-white/[0.04] px-3 py-2 text-sm text-white/62 transition hover:bg-white/[0.08] hover:text-white"
+            className={cn(
+              "rounded-full border border-white/8 bg-white/[0.04] text-white/62 transition hover:bg-white/[0.08] hover:text-white",
+              compact ? "px-2.5 py-1.5 text-[11px]" : "px-3 py-2 text-sm"
+            )}
           >
             {clearLabel}
           </button>
         ) : null}
       </div>
 
-      <div className="mt-4 rounded-[24px] border border-white/8 bg-white/[0.04] px-4 py-3">
+      <div
+        className={cn(
+          "rounded-[24px] border border-white/8 bg-white/[0.04]",
+          compact ? "mt-1.5 rounded-[18px] px-2.5 py-2" : "mt-4 px-4 py-3"
+        )}
+      >
         {selectedOptions.length > 0 ? (
-          <div className="mb-3 flex flex-wrap gap-2">
+          <div className={cn("flex flex-wrap gap-2", compact ? "mb-2" : "mb-3")}>
             {selectedOptions.map((option) => (
               <span
                 key={option.id}
-                className="inline-flex items-center gap-2 rounded-full border border-white/8 bg-white/[0.06] px-2.5 py-1.5"
+                className={cn(
+                  "inline-flex items-center gap-2 rounded-full border border-white/8 bg-white/[0.06]",
+                  compact ? "px-2 py-0.5" : "px-2.5 py-1.5"
+                )}
               >
                 {option.badge ?? (
                   <span className="text-sm text-white/78">{option.label}</span>
@@ -137,9 +155,9 @@ export function FacetedTokenSearch({
         ) : null}
 
         <div className="relative">
-          <div className="flex items-center gap-3">
-            <Search className="size-4 text-white/36" />
-            <input
+              <div className={cn("flex items-center", compact ? "gap-2" : "gap-3")}>
+                <Search className={cn("text-white/36", compact ? "size-3.5" : "size-4")} />
+                <input
               value={query}
               onChange={(event) => {
                 onQueryChange(event.target.value);
@@ -178,19 +196,26 @@ export function FacetedTokenSearch({
                 }
               }}
               placeholder={placeholder}
-              className="min-w-0 flex-1 bg-transparent text-sm text-white placeholder:text-white/34 focus:outline-none"
-            />
-          </div>
+                  className={cn(
+                    "min-w-0 flex-1 bg-transparent text-white placeholder:text-white/34 focus:outline-none",
+                    compact ? "text-[12px]" : "text-sm"
+                  )}
+                />
+              </div>
 
           {open ? (
-            <div className="absolute top-full z-20 mt-2 w-full rounded-[22px] border border-white/8 bg-[rgba(8,13,24,0.96)] p-2 shadow-[0_26px_60px_rgba(4,8,18,0.32)] backdrop-blur-xl">
+            <div className={cn(
+              "absolute top-full z-20 w-full border border-white/8 bg-[rgba(8,13,24,0.96)] shadow-[0_26px_60px_rgba(4,8,18,0.32)] backdrop-blur-xl",
+              compact ? "mt-1.5 rounded-[18px] p-1.5" : "mt-2 rounded-[22px] p-2"
+            )}>
               {filteredOptions.length > 0 ? (
                 filteredOptions.map((option, index) => (
                   <button
                     key={option.id}
                     type="button"
                     className={cn(
-                      "flex w-full items-start justify-between gap-3 rounded-[18px] px-3 py-2.5 text-left transition",
+                      "flex w-full items-start justify-between gap-3 text-left transition",
+                      compact ? "rounded-[14px] px-2.5 py-2" : "rounded-[18px] px-3 py-2.5",
                       index === highlightedIndex
                         ? "bg-white/[0.1] text-white"
                         : "text-white/70 hover:bg-white/[0.06] hover:text-white"
@@ -200,11 +225,11 @@ export function FacetedTokenSearch({
                     onClick={() => addOption(option.id)}
                   >
                     <div className="min-w-0">
-                      <div className="truncate text-sm font-medium">
+                      <div className={cn("truncate font-medium", compact ? "text-[12px]" : "text-sm")}>
                         {option.badge ?? option.label}
                       </div>
                       {option.description ? (
-                        <div className="mt-1 text-xs leading-5 text-white/46">
+                        <div className={cn("mt-1 text-white/46", compact ? "text-[11px] leading-[1.125rem]" : "text-xs leading-5")}>
                           {option.description}
                         </div>
                       ) : null}
@@ -212,7 +237,7 @@ export function FacetedTokenSearch({
                   </button>
                 ))
               ) : (
-                <div className="px-3 py-2.5 text-sm text-white/42">
+                <div className={cn("text-white/42", compact ? "px-2.5 py-2 text-[12px]" : "px-3 py-2.5 text-sm")}>
                   {emptyStateMessage}
                 </div>
               )}
@@ -221,7 +246,9 @@ export function FacetedTokenSearch({
         </div>
       </div>
 
-      <div className="mt-3 text-sm text-white/52">{resultSummary}</div>
+      <div className={cn("text-white/52", compact ? "mt-2 text-xs" : "mt-3 text-sm")}>
+        {resultSummary}
+      </div>
     </div>
   );
 }

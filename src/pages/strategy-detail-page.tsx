@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate, useParams } from "react-router-dom";
+import { OpenInGraphButton } from "@/components/knowledge-graph/open-in-graph-button";
 import { PreferenceEntityHandoffButton } from "@/components/preferences/preference-entity-handoff-button";
 import { StrategyDialog } from "@/components/strategy-dialog";
 import { StrategyGraphCanvas } from "@/components/strategy-graph-canvas";
@@ -220,6 +221,7 @@ export function StrategyDetailPage() {
               label={strategy.title}
               description={strategy.overview || strategy.endStateDescription}
             />
+            <OpenInGraphButton entityType="strategy" entityId={strategy.id} />
             {!strategy.isLocked ? (
               <Button
                 variant="secondary"

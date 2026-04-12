@@ -1,5 +1,5 @@
 import path from "node:path";
-import { closeDatabase, configureDatabase, configureDatabaseSeeding, getDatabase, initializeDatabase } from "./db.js";
+import { closeDatabase, configureDatabase, configureDatabaseSeeding, getDatabase, initializeDatabase, resolveDatabasePathForDataRoot } from "./db.js";
 const PERSONAL_CONTENT_TABLES = [
     "goals",
     "projects",
@@ -23,7 +23,7 @@ function getCounts() {
 }
 export async function seedDemoDataIntoRuntime(dataRoot = process.env.FORGE_DATA_ROOT ?? process.cwd()) {
     const resolvedDataRoot = path.resolve(dataRoot);
-    const databasePath = path.join(resolvedDataRoot, "data", "forge.sqlite");
+    const databasePath = resolveDatabasePathForDataRoot(resolvedDataRoot);
     closeDatabase();
     configureDatabase({ dataRoot: resolvedDataRoot });
     configureDatabaseSeeding(false);

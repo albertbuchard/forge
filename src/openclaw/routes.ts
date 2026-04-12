@@ -879,7 +879,7 @@ async function runReadOnly(config: ForgePluginConfig, path: string) {
   );
 }
 
-async function runRouteCheck(config: ForgePluginConfig) {
+export async function runRouteCheck(config: ForgePluginConfig) {
   const openapi = await runReadOnly(config, "/api/v1/openapi.json");
   const pathMap =
     typeof openapi === "object" &&
@@ -892,15 +892,24 @@ async function runRouteCheck(config: ForgePluginConfig) {
   return buildRouteParityReport(pathMap);
 }
 
-async function runDoctor(config: ForgePluginConfig) {
-  const [health, overview, onboarding, routeParity, uiUrl] = await Promise.all([
-    runReadOnly(config, "/api/v1/health"),
-    runReadOnly(config, "/api/v1/operator/overview"),
-    runReadOnly(config, "/api/v1/agents/onboarding"),
-    runRouteCheck(config),
-    resolveForgeUiUrl(config)
-  ]);
+export async function runDoctor(config: ForgePluginConfig) {
+  const [doctorResponse, overview, onboarding, routeParity, uiUrl] =
+    await Promise.all([
+      runReadOnly(config, "/api/v1/doctor"),
+      runReadOnly(config, "/api/v1/operator/overview"),
+      runReadOnly(config, "/api/v1/agents/onboarding"),
+      runRouteCheck(config),
+      resolveForgeUiUrl(config)
+    ]);
 
+  const doctorBody =
+    typeof doctorResponse === "object" &&
+    doctorResponse !== null &&
+    "doctor" in doctorResponse &&
+    typeof doctorResponse.doctor === "object" &&
+    doctorResponse.doctor !== null
+      ? (doctorResponse.doctor as Record<string, unknown>)
+      : null;
   const overviewBody =
     typeof overview === "object" &&
     overview !== null &&
@@ -915,12 +924,11 @@ async function runDoctor(config: ForgePluginConfig) {
     overviewBody.capabilities !== null
       ? (overviewBody.capabilities as Record<string, unknown>)
       : null;
-  const overviewWarnings = Array.isArray(overviewBody?.warnings)
-    ? overviewBody.warnings.filter(
+  const warnings = Array.isArray(doctorBody?.warnings)
+    ? doctorBody.warnings.filter(
         (entry): entry is string => typeof entry === "string"
       )
     : [];
-  const warnings: string[] = [];
   const canBootstrap = canBootstrapOperatorSession(config.baseUrl);
 
   if (config.apiToken.trim().length === 0 && canBootstrap) {
@@ -931,9 +939,6 @@ async function runDoctor(config: ForgePluginConfig) {
     warnings.push(
       "Forge apiToken is missing, and this target cannot use local or Tailscale operator-session bootstrap. Protected writes will fail."
     );
-  }
-  if (overviewWarnings.length > 0) {
-    warnings.push(...overviewWarnings);
   }
   if (capabilities && capabilities.canReadPsyche === false) {
     warnings.push(
@@ -957,7 +962,9 @@ async function runDoctor(config: ForgePluginConfig) {
   }
 
   return {
+    ...(doctorBody ?? {}),
     ok:
+      doctorBody?.ok === true &&
       (config.apiToken.trim().length > 0 || canBootstrap) &&
       routeParity.missingFromPlugin.length === 0 &&
       routeParity.missingFromOpenApi.length === 0 &&
@@ -970,7 +977,6 @@ async function runDoctor(config: ForgePluginConfig) {
     apiTokenConfigured: config.apiToken.trim().length > 0,
     operatorSessionBootstrapAvailable: canBootstrap,
     warnings,
-    health,
     overview,
     onboarding,
     routeParity

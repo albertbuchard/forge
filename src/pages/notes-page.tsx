@@ -44,7 +44,7 @@ import {
   patchNote,
   deleteNote
 } from "@/lib/api";
-import type { EntityKind } from "@/lib/entity-visuals";
+import { getEntityKindForCrudEntityType } from "@/lib/entity-visuals";
 import {
   buildDestroyAtFromDelay,
   formatNoteDestroyAtInput,
@@ -78,20 +78,6 @@ const FILTERABLE_ENTITY_TYPES = new Set<CrudEntityType>([
   "mode_profile",
   "trigger_report"
 ]);
-
-const ENTITY_KIND_BY_TYPE: Partial<Record<CrudEntityType, EntityKind>> = {
-  goal: "goal",
-  project: "project",
-  task: "task",
-  strategy: "strategy",
-  habit: "habit",
-  psyche_value: "value",
-  behavior_pattern: "pattern",
-  behavior: "behavior",
-  belief_entry: "belief",
-  mode_profile: "mode",
-  trigger_report: "report"
-};
 
 type EditableNoteDraft = {
   contentMarkdown: string;
@@ -300,7 +286,7 @@ export function NotesPage() {
           [goal.title, goal.description],
           goal
         ),
-        kind: ENTITY_KIND_BY_TYPE.goal
+        kind: getEntityKindForCrudEntityType("goal") ?? undefined
       })),
       ...shell.snapshot.dashboard.projects.map((project) => ({
         value: encodeLinkedValue("project", project.id),
@@ -314,7 +300,7 @@ export function NotesPage() {
           [project.title, project.description, project.goalTitle],
           project
         ),
-        kind: ENTITY_KIND_BY_TYPE.project
+        kind: getEntityKindForCrudEntityType("project") ?? undefined
       })),
       ...shell.snapshot.tasks.map((task) => ({
         value: encodeLinkedValue("task", task.id),
@@ -328,7 +314,7 @@ export function NotesPage() {
           [task.title, task.description, task.owner],
           task
         ),
-        kind: ENTITY_KIND_BY_TYPE.task
+        kind: getEntityKindForCrudEntityType("task") ?? undefined
       })),
       ...shell.snapshot.strategies.map((strategy) => ({
         value: encodeLinkedValue("strategy", strategy.id),
@@ -342,7 +328,7 @@ export function NotesPage() {
           [strategy.title, strategy.overview, strategy.endStateDescription],
           strategy
         ),
-        kind: ENTITY_KIND_BY_TYPE.strategy
+        kind: getEntityKindForCrudEntityType("strategy") ?? undefined
       })),
       ...shell.snapshot.habits.map((habit) => ({
         value: encodeLinkedValue("habit", habit.id),
@@ -356,7 +342,7 @@ export function NotesPage() {
           [habit.title, habit.description],
           habit
         ),
-        kind: ENTITY_KIND_BY_TYPE.habit
+        kind: getEntityKindForCrudEntityType("habit") ?? undefined
       })),
       ...shell.snapshot.tags.map((tag) => ({
         value: encodeLinkedValue("tag", tag.id),
@@ -365,7 +351,8 @@ export function NotesPage() {
         searchText: buildOwnedEntitySearchText(
           [tag.name, tag.kind, tag.description],
           tag
-        )
+        ),
+        kind: getEntityKindForCrudEntityType("tag") ?? undefined
       })),
       ...((valuesQuery.data?.values ?? []).map((value) => ({
         value: encodeLinkedValue("psyche_value", value.id),
@@ -375,7 +362,7 @@ export function NotesPage() {
           [value.title, value.description, value.valuedDirection],
           value
         ),
-        kind: ENTITY_KIND_BY_TYPE.psyche_value
+        kind: getEntityKindForCrudEntityType("psyche_value") ?? undefined
       })) satisfies EntityLinkOption[]),
       ...((patternsQuery.data?.patterns ?? []).map((pattern) => ({
         value: encodeLinkedValue("behavior_pattern", pattern.id),
@@ -389,7 +376,7 @@ export function NotesPage() {
           [pattern.title, pattern.description, pattern.targetBehavior],
           pattern
         ),
-        kind: ENTITY_KIND_BY_TYPE.behavior_pattern
+        kind: getEntityKindForCrudEntityType("behavior_pattern") ?? undefined
       })) satisfies EntityLinkOption[]),
       ...((behaviorsQuery.data?.behaviors ?? []).map((behavior) => ({
         value: encodeLinkedValue("behavior", behavior.id),
@@ -403,7 +390,7 @@ export function NotesPage() {
           [behavior.title, behavior.description, behavior.kind],
           behavior
         ),
-        kind: ENTITY_KIND_BY_TYPE.behavior
+        kind: getEntityKindForCrudEntityType("behavior") ?? undefined
       })) satisfies EntityLinkOption[]),
       ...((beliefsQuery.data?.beliefs ?? []).map((belief) => ({
         value: encodeLinkedValue("belief_entry", belief.id),
@@ -417,7 +404,7 @@ export function NotesPage() {
           [belief.statement, belief.flexibleAlternative, belief.originNote],
           belief
         ),
-        kind: ENTITY_KIND_BY_TYPE.belief_entry
+        kind: getEntityKindForCrudEntityType("belief_entry") ?? undefined
       })) satisfies EntityLinkOption[]),
       ...((modesQuery.data?.modes ?? []).map((mode) => ({
         value: encodeLinkedValue("mode_profile", mode.id),
@@ -431,7 +418,7 @@ export function NotesPage() {
           [mode.title, mode.archetype, mode.family, mode.persona],
           mode
         ),
-        kind: ENTITY_KIND_BY_TYPE.mode_profile
+        kind: getEntityKindForCrudEntityType("mode_profile") ?? undefined
       })) satisfies EntityLinkOption[]),
       ...((reportsQuery.data?.reports ?? []).map((report) => ({
         value: encodeLinkedValue("trigger_report", report.id),
@@ -445,7 +432,7 @@ export function NotesPage() {
           [report.title, report.eventSituation, report.customEventType ?? ""],
           report
         ),
-        kind: ENTITY_KIND_BY_TYPE.trigger_report
+        kind: getEntityKindForCrudEntityType("trigger_report") ?? undefined
       })) satisfies EntityLinkOption[])
     ];
 

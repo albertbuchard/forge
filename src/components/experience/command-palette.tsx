@@ -12,6 +12,7 @@ import {
   GitBranch,
   LayoutDashboard,
   LoaderCircle,
+  Network,
   NotebookPen,
   Radar,
   Repeat,
@@ -407,6 +408,21 @@ export function CommandPalette({
         ...getAuxiliaryVisual("route", CalendarDays)
       },
       {
+        id: "route-knowledge-graph",
+        title: "Knowledge Graph",
+        detail: "Open the world model and graph views for Forge.",
+        href: "/knowledge-graph",
+        category: t("common.commandPalette.categoryRoute"),
+        section: "Routes",
+        searchText: buildRouteItemSearchText(
+          "Knowledge Graph",
+          "Open the world model and graph views for Forge.",
+          t("common.commandPalette.categoryRoute")
+        ),
+        score: 0,
+        ...getAuxiliaryVisual("route", Network)
+      },
+      {
         id: "route-settings",
         title: t("common.routeLabels.settings"),
         detail: t("common.commandPalette.routeSettings"),
@@ -544,7 +560,8 @@ export function CommandPalette({
           const detail = inferPowerBarDetail(candidate.entityType, entity);
           const category = powerBarEntityTypeLabel(candidate.entityType, entity);
           const searchText = buildPowerBarSearchText(candidate.entityType, entity);
-          const kind = powerBarEntityTypeToKind(candidate.entityType) ?? undefined;
+          const kind =
+            powerBarEntityTypeToKind(candidate.entityType, entity) ?? undefined;
           const score = scorePowerBarMatch(deferredQuery, title, searchText);
 
           let auxiliaryVisual = getAuxiliaryVisual("search");

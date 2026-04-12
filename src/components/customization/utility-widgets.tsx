@@ -13,6 +13,11 @@ import { createNote, createWikiPage } from "../../lib/api.js";
 import {
   buildStaticWorkbenchExecution
 } from "../../lib/workbench/runtime.js";
+import {
+  createContextOutput,
+  createNoteTool,
+  createSummaryOutput
+} from "../../lib/workbench/contracts.js";
 import type {
   WorkbenchNodeExecutionInput,
   WorkbenchRegisteredComponent
@@ -388,20 +393,44 @@ const timeWidgetDefinition = {
   tags: ["utility", "clock"],
   inputs: [],
   params: [],
-  output: [{ key: "primary", label: "Current time", kind: "text" as const }],
+  output: [
+    createSummaryOutput({
+      label: "Current time",
+      description: "Formatted local time string published by the clock widget."
+    }),
+    createContextOutput({
+      key: "clock",
+      label: "Clock state",
+      description: "Structured clock state including the current ISO timestamp.",
+      modelName: "ForgeClockState"
+    })
+  ],
   tools: [],
   NodeView: createGenericWorkbenchNodeView({
     title: "Clock",
     description: "Live local time widget.",
     inputs: [],
     params: [],
-    output: [{ key: "primary", label: "Current time", kind: "text" }],
+    output: [
+      createSummaryOutput({
+        label: "Current time",
+        description: "Formatted local time string published by the clock widget."
+      }),
+      createContextOutput({
+        key: "clock",
+        label: "Clock state",
+        description: "Structured clock state including the current ISO timestamp.",
+        modelName: "ForgeClockState"
+      })
+    ],
     tools: []
   }),
   WebView: TimeWidget as never,
   execute: (input: Parameters<typeof buildStaticWorkbenchExecution>[0]) =>
     buildStaticWorkbenchExecution(input, {
-      now: input.context.now
+      clock: {
+        now: input.context.now
+      }
     }, new Intl.DateTimeFormat(undefined, {
       hour: "2-digit",
       minute: "2-digit"
@@ -423,20 +452,44 @@ const calendarWidgetDefinition = {
   tags: ["utility", "calendar"],
   inputs: [],
   params: [],
-  output: [{ key: "primary", label: "Month view", kind: "object" as const }],
+  output: [
+    createSummaryOutput({
+      label: "Month view",
+      description: "Summary of the compact month calendar widget."
+    }),
+    createContextOutput({
+      key: "calendarView",
+      label: "Calendar view",
+      description: "Structured mini-calendar state including the current month anchor.",
+      modelName: "ForgeMiniCalendarView"
+    })
+  ],
   tools: [],
   NodeView: createGenericWorkbenchNodeView({
     title: "Mini calendar",
     description: "Compact month calendar widget.",
     inputs: [],
     params: [],
-    output: [{ key: "primary", label: "Month view", kind: "object" }],
+    output: [
+      createSummaryOutput({
+        label: "Month view",
+        description: "Summary of the compact month calendar widget."
+      }),
+      createContextOutput({
+        key: "calendarView",
+        label: "Calendar view",
+        description: "Structured mini-calendar state including the current month anchor.",
+        modelName: "ForgeMiniCalendarView"
+      })
+    ],
     tools: []
   }),
   WebView: MiniCalendarWidget as never,
   execute: (input: Parameters<typeof buildStaticWorkbenchExecution>[0]) =>
     buildStaticWorkbenchExecution(input, {
-      now: input.context.now
+      calendarView: {
+        now: input.context.now
+      }
     }, "Compact month calendar")
 };
 
@@ -462,20 +515,44 @@ const spotifyWidgetDefinition = {
     }
   ],
   params: [],
-  output: [{ key: "primary", label: "Spotify link", kind: "text" as const }],
+  output: [
+    createSummaryOutput({
+      label: "Spotify link",
+      description: "Summary of the pinned music link widget."
+    }),
+    createContextOutput({
+      key: "spotifyLink",
+      label: "Spotify state",
+      description: "Structured Spotify widget state and pinned surface context.",
+      modelName: "ForgeSpotifyWidgetState"
+    })
+  ],
   tools: [],
   NodeView: createGenericWorkbenchNodeView({
     title: "Spotify",
     description: "Pinned music link widget.",
     inputs: [{ key: "surfaceId", label: "Surface id", kind: "text" }],
     params: [],
-    output: [{ key: "primary", label: "Spotify link", kind: "text" }],
+    output: [
+      createSummaryOutput({
+        label: "Spotify link",
+        description: "Summary of the pinned music link widget."
+      }),
+      createContextOutput({
+        key: "spotifyLink",
+        label: "Spotify state",
+        description: "Structured Spotify widget state and pinned surface context.",
+        modelName: "ForgeSpotifyWidgetState"
+      })
+    ],
     tools: []
   }),
   WebView: SpotifyWidget as never,
   execute: (input: Parameters<typeof buildStaticWorkbenchExecution>[0]) =>
     buildStaticWorkbenchExecution(input, {
-      surfaceId: input.inputs.surfaceId ?? null
+      spotifyLink: {
+        surfaceId: input.inputs.surfaceId ?? null
+      }
     }, "Pinned Spotify link")
 };
 
@@ -494,19 +571,41 @@ const weatherWidgetDefinition = {
   tags: ["utility", "weather"],
   inputs: [],
   params: [],
-  output: [{ key: "primary", label: "Weather", kind: "object" as const }],
+  output: [
+    createSummaryOutput({
+      label: "Weather summary",
+      description: "Summary of the weather widget state."
+    }),
+    createContextOutput({
+      key: "weather",
+      label: "Weather payload",
+      description: "Structured weather widget payload.",
+      modelName: "ForgeWeatherWidgetState"
+    })
+  ],
   tools: [],
   NodeView: createGenericWorkbenchNodeView({
     title: "Weather",
     description: "Location-aware weather widget.",
     inputs: [],
     params: [],
-    output: [{ key: "primary", label: "Weather", kind: "object" }],
+    output: [
+      createSummaryOutput({
+        label: "Weather summary",
+        description: "Summary of the weather widget state."
+      }),
+      createContextOutput({
+        key: "weather",
+        label: "Weather payload",
+        description: "Structured weather widget payload.",
+        modelName: "ForgeWeatherWidgetState"
+      })
+    ],
     tools: []
   }),
   WebView: WeatherWidget as never,
   execute: (input: Parameters<typeof buildStaticWorkbenchExecution>[0]) =>
-    buildStaticWorkbenchExecution(input, null, "Weather widget")
+    buildStaticWorkbenchExecution(input, { weather: null }, "Weather widget")
 };
 
 (
@@ -531,28 +630,40 @@ const quickCaptureWidgetDefinition = {
     }
   ],
   params: [],
-  output: [{ key: "primary", label: "Draft", kind: "content" as const }],
+  output: [
+    createSummaryOutput({
+      label: "Draft summary",
+      description: "Summary of the quick-capture draft state."
+    }),
+    createContextOutput({
+      key: "draft",
+      label: "Draft context",
+      description: "Structured quick-capture draft context.",
+      modelName: "ForgeQuickCaptureDraft"
+    })
+  ],
   tools: [
-    {
-      key: "forge.create_note",
-      label: "Create note",
-      description: "Create a Forge evidence note from captured markdown.",
-      accessMode: "write" as const
-    }
+    createNoteTool("Create a Forge evidence note from captured markdown.")
   ],
   NodeView: createGenericWorkbenchNodeView({
     title: "Quick capture",
     description: "Draft a quick note or wiki page.",
     inputs: [{ key: "defaultUserId", label: "Default user id", kind: "text" }],
     params: [],
-    output: [{ key: "primary", label: "Draft", kind: "content" }],
+    output: [
+      createSummaryOutput({
+        label: "Draft summary",
+        description: "Summary of the quick-capture draft state."
+      }),
+      createContextOutput({
+        key: "draft",
+        label: "Draft context",
+        description: "Structured quick-capture draft context.",
+        modelName: "ForgeQuickCaptureDraft"
+      })
+    ],
     tools: [
-      {
-        key: "forge.create_note",
-        label: "Create note",
-        description: "Create a Forge evidence note from captured markdown.",
-        accessMode: "write"
-      }
+      createNoteTool("Create a Forge evidence note from captured markdown.")
     ]
   }),
   WebView: QuickCaptureWidget as never,
@@ -560,7 +671,9 @@ const quickCaptureWidgetDefinition = {
     buildStaticWorkbenchExecution(
       input,
       {
-        defaultUserId: input.inputs.defaultUserId ?? null
+        draft: {
+          defaultUserId: input.inputs.defaultUserId ?? null
+        }
       },
       "Quick capture can draft notes and wiki pages."
     )

@@ -5,8 +5,19 @@ import {
 } from "../../../lib/workbench/runtime.js";
 import type {
   WorkbenchExecutionFunction,
-  WorkbenchNodeExecutionInput
+  WorkbenchInputDefinition,
+  WorkbenchNodeExecutionInput,
+  WorkbenchOutputDefinition,
+  WorkbenchParamDefinition,
+  WorkbenchToolDefinition
 } from "../../../lib/workbench/nodes.js";
+import {
+  createSearchEntitiesTool,
+  createSearchInputs,
+  createSearchOutputs,
+  createSearchParams,
+  createSummaryOutput
+} from "../../../lib/workbench/contracts.js";
 import { createGenericWorkbenchNodeView } from "../shared/generic-node-view.js";
 import { defineWorkbenchBox } from "../shared/define-workbench-box.js";
 
@@ -21,19 +32,15 @@ function defineCalendarBox(
   description: string,
   tags: string[],
   execute: WorkbenchExecutionFunction,
-  searchEntityTypes: string[] = []
+  output: WorkbenchOutputDefinition[],
+  tools: WorkbenchToolDefinition[],
+  options?: {
+    inputs?: WorkbenchInputDefinition[];
+    params?: WorkbenchParamDefinition[];
+  }
 ) {
-  const tools =
-    searchEntityTypes.length > 0
-      ? [
-          {
-            key: "forge.search_entities",
-            label: "Search Forge entities",
-            description: "Search calendar-backed Forge entities and planning records.",
-            accessMode: "read" as const
-          }
-        ]
-      : [];
+  const inputs = options?.inputs ?? [];
+  const params = options?.params ?? [];
   return defineWorkbenchBox(Slot, {
     id,
     surfaceId: "calendar",
@@ -43,16 +50,16 @@ function defineCalendarBox(
     description,
     category: "Calendar",
     tags,
-    inputs: [],
-    params: [],
-    output: [{ key: "primary", label: title, kind: "content" }],
+    inputs,
+    params,
+    output,
     tools,
     NodeView: createGenericWorkbenchNodeView({
       title,
       description,
-      inputs: [],
-      params: [],
-      output: [{ key: "primary", label: title, kind: "content" }],
+      inputs,
+      params,
+      output,
       tools
     }),
     execute
@@ -71,7 +78,9 @@ export const CalendarOverviewBox = defineCalendarBox(
         surfaces: ["events", "work_blocks", "timeboxes"]
       },
       "Calendar overview spanning mirrored events, work blocks, and timeboxes."
-    )
+    ),
+  [createSummaryOutput({ label: "Calendar summary", description: "Summary of mirrored events, work blocks, and timeboxes." })],
+  []
 );
 
 export const CalendarEventsBox = defineCalendarBox(
@@ -85,7 +94,24 @@ export const CalendarEventsBox = defineCalendarBox(
       entityTypes: ["calendar_event"],
       limit: 20
     }),
-  ["calendar_event"]
+  createSearchOutputs({
+    itemKind: "calendar_event",
+    itemLabel: "Calendar event"
+  }),
+  [createSearchEntitiesTool("Search calendar-backed Forge entities and planning records.")],
+  {
+    inputs: createSearchInputs({
+      itemKind: "calendar_event",
+      itemLabel: "Calendar event",
+      defaultEntityTypes: ["calendar_event"],
+      defaultLimit: 20
+    }),
+    params: createSearchParams({
+      itemKind: "calendar_event",
+      defaultEntityTypes: ["calendar_event"],
+      defaultLimit: 20
+    })
+  }
 );
 
 export const CalendarPlanningBox = defineCalendarBox(
@@ -99,5 +125,22 @@ export const CalendarPlanningBox = defineCalendarBox(
       entityTypes: ["task_timebox", "work_block_template"],
       limit: 20
     }),
-  ["task_timebox", "work_block_template"]
+  createSearchOutputs({
+    itemKind: "calendar_plan",
+    itemLabel: "Planning record"
+  }),
+  [createSearchEntitiesTool("Search calendar-backed Forge entities and planning records.")],
+  {
+    inputs: createSearchInputs({
+      itemKind: "calendar_plan",
+      itemLabel: "Planning record",
+      defaultEntityTypes: ["task_timebox", "work_block_template"],
+      defaultLimit: 20
+    }),
+    params: createSearchParams({
+      itemKind: "calendar_plan",
+      defaultEntityTypes: ["task_timebox", "work_block_template"],
+      defaultLimit: 20
+    })
+  }
 );

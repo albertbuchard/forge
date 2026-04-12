@@ -100,8 +100,11 @@ actor HealthSyncStore {
     func buildSyncPayload(
         pairing: PairingPayload,
         healthKitAuthorized: Bool,
+        healthSyncEnabled: Bool,
         lastSuccessfulSyncAt: Date?,
-        movementPayload: CompanionSyncPayload.MovementPayload
+        sourceStates: CompanionSyncPayload.SourceStates,
+        movementPayload: CompanionSyncPayload.MovementPayload,
+        screenTimePayload: CompanionSyncPayload.ScreenTimePayload
     ) async throws -> BuildSyncPayloadResult {
         let endDate = Date()
         let fullWindowStart = Calendar.current.date(byAdding: .day, value: -syncWindowDays, to: endDate)
@@ -109,7 +112,7 @@ actor HealthSyncStore {
         let incrementalStart = lastSuccessfulSyncAt?.addingTimeInterval(-Double(incrementalLookbackHours) * 60 * 60)
         let startDate = max(fullWindowStart, incrementalStart ?? fullWindowStart)
         let protectedDataAvailable = await isProtectedDataAvailable()
-        let canReadHealthData = healthKitAuthorized && protectedDataAvailable
+        let canReadHealthData = healthSyncEnabled && healthKitAuthorized && protectedDataAvailable
         companionDebugLog(
             "HealthSyncStore",
             "buildSyncPayload start session=\(pairing.sessionId) start=\(isoString(startDate)) end=\(isoString(endDate)) incremental=\(incrementalStart.map(isoString) ?? "nil") protectedDataAvailable=\(protectedDataAvailable) canReadHealthData=\(canReadHealthData)"
@@ -147,19 +150,24 @@ actor HealthSyncStore {
                 backgroundRefreshEnabled: backgroundRefreshEnabled,
                 motionReady: movementPayload.settings.motionPermissionStatus == "ready",
                 locationReady: movementPayload.settings.locationPermissionStatus == "always"
-                    || movementPayload.settings.locationPermissionStatus == "when_in_use"
+                    || movementPayload.settings.locationPermissionStatus == "when_in_use",
+                screenTimeReady: screenTimePayload.settings.authorizationStatus == "approved"
+                    && screenTimePayload.settings.trackingEnabled
+                    && screenTimePayload.settings.syncEnabled
             ),
+            sourceStates: sourceStates,
             sleepSessions: sleepSessions,
             workouts: workouts,
-            movement: movementPayload
+            movement: movementPayload,
+            screenTime: screenTimePayload
         )
         companionDebugLog(
             "HealthSyncStore",
-            "buildSyncPayload success sleep=\(payload.sleepSessions.count) workouts=\(payload.workouts.count) trips=\(payload.movement.trips.count) stays=\(payload.movement.stays.count) backgroundRefresh=\(backgroundRefreshEnabled)"
+            "buildSyncPayload success sleep=\(payload.sleepSessions.count) workouts=\(payload.workouts.count) trips=\(payload.movement.trips.count) stays=\(payload.movement.stays.count) screenTimeHours=\(payload.screenTime.hourlySegments.count) backgroundRefresh=\(backgroundRefreshEnabled)"
         )
         return BuildSyncPayloadResult(
             payload: payload,
-            healthDataDeferred: healthKitAuthorized && protectedDataAvailable == false
+            healthDataDeferred: healthSyncEnabled && healthKitAuthorized && protectedDataAvailable == false
         )
     }
 

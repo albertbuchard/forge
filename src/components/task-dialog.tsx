@@ -30,6 +30,8 @@ export const defaultTaskValues: QuickTaskInput = {
   energy: "steady",
   dueDate: "",
   points: 60,
+  plannedDurationSeconds: 86_400,
+  actionCostBand: "standard",
   tagIds: [],
   notes: []
 };
@@ -48,6 +50,8 @@ function taskToFormValues(task: Task): QuickTaskInput {
     energy: task.energy,
     dueDate: task.dueDate ?? "",
     points: task.points,
+    plannedDurationSeconds: task.plannedDurationSeconds ?? 86_400,
+    actionCostBand: task.actionPointSummary?.costBand ?? "standard",
     tagIds: task.tagIds,
     notes: []
   };
@@ -411,6 +415,53 @@ export function TaskDialog({
                 type="date"
                 value={value.dueDate}
                 onChange={(event) => setValue({ dueDate: event.target.value })}
+              />
+            </FlowField>
+          </div>
+          <div className="grid gap-4 md:grid-cols-2">
+            <FlowField
+              label="Expected duration"
+              labelHelp="Life Force uses this as the expected shape of the task. The default is one day."
+              error={fieldErrors.plannedDurationSeconds ?? null}
+            >
+              <Input
+                type="number"
+                min={15}
+                max={7 * 24 * 60}
+                step={15}
+                value={Math.max(
+                  15,
+                  Math.round((value.plannedDurationSeconds ?? 86_400) / 60)
+                )}
+                onChange={(event) =>
+                  setValue({
+                    plannedDurationSeconds: Math.max(
+                      60,
+                      (Number(event.target.value) || 24 * 60) * 60
+                    )
+                  })
+                }
+              />
+            </FlowField>
+            <FlowField
+              label="Action cost"
+              labelHelp="Choose a simple AP band now. Advanced AP editing can happen later inside the task."
+            >
+              <FlowChoiceGrid
+                value={value.actionCostBand ?? "standard"}
+                onChange={(next) =>
+                  setValue({
+                    actionCostBand:
+                      next as NonNullable<QuickTaskInput["actionCostBand"]>
+                  })
+                }
+                options={[
+                  { value: "tiny", label: "Tiny" },
+                  { value: "light", label: "Light" },
+                  { value: "standard", label: "Standard" },
+                  { value: "heavy", label: "Heavy" },
+                  { value: "brutal", label: "Brutal" }
+                ]}
               />
             </FlowField>
           </div>

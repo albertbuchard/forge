@@ -1,4 +1,21 @@
+import { z, ZodError } from "zod";
 import { getDatabase, runInTransaction } from "../db.js";
+import {
+  createSleepSession,
+  createSleepSessionSchema,
+  createWorkoutSession,
+  createWorkoutSessionSchema,
+  deleteSleepSession,
+  deleteWorkoutSession,
+  getSleepSessionById,
+  getWorkoutSessionById,
+  listSleepSessions,
+  listWorkoutSessions,
+  updateSleepSession,
+  updateSleepSessionSchema,
+  updateWorkoutSession,
+  updateWorkoutSessionSchema
+} from "../health.js";
 import { createInsight, deleteInsight, getInsightById, listInsights, updateInsight } from "../repositories/collaboration.js";
 import {
   createCalendarEvent,
@@ -190,6 +207,40 @@ type CrudContext = {
   actor?: string | null;
 };
 
+type CrudOperationType =
+  | "create"
+  | "update"
+  | "delete"
+  | "restore"
+  | "search";
+
+type OperationValidationIssue = {
+  path: string;
+  message: string;
+  code?: string;
+  allowedValues?: unknown[];
+};
+
+type OperationErrorPayload = {
+  code: string;
+  message: string;
+  operationType?: CrudOperationType;
+  entityType?: CrudEntityType;
+  clientRef?: string;
+  routeHint?: string;
+  toolHint?: string;
+  summary?: string;
+  issues?: OperationValidationIssue[];
+  missingRequiredFields?: string[];
+  invalidValueGuidance?: Array<{
+    path: string;
+    allowedValues: unknown[];
+    message: string;
+  }>;
+  allowedTopLevelFields?: string[];
+  minimalExamplePayload?: Record<string, unknown>;
+};
+
 type EntityOperationResult = {
   ok: boolean;
   entityType?: CrudEntityType;
@@ -197,10 +248,7 @@ type EntityOperationResult = {
   clientRef?: string;
   entity?: unknown;
   matches?: unknown[];
-  error?: {
-    code: string;
-    message: string;
-  };
+  error?: OperationErrorPayload;
 };
 
 class AtomicBatchRollback extends Error {
@@ -349,6 +397,39 @@ const CRUD_ENTITY_CAPABILITIES: Record<CrudEntityType, CrudEntityCapability> = {
     create: (data) => createTaskTimebox(data as never) as Record<string, unknown>,
     update: (id, patch) => updateTaskTimebox(id, patch as never) as Record<string, unknown> | undefined,
     hardDelete: (id) => deleteTaskTimebox(id) as Record<string, unknown> | undefined
+  },
+  sleep_session: {
+    entityType: "sleep_session",
+    routeBase: "/api/v1/health/sleep",
+    deleteMode: "immediate",
+    inBin: false,
+    list: () => listSleepSessions() as Array<Record<string, unknown>>,
+    get: (id) => getSleepSessionById(id) as Record<string, unknown> | undefined,
+    create: (data, context) =>
+      createSleepSession(data as never, context) as Record<string, unknown>,
+    update: (id, patch, context) =>
+      updateSleepSession(id, patch as never, context) as
+        | Record<string, unknown>
+        | undefined,
+    hardDelete: (id, context) =>
+      deleteSleepSession(id, context) as Record<string, unknown> | undefined
+  },
+  workout_session: {
+    entityType: "workout_session",
+    routeBase: "/api/v1/health/workouts",
+    deleteMode: "immediate",
+    inBin: false,
+    list: () => listWorkoutSessions() as Array<Record<string, unknown>>,
+    get: (id) =>
+      getWorkoutSessionById(id) as Record<string, unknown> | undefined,
+    create: (data, context) =>
+      createWorkoutSession(data as never, context) as Record<string, unknown>,
+    update: (id, patch, context) =>
+      updateWorkoutSession(id, patch as never, context) as
+        | Record<string, unknown>
+        | undefined,
+    hardDelete: (id, context) =>
+      deleteWorkoutSession(id, context) as Record<string, unknown> | undefined
   },
   psyche_value: {
     entityType: "psyche_value",
@@ -534,6 +615,8 @@ const CREATE_ENTITY_SCHEMAS: Record<CrudEntityType, { parse: (value: unknown) =>
   calendar_event: createCalendarEventSchema,
   work_block_template: createWorkBlockTemplateSchema,
   task_timebox: createTaskTimeboxSchema,
+  sleep_session: createSleepSessionSchema,
+  workout_session: createWorkoutSessionSchema,
   psyche_value: createPsycheValueSchema,
   behavior_pattern: createBehaviorPatternSchema,
   behavior: createBehaviorSchema,
@@ -562,6 +645,8 @@ const UPDATE_ENTITY_SCHEMAS: Record<CrudEntityType, { parse: (value: unknown) =>
   calendar_event: updateCalendarEventSchema,
   work_block_template: updateWorkBlockTemplateSchema,
   task_timebox: updateTaskTimeboxSchema,
+  sleep_session: updateSleepSessionSchema,
+  workout_session: updateWorkoutSessionSchema,
   psyche_value: updatePsycheValueSchema,
   behavior_pattern: updateBehaviorPatternSchema,
   behavior: updateBehaviorSchema,
@@ -578,12 +663,184 @@ const UPDATE_ENTITY_SCHEMAS: Record<CrudEntityType, { parse: (value: unknown) =>
   questionnaire_instrument: updateQuestionnaireInstrumentSchema
 };
 
+type CrudEntitySchema = z.ZodObject<z.ZodRawShape>;
+
+function getCreateSchema(entityType: CrudEntityType) {
+  return CREATE_ENTITY_SCHEMAS[entityType] as CrudEntitySchema;
+}
+
+function getUpdateSchema(entityType: CrudEntityType) {
+  return UPDATE_ENTITY_SCHEMAS[entityType] as CrudEntitySchema;
+}
+
+function unwrapSchema(schema: z.ZodTypeAny): z.ZodTypeAny {
+  if (schema instanceof z.ZodOptional || schema instanceof z.ZodNullable) {
+    return unwrapSchema(schema.unwrap());
+  }
+  if (schema instanceof z.ZodDefault) {
+    return unwrapSchema(schema.removeDefault());
+  }
+  if (schema instanceof z.ZodEffects) {
+    return unwrapSchema(schema.innerType());
+  }
+  return schema;
+}
+
+function isRequiredField(schema: z.ZodTypeAny) {
+  if (schema instanceof z.ZodOptional) {
+    return false;
+  }
+  if (schema instanceof z.ZodDefault) {
+    return false;
+  }
+  return true;
+}
+
+function collectRequiredTopLevelFields(schema: CrudEntitySchema) {
+  const unwrapped = unwrapSchema(schema);
+  if (!(unwrapped instanceof z.ZodObject)) {
+    return [];
+  }
+  return Object.entries(unwrapped.shape)
+    .filter(([, fieldSchema]) => isRequiredField(fieldSchema))
+    .map(([key]) => key)
+    .sort();
+}
+
+function extractAllowedTopLevelFields(schema: CrudEntitySchema) {
+  const unwrapped = unwrapSchema(schema);
+  if (!(unwrapped instanceof z.ZodObject)) {
+    return [];
+  }
+  return Object.keys(unwrapped.shape).sort();
+}
+
+function buildExampleValue(schema: z.ZodTypeAny): unknown {
+  const unwrapped = unwrapSchema(schema);
+  if (unwrapped instanceof z.ZodString) {
+    return "string";
+  }
+  if (unwrapped instanceof z.ZodNumber) {
+    return 0;
+  }
+  if (unwrapped instanceof z.ZodBoolean) {
+    return false;
+  }
+  if (unwrapped instanceof z.ZodArray) {
+    return [];
+  }
+  if (unwrapped instanceof z.ZodRecord) {
+    return {};
+  }
+  if (unwrapped instanceof z.ZodEnum) {
+    return unwrapped.options[0];
+  }
+  if (unwrapped instanceof z.ZodLiteral) {
+    return unwrapped.value;
+  }
+  if (unwrapped instanceof z.ZodUnion) {
+    return buildExampleValue(unwrapped.options[0] ?? z.string());
+  }
+  if (unwrapped instanceof z.ZodObject) {
+    const objectValue: Record<string, unknown> = {};
+    for (const [key, fieldSchema] of Object.entries(unwrapped.shape)) {
+      if (!isRequiredField(fieldSchema)) {
+        continue;
+      }
+      objectValue[key] = buildExampleValue(fieldSchema);
+    }
+    return objectValue;
+  }
+  return "value";
+}
+
+function buildMinimalExamplePayload(schema: CrudEntitySchema) {
+  const unwrapped = unwrapSchema(schema);
+  if (!(unwrapped instanceof z.ZodObject)) {
+    return {};
+  }
+  const requiredFields = collectRequiredTopLevelFields(schema);
+  const example: Record<string, unknown> = {};
+  for (const field of requiredFields) {
+    example[field] = buildExampleValue(unwrapped.shape[field]);
+  }
+  return example;
+}
+
+function formatIssuePath(path: PropertyKey[]) {
+  return path.length > 0 ? path.map(String).join(".") : "body";
+}
+
+function buildValidationOperationError(input: {
+  code: string;
+  message: string;
+  operationType: CrudOperationType;
+  entityType: CrudEntityType;
+  clientRef?: string;
+  schema: CrudEntitySchema;
+  error: ZodError;
+}) {
+  const issues: OperationValidationIssue[] = input.error.issues.map((issue) => {
+    const allowedValues =
+      "options" in issue && Array.isArray(issue.options)
+        ? [...issue.options]
+        : undefined;
+    return {
+      path: formatIssuePath(issue.path),
+      message: issue.message,
+      code: issue.code,
+      ...(allowedValues ? { allowedValues } : {})
+    };
+  });
+  const missingRequiredFields = Array.from(
+    new Set(
+      input.error.issues
+        .filter(
+          (issue) =>
+            issue.code === "invalid_type" &&
+            "received" in issue &&
+            issue.received === "undefined" &&
+            issue.path.length > 0
+        )
+        .map((issue) => formatIssuePath(issue.path))
+    )
+  ).sort();
+  const invalidValueGuidance = input.error.issues
+    .filter(
+      (issue) => "options" in issue && Array.isArray((issue as { options?: unknown[] }).options)
+    )
+    .map((issue) => ({
+      path: formatIssuePath(issue.path),
+      allowedValues: [...((issue as { options: unknown[] }).options ?? [])],
+      message: issue.message
+    }));
+  return {
+    code: input.code,
+    message: input.message,
+    operationType: input.operationType,
+    entityType: input.entityType,
+    clientRef: input.clientRef,
+    routeHint: `/api/v1/entities/${input.operationType}`,
+    toolHint:
+      input.operationType === "search"
+        ? "forge_search_entities"
+        : `forge_${input.operationType}_entities`,
+    summary:
+      `${input.entityType} ${input.operationType} payload failed validation.`,
+    issues,
+    missingRequiredFields,
+    invalidValueGuidance,
+    allowedTopLevelFields: extractAllowedTopLevelFields(input.schema),
+    minimalExamplePayload: buildMinimalExamplePayload(input.schema)
+  } satisfies OperationErrorPayload;
+}
+
 function parseCreateInput(entityType: CrudEntityType, data: Record<string, unknown>) {
-  return CREATE_ENTITY_SCHEMAS[entityType].parse(data);
+  return getCreateSchema(entityType).parse(data);
 }
 
 function parseUpdatePatch(entityType: CrudEntityType, patch: Record<string, unknown>) {
-  return UPDATE_ENTITY_SCHEMAS[entityType].parse(patch);
+  return getUpdateSchema(entityType).parse(patch);
 }
 
 function toOperationError(code: string, message: string) {
@@ -753,6 +1010,8 @@ function matchesLinkedTo(entityType: CrudEntityType, entity: Record<string, unkn
     case "insight":
       return entity.entityType === linkedTo.entityType && entity.entityId === linkedTo.id;
     case "calendar_event":
+    case "sleep_session":
+    case "workout_session":
       return (
         Array.isArray(entity.links) &&
         entity.links.some(
@@ -930,6 +1189,22 @@ export function createEntities(input: BatchCreateEntitiesInput, context: CrudCon
       const entity = getCapability(entry.entityType).create(parseCreateInput(entry.entityType, entry.data), context);
       return { ok: true, entityType: entry.entityType, clientRef: entry.clientRef, id: String(entity.id ?? ""), entity } satisfies EntityOperationResult;
     } catch (error) {
+      if (error instanceof ZodError) {
+        return {
+          ok: false,
+          entityType: entry.entityType,
+          clientRef: entry.clientRef,
+          error: buildValidationOperationError({
+            code: "validation_failed",
+            message: "Entity create payload validation failed.",
+            operationType: "create",
+            entityType: entry.entityType,
+            clientRef: entry.clientRef,
+            schema: getCreateSchema(entry.entityType),
+            error
+          })
+        } satisfies EntityOperationResult;
+      }
       return {
         ok: false,
         entityType: entry.entityType,
@@ -955,6 +1230,23 @@ export function updateEntities(input: BatchUpdateEntitiesInput, context: CrudCon
       }
       return { ok: true, entityType: entry.entityType, id: entry.id, clientRef: entry.clientRef, entity } satisfies EntityOperationResult;
     } catch (error) {
+      if (error instanceof ZodError) {
+        return {
+          ok: false,
+          entityType: entry.entityType,
+          id: entry.id,
+          clientRef: entry.clientRef,
+          error: buildValidationOperationError({
+            code: "validation_failed",
+            message: "Entity update payload validation failed.",
+            operationType: "update",
+            entityType: entry.entityType,
+            clientRef: entry.clientRef,
+            schema: getUpdateSchema(entry.entityType),
+            error
+          })
+        } satisfies EntityOperationResult;
+      }
       return {
         ok: false,
         entityType: entry.entityType,

@@ -9,11 +9,13 @@ import {
 } from "@/lib/diagnostics";
 import { ActivityPage } from "@/pages/activity-page";
 import { CalendarPage } from "@/pages/calendar-page";
+import { CompanionSyncLabPage } from "@/pages/companion-sync-lab-page";
 import { GoalDetailPage } from "@/pages/goal-detail-page";
 import { GoalsPage } from "@/pages/goals-page";
 import { HabitsPage } from "@/pages/habits-page";
 import { InsightsPage } from "@/pages/insights-page";
 import { KanbanPage } from "@/pages/kanban-page";
+import { KnowledgeGraphPage } from "@/pages/knowledge-graph-page";
 import { MovementPage } from "@/pages/movement-page";
 import { NotesPage } from "@/pages/notes-page";
 import { OverviewPage } from "@/pages/overview-page";
@@ -37,9 +39,11 @@ import { PsycheQuestionnairesPage } from "@/pages/psyche-questionnaires-page";
 import { PsycheReportDetailPage } from "@/pages/psyche-report-detail-page";
 import { PsycheReportsPage } from "@/pages/psyche-reports-page";
 import { PsycheSelfObservationPage } from "@/pages/psyche-self-observation-page";
+import { PsycheScreenTimePage } from "@/pages/psyche-screen-time-page";
 import { PsycheSchemasBeliefsPage } from "@/pages/psyche-schemas-beliefs-page";
 import { PsycheValuesPage } from "@/pages/psyche-values-page";
 import { SettingsPage } from "@/pages/settings-page";
+import { SettingsDataPage } from "@/pages/settings-data-page";
 import { SettingsAgentsPage } from "@/pages/settings-agents-page";
 import { SettingsBinPage } from "@/pages/settings-bin-page";
 import { SettingsCalendarPage } from "@/pages/settings-calendar-page";
@@ -224,6 +228,15 @@ export function App() {
             )}
           />
           <Route
+            path="knowledge-graph"
+            element={surface(
+              "knowledge-graph-index",
+              "Knowledge Graph",
+              "One connected map of Forge entities and explicit relationships.",
+              <KnowledgeGraphPage />
+            )}
+          />
+          <Route
             path="movement"
             element={surface(
               "movement-index",
@@ -333,6 +346,15 @@ export function App() {
             )}
           />
           <Route
+            path="psyche/screen-time"
+            element={surface(
+              "psyche-screen-time",
+              "Screen Time",
+              "Apple-compliant device-activity patterns and reflective usage history.",
+              <PsycheScreenTimePage />
+            )}
+          />
+          <Route
             path="psyche/behaviors"
             element={surface(
               "psyche-behaviors",
@@ -417,8 +439,8 @@ export function App() {
             path="wiki"
             element={surface(
               "wiki-index",
-              "Wiki",
-              "Wiki memory search and page navigation.",
+              "KarpaWiki",
+              "KarpaWiki search and page navigation.",
               <WikiPage />
             )}
           />
@@ -426,7 +448,7 @@ export function App() {
             path="wiki/ingest-history"
             element={surface(
               "wiki-ingest-history",
-              "Wiki ingest history",
+              "KarpaWiki ingest history",
               "Ingest jobs and processing history.",
               <WikiIngestHistoryPage />
             )}
@@ -435,8 +457,8 @@ export function App() {
             path="wiki/page/:slug"
             element={surface(
               "wiki-page-detail",
-              "Wiki page",
-              "Wiki page detail and backlinks.",
+              "KarpaWiki page",
+              "KarpaWiki page detail and backlinks.",
               <WikiPage />
             )}
           />
@@ -444,8 +466,8 @@ export function App() {
             path="wiki/new"
             element={surface(
               "wiki-new",
-              "New wiki page",
-              "Wiki editor for new pages.",
+              "New KarpaWiki page",
+              "KarpaWiki editor for new pages.",
               <WikiEditorPage />
             )}
           />
@@ -453,8 +475,8 @@ export function App() {
             path="wiki/edit/:pageId"
             element={surface(
               "wiki-edit",
-              "Edit wiki page",
-              "Wiki editor for existing pages.",
+              "Edit KarpaWiki page",
+              "KarpaWiki editor for existing pages.",
               <WikiEditorPage />
             )}
           />
@@ -514,6 +536,15 @@ export function App() {
             )}
           />
           <Route
+            path="settings/data"
+            element={surface(
+              "settings-data",
+              "Settings data",
+              "Runtime storage, backups, exports, and recovery.",
+              <SettingsDataPage />
+            )}
+          />
+          <Route
             path="settings/users"
             element={surface(
               "settings-users",
@@ -540,6 +571,17 @@ export function App() {
               <SettingsMobilePage />
             )}
           />
+          {import.meta.env.DEV ? (
+            <Route
+              path="settings/mobile/lab"
+              element={surface(
+                "settings-mobile-lab",
+                "Companion sync lab",
+                "Dev-only fixtures for source-state and movement gap QA.",
+                <CompanionSyncLabPage />
+              )}
+            />
+          ) : null}
           <Route
             path="settings/models"
             element={surface(
@@ -571,8 +613,8 @@ export function App() {
             path="settings/wiki"
             element={surface(
               "settings-wiki",
-              "Settings wiki",
-              "Wiki ingestion and profile settings.",
+              "KarpaWiki settings",
+              "KarpaWiki ingestion and profile settings.",
               <SettingsWikiPage />
             )}
           />

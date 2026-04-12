@@ -18,10 +18,12 @@ import {
   useParams,
   useSearchParams
 } from "react-router-dom";
+import { OpenInGraphButton } from "@/components/knowledge-graph/open-in-graph-button";
 import { WikiArticleMarkdown } from "@/components/wiki/wiki-article-markdown";
 import { WikiIngestModal } from "@/components/wiki/wiki-ingest-modal";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { EntityBadge } from "@/components/ui/entity-badge";
 import {
   EmptyState,
   ErrorState,
@@ -132,7 +134,7 @@ function WikiSpacePickerDialog({
           <div className="flex items-start justify-between gap-4">
             <div>
               <Dialog.Title className="font-display text-[1.2rem] tracking-[-0.04em] text-white">
-                Choose wiki space
+                Choose KarpaWiki space
               </Dialog.Title>
               <Dialog.Description className="mt-1 text-[13px] leading-6 text-white/56">
                 Switch the reading space without leaving the article surface.
@@ -399,7 +401,7 @@ export function WikiPage() {
       return;
     }
     const confirmed = window.confirm(
-      `Delete wiki page "${selectedPage.title}"? You can restore it later from the bin.`
+      `Delete KarpaWiki page "${selectedPage.title}"? You can restore it later from the bin.`
     );
     if (!confirmed) {
       return;
@@ -439,9 +441,9 @@ export function WikiPage() {
   ) {
     return (
       <LoadingState
-        eyebrow="Wiki"
+        eyebrow="KarpaWiki"
         title="Loading the article"
-        description="Preparing the current space, article, and wiki index."
+        description="Preparing the current space, article, and KarpaWiki index."
       />
     );
   }
@@ -456,7 +458,7 @@ export function WikiPage() {
   ) {
     return (
       <ErrorState
-        eyebrow="Wiki"
+        eyebrow="KarpaWiki"
         error={
           settingsQuery.error ??
           homeQuery.error ??
@@ -477,7 +479,7 @@ export function WikiPage() {
     if (missingLinkedTitle) {
       return (
         <LoadingState
-          eyebrow="Wiki"
+          eyebrow="KarpaWiki"
           title="Opening a new page"
           description={`Creating a draft for ${missingLinkedTitle}.`}
         />
@@ -485,7 +487,7 @@ export function WikiPage() {
     }
     return (
       <EmptyState
-        eyebrow="Wiki"
+        eyebrow="KarpaWiki"
         title="Article not found"
         description="This page does not exist in the selected space."
       />
@@ -497,10 +499,26 @@ export function WikiPage() {
       <div className="px-3 py-4 sm:px-5 lg:px-6">
         <div className="mx-auto flex w-full max-w-[1680px] flex-col gap-4">
           <section className="wiki-frame px-3 py-3 sm:px-4">
-            <div className="flex flex-wrap items-center gap-2 text-[11px] uppercase tracking-[0.16em] text-white/42">
-              <span>Wiki</span>
-              {activeSpace ? <span>{activeSpace.label}</span> : null}
-              <span>{formatUpdatedAt(selectedPage.updatedAt)}</span>
+            <div className="flex flex-wrap items-center gap-2">
+              <EntityBadge
+                kind="wiki_page"
+                label="KarpaWiki page"
+                compact
+                gradient={false}
+              />
+              {activeSpace ? (
+                <EntityBadge
+                  kind="wiki_space"
+                  label={activeSpace.label}
+                  compact
+                  gradient={false}
+                  wrap
+                  className="max-w-[20rem]"
+                />
+              ) : null}
+              <span className="text-[11px] uppercase tracking-[0.16em] text-white/42">
+                {formatUpdatedAt(selectedPage.updatedAt)}
+              </span>
             </div>
 
             <div className="mt-3 flex flex-col gap-2 lg:flex-row lg:items-center">
@@ -510,7 +528,7 @@ export function WikiPage() {
                 onClick={() => setSearchOpen(true)}
               >
                 <Search className="size-4 shrink-0 text-white/44" />
-                <span>Search this wiki</span>
+                <span>Search KarpaWiki</span>
               </button>
 
               <div className="flex flex-wrap items-center gap-2 lg:shrink-0">
@@ -520,7 +538,7 @@ export function WikiPage() {
                   onClick={() => setSpacePickerOpen(true)}
                 >
                   <span className="max-w-[16rem] truncate">
-                    {activeSpace?.label ?? "Wiki space"}
+                    {activeSpace?.label ?? "KarpaWiki space"}
                   </span>
                 </button>
                 <div className="relative" ref={ingestMenuRef}>
@@ -601,6 +619,12 @@ export function WikiPage() {
                   <PenSquare className="size-3.5" />
                   Edit
                 </Button>
+                <OpenInGraphButton
+                  entityType="note"
+                  entityId={selectedPage.id}
+                  label="Open in graph"
+                  size="sm"
+                />
                 <Button
                   variant="secondary"
                   size="sm"
@@ -614,8 +638,8 @@ export function WikiPage() {
                   disabled={!canDeletePage}
                   title={
                     canDeletePage
-                      ? "Delete this wiki page"
-                      : "The wiki home page cannot be deleted"
+                      ? "Delete this KarpaWiki page"
+                      : "The KarpaWiki home page cannot be deleted"
                   }
                 >
                   <Trash2 className="size-3.5" />
@@ -664,7 +688,7 @@ export function WikiPage() {
                   <div className="mb-4 rounded-[18px] border border-rose-400/20 bg-rose-500/10 px-4 py-3 text-sm text-rose-100">
                     {deletePageMutation.error instanceof Error
                       ? deletePageMutation.error.message
-                      : "Forge could not delete this wiki page."}
+                      : "Forge could not delete this KarpaWiki page."}
                   </div>
                 ) : null}
                 <WikiArticleMarkdown
@@ -762,7 +786,7 @@ export function WikiPage() {
                 autoFocus
                 value={searchQuery}
                 onChange={(event) => setSearchQuery(event.target.value)}
-                placeholder="Search wiki pages"
+                placeholder="Search KarpaWiki pages"
                 className="h-11 rounded-2xl border-white/10 bg-white/[0.04] text-[14px] text-white placeholder:text-white/28"
               />
 
@@ -806,17 +830,17 @@ export function WikiPage() {
             <div className="mt-4 max-h-[60vh] overflow-y-auto">
               {!searchQuery.trim() ? (
                 <div className="rounded-2xl border border-dashed border-white/10 px-4 py-10 text-center text-[13px] leading-6 text-white/42">
-                  Start typing to search the current wiki space.
+                  Start typing to search the current KarpaWiki space.
                 </div>
               ) : searchResultsQuery.isLoading ? (
                 <LoadingState
-                  eyebrow="Wiki search"
+                  eyebrow="KarpaWiki search"
                   title="Searching"
                   description="Ranking matching pages for this query."
                 />
               ) : searchResultsQuery.isError ? (
                 <ErrorState
-                  eyebrow="Wiki search"
+                  eyebrow="KarpaWiki search"
                   error={searchResultsQuery.error}
                   onRetry={() => void searchResultsQuery.refetch()}
                 />

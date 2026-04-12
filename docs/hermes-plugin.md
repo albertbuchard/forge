@@ -82,17 +82,29 @@ If you want to move the data elsewhere, edit `~/.hermes/forge/config.json`:
 }
 ```
 
-For a real release, run the monorepo helper:
+For a real release, the recommended prep flow from a clean checkout on `main` is:
 
 ```bash
-../scripts/release-forge-hermes-plugin.sh patch
+FORGE_RELEASE_MODE=prepare ./scripts/release-forge-hermes-plugin.sh patch
 ```
 
 That script bumps the Hermes plugin version in `plugin.yaml` and
 `forge_hermes/version.py`, bundles the runtime payload, builds a wheel and sdist, runs
 the Forge + Hermes verification suite, smoke-installs the wheel into a temporary
 virtualenv, commits the nested Forge repo, and pushes a Hermes-specific git tag such as
-`hermes-v0.2.19`.
+`hermes-v0.2.19`. The `.github/workflows/release-hermes-plugin.yml` workflow then
+builds the release artifacts from that tag and publishes them to PyPI through Trusted
+Publishing.
+
+One-time PyPI setup for CI:
+
+- configure the `forge-hermes-plugin` project on PyPI with this GitHub repository as a
+  trusted publisher
+- leave the publish job on a GitHub-hosted Linux runner, which is the supported path
+  for `pypa/gh-action-pypi-publish`
+
+For the full cross-registry release reference, including tag names and GitHub secret
+names, use `docs/release-cheat-sheet.md`.
 
 If you want Hermes and OpenClaw to ship on the exact same version in one pass, use the
 shared monorepo wrapper instead:

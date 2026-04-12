@@ -4,20 +4,40 @@ set -euo pipefail
 
 ROOT_DIR="/Users/omarclaw/Documents/aurel-monorepo/projects/forge"
 IOS_DIR="$ROOT_DIR/ios-companion"
-PROJECT_PATH="$IOS_DIR/ForgeCompanion/ForgeCompanion.xcodeproj"
+PROJECT_PATH="$IOS_DIR/ForgeCompanion.xcodeproj"
 SCHEME="ForgeCompanion"
 DERIVED_DATA_PATH="$IOS_DIR/.artifacts/screenshot-derived-data"
 RAW_OUTPUT_DIR="$IOS_DIR/.artifacts/screenshot-raw"
 FINAL_OUTPUT_DIR="$IOS_DIR/fastlane/screenshots/en-US/iphone-65"
 BUNDLE_ID="com.albertbuchard.ForgeCompanion"
-DEVICE_NAME="iPhone 17 Pro Max"
+REQUESTED_DEVICE_NAME="${FORGE_IOS_SCREENSHOT_DEVICE_NAME:-iPhone 17 Pro Max}"
+DEVICE_NAME=""
+SIMULATOR_UDID=""
 
-SIMULATOR_UDID="$(
-  xcrun simctl list devices available | awk -F '[()]' -v device="$DEVICE_NAME" '$0 ~ device {print $2; exit}'
-)"
+find_simulator() {
+  local device_name="$1"
+  local udid
+  udid="$(
+    xcrun simctl list devices available | awk -F '[()]' -v device="$device_name" '$0 ~ device {print $2; exit}'
+  )"
+  if [[ -n "${udid}" ]]; then
+    DEVICE_NAME="${device_name}"
+    SIMULATOR_UDID="${udid}"
+    return 0
+  fi
+  return 1
+}
+
+if ! find_simulator "${REQUESTED_DEVICE_NAME}"; then
+  for candidate in "iPhone 17 Pro Max" "iPhone 16 Pro Max" "iPhone 15 Pro Max" "iPhone 14 Pro Max"; do
+    if find_simulator "${candidate}"; then
+      break
+    fi
+  done
+fi
 
 if [[ -z "${SIMULATOR_UDID}" ]]; then
-  echo "Could not find an available simulator named '$DEVICE_NAME'." >&2
+  echo "Could not find an available simulator matching '${REQUESTED_DEVICE_NAME}' or the fallback list." >&2
   exit 1
 fi
 

@@ -39,6 +39,8 @@ type EditorState = {
   apiKey: string;
 };
 
+const WORKBENCH_MOCK_PROVIDER_ENABLED = import.meta.env.DEV;
+
 function defaultEditorState(provider: AiModelProvider = "openai-api"): EditorState {
   return {
     label:
@@ -46,6 +48,8 @@ function defaultEditorState(provider: AiModelProvider = "openai-api"): EditorSta
         ? "OpenAI Codex"
         : provider === "openai-compatible"
           ? "Local compatible endpoint"
+          : provider === "mock"
+            ? "Workbench mock runtime"
           : "OpenAI API",
     provider,
     baseUrl:
@@ -53,8 +57,10 @@ function defaultEditorState(provider: AiModelProvider = "openai-api"): EditorSta
         ? "https://chatgpt.com/backend-api"
         : provider === "openai-compatible"
           ? "http://127.0.0.1:11434/v1"
+          : provider === "mock"
+            ? "mock://workbench"
           : "https://api.openai.com/v1",
-    model: "gpt-5.4-mini",
+    model: provider === "mock" ? "mock-echo" : "gpt-5.4-mini",
     apiKey: ""
   };
 }
@@ -230,6 +236,9 @@ export function SettingsModelsPage() {
     if (editor.provider === "openai-codex") {
       return Boolean(editor.id || oauthSession?.status === "authorized");
     }
+    if (editor.provider === "mock") {
+      return true;
+    }
     return editor.apiKey.trim().length > 0 || Boolean(editor.id);
   }, [editor, oauthSession?.status]);
 
@@ -305,7 +314,7 @@ export function SettingsModelsPage() {
           </label>
 
           <label className="grid gap-2 rounded-[20px] bg-white/[0.04] p-4">
-            <span className="text-sm text-white/72">Wiki model connection</span>
+            <span className="text-sm text-white/72">KarpaWiki model connection</span>
             <select
               className="rounded-[16px] border border-white/10 bg-white/[0.04] px-3 py-3 text-sm text-white"
               value={wikiConnectionId}
@@ -343,8 +352,8 @@ export function SettingsModelsPage() {
           </Badge>
           <Badge className="bg-white/[0.06] text-white/78">
             {settings.modelSettings.forgeAgent.wiki.connectionLabel
-              ? `Wiki: ${settings.modelSettings.forgeAgent.wiki.connectionLabel}`
-              : "Wiki: no external model selected"}
+              ? `KarpaWiki: ${settings.modelSettings.forgeAgent.wiki.connectionLabel}`
+              : "KarpaWiki: no external model selected"}
           </Badge>
         </div>
       </Card>
@@ -372,7 +381,10 @@ export function SettingsModelsPage() {
                   [
                     ["openai-api", "OpenAI API"],
                     ["openai-codex", "OpenAI Codex OAuth"],
-                    ["openai-compatible", "OpenAI-compatible"]
+                    ["openai-compatible", "OpenAI-compatible"],
+                    ...(WORKBENCH_MOCK_PROVIDER_ENABLED
+                      ? ([["mock", "Workbench mock"]] as const)
+                      : [])
                   ] as const
                 ).map(([provider, label]) => (
                   <button
@@ -412,7 +424,20 @@ export function SettingsModelsPage() {
               placeholder="Model"
             />
 
-            {editor.provider !== "openai-codex" ? (
+            {editor.provider === "mock" ? (
+              <div className="grid gap-3 rounded-[20px] bg-white/[0.04] p-4">
+                <div className="text-sm text-white">
+                  The Workbench mock runtime is only meant for local development and test
+                  workflows.
+                </div>
+                <div className="text-xs leading-5 text-white/52">
+                  Use mock models like <code>mock-echo</code>, <code>mock-json</code>,
+                  <code>mock-tool-search</code>, <code>mock-tool-note</code>, or
+                  <code>mock-chat-memory</code> to exercise deterministic flow behavior
+                  without a real external model.
+                </div>
+              </div>
+            ) : editor.provider !== "openai-codex" ? (
               <>
                 <input
                   className="rounded-[16px] border border-white/10 bg-white/[0.04] px-3 py-3 text-sm text-white"
@@ -524,6 +549,8 @@ export function SettingsModelsPage() {
                 disabled={
                   editor.provider === "openai-codex"
                     ? !editor.id
+                    : editor.provider === "mock"
+                      ? false
                     : !editor.id && !editor.apiKey.trim()
                 }
                 onClick={() => void testConnectionMutation.mutateAsync()}

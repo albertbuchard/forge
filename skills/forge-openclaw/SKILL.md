@@ -41,8 +41,9 @@ Wiki navigation and search rule:
 Health rule:
 
 - Sleep and sports records are first-class health surfaces, not generic notes or tasks.
-- Use `forge_get_sleep_overview` and `forge_get_sports_overview` for review.
-- Use `forge_update_sleep_session` and `forge_update_workout_session` when the user wants to attach reflective context, tags, or Forge links to an existing health record.
+- Use `forge_get_sleep_overview` and `forge_get_sports_overview` for review and trend reading.
+- Use the shared batch entity tools for ordinary `sleep_session` and `workout_session` create, update, delete, and search work. Do not force agents into a large one-route-per-entity mental model when the batch routes already cover the record cleanly.
+- Use `forge_update_sleep_session` and `forge_update_workout_session` only when the job is reflective enrichment on one existing health record after review, such as attaching notes, tags, mood, meaning, or Forge links.
 - Habit-generated workouts and imported HealthKit workouts belong to the same workout record model, so do not invent a separate storage path for sport sessions.
 
 Write to Forge only with clear user consent. If the user is just thinking aloud, helping first is usually better than writing immediately. After helping, you may offer one short Forge prompt if the match is strong. If the user agrees, ask only for the missing fields and only one to three focused questions at a time. Do not offer Forge again after a decline unless the user reopens it.
@@ -64,9 +65,9 @@ Entity conversation rule:
 
 Forge data location rule:
 
-- by default, Forge stores data under the active runtime root at `data/forge.sqlite`
-- on a normal OpenClaw install, this usually means `~/.openclaw/extensions/forge-openclaw-plugin/data/forge.sqlite`
-- on a linked repo-local install, this usually means `<repo>/openclaw-plugin/data/forge.sqlite`
+- by default, Forge stores data under the active runtime root at `forge.sqlite`
+- on a normal OpenClaw install, this usually means `~/.openclaw/extensions/forge-openclaw-plugin/forge.sqlite`
+- on a linked repo-local install, this usually means `<repo>/openclaw-plugin/forge.sqlite`
 - if the user wants the data somewhere else for persistence, backup, or manual control, tell them to set `plugins.entries["forge-openclaw-plugin"].config.dataRoot` and restart the OpenClaw gateway
 - if the user asks where the data is stored or how to move it, explain the current default plainly and show the exact config field
 
@@ -282,12 +283,12 @@ Use the batch entity tools for stored records:
 `forge_search_entities`, `forge_create_entities`, `forge_update_entities`, `forge_delete_entities`, `forge_restore_entities`
 
 These tools operate on:
-`goal`, `project`, `task`, `habit`, `note`, `calendar_event`, `work_block_template`, `task_timebox`, `psyche_value`, `behavior_pattern`, `behavior`, `belief_entry`, `mode_profile`, `mode_guide_session`, `trigger_report`, `event_type`, `emotion_definition`
+`goal`, `project`, `strategy`, `task`, `habit`, `tag`, `note`, `insight`, `calendar_event`, `work_block_template`, `task_timebox`, `psyche_value`, `behavior_pattern`, `behavior`, `belief_entry`, `mode_profile`, `mode_guide_session`, `trigger_report`, `event_type`, `emotion_definition`, `preference_catalog`, `preference_catalog_item`, `preference_context`, `preference_item`, `questionnaire_instrument`, `sleep_session`, `workout_session`
 
 Use the wiki tools for file-first memory work:
 `forge_get_wiki_settings`, `forge_list_wiki_pages`, `forge_get_wiki_page`, `forge_search_wiki`, `forge_upsert_wiki_page`, `forge_get_wiki_health`, `forge_sync_wiki_vault`, `forge_reindex_wiki_embeddings`, `forge_ingest_wiki_source`
 
-Sleep and workout sessions are not batch entities. Use the health tools instead:
+Use the health tools for review and reflective enrichment, not as the default CRUD architecture:
 `forge_get_sleep_overview`, `forge_get_sports_overview`, `forge_update_sleep_session`, `forge_update_workout_session`
 
 Use live work tools for `task_run`:
@@ -343,7 +344,7 @@ For project deletion and recovery, prefer the generic delete and restore tools:
 
 For restore operations, each item must include `entityType` and `id`.
 
-Batch tools do not create or control `task_run` or `insight`.
+Batch tools do not create or control `task_run`.
 
 Use the exact route-facing field names. Do not invent friendlier aliases. If a field name is unclear, use `forge_get_agent_onboarding` as the schema source of truth.
 
@@ -376,9 +377,20 @@ Use the health tools when the request is about sleep or sports review:
 
 - `forge_get_sleep_overview` to inspect recent nights, averages, regularity, stage breakdown, and linked reflective context
 - `forge_get_sports_overview` to inspect training volume, workout types, effort trends, habit-generated sessions, and linked context
-- `forge_update_sleep_session` to add sleep-quality notes, tags, or links back to Forge entities
-- `forge_update_workout_session` to add subjective effort, mood, meaning, tags, or links on one workout
+- `forge_update_sleep_session` to add sleep-quality notes, tags, or links back to Forge entities after review
+- `forge_update_workout_session` to add subjective effort, mood, meaning, tags, or links on one workout after review
 - remember that the UI route is `/sports` while the backend overview route is `/api/v1/health/fitness`
+
+Use these exact health batch payload shapes when the user is creating or editing the stored records themselves:
+
+- create a manual sleep session:
+  `{"operations":[{"entityType":"sleep_session","data":{"startedAt":"2026-04-10T22:45:00.000Z","endedAt":"2026-04-11T06:45:00.000Z","qualitySummary":"Slept cleanly after a light evening.","links":[{"entityType":"habit","entityId":"habit_sleep_hygiene","relationshipType":"supports"}]}}]}`
+- update a sleep session through batch CRUD:
+  `{"operations":[{"entityType":"sleep_session","id":"sleep_123","patch":{"notes":"Woke once around 03:00 but settled quickly.","tags":["travel","recovered"]}}]}`
+- create a manual workout session:
+  `{"operations":[{"entityType":"workout_session","data":{"workoutType":"walk","startedAt":"2026-04-11T10:00:00.000Z","endedAt":"2026-04-11T10:45:00.000Z","subjectiveEffort":6,"meaningText":"Reset after a long planning block.","links":[{"entityType":"task","entityId":"task_123","relationshipType":"supports"}]}}]}`
+- update a workout session through batch CRUD:
+  `{"operations":[{"entityType":"workout_session","id":"workout_123","patch":{"moodAfter":"clear","tags":["zone2"]}}]}`
 
 Work-block payload guidance:
 
@@ -476,7 +488,8 @@ Additional first-class surfaces:
 
 - Use the high-level batch routes for basic Preferences CRUD. `preference_catalog`, `preference_catalog_item`, `preference_context`, and `preference_item` all go through `forge_create_entities`, `forge_update_entities`, and `forge_delete_entities`.
 - Use the high-level batch routes for basic questionnaire CRUD too. `questionnaire_instrument` goes through `forge_create_entities`, `forge_update_entities`, and `forge_delete_entities`.
+- Use the high-level batch routes for ordinary health-session CRUD too. `sleep_session` and `workout_session` go through `forge_search_entities`, `forge_create_entities`, `forge_update_entities`, and `forge_delete_entities` by default. Keep the dedicated health tools for review surfaces and reflective enrichment on one record.
 - Keep the dedicated Preferences tools only for real preference actions and read models: `forge_get_preferences_workspace`, `forge_start_preferences_game`, `forge_merge_preferences_contexts`, `forge_enqueue_preferences_item_from_entity`, `forge_submit_preferences_judgment`, `forge_submit_preferences_signal`, and `forge_update_preferences_score`.
 - Keep the dedicated questionnaire tools only for real flow actions and read models: `forge_list_questionnaires`, `forge_get_questionnaire`, `forge_clone_questionnaire`, `forge_ensure_questionnaire_draft`, `forge_publish_questionnaire_draft`, `forge_start_questionnaire_run`, `forge_get_questionnaire_run`, `forge_update_questionnaire_run`, and `forge_complete_questionnaire_run`.
 - Self-observation is note-backed. Read the calendar through `forge_get_self_observation_calendar`, but create or update the stored observation as a `note` tagged `Self-observation` with `frontmatter.observedAt` and links to the relevant `behavior_pattern`, `trigger_report`, or other Forge records.
-- `sleep_session` and `workout_session` are first-class health records. Review them through the dedicated health tools instead of treating them like loose notes.
+- `sleep_session` and `workout_session` are first-class health records. Treat them like ordinary stored entities for CRUD, and use the dedicated health tools for read models or post-review enrichment rather than pretending they live on a special mutation island.

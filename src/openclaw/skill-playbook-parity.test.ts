@@ -65,6 +65,7 @@ describe("forge skill playbook parity", () => {
   it("keeps the agent-facing skills explicit about preferences, questionnaires, self-observation, and health surfaces", () => {
     const openclawSkill = readRepoFile("skills/forge-openclaw/SKILL.md");
     const hermesSkill = readRepoFile("plugins/forge-hermes/forge_hermes/skill.md");
+    const codexSkill = readRepoFile("plugins/forge-codex/skills/forge-codex/SKILL.md");
 
     expect(openclawSkill).toMatch(/forge_get_preferences_workspace/);
     expect(openclawSkill).toMatch(/forge_start_preferences_game/);
@@ -73,10 +74,17 @@ describe("forge skill playbook parity", () => {
     expect(openclawSkill).toMatch(/Self-observation/);
     expect(openclawSkill).toMatch(/sleep_session/i);
     expect(openclawSkill).toMatch(/workout_session/i);
+    expect(openclawSkill).toMatch(/Batch CRUD is the default for simple entities|shared batch entity tools/i);
 
     expect(hermesSkill).toMatch(/high-level batch routes for basic Preferences CRUD/i);
     expect(hermesSkill).toMatch(/high-level batch routes for basic questionnaire CRUD/i);
     expect(hermesSkill).toMatch(/Self-observation is note-backed/i);
+    expect(hermesSkill).toMatch(/Batch CRUD is the default for simple entities/i);
+    expect(hermesSkill).toMatch(/route jungle|one-route-per-entity/i);
+    expect(codexSkill).toMatch(/sleep_session/i);
+    expect(codexSkill).toMatch(/workout_session/i);
+    expect(codexSkill).toMatch(/simple entities/i);
+    expect(codexSkill).toMatch(/hundreds of individual CRUD routes|route jungle/i);
   });
 
   it("keeps the canonical playbooks focused on guided, one-lane questioning", () => {
@@ -99,6 +107,11 @@ describe("forge skill playbook parity", () => {
     expect(entityPlaybook).toMatch(/When the user is vague, ask for the smallest real example, desired outcome, or stake/i);
     expect(entityPlaybook).toMatch(/When the user is clear, say what the record seems to be becoming/i);
     expect(entityPlaybook).toMatch(/Steering moves/i);
+    expect(entityPlaybook).toMatch(/Question Calibration Loop/i);
+    expect(entityPlaybook).toMatch(/Turn shapes/i);
+    expect(entityPlaybook).toMatch(/Name, Define, Connect/i);
+    expect(entityPlaybook).toMatch(/One focused question is the default/i);
+    expect(entityPlaybook).toMatch(/what is becoming clearer/i);
     expect(entityPlaybook).toMatch(/feels true[\s\S]*or needs one correction/i);
     expect(entityPlaybook).toMatch(/Prefer "what", "when", and "how" before "why"/i);
     expect(entityPlaybook).toMatch(
@@ -112,10 +125,18 @@ describe("forge skill playbook parity", () => {
     expect(entityPlaybook).toMatch(/## Preference Catalog Item/);
     expect(entityPlaybook).toMatch(/## Preference Context/);
     expect(entityPlaybook).toMatch(/## Preference Item/);
+    expect(entityPlaybook).toMatch(/## Wiki Page/);
+    expect(entityPlaybook).toMatch(/## Calendar Connection/);
     expect(entityPlaybook).toMatch(/favorite, veto, or compare-later/i);
     expect(entityPlaybook).toMatch(/candidate label[\s\S]*what kinds of moments belong inside it/i);
+    expect(entityPlaybook).toMatch(/keep it provisional[\s\S]*future use are clear/i);
+    expect(entityPlaybook).toMatch(/When the record is already clear enough to save, save it/i);
+    expect(entityPlaybook).toMatch(/if the user confirms it, stop asking and save/i);
 
     expect(psychePlaybook).toMatch(/Ask only one lane at a time/i);
+    expect(psychePlaybook).toMatch(/Therapeutic Direction Check/i);
+    expect(psychePlaybook).toMatch(/Therapeutic turn shapes/i);
+    expect(psychePlaybook).toMatch(/Name, Define, Connect/i);
     expect(psychePlaybook).toMatch(/Follow-up rhythm/i);
     expect(psychePlaybook).toMatch(/Before the next question, reflect back what you just heard/i);
     expect(psychePlaybook).toMatch(/formulation work/i);
@@ -130,6 +151,11 @@ describe("forge skill playbook parity", () => {
     expect(psychePlaybook).toMatch(/what does it seem to prove in that moment/i);
     expect(psychePlaybook).toMatch(/Psyche update loop/i);
     expect(psychePlaybook).toMatch(/newly true, newly visible, or newly inaccurate/i);
+    expect(psychePlaybook).toMatch(/Do not make the user prove the experience/i);
+    expect(psychePlaybook).toMatch(/Do not widen into adjacent entities until the current one has a working sentence/i);
+    expect(psychePlaybook).toMatch(/If the user says it lands, move toward the write/i);
+    expect(psychePlaybook).toMatch(/choose the clearest primary[\s\S]*container first/i);
+    expect(psychePlaybook).toMatch(/stop deepening and[\s\S]*name it cleanly/i);
     expect(psychePlaybook).toMatch(/What happened the last time this pattern showed up/i);
     expect(psychePlaybook).toMatch(/What did you find yourself doing the last time this move showed up/i);
     expect(psychePlaybook).toMatch(/When that reaction hits, what does it start telling you about you, them, or what happens next/i);
@@ -199,6 +225,7 @@ describe("forge skill playbook parity", () => {
           /forge_get_sports_overview/,
           /forge_update_sleep_session/,
           /forge_update_workout_session/,
+          /batch routes for ordinary health-session CRUD|ordinary `sleep_session` and `workout_session` CRUD belongs on the shared batch routes/i,
           /sleep_session/i,
           /workout_session/i
         ],

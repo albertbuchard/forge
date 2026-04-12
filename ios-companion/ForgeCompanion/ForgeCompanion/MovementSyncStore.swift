@@ -5,14 +5,15 @@ import CoreMotion
 import UIKit
 
 @MainActor
-final class MovementSyncStore: NSObject, ObservableObject, CLLocationManagerDelegate {
+final class MovementSyncStore: NSObject, ObservableObject, @preconcurrency CLLocationManagerDelegate {
     private enum DetectionThresholds {
         static let stayRadiusMeters: Double = 100
         static let stayConfirmationSeconds: TimeInterval = 10 * 60
         static let tripMinimumSeconds: TimeInterval = 5 * 60
         static let tripMinimumDisplacementMeters: Double = 100
         static let stopMinimumSeconds: TimeInterval = 3 * 60
-        static let stayContinuityGapSeconds: TimeInterval = 6 * 60 * 60
+        static let stayContinuityGapSeconds: TimeInterval = 60 * 60
+        static let coverageAuditWindowSeconds: TimeInterval = 30 * 60
     }
 
     struct StoredKnownPlace: Codable, Identifiable, Hashable {
@@ -153,6 +154,74 @@ final class MovementSyncStore: NSObject, ObservableObject, CLLocationManagerDele
         var trips: [StoredTrip]
     }
 
+    struct TimelineSegment: Identifiable {
+        enum Kind: String, Hashable {
+            case stay
+            case trip
+            case missing
+        }
+
+        enum Origin: String, Hashable {
+            case recorded = "recorded"
+            case continuedStay = "continued_stay"
+            case repairedGap = "repaired_gap"
+            case missing = "missing"
+        }
+
+        let id: String
+        let kind: Kind
+        let origin: Origin
+        let startedAt: Date
+        let endedAt: Date
+        let title: String
+        let subtitle: String
+        let placeLabel: String?
+        let anchorExternalUid: String?
+        let coordinate: CLLocationCoordinate2D?
+        let tags: [String]
+        let distanceMeters: Double?
+        let averageSpeedMps: Double?
+        let stayId: String?
+        let tripId: String?
+        let editable: Bool
+
+        init(
+            id: String,
+            kind: Kind,
+            origin: Origin,
+            startedAt: Date,
+            endedAt: Date,
+            title: String,
+            subtitle: String,
+            placeLabel: String?,
+            anchorExternalUid: String? = nil,
+            coordinate: CLLocationCoordinate2D?,
+            tags: [String],
+            distanceMeters: Double?,
+            averageSpeedMps: Double?,
+            stayId: String?,
+            tripId: String?,
+            editable: Bool
+        ) {
+            self.id = id
+            self.kind = kind
+            self.origin = origin
+            self.startedAt = startedAt
+            self.endedAt = endedAt
+            self.title = title
+            self.subtitle = subtitle
+            self.placeLabel = placeLabel
+            self.anchorExternalUid = anchorExternalUid
+            self.coordinate = coordinate
+            self.tags = tags
+            self.distanceMeters = distanceMeters
+            self.averageSpeedMps = averageSpeedMps
+            self.stayId = stayId
+            self.tripId = tripId
+            self.editable = editable
+        }
+    }
+
     private enum StorageKeys {
         static let movementState = "forge_companion_movement_state"
     }
@@ -167,6 +236,7 @@ final class MovementSyncStore: NSObject, ObservableObject, CLLocationManagerDele
     @Published private(set) var locationPermissionStatus = "not_determined"
     @Published private(set) var motionPermissionStatus = "unknown"
     @Published private(set) var backgroundTrackingReady = false
+    @Published private(set) var recentRepairDiagnostics: [String] = []
 
     private let locationManager = CLLocationManager()
     private let activityManager = CMMotionActivityManager()
@@ -213,7 +283,7 @@ final class MovementSyncStore: NSObject, ObservableObject, CLLocationManagerDele
             storedTrips = testingState.trips
             currentStayId = storedStays.first(where: { $0.status == "active" })?.id
             currentTripId = storedTrips.first(where: { $0.status == "active" })?.id
-            repairStoredTimelineState(referenceDate: Date())
+            repairStoredTimelineState(referenceDate: testingReferenceDate(for: testingState))
         } else {
             trackingEnabled = false
             publishMode = "auto_publish"
@@ -340,12 +410,31 @@ final class MovementSyncStore: NSObject, ObservableObject, CLLocationManagerDele
         bootstrap.tripOverrides.forEach { trip in
             reconcileCanonicalTrip(trip)
         }
+        repairStoredTimelineState(referenceDate: Date())
         persistState()
     }
 
     func buildMovementPayload() -> CompanionSyncPayload.MovementPayload {
         refreshDerivedTimelineState(referenceDate: Date())
         pruneLongTermRawPointsIfNeeded()
+        if trackingEnabled == false {
+            return CompanionSyncPayload.MovementPayload(
+                settings: .init(
+                    trackingEnabled: false,
+                    publishMode: publishMode,
+                    retentionMode: retentionMode,
+                    locationPermissionStatus: locationPermissionStatus,
+                    motionPermissionStatus: motionPermissionStatus,
+                    backgroundTrackingReady: backgroundTrackingReady,
+                    metadata: [
+                        "latestLocationSummary": latestLocationSummary
+                    ]
+                ),
+                knownPlaces: [],
+                stays: [],
+                trips: []
+            )
+        }
         let syncableTrips = storedTrips.filter { trip in
             trip.status == "active" ? tripQualifies(trip) : true
         }
@@ -477,6 +566,682 @@ final class MovementSyncStore: NSObject, ObservableObject, CLLocationManagerDele
             latestLocationSummary = "Current state: unknown"
         }
         persistState()
+    }
+
+    @discardableResult
+    func runCoverageRepair(
+        reason: String,
+        referenceDate: Date = Date()
+    ) -> [TimelineSegment] {
+        companionDebugLog(
+            "MovementSyncStore",
+            "runCoverageRepair start reason=\(reason)"
+        )
+        refreshDerivedTimelineState(referenceDate: referenceDate)
+        let timeline = buildHistoricalTimelineSegments(referenceDate: referenceDate)
+        companionDebugLog(
+            "MovementSyncStore",
+            "runCoverageRepair complete reason=\(reason) segments=\(timeline.count) diagnostics=\(recentRepairDiagnostics.joined(separator: "|"))"
+        )
+        return timeline
+    }
+
+    func buildHistoricalTimelineSegments(referenceDate: Date = Date()) -> [TimelineSegment] {
+        repairStoredTimelineState(referenceDate: referenceDate)
+
+        struct Boundary {
+            let coordinate: CLLocationCoordinate2D?
+            let placeLabel: String?
+            let placeExternalUid: String?
+        }
+
+        struct RecordedSegment {
+            let id: String
+            let kind: TimelineSegment.Kind
+            let startedAt: Date
+            let endedAt: Date
+            let title: String
+            let subtitle: String
+            let placeLabel: String?
+            let tags: [String]
+            let distanceMeters: Double?
+            let averageSpeedMps: Double?
+            let stayId: String?
+            let tripId: String?
+            let startBoundary: Boundary
+            let endBoundary: Boundary
+        }
+
+        struct NormalizedSegment {
+            let id: String
+            let kind: TimelineSegment.Kind
+            let origin: TimelineSegment.Origin
+            let startedAt: Date
+            let endedAt: Date
+            let title: String
+            let subtitle: String
+            let placeLabel: String?
+            let anchorExternalUid: String?
+            let coordinate: CLLocationCoordinate2D?
+            let tags: [String]
+            let distanceMeters: Double?
+            let averageSpeedMps: Double?
+            let stayId: String?
+            let tripId: String?
+            let editable: Bool
+            let startBoundary: Boundary
+            let endBoundary: Boundary
+        }
+
+        let activeStayId = currentStayId
+        let activeTripId = currentTripId
+        let recordedSegments =
+            storedStays
+                .filter { $0.id != activeStayId }
+                .compactMap { stay -> RecordedSegment? in
+                    guard stay.endedAt > stay.startedAt else {
+                        return nil
+                    }
+                    let title = stay.placeLabel.isEmpty ? stay.label : stay.placeLabel
+                    let coordinate = CLLocationCoordinate2D(
+                        latitude: stay.centerLatitude,
+                        longitude: stay.centerLongitude
+                    )
+                    return RecordedSegment(
+                        id: "stay-\(stay.id)",
+                        kind: .stay,
+                        startedAt: stay.startedAt,
+                        endedAt: stay.endedAt,
+                        title: title.isEmpty ? "Stay" : title,
+                        subtitle: stay.tags.isEmpty ? "Recorded stay" : stay.tags.joined(separator: " · "),
+                        placeLabel: stay.placeLabel.isEmpty ? nil : stay.placeLabel,
+                        tags: stay.tags,
+                        distanceMeters: nil,
+                        averageSpeedMps: nil,
+                        stayId: stay.id,
+                        tripId: nil,
+                        startBoundary: Boundary(
+                            coordinate: coordinate,
+                            placeLabel: stay.placeLabel.isEmpty ? nil : stay.placeLabel,
+                            placeExternalUid: stay.placeExternalUid.isEmpty ? nil : stay.placeExternalUid
+                        ),
+                        endBoundary: Boundary(
+                            coordinate: coordinate,
+                            placeLabel: stay.placeLabel.isEmpty ? nil : stay.placeLabel,
+                            placeExternalUid: stay.placeExternalUid.isEmpty ? nil : stay.placeExternalUid
+                        )
+                    )
+                }
+                +
+                storedTrips
+                .filter { $0.id != activeTripId && $0.status != "invalid" }
+                .compactMap { trip -> RecordedSegment? in
+                    guard trip.endedAt > trip.startedAt else {
+                        return nil
+                    }
+                    if trip.status != "active" && tripQualifies(trip) == false {
+                        return nil
+                    }
+                    let startPoint = trip.points.first
+                    let endPoint = trip.points.last
+                    let startPlace = place(forExternalUid: trip.startPlaceExternalUid)
+                    let endPlace = place(forExternalUid: trip.endPlaceExternalUid)
+                    let title = trip.label.isEmpty ? "Trip" : trip.label
+                    return RecordedSegment(
+                        id: "trip-\(trip.id)",
+                        kind: .trip,
+                        startedAt: trip.startedAt,
+                        endedAt: trip.endedAt,
+                        title: title,
+                        subtitle: trip.tags.isEmpty
+                            ? (trip.activityType.isEmpty ? "Recorded trip" : trip.activityType)
+                            : trip.tags.joined(separator: " · "),
+                        placeLabel: endPlace?.label ?? startPlace?.label,
+                        tags: trip.tags,
+                        distanceMeters: trip.distanceMeters,
+                        averageSpeedMps: trip.averageSpeedMps,
+                        stayId: nil,
+                        tripId: trip.id,
+                        startBoundary: Boundary(
+                            coordinate: startPoint.map {
+                                CLLocationCoordinate2D(latitude: $0.latitude, longitude: $0.longitude)
+                            } ?? startPlace.map {
+                                CLLocationCoordinate2D(latitude: $0.latitude, longitude: $0.longitude)
+                            },
+                            placeLabel: startPlace?.label,
+                            placeExternalUid: trip.startPlaceExternalUid.isEmpty ? nil : trip.startPlaceExternalUid
+                        ),
+                        endBoundary: Boundary(
+                            coordinate: endPoint.map {
+                                CLLocationCoordinate2D(latitude: $0.latitude, longitude: $0.longitude)
+                            } ?? endPlace.map {
+                                CLLocationCoordinate2D(latitude: $0.latitude, longitude: $0.longitude)
+                            },
+                            placeLabel: endPlace?.label,
+                            placeExternalUid: trip.endPlaceExternalUid.isEmpty ? nil : trip.endPlaceExternalUid
+                        )
+                    )
+                }
+
+        let sorted = recordedSegments.sorted {
+            $0.startedAt < $1.startedAt
+        }
+
+        func distanceMeters(
+            from start: CLLocationCoordinate2D?,
+            to end: CLLocationCoordinate2D?
+        ) -> Double? {
+            guard let start, let end else {
+                return nil
+            }
+            return CLLocation(latitude: start.latitude, longitude: start.longitude)
+                .distance(from: CLLocation(latitude: end.latitude, longitude: end.longitude))
+        }
+
+        func boundariesShareAnchor(
+            _ left: Boundary,
+            _ right: Boundary
+        ) -> Bool {
+            if let leftExternalUid = left.placeExternalUid,
+               let rightExternalUid = right.placeExternalUid,
+               leftExternalUid == rightExternalUid
+            {
+                return true
+            }
+            guard let displacement = distanceMeters(from: left.coordinate, to: right.coordinate) else {
+                return false
+            }
+            return displacement <= DetectionThresholds.tripMinimumDisplacementMeters
+        }
+
+        func makeMissingSegment(
+            id: String,
+            startedAt: Date,
+            endedAt: Date,
+            subtitle: String
+        ) -> NormalizedSegment {
+            NormalizedSegment(
+                id: id,
+                kind: .missing,
+                origin: .missing,
+                startedAt: startedAt,
+                endedAt: endedAt,
+                title: "Missing data",
+                subtitle: subtitle,
+                placeLabel: nil,
+                anchorExternalUid: nil,
+                coordinate: nil,
+                tags: ["missing-data"],
+                distanceMeters: nil,
+                averageSpeedMps: nil,
+                stayId: nil,
+                tripId: nil,
+                editable: false,
+                startBoundary: Boundary(coordinate: nil, placeLabel: nil, placeExternalUid: nil),
+                endBoundary: Boundary(coordinate: nil, placeLabel: nil, placeExternalUid: nil)
+            )
+        }
+
+        func classifyGap(
+            from previous: NormalizedSegment,
+            to next: NormalizedSegment
+        ) -> NormalizedSegment? {
+            let gapSeconds = next.startedAt.timeIntervalSince(previous.endedAt)
+            guard gapSeconds > 0 else {
+                return nil
+            }
+            if gapSeconds > DetectionThresholds.stayContinuityGapSeconds {
+                return makeMissingSegment(
+                    id: "missing-\(previous.id)-\(next.id)",
+                    startedAt: previous.endedAt,
+                    endedAt: next.startedAt,
+                    subtitle: "No reliable movement signal reached the phone here."
+                )
+            }
+
+            if boundariesShareAnchor(previous.endBoundary, next.startBoundary) {
+                let placeLabel = previous.endBoundary.placeLabel ?? next.startBoundary.placeLabel
+                let anchorExternalUid =
+                    previous.endBoundary.placeExternalUid ?? next.startBoundary.placeExternalUid
+                return NormalizedSegment(
+                    id: "repaired-stay-\(previous.id)-\(next.id)",
+                    kind: .stay,
+                    origin: .repairedGap,
+                    startedAt: previous.endedAt,
+                    endedAt: next.startedAt,
+                    title: placeLabel ?? "Repaired stay",
+                    subtitle: "Short quiet gap repaired as one stay.",
+                    placeLabel: placeLabel,
+                    anchorExternalUid: anchorExternalUid,
+                    coordinate: previous.endBoundary.coordinate ?? next.startBoundary.coordinate,
+                    tags: ["repaired-gap"],
+                    distanceMeters: nil,
+                    averageSpeedMps: nil,
+                    stayId: nil,
+                    tripId: nil,
+                    editable: false,
+                    startBoundary: previous.endBoundary,
+                    endBoundary: next.startBoundary
+                )
+            }
+
+            guard let displacement = distanceMeters(
+                from: previous.endBoundary.coordinate,
+                to: next.startBoundary.coordinate
+            ) else {
+                return makeMissingSegment(
+                    id: "missing-\(previous.id)-\(next.id)",
+                    startedAt: previous.endedAt,
+                    endedAt: next.startedAt,
+                    subtitle: "Forge could not classify this short gap because the boundary points were incomplete."
+                )
+            }
+
+            if gapSeconds < DetectionThresholds.tripMinimumSeconds {
+                let placeLabel = previous.endBoundary.placeLabel ?? next.startBoundary.placeLabel
+                let anchorExternalUid =
+                    previous.endBoundary.placeExternalUid ?? next.startBoundary.placeExternalUid
+                return NormalizedSegment(
+                    id: "repaired-short-jump-\(previous.id)-\(next.id)",
+                    kind: .stay,
+                    origin: .repairedGap,
+                    startedAt: previous.endedAt,
+                    endedAt: next.startedAt,
+                    title: placeLabel ?? "Repaired stay",
+                    subtitle: "Short jump under five minutes suppressed into stay continuity.",
+                    placeLabel: placeLabel,
+                    anchorExternalUid: anchorExternalUid,
+                    coordinate: previous.endBoundary.coordinate ?? next.startBoundary.coordinate,
+                    tags: ["repaired-gap", "suppressed-short-jump"],
+                    distanceMeters: nil,
+                    averageSpeedMps: nil,
+                    stayId: nil,
+                    tripId: nil,
+                    editable: false,
+                    startBoundary: previous.endBoundary,
+                    endBoundary: next.startBoundary
+                )
+            }
+
+            return NormalizedSegment(
+                id: "repaired-trip-\(previous.id)-\(next.id)",
+                kind: .trip,
+                origin: .repairedGap,
+                startedAt: previous.endedAt,
+                endedAt: next.startedAt,
+                title: "\(previous.endBoundary.placeLabel ?? previous.title) → \(next.startBoundary.placeLabel ?? next.title)",
+                subtitle: "Short gap repaired as a move between known anchors.",
+                placeLabel: next.startBoundary.placeLabel ?? previous.endBoundary.placeLabel,
+                anchorExternalUid: nil,
+                coordinate: nil,
+                tags: ["repaired-gap"],
+                distanceMeters: displacement,
+                averageSpeedMps: displacement / max(gapSeconds, 1),
+                stayId: nil,
+                tripId: nil,
+                editable: false,
+                startBoundary: previous.endBoundary,
+                endBoundary: next.startBoundary
+            )
+        }
+
+        func coalesceStaySegments(_ segments: [NormalizedSegment]) -> [NormalizedSegment] {
+            var output: [NormalizedSegment] = []
+            for segment in segments {
+                guard let previous = output.last else {
+                    output.append(segment)
+                    continue
+                }
+                let shouldMerge =
+                    previous.kind == .stay
+                    && segment.kind == .stay
+                    && (previous.origin != .recorded || segment.origin != .recorded)
+                    && segment.startedAt.timeIntervalSince(previous.endedAt) == 0
+                    && boundariesShareAnchor(previous.endBoundary, segment.startBoundary)
+                if !shouldMerge {
+                    output.append(segment)
+                    continue
+                }
+                let mergedOrigin: TimelineSegment.Origin =
+                    previous.origin == .continuedStay || segment.origin == .continuedStay
+                    ? .continuedStay
+                    : .repairedGap
+                output[output.count - 1] = NormalizedSegment(
+                    id: "coalesced-\(previous.id)-\(segment.id)",
+                    kind: .stay,
+                    origin: mergedOrigin,
+                    startedAt: previous.startedAt,
+                    endedAt: segment.endedAt,
+                    title: previous.placeLabel ?? segment.placeLabel ?? "Continued stay",
+                    subtitle:
+                        mergedOrigin == .continuedStay
+                        ? "Short stationary gap carried forward into one continuous stay."
+                        : previous.tags.contains("suppressed-short-jump") || segment.tags.contains("suppressed-short-jump")
+                            ? "Short jump under five minutes suppressed into stay continuity."
+                            : "Short quiet gap repaired as one stay.",
+                    placeLabel: previous.placeLabel ?? segment.placeLabel,
+                    anchorExternalUid: previous.anchorExternalUid ?? segment.anchorExternalUid,
+                    coordinate: previous.coordinate ?? segment.coordinate,
+                    tags: Array(NSOrderedSet(array: previous.tags + segment.tags)) as? [String] ?? previous.tags,
+                    distanceMeters: nil,
+                    averageSpeedMps: nil,
+                    stayId: nil,
+                    tripId: nil,
+                    editable: false,
+                    startBoundary: previous.startBoundary,
+                    endBoundary: segment.endBoundary
+                )
+            }
+            return output
+        }
+
+        func updatedSegment(
+            _ segment: NormalizedSegment,
+            startedAt newStartedAt: Date? = nil,
+            endedAt newEndedAt: Date? = nil
+        ) -> NormalizedSegment? {
+            let resolvedStartedAt = newStartedAt ?? segment.startedAt
+            let resolvedEndedAt = newEndedAt ?? segment.endedAt
+            guard resolvedEndedAt > resolvedStartedAt else {
+                return nil
+            }
+            return NormalizedSegment(
+                id: segment.id,
+                kind: segment.kind,
+                origin: segment.origin,
+                startedAt: resolvedStartedAt,
+                endedAt: resolvedEndedAt,
+                title: segment.title,
+                subtitle: segment.subtitle,
+                placeLabel: segment.placeLabel,
+                anchorExternalUid: segment.anchorExternalUid,
+                coordinate: segment.coordinate,
+                tags: segment.tags,
+                distanceMeters:
+                    segment.kind == .trip
+                    ? segment.distanceMeters
+                    : nil,
+                averageSpeedMps: segment.averageSpeedMps,
+                stayId: segment.stayId,
+                tripId: segment.tripId,
+                editable: segment.editable,
+                startBoundary: segment.startBoundary,
+                endBoundary: segment.endBoundary
+            )
+        }
+
+        func mergeTimelineSegments(
+            _ previous: NormalizedSegment,
+            _ next: NormalizedSegment
+        ) -> NormalizedSegment? {
+            guard previous.kind == next.kind else {
+                return nil
+            }
+            let overlapOrTouch = next.startedAt <= previous.endedAt
+                || abs(next.startedAt.timeIntervalSince(previous.endedAt)) < 1
+            guard overlapOrTouch else {
+                return nil
+            }
+            let canMerge: Bool
+            switch previous.kind {
+            case .stay:
+                canMerge = boundariesShareAnchor(previous.endBoundary, next.startBoundary)
+                    || previous.origin != .recorded
+                    || next.origin != .recorded
+            case .trip, .missing:
+                canMerge = true
+            }
+            guard canMerge else {
+                return nil
+            }
+            let mergedOrigin: TimelineSegment.Origin
+            if previous.origin == .continuedStay || next.origin == .continuedStay {
+                mergedOrigin = .continuedStay
+            } else if previous.origin == .repairedGap || next.origin == .repairedGap {
+                mergedOrigin = .repairedGap
+            } else if previous.origin == .missing || next.origin == .missing {
+                mergedOrigin = .missing
+            } else {
+                mergedOrigin = .recorded
+            }
+            return NormalizedSegment(
+                id: "merged-\(previous.id)-\(next.id)",
+                kind: previous.kind,
+                origin: mergedOrigin,
+                startedAt: min(previous.startedAt, next.startedAt),
+                endedAt: max(previous.endedAt, next.endedAt),
+                title: previous.placeLabel ?? next.placeLabel ?? previous.title,
+                subtitle:
+                    mergedOrigin == .continuedStay
+                    ? "Short stationary gap carried forward into one continuous stay."
+                    : previous.tags.contains("suppressed-short-jump") || next.tags.contains("suppressed-short-jump")
+                        ? "Short jump under five minutes suppressed into stay continuity."
+                        : previous.subtitle,
+                placeLabel: previous.placeLabel ?? next.placeLabel,
+                anchorExternalUid: previous.anchorExternalUid ?? next.anchorExternalUid,
+                coordinate: previous.coordinate ?? next.coordinate,
+                tags: Array(NSOrderedSet(array: previous.tags + next.tags)) as? [String] ?? previous.tags,
+                distanceMeters:
+                    previous.kind == .trip
+                    ? max(previous.distanceMeters ?? 0, next.distanceMeters ?? 0)
+                    : nil,
+                averageSpeedMps: previous.averageSpeedMps ?? next.averageSpeedMps,
+                stayId:
+                    mergedOrigin == .recorded
+                    ? previous.stayId ?? next.stayId
+                    : nil,
+                tripId:
+                    mergedOrigin == .recorded
+                    ? previous.tripId ?? next.tripId
+                    : nil,
+                editable: mergedOrigin == .recorded,
+                startBoundary: previous.startBoundary,
+                endBoundary: next.endBoundary
+            )
+        }
+
+        func ensureCoverageSegments(_ segments: [NormalizedSegment]) -> [NormalizedSegment] {
+            let sorted = segments.sorted { left, right in
+                if left.startedAt == right.startedAt {
+                    return left.endedAt < right.endedAt
+                }
+                return left.startedAt < right.startedAt
+            }
+            guard sorted.isEmpty == false else {
+                return []
+            }
+
+            var ensured: [NormalizedSegment] = []
+            for segment in sorted {
+                guard segment.endedAt > segment.startedAt else {
+                    continue
+                }
+                guard let previous = ensured.last else {
+                    ensured.append(segment)
+                    continue
+                }
+
+                if let merged = mergeTimelineSegments(previous, segment) {
+                    ensured[ensured.count - 1] = merged
+                    continue
+                }
+
+                if segment.startedAt > previous.endedAt {
+                    if let gap = classifyGap(from: previous, to: segment) {
+                        ensured.append(gap)
+                    } else {
+                        ensured.append(
+                            makeMissingSegment(
+                                id: "coverage-gap-\(previous.id)-\(segment.id)",
+                                startedAt: previous.endedAt,
+                                endedAt: segment.startedAt,
+                                subtitle: "A repair pass backfilled this uncovered movement gap."
+                            )
+                        )
+                    }
+                    ensured.append(segment)
+                    continue
+                }
+
+                guard let trimmed = updatedSegment(segment, startedAt: previous.endedAt) else {
+                    continue
+                }
+                if let merged = mergeTimelineSegments(previous, trimmed) {
+                    ensured[ensured.count - 1] = merged
+                } else {
+                    ensured.append(trimmed)
+                }
+            }
+
+            if let latest = ensured.last {
+                let trailingGap = referenceDate.timeIntervalSince(latest.endedAt)
+                if trailingGap > 0 {
+                    if latest.kind == .stay,
+                       trailingGap <= DetectionThresholds.stayContinuityGapSeconds,
+                       latest.endBoundary.coordinate != nil
+                    {
+                        ensured.append(
+                            NormalizedSegment(
+                                id: "continued-tail-\(latest.id)",
+                                kind: .stay,
+                                origin: .continuedStay,
+                                startedAt: latest.endedAt,
+                                endedAt: referenceDate,
+                                title: latest.placeLabel ?? "Continued stay",
+                                subtitle: "Short stationary gap carried forward into one continuous stay.",
+                                placeLabel: latest.placeLabel,
+                                anchorExternalUid: latest.anchorExternalUid,
+                                coordinate: latest.endBoundary.coordinate,
+                                tags: ["continued-stay"],
+                                distanceMeters: nil,
+                                averageSpeedMps: nil,
+                                stayId: nil,
+                                tripId: nil,
+                                editable: false,
+                                startBoundary: latest.endBoundary,
+                                endBoundary: latest.endBoundary
+                            )
+                        )
+                    } else {
+                        ensured.append(
+                            makeMissingSegment(
+                                id: "missing-tail-\(latest.id)",
+                                startedAt: latest.endedAt,
+                                endedAt: referenceDate,
+                                subtitle: "No reliable movement signal reached the phone after this point."
+                            )
+                        )
+                    }
+                }
+            }
+
+            return coalesceStaySegments(ensured)
+        }
+
+        func coverageAuditDiagnostics(for timeline: [NormalizedSegment]) -> [String] {
+            let sorted = timeline.sorted { $0.startedAt < $1.startedAt }
+            guard let first = sorted.first else {
+                return []
+            }
+            var diagnostics: [String] = []
+            var windowStart = first.startedAt
+            while windowStart < referenceDate {
+                let windowEnd = min(
+                    windowStart.addingTimeInterval(DetectionThresholds.coverageAuditWindowSeconds),
+                    referenceDate
+                )
+                let overlapping = sorted
+                    .filter { $0.startedAt < windowEnd && $0.endedAt > windowStart }
+                    .sorted { $0.startedAt < $1.startedAt }
+                var coveredUntil = windowStart
+                for segment in overlapping {
+                    if segment.startedAt > coveredUntil {
+                        diagnostics.append(
+                            "coverage-gap:\(Int(coveredUntil.timeIntervalSince1970))-\(Int(segment.startedAt.timeIntervalSince1970))"
+                        )
+                        break
+                    }
+                    coveredUntil = max(coveredUntil, min(segment.endedAt, windowEnd))
+                    if coveredUntil >= windowEnd {
+                        break
+                    }
+                }
+                if coveredUntil < windowEnd {
+                    diagnostics.append(
+                        "coverage-gap:\(Int(coveredUntil.timeIntervalSince1970))-\(Int(windowEnd.timeIntervalSince1970))"
+                    )
+                }
+                windowStart = windowEnd
+            }
+            if diagnostics.isEmpty {
+                return ["coverage-ok:30m-windows"]
+            }
+            return diagnostics
+        }
+
+        var normalized: [NormalizedSegment] = []
+        for (index, segment) in sorted.enumerated() {
+            let recorded = NormalizedSegment(
+                id: segment.id,
+                kind: segment.kind,
+                origin: .recorded,
+                startedAt: segment.startedAt,
+                endedAt: segment.endedAt,
+                title: segment.title,
+                subtitle: segment.subtitle,
+                placeLabel: segment.placeLabel,
+                anchorExternalUid:
+                    segment.kind == .stay
+                    ? segment.startBoundary.placeExternalUid
+                    : nil,
+                coordinate: segment.startBoundary.coordinate,
+                tags: segment.tags,
+                distanceMeters: segment.distanceMeters,
+                averageSpeedMps: segment.averageSpeedMps,
+                stayId: segment.stayId,
+                tripId: segment.tripId,
+                editable: true,
+                startBoundary: segment.startBoundary,
+                endBoundary: segment.endBoundary
+            )
+            if index > 0, let gap = classifyGap(from: normalized.last!, to: recorded) {
+                normalized.append(gap)
+            }
+            normalized.append(recorded)
+        }
+
+        let timeline = ensureCoverageSegments(normalized).map { segment in
+            TimelineSegment(
+                id: segment.id,
+                kind: segment.kind,
+                origin: segment.origin,
+                startedAt: segment.startedAt,
+                endedAt: segment.endedAt,
+                title: segment.title,
+                subtitle: segment.subtitle,
+                placeLabel: segment.placeLabel,
+                anchorExternalUid: segment.anchorExternalUid,
+                coordinate: segment.coordinate,
+                tags: segment.tags,
+                distanceMeters: segment.distanceMeters,
+                averageSpeedMps: segment.averageSpeedMps,
+                stayId: segment.stayId,
+                tripId: segment.tripId,
+                editable: segment.editable
+            )
+        }
+
+        let diagnostics = timeline
+            .filter { $0.origin != .recorded }
+            .map { segment in
+                "\(segment.origin.rawValue):\(segment.kind.rawValue):\(Int(segment.endedAt.timeIntervalSince(segment.startedAt)))s"
+            }
+        let coverageDiagnostics = coverageAuditDiagnostics(
+            for: ensureCoverageSegments(normalized)
+        )
+        recentRepairDiagnostics = Array((diagnostics + coverageDiagnostics).suffix(16))
+
+        return timeline
     }
 
     func reconcileCanonicalStay(_ stay: ForgeMovementTimelineStay) {
@@ -955,6 +1720,13 @@ final class MovementSyncStore: NSObject, ObservableObject, CLLocationManagerDele
             .place
     }
 
+    private func place(forExternalUid externalUid: String) -> StoredKnownPlace? {
+        guard externalUid.isEmpty == false else {
+            return nil
+        }
+        return knownPlaces.first(where: { $0.externalUid == externalUid })
+    }
+
     private var activeTravelLabel: String {
         if latestActivity?.cycling == true {
             return "cycling"
@@ -1068,7 +1840,15 @@ final class MovementSyncStore: NSObject, ObservableObject, CLLocationManagerDele
         {
             let trip = storedTrips[index]
             let lastLocation = recentLocations.last ?? trip.points.last.map {
-                CLLocation(latitude: $0.latitude, longitude: $0.longitude)
+                CLLocation(
+                    coordinate: CLLocationCoordinate2D(latitude: $0.latitude, longitude: $0.longitude),
+                    altitude: $0.altitudeMeters ?? 0,
+                    horizontalAccuracy: $0.accuracyMeters ?? DetectionThresholds.stayRadiusMeters,
+                    verticalAccuracy: $0.altitudeMeters == nil ? -1 : 0,
+                    course: 0,
+                    speed: $0.speedMps ?? 0,
+                    timestamp: $0.recordedAt
+                )
             }
             if let lastLocation,
                tripHasCollapsedIntoStay(trip, currentLocation: lastLocation, referenceDate: referenceDate)
@@ -1126,80 +1906,9 @@ final class MovementSyncStore: NSObject, ObservableObject, CLLocationManagerDele
         {
             storedStays[index].status = "active"
             storedStays[index].endedAt = max(storedStays[index].endedAt, referenceDate)
-            return
+        } else {
+            currentStayId = nil
         }
-
-        let latestLocation = recentLocations.last
-        let latestStayIndex = storedStays.indices
-            .filter { storedStays[$0].endedAt <= referenceDate }
-            .max(by: { storedStays[$0].endedAt < storedStays[$1].endedAt })
-
-        if let latestStayIndex {
-            var stay = storedStays[latestStayIndex]
-            let gap = referenceDate.timeIntervalSince(stay.endedAt)
-            if gap <= DetectionThresholds.stayContinuityGapSeconds {
-                if let latestLocation {
-                    let stayCenter = CLLocation(latitude: stay.centerLatitude, longitude: stay.centerLongitude)
-                    guard stayCenter.distance(from: latestLocation) <= max(DetectionThresholds.stayRadiusMeters, stay.radiusMeters) else {
-                        return
-                    }
-                }
-                stay.status = "active"
-                stay.endedAt = referenceDate
-                storedStays[latestStayIndex] = stay
-                currentStayId = stay.id
-                return
-            }
-        }
-
-        let latestTripIndex = storedTrips.indices
-            .filter { storedTrips[$0].endedAt <= referenceDate }
-            .max(by: { storedTrips[$0].endedAt < storedTrips[$1].endedAt })
-        guard let latestTripIndex else {
-            return
-        }
-
-        let trip = storedTrips[latestTripIndex]
-        let gap = referenceDate.timeIntervalSince(trip.endedAt)
-        guard gap <= DetectionThresholds.stayContinuityGapSeconds else {
-            return
-        }
-
-        let anchorPoint = trip.points.last.map {
-            CLLocation(latitude: $0.latitude, longitude: $0.longitude)
-        } ?? recentLocations.last
-        guard let anchorPoint else {
-            return
-        }
-
-        if let latestLocation,
-           anchorPoint.distance(from: latestLocation) > DetectionThresholds.stayRadiusMeters
-        {
-            return
-        }
-
-        let matchedPlace = matchKnownPlace(for: anchorPoint)
-        let stay = StoredStay(
-            id: "stay_\(UUID().uuidString.lowercased())",
-            label: matchedPlace?.label ?? "Unlabeled stay",
-            status: "active",
-            classification: "passive",
-            startedAt: trip.endedAt,
-            endedAt: referenceDate,
-            centerLatitude: anchorPoint.coordinate.latitude,
-            centerLongitude: anchorPoint.coordinate.longitude,
-            radiusMeters: DetectionThresholds.stayRadiusMeters,
-            sampleCount: 1,
-            placeExternalUid: matchedPlace?.externalUid ?? "",
-            placeLabel: matchedPlace?.label ?? "",
-            tags: Array(Set((matchedPlace?.categoryTags ?? []) + ["movement", "stay", "gap_smoothed"])),
-            metadata: [
-                "derivedFrom": "missing_data_gap_repair",
-                "sourceTripId": trip.id
-            ]
-        )
-        storedStays.insert(stay, at: 0)
-        currentStayId = stay.id
     }
 
     private func normalizedStays(from stays: [StoredStay]) -> [StoredStay] {
@@ -1219,10 +1928,10 @@ final class MovementSyncStore: NSObject, ObservableObject, CLLocationManagerDele
     private func normalizedTrips(from trips: [StoredTrip]) -> [StoredTrip] {
         var normalized: [StoredTrip] = []
         for trip in trips.sorted(by: { $0.startedAt < $1.startedAt }) {
-            guard trip.endedAt > trip.startedAt else {
+            if trip.status != "active" && trip.endedAt <= trip.startedAt {
                 continue
             }
-            if trip.status == "active" || trip.status == "completed" {
+            if trip.status == "completed" {
                 if tripQualifies(trip) == false {
                     continue
                 }
@@ -1472,6 +2181,16 @@ final class MovementSyncStore: NSObject, ObservableObject, CLLocationManagerDele
         repairStoredTimelineState(referenceDate: Date())
     }
 
+    private func testingReferenceDate(for state: PersistedState) -> Date {
+        let stayDates = state.stays.flatMap { [$0.startedAt, $0.endedAt] }
+        let tripDates = state.trips.flatMap { trip in
+            [trip.startedAt, trip.endedAt]
+                + trip.points.map(\.recordedAt)
+                + trip.stops.flatMap { [$0.startedAt, $0.endedAt] }
+        }
+        return (stayDates + tripDates).max() ?? Date(timeIntervalSince1970: 0)
+    }
+
     private func persistState() {
         if testingMode {
             return
@@ -1506,6 +2225,8 @@ final class MovementSyncStore: NSObject, ObservableObject, CLLocationManagerDele
         let activeTrip: StoredTrip?
         let stays: [StoredStay]
         let trips: [StoredTrip]
+        let timeline: [TimelineSegment]
+        let recentRepairDiagnostics: [String]
         let latestLocationSummary: String
     }
 
@@ -1529,6 +2250,8 @@ final class MovementSyncStore: NSObject, ObservableObject, CLLocationManagerDele
             activeTrip: activeTrip,
             stays: storedStays,
             trips: storedTrips,
+            timeline: buildHistoricalTimelineSegments(referenceDate: Date()),
+            recentRepairDiagnostics: recentRepairDiagnostics,
             latestLocationSummary: latestLocationSummary
         )
     }

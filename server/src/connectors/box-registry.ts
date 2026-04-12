@@ -27,6 +27,7 @@ import type {
   WorkbenchRuntimeContext,
   WorkbenchRuntimeServices
 } from "../../../src/lib/workbench/nodes.js";
+import { normalizeWorkbenchPortDefinition } from "../../../src/lib/workbench/nodes.js";
 
 function createSnapshotForConnectorOutput(boxId: string) {
   const outputId = boxId.replace(/^connector-output:/, "");
@@ -89,7 +90,11 @@ function createRuntimeContext(input?: {
       search: searchEntities as WorkbenchRuntimeServices["entities"]["search"]
     },
     notes: {
-      create: createNote as WorkbenchRuntimeServices["notes"]["create"],
+      create: ((input) =>
+        createNote(input as Parameters<typeof createNote>[0], {
+          source: "agent",
+          actor: "Workbench"
+        })) as WorkbenchRuntimeServices["notes"]["create"],
       list: listNotes as WorkbenchRuntimeServices["notes"]["list"]
     },
     movement: {
@@ -142,13 +147,19 @@ function toCatalogEntry(definition: ReturnType<typeof getWorkbenchNodeDefinition
   }
   const toPortDefinition = (
     port: WorkbenchInputDefinition | WorkbenchParamDefinition | WorkbenchOutputDefinition
-  ) => ({
-    key: port.key,
-    label: port.label,
-    kind: port.kind,
-    required: port.required ?? false,
-    expandableKeys: "expandableKeys" in port ? (port.expandableKeys ?? []) : []
-  });
+  ) =>
+    normalizeWorkbenchPortDefinition({
+      key: port.key,
+      label: port.label,
+      kind: port.kind,
+      description: "description" in port ? port.description : undefined,
+      required: port.required ?? false,
+      expandableKeys: "expandableKeys" in port ? (port.expandableKeys ?? []) : [],
+      modelName: "modelName" in port ? port.modelName : undefined,
+      itemKind: "itemKind" in port ? port.itemKind : undefined,
+      shape: "shape" in port ? (port.shape ?? []) : [],
+      exampleValue: "exampleValue" in port ? port.exampleValue : undefined
+    });
   return {
     id: definition.id,
     boxId: definition.id,
@@ -203,21 +214,25 @@ export function buildConnectorOutputCatalogEntry(input: {
     params: [],
     output: [
       {
-        key: "primary",
+        key: input.outputId,
         label: "Published output",
-        kind: "content",
+        kind: "record",
+        description: "Published output record exposed by this Workbench flow.",
         required: false,
-        expandableKeys: []
+        expandableKeys: [],
+        modelName: "WorkbenchPublishedOutput"
       }
     ],
     tools: [],
     outputs: [
       {
-        key: "primary",
+        key: input.outputId,
         label: "Published output",
-        kind: "content",
+        kind: "record",
+        description: "Published output record exposed by this Workbench flow.",
         required: false,
-        expandableKeys: []
+        expandableKeys: [],
+        modelName: "WorkbenchPublishedOutput"
       }
     ],
     toolAdapters: []
@@ -271,14 +286,14 @@ export function resolveForgeBoxSnapshot(
   if (execution instanceof Promise) {
     throw new Error("Workbench box execution must be synchronous for snapshot resolution.");
   }
-  return {
-    boxId: definition.id,
-    label: definition.title,
-    capturedAt: new Date().toISOString(),
-    contentText: execution.primaryText,
-    contentJson: execution.payload,
-    tools: mapWorkbenchTools(definition.tools)
-  } satisfies ForgeBoxSnapshot;
+    return {
+      boxId: definition.id,
+      label: definition.title,
+      capturedAt: new Date().toISOString(),
+      contentText: execution.primaryText,
+      contentJson: execution.payload,
+      tools: mapWorkbenchTools(definition.tools)
+    } satisfies ForgeBoxSnapshot;
 }
 
 export function executeForgeBoxTool(

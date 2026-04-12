@@ -1,12 +1,72 @@
 import type { LucideIcon } from "lucide-react";
-import { FileText, FolderOpen, GitBranch, Heart, ListTodo, Quote, RefreshCw, Repeat, Route, Shapes, Target } from "lucide-react";
+import {
+  Bot,
+  CalendarDays,
+  Compass,
+  FileText,
+  FolderOpen,
+  GitBranch,
+  Heart,
+  ListTodo,
+  Network,
+  NotebookPen,
+  PanelTop,
+  Quote,
+  RefreshCw,
+  Repeat,
+  Route,
+  Shapes,
+  Sparkles,
+  StickyNote,
+  Target,
+  Timer,
+  Workflow
+} from "lucide-react";
+import type { AiConnectorKind, CrudEntityType, Note } from "@/lib/types";
 
-export type EntityKind = "goal" | "project" | "task" | "strategy" | "habit" | "value" | "pattern" | "behavior" | "belief" | "mode" | "report";
+export const ENTITY_KINDS = [
+  "goal",
+  "project",
+  "task",
+  "strategy",
+  "habit",
+  "tag",
+  "note",
+  "wiki_page",
+  "wiki_space",
+  "insight",
+  "calendar_event",
+  "work_block",
+  "timebox",
+  "value",
+  "pattern",
+  "behavior",
+  "belief",
+  "mode",
+  "mode_session",
+  "report",
+  "event_type",
+  "emotion",
+  "workbench",
+  "functor",
+  "chat"
+] as const;
+export type EntityKind = (typeof ENTITY_KINDS)[number];
+
+type EntityRgbTuple = readonly [number, number, number];
+
+export type EntityColorToken = {
+  cssVariable: `--forge-entity-${string}-rgb`;
+  rgb: EntityRgbTuple;
+  hex: string;
+};
 
 export type EntityVisualDefinition = {
   kind: EntityKind;
   label: string;
   icon: LucideIcon;
+  iconName: string;
+  colorToken: EntityColorToken;
   iconClassName: string;
   nameClassName: string;
   badgeClassName: string;
@@ -14,152 +74,285 @@ export type EntityVisualDefinition = {
   buttonClassName: string;
 };
 
-export const ENTITY_KINDS: EntityKind[] = ["goal", "project", "task", "strategy", "habit", "value", "pattern", "behavior", "belief", "mode", "report"];
+type EntityVisualSeed = {
+  kind: EntityKind;
+  label: string;
+  icon: LucideIcon;
+  iconName: string;
+  accentRgb: EntityRgbTuple;
+};
 
-const ENTITY_VISUALS: Record<EntityKind, EntityVisualDefinition> = {
-  goal: {
+const ENTITY_VISUAL_SEEDS: ReadonlyArray<EntityVisualSeed> = [
+  {
     kind: "goal",
     label: "Goal",
     icon: Target,
-    iconClassName: "text-amber-100",
-    nameClassName: "text-amber-100",
-    badgeClassName:
-      "border-amber-300/24 bg-[linear-gradient(135deg,rgba(251,191,36,0.24),rgba(251,191,36,0.08))] text-amber-50",
-    subtleBadgeClassName: "border-amber-300/18 bg-[rgba(251,191,36,0.08)] text-amber-100",
-    buttonClassName:
-      "border-amber-300/20 bg-[rgba(251,191,36,0.12)] text-amber-50 hover:bg-[rgba(251,191,36,0.18)]"
+    iconName: "Target",
+    accentRgb: [251, 191, 36]
   },
-  project: {
+  {
     kind: "project",
     label: "Project",
     icon: FolderOpen,
-    iconClassName: "text-sky-100",
-    nameClassName: "text-sky-100",
-    badgeClassName:
-      "border-sky-300/24 bg-[linear-gradient(135deg,rgba(56,189,248,0.22),rgba(56,189,248,0.08))] text-sky-50",
-    subtleBadgeClassName: "border-sky-300/18 bg-[rgba(56,189,248,0.08)] text-sky-100",
-    buttonClassName:
-      "border-sky-300/20 bg-[rgba(56,189,248,0.12)] text-sky-50 hover:bg-[rgba(56,189,248,0.18)]"
+    iconName: "FolderOpen",
+    accentRgb: [56, 189, 248]
   },
-  task: {
+  {
     kind: "task",
     label: "Task",
     icon: ListTodo,
-    iconClassName: "text-indigo-100",
-    nameClassName: "text-indigo-100",
-    badgeClassName:
-      "border-indigo-300/24 bg-[linear-gradient(135deg,rgba(129,140,248,0.22),rgba(129,140,248,0.08))] text-indigo-50",
-    subtleBadgeClassName: "border-indigo-300/18 bg-[rgba(129,140,248,0.08)] text-indigo-100",
-    buttonClassName:
-      "border-indigo-300/20 bg-[rgba(129,140,248,0.12)] text-indigo-50 hover:bg-[rgba(129,140,248,0.18)]"
+    iconName: "ListTodo",
+    accentRgb: [129, 140, 248]
   },
-  strategy: {
+  {
     kind: "strategy",
     label: "Strategy",
     icon: GitBranch,
-    iconClassName: "text-cyan-100",
-    nameClassName: "text-cyan-100",
-    badgeClassName:
-      "border-cyan-300/24 bg-[linear-gradient(135deg,rgba(34,211,238,0.22),rgba(34,211,238,0.08))] text-cyan-50",
-    subtleBadgeClassName: "border-cyan-300/18 bg-[rgba(34,211,238,0.08)] text-cyan-100",
-    buttonClassName:
-      "border-cyan-300/20 bg-[rgba(34,211,238,0.12)] text-cyan-50 hover:bg-[rgba(34,211,238,0.18)]"
+    iconName: "GitBranch",
+    accentRgb: [34, 211, 238]
   },
-  habit: {
+  {
     kind: "habit",
     label: "Habit",
     icon: RefreshCw,
-    iconClassName: "text-teal-100",
-    nameClassName: "text-teal-100",
-    badgeClassName:
-      "border-teal-300/24 bg-[linear-gradient(135deg,rgba(45,212,191,0.22),rgba(45,212,191,0.08))] text-teal-50",
-    subtleBadgeClassName: "border-teal-300/18 bg-[rgba(45,212,191,0.08)] text-teal-100",
-    buttonClassName:
-      "border-teal-300/20 bg-[rgba(45,212,191,0.12)] text-teal-50 hover:bg-[rgba(45,212,191,0.18)]"
+    iconName: "RefreshCw",
+    accentRgb: [45, 212, 191]
   },
-  value: {
+  {
+    kind: "tag",
+    label: "Tag",
+    icon: PanelTop,
+    iconName: "PanelTop",
+    accentRgb: [163, 230, 53]
+  },
+  {
+    kind: "note",
+    label: "Note",
+    icon: NotebookPen,
+    iconName: "NotebookPen",
+    accentRgb: [148, 163, 184]
+  },
+  {
+    kind: "wiki_page",
+    label: "Wiki Page",
+    icon: StickyNote,
+    iconName: "StickyNote",
+    accentRgb: [125, 211, 252]
+  },
+  {
+    kind: "wiki_space",
+    label: "Wiki Space",
+    icon: Network,
+    iconName: "Network",
+    accentRgb: [99, 102, 241]
+  },
+  {
+    kind: "insight",
+    label: "Insight",
+    icon: Sparkles,
+    iconName: "Sparkles",
+    accentRgb: [250, 204, 21]
+  },
+  {
+    kind: "calendar_event",
+    label: "Calendar Event",
+    icon: CalendarDays,
+    iconName: "CalendarDays",
+    accentRgb: [14, 165, 233]
+  },
+  {
+    kind: "work_block",
+    label: "Work Block",
+    icon: PanelTop,
+    iconName: "PanelTop",
+    accentRgb: [16, 185, 129]
+  },
+  {
+    kind: "timebox",
+    label: "Timebox",
+    icon: Timer,
+    iconName: "Timer",
+    accentRgb: [244, 114, 182]
+  },
+  {
     kind: "value",
     label: "Value",
     icon: Heart,
-    iconClassName: "text-emerald-100",
-    nameClassName: "text-emerald-100",
-    badgeClassName:
-      "border-emerald-300/24 bg-[linear-gradient(135deg,rgba(52,211,153,0.24),rgba(52,211,153,0.08))] text-emerald-50",
-    subtleBadgeClassName: "border-emerald-300/18 bg-[rgba(52,211,153,0.08)] text-emerald-100",
-    buttonClassName:
-      "border-emerald-300/20 bg-[rgba(52,211,153,0.12)] text-emerald-50 hover:bg-[rgba(52,211,153,0.18)]"
+    iconName: "Heart",
+    accentRgb: [52, 211, 153]
   },
-  pattern: {
+  {
     kind: "pattern",
     label: "Pattern",
     icon: Repeat,
-    iconClassName: "text-rose-100",
-    nameClassName: "text-rose-100",
-    badgeClassName:
-      "border-rose-300/24 bg-[linear-gradient(135deg,rgba(251,113,133,0.24),rgba(251,113,133,0.08))] text-rose-50",
-    subtleBadgeClassName: "border-rose-300/18 bg-[rgba(251,113,133,0.08)] text-rose-100",
-    buttonClassName:
-      "border-rose-300/20 bg-[rgba(251,113,133,0.12)] text-rose-50 hover:bg-[rgba(251,113,133,0.18)]"
+    iconName: "Repeat",
+    accentRgb: [251, 113, 133]
   },
-  behavior: {
+  {
     kind: "behavior",
     label: "Behavior",
     icon: Route,
-    iconClassName: "text-orange-100",
-    nameClassName: "text-orange-100",
-    badgeClassName:
-      "border-orange-300/24 bg-[linear-gradient(135deg,rgba(251,146,60,0.24),rgba(251,146,60,0.08))] text-orange-50",
-    subtleBadgeClassName: "border-orange-300/18 bg-[rgba(251,146,60,0.08)] text-orange-100",
-    buttonClassName:
-      "border-orange-300/20 bg-[rgba(251,146,60,0.12)] text-orange-50 hover:bg-[rgba(251,146,60,0.18)]"
+    iconName: "Route",
+    accentRgb: [251, 146, 60]
   },
-  belief: {
+  {
     kind: "belief",
     label: "Belief",
     icon: Quote,
-    iconClassName: "text-violet-100",
-    nameClassName: "text-violet-100",
-    badgeClassName:
-      "border-violet-300/24 bg-[linear-gradient(135deg,rgba(167,139,250,0.24),rgba(167,139,250,0.08))] text-violet-50",
-    subtleBadgeClassName: "border-violet-300/18 bg-[rgba(167,139,250,0.08)] text-violet-100",
-    buttonClassName:
-      "border-violet-300/20 bg-[rgba(167,139,250,0.12)] text-violet-50 hover:bg-[rgba(167,139,250,0.18)]"
+    iconName: "Quote",
+    accentRgb: [167, 139, 250]
   },
-  mode: {
+  {
     kind: "mode",
     label: "Mode",
     icon: Shapes,
-    iconClassName: "text-fuchsia-100",
-    nameClassName: "text-fuchsia-100",
-    badgeClassName:
-      "border-fuchsia-300/24 bg-[linear-gradient(135deg,rgba(217,70,239,0.24),rgba(217,70,239,0.08))] text-fuchsia-50",
-    subtleBadgeClassName: "border-fuchsia-300/18 bg-[rgba(217,70,239,0.08)] text-fuchsia-100",
-    buttonClassName:
-      "border-fuchsia-300/20 bg-[rgba(217,70,239,0.12)] text-fuchsia-50 hover:bg-[rgba(217,70,239,0.18)]"
+    iconName: "Shapes",
+    accentRgb: [217, 70, 239]
   },
-  report: {
+  {
+    kind: "mode_session",
+    label: "Mode Session",
+    icon: Compass,
+    iconName: "Compass",
+    accentRgb: [192, 132, 252]
+  },
+  {
     kind: "report",
     label: "Report",
     icon: FileText,
-    iconClassName: "text-blue-100",
-    nameClassName: "text-blue-100",
-    badgeClassName:
-      "border-blue-300/24 bg-[linear-gradient(135deg,rgba(96,165,250,0.24),rgba(96,165,250,0.08))] text-blue-50",
-    subtleBadgeClassName: "border-blue-300/18 bg-[rgba(96,165,250,0.08)] text-blue-100",
-    buttonClassName:
-      "border-blue-300/20 bg-[rgba(96,165,250,0.12)] text-blue-50 hover:bg-[rgba(96,165,250,0.18)]"
+    iconName: "FileText",
+    accentRgb: [96, 165, 250]
+  },
+  {
+    kind: "event_type",
+    label: "Event Type",
+    icon: CalendarDays,
+    iconName: "CalendarDays",
+    accentRgb: [45, 212, 191]
+  },
+  {
+    kind: "emotion",
+    label: "Emotion",
+    icon: Heart,
+    iconName: "Heart",
+    accentRgb: [248, 113, 113]
+  },
+  {
+    kind: "workbench",
+    label: "Workbench",
+    icon: Workflow,
+    iconName: "Workflow",
+    accentRgb: [45, 212, 191]
+  },
+  {
+    kind: "functor",
+    label: "Functor",
+    icon: Sparkles,
+    iconName: "Sparkles",
+    accentRgb: [250, 204, 21]
+  },
+  {
+    kind: "chat",
+    label: "Chat",
+    icon: Bot,
+    iconName: "Bot",
+    accentRgb: [129, 140, 248]
   }
+] as const;
+
+function toHex(rgb: EntityRgbTuple) {
+  return `#${rgb.map((value) => value.toString(16).padStart(2, "0")).join("")}`;
+}
+
+function toRgbaVar(kind: EntityKind, rgb: EntityRgbTuple, alpha: number) {
+  return `rgba(var(--forge-entity-${kind}-rgb,${rgb.join(",")}),${alpha})`;
+}
+
+function createEntityVisual(seed: EntityVisualSeed): EntityVisualDefinition {
+  return {
+    kind: seed.kind,
+    label: seed.label,
+    icon: seed.icon,
+    iconName: seed.iconName,
+    colorToken: {
+      cssVariable: `--forge-entity-${seed.kind}-rgb`,
+      rgb: seed.accentRgb,
+      hex: toHex(seed.accentRgb)
+    },
+    iconClassName: `text-[${toRgbaVar(seed.kind, seed.accentRgb, 0.96)}]`,
+    nameClassName: `text-[${toRgbaVar(seed.kind, seed.accentRgb, 0.96)}]`,
+    badgeClassName:
+      `border-[${toRgbaVar(seed.kind, seed.accentRgb, 0.24)}] ` +
+      `bg-[linear-gradient(135deg,${toRgbaVar(seed.kind, seed.accentRgb, 0.24)},${toRgbaVar(seed.kind, seed.accentRgb, 0.08)})] text-white`,
+    subtleBadgeClassName:
+      `border-[${toRgbaVar(seed.kind, seed.accentRgb, 0.18)}] ` +
+      `bg-[${toRgbaVar(seed.kind, seed.accentRgb, 0.08)}] text-[${toRgbaVar(seed.kind, seed.accentRgb, 0.92)}]`,
+    buttonClassName:
+      `border-[${toRgbaVar(seed.kind, seed.accentRgb, 0.2)}] ` +
+      `bg-[${toRgbaVar(seed.kind, seed.accentRgb, 0.12)}] text-white hover:bg-[${toRgbaVar(seed.kind, seed.accentRgb, 0.18)}]`
+  };
+}
+
+const ENTITY_VISUALS: Record<EntityKind, EntityVisualDefinition> =
+  Object.fromEntries(
+    ENTITY_VISUAL_SEEDS.map((seed) => [seed.kind, createEntityVisual(seed)])
+  ) as Record<EntityKind, EntityVisualDefinition>;
+
+const CRUD_ENTITY_KIND_MAP: Partial<Record<CrudEntityType, EntityKind>> = {
+  goal: "goal",
+  project: "project",
+  task: "task",
+  strategy: "strategy",
+  habit: "habit",
+  tag: "tag",
+  note: "note",
+  insight: "insight",
+  calendar_event: "calendar_event",
+  work_block_template: "work_block",
+  task_timebox: "timebox",
+  psyche_value: "value",
+  behavior_pattern: "pattern",
+  behavior: "behavior",
+  belief_entry: "belief",
+  mode_profile: "mode",
+  mode_guide_session: "mode_session",
+  event_type: "event_type",
+  emotion_definition: "emotion",
+  trigger_report: "report"
 };
 
 export function getEntityVisual(kind: EntityKind): EntityVisualDefinition {
   return ENTITY_VISUALS[kind];
 }
 
-export function isEntityKind(value: string): value is EntityKind {
-  return ENTITY_KINDS.includes(value as EntityKind);
+export function getEntityVisualCatalog(): EntityVisualDefinition[] {
+  return ENTITY_KINDS.map((kind) => getEntityVisual(kind));
 }
 
-export function getEntityButtonClassName(kind: EntityKind, selected: boolean): string {
+export function isEntityKind(value: string): value is EntityKind {
+  return (ENTITY_KINDS as readonly string[]).includes(value);
+}
+
+export function getEntityKindForCrudEntityType(
+  entityType: CrudEntityType,
+  options?: { noteKind?: Note["kind"] | null }
+): EntityKind | null {
+  if (entityType === "note" && options?.noteKind === "wiki") {
+    return "wiki_page";
+  }
+  return CRUD_ENTITY_KIND_MAP[entityType] ?? null;
+}
+
+export function getEntityKindForWorkbenchFlowKind(
+  kind: AiConnectorKind
+): EntityKind {
+  return kind === "chat" ? "chat" : "functor";
+}
+
+export function getEntityButtonClassName(
+  kind: EntityKind,
+  selected: boolean
+): string {
   const visual = getEntityVisual(kind);
   return selected
     ? `border ${visual.buttonClassName}`

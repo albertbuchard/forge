@@ -175,6 +175,14 @@ export function listActivityEvents(filters: ActivityListQuery = {}): ActivityEve
     whereClauses.push("source = ?");
     params.push(filters.source);
   }
+  if (filters.from) {
+    whereClauses.push("created_at >= ?");
+    params.push(filters.from);
+  }
+  if (filters.to) {
+    whereClauses.push("created_at < ?");
+    params.push(filters.to);
+  }
   if (!filters.includeCorrected) {
     whereClauses.push("event_type != 'activity_corrected'");
     whereClauses.push(

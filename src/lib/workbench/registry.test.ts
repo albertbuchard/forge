@@ -54,4 +54,69 @@ describe("workbench registry", () => {
       category: "Insights"
     });
   });
+
+  it("uses semantic output contracts instead of generic primary content ports", () => {
+    expect(getWorkbenchNodeDefinition("surface:tasks:inbox")?.output).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ key: "summary", kind: "summary" }),
+        expect.objectContaining({ key: "matches", kind: "entity_list" }),
+        expect.objectContaining({ key: "matchCount", kind: "number" })
+      ])
+    );
+    expect(getWorkbenchNodeDefinition("surface:overview:snapshot")?.output).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ key: "summary", kind: "summary" }),
+        expect.objectContaining({
+          key: "context",
+          kind: "context",
+          modelName: "ForgeOverviewContext"
+        })
+      ])
+    );
+    expect(getWorkbenchNodeDefinition("surface:sleep-index:summary")?.output).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ key: "summary", kind: "summary" }),
+        expect.objectContaining({
+          key: "sleepView",
+          kind: "context",
+          modelName: "ForgeSleepView"
+        })
+      ])
+    );
+    expect(getWorkbenchNodeDefinition("surface:habits:search-results")?.output).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          key: "matches",
+          kind: "entity_list",
+          itemKind: "habit",
+          shape: expect.arrayContaining([
+            expect.objectContaining({ key: "id", kind: "text" }),
+            expect.objectContaining({ key: "title", kind: "text" }),
+            expect.objectContaining({ key: "frequency", kind: "text" })
+          ])
+        })
+      ])
+    );
+    expect(getWorkbenchNodeDefinition("surface:habits:search-results")?.output).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ key: "query" }),
+        expect.objectContaining({ key: "entityTypes" }),
+        expect.objectContaining({ key: "limit" })
+      ])
+    );
+    expect(getWorkbenchNodeDefinition("surface:habits:search-results")?.inputs).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ key: "query", kind: "text" }),
+        expect.objectContaining({ key: "entityTypes", kind: "array" }),
+        expect.objectContaining({ key: "limit", kind: "number" })
+      ])
+    );
+    expect(getWorkbenchNodeDefinition("surface:habits:search-results")?.params).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ key: "query", kind: "text" }),
+        expect.objectContaining({ key: "entityTypes", kind: "array" }),
+        expect.objectContaining({ key: "limit", kind: "number" })
+      ])
+    );
+  });
 });

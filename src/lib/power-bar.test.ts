@@ -18,7 +18,19 @@ describe("power bar helpers", () => {
     expect(powerBarEntityTypeToKind("belief_entry")).toBe("belief");
     expect(powerBarEntityTypeToKind("mode_profile")).toBe("mode");
     expect(powerBarEntityTypeToKind("trigger_report")).toBe("report");
-    expect(powerBarEntityTypeToKind("calendar_event")).toBeNull();
+    expect(powerBarEntityTypeToKind("calendar_event")).toBe("calendar_event");
+    expect(powerBarEntityTypeToKind("work_block_template")).toBe("work_block");
+    expect(powerBarEntityTypeToKind("task_timebox")).toBe("timebox");
+    expect(
+      powerBarEntityTypeToKind("note", {
+        kind: "wiki"
+      })
+    ).toBe("wiki_page");
+    expect(
+      powerBarEntityTypeToKind("note", {
+        kind: "evidence"
+      })
+    ).toBe("note");
   });
 
   it("builds focused routes for entity results", () => {

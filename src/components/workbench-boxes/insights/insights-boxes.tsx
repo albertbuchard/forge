@@ -5,8 +5,13 @@ import {
 } from "../../../lib/workbench/runtime.js";
 import type {
   WorkbenchExecutionFunction,
-  WorkbenchNodeExecutionInput
+  WorkbenchNodeExecutionInput,
+  WorkbenchOutputDefinition
 } from "../../../lib/workbench/nodes.js";
+import {
+  createContextOutput,
+  createSummaryOutput
+} from "../../../lib/workbench/contracts.js";
 import { createGenericWorkbenchNodeView } from "../shared/generic-node-view.js";
 import { defineWorkbenchBox } from "../shared/define-workbench-box.js";
 
@@ -20,7 +25,8 @@ function defineInsightsBox(
   title: string,
   description: string,
   tags: string[],
-  execute: WorkbenchExecutionFunction
+  execute: WorkbenchExecutionFunction,
+  output: WorkbenchOutputDefinition[]
 ) {
   return defineWorkbenchBox(Slot, {
     id,
@@ -33,14 +39,14 @@ function defineInsightsBox(
     tags,
     inputs: [],
     params: [],
-    output: [{ key: "primary", label: title, kind: "content" }],
+    output,
     tools: [],
     NodeView: createGenericWorkbenchNodeView({
       title,
       description,
       inputs: [],
       params: [],
-      output: [{ key: "primary", label: title, kind: "content" }],
+      output,
       tools: []
     }),
     execute
@@ -52,7 +58,16 @@ export const InsightsFeedBox = defineInsightsBox(
   "Insights feed",
   "Current coaching feed, status summary, and evidence-backed insight stream.",
   ["insights", "feed"],
-  (input: WorkbenchNodeExecutionInput) => buildInsightsWorkbenchExecution(input)
+  (input: WorkbenchNodeExecutionInput) => buildInsightsWorkbenchExecution(input),
+  [
+    createSummaryOutput({ label: "Insight summary", description: "Summary of the current coaching feed and evidence-backed insight stream." }),
+    createContextOutput({
+      key: "insights",
+      label: "Insight payload",
+      description: "Structured status and coaching payload returned by Forge insights.",
+      modelName: "ForgeInsightsPayload"
+    })
+  ]
 );
 
 export const InsightsCoachingBox = defineInsightsBox(
@@ -67,5 +82,11 @@ export const InsightsCoachingBox = defineInsightsBox(
         focus: "coaching_recommendation"
       },
       "Coaching recommendation surface for the highest-leverage next move."
-    )
+    ),
+  [
+    createSummaryOutput({
+      label: "Coaching recommendation",
+      description: "Summary of the highest-leverage coaching recommendation."
+    })
+  ]
 );

@@ -8,6 +8,7 @@ import { createManualRewardGrant } from "./repositories/rewards.js";
 import { listTaskRuns } from "./repositories/task-runs.js";
 import { getDefaultUser } from "./repositories/users.js";
 import { listWikiSpaces } from "./repositories/wiki-memory.js";
+import { getScreenTimeOverlapSummary } from "./screen-time.js";
 
 const movementPublishModeSchema = z.enum([
   "auto_publish",
@@ -519,6 +520,8 @@ type MovementTimelineCursor = {
   kind: "stay" | "trip";
   id: string;
 };
+
+const MISSING_MOVEMENT_DATA_THRESHOLD_SECONDS = 60 * 60;
 
 function nowIso() {
   return new Date().toISOString();
@@ -1275,6 +1278,20 @@ function mapMovementTrip(
             slug: note.slug
           }
         : null
+  };
+}
+
+function enrichMovementSegmentWithScreenTime<T extends {
+  startedAt: string;
+  endedAt: string;
+}>(segment: T, userIds?: string[]) {
+  return {
+    ...segment,
+    ...getScreenTimeOverlapSummary({
+      startedAt: segment.startedAt,
+      endedAt: segment.endedAt,
+      userIds
+    })
   };
 }
 
@@ -2635,6 +2652,353 @@ function compareMovementTimelineDescending(
   );
 }
 
+type MovementGapBoundary = {
+  latitude: number;
+  longitude: number;
+  placeLabel: string | null;
+  placeExternalUid: string | null;
+} | null;
+
+type MovementGapSourceSegment<TKind extends "stay" | "trip", TPayload> = {
+  id: string;
+  kind: TKind;
+  startedAt: string;
+  endedAt: string;
+  payload: TPayload;
+  startBoundary: MovementGapBoundary;
+  endBoundary: MovementGapBoundary;
+};
+
+type MovementDerivedGapSegment = {
+  id: string;
+  kind: "stay" | "trip" | "missing";
+  origin: "continued_stay" | "repaired_gap" | "missing";
+  startedAt: string;
+  endedAt: string;
+  durationSeconds: number;
+  displacementMeters: number | null;
+  placeLabel: string | null;
+  suppressedShortJump: boolean;
+  startBoundary: MovementGapBoundary;
+  endBoundary: MovementGapBoundary;
+};
+
+type MovementNormalizedGapSegment<TPayload> = {
+  id: string;
+  kind: "stay" | "trip" | "missing";
+  origin: "recorded" | "continued_stay" | "repaired_gap" | "missing";
+  startedAt: string;
+  endedAt: string;
+  durationSeconds: number;
+  payload: TPayload | null;
+  displacementMeters: number | null;
+  placeLabel: string | null;
+  suppressedShortJump: boolean;
+  startBoundary: MovementGapBoundary;
+  endBoundary: MovementGapBoundary;
+};
+
+function movementBoundaryDistanceMeters(
+  left: MovementGapBoundary,
+  right: MovementGapBoundary
+) {
+  if (!left || !right) {
+    return null;
+  }
+  return haversineDistanceMeters(
+    {
+      latitude: left.latitude,
+      longitude: left.longitude
+    },
+    {
+      latitude: right.latitude,
+      longitude: right.longitude
+    }
+  );
+}
+
+function movementBoundariesShareAnchor(
+  left: MovementGapBoundary,
+  right: MovementGapBoundary
+) {
+  if (!left || !right) {
+    return false;
+  }
+  if (
+    left.placeExternalUid &&
+    right.placeExternalUid &&
+    left.placeExternalUid === right.placeExternalUid
+  ) {
+    return true;
+  }
+  const displacementMeters = movementBoundaryDistanceMeters(left, right);
+  return displacementMeters !== null && displacementMeters <= 100;
+}
+
+function buildDerivedMovementGapSegment(input: {
+  id: string;
+  kind: "stay" | "trip" | "missing";
+  origin: "continued_stay" | "repaired_gap" | "missing";
+  startedAt: string;
+  endedAt: string;
+  displacementMeters?: number | null;
+  placeLabel?: string | null;
+  suppressedShortJump?: boolean;
+  startBoundary?: MovementGapBoundary;
+  endBoundary?: MovementGapBoundary;
+}) {
+  return {
+    id: input.id,
+    kind: input.kind,
+    origin: input.origin,
+    startedAt: input.startedAt,
+    endedAt: input.endedAt,
+    durationSeconds: durationSeconds(input.startedAt, input.endedAt),
+    displacementMeters: input.displacementMeters ?? null,
+    placeLabel: input.placeLabel ?? null,
+    suppressedShortJump: input.suppressedShortJump ?? false,
+    startBoundary: input.startBoundary ?? null,
+    endBoundary: input.endBoundary ?? null
+  } satisfies MovementDerivedGapSegment;
+}
+
+function coalesceMovementStayCoverageSegments<TPayload>(
+  segments: MovementNormalizedGapSegment<TPayload>[]
+) {
+  const coalesced: MovementNormalizedGapSegment<TPayload>[] = [];
+  for (const segment of segments) {
+    const previous = coalesced[coalesced.length - 1];
+    const shouldMerge =
+      previous &&
+      previous.kind === "stay" &&
+      segment.kind === "stay" &&
+      (previous.origin !== "recorded" || segment.origin !== "recorded") &&
+      durationSeconds(previous.endedAt, segment.startedAt) === 0 &&
+      movementBoundariesShareAnchor(previous.endBoundary, segment.startBoundary);
+
+    if (!shouldMerge || !previous) {
+      coalesced.push(segment);
+      continue;
+    }
+
+    const mergedOrigin =
+      previous.origin === "continued_stay" || segment.origin === "continued_stay"
+        ? "continued_stay"
+        : previous.origin === "repaired_gap" || segment.origin === "repaired_gap"
+          ? "repaired_gap"
+          : "recorded";
+    coalesced[coalesced.length - 1] = {
+      id: `coalesced_stay_${previous.id}_${segment.id}`,
+      kind: "stay",
+      origin: mergedOrigin,
+      startedAt: previous.startedAt,
+      endedAt: segment.endedAt,
+      durationSeconds: durationSeconds(previous.startedAt, segment.endedAt),
+      payload: null,
+      displacementMeters: null,
+      placeLabel:
+        previous.placeLabel ??
+        segment.placeLabel ??
+        previous.endBoundary?.placeLabel ??
+        segment.startBoundary?.placeLabel ??
+        null,
+      suppressedShortJump: previous.suppressedShortJump || segment.suppressedShortJump,
+      startBoundary: previous.startBoundary,
+      endBoundary: segment.endBoundary
+    };
+  }
+  return coalesced;
+}
+
+function normalizeMovementCoverageSegments<
+  T extends MovementGapSourceSegment<"stay" | "trip", unknown>
+>(
+  segments: T[],
+  options: { rangeStart?: string; rangeEnd?: string; allowStayCoalescing?: boolean } = {}
+) {
+  const sorted = [...segments]
+    .sort((left, right) =>
+      left.startedAt.localeCompare(right.startedAt) ||
+      left.endedAt.localeCompare(right.endedAt)
+    )
+    .map(
+      (segment) =>
+        ({
+          id: segment.id,
+          kind: segment.kind,
+          origin: "recorded",
+          startedAt: segment.startedAt,
+          endedAt: segment.endedAt,
+          durationSeconds: durationSeconds(segment.startedAt, segment.endedAt),
+          payload: segment.payload,
+          displacementMeters: null,
+          placeLabel:
+            segment.kind === "stay"
+              ? segment.startBoundary?.placeLabel ?? segment.endBoundary?.placeLabel ?? null
+              : segment.endBoundary?.placeLabel ?? segment.startBoundary?.placeLabel ?? null,
+          suppressedShortJump: false,
+          startBoundary: segment.startBoundary,
+          endBoundary: segment.endBoundary
+        }) satisfies MovementNormalizedGapSegment<T["payload"]>
+    );
+
+  const classifyGap = (
+    previous: MovementNormalizedGapSegment<T["payload"]>,
+    next: MovementNormalizedGapSegment<T["payload"]>
+  ) => {
+    const gapSeconds = durationSeconds(previous.endedAt, next.startedAt);
+    if (gapSeconds <= 0) {
+      return null;
+    }
+    if (gapSeconds > MISSING_MOVEMENT_DATA_THRESHOLD_SECONDS) {
+      return buildDerivedMovementGapSegment({
+        id: `missing_${previous.endedAt}_${next.startedAt}`,
+        kind: "missing",
+        origin: "missing",
+        startedAt: previous.endedAt,
+        endedAt: next.startedAt
+      });
+    }
+    if (movementBoundariesShareAnchor(previous.endBoundary, next.startBoundary)) {
+      return buildDerivedMovementGapSegment({
+        id: `continued_stay_${previous.id}_${next.id}`,
+        kind: "stay",
+        origin: "repaired_gap",
+        startedAt: previous.endedAt,
+        endedAt: next.startedAt,
+        displacementMeters:
+          movementBoundaryDistanceMeters(previous.endBoundary, next.startBoundary) ?? 0,
+        placeLabel:
+          previous.endBoundary?.placeLabel ?? next.startBoundary?.placeLabel ?? null,
+        startBoundary: previous.endBoundary,
+        endBoundary: next.startBoundary
+      });
+    }
+    const displacementMeters = movementBoundaryDistanceMeters(
+      previous.endBoundary,
+      next.startBoundary
+    );
+    if (displacementMeters === null) {
+      return buildDerivedMovementGapSegment({
+        id: `missing_${previous.endedAt}_${next.startedAt}`,
+        kind: "missing",
+        origin: "missing",
+        startedAt: previous.endedAt,
+        endedAt: next.startedAt
+      });
+    }
+    if (gapSeconds < 5 * 60) {
+      return buildDerivedMovementGapSegment({
+        id: `repaired_stay_short_jump_${previous.id}_${next.id}`,
+        kind: "stay",
+        origin: "repaired_gap",
+        startedAt: previous.endedAt,
+        endedAt: next.startedAt,
+        displacementMeters,
+        placeLabel:
+          previous.endBoundary?.placeLabel ?? next.startBoundary?.placeLabel ?? null,
+        suppressedShortJump: true,
+        startBoundary: previous.endBoundary,
+        endBoundary: next.startBoundary
+      });
+    }
+    return buildDerivedMovementGapSegment({
+      id: `repaired_trip_${previous.id}_${next.id}`,
+      kind: "trip",
+      origin: "repaired_gap",
+      startedAt: previous.endedAt,
+      endedAt: next.startedAt,
+      displacementMeters,
+      placeLabel:
+        next.startBoundary?.placeLabel ?? previous.endBoundary?.placeLabel ?? null,
+      startBoundary: previous.endBoundary,
+      endBoundary: next.startBoundary
+    });
+  };
+
+  const coverage: MovementNormalizedGapSegment<T["payload"]>[] = [];
+  if (sorted.length === 0 && options.rangeStart && options.rangeEnd) {
+    return [
+      buildDerivedMovementGapSegment({
+        id: `missing_${options.rangeStart}_${options.rangeEnd}`,
+        kind: "missing",
+        origin: "missing",
+        startedAt: options.rangeStart,
+        endedAt: options.rangeEnd
+      })
+    ];
+  }
+
+  if (options.rangeStart && sorted[0]) {
+    const first = sorted[0];
+    if (durationSeconds(options.rangeStart, first.startedAt) > 0) {
+      coverage.push(
+        buildDerivedMovementGapSegment({
+          id: `missing_${options.rangeStart}_${first.startedAt}`,
+          kind: "missing",
+          origin: "missing",
+          startedAt: options.rangeStart,
+          endedAt: first.startedAt,
+          placeLabel: first.startBoundary?.placeLabel ?? null,
+          endBoundary: first.startBoundary
+        })
+      );
+    }
+  }
+
+  for (const [index, segment] of sorted.entries()) {
+    if (index > 0) {
+      const derivedGap = classifyGap(sorted[index - 1]!, segment);
+      if (derivedGap) {
+        coverage.push(derivedGap);
+      }
+    }
+    coverage.push(segment);
+  }
+
+  if (options.rangeEnd && sorted.length > 0) {
+    const last = sorted[sorted.length - 1]!;
+    const trailingGapSeconds = durationSeconds(last.endedAt, options.rangeEnd);
+    if (trailingGapSeconds > 0) {
+      if (
+        last.kind === "stay" &&
+        trailingGapSeconds <= MISSING_MOVEMENT_DATA_THRESHOLD_SECONDS &&
+        last.endBoundary
+      ) {
+        coverage.push(
+          buildDerivedMovementGapSegment({
+            id: `continued_stay_${last.id}_${options.rangeEnd}`,
+            kind: "stay",
+            origin: "continued_stay",
+            startedAt: last.endedAt,
+            endedAt: options.rangeEnd,
+            displacementMeters: 0,
+            placeLabel: last.endBoundary.placeLabel ?? null,
+            startBoundary: last.endBoundary,
+            endBoundary: last.endBoundary
+          })
+        );
+      } else {
+        coverage.push(
+          buildDerivedMovementGapSegment({
+            id: `missing_${last.endedAt}_${options.rangeEnd}`,
+            kind: "missing",
+            origin: "missing",
+            startedAt: last.endedAt,
+            endedAt: options.rangeEnd,
+            placeLabel: last.endBoundary?.placeLabel ?? null,
+            startBoundary: last.endBoundary
+          })
+        );
+      }
+    }
+  }
+
+  return options.allowStayCoalescing === false
+    ? coverage
+    : coalesceMovementStayCoverageSegments(coverage);
+}
+
 export function getMovementTimeline(input: z.input<typeof movementTimelineQuerySchema>) {
   const parsed = movementTimelineQuerySchema.parse(input);
   const userIds = parsed.userIds.length > 0 ? parsed.userIds : undefined;
@@ -2706,7 +3070,65 @@ export function getMovementTimeline(input: z.input<typeof movementTimelineQueryS
     }
   }
 
-  const timelineSource = parsed.includeInvalid ? chronological : validChronological;
+  const timelineBaseSource = parsed.includeInvalid ? chronological : validChronological;
+  const timelineBaseSegments = timelineBaseSource.map((segment) => {
+    if (segment.kind === "stay") {
+      return {
+        id: segment.id,
+        kind: "stay" as const,
+        startedAt: segment.startedAt,
+        endedAt: segment.endedAt,
+        payload: segment.stay,
+        startBoundary: {
+          latitude: segment.stay.centerLatitude,
+          longitude: segment.stay.centerLongitude,
+          placeLabel: segment.stay.place?.label ?? segment.stay.label ?? null,
+          placeExternalUid: segment.stay.place?.externalUid ?? null
+        },
+        endBoundary: {
+          latitude: segment.stay.centerLatitude,
+          longitude: segment.stay.centerLongitude,
+          placeLabel: segment.stay.place?.label ?? segment.stay.label ?? null,
+          placeExternalUid: segment.stay.place?.externalUid ?? null
+        }
+      };
+    }
+    const startPoint = segment.trip.points[0] ?? null;
+    const endPoint = segment.trip.points[segment.trip.points.length - 1] ?? null;
+    return {
+      id: segment.id,
+      kind: "trip" as const,
+      startedAt: segment.startedAt,
+      endedAt: segment.endedAt,
+      payload: segment.trip,
+      startBoundary:
+        startPoint || segment.trip.startPlace
+          ? {
+              latitude: startPoint?.latitude ?? segment.trip.startPlace?.latitude ?? 0,
+              longitude: startPoint?.longitude ?? segment.trip.startPlace?.longitude ?? 0,
+              placeLabel: segment.trip.startPlace?.label ?? null,
+              placeExternalUid: segment.trip.startPlace?.externalUid ?? null
+            }
+          : null,
+      endBoundary:
+        endPoint || segment.trip.endPlace
+          ? {
+              latitude: endPoint?.latitude ?? segment.trip.endPlace?.latitude ?? 0,
+              longitude: endPoint?.longitude ?? segment.trip.endPlace?.longitude ?? 0,
+              placeLabel: segment.trip.endPlace?.label ?? null,
+              placeExternalUid: segment.trip.endPlace?.externalUid ?? null
+            }
+          : null
+    };
+  });
+  const timelineSource = normalizeMovementCoverageSegments(timelineBaseSegments, {
+    allowStayCoalescing: !parsed.includeInvalid
+  }).sort((left, right) =>
+    left.startedAt.localeCompare(right.startedAt) ||
+    left.endedAt.localeCompare(right.endedAt) ||
+    left.kind.localeCompare(right.kind) ||
+    left.id.localeCompare(right.id)
+  );
 
   const decorated = timelineSource.map((segment, index) => {
     const previousStayId = [...timelineSource.slice(0, index)]
@@ -2722,65 +3144,154 @@ export function getMovementTimeline(input: z.input<typeof movementTimelineQueryS
       nextStayLaneId ? stayLaneById.get(nextStayLaneId) : undefined;
     const cursor = {
       id: segment.id,
-      kind: segment.kind,
+      kind: segment.kind === "missing" ? "stay" : segment.kind,
       startedAt: segment.startedAt,
       endedAt: segment.endedAt
     } satisfies MovementTimelineCursor;
-    if (segment.kind === "stay") {
-      const invalid = hasInvalidMovementRecord(segment.stay.metadata);
+    if (segment.kind === "missing") {
+      const laneSide = previousStayLane ?? nextStayLane ?? "left";
+      return {
+        id: segment.id,
+        kind: "missing" as const,
+        origin: "missing" as const,
+        editable: false,
+        startedAt: segment.startedAt,
+        endedAt: segment.endedAt,
+        durationSeconds: segment.durationSeconds,
+        laneSide,
+        connectorFromLane: previousStayLane ?? laneSide,
+        connectorToLane: nextStayLane ?? laneSide,
+        title: "Missing data",
+        subtitle: "Forge did not receive enough movement signal here.",
+        placeLabel: null,
+        tags: ["missing-data"],
+        isInvalid: false,
+        syncSource: "derived",
+        cursor: encodeMovementTimelineCursor(cursor),
+        stay: null,
+        trip: null
+      };
+    }
+    if (segment.kind === "stay" && segment.payload) {
+      const invalid = hasInvalidMovementRecord(segment.payload.metadata);
       const laneSide = stayLaneById.get(segment.id) ?? "left";
       return {
         id: segment.id,
         kind: "stay" as const,
+        origin: "recorded" as const,
+        editable: true,
         startedAt: segment.startedAt,
         endedAt: segment.endedAt,
-        durationSeconds: segment.stay.durationSeconds,
+        durationSeconds: segment.payload.durationSeconds,
         laneSide,
         connectorFromLane: laneSide,
         connectorToLane: laneSide,
-        title: buildMovementTimelineTitleForStay(segment.stay),
-        subtitle: buildMovementTimelineSubtitleForStay(segment.stay),
-        placeLabel: segment.stay.place?.label ?? segment.stay.placeId ?? null,
+        title: buildMovementTimelineTitleForStay(segment.payload),
+        subtitle: buildMovementTimelineSubtitleForStay(segment.payload),
+        placeLabel: segment.payload.place?.label ?? segment.payload.placeId ?? null,
         tags: uniqStrings([
-          ...(segment.stay.place?.categoryTags ?? []),
-          ...(Array.isArray((segment.stay.metrics as Record<string, unknown>).tags)
-            ? (((segment.stay.metrics as Record<string, unknown>).tags as string[]) ?? [])
+          ...(segment.payload.place?.categoryTags ?? []),
+          ...(Array.isArray((segment.payload.metrics as Record<string, unknown>).tags)
+            ? (((segment.payload.metrics as Record<string, unknown>).tags as string[]) ?? [])
             : [])
         ]),
         isInvalid: invalid,
-        syncSource: segment.stay.pairingSessionId ? "companion" : "forge",
+        syncSource: segment.payload.pairingSessionId ? "companion" : "forge",
         cursor: encodeMovementTimelineCursor(cursor),
-        stay: segment.stay,
+        stay: segment.payload,
         trip: null
       };
     }
-    const invalid = hasInvalidMovementRecord(segment.trip.metadata);
+    if (segment.kind === "stay") {
+      const laneSide = previousStayLane ?? nextStayLane ?? "left";
+      return {
+        id: segment.id,
+        kind: "stay" as const,
+        origin: "repaired_gap" as const,
+        editable: false,
+        startedAt: segment.startedAt,
+        endedAt: segment.endedAt,
+        durationSeconds: segment.durationSeconds,
+        laneSide,
+        connectorFromLane: previousStayLane ?? laneSide,
+        connectorToLane: nextStayLane ?? laneSide,
+        title:
+          segment.origin === "continued_stay"
+            ? segment.placeLabel ?? "Continued stay"
+            : segment.placeLabel ?? "Repaired stay",
+        subtitle:
+          segment.origin === "continued_stay"
+            ? "Short stationary gap carried forward into one continuous stay."
+            : segment.suppressedShortJump
+              ? "Short jump under five minutes suppressed into stay continuity."
+              : "Short gap repaired as a stay between known anchors.",
+        placeLabel: segment.placeLabel ?? null,
+        tags: uniqStrings([
+          segment.origin === "continued_stay" ? "continued-stay" : "repaired-gap",
+          ...(segment.suppressedShortJump ? ["suppressed-short-jump"] : [])
+        ]),
+        isInvalid: false,
+        syncSource: "derived",
+        cursor: encodeMovementTimelineCursor(cursor),
+        stay: null,
+        trip: null
+      };
+    }
+    if (!segment.payload) {
+      const laneSide = nextStayLane ?? previousStayLane ?? "left";
+      return {
+        id: segment.id,
+        kind: "trip" as const,
+        origin: "repaired_gap" as const,
+        editable: false,
+        startedAt: segment.startedAt,
+        endedAt: segment.endedAt,
+        durationSeconds: segment.durationSeconds,
+        laneSide,
+        connectorFromLane: previousStayLane ?? laneSide,
+        connectorToLane: nextStayLane ?? laneSide,
+        title: segment.placeLabel ?? "Repaired move",
+        subtitle: segment.displacementMeters
+          ? `${round(segment.displacementMeters / 1000, 1)} km · repaired from boundary gap`
+          : "Short gap repaired as a move between known anchors.",
+        placeLabel: segment.placeLabel ?? null,
+        tags: ["repaired-gap"],
+        isInvalid: false,
+        syncSource: "derived",
+        cursor: encodeMovementTimelineCursor(cursor),
+        stay: null,
+        trip: null
+      };
+    }
+    const invalid = hasInvalidMovementRecord(segment.payload.metadata);
     const laneSide = nextStayLane ?? previousStayLane ?? "left";
     return {
       id: segment.id,
       kind: "trip" as const,
+      origin: "recorded" as const,
+      editable: true,
       startedAt: segment.startedAt,
       endedAt: segment.endedAt,
-      durationSeconds: segment.trip.durationSeconds,
+      durationSeconds: segment.payload.durationSeconds,
       laneSide,
       connectorFromLane: previousStayLane ?? laneSide,
       connectorToLane: nextStayLane ?? laneSide,
-      title: buildMovementTimelineTitleForTrip(segment.trip),
-      subtitle: buildMovementTimelineSubtitleForTrip(segment.trip),
+      title: buildMovementTimelineTitleForTrip(segment.payload),
+      subtitle: buildMovementTimelineSubtitleForTrip(segment.payload),
       placeLabel:
-        segment.trip.endPlace?.label ??
-        segment.trip.startPlace?.label ??
+        segment.payload.endPlace?.label ??
+        segment.payload.startPlace?.label ??
         null,
       tags: uniqStrings([
-        ...segment.trip.tags,
-        ...(segment.trip.startPlace?.categoryTags ?? []),
-        ...(segment.trip.endPlace?.categoryTags ?? [])
+        ...segment.payload.tags,
+        ...(segment.payload.startPlace?.categoryTags ?? []),
+        ...(segment.payload.endPlace?.categoryTags ?? [])
       ]),
       isInvalid: invalid,
-      syncSource: segment.trip.pairingSessionId ? "companion" : "forge",
+      syncSource: segment.payload.pairingSessionId ? "companion" : "forge",
       cursor: encodeMovementTimelineCursor(cursor),
       stay: null,
-      trip: segment.trip
+      trip: segment.payload
     };
   });
 
@@ -3661,6 +4172,11 @@ function computeSelectionAggregate(input: {
       )
     )
   );
+  const screenTime = getScreenTimeOverlapSummary({
+    startedAt: input.startedAt,
+    endedAt: input.endedAt,
+    userIds: input.userIds
+  });
   return {
     startedAt: input.startedAt,
     endedAt: input.endedAt,
@@ -3677,7 +4193,12 @@ function computeSelectionAggregate(input: {
       return sum + overlapSeconds(input.startedAt, input.endedAt, run.claimedAt, end);
     }, 0),
     placeLabels,
-    tags
+    tags,
+    estimatedScreenTimeSeconds: screenTime.estimatedScreenTimeSeconds,
+    pickupCount: screenTime.pickupCount,
+    notificationCount: screenTime.notificationCount,
+    topApps: screenTime.topApps,
+    topCategories: screenTime.topCategories
   };
 }
 
@@ -3689,9 +4210,9 @@ export function getMovementDayDetail(input: {
   const placeRows = listMovementPlaceRows(input.userIds);
   const places = placeRows.map(mapMovementPlace);
   const placesById = new Map(places.map((place) => [place.id, place]));
-  const stays = listMovementStayRows(input.userIds, targetDate).map((row) =>
-    mapMovementStay(row, placesById)
-  );
+  const stays = listMovementStayRows(input.userIds, targetDate)
+    .map((row) => mapMovementStay(row, placesById))
+    .map((stay) => enrichMovementSegmentWithScreenTime(stay, input.userIds));
   const tripRows = listMovementTripRows(input.userIds, { dateKey: targetDate });
   const tripIds = tripRows.map((row) => row.id);
   const pointsByTrip = new Map<string, MovementTripPointRow[]>();
@@ -3702,21 +4223,26 @@ export function getMovementDayDetail(input: {
   listTripStops(tripIds).forEach((stop) => {
     stopsByTrip.set(stop.trip_id, [...(stopsByTrip.get(stop.trip_id) ?? []), stop]);
   });
-  const trips = tripRows.map((row) =>
-    mapMovementTrip(
-      row,
-      placesById,
-      pointsByTrip.get(row.id) ?? [],
-      stopsByTrip.get(row.id) ?? []
+  const trips = tripRows
+    .map((row) =>
+      mapMovementTrip(
+        row,
+        placesById,
+        pointsByTrip.get(row.id) ?? [],
+        stopsByTrip.get(row.id) ?? []
+      )
     )
-  );
+    .map((trip) => enrichMovementSegmentWithScreenTime(trip, input.userIds));
 
-  const allSegments = [
+  const baseSegments = [
     ...stays.map((stay) => ({
       id: stay.id,
       kind: "stay" as const,
+      origin: "recorded" as const,
+      editable: true,
       startedAt: stay.startedAt,
       endedAt: stay.endedAt,
+      payload: stay,
       durationSeconds: stay.durationSeconds,
       label: stay.place?.label ?? stay.label ?? "Stay",
       subtitle:
@@ -3724,16 +4250,33 @@ export function getMovementDayDetail(input: {
         (stay.classification === "stationary" ? "Stationary" : stay.classification),
       distanceMeters: 0,
       averageSpeedMps: 0,
+      estimatedScreenTimeSeconds: stay.estimatedScreenTimeSeconds,
+      pickupCount: stay.pickupCount,
       colorTone: stay.place?.categoryTags.includes("home")
         ? "from-sky-400/30 to-indigo-500/12"
         : "from-white/16 to-white/4",
-      noteCount: stay.note ? 1 : 0
+      noteCount: stay.note ? 1 : 0,
+      startBoundary: {
+        latitude: stay.centerLatitude,
+        longitude: stay.centerLongitude,
+        placeLabel: stay.place?.label ?? stay.label ?? null,
+        placeExternalUid: stay.place?.externalUid ?? null
+      },
+      endBoundary: {
+        latitude: stay.centerLatitude,
+        longitude: stay.centerLongitude,
+        placeLabel: stay.place?.label ?? stay.label ?? null,
+        placeExternalUid: stay.place?.externalUid ?? null
+      }
     })),
     ...trips.map((trip) => ({
       id: trip.id,
       kind: "trip" as const,
+      origin: "recorded" as const,
+      editable: true,
       startedAt: trip.startedAt,
       endedAt: trip.endedAt,
+      payload: trip,
       durationSeconds: trip.durationSeconds,
       label:
         trip.label ||
@@ -3741,12 +4284,134 @@ export function getMovementDayDetail(input: {
       subtitle: `${round(trip.distanceMeters / 1000, 1)} km · ${trip.activityType || trip.travelMode}`,
       distanceMeters: trip.distanceMeters,
       averageSpeedMps: trip.averageSpeedMps ?? 0,
+      estimatedScreenTimeSeconds: trip.estimatedScreenTimeSeconds,
+      pickupCount: trip.pickupCount,
       colorTone: "from-emerald-300/26 to-cyan-400/12",
-      noteCount: trip.note ? 1 : 0
+      noteCount: trip.note ? 1 : 0,
+      startBoundary:
+        trip.points[0] || trip.startPlace
+          ? {
+              latitude: trip.points[0]?.latitude ?? trip.startPlace?.latitude ?? 0,
+              longitude: trip.points[0]?.longitude ?? trip.startPlace?.longitude ?? 0,
+              placeLabel: trip.startPlace?.label ?? null,
+              placeExternalUid: trip.startPlace?.externalUid ?? null
+            }
+          : null,
+      endBoundary:
+        trip.points[trip.points.length - 1] || trip.endPlace
+          ? {
+              latitude:
+                trip.points[trip.points.length - 1]?.latitude ??
+                trip.endPlace?.latitude ??
+                0,
+              longitude:
+                trip.points[trip.points.length - 1]?.longitude ??
+                trip.endPlace?.longitude ??
+                0,
+              placeLabel: trip.endPlace?.label ?? null,
+              placeExternalUid: trip.endPlace?.externalUid ?? null
+            }
+          : null
     }))
   ].sort((left, right) => Date.parse(left.startedAt) - Date.parse(right.startedAt));
   const dayStart = `${targetDate}T00:00:00.000Z`;
   const dayEnd = `${targetDate}T23:59:59.999Z`;
+  const allSegments = normalizeMovementCoverageSegments(baseSegments, {
+    rangeStart: dayStart,
+    rangeEnd: dayEnd
+  }).map((segment) => {
+    const origin = segment.origin;
+    const editable = origin === "recorded";
+    if (segment.kind === "stay" && segment.payload) {
+      const stay = segment.payload;
+      return {
+        id: segment.id,
+        kind: "stay" as const,
+        origin,
+        editable,
+        startedAt: segment.startedAt,
+        endedAt: segment.endedAt,
+        durationSeconds: segment.durationSeconds,
+        label: stay.place?.label ?? stay.label ?? "Stay",
+        subtitle:
+          stay.place?.categoryTags.join(" · ") ||
+          (stay.classification === "stationary" ? "Stationary" : stay.classification),
+        distanceMeters: 0,
+        averageSpeedMps: 0,
+        estimatedScreenTimeSeconds: stay.estimatedScreenTimeSeconds,
+        pickupCount: stay.pickupCount,
+        colorTone: stay.place?.categoryTags.includes("home")
+          ? "from-sky-400/30 to-indigo-500/12"
+          : "from-white/16 to-white/4",
+        noteCount: stay.note ? 1 : 0
+      };
+    }
+    if (segment.kind === "trip" && segment.payload) {
+      const trip = segment.payload;
+      return {
+        id: segment.id,
+        kind: "trip" as const,
+        origin,
+        editable,
+        startedAt: segment.startedAt,
+        endedAt: segment.endedAt,
+        durationSeconds: segment.durationSeconds,
+        label:
+          trip.label ||
+          `${trip.startPlace?.label ?? "Unknown"} → ${trip.endPlace?.label ?? "Unknown"}`,
+        subtitle: `${round(trip.distanceMeters / 1000, 1)} km · ${trip.activityType || trip.travelMode}`,
+        distanceMeters: trip.distanceMeters,
+        averageSpeedMps: trip.averageSpeedMps ?? 0,
+        estimatedScreenTimeSeconds: trip.estimatedScreenTimeSeconds,
+        pickupCount: trip.pickupCount,
+        colorTone: "from-emerald-300/26 to-cyan-400/12",
+        noteCount: trip.note ? 1 : 0
+      };
+    }
+    return {
+      id: segment.id,
+      kind: segment.kind,
+      origin,
+      editable: false,
+      startedAt: segment.startedAt,
+      endedAt: segment.endedAt,
+      durationSeconds: segment.durationSeconds,
+      label:
+        segment.kind === "missing"
+          ? "Missing data"
+          : segment.origin === "continued_stay"
+            ? segment.placeLabel ?? "Continued stay"
+            : segment.kind === "stay"
+              ? segment.placeLabel ?? "Repaired stay"
+              : segment.placeLabel ?? "Repaired move",
+      subtitle:
+        segment.kind === "missing"
+          ? "No trusted movement signal for this period"
+          : segment.kind === "stay"
+            ? segment.origin === "continued_stay"
+              ? "Short stationary gap carried forward into one continuous stay"
+              : segment.suppressedShortJump
+                ? "Short jump under five minutes suppressed into stay continuity"
+                : "Short gap repaired as a stay between known anchors"
+            : "Short gap repaired as a move between known anchors",
+      distanceMeters: segment.kind === "trip" ? segment.displacementMeters ?? 0 : 0,
+      averageSpeedMps:
+        segment.kind === "trip" && segment.displacementMeters
+          ? segment.displacementMeters / Math.max(1, segment.durationSeconds)
+          : 0,
+      estimatedScreenTimeSeconds: 0,
+      pickupCount: 0,
+      colorTone:
+        segment.kind === "missing"
+          ? "from-slate-400/18 to-slate-600/10"
+          : segment.kind === "trip"
+            ? "from-amber-300/20 to-emerald-300/10"
+            : segment.origin === "continued_stay"
+              ? "from-sky-400/22 to-indigo-400/10"
+              : "from-white/14 to-sky-300/10",
+      noteCount: 0
+    };
+  });
   const selectionAggregate = computeSelectionAggregate({
     startedAt: dayStart,
     endedAt: dayEnd,
@@ -3765,10 +4430,27 @@ export function getMovementDayDetail(input: {
         trips.reduce((sum, trip) => sum + trip.idleSeconds, 0),
       tripCount: trips.length,
       stayCount: stays.length,
+      missingCount: allSegments.filter((segment) => segment.kind === "missing").length,
+      missingDurationSeconds: allSegments
+        .filter((segment) => segment.kind === "missing")
+        .reduce(
+        (sum, segment) => sum + segment.durationSeconds,
+        0
+      ),
+      repairedGapCount: allSegments.filter((segment) => segment.origin === "repaired_gap").length,
+      repairedGapDurationSeconds: allSegments
+        .filter((segment) => segment.origin === "repaired_gap")
+        .reduce((sum, segment) => sum + segment.durationSeconds, 0),
+      continuedStayCount: allSegments.filter((segment) => segment.origin === "continued_stay").length,
+      continuedStayDurationSeconds: allSegments
+        .filter((segment) => segment.origin === "continued_stay")
+        .reduce((sum, segment) => sum + segment.durationSeconds, 0),
       knownPlaceCount: places.length,
       caloriesKcal: round(
         trips.reduce((sum, trip) => sum + (trip.caloriesKcal ?? 0), 0)
       ),
+      estimatedScreenTimeSeconds: selectionAggregate.estimatedScreenTimeSeconds,
+      pickupCount: selectionAggregate.pickupCount,
       averageSpeedMps: round(
         average(
           trips
@@ -3952,7 +4634,10 @@ export function getMovementTripDetail(tripId: string) {
   const placesById = new Map(places.map((place) => [place.id, place]));
   const points = listTripPoints([tripId]);
   const stops = listTripStops([tripId]);
-  const trip = mapMovementTrip(tripRow, placesById, points, stops);
+  const trip = enrichMovementSegmentWithScreenTime(
+    mapMovementTrip(tripRow, placesById, points, stops),
+    [tripRow.user_id]
+  );
   const stylizedPath = buildStylizedCurve(
     trip.points.map((point) => ({
       latitude: point.latitude,

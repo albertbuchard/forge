@@ -36,6 +36,41 @@ struct ForgeDiscoveryReport {
     let tailscaleStatusMessage: String
 }
 
+struct CompanionSourceState: Codable, Hashable {
+    let desiredEnabled: Bool
+    let appliedEnabled: Bool
+    let authorizationStatus: String
+    let syncEligible: Bool
+    let lastObservedAt: String?
+    let metadata: LooseJSONObject
+}
+
+struct CompanionSourceStates: Codable, Hashable {
+    let health: CompanionSourceState
+    let movement: CompanionSourceState
+    let screenTime: CompanionSourceState
+}
+
+struct CompanionPairingSessionState: Decodable, Hashable {
+    let id: String
+    let userId: String
+    let label: String
+    let status: String
+    let capabilities: [String]
+    let deviceName: String?
+    let platform: String?
+    let appVersion: String?
+    let apiBaseUrl: String
+    let lastSeenAt: String?
+    let lastSyncAt: String?
+    let lastSyncError: String?
+    let pairedAt: String?
+    let sourceStates: CompanionSourceStates
+    let expiresAt: String
+    let createdAt: String
+    let updatedAt: String
+}
+
 struct PairingPayload: Codable {
     let kind: String
     let apiBaseUrl: String
@@ -59,7 +94,10 @@ struct CompanionSyncPayload: Codable {
         let backgroundRefreshEnabled: Bool
         let motionReady: Bool
         let locationReady: Bool
+        let screenTimeReady: Bool
     }
+
+    typealias SourceStates = CompanionSourceStates
 
     struct HealthLink: Codable {
         let entityType: String
@@ -212,13 +250,74 @@ struct CompanionSyncPayload: Codable {
         let trips: [MovementTrip]
     }
 
+    struct ScreenTimeSettings: Codable {
+        let trackingEnabled: Bool
+        let syncEnabled: Bool
+        let authorizationStatus: String
+        let captureState: String
+        let lastCapturedDayKey: String?
+        let lastCaptureStartedAt: String?
+        let lastCaptureEndedAt: String?
+        let metadata: [String: String]
+    }
+
+    struct ScreenTimeDaySummary: Codable {
+        let dateKey: String
+        let totalActivitySeconds: Int
+        let pickupCount: Int
+        let notificationCount: Int
+        let firstPickupAt: String?
+        let longestActivitySeconds: Int
+        let topAppBundleIdentifiers: [String]
+        let topCategoryLabels: [String]
+        let metadata: [String: String]
+    }
+
+    struct ScreenTimeAppUsage: Codable {
+        let bundleIdentifier: String
+        let displayName: String
+        let categoryLabel: String?
+        let totalActivitySeconds: Int
+        let pickupCount: Int
+        let notificationCount: Int
+    }
+
+    struct ScreenTimeCategoryUsage: Codable {
+        let categoryLabel: String
+        let totalActivitySeconds: Int
+    }
+
+    struct ScreenTimeHourlySegment: Codable {
+        let dateKey: String
+        let hourIndex: Int
+        let startedAt: String
+        let endedAt: String
+        let totalActivitySeconds: Int
+        let pickupCount: Int
+        let notificationCount: Int
+        let firstPickupAt: String?
+        let longestActivityStartedAt: String?
+        let longestActivityEndedAt: String?
+        let metadata: [String: String]
+        let apps: [ScreenTimeAppUsage]
+        let categories: [ScreenTimeCategoryUsage]
+    }
+
+    struct ScreenTimePayload: Codable {
+        let settings: ScreenTimeSettings
+        let daySummaries: [ScreenTimeDaySummary]
+        let hourlySegments: [ScreenTimeHourlySegment]
+    }
+
     let sessionId: String
     let pairingToken: String
     let device: Device
     let permissions: Permissions
+    let sourceStates: SourceStates
     let sleepSessions: [SleepSession]
     let workouts: [WorkoutSession]
     let movement: MovementPayload
+    let screenTime: ScreenTimePayload
 }
 
 struct SyncReceipt: Decodable {
@@ -231,6 +330,8 @@ struct SyncReceipt: Decodable {
         let movementStays: Int?
         let movementTrips: Int?
         let movementKnownPlaces: Int?
+        let screenTimeDaySummaries: Int?
+        let screenTimeHourlySegments: Int?
     }
 
     struct MovementBootstrapEnvelope: Decodable {
@@ -262,6 +363,7 @@ struct SyncReceipt: Decodable {
         let places: [Place]
     }
 
+    let pairingSession: CompanionPairingSessionState?
     let imported: ImportedCounts
     let movement: MovementBootstrapEnvelope?
 }
@@ -276,6 +378,8 @@ struct SyncReport {
     let movementStays: Int
     let movementTrips: Int
     let movementKnownPlaces: Int
+    let screenTimeDaySummaries: Int
+    let screenTimeHourlySegments: Int
 }
 
 struct SyncPayloadSummary: Codable {
@@ -291,6 +395,8 @@ struct SyncPayloadSummary: Codable {
     let movementTrips: Int
     let movementTripPoints: Int
     let movementTripStops: Int
+    let screenTimeDaySummaries: Int
+    let screenTimeHourlySegments: Int
     let rawHeartRateDatapointsSynced: Int
 }
 
@@ -468,6 +574,8 @@ struct ForgeMovementTimelineTrip: Decodable, Hashable, Identifiable {
 struct ForgeMovementTimelineSegment: Decodable, Hashable, Identifiable {
     let id: String
     let kind: String
+    let origin: String
+    let editable: Bool
     let startedAt: String
     let endedAt: String
     let durationSeconds: Int

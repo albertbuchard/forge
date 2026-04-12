@@ -30,6 +30,31 @@
   --primary: #c0c1ff;
   --secondary: #4edea3;
   --tertiary: #ffb95f;
+  --forge-entity-goal-rgb: 251, 191, 36;
+  --forge-entity-project-rgb: 56, 189, 248;
+  --forge-entity-task-rgb: 129, 140, 248;
+  --forge-entity-strategy-rgb: 34, 211, 238;
+  --forge-entity-habit-rgb: 45, 212, 191;
+  --forge-entity-tag-rgb: 163, 230, 53;
+  --forge-entity-note-rgb: 148, 163, 184;
+  --forge-entity-wiki_page-rgb: 125, 211, 252;
+  --forge-entity-wiki_space-rgb: 99, 102, 241;
+  --forge-entity-insight-rgb: 250, 204, 21;
+  --forge-entity-calendar_event-rgb: 14, 165, 233;
+  --forge-entity-work_block-rgb: 16, 185, 129;
+  --forge-entity-timebox-rgb: 244, 114, 182;
+  --forge-entity-value-rgb: 52, 211, 153;
+  --forge-entity-pattern-rgb: 251, 113, 133;
+  --forge-entity-behavior-rgb: 251, 146, 60;
+  --forge-entity-belief-rgb: 167, 139, 250;
+  --forge-entity-mode-rgb: 217, 70, 239;
+  --forge-entity-mode_session-rgb: 192, 132, 252;
+  --forge-entity-report-rgb: 96, 165, 250;
+  --forge-entity-event_type-rgb: 45, 212, 191;
+  --forge-entity-emotion-rgb: 248, 113, 113;
+  --forge-entity-workbench-rgb: 45, 212, 191;
+  --forge-entity-functor-rgb: 250, 204, 21;
+  --forge-entity-chat-rgb: 129, 140, 248;
   --surface: #0b1326;
   --surface-low: #131b2e;
   --surface-panel: #171f33;
@@ -92,6 +117,11 @@
   --ui-success-soft: rgba(16, 185, 129, 0.16);
   --ui-shadow-soft: 0 18px 38px rgba(3, 8, 18, 0.18);
   --ui-shadow-floating: 0 36px 110px rgba(3, 8, 18, 0.5);
+  --knowledge-graph-ambient: rgba(125, 211, 252, 0.12);
+  --knowledge-graph-ambient-secondary: rgba(192, 193, 255, 0.1);
+  --knowledge-graph-panel: rgba(6, 12, 24, 0.84);
+  --knowledge-graph-constellation: rgba(255, 255, 255, 0.06);
+  --knowledge-graph-focus-ring: rgba(232, 242, 255, 0.24);
   --radius-card: 24px;
   --radius-hero: 28px;
   --radius-control: 16px;
@@ -653,6 +683,60 @@ select {
 input[type="checkbox"],
 input[type="radio"] {
   accent-color: var(--primary);
+}
+
+.knowledge-graph-surface {
+  position: relative;
+  overflow: hidden;
+  background:
+    radial-gradient(
+      circle at top left,
+      var(--knowledge-graph-ambient),
+      transparent 28%
+    ),
+    radial-gradient(
+      circle at 82% 16%,
+      var(--knowledge-graph-ambient-secondary),
+      transparent 24%
+    ),
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--knowledge-graph-panel) 96%, transparent),
+      color-mix(in srgb, var(--surface-low) 98%, transparent)
+    );
+}
+
+.knowledge-graph-surface::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image:
+    radial-gradient(circle at 18% 24%, var(--knowledge-graph-constellation) 0 1px, transparent 1.5px),
+    radial-gradient(circle at 72% 32%, var(--knowledge-graph-constellation) 0 1px, transparent 1.5px),
+    radial-gradient(circle at 56% 72%, var(--knowledge-graph-constellation) 0 1px, transparent 1.5px),
+    radial-gradient(circle at 84% 66%, var(--knowledge-graph-constellation) 0 1px, transparent 1.5px);
+  opacity: 0.9;
+}
+
+.knowledge-graph-canvas {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid var(--ui-border-subtle);
+  background:
+    radial-gradient(
+      circle at top,
+      color-mix(in srgb, var(--knowledge-graph-focus-ring) 84%, transparent),
+      transparent 36%
+    ),
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--surface-low) 86%, transparent),
+      color-mix(in srgb, var(--surface) 96%, transparent)
+    );
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.04),
+    0 26px 72px rgba(3, 8, 18, 0.26);
 }
 
 @media (prefers-reduced-motion: reduce) {

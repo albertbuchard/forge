@@ -60,6 +60,8 @@ Default local runtime addresses:
 
 When Forge runs inside this monorepo, the local runtime prefers the shared tracked
 data root at `/Users/omarclaw/Documents/aurel-monorepo/data/forge` when it exists.
+The canonical SQLite path inside a configured `dataRoot` is `forge.sqlite`, so this
+monorepo default resolves to `/Users/omarclaw/Documents/aurel-monorepo/data/forge/forge.sqlite`.
 Set `FORGE_DATA_ROOT` or an explicit plugin `dataRoot` if you want another store.
 
 ## Table Of Contents

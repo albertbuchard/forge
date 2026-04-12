@@ -5,8 +5,19 @@ import {
 } from "../../../lib/workbench/runtime.js";
 import type {
   WorkbenchExecutionFunction,
-  WorkbenchNodeExecutionInput
+  WorkbenchInputDefinition,
+  WorkbenchNodeExecutionInput,
+  WorkbenchOutputDefinition,
+  WorkbenchParamDefinition,
+  WorkbenchToolDefinition
 } from "../../../lib/workbench/nodes.js";
+import {
+  createSearchEntitiesTool,
+  createSearchInputs,
+  createSearchOutputs,
+  createSearchParams,
+  createSummaryOutput
+} from "../../../lib/workbench/contracts.js";
 import { createGenericWorkbenchNodeView } from "../shared/generic-node-view.js";
 import { defineWorkbenchBox } from "../shared/define-workbench-box.js";
 
@@ -21,19 +32,15 @@ function defineQuestionnaireBox(
   description: string,
   tags: string[],
   execute: WorkbenchExecutionFunction,
-  entityTypes: string[] = []
+  output: WorkbenchOutputDefinition[],
+  tools: WorkbenchToolDefinition[] = [],
+  options?: {
+    inputs?: WorkbenchInputDefinition[];
+    params?: WorkbenchParamDefinition[];
+  }
 ) {
-  const tools =
-    entityTypes.length > 0
-      ? [
-          {
-            key: "forge.search_entities",
-            label: "Search Forge entities",
-            description: "Search questionnaire instruments and related records.",
-            accessMode: "read" as const
-          }
-        ]
-      : [];
+  const inputs = options?.inputs ?? [];
+  const params = options?.params ?? [];
   return defineWorkbenchBox(Slot, {
     id,
     surfaceId: "questionnaires",
@@ -43,16 +50,16 @@ function defineQuestionnaireBox(
     description,
     category: "Questionnaires",
     tags,
-    inputs: [],
-    params: [],
-    output: [{ key: "primary", label: title, kind: "content" }],
+    inputs,
+    params,
+    output,
     tools,
     NodeView: createGenericWorkbenchNodeView({
       title,
       description,
-      inputs: [],
-      params: [],
-      output: [{ key: "primary", label: title, kind: "content" }],
+      inputs,
+      params,
+      output,
       tools
     }),
     execute
@@ -70,7 +77,24 @@ export const QuestionnairesLibraryBox = defineQuestionnaireBox(
       entityTypes: ["questionnaire_instrument"],
       limit: 20
     }),
-  ["questionnaire_instrument"]
+  createSearchOutputs({
+    itemKind: "questionnaire_instrument",
+    itemLabel: "Questionnaire"
+  }),
+  [createSearchEntitiesTool("Search questionnaire instruments and related records.")],
+  {
+    inputs: createSearchInputs({
+      itemKind: "questionnaire_instrument",
+      itemLabel: "Questionnaire",
+      defaultEntityTypes: ["questionnaire_instrument"],
+      defaultLimit: 20
+    }),
+    params: createSearchParams({
+      itemKind: "questionnaire_instrument",
+      defaultEntityTypes: ["questionnaire_instrument"],
+      defaultLimit: 20
+    })
+  }
 );
 
 export const QuestionnairesDraftingBox = defineQuestionnaireBox(
@@ -85,7 +109,8 @@ export const QuestionnairesDraftingBox = defineQuestionnaireBox(
         states: ["draft", "published", "run"]
       },
       "Questionnaire drafting surface with draft, publish, and run lifecycle context."
-    )
+    ),
+  [createSummaryOutput({ label: "Drafting summary", description: "Summary of questionnaire drafting and lifecycle context." })]
 );
 
 export const QuestionnairesObservationBox = defineQuestionnaireBox(
@@ -100,5 +125,6 @@ export const QuestionnairesObservationBox = defineQuestionnaireBox(
         linkedDomains: ["patterns", "reports", "notes"]
       },
       "Self-observation calendar surface with linked psyche context."
-    )
+    ),
+  [createSummaryOutput({ label: "Observation summary", description: "Summary of the self-observation calendar and linked psyche context." })]
 );

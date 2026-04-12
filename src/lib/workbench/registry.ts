@@ -104,6 +104,7 @@ import type {
   WorkbenchNodeDefinition,
   WorkbenchRegisteredComponent
 } from "./nodes.js";
+import { normalizeWorkbenchPortDefinitions } from "./nodes.js";
 
 export const WORKBENCH_COMPONENT_AUTOLOAD: Array<WorkbenchRegisteredComponent<any>> = [
   TimeWidget as WorkbenchRegisteredComponent,
@@ -202,11 +203,11 @@ export function getWorkbenchNodeCatalog() {
       "content" as const,
       ...(definition.tools.length > 0 ? (["tool"] as const) : [])
     ],
-    inputs: definition.inputs,
-    params: definition.params,
-    output: definition.output,
+    inputs: normalizeWorkbenchPortDefinitions(definition.inputs),
+    params: normalizeWorkbenchPortDefinitions(definition.params),
+    output: normalizeWorkbenchPortDefinitions(definition.output),
     tools: definition.tools,
-    outputs: definition.output,
+    outputs: normalizeWorkbenchPortDefinitions(definition.output),
     toolAdapters: definition.tools,
     snapshotResolverKey: undefined
   }));

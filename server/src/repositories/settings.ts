@@ -1,6 +1,13 @@
 import { createHash, randomBytes, randomUUID } from "node:crypto";
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  writeFileSync
+} from "node:fs";
+import path from "node:path";
 import type { SecretsManager } from "../managers/platform/secrets-manager.js";
-import { getDatabase, runInTransaction } from "../db.js";
+import { getDatabase, getEffectiveDataRoot, runInTransaction } from "../db.js";
 import { logForgeDebug } from "../debug.js";
 import { recordActivityEvent } from "./activity-events.js";
 import { recordEventLog } from "./event-log.js";
@@ -30,6 +37,21 @@ import {
 type ActivityContext = {
   source: ActivitySource;
   actor?: string | null;
+};
+
+export type ForgeSettingsFileStatus = {
+  path: string;
+  exists: boolean;
+  valid: boolean;
+  syncState:
+    | "uninitialized"
+    | "created_from_database"
+    | "mirrored_from_database"
+    | "applied_file_overrides"
+    | "invalid"
+    | "up_to_date";
+  parseError: string | null;
+  overrideKeys: string[];
 };
 
 type SettingsRow = {
@@ -100,6 +122,18 @@ type AgentIdentityRow = {
   active_token_count: number;
 };
 
+const settingsFileSchema = settingsPayloadSchema.deepPartial();
+
+let settingsFileSyncDepth = 0;
+let lastSettingsFileStatus: ForgeSettingsFileStatus = {
+  path: path.join(getEffectiveDataRoot(), "forge.json"),
+  exists: false,
+  valid: false,
+  syncState: "uninitialized",
+  parseError: null,
+  overrideKeys: []
+};
+
 function boolFromInt(value: number): boolean {
   return value === 1;
 }
@@ -154,6 +188,236 @@ function parseCustomThemeJson(raw: string | null | undefined) {
   } catch {
     return null;
   }
+}
+
+function getForgeSettingsFilePath() {
+  return path.join(getEffectiveDataRoot(), "forge.json");
+}
+
+function writeForgeSettingsFileSnapshot(payload: SettingsPayload) {
+  const filePath = getForgeSettingsFilePath();
+  mkdirSync(path.dirname(filePath), { recursive: true });
+  writeFileSync(filePath, `${JSON.stringify(payload, null, 2)}\n`, "utf8");
+  lastSettingsFileStatus = {
+    path: filePath,
+    exists: true,
+    valid: true,
+    syncState: "mirrored_from_database",
+    parseError: null,
+    overrideKeys: []
+  };
+}
+
+function readForgeSettingsFile() {
+  const filePath = getForgeSettingsFilePath();
+  if (!existsSync(filePath)) {
+    return {
+      filePath,
+      exists: false,
+      valid: false,
+      settings: null,
+      parseError: null
+    };
+  }
+
+  try {
+    const raw = readFileSync(filePath, "utf8");
+    const parsed = JSON.parse(raw);
+    const settings = settingsFileSchema.parse(parsed);
+    return {
+      filePath,
+      exists: true,
+      valid: true,
+      settings,
+      parseError: null
+    };
+  } catch (error) {
+    return {
+      filePath,
+      exists: true,
+      valid: false,
+      settings: null,
+      parseError: error instanceof Error ? error.message : String(error)
+    };
+  }
+}
+
+function toSettingsFileOverrideInput(
+  input: Partial<SettingsPayload>
+): UpdateSettingsInput {
+  const next: UpdateSettingsInput = {};
+
+  if (input.profile) {
+    next.profile = {};
+    if (input.profile.operatorName !== undefined) {
+      next.profile.operatorName = input.profile.operatorName;
+    }
+    if (input.profile.operatorEmail !== undefined) {
+      next.profile.operatorEmail = input.profile.operatorEmail;
+    }
+    if (input.profile.operatorTitle !== undefined) {
+      next.profile.operatorTitle = input.profile.operatorTitle;
+    }
+    if (Object.keys(next.profile).length === 0) {
+      delete next.profile;
+    }
+  }
+
+  if (input.notifications) {
+    next.notifications = {};
+    if (input.notifications.goalDriftAlerts !== undefined) {
+      next.notifications.goalDriftAlerts = input.notifications.goalDriftAlerts;
+    }
+    if (input.notifications.dailyQuestReminders !== undefined) {
+      next.notifications.dailyQuestReminders =
+        input.notifications.dailyQuestReminders;
+    }
+    if (input.notifications.achievementCelebrations !== undefined) {
+      next.notifications.achievementCelebrations =
+        input.notifications.achievementCelebrations;
+    }
+    if (Object.keys(next.notifications).length === 0) {
+      delete next.notifications;
+    }
+  }
+
+  if (input.execution) {
+    next.execution = {};
+    if (input.execution.maxActiveTasks !== undefined) {
+      next.execution.maxActiveTasks = input.execution.maxActiveTasks;
+    }
+    if (input.execution.timeAccountingMode !== undefined) {
+      next.execution.timeAccountingMode = input.execution.timeAccountingMode;
+    }
+    if (Object.keys(next.execution).length === 0) {
+      delete next.execution;
+    }
+  }
+
+  if (input.themePreference !== undefined) {
+    next.themePreference = input.themePreference;
+  }
+  if (input.customTheme !== undefined) {
+    next.customTheme = input.customTheme;
+  }
+  if (input.localePreference !== undefined) {
+    next.localePreference = input.localePreference;
+  }
+
+  if (input.security?.psycheAuthRequired !== undefined) {
+    next.security = {
+      psycheAuthRequired: input.security.psycheAuthRequired
+    };
+  }
+
+  if (input.calendarProviders) {
+    next.calendarProviders = {};
+    if (input.calendarProviders.google) {
+      next.calendarProviders.google = {};
+      if (input.calendarProviders.google.clientId !== undefined) {
+        next.calendarProviders.google.clientId =
+          input.calendarProviders.google.clientId;
+      }
+      if (input.calendarProviders.google.clientSecret !== undefined) {
+        next.calendarProviders.google.clientSecret =
+          input.calendarProviders.google.clientSecret;
+      }
+      if (Object.keys(next.calendarProviders.google).length === 0) {
+        delete next.calendarProviders.google;
+      }
+    }
+    if (input.calendarProviders.microsoft) {
+      next.calendarProviders.microsoft = {};
+      if (input.calendarProviders.microsoft.clientId !== undefined) {
+        next.calendarProviders.microsoft.clientId =
+          input.calendarProviders.microsoft.clientId;
+      }
+      if (input.calendarProviders.microsoft.tenantId !== undefined) {
+        next.calendarProviders.microsoft.tenantId =
+          input.calendarProviders.microsoft.tenantId;
+      }
+      if (input.calendarProviders.microsoft.redirectUri !== undefined) {
+        next.calendarProviders.microsoft.redirectUri =
+          input.calendarProviders.microsoft.redirectUri;
+      }
+      if (Object.keys(next.calendarProviders.microsoft).length === 0) {
+        delete next.calendarProviders.microsoft;
+      }
+    }
+    if (Object.keys(next.calendarProviders).length === 0) {
+      delete next.calendarProviders;
+    }
+  }
+
+  if (input.modelSettings?.forgeAgent) {
+    next.modelSettings = {
+      forgeAgent: {}
+    };
+    if (input.modelSettings.forgeAgent.basicChat) {
+      next.modelSettings.forgeAgent.basicChat = {};
+      if (
+        input.modelSettings.forgeAgent.basicChat.connectionId !== undefined
+      ) {
+        next.modelSettings.forgeAgent.basicChat.connectionId =
+          input.modelSettings.forgeAgent.basicChat.connectionId;
+      }
+      if (input.modelSettings.forgeAgent.basicChat.model !== undefined) {
+        next.modelSettings.forgeAgent.basicChat.model =
+          input.modelSettings.forgeAgent.basicChat.model;
+      }
+      if (
+        Object.keys(next.modelSettings.forgeAgent.basicChat).length === 0
+      ) {
+        delete next.modelSettings.forgeAgent.basicChat;
+      }
+    }
+    if (input.modelSettings.forgeAgent.wiki) {
+      next.modelSettings.forgeAgent.wiki = {};
+      if (input.modelSettings.forgeAgent.wiki.connectionId !== undefined) {
+        next.modelSettings.forgeAgent.wiki.connectionId =
+          input.modelSettings.forgeAgent.wiki.connectionId;
+      }
+      if (input.modelSettings.forgeAgent.wiki.model !== undefined) {
+        next.modelSettings.forgeAgent.wiki.model =
+          input.modelSettings.forgeAgent.wiki.model;
+      }
+      if (Object.keys(next.modelSettings.forgeAgent.wiki).length === 0) {
+        delete next.modelSettings.forgeAgent.wiki;
+      }
+    }
+    if (Object.keys(next.modelSettings.forgeAgent).length === 0) {
+      delete next.modelSettings;
+    }
+  }
+
+  return next;
+}
+
+function listOverrideKeys(input: UpdateSettingsInput) {
+  const keys: string[] = [];
+  const pushNestedKeys = (prefix: string, value: Record<string, unknown>) => {
+    for (const [key, nestedValue] of Object.entries(value)) {
+      if (
+        nestedValue &&
+        typeof nestedValue === "object" &&
+        !Array.isArray(nestedValue)
+      ) {
+        pushNestedKeys(`${prefix}.${key}`, nestedValue as Record<string, unknown>);
+      } else if (nestedValue !== undefined) {
+        keys.push(`${prefix}.${key}`);
+      }
+    }
+  };
+
+  for (const [key, value] of Object.entries(input)) {
+    if (!value || typeof value !== "object" || Array.isArray(value)) {
+      keys.push(key);
+      continue;
+    }
+    pushNestedKeys(key, value as Record<string, unknown>);
+  }
+
+  return keys.sort();
 }
 
 function mapAgent(row: AgentIdentityRow): AgentIdentity {
@@ -375,7 +639,7 @@ export function isPsycheAuthRequired(): boolean {
   return row ? boolFromInt(row.psyche_auth_required) : false;
 }
 
-export function getSettings(): SettingsPayload {
+function buildSettingsPayloadFromDatabase(): SettingsPayload {
   const row = readSettingsRow();
   const connections = listAiModelConnections();
   const googleConfig = resolveGoogleCalendarOauthPublicConfig(process.env, {
@@ -477,16 +741,116 @@ export function getSettings(): SettingsPayload {
   });
 }
 
-export function updateSettings(
+function reconcileSettingsFileWithDatabase(
+  current: SettingsPayload
+): SettingsPayload {
+  const fileState = readForgeSettingsFile();
+  if (!fileState.exists) {
+    writeForgeSettingsFileSnapshot(current);
+    lastSettingsFileStatus = {
+      path: fileState.filePath,
+      exists: true,
+      valid: true,
+      syncState: "created_from_database",
+      parseError: null,
+      overrideKeys: []
+    };
+    return current;
+  }
+
+  if (!fileState.valid || !fileState.settings) {
+    lastSettingsFileStatus = {
+      path: fileState.filePath,
+      exists: true,
+      valid: false,
+      syncState: "invalid",
+      parseError: fileState.parseError,
+      overrideKeys: []
+    };
+    return current;
+  }
+
+  const overrideInput = toSettingsFileOverrideInput(fileState.settings);
+  const overrideKeys = listOverrideKeys(overrideInput);
+  let next = current;
+  const currentOverride = toSettingsFileOverrideInput(current);
+  const overridesDiffer =
+    JSON.stringify(currentOverride) !== JSON.stringify(overrideInput);
+  if (overrideKeys.length > 0 && overridesDiffer) {
+    next = updateSettingsInternal(overrideInput, {
+      mirrorSettingsFile: false
+    });
+  }
+
+  const serialized = `${JSON.stringify(next, null, 2)}\n`;
+  let syncState: ForgeSettingsFileStatus["syncState"] =
+    overrideKeys.length > 0 && overridesDiffer
+      ? "applied_file_overrides"
+      : "up_to_date";
+  try {
+    const existing = readFileSync(fileState.filePath, "utf8");
+    if (existing !== serialized) {
+      mkdirSync(path.dirname(fileState.filePath), { recursive: true });
+      writeFileSync(fileState.filePath, serialized, "utf8");
+      if (syncState !== "applied_file_overrides") {
+        syncState = "mirrored_from_database";
+      }
+    }
+  } catch {
+    mkdirSync(path.dirname(fileState.filePath), { recursive: true });
+    writeFileSync(fileState.filePath, serialized, "utf8");
+    if (syncState !== "applied_file_overrides") {
+      syncState = "mirrored_from_database";
+    }
+  }
+
+  lastSettingsFileStatus = {
+    path: fileState.filePath,
+    exists: true,
+    valid: true,
+    syncState,
+    parseError: null,
+    overrideKeys
+  };
+  return next;
+}
+
+export function getSettingsFileStatus(): ForgeSettingsFileStatus {
+  return {
+    ...lastSettingsFileStatus,
+    path: getForgeSettingsFilePath()
+  };
+}
+
+export function mirrorSettingsFileFromCurrentState(): SettingsPayload {
+  const current = buildSettingsPayloadFromDatabase();
+  writeForgeSettingsFileSnapshot(current);
+  return current;
+}
+
+export function getSettings(): SettingsPayload {
+  if (settingsFileSyncDepth > 0) {
+    return buildSettingsPayloadFromDatabase();
+  }
+  settingsFileSyncDepth += 1;
+  try {
+    return reconcileSettingsFileWithDatabase(buildSettingsPayloadFromDatabase());
+  } finally {
+    settingsFileSyncDepth = Math.max(0, settingsFileSyncDepth - 1);
+  }
+}
+
+function updateSettingsInternal(
   input: UpdateSettingsInput,
   options: {
     activity?: ActivityContext;
     secrets?: SecretsManager;
+    mirrorSettingsFile?: boolean;
   } = {}
 ): SettingsPayload {
   const parsed = updateSettingsSchema.parse(input);
   return runInTransaction(() => {
-    const current = getSettings();
+    const current = buildSettingsPayloadFromDatabase();
     const now = new Date().toISOString();
     const nextGoogleClientId =
       parsed.calendarProviders?.google?.clientId?.trim() ??
@@ -651,7 +1015,24 @@ export function updateSettings(
       });
     }
 
-    return getSettings();
+    const updated = buildSettingsPayloadFromDatabase();
+    if (options.mirrorSettingsFile !== false) {
+      writeForgeSettingsFileSnapshot(updated);
+    }
+    return updated;
+  });
+}
+
+export function updateSettings(
+  input: UpdateSettingsInput,
+  options: {
+    activity?: ActivityContext;
+    secrets?: SecretsManager;
+  } = {}
+): SettingsPayload {
+  return updateSettingsInternal(input, {
+    ...options,
+    mirrorSettingsFile: true
   });
 }
 
@@ -715,6 +1096,8 @@ export function createAgentToken(input: CreateAgentTokenInput, activity?: Activi
       });
     }
 
+    mirrorSettingsFileFromCurrentState();
+
     return {
       token,
       tokenSummary
@@ -756,6 +1139,8 @@ export function rotateAgentToken(tokenId: string, activity?: ActivityContext): A
       });
     }
 
+    mirrorSettingsFileFromCurrentState();
+
     return {
       token,
       tokenSummary
@@ -794,6 +1179,7 @@ export function revokeAgentToken(tokenId: string, activity?: ActivityContext): A
         source: activity.source
       });
     }
+    mirrorSettingsFileFromCurrentState();
     return tokenSummary;
   });
 }

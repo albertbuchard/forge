@@ -23,6 +23,8 @@ openclaw-plugin/data/
 plugins/forge-codex/runtime/data/
 ios-companion/ForgeCompanion/**/*.xcuserstate
 ios-companion/ForgeCompanion/**/xcuserdata/
+ios-companion/*.xcodeproj/xcuserdata/
+ios-companion/*.xcodeproj/project.xcworkspace/xcuserdata/
 ios-companion/ForgeCompanion/build/
 ios-companion/.release.env
 ios-companion/.release.env.local
@@ -45,3 +47,4 @@ forge-companion-post-fix-3.png
 !plugins/forge-codex/runtime/dist/
 !plugins/forge-codex/runtime/dist/**
 .vision/psyche-template/views/screenshot_2026_03_23_at_17.10.30.png/
+.vision/knowledge_graph_template/**/screen.png

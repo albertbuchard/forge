@@ -36,7 +36,10 @@ import type {
   WikiLlmProfile,
   WikiSpace
 } from "@/lib/types";
-import type { EntityKind } from "@/lib/entity-visuals";
+import {
+  getEntityKindForCrudEntityType,
+  type EntityKind
+} from "@/lib/entity-visuals";
 import { cn } from "@/lib/utils";
 
 type IngestMode = "files" | "url" | "text";
@@ -200,18 +203,7 @@ function compactWikiIngestLogs(
 }
 
 function entityTypeToKind(entityType: CrudEntityType): EntityKind | null {
-  switch (entityType) {
-    case "goal":
-    case "project":
-    case "task":
-    case "habit":
-    case "strategy":
-      return entityType;
-    case "psyche_value":
-      return "value";
-    default:
-      return null;
-  }
+  return getEntityKindForCrudEntityType(entityType);
 }
 
 function isCrudEntityType(value: unknown): value is CrudEntityType {
@@ -1136,12 +1128,12 @@ export function WikiIngestModal({
             <div className="flex items-start justify-between gap-4">
               <div className="min-w-0">
                 <div className="text-[11px] uppercase tracking-[0.18em] text-white/42">
-                  Wiki Ingest
+                  KarpaWiki Ingest
                 </div>
                 <Dialog.Title className="mt-2 font-display text-[1.5rem] tracking-[-0.04em] text-white">
                   {activeJob
                     ? "Ingest review and progress"
-                    : "Build wiki memory from source files"}
+                    : "Build KarpaWiki memory from source files"}
                 </Dialog.Title>
                 <Dialog.Description className="mt-2 max-w-3xl text-sm leading-6 text-white/58">
                   Upload notes, media, ZIP archives, links, or pasted text.
@@ -1367,7 +1359,7 @@ export function WikiIngestModal({
                             navigate("/settings/wiki");
                           }}
                         >
-                          Open Wiki settings
+                          Open KarpaWiki settings
                         </Button>
                       </div>
                     </div>

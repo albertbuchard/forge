@@ -66,7 +66,52 @@ Workbench is the canonical product surface for these graphs; older connector rou
 runtime names may remain as temporary compatibility layers only. The graph editor
 should feel like a serious visual workflow product, but its visuals must still belong
 to Forge's theme and type system rather than importing an alien design language into
-the app.
+the app. The contract layer of that graph is part of the product experience:
+Workbench nodes must publish semantic inputs and outputs with truthful key names,
+typed model metadata, and tool argument schemas rather than vague `primary` or
+`content` placeholders. A user should be able to inspect a collapsed preview and
+understand what a node consumes, what it emits, what the emitted model looks like,
+and what tools the node may call before they ever press Run. The canvas interaction
+must respect that richness. A node click should select the node, not immediately yank
+the user into a modal. The card itself should carry small explicit actions such as
+Edit, Contracts, and Parameters so the user can inspect or change one aspect of the
+node without losing context. Those cards should also color-code value types so the
+shape of the graph is readable at a glance.
+
+Workbench editing must also feel trustworthy. Dirty graph changes should autosave
+quickly in the background, the Run action must persist the current draft before
+execution, and save state should be visible in plain language. When a user edits a
+node contract they should be able to name inputs and outputs directly, describe what
+each value is expected to contain, and declare a semantic model name instead of being
+trapped inside anonymous `input`, `output`, or `content` buckets. Graph validation
+must catch broken edges, missing handles, missing prompts, missing outputs, and missing
+model configuration before runtime whenever possible, then translate any remaining run
+errors into direct user-facing language rather than connector jargon.
+
+Workbench also needs one explicit flow-level API contract. Every flow that can be run
+through the UI, called by agents, or exposed through the API should declare a public
+input schema in the same semantic contract language as node ports. The user should be
+able to define those public inputs in the editor, bind them to node inputs or node
+parameters, and then see the exact same typed form in the Run modal. Public inputs are
+the primary external surface of a flow; `userInput` and generic context bags remain
+available only where they are truly needed, not as the default contract for every
+graph.
+
+The output side must be equally clear. Workbench should keep a published whole-flow
+output for the main result, but it must also offer stable per-run and per-node
+inspection. A user or agent should be able to fetch the outputs of any node from a
+specific run, inspect the resolved inputs that fed that node, and retrieve the latest
+successful output for one node directly. The result inspector in the UI should mirror
+that same model rather than treating node outputs as a debug accident hidden inside raw
+trace JSON.
+
+Forge also needs one official mock Workbench runtime for development and QA. This is
+not a normal production model provider; it is a deterministic dev and test seam that
+can simulate final answers, structured JSON payloads, tool calls, conversation
+continuity, and forced failure cases. The same mock runtime should back both automated
+tests and local manual Workbench QA so the product can prove that whole graphs work,
+that typed inputs are enforced, and that node outputs remain inspectable even when no
+external LLM service is configured.
 
 That operating model must now be explicitly multi-user. Forge should support multiple
 Forge users in one runtime, and every Forge user must be marked as either `human` or
@@ -96,7 +141,7 @@ short-term memory, episodic memory, semantic memory, and procedural memory. Note
 should also be able to act as ephemeral scratch memory: when the user sets a destroy
 time, Forge should automatically remove the note once that time passes.
 
-That document model must also scale into a first-class Wiki workspace. Forge should
+That document model must also scale into a first-class KarpaWiki workspace. Forge should
 offer a file-first wiki where richer long-form pages, media assets, and evidence notes
 all live inside the same explicit local memory system. The wiki should combine the
 flexibility of markdown and backlinks with structured Forge entity links, shared and
@@ -367,7 +412,12 @@ operator controls in a calm and explicit way. It should not feel cramped or like
 developer-only panel. Calendar provider setup and connection health also belong here
 under a dedicated Calendar section, including a guided connection modal and a step-
 by-step setup guide that names the exact credentials and URLs Forge needs. Settings
-must be legible on mobile and desktop.
+must be legible on mobile and desktop. Settings also needs a dedicated Data section.
+That section owns the live data-folder readout, backup cadence and location, manual
+backup creation, backup restore, repair scans for other Forge copies on disk, and
+download surfaces for the raw database plus structure exports. Data actions that can
+replace or move the live state should use the shared guided modal pattern rather than
+inline destructive buttons.
 Settings also needs a dedicated Models section that is separate from Wiki settings.
 That Models section owns Forge Agent model defaults, OpenAI API credentials, OpenAI
 Codex OAuth setup, local OpenAI-compatible endpoints, and the list of external AI
@@ -538,7 +588,8 @@ Redux Toolkit slices plus RTK Query for cache ownership, route readiness, and sh
 coordination. TanStack Query remains in the codebase only as a migration bridge for
 legacy routes that have not been moved yet. Forms use React Hook Form and Zod, dnd-kit
 handles ordering interactions, Framer Motion handles motion, Recharts handles charts,
-`@xyflow/react` handles connector graphs, and Lucide React provides iconography. The
+`@xyflow/react` handles connector graphs, Sigma 3 + Graphology + ForceAtlas2 workers
+handle the large interactive Knowledge Graph surface, and Lucide React provides iconography. The
 API runtime is Fastify 5, started through `tsx`, and served
 locally on port `4317` by default. The web application lives under the `/forge/` base
 path, and the versioned REST contract is documented through OpenAPI 3.1 at
@@ -553,7 +604,7 @@ with Google Calendar, Apple Calendar, and custom CalDAV adapters, encrypted prov
 credentials, migration-backed calendar tables, and a dedicated Forge calendar per
 connection. Apple setup is discovery-first from `https://caldav.icloud.com` rather
 
-The Wiki memory system is part of this same production stack. Markdown pages and media
+The KarpaWiki memory system is part of this same production stack. Markdown pages and media
 assets are canonical files on the local filesystem, while Fastify and SQLite manage
 metadata, backlinks, lexical search, embedding chunks, ingest jobs, and profile
 configuration. That file-over-app posture is a product requirement, not an implementation

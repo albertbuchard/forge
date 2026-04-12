@@ -44,6 +44,7 @@ include = ["forge_hermes*"]
 "forge_hermes" = [
   "skill.md",
   "scripts/*.mjs",
+  "runtime/package.json",
   "runtime/dist/**/*",
   "runtime/server/migrations/*.sql"
 ]

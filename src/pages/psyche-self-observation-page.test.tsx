@@ -9,6 +9,7 @@ const {
   useForgeShellMock,
   navigateMock,
   getPsycheObservationCalendarMock,
+  exportPsycheObservationCalendarMock,
   createNoteMock,
   patchNoteMock,
   deleteNoteMock,
@@ -22,6 +23,7 @@ const {
   useForgeShellMock: vi.fn(),
   navigateMock: vi.fn(),
   getPsycheObservationCalendarMock: vi.fn(),
+  exportPsycheObservationCalendarMock: vi.fn(),
   createNoteMock: vi.fn(),
   patchNoteMock: vi.fn(),
   deleteNoteMock: vi.fn(),
@@ -149,6 +151,7 @@ vi.mock("@/components/psyche/entity-link-multiselect", () => ({
 
 vi.mock("@/lib/api", () => ({
   getPsycheObservationCalendar: getPsycheObservationCalendarMock,
+  exportPsycheObservationCalendar: exportPsycheObservationCalendarMock,
   createNote: createNoteMock,
   patchNote: patchNoteMock,
   deleteNote: deleteNoteMock,
@@ -191,6 +194,7 @@ function createObservation(args: {
   return {
     id: args.id,
     observedAt: args.observedAt,
+    tags: args.tags,
     note: {
       id: args.id,
       kind: "evidence",
@@ -232,8 +236,50 @@ function createObservation(args: {
   };
 }
 
+function createActivity(args: {
+  id: string;
+  observedAt: string;
+  title: string;
+  description: string;
+  entityType: string;
+  entityId: string;
+  eventType: string;
+  tags: string[];
+  userKind: "human" | "bot";
+}) {
+  return {
+    id: args.id,
+    observedAt: args.observedAt,
+    tags: args.tags,
+    event: {
+      id: args.id,
+      entityType: args.entityType,
+      entityId: args.entityId,
+      eventType: args.eventType,
+      title: args.title,
+      description: args.description,
+      actor: args.userKind === "human" ? "Albert" : "Forge Bot",
+      source: "ui",
+      metadata: {},
+      createdAt: args.observedAt,
+      userId: args.userKind === "human" ? "user_operator" : "user_forge_bot",
+      user: {
+        id: args.userKind === "human" ? "user_operator" : "user_forge_bot",
+        kind: args.userKind,
+        handle: args.userKind === "human" ? "albert" : "forge-bot",
+        displayName: args.userKind === "human" ? "Albert" : "Forge Bot",
+        description: "",
+        accentColor: "#ffffff",
+        createdAt: args.observedAt,
+        updatedAt: args.observedAt
+      }
+    }
+  };
+}
+
 describe("PsycheSelfObservationPage", () => {
   let observations: ReturnType<typeof createObservation>[];
+  let activity: ReturnType<typeof createActivity>[];
 
   beforeEach(() => {
     observations = [
@@ -259,8 +305,21 @@ describe("PsycheSelfObservationPage", () => {
         contentPlain: "Automated system note.",
         observedAt: "2026-04-06T10:30:00.000Z",
         author: "Forge",
-        tags: ["ops"],
+        tags: ["Self-observation", "ops"],
         userKind: "bot"
+      })
+    ];
+    activity = [
+      createActivity({
+        id: "evt_habit",
+        observedAt: "2026-04-06T09:45:00.000Z",
+        title: "Resisted Doomscrolling",
+        description: "Habit check-in logged from the habits page.",
+        entityType: "habit",
+        entityId: "habit_1",
+        eventType: "habit_check_in_created",
+        tags: ["Forge activity", "Entity · Habit", "Source · UI"],
+        userKind: "human"
       })
     ];
 
@@ -322,9 +381,22 @@ describe("PsycheSelfObservationPage", () => {
         from: "2026-04-06T00:00:00.000Z",
         to: "2026-04-13T00:00:00.000Z",
         observations,
-        availableTags: ["Self-observation", "focus", "ops"]
+        activity,
+        availableTags: [
+          "Self-observation",
+          "Forge activity",
+          "focus",
+          "ops",
+          "Entity · Habit",
+          "Source · UI"
+        ]
       }
     }));
+    exportPsycheObservationCalendarMock.mockResolvedValue({
+      blob: new Blob(["week export"], { type: "text/markdown" }),
+      fileName: "forge-self-observation-2026-04-06.md",
+      mimeType: "text/markdown"
+    });
 
     listPsycheValuesMock.mockResolvedValue({ values: [] });
     listBehaviorPatternsMock.mockResolvedValue({
@@ -469,25 +541,81 @@ describe("PsycheSelfObservationPage", () => {
     });
 
     deleteNoteMock.mockResolvedValue({ note: observations[0]!.note });
+
+    Object.defineProperty(URL, "createObjectURL", {
+      configurable: true,
+      writable: true,
+      value: vi.fn(() => "blob:test")
+    });
+    Object.defineProperty(URL, "revokeObjectURL", {
+      configurable: true,
+      writable: true,
+      value: vi.fn(() => undefined)
+    });
+    vi
+      .spyOn(HTMLAnchorElement.prototype, "click")
+      .mockImplementation(() => undefined);
   });
 
   afterEach(() => {
     cleanup();
+    vi.restoreAllMocks();
     vi.clearAllMocks();
   });
 
-  it("seeds the Self-observation tag filter by default and can clear it to reveal all notes", async () => {
+  it("shows observations and Forge activity together, then lets tags isolate activity", async () => {
     renderPage();
 
     expect(
       (await screen.findAllByText("Notice the tension before the meeting.")).length
     ).toBeGreaterThan(0);
-    expect(screen.queryAllByText("Automated system note.")).toHaveLength(0);
+    expect(screen.getAllByText("Automated system note.").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Resisted Doomscrolling").length).toBeGreaterThan(0);
 
-    fireEvent.click(screen.getAllByRole("button", { name: "Self-observation" })[0]!);
+    fireEvent.click(screen.getAllByRole("button", { name: "Forge activity" })[0]!);
 
     await waitFor(() =>
-      expect(screen.getAllByText("Automated system note.").length).toBeGreaterThan(0)
+      expect(screen.queryAllByText("Notice the tension before the meeting.")).toHaveLength(0)
+    );
+    expect(screen.getAllByText("Resisted Doomscrolling").length).toBeGreaterThan(0);
+  });
+
+  it("supports explicit entity filtering and compact density mode", async () => {
+    renderPage();
+
+    await screen.findAllByText("Notice the tension before the meeting.");
+
+    fireEvent.click(screen.getByRole("button", { name: /All entities/i }));
+    fireEvent.click(screen.getByRole("option", { name: /Habit/i }));
+
+    await waitFor(() =>
+      expect(screen.queryAllByText("Notice the tension before the meeting.")).toHaveLength(0)
+    );
+    expect(screen.getAllByText("Resisted Doomscrolling").length).toBeGreaterThan(0);
+
+    fireEvent.click(screen.getByRole("button", { name: /Informative/i }));
+    fireEvent.click(screen.getByRole("option", { name: /Compact/i }));
+
+    expect(screen.getByRole("button", { name: /Compact/i })).toBeTruthy();
+  });
+
+  it("exports the current week with the active filters", async () => {
+    renderPage();
+
+    await screen.findAllByText("Notice the tension before the meeting.");
+    fireEvent.click(screen.getAllByRole("button", { name: "Forge activity" })[0]!);
+    fireEvent.click(screen.getByRole("button", { name: "Export week" }));
+
+    await waitFor(() =>
+      expect(exportPsycheObservationCalendarMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          format: "markdown",
+          tags: ["Forge activity"],
+          includeObservations: true,
+          includeActivity: true,
+          onlyHumanOwned: false
+        })
+      )
     );
   });
 

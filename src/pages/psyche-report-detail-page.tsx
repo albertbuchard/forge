@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useParams } from "react-router-dom";
 import { ChainCanvas } from "@/components/psyche/chain-canvas";
 import { InsightFlowDialog } from "@/components/insights/insight-flow-dialog";
+import { OpenInGraphButton } from "@/components/knowledge-graph/open-in-graph-button";
 import { EntityNotesSurface } from "@/components/notes/entity-notes-surface";
 import { SchemaBadge } from "@/components/psyche/schema-badge";
 import {
@@ -468,6 +469,12 @@ export function PsycheReportDetailPage() {
         title={report.title}
         description="Move through Spark to Pivot in one chain canvas."
         badge={report.status}
+        actions={
+          <OpenInGraphButton
+            entityType="trigger_report"
+            entityId={report.id}
+          />
+        }
       />
       <PsycheSectionNav />
 

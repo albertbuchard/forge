@@ -1,4 +1,12 @@
 import type {
+  DataBackupEntry,
+  DataExportFormat,
+  DataManagementSettings,
+  DataManagementState,
+  DataRecoveryCandidate,
+  DataRootSwitchMode
+} from "./data-management-types";
+import type {
   AgentAction,
   AgentOnboardingPayload,
   AgentIdentity,
@@ -35,6 +43,11 @@ import type {
   Project,
   ProjectBoardPayload,
   ProjectSummary,
+  LifeForcePayload,
+  LifeForceProfilePatchInput,
+  LifeForceTemplateUpdateInput,
+  FatigueSignalInput,
+  TaskSplitInput,
   PreferenceContext,
   PreferenceCatalog,
   PreferenceCatalogItem,
@@ -69,6 +82,10 @@ import type {
   MovementSettingsPayload,
   MovementTimelineData,
   MovementTripDetailData,
+  ScreenTimeAllTimeData,
+  ScreenTimeDayData,
+  ScreenTimeMonthData,
+  ScreenTimeSettingsPayload,
   Strategy,
   Tag,
   Task,
@@ -130,6 +147,12 @@ import type {
   QuestionnaireAnswerInput,
   UpdateQuestionnaireVersionInput
 } from "./questionnaire-types";
+import type {
+  KnowledgeGraphEntityType,
+  KnowledgeGraphFocusPayload,
+  KnowledgeGraphPayload,
+  KnowledgeGraphQuery
+} from "./knowledge-graph-types";
 import type {
   CreateAgentTokenInput,
   CreateInsightInput,
@@ -300,6 +323,50 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return body as T;
 }
 
+async function requestBlob(
+  path: string,
+  init?: RequestInit
+): Promise<{ blob: Blob; fileName: string | null; mimeType: string }> {
+  const headers = new Headers(init?.headers);
+  headers.set("x-forge-source", "ui");
+  const response = await fetch(resolveForgePath(path), {
+    credentials: "same-origin",
+    headers,
+    ...init
+  });
+  if (!response.ok) {
+    const body = await parseResponseBody(response);
+    const maybeBody =
+      typeof body === "object" && body !== null
+        ? (body as Record<string, unknown>)
+        : null;
+    throw new ForgeApiError({
+      status: response.status,
+      code:
+        typeof maybeBody?.code === "string"
+          ? maybeBody.code
+          : typeof maybeBody?.error === "string"
+            ? maybeBody.error
+            : "request_failed",
+      message:
+        typeof maybeBody?.error === "string"
+          ? maybeBody.error
+          : typeof maybeBody?.message === "string"
+            ? maybeBody.message
+            : `Request failed: ${response.status}`,
+      requestPath: path,
+      details: []
+    });
+  }
+  const disposition = response.headers.get("content-disposition");
+  const fileNameMatch = disposition?.match(/filename=\"([^\"]+)\"/i);
+  return {
+    blob: await response.blob(),
+    fileName: fileNameMatch?.[1] ?? null,
+    mimeType: response.headers.get("content-type") || "application/octet-stream"
+  };
+}
+
 function normalizeNestedNotes(
   notes: Array<{ contentMarkdown: string; author: string }>
 ) {
@@ -370,6 +437,122 @@ export function getForgeSnapshot(userIds?: string[] | unknown) {
   return request<ForgeSnapshot>(`/api/v1/context${suffix}`).then(
     normalizeForgeSnapshot
   );
+}
+
+export function getLifeForce(userIds?: string[] | unknown) {
+  const search = new URLSearchParams();
+  appendUserIds(search, coerceUserIds(userIds));
+  const suffix = search.size > 0 ? `?${search.toString()}` : "";
+  return request<{
+    lifeForce: LifeForcePayload;
+    templates: Array<{
+      weekday: number;
+      baselineDailyAp: number;
+      points: LifeForcePayload["currentCurve"];
+    }>;
+  }>(`/api/v1/life-force${suffix}`);
+}
+
+export function patchLifeForceProfile(
+  patch: LifeForceProfilePatchInput,
+  userIds?: string[] | unknown
+) {
+  const search = new URLSearchParams();
+  appendUserIds(search, coerceUserIds(userIds));
+  const suffix = search.size > 0 ? `?${search.toString()}` : "";
+  return request<{ lifeForce: LifeForcePayload }>(
+    `/api/v1/life-force/profile${suffix}`,
+    {
+      method: "PATCH",
+      body: JSON.stringify(patch)
+    }
+  );
+}
+
+export function updateLifeForceTemplate(
+  weekday: number,
+  input: LifeForceTemplateUpdateInput,
+  userIds?: string[] | unknown
+) {
+  const search = new URLSearchParams();
+  appendUserIds(search, coerceUserIds(userIds));
+  const suffix = search.size > 0 ? `?${search.toString()}` : "";
+  return request<{ weekday: number; points: LifeForcePayload["currentCurve"] }>(
+    `/api/v1/life-force/templates/${weekday}${suffix}`,
+    {
+      method: "PUT",
+      body: JSON.stringify(input)
+    }
+  );
+}
+
+export function createFatigueSignal(
+  input: FatigueSignalInput,
+  userIds?: string[] | unknown
+) {
+  const search = new URLSearchParams();
+  appendUserIds(search, coerceUserIds(userIds));
+  const suffix = search.size > 0 ? `?${search.toString()}` : "";
+  return request<{ lifeForce: LifeForcePayload }>(
+    `/api/v1/life-force/fatigue-signals${suffix}`,
+    {
+      method: "POST",
+      body: JSON.stringify(input)
+    }
+  );
+}
+
+export function getKnowledgeGraph(
+  userIds?: string[] | unknown,
+  query?: KnowledgeGraphQuery
+) {
+  const search = new URLSearchParams();
+  appendUserIds(search, coerceUserIds(userIds));
+  if (query?.q?.trim()) {
+    search.set("q", query.q.trim());
+  }
+  for (const kind of query?.entityKinds ?? []) {
+    search.append("entityKind", kind);
+  }
+  for (const relationKind of query?.relationKinds ?? []) {
+    search.append("relationKind", relationKind);
+  }
+  for (const tag of query?.tags ?? []) {
+    search.append("tag", tag);
+  }
+  for (const owner of query?.owners ?? []) {
+    search.append("owner", owner);
+  }
+  if (query?.updatedFrom) {
+    search.set("updatedFrom", query.updatedFrom);
+  }
+  if (query?.updatedTo) {
+    search.set("updatedTo", query.updatedTo);
+  }
+  if (typeof query?.limit === "number" && Number.isFinite(query.limit)) {
+    search.set("limit", String(query.limit));
+  }
+  if (query?.focusNodeId) {
+    search.set("focusNodeId", query.focusNodeId);
+  }
+  const suffix = search.size > 0 ? `?${search.toString()}` : "";
+  return request<{ graph: KnowledgeGraphPayload }>(
+    `/api/v1/knowledge-graph${suffix}`
+  ).then((response) => response.graph);
+}
+
+export function getKnowledgeGraphFocus(
+  entityType: KnowledgeGraphEntityType,
+  entityId: string,
+  userIds?: string[] | unknown
+) {
+  const search = new URLSearchParams();
+  search.set("entityType", entityType);
+  search.set("entityId", entityId);
+  appendUserIds(search, coerceUserIds(userIds));
+  return request<{ focus: KnowledgeGraphFocusPayload }>(
+    `/api/v1/knowledge-graph/focus?${search.toString()}`
+  ).then((response) => response.focus);
 }
 
 export function getPreferenceWorkspace(query: PreferenceWorkspaceQuery) {
@@ -1748,6 +1931,51 @@ export function getPsycheObservationCalendar(
   );
 }
 
+export function exportPsycheObservationCalendar(
+  input: {
+    from?: string;
+    to?: string;
+    userIds?: string[] | unknown;
+    tags?: string[];
+    includeObservations?: boolean;
+    includeActivity?: boolean;
+    onlyHumanOwned?: boolean;
+    search?: string;
+    format: "json" | "csv" | "markdown" | "ics";
+  }
+) {
+  const search = new URLSearchParams();
+  if (input.from) {
+    search.set("from", input.from);
+  }
+  if (input.to) {
+    search.set("to", input.to);
+  }
+  if (input.search?.trim()) {
+    search.set("search", input.search.trim());
+  }
+  if (input.includeObservations !== undefined) {
+    search.set("includeObservations", String(input.includeObservations));
+  }
+  if (input.includeActivity !== undefined) {
+    search.set("includeActivity", String(input.includeActivity));
+  }
+  if (input.onlyHumanOwned !== undefined) {
+    search.set("onlyHumanOwned", String(input.onlyHumanOwned));
+  }
+  for (const tag of input.tags ?? []) {
+    const trimmed = tag.trim();
+    if (trimmed) {
+      search.append("tags", trimmed);
+    }
+  }
+  search.set("format", input.format);
+  appendUserIds(search, coerceUserIds(input.userIds));
+  return requestBlob(
+    `/api/v1/psyche/self-observation/calendar/export?${search.toString()}`
+  );
+}
+
 export function listCalendarConnections() {
   return request<{
     providers: CalendarOverviewPayload["providers"];
@@ -2194,6 +2422,12 @@ export function listHabits(
     status?: Habit["status"];
     polarity?: Habit["polarity"];
     dueToday?: boolean;
+    orderBy?:
+      | "needs_attention"
+      | "name"
+      | "streak"
+      | "created_at"
+      | "updated_at";
     limit?: number;
     userIds?: string[];
   } = {}
@@ -2208,6 +2442,9 @@ export function listHabits(
   }
   if (input.dueToday) {
     search.set("dueToday", "true");
+  }
+  if (input.orderBy) {
+    search.set("orderBy", input.orderBy);
   }
   if (input.limit) {
     search.set("limit", String(input.limit));
@@ -2566,6 +2803,7 @@ export function createWorkbenchFlow(input: {
   kind?: import("./types").AiConnectorKind;
   homeSurfaceId?: string | null;
   endpointEnabled?: boolean;
+  publicInputs?: import("./types").AiConnectorPublicInput[];
   graph?: {
     nodes: import("./types").AiConnectorNode[];
     edges: import("./types").AiConnectorEdge[];
@@ -2596,6 +2834,7 @@ export function updateWorkbenchFlow(
     kind: import("./types").AiConnectorKind;
     homeSurfaceId: string | null;
     endpointEnabled: boolean;
+    publicInputs: import("./types").AiConnectorPublicInput[];
     graph: {
       nodes: import("./types").AiConnectorNode[];
       edges: import("./types").AiConnectorEdge[];
@@ -2624,6 +2863,7 @@ export function runWorkbenchFlow(
   connectorId: string,
   input: {
     userInput?: string;
+    inputs?: Record<string, unknown>;
     context?: Record<string, unknown>;
     boxSnapshots?: Record<string, unknown>;
     conversationId?: string | null;
@@ -2644,6 +2884,7 @@ export function chatWorkbenchFlow(
   connectorId: string,
   input: {
     userInput?: string;
+    inputs?: Record<string, unknown>;
     context?: Record<string, unknown>;
     boxSnapshots?: Record<string, unknown>;
     conversationId?: string | null;
@@ -2671,6 +2912,39 @@ export function getWorkbenchFlowRuns(connectorId: string) {
   return request<{ runs: import("./types").AiConnectorRun[] }>(
     `/api/v1/workbench/flows/${connectorId}/runs`
   );
+}
+
+export function getWorkbenchFlowRun(connectorId: string, runId: string) {
+  return request<{
+    flow: import("./types").AiConnector;
+    run: import("./types").AiConnectorRun;
+  }>(`/api/v1/workbench/flows/${connectorId}/runs/${runId}`);
+}
+
+export function getWorkbenchFlowRunNodes(connectorId: string, runId: string) {
+  return request<{
+    flow: import("./types").AiConnector;
+    nodeResults: import("./types").AiConnectorRunResult["nodeResults"];
+  }>(`/api/v1/workbench/flows/${connectorId}/runs/${runId}/nodes`);
+}
+
+export function getWorkbenchFlowRunNode(
+  connectorId: string,
+  runId: string,
+  nodeId: string
+) {
+  return request<{
+    flow: import("./types").AiConnector;
+    nodeResult: import("./types").AiConnectorRunResult["nodeResults"][number];
+  }>(`/api/v1/workbench/flows/${connectorId}/runs/${runId}/nodes/${nodeId}`);
+}
+
+export function getWorkbenchFlowNodeOutput(connectorId: string, nodeId: string) {
+  return request<{
+    flow: import("./types").AiConnector;
+    run: import("./types").AiConnectorRun;
+    nodeResult: import("./types").AiConnectorRunResult["nodeResults"][number];
+  }>(`/api/v1/workbench/flows/${connectorId}/nodes/${nodeId}/output`);
 }
 
 export function getCompanionOverview(userIds?: string[] | unknown) {
@@ -2732,6 +3006,70 @@ export function getMovementAllTime(userIds?: string[] | unknown) {
   const suffix = search.size > 0 ? `?${search.toString()}` : "";
   return request<{ movement: MovementAllTimeData }>(
     `/api/v1/movement/all-time${suffix}`
+  );
+}
+
+export function getScreenTimeDay(input?: {
+  date?: string;
+  userIds?: string[] | unknown;
+}) {
+  const search = new URLSearchParams();
+  if (input?.date) {
+    search.set("date", input.date);
+  }
+  appendUserIds(search, coerceUserIds(input?.userIds));
+  const suffix = search.size > 0 ? `?${search.toString()}` : "";
+  return request<{ screenTime: ScreenTimeDayData }>(
+    `/api/v1/screen-time/day${suffix}`
+  );
+}
+
+export function getScreenTimeMonth(input?: {
+  month?: string;
+  userIds?: string[] | unknown;
+}) {
+  const search = new URLSearchParams();
+  if (input?.month) {
+    search.set("month", input.month);
+  }
+  appendUserIds(search, coerceUserIds(input?.userIds));
+  const suffix = search.size > 0 ? `?${search.toString()}` : "";
+  return request<{ screenTime: ScreenTimeMonthData }>(
+    `/api/v1/screen-time/month${suffix}`
+  );
+}
+
+export function getScreenTimeAllTime(userIds?: string[] | unknown) {
+  const search = new URLSearchParams();
+  appendUserIds(search, coerceUserIds(userIds));
+  const suffix = search.size > 0 ? `?${search.toString()}` : "";
+  return request<{ screenTime: ScreenTimeAllTimeData }>(
+    `/api/v1/screen-time/all-time${suffix}`
+  );
+}
+
+export function getScreenTimeSettings(userIds?: string[] | unknown) {
+  const search = new URLSearchParams();
+  appendUserIds(search, coerceUserIds(userIds));
+  const suffix = search.size > 0 ? `?${search.toString()}` : "";
+  return request<{ settings: ScreenTimeSettingsPayload }>(
+    `/api/v1/screen-time/settings${suffix}`
+  );
+}
+
+export function patchScreenTimeSettings(
+  patch: Partial<ScreenTimeSettingsPayload>,
+  userIds?: string[] | unknown
+) {
+  const search = new URLSearchParams();
+  appendUserIds(search, coerceUserIds(userIds));
+  const suffix = search.size > 0 ? `?${search.toString()}` : "";
+  return request<{ settings: ScreenTimeSettingsPayload }>(
+    `/api/v1/screen-time/settings${suffix}`,
+    {
+      method: "PATCH",
+      body: JSON.stringify(patch)
+    }
   );
 }
 
@@ -2942,6 +3280,19 @@ export function revokeCompanionPairingSession(pairingSessionId: string) {
   });
 }
 
+export function patchCompanionPairingSourceState(
+  pairingSessionId: string,
+  source: "health" | "movement" | "screenTime",
+  desiredEnabled: boolean
+) {
+  return request<{
+    session: CompanionOverviewPayload["pairings"][number];
+  }>(`/api/v1/health/pairing-sessions/${pairingSessionId}/sources/${source}`, {
+    method: "PATCH",
+    body: JSON.stringify({ desiredEnabled })
+  });
+}
+
 export function revokeAllCompanionPairingSessions(input?: {
   userIds?: string[];
   includeRevoked?: boolean;
@@ -3117,6 +3468,77 @@ export function deleteStrategy(strategyId: string) {
 
 export function getSettingsBin() {
   return request<{ bin: SettingsBinPayload }>("/api/v1/settings/bin");
+}
+
+export function getDataManagementState() {
+  return request<{ data: DataManagementState }>("/api/v1/settings/data");
+}
+
+export function patchDataManagementSettings(
+  input: Partial<{
+    backupDirectory: string;
+    backupFrequencyHours: number | null;
+    autoRepairEnabled: boolean;
+  }>
+) {
+  return request<{
+    settings: DataManagementSettings;
+    data: DataManagementState;
+  }>("/api/v1/settings/data", {
+    method: "PATCH",
+    body: JSON.stringify(input)
+  });
+}
+
+export function scanDataRecoveryCandidates() {
+  return request<{ candidates: DataRecoveryCandidate[] }>(
+    "/api/v1/settings/data/scan",
+    {
+      method: "POST",
+      body: JSON.stringify({})
+    }
+  );
+}
+
+export function createRuntimeDataBackup(note = "") {
+  return request<{ backup: DataBackupEntry; data: DataManagementState }>(
+    "/api/v1/settings/data/backups",
+    {
+      method: "POST",
+      body: JSON.stringify({ note })
+    }
+  );
+}
+
+export function restoreRuntimeDataBackup(
+  backupId: string,
+  createSafetyBackup = true
+) {
+  return request<{ data: DataManagementState }>(
+    `/api/v1/settings/data/backups/${backupId}/restore`,
+    {
+      method: "POST",
+      body: JSON.stringify({ createSafetyBackup })
+    }
+  );
+}
+
+export function switchRuntimeDataRoot(input: {
+  targetDataRoot: string;
+  mode: DataRootSwitchMode;
+  createSafetyBackup?: boolean;
+}) {
+  return request<{ data: DataManagementState }>(
+    "/api/v1/settings/data/switch-root",
+    {
+      method: "POST",
+      body: JSON.stringify(input)
+    }
+  );
+}
+
+export function downloadDataExport(format: DataExportFormat) {
+  return requestBlob(`/api/v1/settings/data/export?format=${format}`);
 }
 
 export function listAgents() {
@@ -3485,6 +3907,10 @@ export function createTask(input: QuickTaskInput) {
     goalId: input.goalId || null,
     projectId: input.projectId || null,
     dueDate: input.dueDate || null,
+    plannedDurationSeconds:
+      input.plannedDurationSeconds === undefined
+        ? null
+        : input.plannedDurationSeconds,
     notes: normalizeNestedNotes(input.notes)
   };
   return request<{ task: Task }>("/api/v1/tasks", {
@@ -3499,6 +3925,8 @@ export function patchTask(
     status?: string;
     plannedDurationSeconds?: number | null;
     schedulingRules?: CalendarSchedulingRules | null;
+    enforceTodayWorkLog?: boolean;
+    completedTodayWorkSeconds?: number;
   }
 ) {
   return request<{ task: unknown }>(`/api/v1/tasks/${taskId}`, {
@@ -3507,9 +3935,23 @@ export function patchTask(
       ...patch,
       goalId: patch.goalId === "" ? null : patch.goalId,
       projectId: patch.projectId === "" ? null : patch.projectId,
-      dueDate: patch.dueDate === "" ? null : patch.dueDate
+      dueDate: patch.dueDate === "" ? null : patch.dueDate,
+      plannedDurationSeconds:
+        patch.plannedDurationSeconds === undefined
+          ? undefined
+          : patch.plannedDurationSeconds
     })
   });
+}
+
+export function splitTask(taskId: string, input: TaskSplitInput) {
+  return request<{ parent: Task; children: Task[] }>(
+    `/api/v1/tasks/${taskId}/split`,
+    {
+      method: "POST",
+      body: JSON.stringify(input)
+    }
+  );
 }
 
 export function deleteTask(taskId: string) {

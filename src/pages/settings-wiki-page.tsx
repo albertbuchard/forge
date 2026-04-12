@@ -118,9 +118,9 @@ export function SettingsWikiPage() {
   if (settingsQuery.isLoading) {
     return (
       <LoadingState
-        eyebrow="Wiki settings"
-        title="Loading wiki controls"
-        description="Fetching spaces and profile configuration for the Forge wiki."
+        eyebrow="KarpaWiki settings"
+        title="Loading KarpaWiki controls"
+        description="Fetching spaces and profile configuration for KarpaWiki."
       />
     );
   }
@@ -128,7 +128,7 @@ export function SettingsWikiPage() {
   if (settingsQuery.isError) {
     return (
       <ErrorState
-        eyebrow="Wiki settings"
+        eyebrow="KarpaWiki settings"
         error={settingsQuery.error}
         onRetry={() => void settingsQuery.refetch()}
       />
@@ -139,8 +139,8 @@ export function SettingsWikiPage() {
   if (!settings) {
     return (
       <ErrorState
-        eyebrow="Wiki settings"
-        error={new Error("Forge returned an empty wiki settings payload.")}
+        eyebrow="KarpaWiki settings"
+        error={new Error("Forge returned an empty KarpaWiki settings payload.")}
         onRetry={() => void settingsQuery.refetch()}
       />
     );
@@ -162,9 +162,9 @@ export function SettingsWikiPage() {
     <div className="mx-auto grid w-full max-w-[1440px] gap-5">
       <PageHero
         eyebrow="File-first memory"
-        title="Wiki Settings"
-        titleText="Wiki Settings"
-        description="Configure file-backed spaces, parse models, and embedding profiles for the Forge wiki memory system."
+        title="KarpaWiki Settings"
+        titleText="KarpaWiki Settings"
+        description="Configure file-backed spaces, parse models, and embedding profiles for the KarpaWiki memory system."
         badge={`${settings.spaces.length} spaces · ${settings.embeddingProfiles.length} embedding profiles`}
         actions={
           <>
@@ -196,7 +196,7 @@ export function SettingsWikiPage() {
             <div>
               <div className="text-sm text-white">Auto-ingest model</div>
               <div className="text-xs leading-5 text-white/50">
-                Wiki ingest now reads its credentials and model slot from the
+                KarpaWiki ingest now reads its credentials and model slot from the
                 dedicated Models settings page instead of owning the OpenAI
                 setup flow here.
               </div>
@@ -211,7 +211,7 @@ export function SettingsWikiPage() {
                     Current profile
                   </div>
                   <div className="mt-2 text-xl font-semibold text-white">
-                    {forgeWikiSlot?.connectionLabel ?? activeLlmProfile?.label ?? "No external wiki model selected"}
+                    {forgeWikiSlot?.connectionLabel ?? activeLlmProfile?.label ?? "No external KarpaWiki model selected"}
                   </div>
                   <div className="mt-2 max-w-3xl text-sm leading-6 text-white/58">
                     {forgeWikiSlot?.connectionLabel

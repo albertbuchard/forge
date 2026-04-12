@@ -152,6 +152,22 @@ function shortLatLngLabel(latitude: number, longitude: number) {
   return `${latitude.toFixed(3)}, ${longitude.toFixed(3)}`;
 }
 
+function hasRecordedTrip(
+  segment: MovementTimelineSegment
+): segment is Extract<MovementTimelineSegment, { kind: "trip" }> & {
+  trip: NonNullable<Extract<MovementTimelineSegment, { kind: "trip" }>["trip"]>;
+} {
+  return segment.kind === "trip" && segment.trip !== null;
+}
+
+function hasRecordedStay(
+  segment: MovementTimelineSegment
+): segment is Extract<MovementTimelineSegment, { kind: "stay" }> & {
+  stay: NonNullable<Extract<MovementTimelineSegment, { kind: "stay" }>["stay"]>;
+} {
+  return segment.kind === "stay" && segment.stay !== null;
+}
+
 function resolveTripEndpoint(
   segment: Extract<MovementTimelineSegment, { kind: "trip" }>,
   kind: "start" | "end",
@@ -160,6 +176,14 @@ function resolveTripEndpoint(
     useHistoryAnchorFallback?: boolean;
   }
 ) {
+  if (!segment.trip) {
+    return {
+      label:
+        segment.placeLabel ??
+        (kind === "start" ? "Known origin" : "Known destination"),
+      detail: compactTimeLabel(kind === "start" ? segment.startedAt : segment.endedAt)
+    };
+  }
   const point =
     kind === "start"
       ? segment.trip.points[0] ?? null
@@ -199,8 +223,14 @@ function displaySegmentTitle(segment: MovementTimelineSegment) {
 }
 
 function displaySegmentBadge(segment: MovementTimelineSegment) {
-  if (segment.kind === "trip") {
+  if (hasRecordedTrip(segment)) {
     return segment.trip.travelMode === "walking" ? "Walk" : "Move";
+  }
+  if (segment.kind === "trip") {
+    return "Repair";
+  }
+  if (segment.kind === "missing") {
+    return "Missing";
   }
   return "Stay";
 }
@@ -232,14 +262,14 @@ function rowHeightForSegment(segment: MovementTimelineSegment) {
 
 function buildDraft(segment: MovementTimelineSegment): TimelineDraft {
   return {
-    label:
-      segment.kind === "stay"
-        ? segment.stay.label || segment.title
-        : segment.trip.label || segment.title,
-    placeLabel:
-      segment.kind === "stay"
-        ? segment.stay.place?.label ?? segment.placeLabel ?? ""
-        : "",
+    label: hasRecordedStay(segment)
+      ? segment.stay.label || segment.title
+      : hasRecordedTrip(segment)
+        ? segment.trip.label || segment.title
+        : segment.title,
+    placeLabel: hasRecordedStay(segment)
+      ? segment.stay.place?.label ?? segment.placeLabel ?? ""
+      : "",
     tagsInput: segment.tags.join(", "),
     startedAtInput: formatDateTimeInput(segment.startedAt),
     endedAtInput: formatDateTimeInput(segment.endedAt)
@@ -281,9 +311,10 @@ function buildMovementSegmentSearchText(segment: MovementTimelineSegment) {
       formatSegmentTimestamp(segment.startedAt),
       formatSegmentTimestamp(segment.endedAt),
       segmentTimeBucket(segment.startedAt),
-      segment.kind === "stay"
+      hasRecordedStay(segment)
         ? segment.stay.place?.label ?? segment.stay.label
-        : [
+        : hasRecordedTrip(segment)
+          ? [
             segment.trip.label,
             segment.trip.activityType,
             segment.trip.travelMode,
@@ -292,6 +323,11 @@ function buildMovementSegmentSearchText(segment: MovementTimelineSegment) {
           ]
             .filter(Boolean)
             .join(" ")
+          : segment.kind === "trip"
+            ? [segment.title, segment.subtitle, segment.placeLabel ?? ""]
+                .filter(Boolean)
+                .join(" ")
+          : "missing data gap"
     ].join(" ")
   );
 }
@@ -639,7 +675,7 @@ function MovementTimelineHistoryCap({
   const knownLabel =
     segment?.kind === "stay"
       ? segment.placeLabel || segment.title || null
-      : segment
+      : segment?.kind === "trip"
         ? resolveTripEndpoint(segment, "start", {
             includeCoordinates: false,
             useHistoryAnchorFallback: true
@@ -684,7 +720,11 @@ function MovementTimelineDetailCard({
       <div className="flex items-start justify-between gap-3">
         <div>
           <div className="font-label text-[11px] uppercase tracking-[0.2em] text-white/40">
-            {segment.kind === "stay" ? "Stay detail" : "Move detail"}
+            {segment.kind === "stay"
+              ? "Stay detail"
+              : segment.kind === "trip"
+                ? "Move detail"
+                : "Missing data"}
           </div>
           <div className="mt-2 text-lg text-white">{displaySegmentTitle(segment)}</div>
         </div>
@@ -694,6 +734,7 @@ function MovementTimelineDetailCard({
             variant="ghost"
             className="size-9 rounded-full border border-white/10 bg-white/[0.04] text-white/78 hover:bg-white/[0.08]"
             aria-label="Edit movement segment"
+            disabled={segment.kind === "missing"}
           >
             <PencilLine className="size-4" />
           </Button>
@@ -722,7 +763,7 @@ function MovementTimelineDetailCard({
 
       <div className="mt-3 flex flex-wrap gap-2">
         <Badge tone="signal">{formatDurationLabel(segment.durationSeconds)}</Badge>
-        {segment.kind === "trip" ? (
+        {hasRecordedTrip(segment) ? (
           <>
             <Badge className="bg-white/[0.08] text-white/74">
               {distanceLabel(segment.trip.distanceMeters)}
@@ -749,21 +790,33 @@ function MovementTimelineDetailCard({
           <div className="mt-2 text-sm leading-6 text-white/76">
             {segment.kind === "stay"
               ? `Stay block from ${compactTimeLabel(segment.startedAt)} to ${compactTimeLabel(segment.endedAt)}.`
-              : `Connector from ${resolveTripEndpoint(segment, "start").label} to ${resolveTripEndpoint(segment, "end").label}.`}
+              : segment.kind === "trip"
+                ? `Connector from ${resolveTripEndpoint(segment, "start").label} to ${resolveTripEndpoint(segment, "end").label}.`
+                : `No reliable movement signal reached Forge from ${compactTimeLabel(segment.startedAt)} to ${compactTimeLabel(segment.endedAt)}.`}
           </div>
         </div>
       </div>
 
       <div className="mt-5 flex flex-wrap items-center gap-2 text-sm text-white/56">
-        {segment.kind === "stay" ? (
+        {hasRecordedStay(segment) ? (
           <>
             <MapPin className="size-4 text-[var(--primary)]" />
             {segment.stay.place?.label ?? "No canonical place linked yet"}
           </>
-        ) : (
+        ) : hasRecordedTrip(segment) ? (
           <>
             <Route className="size-4 text-[var(--primary)]" />
             {segment.trip.activityType || segment.trip.travelMode}
+          </>
+        ) : segment.kind === "trip" ? (
+          <>
+            <Route className="size-4 text-[var(--primary)]" />
+            Repaired movement connector
+          </>
+        ) : (
+          <>
+            <Database className="size-4 text-white/56" />
+            Missing intervals are synthesized from long signal gaps instead of inventing fake travel.
           </>
         )}
       </div>
@@ -1016,11 +1069,11 @@ function MovementTimelineRow({
               </div>
               <div className="mt-2 flex flex-wrap gap-2">
                 <Badge className="bg-white/[0.08] text-white/74">
-                  {distanceLabel(segment.trip.distanceMeters)}
+                  {distanceLabel(segment.trip?.distanceMeters ?? 0)}
                 </Badge>
-                {segment.trip.stops.length > 0 ? (
+                {(segment.trip?.stops.length ?? 0) > 0 ? (
                   <Badge className="bg-white/[0.08] text-white/74">
-                    {segment.trip.stops.length} stop{segment.trip.stops.length === 1 ? "" : "s"}
+                    {segment.trip?.stops.length} stop{segment.trip?.stops.length === 1 ? "" : "s"}
                   </Badge>
                 ) : null}
               </div>
@@ -1305,9 +1358,12 @@ export function MovementLifeTimeline({ userIds = [] }: MovementLifeTimelineProps
       const startedAt = parseDateTimeInput(draft.startedAtInput) ?? segment.startedAt;
       const endedAt = parseDateTimeInput(draft.endedAtInput) ?? segment.endedAt;
 
-      if (segment.kind === "stay") {
+      if (hasRecordedStay(segment)) {
         let placeId: string | undefined;
         const desiredPlaceLabel = draft.placeLabel.trim();
+        if (!hasRecordedStay(segment)) {
+          throw new Error("Only recorded stays can create or link canonical places.");
+        }
         if (
           desiredPlaceLabel &&
           desiredPlaceLabel !== (segment.stay.place?.label ?? segment.placeLabel ?? "")
@@ -1332,13 +1388,15 @@ export function MovementLifeTimeline({ userIds = [] }: MovementLifeTimelineProps
           endedAt,
           ...(placeId ? { placeId } : {})
         });
-      } else {
+      } else if (hasRecordedTrip(segment)) {
         await patchMovementTrip(segment.trip.id, {
           label: draft.label.trim(),
           tags,
           startedAt,
           endedAt
         });
+      } else {
+        throw new Error("Only recorded movement segments can be edited.");
       }
     },
     onSuccess: async () => {
@@ -1362,11 +1420,15 @@ export function MovementLifeTimeline({ userIds = [] }: MovementLifeTimelineProps
 
   const deleteMutation = useMutation({
     mutationFn: async (segment: MovementTimelineSegment) => {
-      if (segment.kind === "stay") {
+      if (hasRecordedStay(segment)) {
         await deleteMovementStay(segment.stay.id);
         return;
       }
-      await deleteMovementTrip(segment.trip.id);
+      if (hasRecordedTrip(segment)) {
+        await deleteMovementTrip(segment.trip.id);
+        return;
+      }
+      throw new Error("Only recorded movement segments can be deleted.");
     },
     onSuccess: async (_, segment) => {
       setSelectedSegmentId((current) => (current === segment.id ? null : current));
@@ -1571,7 +1633,12 @@ export function MovementLifeTimeline({ userIds = [] }: MovementLifeTimelineProps
                         current === segment.id ? null : segment.id
                       )
                     }
-                    onEdit={() => setEditingSegmentId(segment.id)}
+                    onEdit={() => {
+                      if (!segment.editable) {
+                        return;
+                      }
+                      setEditingSegmentId(segment.id);
+                    }}
                   />
                 </div>
               );
@@ -1702,6 +1769,9 @@ export function MovementLifeTimeline({ userIds = [] }: MovementLifeTimelineProps
                               type="button"
                               className="min-w-0 flex-1 text-left transition hover:opacity-100"
                               onClick={() => {
+                                if (!segment.editable) {
+                                  return;
+                                }
                                 setReopenDataModalOnEditClose(true);
                                 setDataModalOpen(false);
                                 setEditingSegmentId(segment.id);
@@ -1726,11 +1796,30 @@ export function MovementLifeTimeline({ userIds = [] }: MovementLifeTimelineProps
                                 </div>
                                 <div className="flex shrink-0 flex-wrap justify-end gap-1.5">
                                   <Badge tone={segment.kind === "trip" ? "signal" : "meta"}>
-                                    {segment.kind === "trip" ? "Move" : "Stay"}
+                                    {segment.kind === "trip"
+                                      ? "Move"
+                                      : segment.kind === "missing"
+                                        ? "Missing"
+                                        : "Stay"}
                                   </Badge>
                                   <Badge tone="meta">
                                     {formatDurationLabel(segment.durationSeconds)}
                                   </Badge>
+                                  {segment.origin === "continued_stay" ? (
+                                    <Badge className="bg-sky-400/10 text-sky-100">
+                                      Continued stay
+                                    </Badge>
+                                  ) : null}
+                                  {segment.origin === "repaired_gap" ? (
+                                    <Badge className="bg-amber-400/10 text-amber-100">
+                                      Repaired
+                                    </Badge>
+                                  ) : null}
+                                  {segment.kind === "missing" ? (
+                                    <Badge className="bg-slate-300/10 text-slate-100">
+                                      Missing
+                                    </Badge>
+                                  ) : null}
                                   {segment.isInvalid ? (
                                     <Badge className="bg-amber-500/10 text-amber-100">
                                       Invalid
@@ -1752,7 +1841,11 @@ export function MovementLifeTimeline({ userIds = [] }: MovementLifeTimelineProps
                                 deleteMutation.variables?.id === segment.id
                               }
                               pendingLabel=""
+                              disabled={!segment.editable}
                               onClick={() => {
+                                if (!segment.editable) {
+                                  return;
+                                }
                                 const confirmed = window.confirm(
                                   `Delete ${displaySegmentTitle(segment)} and keep it deleted across companion sync?`
                                 );

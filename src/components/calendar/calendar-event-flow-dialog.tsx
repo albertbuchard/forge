@@ -14,7 +14,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { EntityBadge } from "@/components/ui/entity-badge";
 import { readCalendarDisplayName } from "@/lib/calendar-name-deduper";
-import type { EntityKind } from "@/lib/entity-visuals";
+import { getEntityKindForCrudEntityType } from "@/lib/entity-visuals";
 import type {
   CalendarAvailability,
   CalendarEvent,
@@ -50,14 +50,6 @@ type LinkOption = {
   entityId: string;
   label: string;
   subtitle: string;
-};
-
-const ENTITY_KIND_BY_TYPE: Partial<Record<CrudEntityType, EntityKind>> = {
-  goal: "goal",
-  project: "project",
-  task: "task",
-  strategy: "strategy",
-  habit: "habit"
 };
 
 function toLocalInputValue(value: string) {
@@ -209,13 +201,13 @@ export function CalendarEventFlowDialog({
   const linkSelectOptions = useMemo<EntityLinkOption[]>(
     () =>
       linkOptions.map((option) => {
-        const entityKind = ENTITY_KIND_BY_TYPE[option.entityType];
+        const entityKind = getEntityKindForCrudEntityType(option.entityType);
         return {
           value: `${option.entityType}:${option.entityId}`,
           label: option.label,
           description: option.subtitle,
           searchText: `${option.label} ${option.subtitle} ${option.entityType}`,
-          kind: entityKind,
+          kind: entityKind ?? undefined,
           menuBadge: entityKind ? (
             <EntityBadge kind={entityKind} label={option.label} compact gradient={false} />
           ) : undefined,

@@ -1038,6 +1038,17 @@ export function MovementPage() {
             </Card>
             <Card className="rounded-[24px] border border-white/8 bg-white/[0.04] p-4">
               <div className="font-label text-[11px] uppercase tracking-[0.2em] text-white/40">
+                Estimated phone time
+              </div>
+              <div className="mt-3 font-display text-4xl text-white">
+                {durationLabel(movementDay.summary.estimatedScreenTimeSeconds)}
+              </div>
+              <div className="mt-2 text-sm text-white/56">
+                Estimated from hourly Screen Time bins, not exact foreground traces.
+              </div>
+            </Card>
+            <Card className="rounded-[24px] border border-white/8 bg-white/[0.04] p-4">
+              <div className="font-label text-[11px] uppercase tracking-[0.2em] text-white/40">
                 Known places
               </div>
               <div className="mt-3 font-display text-4xl text-white">
@@ -1045,6 +1056,39 @@ export function MovementPage() {
               </div>
               <div className="mt-2 text-sm text-white/56">
                 Shared between Forge and the iPhone companion.
+              </div>
+            </Card>
+            <Card className="rounded-[24px] border border-white/8 bg-[linear-gradient(180deg,rgba(148,163,184,0.12),rgba(71,85,105,0.12))] p-4">
+              <div className="font-label text-[11px] uppercase tracking-[0.2em] text-white/40">
+                Missing data
+              </div>
+              <div className="mt-3 font-display text-4xl text-white">
+                {durationLabel(movementDay.summary.missingDurationSeconds)}
+              </div>
+              <div className="mt-2 text-sm text-white/56">
+                {movementDay.summary.missingCount} grey gap{movementDay.summary.missingCount === 1 ? "" : "s"} where Forge had over one hour without enough movement signal.
+              </div>
+            </Card>
+            <Card className="rounded-[24px] border border-white/8 bg-[linear-gradient(180deg,rgba(251,191,36,0.12),rgba(16,185,129,0.08))] p-4">
+              <div className="font-label text-[11px] uppercase tracking-[0.2em] text-white/40">
+                Repaired gaps
+              </div>
+              <div className="mt-3 font-display text-4xl text-white">
+                {durationLabel(movementDay.summary.repairedGapDurationSeconds)}
+              </div>
+              <div className="mt-2 text-sm text-white/56">
+                {movementDay.summary.repairedGapCount} inferred span{movementDay.summary.repairedGapCount === 1 ? "" : "s"} classified as stay or move instead of leaving blank holes in the day.
+              </div>
+            </Card>
+            <Card className="rounded-[24px] border border-white/8 bg-[linear-gradient(180deg,rgba(56,189,248,0.12),rgba(99,102,241,0.08))] p-4">
+              <div className="font-label text-[11px] uppercase tracking-[0.2em] text-white/40">
+                Continued stays
+              </div>
+              <div className="mt-3 font-display text-4xl text-white">
+                {durationLabel(movementDay.summary.continuedStayDurationSeconds)}
+              </div>
+              <div className="mt-2 text-sm text-white/56">
+                {movementDay.summary.continuedStayCount} short stationary span{movementDay.summary.continuedStayCount === 1 ? "" : "s"} carried forward so quiet home time stays continuous instead of disappearing.
               </div>
             </Card>
           </div>
@@ -1062,7 +1106,7 @@ export function MovementPage() {
           <div className="mt-2 text-sm text-white/56">
             Select any combination of stays and trips to sum movement, time, and work evidence.
           </div>
-          <div className="mt-5 grid gap-3 sm:grid-cols-2">
+          <div className="mt-5 grid gap-3 sm:grid-cols-3">
             <div className="rounded-[22px] border border-white/8 bg-white/[0.04] p-4">
               <div className="text-xs uppercase tracking-[0.18em] text-white/36">
                 Span
@@ -1095,6 +1139,30 @@ export function MovementPage() {
                 {selectionAggregate.noteCount}
               </div>
             </div>
+            <div className="rounded-[22px] border border-white/8 bg-white/[0.04] p-4">
+              <div className="text-xs uppercase tracking-[0.18em] text-white/36">
+                Estimated phone time
+              </div>
+              <div className="mt-2 text-lg text-white">
+                {durationLabel(selectionAggregate.estimatedScreenTimeSeconds)}
+              </div>
+            </div>
+            <div className="rounded-[22px] border border-white/8 bg-white/[0.04] p-4">
+              <div className="text-xs uppercase tracking-[0.18em] text-white/36">
+                Pickups
+              </div>
+              <div className="mt-2 text-lg text-white">
+                {selectionAggregate.pickupCount}
+              </div>
+            </div>
+            <div className="rounded-[22px] border border-white/8 bg-white/[0.04] p-4">
+              <div className="text-xs uppercase tracking-[0.18em] text-white/36">
+                Notifications
+              </div>
+              <div className="mt-2 text-lg text-white">
+                {selectionAggregate.notificationCount}
+              </div>
+            </div>
           </div>
           <div className="mt-4 flex flex-wrap gap-2">
             {selectionAggregate.placeLabels.map((label) => (
@@ -1103,6 +1171,24 @@ export function MovementPage() {
               </Badge>
             ))}
           </div>
+          {selectionAggregate.topApps.length > 0 ? (
+            <div className="mt-4 flex flex-wrap gap-2">
+              {selectionAggregate.topApps.map((app) => (
+                <Badge key={app.id} tone="default" className="bg-[rgba(114,204,255,0.12)] text-white/80">
+                  {(app.displayName || app.bundleIdentifier) + " · " + durationLabel(app.totalActivitySeconds)}
+                </Badge>
+              ))}
+            </div>
+          ) : null}
+          {selectionAggregate.topCategories.length > 0 ? (
+            <div className="mt-3 flex flex-wrap gap-2">
+              {selectionAggregate.topCategories.map((category) => (
+                <Badge key={category.id} tone="default" className="bg-white/[0.05] text-white/64">
+                  {category.categoryLabel}
+                </Badge>
+              ))}
+            </div>
+          ) : null}
           </Card>
         </MovementSelectionBox>
       </section>
@@ -1161,19 +1247,26 @@ export function MovementPage() {
                     const active =
                       segment.kind === "stay"
                         ? selectedSegmentIds.stayIds.includes(segment.id)
-                        : selectedSegmentIds.tripIds.includes(segment.id);
+                        : segment.kind === "trip"
+                          ? selectedSegmentIds.tripIds.includes(segment.id)
+                          : false;
                     return (
                       <button
                         key={segment.id}
                         type="button"
                         className={cn(
                           "relative flex min-w-[5.5rem] flex-col justify-between rounded-[22px] border px-3 py-2 text-left transition",
-                          active
-                            ? "border-[rgba(171,232,255,0.5)] bg-[rgba(171,232,255,0.16)]"
-                            : "border-white/6 bg-[linear-gradient(180deg,rgba(255,255,255,0.08),rgba(255,255,255,0.02))] hover:border-white/14 hover:bg-white/[0.08]"
+                          segment.kind === "missing"
+                            ? "border-slate-400/20 bg-[linear-gradient(180deg,rgba(148,163,184,0.18),rgba(51,65,85,0.14))] hover:border-slate-300/30 hover:bg-[rgba(148,163,184,0.14)]"
+                            : active
+                              ? "border-[rgba(171,232,255,0.5)] bg-[rgba(171,232,255,0.16)]"
+                              : "border-white/6 bg-[linear-gradient(180deg,rgba(255,255,255,0.08),rgba(255,255,255,0.02))] hover:border-white/14 hover:bg-white/[0.08]"
                         )}
                         style={{ width: `${width}%` }}
                         onClick={() => {
+                          if (segment.kind === "missing") {
+                            return;
+                          }
                           setSelectedSegmentIds((current) => {
                             const stayIds = new Set(current.stayIds);
                             const tripIds = new Set(current.tripIds);
@@ -1200,10 +1293,16 @@ export function MovementPage() {
                       >
                         <div className="flex items-center justify-between gap-2">
                           <Badge
-                            tone={segment.kind === "trip" ? "signal" : "default"}
+                            tone={
+                              segment.kind === "trip"
+                                ? "signal"
+                                : segment.kind === "missing"
+                                  ? "meta"
+                                  : "default"
+                            }
                             className="bg-white/[0.08] text-white/82"
                           >
-                            {segment.kind}
+                            {segment.kind === "missing" ? "gap" : segment.kind}
                           </Badge>
                           <span className="text-[11px] text-white/46">
                             {durationLabel(segment.durationSeconds)}
@@ -1230,6 +1329,9 @@ export function MovementPage() {
               </Badge>
               <Badge tone="default" className="bg-white/[0.06] text-white/72">
                 {movementDay.summary.stayCount} stays
+              </Badge>
+              <Badge tone="meta">
+                {movementDay.summary.missingCount} gaps
               </Badge>
             </div>
           </Card>
@@ -1282,6 +1384,53 @@ export function MovementPage() {
                       selectedTripQuery.data.trip.endedAt
                     )}
                   </div>
+                  <div className="mt-4 grid gap-3 sm:grid-cols-3">
+                    <div className="rounded-[20px] border border-white/8 bg-white/[0.04] p-3">
+                      <div className="text-[11px] uppercase tracking-[0.18em] text-white/38">
+                        Hourly estimate
+                      </div>
+                      <div className="mt-2 text-lg text-white">
+                        {durationLabel(selectedTripQuery.data.trip.estimatedScreenTimeSeconds)}
+                      </div>
+                    </div>
+                    <div className="rounded-[20px] border border-white/8 bg-white/[0.04] p-3">
+                      <div className="text-[11px] uppercase tracking-[0.18em] text-white/38">
+                        Pickups
+                      </div>
+                      <div className="mt-2 text-lg text-white">
+                        {selectedTripQuery.data.trip.pickupCount}
+                      </div>
+                    </div>
+                    <div className="rounded-[20px] border border-white/8 bg-white/[0.04] p-3">
+                      <div className="text-[11px] uppercase tracking-[0.18em] text-white/38">
+                        Notifications
+                      </div>
+                      <div className="mt-2 text-lg text-white">
+                        {selectedTripQuery.data.trip.notificationCount}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="mt-3 text-xs leading-5 text-white/48">
+                    Derived from Screen Time hourly bins, not exact foreground traces.
+                  </div>
+                  {selectedTripQuery.data.trip.topApps.length > 0 ? (
+                    <div className="mt-4 flex flex-wrap gap-2">
+                      {selectedTripQuery.data.trip.topApps.map((app) => (
+                        <Badge key={app.id} tone="default" className="bg-[rgba(114,204,255,0.12)] text-white/80">
+                          {(app.displayName || app.bundleIdentifier) + " · " + durationLabel(app.totalActivitySeconds)}
+                        </Badge>
+                      ))}
+                    </div>
+                  ) : null}
+                  {selectedTripQuery.data.trip.topCategories.length > 0 ? (
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {selectedTripQuery.data.trip.topCategories.map((category) => (
+                        <Badge key={category.id} tone="default" className="bg-white/[0.05] text-white/64">
+                          {category.categoryLabel}
+                        </Badge>
+                      ))}
+                    </div>
+                  ) : null}
                 </Card>
               </>
             ) : (

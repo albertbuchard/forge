@@ -5,8 +5,19 @@ import {
 } from "../../../lib/workbench/runtime.js";
 import type {
   WorkbenchExecutionFunction,
-  WorkbenchNodeExecutionInput
+  WorkbenchInputDefinition,
+  WorkbenchNodeExecutionInput,
+  WorkbenchOutputDefinition,
+  WorkbenchParamDefinition,
+  WorkbenchToolDefinition
 } from "../../../lib/workbench/nodes.js";
+import {
+  createSearchEntitiesTool,
+  createSearchInputs,
+  createSearchOutputs,
+  createSearchParams,
+  createSummaryOutput
+} from "../../../lib/workbench/contracts.js";
 import { createGenericWorkbenchNodeView } from "../shared/generic-node-view.js";
 import { defineWorkbenchBox } from "../shared/define-workbench-box.js";
 
@@ -21,8 +32,15 @@ function defineStrategyBox(
   description: string,
   tags: string[],
   execute: WorkbenchExecutionFunction,
-  withSearchTool = false
+  output: WorkbenchOutputDefinition[],
+  tools: WorkbenchToolDefinition[] = [],
+  options?: {
+    inputs?: WorkbenchInputDefinition[];
+    params?: WorkbenchParamDefinition[];
+  }
 ) {
+  const inputs = options?.inputs ?? [];
+  const params = options?.params ?? [];
   return defineWorkbenchBox(Slot, {
     id,
     surfaceId: "strategies",
@@ -32,35 +50,17 @@ function defineStrategyBox(
     description,
     category: "Strategies",
     tags,
-    inputs: [],
-    params: [],
-    output: [{ key: "primary", label: title, kind: "content" }],
-    tools: withSearchTool
-      ? [
-          {
-            key: "forge.search_entities",
-            label: "Search Forge entities",
-            description: "Search Forge entities by query and entity types.",
-            accessMode: "read"
-          }
-        ]
-      : [],
+    inputs,
+    params,
+    output,
+    tools,
     NodeView: createGenericWorkbenchNodeView({
       title,
       description,
-      inputs: [],
-      params: [],
-      output: [{ key: "primary", label: title, kind: "content" }],
-      tools: withSearchTool
-        ? [
-            {
-              key: "forge.search_entities",
-              label: "Search Forge entities",
-              description: "Search Forge entities by query and entity types.",
-              accessMode: "read"
-            }
-          ]
-        : []
+      inputs,
+      params,
+      output,
+      tools
     }),
     execute
   });
@@ -72,7 +72,8 @@ export const StrategiesHeroBox = defineStrategyBox(
   "Strategies page header and sequencing context.",
   ["strategies", "hero"],
   (input: WorkbenchNodeExecutionInput) =>
-    buildStaticWorkbenchExecution(input, null, "Strategies page header.")
+    buildStaticWorkbenchExecution(input, null, "Strategies page header."),
+  [createSummaryOutput({ label: "Strategies summary", description: "High-level strategies page framing." })]
 );
 
 export const StrategiesSearchResultsBox = defineStrategyBox(
@@ -86,7 +87,24 @@ export const StrategiesSearchResultsBox = defineStrategyBox(
       entityTypes: ["strategy"],
       limit: 20
     }),
-  true
+  createSearchOutputs({
+    itemKind: "strategy",
+    itemLabel: "Strategy"
+  }),
+  [createSearchEntitiesTool("Search strategy entities by query and entity types.")],
+  {
+    inputs: createSearchInputs({
+      itemKind: "strategy",
+      itemLabel: "Strategy",
+      defaultEntityTypes: ["strategy"],
+      defaultLimit: 20
+    }),
+    params: createSearchParams({
+      itemKind: "strategy",
+      defaultEntityTypes: ["strategy"],
+      defaultLimit: 20
+    })
+  }
 );
 
 export const StrategiesSummaryBox = defineStrategyBox(
@@ -95,5 +113,11 @@ export const StrategiesSummaryBox = defineStrategyBox(
   "Strategy collection summary and state context.",
   ["strategies", "summary"],
   (input: WorkbenchNodeExecutionInput) =>
-    buildStaticWorkbenchExecution(input, null, "Strategy collection summary.")
+    buildStaticWorkbenchExecution(input, null, "Strategy collection summary."),
+  [
+    createSummaryOutput({
+      label: "Strategy summary",
+      description: "Summary of strategy state and collection context."
+    })
+  ]
 );

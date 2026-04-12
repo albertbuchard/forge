@@ -30,6 +30,26 @@ export class SecretsManager extends AbstractManager {
     return timingSafeEqual(leftBuffer, rightBuffer);
   }
 
+  private getCanonicalKeyPath() {
+    return path.join(this.rootDir, ".forge-secrets.key");
+  }
+
+  private getLegacyKeyPath() {
+    return path.join(this.rootDir, "data", ".forge-secrets.key");
+  }
+
+  private getPreferredKeyPath() {
+    const canonicalKeyPath = this.getCanonicalKeyPath();
+    if (existsSync(canonicalKeyPath)) {
+      return canonicalKeyPath;
+    }
+    const legacyKeyPath = this.getLegacyKeyPath();
+    if (existsSync(legacyKeyPath)) {
+      return legacyKeyPath;
+    }
+    return canonicalKeyPath;
+  }
+
   sealJson(value: Record<string, unknown>) {
     const iv = randomBytes(12);
     const cipher = createCipheriv("aes-256-gcm", this.getEncryptionKey(), iv);
@@ -61,7 +81,7 @@ export class SecretsManager extends AbstractManager {
     if (this.cachedKey) {
       return this.cachedKey;
     }
-    const keyPath = path.join(this.rootDir, "data", ".forge-secrets.key");
+    const keyPath = this.getPreferredKeyPath();
     mkdirSync(path.dirname(keyPath), { recursive: true });
     if (!existsSync(keyPath)) {
       writeFileSync(keyPath, randomBytes(32).toString("base64"), { encoding: "utf8", mode: 0o600 });

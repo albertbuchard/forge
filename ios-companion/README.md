@@ -36,14 +36,18 @@ The architecture still leaves room for:
 ## Project generation
 
 This folder keeps `project.yml` as the diffable XcodeGen definition for the Apple
-targets, but the current manually curated Xcode project lives at
-`ForgeCompanion/ForgeCompanion.xcodeproj`.
+targets. The canonical Xcode project is the generated root project at
+`ios-companion/ForgeCompanion.xcodeproj`.
+
+Do not open a nested `ForgeCompanion/ForgeCompanion.xcodeproj` path if one appears in
+old local state or backups. That stale project drifted from the generated source of
+truth and can compile the wrong target graph.
 
 If you want to regenerate later:
 
 1. Install [XcodeGen](https://github.com/yonaskolb/XcodeGen)
 2. Run `xcodegen generate` from `ios-companion/`
-3. Open `ForgeCompanion/ForgeCompanion.xcodeproj`
+3. Open `ForgeCompanion.xcodeproj`
 
 ## Key frameworks
 
@@ -90,9 +94,19 @@ Public entrypoint:
 - `./ios-companion/scripts/publish-forge-companion.sh app-store`
 
 The script bootstraps a local Fastlane toolchain under `ios-companion/vendor/bundle`,
-runs Forge repo checks, archives the real manually curated Xcode project at
-`ios-companion/ForgeCompanion/ForgeCompanion.xcodeproj`, and then uploads or submits
+runs Forge repo checks, archives the canonical generated Xcode project at
+`ios-companion/ForgeCompanion.xcodeproj`, and then uploads or submits
 depending on the selected mode.
+
+This repo now also includes tag-driven GitHub Actions release workflows:
+
+- `ios-testflight-v<marketing-version>` runs screenshot capture plus the
+  `testflight_release` lane
+- `ios-app-store-v<marketing-version>` runs screenshot capture plus the
+  `app_store_release` lane
+
+Those tags must point at commits already on `main`, and the version in the tag must
+match `ios-companion/release/release.yml`.
 
 ### One-time local setup
 
@@ -115,6 +129,30 @@ Developer already has:
 - automatic signing working for team `KZ65F7924F`
 - an App Store Connect API key with permission to upload builds and manage releases
 - app category, pricing, availability, export compliance, privacy questionnaire, and age rating completed
+
+### One-time GitHub Actions setup
+
+For the CI workflow in `.github/workflows/release-ios-companion.yml`, add these
+repository secrets:
+
+- `FORGE_ASC_KEY_ID`
+- `FORGE_ASC_ISSUER_ID`
+- `FORGE_ASC_KEY_CONTENT_BASE64`
+- optional `FORGE_APPLE_TEAM_ID` if you do not want to rely on the repo default
+
+If the GitHub runner cannot complete automatic signing with its own state, also add:
+
+- `FORGE_IOS_BUILD_CERTIFICATE_BASE64`
+- `FORGE_IOS_P12_PASSWORD`
+- `FORGE_IOS_KEYCHAIN_PASSWORD`
+- optional `FORGE_IOS_PROVISIONING_PROFILES_BASE64` as newline-delimited base64
+  `.mobileprovision` payloads
+
+The workflow writes `ios-companion/.release.env` from those secrets, captures the
+managed screenshots, and then calls the same publish script the local flow uses.
+
+For the exact release tags, full prerequisites, and the combined plugin plus iOS
+release flow, use `docs/release-cheat-sheet.md`.
 
 ### Screenshots
 

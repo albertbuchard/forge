@@ -12,7 +12,7 @@ test("demo seed bootstraps fixtures into an empty runtime", async () => {
     const summary = await seedDemoDataIntoRuntime(dataRoot);
 
     assert.equal(summary.dataRoot, dataRoot);
-    assert.equal(summary.databasePath, path.join(dataRoot, "data", "forge.sqlite"));
+    assert.equal(summary.databasePath, path.join(dataRoot, "forge.sqlite"));
     assert.equal(summary.counts.goals, 3);
     assert.equal(summary.counts.projects, 3);
     assert.equal(summary.counts.tasks, 5);

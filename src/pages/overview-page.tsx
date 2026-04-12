@@ -11,6 +11,7 @@ import {
   WeatherWidget
 } from "@/components/customization/utility-widgets";
 import { FlagshipSignalDeck } from "@/components/experience/flagship-signal-deck";
+import { LifeForceOverviewWorkspace } from "@/components/life-force/life-force-workspace";
 import { EntityNoteCountLink } from "@/components/notes/entity-note-count-link";
 import { useForgeShell } from "@/components/shell/app-shell";
 import { PageHero } from "@/components/shell/page-hero";
@@ -50,6 +51,7 @@ export function OverviewPage() {
         ? "Steady"
         : "Needs attention";
   const hasOverviewData =
+    snapshot.lifeForce !== undefined ||
     snapshot.overview.activeGoals.length > 0 ||
     snapshot.overview.projects.length > 0 ||
     snapshot.overview.topTasks.length > 0 ||
@@ -127,6 +129,22 @@ export function OverviewPage() {
           titleText="Overview"
           description={`${heroStatus}. Core goals, active projects, top tasks, and momentum are all here.`}
           badge={`${snapshot.metrics.streakDays} day streak`}
+        />
+      )
+    },
+    {
+      id: "life-force",
+      title: "Life Force",
+      description:
+        "Dynamic Action Points, the editable capacity curve, current drains, and stat growth all live here.",
+      defaultWidth: 12,
+      defaultHeight: 7,
+      minWidth: 6,
+      render: () => (
+        <LifeForceOverviewWorkspace
+          selectedUserIds={shell.selectedUserIds}
+          fallbackLifeForce={snapshot.lifeForce!}
+          onRefresh={shell.refresh}
         />
       )
     },

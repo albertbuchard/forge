@@ -156,7 +156,7 @@ export function WikiIngestHistoryPage() {
   if (settingsQuery.isLoading || jobsQuery.isLoading) {
     return (
       <SurfaceSkeleton
-        eyebrow="Wiki"
+        eyebrow="KarpaWiki"
         title="Loading ingest history"
         description="Gathering prior imports, statuses, and review state."
         columns={1}
@@ -168,7 +168,7 @@ export function WikiIngestHistoryPage() {
   if (settingsQuery.isError || jobsQuery.isError) {
     return (
       <ErrorState
-        eyebrow="Wiki"
+        eyebrow="KarpaWiki"
         error={settingsQuery.error ?? jobsQuery.error}
         onRetry={() => {
           void settingsQuery.refetch();
@@ -183,7 +183,7 @@ export function WikiIngestHistoryPage() {
       <div className="px-3 py-4 sm:px-5 lg:px-6">
         <div className="mx-auto grid w-full max-w-[1480px] gap-5">
           <PageHero
-            title="Wiki Ingest History"
+            title="KarpaWiki Ingest History"
             description="Search prior ingests, reopen a review, or clear ingest records without touching pages and entities that were already published."
             badge={`${filteredJobs.length} matching jobs`}
           />
@@ -207,7 +207,7 @@ export function WikiIngestHistoryPage() {
                     )
                   }
                 >
-                  Back to wiki
+                  Back to KarpaWiki
                 </Button>
                 <Button onClick={() => openModal()}>
                   <Sparkles className="size-3.5" />
@@ -279,7 +279,7 @@ export function WikiIngestHistoryPage() {
 
           {filteredJobs.length === 0 ? (
             <EmptyState
-              eyebrow="Wiki ingest"
+              eyebrow="KarpaWiki ingest"
               title="No ingest jobs match these filters"
               description="Try widening the dates or clearing a status tag."
             />
@@ -290,7 +290,7 @@ export function WikiIngestHistoryPage() {
                   entry.job.titleHint ||
                   entry.job.latestMessage ||
                   entry.job.sourceLocator ||
-                  "Wiki ingest";
+                  "KarpaWiki ingest";
                 const deletable = !["queued", "processing"].includes(
                   entry.job.status
                 );
@@ -304,7 +304,7 @@ export function WikiIngestHistoryPage() {
                       >
                         <div className="flex flex-wrap items-center gap-2">
                           <span className="text-[11px] uppercase tracking-[0.16em] text-white/42">
-                            Wiki ingest
+                            KarpaWiki ingest
                           </span>
                           <span className="rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1 text-[10px] uppercase tracking-[0.16em] text-white/60">
                             {entry.job.status}

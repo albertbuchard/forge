@@ -1,0 +1,83 @@
+name: Release Forge Hermes Plugin
+
+on:
+  push:
+    tags:
+      - "hermes-v*"
+
+concurrency:
+  group: release-hermes-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Verify tag points at main
+        run: |
+          git fetch origin main --depth=1
+          git merge-base --is-ancestor "$GITHUB_SHA" origin/main || {
+            echo "Release tags must point to a commit on origin/main." >&2
+            exit 1
+          }
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22.14.0"
+          cache: "npm"
+          cache-dependency-path: "package-lock.json"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build and verify release artifacts from tag
+        env:
+          RELEASE_VERSION: ${{ github.ref_name }}
+        run: |
+          FORGE_RELEASE_MODE=publish-from-tag \
+          FORGE_RELEASE_SKIP_UPLOAD=1 \
+            ./scripts/release-forge-hermes-plugin.sh "${RELEASE_VERSION#hermes-v}"
+
+      - name: Upload PyPI artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: forge-hermes-python-dist
+          path: plugins/forge-hermes/python-dist/*
+          if-no-files-found: error
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      id-token: write
+    environment:
+      name: pypi
+      url: https://pypi.org/p/forge-hermes-plugin
+
+    steps:
+      - name: Download PyPI artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: forge-hermes-python-dist
+          path: dist
+
+      - name: Publish package distributions to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: dist/

@@ -5,8 +5,20 @@ import {
 } from "../../../lib/workbench/runtime.js";
 import type {
   WorkbenchExecutionFunction,
-  WorkbenchNodeExecutionInput
+  WorkbenchInputDefinition,
+  WorkbenchNodeExecutionInput,
+  WorkbenchOutputDefinition,
+  WorkbenchParamDefinition,
+  WorkbenchToolDefinition
 } from "../../../lib/workbench/nodes.js";
+import {
+  createSearchEntitiesTool,
+  createSearchInputs,
+  createSearchOutputs,
+  createSearchParams,
+  createSummaryOutput,
+  createTaskStatusTool
+} from "../../../lib/workbench/contracts.js";
 import { createGenericWorkbenchNodeView } from "../shared/generic-node-view.js";
 import { defineWorkbenchBox } from "../shared/define-workbench-box.js";
 
@@ -21,13 +33,15 @@ function defineTasksBox(
   description: string,
   tags: string[],
   execute: WorkbenchExecutionFunction,
-  tools: Array<{
-    key: string;
-    label: string;
-    description: string;
-    accessMode: "read" | "write" | "read_write" | "exec";
-  }> = []
+  output: WorkbenchOutputDefinition[],
+  tools: WorkbenchToolDefinition[] = [],
+  options?: {
+    inputs?: WorkbenchInputDefinition[];
+    params?: WorkbenchParamDefinition[];
+  }
 ) {
+  const inputs = options?.inputs ?? [];
+  const params = options?.params ?? [];
   return defineWorkbenchBox(Slot, {
     id,
     surfaceId: "tasks",
@@ -37,16 +51,16 @@ function defineTasksBox(
     description,
     category: "Tasks",
     tags,
-    inputs: [],
-    params: [],
-    output: [{ key: "primary", label: title, kind: "content" }],
+    inputs,
+    params,
+    output,
     tools,
     NodeView: createGenericWorkbenchNodeView({
       title,
       description,
-      inputs: [],
-      params: [],
-      output: [{ key: "primary", label: title, kind: "content" }],
+      inputs,
+      params,
+      output,
       tools
     }),
     execute
@@ -64,20 +78,27 @@ export const TasksInboxBox = defineTasksBox(
       entityTypes: ["task"],
       limit: 20
     }),
+  createSearchOutputs({
+    itemKind: "task",
+    itemLabel: "Task"
+  }),
   [
-    {
-      key: "forge.search_entities",
-      label: "Search Forge entities",
-      description: "Search task entities by title, status, or linked context.",
-      accessMode: "read"
-    },
-    {
-      key: "forge.update_task_status",
-      label: "Update task status",
-      description: "Move a task between backlog, focus, in progress, blocked, and done.",
-      accessMode: "write"
-    }
-  ]
+    createSearchEntitiesTool("Search task entities by title, status, or linked context."),
+    createTaskStatusTool("Move a task between backlog, focus, in progress, blocked, and done.")
+  ],
+  {
+    inputs: createSearchInputs({
+      itemKind: "task",
+      itemLabel: "Task",
+      defaultEntityTypes: ["task"],
+      defaultLimit: 20
+    }),
+    params: createSearchParams({
+      itemKind: "task",
+      defaultEntityTypes: ["task"],
+      defaultLimit: 20
+    })
+  }
 );
 
 export const TasksFocusBox = defineTasksBox(
@@ -94,12 +115,13 @@ export const TasksFocusBox = defineTasksBox(
       "Focus lane context for the current execution board."
     ),
   [
-    {
-      key: "forge.update_task_status",
-      label: "Update task status",
-      description: "Change task state as the flow decides what should happen next.",
-      accessMode: "write"
-    }
+    createSummaryOutput({
+      label: "Focus summary",
+      description: "Human-readable explanation of what the focus lane represents."
+    })
+  ],
+  [
+    createTaskStatusTool("Change task state as the flow decides what should happen next.")
   ]
 );
 
@@ -115,5 +137,11 @@ export const TasksSummaryBox = defineTasksBox(
         states: ["backlog", "focus", "in_progress", "blocked", "done"]
       },
       "Task system summary with the key task states Forge tracks."
-    )
+    ),
+  [
+    createSummaryOutput({
+      label: "Task summary",
+      description: "High-level summary of the current task system and work state."
+    })
+  ]
 );

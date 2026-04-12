@@ -1,4 +1,9 @@
 import { z } from "zod";
+import {
+  LEGACY_WORKBENCH_PORT_KINDS,
+  WORKBENCH_PORT_KINDS,
+  normalizeWorkbenchPortKind
+} from "../../src/lib/workbench/nodes.js";
 
 export const taskStatusSchema = z.enum([
   "backlog",
@@ -34,6 +39,13 @@ export const habitFrequencySchema = z.enum(["daily", "weekly"]);
 export const habitPolaritySchema = z.enum(["positive", "negative"]);
 export const habitStatusSchema = z.enum(["active", "paused", "archived"]);
 export const habitCheckInStatusSchema = z.enum(["done", "missed"]);
+export const habitOrderBySchema = z.enum([
+  "needs_attention",
+  "name",
+  "streak",
+  "created_at",
+  "updated_at"
+]);
 export const calendarProviderSchema = z.enum([
   "google",
   "apple",
@@ -80,6 +92,35 @@ export const calendarTimeboxSourceSchema = z.enum([
   "live_run"
 ]);
 export const workAdjustmentEntityTypeSchema = z.enum(["task", "project"]);
+export const taskResolutionKindSchema = z.enum(["completed", "split"]);
+export const actionProfileModeSchema = z.enum([
+  "impulse",
+  "rate",
+  "hybrid",
+  "recovery",
+  "container"
+]);
+export const actionProfileSourceMethodSchema = z.enum([
+  "seeded",
+  "inferred",
+  "manual",
+  "learned"
+]);
+export const actionCostBandSchema = z.enum([
+  "tiny",
+  "light",
+  "standard",
+  "heavy",
+  "brutal"
+]);
+export const lifeForceStatKeySchema = z.enum([
+  "life_force",
+  "activation",
+  "focus",
+  "vigor",
+  "composure",
+  "flow"
+]);
 export const activityEntityTypeSchema = z.enum([
   "task",
   "habit",
@@ -116,7 +157,9 @@ export const activityEntityTypeSchema = z.enum([
   "calendar_event",
   "work_block",
   "work_block_template",
-  "task_timebox"
+  "task_timebox",
+  "sleep_session",
+  "workout_session"
 ]);
 export const activitySourceSchema = z.enum([
   "ui",
@@ -124,12 +167,21 @@ export const activitySourceSchema = z.enum([
   "agent",
   "system"
 ]);
-export const diagnosticLogLevelSchema = z.enum([
-  "debug",
-  "info",
-  "warning",
-  "error"
-]);
+export const diagnosticLogLevelSchema = z.preprocess(
+  (value) => {
+    if (typeof value !== "string") {
+      return value;
+    }
+    const normalized = value.trim().toLowerCase();
+    return normalized === "warn" ? "warning" : normalized;
+  },
+  z.enum([
+    "debug",
+    "info",
+    "warning",
+    "error"
+  ])
+);
 export const diagnosticLogSourceSchema = z.enum([
   "ui",
   "openclaw",
@@ -211,7 +263,9 @@ export const crudEntityTypeSchema = z.enum([
   "preference_catalog_item",
   "preference_context",
   "preference_item",
-  "questionnaire_instrument"
+  "questionnaire_instrument",
+  "sleep_session",
+  "workout_session"
 ]);
 export const rewardableEntityTypeSchema = z.enum([
   "system",
@@ -479,6 +533,117 @@ export const workAdjustmentResultSchema = z.object({
   metrics: z.lazy(() => xpMetricsPayloadSchema)
 });
 
+export const actionDemandWeightsSchema = z.object({
+  activation: z.number().min(0).max(1),
+  focus: z.number().min(0).max(1),
+  vigor: z.number().min(0).max(1),
+  composure: z.number().min(0).max(1),
+  flow: z.number().min(0).max(1)
+});
+
+export const actionProfileSchema = z.object({
+  id: z.string(),
+  profileKey: nonEmptyTrimmedString,
+  title: nonEmptyTrimmedString,
+  entityType: trimmedString.nullable().default(null),
+  mode: actionProfileModeSchema,
+  startupAp: z.number().min(0).default(0),
+  totalCostAp: z.number().min(0).default(0),
+  expectedDurationSeconds: z.number().int().positive().nullable().default(null),
+  sustainRateApPerHour: z.number().min(0).default(0),
+  demandWeights: actionDemandWeightsSchema,
+  doubleCountPolicy: z.enum([
+    "primary_only",
+    "secondary_weighted",
+    "always_count",
+    "container_only"
+  ]),
+  sourceMethod: actionProfileSourceMethodSchema,
+  costBand: actionCostBandSchema.default("standard"),
+  recoveryEffect: z.number().default(0),
+  metadata: z.record(z.string(), z.unknown()).default({}),
+  createdAt: z.string(),
+  updatedAt: z.string()
+});
+
+export const taskActionPointSummarySchema = z.object({
+  costBand: actionCostBandSchema,
+  totalCostAp: z.number().min(0),
+  expectedDurationSeconds: z.number().int().positive(),
+  sustainRateApPerHour: z.number().min(0),
+  spentTodayAp: z.number().min(0),
+  spentTotalAp: z.number().min(0),
+  remainingAp: z.number().min(0)
+});
+
+export const taskSplitSuggestionSchema = z.object({
+  shouldSplit: z.boolean(),
+  reason: trimmedString.nullable().default(null),
+  thresholdSeconds: z.number().int().positive()
+});
+
+export const lifeForceStatStateSchema = z.object({
+  key: lifeForceStatKeySchema,
+  label: nonEmptyTrimmedString,
+  level: z.number().int().min(1),
+  xp: z.number().min(0),
+  xpToNextLevel: z.number().min(0),
+  costModifier: z.number().min(0)
+});
+
+export const lifeForceCurvePointSchema = z.object({
+  minuteOfDay: z.number().int().min(0).max(24 * 60),
+  rateApPerHour: z.number().min(0),
+  locked: z.boolean().optional()
+});
+
+export const lifeForceDrainEntrySchema = z.object({
+  id: z.string(),
+  sourceType: nonEmptyTrimmedString,
+  sourceId: nonEmptyTrimmedString,
+  title: nonEmptyTrimmedString,
+  role: z.enum(["primary", "secondary", "background", "recovery"]),
+  apPerHour: z.number(),
+  instantAp: z.number(),
+  why: trimmedString.default(""),
+  startedAt: z.string().nullable().default(null),
+  endsAt: z.string().nullable().default(null)
+});
+
+export const lifeForceWarningSchema = z.object({
+  id: z.string(),
+  tone: z.enum(["info", "warning", "danger", "success"]),
+  title: nonEmptyTrimmedString,
+  detail: trimmedString.default("")
+});
+
+export const lifeForcePayloadSchema = z.object({
+  userId: z.string(),
+  dateKey: dateOnlySchema,
+  baselineDailyAp: z.number().min(0),
+  dailyBudgetAp: z.number().min(0),
+  spentTodayAp: z.number(),
+  remainingAp: z.number(),
+  forecastAp: z.number(),
+  targetBandMinAp: z.number().min(0),
+  targetBandMaxAp: z.number().min(0),
+  instantCapacityApPerHour: z.number().min(0),
+  instantFreeApPerHour: z.number(),
+  overloadApPerHour: z.number().min(0),
+  currentDrainApPerHour: z.number().min(0),
+  fatigueBufferApPerHour: z.number().min(0),
+  sleepRecoveryMultiplier: z.number().min(0),
+  readinessMultiplier: z.number().min(0),
+  fatigueDebtCarry: z.number().min(0),
+  stats: z.array(lifeForceStatStateSchema),
+  currentCurve: z.array(lifeForceCurvePointSchema),
+  activeDrains: z.array(lifeForceDrainEntrySchema),
+  warnings: z.array(lifeForceWarningSchema),
+  recommendations: z.array(trimmedString),
+  topTaskIdsNeedingSplit: z.array(z.string()),
+  updatedAt: z.string()
+});
+
 export const noteLinkSchema = z.object({
   entityType: crudEntityTypeSchema,
   entityId: nonEmptyTrimmedString,
@@ -601,10 +766,12 @@ export const taskSchema = z.object({
     .number()
     .int()
     .min(60)
-    .max(86_400)
+    .max(7 * 86_400)
     .nullable()
-    .default(null),
+    .default(86_400),
   schedulingRules: calendarSchedulingRulesSchema.nullable().default(null),
+  resolutionKind: taskResolutionKindSchema.nullable().default(null),
+  splitParentTaskId: z.string().nullable().default(null),
   completedAt: z.string().nullable(),
   createdAt: z.string(),
   updatedAt: z.string(),
@@ -619,6 +786,20 @@ export const taskSchema = z.object({
     activeRunCount: 0,
     hasCurrentRun: false,
     currentRunId: null
+  }),
+  actionPointSummary: taskActionPointSummarySchema.default({
+    costBand: "standard",
+    totalCostAp: 100,
+    expectedDurationSeconds: 86_400,
+    sustainRateApPerHour: 100 / 24,
+    spentTodayAp: 0,
+    spentTotalAp: 0,
+    remainingAp: 100
+  }),
+  splitSuggestion: taskSplitSuggestionSchema.default({
+    shouldSplit: false,
+    reason: null,
+    thresholdSeconds: 2 * 86_400
   })
 });
 
@@ -1376,7 +1557,8 @@ export const googleCalendarAuthSettingsSchema = z.object({
 export const aiModelProviderSchema = z.enum([
   "openai-api",
   "openai-codex",
-  "openai-compatible"
+  "openai-compatible",
+  "mock"
 ]);
 
 export const aiModelAuthModeSchema = z.enum(["api_key", "oauth"]);
@@ -1559,15 +1741,47 @@ export const forgeBoxToolAdapterSchema = z.object({
   key: nonEmptyTrimmedString,
   label: nonEmptyTrimmedString,
   description: trimmedString.default(""),
-  accessMode: aiProcessorAccessModeSchema.default("read")
+  accessMode: aiProcessorAccessModeSchema.default("read"),
+  argsSchema: z.record(z.string(), z.unknown()).optional()
+});
+
+const workbenchPortKindSchema = z
+  .enum([...WORKBENCH_PORT_KINDS, ...LEGACY_WORKBENCH_PORT_KINDS] as [
+    (typeof WORKBENCH_PORT_KINDS)[number],
+    ...Array<(typeof WORKBENCH_PORT_KINDS)[number] | (typeof LEGACY_WORKBENCH_PORT_KINDS)[number]>
+  ])
+  .transform((value) => normalizeWorkbenchPortKind({ kind: value }));
+
+export const forgeBoxPortShapeFieldSchema = z.object({
+  key: nonEmptyTrimmedString,
+  label: nonEmptyTrimmedString,
+  kind: workbenchPortKindSchema.default("record"),
+  description: trimmedString.optional(),
+  required: z.boolean().default(false)
 });
 
 export const forgeBoxPortDefinitionSchema = z.object({
   key: nonEmptyTrimmedString,
   label: nonEmptyTrimmedString,
-  kind: nonEmptyTrimmedString.default("content"),
+  kind: workbenchPortKindSchema.default("record"),
+  description: trimmedString.optional(),
   required: z.boolean().default(false),
-  expandableKeys: z.array(nonEmptyTrimmedString).default([])
+  expandableKeys: z.array(nonEmptyTrimmedString).default([]),
+  modelName: trimmedString.optional(),
+  itemKind: trimmedString.optional(),
+  shape: z.array(forgeBoxPortShapeFieldSchema).default([]),
+  exampleValue: trimmedString.optional()
+});
+
+export const aiConnectorPublicInputBindingSchema = z.object({
+  nodeId: nonEmptyTrimmedString,
+  targetKey: nonEmptyTrimmedString,
+  targetKind: z.enum(["input", "param"]).default("input")
+});
+
+export const aiConnectorPublicInputSchema = forgeBoxPortDefinitionSchema.extend({
+  defaultValue: z.unknown().optional(),
+  bindings: z.array(aiConnectorPublicInputBindingSchema).default([])
 });
 
 export const forgeBoxCatalogEntrySchema = z.object({
@@ -1679,6 +1893,37 @@ export const aiConnectorRunResultSchema = z.object({
       json: z.record(z.string(), z.unknown()).nullable()
     })
   ),
+  nodeResults: z
+    .array(
+      z.object({
+        nodeId: nonEmptyTrimmedString,
+        nodeType: aiConnectorNodeTypeSchema,
+        label: nonEmptyTrimmedString,
+        input: z.array(
+          z.object({
+            sourceNodeId: nonEmptyTrimmedString,
+            sourceHandle: trimmedString.nullable(),
+            targetHandle: trimmedString.nullable(),
+            text: z.string(),
+            json: z.record(z.string(), z.unknown()).nullable()
+          })
+        ),
+        primaryText: z.string(),
+        payload: z.record(z.string(), z.unknown()).nullable(),
+        outputMap: z.record(
+          z.string(),
+          z.object({
+            text: z.string(),
+            json: z.record(z.string(), z.unknown()).nullable()
+          })
+        ),
+        tools: z.array(z.string()).default([]),
+        logs: z.array(z.string()).default([]),
+        error: z.string().nullable(),
+        timingMs: z.number().int().nonnegative().nullable().optional()
+      })
+    )
+    .default([]),
   debugTrace: z
     .object({
       nodes: z.array(
@@ -1715,6 +1960,7 @@ export const aiConnectorRunSchema = z.object({
   mode: z.enum(["run", "chat"]),
   status: z.enum(["running", "completed", "failed"]),
   userInput: z.string(),
+  inputs: z.record(z.string(), z.unknown()).default({}),
   context: z.record(z.string(), z.unknown()).default({}),
   conversationId: trimmedString.nullable(),
   result: aiConnectorRunResultSchema.nullable(),
@@ -1751,6 +1997,7 @@ export const aiConnectorSchema = z.object({
     nodes: z.array(aiConnectorNodeSchema).default([]),
     edges: z.array(aiConnectorEdgeSchema).default([])
   }),
+  publicInputs: z.array(aiConnectorPublicInputSchema).default([]),
   publishedOutputs: z.array(aiConnectorOutputSchema).default([]),
   lastRun: aiConnectorRunSchema.nullable(),
   legacyProcessorId: trimmedString.nullable().default(null),
@@ -2255,6 +2502,8 @@ export const activityListQuerySchema = z.object({
   entityType: activityEntityTypeSchema.optional(),
   entityId: nonEmptyTrimmedString.optional(),
   source: activitySourceSchema.optional(),
+  from: flexibleCalendarQueryDateSchema.optional(),
+  to: flexibleCalendarQueryDateSchema.optional(),
   includeCorrected: z.coerce.boolean().optional(),
   userIds: repeatedTrimmedStringQuerySchema.optional(),
   limit: z.coerce.number().int().positive().max(100).optional()
@@ -2279,6 +2528,25 @@ export const calendarOverviewQuerySchema = z.object({
   from: flexibleCalendarQueryDateSchema.optional(),
   to: flexibleCalendarQueryDateSchema.optional(),
   userIds: repeatedTrimmedStringQuerySchema.optional()
+});
+
+export const psycheObservationCalendarExportFormatSchema = z.enum([
+  "json",
+  "csv",
+  "markdown",
+  "ics"
+]);
+
+export const psycheObservationCalendarExportQuerySchema = z.object({
+  from: flexibleCalendarQueryDateSchema.optional(),
+  to: flexibleCalendarQueryDateSchema.optional(),
+  userIds: repeatedTrimmedStringQuerySchema.optional(),
+  tags: repeatedTrimmedStringQuerySchema.optional(),
+  includeObservations: z.coerce.boolean().optional(),
+  includeActivity: z.coerce.boolean().optional(),
+  onlyHumanOwned: z.coerce.boolean().optional(),
+  search: trimmedString.optional(),
+  format: psycheObservationCalendarExportFormatSchema.default("markdown")
 });
 
 export const createCalendarConnectionSchema = z.discriminatedUnion("provider", [
@@ -2599,6 +2867,7 @@ export const habitListQuerySchema = z.object({
   status: habitStatusSchema.optional(),
   polarity: habitPolaritySchema.optional(),
   dueToday: z.coerce.boolean().optional(),
+  orderBy: habitOrderBySchema.optional(),
   userIds: repeatedTrimmedStringQuerySchema.optional(),
   limit: z.coerce.number().int().positive().max(100).optional()
 });
@@ -2678,12 +2947,13 @@ export const taskMutationShape = {
     .number()
     .int()
     .min(60)
-    .max(86_400)
+    .max(7 * 86_400)
     .nullable()
-    .default(null),
+    .default(86_400),
   schedulingRules: calendarSchedulingRulesSchema.nullable().default(null),
   sortOrder: z.number().int().nonnegative().optional(),
   tagIds: uniqueStringArraySchema.default([]),
+  actionCostBand: actionCostBandSchema.default("standard"),
   notes: z.array(nestedCreateNoteSchema).default([])
 };
 
@@ -2834,13 +3104,47 @@ export const updateTaskSchema = z.object({
     .number()
     .int()
     .min(60)
-    .max(86_400)
+    .max(7 * 86_400)
     .nullable()
     .optional(),
   schedulingRules: calendarSchedulingRulesSchema.nullable().optional(),
+  resolutionKind: taskResolutionKindSchema.nullable().optional(),
+  splitParentTaskId: z.string().nullable().optional(),
+  enforceTodayWorkLog: z.boolean().optional(),
+  completedTodayWorkSeconds: z
+    .number()
+    .int()
+    .min(0)
+    .max(7 * 86_400)
+    .optional(),
+  actionCostBand: actionCostBandSchema.optional(),
   sortOrder: z.number().int().nonnegative().optional(),
   tagIds: uniqueStringArraySchema.optional(),
   notes: z.array(nestedCreateNoteSchema).optional()
+});
+
+export const lifeForceProfilePatchSchema = z.object({
+  baseDailyAp: z.number().int().min(50).max(500).optional(),
+  readinessMultiplier: z.number().min(0.5).max(1.5).optional(),
+  stats: z
+    .record(lifeForceStatKeySchema, z.number().int().min(1).max(100))
+    .optional()
+});
+
+export const lifeForceTemplateUpdateSchema = z.object({
+  points: z.array(lifeForceCurvePointSchema).min(2)
+});
+
+export const fatigueSignalCreateSchema = z.object({
+  signalType: z.enum(["tired", "okay_again"]),
+  observedAt: dateTimeSchema.optional(),
+  note: trimmedString.optional()
+});
+
+export const taskSplitCreateSchema = z.object({
+  firstTitle: nonEmptyTrimmedString,
+  secondTitle: nonEmptyTrimmedString,
+  remainingRatio: z.number().min(0.1).max(0.9).default(0.5)
 });
 
 export const tagSuggestionRequestSchema = z.object({
@@ -3018,6 +3322,7 @@ export const upsertAiModelConnectionSchema = z
     const authMode =
       value.authMode ??
       (value.provider === "openai-codex" ? "oauth" : "api_key");
+    const isMockProvider = value.provider === "mock";
     if (value.provider === "openai-codex" && authMode !== "oauth") {
       context.addIssue({
         code: z.ZodIssueCode.custom,
@@ -3027,6 +3332,7 @@ export const upsertAiModelConnectionSchema = z
     }
     if (
       authMode === "api_key" &&
+      !isMockProvider &&
       !value.id?.trim() &&
       !value.apiKey?.trim()
     ) {
@@ -3113,6 +3419,7 @@ export const createAiConnectorSchema = z.object({
   kind: aiConnectorKindSchema.default("functor"),
   homeSurfaceId: trimmedString.nullable().default(null),
   endpointEnabled: z.boolean().default(true),
+  publicInputs: z.array(aiConnectorPublicInputSchema).default([]),
   graph: z
     .object({
       nodes: z.array(aiConnectorNodeSchema).default([]),
@@ -3127,6 +3434,7 @@ export const updateAiConnectorSchema = z.object({
   kind: aiConnectorKindSchema.optional(),
   homeSurfaceId: trimmedString.nullable().optional(),
   endpointEnabled: z.boolean().optional(),
+  publicInputs: z.array(aiConnectorPublicInputSchema).optional(),
   graph: z
     .object({
       nodes: z.array(aiConnectorNodeSchema).default([]),
@@ -3137,6 +3445,7 @@ export const updateAiConnectorSchema = z.object({
 
 export const runAiConnectorSchema = z.object({
   userInput: trimmedString.default(""),
+  inputs: z.record(z.string(), z.unknown()).default({}),
   context: z.record(z.string(), z.unknown()).default({}),
   boxSnapshots: z.record(z.string(), z.unknown()).default({}),
   conversationId: trimmedString.nullable().default(null),
@@ -3598,6 +3907,17 @@ export type CreateProjectInput = z.infer<typeof createProjectSchema>;
 export type CreateStrategyInput = z.infer<typeof createStrategySchema>;
 export type CreateTagInput = z.infer<typeof createTagSchema>;
 export type CreateTaskInput = z.infer<typeof createTaskSchema>;
+export type TaskResolutionKind = z.infer<typeof taskResolutionKindSchema>;
+export type LifeForceProfilePatchInput = z.infer<
+  typeof lifeForceProfilePatchSchema
+>;
+export type LifeForceTemplateUpdateInput = z.infer<
+  typeof lifeForceTemplateUpdateSchema
+>;
+export type FatigueSignalCreateInput = z.infer<
+  typeof fatigueSignalCreateSchema
+>;
+export type TaskSplitCreateInput = z.infer<typeof taskSplitCreateSchema>;
 export type CreateUserInput = z.infer<typeof createUserSchema>;
 export type CoachingInsight = z.infer<typeof coachingInsightSchema>;
 export type DashboardGoal = z.infer<typeof dashboardGoalSchema>;
@@ -3606,6 +3926,17 @@ export type DashboardExecutionBucket = z.infer<
   typeof dashboardExecutionBucketSchema
 >;
 export type DashboardStats = z.infer<typeof dashboardStatsSchema>;
+export type ActionProfile = z.infer<typeof actionProfileSchema>;
+export type ActionCostBand = z.infer<typeof actionCostBandSchema>;
+export type LifeForceStatKey = z.infer<typeof lifeForceStatKeySchema>;
+export type TaskActionPointSummary = z.infer<
+  typeof taskActionPointSummarySchema
+>;
+export type TaskSplitSuggestion = z.infer<typeof taskSplitSuggestionSchema>;
+export type LifeForceCurvePoint = z.infer<typeof lifeForceCurvePointSchema>;
+export type LifeForceDrainEntry = z.infer<typeof lifeForceDrainEntrySchema>;
+export type LifeForceWarning = z.infer<typeof lifeForceWarningSchema>;
+export type LifeForcePayload = z.infer<typeof lifeForcePayloadSchema>;
 export type CalendarAvailability = z.infer<typeof calendarAvailabilitySchema>;
 export type CalendarConnection = z.infer<typeof calendarConnectionSchema>;
 export type CalendarConnectionStatus = z.infer<
@@ -3756,6 +4087,12 @@ export type StrategyGraph = z.infer<typeof strategyGraphSchema>;
 export type StrategyListQuery = z.infer<typeof strategyListQuerySchema>;
 export type StrategyStatus = z.infer<typeof strategyStatusSchema>;
 export type CalendarOverviewQuery = z.infer<typeof calendarOverviewQuerySchema>;
+export type PsycheObservationCalendarExportFormat = z.infer<
+  typeof psycheObservationCalendarExportFormatSchema
+>;
+export type PsycheObservationCalendarExportQuery = z.infer<
+  typeof psycheObservationCalendarExportQuerySchema
+>;
 export type RewardsLedgerQuery = z.infer<typeof rewardsLedgerQuerySchema>;
 export type TaskListQuery = z.infer<typeof taskListQuerySchema>;
 export type TaskRun = z.infer<typeof taskRunSchema>;

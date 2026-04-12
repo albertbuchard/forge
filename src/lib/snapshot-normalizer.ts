@@ -57,6 +57,8 @@ function normalizeTask(task: Partial<Task> | undefined): Task {
     plannedDurationSeconds: task?.plannedDurationSeconds ?? null,
     schedulingRules: task?.schedulingRules ?? null,
     sortOrder: task?.sortOrder ?? 0,
+    resolutionKind: task?.resolutionKind ?? null,
+    splitParentTaskId: task?.splitParentTaskId ?? null,
     completedAt: task?.completedAt ?? null,
     createdAt: task?.createdAt ?? new Date(0).toISOString(),
     updatedAt: task?.updatedAt ?? new Date(0).toISOString(),
@@ -72,6 +74,20 @@ function normalizeTask(task: Partial<Task> | undefined): Task {
       activeRunCount: 0,
       hasCurrentRun: false,
       currentRunId: null
+    },
+    actionPointSummary: task?.actionPointSummary ?? {
+      costBand: "standard",
+      totalCostAp: 100,
+      expectedDurationSeconds: 86_400,
+      sustainRateApPerHour: 100 / 24,
+      spentTodayAp: 0,
+      spentTotalAp: 0,
+      remainingAp: 100
+    },
+    splitSuggestion: task?.splitSuggestion ?? {
+      shouldSplit: false,
+      reason: null,
+      thresholdSeconds: 2 * 86_400
     }
   };
 }
@@ -438,6 +454,32 @@ export function normalizeForgeSnapshot(
     tasks: (raw.tasks ?? []).map(normalizeTask),
     habits: (raw.habits ?? raw.dashboard?.habits ?? []).map(normalizeHabit),
     activity: raw.activity ?? [],
-    activeTaskRuns: raw.activeTaskRuns ?? []
+    activeTaskRuns: raw.activeTaskRuns ?? [],
+    lifeForce: raw.lifeForce ?? {
+      userId: "",
+      dateKey: new Date().toISOString().slice(0, 10),
+      baselineDailyAp: 200,
+      dailyBudgetAp: 200,
+      spentTodayAp: 0,
+      remainingAp: 200,
+      forecastAp: 0,
+      targetBandMinAp: 170,
+      targetBandMaxAp: 200,
+      instantCapacityApPerHour: 0,
+      instantFreeApPerHour: 0,
+      overloadApPerHour: 0,
+      currentDrainApPerHour: 0,
+      fatigueBufferApPerHour: 0,
+      sleepRecoveryMultiplier: 1,
+      readinessMultiplier: 1,
+      fatigueDebtCarry: 0,
+      stats: [],
+      currentCurve: [],
+      activeDrains: [],
+      warnings: [],
+      recommendations: [],
+      topTaskIdsNeedingSplit: [],
+      updatedAt: new Date(0).toISOString()
+    }
   };
 }

@@ -5,8 +5,19 @@ import {
 } from "../../../lib/workbench/runtime.js";
 import type {
   WorkbenchExecutionFunction,
-  WorkbenchNodeExecutionInput
+  WorkbenchInputDefinition,
+  WorkbenchNodeExecutionInput,
+  WorkbenchOutputDefinition,
+  WorkbenchParamDefinition,
+  WorkbenchToolDefinition
 } from "../../../lib/workbench/nodes.js";
+import {
+  createSearchEntitiesTool,
+  createSearchInputs,
+  createSearchOutputs,
+  createSearchParams,
+  createSummaryOutput
+} from "../../../lib/workbench/contracts.js";
 import { createGenericWorkbenchNodeView } from "../shared/generic-node-view.js";
 import { defineWorkbenchBox } from "../shared/define-workbench-box.js";
 
@@ -21,8 +32,15 @@ function defineTodayBox(
   description: string,
   tags: string[],
   execute: WorkbenchExecutionFunction,
-  withSearchTool = false
+  output: WorkbenchOutputDefinition[],
+  tools: WorkbenchToolDefinition[] = [],
+  options?: {
+    inputs?: WorkbenchInputDefinition[];
+    params?: WorkbenchParamDefinition[];
+  }
 ) {
+  const inputs = options?.inputs ?? [];
+  const params = options?.params ?? [];
   return defineWorkbenchBox(Slot, {
     id,
     surfaceId: "today",
@@ -32,35 +50,17 @@ function defineTodayBox(
     description,
     category: "Today",
     tags,
-    inputs: [],
-    params: [],
-    output: [{ key: "primary", label: title, kind: "content" }],
-    tools: withSearchTool
-      ? [
-          {
-            key: "forge.search_entities",
-            label: "Search Forge entities",
-            description: "Search Forge entities by query and entity types.",
-            accessMode: "read"
-          }
-        ]
-      : [],
+    inputs,
+    params,
+    output,
+    tools,
     NodeView: createGenericWorkbenchNodeView({
       title,
       description,
-      inputs: [],
-      params: [],
-      output: [{ key: "primary", label: title, kind: "content" }],
-      tools: withSearchTool
-        ? [
-            {
-              key: "forge.search_entities",
-              label: "Search Forge entities",
-              description: "Search Forge entities by query and entity types.",
-              accessMode: "read"
-            }
-          ]
-        : []
+      inputs,
+      params,
+      output,
+      tools
     }),
     execute
   });
@@ -72,7 +72,8 @@ export const TodayHeroBox = defineTodayBox(
   "Daily execution header and directive.",
   ["today", "hero"],
   (input: WorkbenchNodeExecutionInput) =>
-    buildStaticWorkbenchExecution(input, null, "Daily execution header.")
+    buildStaticWorkbenchExecution(input, null, "Daily execution header."),
+  [createSummaryOutput({ label: "Today summary", description: "High-level framing for today's execution." })]
 );
 
 export const TodayMetricsBox = defineTodayBox(
@@ -81,7 +82,8 @@ export const TodayMetricsBox = defineTodayBox(
   "Daily XP, level, and momentum metrics.",
   ["today", "metrics"],
   (input: WorkbenchNodeExecutionInput) =>
-    buildStaticWorkbenchExecution(input, null, "Daily metrics.")
+    buildStaticWorkbenchExecution(input, null, "Daily metrics."),
+  [createSummaryOutput({ label: "Metrics summary", description: "Summary of today's XP, level, and momentum metrics." })]
 );
 
 export const TodayRunwayBox = defineTodayBox(
@@ -95,7 +97,24 @@ export const TodayRunwayBox = defineTodayBox(
       entityTypes: ["task", "habit"],
       limit: 16
     }),
-  true
+  createSearchOutputs({
+    itemKind: "execution_item",
+    itemLabel: "Execution item"
+  }),
+  [createSearchEntitiesTool("Search today's active tasks and habits by query and entity types.")],
+  {
+    inputs: createSearchInputs({
+      itemKind: "execution_item",
+      itemLabel: "Execution item",
+      defaultEntityTypes: ["task", "habit"],
+      defaultLimit: 16
+    }),
+    params: createSearchParams({
+      itemKind: "execution_item",
+      defaultEntityTypes: ["task", "habit"],
+      defaultLimit: 16
+    })
+  }
 );
 
 export const TodayCalendarBox = defineTodayBox(
@@ -104,7 +123,8 @@ export const TodayCalendarBox = defineTodayBox(
   "Calendar context for today.",
   ["today", "calendar"],
   (input: WorkbenchNodeExecutionInput) =>
-    buildStaticWorkbenchExecution(input, null, "Today's calendar context.")
+    buildStaticWorkbenchExecution(input, null, "Today's calendar context."),
+  [createSummaryOutput({ label: "Calendar summary", description: "Summary of today's calendar context." })]
 );
 
 export const TodayFocusBox = defineTodayBox(
@@ -118,5 +138,22 @@ export const TodayFocusBox = defineTodayBox(
       entityTypes: ["task", "habit"],
       limit: 16
     }),
-  true
+  createSearchOutputs({
+    itemKind: "focus_item",
+    itemLabel: "Focus item"
+  }),
+  [createSearchEntitiesTool("Search today's priority tasks and habits by query and entity types.")],
+  {
+    inputs: createSearchInputs({
+      itemKind: "focus_item",
+      itemLabel: "Focus item",
+      defaultEntityTypes: ["task", "habit"],
+      defaultLimit: 16
+    }),
+    params: createSearchParams({
+      itemKind: "focus_item",
+      defaultEntityTypes: ["task", "habit"],
+      defaultLimit: 16
+    })
+  }
 );

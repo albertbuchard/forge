@@ -131,7 +131,7 @@ def forge_root
 end
 
 def xcode_project_path
-  File.join(release_root, "ForgeCompanion", "ForgeCompanion.xcodeproj")
+  File.join(release_root, "ForgeCompanion.xcodeproj")
 end
 
 def scheme_name

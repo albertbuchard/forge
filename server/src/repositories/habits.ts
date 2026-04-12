@@ -392,6 +392,58 @@ function getHabitRow(habitId: string): HabitRow | undefined {
     .get(habitId) as HabitRow | undefined;
 }
 
+function compareDateDesc(left: string | null, right: string | null) {
+  return new Date(right ?? 0).getTime() - new Date(left ?? 0).getTime();
+}
+
+function compareDateAsc(left: string | null, right: string | null) {
+  return new Date(left ?? 0).getTime() - new Date(right ?? 0).getTime();
+}
+
+function sortHabits(habits: Habit[], orderBy: HabitListQuery["orderBy"]) {
+  const nextHabits = [...habits];
+
+  nextHabits.sort((left, right) => {
+    if (orderBy === "name") {
+      return (
+        left.title.localeCompare(right.title, undefined, { sensitivity: "base" }) ||
+        compareDateDesc(left.createdAt, right.createdAt)
+      );
+    }
+
+    if (orderBy === "streak") {
+      return (
+        right.streakCount - left.streakCount ||
+        Number(right.dueToday) - Number(left.dueToday) ||
+        left.title.localeCompare(right.title, undefined, { sensitivity: "base" })
+      );
+    }
+
+    if (orderBy === "created_at") {
+      return (
+        compareDateDesc(left.createdAt, right.createdAt) ||
+        left.title.localeCompare(right.title, undefined, { sensitivity: "base" })
+      );
+    }
+
+    if (orderBy === "updated_at") {
+      return (
+        compareDateDesc(left.updatedAt, right.updatedAt) ||
+        left.title.localeCompare(right.title, undefined, { sensitivity: "base" })
+      );
+    }
+
+    return (
+      Number(right.dueToday) - Number(left.dueToday) ||
+      compareDateAsc(left.lastCheckInAt, right.lastCheckInAt) ||
+      compareDateDesc(left.updatedAt, right.updatedAt) ||
+      left.title.localeCompare(right.title, undefined, { sensitivity: "base" })
+    );
+  });
+
+  return nextHabits;
+}
+
 export function listHabits(filters: HabitListQuery = {}): Habit[] {
   const parsed = filters;
   const whereClauses: string[] = [];
@@ -430,7 +482,10 @@ export function listHabits(filters: HabitListQuery = {}): Habit[] {
     "habit",
     rows.map((row) => mapHabit(row))
   );
-  return parsed.dueToday ? habits.filter((habit) => habit.dueToday) : habits;
+  const filteredHabits = parsed.dueToday
+    ? habits.filter((habit) => habit.dueToday)
+    : habits;
+  return sortHabits(filteredHabits, parsed.orderBy);
 }
 
 export function getHabitById(habitId: string): Habit | undefined {

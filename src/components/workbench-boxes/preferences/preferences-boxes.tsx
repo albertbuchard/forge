@@ -5,8 +5,19 @@ import {
 } from "../../../lib/workbench/runtime.js";
 import type {
   WorkbenchExecutionFunction,
-  WorkbenchNodeExecutionInput
+  WorkbenchInputDefinition,
+  WorkbenchNodeExecutionInput,
+  WorkbenchOutputDefinition,
+  WorkbenchParamDefinition,
+  WorkbenchToolDefinition
 } from "../../../lib/workbench/nodes.js";
+import {
+  createSearchEntitiesTool,
+  createSearchInputs,
+  createSearchOutputs,
+  createSearchParams,
+  createSummaryOutput
+} from "../../../lib/workbench/contracts.js";
 import { createGenericWorkbenchNodeView } from "../shared/generic-node-view.js";
 import { defineWorkbenchBox } from "../shared/define-workbench-box.js";
 
@@ -21,19 +32,15 @@ function definePreferencesBox(
   description: string,
   tags: string[],
   execute: WorkbenchExecutionFunction,
-  entityTypes: string[] = []
+  output: WorkbenchOutputDefinition[],
+  tools: WorkbenchToolDefinition[] = [],
+  options?: {
+    inputs?: WorkbenchInputDefinition[];
+    params?: WorkbenchParamDefinition[];
+  }
 ) {
-  const tools =
-    entityTypes.length > 0
-      ? [
-          {
-            key: "forge.search_entities",
-            label: "Search Forge entities",
-            description: "Search preference contexts and modeled preference items.",
-            accessMode: "read" as const
-          }
-        ]
-      : [];
+  const inputs = options?.inputs ?? [];
+  const params = options?.params ?? [];
   return defineWorkbenchBox(Slot, {
     id,
     surfaceId: "preferences",
@@ -43,16 +50,16 @@ function definePreferencesBox(
     description,
     category: "Preferences",
     tags,
-    inputs: [],
-    params: [],
-    output: [{ key: "primary", label: title, kind: "content" }],
+    inputs,
+    params,
+    output,
     tools,
     NodeView: createGenericWorkbenchNodeView({
       title,
       description,
-      inputs: [],
-      params: [],
-      output: [{ key: "primary", label: title, kind: "content" }],
+      inputs,
+      params,
+      output,
       tools
     }),
     execute
@@ -71,7 +78,8 @@ export const PreferencesWorkspaceBox = definePreferencesBox(
         surfaces: ["summary", "comparison_game", "evidence"]
       },
       "Preferences workspace with summary, pairwise comparison, and evidence views."
-    )
+    ),
+  [createSummaryOutput({ label: "Preference summary", description: "Summary of the active preference modeling workspace." })]
 );
 
 export const PreferencesContextsBox = definePreferencesBox(
@@ -85,7 +93,24 @@ export const PreferencesContextsBox = definePreferencesBox(
       entityTypes: ["preference_context"],
       limit: 20
     }),
-  ["preference_context"]
+  createSearchOutputs({
+    itemKind: "preference_context",
+    itemLabel: "Preference context"
+  }),
+  [createSearchEntitiesTool("Search preference contexts and modeled preference items.")],
+  {
+    inputs: createSearchInputs({
+      itemKind: "preference_context",
+      itemLabel: "Preference context",
+      defaultEntityTypes: ["preference_context"],
+      defaultLimit: 20
+    }),
+    params: createSearchParams({
+      itemKind: "preference_context",
+      defaultEntityTypes: ["preference_context"],
+      defaultLimit: 20
+    })
+  }
 );
 
 export const PreferencesItemsBox = definePreferencesBox(
@@ -99,5 +124,22 @@ export const PreferencesItemsBox = definePreferencesBox(
       entityTypes: ["preference_item"],
       limit: 20
     }),
-  ["preference_item"]
+  createSearchOutputs({
+    itemKind: "preference_item",
+    itemLabel: "Preference item"
+  }),
+  [createSearchEntitiesTool("Search preference contexts and modeled preference items.")],
+  {
+    inputs: createSearchInputs({
+      itemKind: "preference_item",
+      itemLabel: "Preference item",
+      defaultEntityTypes: ["preference_item"],
+      defaultLimit: 20
+    }),
+    params: createSearchParams({
+      itemKind: "preference_item",
+      defaultEntityTypes: ["preference_item"],
+      defaultLimit: 20
+    })
+  }
 );

@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { GoalDialog } from "@/components/goal-dialog";
+import { OpenInGraphButton } from "@/components/knowledge-graph/open-in-graph-button";
 import { NoteMarkdown } from "@/components/notes/note-markdown";
 import { ProjectDialog } from "@/components/project-dialog";
 import { EntityNotesSurface } from "@/components/notes/entity-notes-surface";
@@ -171,14 +172,17 @@ export function GoalDetailPage() {
           { count: projects.length }
         )}
         actions={
-          <PreferenceEntityHandoffButton
-            userId={defaultUserId}
-            domain="projects"
-            entityType="goal"
-            entityId={goal.id}
-            label={goal.title}
-            description={goal.description}
-          />
+          <div className="flex flex-wrap gap-2">
+            <PreferenceEntityHandoffButton
+              userId={defaultUserId}
+              domain="projects"
+              entityType="goal"
+              entityId={goal.id}
+              label={goal.title}
+              description={goal.description}
+            />
+            <OpenInGraphButton entityType="goal" entityId={goal.id} />
+          </div>
         }
       />
 

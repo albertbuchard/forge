@@ -31,6 +31,7 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/page-state";
 import { EntityName } from "@/components/ui/entity-name";
+import { SelectMenu, type SelectMenuOption } from "@/components/ui/select-menu";
 import { Textarea } from "@/components/ui/textarea";
 import { UserBadge } from "@/components/ui/user-badge";
 import {
@@ -64,6 +65,40 @@ const WEEKDAY_LABELS = [
 ] as const;
 
 const DAILY_HISTORY_LABELS = ["S", "M", "T", "W", "T", "F", "S"] as const;
+type HabitOrderBy =
+  | "needs_attention"
+  | "name"
+  | "streak"
+  | "created_at"
+  | "updated_at";
+
+const HABIT_ORDER_OPTIONS: SelectMenuOption<HabitOrderBy>[] = [
+  {
+    value: "name",
+    label: "Name A-Z",
+    description: "Keep the list stable alphabetically."
+  },
+  {
+    value: "needs_attention",
+    label: "Needs attention",
+    description: "Bubble up habits still waiting on today."
+  },
+  {
+    value: "streak",
+    label: "Longest streak",
+    description: "Put the strongest current streaks first."
+  },
+  {
+    value: "created_at",
+    label: "Newest created",
+    description: "Show the most recently created habits first."
+  },
+  {
+    value: "updated_at",
+    label: "Recently updated",
+    description: "Sort by the most recently changed habits."
+  }
+];
 
 function formatHabitCadence(habit: Habit) {
   if (habit.frequency === "daily") {
@@ -447,6 +482,23 @@ function getHistoryOptionCopy(habit: Habit) {
       };
 }
 
+function getHabitActionStatus(
+  habit: Habit,
+  outcome: "aligned" | "unaligned"
+): Habit["checkIns"][number]["status"] {
+  if (habit.polarity === "positive") {
+    return outcome === "aligned" ? "done" : "missed";
+  }
+  return outcome === "aligned" ? "missed" : "done";
+}
+
+function getHabitActionTone(
+  habit: Habit,
+  status: Habit["checkIns"][number]["status"]
+) {
+  return isAlignedCheckIn(habit, status) ? "aligned" : "unaligned";
+}
+
 export function HabitsPage() {
   const shell = useForgeShell();
   const queryClient = useQueryClient();
@@ -464,9 +516,10 @@ export function HabitsPage() {
     useState<Habit | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const focusedHabitId = searchParams.get("focus");
+  const habitOrderBy = (searchParams.get("orderBy") as HabitOrderBy | null) ?? "name";
   const selectedUserIds = coerceSelectedUserIds(shell.selectedUserIds);
   const defaultUserId = getSingleSelectedUserId(selectedUserIds);
-  const habitsQueryKey = ["forge-habits", ...selectedUserIds];
+  const habitsQueryKey = ["forge-habits", habitOrderBy, ...selectedUserIds];
 
   usePsycheFocusTarget(focusedHabitId);
 
@@ -475,7 +528,8 @@ export function HabitsPage() {
     queryFn: async () =>
       (
         await listHabits({
-          userIds: selectedUserIds
+          userIds: selectedUserIds,
+          orderBy: habitOrderBy
         })
       ).habits
   });
@@ -584,22 +638,6 @@ export function HabitsPage() {
     () => activeHabits.filter((habit) => habit.dueToday),
     [activeHabits]
   );
-  const prioritizedHabits = useMemo(
-    () =>
-      [...activeHabits].sort((left, right) => {
-        if (left.dueToday !== right.dueToday) {
-          return Number(right.dueToday) - Number(left.dueToday);
-        }
-        if (left.dueToday && right.dueToday) {
-          return (
-            new Date(left.lastCheckInAt ?? 0).getTime() -
-            new Date(right.lastCheckInAt ?? 0).getTime()
-          );
-        }
-        return left.title.localeCompare(right.title);
-      }),
-    [activeHabits]
-  );
   const selectedHistoryCheckIn = useMemo(() => {
     if (!historyEditor) {
       return null;
@@ -625,6 +663,21 @@ export function HabitsPage() {
   if (habitsQuery.error) {
     throw habitsQuery.error;
   }
+
+  const handleOrderChange = (nextOrderBy: HabitOrderBy) => {
+    setSearchParams(
+      (current) => {
+        const next = new URLSearchParams(current);
+        if (nextOrderBy === "name") {
+          next.delete("orderBy");
+        } else {
+          next.set("orderBy", nextOrderBy);
+        }
+        return next;
+      },
+      { replace: true }
+    );
+  };
 
   const historyCopy = historyEditor
     ? getHistoryOptionCopy(historyEditor.habit)
@@ -729,8 +782,28 @@ export function HabitsPage() {
           }
         />
       ) : (
-        <div className="grid gap-4 xl:grid-cols-2">
-          {prioritizedHabits.map((habit) => {
+        <div className="grid gap-4">
+          <div className="flex flex-col gap-3 rounded-[24px] border border-white/8 bg-white/[0.03] p-4 shadow-[0_18px_36px_rgba(15,23,42,0.16)] sm:flex-row sm:items-end sm:justify-between">
+            <div className="max-w-xl">
+              <div className="text-sm font-medium text-white">
+                Habit list order
+              </div>
+              <div className="mt-1 text-sm text-white/54">
+                Choose a stable ordering so the list does not reshuffle while you
+                are logging check-ins.
+              </div>
+            </div>
+            <SelectMenu
+              label="Order by"
+              value={habitOrderBy}
+              options={HABIT_ORDER_OPTIONS}
+              onChange={handleOrderChange}
+              className="w-full sm:w-[19rem]"
+            />
+          </div>
+
+          <div className="grid gap-4 xl:grid-cols-2">
+            {activeHabits.map((habit) => {
             const visualState = getHabitVisualState(habit);
             const streak = getStreakPresentation(habit.streakCount);
             const StreakIcon = streak.Icon;
@@ -743,14 +816,14 @@ export function HabitsPage() {
               habit.polarity === "positive"
                 ? {
                     label: "Done",
-                    status: "done" as const,
+                    status: getHabitActionStatus(habit, "aligned"),
                     Icon: CheckCheck,
                     className:
                       "border-emerald-300/18 bg-emerald-300/14 text-emerald-50 shadow-[0_14px_28px_rgba(52,211,153,0.14)] hover:bg-emerald-300/20"
                   }
                 : {
                     label: "Resisted",
-                    status: "missed" as const,
+                    status: getHabitActionStatus(habit, "aligned"),
                     Icon: ShieldBan,
                     className:
                       "border-emerald-300/18 bg-emerald-300/14 text-emerald-50 shadow-[0_14px_28px_rgba(52,211,153,0.14)] hover:bg-emerald-300/20"
@@ -759,14 +832,14 @@ export function HabitsPage() {
               habit.polarity === "positive"
                 ? {
                     label: "Missed",
-                    status: "missed" as const,
+                    status: getHabitActionStatus(habit, "unaligned"),
                     Icon: CircleX,
                     className:
                       "border-rose-300/18 bg-rose-300/14 text-rose-50 shadow-[0_14px_28px_rgba(251,113,133,0.14)] hover:bg-rose-300/20"
                   }
                 : {
                     label: "Performed",
-                    status: "done" as const,
+                    status: getHabitActionStatus(habit, "unaligned"),
                     Icon: TriangleAlert,
                     className:
                       "border-rose-300/18 bg-rose-300/14 text-rose-50 shadow-[0_14px_28px_rgba(251,113,133,0.14)] hover:bg-rose-300/20"
@@ -1113,7 +1186,8 @@ export function HabitsPage() {
                 </div>
               </Card>
             );
-          })}
+            })}
+          </div>
         </div>
       )}
 
@@ -1270,16 +1344,29 @@ export function HabitsPage() {
                   <div className="grid gap-3 md:grid-cols-2">
                     <button
                       type="button"
-                      aria-pressed={historyStatus === "done"}
+                      aria-pressed={
+                        historyStatus !== null &&
+                        getHabitActionTone(historyEditor.habit, historyStatus) ===
+                          "aligned"
+                      }
                       className={cn(
                         "rounded-[22px] border px-4 py-4 text-left transition",
-                        historyStatus === "done"
+                        historyStatus !== null &&
+                          getHabitActionTone(historyEditor.habit, historyStatus) ===
+                            "aligned"
                           ? "border-emerald-300/24 bg-emerald-300/14 text-white shadow-[0_16px_36px_rgba(52,211,153,0.14)]"
                           : "border-white/8 bg-white/[0.04] text-white/72 hover:bg-white/[0.07]"
                       )}
                       onClick={() =>
                         setHistoryStatus((current) =>
-                          current === "done" ? null : "done"
+                          current !== null &&
+                          getHabitActionTone(historyEditor.habit, current) ===
+                            "aligned"
+                            ? null
+                            : getHabitActionStatus(
+                                historyEditor.habit,
+                                "aligned"
+                              )
                         )
                       }
                     >
@@ -1293,16 +1380,29 @@ export function HabitsPage() {
                     </button>
                     <button
                       type="button"
-                      aria-pressed={historyStatus === "missed"}
+                      aria-pressed={
+                        historyStatus !== null &&
+                        getHabitActionTone(historyEditor.habit, historyStatus) ===
+                          "unaligned"
+                      }
                       className={cn(
                         "rounded-[22px] border px-4 py-4 text-left transition",
-                        historyStatus === "missed"
+                        historyStatus !== null &&
+                          getHabitActionTone(historyEditor.habit, historyStatus) ===
+                            "unaligned"
                           ? "border-rose-300/24 bg-rose-300/14 text-white shadow-[0_16px_36px_rgba(251,113,133,0.14)]"
                           : "border-white/8 bg-white/[0.04] text-white/72 hover:bg-white/[0.07]"
                       )}
                       onClick={() =>
                         setHistoryStatus((current) =>
-                          current === "missed" ? null : "missed"
+                          current !== null &&
+                          getHabitActionTone(historyEditor.habit, current) ===
+                            "unaligned"
+                            ? null
+                            : getHabitActionStatus(
+                                historyEditor.habit,
+                                "unaligned"
+                              )
                         )
                       }
                     >

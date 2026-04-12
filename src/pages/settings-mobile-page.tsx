@@ -22,6 +22,7 @@ import { useForgeShell } from "@/components/shell/app-shell";
 import {
   createCompanionPairingSession,
   getCompanionOverview,
+  patchCompanionPairingSourceState,
   revokeAllCompanionPairingSessions,
   revokeCompanionPairingSession
 } from "@/lib/api";
@@ -43,6 +44,24 @@ function formatSyncSummary(payloadSummary: Record<string, unknown>) {
 
 function permissionTone(enabled: boolean) {
   return enabled ? "signal" : "meta";
+}
+
+function formatSourceAuthorization(status: string) {
+  return status.replaceAll("_", " ");
+}
+
+function formatSourceObservedAt(value: string | null) {
+  if (!value) {
+    return "Waiting for device update";
+  }
+  return new Date(value).toLocaleString();
+}
+
+function sourceTone(enabled: boolean, syncEligible: boolean) {
+  if (!enabled) {
+    return "meta";
+  }
+  return syncEligible ? "signal" : "default";
 }
 
 export function SettingsMobilePage() {
@@ -99,6 +118,24 @@ export function SettingsMobilePage() {
         userIds: selectedUserIds,
         includeRevoked: false
       }),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({
+        queryKey: ["forge-companion-overview"]
+      });
+    }
+  });
+
+  const sourceToggleMutation = useMutation({
+    mutationFn: async (input: {
+      pairingSessionId: string;
+      source: "health" | "movement" | "screenTime";
+      desiredEnabled: boolean;
+    }) =>
+      patchCompanionPairingSourceState(
+        input.pairingSessionId,
+        input.source,
+        input.desiredEnabled
+      ),
     onSuccess: async () => {
       await queryClient.invalidateQueries({
         queryKey: ["forge-companion-overview"]
@@ -167,6 +204,25 @@ export function SettingsMobilePage() {
       <SettingsSectionNav />
 
       <section className="grid gap-4">
+        {import.meta.env.DEV ? (
+          <Card className="flex flex-wrap items-center justify-between gap-3 rounded-[24px] border border-dashed border-white/10 bg-white/[0.02] p-4">
+            <div className="grid gap-1">
+              <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/42">
+                QA lab
+              </div>
+              <div className="text-sm text-white/62">
+                Open deterministic source-state and movement-gap fixtures without a real phone.
+              </div>
+            </div>
+            <Link
+              to="/settings/mobile/lab"
+              className="inline-flex h-10 items-center justify-center rounded-full border border-white/10 bg-white/[0.06] px-4 text-sm font-medium text-white transition hover:bg-white/[0.1]"
+            >
+              Open Companion Sync Lab
+            </Link>
+          </Card>
+        ) : null}
+
         <Card className="grid gap-4">
           <div className="flex items-center justify-between gap-3">
             <div>
@@ -429,6 +485,88 @@ export function SettingsMobilePage() {
                     <ShieldOff className="size-4" />
                     {pairing.status === "revoked" ? "Revoked" : "Revoke"}
                   </Button>
+                </div>
+                <div className="grid gap-3 rounded-[16px] border border-white/8 bg-white/[0.03] p-3">
+                  <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">
+                    Device sync sources
+                  </div>
+                  {(
+                    [
+                      ["health", "Health"],
+                      ["movement", "Movement"],
+                      ["screenTime", "Screen Time"]
+                    ] as const
+                  ).map(([sourceKey, label]) => {
+                    const source = pairing.sourceStates[sourceKey];
+                    const pending =
+                      source.desiredEnabled !== source.appliedEnabled;
+                    const loading =
+                      sourceToggleMutation.isPending &&
+                      sourceToggleMutation.variables?.pairingSessionId === pairing.id &&
+                      sourceToggleMutation.variables?.source === sourceKey;
+                    return (
+                      <div
+                        key={sourceKey}
+                        className="flex flex-wrap items-center justify-between gap-3 rounded-[14px] border border-white/6 bg-white/[0.03] px-3 py-3"
+                      >
+                        <div className="grid gap-1">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <div className="text-sm text-white">{label}</div>
+                            <Badge
+                              tone={sourceTone(
+                                source.desiredEnabled,
+                                source.syncEligible
+                              )}
+                              size="sm"
+                            >
+                              {source.desiredEnabled ? "Enabled" : "Off"}
+                            </Badge>
+                            {pending ? (
+                              <Badge tone="meta" size="sm">
+                                Pending on phone
+                              </Badge>
+                            ) : (
+                              <Badge tone="meta" size="sm">
+                                Applied
+                              </Badge>
+                            )}
+                          </div>
+                          <div className="text-xs text-white/55">
+                            Authorization {formatSourceAuthorization(source.authorizationStatus)}
+                            {" · "}
+                            Last seen {formatSourceObservedAt(source.lastObservedAt)}
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          role="switch"
+                          aria-checked={source.desiredEnabled}
+                          aria-label={`${label} sync source`}
+                          disabled={loading}
+                          onClick={() =>
+                            void sourceToggleMutation.mutateAsync({
+                              pairingSessionId: pairing.id,
+                              source: sourceKey,
+                              desiredEnabled: !source.desiredEnabled
+                            })
+                          }
+                          className={`relative inline-flex h-7 w-12 items-center rounded-full border transition ${
+                            source.desiredEnabled
+                              ? "border-[rgba(171,232,255,0.4)] bg-[rgba(111,133,232,0.36)]"
+                              : "border-white/10 bg-white/[0.06]"
+                          } ${loading ? "opacity-60" : ""}`}
+                        >
+                          <span
+                            className={`inline-block size-5 rounded-full bg-white shadow transition ${
+                              source.desiredEnabled
+                                ? "translate-x-6"
+                                : "translate-x-1"
+                            }`}
+                          />
+                        </button>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             ))}

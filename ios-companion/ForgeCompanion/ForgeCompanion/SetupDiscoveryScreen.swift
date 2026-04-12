@@ -95,9 +95,10 @@ struct SetupDiscoveryScreen: View {
                                     .font(.system(size: 16, weight: .semibold, design: .rounded))
                                     .foregroundStyle(CompanionStyle.textPrimary)
 
-                                Text("Keep Forge running, then scan again.")
+                                Text("Keep Forge running, then scan again. If you already know the machine name, use Manual setup below.")
                                     .font(.system(size: 14, weight: .medium, design: .rounded))
                                     .foregroundStyle(CompanionStyle.textSecondary)
+                                    .fixedSize(horizontal: false, vertical: true)
                             }
                         }
                     }
@@ -139,8 +140,8 @@ struct SetupDiscoveryScreen: View {
             }
             .buttonStyle(CompanionGhostButtonStyle())
 
-            Button("Paste code") {
-                companionDebugLog("SetupDiscoveryScreen", "tap Paste code")
+            Button("Manual setup") {
+                companionDebugLog("SetupDiscoveryScreen", "tap Manual setup")
                 openManual()
             }
             .buttonStyle(CompanionGhostButtonStyle())

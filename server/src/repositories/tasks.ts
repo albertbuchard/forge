@@ -32,6 +32,13 @@ import {
   computeWorkTime,
   emptyTaskTimeSummary
 } from "../services/work-time.js";
+import { resolveTaskExpectedDurationSeconds } from "../services/life-force-model.js";
+import {
+  buildTaskLifeForceFields,
+  getTaskCompletionRequirement,
+  upsertTaskActionProfile
+} from "../services/life-force.js";
+import { createWorkAdjustment } from "./work-adjustments.js";
 import {
   calendarSchedulingRulesSchema,
   taskSchema,
@@ -39,6 +46,7 @@ import {
   type CreateTaskInput,
   type Task,
   type TaskListQuery,
+  type TaskSplitCreateInput,
   type TaskTimeSummary,
   type UpdateTaskInput
 } from "../types.js";
@@ -59,6 +67,8 @@ type TaskRow = {
   planned_duration_seconds: number | null;
   scheduling_rules_json: string | null;
   sort_order: number;
+  resolution_kind: string | null;
+  split_parent_task_id: string | null;
   completed_at: string | null;
   created_at: string;
   updated_at: string;
@@ -83,7 +93,7 @@ function mapTask(
   row: TaskRow,
   time: TaskTimeSummary = emptyTaskTimeSummary()
 ): Task {
-  return taskSchema.parse(
+  const task = taskSchema.parse(
     decorateOwnedEntity("task", {
       id: row.id,
       title: row.title,
@@ -105,6 +115,11 @@ function mapTask(
               JSON.parse(row.scheduling_rules_json)
             ),
       sortOrder: row.sort_order,
+      resolutionKind:
+        row.resolution_kind === "completed" || row.resolution_kind === "split"
+          ? row.resolution_kind
+          : null,
+      splitParentTaskId: row.split_parent_task_id,
       completedAt: row.completed_at,
       createdAt: row.created_at,
       updatedAt: row.updated_at,
@@ -112,6 +127,10 @@ function mapTask(
       time
     })
   );
+  return {
+    ...task,
+    ...buildTaskLifeForceFields(task, task.userId ?? undefined)
+  };
 }
 
 function replaceTaskTags(taskId: string, tagIds: string[]): void {
@@ -317,6 +336,50 @@ function updateTaskRecord(
   const nextSort =
     input.sortOrder ??
     (movedColumns ? nextSortOrder(nextStatus) : current.sortOrder);
+  if (
+    current.status !== "done" &&
+    nextStatus === "done" &&
+    input.resolutionKind !== "split"
+  ) {
+    const completionRequirement = getTaskCompletionRequirement(
+      current,
+      current.userId ?? undefined
+    );
+    if (
+      input.enforceTodayWorkLog === true &&
+      completionRequirement.requiresWorkLog &&
+      input.completedTodayWorkSeconds === undefined
+    ) {
+      throw new HttpError(
+        409,
+        "task_completion_work_log_required",
+        "Log how long you worked on this task today before closing it.",
+        {
+          taskId: current.id,
+          todayCreditedSeconds: completionRequirement.todayCreditedSeconds
+        }
+      );
+    }
+    if ((input.completedTodayWorkSeconds ?? 0) > 0) {
+      const appliedDeltaMinutes = Math.max(
+        1,
+        Math.round((input.completedTodayWorkSeconds ?? 0) / 60)
+      );
+      createWorkAdjustment(
+        {
+          entityType: "task",
+          entityId: current.id,
+          deltaMinutes: appliedDeltaMinutes,
+          appliedDeltaMinutes,
+          note: "Completion log for today"
+        },
+        {
+          actor: activity?.actor ?? null,
+          source: activity?.source ?? "ui"
+        }
+      );
+    }
+  }
   const completedAt = normalizeCompletedAt(nextStatus, current.completedAt);
   const updatedAt = new Date().toISOString();
 
@@ -324,7 +387,7 @@ function updateTaskRecord(
     .prepare(
       `UPDATE tasks
        SET title = ?, description = ?, status = ?, priority = ?, owner = ?, goal_id = ?, due_date = ?, effort = ?,
-           energy = ?, points = ?, planned_duration_seconds = ?, scheduling_rules_json = ?, sort_order = ?, completed_at = ?, updated_at = ?, project_id = ?
+           energy = ?, points = ?, planned_duration_seconds = ?, scheduling_rules_json = ?, sort_order = ?, resolution_kind = ?, split_parent_task_id = ?, completed_at = ?, updated_at = ?, project_id = ?
        WHERE id = ?`
     )
     .run(
@@ -349,6 +412,10 @@ function updateTaskRecord(
           ? null
           : JSON.stringify(input.schedulingRules),
       nextSort,
+      input.resolutionKind === undefined ? current.resolutionKind : input.resolutionKind,
+      input.splitParentTaskId === undefined
+        ? current.splitParentTaskId
+        : input.splitParentTaskId,
       completedAt,
       updatedAt,
       nextProjectId,
@@ -358,6 +425,20 @@ function updateTaskRecord(
   replaceTaskTags(current.id, nextTagIds);
   setEntityOwner("task", current.id, assignment.userId);
   const updated = getTaskById(current.id);
+  if (
+    updated &&
+    (input.actionCostBand !== undefined ||
+      input.plannedDurationSeconds !== undefined ||
+      input.title !== undefined)
+  ) {
+    upsertTaskActionProfile({
+      taskId: updated.id,
+      title: updated.title,
+      plannedDurationSeconds: updated.plannedDurationSeconds,
+      actionCostBand:
+        input.actionCostBand ?? updated.actionPointSummary?.costBand ?? "standard"
+    });
+  }
   if (updated && activity) {
     const statusChanged = current.status !== updated.status;
     const ownerChanged = current.owner !== updated.owner;
@@ -411,7 +492,11 @@ function updateTaskRecord(
         pointsChanged
       }
     });
-    if (current.status !== "done" && updated.status === "done") {
+    if (
+      current.status !== "done" &&
+      updated.status === "done" &&
+      updated.resolutionKind !== "split"
+    ) {
       awardTaskCompletionReward(updated, activity);
     } else if (current.status === "done" && updated.status !== "done") {
       reverseLatestTaskCompletionReward(updated, activity);
@@ -486,9 +571,9 @@ function insertTaskRecord(
     .prepare(
       `INSERT INTO tasks (
         id, title, description, status, priority, owner, goal_id, project_id, due_date, effort, energy, points,
-        planned_duration_seconds, scheduling_rules_json, sort_order, completed_at, created_at, updated_at
+        planned_duration_seconds, scheduling_rules_json, sort_order, resolution_kind, split_parent_task_id, completed_at, created_at, updated_at
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
     .run(
       id,
@@ -508,6 +593,8 @@ function insertTaskRecord(
         ? null
         : JSON.stringify(input.schedulingRules),
       sortOrder,
+      input.status === "done" ? "completed" : null,
+      null,
       completedAt,
       now,
       now
@@ -515,6 +602,12 @@ function insertTaskRecord(
   setEntityOwner("task", id, assignment.userId);
   replaceTaskTags(id, input.tagIds);
   const task = getTaskById(id)!;
+  upsertTaskActionProfile({
+    taskId: task.id,
+    title: task.title,
+    plannedDurationSeconds: task.plannedDurationSeconds,
+    actionCostBand: input.actionCostBand
+  });
   if (activity) {
     recordActivityEvent({
       entityType: "task",
@@ -534,7 +627,7 @@ function insertTaskRecord(
         points: task.points
       }
     });
-    if (task.status === "done") {
+    if (task.status === "done" && task.resolutionKind !== "split") {
       awardTaskCompletionReward(task, activity);
     }
   }
@@ -603,7 +696,7 @@ export function listTasks(filters: TaskListQuery = {}): Task[] {
   const rows = getDatabase()
     .prepare(
       `SELECT id, title, description, status, priority, owner, goal_id, project_id, due_date, effort, energy, points,
-              planned_duration_seconds, scheduling_rules_json, sort_order,
+              planned_duration_seconds, scheduling_rules_json, sort_order, resolution_kind, split_parent_task_id,
               completed_at, created_at, updated_at
        FROM tasks
        ${whereSql}
@@ -636,7 +729,7 @@ export function getTaskById(taskId: string): Task | undefined {
   const row = getDatabase()
     .prepare(
       `SELECT id, title, description, status, priority, owner, goal_id, project_id, due_date, effort, energy, points,
-              planned_duration_seconds, scheduling_rules_json, sort_order,
+              planned_duration_seconds, scheduling_rules_json, sort_order, resolution_kind, split_parent_task_id,
               completed_at, created_at, updated_at
        FROM tasks
        WHERE id = ?`
@@ -779,4 +872,141 @@ export function deleteTask(
 
     return current;
   });
+}
+
+export function splitTask(
+  taskId: string,
+  input: TaskSplitCreateInput,
+  activity?: ActivityContext
+): { parent: Task; children: Task[] } | undefined {
+  const current = getTaskById(taskId);
+  if (!current) {
+    return undefined;
+  }
+
+  return runInTransaction(() => {
+    const remainingRatio = clampRatio(input.remainingRatio);
+    const remainingExpectedDurationSeconds = Math.max(
+      60,
+      current.actionPointSummary.expectedDurationSeconds -
+        current.time.totalCreditedSeconds
+    );
+    const remainingAp = Math.max(1, current.actionPointSummary.remainingAp);
+    const firstChildDurationSeconds = Math.max(
+      60,
+      Math.round(remainingExpectedDurationSeconds * remainingRatio)
+    );
+    const secondChildDurationSeconds = Math.max(
+      60,
+      remainingExpectedDurationSeconds - firstChildDurationSeconds
+    );
+    const firstChildTotalAp = Math.max(1, Math.round(remainingAp * remainingRatio));
+    const secondChildTotalAp = Math.max(1, remainingAp - firstChildTotalAp);
+    const parent = updateTaskRecord(
+      current,
+      {
+        status: "done",
+        resolutionKind: "split"
+      },
+      activity
+    );
+    if (!parent) {
+      throw new HttpError(500, "task_split_failed", "Could not mark the original task as split.");
+    }
+    const totalCostPoints = current.points;
+    const firstChild = insertTaskRecord(
+      {
+        title: input.firstTitle,
+        description: current.description,
+        status: "focus",
+        priority: current.priority,
+        owner: current.owner,
+        userId: current.userId ?? null,
+        goalId: current.goalId,
+        projectId: current.projectId,
+        dueDate: current.dueDate,
+        effort: current.effort,
+        energy: current.energy,
+        points: Math.max(5, Math.round(totalCostPoints * remainingRatio)),
+        plannedDurationSeconds: firstChildDurationSeconds,
+        schedulingRules: current.schedulingRules,
+        actionCostBand: current.actionPointSummary.costBand,
+        tagIds: current.tagIds,
+        notes: []
+      },
+      activity
+    );
+    const secondChild = insertTaskRecord(
+      {
+        title: input.secondTitle,
+        description: current.description,
+        status: "focus",
+        priority: current.priority,
+        owner: current.owner,
+        userId: current.userId ?? null,
+        goalId: current.goalId,
+        projectId: current.projectId,
+        dueDate: current.dueDate,
+        effort: current.effort,
+        energy: current.energy,
+        points: Math.max(5, totalCostPoints - firstChild.points),
+        plannedDurationSeconds: secondChildDurationSeconds,
+        schedulingRules: current.schedulingRules,
+        actionCostBand: current.actionPointSummary.costBand,
+        tagIds: current.tagIds,
+        notes: []
+      },
+      activity
+    );
+    upsertTaskActionProfile({
+      taskId: firstChild.id,
+      title: firstChild.title,
+      plannedDurationSeconds: firstChildDurationSeconds,
+      actionCostBand: current.actionPointSummary.costBand,
+      totalCostAp: firstChildTotalAp
+    });
+    upsertTaskActionProfile({
+      taskId: secondChild.id,
+      title: secondChild.title,
+      plannedDurationSeconds: secondChildDurationSeconds,
+      actionCostBand: current.actionPointSummary.costBand,
+      totalCostAp: secondChildTotalAp
+    });
+    updateTaskRecord(
+      firstChild,
+      { splitParentTaskId: current.id },
+      activity
+    );
+    updateTaskRecord(
+      secondChild,
+      { splitParentTaskId: current.id },
+      activity
+    );
+    if (activity) {
+      recordActivityEvent({
+        entityType: "task",
+        entityId: current.id,
+        eventType: "task_split",
+        title: `Task split: ${current.title}`,
+        description: `Remaining work was split into ${input.firstTitle} and ${input.secondTitle}.`,
+        actor: activity.actor ?? null,
+        source: activity.source,
+        metadata: {
+          firstChildTaskId: firstChild.id,
+          secondChildTaskId: secondChild.id
+        }
+      });
+    }
+    return {
+      parent: getTaskById(current.id)!,
+      children: [getTaskById(firstChild.id)!, getTaskById(secondChild.id)!]
+    };
+  });
+}
+
+function clampRatio(value: number | undefined) {
+  if (typeof value !== "number" || Number.isNaN(value)) {
+    return 0.5;
+  }
+  return Math.min(0.9, Math.max(0.1, value));
 }

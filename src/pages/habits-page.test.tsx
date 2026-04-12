@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -225,6 +225,192 @@ describe("HabitsPage", () => {
     });
     await waitFor(() => {
       expect(screen.queryByText("Meditation")).not.toBeInTheDocument();
+    });
+  });
+
+  it("loads habits ordered by name by default and allows changing the order", async () => {
+    listHabitsMock.mockResolvedValue({
+      habits: [
+        createHabit({ id: "habit_b", title: "Breathing" }),
+        createHabit({ id: "habit_a", title: "Meditation" })
+      ]
+    });
+    getPsycheOverviewMock.mockResolvedValue({
+      overview: {
+        values: [],
+        patterns: [],
+        behaviors: [],
+        beliefs: [],
+        modes: [],
+        reports: []
+      }
+    });
+    useForgeShellMock.mockReturnValue({
+      selectedUserIds: [],
+      refresh: vi.fn().mockResolvedValue(undefined),
+      snapshot: {
+        goals: [],
+        tasks: [],
+        users: [habitUser],
+        dashboard: {
+          goals: [],
+          projects: [],
+          notesSummaryByEntity: {}
+        }
+      }
+    });
+
+    renderWithProviders();
+
+    await screen.findByText("Breathing");
+
+    expect(listHabitsMock).toHaveBeenCalledWith({
+      userIds: [],
+      orderBy: "name"
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /name a-z/i }));
+    fireEvent.click(screen.getByRole("option", { name: /needs attention/i }));
+
+    await waitFor(() => {
+      expect(listHabitsMock).toHaveBeenLastCalledWith({
+        userIds: [],
+        orderBy: "needs_attention"
+      });
+    });
+  });
+
+  it("treats a resisted negative habit as the green aligned history state", async () => {
+    const todayKey = new Date().toISOString().slice(0, 10);
+    listHabitsMock.mockResolvedValue({
+      habits: [
+        createHabit({
+          id: "habit_negative",
+          title: "Late-night doomscrolling",
+          polarity: "negative",
+          dueToday: false,
+          lastCheckInAt: `${todayKey}T09:00:00.000Z`,
+          lastCheckInStatus: "missed",
+          checkIns: [
+            {
+              id: "checkin_1",
+              habitId: "habit_negative",
+              dateKey: todayKey,
+              status: "missed",
+              note: "Closed the phone and went to sleep.",
+              deltaXp: 5,
+              createdAt: `${todayKey}T09:00:00.000Z`,
+              updatedAt: `${todayKey}T09:00:00.000Z`
+            }
+          ]
+        })
+      ]
+    });
+    getPsycheOverviewMock.mockResolvedValue({
+      overview: {
+        values: [],
+        patterns: [],
+        behaviors: [],
+        beliefs: [],
+        modes: [],
+        reports: []
+      }
+    });
+    useForgeShellMock.mockReturnValue({
+      selectedUserIds: [],
+      refresh: vi.fn().mockResolvedValue(undefined),
+      snapshot: {
+        goals: [],
+        tasks: [],
+        users: [habitUser],
+        dashboard: {
+          goals: [],
+          projects: [],
+          notesSummaryByEntity: {}
+        }
+      }
+    });
+
+    renderWithProviders();
+
+    await screen.findByText("Late-night doomscrolling");
+
+    fireEvent.click(
+      screen.getAllByRole("button", { name: /log check-in for/i }).at(-1)!
+    );
+
+    const dialog = await screen.findByRole("dialog");
+    const dialogScreen = within(dialog);
+
+    const resistedButton = await dialogScreen.findByRole("button", {
+      name: /Resisted/i
+    });
+    const performedButton = dialogScreen.getByRole("button", {
+      name: /Performed/i
+    });
+
+    expect(resistedButton).toHaveAttribute("aria-pressed", "true");
+    expect(performedButton).toHaveAttribute("aria-pressed", "false");
+  });
+
+  it("saves resisted for a negative habit as the aligned missed status", async () => {
+    createHabitCheckInMock.mockResolvedValue({
+      habit: createHabit({
+        id: "habit_negative",
+        polarity: "negative",
+        dueToday: false,
+        lastCheckInAt: "2026-04-11T09:00:00.000Z",
+        lastCheckInStatus: "missed",
+        checkIns: []
+      })
+    });
+    listHabitsMock.mockResolvedValue({
+      habits: [
+        createHabit({
+          id: "habit_negative",
+          title: "Late-night doomscrolling",
+          polarity: "negative",
+          dueToday: true,
+          checkIns: []
+        })
+      ]
+    });
+    getPsycheOverviewMock.mockResolvedValue({
+      overview: {
+        values: [],
+        patterns: [],
+        behaviors: [],
+        beliefs: [],
+        modes: [],
+        reports: []
+      }
+    });
+    useForgeShellMock.mockReturnValue({
+      selectedUserIds: [],
+      refresh: vi.fn().mockResolvedValue(undefined),
+      snapshot: {
+        goals: [],
+        tasks: [],
+        users: [habitUser],
+        dashboard: {
+          goals: [],
+          projects: [],
+          notesSummaryByEntity: {}
+        }
+      }
+    });
+
+    renderWithProviders();
+
+    await screen.findAllByText("Late-night doomscrolling");
+    fireEvent.click(await screen.findByRole("button", { name: /^Resisted$/i }));
+
+    await waitFor(() => {
+      expect(createHabitCheckInMock).toHaveBeenCalledWith("habit_negative", {
+        status: "missed",
+        dateKey: undefined,
+        note: undefined
+      });
     });
   });
 });

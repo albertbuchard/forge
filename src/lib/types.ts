@@ -2,6 +2,7 @@ import type {
   ForgeCustomTheme,
   ForgeThemePreference
 } from "@/lib/theme-system";
+import type { WorkbenchPortKind } from "@/lib/workbench/nodes";
 
 export type TaskStatus =
   | "backlog"
@@ -46,6 +47,26 @@ export type CalendarTimeboxStatus =
   | "cancelled";
 export type CalendarTimeboxSource = "manual" | "suggested" | "live_run";
 export type WorkAdjustmentEntityType = "task" | "project";
+export type TaskResolutionKind = "completed" | "split";
+export type ActionProfileMode =
+  | "impulse"
+  | "rate"
+  | "hybrid"
+  | "recovery"
+  | "container";
+export type ActionProfileSourceMethod =
+  | "seeded"
+  | "inferred"
+  | "manual"
+  | "learned";
+export type ActionCostBand = "tiny" | "light" | "standard" | "heavy" | "brutal";
+export type LifeForceStatKey =
+  | "life_force"
+  | "activation"
+  | "focus"
+  | "vigor"
+  | "composure"
+  | "flow";
 export type CrudEntityType =
   | "goal"
   | "project"
@@ -66,7 +87,14 @@ export type CrudEntityType =
   | "mode_guide_session"
   | "event_type"
   | "emotion_definition"
-  | "trigger_report";
+  | "trigger_report"
+  | "preference_catalog"
+  | "preference_catalog_item"
+  | "preference_context"
+  | "preference_item"
+  | "questionnaire_instrument"
+  | "sleep_session"
+  | "workout_session";
 export type RewardableEntityType =
   | "system"
   | "goal"
@@ -197,6 +225,138 @@ export interface WorkAdjustmentResult {
   target: WorkAdjustmentTargetSummary;
   reward: RewardLedgerEvent | null;
   metrics: XpMetricsPayload;
+}
+
+export interface ActionDemandWeights {
+  activation: number;
+  focus: number;
+  vigor: number;
+  composure: number;
+  flow: number;
+}
+
+export interface ActionProfile {
+  id: string;
+  profileKey: string;
+  title: string;
+  entityType: string | null;
+  mode: ActionProfileMode;
+  startupAp: number;
+  totalCostAp: number;
+  expectedDurationSeconds: number | null;
+  sustainRateApPerHour: number;
+  demandWeights: ActionDemandWeights;
+  doubleCountPolicy:
+    | "primary_only"
+    | "secondary_weighted"
+    | "always_count"
+    | "container_only";
+  sourceMethod: ActionProfileSourceMethod;
+  costBand: ActionCostBand;
+  recoveryEffect: number;
+  metadata: Record<string, unknown>;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface TaskActionPointSummary {
+  costBand: ActionCostBand;
+  totalCostAp: number;
+  expectedDurationSeconds: number;
+  sustainRateApPerHour: number;
+  spentTodayAp: number;
+  spentTotalAp: number;
+  remainingAp: number;
+}
+
+export interface TaskSplitSuggestion {
+  shouldSplit: boolean;
+  reason: string | null;
+  thresholdSeconds: number;
+}
+
+export interface LifeForceStatState {
+  key: LifeForceStatKey;
+  label: string;
+  level: number;
+  xp: number;
+  xpToNextLevel: number;
+  costModifier: number;
+}
+
+export interface LifeForceCurvePoint {
+  minuteOfDay: number;
+  rateApPerHour: number;
+  locked?: boolean;
+}
+
+export interface LifeForceDrainEntry {
+  id: string;
+  sourceType: string;
+  sourceId: string;
+  title: string;
+  role: "primary" | "secondary" | "background" | "recovery";
+  apPerHour: number;
+  instantAp: number;
+  why: string;
+  startedAt: string | null;
+  endsAt: string | null;
+}
+
+export interface LifeForceWarning {
+  id: string;
+  tone: "info" | "warning" | "danger" | "success";
+  title: string;
+  detail: string;
+}
+
+export interface LifeForcePayload {
+  userId: string;
+  dateKey: string;
+  baselineDailyAp: number;
+  dailyBudgetAp: number;
+  spentTodayAp: number;
+  remainingAp: number;
+  forecastAp: number;
+  targetBandMinAp: number;
+  targetBandMaxAp: number;
+  instantCapacityApPerHour: number;
+  instantFreeApPerHour: number;
+  overloadApPerHour: number;
+  currentDrainApPerHour: number;
+  fatigueBufferApPerHour: number;
+  sleepRecoveryMultiplier: number;
+  readinessMultiplier: number;
+  fatigueDebtCarry: number;
+  stats: LifeForceStatState[];
+  currentCurve: LifeForceCurvePoint[];
+  activeDrains: LifeForceDrainEntry[];
+  warnings: LifeForceWarning[];
+  recommendations: string[];
+  topTaskIdsNeedingSplit: string[];
+  updatedAt: string;
+}
+
+export interface LifeForceTemplateUpdateInput {
+  points: LifeForceCurvePoint[];
+}
+
+export interface LifeForceProfilePatchInput {
+  baseDailyAp?: number;
+  readinessMultiplier?: number;
+  stats?: Partial<Record<LifeForceStatKey, number>>;
+}
+
+export interface FatigueSignalInput {
+  signalType: "tired" | "okay_again";
+  observedAt?: string;
+  note?: string;
+}
+
+export interface TaskSplitInput {
+  firstTitle: string;
+  secondTitle: string;
+  remainingRatio?: number;
 }
 
 export interface NoteLink {
@@ -536,11 +696,15 @@ export interface Task extends OwnedEntity {
   plannedDurationSeconds: number | null;
   schedulingRules: CalendarSchedulingRules | null;
   sortOrder: number;
+  resolutionKind?: TaskResolutionKind | null;
+  splitParentTaskId?: string | null;
   completedAt: string | null;
   createdAt: string;
   updatedAt: string;
   tagIds: string[];
   time: TaskTimeSummary;
+  actionPointSummary?: TaskActionPointSummary;
+  splitSuggestion?: TaskSplitSuggestion;
 }
 
 export interface ActivityEvent extends OwnedEntity {
@@ -912,9 +1076,33 @@ export interface CompanionPairingSession {
   lastSyncAt: string | null;
   lastSyncError: string | null;
   pairedAt: string | null;
+  sourceStates: CompanionPairingSourceStates;
   expiresAt: string;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface CompanionPairingSourceState {
+  desiredEnabled: boolean;
+  appliedEnabled: boolean;
+  authorizationStatus:
+    | "not_determined"
+    | "pending"
+    | "approved"
+    | "denied"
+    | "restricted"
+    | "unavailable"
+    | "partial"
+    | "disabled";
+  syncEligible: boolean;
+  lastObservedAt: string | null;
+  metadata: Record<string, unknown>;
+}
+
+export interface CompanionPairingSourceStates {
+  health: CompanionPairingSourceState;
+  movement: CompanionPairingSourceState;
+  screenTime: CompanionPairingSourceState;
 }
 
 export interface CompanionOverviewPayload {
@@ -937,12 +1125,15 @@ export interface CompanionOverviewPayload {
     movementKnownPlaces: number;
     movementStays: number;
     movementTrips: number;
+    screenTimeDaySummaries?: number;
+    screenTimeHourlySegments?: number;
   };
   permissions: {
     healthKitAuthorized: boolean;
     backgroundRefreshEnabled: boolean;
     locationReady: boolean;
     motionReady: boolean;
+    screenTimeReady?: boolean;
   };
 }
 
@@ -1161,6 +1352,70 @@ export interface MovementSettingsPayload {
   knownPlaceCount: number;
 }
 
+export interface ScreenTimeSettingsPayload {
+  userId: string;
+  trackingEnabled: boolean;
+  syncEnabled: boolean;
+  authorizationStatus:
+    | "not_determined"
+    | "denied"
+    | "approved"
+    | "unavailable";
+  captureState:
+    | "disabled"
+    | "ready"
+    | "sync_paused"
+    | "unavailable"
+    | "needs_authorization";
+  lastCapturedDayKey: string | null;
+  lastCaptureStartedAt: string | null;
+  lastCaptureEndedAt: string | null;
+  captureFreshness: "empty" | "fresh" | "stale" | "unavailable";
+  captureAgeHours: number | null;
+  capturedDayCount: number;
+  capturedHourCount: number;
+  captureWindowDays: number;
+  metadata: Record<string, unknown>;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ScreenTimeAppUsage {
+  id: string;
+  bundleIdentifier: string;
+  displayName: string;
+  categoryLabel: string | null;
+  totalActivitySeconds: number;
+  pickupCount: number;
+  notificationCount: number;
+}
+
+export interface ScreenTimeCategoryUsage {
+  id: string;
+  categoryLabel: string;
+  totalActivitySeconds: number;
+}
+
+export interface ScreenTimeHourlySegment {
+  id: string;
+  userId: string;
+  pairingSessionId: string | null;
+  sourceDevice: string;
+  dateKey: string;
+  hourIndex: number;
+  startedAt: string;
+  endedAt: string;
+  totalActivitySeconds: number;
+  pickupCount: number;
+  notificationCount: number;
+  firstPickupAt: string | null;
+  longestActivityStartedAt: string | null;
+  longestActivityEndedAt: string | null;
+  metadata: Record<string, unknown>;
+  apps: ScreenTimeAppUsage[];
+  categories: ScreenTimeCategoryUsage[];
+}
+
 export interface MovementStayRecord {
   id: string;
   externalUid: string;
@@ -1189,6 +1444,11 @@ export interface MovementStayRecord {
     title: string;
     slug: string;
   } | null;
+  estimatedScreenTimeSeconds: number;
+  pickupCount: number;
+  notificationCount: number;
+  topApps: ScreenTimeAppUsage[];
+  topCategories: ScreenTimeCategoryUsage[];
 }
 
 export interface MovementTripPointRecord {
@@ -1264,6 +1524,11 @@ export interface MovementTripRecord {
     title: string;
     slug: string;
   } | null;
+  estimatedScreenTimeSeconds: number;
+  pickupCount: number;
+  notificationCount: number;
+  topApps: ScreenTimeAppUsage[];
+  topCategories: ScreenTimeCategoryUsage[];
 }
 
 export interface MovementSelectionAggregate {
@@ -1280,6 +1545,11 @@ export interface MovementSelectionAggregate {
   trackedWorkSeconds: number;
   placeLabels: string[];
   tags: string[];
+  estimatedScreenTimeSeconds: number;
+  pickupCount: number;
+  notificationCount: number;
+  topApps: ScreenTimeAppUsage[];
+  topCategories: ScreenTimeCategoryUsage[];
 }
 
 export interface MovementDayData {
@@ -1291,13 +1561,23 @@ export interface MovementDayData {
     totalIdleSeconds: number;
     tripCount: number;
     stayCount: number;
+    missingCount: number;
+    missingDurationSeconds: number;
+    repairedGapCount: number;
+    repairedGapDurationSeconds: number;
+    continuedStayCount: number;
+    continuedStayDurationSeconds: number;
     knownPlaceCount: number;
     caloriesKcal: number;
+    estimatedScreenTimeSeconds: number;
+    pickupCount: number;
     averageSpeedMps: number;
   };
   segments: Array<{
     id: string;
-    kind: "stay" | "trip";
+    kind: "stay" | "trip" | "missing";
+    origin: "recorded" | "continued_stay" | "repaired_gap" | "missing";
+    editable: boolean;
     startedAt: string;
     endedAt: string;
     durationSeconds: number;
@@ -1305,6 +1585,8 @@ export interface MovementDayData {
     subtitle: string;
     distanceMeters: number;
     averageSpeedMps: number;
+    estimatedScreenTimeSeconds: number;
+    pickupCount: number;
     colorTone: string;
     noteCount: number;
   }>;
@@ -1358,6 +1640,61 @@ export interface MovementAllTimeData {
   }>;
 }
 
+export interface ScreenTimeDayData {
+  date: string;
+  settings: ScreenTimeSettingsPayload;
+  summary: {
+    totalActivitySeconds: number;
+    pickupCount: number;
+    notificationCount: number;
+    firstPickupAt: string | null;
+    longestActivitySeconds: number;
+    activeHourCount: number;
+    averageHourlyActivitySeconds: number;
+  };
+  hourlySegments: ScreenTimeHourlySegment[];
+  topApps: ScreenTimeAppUsage[];
+  topCategories: ScreenTimeCategoryUsage[];
+}
+
+export interface ScreenTimeMonthData {
+  month: string;
+  days: Array<{
+    dateKey: string;
+    totalActivitySeconds: number;
+    pickupCount: number;
+    notificationCount: number;
+    longestActivitySeconds: number;
+  }>;
+  totals: {
+    totalActivitySeconds: number;
+    pickupCount: number;
+    notificationCount: number;
+    activeDays: number;
+  };
+  topApps: ScreenTimeAppUsage[];
+  topCategories: ScreenTimeCategoryUsage[];
+}
+
+export interface ScreenTimeAllTimeData {
+  summary: {
+    dayCount: number;
+    totalActivitySeconds: number;
+    totalPickups: number;
+    totalNotifications: number;
+    averageDailyActivitySeconds: number;
+    averageDailyPickups: number;
+  };
+  weekdayPattern: Array<{
+    weekday: number;
+    averageActivitySeconds: number;
+    averagePickups: number;
+    averageNotifications: number;
+  }>;
+  topApps: ScreenTimeAppUsage[];
+  topCategories: ScreenTimeCategoryUsage[];
+}
+
 export interface MovementTripDetailData {
   trip: MovementTripRecord;
   stylizedPath: {
@@ -1380,7 +1717,9 @@ export type MovementTimelineLaneSide = "left" | "right";
 
 export interface MovementTimelineSegmentBase {
   id: string;
-  kind: "stay" | "trip";
+  kind: "stay" | "trip" | "missing";
+  origin: "recorded" | "continued_stay" | "repaired_gap" | "missing";
+  editable: boolean;
   isInvalid: boolean;
   startedAt: string;
   endedAt: string;
@@ -1398,19 +1737,26 @@ export interface MovementTimelineSegmentBase {
 
 export interface MovementTimelineStaySegment extends MovementTimelineSegmentBase {
   kind: "stay";
-  stay: MovementStayRecord;
+  stay: MovementStayRecord | null;
   trip: null;
 }
 
 export interface MovementTimelineTripSegment extends MovementTimelineSegmentBase {
   kind: "trip";
   stay: null;
-  trip: MovementTripRecord;
+  trip: MovementTripRecord | null;
+}
+
+export interface MovementTimelineMissingSegment extends MovementTimelineSegmentBase {
+  kind: "missing";
+  stay: null;
+  trip: null;
 }
 
 export type MovementTimelineSegment =
   | MovementTimelineStaySegment
-  | MovementTimelineTripSegment;
+  | MovementTimelineTripSegment
+  | MovementTimelineMissingSegment;
 
 export interface MovementTimelineData {
   segments: MovementTimelineSegment[];
@@ -1631,7 +1977,8 @@ export interface AgentIdentity {
 export type AiModelProvider =
   | "openai-api"
   | "openai-codex"
-  | "openai-compatible";
+  | "openai-compatible"
+  | "mock";
 
 export type AiModelAuthMode = "api_key" | "oauth";
 
@@ -1774,15 +2121,39 @@ export interface ForgeBoxToolAdapter {
   label: string;
   description: string;
   accessMode: "read" | "write" | "read_write" | "exec";
+  argsSchema?: Record<string, unknown>;
+}
+
+export interface ForgeBoxPortShapeField {
+  key: string;
+  label: string;
+  kind: WorkbenchPortKind;
+  description?: string;
+  required?: boolean;
 }
 
 export interface ForgeBoxPortDefinition {
   key: string;
   label: string;
-  kind: string;
+  kind: WorkbenchPortKind;
   description?: string;
   required?: boolean;
   expandableKeys?: string[];
+  modelName?: string;
+  itemKind?: string;
+  shape?: ForgeBoxPortShapeField[];
+  exampleValue?: string;
+}
+
+export interface AiConnectorPublicInputBinding {
+  nodeId: string;
+  targetKey: string;
+  targetKind: "input" | "param";
+}
+
+export interface AiConnectorPublicInput extends ForgeBoxPortDefinition {
+  defaultValue?: unknown;
+  bindings: AiConnectorPublicInputBinding[];
 }
 
 export interface ForgeBoxCatalogEntry {
@@ -1888,6 +2259,31 @@ export interface AiConnectorRunResult {
       json: Record<string, unknown> | null;
     }
   >;
+  nodeResults: Array<{
+    nodeId: string;
+    nodeType: AiConnectorNodeType;
+    label: string;
+    input: Array<{
+      sourceNodeId: string;
+      sourceHandle: string | null;
+      targetHandle: string | null;
+      text: string;
+      json: Record<string, unknown> | null;
+    }>;
+    primaryText: string;
+    payload: Record<string, unknown> | null;
+    outputMap: Record<
+      string,
+      {
+        text: string;
+        json: Record<string, unknown> | null;
+      }
+    >;
+    tools: string[];
+    logs: string[];
+    error: string | null;
+    timingMs?: number | null;
+  }>;
   debugTrace?: {
     nodes: Array<{
       nodeId: string;
@@ -1918,6 +2314,7 @@ export interface AiConnectorRun {
   mode: "run" | "chat";
   status: "running" | "completed" | "failed";
   userInput: string;
+  inputs: Record<string, unknown>;
   context: Record<string, unknown>;
   conversationId: string | null;
   result: AiConnectorRunResult | null;
@@ -1952,6 +2349,7 @@ export interface AiConnector {
     nodes: AiConnectorNode[];
     edges: AiConnectorEdge[];
   };
+  publicInputs: AiConnectorPublicInput[];
   publishedOutputs: AiConnectorOutput[];
   lastRun: AiConnectorRun | null;
   legacyProcessorId: string | null;
@@ -2365,13 +2763,22 @@ export interface AgentOnboardingFieldGuide {
 }
 
 export interface AgentOnboardingEntityGuide {
-  entityType: CrudEntityType;
+  entityType: string;
+  classification:
+    | "batch_crud_entity"
+    | "specialized_crud_entity"
+    | "action_workflow_entity"
+    | "read_model_only_surface";
   purpose: string;
   minimumCreateFields: string[];
   relationshipRules: string[];
   searchHints: string[];
   fieldGuide: AgentOnboardingFieldGuide[];
   examples?: string[];
+  routeBase?: string | null;
+  preferredMutationPath: string;
+  preferredReadPath?: string | null;
+  preferredMutationTool?: string | null;
 }
 
 export interface AgentOnboardingToolGuide {
@@ -2441,7 +2848,16 @@ export interface AgentOnboardingPayload {
     task: string;
     taskRun: string;
     note: string;
+    wiki: string;
+    sleepSession: string;
+    workoutSession: string;
+    preferences: string;
+    questionnaire: string;
+    selfObservation: string;
     insight: string;
+    calendar: string;
+    workBlock: string;
+    taskTimebox: string;
     psyche: string;
   };
   psycheSubmoduleModel: {
@@ -2457,7 +2873,27 @@ export interface AgentOnboardingPayload {
     triggerReport: string;
   };
   psycheCoachingPlaybooks: AgentOnboardingPsychePlaybook[];
+  conversationRules: string[];
+  entityConversationPlaybooks: Array<{
+    focus: string;
+    openingQuestion: string;
+    coachingGoal: string;
+    askSequence: string[];
+  }>;
   relationshipModel: string[];
+  entityRouteModel: {
+    batchCrudEntities: string[];
+    batchRoutes: {
+      search: string;
+      create: string;
+      update: string;
+      delete: string;
+      restore: string;
+    };
+    specializedCrudEntities: Record<string, Record<string, string>>;
+    actionEntities: Record<string, Record<string, unknown>>;
+    readModelOnlySurfaces: Record<string, string>;
+  };
   multiUserModel: {
     summary: string;
     defaultUserScopeBehavior: string;
@@ -2491,6 +2927,12 @@ export interface AgentOnboardingPayload {
     context: string;
     xpMetrics: string;
     weeklyReview: string;
+    sleepOverview: string;
+    sportsOverview: string;
+    wikiSettings: string;
+    wikiSearch: string;
+    wikiHealth: string;
+    calendarOverview: string;
     settingsBin: string;
     batchSearch: string;
     psycheSchemaCatalog: string;
@@ -2502,7 +2944,11 @@ export interface AgentOnboardingPayload {
     readModels: string[];
     uiWorkflow: string[];
     entityWorkflow: string[];
+    wikiWorkflow: string[];
+    healthWorkflow: string[];
+    rewardWorkflow: string[];
     workWorkflow: string[];
+    calendarWorkflow: string[];
     insightWorkflow: string[];
   };
   interactionGuidance: {
@@ -2510,6 +2956,8 @@ export interface AgentOnboardingPayload {
     saveSuggestionPlacement: string;
     saveSuggestionTone: string;
     maxQuestionsPerTurn: number;
+    psycheExplorationRule: string;
+    psycheOpeningQuestionRule: string;
     duplicateCheckRoute: string;
     uiSuggestionRule: string;
     browserFallbackRule: string;
@@ -2688,6 +3136,7 @@ export interface ForgeSnapshot {
   habits: Habit[];
   activity: ActivityEvent[];
   activeTaskRuns: TaskRun[];
+  lifeForce?: LifeForcePayload;
 }
 
 export type PreferenceDomain =

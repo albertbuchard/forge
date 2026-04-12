@@ -1890,11 +1890,14 @@ const AGENT_ONBOARDING_ENTITY_CATALOG = [
 ];
 const AGENT_ONBOARDING_CONVERSATION_RULES = [
     "Ask only for what is missing or unclear instead of walking the user through every optional field.",
+    "Before each question, decide the one missing thing you are trying to clarify and why it matters for the record.",
     "Use a progression of concrete example or intent, working name, purpose or meaning, placement in Forge, operational details, and linked context.",
     "Ask one to three focused questions at a time. One is usually best when the user is uncertain or emotionally loaded.",
     "If the user already answered the normal opening question, do not repeat it. Move to the next missing clarification.",
     "Do not over-therapize logistical entities. For tasks, calendar events, work blocks, timeboxes, and task runs, one brief confirming sentence plus one question is usually enough.",
+    "When the meaning is clearer than the wording, offer a tentative title or formulation yourself and invite correction instead of forcing the user to wordsmith alone.",
     "Before saving, briefly summarize the working formulation in the user's own language when that would reduce ambiguity.",
+    "Once the record is clear enough to name, stop exploring broadly and ask only for the last structural detail that still matters.",
     "When updating an entity, start with what is changing, what should stay true, and what prompted the update now."
 ];
 const AGENT_ONBOARDING_ENTITY_CONVERSATION_PLAYBOOKS = [
@@ -1954,6 +1957,17 @@ const AGENT_ONBOARDING_ENTITY_CONVERSATION_PLAYBOOKS = [
         ]
     },
     {
+        focus: "tag",
+        openingQuestion: "What do you want this tag to help you notice or find again later?",
+        coachingGoal: "Create a label that helps later retrieval or grouping instead of another vague bucket.",
+        askSequence: [
+            "Ask what the tag should help the user notice, group, or find later.",
+            "Ask what kinds of records should belong under it and what should stay outside it.",
+            "Offer a concise label if the grouping meaning is clearer than the wording.",
+            "Ask about color, kind, or parent grouping only if that changes how the tag will be used."
+        ]
+    },
+    {
         focus: "note",
         openingQuestion: "What feels important to preserve from this?",
         coachingGoal: "Preserve the useful context and link it to the right places without turning the note into a dump.",
@@ -1962,6 +1976,17 @@ const AGENT_ONBOARDING_ENTITY_CONVERSATION_PLAYBOOKS = [
             "Ask what entities it should stay attached to.",
             "Ask whether it should be durable or temporary.",
             "Ask about tags or author only if they help retrieval or handoff."
+        ]
+    },
+    {
+        focus: "wiki_page",
+        openingQuestion: "What should this page become the main reference for?",
+        coachingGoal: "Create a durable reference page with a clear scope instead of dumping raw notes into the wiki.",
+        askSequence: [
+            "Ask what topic this page should become the canonical place for.",
+            "Ask whether it is a durable wiki page or supporting evidence.",
+            "Ask what future lookup, decision, or collaboration this page should support.",
+            "Ask about linked entities, aliases, or tags only if they will make the page more navigable later."
         ]
     },
     {
@@ -2007,22 +2032,143 @@ const AGENT_ONBOARDING_ENTITY_CONVERSATION_PLAYBOOKS = [
         ]
     },
     {
+        focus: "calendar_connection",
+        openingQuestion: "Which calendar provider are you trying to connect, and what do you want Forge to do with it?",
+        coachingGoal: "Connect the right provider deliberately without turning setup into a credential dump.",
+        askSequence: [
+            "Ask which provider the user wants to connect and what they want Forge to do with it.",
+            "Ask whether the goal is read-only visibility, writable planning, or both.",
+            "Ask only for the next provider-specific step that still matters, such as auth flow, label, or calendar selection.",
+            "Move into the actual connection flow once the setup goal is clear."
+        ]
+    },
+    {
+        focus: "task_run",
+        openingQuestion: "Which task should I start?",
+        coachingGoal: "Start truthful live work with as little friction as possible while still knowing what is being worked on and by whom.",
+        askSequence: [
+            "Confirm the task.",
+            "Confirm the actor only if it is not already obvious.",
+            "Ask whether the run should be planned or unlimited only if that changes the action.",
+            "Start the run instead of turning it into a longer intake."
+        ]
+    },
+    {
+        focus: "self_observation",
+        openingQuestion: "What did you notice most clearly in that moment?",
+        coachingGoal: "Capture one observation clearly enough that it can support later reflection without pretending it is already a full interpretation.",
+        askSequence: [
+            "Ask what was observed.",
+            "Ask when it happened or became noticeable unless timing is already clear.",
+            "Ask what it may connect to: pattern, belief, value, mode, task, project, or note.",
+            "Ask for tags or extra context only if that will help later review."
+        ]
+    },
+    {
+        focus: "sleep_session",
+        openingQuestion: "What about this night feels important enough to remember or connect?",
+        coachingGoal: "Enrich one night's record with reflective context instead of treating it like a generic note.",
+        askSequence: [
+            "Ask what about the night feels worth capturing.",
+            "Ask whether the main point is quality, pattern, context, meaning, or links.",
+            "Ask what goal, project, task, habit, or Psyche record it should stay connected to.",
+            "Ask about tags only if they will help later review."
+        ]
+    },
+    {
+        focus: "workout_session",
+        openingQuestion: "What about this workout feels most worth remembering or connecting?",
+        coachingGoal: "Enrich one workout with subjective effort, mood, meaning, or linked context.",
+        askSequence: [
+            "Ask what about the session the user wants to preserve.",
+            "Ask whether the key layer is effort, mood, meaning, social context, or links.",
+            "Ask what it connects to in Forge if links matter.",
+            "Ask about tags only if they help later retrieval."
+        ]
+    },
+    {
+        focus: "preference_catalog",
+        openingQuestion: "What decision or taste question should this catalog help with?",
+        coachingGoal: "Define a useful comparison pool rather than a list with no decision purpose.",
+        askSequence: [
+            "Ask what preference question this catalog is meant to support.",
+            "Ask what domain or concept area it belongs to.",
+            "Ask what kinds of items should be included or excluded.",
+            "Offer a working catalog name once the purpose is clear."
+        ]
+    },
+    {
+        focus: "preference_catalog_item",
+        openingQuestion: "What makes this option meaningfully worth comparing?",
+        coachingGoal: "Add one candidate in a way that will make later comparisons feel clear and fair.",
+        askSequence: [
+            "Ask what makes this item worth including in the catalog.",
+            "Ask what catalog or domain it belongs to if that is still unclear.",
+            "Ask for a short clarifying description only if the label would be ambiguous later.",
+            "Ask about aliases or tags only if they help retrieval."
+        ]
+    },
+    {
+        focus: "preference_context",
+        openingQuestion: "In what situation should Forge treat your preferences differently here?",
+        coachingGoal: "Define a real operating mode for preferences instead of a decorative label.",
+        askSequence: [
+            "Ask what situation or mode this context is meant to represent.",
+            "Ask what should count inside that context and what should stay outside it.",
+            "Ask whether it should be active, default, or kept separate from other evidence.",
+            "Offer a concise name if the mode is clearer than the wording."
+        ]
+    },
+    {
+        focus: "preference_item",
+        openingQuestion: "What preference are you trying to make clearer by saving this item?",
+        coachingGoal: "Save one concrete preference candidate or signal without losing the context that makes it meaningful.",
+        askSequence: [
+            "Ask what preference or taste question this item belongs to.",
+            "Ask what domain or context it should live in.",
+            "Ask whether the user is saving a comparison candidate or a direct signal such as favorite, veto, or compare-later.",
+            "Ask what makes the item distinct enough to compare usefully only if it is still a comparison candidate."
+        ]
+    },
+    {
+        focus: "questionnaire_instrument",
+        openingQuestion: "What would this questionnaire help someone notice or track?",
+        coachingGoal: "Clarify whether the user is authoring a reusable questionnaire and what the instrument is for.",
+        askSequence: [
+            "Ask what the questionnaire is meant to measure or surface.",
+            "Ask who it is for and when it should be used.",
+            "Ask what kind of honest moment or decision it should help someone answer before getting into item wording.",
+            "Move to draft creation once the purpose is clear."
+        ]
+    },
+    {
+        focus: "questionnaire_run",
+        openingQuestion: "Do you want to start, continue, review, or finish a questionnaire run?",
+        coachingGoal: "Clarify whether the user wants to start, continue, or complete one answer session.",
+        askSequence: [
+            "Ask which questionnaire run this is about.",
+            "Ask whether the user wants to start, continue, review, or complete it.",
+            "If answering is still in progress, ask only for the next answer or note that matters."
+        ]
+    },
+    {
         focus: "event_type",
-        openingQuestion: "When this kind of moment happens, what would you want to call it so future reports stay consistent?",
+        openingQuestion: "What kind of moment keeps happening that you want future reports to name the same way each time?",
         coachingGoal: "Create a reusable incident category that will actually help future reports stay consistent.",
         askSequence: [
-            "Ask what category the label should capture.",
+            "Ask what kind of moment or incident this label should capture in lived terms.",
             "Ask how narrow or broad it should be.",
+            "Ask what would count as inside versus outside the category if that boundary is still fuzzy.",
             "Ask for a short description only if the label could be ambiguous later."
         ]
     },
     {
         focus: "emotion_definition",
-        openingQuestion: "What emotion do you want Forge to help you name clearly and reuse later?",
+        openingQuestion: "When this feeling is present, what tells you it is this feeling and not a nearby one?",
         coachingGoal: "Create a reusable emotion label with enough clarity to use consistently later.",
         askSequence: [
-            "Ask what emotion label the user wants to preserve.",
-            "Ask what distinguishes it from nearby emotions.",
+            "Ask what this feeling is like in lived terms when the user says it.",
+            "Ask what distinguishes it from nearby emotions if that matters.",
             "Ask for a broader category only if it will help later browsing or reporting."
         ]
     }
@@ -3072,8 +3218,8 @@ function buildAgentOnboardingPayload(request) {
             saveSuggestionPlacement: "end_of_message",
             saveSuggestionTone: "gentle_optional",
             maxQuestionsPerTurn: 1,
-            psycheExplorationRule: "When a Psyche entity needs understanding first, begin with one exploratory question before any working formulation, replacement belief, suggested title, or save pitch. Keep the opening reflection to one or two short sentences, stay in plain prose instead of bullets or numbered lists, keep that first reply short, do not mention Forge search or save structure yet, avoid colons or list-shaped phrasing, prefer what/when/how over why until the experience is grounded, and wait for the user's answer before offering a fuller formulation.",
-            psycheOpeningQuestionRule: "Prefer a concrete opening question tied to the entity: ask when the value mattered, what happened the last time the pattern appeared, what cue or body signal came first before the behavior, what the belief starts saying about self or outcome, what feels most at risk inside the mode, what the part is trying to get the user to do or stop doing, or where the shift began in the incident. Reflect briefly before the question and stay in one follow-up lane at a time.",
+            psycheExplorationRule: "When a Psyche entity needs understanding first, begin with one exploratory question before any working formulation, replacement belief, suggested title, or save pitch. Keep the opening reflection to one or two short sentences, stay in plain prose instead of bullets or numbered lists, keep that first reply short, do not mention Forge search or save structure yet, avoid colons or list-shaped phrasing, prefer what/when/how over why until the experience is grounded, wait for the user's answer before offering a fuller formulation, and once the lived experience is coherent stop deepening and help the user name it cleanly.",
+            psycheOpeningQuestionRule: "Prefer a concrete opening question tied to the entity: ask when the value mattered, what happened the last time the pattern appeared, what cue or body signal came first before the behavior, what the belief starts saying about self or outcome, what feels most at risk inside the mode, what the part is trying to get the user to do or stop doing, or where the shift began in the incident. Reflect briefly before the question, choose one follow-up lane at a time, and if several Psyche entities are visible hold the adjacent ones lightly until the main container is clear.",
             duplicateCheckRoute: "/api/v1/entities/search",
             uiSuggestionRule: "offer_visual_ui_when_review_or_editing_would_be_easier",
             browserFallbackRule: "Do not open the Forge UI or a browser just to create or update normal entities when the batch entity tools can do the job.",

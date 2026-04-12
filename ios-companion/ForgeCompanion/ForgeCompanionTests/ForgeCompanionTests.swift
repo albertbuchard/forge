@@ -92,12 +92,269 @@ final class ForgeCompanionTests: XCTestCase {
         XCTAssertEqual(bootstrap.checkInOptions.recentPeople.first, "Julien")
     }
 
-    func testPassiveStationaryClusterRepairsShortMoveIntoRetroactiveStay() {
+    func testScreenTimeStoreMarksFreshCaptureAndBuildsReadablePreview() {
+        let snapshot = ForgeCompanion.ForgeScreenTimeSnapshotEnvelope(
+            generatedAt: "2026-04-11T10:00:00.000Z",
+            source: "device_activity_report_extension",
+            segmentKind: "hourly",
+            daySummaries: [
+                ForgeCompanion.ForgeScreenTimeDaySummarySnapshot(
+                    id: "2026-04-10",
+                    dateKey: "2026-04-10",
+                    totalActivitySeconds: 5400,
+                    pickupCount: 12,
+                    notificationCount: 5,
+                    firstPickupAt: "2026-04-10T07:10:00.000Z",
+                    longestActivitySeconds: 1800,
+                    topAppBundleIdentifiers: ["com.apple.mobilesafari"],
+                    topCategoryLabels: ["Productivity"],
+                    metadata: [:]
+                )
+            ],
+            hourlySegments: [
+                ForgeCompanion.ForgeScreenTimeHourlySegmentSnapshot(
+                    id: "2026-04-10-7",
+                    dateKey: "2026-04-10",
+                    hourIndex: 7,
+                    startedAt: "2026-04-10T07:00:00.000Z",
+                    endedAt: "2026-04-10T08:00:00.000Z",
+                    totalActivitySeconds: 1800,
+                    pickupCount: 4,
+                    notificationCount: 1,
+                    firstPickupAt: "2026-04-10T07:12:00.000Z",
+                    longestActivityStartedAt: "2026-04-10T07:14:00.000Z",
+                    longestActivityEndedAt: "2026-04-10T07:36:00.000Z",
+                    metadata: [:],
+                    apps: [
+                        ForgeCompanion.ForgeScreenTimeAppUsageSnapshot(
+                            id: "com.apple.mobilesafari",
+                            bundleIdentifier: "com.apple.mobilesafari",
+                            displayName: "Safari",
+                            categoryLabel: "Productivity",
+                            totalActivitySeconds: 1500,
+                            pickupCount: 4,
+                            notificationCount: 1
+                        )
+                    ],
+                    categories: [
+                        ForgeCompanion.ForgeScreenTimeCategoryUsageSnapshot(
+                            id: "Productivity",
+                            categoryLabel: "Productivity",
+                            totalActivitySeconds: 1500
+                        )
+                    ]
+                )
+            ]
+        )
+
+        let store = ScreenTimeStore(
+            snapshotLoader: { snapshot },
+            nowProvider: {
+                ISO8601DateFormatter().date(from: "2026-04-11T12:00:00Z") ?? Date()
+            },
+            storedStateOverride: .init(
+                trackingEnabled: true,
+                syncEnabled: true,
+                metadata: [:]
+            ),
+            authorizationStatusOverride: "approved",
+            bindAuthorizationUpdates: false
+        )
+
+        XCTAssertEqual(store.captureFreshness, "fresh")
+        XCTAssertEqual(store.capturedDayCount, 1)
+        XCTAssertEqual(store.capturedHourCount, 1)
+        XCTAssertEqual(store.captureWindowDays, 1)
+        XCTAssertTrue(store.latestCaptureSummary.contains("hourly slices"))
+        XCTAssertEqual(store.topAppsPreview.first, "Safari")
+        XCTAssertEqual(store.topCategoriesPreview.first, "Productivity")
+    }
+
+    func testScreenTimeStoreMarksStaleCaptureWhenSnapshotIsOld() {
+        let snapshot = ForgeCompanion.ForgeScreenTimeSnapshotEnvelope(
+            generatedAt: "2026-04-08T08:00:00.000Z",
+            source: "device_activity_report_extension",
+            segmentKind: "hourly",
+            daySummaries: [],
+            hourlySegments: [
+                ForgeCompanion.ForgeScreenTimeHourlySegmentSnapshot(
+                    id: "2026-04-08-7",
+                    dateKey: "2026-04-08",
+                    hourIndex: 7,
+                    startedAt: "2026-04-08T07:00:00.000Z",
+                    endedAt: "2026-04-08T08:00:00.000Z",
+                    totalActivitySeconds: 600,
+                    pickupCount: 1,
+                    notificationCount: 0,
+                    firstPickupAt: nil,
+                    longestActivityStartedAt: nil,
+                    longestActivityEndedAt: nil,
+                    metadata: [:],
+                    apps: [],
+                    categories: []
+                )
+            ]
+        )
+
+        let store = ScreenTimeStore(
+            snapshotLoader: { snapshot },
+            nowProvider: {
+                ISO8601DateFormatter().date(from: "2026-04-11T12:00:00Z") ?? Date()
+            },
+            storedStateOverride: .init(
+                trackingEnabled: true,
+                syncEnabled: true,
+                metadata: [:]
+            ),
+            authorizationStatusOverride: "approved",
+            bindAuthorizationUpdates: false
+        )
+
+        XCTAssertEqual(store.captureFreshness, "stale")
+        XCTAssertTrue(store.freshnessSummary.contains("Stale"))
+    }
+
+    func testScreenTimeAuthorizationNormalizationTreatsApprovedWithDataAccessAsApproved() {
+        XCTAssertEqual(
+            ScreenTimeStore.normalizeAuthorizationStatus(
+                description: "approvedWithDataAccess"
+            ),
+            "approved"
+        )
+        XCTAssertEqual(
+            ScreenTimeStore.normalizeAuthorizationStatus(
+                description: "approved with data access"
+            ),
+            "approved"
+        )
+    }
+
+    func testScreenTimeAuthorizationNormalizationFallsBackToKnownRawValues() {
+        XCTAssertEqual(
+            ScreenTimeStore.normalizeAuthorizationStatus(
+                description: "unexpected_future_case",
+                fallbackRawValue: 2
+            ),
+            "approved"
+        )
+        XCTAssertEqual(
+            ScreenTimeStore.normalizeAuthorizationStatus(
+                description: "unexpected_future_case",
+                fallbackRawValue: 1
+            ),
+            "denied"
+        )
+        XCTAssertEqual(
+            ScreenTimeStore.normalizeAuthorizationStatus(
+                description: "unexpected_future_case",
+                fallbackRawValue: 0
+            ),
+            "not_determined"
+        )
+    }
+
+    func testCompanionOperationalSummaryFlagsMissingAuthorizationAsWarning() {
+        let summary = CompanionOperationalSummary.derive(
+            syncState: .permissionDenied,
+            latestError: nil,
+            healthSyncEnabled: true,
+            healthAccessStatus: .notSet,
+            movementEnabled: true,
+            movementPermissionStatus: "not_determined",
+            movementBackgroundReady: false,
+            screenTimeEnabled: true,
+            screenTimeAuthorizationStatus: "not_determined"
+        )
+
+        XCTAssertEqual(summary.status, .warning)
+        XCTAssertEqual(summary.detail, "Missing authorization")
+    }
+
+    func testCompanionOperationalSummaryReturnsOkWhenSignalsAreReady() {
+        let summary = CompanionOperationalSummary.derive(
+            syncState: .healthy,
+            latestError: nil,
+            healthSyncEnabled: true,
+            healthAccessStatus: .fullAccess,
+            movementEnabled: true,
+            movementPermissionStatus: "authorized_always",
+            movementBackgroundReady: true,
+            screenTimeEnabled: true,
+            screenTimeAuthorizationStatus: "approved"
+        )
+
+        XCTAssertEqual(summary.status, .ok)
+        XCTAssertEqual(summary.detail, "All core signals ready")
+    }
+
+    func testCompanionOperationalSummaryPromotesErrorsAboveAuthorizationWarnings() {
+        let summary = CompanionOperationalSummary.derive(
+            syncState: .healthy,
+            latestError: "Upload failed",
+            healthSyncEnabled: true,
+            healthAccessStatus: .fullAccess,
+            movementEnabled: true,
+            movementPermissionStatus: "authorized_always",
+            movementBackgroundReady: true,
+            screenTimeEnabled: true,
+            screenTimeAuthorizationStatus: "approved"
+        )
+
+        XCTAssertEqual(summary.status, .error)
+        XCTAssertEqual(summary.detail, "Upload failed")
+    }
+
+    func testPermissionSyncPhaseUsesBusyLabelsForLiveWork() {
+        XCTAssertTrue(CompanionPermissionSyncPhase.requestingHealth.isBusy)
+        XCTAssertEqual(CompanionPermissionSyncPhase.requestingHealth.buttonLabel, "Requesting Health…")
+        XCTAssertEqual(CompanionPermissionSyncPhase.requestingHealth.progressDetail, "Waiting for Health access.")
+
+        XCTAssertTrue(CompanionPermissionSyncPhase.syncing.isBusy)
+        XCTAssertEqual(CompanionPermissionSyncPhase.syncing.buttonLabel, "Syncing now…")
+        XCTAssertEqual(CompanionPermissionSyncPhase.syncing.progressDetail, "Sending the latest payload to Forge.")
+    }
+
+    func testPermissionSyncPhaseFallsBackToRetryAfterFailure() {
+        XCTAssertFalse(CompanionPermissionSyncPhase.failed.isBusy)
+        XCTAssertEqual(CompanionPermissionSyncPhase.failed.buttonLabel, "Try again")
+        XCTAssertEqual(CompanionPermissionSyncPhase.failed.progressDetail, "The action did not finish. You can retry.")
+    }
+
+    func testManualProbeCandidatesPreferTailscaleServeForMagicDNSHosts() {
+        let candidates = ForgeServerDiscovery.manualProbeCandidates(
+            for: "macbook-pro.tail47ba04.ts.net"
+        )
+
+        XCTAssertTrue(
+            candidates.contains {
+                $0.apiBaseUrl == "https://macbook-pro.tail47ba04.ts.net/api/v1"
+                    && $0.uiBaseUrl == "https://macbook-pro.tail47ba04.ts.net/forge/"
+                    && $0.source == .tailscale
+                    && $0.canBootstrapPairing
+            }
+        )
+    }
+
+    func testManualProbeCandidatesNormalizeExplicitLocalApiUrl() {
+        let candidates = ForgeServerDiscovery.manualProbeCandidates(
+            for: "http://192.168.1.42:4317"
+        )
+
+        XCTAssertTrue(
+            candidates.contains {
+                $0.apiBaseUrl == "http://192.168.1.42:4317/api/v1"
+                    && $0.uiBaseUrl == "http://192.168.1.42:4317/forge/"
+                    && $0.source == .lan
+            }
+        )
+    }
+
+    func testPassiveStationaryClusterRepairsShortMoveIntoRetroactiveStay() throws {
         let store = MovementSyncStore(testingState: nil)
         store.debugSetTrackingEnabled(true)
 
         let start = Date(timeIntervalSince1970: 1_775_563_200)
-        let locations = stride(from: 0, through: 10, by: 1).map { minute in
+        let locations = stride(from: 0, through: 11, by: 1).map { minute in
             makeLocation(
                 latitude: 46.5191,
                 longitude: 6.6323,
@@ -111,7 +368,8 @@ final class ForgeCompanionTests: XCTestCase {
         XCTAssertNil(snapshot.activeTrip)
         XCTAssertNotNil(snapshot.activeStay)
         XCTAssertEqual(snapshot.stays.count, 1)
-        XCTAssertEqual(snapshot.activeStay?.startedAt.timeIntervalSince1970, start.timeIntervalSince1970, accuracy: 1)
+        let activeStayStart = try XCTUnwrap(snapshot.activeStay?.startedAt)
+        XCTAssertEqual(activeStayStart.timeIntervalSince1970, start.timeIntervalSince1970, accuracy: 1)
         XCTAssertEqual(snapshot.activeStay?.status, "active")
         XCTAssertEqual(snapshot.latestLocationSummary, "Current state: staying")
     }
@@ -141,7 +399,7 @@ final class ForgeCompanionTests: XCTestCase {
         XCTAssertEqual(snapshot.latestLocationSummary, "Current state: moving")
     }
 
-    func testPersistedInvalidActiveTripRepairsToStayOnLoad() {
+    func testPersistedInvalidActiveTripRepairsToStayOnLoad() throws {
         let start = Date(timeIntervalSince1970: 1_775_563_200)
         let end = start.addingTimeInterval(6.2 * 3600)
         let initialState = MovementSyncStore.PersistedState(
@@ -173,6 +431,7 @@ final class ForgeCompanionTests: XCTestCase {
                     points: [
                         MovementSyncStore.StoredTripPoint(
                             id: "point_a",
+                            externalUid: "point_a",
                             recordedAt: start,
                             latitude: 46.5191,
                             longitude: 6.6323,
@@ -183,6 +442,7 @@ final class ForgeCompanionTests: XCTestCase {
                         ),
                         MovementSyncStore.StoredTripPoint(
                             id: "point_b",
+                            externalUid: "point_b",
                             recordedAt: end,
                             latitude: 46.5192,
                             longitude: 6.63235,
@@ -203,7 +463,8 @@ final class ForgeCompanionTests: XCTestCase {
         XCTAssertNil(snapshot.activeTrip)
         XCTAssertEqual(snapshot.trips.count, 0)
         XCTAssertEqual(snapshot.stays.count, 1)
-        XCTAssertEqual(snapshot.activeStay?.startedAt.timeIntervalSince1970, start.timeIntervalSince1970, accuracy: 1)
+        let repairedStayStart = try XCTUnwrap(snapshot.activeStay?.startedAt)
+        XCTAssertEqual(repairedStayStart.timeIntervalSince1970, start.timeIntervalSince1970, accuracy: 1)
         XCTAssertEqual(snapshot.activeStay?.status, "active")
         XCTAssertTrue(snapshot.activeStay?.tags.contains("invalid_trip_replaced") ?? false)
     }
@@ -260,7 +521,7 @@ final class ForgeCompanionTests: XCTestCase {
         XCTAssertEqual(snapshot.stays.first?.id, "stay_a")
     }
 
-    func testPersistedActiveTripWithStationaryTailRepairsIntoTripPlusStay() {
+    func testPersistedActiveTripWithStationaryTailRepairsIntoTripPlusStay() throws {
         let start = Date(timeIntervalSince1970: 1_775_563_200)
         let tailStart = start.addingTimeInterval(9 * 60)
         let end = start.addingTimeInterval(20 * 60)
@@ -293,6 +554,7 @@ final class ForgeCompanionTests: XCTestCase {
                     points: [
                         MovementSyncStore.StoredTripPoint(
                             id: "point_a",
+                            externalUid: "point_a",
                             recordedAt: start,
                             latitude: 46.5191,
                             longitude: 6.6323,
@@ -303,6 +565,7 @@ final class ForgeCompanionTests: XCTestCase {
                         ),
                         MovementSyncStore.StoredTripPoint(
                             id: "point_b",
+                            externalUid: "point_b",
                             recordedAt: start.addingTimeInterval(5 * 60),
                             latitude: 46.5212,
                             longitude: 6.6378,
@@ -313,6 +576,7 @@ final class ForgeCompanionTests: XCTestCase {
                         ),
                         MovementSyncStore.StoredTripPoint(
                             id: "point_c",
+                            externalUid: "point_c",
                             recordedAt: tailStart,
                             latitude: 46.5234,
                             longitude: 6.6412,
@@ -323,6 +587,7 @@ final class ForgeCompanionTests: XCTestCase {
                         ),
                         MovementSyncStore.StoredTripPoint(
                             id: "point_d",
+                            externalUid: "point_d",
                             recordedAt: start.addingTimeInterval(14 * 60),
                             latitude: 46.52345,
                             longitude: 6.64125,
@@ -333,6 +598,7 @@ final class ForgeCompanionTests: XCTestCase {
                         ),
                         MovementSyncStore.StoredTripPoint(
                             id: "point_e",
+                            externalUid: "point_e",
                             recordedAt: end,
                             latitude: 46.52341,
                             longitude: 6.64119,
@@ -353,13 +619,15 @@ final class ForgeCompanionTests: XCTestCase {
         XCTAssertNil(snapshot.activeTrip)
         XCTAssertEqual(snapshot.trips.count, 1)
         XCTAssertEqual(snapshot.trips.first?.status, "completed")
-        XCTAssertEqual(snapshot.trips.first?.endedAt.timeIntervalSince1970, tailStart.timeIntervalSince1970, accuracy: 1)
+        let repairedTripEnd = try XCTUnwrap(snapshot.trips.first?.endedAt)
+        XCTAssertEqual(repairedTripEnd.timeIntervalSince1970, tailStart.timeIntervalSince1970, accuracy: 1)
         XCTAssertEqual(snapshot.stays.count, 1)
-        XCTAssertEqual(snapshot.activeStay?.startedAt.timeIntervalSince1970, tailStart.timeIntervalSince1970, accuracy: 1)
+        let tailStayStart = try XCTUnwrap(snapshot.activeStay?.startedAt)
+        XCTAssertEqual(tailStayStart.timeIntervalSince1970, tailStart.timeIntervalSince1970, accuracy: 1)
         XCTAssertTrue(snapshot.activeStay?.tags.contains("repaired_from_trip") ?? false)
     }
 
-    func testCompletedRecentStayRevivesAcrossShortMissingGap() {
+    func testCompletedRecentStayDoesNotReviveWithoutFreshLocationSignal() throws {
         let start = Date(timeIntervalSince1970: 1_775_563_200)
         let end = start.addingTimeInterval(2 * 3600)
         let repairDate = end.addingTimeInterval(4 * 3600)
@@ -394,15 +662,17 @@ final class ForgeCompanionTests: XCTestCase {
         let snapshot = store.debugSnapshot()
 
         XCTAssertEqual(snapshot.stays.count, 1)
-        XCTAssertEqual(snapshot.activeStay?.id, "stay_recent")
-        XCTAssertEqual(snapshot.activeStay?.status, "active")
-        XCTAssertEqual(snapshot.activeStay?.endedAt.timeIntervalSince1970, repairDate.timeIntervalSince1970, accuracy: 1)
+        XCTAssertNil(snapshot.activeStay)
+        XCTAssertEqual(snapshot.stays.first?.id, "stay_recent")
+        XCTAssertEqual(snapshot.stays.first?.status, "completed")
+        let preservedStayEnd = try XCTUnwrap(snapshot.stays.first?.endedAt)
+        XCTAssertEqual(preservedStayEnd.timeIntervalSince1970, end.timeIntervalSince1970, accuracy: 1)
     }
 
-    func testCompletedTripCreatesGapSmoothedDestinationStay() {
+    func testCompletedTripDoesNotPersistGapSmoothedDestinationStayWithoutFreshLocation() throws {
         let start = Date(timeIntervalSince1970: 1_775_563_200)
         let end = start.addingTimeInterval(42 * 60)
-        let repairDate = end.addingTimeInterval(2 * 3600)
+        let repairDate = end.addingTimeInterval(30 * 60)
         let initialState = MovementSyncStore.PersistedState(
             trackingEnabled: true,
             publishMode: "auto_publish",
@@ -432,6 +702,7 @@ final class ForgeCompanionTests: XCTestCase {
                     points: [
                         MovementSyncStore.StoredTripPoint(
                             id: "trip_done_a",
+                            externalUid: "trip_done_a",
                             recordedAt: start,
                             latitude: 46.5191,
                             longitude: 6.6323,
@@ -442,6 +713,7 @@ final class ForgeCompanionTests: XCTestCase {
                         ),
                         MovementSyncStore.StoredTripPoint(
                             id: "trip_done_b",
+                            externalUid: "trip_done_b",
                             recordedAt: end,
                             latitude: 46.5234,
                             longitude: 6.6412,
@@ -461,13 +733,79 @@ final class ForgeCompanionTests: XCTestCase {
         let snapshot = store.debugSnapshot()
 
         XCTAssertEqual(snapshot.trips.count, 1)
-        XCTAssertEqual(snapshot.stays.count, 1)
-        XCTAssertEqual(snapshot.activeStay?.startedAt.timeIntervalSince1970, end.timeIntervalSince1970, accuracy: 1)
-        XCTAssertEqual(snapshot.activeStay?.endedAt.timeIntervalSince1970, repairDate.timeIntervalSince1970, accuracy: 1)
-        XCTAssertTrue(snapshot.activeStay?.tags.contains("gap_smoothed") ?? false)
+        XCTAssertEqual(snapshot.stays.count, 0)
+        XCTAssertNil(snapshot.activeStay)
     }
 
-    func testQuietBogusMoveRepairsToActiveStayUsingCurrentTimeNotLastPointTime() {
+    func testCompletedTripDoesNotCreateGapSmoothedStayAcrossLongMissingGap() throws {
+        let start = Date(timeIntervalSince1970: 1_775_563_200)
+        let end = start.addingTimeInterval(42 * 60)
+        let repairDate = end.addingTimeInterval((60 * 60) + 1)
+        let initialState = MovementSyncStore.PersistedState(
+            trackingEnabled: true,
+            publishMode: "auto_publish",
+            retentionMode: "aggregates_only",
+            knownPlaces: [],
+            stays: [],
+            trips: [
+                MovementSyncStore.StoredTrip(
+                    id: "trip_done",
+                    label: "Travel",
+                    status: "completed",
+                    travelMode: "travel",
+                    activityType: "walking",
+                    startedAt: start,
+                    endedAt: end,
+                    startPlaceExternalUid: "",
+                    endPlaceExternalUid: "",
+                    distanceMeters: 900,
+                    movingSeconds: Int(42 * 60),
+                    idleSeconds: 0,
+                    averageSpeedMps: 1.1,
+                    maxSpeedMps: 1.5,
+                    caloriesKcal: nil,
+                    expectedMet: nil,
+                    tags: ["movement"],
+                    metadata: [:],
+                    points: [
+                        MovementSyncStore.StoredTripPoint(
+                            id: "trip_done_a",
+                            externalUid: "trip_done_a",
+                            recordedAt: start,
+                            latitude: 46.5191,
+                            longitude: 6.6323,
+                            accuracyMeters: 8,
+                            altitudeMeters: nil,
+                            speedMps: 1.2,
+                            isStopAnchor: false
+                        ),
+                        MovementSyncStore.StoredTripPoint(
+                            id: "trip_done_b",
+                            externalUid: "trip_done_b",
+                            recordedAt: end,
+                            latitude: 46.5234,
+                            longitude: 6.6412,
+                            accuracyMeters: 8,
+                            altitudeMeters: nil,
+                            speedMps: 0.0,
+                            isStopAnchor: true
+                        )
+                    ],
+                    stops: []
+                )
+            ]
+        )
+
+        let store = MovementSyncStore(testingState: initialState)
+        store.debugRepair(referenceDate: repairDate)
+        let snapshot = store.debugSnapshot()
+
+        XCTAssertEqual(snapshot.trips.count, 1)
+        XCTAssertEqual(snapshot.stays.count, 0)
+        XCTAssertNil(snapshot.activeStay)
+    }
+
+    func testQuietBogusMoveRepairsToActiveStayUsingCurrentTimeNotLastPointTime() throws {
         let start = Date(timeIntervalSince1970: 1_775_563_200)
         let lastPointAt = start.addingTimeInterval(60)
         let repairDate = start.addingTimeInterval(15 * 60)
@@ -517,6 +855,7 @@ final class ForgeCompanionTests: XCTestCase {
                     points: [
                         MovementSyncStore.StoredTripPoint(
                             id: "trip_stuck_a",
+                            externalUid: "trip_stuck_a",
                             recordedAt: start,
                             latitude: 46.5191,
                             longitude: 6.6323,
@@ -527,6 +866,7 @@ final class ForgeCompanionTests: XCTestCase {
                         ),
                         MovementSyncStore.StoredTripPoint(
                             id: "trip_stuck_b",
+                            externalUid: "trip_stuck_b",
                             recordedAt: lastPointAt,
                             latitude: 46.51915,
                             longitude: 6.63231,
@@ -548,7 +888,253 @@ final class ForgeCompanionTests: XCTestCase {
         XCTAssertNil(snapshot.activeTrip)
         XCTAssertEqual(snapshot.trips.count, 0)
         XCTAssertNotNil(snapshot.activeStay)
-        XCTAssertEqual(snapshot.activeStay?.endedAt.timeIntervalSince1970, repairDate.timeIntervalSince1970, accuracy: 1)
+        let repairedCurrentStayEnd = try XCTUnwrap(snapshot.activeStay?.endedAt)
+        XCTAssertEqual(repairedCurrentStayEnd.timeIntervalSince1970, repairDate.timeIntervalSince1970, accuracy: 1)
+    }
+
+    func testHistoricalTimelineSynthesizesRepairedGapsAndMissingTail() {
+        let home = CLLocationCoordinate2D(latitude: 46.5191, longitude: 6.6323)
+        let office = CLLocationCoordinate2D(latitude: 46.5252, longitude: 6.6492)
+        let park = CLLocationCoordinate2D(latitude: 46.5236, longitude: 6.6458)
+        let cafe = CLLocationCoordinate2D(latitude: 46.5218, longitude: 6.6418)
+        let referenceDate = ISO8601DateFormatter().date(from: "2026-04-05T12:30:00Z") ?? Date()
+        let initialState = MovementSyncStore.PersistedState(
+            trackingEnabled: true,
+            publishMode: "auto_publish",
+            retentionMode: "aggregates_only",
+            knownPlaces: [],
+            stays: [
+                MovementSyncStore.StoredStay(
+                    id: "stay_home_1",
+                    label: "Home",
+                    status: "completed",
+                    classification: "stationary",
+                    startedAt: ISO8601DateFormatter().date(from: "2026-04-05T07:00:00Z") ?? Date(),
+                    endedAt: ISO8601DateFormatter().date(from: "2026-04-05T08:00:00Z") ?? Date(),
+                    centerLatitude: home.latitude,
+                    centerLongitude: home.longitude,
+                    radiusMeters: 100,
+                    sampleCount: 8,
+                    placeExternalUid: "",
+                    placeLabel: "Home",
+                    tags: ["home"],
+                    metadata: [:]
+                ),
+                MovementSyncStore.StoredStay(
+                    id: "stay_home_2",
+                    label: "Home",
+                    status: "completed",
+                    classification: "stationary",
+                    startedAt: ISO8601DateFormatter().date(from: "2026-04-05T08:20:00Z") ?? Date(),
+                    endedAt: ISO8601DateFormatter().date(from: "2026-04-05T08:40:00Z") ?? Date(),
+                    centerLatitude: home.latitude,
+                    centerLongitude: home.longitude,
+                    radiusMeters: 100,
+                    sampleCount: 6,
+                    placeExternalUid: "",
+                    placeLabel: "Home",
+                    tags: ["home"],
+                    metadata: [:]
+                ),
+                MovementSyncStore.StoredStay(
+                    id: "stay_cafe",
+                    label: "Cafe",
+                    status: "completed",
+                    classification: "stationary",
+                    startedAt: ISO8601DateFormatter().date(from: "2026-04-05T09:30:00Z") ?? Date(),
+                    endedAt: ISO8601DateFormatter().date(from: "2026-04-05T10:00:00Z") ?? Date(),
+                    centerLatitude: cafe.latitude,
+                    centerLongitude: cafe.longitude,
+                    radiusMeters: 90,
+                    sampleCount: 4,
+                    placeExternalUid: "",
+                    placeLabel: "Cafe",
+                    tags: ["cafe"],
+                    metadata: [:]
+                )
+            ],
+            trips: [
+                MovementSyncStore.StoredTrip(
+                    id: "trip_office_park",
+                    label: "Office to park",
+                    status: "completed",
+                    travelMode: "travel",
+                    activityType: "walking",
+                    startedAt: ISO8601DateFormatter().date(from: "2026-04-05T08:44:00Z") ?? Date(),
+                    endedAt: ISO8601DateFormatter().date(from: "2026-04-05T09:10:00Z") ?? Date(),
+                    startPlaceExternalUid: "",
+                    endPlaceExternalUid: "",
+                    distanceMeters: 1600,
+                    movingSeconds: 1300,
+                    idleSeconds: 60,
+                    averageSpeedMps: 1.3,
+                    maxSpeedMps: 2.1,
+                    caloriesKcal: nil,
+                    expectedMet: nil,
+                    tags: ["movement"],
+                    metadata: [:],
+                    points: [
+                        MovementSyncStore.StoredTripPoint(
+                            id: "trip_start",
+                            externalUid: "trip_start",
+                            recordedAt: ISO8601DateFormatter().date(from: "2026-04-05T08:44:00Z") ?? Date(),
+                            latitude: office.latitude,
+                            longitude: office.longitude,
+                            accuracyMeters: 8,
+                            altitudeMeters: nil,
+                            speedMps: 1.2,
+                            isStopAnchor: false
+                        ),
+                        MovementSyncStore.StoredTripPoint(
+                            id: "trip_end",
+                            externalUid: "trip_end",
+                            recordedAt: ISO8601DateFormatter().date(from: "2026-04-05T09:10:00Z") ?? Date(),
+                            latitude: park.latitude,
+                            longitude: park.longitude,
+                            accuracyMeters: 8,
+                            altitudeMeters: nil,
+                            speedMps: 1.4,
+                            isStopAnchor: true
+                        )
+                    ],
+                    stops: []
+                )
+            ]
+        )
+
+        let store = MovementSyncStore(testingState: initialState)
+        let timeline = store.buildHistoricalTimelineSegments(referenceDate: referenceDate)
+
+        XCTAssertGreaterThanOrEqual(timeline.filter { $0.origin == .recorded }.count, 2)
+        XCTAssertEqual(
+            timeline.filter { $0.origin == .repairedGap && $0.kind == .stay }.count,
+            1
+        )
+        XCTAssertEqual(
+            timeline.filter { $0.origin == .repairedGap && $0.kind == .trip }.count,
+            1
+        )
+        XCTAssertEqual(
+            timeline.filter { $0.origin == .missing && $0.kind == .missing }.count,
+            1
+        )
+        XCTAssertTrue(
+            timeline.contains(where: {
+                $0.origin == .repairedGap
+                    && $0.kind == .stay
+                    && $0.tags.contains("suppressed-short-jump")
+                    && $0.editable == false
+            })
+        )
+        XCTAssertTrue(
+            timeline.allSatisfy { segment in
+                segment.origin == .recorded ? segment.editable : segment.editable == false
+            }
+        )
+        let sortedTimeline = timeline.sorted { $0.startedAt < $1.startedAt }
+        XCTAssertEqual(sortedTimeline.first?.startedAt, ISO8601DateFormatter().date(from: "2026-04-05T07:00:00Z"))
+        XCTAssertEqual(sortedTimeline.last?.endedAt, referenceDate)
+        for index in 1..<sortedTimeline.count {
+            XCTAssertEqual(sortedTimeline[index - 1].endedAt, sortedTimeline[index].startedAt)
+        }
+    }
+
+    func testHistoricalTimelineMakesLongOvernightGapsExplicitInsteadOfBlank() {
+        let formatter = ISO8601DateFormatter()
+        let home = CLLocationCoordinate2D(latitude: 46.5191, longitude: 6.6323)
+        let tripStart = CLLocationCoordinate2D(latitude: 46.5216, longitude: 6.6404)
+        let tripEnd = CLLocationCoordinate2D(latitude: 46.5226, longitude: 6.6424)
+        let referenceDate = formatter.date(from: "2026-04-06T02:40:00Z") ?? Date()
+        let initialState = MovementSyncStore.PersistedState(
+            trackingEnabled: true,
+            publishMode: "auto_publish",
+            retentionMode: "aggregates_only",
+            knownPlaces: [],
+            stays: [
+                MovementSyncStore.StoredStay(
+                    id: "stay_home_evening",
+                    label: "Home",
+                    status: "completed",
+                    classification: "stationary",
+                    startedAt: formatter.date(from: "2026-04-05T21:15:00Z") ?? Date(),
+                    endedAt: formatter.date(from: "2026-04-05T21:30:00Z") ?? Date(),
+                    centerLatitude: home.latitude,
+                    centerLongitude: home.longitude,
+                    radiusMeters: 100,
+                    sampleCount: 5,
+                    placeExternalUid: "",
+                    placeLabel: "Home",
+                    tags: ["home"],
+                    metadata: [:]
+                )
+            ],
+            trips: [
+                MovementSyncStore.StoredTrip(
+                    id: "trip_night_move",
+                    label: "Night move",
+                    status: "completed",
+                    travelMode: "travel",
+                    activityType: "walking",
+                    startedAt: formatter.date(from: "2026-04-06T02:34:00Z") ?? Date(),
+                    endedAt: formatter.date(from: "2026-04-06T02:40:00Z") ?? Date(),
+                    startPlaceExternalUid: "",
+                    endPlaceExternalUid: "",
+                    distanceMeters: 650,
+                    movingSeconds: 300,
+                    idleSeconds: 60,
+                    averageSpeedMps: 1.8,
+                    maxSpeedMps: 2.5,
+                    caloriesKcal: nil,
+                    expectedMet: nil,
+                    tags: ["movement"],
+                    metadata: [:],
+                    points: [
+                        MovementSyncStore.StoredTripPoint(
+                            id: "trip_start",
+                            externalUid: "trip_start",
+                            recordedAt: formatter.date(from: "2026-04-06T02:34:00Z") ?? Date(),
+                            latitude: tripStart.latitude,
+                            longitude: tripStart.longitude,
+                            accuracyMeters: 8,
+                            altitudeMeters: nil,
+                            speedMps: 1.6,
+                            isStopAnchor: false
+                        ),
+                        MovementSyncStore.StoredTripPoint(
+                            id: "trip_end",
+                            externalUid: "trip_end",
+                            recordedAt: formatter.date(from: "2026-04-06T02:40:00Z") ?? Date(),
+                            latitude: tripEnd.latitude,
+                            longitude: tripEnd.longitude,
+                            accuracyMeters: 8,
+                            altitudeMeters: nil,
+                            speedMps: 1.9,
+                            isStopAnchor: true
+                        )
+                    ],
+                    stops: []
+                )
+            ]
+        )
+
+        let store = MovementSyncStore(testingState: initialState)
+        let timeline = store.buildHistoricalTimelineSegments(referenceDate: referenceDate)
+        let sortedTimeline = timeline.sorted { $0.startedAt < $1.startedAt }
+
+        XCTAssertEqual(sortedTimeline.count, 3)
+        XCTAssertEqual(sortedTimeline[0].kind, .stay)
+        XCTAssertEqual(sortedTimeline[0].origin, .recorded)
+        XCTAssertEqual(sortedTimeline[1].kind, .missing)
+        XCTAssertEqual(sortedTimeline[1].origin, .missing)
+        XCTAssertEqual(
+            Int(sortedTimeline[1].endedAt.timeIntervalSince(sortedTimeline[1].startedAt)),
+            Int((5 * 60 * 60) + (4 * 60))
+        )
+        XCTAssertEqual(sortedTimeline[2].kind, .trip)
+        XCTAssertEqual(sortedTimeline[2].origin, .recorded)
+        for index in 1..<sortedTimeline.count {
+            XCTAssertEqual(sortedTimeline[index - 1].endedAt, sortedTimeline[index].startedAt)
+        }
     }
 
     private func makeLocation(

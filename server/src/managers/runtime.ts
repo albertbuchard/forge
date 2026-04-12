@@ -17,6 +17,15 @@ import { ExternalServiceManager } from "./platform/external-service-manager.js";
 import { SearchIndexManager } from "./platform/search-index-manager.js";
 import { LlmManager } from "./platform/llm-manager.js";
 import { OpenAiResponsesProvider } from "./platform/openai-responses-provider.js";
+import { MockWorkbenchProvider } from "./platform/mock-workbench-provider.js";
+
+function shouldEnableMockWorkbenchProvider(env: NodeJS.ProcessEnv = process.env) {
+  return (
+    env.NODE_ENV === "test" ||
+    env.FORGE_ENABLE_DEV_MOCKS === "1" ||
+    env.FORGE_OPENCLAW_DEV === "1"
+  );
+}
 
 export function createManagerRuntime(options: { dataRoot?: string } = {}) {
   const configuration = new ConfigurationManager();
@@ -42,6 +51,9 @@ export function createManagerRuntime(options: { dataRoot?: string } = {}) {
   const searchIndex = new SearchIndexManager();
   const llm = new LlmManager(secrets);
   llm.register(new OpenAiResponsesProvider());
+  if (shouldEnableMockWorkbenchProvider()) {
+    llm.register(new MockWorkbenchProvider());
+  }
 
   return {
     configuration,
