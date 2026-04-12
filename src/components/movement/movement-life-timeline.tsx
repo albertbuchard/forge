@@ -4,6 +4,7 @@ import { motion } from "framer-motion";
 import {
   useInfiniteQuery,
   useMutation,
+  useQuery,
   useQueryClient
 } from "@tanstack/react-query";
 import { useVirtualizer } from "@tanstack/react-virtual";
@@ -33,11 +34,13 @@ import {
   deleteMovementUserBox,
   getMovementTimeline,
   invalidateAutomaticMovementBox,
+  preflightMovementUserBox,
   patchMovementUserBox
 } from "@/lib/api";
 import type {
   MovementTimelineLaneSide,
-  MovementTimelineSegment
+  MovementTimelineSegment,
+  MovementUserBoxPreflight
 } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -321,6 +324,40 @@ function buildNewDraft(
           : "user-defined, move",
     startedAtInput: formatDateTimeInput(seedStart),
     endedAtInput: formatDateTimeInput(seedEnd)
+  };
+}
+
+function buildMovementUserBoxPayloadInput(
+  draft: TimelineDraft,
+  segment: MovementTimelineSegment | null
+) {
+  const tags = draft.tagsInput
+    .split(",")
+    .map((value) => value.trim())
+    .filter(Boolean);
+  const startedAt =
+    parseDateTimeInput(draft.startedAtInput) ??
+    segment?.startedAt ??
+    new Date(Date.now() - 60 * 60 * 1000).toISOString();
+  const endedAt =
+    parseDateTimeInput(draft.endedAtInput) ??
+    segment?.endedAt ??
+    new Date().toISOString();
+  return {
+    kind: draft.kind,
+    startedAt,
+    endedAt,
+    title: draft.label.trim(),
+    subtitle:
+      draft.kind === "missing"
+        ? "User-defined missing-data override."
+        : "User-defined movement box.",
+    placeLabel: draft.placeLabel.trim() || null,
+    tags,
+    distanceMeters:
+      draft.kind === "trip" ? Math.max(segment?.trip?.distanceMeters ?? 150, 150) : null,
+    averageSpeedMps: draft.kind === "trip" ? segment?.trip?.averageSpeedMps ?? null : null,
+    metadata: { createdFrom: "movement-life-timeline" }
   };
 }
 
@@ -1475,39 +1512,10 @@ export function MovementLifeTimeline({ userIds = [] }: MovementLifeTimelineProps
       creating: boolean;
     }) => {
       const { segment, draft, creating } = input;
-      const tags = draft.tagsInput
-        .split(",")
-        .map((value) => value.trim())
-        .filter(Boolean);
-      const startedAt =
-        parseDateTimeInput(draft.startedAtInput) ??
-        segment?.startedAt ??
-        new Date(Date.now() - 60 * 60 * 1000).toISOString();
-      const endedAt =
-        parseDateTimeInput(draft.endedAtInput) ??
-        segment?.endedAt ??
-        new Date().toISOString();
+      const payload = buildMovementUserBoxPayloadInput(draft, segment);
 
       if (creating) {
-        await createMovementUserBox(
-          {
-            kind: draft.kind,
-            startedAt,
-            endedAt,
-            title: draft.label.trim(),
-            subtitle:
-              draft.kind === "missing"
-                ? "User-defined missing-data override."
-                : "User-defined movement box.",
-            placeLabel: draft.placeLabel.trim() || null,
-            tags,
-            distanceMeters:
-              draft.kind === "trip" ? Math.max(segment?.trip?.distanceMeters ?? 150, 150) : null,
-            averageSpeedMps: draft.kind === "trip" ? segment?.trip?.averageSpeedMps ?? null : null,
-            metadata: { createdFrom: "movement-life-timeline" }
-          },
-          userIds
-        );
+        await createMovementUserBox(payload, userIds);
         return;
       }
 
@@ -1521,23 +1529,9 @@ export function MovementLifeTimeline({ userIds = [] }: MovementLifeTimelineProps
       }
 
       await patchMovementUserBox(
-        segment.id,
+        segment.boxId,
         {
-          kind: draft.kind,
-          startedAt,
-          endedAt,
-          title: draft.label.trim(),
-          subtitle:
-            draft.kind === "missing"
-              ? "User-defined missing-data override."
-              : "User-defined movement box.",
-          placeLabel: draft.placeLabel.trim() || null,
-          tags,
-          distanceMeters:
-            draft.kind === "trip"
-              ? Math.max(segment.trip?.distanceMeters ?? 150, 150)
-              : null,
-          averageSpeedMps: draft.kind === "trip" ? segment.trip?.averageSpeedMps ?? null : null,
+          ...payload,
           metadata: { updatedFrom: "movement-life-timeline" }
         },
         userIds
@@ -1565,11 +1559,11 @@ export function MovementLifeTimeline({ userIds = [] }: MovementLifeTimelineProps
   const deleteMutation = useMutation({
     mutationFn: async (segment: MovementTimelineSegment) => {
       if (segment.sourceKind === "user_defined") {
-        await deleteMovementUserBox(segment.id, userIds);
+        await deleteMovementUserBox(segment.boxId, userIds);
         return;
       }
       await invalidateAutomaticMovementBox(
-        segment.id,
+        segment.boxId,
         {
           title: "User invalidated automatic movement",
           subtitle: `Overrides ${displaySegmentTitle(segment)} with missing data.`
@@ -1704,6 +1698,42 @@ export function MovementLifeTimeline({ userIds = [] }: MovementLifeTimelineProps
     : null;
   const isCreating = creatingDraft !== null;
   const activeDraft = creatingDraft ?? editingDraft;
+  const visibleRangeStart = segments[0]?.startedAt ?? null;
+  const visibleRangeEnd = segments[segments.length - 1]?.endedAt ?? null;
+  const preflightQuery = useQuery({
+    queryKey: [
+      "forge-movement-user-box-preflight",
+      editingSegment?.boxId ?? "create",
+      activeDraft?.kind ?? null,
+      activeDraft?.startedAtInput ?? null,
+      activeDraft?.endedAtInput ?? null,
+      visibleRangeStart,
+      visibleRangeEnd,
+      ...userIds
+    ],
+    enabled:
+      activeDraft !== null &&
+      parseDateTimeInput(activeDraft.startedAtInput) !== null &&
+      parseDateTimeInput(activeDraft.endedAtInput) !== null,
+    queryFn: async () => {
+      if (!activeDraft) {
+        return null;
+      }
+      const payload = buildMovementUserBoxPayloadInput(activeDraft, editingSegment);
+      const response = await preflightMovementUserBox(
+        {
+          ...payload,
+          excludeBoxId: editingSegment?.sourceKind === "user_defined"
+            ? editingSegment.boxId
+            : null,
+          rangeStart: visibleRangeStart,
+          rangeEnd: visibleRangeEnd
+        },
+        userIds
+      );
+      return response.preflight;
+    }
+  });
 
   const contentHeight = Math.max(
     timelineRows.length > 0
@@ -1811,7 +1841,31 @@ export function MovementLifeTimeline({ userIds = [] }: MovementLifeTimelineProps
         draft={activeDraft}
         creating={isCreating}
         saving={saveMutation.isPending}
+        preflight={preflightQuery.data ?? null}
+        preflightLoading={preflightQuery.isFetching}
         onDraftChange={(nextDraft) => {
+          if (isCreating) {
+            setCreatingDraft(nextDraft);
+            return;
+          }
+          if (!editingSegment) {
+            return;
+          }
+          setDraftById((current) => ({
+            ...current,
+            [editingSegment.id]: nextDraft
+          }));
+        }}
+        onFitMissing={() => {
+          const preflight = preflightQuery.data;
+          if (!preflight?.nearestMissingStartedAt || !preflight.nearestMissingEndedAt) {
+            return;
+          }
+          const nextDraft = {
+            ...(activeDraft ?? buildNewDraft("stay", editingSegment)),
+            startedAtInput: formatDateTimeInput(preflight.nearestMissingStartedAt),
+            endedAtInput: formatDateTimeInput(preflight.nearestMissingEndedAt)
+          };
           if (isCreating) {
             setCreatingDraft(nextDraft);
             return;
