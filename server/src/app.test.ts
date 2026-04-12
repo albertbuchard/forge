@@ -1743,6 +1743,95 @@ test("mobile health sync accepts screen time warning paths and records warning d
   }
 });
 
+test("mobile health sync accepts waiting_for_snapshot screen time capture state", async () => {
+  const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-screen-time-waiting-"));
+  const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
+
+  try {
+    const operatorCookie = await issueOperatorSessionCookie(app);
+    const pairingResponse = await app.inject({
+      method: "POST",
+      url: "/api/v1/health/pairing-sessions",
+      headers: {
+        cookie: operatorCookie,
+        host: "127.0.0.1:4317"
+      },
+      payload: {
+        userId: "user_operator"
+      }
+    });
+    assert.equal(pairingResponse.statusCode, 201);
+    const qrPayload = (
+      pairingResponse.json() as {
+        qrPayload: {
+          sessionId: string;
+          pairingToken: string;
+        };
+      }
+    ).qrPayload;
+
+    const syncResponse = await app.inject({
+      method: "POST",
+      url: "/api/v1/mobile/healthkit/sync",
+      payload: {
+        sessionId: qrPayload.sessionId,
+        pairingToken: qrPayload.pairingToken,
+        device: {
+          name: "Omar iPhone",
+          platform: "ios",
+          appVersion: "1.0",
+          sourceDevice: "iPhone"
+        },
+        permissions: {
+          healthKitAuthorized: true,
+          backgroundRefreshEnabled: true,
+          motionReady: false,
+          locationReady: false,
+          screenTimeReady: false
+        },
+        sleepSessions: [],
+        workouts: [],
+        stays: [],
+        trips: [],
+        screenTime: {
+          settings: {
+            trackingEnabled: true,
+            syncEnabled: true,
+            authorizationStatus: "approved",
+            captureState: "waiting_for_snapshot",
+            lastCapturedDayKey: null,
+            lastCaptureStartedAt: null,
+            lastCaptureEndedAt: null,
+            metadata: {
+              source: "waiting_for_snapshot_test"
+            }
+          },
+          daySummaries: [],
+          hourlySegments: []
+        }
+      }
+    });
+    assert.equal(syncResponse.statusCode, 200);
+
+    const settingsResponse = await app.inject({
+      method: "GET",
+      url: "/api/v1/screen-time/settings",
+      headers: {
+        cookie: operatorCookie
+      }
+    });
+    assert.equal(settingsResponse.statusCode, 200);
+    const settingsPayload = settingsResponse.json() as {
+      settings: { captureState: string };
+    };
+    assert.equal(settingsPayload.settings.captureState, "waiting_for_snapshot");
+  } finally {
+    await app.close();
+    closeDatabase();
+    await rm(rootDir, { recursive: true, force: true });
+  }
+});
+
 test("diagnostic log schema accepts warn as a warning alias", async () => {
   const rootDir = await mkdtemp(
     path.join(os.tmpdir(), "forge-diagnostic-warn-alias-")
@@ -3674,6 +3763,16 @@ test("user-defined movement boxes override automatic boxes without mutating raw 
       }
     });
     assert.equal(createBoxResponse.statusCode, 201);
+    const createdBox = createBoxResponse.json() as {
+      box: {
+        id: string;
+        boxId: string;
+        laneSide: string;
+        connectorFromLane: string;
+      };
+    };
+    assert.equal(createdBox.box.boxId, createdBox.box.id);
+    assert.ok(createdBox.box.laneSide.length > 0);
 
     const expected = await loadSharedMovementFixture("user_defined_missing_override");
 
@@ -3748,6 +3847,123 @@ test("user-defined movement boxes override automatic boxes without mutating raw 
           segment.startedAt === "2026-04-05T08:30:00.000Z"
       ),
       false
+    );
+  } finally {
+    await app.close();
+    closeDatabase();
+    await rm(rootDir, { recursive: true, force: true });
+  }
+});
+
+test("movement user-box preflight and save allow overlapping manual boxes with last-write-wins projection", async () => {
+  const rootDir = await mkdtemp(
+    path.join(os.tmpdir(), "forge-movement-user-box-preflight-")
+  );
+  const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
+
+  try {
+    const operatorCookie = await issueOperatorSessionCookie(app);
+
+    const firstCreate = await app.inject({
+      method: "POST",
+      url: "/api/v1/movement/user-boxes",
+      headers: { cookie: operatorCookie },
+      payload: {
+        kind: "stay",
+        startedAt: "2026-04-05T14:00:00.000Z",
+        endedAt: "2026-04-05T20:00:00.000Z",
+        title: "Home",
+        subtitle: "Manual stay.",
+        placeLabel: "Home",
+        tags: ["user-defined", "stay"]
+      }
+    });
+    assert.equal(firstCreate.statusCode, 201);
+    const firstBoxId = (firstCreate.json() as { box: { boxId: string } }).box.boxId;
+
+    const preflight = await app.inject({
+      method: "POST",
+      url: "/api/v1/movement/user-boxes/preflight",
+      headers: { cookie: operatorCookie },
+      payload: {
+        kind: "missing",
+        startedAt: "2026-04-05T16:00:00.000Z",
+        endedAt: "2026-04-05T18:00:00.000Z",
+        title: "User-defined missing data",
+        subtitle: "Manual override.",
+        placeLabel: "Home",
+        tags: ["missing-data"]
+      }
+    });
+    assert.equal(preflight.statusCode, 200);
+    const preflightBody = preflight.json() as {
+      preflight: {
+        overlapsAnything: boolean;
+        affectedUserBoxIds: string[];
+        trimmedUserBoxIds: string[];
+      };
+    };
+    assert.equal(preflightBody.preflight.overlapsAnything, true);
+    assert.deepEqual(preflightBody.preflight.affectedUserBoxIds, [firstBoxId]);
+    assert.deepEqual(preflightBody.preflight.trimmedUserBoxIds, [firstBoxId]);
+
+    const secondCreate = await app.inject({
+      method: "POST",
+      url: "/api/v1/movement/user-boxes",
+      headers: { cookie: operatorCookie },
+      payload: {
+        kind: "missing",
+        startedAt: "2026-04-05T16:00:00.000Z",
+        endedAt: "2026-04-05T18:00:00.000Z",
+        title: "User-defined missing data",
+        subtitle: "Manual override.",
+        placeLabel: "Home",
+        tags: ["missing-data"]
+      }
+    });
+    assert.equal(secondCreate.statusCode, 201);
+
+    const timelineResponse = await app.inject({
+      method: "GET",
+      url: "/api/v1/movement/timeline?limit=20"
+    });
+    assert.equal(timelineResponse.statusCode, 200);
+    const timeline = timelineResponse.json() as {
+      movement: {
+        segments: Array<{
+          boxId: string;
+          sourceKind: "automatic" | "user_defined";
+          kind: "stay" | "trip" | "missing";
+          startedAt: string;
+          endedAt: string;
+        }>;
+      };
+    };
+
+    const visibleFirstBoxFragments = timeline.movement.segments.filter(
+      (segment) => segment.sourceKind === "user_defined" && segment.boxId === firstBoxId
+    );
+    assert.equal(visibleFirstBoxFragments.length, 2);
+    assert.deepEqual(
+      visibleFirstBoxFragments
+        .map((segment) => ({
+          kind: segment.kind,
+          startedAt: segment.startedAt,
+          endedAt: segment.endedAt
+        }))
+        .sort((left, right) => left.startedAt.localeCompare(right.startedAt)),
+      [
+        {
+          kind: "stay",
+          startedAt: "2026-04-05T14:00:00.000Z",
+          endedAt: "2026-04-05T16:00:00.000Z"
+        },
+        {
+          kind: "stay",
+          startedAt: "2026-04-05T18:00:00.000Z",
+          endedAt: "2026-04-05T20:00:00.000Z"
+        }
+      ]
     );
   } finally {
     await app.close();

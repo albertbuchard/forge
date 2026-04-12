@@ -54,9 +54,15 @@ npm run dev
 
 Default local runtime addresses:
 
-- UI: `http://127.0.0.1:3027/forge/`
+- UI: `http://127.0.0.1:4317/forge/`
+- Vite dev frontend: `http://127.0.0.1:3027/forge/`
 - API: `http://127.0.0.1:4317/api/v1/`
 - OpenAPI: `http://127.0.0.1:4317/api/v1/openapi.json`
+
+Forge should always be served through the backend on `4317`. In development, the
+backend can proxy and autostart the hot-reloading Vite frontend on `3027`, but
+shared routes such as Tailscale `/forge` should still point to
+`http://127.0.0.1:4317/forge/`, not directly to the dev server.
 
 When Forge runs inside this monorepo, the local runtime prefers the shared tracked
 data root at `/Users/omarclaw/Documents/aurel-monorepo/data/forge` when it exists.
@@ -243,7 +249,7 @@ node --import tsx --test --test-concurrency=1 server/src/*.test.ts
 npm run test
 tailscale serve status
 curl -I http://127.0.0.1:4317/api/v1/health
-curl -I http://127.0.0.1:3027/forge/
+curl -I http://127.0.0.1:4317/forge/
 ```
 
 If you are changing the public docs surface, also regenerate the Pages OpenAPI copy:

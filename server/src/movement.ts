@@ -4015,30 +4015,6 @@ function recomputeMovementBoxOverrideState(userId: string) {
   }
 }
 
-function assertMovementUserBoxDoesNotOverlap(input: {
-  userId: string;
-  startedAt: string;
-  endedAt: string;
-  excludeId?: string;
-}) {
-  const overlapping = listMovementBoxRows({
-    userIds: [input.userId],
-    sourceKinds: ["user_defined"]
-  }).find((row) => {
-    if (input.excludeId && row.id === input.excludeId) {
-      return false;
-    }
-    return movementBoxOverlapsRange(row, input.startedAt, input.endedAt);
-  });
-  if (overlapping) {
-    throw new HttpError(
-      409,
-      "movement_user_box_overlap",
-      "Manual movement boxes cannot overlap each other."
-    );
-  }
-}
-
 function legacyTripHasCorrections(userId: string, tripExternalUid: string) {
   return (
     listMovementTripTombstones(userId).some(
@@ -4822,11 +4798,6 @@ export function invalidateAutomaticMovementBox(
   const parsed = movementAutomaticBoxInvalidateSchema.parse(input);
   const startedAt = parsed.startedAt ?? automatic.started_at;
   const endedAt = parsed.endedAt ?? automatic.ended_at;
-  assertMovementUserBoxDoesNotOverlap({
-    userId: automatic.user_id,
-    startedAt,
-    endedAt
-  });
   const created = createMovementUserBox(
     {
       userId: automatic.user_id,
@@ -5108,6 +5079,8 @@ function buildProjectedMovementTimelineSegments(userIds: string[]) {
       trip: rawTrip
     };
   });
+
+  return decorated;
 }
 
 export function resolveMovementTimelineSegmentForBox(

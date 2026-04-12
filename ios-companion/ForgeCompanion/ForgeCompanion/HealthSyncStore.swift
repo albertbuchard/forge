@@ -154,7 +154,6 @@ actor HealthSyncStore {
                 screenTimeReady: screenTimePayload.settings.authorizationStatus == "approved"
                     && screenTimePayload.settings.trackingEnabled
                     && screenTimePayload.settings.syncEnabled
-                    && screenTimePayload.hourlySegments.isEmpty == false
             ),
             sourceStates: sourceStates,
             sleepSessions: sleepSessions,

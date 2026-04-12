@@ -10,12 +10,14 @@ import type { MovementTimelineSegment } from "@/lib/types";
 const {
   getMovementTimelineMock,
   createMovementUserBoxMock,
+  preflightMovementUserBoxMock,
   patchMovementUserBoxMock,
   deleteMovementUserBoxMock,
   invalidateAutomaticMovementBoxMock
 } = vi.hoisted(() => ({
   getMovementTimelineMock: vi.fn(),
   createMovementUserBoxMock: vi.fn(),
+  preflightMovementUserBoxMock: vi.fn(),
   patchMovementUserBoxMock: vi.fn(),
   deleteMovementUserBoxMock: vi.fn(),
   invalidateAutomaticMovementBoxMock: vi.fn()
@@ -39,6 +41,7 @@ vi.mock("@tanstack/react-virtual", () => ({
 vi.mock("@/lib/api", () => ({
   getMovementTimeline: (...args: unknown[]) => getMovementTimelineMock(...args),
   createMovementUserBox: (...args: unknown[]) => createMovementUserBoxMock(...args),
+  preflightMovementUserBox: (...args: unknown[]) => preflightMovementUserBoxMock(...args),
   patchMovementUserBox: (...args: unknown[]) => patchMovementUserBoxMock(...args),
   deleteMovementUserBox: (...args: unknown[]) => deleteMovementUserBoxMock(...args),
   invalidateAutomaticMovementBox: (...args: unknown[]) =>
@@ -50,6 +53,7 @@ function createSegment(
 ): MovementTimelineSegment {
   const base: MovementTimelineSegment = {
     id: "segment_auto_stay",
+    boxId: "segment_auto_stay",
     kind: "stay",
     sourceKind: "automatic",
     origin: "continued_stay",
@@ -57,6 +61,10 @@ function createSegment(
     isInvalid: false,
     startedAt: "2026-04-06T08:00:00.000Z",
     endedAt: "2026-04-06T09:00:00.000Z",
+    trueStartedAt: "2026-04-06T08:00:00.000Z",
+    trueEndedAt: "2026-04-06T09:00:00.000Z",
+    visibleStartedAt: "2026-04-06T08:00:00.000Z",
+    visibleEndedAt: "2026-04-06T09:00:00.000Z",
     durationSeconds: 3600,
     laneSide: "left",
     connectorFromLane: "left",
@@ -69,6 +77,8 @@ function createSegment(
     cursor: "2026-04-06T09:00:00.000Z::segment_auto_stay",
     overrideCount: 0,
     overriddenAutomaticBoxIds: [],
+    overriddenUserBoxIds: [],
+    isFullyHidden: false,
     rawStayIds: ["stay_home"],
     rawTripIds: [],
     rawPointCount: 0,
@@ -134,6 +144,21 @@ describe("MovementLifeTimeline", () => {
       }
     });
     createMovementUserBoxMock.mockResolvedValue({});
+    preflightMovementUserBoxMock.mockResolvedValue({
+      preflight: {
+        overlapsAnything: false,
+        visibleRangeStart: "2026-04-06T08:00:00.000Z",
+        visibleRangeEnd: "2026-04-06T10:00:00.000Z",
+        suggestedStartedAt: null,
+        suggestedEndedAt: null,
+        nearestMissingStartedAt: null,
+        nearestMissingEndedAt: null,
+        affectedAutomaticBoxIds: [],
+        affectedUserBoxIds: [],
+        fullyOverriddenUserBoxIds: [],
+        trimmedUserBoxIds: []
+      }
+    });
     patchMovementUserBoxMock.mockResolvedValue({});
     deleteMovementUserBoxMock.mockResolvedValue({});
     invalidateAutomaticMovementBoxMock.mockResolvedValue({});
@@ -187,5 +212,39 @@ describe("MovementLifeTimeline", () => {
     await waitFor(() => {
       expect(screen.getAllByText("Missing").length).toBeGreaterThan(0);
     });
+  });
+
+  it("shows overlap guidance and missing-fit actions in the editor", async () => {
+    preflightMovementUserBoxMock.mockResolvedValue({
+      preflight: {
+        overlapsAnything: true,
+        visibleRangeStart: "2026-04-06T08:00:00.000Z",
+        visibleRangeEnd: "2026-04-06T10:00:00.000Z",
+        suggestedStartedAt: "2026-04-06T08:30:00.000Z",
+        suggestedEndedAt: "2026-04-06T09:00:00.000Z",
+        nearestMissingStartedAt: "2026-04-06T08:30:00.000Z",
+        nearestMissingEndedAt: "2026-04-06T09:00:00.000Z",
+        affectedAutomaticBoxIds: ["mba_home"],
+        affectedUserBoxIds: ["mbx_existing"],
+        fullyOverriddenUserBoxIds: [],
+        trimmedUserBoxIds: ["mbx_existing"]
+      }
+    });
+
+    renderTimeline(<MovementLifeTimeline userIds={["user_operator"]} />);
+
+    expect(await screen.findByText("Movement")).toBeInTheDocument();
+    screen.getByText("Add box").closest("button")?.click();
+    expect(await screen.findByText("Overlap guidance")).toBeInTheDocument();
+    await waitFor(() => {
+      expect(
+        screen.getByText(
+          /This box overlaps 1 automatic and 1 manual boxes\./i
+        )
+      ).toBeInTheDocument();
+    });
+    expect(
+      screen.getByRole("button", { name: /Fit Missing Time/i })
+    ).toBeEnabled();
   });
 });

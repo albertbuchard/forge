@@ -6554,7 +6554,7 @@ export async function buildServer(
       }
       reply.code(201);
       return {
-        box: resolveMovementTimelineSegmentForBox(userId, result.id) ?? result
+        box: resolveMovementTimelineSegmentForBox(userId, result.box.id) ?? result.box
       };
     }
   );
@@ -6888,8 +6888,8 @@ export async function buildServer(
       reply.code(201);
       return {
         box:
-          resolveMovementTimelineSegmentForBox(pairing.user_id, result.id) ??
-          result
+          resolveMovementTimelineSegmentForBox(pairing.user_id, result.box.id) ??
+          result.box
       };
     }
   );

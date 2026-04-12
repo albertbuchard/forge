@@ -1694,6 +1694,52 @@ export function MovementLifeTimeline({ userIds = [] }: MovementLifeTimelineProps
     overscan: 8
   });
 
+  const editingSegment = editingSegmentId
+    ? segments.find((segment) => segment.id === editingSegmentId) ?? null
+    : null;
+  const editingDraft = editingSegment
+    ? (draftById[editingSegment.id] ?? buildDraft(editingSegment))
+    : null;
+  const isCreating = creatingDraft !== null;
+  const activeDraft = creatingDraft ?? editingDraft;
+  const visibleRangeStart = segments[0]?.startedAt ?? null;
+  const visibleRangeEnd = segments[segments.length - 1]?.endedAt ?? null;
+  const preflightQuery = useQuery({
+    queryKey: [
+      "forge-movement-user-box-preflight",
+      editingSegment?.boxId ?? "create",
+      activeDraft?.kind ?? null,
+      activeDraft?.startedAtInput ?? null,
+      activeDraft?.endedAtInput ?? null,
+      visibleRangeStart,
+      visibleRangeEnd,
+      ...userIds
+    ],
+    enabled:
+      activeDraft !== null &&
+      parseDateTimeInput(activeDraft.startedAtInput) !== null &&
+      parseDateTimeInput(activeDraft.endedAtInput) !== null,
+    queryFn: async () => {
+      if (!activeDraft) {
+        return null;
+      }
+      const payload = buildMovementUserBoxPayloadInput(activeDraft, editingSegment);
+      const response = await preflightMovementUserBox(
+        {
+          ...payload,
+          excludeBoxId:
+            editingSegment?.sourceKind === "user_defined"
+              ? editingSegment.boxId
+              : null,
+          rangeStart: visibleRangeStart,
+          rangeEnd: visibleRangeEnd
+        },
+        userIds
+      );
+      return response.preflight;
+    }
+  });
+
   const handleScroll = () => {
     const element = scrollParentRef.current;
     if (!element) {
@@ -1736,51 +1782,6 @@ export function MovementLifeTimeline({ userIds = [] }: MovementLifeTimelineProps
   }
 
   const virtualRows = rowVirtualizer.getVirtualItems();
-  const editingSegment = editingSegmentId
-    ? segments.find((segment) => segment.id === editingSegmentId) ?? null
-    : null;
-  const editingDraft = editingSegment
-    ? (draftById[editingSegment.id] ?? buildDraft(editingSegment))
-    : null;
-  const isCreating = creatingDraft !== null;
-  const activeDraft = creatingDraft ?? editingDraft;
-  const visibleRangeStart = segments[0]?.startedAt ?? null;
-  const visibleRangeEnd = segments[segments.length - 1]?.endedAt ?? null;
-  const preflightQuery = useQuery({
-    queryKey: [
-      "forge-movement-user-box-preflight",
-      editingSegment?.boxId ?? "create",
-      activeDraft?.kind ?? null,
-      activeDraft?.startedAtInput ?? null,
-      activeDraft?.endedAtInput ?? null,
-      visibleRangeStart,
-      visibleRangeEnd,
-      ...userIds
-    ],
-    enabled:
-      activeDraft !== null &&
-      parseDateTimeInput(activeDraft.startedAtInput) !== null &&
-      parseDateTimeInput(activeDraft.endedAtInput) !== null,
-    queryFn: async () => {
-      if (!activeDraft) {
-        return null;
-      }
-      const payload = buildMovementUserBoxPayloadInput(activeDraft, editingSegment);
-      const response = await preflightMovementUserBox(
-        {
-          ...payload,
-          excludeBoxId: editingSegment?.sourceKind === "user_defined"
-            ? editingSegment.boxId
-            : null,
-          rangeStart: visibleRangeStart,
-          rangeEnd: visibleRangeEnd
-        },
-        userIds
-      );
-      return response.preflight;
-    }
-  });
-
   const contentHeight = Math.max(
     timelineRows.length > 0
       ? timelineRows[timelineRows.length - 1]!.rowStart +

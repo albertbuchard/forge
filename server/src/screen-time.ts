@@ -13,6 +13,8 @@ const screenTimeAuthorizationStatusSchema = z.enum([
 
 const screenTimeCaptureStateSchema = z.enum([
   "disabled",
+  "capturing",
+  "waiting_for_snapshot",
   "ready",
   "sync_paused",
   "unavailable",

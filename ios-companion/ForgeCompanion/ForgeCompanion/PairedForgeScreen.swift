@@ -450,6 +450,9 @@ private struct MovementLifeTimelineView: View {
             MovementTimelineEditSheet(
                 draft: draft,
                 creating: creatingDraft != nil,
+                preflight: { updatedDraft in
+                    await preflightEditor(updatedDraft)
+                },
                 save: { updatedDraft in
                     await saveEditor(updatedDraft)
                 },
@@ -764,29 +767,10 @@ private struct MovementLifeTimelineView: View {
     }
 
     private func saveEditor(_ draft: MovementTimelineEditorDraft) async {
-        let trimmedLabel = draft.label.trimmingCharacters(in: .whitespacesAndNewlines)
-        let trimmedPlace = draft.placeLabel.trimmingCharacters(in: .whitespacesAndNewlines)
-        let tags = draft.tags
-            .split(separator: ",")
-            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { $0.isEmpty == false }
-
         do {
-            let payload = ForgeMovementUserBoxPayload(
-                kind: draft.kind == .stay ? "stay" : draft.kind == .trip ? "trip" : "missing",
-                startedAt: MovementTimelineFormatting.isoFormatter.string(from: draft.startedAt),
-                endedAt: MovementTimelineFormatting.isoFormatter.string(from: draft.endedAt),
-                title: trimmedLabel,
-                subtitle:
-                    draft.kind == .missing
-                    ? "User-defined missing-data override."
-                    : "User-defined movement box.",
-                placeLabel: draft.kind == .trip ? nil : .some(trimmedPlace.isEmpty ? nil : trimmedPlace),
-                anchorExternalUid: nil,
-                tags: tags,
-                distanceMeters: draft.kind == .trip ? 150 : nil,
-                averageSpeedMps: nil,
-                metadata: ["updatedFrom": creatingDraft != nil ? "companion-create" : "companion-edit"]
+            let payload = makeMovementUserBoxPayload(
+                draft,
+                metadataSource: creatingDraft != nil ? "companion-create" : "companion-edit"
             )
             switch draft.item.source {
             case .remoteUserBox(let boxId, _):
@@ -846,6 +830,80 @@ private struct MovementLifeTimelineView: View {
                 "saveEditor failed error=\(error.localizedDescription)"
             )
             loadError = error.localizedDescription
+        }
+    }
+
+    private func makeMovementUserBoxPayload(
+        _ draft: MovementTimelineEditorDraft,
+        metadataSource: String
+    ) -> ForgeMovementUserBoxPayload {
+        let trimmedLabel = draft.label.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedPlace = draft.placeLabel.trimmingCharacters(in: .whitespacesAndNewlines)
+        let tags = draft.tags
+            .split(separator: ",")
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { $0.isEmpty == false }
+        return ForgeMovementUserBoxPayload(
+            kind: draft.kind == .stay ? "stay" : draft.kind == .trip ? "trip" : "missing",
+            startedAt: MovementTimelineFormatting.isoFormatter.string(from: draft.startedAt),
+            endedAt: MovementTimelineFormatting.isoFormatter.string(from: draft.endedAt),
+            title: trimmedLabel,
+            subtitle:
+                draft.kind == .missing
+                ? "User-defined missing-data override."
+                : "User-defined movement box.",
+            placeLabel: draft.kind == .trip ? nil : .some(trimmedPlace.isEmpty ? nil : trimmedPlace),
+            anchorExternalUid: nil,
+            tags: tags,
+            distanceMeters: draft.kind == .trip ? 150 : nil,
+            averageSpeedMps: nil,
+            metadata: ["updatedFrom": metadataSource]
+        )
+    }
+
+    private func preflightEditor(
+        _ draft: MovementTimelineEditorDraft
+    ) async -> ForgeMovementUserBoxPreflight? {
+        guard let pairing = appModel.pairing else {
+            return nil
+        }
+        let rangeStart = segments.first?.startedAt
+        let rangeEnd = segments.last?.endedAt
+        let excludeBoxId: String?
+        switch draft.item.source {
+        case .remoteUserBox(let boxId, _):
+            excludeBoxId = boxId
+        default:
+            excludeBoxId = nil
+        }
+        do {
+            return try await appModel.syncClient.preflightMovementUserBox(
+                draft: ForgeMovementUserBoxPreflightPayload(
+                    kind: draft.kind == .stay ? "stay" : draft.kind == .trip ? "trip" : "missing",
+                    startedAt: MovementTimelineFormatting.isoFormatter.string(from: draft.startedAt),
+                    endedAt: MovementTimelineFormatting.isoFormatter.string(from: draft.endedAt),
+                    title: draft.label.trimmingCharacters(in: .whitespacesAndNewlines),
+                    subtitle:
+                        draft.kind == .missing
+                        ? "User-defined missing-data override."
+                        : "User-defined movement box.",
+                    placeLabel: draft.kind == .trip ? nil : draft.placeLabel.trimmingCharacters(in: .whitespacesAndNewlines),
+                    anchorExternalUid: nil,
+                    tags: draft.tags
+                        .split(separator: ",")
+                        .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                        .filter { $0.isEmpty == false },
+                    distanceMeters: draft.kind == .trip ? 150 : nil,
+                    averageSpeedMps: nil,
+                    metadata: ["preflightFrom": "companion-life-timeline"],
+                    excludeBoxId: excludeBoxId,
+                    rangeStart: rangeStart,
+                    rangeEnd: rangeEnd
+                ),
+                pairing: pairing
+            )
+        } catch {
+            return nil
         }
     }
 
@@ -1637,10 +1695,30 @@ private struct MovementTimelineEditSheet: View {
     @State var draft: MovementTimelineEditorDraft
 
     let creating: Bool
+    let preflight: (MovementTimelineEditorDraft) async -> ForgeMovementUserBoxPreflight?
     let save: (MovementTimelineEditorDraft) async -> Void
     let close: () -> Void
 
     @State private var saving = false
+    @State private var preflightState: ForgeMovementUserBoxPreflight?
+    @State private var preflightLoading = false
+
+    private var preflightKey: String {
+        "\(kindKey(draft.kind))|\(draft.startedAt.timeIntervalSince1970)|\(draft.endedAt.timeIntervalSince1970)|\(draft.item.id)"
+    }
+
+    private func kindKey(_ kind: MovementLifeTimelineItem.Kind) -> String {
+        switch kind {
+        case .stay:
+            return "stay"
+        case .trip:
+            return "trip"
+        case .missing:
+            return "missing"
+        case .anchor:
+            return "anchor"
+        }
+    }
 
     var body: some View {
         NavigationStack {
@@ -1663,6 +1741,42 @@ private struct MovementTimelineEditSheet: View {
                     DatePicker("Ended", selection: $draft.endedAt, displayedComponents: [.date, .hourAndMinute])
                 }
 
+                Section("Overlap guidance") {
+                    if preflightLoading {
+                        Text("Checking visible overlaps and missing windows…")
+                            .foregroundStyle(CompanionStyle.textSecondary)
+                    } else if let preflightState {
+                        Text(
+                            preflightState.overlapsAnything
+                                ? "This box overlaps \(preflightState.affectedAutomaticBoxIds.count) automatic and \(preflightState.affectedUserBoxIds.count) manual boxes. Saving will fully override \(preflightState.fullyOverriddenUserBoxIds.count) manual boxes and trim \(preflightState.trimmedUserBoxIds.count)."
+                                : "No overlap in the currently visible timeline window."
+                        )
+                        .foregroundStyle(CompanionStyle.textPrimary)
+                        if let start = preflightState.visibleRangeStart,
+                           let end = preflightState.visibleRangeEnd
+                        {
+                            Text("Visible range: \(MovementTimelineFormatting.dayFormatter.string(from: MovementTimelineFormatting.isoFormatter.date(from: start) ?? draft.startedAt)) \(MovementTimelineFormatting.timeFormatter.string(from: MovementTimelineFormatting.isoFormatter.date(from: start) ?? draft.startedAt)) -> \(MovementTimelineFormatting.dayFormatter.string(from: MovementTimelineFormatting.isoFormatter.date(from: end) ?? draft.endedAt)) \(MovementTimelineFormatting.timeFormatter.string(from: MovementTimelineFormatting.isoFormatter.date(from: end) ?? draft.endedAt))")
+                                .font(.system(size: 12, weight: .medium, design: .rounded))
+                                .foregroundStyle(CompanionStyle.textSecondary)
+                        }
+                        Button("Fit Missing Time") {
+                            guard let start = preflightState.nearestMissingStartedAt,
+                                  let end = preflightState.nearestMissingEndedAt,
+                                  let startDate = MovementTimelineFormatting.isoFormatter.date(from: start),
+                                  let endDate = MovementTimelineFormatting.isoFormatter.date(from: end)
+                            else {
+                                return
+                            }
+                            draft.startedAt = startDate
+                            draft.endedAt = endDate
+                        }
+                        .disabled(
+                            preflightState.nearestMissingStartedAt == nil ||
+                            preflightState.nearestMissingEndedAt == nil
+                        )
+                    }
+                }
+
                 Section("Sync") {
                     Text(draft.item.syncSource.capitalized)
                     if draft.item.isCurrent {
@@ -1683,6 +1797,11 @@ private struct MovementTimelineEditSheet: View {
             }
             .scrollContentBackground(.hidden)
             .background(CompanionStyle.background)
+            .task(id: preflightKey) {
+                preflightLoading = true
+                preflightState = await preflight(draft)
+                preflightLoading = false
+            }
             .navigationTitle(creating ? "Create box" : "Edit box")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -2914,6 +3033,18 @@ private enum MovementTimelineFormatting {
     static let isoFormatter: ISO8601DateFormatter = {
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return formatter
+    }()
+
+    static let dayFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "dd/MM/yy"
+        return formatter
+    }()
+
+    static let timeFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "HH:mm"
         return formatter
     }()
 

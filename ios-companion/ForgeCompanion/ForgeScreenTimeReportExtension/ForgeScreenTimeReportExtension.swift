@@ -7,26 +7,28 @@ import _DeviceActivity_SwiftUI
 @main
 struct ForgeScreenTimeReportExtension: DeviceActivityReportExtension {
     var body: some DeviceActivityReportScene {
-        ForgeHourlyScreenTimeReport { _ in
-            EmptyView()
+        ForgeHourlyScreenTimeReport { snapshot in
+            ForgeScreenTimeReportView(snapshot: snapshot)
         }
-        ForgeDailyScreenTimeReport { _ in
-            EmptyView()
+        ForgeDailyScreenTimeReport { snapshot in
+            ForgeScreenTimeReportView(snapshot: snapshot)
         }
     }
 }
 
 private struct ForgeHourlyScreenTimeReport: DeviceActivityReportScene {
     let context: DeviceActivityReport.Context = .forgeHourlyScreenTime
-    let content: (ForgeScreenTimeSnapshotEnvelope) -> EmptyView
+    let content: (ForgeScreenTimeSnapshotEnvelope) -> ForgeScreenTimeReportView
 
     func makeConfiguration(
         representing data: DeviceActivityResults<DeviceActivityData>
     ) async -> ForgeScreenTimeSnapshotEnvelope {
+        debugLog("makeConfiguration start context=hourly")
         let snapshot = await buildSnapshotEnvelope(
             from: data,
             segmentKind: "hourly"
         )
+        debugLog("makeConfiguration complete context=hourly days=\(snapshot.daySummaries.count) hours=\(snapshot.hourlySegments.count)")
         persistMergedSnapshot(snapshot, replacesHourly: true, replacesDaily: false)
         return snapshot
     }
@@ -34,15 +36,17 @@ private struct ForgeHourlyScreenTimeReport: DeviceActivityReportScene {
 
 private struct ForgeDailyScreenTimeReport: DeviceActivityReportScene {
     let context: DeviceActivityReport.Context = .forgeDailyScreenTime
-    let content: (ForgeScreenTimeSnapshotEnvelope) -> EmptyView
+    let content: (ForgeScreenTimeSnapshotEnvelope) -> ForgeScreenTimeReportView
 
     func makeConfiguration(
         representing data: DeviceActivityResults<DeviceActivityData>
     ) async -> ForgeScreenTimeSnapshotEnvelope {
+        debugLog("makeConfiguration start context=daily")
         let snapshot = await buildSnapshotEnvelope(
             from: data,
             segmentKind: "daily"
         )
+        debugLog("makeConfiguration complete context=daily days=\(snapshot.daySummaries.count) hours=\(snapshot.hourlySegments.count)")
         persistMergedSnapshot(snapshot, replacesHourly: false, replacesDaily: true)
         return snapshot
     }
@@ -135,6 +139,95 @@ private func buildSnapshotEnvelope(
     )
 }
 
+private struct ForgeScreenTimeReportView: View {
+    let snapshot: ForgeScreenTimeSnapshotEnvelope
+
+    private var totalActivitySeconds: Int {
+        if snapshot.daySummaries.isEmpty == false {
+            return snapshot.daySummaries.reduce(0) { $0 + $1.totalActivitySeconds }
+        }
+        return snapshot.hourlySegments.reduce(0) { $0 + $1.totalActivitySeconds }
+    }
+
+    private var topApps: [(name: String, seconds: Int)] {
+        let aggregates = Dictionary(grouping: snapshot.hourlySegments.flatMap(\.apps)) { usage in
+            usage.displayName.isEmpty ? usage.bundleIdentifier : usage.displayName
+        }
+            .map { key, values in
+                (
+                    name: key,
+                    seconds: values.reduce(0) { $0 + $1.totalActivitySeconds }
+                )
+            }
+            .sorted { lhs, rhs in
+                if lhs.seconds == rhs.seconds {
+                    return lhs.name < rhs.name
+                }
+                return lhs.seconds > rhs.seconds
+            }
+        return Array(aggregates.prefix(4))
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text("Screen Time")
+                .font(.headline.weight(.bold))
+                .foregroundStyle(.primary)
+
+            if snapshot.daySummaries.isEmpty && snapshot.hourlySegments.isEmpty {
+                Text("No Screen Time activity is available for this filter yet.")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            } else {
+                Text(formattedDuration(totalActivitySeconds))
+                    .font(.system(size: 28, weight: .bold, design: .rounded))
+                    .foregroundStyle(.primary)
+
+                if snapshot.daySummaries.isEmpty == false {
+                    VStack(alignment: .leading, spacing: 8) {
+                        ForEach(Array(snapshot.daySummaries.prefix(5)), id: \.id) { day in
+                            HStack {
+                                Text(shortDayLabel(day.dateKey))
+                                    .foregroundStyle(.primary)
+                                Spacer()
+                                Text(formattedDuration(day.totalActivitySeconds))
+                                    .foregroundStyle(.secondary)
+                            }
+                            .font(.subheadline.weight(.medium))
+                        }
+                    }
+                }
+
+                if topApps.isEmpty == false {
+                    Divider()
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Top apps")
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                        ForEach(Array(topApps.enumerated()), id: \.offset) { _, app in
+                            HStack {
+                                Text(app.name)
+                                    .foregroundStyle(.primary)
+                                    .lineLimit(1)
+                                Spacer()
+                                Text(formattedDuration(app.seconds))
+                                    .foregroundStyle(.secondary)
+                            }
+                            .font(.subheadline)
+                        }
+                    }
+                }
+            }
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .fill(Color(uiColor: .secondarySystemBackground))
+        )
+    }
+}
+
 private func collectApps(
     from segment: DeviceActivityData.ActivitySegment
 ) async -> [ForgeScreenTimeAppUsageSnapshot] {
@@ -198,6 +291,7 @@ private func persistMergedSnapshot(
         hourlySegments: replacesHourly ? snapshot.hourlySegments : existing.hourlySegments
     )
     ForgeScreenTimeSnapshotStore.save(merged)
+    debugLog("persistMergedSnapshot saved generatedAt=\(snapshot.generatedAt) days=\(merged.daySummaries.count) hours=\(merged.hourlySegments.count)")
 }
 
 private func dayKey(_ date: Date) -> String {
@@ -220,4 +314,32 @@ private func minIso(_ left: String?, _ right: String?) -> String? {
     default:
         return nil
     }
+}
+
+private func formattedDuration(_ seconds: Int) -> String {
+    let hours = seconds / 3600
+    let minutes = (seconds % 3600) / 60
+    if hours > 0 {
+        return "\(hours)h \(minutes)m"
+    }
+    return "\(minutes)m"
+}
+
+private func shortDayLabel(_ dateKey: String) -> String {
+    let parser = DateFormatter()
+    parser.calendar = Calendar(identifier: .gregorian)
+    parser.locale = Locale(identifier: "en_US_POSIX")
+    parser.timeZone = TimeZone(secondsFromGMT: 0)
+    parser.dateFormat = "yyyy-MM-dd"
+    guard let date = parser.date(from: dateKey) else {
+        return dateKey
+    }
+    let formatter = DateFormatter()
+    formatter.locale = Locale(identifier: "en_US_POSIX")
+    formatter.dateFormat = "EEE d MMM"
+    return formatter.string(from: date)
+}
+
+private func debugLog(_ message: String) {
+    print("[ForgeScreenTimeReportExtension] \(message)")
 }

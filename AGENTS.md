@@ -26,10 +26,11 @@ When Forge work involves the OpenClaw plugin, treat the repo-local plugin folder
 After every code change to Forge:
 
 1. **Type-check** — run `npx tsc --noEmit` and fix any errors before considering the task done.
-2. **Dev server** — confirm the Vite dev server and the backend API server are both running:
+2. **Runtime contract** — confirm the backend API server is running on `4317`, and if dev mode is enabled it is supervising the Vite frontend behind `/forge/`:
    - Backend API: `npm run dev:server:openclaw-data`
-   - Vite dev: `FORGE_BASE_PATH=/forge/ npm run dev` (port 3027)
-3. **Tailscale serve** — verify `tailscale serve status` shows `/forge` mapped to the dev server and that the MagicDNS URL returns a successful response.
+   - Optional direct Vite dev: `FORGE_BASE_PATH=/forge/ npm run dev:web -- --host 127.0.0.1 --port 3027`
+   - In development, `/forge` must still be served through `http://127.0.0.1:4317/forge/`; the backend is the stable entrypoint and can proxy/autostart Vite.
+3. **Tailscale serve** — verify `tailscale serve status` shows `/forge` mapped to `http://127.0.0.1:4317/forge/` and that the MagicDNS URL returns a successful response. If a direct dev route exists, it should live on `/forge-dev`, not replace `/forge`.
 4. If any of the above are down, restart them and re-verify before reporting the task as complete.
 
 Do **not** skip this verification. Do **not** report a task as done until the live app is confirmed reachable.

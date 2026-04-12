@@ -53,6 +53,7 @@ If you want editable package mode while developing from this repo:
 - supports `FORGE_API_TOKEN` for remote or explicitly scoped access
 - supports `FORGE_DATA_ROOT` when you want Forge to use a specific local data folder
 - when Forge is local and not already running, the plugin calls the repo's tested Forge local-runtime bootstrap helper instead of maintaining a separate startup implementation
+- the stable local web entrypoint stays `http://127.0.0.1:4317/forge/`; if the shared runtime is in dev mode it can supervise the Vite frontend behind that same URL instead of exposing `3027` directly
 - when port `4317` is busy and not explicitly pinned, the shared runtime helper can move Forge to the next free localhost port and remember that preferred port
 - if another Forge runtime is already serving the wrong storage root, startup fails loudly instead of attaching to the wrong database
 

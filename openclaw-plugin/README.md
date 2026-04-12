@@ -24,6 +24,11 @@ For a normal local install, the Forge UI address is usually:
 http://127.0.0.1:4317/forge/
 ```
 
+That `4317` backend URL is the stable entrypoint. If Forge is running in a local
+development checkout, the backend can proxy and supervise the hot-reloading Vite
+frontend behind that same `/forge/` URL. Shared routes such as Tailscale should
+still target `http://127.0.0.1:4317/forge/`, not `3027` directly.
+
 You can also ask the agent to call the UI entry tool and return the exact current address.
 
 If you want Forge to use a specific local data folder, set `dataRoot` in the plugin config. The local runtime will then store its database as `forge.sqlite` directly inside that folder instead of using the runtime working directory.

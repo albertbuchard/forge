@@ -71,7 +71,11 @@ final class ScreenTimeStore: ObservableObject {
 
     deinit {
         capturePollingTask?.cancel()
-        unregisterSharedSnapshotObserver()
+        let observer = Unmanaged.passUnretained(self).toOpaque()
+        CFNotificationCenterRemoveEveryObserver(
+            CFNotificationCenterGetDarwinNotifyCenter(),
+            observer
+        )
     }
 
     private func bindAuthorizationCenter() {
@@ -182,6 +186,7 @@ final class ScreenTimeStore: ObservableObject {
     }
 
     func refreshCaptureNow() async {
+        companionDebugLog("ScreenTimeStore", "refreshCaptureNow visible report reload")
         triggerCaptureRefresh(reason: "manual refresh")
         _ = await awaitInitialSnapshotIfNeeded(reason: "manual refresh")
     }
@@ -197,7 +202,7 @@ final class ScreenTimeStore: ObservableObject {
         let captured = await awaitInitialSnapshotIfNeeded(reason: "sync \(reason)")
         companionDebugLog(
             "ScreenTimeStore",
-            "prepareSnapshotForSync complete reason=\(reason) captured=\(captured) hours=\(hourlySegments.count)"
+            "prepareSnapshotForSync complete reason=\(reason) captured=\(captured) days=\(daySummaries.count) hours=\(hourlySegments.count)"
         )
     }
 
@@ -215,7 +220,8 @@ final class ScreenTimeStore: ObservableObject {
                     "captureFreshness": captureFreshness,
                     "capturedDayCount": "\(capturedDayCount)",
                     "capturedHourCount": "\(capturedHourCount)",
-                    "captureWindowDays": "\(captureWindowDays)"
+                    "captureWindowDays": "\(captureWindowDays)",
+                    "deliveryMode": "device_activity_report_extension"
                 ]) { _, new in new }
             ),
             daySummaries: daySummaries.map { summary in
@@ -266,7 +272,7 @@ final class ScreenTimeStore: ObservableObject {
     }
 
     var readyForSync: Bool {
-        enabled && authorizationStatus == "approved" && hourlySegments.isEmpty == false
+        enabled && authorizationStatus == "approved" && hasCapturedData
     }
 
     var capturedDayCount: Int {
@@ -289,11 +295,15 @@ final class ScreenTimeStore: ObservableObject {
         return (delta * 10).rounded() / 10
     }
 
+    var hasCapturedData: Bool {
+        daySummaries.isEmpty == false || hourlySegments.isEmpty == false
+    }
+
     var captureFreshness: String {
         if authorizationStatus == "unavailable" {
             return "unavailable"
         }
-        if hourlySegments.isEmpty {
+        if hasCapturedData == false {
             return "empty"
         }
         if let captureAgeHours, captureAgeHours <= 36 {
@@ -307,7 +317,7 @@ final class ScreenTimeStore: ObservableObject {
             let startedAt = lastCaptureStartedAt.flatMap(Self.parseIso),
             let endedAt = lastCaptureEndedAt.flatMap(Self.parseIso)
         else {
-            return hourlySegments.isEmpty ? 0 : 1
+            return hasCapturedData ? 1 : 0
         }
         let delta = max(0, endedAt.timeIntervalSince(startedAt))
         return max(1, Int((delta / 86_400).rounded()))
@@ -324,7 +334,7 @@ final class ScreenTimeStore: ObservableObject {
     }
 
     var freshnessSummary: String {
-        if captureRefreshInFlight && hourlySegments.isEmpty {
+        if captureRefreshInFlight && hasCapturedData == false {
             return "Capturing first snapshot"
         }
         switch captureFreshness {
@@ -337,7 +347,9 @@ final class ScreenTimeStore: ObservableObject {
         case "unavailable":
             return "Unavailable on this build"
         default:
-            return "Waiting for first capture"
+            return authorizationStatus == "approved"
+                ? "Waiting for the report extension to write data"
+                : "Waiting for authorization"
         }
     }
 
@@ -352,7 +364,10 @@ final class ScreenTimeStore: ObservableObject {
             if captureRefreshInFlight {
                 return "Capturing first Screen Time snapshot"
             }
-            return enabled ? "Waiting for first Screen Time snapshot" : "Screen Time off"
+            if enabled && authorizationStatus == "approved" {
+                return "Waiting for the report extension to write Screen Time data"
+            }
+            return enabled ? "Waiting for Screen Time authorization" : "Screen Time off"
         }
         return "\(capturedDayCount) days · \(capturedHourCount) hourly slices · \(captureFreshness)"
     }
@@ -509,7 +524,10 @@ final class ScreenTimeStore: ObservableObject {
     private func pollForInitialSnapshot(reason: String) async -> Bool {
         ingestSharedSnapshots()
         if readyForSync {
-            companionDebugLog("ScreenTimeStore", "pollForInitialSnapshot immediate success reason=\(reason)")
+            companionDebugLog(
+                "ScreenTimeStore",
+                "pollForInitialSnapshot immediate success reason=\(reason) days=\(daySummaries.count) hours=\(hourlySegments.count)"
+            )
             return true
         }
 
@@ -524,7 +542,7 @@ final class ScreenTimeStore: ObservableObject {
             if readyForSync {
                 companionDebugLog(
                     "ScreenTimeStore",
-                    "pollForInitialSnapshot success reason=\(reason) attempt=\(attempt + 1) hours=\(hourlySegments.count)"
+                    "pollForInitialSnapshot success reason=\(reason) attempt=\(attempt + 1) days=\(daySummaries.count) hours=\(hourlySegments.count)"
                 )
                 return true
             }

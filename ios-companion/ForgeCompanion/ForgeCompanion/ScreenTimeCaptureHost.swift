@@ -35,8 +35,11 @@ struct ScreenTimeCaptureHost: View {
                     )
                 }
                 .id(screenTimeStore.captureRefreshToken)
-                .frame(width: 1, height: 1)
-                .opacity(0.001)
+                // Screen Time report rendering is finicky when the report has no
+                // measurable layout. Keep a tiny fixed-size host alive so the
+                // extension reliably materializes and writes the shared snapshot.
+                .frame(width: 12, height: 12)
+                .opacity(0.01)
                 .allowsHitTesting(false)
                 .accessibilityHidden(true)
                 .onAppear {

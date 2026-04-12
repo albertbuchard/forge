@@ -1363,6 +1363,8 @@ export interface ScreenTimeSettingsPayload {
     | "unavailable";
   captureState:
     | "disabled"
+    | "capturing"
+    | "waiting_for_snapshot"
     | "ready"
     | "sync_paused"
     | "unavailable"

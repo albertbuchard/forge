@@ -12,12 +12,14 @@ enum ForgeScreenTimeStorage {
     )
 
     nonisolated static func sharedDefaults() -> UserDefaults {
-        guard FileManager.default.containerURL(
+        let containerUrl = FileManager.default.containerURL(
             forSecurityApplicationGroupIdentifier: appGroupId
-        ) != nil else {
-            return .standard
-        }
-        return UserDefaults(suiteName: appGroupId) ?? .standard
+        )
+        let suiteDefaults = UserDefaults(suiteName: appGroupId)
+        debugLog(
+            "sharedDefaults containerAvailable=\(containerUrl != nil) suiteAvailable=\(suiteDefaults != nil)"
+        )
+        return suiteDefaults ?? .standard
     }
 }
 
@@ -98,18 +100,26 @@ enum ForgeScreenTimeSnapshotStore {
                 from: data
             )
         else {
+            debugLog("load missingOrInvalidSnapshot")
             return .empty
         }
+        debugLog(
+            "load success days=\(snapshot.daySummaries.count) hours=\(snapshot.hourlySegments.count) source=\(snapshot.source)"
+        )
         return snapshot
     }
 
     static func save(_ snapshot: ForgeScreenTimeSnapshotEnvelope) {
         let defaults = ForgeScreenTimeStorage.sharedDefaults()
         guard let data = try? JSONEncoder().encode(snapshot) else {
+            debugLog("save encodeFailed")
             return
         }
         defaults.set(data, forKey: ForgeScreenTimeStorage.snapshotKey)
         defaults.synchronize()
+        debugLog(
+            "save success days=\(snapshot.daySummaries.count) hours=\(snapshot.hourlySegments.count) source=\(snapshot.source)"
+        )
         CFNotificationCenterPostNotification(
             CFNotificationCenterGetDarwinNotifyCenter(),
             ForgeScreenTimeStorage.snapshotDidChangeDarwinName,
@@ -118,4 +128,8 @@ enum ForgeScreenTimeSnapshotStore {
             true
         )
     }
+}
+
+private func debugLog(_ message: String) {
+    print("[ForgeScreenTimeShared] \(message)")
 }

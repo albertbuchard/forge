@@ -1,4 +1,5 @@
 import { spawn, type ChildProcess } from "node:child_process";
+import { existsSync } from "node:fs";
 import { access, readFile } from "node:fs/promises";
 import path from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
@@ -58,6 +59,64 @@ function shouldAutostartDevWeb(env: NodeJS.ProcessEnv) {
 function getDevWebCommand(env: NodeJS.ProcessEnv) {
   const value = env.FORGE_DEV_WEB_COMMAND?.trim();
   return value && value.length > 0 ? value : "npm run dev:web";
+}
+
+type ManagedDevWebLaunch = {
+  command: string;
+  args?: string[];
+  env: NodeJS.ProcessEnv;
+  shell: boolean;
+};
+
+function getDefaultDevWebOriginPort(origin: URL | null) {
+  if (origin?.port && origin.port.trim().length > 0) {
+    return origin.port;
+  }
+  if (origin?.protocol === "https:") {
+    return "443";
+  }
+  return "3027";
+}
+
+function getDefaultViteCliPath(cwd: string) {
+  const candidate = path.join(cwd, "node_modules", "vite", "bin", "vite.js");
+  return existsSync(candidate) ? candidate : null;
+}
+
+function buildManagedDevWebLaunch(input: {
+  cwd: string;
+  env: NodeJS.ProcessEnv;
+  origin: URL | null;
+}): ManagedDevWebLaunch {
+  const explicitCommand = input.env.FORGE_DEV_WEB_COMMAND?.trim();
+  if (explicitCommand && explicitCommand.length > 0) {
+    return {
+      command: explicitCommand,
+      env: input.env,
+      shell: true
+    };
+  }
+
+  const viteCliPath = getDefaultViteCliPath(input.cwd);
+  if (!viteCliPath) {
+    return {
+      command: getDevWebCommand(input.env),
+      env: input.env,
+      shell: true
+    };
+  }
+
+  const host = input.env.FORGE_DEV_WEB_HOST?.trim() || "127.0.0.1";
+  const port = input.env.FORGE_DEV_WEB_PORT?.trim() || getDefaultDevWebOriginPort(input.origin);
+  return {
+    command: process.execPath,
+    args: [viteCliPath, "--host", host, "--port", port],
+    env: {
+      ...input.env,
+      FORGE_BASE_PATH: getDefaultBasePath()
+    },
+    shell: false
+  };
 }
 
 function stripBasePath(requestPath: string, basePath: string) {
@@ -181,7 +240,6 @@ export function createManagedDevWebRuntime(
   const fetchImpl = options.fetchImpl ?? fetch;
   const spawnImpl = options.spawnImpl ?? spawn;
   const autostart = shouldAutostartDevWeb(env);
-  const command = getDevWebCommand(env);
   const waitTimeoutMs = Number(env.FORGE_DEV_WEB_START_TIMEOUT_MS ?? 30_000);
   const pollIntervalMs = 500;
   let child: ChildProcess | null = null;
@@ -233,12 +291,19 @@ export function createManagedDevWebRuntime(
     if (!startupPromise) {
       startupPromise = (async () => {
         if (!child || child.exitCode !== null) {
-          const nextChild = spawnImpl(command, {
-            cwd,
-            env,
-            shell: true,
-            stdio: "inherit"
-          });
+          const launch = buildManagedDevWebLaunch({ cwd, env, origin });
+          const nextChild = launch.shell
+            ? spawnImpl(launch.command, {
+                cwd,
+                env: launch.env,
+                shell: true,
+                stdio: "inherit"
+              })
+            : spawnImpl(launch.command, launch.args ?? [], {
+                cwd,
+                env: launch.env,
+                stdio: "inherit"
+              });
           child = nextChild;
           nextChild.once("exit", () => {
             if (child === nextChild) {

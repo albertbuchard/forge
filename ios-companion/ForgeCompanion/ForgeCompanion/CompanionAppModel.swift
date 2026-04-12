@@ -1235,9 +1235,15 @@ final class CompanionAppModel: ObservableObject {
             if buildResult.healthDataDeferred {
                 lastSyncMessage =
                     "Synced movement while HealthKit stayed locked. Health data will resume after unlock."
+            } else if screenTimeStore.authorizationStatus == "approved"
+                && (receipt.imported.screenTimeHourlySegments ?? 0) == 0
+                && (receipt.imported.screenTimeDaySummaries ?? 0) == 0
+            {
+                lastSyncMessage =
+                    "Synced \(receipt.imported.sleepSessions) sleep, \(receipt.imported.workouts) workouts, and \(receipt.imported.movementTrips ?? 0) trips via \(trigger). Screen Time capture is still pending on this iPhone."
             } else {
                 lastSyncMessage =
-                    "Synced \(receipt.imported.sleepSessions) sleep, \(receipt.imported.workouts) workouts, \(receipt.imported.movementTrips ?? 0) trips, and \(receipt.imported.screenTimeHourlySegments ?? 0) Screen Time hours via \(trigger)"
+                    "Synced \(receipt.imported.sleepSessions) sleep, \(receipt.imported.workouts) workouts, \(receipt.imported.movementTrips ?? 0) trips, \(receipt.imported.screenTimeDaySummaries ?? 0) Screen Time days, and \(receipt.imported.screenTimeHourlySegments ?? 0) Screen Time hourly slices via \(trigger)"
             }
             latestError = nil
             await refreshHealthAccessStatus()

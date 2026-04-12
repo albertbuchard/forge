@@ -276,4 +276,65 @@ describe("forge local runtime", () => {
       rmSync(tempHome, { recursive: true, force: true });
     }
   });
+
+  it("enables managed dev web supervision for local dev runtimes", async () => {
+    const tempHome = mkdtempSync(path.join(tmpdir(), "forge-runtime-home-"));
+    vi.stubEnv("HOME", tempHome);
+    vi.stubEnv("FORGE_OPENCLAW_DEV", "1");
+    try {
+      let runtimeStarted = false;
+      const fakeChild = {
+        pid: 61234,
+        killed: false,
+        unref: vi.fn(),
+        once: vi.fn().mockReturnThis()
+      };
+      const spawnMock = vi.fn().mockImplementation(() => {
+        runtimeStarted = true;
+        return fakeChild;
+      });
+      vi.doMock("node:child_process", async (importOriginal) => {
+        const actual = await importOriginal<typeof import("node:child_process")>();
+        return {
+          ...actual,
+          spawn: spawnMock,
+          default: {
+            ...("default" in actual && actual.default ? actual.default : {}),
+            spawn: spawnMock
+          }
+        };
+      });
+
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async () => {
+          if (runtimeStarted) {
+            return new Response(JSON.stringify({ ok: true }), {
+              status: 200,
+              headers: { "content-type": "application/json" }
+            });
+          }
+          throw new Error("Forge runtime unavailable");
+        })
+      );
+
+      const { ensureForgeRuntimeReady } = await import("./local-runtime");
+      const config = createLocalConfig();
+
+      await ensureForgeRuntimeReady(config);
+
+      expect(spawnMock).toHaveBeenCalledTimes(1);
+      expect(spawnMock.mock.calls[0]?.[2]).toEqual(
+        expect.objectContaining({
+          env: expect.objectContaining({
+            FORGE_DEV_WEB_ORIGIN: "http://127.0.0.1:3027/forge/",
+            FORGE_BASE_PATH: "/forge/",
+            PORT: "4317"
+          })
+        })
+      );
+    } finally {
+      rmSync(tempHome, { recursive: true, force: true });
+    }
+  });
 });
