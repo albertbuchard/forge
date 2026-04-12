@@ -58,6 +58,16 @@ struct ScreenTimeSettingsSheet: View {
                 }
                 .buttonStyle(CompanionFilledButtonStyle())
                 .disabled(enabling || screenTimeStore.authorizationStatus == "unavailable")
+            } else if screenTimeStore.enabled && screenTimeStore.authorizationStatus == "approved" {
+                Button(screenTimeStore.readyForSync ? "Refresh Screen Time" : "Fetch First Snapshot") {
+                    enabling = true
+                    Task {
+                        await screenTimeStore.refreshCaptureNow()
+                        enabling = false
+                    }
+                }
+                .buttonStyle(CompanionFilledButtonStyle())
+                .disabled(enabling)
             }
         }
         .padding(18)

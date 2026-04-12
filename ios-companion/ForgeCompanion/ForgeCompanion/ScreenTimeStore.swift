@@ -1,3 +1,4 @@
+import CoreFoundation
 import Foundation
 import Combine
 import FamilyControls
@@ -29,29 +30,48 @@ final class ScreenTimeStore: ObservableObject {
     private var cancellables: Set<AnyCancellable> = []
     private let snapshotLoader: () -> ForgeScreenTimeSnapshotEnvelope
     private let nowProvider: () -> Date
+    private let sleepForSeconds: @Sendable (TimeInterval) async -> Void
     private let storedStateOverride: PersistedState?
     private let authorizationStatusOverride: String?
     private let bindAuthorizationUpdates: Bool
+    private var capturePollingTask: Task<Bool, Never>?
+    private var captureRefreshInFlight = false
+    private var sharedSnapshotObserverRegistered = false
+
+    private static let capturePollingIntervalSeconds: TimeInterval = 0.8
+    private static let capturePollingAttempts = 15
+    private static let captureRefreshRetryAttempts: Set<Int> = [2, 6, 10]
 
     init(
         snapshotLoader: @escaping () -> ForgeScreenTimeSnapshotEnvelope = ForgeScreenTimeSnapshotStore.load,
         nowProvider: @escaping () -> Date = Date.init,
+        sleepForSeconds: @escaping @Sendable (TimeInterval) async -> Void = { seconds in
+            let nanoseconds = UInt64((seconds * 1_000_000_000).rounded())
+            try? await Task.sleep(nanoseconds: nanoseconds)
+        },
         storedStateOverride: PersistedState? = nil,
         authorizationStatusOverride: String? = nil,
         bindAuthorizationUpdates: Bool = true
     ) {
         self.snapshotLoader = snapshotLoader
         self.nowProvider = nowProvider
+        self.sleepForSeconds = sleepForSeconds
         self.storedStateOverride = storedStateOverride
         self.authorizationStatusOverride = authorizationStatusOverride
         self.bindAuthorizationUpdates = bindAuthorizationUpdates
         loadState()
+        registerSharedSnapshotObserver()
         if bindAuthorizationUpdates {
             bindAuthorizationCenter()
         }
         refreshAuthorizationStatus()
         ingestSharedSnapshots()
         refreshCaptureState()
+    }
+
+    deinit {
+        capturePollingTask?.cancel()
+        unregisterSharedSnapshotObserver()
     }
 
     private func bindAuthorizationCenter() {
@@ -68,6 +88,7 @@ final class ScreenTimeStore: ObservableObject {
         do {
             try await AuthorizationCenter.shared.requestAuthorization(for: .individual)
             refreshAuthorizationStatus()
+            ingestSharedSnapshots()
             refreshCaptureState()
             triggerCaptureRefresh(reason: "authorization granted")
             companionDebugLog("ScreenTimeStore", "requestAuthorization success")
@@ -122,20 +143,62 @@ final class ScreenTimeStore: ObservableObject {
 
     func ingestSharedSnapshots() {
         let snapshot = snapshotLoader()
-        daySummaries = snapshot.daySummaries.sorted { $0.dateKey > $1.dateKey }
-        hourlySegments = snapshot.hourlySegments.sorted { lhs, rhs in
+        let sortedDaySummaries = snapshot.daySummaries.sorted { $0.dateKey > $1.dateKey }
+        let sortedHourlySegments = snapshot.hourlySegments.sorted { lhs, rhs in
             if lhs.startedAt == rhs.startedAt {
                 return lhs.hourIndex < rhs.hourIndex
             }
             return lhs.startedAt < rhs.startedAt
         }
-        lastCapturedDayKey = daySummaries.first?.dateKey
-        lastCaptureStartedAt = hourlySegments.first?.startedAt
-        lastCaptureEndedAt = hourlySegments.last?.endedAt
-        metadata["snapshot_source"] = snapshot.source
-        metadata["snapshot_kind"] = snapshot.segmentKind
-        metadata["generated_at"] = snapshot.generatedAt
+        let nextLastCapturedDayKey = sortedDaySummaries.first?.dateKey
+        let nextLastCaptureStartedAt = sortedHourlySegments.first?.startedAt
+        let nextLastCaptureEndedAt = sortedHourlySegments.last?.endedAt
+        let nextMetadata = metadata.merging([
+            "snapshot_source": snapshot.source,
+            "snapshot_kind": snapshot.segmentKind,
+            "generated_at": snapshot.generatedAt
+        ]) { _, new in new }
+
+        let snapshotDidChange = daySummaries != sortedDaySummaries
+            || hourlySegments != sortedHourlySegments
+            || lastCapturedDayKey != nextLastCapturedDayKey
+            || lastCaptureStartedAt != nextLastCaptureStartedAt
+            || lastCaptureEndedAt != nextLastCaptureEndedAt
+            || metadata != nextMetadata
+
+        if snapshotDidChange {
+            daySummaries = sortedDaySummaries
+            hourlySegments = sortedHourlySegments
+            lastCapturedDayKey = nextLastCapturedDayKey
+            lastCaptureStartedAt = nextLastCaptureStartedAt
+            lastCaptureEndedAt = nextLastCaptureEndedAt
+            metadata = nextMetadata
+            companionDebugLog(
+                "ScreenTimeStore",
+                "ingestSharedSnapshots updated days=\(daySummaries.count) hours=\(hourlySegments.count) generatedAt=\(snapshot.generatedAt)"
+            )
+        }
         refreshCaptureState()
+    }
+
+    func refreshCaptureNow() async {
+        triggerCaptureRefresh(reason: "manual refresh")
+        _ = await awaitInitialSnapshotIfNeeded(reason: "manual refresh")
+    }
+
+    func prepareSnapshotForSync(reason: String) async {
+        guard enabled, authorizationStatus == "approved" else {
+            return
+        }
+        ingestSharedSnapshots()
+        guard readyForSync == false else {
+            return
+        }
+        let captured = await awaitInitialSnapshotIfNeeded(reason: "sync \(reason)")
+        companionDebugLog(
+            "ScreenTimeStore",
+            "prepareSnapshotForSync complete reason=\(reason) captured=\(captured) hours=\(hourlySegments.count)"
+        )
     }
 
     func buildScreenTimePayload() -> CompanionSyncPayload.ScreenTimePayload {
@@ -203,7 +266,7 @@ final class ScreenTimeStore: ObservableObject {
     }
 
     var readyForSync: Bool {
-        enabled && authorizationStatus == "approved"
+        enabled && authorizationStatus == "approved" && hourlySegments.isEmpty == false
     }
 
     var capturedDayCount: Int {
@@ -261,6 +324,9 @@ final class ScreenTimeStore: ObservableObject {
     }
 
     var freshnessSummary: String {
+        if captureRefreshInFlight && hourlySegments.isEmpty {
+            return "Capturing first snapshot"
+        }
         switch captureFreshness {
         case "fresh":
             return captureAgeHours.map { "Fresh · updated \($0.formatted(.number.precision(.fractionLength(0...1))))h ago" }
@@ -283,6 +349,9 @@ final class ScreenTimeStore: ObservableObject {
             return "Entitlement unavailable"
         }
         if hourlySegments.isEmpty {
+            if captureRefreshInFlight {
+                return "Capturing first Screen Time snapshot"
+            }
             return enabled ? "Waiting for first Screen Time snapshot" : "Screen Time off"
         }
         return "\(capturedDayCount) days · \(capturedHourCount) hourly slices · \(captureFreshness)"
@@ -386,7 +455,13 @@ final class ScreenTimeStore: ObservableObject {
         }
         switch authorizationStatus {
         case "approved":
-            captureState = "ready"
+            if readyForSync {
+                captureState = "ready"
+            } else if captureRefreshInFlight {
+                captureState = "capturing"
+            } else {
+                captureState = "waiting_for_snapshot"
+            }
         case "denied", "not_determined":
             captureState = "needs_authorization"
         default:
@@ -396,13 +471,124 @@ final class ScreenTimeStore: ObservableObject {
 
     private func triggerCaptureRefresh(reason: String) {
         companionDebugLog("ScreenTimeStore", "triggerCaptureRefresh reason=\(reason)")
+        remountCaptureHost(reason: reason)
+        if capturePollingTask == nil {
+            capturePollingTask = Task { @MainActor [weak self] in
+                guard let self else { return false }
+                defer {
+                    self.captureRefreshInFlight = false
+                    self.capturePollingTask = nil
+                    self.refreshCaptureState()
+                }
+                self.captureRefreshInFlight = true
+                self.refreshCaptureState()
+                return await self.pollForInitialSnapshot(reason: reason)
+            }
+        }
+    }
+
+    private func remountCaptureHost(reason: String) {
+        companionDebugLog("ScreenTimeStore", "remountCaptureHost reason=\(reason)")
         captureRefreshToken = UUID()
+    }
+
+    private func awaitInitialSnapshotIfNeeded(reason: String) async -> Bool {
+        ingestSharedSnapshots()
+        guard enabled, authorizationStatus == "approved" else {
+            return false
+        }
+        guard readyForSync == false else {
+            return true
+        }
+        if capturePollingTask == nil {
+            triggerCaptureRefresh(reason: reason)
+        }
+        return await (capturePollingTask?.value ?? false)
+    }
+
+    private func pollForInitialSnapshot(reason: String) async -> Bool {
+        ingestSharedSnapshots()
+        if readyForSync {
+            companionDebugLog("ScreenTimeStore", "pollForInitialSnapshot immediate success reason=\(reason)")
+            return true
+        }
+
+        companionDebugLog("ScreenTimeStore", "pollForInitialSnapshot start reason=\(reason)")
+        for attempt in 0..<Self.capturePollingAttempts {
+            await sleepForSeconds(Self.capturePollingIntervalSeconds)
+            if Task.isCancelled {
+                companionDebugLog("ScreenTimeStore", "pollForInitialSnapshot cancelled reason=\(reason)")
+                return false
+            }
+            ingestSharedSnapshots()
+            if readyForSync {
+                companionDebugLog(
+                    "ScreenTimeStore",
+                    "pollForInitialSnapshot success reason=\(reason) attempt=\(attempt + 1) hours=\(hourlySegments.count)"
+                )
+                return true
+            }
+            if Self.captureRefreshRetryAttempts.contains(attempt) {
+                remountCaptureHost(reason: "\(reason) retry \(attempt + 1)")
+            }
+        }
+        ingestSharedSnapshots()
+        companionDebugLog(
+            "ScreenTimeStore",
+            "pollForInitialSnapshot timed out reason=\(reason) days=\(daySummaries.count) hours=\(hourlySegments.count)"
+        )
+        return readyForSync
+    }
+
+    private func registerSharedSnapshotObserver() {
+        guard sharedSnapshotObserverRegistered == false else {
+            return
+        }
+        let observer = Unmanaged.passUnretained(self).toOpaque()
+        CFNotificationCenterAddObserver(
+            CFNotificationCenterGetDarwinNotifyCenter(),
+            observer,
+            Self.sharedSnapshotNotificationCallback,
+            ForgeScreenTimeStorage.snapshotDidChangeDarwinName.rawValue,
+            nil,
+            .deliverImmediately
+        )
+        sharedSnapshotObserverRegistered = true
+    }
+
+    private func unregisterSharedSnapshotObserver() {
+        guard sharedSnapshotObserverRegistered else {
+            return
+        }
+        let observer = Unmanaged.passUnretained(self).toOpaque()
+        CFNotificationCenterRemoveEveryObserver(
+            CFNotificationCenterGetDarwinNotifyCenter(),
+            observer
+        )
+        sharedSnapshotObserverRegistered = false
+    }
+
+    private func handleSharedSnapshotNotification() {
+        companionDebugLog("ScreenTimeStore", "handleSharedSnapshotNotification")
+        ingestSharedSnapshots()
+    }
+
+    private static let sharedSnapshotNotificationCallback: CFNotificationCallback = {
+        _, observer, _, _, _
+        in
+        guard let observer else {
+            return
+        }
+        let store = Unmanaged<ScreenTimeStore>.fromOpaque(observer).takeUnretainedValue()
+        Task { @MainActor in
+            store.handleSharedSnapshotNotification()
+        }
     }
 
     private func loadState() {
         if let storedStateOverride {
             trackingEnabled = storedStateOverride.trackingEnabled
-            syncEnabled = storedStateOverride.trackingEnabled
+            syncEnabled = storedStateOverride.syncEnabled
             metadata = storedStateOverride.metadata
             return
         }
@@ -411,7 +597,7 @@ final class ScreenTimeStore: ObservableObject {
             let state = try? JSONDecoder().decode(PersistedState.self, from: data)
         {
             trackingEnabled = state.trackingEnabled
-            syncEnabled = state.trackingEnabled
+            syncEnabled = state.syncEnabled
             metadata = state.metadata
             return
         }

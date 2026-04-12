@@ -1190,6 +1190,7 @@ final class CompanionAppModel: ObservableObject {
         }
         syncState = .syncing
         do {
+            await screenTimeStore.prepareSnapshotForSync(reason: trigger)
             let movementPayload = movementStore.buildMovementPayload()
             let screenTimePayload = screenTimeStore.buildScreenTimePayload()
             let buildResult = try await healthStore.buildSyncPayload(
@@ -1818,7 +1819,7 @@ final class CompanionAppModel: ObservableObject {
                 desiredEnabled: screenTimeStore.enabled,
                 appliedEnabled: screenTimeStore.enabled,
                 authorizationStatus: sourceAuthorizationStatus(for: .screenTime),
-                syncEligible: screenTimeStore.enabled && screenTimeStore.authorizationStatus == "approved",
+                syncEligible: screenTimeStore.readyForSync,
                 lastObservedAt: now,
                 metadata: LooseJSONObject(values: [
                     "captureState": screenTimeStore.captureState,

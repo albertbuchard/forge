@@ -593,6 +593,7 @@ import {
   updateWorkoutMetadataSchema
 } from "./health.js";
 import {
+  analyzeMovementUserBoxPreflight,
   createMovementUserBox,
   createMovementPlace,
   deleteMovementUserBox,
@@ -610,6 +611,7 @@ import {
   movementMobileBootstrapSchema,
   movementMobilePlaceMutationSchema,
   movementMobileUserBoxCreateSchema,
+  movementMobileUserBoxPreflightSchema,
   movementMobileUserBoxPatchSchema,
   movementMobileAutomaticBoxInvalidateSchema,
   movementMobileTimelineSchema,
@@ -619,6 +621,7 @@ import {
   movementStayPatchSchema,
   movementTripPatchSchema,
   movementUserBoxCreateSchema,
+  movementUserBoxPreflightSchema,
   movementUserBoxPatchSchema,
   movementSettingsPatchSchema,
   movementTimelineQuerySchema,
@@ -631,7 +634,8 @@ import {
   updateMovementStay,
   updateMovementTrip,
   updateMovementUserBox,
-  updateMovementTripPoint
+  updateMovementTripPoint,
+  resolveMovementTimelineSegmentForBox
 } from "./movement.js";
 import {
   getScreenTimeAllTimeSummary,

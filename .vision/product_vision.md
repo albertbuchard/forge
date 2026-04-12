@@ -175,6 +175,12 @@ scrolling road-of-life surface where the current live stay or trip sits near the
 middle, older canonical stays and trips alternate left and right into the past, long
 durations visually cap while preserving the real duration label, and selecting a
 segment opens rich detail and edit actions without dropping the user into the web app.
+The iPhone companion also needs a truthful Screen Time capture pipeline. Authorization
+success is not enough: Forge should only present Screen Time as ready once the Device
+Activity report extension has produced shared snapshots for sync. The production
+implementation must keep the report extension entitlement configuration aligned with
+the main app, bridge extension snapshots back through the shared app-group channel, and
+surface an explicit waiting or capturing state until the first hourly snapshot exists.
 
 ## What The Main Views Are Supposed To Do
 

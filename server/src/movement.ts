@@ -4852,10 +4852,7 @@ export function invalidateAutomaticMovementBox(
   };
 }
 
-export function getMovementTimeline(input: z.input<typeof movementTimelineQuerySchema>) {
-  const parsed = movementTimelineQuerySchema.parse(input);
-  const userIds =
-    parsed.userIds.length > 0 ? parsed.userIds : [getDefaultUser().id];
+function buildProjectedMovementTimelineSegments(userIds: string[]) {
   const places = listMovementPlaceRows(userIds).map(mapMovementPlace);
   const placesById = new Map(places.map((place) => [place.id, place] as const));
   const stayRows = listMovementStayRows(userIds);
@@ -4924,12 +4921,17 @@ export function getMovementTimeline(input: z.input<typeof movementTimelineQueryS
       const laneSide = previousStayLane ?? nextStayLane ?? "left";
       return {
         id: segment.id,
+        boxId: segment.boxId,
         kind: "missing" as const,
         sourceKind: segment.sourceKind,
         origin: segment.origin,
         editable: segment.editable,
         startedAt: segment.startedAt,
         endedAt: segment.endedAt,
+        trueStartedAt: segment.trueStartedAt,
+        trueEndedAt: segment.trueEndedAt,
+        visibleStartedAt: segment.visibleStartedAt,
+        visibleEndedAt: segment.visibleEndedAt,
         durationSeconds: segment.durationSeconds,
         laneSide,
         connectorFromLane: previousStayLane ?? laneSide,
@@ -4943,6 +4945,8 @@ export function getMovementTimeline(input: z.input<typeof movementTimelineQueryS
         cursor: encodeMovementTimelineCursor(cursor),
         overrideCount: segment.overrideCount,
         overriddenAutomaticBoxIds: segment.overriddenAutomaticBoxIds,
+        overriddenUserBoxIds: segment.overriddenUserBoxIds,
+        isFullyHidden: segment.isFullyHidden,
         rawStayIds: segment.rawStayIds,
         rawTripIds: segment.rawTripIds,
         rawPointCount: segment.rawPointCount,
@@ -4956,12 +4960,17 @@ export function getMovementTimeline(input: z.input<typeof movementTimelineQueryS
       const laneSide = stayLaneById.get(segment.id) ?? "left";
       return {
         id: segment.id,
+        boxId: segment.boxId,
         kind: "stay" as const,
         sourceKind: segment.sourceKind,
         origin: segment.origin,
         editable: segment.editable,
         startedAt: segment.startedAt,
         endedAt: segment.endedAt,
+        trueStartedAt: segment.trueStartedAt,
+        trueEndedAt: segment.trueEndedAt,
+        visibleStartedAt: segment.visibleStartedAt,
+        visibleEndedAt: segment.visibleEndedAt,
         durationSeconds: segment.durationSeconds,
         laneSide,
         connectorFromLane: laneSide,
@@ -4975,6 +4984,8 @@ export function getMovementTimeline(input: z.input<typeof movementTimelineQueryS
         cursor: encodeMovementTimelineCursor(cursor),
         overrideCount: segment.overrideCount,
         overriddenAutomaticBoxIds: segment.overriddenAutomaticBoxIds,
+        overriddenUserBoxIds: segment.overriddenUserBoxIds,
+        isFullyHidden: segment.isFullyHidden,
         rawStayIds: segment.rawStayIds,
         rawTripIds: segment.rawTripIds,
         rawPointCount: segment.rawPointCount,
@@ -4987,12 +4998,17 @@ export function getMovementTimeline(input: z.input<typeof movementTimelineQueryS
       const laneSide = previousStayLane ?? nextStayLane ?? "left";
       return {
         id: segment.id,
+        boxId: segment.boxId,
         kind: "stay" as const,
         sourceKind: segment.sourceKind,
         origin: segment.origin,
         editable: segment.editable,
         startedAt: segment.startedAt,
         endedAt: segment.endedAt,
+        trueStartedAt: segment.trueStartedAt,
+        trueEndedAt: segment.trueEndedAt,
+        visibleStartedAt: segment.visibleStartedAt,
+        visibleEndedAt: segment.visibleEndedAt,
         durationSeconds: segment.durationSeconds,
         laneSide,
         connectorFromLane: previousStayLane ?? laneSide,
@@ -5006,6 +5022,8 @@ export function getMovementTimeline(input: z.input<typeof movementTimelineQueryS
         cursor: encodeMovementTimelineCursor(cursor),
         overrideCount: segment.overrideCount,
         overriddenAutomaticBoxIds: segment.overriddenAutomaticBoxIds,
+        overriddenUserBoxIds: segment.overriddenUserBoxIds,
+        isFullyHidden: segment.isFullyHidden,
         rawStayIds: segment.rawStayIds,
         rawTripIds: segment.rawTripIds,
         rawPointCount: segment.rawPointCount,
@@ -5018,12 +5036,17 @@ export function getMovementTimeline(input: z.input<typeof movementTimelineQueryS
       const laneSide = nextStayLane ?? previousStayLane ?? "left";
       return {
         id: segment.id,
+        boxId: segment.boxId,
         kind: "trip" as const,
         sourceKind: segment.sourceKind,
         origin: segment.origin,
         editable: segment.editable,
         startedAt: segment.startedAt,
         endedAt: segment.endedAt,
+        trueStartedAt: segment.trueStartedAt,
+        trueEndedAt: segment.trueEndedAt,
+        visibleStartedAt: segment.visibleStartedAt,
+        visibleEndedAt: segment.visibleEndedAt,
         durationSeconds: segment.durationSeconds,
         laneSide,
         connectorFromLane: previousStayLane ?? laneSide,
@@ -5037,6 +5060,8 @@ export function getMovementTimeline(input: z.input<typeof movementTimelineQueryS
         cursor: encodeMovementTimelineCursor(cursor),
         overrideCount: segment.overrideCount,
         overriddenAutomaticBoxIds: segment.overriddenAutomaticBoxIds,
+        overriddenUserBoxIds: segment.overriddenUserBoxIds,
+        isFullyHidden: segment.isFullyHidden,
         rawStayIds: segment.rawStayIds,
         rawTripIds: segment.rawTripIds,
         rawPointCount: segment.rawPointCount,
@@ -5049,12 +5074,17 @@ export function getMovementTimeline(input: z.input<typeof movementTimelineQueryS
     const laneSide = nextStayLane ?? previousStayLane ?? "left";
     return {
       id: segment.id,
+      boxId: segment.boxId,
       kind: "trip" as const,
       sourceKind: segment.sourceKind,
       origin: segment.origin,
       editable: segment.editable,
       startedAt: segment.startedAt,
       endedAt: segment.endedAt,
+      trueStartedAt: segment.trueStartedAt,
+      trueEndedAt: segment.trueEndedAt,
+      visibleStartedAt: segment.visibleStartedAt,
+      visibleEndedAt: segment.visibleEndedAt,
       durationSeconds: segment.durationSeconds,
       laneSide,
       connectorFromLane: previousStayLane ?? laneSide,
@@ -5068,6 +5098,8 @@ export function getMovementTimeline(input: z.input<typeof movementTimelineQueryS
       cursor: encodeMovementTimelineCursor(cursor),
       overrideCount: segment.overrideCount,
       overriddenAutomaticBoxIds: segment.overriddenAutomaticBoxIds,
+      overriddenUserBoxIds: segment.overriddenUserBoxIds,
+      isFullyHidden: segment.isFullyHidden,
       rawStayIds: segment.rawStayIds,
       rawTripIds: segment.rawTripIds,
       rawPointCount: segment.rawPointCount,
@@ -5076,6 +5108,102 @@ export function getMovementTimeline(input: z.input<typeof movementTimelineQueryS
       trip: rawTrip
     };
   });
+}
+
+export function resolveMovementTimelineSegmentForBox(
+  userId: string,
+  boxId: string
+) {
+  return buildProjectedMovementTimelineSegments([userId]).find(
+    (segment) => segment.boxId === boxId
+  );
+}
+
+export function analyzeMovementUserBoxPreflight(
+  input: z.input<typeof movementUserBoxPreflightSchema> & { userId: string }
+) {
+  const parsed = movementUserBoxPreflightSchema.parse(input);
+  const visibleRangeStart = parsed.rangeStart ?? null;
+  const visibleRangeEnd = parsed.rangeEnd ?? null;
+  const allRows = listMovementBoxRows({ userIds: [input.userId] });
+  const automaticRows = allRows.filter((row) => row.source_kind === "automatic");
+  const userRows = allRows.filter(
+    (row) =>
+      row.source_kind === "user_defined" &&
+      row.id !== (parsed.excludeBoxId ?? null)
+  );
+  const affectedAutomaticBoxIds = automaticRows
+    .filter((row) => movementBoxOverlapsRange(row, parsed.startedAt, parsed.endedAt))
+    .map((row) => row.id);
+  const affectedUserRows = userRows.filter((row) =>
+    movementBoxOverlapsRange(row, parsed.startedAt, parsed.endedAt)
+  );
+  const fullyOverriddenUserBoxIds: string[] = [];
+  const trimmedUserBoxIds: string[] = [];
+  for (const row of affectedUserRows) {
+    const fragments = subtractMovementOverrideRanges(
+      row.started_at,
+      row.ended_at,
+      [
+        {
+          startedAt:
+            parsed.startedAt > row.started_at ? parsed.startedAt : row.started_at,
+          endedAt:
+            parsed.endedAt < row.ended_at ? parsed.endedAt : row.ended_at
+        }
+      ]
+    );
+    if (fragments.length === 0) {
+      fullyOverriddenUserBoxIds.push(row.id);
+    } else {
+      trimmedUserBoxIds.push(row.id);
+    }
+  }
+  const projected = buildProjectedMovementTimelineSegments([input.userId]).filter((segment) => {
+    if (visibleRangeStart && segment.endedAt <= visibleRangeStart) {
+      return false;
+    }
+    if (visibleRangeEnd && segment.startedAt >= visibleRangeEnd) {
+      return false;
+    }
+    return true;
+  });
+  const missingSegments = projected.filter((segment) => segment.kind === "missing");
+  const nearestMissing = [...missingSegments].sort((left, right) => {
+    const leftDistance = Math.min(
+      Math.abs(Date.parse(left.startedAt) - Date.parse(parsed.startedAt)),
+      Math.abs(Date.parse(left.endedAt) - Date.parse(parsed.endedAt))
+    );
+    const rightDistance = Math.min(
+      Math.abs(Date.parse(right.startedAt) - Date.parse(parsed.startedAt)),
+      Math.abs(Date.parse(right.endedAt) - Date.parse(parsed.endedAt))
+    );
+    return leftDistance - rightDistance;
+  })[0] ?? null;
+
+  return {
+    overlapsAnything:
+      affectedAutomaticBoxIds.length > 0 || affectedUserRows.length > 0,
+    visibleRangeStart:
+      visibleRangeStart ?? projected[0]?.startedAt ?? parsed.startedAt,
+    visibleRangeEnd:
+      visibleRangeEnd ?? projected[projected.length - 1]?.endedAt ?? parsed.endedAt,
+    suggestedStartedAt: nearestMissing?.startedAt ?? null,
+    suggestedEndedAt: nearestMissing?.endedAt ?? null,
+    nearestMissingStartedAt: nearestMissing?.startedAt ?? null,
+    nearestMissingEndedAt: nearestMissing?.endedAt ?? null,
+    affectedAutomaticBoxIds,
+    affectedUserBoxIds: affectedUserRows.map((row) => row.id),
+    fullyOverriddenUserBoxIds,
+    trimmedUserBoxIds
+  };
+}
+
+export function getMovementTimeline(input: z.input<typeof movementTimelineQuerySchema>) {
+  const parsed = movementTimelineQuerySchema.parse(input);
+  const userIds =
+    parsed.userIds.length > 0 ? parsed.userIds : [getDefaultUser().id];
+  const decorated = buildProjectedMovementTimelineSegments(userIds);
 
   const descending = [...decorated].sort((left, right) =>
     compareMovementTimelineDescending(
@@ -6036,12 +6164,17 @@ export function getMovementDayDetail(input: {
     const noteCount = rawStay?.note ? 1 : rawTrip?.note ? 1 : 0;
     return {
       id: segment.id,
+      boxId: segment.boxId,
       kind: segment.kind,
       sourceKind: segment.sourceKind,
       origin: segment.origin,
       editable: segment.editable,
       startedAt: segment.startedAt,
       endedAt: segment.endedAt,
+      trueStartedAt: segment.trueStartedAt,
+      trueEndedAt: segment.trueEndedAt,
+      visibleStartedAt: segment.visibleStartedAt,
+      visibleEndedAt: segment.visibleEndedAt,
       durationSeconds: segment.durationSeconds,
       label: segment.title,
       subtitle: segment.subtitle,
@@ -6061,6 +6194,9 @@ export function getMovementDayDetail(input: {
                 : "from-white/16 to-white/4",
       noteCount,
       overrideCount: segment.overrideCount,
+      overriddenAutomaticBoxIds: segment.overriddenAutomaticBoxIds,
+      overriddenUserBoxIds: segment.overriddenUserBoxIds,
+      isFullyHidden: segment.isFullyHidden,
       rawStayIds: segment.rawStayIds,
       rawTripIds: segment.rawTripIds,
       rawPointCount: segment.rawPointCount,

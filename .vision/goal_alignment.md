@@ -49,12 +49,17 @@ goals and strategies, and the user must be able to intentionally widen search or
 views to other users instead of being trapped inside one invisible owner namespace.
 Eighth, it must support a native iPhone companion that can pair securely with a local
 Forge runtime, request Apple permissions directly, import HealthKit sleep and workout
-data, and turn that mobile-native context into structured Forge records instead of
-opaque wellness blobs. After pairing, that companion should default to Forge itself in
-a full-screen embedded web view, with native iOS controls reserved for permissions,
-sync, and device-specific settings. Runtime discovery for that companion should work
-on trusted same-Wi-Fi networks and through Tailscale, with the Forge runtime
-advertising itself over Bonjour and publishing its Tailscale Serve URL when available.
+data plus Screen Time usage, and turn that mobile-native context into structured Forge
+records instead of opaque wellness blobs. After pairing, that companion should default
+to Forge itself in a full-screen embedded web view, with native iOS controls reserved
+for permissions, sync, and device-specific settings. Runtime discovery for that
+companion should work on trusted same-Wi-Fi networks and through Tailscale, with the
+Forge runtime advertising itself over Bonjour and publishing its Tailscale Serve URL
+when available. Screen Time sync must use Apple's Device Activity report-extension
+pipeline with the Family Controls App and Website Usage entitlement present on both the
+app and report-extension targets, shared app-group snapshot transport, and truthful
+first-capture readiness handling instead of assuming authorization alone means captured
+usage data already exists.
 Ninth, it must support Preferences as a first-class domain. Forge should be able to
 learn and store what a user prefers across concrete domains and contexts through a
 fully algorithmic system of pairwise comparisons, direct preference signals, explicit
