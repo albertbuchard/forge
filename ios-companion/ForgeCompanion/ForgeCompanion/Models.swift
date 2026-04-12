@@ -574,12 +574,17 @@ struct ForgeMovementTimelineTrip: Codable, Hashable, Identifiable {
 
 struct ForgeMovementTimelineSegment: Codable, Hashable, Identifiable {
     let id: String
+    let boxId: String?
     let kind: String
     let sourceKind: String
     let origin: String
     let editable: Bool
     let startedAt: String
     let endedAt: String
+    let trueStartedAt: String?
+    let trueEndedAt: String?
+    let visibleStartedAt: String?
+    let visibleEndedAt: String?
     let durationSeconds: Int
     let laneSide: MovementTimelineLaneSide
     let connectorFromLane: MovementTimelineLaneSide
@@ -592,12 +597,28 @@ struct ForgeMovementTimelineSegment: Codable, Hashable, Identifiable {
     let cursor: String
     let overrideCount: Int
     let overriddenAutomaticBoxIds: [String]
+    let overriddenUserBoxIds: [String]?
+    let isFullyHidden: Bool?
     let rawStayIds: [String]
     let rawTripIds: [String]
     let rawPointCount: Int
     let hasLegacyCorrections: Bool
     let stay: ForgeMovementTimelineStay?
     let trip: ForgeMovementTimelineTrip?
+}
+
+struct ForgeMovementUserBoxPreflight: Codable, Hashable {
+    let overlapsAnything: Bool
+    let visibleRangeStart: String?
+    let visibleRangeEnd: String?
+    let suggestedStartedAt: String?
+    let suggestedEndedAt: String?
+    let nearestMissingStartedAt: String?
+    let nearestMissingEndedAt: String?
+    let affectedAutomaticBoxIds: [String]
+    let affectedUserBoxIds: [String]
+    let fullyOverriddenUserBoxIds: [String]
+    let trimmedUserBoxIds: [String]
 }
 
 struct ForgeMovementUserBoxPayload: Encodable {
@@ -612,6 +633,23 @@ struct ForgeMovementUserBoxPayload: Encodable {
     var distanceMeters: Double?
     var averageSpeedMps: Double??
     var metadata: [String: String]?
+}
+
+struct ForgeMovementUserBoxPreflightPayload: Encodable {
+    var kind: String
+    var startedAt: String
+    var endedAt: String
+    var title: String
+    var subtitle: String
+    var placeLabel: String?
+    var anchorExternalUid: String?
+    var tags: [String]
+    var distanceMeters: Double?
+    var averageSpeedMps: Double?
+    var metadata: [String: String]
+    var excludeBoxId: String?
+    var rangeStart: String?
+    var rangeEnd: String?
 }
 
 enum HealthAccessStatus: String, Codable {

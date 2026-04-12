@@ -27,6 +27,78 @@ private let sharedMovementFixtureDateFormatter: ISO8601DateFormatter = {
 
 @MainActor
 final class ForgeCompanionTests: XCTestCase {
+    private final class ScreenTimeSnapshotBox: @unchecked Sendable {
+        var snapshot: ForgeCompanion.ForgeScreenTimeSnapshotEnvelope
+
+        init(snapshot: ForgeCompanion.ForgeScreenTimeSnapshotEnvelope) {
+            self.snapshot = snapshot
+        }
+    }
+
+    private func makeScreenTimeSnapshot(
+        generatedAt: String,
+        daySummaries: [ForgeCompanion.ForgeScreenTimeDaySummarySnapshot] = [],
+        hourlySegments: [ForgeCompanion.ForgeScreenTimeHourlySegmentSnapshot] = []
+    ) -> ForgeCompanion.ForgeScreenTimeSnapshotEnvelope {
+        ForgeCompanion.ForgeScreenTimeSnapshotEnvelope(
+            generatedAt: generatedAt,
+            source: "device_activity_report_extension",
+            segmentKind: "hourly",
+            daySummaries: daySummaries,
+            hourlySegments: hourlySegments
+        )
+    }
+
+    private func makeSampleDaySummary() -> ForgeCompanion.ForgeScreenTimeDaySummarySnapshot {
+        ForgeCompanion.ForgeScreenTimeDaySummarySnapshot(
+            id: "2026-04-10",
+            dateKey: "2026-04-10",
+            totalActivitySeconds: 5400,
+            pickupCount: 12,
+            notificationCount: 5,
+            firstPickupAt: "2026-04-10T07:10:00.000Z",
+            longestActivitySeconds: 1800,
+            topAppBundleIdentifiers: ["com.apple.mobilesafari"],
+            topCategoryLabels: ["Productivity"],
+            metadata: [:]
+        )
+    }
+
+    private func makeSampleHourlySegment() -> ForgeCompanion.ForgeScreenTimeHourlySegmentSnapshot {
+        ForgeCompanion.ForgeScreenTimeHourlySegmentSnapshot(
+            id: "2026-04-10-7",
+            dateKey: "2026-04-10",
+            hourIndex: 7,
+            startedAt: "2026-04-10T07:00:00.000Z",
+            endedAt: "2026-04-10T08:00:00.000Z",
+            totalActivitySeconds: 1800,
+            pickupCount: 4,
+            notificationCount: 1,
+            firstPickupAt: "2026-04-10T07:12:00.000Z",
+            longestActivityStartedAt: "2026-04-10T07:14:00.000Z",
+            longestActivityEndedAt: "2026-04-10T07:36:00.000Z",
+            metadata: [:],
+            apps: [
+                ForgeCompanion.ForgeScreenTimeAppUsageSnapshot(
+                    id: "com.apple.mobilesafari",
+                    bundleIdentifier: "com.apple.mobilesafari",
+                    displayName: "Safari",
+                    categoryLabel: "Productivity",
+                    totalActivitySeconds: 1500,
+                    pickupCount: 4,
+                    notificationCount: 1
+                )
+            ],
+            categories: [
+                ForgeCompanion.ForgeScreenTimeCategoryUsageSnapshot(
+                    id: "Productivity",
+                    categoryLabel: "Productivity",
+                    totalActivitySeconds: 1500
+                )
+            ]
+        )
+    }
+
     private func loadSharedMovementFixture(id: String) throws -> SharedMovementFixtureScenario {
         let fixtureURL = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
@@ -129,58 +201,10 @@ final class ForgeCompanionTests: XCTestCase {
     }
 
     func testScreenTimeStoreMarksFreshCaptureAndBuildsReadablePreview() {
-        let snapshot = ForgeCompanion.ForgeScreenTimeSnapshotEnvelope(
+        let snapshot = makeScreenTimeSnapshot(
             generatedAt: "2026-04-11T10:00:00.000Z",
-            source: "device_activity_report_extension",
-            segmentKind: "hourly",
-            daySummaries: [
-                ForgeCompanion.ForgeScreenTimeDaySummarySnapshot(
-                    id: "2026-04-10",
-                    dateKey: "2026-04-10",
-                    totalActivitySeconds: 5400,
-                    pickupCount: 12,
-                    notificationCount: 5,
-                    firstPickupAt: "2026-04-10T07:10:00.000Z",
-                    longestActivitySeconds: 1800,
-                    topAppBundleIdentifiers: ["com.apple.mobilesafari"],
-                    topCategoryLabels: ["Productivity"],
-                    metadata: [:]
-                )
-            ],
-            hourlySegments: [
-                ForgeCompanion.ForgeScreenTimeHourlySegmentSnapshot(
-                    id: "2026-04-10-7",
-                    dateKey: "2026-04-10",
-                    hourIndex: 7,
-                    startedAt: "2026-04-10T07:00:00.000Z",
-                    endedAt: "2026-04-10T08:00:00.000Z",
-                    totalActivitySeconds: 1800,
-                    pickupCount: 4,
-                    notificationCount: 1,
-                    firstPickupAt: "2026-04-10T07:12:00.000Z",
-                    longestActivityStartedAt: "2026-04-10T07:14:00.000Z",
-                    longestActivityEndedAt: "2026-04-10T07:36:00.000Z",
-                    metadata: [:],
-                    apps: [
-                        ForgeCompanion.ForgeScreenTimeAppUsageSnapshot(
-                            id: "com.apple.mobilesafari",
-                            bundleIdentifier: "com.apple.mobilesafari",
-                            displayName: "Safari",
-                            categoryLabel: "Productivity",
-                            totalActivitySeconds: 1500,
-                            pickupCount: 4,
-                            notificationCount: 1
-                        )
-                    ],
-                    categories: [
-                        ForgeCompanion.ForgeScreenTimeCategoryUsageSnapshot(
-                            id: "Productivity",
-                            categoryLabel: "Productivity",
-                            totalActivitySeconds: 1500
-                        )
-                    ]
-                )
-            ]
+            daySummaries: [makeSampleDaySummary()],
+            hourlySegments: [makeSampleHourlySegment()]
         )
 
         let store = ScreenTimeStore(
@@ -207,11 +231,8 @@ final class ForgeCompanionTests: XCTestCase {
     }
 
     func testScreenTimeStoreMarksStaleCaptureWhenSnapshotIsOld() {
-        let snapshot = ForgeCompanion.ForgeScreenTimeSnapshotEnvelope(
+        let snapshot = makeScreenTimeSnapshot(
             generatedAt: "2026-04-08T08:00:00.000Z",
-            source: "device_activity_report_extension",
-            segmentKind: "hourly",
-            daySummaries: [],
             hourlySegments: [
                 ForgeCompanion.ForgeScreenTimeHourlySegmentSnapshot(
                     id: "2026-04-08-7",
@@ -248,6 +269,65 @@ final class ForgeCompanionTests: XCTestCase {
 
         XCTAssertEqual(store.captureFreshness, "stale")
         XCTAssertTrue(store.freshnessSummary.contains("Stale"))
+    }
+
+    func testScreenTimeStoreMarksApprovedButEmptyCaptureAsWaiting() {
+        let store = ScreenTimeStore(
+            snapshotLoader: {
+                self.makeScreenTimeSnapshot(generatedAt: "2026-04-11T10:00:00.000Z")
+            },
+            nowProvider: {
+                ISO8601DateFormatter().date(from: "2026-04-11T12:00:00Z") ?? Date()
+            },
+            storedStateOverride: .init(
+                trackingEnabled: true,
+                syncEnabled: true,
+                metadata: [:]
+            ),
+            authorizationStatusOverride: "approved",
+            bindAuthorizationUpdates: false
+        )
+
+        XCTAssertEqual(store.captureState, "waiting_for_snapshot")
+        XCTAssertFalse(store.readyForSync)
+        XCTAssertEqual(store.captureFreshness, "empty")
+        XCTAssertEqual(store.latestCaptureSummary, "Waiting for first Screen Time snapshot")
+    }
+
+    func testScreenTimeStoreWaitsForFirstSnapshotBeforeReadyForSync() async {
+        let emptySnapshot = makeScreenTimeSnapshot(generatedAt: "2026-04-11T10:00:00.000Z")
+        let populatedSnapshot = makeScreenTimeSnapshot(
+            generatedAt: "2026-04-11T10:05:00.000Z",
+            daySummaries: [makeSampleDaySummary()],
+            hourlySegments: [makeSampleHourlySegment()]
+        )
+        let snapshotBox = ScreenTimeSnapshotBox(snapshot: emptySnapshot)
+        let store = ScreenTimeStore(
+            snapshotLoader: { snapshotBox.snapshot },
+            nowProvider: {
+                ISO8601DateFormatter().date(from: "2026-04-11T12:00:00Z") ?? Date()
+            },
+            sleepForSeconds: { _ in
+                snapshotBox.snapshot = populatedSnapshot
+            },
+            storedStateOverride: .init(
+                trackingEnabled: true,
+                syncEnabled: true,
+                metadata: [:]
+            ),
+            authorizationStatusOverride: "approved",
+            bindAuthorizationUpdates: false
+        )
+
+        XCTAssertFalse(store.readyForSync)
+        XCTAssertEqual(store.captureState, "waiting_for_snapshot")
+
+        await store.prepareSnapshotForSync(reason: "unit test")
+
+        XCTAssertTrue(store.readyForSync)
+        XCTAssertEqual(store.captureState, "ready")
+        XCTAssertEqual(store.capturedHourCount, 1)
+        XCTAssertEqual(store.latestCaptureSummary, "1 days · 1 hourly slices · fresh")
     }
 
     func testScreenTimeAuthorizationNormalizationTreatsApprovedWithDataAccessAsApproved() {

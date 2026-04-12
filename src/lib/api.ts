@@ -81,6 +81,7 @@ import type {
   MovementSelectionAggregate,
   MovementSettingsPayload,
   MovementTimelineData,
+  MovementUserBoxPreflight,
   MovementTripDetailData,
   ScreenTimeAllTimeData,
   ScreenTimeDayData,
@@ -3175,6 +3176,22 @@ export function createMovementUserBox(
   const suffix = search.size > 0 ? `?${search.toString()}` : "";
   return request<{ box: MovementTimelineData["segments"][number] }>(
     `/api/v1/movement/user-boxes${suffix}`,
+    {
+      method: "POST",
+      body: JSON.stringify(input)
+    }
+  );
+}
+
+export function preflightMovementUserBox(
+  input: Record<string, unknown>,
+  userIds?: string[] | unknown
+) {
+  const search = new URLSearchParams();
+  appendUserIds(search, coerceUserIds(userIds));
+  const suffix = search.size > 0 ? `?${search.toString()}` : "";
+  return request<{ preflight: MovementUserBoxPreflight }>(
+    `/api/v1/movement/user-boxes/preflight${suffix}`,
     {
       method: "POST",
       body: JSON.stringify(input)
