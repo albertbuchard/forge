@@ -1575,6 +1575,7 @@ export interface MovementDayData {
   };
   segments: Array<{
     id: string;
+    boxId: string;
     kind: "stay" | "trip" | "missing";
     sourceKind: "automatic" | "user_defined";
     origin:
@@ -1587,6 +1588,10 @@ export interface MovementDayData {
     editable: boolean;
     startedAt: string;
     endedAt: string;
+    trueStartedAt: string;
+    trueEndedAt: string;
+    visibleStartedAt: string;
+    visibleEndedAt: string;
     durationSeconds: number;
     label: string;
     subtitle: string;
@@ -1597,6 +1602,9 @@ export interface MovementDayData {
     colorTone: string;
     noteCount: number;
     overrideCount: number;
+    overriddenAutomaticBoxIds: string[];
+    overriddenUserBoxIds: string[];
+    isFullyHidden: boolean;
     rawStayIds: string[];
     rawTripIds: string[];
     rawPointCount: number;
@@ -1729,6 +1737,7 @@ export type MovementTimelineLaneSide = "left" | "right";
 
 export interface MovementTimelineSegmentBase {
   id: string;
+  boxId: string;
   kind: "stay" | "trip" | "missing";
   sourceKind: "automatic" | "user_defined";
   origin:
@@ -1742,6 +1751,10 @@ export interface MovementTimelineSegmentBase {
   isInvalid: boolean;
   startedAt: string;
   endedAt: string;
+  trueStartedAt: string;
+  trueEndedAt: string;
+  visibleStartedAt: string;
+  visibleEndedAt: string;
   durationSeconds: number;
   laneSide: MovementTimelineLaneSide;
   connectorFromLane: MovementTimelineLaneSide;
@@ -1754,6 +1767,8 @@ export interface MovementTimelineSegmentBase {
   cursor: string;
   overrideCount: number;
   overriddenAutomaticBoxIds: string[];
+  overriddenUserBoxIds: string[];
+  isFullyHidden: boolean;
   rawStayIds: string[];
   rawTripIds: string[];
   rawPointCount: number;
@@ -1788,6 +1803,20 @@ export interface MovementTimelineData {
   nextCursor: string | null;
   hasMore: boolean;
   invalidSegmentCount: number;
+}
+
+export interface MovementUserBoxPreflight {
+  overlapsAnything: boolean;
+  visibleRangeStart: string | null;
+  visibleRangeEnd: string | null;
+  suggestedStartedAt: string | null;
+  suggestedEndedAt: string | null;
+  nearestMissingStartedAt: string | null;
+  nearestMissingEndedAt: string | null;
+  affectedAutomaticBoxIds: string[];
+  affectedUserBoxIds: string[];
+  fullyOverriddenUserBoxIds: string[];
+  trimmedUserBoxIds: string[];
 }
 
 export interface TaskRunClaimInput {

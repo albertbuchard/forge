@@ -6462,14 +6462,31 @@ export async function buildServer(
       resolveScopedUserIds(request.query as Record<string, unknown>)?.[0] ??
       getDefaultUser().id;
     reply.code(201);
+    const created = createMovementUserBox(
+      {
+        ...movementUserBoxCreateSchema.parse(request.body ?? {}),
+        userId
+      },
+      toActivityContext(auth)
+    );
     return {
-      box: createMovementUserBox(
-        {
-          ...movementUserBoxCreateSchema.parse(request.body ?? {}),
-          userId
-        },
-        toActivityContext(auth)
-      )
+      box: resolveMovementTimelineSegmentForBox(userId, created.id) ?? created
+    };
+  });
+  app.post("/api/v1/movement/user-boxes/preflight", async (request) => {
+    requireScopedAccess(
+      request.headers as Record<string, unknown>,
+      ["write"],
+      { route: "/api/v1/movement/user-boxes/preflight" }
+    );
+    const userId =
+      resolveScopedUserIds(request.query as Record<string, unknown>)?.[0] ??
+      getDefaultUser().id;
+    return {
+      preflight: analyzeMovementUserBoxPreflight({
+        ...movementUserBoxPreflightSchema.parse(request.body ?? {}),
+        userId
+      })
     };
   });
   app.patch("/api/v1/movement/user-boxes/:id", async (request, reply) => {
@@ -6492,7 +6509,9 @@ export async function buildServer(
       reply.code(404);
       return { error: "Movement user box not found" };
     }
-    return { box };
+    return {
+      box: resolveMovementTimelineSegmentForBox(userId, box.id) ?? box
+    };
   });
   app.delete("/api/v1/movement/user-boxes/:id", async (request, reply) => {
     const auth = requireScopedAccess(
@@ -6534,7 +6553,9 @@ export async function buildServer(
         return { error: "Automatic movement box not found" };
       }
       reply.code(201);
-      return result;
+      return {
+        box: resolveMovementTimelineSegmentForBox(userId, result.id) ?? result
+      };
     }
   );
   app.patch("/api/v1/movement/stays/:id", async (request, reply) => {
@@ -6779,17 +6800,29 @@ export async function buildServer(
     const parsed = movementMobileUserBoxCreateSchema.parse(request.body ?? {});
     const pairing = requireValidPairing(parsed.sessionId, parsed.pairingToken);
     reply.code(201);
+    const created = createMovementUserBox(
+      {
+        ...parsed.box,
+        userId: pairing.user_id
+      },
+      {
+        actor: "Forge Companion",
+        source: "system"
+      }
+    );
     return {
-      box: createMovementUserBox(
-        {
-          ...parsed.box,
-          userId: pairing.user_id
-        },
-        {
-          actor: "Forge Companion",
-          source: "system"
-        }
-      )
+      box:
+        resolveMovementTimelineSegmentForBox(pairing.user_id, created.id) ?? created
+    };
+  });
+  app.post("/api/v1/mobile/movement/user-boxes/preflight", async (request) => {
+    const parsed = movementMobileUserBoxPreflightSchema.parse(request.body ?? {});
+    const pairing = requireValidPairing(parsed.sessionId, parsed.pairingToken);
+    return {
+      preflight: analyzeMovementUserBoxPreflight({
+        ...parsed.draft,
+        userId: pairing.user_id
+      })
     };
   });
   app.patch("/api/v1/mobile/movement/user-boxes/:id", async (request, reply) => {
@@ -6809,7 +6842,9 @@ export async function buildServer(
       reply.code(404);
       return { error: "Movement user box not found" };
     }
-    return { box };
+    return {
+      box: resolveMovementTimelineSegmentForBox(pairing.user_id, box.id) ?? box
+    };
   });
   app.delete("/api/v1/mobile/movement/user-boxes/:id", async (request, reply) => {
     const parsed = movementMobileBootstrapSchema.parse(request.body ?? {});
@@ -6851,7 +6886,11 @@ export async function buildServer(
         return { error: "Automatic movement box not found" };
       }
       reply.code(201);
-      return result;
+      return {
+        box:
+          resolveMovementTimelineSegmentForBox(pairing.user_id, result.id) ??
+          result
+      };
     }
   );
   app.patch("/api/v1/mobile/movement/stays/:id", async (request, reply) => {
