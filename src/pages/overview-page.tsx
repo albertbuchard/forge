@@ -31,7 +31,24 @@ import {
 } from "@/lib/life-force-display";
 import { getEntityNotesSummary } from "@/lib/note-helpers";
 import { useI18n } from "@/lib/i18n";
+import type { SurfaceLayoutPayload } from "@/lib/types";
 import { cn } from "@/lib/utils";
+
+function normalizeOverviewLayout(layout: SurfaceLayoutPayload): SurfaceLayoutPayload {
+  const summaryIndex = layout.order.indexOf("summary");
+  const signalsIndex = layout.order.indexOf("signals");
+  if (summaryIndex === -1 || signalsIndex === -1 || summaryIndex < signalsIndex) {
+    return layout;
+  }
+  const nextOrder = [...layout.order];
+  nextOrder.splice(summaryIndex, 1);
+  const nextSignalsIndex = nextOrder.indexOf("signals");
+  nextOrder.splice(nextSignalsIndex, 0, "summary");
+  return {
+    ...layout,
+    order: nextOrder
+  };
+}
 
 export function OverviewPage() {
   const { t } = useI18n();
@@ -570,5 +587,11 @@ export function OverviewPage() {
     }
   ];
 
-  return <AiSurfaceWorkspace surfaceId="overview" baseWidgets={widgets} />;
+  return (
+    <AiSurfaceWorkspace
+      surfaceId="overview"
+      baseWidgets={widgets}
+      normalizeLayout={normalizeOverviewLayout}
+    />
+  );
 }

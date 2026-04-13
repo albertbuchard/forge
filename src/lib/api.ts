@@ -2034,6 +2034,9 @@ export function requestMacOSLocalCalendarAccess() {
   return request<{
     granted: boolean;
     status: MacOSCalendarAccessStatus;
+    promptSuppressed?: boolean;
+    openedSystemSettings?: boolean;
+    message?: string;
   }>("/api/v1/calendar/macos-local/request-access", {
     method: "POST"
   });

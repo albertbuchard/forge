@@ -44,6 +44,12 @@ Use those same playbooks for action-heavy non-Psyche flows such as
 `work_adjustment`, `preference_judgment`, `preference_signal`, and specialized
 `movement`, `life_force`, or `workbench` work so Hermes starts from the user's real
 job before choosing a route family.
+When the operation is not already explicit, identify the job first:
+add, update, review, compare, navigate, link, or run. Skip that meta question when
+the action is already obvious from the user's wording.
+When the user wants to review, compare, inspect, or navigate an existing Forge
+record, ask what they are trying to understand first and prefer the read path before
+you reopen create or update intake.
 
 ## Wiki model
 
@@ -118,6 +124,20 @@ For wiki-specific recall:
 - Use the high-level batch routes for basic questionnaire CRUD too. `questionnaire_instrument` should normally flow through `forge_create_entities`, `forge_update_entities`, and `forge_delete_entities`.
 - Use the high-level batch routes for ordinary health-session CRUD too. `sleep_session` and `workout_session` should normally flow through `forge_search_entities`, `forge_create_entities`, `forge_update_entities`, and `forge_delete_entities`. Keep `forge_get_sleep_overview` and `forge_get_sports_overview` for read models, and keep `forge_update_sleep_session` and `forge_update_workout_session` for reflective enrichment on one already-existing record.
 - Use the dedicated API families for Movement, Life Force, and Workbench. Those routes are published in `forge_get_agent_onboarding.entityRouteModel.specializedDomainSurfaces` and are the preferred contract for movement stays, trips, time-in-place and travel-behavior queries, life-force state, and workbench execution/result work.
+- Movement lane hints: review spans through `/api/v1/movement/day`,
+  `/api/v1/movement/month`, `/api/v1/movement/all-time`, `/api/v1/movement/timeline`,
+  `/api/v1/movement/places`, `/api/v1/movement/selection`, and
+  `/api/v1/movement/trips/:id`; fill missing spans through
+  `/api/v1/movement/user-boxes/preflight` then `/api/v1/movement/user-boxes`; only
+  patch `/stays/:id` or `/trips/:id` when editing an already-recorded item.
+- Life Force lane hints: overview is `GET /api/v1/life-force`, durable profile edits
+  are `PATCH /api/v1/life-force/profile`, weekday curve edits are
+  `PUT /api/v1/life-force/templates/:weekday`, and real-time tired or recovered
+  reports are `POST /api/v1/life-force/fatigue-signals`.
+- Workbench lane hints: flow catalog and CRUD live under `/api/v1/workbench/flows`,
+  execution uses `/api/v1/workbench/flows/:id/run` or `/api/v1/workbench/run`,
+  published outputs use `/api/v1/workbench/flows/:id/output`, and per-run or per-node
+  inspection uses the run and node-result routes under `/api/v1/workbench/flows/:id`.
 - Keep dedicated Preferences tools only for real preference actions and read models: workspace reads, game starts, context merges, entity seeding, judgments, direct signals, and score overrides.
 - For `work_adjustment`, ask what existing task or project the correction belongs to, whether time should be added or removed, and what truthful reason should stay with it before calling `forge_adjust_work_minutes`.
 - For `preference_judgment` and `preference_signal`, ask what comparison or direct mark the user is actually trying to make, what context it belongs to, and only then call the dedicated judgment or signal route.

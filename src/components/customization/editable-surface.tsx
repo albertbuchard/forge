@@ -244,12 +244,14 @@ export function EditableSurface({
   surfaceId,
   widgets,
   defaultEditing = false,
-  actions
+  actions,
+  normalizeLayout
 }: {
   surfaceId: string;
   widgets: SurfaceWidgetDefinition[];
   defaultEditing?: boolean;
   actions?: ReactNode;
+  normalizeLayout?: (layout: SurfaceLayoutPayload) => SurfaceLayoutPayload;
 }) {
   const widgetLayoutSignature = useMemo(
     () =>
@@ -266,26 +268,32 @@ export function EditableSurface({
       ),
     [widgets]
   );
-  const defaults = useMemo(
-    () => buildDefaultSurfaceLayoutPayload(surfaceId, widgets),
-    [surfaceId, widgetLayoutSignature]
-  );
+  const defaults = useMemo(() => {
+    const payload = buildDefaultSurfaceLayoutPayload(surfaceId, widgets);
+    return normalizeLayout ? normalizeLayout(payload) : payload;
+  }, [normalizeLayout, surfaceId, widgetLayoutSignature]);
+  const normalizePayload = (payload: SurfaceLayoutPayload) =>
+    normalizeLayout ? normalizeLayout(payload) : payload;
   const [editing, setEditing] = useState(defaultEditing);
   const [containerWidth, setContainerWidth] = useState(1280);
   const [layoutPayload, setLayoutPayload] = useState<SurfaceLayoutPayload>(() =>
-    mergeSurfaceLayoutPayload(
-      surfaceId,
-      widgets,
-      readCachedSurfaceLayout(surfaceId) ?? defaults
+    normalizePayload(
+      mergeSurfaceLayoutPayload(
+        surfaceId,
+        widgets,
+        readCachedSurfaceLayout(surfaceId) ?? defaults
+      )
     )
   );
   const saveTimerRef = useRef<number | null>(null);
   const hydrationCompleteRef = useRef(false);
   const lastPersistedLayoutRef = useRef<SurfaceLayoutPayload>(
-    mergeSurfaceLayoutPayload(
-      surfaceId,
-      widgets,
-      readCachedSurfaceLayout(surfaceId) ?? defaults
+    normalizePayload(
+      mergeSurfaceLayoutPayload(
+        surfaceId,
+        widgets,
+        readCachedSurfaceLayout(surfaceId) ?? defaults
+      )
     )
   );
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -315,10 +323,12 @@ export function EditableSurface({
   });
 
   useEffect(() => {
-    const merged = mergeSurfaceLayoutPayload(
-      surfaceId,
-      widgets,
-      layoutQuery.data?.layout ?? readCachedSurfaceLayout(surfaceId) ?? defaults
+    const merged = normalizePayload(
+      mergeSurfaceLayoutPayload(
+        surfaceId,
+        widgets,
+        layoutQuery.data?.layout ?? readCachedSurfaceLayout(surfaceId) ?? defaults
+      )
     );
     setLayoutPayload((current) =>
       layoutPayloadEquals(current, merged) ? current : merged
@@ -329,6 +339,7 @@ export function EditableSurface({
   }, [
     defaults,
     layoutQuery.data?.layout,
+    normalizeLayout,
     surfaceId,
     widgetLayoutSignature,
     widgets
@@ -390,23 +401,27 @@ export function EditableSurface({
     widgetId: string,
     patch: Partial<SurfaceWidgetPreferences>
   ) {
-    setLayoutPayload((current) => ({
-      ...current,
-      widgets: {
-        ...current.widgets,
-        [widgetId]: {
-          ...current.widgets[widgetId],
-          ...patch
+    setLayoutPayload((current) =>
+      normalizePayload({
+        ...current,
+        widgets: {
+          ...current.widgets,
+          [widgetId]: {
+            ...current.widgets[widgetId],
+            ...patch
+          }
         }
-      }
-    }));
+      })
+    );
   }
 
   function moveWidget(widgetId: string, nextIndex: number) {
-    setLayoutPayload((current) => ({
-      ...current,
-      order: moveItemInOrder(current.order, widgetId, nextIndex)
-    }));
+    setLayoutPayload((current) =>
+      normalizePayload({
+        ...current,
+        order: moveItemInOrder(current.order, widgetId, nextIndex)
+      })
+    );
   }
 
   function handleDragEnd(event: DragEndEvent) {
@@ -420,15 +435,17 @@ export function EditableSurface({
       if (oldIndex === -1 || newIndex === -1) {
         return current;
       }
-      return {
+      return normalizePayload({
         ...current,
         order: arrayMove(current.order, oldIndex, newIndex)
-      };
+      });
     });
   }
 
   function handleReset() {
-    const next = buildDefaultSurfaceLayoutPayload(surfaceId, widgets);
+    const next = normalizePayload(
+      buildDefaultSurfaceLayoutPayload(surfaceId, widgets)
+    );
     setLayoutPayload(next);
     writeCachedSurfaceLayout(next);
     lastPersistedLayoutRef.current = next;

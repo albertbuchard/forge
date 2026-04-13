@@ -3,22 +3,26 @@ import {
   EditableSurface,
   type SurfaceWidgetDefinition
 } from "@/components/customization/editable-surface";
+import type { SurfaceLayoutPayload } from "@/lib/types";
 import { Workflow } from "lucide-react";
 import { Link } from "react-router-dom";
 
 export function AiSurfaceWorkspace({
   surfaceId,
   baseWidgets,
-  actions
+  actions,
+  normalizeLayout
 }: {
   surfaceId: string;
   baseWidgets: SurfaceWidgetDefinition[];
   actions?: ReactNode;
+  normalizeLayout?: (layout: SurfaceLayoutPayload) => SurfaceLayoutPayload;
 }) {
   return (
     <EditableSurface
       surfaceId={surfaceId}
       widgets={baseWidgets}
+      normalizeLayout={normalizeLayout}
       actions={
         <>
           {actions}

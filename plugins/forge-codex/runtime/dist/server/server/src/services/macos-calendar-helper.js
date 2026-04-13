@@ -63,8 +63,10 @@ func authStatusText() -> String {
     return "restricted"
   case .denied:
     return "denied"
-  case .authorized:
+  case .authorized, .fullAccess:
     return "full_access"
+  case .writeOnly:
+    return "denied"
   @unknown default:
     return "unavailable"
   }
@@ -121,11 +123,32 @@ func sourceTypeText(_ sourceType: EKSourceType) -> String {
     return "subscribed"
   case .birthdays:
     return "birthdays"
-  case .delegated:
-    return "delegated"
   @unknown default:
     return "unknown"
   }
+}
+
+func sourceIdentifier(_ source: EKSource?) -> String {
+  source?.sourceIdentifier ?? "unknown-source"
+}
+
+func sourceTitle(_ source: EKSource?) -> String {
+  source?.title ?? "Unknown source"
+}
+
+func sourceTypeValue(_ source: EKSource?) -> String {
+  guard let source else {
+    return "unknown"
+  }
+  return sourceTypeText(source.sourceType)
+}
+
+func calendarDescription(_ calendar: EKCalendar) -> String {
+  ""
+}
+
+func calendarTimezoneIdentifier() -> String {
+  TimeZone.current.identifier
 }
 
 func calendarTypeText(_ calendarType: EKCalendarType) -> String {
@@ -178,7 +201,7 @@ func discover(store: EKEventStore) throws -> [String: Any] {
   }
 
   let calendars = store.calendars(for: .event)
-  let grouped = Dictionary(grouping: calendars, by: { $0.source.sourceIdentifier })
+  let grouped = Dictionary(grouping: calendars, by: { sourceIdentifier($0.source) })
   let sources = grouped.keys.sorted().compactMap { sourceId -> [String: Any]? in
     guard let calendarsForSource = grouped[sourceId], let first = calendarsForSource.first else {
       return nil
@@ -193,24 +216,24 @@ func discover(store: EKEventStore) throws -> [String: Any] {
       }
       .map { calendar in
         [
-          "sourceId": source.sourceIdentifier,
-          "sourceTitle": source.title,
-          "sourceType": sourceTypeText(source.sourceType),
+          "sourceId": sourceIdentifier(source),
+          "sourceTitle": sourceTitle(source),
+          "sourceType": sourceTypeValue(source),
           "calendarId": calendar.calendarIdentifier,
           "title": calendar.title,
-          "description": calendar.notes ?? "",
+          "description": calendarDescription(calendar),
           "color": colorHex(calendar.cgColor),
-          "timezone": calendar.timeZone?.identifier ?? "UTC",
+          "timezone": calendarTimezoneIdentifier(),
           "calendarType": calendarTypeText(calendar.type),
           "isPrimary": calendar.allowsContentModifications && calendar.title.localizedCaseInsensitiveCompare("calendar") == .orderedSame,
           "canWrite": calendar.allowsContentModifications
         ] as [String : Any]
       }
     return [
-      "sourceId": source.sourceIdentifier,
-      "sourceTitle": source.title,
-      "sourceType": sourceTypeText(source.sourceType),
-      "accountLabel": source.title,
+      "sourceId": sourceIdentifier(source),
+      "sourceTitle": sourceTitle(source),
+      "sourceType": sourceTypeValue(source),
+      "accountLabel": sourceTitle(source),
       "calendars": mappedCalendars
     ]
   }
@@ -224,7 +247,7 @@ func discover(store: EKEventStore) throws -> [String: Any] {
 func eventPayload(_ event: EKEvent) -> [String: Any] {
   [
     "eventId": event.eventIdentifier ?? "",
-    "externalId": event.calendarItemExternalIdentifier,
+    "externalId": event.calendarItemExternalIdentifier ?? NSNull(),
     "calendarId": event.calendar.calendarIdentifier,
     "title": event.title ?? "(untitled event)",
     "startAt": isoString(event.startDate) ?? "",
@@ -233,8 +256,8 @@ func eventPayload(_ event: EKEvent) -> [String: Any] {
     "availability": availabilityText(event.availability),
     "location": event.location ?? "",
     "notes": event.notes ?? "",
-    "occurrenceDate": isoString(event.occurrenceDate),
-    "lastModifiedAt": isoString(event.lastModifiedDate)
+    "occurrenceDate": isoString(event.occurrenceDate) ?? NSNull(),
+    "lastModifiedAt": isoString(event.lastModifiedDate) ?? NSNull()
   ]
 }
 
@@ -277,7 +300,9 @@ func ensureForgeCalendar(store: EKEventStore, payload: [String: Any]) throws -> 
   guard let sourceId = payload["sourceId"] as? String, !sourceId.isEmpty else {
     throw HelperError.invalidRequest("sourceId is required.")
   }
-  let calendars = store.calendars(for: .event).filter { $0.source.sourceIdentifier == sourceId }
+  let calendars = store.calendars(for: .event).filter {
+    sourceIdentifier($0.source) == sourceId
+  }
   guard let source = calendars.first?.source else {
     throw HelperError.invalidRequest("Unknown macOS calendar source.")
   }
@@ -288,9 +313,9 @@ func ensureForgeCalendar(store: EKEventStore, payload: [String: Any]) throws -> 
       "sourceType": sourceTypeText(source.sourceType),
       "calendarId": existing.calendarIdentifier,
       "title": existing.title,
-      "description": existing.notes ?? "",
+      "description": calendarDescription(existing),
       "color": colorHex(existing.cgColor),
-      "timezone": existing.timeZone?.identifier ?? "UTC",
+      "timezone": calendarTimezoneIdentifier(),
       "calendarType": calendarTypeText(existing.type),
       "isPrimary": false,
       "canWrite": existing.allowsContentModifications
@@ -301,7 +326,6 @@ func ensureForgeCalendar(store: EKEventStore, payload: [String: Any]) throws -> 
   newCalendar.source = source
   newCalendar.title = "Forge"
   newCalendar.cgColor = NSColor(calibratedRed: 0.49, green: 0.83, blue: 0.99, alpha: 1.0).cgColor
-  newCalendar.notes = "Forge-owned work blocks and task timeboxes"
   try store.saveCalendar(newCalendar, commit: true)
 
   return ["calendar": [
@@ -310,9 +334,9 @@ func ensureForgeCalendar(store: EKEventStore, payload: [String: Any]) throws -> 
     "sourceType": sourceTypeText(source.sourceType),
     "calendarId": newCalendar.calendarIdentifier,
     "title": newCalendar.title,
-    "description": newCalendar.notes ?? "",
+    "description": calendarDescription(newCalendar),
     "color": colorHex(newCalendar.cgColor),
-    "timezone": newCalendar.timeZone?.identifier ?? "UTC",
+    "timezone": calendarTimezoneIdentifier(),
     "calendarType": calendarTypeText(newCalendar.type),
     "isPrimary": false,
     "canWrite": newCalendar.allowsContentModifications

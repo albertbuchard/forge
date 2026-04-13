@@ -2033,6 +2033,138 @@ describe("calendar routing surfaces", () => {
     });
   });
 
+  it("reuses the existing shared Forge write target when connecting another writable provider", async () => {
+    listCalendarConnectionsMock.mockResolvedValueOnce({
+      providers: [
+        {
+          provider: "apple",
+          label: "Apple Calendar",
+          supportsDedicatedForgeCalendar: true,
+          connectionHelp: "Use Apple autodiscovery from caldav.icloud.com."
+        },
+        {
+          provider: "macos_local",
+          label: "Calendars On This Mac",
+          supportsDedicatedForgeCalendar: true,
+          connectionHelp: "Use EventKit to access the calendars already configured on this Mac."
+        }
+      ],
+      connections: [
+        {
+          id: "conn_apple_primary",
+          provider: "apple",
+          label: "Primary Apple",
+          accountLabel: "albert.buchard@gmail.com",
+          status: "connected",
+          config: {
+            forgeCalendarUrl: "https://caldav.icloud.com/calendars/forge/",
+            selectedCalendarCount: 2
+          },
+          forgeCalendarId: "calendar_apple_forge",
+          lastSyncedAt: "2026-04-03T08:00:00.000Z",
+          lastSyncError: null,
+          createdAt: "2026-04-03T08:00:00.000Z",
+          updatedAt: "2026-04-03T08:00:00.000Z"
+        }
+      ]
+    });
+    getMacOSLocalCalendarStatusMock.mockResolvedValue({
+      status: "full_access"
+    });
+    discoverMacOSLocalCalendarSourcesMock.mockResolvedValue({
+      discovery: {
+        status: "full_access",
+        requestedAt: "2026-04-03T08:00:00.000Z",
+        sources: [
+          {
+            sourceId: "source_work",
+            sourceTitle: "Work",
+            sourceType: "exchange",
+            accountLabel: "Work",
+            accountIdentityKey: "exchange:work",
+            calendars: [
+              {
+                url: "forge-macos-local://calendar/source_work/cal_work/",
+                displayName: "Work",
+                description: "Main work calendar",
+                color: "#7dd3fc",
+                timezone: "Europe/Zurich",
+                isPrimary: true,
+                canWrite: true,
+                selectedByDefault: true,
+                isForgeCandidate: false,
+                sourceId: "source_work",
+                sourceTitle: "Work",
+                sourceType: "exchange",
+                calendarType: "exchange",
+                hostCalendarId: "cal_work",
+                canonicalKey: "exchange:work:work"
+              },
+              {
+                url: "forge-macos-local://calendar/source_work/cal_forge/",
+                displayName: "Forge",
+                description: "Forge write calendar",
+                color: "#22c55e",
+                timezone: "Europe/Zurich",
+                isPrimary: false,
+                canWrite: true,
+                selectedByDefault: false,
+                isForgeCandidate: true,
+                sourceId: "source_work",
+                sourceTitle: "Work",
+                sourceType: "exchange",
+                calendarType: "exchange",
+                hostCalendarId: "cal_forge",
+                canonicalKey: "exchange:work:forge"
+              }
+            ]
+          }
+        ]
+      }
+    });
+    createCalendarConnectionMock.mockResolvedValue({
+      connection: { id: "conn_macos_1" }
+    });
+
+    renderWithRouter(<SettingsCalendarPage />, "/settings/calendar");
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Open Mac calendar flow" })
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: "Continue" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Continue" }));
+
+    expect(
+      await screen.findByText(/Forge already writes work blocks and owned timeboxes through/i)
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Use for Forge writes")).not.toBeInTheDocument();
+    expect(screen.queryByText("Create a new Forge calendar")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    expect(await screen.findByText("Forge writes:")).toBeInTheDocument();
+    expect(
+      screen.getByText("shared target via Primary Apple · albert.buchard@gmail.com")
+    ).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Connect provider" }));
+
+    await waitFor(() => {
+      expect(createCalendarConnectionMock).toHaveBeenCalledTimes(1);
+    });
+    expect(createCalendarConnectionMock.mock.calls[0]?.[0]).toEqual({
+      provider: "macos_local",
+      label: "Calendars On This Mac",
+      sourceId: "source_work",
+      selectedCalendarUrls: [
+        "forge-macos-local://calendar/source_work/cal_work/"
+      ],
+      forgeCalendarUrl: null,
+      createForgeCalendar: false,
+      replaceConnectionIds: []
+    });
+  });
+
   it("lets connected providers unselect mirrored calendars", async () => {
     listCalendarConnectionsMock.mockResolvedValueOnce({
       providers: [

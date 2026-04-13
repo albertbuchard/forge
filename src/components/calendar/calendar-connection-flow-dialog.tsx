@@ -64,6 +64,9 @@ type ExistingCalendarConnection = {
   label: string;
   provider: CalendarProvider;
   status: CalendarConnectionStatus;
+  accountLabel?: string;
+  forgeCalendarId?: string | null;
+  config?: Record<string, string | number | boolean | null>;
 };
 
 type GooglePopupMessage = {
@@ -422,6 +425,35 @@ export function CalendarConnectionFlowDialog({
   const [microsoftSetupMessage, setMicrosoftSetupMessage] = useState<string | null>(null);
   const popupRef = useRef<Window | null>(null);
 
+  const findSharedForgeWriteTarget = (excludeConnectionIds: string[] = []) => {
+    const excluded = new Set(excludeConnectionIds);
+    return (
+      existingConnections.find((connection) => {
+        if (excluded.has(connection.id)) {
+          return false;
+        }
+        return (
+          typeof connection.config?.forgeCalendarUrl === "string" &&
+          connection.config.forgeCalendarUrl.trim().length > 0
+        );
+      }) ?? null
+    );
+  };
+
+  const sharedForgeWriteTarget = useMemo(
+    () =>
+      draft.provider === "microsoft"
+        ? null
+        : findSharedForgeWriteTarget(draft.replaceConnectionIds),
+    [draft.provider, draft.replaceConnectionIds, existingConnections]
+  );
+  const sharedForgeWriteTargetLabel = sharedForgeWriteTarget
+    ? sharedForgeWriteTarget.accountLabel &&
+      sharedForgeWriteTarget.accountLabel.trim().length > 0
+      ? `${sharedForgeWriteTarget.label} · ${sharedForgeWriteTarget.accountLabel}`
+      : sharedForgeWriteTarget.label
+    : null;
+
   const applyServerSettings = (response: Awaited<ReturnType<typeof patchSettings>>) => {
     queryClient.setQueryData(["forge-settings"], response);
     return response.settings;
@@ -443,23 +475,32 @@ export function CalendarConnectionFlowDialog({
       .filter((calendar) => calendar.selectedByDefault)
       .map((calendar) => calendar.url);
     const existingForge = payload.calendars.find((calendar) => calendar.isForgeCandidate);
-    setDraft((current) => ({
-      ...current,
-      selectedCalendarUrls:
-        current.selectedCalendarUrls.length > 0
-          ? current.selectedCalendarUrls.filter((url) =>
-              payload.calendars.some((calendar) => calendar.url === url)
-            )
-          : syncSelection,
-      forgeCalendarUrl:
-        current.provider === "microsoft"
-          ? null
-          : existingForge?.url ?? current.forgeCalendarUrl ?? null,
-      createForgeCalendar:
-        current.provider === "microsoft"
-          ? false
-          : current.createForgeCalendar && !existingForge
-    }));
+    setDraft((current) => {
+      const sharedWriteTarget = findSharedForgeWriteTarget(
+        current.replaceConnectionIds
+      );
+      return {
+        ...current,
+        selectedCalendarUrls:
+          current.selectedCalendarUrls.length > 0
+            ? current.selectedCalendarUrls.filter((url) =>
+                payload.calendars.some((calendar) => calendar.url === url)
+              )
+            : syncSelection,
+        forgeCalendarUrl:
+          current.provider === "microsoft"
+            ? null
+            : sharedWriteTarget
+              ? null
+              : existingForge?.url ?? current.forgeCalendarUrl ?? null,
+        createForgeCalendar:
+          current.provider === "microsoft"
+            ? false
+            : sharedWriteTarget
+              ? false
+              : current.createForgeCalendar && !existingForge
+      };
+    });
     setSubmitError(null);
   };
 
@@ -487,6 +528,44 @@ export function CalendarConnectionFlowDialog({
     }
     void macosStatusMutation.mutateAsync();
   }, [draft.provider, open]);
+
+  useEffect(() => {
+    if (
+      !open ||
+      !discovery ||
+      draft.provider === "microsoft" ||
+      sharedForgeWriteTarget ||
+      draft.forgeCalendarUrl ||
+      draft.createForgeCalendar
+    ) {
+      return;
+    }
+    const existingForge = discovery.calendars.find((calendar) => calendar.isForgeCandidate);
+    if (!existingForge) {
+      return;
+    }
+    setDraft((current) => {
+      if (
+        current.provider === "microsoft" ||
+        current.forgeCalendarUrl ||
+        current.createForgeCalendar ||
+        findSharedForgeWriteTarget(current.replaceConnectionIds)
+      ) {
+        return current;
+      }
+      return {
+        ...current,
+        forgeCalendarUrl: existingForge.url
+      };
+    });
+  }, [
+    discovery,
+    draft.createForgeCalendar,
+    draft.forgeCalendarUrl,
+    draft.provider,
+    open,
+    sharedForgeWriteTarget
+  ]);
 
   useEffect(() => {
     if (!open) {
@@ -688,8 +767,16 @@ export function CalendarConnectionFlowDialog({
 
   const macosAccessMutation = useMutation({
     mutationFn: requestMacOSLocalCalendarAccess,
-    onSuccess: ({ status }) => {
+    onSuccess: ({ granted, status, message }) => {
       setMacosStatus(status);
+      if (granted) {
+        setSubmitError(null);
+        return;
+      }
+      setSubmitError(
+        message ??
+          "Forge could not obtain Calendar access from macOS yet. Open System Settings > Privacy & Security > Calendars, allow Forge, then return here and click Check access."
+      );
     },
     onError: (error) => {
       setSubmitError(
@@ -1789,8 +1876,12 @@ export function CalendarConnectionFlowDialog({
           draft.provider === "microsoft"
             ? "Select the Exchange Online calendars Forge should mirror into the Calendar page. This connection stays read-only for now."
             : draft.provider === "macos_local"
-            ? "Select the host-machine calendars Forge should mirror into the Calendar page, then choose the host calendar Forge should write into for work blocks and timeboxes."
-            : "Select the calendars Forge should mirror into the Calendar page, then choose the calendar Forge should write into for work blocks and timeboxes.",
+            ? sharedForgeWriteTargetLabel
+              ? `Select the host-machine calendars Forge should mirror into the Calendar page. Forge already writes work blocks and timeboxes through ${sharedForgeWriteTargetLabel}.`
+              : "Select the host-machine calendars Forge should mirror into the Calendar page, then choose the host calendar Forge should write into for work blocks and timeboxes."
+            : sharedForgeWriteTargetLabel
+              ? `Select the calendars Forge should mirror into the Calendar page. Forge already writes work blocks and timeboxes through ${sharedForgeWriteTargetLabel}.`
+              : "Select the calendars Forge should mirror into the Calendar page, then choose the calendar Forge should write into for work blocks and timeboxes.",
         render: (value, setValue) => (
           <div className="grid gap-4">
             {value.provider === "google" ? (
@@ -1878,6 +1969,16 @@ export function CalendarConnectionFlowDialog({
                   ) : null}
                 </div>
 
+                {value.provider !== "microsoft" && sharedForgeWriteTargetLabel ? (
+                  <div className="rounded-[24px] border border-emerald-400/20 bg-emerald-400/10 p-4 text-sm leading-6 text-emerald-50">
+                    Forge already writes work blocks and owned timeboxes through{" "}
+                    <span className="font-medium text-white">
+                      {sharedForgeWriteTargetLabel}
+                    </span>
+                    . This connection only needs a mirror selection.
+                  </div>
+                ) : null}
+
                 <div className="grid gap-3">
                   {discovery.calendars.map((calendar) => {
                     const selected = value.selectedCalendarUrls.includes(calendar.url);
@@ -1931,7 +2032,7 @@ export function CalendarConnectionFlowDialog({
                           >
                             {selected ? "Mirrored" : "Mirror into Forge"}
                           </button>
-                          {value.provider !== "microsoft" ? (
+                          {value.provider !== "microsoft" && !sharedForgeWriteTargetLabel ? (
                             <button
                               type="button"
                               onClick={() =>
@@ -1951,8 +2052,16 @@ export function CalendarConnectionFlowDialog({
                                 : "Use for Forge writes"}
                             </button>
                           ) : (
-                            <Badge className="bg-sky-400/12 text-sky-100">
-                              Read only
+                            <Badge
+                              className={
+                                value.provider === "microsoft"
+                                  ? "bg-sky-400/12 text-sky-100"
+                                  : "bg-white/[0.08] text-white/74"
+                              }
+                            >
+                              {value.provider === "microsoft"
+                                ? "Read only"
+                                : "Shared target elsewhere"}
                             </Badge>
                           )}
                         </div>
@@ -1961,7 +2070,7 @@ export function CalendarConnectionFlowDialog({
                   })}
                 </div>
 
-                {value.provider !== "microsoft" ? (
+                {value.provider !== "microsoft" && !sharedForgeWriteTargetLabel ? (
                   <div className="rounded-[24px] border border-dashed border-white/10 bg-white/[0.03] p-4">
                     <div className="font-medium text-white">No Forge calendar yet?</div>
                     <p className="mt-2 text-sm leading-6 text-white/60">
@@ -1991,12 +2100,21 @@ export function CalendarConnectionFlowDialog({
                       </button>
                     </div>
                   </div>
-                ) : (
+                ) : value.provider === "microsoft" ? (
                   <div className="rounded-[24px] border border-sky-400/20 bg-sky-400/10 p-4 text-sm leading-6 text-sky-50">
                     Exchange Online is connected through Microsoft Graph in read-only
                     mode. Forge will mirror the calendars you select here, but it
                     will keep work blocks and owned timeboxes local or publish them
                     through another writable provider.
+                  </div>
+                ) : (
+                  <div className="rounded-[24px] border border-dashed border-white/10 bg-white/[0.03] p-4 text-sm leading-6 text-white/60">
+                    Forge will keep{" "}
+                    <span className="font-medium text-white">
+                      {sharedForgeWriteTargetLabel}
+                    </span>{" "}
+                    as the canonical write target instead of creating another Forge
+                    calendar on this connection.
                   </div>
                 )}
               </>
@@ -2091,7 +2209,9 @@ export function CalendarConnectionFlowDialog({
                         ? "existing calendar"
                         : value.createForgeCalendar
                           ? "new Forge calendar"
-                          : "not selected"}
+                          : sharedForgeWriteTargetLabel
+                            ? `shared target via ${sharedForgeWriteTargetLabel}`
+                            : "not selected"}
                   </span>
                 </div>
               </div>
@@ -2146,7 +2266,9 @@ export function CalendarConnectionFlowDialog({
       activeMicrosoftSetup.isReadyForSignIn,
       activeMicrosoftSetup.redirectUri,
       macosDiscovery,
-      microsoftSession
+      microsoftSession,
+      sharedForgeWriteTarget,
+      sharedForgeWriteTargetLabel
     ]
   );
 
@@ -2161,7 +2283,7 @@ export function CalendarConnectionFlowDialog({
       onOpenChange={onOpenChange}
       eyebrow="Calendar settings"
       title="Connect a calendar provider"
-      description="Discover provider calendars first, then choose which calendars Forge should mirror and, for writable providers, which calendar Forge should write into."
+      description="Discover provider calendars first, choose which calendars Forge should mirror, and only choose a Forge write target when the runtime does not already have one."
       value={draft}
       onChange={(next) => {
         setDraft(next);
@@ -2193,10 +2315,11 @@ export function CalendarConnectionFlowDialog({
           if (
             draft.provider !== "microsoft" &&
             !draft.forgeCalendarUrl &&
-            !draft.createForgeCalendar
+            !draft.createForgeCalendar &&
+            !sharedForgeWriteTarget
           ) {
             setSubmitError(
-              "Choose the calendar Forge should write into, or ask Forge to create one."
+              "Choose the calendar Forge should write into, ask Forge to create one, or keep using the existing shared Forge write target."
             );
             return;
           }

@@ -113,6 +113,7 @@ import {
   formatKnowledgeGraphFocusValue,
   type KnowledgeGraphNode
 } from "@/lib/knowledge-graph-types";
+import { formatLifeForceRate } from "@/lib/life-force-display";
 import { getEntityNotesHref } from "@/lib/note-helpers";
 import { cn } from "@/lib/utils";
 import { isShellRouteReady } from "@/features/shell/route-readiness";
@@ -1635,49 +1636,7 @@ function ShellFrame({
     mutatingCount: mutating,
     t
   });
-  const sidebarMetrics = [
-    {
-      id: "ap",
-      label: "AP",
-      compactValue: shell.snapshot.lifeForce
-        ? String(Math.round(shell.snapshot.lifeForce.remainingAp))
-        : "0",
-      expandedValue: shell.snapshot.lifeForce
-        ? `${Math.round(shell.snapshot.lifeForce.remainingAp)} AP left`
-        : "AP unavailable",
-      icon: BatteryCharging
-    },
-    {
-      id: "streak",
-      label: t("common.shell.momentum.streak"),
-      compactValue: String(shell.snapshot.metrics.streakDays),
-      expandedValue: t(
-        shell.snapshot.metrics.streakDays === 1
-          ? "common.shell.momentum.streakBadgeOne"
-          : "common.shell.momentum.streakBadgeOther",
-        {
-          count: shell.snapshot.metrics.streakDays
-        }
-      ),
-      icon: Flame
-    },
-    {
-      id: "xp",
-      label: t("common.shell.momentum.xp"),
-      compactValue: String(shell.snapshot.metrics.totalXp),
-      expandedValue: `${shell.snapshot.metrics.totalXp} XP`,
-      icon: Zap
-    },
-    {
-      id: "momentum",
-      label: t("common.shell.momentum.momentum"),
-      compactValue: `${shell.snapshot.metrics.momentumScore}%`,
-      expandedValue: t("common.shell.momentum.liveMomentum", {
-        count: shell.snapshot.metrics.momentumScore
-      }),
-      icon: Activity
-    }
-  ] as const;
+  const sidebarMetrics = buildSidebarMetrics(shell.snapshot, t);
   const createActions = useForgeCreateActions({
     goals: shell.snapshot.dashboard.goals,
     projects: shell.snapshot.dashboard.projects,
@@ -3185,4 +3144,64 @@ export function AppShell() {
 
 export function useForgeShell() {
   return useContext(ShellContext) ?? useOutletContext<ShellContextValue>();
+}
+
+export function buildSidebarMetrics(
+  snapshot: ForgeSnapshot,
+  t: ReturnType<typeof useI18n>["t"]
+) {
+  return [
+    {
+      id: "ap",
+      label: "AP",
+      compactValue: snapshot.lifeForce
+        ? String(Math.round(snapshot.lifeForce.remainingAp))
+        : "0",
+      expandedValue: snapshot.lifeForce
+        ? `${Math.round(snapshot.lifeForce.remainingAp)} AP left`
+        : "AP unavailable",
+      icon: BatteryCharging
+    },
+    {
+      id: "instant-ap",
+      label: "Instant AP/h",
+      compactValue: snapshot.lifeForce
+        ? String(Number(snapshot.lifeForce.instantFreeApPerHour.toFixed(1)))
+        : "0",
+      expandedValue: snapshot.lifeForce
+        ? formatLifeForceRate(snapshot.lifeForce.instantFreeApPerHour)
+        : "0 AP/h",
+      icon: Clock3
+    },
+    {
+      id: "streak",
+      label: t("common.shell.momentum.streak"),
+      compactValue: String(snapshot.metrics.streakDays),
+      expandedValue: t(
+        snapshot.metrics.streakDays === 1
+          ? "common.shell.momentum.streakBadgeOne"
+          : "common.shell.momentum.streakBadgeOther",
+        {
+          count: snapshot.metrics.streakDays
+        }
+      ),
+      icon: Flame
+    },
+    {
+      id: "xp",
+      label: t("common.shell.momentum.xp"),
+      compactValue: String(snapshot.metrics.totalXp),
+      expandedValue: `${snapshot.metrics.totalXp} XP`,
+      icon: Zap
+    },
+    {
+      id: "momentum",
+      label: t("common.shell.momentum.momentum"),
+      compactValue: `${snapshot.metrics.momentumScore}%`,
+      expandedValue: t("common.shell.momentum.liveMomentum", {
+        count: snapshot.metrics.momentumScore
+      }),
+      icon: Activity
+    }
+  ] as const;
 }

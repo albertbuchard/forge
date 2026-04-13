@@ -15,6 +15,8 @@ Forge correctly, and gather only the structure that still matters.
   naming what you think the user is trying to preserve, clarify, decide, schedule, or
   make easier.
 - Ask only for what is missing or still unclear.
+- First identify the user's job when the lane is not already explicit:
+  are they trying to add, update, review, compare, navigate, link, or run something?
 - Before every question, decide the one missing thing you are trying to clarify.
 - Ask first for the missing thing that would change the record shape, title, or next
   action most, not just the easiest field to fill.
@@ -77,6 +79,21 @@ Most good Forge intake flows follow this sequence:
 5. Ask about links only when those links will make the record more useful.
 
 That sequence is not a script. Skip steps the user already answered.
+
+## Operation lane checkpoint
+
+Use this before you choose an API path or ask for more structure.
+
+- If the user has not made the operation explicit yet, clarify the job first:
+  add, update, review, compare, navigate, link, or run.
+- Ask the lane question only when it changes the route family or the next question.
+- Skip the meta lane question when the user already gave both the entity and the
+  action clearly, such as "pause this project", "add a home stay for that missing
+  block", or "run this flow again".
+- For simple stored entities, once the lane is clear, fall back to the shared batch
+  CRUD flow.
+- For specialized surfaces such as Movement, Life Force, and Workbench, use the lane
+  to choose the dedicated route family before you ask for lower-level details.
 
 ## Active-listening patterns
 
@@ -157,6 +174,21 @@ When an adjacent record becomes visible:
 
 - name it gently and ask whether it should be linked now, saved separately later, or
   left alone for now
+
+## Review And Navigation Moves
+
+Use this when the user wants to inspect, compare, review, or navigate existing Forge
+records rather than create something new.
+
+- Start by asking what they are trying to understand, decide, compare, or check.
+- Ask only for the scoping detail that changes the read path most:
+  entity, owner, timeframe, context, or comparison target.
+- If the record already exists and the user wants review, do not reopen a creation
+  intake. Route to search, list, overview, or detail first.
+- For review-heavy questions, the useful progression is:
+  user goal -> scope -> read path -> interpretation -> optional follow-up write.
+- Only drift back into create or update intake if the user actually wants the record
+  changed after the review.
 
 ## Question Calibration Loop
 
@@ -913,6 +945,21 @@ Helpful follow-up lanes:
   distribution, versus an edit
 - whether the edit is a missing-gap overlay versus a true recorded stay/trip patch
 
+Lane-to-route map:
+
+- review one day or month:
+  `/api/v1/movement/day` or `/api/v1/movement/month`
+- review long-range behavior or dominant places:
+  `/api/v1/movement/all-time`, `/api/v1/movement/places`, or `/api/v1/movement/selection`
+- inspect the full life timeline:
+  `/api/v1/movement/timeline`
+- inspect one trip:
+  `/api/v1/movement/trips/:id`
+- fill a missing span:
+  `/api/v1/movement/user-boxes/preflight` then `/api/v1/movement/user-boxes`
+- edit an already-recorded stay, trip, or trip point:
+  `/api/v1/movement/stays/:id`, `/api/v1/movement/trips/:id`, or `/api/v1/movement/trips/:id/points/:pointId`
+
 Ready to act when:
 
 - the movement surface is clear
@@ -941,6 +988,17 @@ Helpful follow-up lanes:
 - what part of the energy model feels off or useful
 - what durable assumption versus real-time state is being changed
 
+Lane-to-route map:
+
+- understand the current energy picture:
+  `GET /api/v1/life-force`
+- change durable profile assumptions:
+  `PATCH /api/v1/life-force/profile`
+- change one weekday curve or template:
+  `PUT /api/v1/life-force/templates/:weekday`
+- log a real-time tired or recovered signal:
+  `POST /api/v1/life-force/fatigue-signals`
+
 Ready to act when:
 
 - the life-force lane is clear
@@ -968,6 +1026,27 @@ Helpful follow-up lanes:
 - whether the user wants structure, execution, or results
 - what exact flow or run is in scope
 - whether they need whole-flow output or node-level detail
+
+Lane-to-route map:
+
+- discover or inspect flows:
+  `/api/v1/workbench/flows`, `/api/v1/workbench/flows/:id`, or `/api/v1/workbench/flows/by-slug/:slug`
+- create, update, or delete a flow:
+  `POST/PATCH/DELETE /api/v1/workbench/flows`
+- run a known flow:
+  `/api/v1/workbench/flows/:id/run`
+- run from a payload-first contract:
+  `/api/v1/workbench/run`
+- inspect published output or run history:
+  `/api/v1/workbench/flows/:id/output` or `/api/v1/workbench/flows/:id/runs`
+- inspect one run or node result:
+  `/api/v1/workbench/flows/:id/runs/:runId`,
+  `/api/v1/workbench/flows/:id/runs/:runId/nodes`,
+  `/api/v1/workbench/flows/:id/runs/:runId/nodes/:nodeId`
+- inspect the latest successful node output:
+  `/api/v1/workbench/flows/:id/nodes/:nodeId/output`
+- inspect available box inputs:
+  `/api/v1/workbench/catalog/boxes`
 
 Ready to act when:
 
@@ -1145,10 +1224,12 @@ consistent.
 Arc:
 
 1. Ask what kind of moment or incident this label should capture in lived terms.
-2. Ask how narrow or broad it should be.
-3. Ask what would count as inside versus outside the category if that boundary is
+2. Reflect the repeated moment back in plain language before narrowing the wording.
+3. Ask how narrow or broad it should be.
+4. Ask what would count as inside versus outside the category if that boundary is
    still fuzzy.
-4. Ask for a short description only if the label could be ambiguous later.
+5. Offer a concise label if the lived meaning is clearer than the wording.
+6. Ask for a short description only if the label could be ambiguous later.
 
 If the user already offered a candidate label, keep the wording provisional and ask
 what kinds of moments belong inside it before you ask whether the label is right.
@@ -1169,8 +1250,10 @@ Aim: define one reusable emotion entry clearly enough that future reports stay p
 Arc:
 
 1. Ask what this feeling is like in lived terms when the user says it.
-2. Ask what distinguishes it from nearby emotions if that matters.
-3. Ask for a short description only if later reports would benefit from it.
+2. Reflect the felt signature back in plain language before you settle the label.
+3. Ask what distinguishes it from nearby emotions if that matters.
+4. Offer a concise label if the felt meaning is clearer than the wording.
+5. Ask for a short description only if later reports would benefit from it.
 
 Helpful follow-up lanes:
 

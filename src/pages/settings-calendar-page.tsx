@@ -127,7 +127,7 @@ function providerAccessLabel(provider: CalendarProvider) {
 function providerConnectionSummary(provider: CalendarProvider) {
   switch (provider) {
     case "google":
-      return "Sign in from the same machine running Forge. After connection, Forge can mirror the calendars you choose and write to a dedicated Forge calendar.";
+      return "Sign in from the same machine running Forge. After connection, Forge can mirror the calendars you choose and reuse the current shared Forge write target, creating one only when the runtime does not already have one.";
     case "apple":
       return "Use your Apple ID email and app-specific password. Forge discovers your iCloud calendars before you choose what to mirror.";
     case "microsoft":
@@ -269,6 +269,15 @@ export function SettingsCalendarPage() {
   const calendarDisplayColors = useMemo(
     () => buildCalendarDisplayColorMap(displayCalendars, displayPreferences.calendarColors),
     [displayCalendars, displayPreferences.calendarColors]
+  );
+  const sharedForgeWriteTargetConnection = useMemo(
+    () =>
+      (connectionsQuery.data?.connections ?? []).find(
+        (connection) =>
+          typeof connection.config?.forgeCalendarUrl === "string" &&
+          connection.config.forgeCalendarUrl.trim().length > 0
+      ) ?? null,
+    [connectionsQuery.data?.connections]
   );
 
   const managedConnection = useMemo(
@@ -481,7 +490,7 @@ export function SettingsCalendarPage() {
     <div className="mx-auto grid w-full max-w-[1220px] gap-5">
       <PageHero
         title="Calendar settings"
-        description="Manage provider connections, review dedicated Forge write calendars where supported, and open guided setup only when you need to connect or reconfigure a provider."
+        description="Manage provider connections, review the shared Forge write target, and open guided setup only when you need to connect or reconfigure a provider."
         badge={`${connections.length} connection${connections.length === 1 ? "" : "s"}`}
       />
 
@@ -494,7 +503,7 @@ export function SettingsCalendarPage() {
               Provider connections
             </div>
             <p className="mt-2 text-sm leading-6 text-white/60">
-              Connect a provider here, then choose which calendars Forge should mirror. Providers with write access can publish work blocks and owned timeboxes into a dedicated calendar named <span className="font-medium text-white">Forge</span>.
+              Connect a provider here, then choose which calendars Forge should mirror. Writable providers publish work blocks and owned timeboxes through one shared <span className="font-medium text-white">Forge</span> write target, creating it only when the runtime does not already have one.
             </p>
           </div>
 
@@ -685,7 +694,7 @@ export function SettingsCalendarPage() {
             <div>
               <div className="text-[11px] uppercase tracking-[0.18em] text-white/45">Connected providers</div>
               <p className="mt-2 text-sm leading-6 text-white/60">
-                Review connection health and confirm which provider calendars Forge can read, mirror, or write.
+                Review connection health, confirm which provider calendars Forge can read or mirror, and see which connection currently owns the shared Forge write target.
               </p>
             </div>
           </div>
@@ -694,6 +703,10 @@ export function SettingsCalendarPage() {
             <div className="grid gap-3">
               {connections.map((connection) => {
                 const calendars = calendarsByConnection.get(connection.id) ?? [];
+                const usesSharedWriteTargetElsewhere =
+                  connection.provider !== "microsoft" &&
+                  sharedForgeWriteTargetConnection !== null &&
+                  sharedForgeWriteTargetConnection.id !== connection.id;
                 return (
                   <div key={connection.id} className="rounded-[24px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] p-4">
                     <div className="flex flex-wrap items-start justify-between gap-3">
@@ -709,6 +722,17 @@ export function SettingsCalendarPage() {
                         ) : null}
                         {connection.lastSyncError ? (
                           <div className="mt-2 text-sm text-rose-200">{connection.lastSyncError}</div>
+                        ) : null}
+                        {usesSharedWriteTargetElsewhere ? (
+                          <div className="mt-2 text-sm text-[var(--ui-ink-soft)]">
+                            Forge writes through{" "}
+                            <span className="font-medium text-[var(--ui-ink-strong)]">
+                              {sharedForgeWriteTargetConnection.label}
+                            </span>
+                            {sharedForgeWriteTargetConnection.accountLabel
+                              ? ` · ${sharedForgeWriteTargetConnection.accountLabel}`
+                              : ""}.
+                          </div>
                         ) : null}
                       </div>
                       <div className="flex items-center gap-2">
@@ -783,7 +807,7 @@ export function SettingsCalendarPage() {
             </div>
           ) : (
             <div className="rounded-[26px] border border-dashed border-white/10 bg-white/[0.03] px-5 py-6 text-sm leading-6 text-white/60">
-              No provider is connected yet. Open a guided setup flow above when you are ready. Forge will either create or reuse a dedicated <span className="font-medium text-white">Forge</span> calendar for writable providers, or mirror selected calendars in read-only mode for providers like Exchange Online.
+              No provider is connected yet. Open a guided setup flow above when you are ready. Forge will reuse one shared <span className="font-medium text-white">Forge</span> write target across writable providers when it already exists, create one only when none exists yet, and mirror selected calendars in read-only mode for providers like Exchange Online.
             </div>
           )}
         </Card>
@@ -805,7 +829,10 @@ export function SettingsCalendarPage() {
           id: connection.id,
           label: connection.label,
           provider: connection.provider,
-          status: connection.status
+          status: connection.status,
+          accountLabel: connection.accountLabel,
+          forgeCalendarId: connection.forgeCalendarId,
+          config: connection.config
         }))}
         onCalendarSettingsChanged={invalidateCalendarSettings}
         pending={connectMutation.isPending}

@@ -6,7 +6,7 @@ const GUIDE_SECTIONS = [
   {
     title: "Before you connect anything",
     description:
-      "Forge mirrors provider events into Forge. Writable providers can also publish work blocks plus owned timeboxes into a dedicated calendar named Forge, while Exchange Online stays read-only for now.",
+      "Forge mirrors provider events into Forge. Writable providers can also publish work blocks plus owned timeboxes into one shared Forge write target, while Exchange Online stays read-only for now.",
     bullets: [
       "Google uses a localhost Authorization Code + PKCE flow. Each user signs in with their own Google account on the same machine running Forge, while Forge stores that user's refresh token on the server for background sync.",
       "Calendars On This Mac uses EventKit to access the calendars already configured in Calendar.app on the host machine, including iCloud, Google, Exchange, and other accounts the Mac is already syncing.",
@@ -27,7 +27,7 @@ const GUIDE_SECTIONS = [
       "Choose Calendars On This Mac in Forge settings.",
       "Grant Calendar full access when macOS prompts for it, or re-enable it later in System Settings -> Privacy & Security -> Calendars.",
       "Let Forge discover the available host calendar sources and pick the source account you want to sync.",
-      "Choose which calendars Forge should mirror and select or create a dedicated Forge write calendar for work blocks and timeboxes.",
+      "Choose which calendars Forge should mirror. If Forge already has a write target on another writable connection, this new connection can reuse it instead of creating another Forge calendar.",
       "If Forge already syncs the same account through Google, Apple, CalDAV, or Microsoft, the macOS-local connection replaces the older remote one instead of keeping two visible copies."
     ],
     icon: Link2,

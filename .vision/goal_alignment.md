@@ -251,8 +251,11 @@ host-managed calendars when available. The duplicate-prevention rule is account 
 calendar canonicalization, not ongoing per-event duplicate checks: if the same
 upstream account is already connected through a remote provider, Forge should replace
 that older connection and expose only one visible copy of the account's calendars.
-Writable providers give Forge a dedicated Forge-owned calendar for publishing work
-blocks and task timeboxes. Exchange Online is currently read-only in Forge: it mirrors
+Writable providers share one canonical Forge write target across the runtime for
+publishing work blocks and task timeboxes. Forge should reuse an already-selected
+target when a new writable connection is added, and only ask to create or select a
+Forge calendar when no active write target exists yet. Exchange Online is currently
+read-only in Forge: it mirrors
 the selected Microsoft calendars into Forge but does not publish Forge-owned work
 blocks or timeboxes back to Microsoft. In the current self-hosted local runtime,
 Microsoft setup uses a guided MSAL public-client sign-in flow with PKCE, so the user

@@ -39,6 +39,9 @@ does want to save or update something, ask only for what is missing or unclear.
   `work_adjustment`, `preference_judgment`, `preference_signal`, and specialized
   `movement`, `life_force`, or `workbench` work so Codex starts from the user's real
   job before choosing the route family.
+- When the operation is not already explicit, identify the job first:
+  add, update, review, compare, navigate, link, or run. Skip that meta question
+  when the action is already obvious from the user's wording.
 - For emotionally meaningful non-Psyche records such as goals, habits, and notes,
   reflect the meaning before you ask for the structure.
 - When updating, start with what is changing, what should stay true, and what prompted
@@ -47,6 +50,9 @@ does want to save or update something, ask only for what is missing or unclear.
   outcome before you ask them to name the record.
 - When the user is clear, state the working formulation and ask only for the last
   missing detail.
+- When the user wants to review, compare, inspect, or navigate an existing Forge
+  record, ask what they are trying to understand first and prefer the read path before
+  you reopen create or update intake.
 - Before saving, briefly summarize the working formulation in the user's own language
   when that would reduce ambiguity.
 - Search before creating duplicates when the entity is ambiguous.
@@ -144,6 +150,20 @@ does want to save or update something, ask only for what is missing or unclear.
 - Preferred mutation path for wiki content: use the wiki tools instead of batch CRUD.
 - Preferred API path for Movement, Life Force, and Workbench: use the dedicated
   route families published in `forge_get_agent_onboarding.entityRouteModel.specializedDomainSurfaces`.
+- Movement lane hints: review spans through `/api/v1/movement/day`,
+  `/api/v1/movement/month`, `/api/v1/movement/all-time`, `/api/v1/movement/timeline`,
+  `/api/v1/movement/places`, `/api/v1/movement/selection`, and
+  `/api/v1/movement/trips/:id`; fill missing spans through
+  `/api/v1/movement/user-boxes/preflight` then `/api/v1/movement/user-boxes`; only
+  patch `/stays/:id` or `/trips/:id` when editing an already-recorded item.
+- Life Force lane hints: overview is `GET /api/v1/life-force`, durable profile edits
+  are `PATCH /api/v1/life-force/profile`, weekday curve edits are
+  `PUT /api/v1/life-force/templates/:weekday`, and real-time tired or recovered
+  reports are `POST /api/v1/life-force/fatigue-signals`.
+- Workbench lane hints: flow catalog and CRUD live under `/api/v1/workbench/flows`,
+  execution uses `/api/v1/workbench/flows/:id/run` or `/api/v1/workbench/run`,
+  published outputs use `/api/v1/workbench/flows/:id/output`, and per-run or per-node
+  inspection uses the run and node-result routes under `/api/v1/workbench/flows/:id`.
 - Exact create-shape expectations live in `forge_get_agent_onboarding`. Use its
   `entityCatalog` as the schema source of truth for `minimumCreateFields`,
   `fieldGuide`, examples, classification, and preferred mutation path.

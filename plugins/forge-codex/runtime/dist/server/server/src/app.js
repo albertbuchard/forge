@@ -2704,10 +2704,12 @@ const AGENT_ONBOARDING_CONVERSATION_RULES = [
     "Ask only for what is missing or unclear instead of walking the user through every optional field.",
     "Start by saying what seems to matter here or what the record is becoming, then ask the next useful question.",
     "Whenever possible, make the direction of the intake visible before the question by naming what you think the user is trying to preserve, clarify, decide, schedule, or make easier.",
+    "When the user's operation is not already explicit, identify the job first: add, update, review, compare, navigate, link, or run.",
     "Before each question, decide the one missing thing you are trying to clarify and why it matters for the record.",
     "Use a progression of concrete example or intent, working name, purpose or meaning, placement in Forge, operational details, and linked context.",
     "Ask one to three focused questions at a time. One is usually best when the user is uncertain or emotionally loaded.",
     "One focused question is the default. Only stack a second question when both serve the same clarification job and the user is steady enough for it.",
+    "When the user wants review, comparison, or navigation around an existing record, ask what they are trying to understand first and route to the read path before reopening create or update intake.",
     "If the user already answered the normal opening question, do not repeat it. Move to the next missing clarification.",
     "Do not over-therapize logistical entities. For tasks, calendar events, work blocks, timeboxes, and task runs, one brief confirming sentence plus one question is usually enough.",
     "After each substantive answer, briefly say what is becoming clearer and ask only for the next thing that still changes the record shape or usefulness.",
@@ -3028,6 +3030,7 @@ const AGENT_ONBOARDING_ENTITY_CONVERSATION_PLAYBOOKS = [
             "Ask whether the focus is a stay, a trip, a place, a timeline window, or a selected span.",
             "Ask for the time window, place, or movement item that makes the question concrete.",
             "Ask what they are trying to notice, preserve, or answer through that movement context.",
+            "Skip the meta lane question when the user already named the exact correction or review target and only one ambiguity remains.",
             "If the request is filling a missing-data gap, use a user-defined movement box rather than a raw stay or trip patch.",
             "When the user already gave a concrete correction like 'I stayed home during that missing block', confirm only the interval or place if needed, then create the overlay and read the timeline back."
         ]
@@ -3040,6 +3043,7 @@ const AGENT_ONBOARDING_ENTITY_CONVERSATION_PLAYBOOKS = [
             "Ask whether the job is overview, profile change, weekday-template change, or fatigue signaling.",
             "Ask what part of the current energy picture feels most important or inaccurate.",
             "Ask what should stay true if they are changing profile or template assumptions.",
+            "If the user already named the life-force lane clearly, skip the meta lane question and ask only for the specific weekday, profile field, or signal that still matters.",
             "Route to the dedicated life-force path once the lane is clear."
         ]
     },
@@ -3051,6 +3055,7 @@ const AGENT_ONBOARDING_ENTITY_CONVERSATION_PLAYBOOKS = [
             "Ask whether the job is flow discovery, one flow edit, execution, run history, published output, node-level inspection, or latest-node-output lookup.",
             "Ask which flow, slug, run, or node the request is about.",
             "Ask what the user is trying to learn, repair, or publish through that flow.",
+            "If the user already named the flow and action clearly, skip the meta lane question and ask only for the missing run, node, or output scope.",
             "Route to the dedicated workbench route family once the execution lane is clear."
         ]
     },
@@ -3060,8 +3065,10 @@ const AGENT_ONBOARDING_ENTITY_CONVERSATION_PLAYBOOKS = [
         coachingGoal: "Create a reusable incident category that will actually help future reports stay consistent.",
         askSequence: [
             "Ask what kind of moment or incident this label should capture in lived terms.",
+            "Reflect the repeated moment back in plain language before narrowing the wording.",
             "Ask how narrow or broad it should be.",
             "Ask what would count as inside versus outside the category if that boundary is still fuzzy.",
+            "Offer a concise label if the lived meaning is clearer than the wording.",
             "Ask for a short description only if the label could be ambiguous later."
         ]
     },
@@ -3071,7 +3078,9 @@ const AGENT_ONBOARDING_ENTITY_CONVERSATION_PLAYBOOKS = [
         coachingGoal: "Create a reusable emotion label with enough clarity to use consistently later.",
         askSequence: [
             "Ask what this feeling is like in lived terms when the user says it.",
+            "Reflect the felt signature back in plain language before you settle the label.",
             "Ask what distinguishes it from nearby emotions if that matters.",
+            "Offer a concise label if the felt meaning is clearer than the wording.",
             "Ask for a broader category only if it will help later browsing or reporting."
         ]
     }
@@ -4148,9 +4157,23 @@ function buildAgentOnboardingPayload(request) {
             sleepOverview: "/api/v1/health/sleep",
             sportsOverview: "/api/v1/health/fitness",
             lifeForce: "/api/v1/life-force",
+            lifeForceProfile: "/api/v1/life-force/profile",
+            lifeForceWeekdayTemplate: "/api/v1/life-force/templates/:weekday",
+            lifeForceFatigueSignals: "/api/v1/life-force/fatigue-signals",
+            movementDay: "/api/v1/movement/day",
+            movementMonth: "/api/v1/movement/month",
             movementTimeline: "/api/v1/movement/timeline",
             movementAllTime: "/api/v1/movement/all-time",
+            movementPlaces: "/api/v1/movement/places",
+            movementTripDetail: "/api/v1/movement/trips/:id",
+            movementSelection: "/api/v1/movement/selection",
+            movementUserBoxPreflight: "/api/v1/movement/user-boxes/preflight",
             workbenchFlows: "/api/v1/workbench/flows",
+            workbenchFlowBySlug: "/api/v1/workbench/flows/by-slug/:slug",
+            workbenchPublishedOutput: "/api/v1/workbench/flows/:id/output",
+            workbenchRunDetail: "/api/v1/workbench/flows/:id/runs/:runId",
+            workbenchNodeResult: "/api/v1/workbench/flows/:id/runs/:runId/nodes/:nodeId",
+            workbenchLatestNodeOutput: "/api/v1/workbench/flows/:id/nodes/:nodeId/output",
             wikiSettings: "/api/v1/wiki/settings",
             wikiSearch: "/api/v1/wiki/search",
             wikiHealth: "/api/v1/wiki/health",

@@ -84,6 +84,8 @@ describe("forge skill playbook parity", () => {
 
     expect(hermesSkill).toMatch(/high-level batch routes for basic Preferences CRUD/i);
     expect(hermesSkill).toMatch(/high-level batch routes for basic questionnaire CRUD/i);
+    expect(hermesSkill).toMatch(/add, update, review, compare, navigate, link, or run/i);
+    expect(hermesSkill).toMatch(/review, compare, inspect, or navigate an existing Forge/i);
     expect(hermesSkill).toMatch(/Self-observation is note-backed/i);
     expect(hermesSkill).toMatch(/Batch CRUD is the default for simple entities/i);
     expect(hermesSkill).toMatch(/route jungle|one-route-per-entity/i);
@@ -93,9 +95,13 @@ describe("forge skill playbook parity", () => {
     expect(hermesSkill).toMatch(/preference_signal/i);
     expect(codexSkill).toMatch(/sleep_session/i);
     expect(codexSkill).toMatch(/workout_session/i);
+    expect(codexSkill).toMatch(/add, update, review, compare, navigate, link, or run/i);
     expect(codexSkill).toMatch(/simple entities/i);
     expect(codexSkill).toMatch(/hundreds of individual CRUD routes|route jungle/i);
     expect(codexSkill).toMatch(/specializedDomainSurfaces/i);
+    expect(codexSkill).toMatch(/\/api\/v1\/movement\/day/i);
+    expect(codexSkill).toMatch(/\/api\/v1\/life-force\/profile/i);
+    expect(codexSkill).toMatch(/\/api\/v1\/workbench\/flows\/:id\/run/i);
     expect(codexSkill).toMatch(/forge_adjust_work_minutes/);
     expect(codexSkill).toMatch(/preference_judgment/i);
     expect(codexSkill).toMatch(/preference_signal/i);
@@ -121,10 +127,13 @@ describe("forge skill playbook parity", () => {
     expect(entityPlaybook).toMatch(/When the user is vague, ask for the smallest real example, desired outcome, or stake/i);
     expect(entityPlaybook).toMatch(/When the user is clear, say what the record seems to be becoming/i);
     expect(entityPlaybook).toMatch(/Steering moves/i);
+    expect(entityPlaybook).toMatch(/Review And Navigation Moves/i);
     expect(entityPlaybook).toMatch(/Question Calibration Loop/i);
     expect(entityPlaybook).toMatch(/Turn shapes/i);
     expect(entityPlaybook).toMatch(/Name, Define, Connect/i);
     expect(entityPlaybook).toMatch(/One focused question is the default/i);
+    expect(entityPlaybook).toMatch(/Operation lane checkpoint/i);
+    expect(entityPlaybook).toMatch(/add, update, review, compare, navigate, link, or run/i);
     expect(entityPlaybook).toMatch(/what is becoming clearer/i);
     expect(entityPlaybook).toMatch(/feels true[\s\S]*or needs one correction/i);
     expect(entityPlaybook).toMatch(/Prefer "what", "when", and "how" before "why"/i);
@@ -135,6 +144,8 @@ describe("forge skill playbook parity", () => {
     expect(entityPlaybook).toMatch(/emotionally meaningful vocabulary records/i);
     expect(entityPlaybook).toMatch(/adjacent record becomes visible/i);
     expect(entityPlaybook).toMatch(/offer one revised formulation yourself/i);
+    expect(entityPlaybook).toMatch(/repeated moment back in plain language/i);
+    expect(entityPlaybook).toMatch(/felt signature back in plain language/i);
     expect(entityPlaybook).toMatch(/## Preference Catalog/);
     expect(entityPlaybook).toMatch(/## Preference Catalog Item/);
     expect(entityPlaybook).toMatch(/## Preference Context/);
@@ -147,6 +158,10 @@ describe("forge skill playbook parity", () => {
     expect(entityPlaybook).toMatch(/## Movement/);
     expect(entityPlaybook).toMatch(/## Life Force/);
     expect(entityPlaybook).toMatch(/## Workbench/);
+    expect(entityPlaybook).toMatch(/Lane-to-route map:/);
+    expect(entityPlaybook).toMatch(/\/api\/v1\/movement\/day/);
+    expect(entityPlaybook).toMatch(/\/api\/v1\/life-force\/profile/);
+    expect(entityPlaybook).toMatch(/\/api\/v1\/workbench\/flows\/:id\/run/);
     expect(entityPlaybook).toMatch(/favorite, veto, or compare-later/i);
     expect(entityPlaybook).toMatch(/specialized surface work in Movement, Life Force, or Workbench/i);
     expect(entityPlaybook).toMatch(/candidate label[\s\S]*what kinds of moments belong inside it/i);

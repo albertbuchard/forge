@@ -5415,6 +5415,149 @@ test("macOS local connection replacement rehomes Forge-owned references and bloc
   }
 });
 
+test("new writable connections can reuse the existing shared Forge write target without creating another one", async () => {
+  const previousMock = process.env.FORGE_MACOS_LOCAL_MOCK_JSON;
+  process.env.FORGE_MACOS_LOCAL_MOCK_JSON = JSON.stringify({
+    status: "full_access",
+    granted: true,
+    sources: [
+      {
+        sourceId: "source_work",
+        sourceTitle: "Work",
+        sourceType: "exchange",
+        accountLabel: "Work",
+        calendars: [
+          {
+            sourceId: "source_work",
+            sourceTitle: "Work",
+            sourceType: "exchange",
+            calendarId: "cal_work",
+            title: "Work",
+            description: "Main work calendar",
+            color: "#7dd3fc",
+            timezone: "Europe/Zurich",
+            calendarType: "exchange",
+            isPrimary: true,
+            canWrite: true
+          },
+          {
+            sourceId: "source_work",
+            sourceTitle: "Work",
+            sourceType: "exchange",
+            calendarId: "cal_forge",
+            title: "Forge",
+            description: "Forge write calendar",
+            color: "#22c55e",
+            timezone: "Europe/Zurich",
+            calendarType: "exchange",
+            isPrimary: false,
+            canWrite: true
+          }
+        ]
+      }
+    ],
+    events: []
+  });
+
+  const rootDir = await mkdtemp(
+    path.join(os.tmpdir(), "forge-shared-write-target-")
+  );
+  const app = await buildServer({ dataRoot: rootDir, seedDemoData: false });
+
+  try {
+    const operatorCookie = await issueOperatorSessionCookie(app);
+    const database = getDatabase();
+    const now = "2026-04-03T00:00:00.000Z";
+
+    database
+      .prepare(
+        `INSERT INTO stored_secrets (id, cipher_text, description, created_at, updated_at)
+         VALUES (?, ?, '', ?, ?)`
+      )
+      .run("secret_calendar_existing", "cipher", now, now);
+
+    database
+      .prepare(
+        `INSERT INTO calendar_connections (
+           id, provider, label, account_label, status, config_json, credentials_secret_id, forge_calendar_id, last_synced_at, last_sync_error, created_at, updated_at
+         )
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?)`
+      )
+      .run(
+        "conn_apple_existing",
+        "apple",
+        "Primary Apple",
+        "albert.buchard@gmail.com",
+        "connected",
+        JSON.stringify({
+          forgeCalendarUrl: "https://caldav.icloud.com/calendars/forge/",
+          selectedCalendarCount: 2
+        }),
+        "secret_calendar_existing",
+        null,
+        now,
+        now,
+        now
+      );
+
+    const createResponse = await app.inject({
+      method: "POST",
+      url: "/api/v1/calendar/connections",
+      headers: {
+        cookie: operatorCookie,
+        host: "127.0.0.1:4317"
+      },
+      payload: {
+        provider: "macos_local",
+        label: "Calendars On This Mac",
+        sourceId: "source_work",
+        selectedCalendarUrls: [
+          "forge-macos-local://calendar/source_work/cal_work/"
+        ]
+      }
+    });
+
+    assert.equal(createResponse.statusCode, 201);
+    const createdConnection = (
+      createResponse.json() as { connection: { id: string; provider: string; forgeCalendarId: string | null } }
+    ).connection;
+    assert.equal(createdConnection.provider, "macos_local");
+    assert.equal(createdConnection.forgeCalendarId, null);
+
+    const createdRow = database
+      .prepare(
+        `SELECT config_json, forge_calendar_id
+         FROM calendar_connections
+         WHERE id = ?`
+      )
+      .get(createdConnection.id) as {
+      config_json: string;
+      forge_calendar_id: string | null;
+    };
+    const createdConfig = JSON.parse(createdRow.config_json) as Record<string, unknown>;
+    assert.equal(createdConfig.forgeCalendarUrl, null);
+    assert.equal(createdRow.forge_calendar_id, null);
+
+    const forgeManagedCalendars = database
+      .prepare(
+        `SELECT COUNT(*) as count
+         FROM calendar_calendars
+         WHERE connection_id = ? AND forge_managed = 1`
+      )
+      .get(createdConnection.id) as { count: number };
+    assert.equal(forgeManagedCalendars.count, 0);
+  } finally {
+    if (previousMock === undefined) {
+      delete process.env.FORGE_MACOS_LOCAL_MOCK_JSON;
+    } else {
+      process.env.FORGE_MACOS_LOCAL_MOCK_JSON = previousMock;
+    }
+    await app.close();
+    closeDatabase();
+    await rm(rootDir, { recursive: true, force: true });
+  }
+});
+
 test("microsoft local auth config can be validated without env secrets", async () => {
   const rootDir = await mkdtemp(
     path.join(os.tmpdir(), "forge-microsoft-config-test-")
@@ -13731,6 +13874,11 @@ test("settings and local agent token management persist through the versioned AP
     );
     assert.ok(
       onboardingBody.onboarding.conversationRules.some((rule) =>
+        /add, update, review, compare, navigate, link, or run/i.test(rule)
+      )
+    );
+    assert.ok(
+      onboardingBody.onboarding.conversationRules.some((rule) =>
         /distinction or decision the record should help with/i.test(rule)
       )
     );
@@ -13995,6 +14143,16 @@ test("settings and local agent token management persist through the versioned AP
     );
     assert.ok(eventTypeEntity);
     assert.ok(eventTypeEntity.minimumCreateFields.includes("label"));
+    const eventTypePlaybook =
+      onboardingBody.onboarding.entityConversationPlaybooks.find(
+        (playbook) => playbook.focus === "event_type"
+      );
+    assert.ok(eventTypePlaybook);
+    assert.ok(
+      eventTypePlaybook.askSequence.some((step) =>
+        /repeated moment back in plain language/i.test(step)
+      )
+    );
     const calendarEventEntity = onboardingBody.onboarding.entityCatalog.find(
       (entity) => entity.entityType === "calendar_event"
     );
@@ -14026,6 +14184,16 @@ test("settings and local agent token management persist through the versioned AP
     assert.ok(emotionEntity);
     assert.ok(
       emotionEntity.fieldGuide.some((field) => field.name === "category")
+    );
+    const emotionPlaybook =
+      onboardingBody.onboarding.entityConversationPlaybooks.find(
+        (playbook) => playbook.focus === "emotion_definition"
+      );
+    assert.ok(emotionPlaybook);
+    assert.ok(
+      emotionPlaybook.askSequence.some((step) =>
+        /felt signature back in plain language/i.test(step)
+      )
     );
     const sleepEntity = onboardingBody.onboarding.entityCatalog.find(
       (entity) => entity.entityType === "sleep_session"
@@ -14146,6 +14314,26 @@ test("settings and local agent token management persist through the versioned AP
       "/api/v1/life-force"
     );
     assert.equal(
+      onboardingBody.onboarding.verificationPaths.lifeForceProfile,
+      "/api/v1/life-force/profile"
+    );
+    assert.equal(
+      onboardingBody.onboarding.verificationPaths.lifeForceWeekdayTemplate,
+      "/api/v1/life-force/templates/:weekday"
+    );
+    assert.equal(
+      onboardingBody.onboarding.verificationPaths.lifeForceFatigueSignals,
+      "/api/v1/life-force/fatigue-signals"
+    );
+    assert.equal(
+      onboardingBody.onboarding.verificationPaths.movementDay,
+      "/api/v1/movement/day"
+    );
+    assert.equal(
+      onboardingBody.onboarding.verificationPaths.movementMonth,
+      "/api/v1/movement/month"
+    );
+    assert.equal(
       onboardingBody.onboarding.verificationPaths.movementTimeline,
       "/api/v1/movement/timeline"
     );
@@ -14154,8 +14342,44 @@ test("settings and local agent token management persist through the versioned AP
       "/api/v1/movement/all-time"
     );
     assert.equal(
+      onboardingBody.onboarding.verificationPaths.movementPlaces,
+      "/api/v1/movement/places"
+    );
+    assert.equal(
+      onboardingBody.onboarding.verificationPaths.movementTripDetail,
+      "/api/v1/movement/trips/:id"
+    );
+    assert.equal(
+      onboardingBody.onboarding.verificationPaths.movementSelection,
+      "/api/v1/movement/selection"
+    );
+    assert.equal(
+      onboardingBody.onboarding.verificationPaths.movementUserBoxPreflight,
+      "/api/v1/movement/user-boxes/preflight"
+    );
+    assert.equal(
       onboardingBody.onboarding.verificationPaths.workbenchFlows,
       "/api/v1/workbench/flows"
+    );
+    assert.equal(
+      onboardingBody.onboarding.verificationPaths.workbenchFlowBySlug,
+      "/api/v1/workbench/flows/by-slug/:slug"
+    );
+    assert.equal(
+      onboardingBody.onboarding.verificationPaths.workbenchPublishedOutput,
+      "/api/v1/workbench/flows/:id/output"
+    );
+    assert.equal(
+      onboardingBody.onboarding.verificationPaths.workbenchRunDetail,
+      "/api/v1/workbench/flows/:id/runs/:runId"
+    );
+    assert.equal(
+      onboardingBody.onboarding.verificationPaths.workbenchNodeResult,
+      "/api/v1/workbench/flows/:id/runs/:runId/nodes/:nodeId"
+    );
+    assert.equal(
+      onboardingBody.onboarding.verificationPaths.workbenchLatestNodeOutput,
+      "/api/v1/workbench/flows/:id/nodes/:nodeId/output"
     );
     const movementSurface =
       onboardingBody.onboarding.entityRouteModel.specializedDomainSurfaces
@@ -14174,6 +14398,16 @@ test("settings and local agent token management persist through the versioned AP
     assert.ok(
       movementSurface.notes.some((note) => /batch CRUD entity family/i.test(note))
     );
+    const movementPlaybook =
+      onboardingBody.onboarding.entityConversationPlaybooks.find(
+        (playbook) => playbook.focus === "movement"
+      );
+    assert.ok(movementPlaybook);
+    assert.ok(
+      movementPlaybook.askSequence.some((step) =>
+        /Skip the meta lane question/i.test(step)
+      )
+    );
     const lifeForceSurface =
       onboardingBody.onboarding.entityRouteModel.specializedDomainSurfaces
         .lifeForce;
@@ -14190,6 +14424,16 @@ test("settings and local agent token management persist through the versioned AP
     );
     assert.ok(
       lifeForceSurface.notes.some((note) => /current overview payload/i.test(note))
+    );
+    const lifeForcePlaybook =
+      onboardingBody.onboarding.entityConversationPlaybooks.find(
+        (playbook) => playbook.focus === "life_force"
+      );
+    assert.ok(lifeForcePlaybook);
+    assert.ok(
+      lifeForcePlaybook.askSequence.some((step) =>
+        /specific weekday, profile field, or signal/i.test(step)
+      )
     );
     const workbenchSurface =
       onboardingBody.onboarding.entityRouteModel.specializedDomainSurfaces
@@ -14215,6 +14459,16 @@ test("settings and local agent token management persist through the versioned AP
     assert.ok(
       workbenchSurface.notes.some((note) =>
         /node-result routes over reverse-engineering raw traces/i.test(note)
+      )
+    );
+    const workbenchPlaybook =
+      onboardingBody.onboarding.entityConversationPlaybooks.find(
+        (playbook) => playbook.focus === "workbench"
+      );
+    assert.ok(workbenchPlaybook);
+    assert.ok(
+      workbenchPlaybook.askSequence.some((step) =>
+        /skip the meta lane question/i.test(step)
       )
     );
     assert.deepEqual(

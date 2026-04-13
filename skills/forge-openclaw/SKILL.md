@@ -57,9 +57,15 @@ Entity conversation rule:
 - Prefer a progression of:
   concrete example or intent -> working name -> purpose or meaning -> placement in Forge -> operational details -> linked context.
 - Use those same playbooks for action-heavy non-Psyche flows such as `work_adjustment`, `preference_judgment`, `preference_signal`, and specialized `movement`, `life_force`, or `workbench` requests so the conversation starts from what the user is trying to understand, change, add, update, link, or run before you choose the route.
+- When the operation is not already explicit, identify the job first:
+  add, update, review, compare, navigate, link, or run. Skip that meta question
+  when the action is already obvious from the user's wording.
 - For emotionally meaningful non-Psyche records such as goals, habits, and notes, reflect the meaning before you ask for structure.
 - When the user is vague, ask for one small concrete example, stake, or desired outcome before you ask them to name the record.
 - When the user is clear, say what the record seems to be becoming and ask only for the last missing detail.
+- When the user wants to review, compare, inspect, or navigate an existing Forge
+  record, ask what they are trying to understand first and prefer the read path before
+  you reopen create or update intake.
 - When updating an entity, start with what is changing, what should stay true, and what prompted the update now.
 - When enough is clear, briefly summarize what you heard in the user's own language before asking for the last missing structural detail.
 - The quick intake prompts later in this file are fallback checkpoints, not a script to read aloud.
@@ -261,8 +267,9 @@ Minimum field: `label`
 Usually useful: `description`
 Ask:
 
-1. What should this event type be called?
-2. What kind of incident does it represent?
+1. What kind of repeated moment or incident do you want future reports to name the same way?
+2. What would count as inside this category, and what should stay outside it?
+3. If the meaning is clear but the wording is not, would you like me to suggest a concise label?
 
 `emotion_definition`
 Use for a reusable emotion vocabulary entry.
@@ -270,9 +277,9 @@ Minimum field: `label`
 Usually useful: `description`, `category`
 Ask:
 
-1. What emotion label do you want to reuse?
-2. How would you describe it?
-3. Does it belong to a broader category?
+1. When this feeling is present, what tells you it is this feeling and not a nearby one?
+2. What would you want a later trigger report to mean when it uses this label?
+3. If the felt meaning is clear but the wording is not, would you like me to suggest a concise label or broader category?
 
 Use these rules when choosing tools.
 
@@ -296,11 +303,20 @@ Use the dedicated domain routes for specialized surfaces that are not simple bat
 
 - Movement lives under `/api/v1/movement/*`. Treat it as a dedicated timeline of `stays` and `trips`, not as generic batch CRUD. A `stay` means the user remained in the same place for a span of time. A `trip` means the user traveled between places. Use the movement routes when the user wants to understand time in place, travel behavior, specific stays or trips, known places, or selected-span aggregates such as "how long was I at home in the past 2 weeks?" or "when did I travel last month?".
 - Movement user actions are: query movement behavior, add a place or manual stay/trip overlay, update an existing stay/trip/place, or link a specific movement item to another Forge entity. Keep the explanation user-facing: where they stayed, when they traveled, what changed, and what this movement should be linked to.
+- Movement read lanes map cleanly to the dedicated routes:
+  `/api/v1/movement/day`, `/api/v1/movement/month`, `/api/v1/movement/all-time`,
+  `/api/v1/movement/timeline`, `/api/v1/movement/places`,
+  `/api/v1/movement/selection`, and `/api/v1/movement/trips/:id`.
 - When the user is filling a missing-data gap, the default write path is a user-defined overlay box, not a raw stay or trip patch. Use `POST /api/v1/movement/user-boxes/preflight` if you need to confirm overlap or snap to the nearest missing interval, then `POST /api/v1/movement/user-boxes` with `kind: "stay"` or `kind: "trip"`.
 - Use `PATCH /api/v1/movement/stays/:id` or `PATCH /api/v1/movement/trips/:id` only when the user is editing an existing recorded stay or recorded trip. Do not use those routes to fill a missing span.
 - If the user says something as explicit as "that missing block was me staying home", do not reopen broad intake. Confirm the interval or place only if it is still ambiguous, then create the overlay and read the timeline back.
 - Life Force lives under `/api/v1/life-force*`. Use `GET /api/v1/life-force` for the current energy overview, `PATCH /api/v1/life-force/profile` for durable profile changes, `PUT /api/v1/life-force/templates/:weekday` for weekday curve edits, and `POST /api/v1/life-force/fatigue-signals` for real-time tired or recovered signals.
 - Workbench lives under `/api/v1/workbench/*`. Use those dedicated routes for flow catalog reads, flow CRUD, runs, published outputs, node results, and latest-node-output reads instead of trying to force Workbench through the batch entity routes.
+- Workbench lane hints:
+  use `/api/v1/workbench/flows` for flow catalog and CRUD,
+  `/api/v1/workbench/flows/:id/run` or `/api/v1/workbench/run` for execution,
+  `/api/v1/workbench/flows/:id/output` for published outputs, and the run/node routes
+  under `/api/v1/workbench/flows/:id` for run history and node-level inspection.
 - If you are unsure which specialized route family applies, check `forge_get_agent_onboarding` and use its `entityRouteModel.specializedDomainSurfaces` section before guessing.
 
 Use live work tools for `task_run`:

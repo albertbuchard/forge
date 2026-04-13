@@ -613,7 +613,8 @@ artifact includes a rendered API reference generated from the same OpenAPI docum
 the public documentation surface does not drift from the runtime contract. Calendar
 provider sync runs inside this live runtime today, with Google Calendar, macOS-local
 EventKit, Apple Calendar, Exchange Online, and custom CalDAV adapters, encrypted
-provider credentials, migration-backed calendar tables, and a dedicated Forge calendar
+provider credentials, migration-backed calendar tables, and one shared Forge write
+target
 per writable connection. Apple setup is discovery-first from
 `https://caldav.icloud.com` rather
 
