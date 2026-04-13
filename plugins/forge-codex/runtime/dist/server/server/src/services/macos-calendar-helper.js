@@ -1,6 +1,6 @@
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { execFile as execFileCallback } from "node:child_process";
-import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
@@ -19,6 +19,17 @@ enum HelperError: Error {
 func emit(_ payload: [String: Any]) {
   let data = try! JSONSerialization.data(withJSONObject: payload, options: [])
   FileHandle.standardOutput.write(data)
+  if let responsePath = responseFilePath() {
+    try? data.write(to: URL(fileURLWithPath: responsePath), options: .atomic)
+  }
+}
+
+func responseFilePath() -> String? {
+  let args = CommandLine.arguments
+  guard let responseIndex = args.firstIndex(of: "--response-file"), responseIndex + 1 < args.count else {
+    return nil
+  }
+  return args[responseIndex + 1]
 }
 
 func readRequest() throws -> [String: Any] {
@@ -192,7 +203,20 @@ func isoString(_ date: Date?) -> String? {
   guard let date else {
     return nil
   }
-  return ISO8601DateFormatter().string(from: date)
+  let formatter = ISO8601DateFormatter()
+  formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+  return formatter.string(from: date)
+}
+
+func parseIsoDate(_ value: String) -> Date? {
+  let fractionalFormatter = ISO8601DateFormatter()
+  fractionalFormatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+  if let parsed = fractionalFormatter.date(from: value) {
+    return parsed
+  }
+  let standardFormatter = ISO8601DateFormatter()
+  standardFormatter.formatOptions = [.withInternetDateTime]
+  return standardFormatter.date(from: value)
 }
 
 func discover(store: EKEventStore) throws -> [String: Any] {
@@ -272,10 +296,10 @@ func listEvents(store: EKEventStore, payload: [String: Any]) throws -> [String: 
   guard let calendarIds = payload["calendarIds"] as? [String], !calendarIds.isEmpty else {
     throw HelperError.invalidRequest("calendarIds are required.")
   }
-  guard let startRaw = payload["start"] as? String, let start = ISO8601DateFormatter().date(from: startRaw) else {
+  guard let startRaw = payload["start"] as? String, let start = parseIsoDate(startRaw) else {
     throw HelperError.invalidRequest("A valid start ISO timestamp is required.")
   }
-  guard let endRaw = payload["end"] as? String, let end = ISO8601DateFormatter().date(from: endRaw) else {
+  guard let endRaw = payload["end"] as? String, let end = parseIsoDate(endRaw) else {
     throw HelperError.invalidRequest("A valid end ISO timestamp is required.")
   }
 
@@ -356,10 +380,10 @@ func upsertEvent(store: EKEventStore, payload: [String: Any]) throws -> [String:
   guard let title = payload["title"] as? String, !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
     throw HelperError.invalidRequest("title is required.")
   }
-  guard let startRaw = payload["startAt"] as? String, let start = ISO8601DateFormatter().date(from: startRaw) else {
+  guard let startRaw = payload["startAt"] as? String, let start = parseIsoDate(startRaw) else {
     throw HelperError.invalidRequest("A valid startAt ISO timestamp is required.")
   }
-  guard let endRaw = payload["endAt"] as? String, let end = ISO8601DateFormatter().date(from: endRaw) else {
+  guard let endRaw = payload["endAt"] as? String, let end = parseIsoDate(endRaw) else {
     throw HelperError.invalidRequest("A valid endAt ISO timestamp is required.")
   }
 
@@ -423,14 +447,57 @@ do {
   ])
 }
 `;
+const HELPER_INFO_PLIST = `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>CFBundleDevelopmentRegion</key>
+  <string>en</string>
+  <key>CFBundleDisplayName</key>
+  <string>Forge macOS Calendar Helper</string>
+  <key>CFBundleExecutable</key>
+  <string>ForgeMacOSCalendarHelper</string>
+  <key>CFBundleIdentifier</key>
+  <string>ai.openclaw.forge.macos-calendar-helper</string>
+  <key>CFBundleInfoDictionaryVersion</key>
+  <string>6.0</string>
+  <key>CFBundleName</key>
+  <string>ForgeMacOSCalendarHelper</string>
+  <key>CFBundlePackageType</key>
+  <string>APPL</string>
+  <key>CFBundleShortVersionString</key>
+  <string>1.0</string>
+  <key>CFBundleVersion</key>
+  <string>1</string>
+  <key>LSUIElement</key>
+  <true/>
+  <key>NSCalendarsFullAccessUsageDescription</key>
+  <string>Forge uses Calendar access to read and write the calendars already configured on this Mac.</string>
+  <key>NSCalendarsUsageDescription</key>
+  <string>Forge uses Calendar access to read and write the calendars already configured on this Mac.</string>
+</dict>
+</plist>
+`;
 function helperCacheDir() {
     return path.join(resolveDataDir(), ".forge-native", "macos-calendar-helper");
 }
 function helperSourcePath() {
     return path.join(helperCacheDir(), "ForgeMacOSCalendarHelper.swift");
 }
+function helperAppPath() {
+    return path.join(helperCacheDir(), "ForgeMacOSCalendarHelper.app");
+}
+function helperContentsPath() {
+    return path.join(helperAppPath(), "Contents");
+}
+function helperMacOSPath() {
+    return path.join(helperContentsPath(), "MacOS");
+}
+function helperInfoPlistPath() {
+    return path.join(helperContentsPath(), "Info.plist");
+}
 function helperBinaryPath() {
-    return path.join(helperCacheDir(), "forge-macos-calendar-helper");
+    return path.join(helperMacOSPath(), "ForgeMacOSCalendarHelper");
 }
 async function ensureHelperCompiled() {
     if (process.platform !== "darwin") {
@@ -439,33 +506,49 @@ async function ensureHelperCompiled() {
     const cacheDir = helperCacheDir();
     const sourcePath = helperSourcePath();
     const binaryPath = helperBinaryPath();
+    const infoPlistPath = helperInfoPlistPath();
     const sourceHash = createHash("sha256").update(HELPER_SOURCE).digest("hex");
+    const plistHash = createHash("sha256").update(HELPER_INFO_PLIST).digest("hex");
     await mkdir(cacheDir, { recursive: true });
+    await mkdir(helperMacOSPath(), { recursive: true });
     let existingSource = "";
+    let existingPlist = "";
     try {
         existingSource = await readFile(sourcePath, "utf8");
     }
     catch {
         existingSource = "";
     }
+    try {
+        existingPlist = await readFile(infoPlistPath, "utf8");
+    }
+    catch {
+        existingPlist = "";
+    }
     if (existingSource !== HELPER_SOURCE) {
         await writeFile(sourcePath, HELPER_SOURCE, "utf8");
     }
-    let needsCompile = existingSource !== HELPER_SOURCE;
+    if (existingPlist !== HELPER_INFO_PLIST) {
+        await writeFile(infoPlistPath, HELPER_INFO_PLIST, "utf8");
+    }
+    let needsCompile = existingSource !== HELPER_SOURCE || existingPlist !== HELPER_INFO_PLIST;
     if (!needsCompile) {
         try {
-            const [sourceStats, binaryStats] = await Promise.all([
+            const [sourceStats, plistStats, binaryStats] = await Promise.all([
                 stat(sourcePath),
+                stat(infoPlistPath),
                 stat(binaryPath)
             ]);
-            needsCompile = binaryStats.mtimeMs < sourceStats.mtimeMs;
+            needsCompile =
+                binaryStats.mtimeMs < sourceStats.mtimeMs ||
+                    binaryStats.mtimeMs < plistStats.mtimeMs;
         }
         catch {
             needsCompile = true;
         }
     }
     if (!needsCompile) {
-        return { binaryPath, sourceHash };
+        return { binaryPath, sourceHash, plistHash };
     }
     await execFile("xcrun", [
         "swiftc",
@@ -478,7 +561,41 @@ async function ensureHelperCompiled() {
         "-o",
         binaryPath
     ]);
-    return { binaryPath, sourceHash };
+    return { binaryPath, sourceHash, plistHash };
+}
+async function runHelperViaApp(payload) {
+    const { binaryPath } = await ensureHelperCompiled();
+    const appPath = helperAppPath();
+    const encoded = Buffer.from(JSON.stringify(payload), "utf8").toString("base64");
+    const responsePath = path.join(helperCacheDir(), `response-${randomUUID()}.json`);
+    try {
+        await execFile("open", [
+            "-W",
+            "-n",
+            appPath,
+            "--args",
+            "--request-base64",
+            encoded,
+            "--response-file",
+            responsePath
+        ], {
+            maxBuffer: 8 * 1024 * 1024,
+            env: {
+                ...process.env,
+                TMPDIR: process.env.TMPDIR ?? os.tmpdir()
+            }
+        });
+        const raw = await readFile(responsePath, "utf8");
+        const parsed = JSON.parse(raw);
+        if (!parsed.ok) {
+            throw new Error(parsed.error);
+        }
+        return parsed;
+    }
+    finally {
+        await rm(responsePath, { force: true }).catch(() => undefined);
+        void binaryPath;
+    }
 }
 async function runHelper(payload) {
     const mockRaw = process.env.FORGE_MACOS_LOCAL_MOCK_JSON?.trim();
@@ -543,20 +660,7 @@ async function runHelper(payload) {
                 throw new Error(`Unknown mock macOS helper command ${String(payload.command)}`);
         }
     }
-    const { binaryPath } = await ensureHelperCompiled();
-    const encoded = Buffer.from(JSON.stringify(payload), "utf8").toString("base64");
-    const { stdout } = await execFile(binaryPath, ["--request-base64", encoded], {
-        maxBuffer: 8 * 1024 * 1024,
-        env: {
-            ...process.env,
-            TMPDIR: process.env.TMPDIR ?? os.tmpdir()
-        }
-    });
-    const parsed = JSON.parse(stdout);
-    if (!parsed.ok) {
-        throw new Error(parsed.error);
-    }
-    return parsed;
+    return runHelperViaApp(payload);
 }
 export function buildMacOSLocalCalendarUrl(sourceId, calendarId) {
     return `forge-macos-local://calendar/${encodeURIComponent(sourceId)}/${encodeURIComponent(calendarId)}/`;
@@ -593,6 +697,20 @@ export async function requestMacOSCalendarAccess() {
     return runHelper({
         command: "request_access"
     });
+}
+export async function openMacOSCalendarPrivacySettings() {
+    if (process.platform !== "darwin") {
+        return { opened: false };
+    }
+    try {
+        await execFile("open", [
+            "x-apple.systempreferences:com.apple.preference.security?Privacy_Calendars"
+        ]);
+        return { opened: true };
+    }
+    catch {
+        return { opened: false };
+    }
 }
 export async function discoverMacOSLocalCalendars() {
     const payload = await runHelper({

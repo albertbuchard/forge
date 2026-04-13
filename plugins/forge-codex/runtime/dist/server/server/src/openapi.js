@@ -6804,7 +6804,7 @@ export function buildOpenApiDocument() {
                 },
                 post: {
                     summary: "Create a Google, Apple, or custom CalDAV calendar connection",
-                    description: "Forge first discovers the writable calendars for the account, then stores the chosen mirrored calendars and dedicated Forge write calendar.",
+                    description: "Forge first discovers the writable calendars for the account, then stores the chosen mirrored calendars and either reuses the existing shared Forge write target or saves a new one when needed.",
                     responses: {
                         "201": jsonResponse({
                             type: "object",

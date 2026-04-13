@@ -3638,7 +3638,7 @@ const AGENT_ONBOARDING_TOOL_INPUT_CATALOG = [
             "In the current self-hosted local runtime, Exchange Online now uses an interactive Microsoft public-client sign-in flow with PKCE after the operator has saved the Microsoft client ID, tenant, and redirect URI in Settings -> Calendar. Non-interactive callers should treat Microsoft connection setup as a Settings-owned operator action unless a completed authSessionId already exists.",
             "macos_local uses EventKit to read and write the calendars already configured on the host Mac. Discovery is grouped by host calendar source, and Forge replaces overlapping remote connections for the same account instead of keeping duplicate copies.",
             "Custom CalDAV uses an account-level server URL, not a single calendar collection URL.",
-            "Writable providers publish Forge work blocks and timeboxes to the dedicated Forge calendar for that connection."
+            "Writable providers publish Forge work blocks and timeboxes through one shared Forge write target. A new connection only needs its own write calendar when the runtime does not already have one."
         ],
         example: '{"provider":"apple","label":"Primary Apple","username":"operator@example.com","password":"app-password","selectedCalendarUrls":["https://caldav.icloud.com/.../Family/"],"forgeCalendarUrl":"https://caldav.icloud.com/.../Forge/","createForgeCalendar":false}'
     },
@@ -3684,7 +3684,7 @@ const AGENT_ONBOARDING_TOOL_INPUT_CATALOG = [
         inputShape: '{ taskId: string, projectId?: string|null, title: string, startsAt: string, endsAt: string, source?: "manual"|"suggested"|"live_run" }',
         requiredFields: ["taskId", "title", "startsAt", "endsAt"],
         notes: [
-            "Forge publishes these into the dedicated Forge calendar during provider sync.",
+            "Forge publishes these through the shared Forge write target during provider sync.",
             "Live task runs can later attach to matching timeboxes.",
             "This is a convenience helper; agents can also create task_timebox through forge_create_entities."
         ],

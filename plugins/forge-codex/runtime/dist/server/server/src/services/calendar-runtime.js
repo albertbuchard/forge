@@ -2,13 +2,20 @@ import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { CryptoProvider, PublicClientApplication } from "@azure/msal-node";
 import ical from "node-ical";
 import { logForgeDebug } from "../debug.js";
-import { buildMacOSLocalCalendarUrl, deleteMacOSLocalEvent, discoverMacOSLocalCalendars, ensureMacOSLocalForgeCalendar, getMacOSCalendarAuthStatus, parseMacOSLocalCalendarUrl, requestMacOSCalendarAccess, upsertMacOSLocalEvent, listMacOSLocalEvents } from "./macos-calendar-helper.js";
+import { buildMacOSLocalCalendarUrl, deleteMacOSLocalEvent, discoverMacOSLocalCalendars, ensureMacOSLocalForgeCalendar, getMacOSCalendarAuthStatus, openMacOSCalendarPrivacySettings, parseMacOSLocalCalendarUrl, requestMacOSCalendarAccess, upsertMacOSLocalEvent, listMacOSLocalEvents } from "./macos-calendar-helper.js";
 import { getGoogleCalendarOauthCallbackPath, isGoogleCalendarOriginAllowed, isGoogleCalendarLoopbackOrigin, resolveGoogleCalendarOauthPrivateConfig } from "./google-calendar-oauth-config.js";
 import { createDAVClient, DAVNamespaceShort } from "tsdav";
 import { getSettings } from "../repositories/settings.js";
 import { createCalendarConnectionRecord, deleteCalendarConnectionRecord, deleteEncryptedSecret, deleteExternalEventsForConnection, detachConnectionFromForgeEvents, getCalendarById, getCalendarConnectionById, getCalendarEventStorageRecord, getCalendarOverview, isSupersededCalendarConnection, listCalendarConnections, listCalendarEventSources, listCalendars, listTaskTimeboxes, markCalendarEventSourcesSyncState, readEncryptedSecret, registerCalendarEventSourceProjection, recordCalendarActivity, storeEncryptedSecret, rehomeCalendarConnectionReferences, updateCalendarConnectionRecord, updateTaskTimebox, upsertCalendarEventRecord, upsertCalendarRecord } from "../repositories/calendar.js";
 function isWritableCalendarCredentials(credentials) {
     return credentials.provider !== "microsoft";
+}
+function normalizeOptionalUrl(value) {
+    if (typeof value !== "string") {
+        return null;
+    }
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? normalizeUrl(trimmed) : null;
 }
 const GOOGLE_CALDAV_URL = "https://apidata.googleusercontent.com/caldav/v2/";
 const GOOGLE_OAUTH_AUTHORIZE_URL = "https://accounts.google.com/o/oauth2/v2/auth";
@@ -1598,7 +1605,7 @@ async function syncDiscoveredState(connectionId, credentials) {
     const state = await createProviderClient(credentials);
     if (state.mode === "macos_local") {
         const selected = new Set(credentials.selectedCalendarUrls.map((value) => normalizeUrl(value)));
-        const forgeCalendarUrl = normalizeUrl(credentials.forgeCalendarUrl);
+        const forgeCalendarUrl = normalizeOptionalUrl(credentials.forgeCalendarUrl);
         for (const calendar of state.calendars) {
             const normalized = normalizeUrl(calendar.url);
             upsertCalendarRecord(connectionId, {
@@ -1634,7 +1641,9 @@ async function syncDiscoveredState(connectionId, credentials) {
                 if (!calendar) {
                     continue;
                 }
-                const ownership = normalizeUrl(calendar.url) === forgeCalendarUrl ? "forge" : "external";
+                const ownership = forgeCalendarUrl && normalizeUrl(calendar.url) === forgeCalendarUrl
+                    ? "forge"
+                    : "external";
                 upsertCalendarEventRecord(connectionId, mapMacOSLocalEventToSyncInput(calendar.url, event, ownership));
             }
         }
@@ -1678,17 +1687,19 @@ async function syncDiscoveredState(connectionId, credentials) {
         throw new Error("Forge expected a DAV provider state for this writable calendar connection.");
     }
     const selected = new Set(credentials.selectedCalendarUrls.map((value) => normalizeUrl(value)));
-    const forgeCalendarUrl = normalizeUrl(credentials.forgeCalendarUrl);
+    const forgeCalendarUrl = normalizeOptionalUrl(credentials.forgeCalendarUrl);
     const calendarsToSync = state.calendars.filter((calendar) => {
         const normalized = normalizeUrl(calendar.url);
         if (selected.has(normalized)) {
             return true;
         }
-        if (credentials.provider === "google" && normalized === forgeCalendarUrl) {
+        if (credentials.provider === "google" &&
+            forgeCalendarUrl &&
+            normalized === forgeCalendarUrl) {
             logForgeDebug(`[forge-calendar-sync] skip_forge_readback connectionId=${JSON.stringify(connectionId)} provider=${JSON.stringify(credentials.provider)} calendarUrl=${JSON.stringify(normalized)}`);
             return false;
         }
-        return normalized === forgeCalendarUrl;
+        return forgeCalendarUrl ? normalized === forgeCalendarUrl : false;
     });
     for (const calendar of state.calendars) {
         const normalized = normalizeUrl(calendar.url);
@@ -1701,7 +1712,9 @@ async function syncDiscoveredState(connectionId, credentials) {
     const start = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString();
     const end = new Date(now.getTime() + 180 * 24 * 60 * 60 * 1000).toISOString();
     for (const calendar of calendarsToSync) {
-        const ownership = normalizeUrl(calendar.url) === forgeCalendarUrl ? "forge" : "external";
+        const ownership = forgeCalendarUrl && normalizeUrl(calendar.url) === forgeCalendarUrl
+            ? "forge"
+            : "external";
         const calendarUrl = normalizeUrl(calendar.url);
         logForgeDebug(`[forge-calendar-sync] fetch_calendar_objects_start connectionId=${JSON.stringify(connectionId)} provider=${JSON.stringify(credentials.provider)} calendarUrl=${JSON.stringify(calendarUrl)} ownership=${JSON.stringify(ownership)}`);
         if (credentials.provider === "google") {
@@ -1747,7 +1760,7 @@ function toStoredCredentials(input, forgeCalendarUrl) {
             username: input.username,
             password: input.password,
             selectedCalendarUrls: input.selectedCalendarUrls.map(normalizeUrl),
-            forgeCalendarUrl: normalizeUrl(forgeCalendarUrl)
+            forgeCalendarUrl: normalizeOptionalUrl(forgeCalendarUrl)
         };
     }
     return {
@@ -1756,7 +1769,7 @@ function toStoredCredentials(input, forgeCalendarUrl) {
         username: input.username,
         password: input.password,
         selectedCalendarUrls: input.selectedCalendarUrls.map(normalizeUrl),
-        forgeCalendarUrl: normalizeUrl(forgeCalendarUrl)
+        forgeCalendarUrl: normalizeOptionalUrl(forgeCalendarUrl)
     };
 }
 function credentialsMatch(existing, incoming) {
@@ -1818,6 +1831,21 @@ function findOverlappingConnectionsForAccount(accountIdentityKey, secrets) {
         return readConnectionAccountIdentityKey(connection, secrets) === target;
     });
 }
+function findExistingForgeWriteTarget(options) {
+    const excluded = new Set(options?.excludeConnectionIds ?? []);
+    return listCalendarConnections().find((connection) => {
+        if (excluded.has(connection.id)) {
+            return false;
+        }
+        if (typeof connection.config.replacedByConnectionId === "string" &&
+            connection.config.replacedByConnectionId.trim().length > 0) {
+            return false;
+        }
+        return normalizeOptionalUrl(typeof connection.config.forgeCalendarUrl === "string"
+            ? connection.config.forgeCalendarUrl
+            : null) !== null;
+    });
+}
 function supersedeCalendarConnections(connectionIds, replacingConnectionId) {
     for (const connectionId of connectionIds) {
         const connection = getCalendarConnectionById(connectionId);
@@ -1866,7 +1894,28 @@ export async function getMacOSLocalCalendarAccessStatus() {
     return getMacOSCalendarAuthStatus();
 }
 export async function requestMacOSLocalCalendarAccess() {
-    return requestMacOSCalendarAccess();
+    const result = await requestMacOSCalendarAccess();
+    if (result.granted) {
+        return result;
+    }
+    if (result.status === "not_determined") {
+        const settings = await openMacOSCalendarPrivacySettings();
+        return {
+            ...result,
+            promptSuppressed: true,
+            openedSystemSettings: settings.opened,
+            message: settings.opened
+                ? "macOS did not present the Calendar permission prompt from the Forge background service. Forge opened System Settings > Privacy & Security > Calendars so you can allow access there, then return here and click Check access."
+                : "macOS did not present the Calendar permission prompt from the Forge background service. Open System Settings > Privacy & Security > Calendars, allow Forge, then return here and click Check access."
+        };
+    }
+    if (result.status === "denied" || result.status === "restricted") {
+        return {
+            ...result,
+            message: "Calendar access is blocked for Forge. Open System Settings > Privacy & Security > Calendars, allow Forge, then return here and click Check access."
+        };
+    }
+    return result;
 }
 export async function discoverMacOSLocalCalendarSources() {
     const discovery = await discoverMacOSLocalCalendars();
@@ -1916,6 +1965,20 @@ export async function discoverExistingCalendarConnection(connectionId, secrets) 
     return mapDiscoveryPayload(connection.provider, state);
 }
 export async function createCalendarConnection(input, secrets, activity = { source: "ui" }) {
+    const cleanupFailedConnectionCreation = (connectionId, secretId) => {
+        try {
+            deleteCalendarConnectionRecord(connectionId);
+        }
+        catch {
+            // Best-effort cleanup for partially-created connections.
+        }
+        try {
+            deleteEncryptedSecret(secretId);
+        }
+        catch {
+            // Best-effort cleanup for partially-created credentials.
+        }
+    };
     if (input.provider === "macos_local") {
         const discovery = await discoverMacOSLocalCalendars();
         if (discovery.status !== "full_access") {
@@ -1939,15 +2002,20 @@ export async function createCalendarConnection(input, secrets, activity = { sour
             ...calendar,
             url: buildMacOSLocalCalendarUrl(source.sourceId, calendar.calendarId)
         }));
+        const sharedWriteTarget = findExistingForgeWriteTarget({
+            excludeConnectionIds: Array.from(replaceIds)
+        });
         let forgeCalendarUrl = input.forgeCalendarUrl?.trim() ||
-            discoveredCalendars.find((calendar) => isForgeName(calendar.title))?.url ||
+            (!sharedWriteTarget
+                ? discoveredCalendars.find((calendar) => isForgeName(calendar.title))?.url
+                : null) ||
             null;
-        if (!forgeCalendarUrl && input.createForgeCalendar) {
+        if (!forgeCalendarUrl && input.createForgeCalendar && !sharedWriteTarget) {
             const created = await ensureMacOSLocalForgeCalendar(source.sourceId);
             forgeCalendarUrl = buildMacOSLocalCalendarUrl(created.calendar.sourceId, created.calendar.calendarId);
         }
-        if (!forgeCalendarUrl) {
-            throw new Error("Select the calendar Forge should write into, or create a dedicated local calendar named Forge.");
+        if (!forgeCalendarUrl && !sharedWriteTarget) {
+            throw new Error("Select the calendar Forge should write into, ask Forge to create one, or keep using the existing shared Forge write target.");
         }
         const secretId = `calendar_secret_${randomUUID().replaceAll("-", "").slice(0, 10)}`;
         const storedCredentials = {
@@ -1957,7 +2025,7 @@ export async function createCalendarConnection(input, secrets, activity = { sour
             sourceType: source.sourceType,
             accountIdentityKey,
             selectedCalendarUrls: input.selectedCalendarUrls.map(normalizeUrl),
-            forgeCalendarUrl: normalizeUrl(forgeCalendarUrl)
+            forgeCalendarUrl: normalizeOptionalUrl(forgeCalendarUrl)
         };
         storeEncryptedSecret(secretId, secrets.sealJson(storedCredentials), `${input.label} macOS local calendar credentials`);
         const connection = createCalendarConnectionRecord({
@@ -1975,7 +2043,13 @@ export async function createCalendarConnection(input, secrets, activity = { sour
             },
             credentialsSecretId: secretId
         });
-        await syncCalendarConnection(connection.id, secrets, activity);
+        try {
+            await syncCalendarConnection(connection.id, secrets, activity);
+        }
+        catch (error) {
+            cleanupFailedConnectionCreation(connection.id, secretId);
+            throw error;
+        }
         if (replaceIds.size > 0) {
             for (const replacedConnectionId of replaceIds) {
                 rehomeCalendarConnectionReferences({
@@ -2012,21 +2086,24 @@ export async function createCalendarConnection(input, secrets, activity = { sour
         if (state.mode !== "dav") {
             throw new Error("Forge expected a writable DAV provider state for this Google Calendar connection.");
         }
+        const sharedWriteTarget = findExistingForgeWriteTarget();
         let forgeCalendarUrl = input.forgeCalendarUrl?.trim() ||
-            session.discovery.calendars.find((calendar) => calendar.isForgeCandidate)?.url ||
+            (!sharedWriteTarget
+                ? session.discovery.calendars.find((calendar) => calendar.isForgeCandidate)?.url
+                : null) ||
             null;
-        if (!forgeCalendarUrl && input.createForgeCalendar) {
+        if (!forgeCalendarUrl && input.createForgeCalendar && !sharedWriteTarget) {
             const created = await ensureForgeCalendar(state);
             forgeCalendarUrl = created.forgeCalendarUrl;
         }
-        if (!forgeCalendarUrl) {
-            throw new Error("Select the calendar Forge should write into, or create a new calendar named Forge.");
+        if (!forgeCalendarUrl && !sharedWriteTarget) {
+            throw new Error("Select the calendar Forge should write into, ask Forge to create one, or keep using the existing shared Forge write target.");
         }
         const secretId = `calendar_secret_${randomUUID().replaceAll("-", "").slice(0, 10)}`;
         const storedCredentials = {
             ...session.credentials,
             selectedCalendarUrls: input.selectedCalendarUrls.map(normalizeUrl),
-            forgeCalendarUrl: normalizeUrl(forgeCalendarUrl)
+            forgeCalendarUrl: normalizeOptionalUrl(forgeCalendarUrl)
         };
         // The app credentials belong to Forge itself. Only user-specific OAuth tokens
         // are stored per calendar connection.
@@ -2038,11 +2115,17 @@ export async function createCalendarConnection(input, secrets, activity = { sour
             config: {
                 serverUrl: session.discovery.serverUrl,
                 selectedCalendarCount: storedCredentials.selectedCalendarUrls.length,
-                forgeCalendarUrl: normalizeUrl(storedCredentials.forgeCalendarUrl)
+                forgeCalendarUrl: normalizeOptionalUrl(storedCredentials.forgeCalendarUrl)
             },
             credentialsSecretId: secretId
         });
-        await syncCalendarConnection(connection.id, secrets, activity);
+        try {
+            await syncCalendarConnection(connection.id, secrets, activity);
+        }
+        catch (error) {
+            cleanupFailedConnectionCreation(connection.id, secretId);
+            throw error;
+        }
         session.status = "consumed";
         recordCalendarActivity("calendar_connection_created", "calendar_connection", connection.id, `Calendar connection created: ${connection.label}`, "Google Calendar is now connected to Forge through the Authorization Code + PKCE flow.", activity, { provider: input.provider });
         return getCalendarConnectionById(connection.id);
@@ -2085,7 +2168,13 @@ export async function createCalendarConnection(input, secrets, activity = { sour
             },
             credentialsSecretId: secretId
         });
-        await syncCalendarConnection(connection.id, secrets, activity);
+        try {
+            await syncCalendarConnection(connection.id, secrets, activity);
+        }
+        catch (error) {
+            cleanupFailedConnectionCreation(connection.id, secretId);
+            throw error;
+        }
         session.status = "consumed";
         recordCalendarActivity("calendar_connection_created", "calendar_connection", connection.id, `Calendar connection created: ${connection.label}`, "Exchange Online is now connected to Forge through Microsoft sign-in in read-only mode.", activity, { provider: input.provider });
         return getCalendarConnectionById(connection.id);
@@ -2100,17 +2189,20 @@ export async function createCalendarConnection(input, secrets, activity = { sour
         throw new Error("Forge expected a writable DAV provider state for this calendar connection.");
     }
     const discovery = mapDiscoveryPayload(input.provider, state);
+    const sharedWriteTarget = findExistingForgeWriteTarget();
     let forgeCalendarUrl = null;
     forgeCalendarUrl =
         input.forgeCalendarUrl?.trim() ||
-            discovery.calendars.find((calendar) => calendar.isForgeCandidate)?.url ||
+            (!sharedWriteTarget
+                ? discovery.calendars.find((calendar) => calendar.isForgeCandidate)?.url
+                : null) ||
             null;
-    if (!forgeCalendarUrl && input.createForgeCalendar) {
+    if (!forgeCalendarUrl && input.createForgeCalendar && !sharedWriteTarget) {
         const created = await ensureForgeCalendar(state);
         forgeCalendarUrl = created.forgeCalendarUrl;
     }
-    if (!forgeCalendarUrl) {
-        throw new Error("Select the calendar Forge should write into, or create a new calendar named Forge.");
+    if (!forgeCalendarUrl && !sharedWriteTarget) {
+        throw new Error("Select the calendar Forge should write into, ask Forge to create one, or keep using the existing shared Forge write target.");
     }
     const secretId = `calendar_secret_${randomUUID().replaceAll("-", "").slice(0, 10)}`;
     const storedCredentials = toStoredCredentials(input, forgeCalendarUrl);
@@ -2122,11 +2214,17 @@ export async function createCalendarConnection(input, secrets, activity = { sour
         config: {
             serverUrl: discovery.serverUrl,
             selectedCalendarCount: storedCredentials.selectedCalendarUrls.length,
-            forgeCalendarUrl: normalizeUrl(storedCredentials.forgeCalendarUrl)
+            forgeCalendarUrl: normalizeOptionalUrl(storedCredentials.forgeCalendarUrl)
         },
         credentialsSecretId: secretId
     });
-    await syncCalendarConnection(connection.id, secrets, activity);
+    try {
+        await syncCalendarConnection(connection.id, secrets, activity);
+    }
+    catch (error) {
+        cleanupFailedConnectionCreation(connection.id, secretId);
+        throw error;
+    }
     recordCalendarActivity("calendar_connection_created", "calendar_connection", connection.id, `Calendar connection created: ${connection.label}`, `${input.provider === "apple" ? "Apple Calendar" : "Custom CalDAV"} is now connected to Forge.`, activity, { provider: input.provider });
     return getCalendarConnectionById(connection.id);
 }
@@ -2178,10 +2276,10 @@ export async function syncCalendarConnection(connectionId, secrets, activity = {
                             sourceId: credentials.sourceId,
                             sourceType: credentials.sourceType,
                             accountIdentityKey: credentials.accountIdentityKey,
-                            forgeCalendarUrl: normalizeUrl(credentials.forgeCalendarUrl)
+                            forgeCalendarUrl: normalizeOptionalUrl(credentials.forgeCalendarUrl)
                         }
                         : {
-                            forgeCalendarUrl: normalizeUrl(credentials.forgeCalendarUrl)
+                            forgeCalendarUrl: normalizeOptionalUrl(credentials.forgeCalendarUrl)
                         })
             },
             lastSyncedAt: new Date().toISOString(),
@@ -2190,7 +2288,9 @@ export async function syncCalendarConnection(connectionId, secrets, activity = {
         await publishTaskTimeboxes(state, forgeCalendarUrl, connectionId);
         recordCalendarActivity("calendar_connection_synced", "calendar_connection", connectionId, `Calendar synced: ${connection.label}`, credentials.provider === "microsoft"
             ? "Exchange Online calendars were mirrored into Forge in read-only mode."
-            : "Provider events and Forge timeboxes were synchronized.", activity);
+            : forgeCalendarUrl
+                ? "Provider events and Forge timeboxes were synchronized."
+                : "Provider events were synchronized. Forge keeps publishing work blocks and timeboxes through the existing shared write target.", activity);
         return getCalendarConnectionById(connectionId);
     }
     catch (error) {
