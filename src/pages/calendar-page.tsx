@@ -315,6 +315,7 @@ export function CalendarPage() {
   const [selectedWorkBlockTemplate, setSelectedWorkBlockTemplate] = useState<WorkBlockTemplate | null>(null);
   const [taskRulesDialogOpen, setTaskRulesDialogOpen] = useState(false);
   const [timeboxDialogOpen, setTimeboxDialogOpen] = useState(false);
+  const [selectedTimebox, setSelectedTimebox] = useState<TaskTimebox | null>(null);
   const [eventDialogOpen, setEventDialogOpen] = useState(false);
   const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null);
   const [renameEvent, setRenameEvent] = useState<CalendarEvent | null>(null);
@@ -452,6 +453,16 @@ export function CalendarPage() {
       startsAt: string;
       endsAt: string;
     }) => patchTaskTimebox(timeboxId, { startsAt, endsAt }),
+    onSuccess: invalidateCalendar
+  });
+  const patchTimeboxMutation = useMutation({
+    mutationFn: ({
+      timeboxId,
+      patch
+    }: {
+      timeboxId: string;
+      patch: Parameters<typeof patchTaskTimebox>[1];
+    }) => patchTaskTimebox(timeboxId, patch),
     onSuccess: invalidateCalendar
   });
 
@@ -1458,6 +1469,10 @@ export function CalendarPage() {
                         setDraggedTimeboxId(timebox.id);
                         event.dataTransfer.setData("text/forge-timebox-id", timebox.id);
                       }}
+                      onClick={() => {
+                        setSelectedTimebox(timebox);
+                        setTimeboxDialogOpen(true);
+                      }}
                       className="min-w-0 overflow-hidden cursor-move rounded-[18px] bg-[var(--primary)]/14 px-3 py-2 text-sm text-[var(--primary)] shadow-[inset_0_0_0_1px_rgba(192,193,255,0.18)]"
                     >
                       {(() => {
@@ -1490,6 +1505,29 @@ export function CalendarPage() {
                       </div>
                       <div className="mt-2 text-xs uppercase tracking-[0.14em] text-white/56">
                         {formatLifeForceAp(estimateTaskTimeboxActionPointLoad(timebox).totalAp)}
+                      </div>
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            setSelectedTimebox(timebox);
+                            setTimeboxDialogOpen(true);
+                          }}
+                          className="rounded-[999px] bg-white/[0.08] px-2.5 py-1 text-[10px] uppercase tracking-[0.14em] text-white/78 transition hover:bg-white/[0.14]"
+                        >
+                          Edit
+                        </button>
+                        <button
+                          type="button"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            navigate(`/tasks/${timebox.taskId}`);
+                          }}
+                          className="rounded-[999px] bg-white/[0.08] px-2.5 py-1 text-[10px] uppercase tracking-[0.14em] text-white/78 transition hover:bg-white/[0.14]"
+                        >
+                          Open task
+                        </button>
                       </div>
                     </div>
                   ))}
@@ -1764,12 +1802,24 @@ export function CalendarPage() {
 
       <TimeboxPlanningDialog
         open={timeboxDialogOpen}
-        onOpenChange={setTimeboxDialogOpen}
+        onOpenChange={(open) => {
+          setTimeboxDialogOpen(open);
+          if (!open) {
+            setSelectedTimebox(null);
+          }
+        }}
         tasks={shell.snapshot.tasks}
+        editingTimebox={selectedTimebox}
         from={range.from}
         to={range.to}
         onCreateTimebox={async (input) => {
           await createTimeboxMutation.mutateAsync(input);
+        }}
+        onUpdateTimebox={async (timeboxId, patch) => {
+          await patchTimeboxMutation.mutateAsync({
+            timeboxId,
+            patch
+          });
         }}
       />
 

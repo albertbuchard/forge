@@ -1,5 +1,5 @@
 import { LifeForceOverviewWorkspace } from "@/components/life-force/life-force-workspace";
-import { useForgeShell } from "@/components/shell/app-shell";
+import { UserScopeSelector, useForgeShell } from "@/components/shell/app-shell";
 import { PageHero } from "@/components/shell/page-hero";
 
 export function LifeForcePage() {
@@ -26,6 +26,13 @@ export function LifeForcePage() {
         titleText="Life Force"
         description="Edit weekday Action Point curves, inspect drains, and tune the capacity model without crowding the Overview surface."
         badge={`${Math.round(lifeForce.spentTodayAp)} / ${Math.round(lifeForce.dailyBudgetAp)} AP`}
+        actions={
+          <UserScopeSelector
+            users={shell.snapshot.users}
+            selectedUserIds={shell.selectedUserIds}
+            onChange={shell.setSelectedUserIds}
+          />
+        }
       />
       <LifeForceOverviewWorkspace
         selectedUserIds={shell.selectedUserIds}

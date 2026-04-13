@@ -14,6 +14,7 @@ const {
   getCalendarOverviewMock,
   getLifeForceMock,
   getTaskContextMock,
+  patchTaskTimeboxMock,
   patchTaskMock,
   recommendTaskTimeboxesMock,
   releaseTaskRunMock,
@@ -28,6 +29,7 @@ const {
   getCalendarOverviewMock: vi.fn(),
   getLifeForceMock: vi.fn(),
   getTaskContextMock: vi.fn(),
+  patchTaskTimeboxMock: vi.fn(),
   patchTaskMock: vi.fn(),
   recommendTaskTimeboxesMock: vi.fn(),
   releaseTaskRunMock: vi.fn(),
@@ -44,6 +46,7 @@ vi.mock("@/lib/api", () => ({
   getCalendarOverview: getCalendarOverviewMock,
   getLifeForce: getLifeForceMock,
   getTaskContext: getTaskContextMock,
+  patchTaskTimebox: patchTaskTimeboxMock,
   patchTask: patchTaskMock,
   recommendTaskTimeboxes: recommendTaskTimeboxesMock,
   releaseTaskRun: releaseTaskRunMock,
@@ -66,8 +69,8 @@ vi.mock("@/components/experience/surface-skeleton", () => ({
   SurfaceSkeleton: () => <div>Loading…</div>
 }));
 
-vi.mock("@/components/calendar/scheduling-rules-editor", () => ({
-  SchedulingRulesEditor: () => <div>Scheduling rules</div>
+vi.mock("@/components/calendar/task-scheduling-dialog", () => ({
+  TaskSchedulingDialog: () => null
 }));
 
 vi.mock("@/components/experience/sheet-scaffold", () => ({
@@ -194,7 +197,28 @@ describe("TaskDetailPage", () => {
         events: [],
         workBlockTemplates: [],
         workBlockInstances: [],
-        timeboxes: []
+        timeboxes: [
+          {
+            id: "timebox_1",
+            taskId: "task_1",
+            projectId: null,
+            connectionId: null,
+            calendarId: null,
+            remoteEventId: null,
+            linkedTaskRunId: null,
+            status: "planned",
+            source: "manual",
+            title: "Deep work tomorrow morning",
+            startsAt: "2026-04-12T09:00:00.000Z",
+            endsAt: "2026-04-12T10:00:00.000Z",
+            overrideReason: "Protected block",
+            actionProfile: null,
+            createdAt: "2026-04-11T08:00:00.000Z",
+            updatedAt: "2026-04-11T08:00:00.000Z",
+            userId: "user_operator",
+            user: null
+          }
+        ]
       }
     });
     createTaskTimeboxMock.mockResolvedValue({
@@ -317,12 +341,15 @@ describe("TaskDetailPage", () => {
 
     expect(await screen.findByText("34 xp · 100 AP")).toBeInTheDocument();
     expect(screen.getByText("Action Point load")).toBeInTheDocument();
-    expect(screen.getByText("4.2 AP")).toBeInTheDocument();
+    expect(screen.getAllByText("4.2 AP").length).toBeGreaterThan(0);
     expect(screen.getAllByText("4.2 AP/h").length).toBeGreaterThan(0);
     expect(screen.getByText("Split it")).toBeInTheDocument();
     expect(screen.getByText("Today's Life Force context")).toBeInTheDocument();
     expect(screen.getByText("72 AP / 210 AP")).toBeInTheDocument();
     expect(screen.getAllByText("Time Box").length).toBeGreaterThan(0);
+    expect(screen.getByText("Scheduled blocks")).toBeInTheDocument();
+    expect(screen.getByText("Deep work tomorrow morning")).toBeInTheDocument();
+    expect(screen.getByText("Edit task scheduling")).toBeInTheDocument();
     expect(
       screen.getByText(/This task only debits the Action Points you actually worked today/i)
     ).toBeInTheDocument();

@@ -289,17 +289,23 @@ display-first visibility plus guided action flows for work blocks, task-rule edi
 timebox planning, and native event creation. A user must be able to create a Forge
 calendar event even without any provider connected, link it to goals, projects, tasks,
 or habits, and later choose whether that event should project out to a writable remote
-calendar. The current provider roster should explicitly cover Google Calendar, Apple
-Calendar, Exchange Online, and custom CalDAV. Apple must rely on autodiscovery from
-`https://caldav.icloud.com` instead of asking for raw collection URLs. Exchange Online
-must use Microsoft Graph and be clearly marked as read-only for now, meaning it
-mirrors selected calendars into Forge but does not receive Forge-owned work blocks,
-timeboxes, or native event projections yet. In the current self-hosted local Forge
-runtime, its setup path should be a guided Microsoft public-client sign-in flow with
-PKCE in Settings rather than a user-facing form for client secrets or refresh
-tokens. For self-hosted local Forge, the Microsoft client ID, tenant, and redirect
-URI should be configurable from the Calendar settings UI itself so the operator does
-not have to treat backend env vars as the primary setup surface.
+calendar. The current provider roster should explicitly cover Google Calendar,
+Calendars On This Mac through EventKit, Apple Calendar, Exchange Online, and custom
+CalDAV. Apple must rely on autodiscovery from `https://caldav.icloud.com` instead of
+asking for raw collection URLs. The macOS-local path must use EventKit against the
+host calendar store and surface host-configured account sources directly in the Forge
+setup flow so the user does not need to reconnect calendars that already exist in
+Calendar.app. When Forge detects that the same upstream account is already connected
+through a remote provider, the product should replace the older connection so only one
+canonical copy remains visible. Exchange Online must use Microsoft Graph and be
+clearly marked as read-only for now, meaning it mirrors selected calendars into Forge
+but does not receive Forge-owned work blocks, timeboxes, or native event projections
+yet. In the current self-hosted local Forge runtime, its setup path should be a guided
+Microsoft public-client sign-in flow with PKCE in Settings rather than a user-facing
+form for client secrets or refresh tokens. For self-hosted local Forge, the Microsoft
+client ID, tenant, and redirect URI should be configurable from the Calendar settings
+UI itself so the operator does not have to treat backend env vars as the primary setup
+surface.
 Google should follow the same display-first guided setup posture, but as a local
 localhost Authorization Code + PKCE flow. The UI should explain clearly that
 the Google OAuth client belongs to the local Forge runtime, that each user only
@@ -605,10 +611,11 @@ entry-point discovery, and a repo-local Codex MCP adapter. Forge also publishes 
 engineering-first GitHub Pages site from `openclaw-plugin/docs`, and that static docs
 artifact includes a rendered API reference generated from the same OpenAPI document so
 the public documentation surface does not drift from the runtime contract. Calendar
-provider sync runs inside this live runtime today,
-with Google Calendar, Apple Calendar, and custom CalDAV adapters, encrypted provider
-credentials, migration-backed calendar tables, and a dedicated Forge calendar per
-connection. Apple setup is discovery-first from `https://caldav.icloud.com` rather
+provider sync runs inside this live runtime today, with Google Calendar, macOS-local
+EventKit, Apple Calendar, Exchange Online, and custom CalDAV adapters, encrypted
+provider credentials, migration-backed calendar tables, and a dedicated Forge calendar
+per writable connection. Apple setup is discovery-first from
+`https://caldav.icloud.com` rather
 
 The KarpaWiki memory system is part of this same production stack. Markdown pages and media
 assets are canonical files on the local filesystem, while Fastify and SQLite manage

@@ -26,6 +26,7 @@ ios-companion/ForgeCompanion/**/xcuserdata/
 ios-companion/*.xcodeproj/xcuserdata/
 ios-companion/*.xcodeproj/project.xcworkspace/xcuserdata/
 ios-companion/ForgeCompanion/build/
+ios-companion/ForgeCompanion/Backups/
 ios-companion/.release.env
 ios-companion/.release.env.local
 ios-companion/.artifacts/

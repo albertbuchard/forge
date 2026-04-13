@@ -227,9 +227,10 @@ task or project. It is not a hidden task run. It exists so the user or a trusted
 agent can truthfully add or remove tracked minutes after the fact, with the clamp and
 XP effects remaining explicit and auditable.
 
-A calendar connection links Forge to an external provider. In the current production
-implementation that means Google Calendar, Apple Calendar, Exchange Online through
-Microsoft Graph, or custom CalDAV.
+A calendar connection links Forge to an external provider or host calendar substrate.
+In the current production implementation that means Google Calendar, Calendars On This
+Mac through EventKit, Apple Calendar, Exchange Online through Microsoft Graph, or
+custom CalDAV.
 Google setup now uses one local Google OAuth desktop-app client for the Forge
 runtime. End users do not create their own Google app or paste a refresh token
 into Forge. They sign in with their own Google accounts through a guided
@@ -243,17 +244,24 @@ callback still points to localhost, Forge must explain that Google would
 redirect to localhost on that other device rather than back to the Forge server.
 Apple setup starts from `https://caldav.icloud.com` and autodiscovers the principal,
 calendar home, and writable calendars instead of asking the user to paste hidden
-calendar collection URLs. Writable providers give Forge a dedicated Forge-owned
-calendar for publishing work blocks and task timeboxes. Exchange Online is currently
-read-only in Forge: it mirrors the selected Microsoft calendars into Forge but does
-not publish Forge-owned work blocks or timeboxes back to Microsoft. In the current
-self-hosted local runtime, Microsoft setup uses a guided MSAL public-client sign-in
-flow with PKCE, so the user does not paste a client secret or refresh token into the
-UI. The Microsoft client ID, tenant, and redirect URI belong to the local Settings
-surface for that Forge runtime rather than to backend env vars as the primary user
-configuration path. The default calendar name for the dedicated write surface remains
-`Forge`, and provider credentials must be managed from the Settings area rather than
-from the execution calendar page.
+calendar collection URLs. The macOS-local provider uses EventKit against the host
+calendar store so Forge can reuse the calendars already configured in Calendar.app,
+including grouped account sources such as iCloud, Google, Exchange, local, and other
+host-managed calendars when available. The duplicate-prevention rule is account and
+calendar canonicalization, not ongoing per-event duplicate checks: if the same
+upstream account is already connected through a remote provider, Forge should replace
+that older connection and expose only one visible copy of the account's calendars.
+Writable providers give Forge a dedicated Forge-owned calendar for publishing work
+blocks and task timeboxes. Exchange Online is currently read-only in Forge: it mirrors
+the selected Microsoft calendars into Forge but does not publish Forge-owned work
+blocks or timeboxes back to Microsoft. In the current self-hosted local runtime,
+Microsoft setup uses a guided MSAL public-client sign-in flow with PKCE, so the user
+does not paste a client secret or refresh token into the UI. The Microsoft client ID,
+tenant, and redirect URI belong to the local Settings surface for that Forge runtime
+rather than to backend env vars as the primary user configuration path. The default
+calendar name for the dedicated write surface remains `Forge`, and provider
+credentials must be managed from the Settings area rather than from the execution
+calendar page.
 
 A work block is a compact recurring availability template such as Main Activity,
 Secondary Activity, Third Activity, Rest, Holiday, or a user-defined custom block.

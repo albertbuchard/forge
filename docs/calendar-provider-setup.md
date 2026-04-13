@@ -8,6 +8,10 @@ Forge sync is provider-aware:
 - Forge mirrors provider events into the Calendar view.
 - Writable providers let Forge write work blocks and owned task timeboxes into a
   dedicated calendar named `Forge`.
+- `Calendars On This Mac` uses EventKit to access the calendars already
+  configured in Calendar.app on the host Mac.
+- When the same upstream account is already connected remotely, Forge replaces
+  the older connection instead of keeping duplicate visible copies.
 - Exchange Online is currently read-only in Forge through Microsoft Graph.
 - Exchange Online now uses a guided Microsoft sign-in flow in Forge, but that
   flow still requires a Microsoft app registration first.
@@ -16,9 +20,10 @@ Forge sync is provider-aware:
 
 ## What Forge Asks For
 
-Forge now has four guided provider paths:
+Forge now has five guided provider paths:
 
 - `Google Calendar`
+- `Calendars On This Mac`
 - `Apple Calendar`
 - `Exchange Online`
 - `Custom CalDAV`
@@ -28,6 +33,40 @@ collection URLs up front. It starts from
 [https://caldav.icloud.com](https://caldav.icloud.com), authenticates, discovers
 the current user principal and calendar home, then lets you choose which
 calendars to mirror and which calendar Forge should write into.
+
+## Calendars On This Mac
+
+What you need:
+
+- a macOS host running Forge
+- the relevant calendars already configured in Calendar.app
+- Calendar full access granted to Forge on that Mac
+
+Important notes:
+
+- Forge uses Apple's EventKit API against the host calendar store.
+- This path can surface iCloud, Google, Exchange, local, subscribed, and other
+  calendars that Calendar.app already aggregates for that machine.
+- Forge groups discovery by host calendar source and prevents duplicate steady-
+  state sync by replacing overlapping remote account connections instead of
+  running two live copies side by side.
+
+Step by step:
+
+1. Open Forge on the same Mac that already has the desired calendars in
+   Calendar.app.
+2. Go to `Settings -> Calendar`.
+3. Click `Calendars On This Mac`.
+4. Click `Request Calendar access` and approve full access in macOS if asked.
+5. Click `Discover host calendars`.
+6. Choose the source account Forge should connect.
+7. Select which calendars Forge should mirror into Forge.
+8. Choose an existing writable calendar for Forge writes, or let Forge create a
+   dedicated `Forge` calendar under that source.
+9. If Forge detects that the same account is already connected through Google,
+   Apple, Microsoft, or another CalDAV connection, confirm the replacement so
+   only one canonical copy remains visible.
+10. Save the connection and run the first sync.
 
 ## Exchange Online
 

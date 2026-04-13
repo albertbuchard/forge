@@ -20,7 +20,12 @@ export type HabitFrequency = "daily" | "weekly";
 export type HabitPolarity = "positive" | "negative";
 export type HabitStatus = "active" | "paused" | "archived";
 export type HabitCheckInStatus = "done" | "missed";
-export type CalendarProvider = "google" | "apple" | "caldav" | "microsoft";
+export type CalendarProvider =
+  | "google"
+  | "apple"
+  | "caldav"
+  | "microsoft"
+  | "macos_local";
 export type CalendarConnectionStatus =
   | "connected"
   | "needs_attention"
@@ -31,7 +36,14 @@ export type CalendarEventOrigin =
   | "apple"
   | "caldav"
   | "microsoft"
+  | "macos_local"
   | "derived";
+export type MacOSCalendarAccessStatus =
+  | "not_determined"
+  | "denied"
+  | "restricted"
+  | "full_access"
+  | "unavailable";
 export type CalendarAvailability = "busy" | "free";
 export type WorkBlockKind =
   | "main_activity"
@@ -819,6 +831,12 @@ export interface CalendarDiscoveryCalendar {
   canWrite: boolean;
   selectedByDefault: boolean;
   isForgeCandidate: boolean;
+  sourceId: string | null;
+  sourceTitle: string | null;
+  sourceType: string | null;
+  calendarType: string | null;
+  hostCalendarId: string | null;
+  canonicalKey: string | null;
 }
 
 export interface CalendarDiscoveryPayload {
@@ -828,6 +846,21 @@ export interface CalendarDiscoveryPayload {
   principalUrl: string | null;
   homeUrl: string | null;
   calendars: CalendarDiscoveryCalendar[];
+}
+
+export interface MacOSLocalCalendarSource {
+  sourceId: string;
+  sourceTitle: string;
+  sourceType: string;
+  accountLabel: string;
+  accountIdentityKey: string;
+  calendars: CalendarDiscoveryCalendar[];
+}
+
+export interface MacOSLocalCalendarDiscoveryPayload {
+  status: MacOSCalendarAccessStatus;
+  requestedAt: string;
+  sources: MacOSLocalCalendarSource[];
 }
 
 export interface MicrosoftCalendarOauthSession {
@@ -861,6 +894,12 @@ export interface CalendarResource {
   canWrite: boolean;
   selectedForSync: boolean;
   forgeManaged: boolean;
+  sourceId: string | null;
+  sourceTitle: string | null;
+  sourceType: string | null;
+  calendarType: string | null;
+  hostCalendarId: string | null;
+  canonicalKey: string | null;
   lastSyncedAt: string | null;
   createdAt: string;
   updatedAt: string;

@@ -16,6 +16,8 @@ function shortCalendarProviderLabel(provider) {
             return "Apple";
         case "microsoft":
             return "Microsoft";
+        case "macos_local":
+            return "Mac";
         case "caldav":
         default:
             return "CalDAV";

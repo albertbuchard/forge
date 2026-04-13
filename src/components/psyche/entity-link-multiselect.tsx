@@ -1,6 +1,14 @@
-import { useMemo, useState, type ReactNode } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode
+} from "react";
+import { createPortal } from "react-dom";
 import { Plus, Search, X } from "lucide-react";
 import { EntityBadge } from "@/components/ui/entity-badge";
+import { useAnchoredOverlayPosition } from "@/components/ui/use-anchored-overlay-position";
 import type { EntityKind } from "@/lib/entity-visuals";
 import { cn } from "@/lib/utils";
 
@@ -49,9 +57,16 @@ export function EntityLinkMultiSelect({
   const [pendingCreate, setPendingCreate] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
   const [createdOptions, setCreatedOptions] = useState<EntityLinkOption[]>([]);
+  const rootRef = useRef<HTMLDivElement | null>(null);
+  const menuRef = useRef<HTMLDivElement | null>(null);
   const safeOptions = options ?? [];
   const safeSelectedValues = selectedValues ?? [];
   const actionBarVariant = variant === "action-bar";
+  const menuStyle = useAnchoredOverlayPosition(rootRef, open, {
+    offset: 6,
+    preferredMaxHeight: 320,
+    minHeight: 160
+  });
 
   const mergedOptions = useMemo(() => {
     const map = new Map<string, EntityLinkOption>();
@@ -82,6 +97,33 @@ export function EntityLinkMultiSelect({
   }, [mergedOptions, normalizedQuery, safeSelectedValues]);
 
   const hasExactMatch = mergedOptions.some((option) => normalize(option.label) === normalizedQuery);
+
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+
+    const handlePointerDown = (event: PointerEvent) => {
+      const target = event.target as Node;
+      if (rootRef.current?.contains(target) || menuRef.current?.contains(target)) {
+        return;
+      }
+      setOpen(false);
+    };
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setOpen(false);
+      }
+    };
+
+    document.addEventListener("pointerdown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [open]);
 
   const selectValue = (value: string) => {
     onChange(appendUnique(safeSelectedValues, value));
@@ -118,7 +160,7 @@ export function EntityLinkMultiSelect({
   };
 
   return (
-    <div className={cn("relative grid gap-2", className)}>
+    <div className={cn("relative grid gap-2", className)} ref={rootRef}>
       <div
         className={cn(
           "rounded-[22px] border border-white/10 bg-white/[0.04]",
@@ -194,9 +236,6 @@ export function EntityLinkMultiSelect({
               setHighlightedIndex(0);
             }}
             onFocus={() => setOpen(true)}
-            onBlur={() => {
-              window.setTimeout(() => setOpen(false), 120);
-            }}
             onKeyDown={(event) => {
               if (event.key === "Backspace" && !query && safeSelectedValues.length > 0) {
                 removeValue(safeSelectedValues[safeSelectedValues.length - 1]!);
@@ -252,19 +291,27 @@ export function EntityLinkMultiSelect({
         </div>
       </div>
 
-      {open ? (
-        <div
-          className={cn(
-            "absolute top-full z-20 mt-1.5 max-h-64 w-full overflow-y-auto rounded-[22px] p-2 backdrop-blur-xl",
-            actionBarVariant
-              ? "border border-[var(--ui-border-subtle)] bg-[color-mix(in_srgb,var(--ui-surface-1)_94%,transparent)] shadow-[0_24px_56px_rgba(4,8,18,0.16)]"
-              : "border border-white/10 bg-[rgba(10,15,27,0.96)] shadow-[0_26px_60px_rgba(4,8,18,0.32)]"
-          )}
-        >
+      {open && menuStyle && typeof document !== "undefined"
+        ? createPortal(
+            <div
+              ref={menuRef}
+              role="listbox"
+              aria-multiselectable="true"
+              className={cn(
+                "z-[80] overflow-y-auto overscroll-contain rounded-[22px] p-2 [webkit-overflow-scrolling:touch]",
+                actionBarVariant
+                  ? "border border-[var(--ui-border-subtle)] bg-[color-mix(in_srgb,var(--ui-surface-1)_94%,transparent)] shadow-[0_24px_56px_rgba(4,8,18,0.16)]"
+                  : "border border-white/10 bg-[rgba(10,15,27,0.96)] shadow-[0_26px_60px_rgba(4,8,18,0.32)]",
+                "backdrop-blur-xl"
+              )}
+              style={menuStyle}
+            >
           {filteredOptions.map((option, index) => (
             <button
               key={option.value}
               type="button"
+              role="option"
+              aria-selected={false}
               className={cn(
                 "flex w-full items-start justify-between gap-3 rounded-[18px] px-3 py-2.5 text-left transition",
                 index === highlightedIndex
@@ -344,8 +391,10 @@ export function EntityLinkMultiSelect({
               {emptyMessage}
             </div>
           ) : null}
-        </div>
-      ) : null}
+            </div>,
+            document.body
+          )
+        : null}
 
       {createError ? (
         <div className="text-sm text-rose-300">{createError}</div>

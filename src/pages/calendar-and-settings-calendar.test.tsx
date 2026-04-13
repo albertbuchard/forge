@@ -5,6 +5,7 @@ import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { CalendarPage } from "@/pages/calendar-page";
 import { SettingsCalendarPage } from "@/pages/settings-calendar-page";
 import { describeGoogleRouteRequirement } from "@/components/calendar/calendar-connection-flow-dialog";
+import { ForgeApiError } from "@/lib/api-error";
 import { useForgeClipboardStore } from "@/store/use-forge-clipboard";
 import type { ForgeSnapshot } from "@/lib/types";
 
@@ -27,6 +28,9 @@ const {
   listCalendarResourcesMock,
   discoverCalendarConnectionMock,
   patchSettingsMock,
+  getMacOSLocalCalendarStatusMock,
+  requestMacOSLocalCalendarAccessMock,
+  discoverMacOSLocalCalendarSourcesMock,
   startGoogleCalendarOauthMock,
   getGoogleCalendarOauthSessionMock,
   startMicrosoftCalendarOauthMock,
@@ -56,6 +60,9 @@ const {
   listCalendarResourcesMock: vi.fn(),
   discoverCalendarConnectionMock: vi.fn(),
   patchSettingsMock: vi.fn(),
+  getMacOSLocalCalendarStatusMock: vi.fn(),
+  requestMacOSLocalCalendarAccessMock: vi.fn(),
+  discoverMacOSLocalCalendarSourcesMock: vi.fn(),
   startGoogleCalendarOauthMock: vi.fn(),
   getGoogleCalendarOauthSessionMock: vi.fn(),
   startMicrosoftCalendarOauthMock: vi.fn(),
@@ -108,6 +115,9 @@ vi.mock("@/lib/api", () => ({
   listCalendarResources: listCalendarResourcesMock,
   discoverCalendarConnection: discoverCalendarConnectionMock,
   patchSettings: patchSettingsMock,
+  getMacOSLocalCalendarStatus: getMacOSLocalCalendarStatusMock,
+  requestMacOSLocalCalendarAccess: requestMacOSLocalCalendarAccessMock,
+  discoverMacOSLocalCalendarSources: discoverMacOSLocalCalendarSourcesMock,
   startGoogleCalendarOauth: startGoogleCalendarOauthMock,
   getGoogleCalendarOauthSession: getGoogleCalendarOauthSessionMock,
   startMicrosoftCalendarOauth: startMicrosoftCalendarOauthMock,
@@ -505,6 +515,20 @@ beforeEach(() => {
   patchSettingsMock.mockResolvedValue({
     settings: {}
   });
+  getMacOSLocalCalendarStatusMock.mockResolvedValue({
+    status: "unavailable"
+  });
+  requestMacOSLocalCalendarAccessMock.mockResolvedValue({
+    granted: false,
+    status: "unavailable"
+  });
+  discoverMacOSLocalCalendarSourcesMock.mockResolvedValue({
+    discovery: {
+      status: "unavailable",
+      requestedAt: "2026-04-03T08:00:00.000Z",
+      sources: []
+    }
+  });
   startGoogleCalendarOauthMock.mockResolvedValue({
     session: {
       sessionId: "google_session_1",
@@ -574,6 +598,12 @@ beforeEach(() => {
         label: "Exchange Online",
         supportsDedicatedForgeCalendar: false,
         connectionHelp: "Sign in with Microsoft in a guided popup flow. Forge mirrors the selected calendars in read-only mode for now."
+      },
+      {
+        provider: "macos_local",
+        label: "Calendars On This Mac",
+        supportsDedicatedForgeCalendar: true,
+        connectionHelp: "Use EventKit to access the calendars already configured in Calendar.app on this Mac."
       },
       {
         provider: "caldav",
@@ -762,8 +792,8 @@ describe("calendar routing surfaces", () => {
               source: "",
               externalPlaceId: ""
             },
-            startAt: "2026-04-06T10:00:00.000Z",
-            endAt: "2026-04-06T11:00:00.000Z",
+            startAt: "2026-04-13T10:00:00.000Z",
+            endAt: "2026-04-13T11:00:00.000Z",
             timezone: "Europe/Zurich",
             isAllDay: false,
             availability: "busy",
@@ -796,11 +826,11 @@ describe("calendar routing surfaces", () => {
         ],
         workBlockInstances: [
           {
-            id: "wbinst_focus_2026-04-06",
+            id: "wbinst_focus_2026-04-13",
             templateId: "wbtpl_focus",
-            dateKey: "2026-04-06",
-            startAt: "2026-04-06T08:00:00.000Z",
-            endAt: "2026-04-06T10:00:00.000Z",
+            dateKey: "2026-04-13",
+            startAt: "2026-04-13T08:00:00.000Z",
+            endAt: "2026-04-13T10:00:00.000Z",
             title: "Focus block",
             kind: "main_activity",
             color: "#8b5cf6",
@@ -816,8 +846,8 @@ describe("calendar routing surfaces", () => {
             taskId: "task_1",
             projectId: "project_1",
             title: "Planning window",
-            startsAt: "2026-04-06T12:00:00.000Z",
-            endsAt: "2026-04-06T14:00:00.000Z",
+            startsAt: "2026-04-13T12:00:00.000Z",
+            endsAt: "2026-04-13T14:00:00.000Z",
             status: "planned",
             source: "manual",
             linkedTaskRunId: null,
@@ -844,6 +874,46 @@ describe("calendar routing surfaces", () => {
     expect(screen.getByText("Hiring meeting")).toBeInTheDocument();
     expect(screen.getAllByText("Focus block").length).toBeGreaterThan(0);
     expect(screen.getByText("Planning window")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Open task" })).toBeInTheDocument();
+  });
+
+  it("opens existing timeboxes for editing from the calendar surface", async () => {
+    getCalendarOverviewMock.mockResolvedValueOnce({
+      calendar: {
+        generatedAt: "2026-04-03T08:00:00.000Z",
+        providers: [],
+        connections: [],
+        calendars: [],
+        events: [],
+        workBlockTemplates: [],
+        workBlockInstances: [],
+        timeboxes: [
+          {
+            id: "timebox_planning",
+            taskId: "task_1",
+            projectId: "project_1",
+            connectionId: null,
+            calendarId: null,
+            remoteEventId: null,
+            linkedTaskRunId: null,
+            title: "Planning window",
+            startsAt: "2026-04-13T12:00:00.000Z",
+            endsAt: "2026-04-13T14:00:00.000Z",
+            status: "planned",
+            source: "manual",
+            overrideReason: null,
+            actionProfile: null,
+            createdAt: "2026-04-03T08:00:00.000Z",
+            updatedAt: "2026-04-03T08:00:00.000Z"
+          }
+        ]
+      }
+    });
+
+    renderWithRouter(<CalendarPage />, "/calendar");
+
+    fireEvent.click(await screen.findByText("Planning window"));
+    expect(await screen.findByText("Edit timebox")).toBeInTheDocument();
   });
 
   it("lets the user edit and delete recurring work blocks from the calendar surface", async () => {
@@ -864,8 +934,8 @@ describe("calendar routing surfaces", () => {
             weekDays: [0, 1, 2, 3, 4, 5, 6],
             startMinute: 0,
             endMinute: 1440,
-            startsOn: "2026-04-01",
-            endsOn: "2026-04-07",
+            startsOn: "2026-04-13",
+            endsOn: "2026-04-17",
             blockingState: "blocked",
             createdAt: "2026-04-03T08:00:00.000Z",
             updatedAt: "2026-04-03T08:00:00.000Z"
@@ -873,11 +943,11 @@ describe("calendar routing surfaces", () => {
         ],
         workBlockInstances: [
           {
-            id: "wbinst_wbtpl_holiday_2026-04-06",
+            id: "wbinst_wbtpl_holiday_2026-04-13",
             templateId: "wbtpl_holiday",
-            dateKey: "2026-04-06",
-            startAt: "2026-04-06T00:00:00.000Z",
-            endAt: "2026-04-07T00:00:00.000Z",
+            dateKey: "2026-04-13",
+            startAt: "2026-04-13T00:00:00.000Z",
+            endAt: "2026-04-14T00:00:00.000Z",
             title: "Vacation",
             kind: "holiday",
             color: "#14b8a6",
@@ -910,7 +980,7 @@ describe("calendar routing surfaces", () => {
       target: { value: "Summer holiday" }
     });
     fireEvent.change(screen.getByLabelText("End date"), {
-      target: { value: "2026-04-10" }
+      target: { value: "2026-04-20" }
     });
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
     fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
@@ -924,8 +994,8 @@ describe("calendar routing surfaces", () => {
         weekDays: [0, 1, 2, 3, 4, 5, 6],
         startMinute: 0,
         endMinute: 1440,
-        startsOn: "2026-04-01",
-        endsOn: "2026-04-10",
+        startsOn: "2026-04-13",
+        endsOn: "2026-04-20",
         blockingState: "blocked",
         activityPresetKey: null,
         customSustainRateApPerHour: null
@@ -977,8 +1047,8 @@ describe("calendar routing surfaces", () => {
             title: "Choeur a coeur",
             description: "",
             location: "",
-            startAt: "2026-04-06T18:30:00.000Z",
-            endAt: "2026-04-06T20:00:00.000Z",
+            startAt: "2026-04-13T18:30:00.000Z",
+            endAt: "2026-04-13T20:00:00.000Z",
             timezone: "Europe/Zurich",
             isAllDay: false,
             availability: "busy",
@@ -1070,8 +1140,8 @@ describe("calendar routing surfaces", () => {
             title: "Old title",
             description: "",
             location: "",
-            startAt: "2026-04-06T09:00:00.000Z",
-            endAt: "2026-04-06T10:00:00.000Z",
+            startAt: "2026-04-13T09:00:00.000Z",
+            endAt: "2026-04-13T10:00:00.000Z",
             timezone: "Europe/Zurich",
             isAllDay: false,
             availability: "busy",
@@ -1123,8 +1193,8 @@ describe("calendar routing surfaces", () => {
         title: "New title",
         description: "",
         location: "",
-        startAt: "2026-04-06T09:00:00.000Z",
-        endAt: "2026-04-06T10:00:00.000Z",
+        startAt: "2026-04-13T09:00:00.000Z",
+        endAt: "2026-04-13T10:00:00.000Z",
         timezone: "Europe/Zurich",
         isAllDay: false,
         availability: "busy",
@@ -1807,6 +1877,159 @@ describe("calendar routing surfaces", () => {
         authSessionId: "ms_session_1",
         selectedCalendarUrls: ["https://graph.microsoft.com/v1.0/me/calendars/AAMkAGI2TAAA="]
       });
+    });
+  });
+
+  it("guides the macOS local replacement flow and retries with replaceConnectionIds", async () => {
+    listCalendarConnectionsMock.mockResolvedValueOnce({
+      providers: [
+        {
+          provider: "google",
+          label: "Google Calendar",
+          supportsDedicatedForgeCalendar: true,
+          connectionHelp: "Use Google OAuth credentials."
+        },
+        {
+          provider: "macos_local",
+          label: "Calendars On This Mac",
+          supportsDedicatedForgeCalendar: true,
+          connectionHelp: "Use EventKit to access the calendars already configured on this Mac."
+        }
+      ],
+      connections: [
+        {
+          id: "conn_google_1",
+          provider: "google",
+          label: "Primary Google",
+          accountLabel: "Work",
+          status: "connected",
+          config: {
+            accountIdentityKey: "exchange:work"
+          },
+          forgeCalendarId: "calendar_google_forge",
+          lastSyncedAt: "2026-04-03T08:00:00.000Z",
+          lastSyncError: null,
+          createdAt: "2026-04-03T08:00:00.000Z",
+          updatedAt: "2026-04-03T08:00:00.000Z"
+        }
+      ]
+    });
+    getMacOSLocalCalendarStatusMock.mockResolvedValue({
+      status: "full_access"
+    });
+    discoverMacOSLocalCalendarSourcesMock.mockResolvedValue({
+      discovery: {
+        status: "full_access",
+        requestedAt: "2026-04-03T08:00:00.000Z",
+        sources: [
+          {
+            sourceId: "source_work",
+            sourceTitle: "Work",
+            sourceType: "exchange",
+            accountLabel: "Work",
+            accountIdentityKey: "exchange:work",
+            calendars: [
+              {
+                url: "forge-macos-local://calendar/source_work/cal_work/",
+                displayName: "Work",
+                description: "Main work calendar",
+                color: "#7dd3fc",
+                timezone: "Europe/Zurich",
+                isPrimary: true,
+                canWrite: true,
+                selectedByDefault: true,
+                isForgeCandidate: false,
+                sourceId: "source_work",
+                sourceTitle: "Work",
+                sourceType: "exchange",
+                calendarType: "exchange",
+                hostCalendarId: "cal_work",
+                canonicalKey: "exchange:work:work"
+              },
+              {
+                url: "forge-macos-local://calendar/source_work/cal_forge/",
+                displayName: "Forge",
+                description: "Forge write calendar",
+                color: "#22c55e",
+                timezone: "Europe/Zurich",
+                isPrimary: false,
+                canWrite: true,
+                selectedByDefault: false,
+                isForgeCandidate: true,
+                sourceId: "source_work",
+                sourceTitle: "Work",
+                sourceType: "exchange",
+                calendarType: "exchange",
+                hostCalendarId: "cal_forge",
+                canonicalKey: "exchange:work:forge"
+              }
+            ]
+          }
+        ]
+      }
+    });
+    createCalendarConnectionMock
+      .mockRejectedValueOnce(
+        new ForgeApiError({
+          status: 409,
+          code: "calendar_connection_overlap",
+          message:
+            "Forge already syncs Work through another calendar connection. Replace the older connection instead of keeping two copies of the same calendar account.",
+          requestPath: "/api/v1/calendar/connections",
+          response: {
+            overlappingConnectionIds: ["conn_google_1"]
+          }
+        })
+      )
+      .mockResolvedValueOnce({
+        connection: { id: "conn_macos_1" }
+      });
+
+    renderWithRouter(<SettingsCalendarPage />, "/settings/calendar");
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Open Mac calendar flow" })
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: "Continue" }));
+    expect(await screen.findByText("macOS Calendar access")).toBeInTheDocument();
+    expect(await screen.findByText("Host calendar sources")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+
+    expect(
+      await screen.findByText("Discovered through the host calendar store")
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+
+    expect(await screen.findByText("Selected host source:")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Connect provider" }));
+
+    await waitFor(() => {
+      expect(createCalendarConnectionMock).toHaveBeenCalledTimes(1);
+    });
+    expect(
+      await screen.findByText(/replace the older overlapping connection/i)
+    ).toBeInTheDocument();
+    expect(screen.getAllByText(/Primary Google/).length).toBeGreaterThan(0);
+    expect(
+      screen.getByRole("button", { name: "Replace and connect" })
+    ).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Replace and connect" }));
+
+    await waitFor(() => {
+      expect(createCalendarConnectionMock).toHaveBeenCalledTimes(2);
+    });
+    expect(createCalendarConnectionMock.mock.calls[1]?.[0]).toEqual({
+      provider: "macos_local",
+      label: "Calendars On This Mac",
+      sourceId: "source_work",
+      selectedCalendarUrls: [
+        "forge-macos-local://calendar/source_work/cal_work/"
+      ],
+      forgeCalendarUrl: "forge-macos-local://calendar/source_work/cal_forge/",
+      createForgeCalendar: false,
+      replaceConnectionIds: ["conn_google_1"]
     });
   });
 

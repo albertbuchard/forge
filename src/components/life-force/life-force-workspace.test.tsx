@@ -291,6 +291,84 @@ describe("Life Force workspace", () => {
     });
   });
 
+  it("shows a ghost handle that follows the pointer while dragging a turn point", async () => {
+    renderWithQueryClient(
+      <LifeForceOverviewWorkspace
+        selectedUserIds={["user_operator"]}
+        fallbackLifeForce={createLifeForcePayload()}
+      />
+    );
+
+    const chart = screen.getByRole("img", {
+      name: /life force capacity curve editor/i
+    });
+    Object.defineProperty(chart, "clientWidth", {
+      value: 720,
+      configurable: true
+    });
+    Object.defineProperty(chart, "getBoundingClientRect", {
+      value: () => ({
+        left: 0,
+        top: 0,
+        right: 720,
+        bottom: 288,
+        width: 720,
+        height: 288,
+        x: 0,
+        y: 0,
+        toJSON: () => ({})
+      }),
+      configurable: true
+    });
+
+    const turnPoint = screen.getByRole("button", {
+      name: /Turn point at 12:00 PM/i
+    });
+
+    fireEvent.pointerDown(turnPoint, {
+      pointerId: 7,
+      clientX: 360,
+      clientY: 132
+    });
+
+    const ghostHandle = await screen.findByTestId("life-force-ghost-handle");
+    expect(Number(ghostHandle.getAttribute("cx"))).toBeGreaterThan(0);
+    expect(Number(ghostHandle.getAttribute("cy"))).toBeGreaterThan(0);
+
+    fireEvent.pointerUp(window, {
+      pointerId: 7
+    });
+
+    await waitFor(() => {
+      expect(screen.queryByTestId("life-force-ghost-handle")).not.toBeInTheDocument();
+    });
+  });
+
+  it("keeps the rendered chart width equal to the measured editor width on narrow layouts", async () => {
+    renderWithQueryClient(
+      <LifeForceOverviewWorkspace
+        selectedUserIds={["user_operator"]}
+        fallbackLifeForce={createLifeForcePayload()}
+      />
+    );
+
+    const chart = screen.getByRole("img", {
+      name: /life force capacity curve editor/i
+    });
+    Object.defineProperty(chart, "clientWidth", {
+      value: 280,
+      configurable: true
+    });
+
+    fireEvent(window, new Event("resize"));
+
+    await waitFor(() => {
+      const svg = chart.querySelector("svg.recharts-surface");
+      expect(svg).not.toBeNull();
+      expect(svg?.getAttribute("width")).toBe("280");
+    });
+  });
+
   it("shows the compact today state and handles recovery signals", async () => {
     renderWithQueryClient(
       <LifeForceTodayCard

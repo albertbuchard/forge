@@ -155,10 +155,11 @@ function nextSortOrder(status: string): number {
 
 function normalizeCompletedAt(
   status: string,
-  existingCompletedAt: string | null
+  existingCompletedAt: string | null,
+  overrideCompletedAt?: string
 ): string | null {
   if (status === "done") {
-    return existingCompletedAt ?? new Date().toISOString();
+    return overrideCompletedAt ?? existingCompletedAt ?? new Date().toISOString();
   }
   return null;
 }
@@ -336,15 +337,44 @@ function updateTaskRecord(
   const nextSort =
     input.sortOrder ??
     (movedColumns ? nextSortOrder(nextStatus) : current.sortOrder);
+  const completionRequirement =
+    nextStatus === "done"
+      ? getTaskCompletionRequirement(current, current.userId ?? undefined)
+      : null;
+  const applyCompletionWorkLogAdjustment = (
+    desiredTodaySeconds: number,
+    currentTodayCreditedSeconds: number
+  ) => {
+    const deltaMinutes = Math.round(
+      (desiredTodaySeconds - currentTodayCreditedSeconds) / 60
+    );
+    if (deltaMinutes === 0) {
+      return;
+    }
+    const appliedDeltaMinutes = deltaMinutes;
+    createWorkAdjustment(
+      {
+        entityType: "task",
+        entityId: current.id,
+        deltaMinutes: appliedDeltaMinutes,
+        appliedDeltaMinutes,
+        note:
+          desiredTodaySeconds <= 0
+            ? "Completion log cleared for today"
+            : "Completion log adjusted for today"
+      },
+      {
+        actor: activity?.actor ?? null,
+        source: activity?.source ?? "ui"
+      }
+    );
+  };
   if (
     current.status !== "done" &&
     nextStatus === "done" &&
-    input.resolutionKind !== "split"
+    input.resolutionKind !== "split" &&
+    completionRequirement
   ) {
-    const completionRequirement = getTaskCompletionRequirement(
-      current,
-      current.userId ?? undefined
-    );
     if (
       input.enforceTodayWorkLog === true &&
       completionRequirement.requiresWorkLog &&
@@ -360,27 +390,29 @@ function updateTaskRecord(
         }
       );
     }
-    if ((input.completedTodayWorkSeconds ?? 0) > 0) {
-      const appliedDeltaMinutes = Math.max(
-        1,
-        Math.round((input.completedTodayWorkSeconds ?? 0) / 60)
-      );
-      createWorkAdjustment(
-        {
-          entityType: "task",
-          entityId: current.id,
-          deltaMinutes: appliedDeltaMinutes,
-          appliedDeltaMinutes,
-          note: "Completion log for today"
-        },
-        {
-          actor: activity?.actor ?? null,
-          source: activity?.source ?? "ui"
-        }
+    if (input.completedTodayWorkSeconds !== undefined) {
+      const desiredTodaySeconds = Math.max(0, input.completedTodayWorkSeconds);
+      applyCompletionWorkLogAdjustment(
+        desiredTodaySeconds,
+        completionRequirement.todayCreditedSeconds
       );
     }
+  } else if (
+    nextStatus === "done" &&
+    input.completedTodayWorkSeconds !== undefined &&
+    completionRequirement
+  ) {
+    const desiredTodaySeconds = Math.max(0, input.completedTodayWorkSeconds);
+    applyCompletionWorkLogAdjustment(
+      desiredTodaySeconds,
+      completionRequirement.todayCreditedSeconds
+    );
   }
-  const completedAt = normalizeCompletedAt(nextStatus, current.completedAt);
+  const completedAt = normalizeCompletedAt(
+    nextStatus,
+    current.completedAt,
+    input.completedAt
+  );
   const updatedAt = new Date().toISOString();
 
   getDatabase()

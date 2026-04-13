@@ -61,6 +61,8 @@ function calendarProviderLabel(provider: CalendarProvider) {
       return "Apple Calendar";
     case "microsoft":
       return "Exchange Online";
+    case "macos_local":
+      return "Calendars On This Mac";
     case "caldav":
     default:
       return "Custom CalDAV";
@@ -73,6 +75,8 @@ function providerActionLabel(provider: CalendarProvider) {
       return "Open Google guided flow";
     case "microsoft":
       return "Open Microsoft guided flow";
+    case "macos_local":
+      return "Open Mac calendar flow";
     default:
       return "Open guided setup";
   }
@@ -83,6 +87,8 @@ function providerConnectionIcon(provider: CalendarProvider) {
     case "google":
     case "microsoft":
       return KeyRound;
+    case "macos_local":
+      return CalendarDays;
     case "apple":
       return CalendarDays;
     case "caldav":
@@ -95,6 +101,8 @@ function providerSyncLabel(provider: CalendarProvider) {
   switch (provider) {
     case "microsoft":
       return "Read only";
+    case "macos_local":
+      return "Read + write";
     default:
       return "Read + write";
   }
@@ -106,6 +114,8 @@ function providerAccessLabel(provider: CalendarProvider) {
       return "Local PKCE";
     case "microsoft":
       return "Guided sign-in";
+    case "macos_local":
+      return "Host machine";
     case "apple":
       return "App password";
     case "caldav":
@@ -122,6 +132,8 @@ function providerConnectionSummary(provider: CalendarProvider) {
       return "Use your Apple ID email and app-specific password. Forge discovers your iCloud calendars before you choose what to mirror.";
     case "microsoft":
       return "Use the guided Microsoft sign-in flow. Forge mirrors the Exchange calendars you choose and keeps this provider read only.";
+    case "macos_local":
+      return "Use the calendars already configured in Calendar.app on this Mac. Forge requests Calendar access through macOS, discovers host calendars by account source, and replaces overlapping remote account connections instead of duplicating them.";
     case "caldav":
     default:
       return "Enter a CalDAV server URL and account credentials. Forge discovers the calendars on that account before you choose what to mirror.";
@@ -214,7 +226,11 @@ export function SettingsCalendarPage() {
       return;
     }
     setInitialProvider(
-      provider === "apple" || provider === "caldav" || provider === "google" || provider === "microsoft"
+      provider === "apple" ||
+        provider === "caldav" ||
+        provider === "google" ||
+        provider === "microsoft" ||
+        provider === "macos_local"
         ? provider
         : "google"
     );
@@ -785,6 +801,12 @@ export function SettingsCalendarPage() {
         initialStepId={dialogInitialStepId}
         googleSetup={googleSettings}
         microsoftSetup={microsoftSettings}
+        existingConnections={connections.map((connection) => ({
+          id: connection.id,
+          label: connection.label,
+          provider: connection.provider,
+          status: connection.status
+        }))}
         onCalendarSettingsChanged={invalidateCalendarSettings}
         pending={connectMutation.isPending}
         onSubmit={async (input) => {

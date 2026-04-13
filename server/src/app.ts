@@ -382,16 +382,20 @@ import {
 import { suggestTags } from "./services/tagging.js";
 import {
   CalendarConnectionConflictError,
+  CalendarConnectionOverlapError,
   completeGoogleCalendarOauth,
   completeMicrosoftCalendarOauth,
   createCalendarConnection,
+  discoverMacOSLocalCalendarSources,
   deleteCalendarEventProjection,
   discoverCalendarConnection,
   discoverExistingCalendarConnection,
   getGoogleCalendarOauthSession,
+  getMacOSLocalCalendarAccessStatus,
   getMicrosoftCalendarOauthSession,
   listConnectedCalendarConnections,
   removeCalendarConnection,
+  requestMacOSLocalCalendarAccess,
   pushCalendarEventUpdate,
   readCalendarOverview,
   syncCalendarConnection,
@@ -4456,17 +4460,18 @@ const AGENT_ONBOARDING_TOOL_INPUT_CATALOG = [
   {
     toolName: "forge_connect_calendar_provider",
     summary:
-      "Create a Forge calendar connection for Google, Apple, Exchange Online, or custom CalDAV.",
+      "Create a Forge calendar connection for Google, Apple, Exchange Online, calendars already configured on this Mac, or custom CalDAV.",
     whenToUse:
       "Use only when the operator explicitly wants Forge connected to an external calendar provider.",
     inputShape:
-      '{ provider: "google"|"apple"|"caldav"|"microsoft", label: string, username?: string, password?: string, serverUrl?: string, authSessionId?: string, selectedCalendarUrls: string[], forgeCalendarUrl?: string, createForgeCalendar?: boolean }',
+      '{ provider: "google"|"apple"|"caldav"|"microsoft"|"macos_local", label: string, username?: string, password?: string, serverUrl?: string, authSessionId?: string, sourceId?: string, selectedCalendarUrls: string[], forgeCalendarUrl?: string, createForgeCalendar?: boolean, replaceConnectionIds?: string[] }',
     requiredFields: ["provider", "label", "provider-specific credentials"],
     notes: [
       "Google now uses an interactive localhost Authorization Code + PKCE flow. The user signs in interactively on the same machine running Forge, Forge exchanges the authorization code on the backend, and forge_connect_calendar_provider should only be used after a completed Google authSessionId exists.",
       "Apple starts from https://caldav.icloud.com and autodiscovers the principal plus calendars after authentication.",
       "Exchange Online uses Microsoft Graph. In the current Forge implementation it is read-only: Forge mirrors the selected calendars but does not publish work blocks or timeboxes back to Microsoft.",
       "In the current self-hosted local runtime, Exchange Online now uses an interactive Microsoft public-client sign-in flow with PKCE after the operator has saved the Microsoft client ID, tenant, and redirect URI in Settings -> Calendar. Non-interactive callers should treat Microsoft connection setup as a Settings-owned operator action unless a completed authSessionId already exists.",
+      "macos_local uses EventKit to read and write the calendars already configured on the host Mac. Discovery is grouped by host calendar source, and Forge replaces overlapping remote connections for the same account instead of keeping duplicate copies.",
       "Custom CalDAV uses an account-level server URL, not a single calendar collection URL.",
       "Writable providers publish Forge work blocks and timeboxes to the dedicated Forge calendar for that connection."
     ],
@@ -9509,6 +9514,41 @@ export async function buildServer(
     providers: listCalendarProviderMetadata(),
     connections: listConnectedCalendarConnections()
   }));
+  app.get("/api/v1/calendar/macos-local/status", async (request) => {
+    requireScopedAccess(request.headers as Record<string, unknown>, ["write"], {
+      route: "/api/v1/calendar/macos-local/status"
+    });
+    return await getMacOSLocalCalendarAccessStatus();
+  });
+  app.post("/api/v1/calendar/macos-local/request-access", async (request) => {
+    requireScopedAccess(request.headers as Record<string, unknown>, ["write"], {
+      route: "/api/v1/calendar/macos-local/request-access"
+    });
+    return await requestMacOSLocalCalendarAccess();
+  });
+  app.get("/api/v1/calendar/macos-local/discovery", async (request) => {
+    const auth = requireScopedAccess(
+      request.headers as Record<string, unknown>,
+      ["write"],
+      { route: "/api/v1/calendar/macos-local/discovery" }
+    );
+    const discovery = await discoverMacOSLocalCalendarSources();
+    recordActivityEvent({
+      entityType: "calendar_connection",
+      entityId: "calendar_discovery_macos_local",
+      eventType: "calendar_connection_discovered",
+      title: "Calendar discovery completed for macOS local calendars",
+      description:
+        "Forge discovered the calendars already configured on this Mac before connection setup.",
+      actor: auth.actor ?? null,
+      source: auth.source,
+      metadata: {
+        provider: "macos_local",
+        sources: discovery.sources.length
+      }
+    });
+    return { discovery };
+  });
   app.post("/api/v1/calendar/oauth/google/start", async (request) => {
     requireScopedAccess(request.headers as Record<string, unknown>, ["write"], {
       route: "/api/v1/calendar/oauth/google/start"
@@ -10573,6 +10613,14 @@ export async function buildServer(
           existingConnectionId: error.connectionId
         };
       }
+      if (error instanceof CalendarConnectionOverlapError) {
+        reply.code(409);
+        return {
+          code: "calendar_connection_overlap",
+          error: error.message,
+          overlappingConnectionIds: error.connectionIds
+        };
+      }
       throw error;
     }
   });
@@ -10624,20 +10672,34 @@ export async function buildServer(
       { route: "/api/v1/calendar/connections/:id/sync" }
     );
     const { id } = request.params as { id: string };
-    const connection = await syncCalendarConnection(
-      id,
-      managers.secrets,
-      toActivityContext(auth)
-    );
-    if (!connection) {
-      reply.code(404);
-      return { error: "Calendar connection not found" };
+    try {
+      const connection = await syncCalendarConnection(
+        id,
+        managers.secrets,
+        toActivityContext(auth)
+      );
+      if (!connection) {
+        reply.code(404);
+        return { error: "Calendar connection not found" };
+      }
+      return {
+        connection: listConnectedCalendarConnections().find(
+          (entry) => entry.id === id
+        )
+      };
+    } catch (error) {
+      if (
+        error instanceof Error &&
+        error.message.includes("replaced by a newer canonical connection")
+      ) {
+        reply.code(409);
+        return {
+          code: "calendar_connection_superseded",
+          error: error.message
+        };
+      }
+      throw error;
     }
-    return {
-      connection: listConnectedCalendarConnections().find(
-        (entry) => entry.id === id
-      )
-    };
   });
   app.delete("/api/v1/calendar/connections/:id", async (request, reply) => {
     const auth = requireScopedAccess(

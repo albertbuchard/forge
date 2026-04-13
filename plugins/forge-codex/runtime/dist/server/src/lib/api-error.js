@@ -3,6 +3,7 @@ export class ForgeApiError extends Error {
     code;
     details;
     requestPath;
+    response;
     constructor(input) {
         super(input.message);
         this.name = "ForgeApiError";
@@ -10,6 +11,7 @@ export class ForgeApiError extends Error {
         this.code = input.code;
         this.details = input.details ?? [];
         this.requestPath = input.requestPath;
+        this.response = input.response ?? null;
     }
 }
 export function describeApiError(error) {

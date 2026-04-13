@@ -9,10 +9,26 @@ const GUIDE_SECTIONS = [
       "Forge mirrors provider events into Forge. Writable providers can also publish work blocks plus owned timeboxes into a dedicated calendar named Forge, while Exchange Online stays read-only for now.",
     bullets: [
       "Google uses a localhost Authorization Code + PKCE flow. Each user signs in with their own Google account on the same machine running Forge, while Forge stores that user's refresh token on the server for background sync.",
+      "Calendars On This Mac uses EventKit to access the calendars already configured in Calendar.app on the host machine, including iCloud, Google, Exchange, and other accounts the Mac is already syncing.",
       "Apple Calendar starts from https://caldav.icloud.com and autodiscovers the real principal plus calendar collections for you.",
       "Exchange Online uses Microsoft Graph with a guided local public-client Microsoft sign-in flow and mirrors the calendars you select into Forge.",
       "Custom CalDAV uses one account-level base URL, then Forge discovers the writable calendars before you choose what to mirror.",
       "Read-only .ics feeds are not enough for writable-provider flows because Forge needs write access for work blocks and task timeboxes."
+    ],
+    icon: Link2,
+    links: []
+  },
+  {
+    title: "Calendars On This Mac setup",
+    description:
+      "Use this path when the Mac already has the needed accounts connected in Calendar.app and Forge should sync them through EventKit instead of reconnecting each provider manually.",
+    bullets: [
+      "Open Forge on the same Mac whose Calendar.app already contains the accounts you want to mirror.",
+      "Choose Calendars On This Mac in Forge settings.",
+      "Grant Calendar full access when macOS prompts for it, or re-enable it later in System Settings -> Privacy & Security -> Calendars.",
+      "Let Forge discover the available host calendar sources and pick the source account you want to sync.",
+      "Choose which calendars Forge should mirror and select or create a dedicated Forge write calendar for work blocks and timeboxes.",
+      "If Forge already syncs the same account through Google, Apple, CalDAV, or Microsoft, the macOS-local connection replaces the older remote one instead of keeping two visible copies."
     ],
     icon: Link2,
     links: []
@@ -119,6 +135,8 @@ function getVisibleSections(provider?: CalendarProvider) {
   const providerTitle =
     provider === "google"
       ? "Google Calendar setup"
+      : provider === "macos_local"
+        ? "Calendars On This Mac setup"
       : provider === "apple"
         ? "Apple Calendar setup"
         : provider === "microsoft"

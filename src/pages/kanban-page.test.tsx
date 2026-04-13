@@ -459,7 +459,7 @@ describe("KanbanPage split flow", () => {
         target: { value: "Hermes" }
       }
     );
-    fireEvent.click(screen.getByRole("button", { name: /Hermes Concierge/i }));
+    fireEvent.click(screen.getByRole("option", { name: /Hermes Concierge/i }));
 
     await waitFor(() => {
       expect(screen.getByText("Execution board 1")).toBeInTheDocument();
@@ -503,7 +503,7 @@ describe("KanbanPage split flow", () => {
         target: { value: "Bo" }
       }
     );
-    fireEvent.click(screen.getByRole("button", { name: /Bots/i }));
+    fireEvent.click(screen.getByRole("option", { name: /Bots/i }));
 
     await waitFor(() => {
       expect(screen.getByText("Execution board 1")).toBeInTheDocument();
@@ -518,7 +518,7 @@ describe("KanbanPage split flow", () => {
         target: { value: "Albert" }
       }
     );
-    fireEvent.click(screen.getByRole("button", { name: /Albert/i }));
+    fireEvent.click(screen.getByRole("option", { name: /Albert/i }));
 
     await waitFor(() => {
       expect(screen.getByText("Execution board 2")).toBeInTheDocument();

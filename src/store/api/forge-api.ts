@@ -185,6 +185,7 @@ export const forgeApi = createApi({
       {
         taskId: string;
         status: "backlog" | "focus" | "in_progress" | "blocked" | "done";
+        completedAt?: string;
         enforceTodayWorkLog?: boolean;
         completedTodayWorkSeconds?: number;
       }
@@ -192,12 +193,14 @@ export const forgeApi = createApi({
       queryFn: ({
         taskId,
         status,
+        completedAt,
         enforceTodayWorkLog,
         completedTodayWorkSeconds
       }) =>
         resolveResult(() =>
           patchTask(taskId, {
             status,
+            completedAt,
             enforceTodayWorkLog,
             completedTodayWorkSeconds
           })

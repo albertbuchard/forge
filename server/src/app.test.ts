@@ -744,6 +744,116 @@ test("task creation and column movement persist through the API", async () => {
   }
 });
 
+test("task completion API supports retroactive completion without burning today's AP", async () => {
+  const rootDir = await mkdtemp(
+    path.join(os.tmpdir(), "forge-task-retro-complete-")
+  );
+  const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
+
+  try {
+    const operatorCookie = await issueOperatorSessionCookie(app);
+    const dashboard = await app.inject({
+      method: "GET",
+      url: "/api/dashboard"
+    });
+    const dashboardPayload = dashboard.json() as {
+      goals: Array<{ id: string }>;
+    };
+    const goalId = dashboardPayload.goals[0]!.id;
+    const created = await app.inject({
+      method: "POST",
+      url: "/api/tasks",
+      headers: {
+        cookie: operatorCookie
+      },
+      payload: {
+        title: "Retroactive closeout",
+        description: "Backdated completion should not burn today's AP.",
+        status: "focus",
+        priority: "high",
+        owner: "Albert",
+        goalId,
+        dueDate: "2026-04-15",
+        effort: "deep",
+        energy: "high",
+        points: 60
+      }
+    });
+
+    assert.equal(created.statusCode, 201);
+    const createdTask = (created.json() as { task: { id: string } }).task;
+
+    const addWork = await app.inject({
+      method: "POST",
+      url: "/api/v1/work-adjustments",
+      headers: {
+        cookie: operatorCookie
+      },
+      payload: {
+        entityType: "task",
+        entityId: createdTask.id,
+        deltaMinutes: 60,
+        note: "Logged today before realizing the work finished yesterday."
+      }
+    });
+
+    assert.equal(addWork.statusCode, 201);
+
+    const initialCompletion = await app.inject({
+      method: "PATCH",
+      url: `/api/v1/tasks/${createdTask.id}`,
+      headers: {
+        cookie: operatorCookie
+      },
+      payload: {
+        status: "done"
+      }
+    });
+
+    assert.equal(initialCompletion.statusCode, 200);
+
+    const retroCompletedAt = "2026-04-10T18:30:00.000Z";
+    const moved = await app.inject({
+      method: "PATCH",
+      url: `/api/v1/tasks/${createdTask.id}`,
+      headers: {
+        cookie: operatorCookie
+      },
+      payload: {
+        status: "done",
+        completedAt: retroCompletedAt,
+        completedTodayWorkSeconds: 0
+      }
+    });
+
+    assert.equal(moved.statusCode, 200);
+    const movedTask = (
+      moved.json() as { task: { status: string; completedAt: string | null } }
+    ).task;
+    assert.equal(movedTask.status, "done");
+    assert.equal(movedTask.completedAt, retroCompletedAt);
+
+    const taskContext = await app.inject({
+      method: "GET",
+      url: `/api/v1/tasks/${createdTask.id}/context`
+    });
+
+    assert.equal(taskContext.statusCode, 200);
+    const taskBody = taskContext.json() as {
+      task: {
+        time: { totalCreditedSeconds: number };
+        actionPointSummary: { spentTodayAp: number };
+      };
+    };
+    assert.equal(taskBody.task.time.totalCreditedSeconds, 0);
+    assert.equal(taskBody.task.actionPointSummary.spentTodayAp, 0);
+  } finally {
+    await app.close();
+    closeDatabase();
+    await rm(rootDir, { recursive: true, force: true });
+  }
+});
+
 test("knowledge graph routes return a unified graph and focused neighborhood", async () => {
   const rootDir = await mkdtemp(
     path.join(os.tmpdir(), "forge-knowledge-graph-")
@@ -4930,7 +5040,7 @@ test("calendar resource listing normalizes blank timezones to UTC", async () => 
   }
 });
 
-test("calendar connection metadata exposes Exchange Online as read only", async () => {
+test("calendar connection metadata exposes Exchange Online as read only and macOS local as writable", async () => {
   const rootDir = await mkdtemp(
     path.join(os.tmpdir(), "forge-calendar-providers-")
   );
@@ -4961,12 +5071,346 @@ test("calendar connection metadata exposes Exchange Online as read only", async 
       exchangeProvider?.connectionHelp ?? "",
       /microsoft client id|sign-in flow/i
     );
+    const macosProvider = body.providers.find(
+      (provider) => provider.provider === "macos_local"
+    );
+    assert.ok(macosProvider);
+    assert.equal(macosProvider?.label, "Calendars On This Mac");
+    assert.equal(macosProvider?.supportsDedicatedForgeCalendar, true);
+    assert.match(
+      macosProvider?.connectionHelp ?? "",
+      /eventkit|configured on this mac|duplicate/i
+    );
     assert.deepEqual(
       body.providers.map((provider) => provider.provider),
-      ["google", "apple", "microsoft", "caldav"]
+      ["google", "apple", "microsoft", "caldav", "macos_local"]
     );
   } finally {
     await app.close();
+    await rm(rootDir, { recursive: true, force: true });
+  }
+});
+
+test("macOS local connection replacement rehomes Forge-owned references and blocks superseded sync", async () => {
+  const previousMock = process.env.FORGE_MACOS_LOCAL_MOCK_JSON;
+  process.env.FORGE_MACOS_LOCAL_MOCK_JSON = JSON.stringify({
+    status: "full_access",
+    granted: true,
+    sources: [
+      {
+        sourceId: "source_work",
+        sourceTitle: "Work",
+        sourceType: "exchange",
+        accountLabel: "Work",
+        calendars: [
+          {
+            sourceId: "source_work",
+            sourceTitle: "Work",
+            sourceType: "exchange",
+            calendarId: "cal_work",
+            title: "Work",
+            description: "Main work calendar",
+            color: "#7dd3fc",
+            timezone: "Europe/Zurich",
+            calendarType: "exchange",
+            isPrimary: true,
+            canWrite: true
+          },
+          {
+            sourceId: "source_work",
+            sourceTitle: "Work",
+            sourceType: "exchange",
+            calendarId: "cal_forge",
+            title: "Forge",
+            description: "Forge write calendar",
+            color: "#22c55e",
+            timezone: "Europe/Zurich",
+            calendarType: "exchange",
+            isPrimary: false,
+            canWrite: true
+          }
+        ]
+      }
+    ],
+    events: []
+  });
+
+  const rootDir = await mkdtemp(
+    path.join(os.tmpdir(), "forge-macos-local-replace-")
+  );
+  const app = await buildServer({ dataRoot: rootDir, seedDemoData: false });
+
+  try {
+    const operatorCookie = await issueOperatorSessionCookie(app);
+    const database = getDatabase();
+    const now = "2026-04-03T00:00:00.000Z";
+
+    database
+      .prepare(
+        `INSERT INTO stored_secrets (id, cipher_text, description, created_at, updated_at)
+         VALUES (?, ?, '', ?, ?)`
+      )
+      .run("secret_calendar_old", "cipher", now, now);
+
+    database
+      .prepare(
+        `INSERT INTO calendar_connections (
+           id, provider, label, account_label, status, config_json, credentials_secret_id, forge_calendar_id, last_synced_at, last_sync_error, created_at, updated_at
+         )
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?)`
+      )
+      .run(
+        "conn_google_old",
+        "google",
+        "Primary Google",
+        "Work",
+        "connected",
+        JSON.stringify({
+          accountIdentityKey: "exchange:work",
+          forgeCalendarUrl: "https://google.example/forge/"
+        }),
+        "secret_calendar_old",
+        null,
+        now,
+        now,
+        now
+      );
+
+    database
+      .prepare(
+        `INSERT INTO tasks (
+           id, title, description, status, priority, owner, goal_id, project_id, due_date, effort, energy, points, sort_order, completed_at, created_at, updated_at
+         )
+         VALUES (?, ?, '', 'todo', 'medium', 'Albert', NULL, NULL, NULL, 'medium', 'medium', 10, 0, NULL, ?, ?)`
+      )
+      .run("task_replace_test", "Replacement test task", now, now);
+
+    database
+      .prepare(
+        `INSERT INTO calendar_calendars (
+           id, connection_id, remote_id, title, description, color, timezone, is_primary, can_write, selected_for_sync, forge_managed,
+           source_id, source_title, source_type, calendar_type, host_calendar_id, canonical_key, last_synced_at, created_at, updated_at
+         )
+         VALUES (?, ?, ?, ?, '', ?, ?, 0, 1, 1, 0, NULL, NULL, NULL, NULL, NULL, ?, ?, ?, ?)`
+      )
+      .run(
+        "calendar_old_work",
+        "conn_google_old",
+        "https://google.example/work/",
+        "Work",
+        "#7dd3fc",
+        "Europe/Zurich",
+        "exchange:work:work",
+        now,
+        now,
+        now
+      );
+
+    database
+      .prepare(
+        `INSERT INTO calendar_calendars (
+           id, connection_id, remote_id, title, description, color, timezone, is_primary, can_write, selected_for_sync, forge_managed,
+           source_id, source_title, source_type, calendar_type, host_calendar_id, canonical_key, last_synced_at, created_at, updated_at
+         )
+         VALUES (?, ?, ?, ?, '', ?, ?, 0, 1, 0, 1, NULL, NULL, NULL, NULL, NULL, ?, ?, ?, ?)`
+      )
+      .run(
+        "calendar_old_forge",
+        "conn_google_old",
+        "https://google.example/forge/",
+        "Forge",
+        "#22c55e",
+        "Europe/Zurich",
+        "exchange:work:forge",
+        now,
+        now,
+        now
+      );
+
+    database
+      .prepare(
+        `INSERT INTO forge_events (
+           id, preferred_connection_id, preferred_calendar_id, ownership, origin_type, status, title, description, location,
+           place_label, place_address, place_timezone, place_latitude, place_longitude, place_source, place_external_id,
+           start_at, end_at, timezone, is_all_day, availability, event_type, categories_json, deleted_at, created_at, updated_at
+         )
+         VALUES (?, ?, ?, 'forge', 'native', 'confirmed', ?, '', '', '', '', '', NULL, NULL, '', '', ?, ?, ?, 0, 'busy', 'general', '[]', NULL, ?, ?)`
+      )
+      .run(
+        "calevent_replace_test",
+        "conn_google_old",
+        "calendar_old_forge",
+        "Focus block",
+        "2026-04-04T09:00:00.000Z",
+        "2026-04-04T10:00:00.000Z",
+        "Europe/Zurich",
+        now,
+        now
+      );
+
+    database
+      .prepare(
+        `INSERT INTO forge_event_sources (
+           id, forge_event_id, provider, connection_id, calendar_id, remote_calendar_id, remote_event_id, remote_uid,
+           recurrence_instance_id, is_master_recurring, remote_href, remote_etag, sync_state, raw_payload_json, last_synced_at, created_at, updated_at
+         )
+         VALUES (?, ?, 'google', ?, ?, ?, ?, ?, NULL, 0, NULL, NULL, 'synced', '{}', ?, ?, ?)`
+      )
+      .run(
+        "evsrc_replace_test",
+        "calevent_replace_test",
+        "conn_google_old",
+        "calendar_old_forge",
+        "https://google.example/forge/",
+        "remote_old_event",
+        "remote_old_event",
+        now,
+        now,
+        now
+      );
+
+    database
+      .prepare(
+        `INSERT INTO task_timeboxes (
+           id, task_id, project_id, connection_id, calendar_id, remote_event_id, linked_task_run_id, status, source, title,
+           starts_at, ends_at, override_reason, created_at, updated_at
+         )
+         VALUES (?, ?, NULL, ?, ?, ?, NULL, 'planned', 'manual', ?, ?, ?, NULL, ?, ?)`
+      )
+      .run(
+        "timebox_replace_test",
+        "task_replace_test",
+        "conn_google_old",
+        "calendar_old_forge",
+        "remote_old_timebox",
+        "Focus block",
+        "2026-04-04T09:00:00.000Z",
+        "2026-04-04T10:00:00.000Z",
+        now,
+        now
+      );
+
+    const createResponse = await app.inject({
+      method: "POST",
+      url: "/api/v1/calendar/connections",
+      headers: {
+        cookie: operatorCookie,
+        host: "127.0.0.1:4317"
+      },
+      payload: {
+        provider: "macos_local",
+        label: "Calendars On This Mac",
+        sourceId: "source_work",
+        selectedCalendarUrls: [
+          "forge-macos-local://calendar/source_work/cal_work/"
+        ],
+        forgeCalendarUrl: "forge-macos-local://calendar/source_work/cal_forge/",
+        createForgeCalendar: false,
+        replaceConnectionIds: ["conn_google_old"]
+      }
+    });
+
+    assert.equal(createResponse.statusCode, 201);
+    const createdConnection = (
+      createResponse.json() as { connection: { id: string; provider: string } }
+    ).connection;
+    assert.equal(createdConnection.provider, "macos_local");
+
+    const oldConnectionRow = database
+      .prepare(
+        `SELECT config_json
+         FROM calendar_connections
+         WHERE id = ?`
+      )
+      .get("conn_google_old") as { config_json: string };
+    const oldConfig = JSON.parse(oldConnectionRow.config_json) as Record<string, unknown>;
+    assert.equal(oldConfig.replacedByConnectionId, createdConnection.id);
+
+    const newForgeCalendar = database
+      .prepare(
+        `SELECT id
+         FROM calendar_calendars
+         WHERE connection_id = ? AND forge_managed = 1
+         LIMIT 1`
+      )
+      .get(createdConnection.id) as { id: string };
+    assert.ok(newForgeCalendar);
+
+    const rehomedEvent = database
+      .prepare(
+        `SELECT preferred_connection_id, preferred_calendar_id
+         FROM forge_events
+         WHERE id = ?`
+      )
+      .get("calevent_replace_test") as {
+      preferred_connection_id: string | null;
+      preferred_calendar_id: string | null;
+    };
+    assert.equal(rehomedEvent.preferred_connection_id, createdConnection.id);
+    assert.equal(rehomedEvent.preferred_calendar_id, newForgeCalendar.id);
+
+    const oldForgeSources = database
+      .prepare(
+        `SELECT COUNT(*) as count
+         FROM forge_event_sources
+         WHERE connection_id = ? AND forge_event_id = ?`
+      )
+      .get("conn_google_old", "calevent_replace_test") as { count: number };
+    assert.equal(oldForgeSources.count, 0);
+
+    const rehomedTimebox = database
+      .prepare(
+        `SELECT connection_id, calendar_id, remote_event_id
+         FROM task_timeboxes
+         WHERE id = ?`
+      )
+      .get("timebox_replace_test") as {
+      connection_id: string | null;
+      calendar_id: string | null;
+      remote_event_id: string | null;
+    };
+    assert.equal(rehomedTimebox.connection_id, createdConnection.id);
+    assert.equal(rehomedTimebox.calendar_id, newForgeCalendar.id);
+    assert.equal(rehomedTimebox.remote_event_id, null);
+
+    const listResponse = await app.inject({
+      method: "GET",
+      url: "/api/v1/calendar/connections"
+    });
+    assert.equal(listResponse.statusCode, 200);
+    const listedConnections = (
+      listResponse.json() as { connections: Array<{ id: string }> }
+    ).connections;
+    assert.equal(
+      listedConnections.some((connection) => connection.id === "conn_google_old"),
+      false
+    );
+    assert.equal(
+      listedConnections.some((connection) => connection.id === createdConnection.id),
+      true
+    );
+
+    const syncOldResponse = await app.inject({
+      method: "POST",
+      url: "/api/v1/calendar/connections/conn_google_old/sync",
+      headers: {
+        cookie: operatorCookie,
+        host: "127.0.0.1:4317"
+      }
+    });
+    assert.equal(syncOldResponse.statusCode, 409);
+    assert.equal(
+      (syncOldResponse.json() as { code: string }).code,
+      "calendar_connection_superseded"
+    );
+  } finally {
+    if (previousMock === undefined) {
+      delete process.env.FORGE_MACOS_LOCAL_MOCK_JSON;
+    } else {
+      process.env.FORGE_MACOS_LOCAL_MOCK_JSON = previousMock;
+    }
+    await app.close();
+    closeDatabase();
     await rm(rootDir, { recursive: true, force: true });
   }
 });

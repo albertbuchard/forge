@@ -3,6 +3,20 @@ import { CryptoProvider, PublicClientApplication } from "@azure/msal-node";
 import ical from "node-ical";
 import { logForgeDebug } from "../debug.js";
 import {
+  buildMacOSLocalCalendarUrl,
+  deleteMacOSLocalEvent,
+  discoverMacOSLocalCalendars,
+  ensureMacOSLocalForgeCalendar,
+  getMacOSCalendarAuthStatus,
+  parseMacOSLocalCalendarUrl,
+  requestMacOSCalendarAccess,
+  upsertMacOSLocalEvent,
+  listMacOSLocalEvents,
+  type MacOSCalendarAccessStatus,
+  type MacOSLocalCalendarRecord,
+  type MacOSLocalEventRecord
+} from "./macos-calendar-helper.js";
+import {
   getGoogleCalendarOauthCallbackPath,
   isGoogleCalendarOriginAllowed,
   isGoogleCalendarLoopbackOrigin,
@@ -28,6 +42,7 @@ import {
   getCalendarEventStorageRecord,
   getPrimaryCalendarEventSource,
   getCalendarOverview,
+  isSupersededCalendarConnection,
   listCalendarConnections,
   listCalendarEventSources,
   listCalendars,
@@ -37,6 +52,7 @@ import {
   registerCalendarEventSourceProjection,
   recordCalendarActivity,
   storeEncryptedSecret,
+  rehomeCalendarConnectionReferences,
   updateCalendarEvent,
   updateCalendarConnectionRecord,
   updateTaskTimebox,
@@ -52,6 +68,7 @@ import type {
   CalendarDiscoveryPayload,
   GoogleCalendarOauthSession,
   MicrosoftCalendarOauthSession,
+  MacOSLocalCalendarDiscoveryPayload,
   CalendarOverviewPayload,
   CreateCalendarConnectionInput,
   DiscoverCalendarConnectionInput,
@@ -111,16 +128,28 @@ type MicrosoftCredentials = {
   selectedCalendarUrls: string[];
 };
 
+type MacOSLocalCredentials = {
+  provider: "macos_local";
+  sourceId: string;
+  sourceTitle: string;
+  sourceType: string;
+  accountIdentityKey: string;
+  selectedCalendarUrls: string[];
+  forgeCalendarUrl: string;
+};
+
 type StoredCalendarCredentials =
   | LegacyGoogleCredentials
   | AppleCredentials
   | CustomCaldavCredentials
-  | MicrosoftCredentials;
+  | MicrosoftCredentials
+  | MacOSLocalCredentials;
 
 type WritableCalendarCredentials =
   | GoogleCredentials
   | AppleCredentials
-  | CustomCaldavCredentials;
+  | CustomCaldavCredentials
+  | MacOSLocalCredentials;
 
 type DiscoverableCredentials =
   | Omit<GoogleCredentials, "selectedCalendarUrls" | "forgeCalendarUrl">
@@ -220,7 +249,25 @@ type MicrosoftProviderState = {
   credentials: MicrosoftCredentials;
 };
 
-type ProviderState = DavProviderState | MicrosoftProviderState;
+type MacOSLocalProviderCalendar = MacOSLocalCalendarRecord & {
+  url: string;
+};
+
+type MacOSLocalProviderState = {
+  mode: "macos_local";
+  accountLabel: string;
+  serverUrl: string;
+  principalUrl: null;
+  homeUrl: null;
+  sourceId: string;
+  sourceTitle: string;
+  sourceType: string;
+  accountIdentityKey: string;
+  calendars: MacOSLocalProviderCalendar[];
+  credentials: MacOSLocalCredentials;
+};
+
+type ProviderState = DavProviderState | MicrosoftProviderState | MacOSLocalProviderState;
 
 function isWritableCalendarCredentials(
   credentials: StoredCalendarCredentials
@@ -314,6 +361,16 @@ export class CalendarConnectionConflictError extends Error {
     super(message);
     this.name = "CalendarConnectionConflictError";
     this.connectionId = connectionId;
+  }
+}
+
+export class CalendarConnectionOverlapError extends Error {
+  connectionIds: string[];
+
+  constructor(message: string, connectionIds: string[]) {
+    super(message);
+    this.name = "CalendarConnectionOverlapError";
+    this.connectionIds = connectionIds;
   }
 }
 
@@ -738,6 +795,18 @@ function normalizeUrl(value: string) {
 
 function normalizeAccountIdentity(value: string) {
   return value.trim().toLowerCase();
+}
+
+function normalizeCalendarKey(value: string) {
+  return value.trim().replace(/\s+/g, " ").toLowerCase();
+}
+
+function accountIdentityKeyForMacOSSource(input: {
+  sourceTitle: string;
+  sourceType: string;
+}) {
+  const normalizedTitle = normalizeAccountIdentity(input.sourceTitle);
+  return `${input.sourceType}:${normalizedTitle}`;
 }
 
 function buildGoogleCalendarCollectionUrl(calendarId: string) {
@@ -1200,6 +1269,35 @@ function mapMicrosoftEventToSyncInput(
 async function createProviderClient(
   credentials: DiscoverableCredentials | StoredCalendarCredentials
 ): Promise<ProviderState> {
+  if (credentials.provider === "macos_local") {
+    const discovery = await discoverMacOSLocalCalendars();
+    const source = discovery.sources.find(
+      (entry) => entry.sourceId === credentials.sourceId
+    );
+    if (!source) {
+      throw new Error(
+        "Forge could not find that macOS calendar source anymore. Reconnect it from Settings -> Calendar."
+      );
+    }
+
+    return {
+      mode: "macos_local",
+      accountLabel: source.accountLabel,
+      serverUrl: "forge-macos-local://eventkit/",
+      principalUrl: null,
+      homeUrl: null,
+      sourceId: source.sourceId,
+      sourceTitle: source.sourceTitle,
+      sourceType: source.sourceType,
+      accountIdentityKey: credentials.accountIdentityKey,
+      calendars: source.calendars.map((calendar) => ({
+        ...calendar,
+        url: buildMacOSLocalCalendarUrl(source.sourceId, calendar.calendarId)
+      })),
+      credentials
+    };
+  }
+
   if (credentials.provider === "microsoft") {
     const client = createMicrosoftPublicClient({
       clientId: credentials.clientId,
@@ -1346,6 +1444,33 @@ function mapDiscoveryPayload(
   provider: CalendarConnection["provider"],
   state: ProviderState
 ): CalendarDiscoveryPayload {
+  if (state.mode === "macos_local") {
+    return {
+      provider,
+      accountLabel: state.accountLabel,
+      serverUrl: state.serverUrl,
+      principalUrl: null,
+      homeUrl: null,
+      calendars: state.calendars.map((calendar) => ({
+        url: calendar.url,
+        displayName: safeDisplayName(calendar.title, "Calendar"),
+        description: calendar.description,
+        color: calendar.color,
+        timezone: normalizeTimezone(calendar.timezone),
+        isPrimary: calendar.isPrimary,
+        canWrite: calendar.canWrite,
+        selectedByDefault: !isForgeName(calendar.title),
+        isForgeCandidate: isForgeName(calendar.title),
+        sourceId: calendar.sourceId,
+        sourceTitle: calendar.sourceTitle,
+        sourceType: calendar.sourceType,
+        calendarType: calendar.calendarType,
+        hostCalendarId: calendar.calendarId,
+        canonicalKey: `${state.accountIdentityKey}:${normalizeCalendarKey(calendar.title)}`
+      }))
+    };
+  }
+
   if (state.mode === "microsoft") {
     return {
       provider,
@@ -1365,7 +1490,13 @@ function mapDiscoveryPayload(
         isPrimary: state.primaryCalendarId === calendar.id,
         canWrite: false,
         selectedByDefault: true,
-        isForgeCandidate: false
+        isForgeCandidate: false,
+        sourceId: null,
+        sourceTitle: null,
+        sourceType: null,
+        calendarType: null,
+        hostCalendarId: null,
+        canonicalKey: null
       }))
     };
   }
@@ -1388,7 +1519,13 @@ function mapDiscoveryPayload(
         isPrimary: false,
         canWrite: canWriteDavCalendar(calendar),
         selectedByDefault: !isForgeName(displayName),
-        isForgeCandidate: isForgeName(displayName)
+        isForgeCandidate: isForgeName(displayName),
+        sourceId: null,
+        sourceTitle: null,
+        sourceType: null,
+        calendarType: null,
+        hostCalendarId: null,
+        canonicalKey: null
       };
     })
   };
@@ -1976,9 +2113,40 @@ function mapDavObjectToEvents(
 }
 
 function mapCalendarRecord(
-  calendar: DAVCalendar | MicrosoftGraphCalendar,
-  options: { forgeCalendarUrl?: string | null; primaryCalendarId?: string | null }
+  calendar: DAVCalendar | MicrosoftGraphCalendar | MacOSLocalProviderCalendar,
+  options: {
+    forgeCalendarUrl?: string | null;
+    primaryCalendarId?: string | null;
+    accountIdentityKey?: string | null;
+  }
 ): CalendarSyncCalendarInput {
+  if ("calendarId" in calendar) {
+    const forgeCalendarUrl = options.forgeCalendarUrl
+      ? normalizeUrl(options.forgeCalendarUrl)
+      : null;
+    return {
+      remoteId: normalizeUrl(calendar.url),
+      title: safeDisplayName(calendar.title, "Calendar"),
+      description: calendar.description,
+      color: calendar.color,
+      timezone: normalizeTimezone(calendar.timezone),
+      isPrimary: calendar.isPrimary,
+      canWrite: calendar.canWrite,
+      selectedForSync: forgeCalendarUrl
+        ? normalizeUrl(calendar.url) !== forgeCalendarUrl
+        : true,
+      forgeManaged: forgeCalendarUrl
+        ? normalizeUrl(calendar.url) === forgeCalendarUrl
+        : false,
+      sourceId: calendar.sourceId,
+      sourceTitle: calendar.sourceTitle,
+      sourceType: calendar.sourceType,
+      calendarType: calendar.calendarType,
+      hostCalendarId: calendar.calendarId,
+      canonicalKey: `${options.accountIdentityKey ?? ""}:${normalizeCalendarKey(calendar.title)}`
+    };
+  }
+
   if ("url" in calendar) {
     const forgeCalendarUrl = options.forgeCalendarUrl ? normalizeUrl(options.forgeCalendarUrl) : null;
     const title = safeDisplayName(calendar.displayName, "Calendar");
@@ -1993,7 +2161,13 @@ function mapCalendarRecord(
       isPrimary: false,
       canWrite: canWriteDavCalendar(calendar),
       selectedForSync: forgeCalendarUrl ? remoteUrl !== forgeCalendarUrl : true,
-      forgeManaged: forgeCalendarUrl ? remoteUrl === forgeCalendarUrl : false
+      forgeManaged: forgeCalendarUrl ? remoteUrl === forgeCalendarUrl : false,
+      sourceId: null,
+      sourceTitle: null,
+      sourceType: null,
+      calendarType: null,
+      hostCalendarId: null,
+      canonicalKey: remoteUrl
     };
   }
 
@@ -2009,7 +2183,43 @@ function mapCalendarRecord(
     isPrimary: options.primaryCalendarId === calendar.id,
     canWrite: false,
     selectedForSync: true,
-    forgeManaged: false
+    forgeManaged: false,
+    sourceId: null,
+    sourceTitle: null,
+    sourceType: null,
+    calendarType: null,
+    hostCalendarId: null,
+    canonicalKey: microsoftCalendarUrl(calendar.id)
+  };
+}
+
+function mapMacOSLocalEventToSyncInput(
+  calendarUrl: string,
+  event: MacOSLocalEventRecord,
+  ownership: "external" | "forge"
+): CalendarSyncEventInput {
+  return {
+    calendarRemoteId: normalizeUrl(calendarUrl),
+    remoteId: event.eventId,
+    remoteHref: null,
+    remoteEtag: null,
+    ownership,
+    status: "confirmed",
+    title: event.title,
+    description: event.notes,
+    location: event.location,
+    startAt: event.startAt,
+    endAt: event.endAt,
+    isAllDay: event.allDay,
+    availability: event.availability,
+    eventType: "",
+    categories: [],
+    rawPayload: {
+      externalId: event.externalId,
+      occurrenceDate: event.occurrenceDate
+    },
+    remoteUpdatedAt: event.lastModifiedAt,
+    deletedAt: null
   };
 }
 
@@ -2018,7 +2228,45 @@ async function publishTaskTimeboxes(
   forgeCalendarUrl: string | null,
   connectionId: string
 ) {
-  if (state.mode !== "dav" || !forgeCalendarUrl) {
+  if (!forgeCalendarUrl) {
+    return;
+  }
+
+  if (state.mode === "macos_local") {
+    const forgeCalendar = state.calendars.find(
+      (calendar) => normalizeUrl(calendar.url) === normalizeUrl(forgeCalendarUrl)
+    );
+    if (!forgeCalendar || !forgeCalendar.canWrite) {
+      return;
+    }
+
+    const horizon = {
+      from: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString(),
+      to: new Date(Date.now() + 180 * 24 * 60 * 60 * 1000).toISOString()
+    };
+    const timeboxes = listTaskTimeboxes(horizon);
+    for (const timebox of timeboxes) {
+      const { event } = await upsertMacOSLocalEvent({
+        calendarId: forgeCalendar.calendarId,
+        eventId: timebox.remoteEventId,
+        title: timebox.title,
+        startAt: timebox.startsAt,
+        endAt: timebox.endsAt,
+        notes: timebox.overrideReason ?? ""
+      });
+      const localForgeCalendar = listCalendars(connectionId).find(
+        (entry) => normalizeUrl(entry.remoteId) === normalizeUrl(forgeCalendar.url)
+      );
+      updateTaskTimebox(timebox.id, {
+        connectionId,
+        calendarId: localForgeCalendar?.id ?? null,
+        remoteEventId: event.eventId
+      });
+    }
+    return;
+  }
+
+  if (state.mode !== "dav") {
     return;
   }
   const forgeCalendar = state.calendars.find(
@@ -2075,6 +2323,75 @@ async function syncDiscoveredState(
   credentials: StoredCalendarCredentials
 ) {
   const state = await createProviderClient(credentials);
+  if (state.mode === "macos_local") {
+    const selected = new Set(
+      credentials.selectedCalendarUrls.map((value) => normalizeUrl(value))
+    );
+    const forgeCalendarUrl = normalizeUrl(credentials.forgeCalendarUrl);
+
+    for (const calendar of state.calendars) {
+      const normalized = normalizeUrl(calendar.url);
+      upsertCalendarRecord(
+        connectionId,
+        {
+          ...mapCalendarRecord(calendar, {
+            forgeCalendarUrl,
+            accountIdentityKey: state.accountIdentityKey
+          }),
+          selectedForSync: selected.has(normalized)
+        }
+      );
+      if (!selected.has(normalized) && normalized !== forgeCalendarUrl) {
+        continue;
+      }
+    }
+
+    const calendarIds = state.calendars
+      .filter((calendar) => {
+        const normalized = normalizeUrl(calendar.url);
+        return (
+          selected.has(normalized) ||
+          normalized === forgeCalendarUrl
+        );
+      })
+      .map((calendar) => calendar.calendarId);
+
+    if (calendarIds.length > 0) {
+      const now = new Date();
+      const start = new Date(
+        now.getTime() - 30 * 24 * 60 * 60 * 1000
+      ).toISOString();
+      const end = new Date(
+        now.getTime() + 180 * 24 * 60 * 60 * 1000
+      ).toISOString();
+      const { events } = await listMacOSLocalEvents({
+        calendarIds,
+        start,
+        end
+      });
+      const calendarsById = new Map(
+        state.calendars.map((calendar) => [calendar.calendarId, calendar])
+      );
+      for (const event of events) {
+        const calendar = calendarsById.get(event.calendarId);
+        if (!calendar) {
+          continue;
+        }
+        const ownership =
+          normalizeUrl(calendar.url) === forgeCalendarUrl ? "forge" : "external";
+        upsertCalendarEventRecord(
+          connectionId,
+          mapMacOSLocalEventToSyncInput(calendar.url, event, ownership)
+        );
+      }
+    }
+
+    return {
+      state,
+      forgeCalendarUrl
+    };
+  }
+
   if (!isWritableCalendarCredentials(credentials)) {
     if (state.mode !== "microsoft") {
       throw new Error("Forge expected a Microsoft provider state for this calendar connection.");
@@ -2282,6 +2599,80 @@ function findExistingCalendarConnection(
   });
 }
 
+function readConnectionAccountIdentityKey(
+  connection: CalendarConnectionRecord,
+  secrets: SecretsManager
+) {
+  const configuredKey =
+    typeof connection.config.accountIdentityKey === "string"
+      ? connection.config.accountIdentityKey.trim()
+      : "";
+  if (configuredKey) {
+    return normalizeAccountIdentity(configuredKey);
+  }
+
+  try {
+    const existing = requireSecretRecord<StoredCalendarCredentials>(
+      secrets,
+      connection.credentialsSecretId
+    );
+    if (existing.provider === "macos_local") {
+      return normalizeAccountIdentity(existing.accountIdentityKey);
+    }
+    if ("username" in existing && typeof existing.username === "string") {
+      return normalizeAccountIdentity(existing.username);
+    }
+  } catch {
+    // Fall back to account label below.
+  }
+
+  return normalizeAccountIdentity(connection.accountLabel);
+}
+
+function findOverlappingConnectionsForAccount(
+  accountIdentityKey: string,
+  secrets: SecretsManager
+) {
+  const target = normalizeAccountIdentity(accountIdentityKey);
+  return listCalendarConnections().filter((connection) => {
+    if (
+      typeof connection.config.replacedByConnectionId === "string" &&
+      connection.config.replacedByConnectionId.trim().length > 0
+    ) {
+      return false;
+    }
+    return readConnectionAccountIdentityKey(connection, secrets) === target;
+  });
+}
+
+function supersedeCalendarConnections(
+  connectionIds: string[],
+  replacingConnectionId: string
+) {
+  for (const connectionId of connectionIds) {
+    const connection = getCalendarConnectionById(connectionId);
+    if (!connection) {
+      continue;
+    }
+    updateCalendarConnectionRecord(connectionId, {
+      status: "needs_attention",
+      config: {
+        ...connection.config,
+        replacedByConnectionId: replacingConnectionId,
+        replacementTransport: "macos_local"
+      }
+    });
+  }
+}
+
+function requireActiveConnection(connectionId: string) {
+  if (isSupersededCalendarConnection(connectionId)) {
+    throw new Error(
+      "This calendar connection has been replaced by a newer canonical connection and can no longer be synced directly."
+    );
+  }
+}
+
 function toDiscoveryCredentials(
   input: DiscoverCalendarConnectionInput | CreateCalendarConnectionInput
 ): DiscoverableCredentials {
@@ -2315,10 +2706,57 @@ export async function discoverCalendarConnection(
   return mapDiscoveryPayload(input.provider, state);
 }
 
+export async function getMacOSLocalCalendarAccessStatus() {
+  return getMacOSCalendarAuthStatus();
+}
+
+export async function requestMacOSLocalCalendarAccess() {
+  return requestMacOSCalendarAccess();
+}
+
+export async function discoverMacOSLocalCalendarSources(): Promise<MacOSLocalCalendarDiscoveryPayload> {
+  const discovery = await discoverMacOSLocalCalendars();
+  return {
+    status: discovery.status,
+    requestedAt: discovery.requestedAt,
+    sources: discovery.sources.map((source) => ({
+      sourceId: source.sourceId,
+      sourceTitle: source.sourceTitle,
+      sourceType: source.sourceType,
+      accountLabel: source.accountLabel,
+      accountIdentityKey: accountIdentityKeyForMacOSSource({
+        sourceTitle: source.sourceTitle,
+        sourceType: source.sourceType
+      }),
+      calendars: source.calendars.map((calendar) => ({
+        url: buildMacOSLocalCalendarUrl(source.sourceId, calendar.calendarId),
+        displayName: calendar.title,
+        description: calendar.description,
+        color: calendar.color,
+        timezone: normalizeTimezone(calendar.timezone),
+        isPrimary: calendar.isPrimary,
+        canWrite: calendar.canWrite,
+        selectedByDefault: !isForgeName(calendar.title),
+        isForgeCandidate: isForgeName(calendar.title),
+        sourceId: source.sourceId,
+        sourceTitle: source.sourceTitle,
+        sourceType: source.sourceType,
+        calendarType: calendar.calendarType,
+        hostCalendarId: calendar.calendarId,
+        canonicalKey: `${accountIdentityKeyForMacOSSource({
+          sourceTitle: source.sourceTitle,
+          sourceType: source.sourceType
+        })}:${normalizeCalendarKey(calendar.title)}`
+      }))
+    }))
+  };
+}
+
 export async function discoverExistingCalendarConnection(
   connectionId: string,
   secrets: SecretsManager
 ): Promise<CalendarDiscoveryPayload> {
+  requireActiveConnection(connectionId);
   const connection = getCalendarConnectionById(connectionId);
   if (!connection) {
     throw new Error(`Unknown calendar connection ${connectionId}`);
@@ -2336,6 +2774,116 @@ export async function createCalendarConnection(
   secrets: SecretsManager,
   activity: ActivityContext = { source: "ui" }
 ) {
+  if (input.provider === "macos_local") {
+    const discovery = await discoverMacOSLocalCalendars();
+    if (discovery.status !== "full_access") {
+      throw new Error(
+        "Forge needs Calendar full access before it can connect the calendars already configured on this Mac."
+      );
+    }
+
+    const source = discovery.sources.find((entry) => entry.sourceId === input.sourceId);
+    if (!source) {
+      throw new Error("Forge could not find that macOS calendar source anymore. Discover again and retry.");
+    }
+
+    const accountIdentityKey = accountIdentityKeyForMacOSSource({
+      sourceTitle: source.sourceTitle,
+      sourceType: source.sourceType
+    });
+    const overlaps = findOverlappingConnectionsForAccount(
+      accountIdentityKey,
+      secrets
+    );
+    const replaceIds = new Set(input.replaceConnectionIds ?? []);
+    const unresolvedOverlaps = overlaps.filter(
+      (connection) => !replaceIds.has(connection.id)
+    );
+    if (unresolvedOverlaps.length > 0) {
+      throw new CalendarConnectionOverlapError(
+        `Forge already syncs ${source.accountLabel || source.sourceTitle} through another calendar connection. Replace the older connection instead of keeping two copies of the same calendar account.`,
+        unresolvedOverlaps.map((connection) => connection.id)
+      );
+    }
+
+    const discoveredCalendars = source.calendars.map((calendar) => ({
+      ...calendar,
+      url: buildMacOSLocalCalendarUrl(source.sourceId, calendar.calendarId)
+    }));
+
+    let forgeCalendarUrl =
+      input.forgeCalendarUrl?.trim() ||
+      discoveredCalendars.find((calendar) => isForgeName(calendar.title))?.url ||
+      null;
+    if (!forgeCalendarUrl && input.createForgeCalendar) {
+      const created = await ensureMacOSLocalForgeCalendar(source.sourceId);
+      forgeCalendarUrl = buildMacOSLocalCalendarUrl(
+        created.calendar.sourceId,
+        created.calendar.calendarId
+      );
+    }
+    if (!forgeCalendarUrl) {
+      throw new Error(
+        "Select the calendar Forge should write into, or create a dedicated local calendar named Forge."
+      );
+    }
+
+    const secretId = `calendar_secret_${randomUUID().replaceAll("-", "").slice(0, 10)}`;
+    const storedCredentials: MacOSLocalCredentials = {
+      provider: "macos_local",
+      sourceId: source.sourceId,
+      sourceTitle: source.sourceTitle,
+      sourceType: source.sourceType,
+      accountIdentityKey,
+      selectedCalendarUrls: input.selectedCalendarUrls.map(normalizeUrl),
+      forgeCalendarUrl: normalizeUrl(forgeCalendarUrl)
+    };
+    storeEncryptedSecret(
+      secretId,
+      secrets.sealJson(storedCredentials),
+      `${input.label} macOS local calendar credentials`
+    );
+
+    const connection = createCalendarConnectionRecord({
+      provider: "macos_local",
+      label: input.label,
+      accountLabel: source.accountLabel,
+      config: {
+        serverUrl: "forge-macos-local://eventkit/",
+        transportKind: "macos_local",
+        sourceId: source.sourceId,
+        sourceType: source.sourceType,
+        accountIdentityKey,
+        selectedCalendarCount: storedCredentials.selectedCalendarUrls.length,
+        forgeCalendarUrl: storedCredentials.forgeCalendarUrl
+      },
+      credentialsSecretId: secretId
+    });
+
+    await syncCalendarConnection(connection.id, secrets, activity);
+    if (replaceIds.size > 0) {
+      for (const replacedConnectionId of replaceIds) {
+        rehomeCalendarConnectionReferences({
+          fromConnectionId: replacedConnectionId,
+          toConnectionId: connection.id
+        });
+      }
+      supersedeCalendarConnections(Array.from(replaceIds), connection.id);
+    }
+
+    recordCalendarActivity(
+      "calendar_connection_created",
+      "calendar_connection",
+      connection.id,
+      `Calendar connection created: ${connection.label}`,
+      "Forge is now mirroring the calendars already configured on this Mac through EventKit.",
+      activity,
+      { provider: input.provider }
+    );
+
+    return getCalendarConnectionById(connection.id)!;
+  }
+
   if (input.provider === "google") {
     pruneGoogleOauthSessions();
     const session = googleOauthSessions.get(input.authSessionId);
@@ -2601,6 +3149,7 @@ export async function syncCalendarConnection(
   secrets: SecretsManager,
   activity: ActivityContext = { source: "system" }
 ) {
+  requireActiveConnection(connectionId);
   const connection = getCalendarConnectionById(connectionId);
   if (!connection) {
     throw new Error(`Unknown calendar connection ${connectionId}`);
@@ -2633,7 +3182,10 @@ export async function syncCalendarConnection(
       forgeCalendarId: forgeCalendar?.id ?? null,
       status: "connected",
       config: {
-        serverUrl: credentials.serverUrl,
+        serverUrl:
+          credentials.provider === "macos_local"
+            ? "forge-macos-local://eventkit/"
+            : credentials.serverUrl,
         selectedCalendarCount: credentials.selectedCalendarUrls.length,
         ...(credentials.provider === "microsoft"
           ? {
@@ -2641,9 +3193,17 @@ export async function syncCalendarConnection(
               tenantId: credentials.tenantId,
               writeMode: "read_only"
             }
-          : {
-              forgeCalendarUrl: normalizeUrl(credentials.forgeCalendarUrl)
-            })
+          : credentials.provider === "macos_local"
+            ? {
+                transportKind: "macos_local",
+                sourceId: credentials.sourceId,
+                sourceType: credentials.sourceType,
+                accountIdentityKey: credentials.accountIdentityKey,
+                forgeCalendarUrl: normalizeUrl(credentials.forgeCalendarUrl)
+              }
+            : {
+                forgeCalendarUrl: normalizeUrl(credentials.forgeCalendarUrl)
+              })
       },
       lastSyncedAt: new Date().toISOString(),
       lastSyncError: null
@@ -2682,6 +3242,7 @@ export async function updateCalendarConnectionSelection(
   secrets: SecretsManager,
   activity: ActivityContext = { source: "ui" }
 ) {
+  requireActiveConnection(connectionId);
   const connection = getCalendarConnectionById(connectionId);
   if (!connection) {
     throw new Error(`Unknown calendar connection ${connectionId}`);
@@ -2810,6 +3371,43 @@ export async function syncForgeCalendarEvent(
         source.connectionId!,
         secrets
       );
+      if (state.mode === "macos_local") {
+        const localCalendar = getCalendarById(source.calendarId);
+        if (!localCalendar || localCalendar.canWrite === false) {
+          continue;
+        }
+        const hostCalendarId =
+          localCalendar.hostCalendarId ??
+          parseMacOSLocalCalendarUrl(localCalendar.remoteId).calendarId;
+        const { event: remoteEvent } = await upsertMacOSLocalEvent({
+          calendarId: hostCalendarId,
+          eventId: source.remoteEventId,
+          title: event.title,
+          startAt: event.start_at,
+          endAt: event.end_at,
+          notes: event.description,
+          location: event.location,
+          allDay: Boolean(event.is_all_day)
+        });
+        registerCalendarEventSourceProjection({
+          forgeEventId: eventId,
+          provider: connection.provider,
+          connectionId: connection.id,
+          calendarId: source.calendarId,
+          remoteCalendarId: getCalendarById(source.calendarId!)?.remoteId ?? null,
+          remoteEventId: remoteEvent.eventId,
+          remoteUid: remoteEvent.externalId,
+          recurrenceInstanceId: remoteEvent.occurrenceDate,
+          isMasterRecurring: false,
+          syncState: "synced",
+          rawPayloadJson: JSON.stringify({
+            externalId: remoteEvent.externalId,
+            occurrenceDate: remoteEvent.occurrenceDate
+          }),
+          lastSyncedAt: new Date().toISOString()
+        });
+        continue;
+      }
       if (state.mode !== "dav") {
         continue;
       }
@@ -2866,6 +3464,41 @@ export async function syncForgeCalendarEvent(
     event.preferred_connection_id,
     secrets
   );
+  if (state.mode === "macos_local") {
+    const localCalendar = getCalendarById(event.preferred_calendar_id);
+    if (!localCalendar || localCalendar.canWrite === false) {
+      throw new Error(`Unknown local calendar for event ${eventId}`);
+    }
+    const hostCalendarId =
+      localCalendar.hostCalendarId ??
+      parseMacOSLocalCalendarUrl(localCalendar.remoteId).calendarId;
+    const { event: remoteEvent } = await upsertMacOSLocalEvent({
+      calendarId: hostCalendarId,
+      title: event.title,
+      startAt: event.start_at,
+      endAt: event.end_at,
+      notes: event.description,
+      location: event.location,
+      allDay: Boolean(event.is_all_day)
+    });
+    registerCalendarEventSourceProjection({
+      forgeEventId: eventId,
+      provider: connection.provider,
+      connectionId: connection.id,
+      calendarId: event.preferred_calendar_id,
+      remoteCalendarId: getCalendarById(event.preferred_calendar_id)?.remoteId ?? null,
+      remoteEventId: remoteEvent.eventId,
+      remoteUid: remoteEvent.externalId,
+      recurrenceInstanceId: remoteEvent.occurrenceDate,
+      syncState: "synced",
+      rawPayloadJson: JSON.stringify({
+        externalId: remoteEvent.externalId,
+        occurrenceDate: remoteEvent.occurrenceDate
+      }),
+      lastSyncedAt: new Date().toISOString()
+    });
+    return;
+  }
   if (state.mode !== "dav") {
     throw new Error(`Connection ${connection.id} is read-only, so Forge cannot publish this event there.`);
   }
@@ -2929,6 +3562,10 @@ export async function deleteCalendarEventProjection(
       source.connectionId!,
       secrets
     );
+    if (state.mode === "macos_local") {
+      await deleteMacOSLocalEvent(source.remoteEventId);
+      continue;
+    }
     if (state.mode !== "dav") {
       continue;
     }
@@ -2983,12 +3620,25 @@ export function listCalendarProviderMetadata() {
       supportsDedicatedForgeCalendar: true,
       connectionHelp:
         "Use a CalDAV base server URL plus account credentials. Forge discovers the calendars available under that account before you pick what to sync."
+    },
+    {
+      provider: "macos_local" as const,
+      label: "Calendars On This Mac",
+      supportsDedicatedForgeCalendar: true,
+      connectionHelp:
+        "Use EventKit to access the calendars already configured in Calendar.app on this Mac. When the same account is already connected remotely, Forge replaces the older connection instead of showing duplicate copies."
     }
   ];
 }
 
 export function listConnectedCalendarConnections() {
-  return listCalendarConnections().map(
-    ({ credentialsSecretId: _secret, ...connection }) => connection
-  );
+  return listCalendarConnections()
+    .filter(
+      (connection) =>
+        !(
+          typeof connection.config.replacedByConnectionId === "string" &&
+          connection.config.replacedByConnectionId.trim().length > 0
+        )
+    )
+    .map(({ credentialsSecretId: _secret, ...connection }) => connection);
 }

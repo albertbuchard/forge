@@ -357,7 +357,12 @@ function LifeForceCurveEditor({
   onWeekdayChange: (weekday: number) => void;
 }) {
   const containerRef = useRef<HTMLDivElement | null>(null);
-  const [dragIndex, setDragIndex] = useState<number | null>(null);
+  const [dragState, setDragState] = useState<{
+    index: number;
+    pointerId: number;
+    pointerX: number;
+    pointerY: number;
+  } | null>(null);
   const [containerWidth, setContainerWidth] = useState(720);
   const [menuState, setMenuState] = useState<{
     index: number;
@@ -412,9 +417,10 @@ function LifeForceCurveEditor({
       ).sort((left, right) => left - right),
     [yMax]
   );
+  const chartWidth = Math.max(containerWidth, 1);
   const plotWidth = Math.max(
     160,
-    containerWidth - CURVE_CHART_MARGIN.left - CURVE_CHART_MARGIN.right
+    chartWidth - CURVE_CHART_MARGIN.left - CURVE_CHART_MARGIN.right
   );
   const plotHeight =
     CURVE_CHART_HEIGHT - CURVE_CHART_MARGIN.top - CURVE_CHART_MARGIN.bottom;
@@ -430,32 +436,48 @@ function LifeForceCurveEditor({
   }, []);
 
   useEffect(() => {
-    if (dragIndex === null || !containerRef.current) {
+    if (dragState === null || !containerRef.current) {
       return;
     }
     const chart = containerRef.current;
     const onPointerMove = (event: PointerEvent) => {
+      if (event.pointerId !== dragState.pointerId) {
+        return;
+      }
+      event.preventDefault();
       const rect = chart.getBoundingClientRect();
+      const clientX = Number.isFinite(event.clientX)
+        ? event.clientX
+        : rect.left + dragState.pointerX;
+      const clientY = Number.isFinite(event.clientY)
+        ? event.clientY
+        : rect.top + dragState.pointerY;
+      const pointerX = clamp(clientX - rect.left, 0, rect.width);
+      const pointerY = clamp(clientY - rect.top, 0, rect.height);
       const x = clamp(
-        event.clientX - rect.left - CURVE_CHART_MARGIN.left,
+        clientX - rect.left - CURVE_CHART_MARGIN.left,
         0,
         plotWidth
       );
       const y = clamp(
-        event.clientY - rect.top - CURVE_CHART_MARGIN.top,
+        clientY - rect.top - CURVE_CHART_MARGIN.top,
         0,
         plotHeight
       );
       onChange(
         visiblePoints.map((point, index) => {
-          if (index !== dragIndex) {
+          if (index !== dragState.index) {
             return {
               minuteOfDay: point.minuteOfDay,
               rateApPerHour: point.rateApPerHour,
               locked: point.locked
             };
           }
-          if (point.locked || index === 0 || index === visiblePoints.length - 1) {
+          if (
+            point.locked ||
+            index === 0 ||
+            index === visiblePoints.length - 1
+          ) {
             return {
               minuteOfDay: point.minuteOfDay,
               rateApPerHour: point.rateApPerHour,
@@ -495,15 +517,38 @@ function LifeForceCurveEditor({
           return draft[index]!;
         })
       );
+      setDragState((current) =>
+        current === null || current.pointerId !== event.pointerId
+          ? current
+          : {
+              ...current,
+              pointerX,
+              pointerY
+            }
+      );
     };
-    const stopDragging = () => setDragIndex(null);
-    window.addEventListener("pointermove", onPointerMove);
-    window.addEventListener("pointerup", stopDragging, { once: true });
+    const stopDragging = (event?: PointerEvent) => {
+      if (!event || event.pointerId === dragState.pointerId) {
+        setDragState(null);
+      }
+    };
+    window.addEventListener("pointermove", onPointerMove, { passive: false });
+    window.addEventListener("pointerup", stopDragging);
+    window.addEventListener("pointercancel", stopDragging);
     return () => {
       window.removeEventListener("pointermove", onPointerMove);
       window.removeEventListener("pointerup", stopDragging);
+      window.removeEventListener("pointercancel", stopDragging);
     };
-  }, [baselineDailyAp, dragIndex, onChange, plotHeight, plotWidth, visiblePoints, yMax]);
+  }, [
+    baselineDailyAp,
+    dragState,
+    onChange,
+    plotHeight,
+    plotWidth,
+    visiblePoints,
+    yMax
+  ]);
 
   const activeMenuItems = useMemo<FloatingActionMenuItem[]>(() => {
     if (!menuState) {
@@ -571,237 +616,316 @@ function LifeForceCurveEditor({
       })),
     [plotHeight, plotWidth, visiblePoints, yMax]
   );
+  const dragPreview =
+    dragState === null
+      ? null
+      : {
+          pointerX: dragState.pointerX,
+          pointerY: dragState.pointerY,
+          constrainedX: handlePositions[dragState.index]?.x ?? dragState.pointerX,
+          constrainedY: handlePositions[dragState.index]?.y ?? dragState.pointerY
+        };
 
   return (
     <>
       <Card className="overflow-hidden p-4">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0">
-          <div className="text-[11px] uppercase tracking-[0.18em] text-white/40">
-            Life Force view
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="min-w-0">
+            <div className="text-[11px] uppercase tracking-[0.18em] text-white/40">
+              Life Force view
+            </div>
+            <div className="mt-2 text-xl font-semibold text-white">
+              Instant Life Force editor
+            </div>
+            <div className="mt-2 max-w-3xl text-sm leading-6 text-white/56">
+              One click adds a turn point. Drag future handles. Right click a
+              handle to remove or flatten it. The ghost handle follows your
+              finger or cursor while the real turn point stays constrained on
+              the curve and normalized to the baseline daily AP budget.
+            </div>
           </div>
-          <div className="mt-2 text-xl font-semibold text-white">
-            Instant Life Force editor
-          </div>
-          <div className="mt-2 max-w-3xl text-sm leading-6 text-white/56">
-            One click adds a turn point. Drag future handles. Right click a
-            handle to remove or flatten it. The curve stays normalized to the
-            baseline daily AP budget while you edit.
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <div className="flex flex-wrap items-center gap-1 rounded-full bg-white/[0.04] p-1">
+              {WEEKDAY_LABELS.map((label, index) => (
+                <button
+                  key={label}
+                  type="button"
+                  className={cn(
+                    "rounded-full px-3 py-1.5 text-[11px] font-medium transition",
+                    weekday === index
+                      ? "bg-[var(--primary)] text-slate-950"
+                      : "text-white/60 hover:bg-white/[0.05] hover:text-white"
+                  )}
+                  onClick={() => onWeekdayChange(index)}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            <Button variant="secondary" onClick={onReset}>
+              Reset
+            </Button>
+            <Button onClick={onSave} pending={isSaving} disabled={!isDirty}>
+              <Save className="mr-2 size-4" />
+              Save curve
+            </Button>
           </div>
         </div>
-        <div className="flex flex-wrap items-center justify-end gap-2">
-          <div className="flex flex-wrap items-center gap-1 rounded-full bg-white/[0.04] p-1">
-            {WEEKDAY_LABELS.map((label, index) => (
-              <button
-                key={label}
-                type="button"
-                className={cn(
-                  "rounded-full px-3 py-1.5 text-[11px] font-medium transition",
-                  weekday === index
-                    ? "bg-[var(--primary)] text-slate-950"
-                    : "text-white/60 hover:bg-white/[0.05] hover:text-white"
-                )}
-                onClick={() => onWeekdayChange(index)}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-          <Button variant="secondary" onClick={onReset}>
-            Reset
-          </Button>
-          <Button onClick={onSave} pending={isSaving} disabled={!isDirty}>
-            <Save className="mr-2 size-4" />
-            Save curve
-          </Button>
-        </div>
-      </div>
 
-      <div className="mt-4 rounded-[24px] bg-[linear-gradient(180deg,rgba(192,193,255,0.08),rgba(192,193,255,0.02))] p-3">
-        <div
-          ref={containerRef}
-          className="relative h-72 w-full overflow-hidden rounded-[20px] bg-[rgba(255,255,255,0.02)]"
-          role="img"
-          aria-label="Life Force capacity curve editor"
-          onClick={(event) => {
-            if (dragIndex !== null || !containerRef.current) {
-              return;
-            }
-            if (event.target !== event.currentTarget) {
-              return;
-            }
-            const rect = containerRef.current.getBoundingClientRect();
-            const x = clamp(
-              event.clientX - rect.left - CURVE_CHART_MARGIN.left,
-              0,
-              plotWidth
-            );
-            const minuteOfDay = Math.round((x / plotWidth) * 1440);
-            const insertAt = visiblePoints.findIndex(
-              (point) => point.minuteOfDay > minuteOfDay
-            );
-            if (insertAt <= 0) {
-              return;
-            }
-            const previous = visiblePoints[insertAt - 1]!;
-            const next = visiblePoints[insertAt]!;
-            if (
-              minuteOfDay - previous.minuteOfDay < MIN_POINT_GAP_MINUTES ||
-              next.minuteOfDay - minuteOfDay < MIN_POINT_GAP_MINUTES
-            ) {
-              return;
-            }
-            const rateApPerHour = interpolateRate(visiblePoints, minuteOfDay);
-            const nextPoints = [...visiblePoints];
-            nextPoints.splice(insertAt, 0, {
-              minuteOfDay,
-              rateApPerHour: Number(rateApPerHour.toFixed(3)),
-              locked: weekday === todayWeekday && minuteOfDay <= minuteOfDayNow
-            });
-            onChange(nextPoints);
-          }}
-        >
-          <AreaChart
-            width={Math.max(containerWidth, 320)}
-            height={CURVE_CHART_HEIGHT}
-            data={chartData}
-            margin={CURVE_CHART_MARGIN}
+        <div className="mt-4 rounded-[24px] bg-[linear-gradient(180deg,rgba(192,193,255,0.08),rgba(192,193,255,0.02))] p-3">
+          <div
+            ref={containerRef}
+            className={cn(
+              "relative h-72 w-full overflow-hidden rounded-[20px] bg-[rgba(255,255,255,0.02)]",
+              dragState !== null ? "select-none touch-none" : ""
+            )}
+            style={{ touchAction: dragState === null ? "pan-y" : "none" }}
+            role="img"
+            aria-label="Life Force capacity curve editor"
+            onClick={(event) => {
+              if (dragState !== null || !containerRef.current) {
+                return;
+              }
+              if (event.target !== event.currentTarget) {
+                return;
+              }
+              const rect = containerRef.current.getBoundingClientRect();
+              const x = clamp(
+                event.clientX - rect.left - CURVE_CHART_MARGIN.left,
+                0,
+                plotWidth
+              );
+              const minuteOfDay = Math.round((x / plotWidth) * 1440);
+              const insertAt = visiblePoints.findIndex(
+                (point) => point.minuteOfDay > minuteOfDay
+              );
+              if (insertAt <= 0) {
+                return;
+              }
+              const previous = visiblePoints[insertAt - 1]!;
+              const next = visiblePoints[insertAt]!;
+              if (
+                minuteOfDay - previous.minuteOfDay < MIN_POINT_GAP_MINUTES ||
+                next.minuteOfDay - minuteOfDay < MIN_POINT_GAP_MINUTES
+              ) {
+                return;
+              }
+              const rateApPerHour = interpolateRate(visiblePoints, minuteOfDay);
+              const nextPoints = [...visiblePoints];
+              nextPoints.splice(insertAt, 0, {
+                minuteOfDay,
+                rateApPerHour: Number(rateApPerHour.toFixed(3)),
+                locked: weekday === todayWeekday && minuteOfDay <= minuteOfDayNow
+              });
+              onChange(nextPoints);
+            }}
           >
-            <defs>
-              <linearGradient id="life-force-chart-fill" x1="0" x2="0" y1="0" y2="1">
-                <stop offset="0%" stopColor="rgba(192,193,255,0.24)" />
-                <stop offset="100%" stopColor="rgba(192,193,255,0.02)" />
-              </linearGradient>
-            </defs>
-            <CartesianGrid
-              vertical={false}
-              stroke="rgba(255,255,255,0.08)"
-              strokeDasharray="3 4"
-            />
-            <XAxis
-              dataKey="minuteOfDay"
-              type="number"
-              domain={[0, 1440]}
-              ticks={xTicks}
-              tickFormatter={formatMinuteTick}
-              tick={{ fill: "rgba(255,255,255,0.48)", fontSize: 10 }}
-              tickLine={false}
-              axisLine={{ stroke: "rgba(255,255,255,0.12)" }}
+            <AreaChart
+              width={chartWidth}
+              height={CURVE_CHART_HEIGHT}
+              data={chartData}
+              margin={CURVE_CHART_MARGIN}
             >
-              <Label
-                value="Time"
-                position="insideBottom"
-                offset={-10}
-                fill="rgba(255,255,255,0.38)"
-                fontSize={10}
-              />
-            </XAxis>
-            <YAxis
-              type="number"
-              domain={[0, yMax]}
-              ticks={yTicks}
-              tick={{ fill: "rgba(255,255,255,0.48)", fontSize: 10 }}
-              tickLine={false}
-              axisLine={{ stroke: "rgba(255,255,255,0.12)" }}
-              width={34}
-            >
-              <Label
-                value="AP/h"
-                angle={-90}
-                position="insideLeft"
-                fill="rgba(255,255,255,0.38)"
-                fontSize={10}
-                style={{ textAnchor: "middle" }}
-              />
-            </YAxis>
-            <Tooltip
-              cursor={{
-                stroke: "rgba(255,255,255,0.18)",
-                strokeDasharray: "3 4"
-              }}
-              content={({ active, payload }) => {
-                const point = active ? payload?.[0]?.payload : null;
-                if (!point) {
-                  return null;
-                }
-                return (
-                  <div className="rounded-[16px] border border-white/10 bg-[rgba(10,15,27,0.95)] px-3 py-2 text-xs text-white shadow-[0_18px_50px_rgba(4,8,18,0.3)] backdrop-blur-xl">
-                    <div className="font-medium text-white">{point.label}</div>
-                    <div className="mt-1 text-white/60">
-                      {formatRate(point.rateApPerHour)}
-                    </div>
-                  </div>
-                );
-              }}
-            />
-            {weekday === todayWeekday ? (
-              <ReferenceLine
-                x={minuteOfDayNow}
-                stroke="rgba(255,255,255,0.22)"
+              <defs>
+                <linearGradient id="life-force-chart-fill" x1="0" x2="0" y1="0" y2="1">
+                  <stop offset="0%" stopColor="rgba(192,193,255,0.24)" />
+                  <stop offset="100%" stopColor="rgba(192,193,255,0.02)" />
+                </linearGradient>
+              </defs>
+              <CartesianGrid
+                vertical={false}
+                stroke="rgba(255,255,255,0.08)"
                 strokeDasharray="3 4"
               />
-            ) : null}
-            <Area
-              type="linear"
-              dataKey="rateApPerHour"
-              stroke="none"
-              fill="url(#life-force-chart-fill)"
-              isAnimationActive={false}
-            />
-            <Line
-              type="linear"
-              dataKey="rateApPerHour"
-              stroke="rgba(214,215,255,0.95)"
-              strokeWidth={1.5}
-              dot={false}
-              activeDot={false}
-              isAnimationActive={false}
-            />
-          </AreaChart>
-          {handlePositions.map((point, index) => {
-            const isEndpoint = index === 0 || index === handlePositions.length - 1;
-            return (
-              <button
-                key={`${point.minuteOfDay}-${index}`}
-                type="button"
-                aria-label={`Turn point at ${formatMinuteOfDay(point.minuteOfDay)}`}
-                className={cn(
-                  "absolute z-10 rounded-full border border-[rgba(10,15,27,0.9)] transition",
-                  point.locked || isEndpoint
-                    ? "cursor-not-allowed bg-white/45"
-                    : "cursor-grab bg-white active:cursor-grabbing"
-                )}
-                style={{
-                  left: point.x - (isEndpoint ? 6 : 5),
-                  top: point.y - (isEndpoint ? 6 : 5),
-                  width: isEndpoint ? 12 : 10,
-                  height: isEndpoint ? 12 : 10
+              <XAxis
+                dataKey="minuteOfDay"
+                type="number"
+                domain={[0, 1440]}
+                ticks={xTicks}
+                tickFormatter={formatMinuteTick}
+                tick={{ fill: "rgba(255,255,255,0.48)", fontSize: 10 }}
+                tickLine={false}
+                axisLine={{ stroke: "rgba(255,255,255,0.12)" }}
+              >
+                <Label
+                  value="Time"
+                  position="insideBottom"
+                  offset={-10}
+                  fill="rgba(255,255,255,0.38)"
+                  fontSize={10}
+                />
+              </XAxis>
+              <YAxis
+                type="number"
+                domain={[0, yMax]}
+                ticks={yTicks}
+                tick={{ fill: "rgba(255,255,255,0.48)", fontSize: 10 }}
+                tickLine={false}
+                axisLine={{ stroke: "rgba(255,255,255,0.12)" }}
+                width={34}
+              >
+                <Label
+                  value="AP/h"
+                  angle={-90}
+                  position="insideLeft"
+                  fill="rgba(255,255,255,0.38)"
+                  fontSize={10}
+                  style={{ textAnchor: "middle" }}
+                />
+              </YAxis>
+              <Tooltip
+                cursor={{
+                  stroke: "rgba(255,255,255,0.18)",
+                  strokeDasharray: "3 4"
                 }}
-                onPointerDown={(event: ReactPointerEvent<HTMLButtonElement>) => {
-                  event.preventDefault();
-                  event.stopPropagation();
-                  if (point.locked || isEndpoint) {
-                    return;
+                content={({ active, payload }) => {
+                  const point = active ? payload?.[0]?.payload : null;
+                  if (!point) {
+                    return null;
                   }
-                  setDragIndex(index);
-                }}
-                onContextMenu={(event) => {
-                  event.preventDefault();
-                  event.stopPropagation();
-                  setMenuState({
-                    index,
-                    position: { x: event.clientX + 6, y: event.clientY + 6 }
-                  });
+                  return (
+                    <div className="rounded-[16px] border border-white/10 bg-[rgba(10,15,27,0.95)] px-3 py-2 text-xs text-white shadow-[0_18px_50px_rgba(4,8,18,0.3)] backdrop-blur-xl">
+                      <div className="font-medium text-white">{point.label}</div>
+                      <div className="mt-1 text-white/60">
+                        {formatRate(point.rateApPerHour)}
+                      </div>
+                    </div>
+                  );
                 }}
               />
-            );
-          })}
+              {weekday === todayWeekday ? (
+                <ReferenceLine
+                  x={minuteOfDayNow}
+                  stroke="rgba(255,255,255,0.22)"
+                  strokeDasharray="3 4"
+                />
+              ) : null}
+              <Area
+                type="linear"
+                dataKey="rateApPerHour"
+                stroke="none"
+                fill="url(#life-force-chart-fill)"
+                isAnimationActive={false}
+              />
+              <Line
+                type="linear"
+                dataKey="rateApPerHour"
+                stroke="rgba(214,215,255,0.95)"
+                strokeWidth={1.5}
+                dot={false}
+                activeDot={false}
+                isAnimationActive={false}
+              />
+            </AreaChart>
+            {dragPreview ? (
+              <svg
+                className="pointer-events-none absolute inset-0 z-[15] h-full w-full"
+                aria-hidden="true"
+              >
+                <line
+                  x1={dragPreview.constrainedX}
+                  y1={dragPreview.constrainedY}
+                  x2={dragPreview.pointerX}
+                  y2={dragPreview.pointerY}
+                  stroke="rgba(214,215,255,0.38)"
+                  strokeDasharray="4 5"
+                  strokeWidth="1.5"
+                />
+                <circle
+                  cx={dragPreview.pointerX}
+                  cy={dragPreview.pointerY}
+                  r="11"
+                  fill="rgba(214,215,255,0.12)"
+                  stroke="rgba(214,215,255,0.34)"
+                  strokeWidth="1.5"
+                  data-testid="life-force-ghost-handle"
+                />
+                <circle
+                  cx={dragPreview.pointerX}
+                  cy={dragPreview.pointerY}
+                  r="3.5"
+                  fill="rgba(255,255,255,0.44)"
+                />
+              </svg>
+            ) : null}
+            {handlePositions.map((point, index) => {
+              const isEndpoint = index === 0 || index === handlePositions.length - 1;
+              const isDragging = dragState?.index === index;
+              const visibleSize = isEndpoint ? 14 : 16;
+              const hitSize = isEndpoint ? 22 : 28;
+              return (
+                <button
+                  key={`${point.minuteOfDay}-${index}`}
+                  type="button"
+                  aria-label={`Turn point at ${formatMinuteOfDay(point.minuteOfDay)}`}
+                  className={cn(
+                    "absolute z-20 flex items-center justify-center rounded-full transition-transform duration-75",
+                    point.locked || isEndpoint
+                      ? "cursor-not-allowed"
+                      : "cursor-grab active:cursor-grabbing",
+                    isDragging ? "scale-110" : ""
+                  )}
+                  style={{
+                    left: point.x - hitSize / 2,
+                    top: point.y - hitSize / 2,
+                    width: hitSize,
+                    height: hitSize,
+                    touchAction: "none"
+                  }}
+                  onPointerDown={(event: ReactPointerEvent<HTMLButtonElement>) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    if (point.locked || isEndpoint || !containerRef.current) {
+                      return;
+                    }
+                    if ("setPointerCapture" in event.currentTarget) {
+                      event.currentTarget.setPointerCapture(event.pointerId);
+                    }
+                    const rect = containerRef.current.getBoundingClientRect();
+                    const clientX = Number.isFinite(event.clientX)
+                      ? event.clientX
+                      : rect.left + point.x;
+                    const clientY = Number.isFinite(event.clientY)
+                      ? event.clientY
+                      : rect.top + point.y;
+                    setDragState({
+                      index,
+                      pointerId: event.pointerId,
+                      pointerX: clamp(clientX - rect.left, 0, rect.width),
+                      pointerY: clamp(clientY - rect.top, 0, rect.height)
+                    });
+                  }}
+                  onContextMenu={(event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    setMenuState({
+                      index,
+                      position: { x: event.clientX + 6, y: event.clientY + 6 }
+                    });
+                  }}
+                >
+                  <span
+                    className={cn(
+                      "pointer-events-none inline-flex rounded-full border border-[rgba(10,15,27,0.92)] shadow-[0_0_0_1px_rgba(255,255,255,0.08),0_10px_24px_rgba(4,8,18,0.28)]",
+                      point.locked || isEndpoint
+                        ? "bg-white/55"
+                        : "bg-white"
+                    )}
+                    style={{
+                      width: visibleSize,
+                      height: visibleSize,
+                      opacity: isDragging ? 0.96 : 1
+                    }}
+                  />
+                </button>
+              );
+            })}
+          </div>
+          <div className="mt-3 flex flex-wrap items-center justify-between gap-2 px-1 text-[11px] text-white/42">
+            <div>Editing {WEEKDAY_LABELS[weekday]} curve</div>
+            <div>{Math.round(baselineDailyAp)} AP/day baseline</div>
+          </div>
         </div>
-        <div className="mt-3 flex flex-wrap items-center justify-between gap-2 px-1 text-[11px] text-white/42">
-          <div>Editing {WEEKDAY_LABELS[weekday]} curve</div>
-          <div>{Math.round(baselineDailyAp)} AP/day baseline</div>
-        </div>
-      </div>
       </Card>
       <FloatingActionMenu
         open={menuState !== null}

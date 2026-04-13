@@ -50,7 +50,8 @@ export const calendarProviderSchema = z.enum([
   "google",
   "apple",
   "caldav",
-  "microsoft"
+  "microsoft",
+  "macos_local"
 ]);
 export const calendarConnectionStatusSchema = z.enum([
   "connected",
@@ -64,7 +65,15 @@ export const calendarEventOriginSchema = z.enum([
   "apple",
   "caldav",
   "microsoft",
+  "macos_local",
   "derived"
+]);
+export const macosCalendarAccessStatusSchema = z.enum([
+  "not_determined",
+  "denied",
+  "restricted",
+  "full_access",
+  "unavailable"
 ]);
 export const calendarAvailabilitySchema = z.enum(["busy", "free"]);
 export const calendarEventStatusSchema = z.enum([
@@ -857,7 +866,13 @@ export const calendarDiscoveryCalendarSchema = z.object({
   isPrimary: z.boolean(),
   canWrite: z.boolean(),
   selectedByDefault: z.boolean(),
-  isForgeCandidate: z.boolean()
+  isForgeCandidate: z.boolean(),
+  sourceId: trimmedString.nullable().default(null),
+  sourceTitle: trimmedString.nullable().default(null),
+  sourceType: trimmedString.nullable().default(null),
+  calendarType: trimmedString.nullable().default(null),
+  hostCalendarId: trimmedString.nullable().default(null),
+  canonicalKey: trimmedString.nullable().default(null)
 });
 
 export const calendarDiscoveryPayloadSchema = z.object({
@@ -867,6 +882,21 @@ export const calendarDiscoveryPayloadSchema = z.object({
   principalUrl: z.string().nullable(),
   homeUrl: z.string().nullable(),
   calendars: z.array(calendarDiscoveryCalendarSchema)
+});
+
+export const macosLocalCalendarSourceSchema = z.object({
+  sourceId: nonEmptyTrimmedString,
+  sourceTitle: trimmedString,
+  sourceType: trimmedString,
+  accountLabel: trimmedString,
+  accountIdentityKey: trimmedString,
+  calendars: z.array(calendarDiscoveryCalendarSchema)
+});
+
+export const macosLocalCalendarDiscoveryPayloadSchema = z.object({
+  status: macosCalendarAccessStatusSchema,
+  requestedAt: z.string(),
+  sources: z.array(macosLocalCalendarSourceSchema)
 });
 
 export const calendarSchema = z.object({
@@ -881,6 +911,12 @@ export const calendarSchema = z.object({
   canWrite: z.boolean(),
   selectedForSync: z.boolean(),
   forgeManaged: z.boolean(),
+  sourceId: trimmedString.nullable().default(null),
+  sourceTitle: trimmedString.nullable().default(null),
+  sourceType: trimmedString.nullable().default(null),
+  calendarType: trimmedString.nullable().default(null),
+  hostCalendarId: trimmedString.nullable().default(null),
+  canonicalKey: trimmedString.nullable().default(null),
   lastSyncedAt: z.string().nullable(),
   createdAt: z.string(),
   updatedAt: z.string()
@@ -2588,6 +2624,15 @@ export const createCalendarConnectionSchema = z.discriminatedUnion("provider", [
     label: nonEmptyTrimmedString,
     authSessionId: nonEmptyTrimmedString,
     selectedCalendarUrls: z.array(nonEmptyTrimmedString.url()).min(1)
+  }),
+  z.object({
+    provider: z.literal("macos_local"),
+    label: nonEmptyTrimmedString,
+    sourceId: nonEmptyTrimmedString,
+    selectedCalendarUrls: z.array(nonEmptyTrimmedString.url()).min(1),
+    forgeCalendarUrl: nonEmptyTrimmedString.url().nullable().optional(),
+    createForgeCalendar: z.boolean().optional().default(false),
+    replaceConnectionIds: z.array(nonEmptyTrimmedString).optional().default([])
   })
 ]);
 
@@ -3111,6 +3156,7 @@ export const updateTaskSchema = z.object({
   title: nonEmptyTrimmedString.optional(),
   description: trimmedString.optional(),
   status: taskStatusSchema.optional(),
+  completedAt: dateTimeSchema.optional(),
   priority: taskPrioritySchema.optional(),
   owner: nonEmptyTrimmedString.optional(),
   userId: nonEmptyTrimmedString.nullable().optional(),
@@ -3962,6 +4008,9 @@ export type CalendarConnection = z.infer<typeof calendarConnectionSchema>;
 export type CalendarConnectionStatus = z.infer<
   typeof calendarConnectionStatusSchema
 >;
+export type MacOSCalendarAccessStatus = z.infer<
+  typeof macosCalendarAccessStatusSchema
+>;
 export type CalendarEvent = z.infer<typeof calendarEventSchema>;
 export type CalendarEventLink = z.infer<typeof calendarEventLinkSchema>;
 export type CalendarEventOrigin = z.infer<typeof calendarEventOriginSchema>;
@@ -4212,6 +4261,12 @@ export type CalendarDiscoveryCalendar = z.infer<
 >;
 export type CalendarDiscoveryPayload = z.infer<
   typeof calendarDiscoveryPayloadSchema
+>;
+export type MacOSLocalCalendarSource = z.infer<
+  typeof macosLocalCalendarSourceSchema
+>;
+export type MacOSLocalCalendarDiscoveryPayload = z.infer<
+  typeof macosLocalCalendarDiscoveryPayloadSchema
 >;
 export type MicrosoftCalendarOauthSession = z.infer<
   typeof microsoftCalendarOauthSessionSchema

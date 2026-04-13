@@ -64,6 +64,12 @@ function mapCalendar(row) {
         canWrite: Boolean(row.can_write),
         selectedForSync: Boolean(row.selected_for_sync),
         forgeManaged: Boolean(row.forge_managed),
+        sourceId: row.source_id,
+        sourceTitle: row.source_title,
+        sourceType: row.source_type,
+        calendarType: row.calendar_type,
+        hostCalendarId: row.host_calendar_id,
+        canonicalKey: row.canonical_key,
         lastSyncedAt: row.last_synced_at,
         createdAt: row.created_at,
         updatedAt: row.updated_at
@@ -255,6 +261,13 @@ export function readEncryptedSecret(secretId) {
 export function deleteEncryptedSecret(secretId) {
     getDatabase().prepare(`DELETE FROM stored_secrets WHERE id = ?`).run(secretId);
 }
+export function isSupersededCalendarConnection(connectionId) {
+    const connection = getCalendarConnectionById(connectionId);
+    if (!connection) {
+        return false;
+    }
+    return isSupersededConnection(connection);
+}
 export function listCalendarConnections() {
     const rows = getDatabase()
         .prepare(`SELECT id, provider, label, account_label, status, config_json, credentials_secret_id, forge_calendar_id,
@@ -263,6 +276,15 @@ export function listCalendarConnections() {
        ORDER BY created_at DESC`)
         .all();
     return rows.map(mapConnection);
+}
+function isSupersededConnection(connection) {
+    return (typeof connection.config.replacedByConnectionId === "string" &&
+        connection.config.replacedByConnectionId.trim().length > 0);
+}
+function activeConnectionIds() {
+    return new Set(listCalendarConnections()
+        .filter((connection) => !isSupersededConnection(connection))
+        .map((connection) => connection.id));
 }
 export function getCalendarConnectionById(connectionId) {
     const row = getDatabase()
@@ -330,6 +352,70 @@ export function deleteExternalEventsForConnection(connectionId) {
     }
     return rows.map((row) => row.id);
 }
+export function rehomeCalendarConnectionReferences(input) {
+    return runInTransaction(() => {
+        const fromCalendars = listCalendars(input.fromConnectionId, {
+            includeUnselected: true
+        });
+        const toCalendars = listCalendars(input.toConnectionId, {
+            includeUnselected: true
+        });
+        const toForgeCalendar = toCalendars.find((calendar) => calendar.forgeManaged) ??
+            toCalendars.find((calendar) => calendar.canWrite) ??
+            null;
+        const toByCanonicalKey = new Map(toCalendars
+            .filter((calendar) => typeof calendar.canonicalKey === "string" &&
+            calendar.canonicalKey.trim().length > 0)
+            .map((calendar) => [calendar.canonicalKey, calendar]));
+        const mappedCalendarIds = new Map();
+        for (const fromCalendar of fromCalendars) {
+            const mapped = (fromCalendar.canonicalKey
+                ? toByCanonicalKey.get(fromCalendar.canonicalKey)
+                : null) ??
+                (fromCalendar.forgeManaged ? toForgeCalendar : null) ??
+                null;
+            mappedCalendarIds.set(fromCalendar.id, mapped?.id ?? null);
+        }
+        const now = nowIso();
+        const forgeEventRows = getDatabase()
+            .prepare(`SELECT id, preferred_calendar_id
+         FROM forge_events
+         WHERE ownership = 'forge' AND preferred_connection_id = ?`)
+            .all(input.fromConnectionId);
+        const updateForgeEvent = getDatabase().prepare(`UPDATE forge_events
+       SET preferred_connection_id = ?, preferred_calendar_id = ?, updated_at = ?
+       WHERE id = ?`);
+        for (const row of forgeEventRows) {
+            const nextCalendarId = row.preferred_calendar_id
+                ? (mappedCalendarIds.get(row.preferred_calendar_id) ?? toForgeCalendar?.id ?? null)
+                : (toForgeCalendar?.id ?? null);
+            updateForgeEvent.run(nextCalendarId ? input.toConnectionId : null, nextCalendarId, now, row.id);
+        }
+        const timeboxRows = getDatabase()
+            .prepare(`SELECT id, calendar_id
+         FROM task_timeboxes
+         WHERE connection_id = ?`)
+            .all(input.fromConnectionId);
+        const updateTimebox = getDatabase().prepare(`UPDATE task_timeboxes
+       SET connection_id = ?, calendar_id = ?, remote_event_id = NULL, updated_at = ?
+       WHERE id = ?`);
+        for (const row of timeboxRows) {
+            const nextCalendarId = row.calendar_id
+                ? (mappedCalendarIds.get(row.calendar_id) ?? toForgeCalendar?.id ?? null)
+                : (toForgeCalendar?.id ?? null);
+            updateTimebox.run(nextCalendarId ? input.toConnectionId : null, nextCalendarId, now, row.id);
+        }
+        getDatabase()
+            .prepare(`DELETE FROM forge_event_sources
+         WHERE connection_id = ?
+           AND forge_event_id IN (
+             SELECT id
+             FROM forge_events
+             WHERE ownership = 'forge'
+           )`)
+            .run(input.fromConnectionId);
+    });
+}
 export function detachConnectionFromForgeEvents(connectionId) {
     const now = nowIso();
     getDatabase()
@@ -352,16 +438,23 @@ export function listCalendars(connectionId, options = {}) {
             : "WHERE (selected_for_sync = 1 OR forge_managed = 1)";
     const rows = getDatabase()
         .prepare(`SELECT id, connection_id, remote_id, title, description, color, timezone, is_primary, can_write, selected_for_sync, forge_managed,
+              source_id, source_title, source_type, calendar_type, host_calendar_id, canonical_key,
               last_synced_at, created_at, updated_at
        FROM calendar_calendars
        ${connectionId ? `WHERE connection_id = ? ${visibilityClause}` : visibilityClause}
        ORDER BY forge_managed DESC, title ASC`)
         .all(...(connectionId ? [connectionId] : []));
-    return rows.map(mapCalendar);
+    const mapped = rows.map(mapCalendar);
+    if (connectionId) {
+        return mapped;
+    }
+    const activeIds = activeConnectionIds();
+    return mapped.filter((calendar) => activeIds.has(calendar.connectionId));
 }
 export function getCalendarById(calendarId) {
     const row = getDatabase()
         .prepare(`SELECT id, connection_id, remote_id, title, description, color, timezone, is_primary, can_write, selected_for_sync, forge_managed,
+              source_id, source_title, source_type, calendar_type, host_calendar_id, canonical_key,
               last_synced_at, created_at, updated_at
        FROM calendar_calendars
        WHERE id = ?`)
@@ -371,6 +464,7 @@ export function getCalendarById(calendarId) {
 function getDefaultWritableCalendar() {
     const row = getDatabase()
         .prepare(`SELECT id, connection_id, remote_id, title, description, color, timezone, is_primary, can_write, selected_for_sync, forge_managed,
+              source_id, source_title, source_type, calendar_type, host_calendar_id, canonical_key,
               last_synced_at, created_at, updated_at
        FROM calendar_calendars
        WHERE can_write = 1
@@ -383,6 +477,7 @@ function getDefaultWritableCalendar() {
 export function getCalendarByRemoteId(connectionId, remoteId) {
     const row = getDatabase()
         .prepare(`SELECT id, connection_id, remote_id, title, description, color, timezone, is_primary, can_write, selected_for_sync, forge_managed,
+              source_id, source_title, source_type, calendar_type, host_calendar_id, canonical_key,
               last_synced_at, created_at, updated_at
        FROM calendar_calendars
        WHERE connection_id = ? AND remote_id = ?`)
@@ -395,18 +490,21 @@ export function upsertCalendarRecord(connectionId, input) {
     if (existing) {
         getDatabase()
             .prepare(`UPDATE calendar_calendars
-         SET title = ?, description = ?, color = ?, timezone = ?, is_primary = ?, can_write = ?, selected_for_sync = ?, forge_managed = ?, last_synced_at = ?, updated_at = ?
+         SET title = ?, description = ?, color = ?, timezone = ?, is_primary = ?, can_write = ?, selected_for_sync = ?, forge_managed = ?,
+             source_id = ?, source_title = ?, source_type = ?, calendar_type = ?, host_calendar_id = ?, canonical_key = ?,
+             last_synced_at = ?, updated_at = ?
          WHERE id = ?`)
-            .run(input.title, input.description ?? existing.description, input.color ?? existing.color, normalizeTimezone(input.timezone ?? existing.timezone), input.isPrimary ? 1 : 0, input.canWrite === false ? 0 : 1, input.selectedForSync === false ? 0 : 1, input.forgeManaged ? 1 : 0, now, now, existing.id);
+            .run(input.title, input.description ?? existing.description, input.color ?? existing.color, normalizeTimezone(input.timezone ?? existing.timezone), input.isPrimary ? 1 : 0, input.canWrite === false ? 0 : 1, input.selectedForSync === false ? 0 : 1, input.forgeManaged ? 1 : 0, input.sourceId ?? existing.sourceId, input.sourceTitle ?? existing.sourceTitle, input.sourceType ?? existing.sourceType, input.calendarType ?? existing.calendarType, input.hostCalendarId ?? existing.hostCalendarId, input.canonicalKey ?? existing.canonicalKey ?? existing.remoteId, now, now, existing.id);
         return getCalendarById(existing.id);
     }
     const id = `calendar_${randomUUID().replaceAll("-", "").slice(0, 10)}`;
     getDatabase()
         .prepare(`INSERT INTO calendar_calendars (
-         id, connection_id, remote_id, title, description, color, timezone, is_primary, can_write, selected_for_sync, forge_managed, last_synced_at, created_at, updated_at
+         id, connection_id, remote_id, title, description, color, timezone, is_primary, can_write, selected_for_sync, forge_managed,
+         source_id, source_title, source_type, calendar_type, host_calendar_id, canonical_key, last_synced_at, created_at, updated_at
        )
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-        .run(id, connectionId, input.remoteId, input.title, input.description ?? "", input.color ?? "#7dd3fc", normalizeTimezone(input.timezone), input.isPrimary ? 1 : 0, input.canWrite === false ? 0 : 1, input.selectedForSync === false ? 0 : 1, input.forgeManaged ? 1 : 0, now, now, now);
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+        .run(id, connectionId, input.remoteId, input.title, input.description ?? "", input.color ?? "#7dd3fc", normalizeTimezone(input.timezone), input.isPrimary ? 1 : 0, input.canWrite === false ? 0 : 1, input.selectedForSync === false ? 0 : 1, input.forgeManaged ? 1 : 0, input.sourceId ?? null, input.sourceTitle ?? null, input.sourceType ?? null, input.calendarType ?? null, input.hostCalendarId ?? null, input.canonicalKey ?? input.remoteId, now, now, now);
     return getCalendarById(id);
 }
 export function listCalendarEvents(query) {
@@ -442,7 +540,12 @@ export function listCalendarEvents(query) {
        WHERE ${clauses.join(" AND ")}
        ORDER BY start_at ASC, title ASC`)
         .all(...params);
-    return filterOwnedEntities("calendar_event", rows.map(mapEvent), query.userIds);
+    const activeIds = activeConnectionIds();
+    return filterOwnedEntities("calendar_event", rows
+        .map(mapEvent)
+        .filter((event) => event.ownership !== "external" ||
+        event.connectionId === null ||
+        activeIds.has(event.connectionId)), query.userIds);
 }
 export function getCalendarEventById(eventId) {
     const row = getDatabase()
@@ -556,10 +659,20 @@ export function upsertCalendarEventRecord(connectionId, input) {
             calendarId: calendar.id,
             remoteCalendarId: calendar.remoteId,
             remoteEventId: input.remoteId,
-            remoteUid: typeof input.rawPayload?.uid === "string" ? String(input.rawPayload.uid) : null,
+            remoteUid: typeof input.rawPayload?.uid === "string"
+                ? String(input.rawPayload.uid)
+                : typeof input.rawPayload?.externalId === "string"
+                    ? String(input.rawPayload.externalId)
+                    : typeof input.rawPayload?.iCalUID === "string"
+                        ? String(input.rawPayload.iCalUID)
+                        : typeof input.rawPayload?.iCalUId === "string"
+                            ? String(input.rawPayload.iCalUId)
+                            : null,
             recurrenceInstanceId: typeof input.rawPayload?.recurrenceid === "string"
                 ? String(input.rawPayload.recurrenceid)
-                : null,
+                : typeof input.rawPayload?.occurrenceDate === "string"
+                    ? String(input.rawPayload.occurrenceDate)
+                    : null,
             isMasterRecurring: Boolean(input.rawPayload?.rrule),
             remoteHref: input.remoteHref ?? null,
             remoteEtag: input.remoteEtag ?? null,
@@ -585,10 +698,20 @@ export function upsertCalendarEventRecord(connectionId, input) {
         calendarId: calendar.id,
         remoteCalendarId: calendar.remoteId,
         remoteEventId: input.remoteId,
-        remoteUid: typeof input.rawPayload?.uid === "string" ? String(input.rawPayload.uid) : null,
+        remoteUid: typeof input.rawPayload?.uid === "string"
+            ? String(input.rawPayload.uid)
+            : typeof input.rawPayload?.externalId === "string"
+                ? String(input.rawPayload.externalId)
+                : typeof input.rawPayload?.iCalUID === "string"
+                    ? String(input.rawPayload.iCalUID)
+                    : typeof input.rawPayload?.iCalUId === "string"
+                        ? String(input.rawPayload.iCalUId)
+                        : null,
         recurrenceInstanceId: typeof input.rawPayload?.recurrenceid === "string"
             ? String(input.rawPayload.recurrenceid)
-            : null,
+            : typeof input.rawPayload?.occurrenceDate === "string"
+                ? String(input.rawPayload.occurrenceDate)
+                : null,
         isMasterRecurring: Boolean(input.rawPayload?.rrule),
         remoteHref: input.remoteHref ?? null,
         remoteEtag: input.remoteEtag ?? null,
@@ -931,7 +1054,10 @@ export function listTaskTimeboxes(query) {
        WHERE ${clauses.join(" AND ")}
        ORDER BY starts_at ASC`)
         .all(...params);
-    return filterOwnedEntities("task_timebox", rows.map(mapTimebox), query.userIds);
+    const activeIds = activeConnectionIds();
+    return filterOwnedEntities("task_timebox", rows
+        .map(mapTimebox)
+        .filter((timebox) => timebox.connectionId === null || activeIds.has(timebox.connectionId)), query.userIds);
 }
 export function getTaskTimeboxById(timeboxId) {
     const row = getDatabase()
@@ -1302,6 +1428,12 @@ export function getCalendarOverview(query) {
                 label: "Custom CalDAV",
                 supportsDedicatedForgeCalendar: true,
                 connectionHelp: "Use an account-level CalDAV base URL, then let Forge discover the calendars before selecting sync and write targets."
+            },
+            {
+                provider: "macos_local",
+                label: "Calendars On This Mac",
+                supportsDedicatedForgeCalendar: true,
+                connectionHelp: "Use EventKit to access the calendars already configured in Calendar.app on this Mac. Forge replaces overlapping remote account connections instead of showing duplicate copies."
             }
         ],
         connections: listCalendarConnections().map(({ credentialsSecretId: _secret, ...connection }) => connection),

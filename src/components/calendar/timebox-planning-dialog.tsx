@@ -28,8 +28,8 @@ type PlannerDraft = {
   selectedTimeboxId: string;
   activityPresetKey: string | null;
   customSustainRateApPerHour: number | null;
-  manualStartAt: string;
-  manualEndAt: string;
+  manualStartTime: string;
+  manualEndTime: string;
   manualTitle: string;
   overrideReason: string;
 };
@@ -46,15 +46,53 @@ function toDayEndIso(dateKey: string) {
   return new Date(`${dateKey}T23:59:59.999`).toISOString();
 }
 
+function clampDateKey(dateKey: string, minDateKey: string, maxDateKey: string) {
+  if (dateKey < minDateKey) {
+    return minDateKey;
+  }
+  if (dateKey > maxDateKey) {
+    return maxDateKey;
+  }
+  return dateKey;
+}
+
+function getPreferredPlanningDateKey(from: string, to: string) {
+  const minDateKey = toDateKey(from);
+  const maxDateKey = toDateKey(to);
+  const candidate = new Date(`${minDateKey}T12:00:00`);
+  candidate.setDate(candidate.getDate() + 1);
+  return clampDateKey(toDateKey(candidate.toISOString()), minDateKey, maxDateKey);
+}
+
 function padNumber(value: number) {
   return String(value).padStart(2, "0");
 }
 
-function toDateTimeLocalValue(date: Date) {
-  return `${date.getFullYear()}-${padNumber(date.getMonth() + 1)}-${padNumber(date.getDate())}T${padNumber(date.getHours())}:${padNumber(date.getMinutes())}`;
+function toTimeInputValue(date: Date) {
+  return `${padNumber(date.getHours())}:${padNumber(date.getMinutes())}`;
 }
 
-function buildManualWindow(dateKey: string, durationSeconds?: number | null) {
+function parseDateAndTime(dateKey: string, timeValue: string) {
+  if (!dateKey || !timeValue) {
+    return null;
+  }
+  const date = new Date(`${dateKey}T${timeValue}:00`);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function buildManualWindow(
+  dateKey: string,
+  durationSeconds?: number | null,
+  seed?: { startsAt: string; endsAt: string } | null
+) {
+  if (seed) {
+    const seededStart = new Date(seed.startsAt);
+    const seededEnd = new Date(seed.endsAt);
+    return {
+      startTime: toTimeInputValue(seededStart),
+      endTime: toTimeInputValue(seededEnd)
+    };
+  }
   const start = new Date(`${dateKey}T09:00:00`);
   const boundedDurationSeconds = Math.max(
     30 * 60,
@@ -62,8 +100,8 @@ function buildManualWindow(dateKey: string, durationSeconds?: number | null) {
   );
   const end = new Date(start.getTime() + boundedDurationSeconds * 1000);
   return {
-    start: toDateTimeLocalValue(start),
-    end: toDateTimeLocalValue(end)
+    startTime: toTimeInputValue(start),
+    endTime: toTimeInputValue(end)
   };
 }
 
@@ -173,8 +211,10 @@ export function TimeboxPlanningDialog({
   from,
   to,
   onCreateTimebox,
+  onUpdateTimebox,
   initialTaskId,
   lockedTaskId,
+  editingTimebox,
   userIds
 }: {
   open: boolean;
@@ -193,39 +233,74 @@ export function TimeboxPlanningDialog({
     activityPresetKey?: string | null;
     customSustainRateApPerHour?: number | null;
   }) => Promise<void>;
+  onUpdateTimebox?: (
+    timeboxId: string,
+    patch: {
+      title: string;
+      startsAt: string;
+      endsAt: string;
+      overrideReason?: string | null;
+      activityPresetKey?: string | null;
+      customSustainRateApPerHour?: number | null;
+    }
+  ) => Promise<void>;
   initialTaskId?: string;
   lockedTaskId?: string;
+  editingTimebox?: TaskTimebox | null;
   userIds?: string[];
 }) {
+  const isEditing = Boolean(editingTimebox);
   const availableTasks = useMemo(() => {
-    const liveTasks = tasks.filter((task) => task.status !== "done");
-    if (!lockedTaskId) {
+    const pinnedTaskId = lockedTaskId ?? editingTimebox?.taskId ?? null;
+    const liveTasks = tasks.filter(
+      (task) => task.status !== "done" || task.id === pinnedTaskId
+    );
+    if (!pinnedTaskId) {
       return liveTasks;
     }
-    const locked = liveTasks.find((task) => task.id === lockedTaskId);
+    const locked = liveTasks.find((task) => task.id === pinnedTaskId);
     return locked ? [locked] : [];
-  }, [lockedTaskId, tasks]);
+  }, [editingTimebox?.taskId, lockedTaskId, tasks]);
 
-  const defaultDateKey = toDateKey(from);
-  const defaultTaskId = lockedTaskId ?? initialTaskId ?? availableTasks[0]?.id ?? "";
+  const minDateKey = toDateKey(from);
+  const maxDateKey = toDateKey(to);
+  const defaultDateKey = editingTimebox
+    ? clampDateKey(toDateKey(editingTimebox.startsAt), minDateKey, maxDateKey)
+    : getPreferredPlanningDateKey(from, to);
+  const defaultTaskId =
+    lockedTaskId ??
+    editingTimebox?.taskId ??
+    initialTaskId ??
+    availableTasks[0]?.id ??
+    "";
   const defaultTask =
     availableTasks.find((task) => task.id === defaultTaskId) ?? availableTasks[0] ?? null;
   const defaultManualWindow = buildManualWindow(
     defaultDateKey,
-    defaultTask?.plannedDurationSeconds
+    defaultTask?.plannedDurationSeconds,
+    editingTimebox
+      ? {
+          startsAt: editingTimebox.startsAt,
+          endsAt: editingTimebox.endsAt
+        }
+      : null
   );
 
   const [draft, setDraft] = useState<PlannerDraft>({
     taskId: defaultTaskId,
     preferredDate: defaultDateKey,
-    plannerMode: "suggested",
+    plannerMode: editingTimebox ? "manual" : "suggested",
     selectedTimeboxId: "",
-    activityPresetKey: "task_inherited",
-    customSustainRateApPerHour: null,
-    manualStartAt: defaultManualWindow.start,
-    manualEndAt: defaultManualWindow.end,
-    manualTitle: defaultTask?.title ?? "",
-    overrideReason: ""
+    activityPresetKey:
+      editingTimebox?.actionProfile?.profileKey ?? "task_inherited",
+    customSustainRateApPerHour:
+      editingTimebox?.actionProfile?.sourceMethod === "manual"
+        ? editingTimebox.actionProfile.sustainRateApPerHour
+        : null,
+    manualStartTime: defaultManualWindow.startTime,
+    manualEndTime: defaultManualWindow.endTime,
+    manualTitle: editingTimebox?.title ?? defaultTask?.title ?? "",
+    overrideReason: editingTimebox?.overrideReason ?? ""
   });
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -235,50 +310,43 @@ export function TimeboxPlanningDialog({
       return;
     }
     const nextTaskId = lockedTaskId ?? initialTaskId ?? availableTasks[0]?.id ?? "";
+    const resolvedTaskId = editingTimebox?.taskId ?? nextTaskId;
     const nextTask =
-      availableTasks.find((task) => task.id === nextTaskId) ?? availableTasks[0] ?? null;
-    const nextDateKey = toDateKey(from);
+      availableTasks.find((task) => task.id === resolvedTaskId) ?? availableTasks[0] ?? null;
+    const nextDateKey = editingTimebox
+      ? clampDateKey(toDateKey(editingTimebox.startsAt), minDateKey, maxDateKey)
+      : getPreferredPlanningDateKey(from, to);
     const nextManualWindow = buildManualWindow(
       nextDateKey,
-      nextTask?.plannedDurationSeconds
+      nextTask?.plannedDurationSeconds,
+      editingTimebox
+        ? {
+            startsAt: editingTimebox.startsAt,
+            endsAt: editingTimebox.endsAt
+          }
+        : null
     );
     setSubmitError(null);
     setDraft({
-      taskId: nextTaskId,
+      taskId: resolvedTaskId,
       preferredDate: nextDateKey,
-      plannerMode: "suggested",
+      plannerMode: editingTimebox ? "manual" : "suggested",
       selectedTimeboxId: "",
-      activityPresetKey: "task_inherited",
-      customSustainRateApPerHour: null,
-      manualStartAt: nextManualWindow.start,
-      manualEndAt: nextManualWindow.end,
-      manualTitle: nextTask?.title ?? "",
-      overrideReason: ""
+      activityPresetKey:
+        editingTimebox?.actionProfile?.profileKey ?? "task_inherited",
+      customSustainRateApPerHour:
+        editingTimebox?.actionProfile?.sourceMethod === "manual"
+          ? editingTimebox.actionProfile.sustainRateApPerHour
+          : null,
+      manualStartTime: nextManualWindow.startTime,
+      manualEndTime: nextManualWindow.endTime,
+      manualTitle: editingTimebox?.title ?? nextTask?.title ?? "",
+      overrideReason: editingTimebox?.overrideReason ?? ""
     });
-  }, [availableTasks, from, initialTaskId, lockedTaskId, open]);
+  }, [availableTasks, editingTimebox, from, initialTaskId, lockedTaskId, maxDateKey, minDateKey, open, to]);
 
   const selectedTask =
     availableTasks.find((task) => task.id === draft.taskId) ?? null;
-
-  useEffect(() => {
-    if (!open || !selectedTask) {
-      return;
-    }
-    const manualWindow = buildManualWindow(
-      draft.preferredDate,
-      selectedTask.plannedDurationSeconds
-    );
-    setDraft((current) => ({
-      ...current,
-      manualStartAt: manualWindow.start,
-      manualEndAt: manualWindow.end,
-      manualTitle:
-        current.manualTitle.trim().length > 0 &&
-        current.manualTitle !== selectedTask.title
-          ? current.manualTitle
-          : selectedTask.title
-    }));
-  }, [draft.preferredDate, open, selectedTask?.id, selectedTask?.plannedDurationSeconds]);
 
   const selectedDayWindow = useMemo(
     () => ({
@@ -350,11 +418,13 @@ export function TimeboxPlanningDialog({
   const selectedSuggestion = (suggestionQuery.data?.timeboxes ?? []).find(
     (timebox) => timebox.id === draft.selectedTimeboxId
   );
+  const manualStart = parseDateAndTime(draft.preferredDate, draft.manualStartTime);
+  const manualEnd = parseDateAndTime(draft.preferredDate, draft.manualEndTime);
   const manualPreview =
-    draft.manualStartAt && draft.manualEndAt
+    manualStart && manualEnd
       ? estimateTaskTimeboxActionPointLoad({
-          startsAt: new Date(draft.manualStartAt).toISOString(),
-          endsAt: new Date(draft.manualEndAt).toISOString(),
+          startsAt: manualStart.toISOString(),
+          endsAt: manualEnd.toISOString(),
           actionProfile:
             draft.customSustainRateApPerHour !== null ||
             draft.activityPresetKey !== "task_inherited"
@@ -385,18 +455,22 @@ export function TimeboxPlanningDialog({
                   costBand: "light",
                   recoveryEffect: 0,
                   metadata: {},
-                  createdAt: new Date(draft.manualStartAt).toISOString(),
-                  updatedAt: new Date(draft.manualStartAt).toISOString()
+                  createdAt: manualStart.toISOString(),
+                  updatedAt: manualStart.toISOString()
                 }
               : null
         })
       : null;
 
-  const taskStepTitle = lockedTaskId
+  const taskStepTitle = isEditing
+    ? "Review the task tied to this scheduled block"
+    : lockedTaskId
     ? "Review the task you are planning"
     : "Choose the task you want to place into the calendar";
 
-  const taskStepDescription = lockedTaskId
+  const taskStepDescription = isEditing
+    ? "The timebox stays linked to this task. Update the day, hours, title, or AP profile without leaving the planning flow."
+    : lockedTaskId
     ? "Forge will use this task's current duration target and scheduling rules while it looks for viable slots."
     : "Forge will use the task's current planned duration and scheduling rules when it searches for valid slots.";
 
@@ -414,12 +488,24 @@ export function TimeboxPlanningDialog({
                 <select
                   value={value.taskId}
                   onChange={(event) =>
-                    setValue({
-                      taskId: event.target.value,
-                      selectedTimeboxId: "",
-                      activityPresetKey: "task_inherited",
-                      customSustainRateApPerHour: null
-                    })
+                    (() => {
+                      const nextTask = availableTasks.find(
+                        (task) => task.id === event.target.value
+                      );
+                      const nextManualWindow = buildManualWindow(
+                        value.preferredDate,
+                        nextTask?.plannedDurationSeconds
+                      );
+                      setValue({
+                        taskId: event.target.value,
+                        selectedTimeboxId: "",
+                        activityPresetKey: "task_inherited",
+                        customSustainRateApPerHour: null,
+                        manualStartTime: nextManualWindow.startTime,
+                        manualEndTime: nextManualWindow.endTime,
+                        manualTitle: nextTask?.title ?? value.manualTitle
+                      });
+                    })()
                   }
                   className="rounded-[22px] border border-white/8 bg-white/6 px-4 py-3 text-[15px] text-white outline-none"
                 >
@@ -491,15 +577,27 @@ export function TimeboxPlanningDialog({
                 >
                   <Input
                     type="date"
-                    min={toDateKey(from)}
-                    max={toDateKey(to)}
+                    min={minDateKey}
+                    max={maxDateKey}
                     value={value.preferredDate}
-                    onChange={(event) =>
+                    onChange={(event) => {
+                      const nextManualWindow = buildManualWindow(
+                        event.target.value,
+                        selectedTask?.plannedDurationSeconds,
+                        editingTimebox
+                          ? {
+                              startsAt: `${event.target.value}T${value.manualStartTime}:00`,
+                              endsAt: `${event.target.value}T${value.manualEndTime}:00`
+                            }
+                          : null
+                      );
                       setValue({
                         preferredDate: event.target.value,
-                        selectedTimeboxId: ""
-                      })
-                    }
+                        selectedTimeboxId: "",
+                        manualStartTime: nextManualWindow.startTime,
+                        manualEndTime: nextManualWindow.endTime
+                      });
+                    }}
                   />
                 </FlowField>
                 <FlowField
@@ -612,28 +710,42 @@ export function TimeboxPlanningDialog({
           if (value.plannerMode === "manual") {
             return (
               <div className="grid gap-5">
-                <div className="grid gap-4 md:grid-cols-2">
+                <div className="grid gap-4 md:grid-cols-3">
                   <FlowField
-                    label="Start"
+                    label="Day"
+                    description="Pick the day for the block. Forge defaults to a future day, but you can move it."
+                  >
+                    <Input
+                      type="date"
+                      min={minDateKey}
+                      max={maxDateKey}
+                      value={value.preferredDate}
+                      onChange={(event) => setValue({ preferredDate: event.target.value })}
+                    />
+                  </FlowField>
+                  <FlowField
+                    label="Start time"
                     description="Choose when the protected work block should begin."
                   >
                     <Input
-                      type="datetime-local"
-                      value={value.manualStartAt}
+                      type="time"
+                      step={300}
+                      value={value.manualStartTime}
                       onChange={(event) =>
-                        setValue({ manualStartAt: event.target.value })
+                        setValue({ manualStartTime: event.target.value })
                       }
                     />
                   </FlowField>
                   <FlowField
-                    label="End"
+                    label="End time"
                     description="Choose when the work block should end."
                   >
                     <Input
-                      type="datetime-local"
-                      value={value.manualEndAt}
+                      type="time"
+                      step={300}
+                      value={value.manualEndTime}
                       onChange={(event) =>
-                        setValue({ manualEndAt: event.target.value })
+                        setValue({ manualEndTime: event.target.value })
                       }
                     />
                   </FlowField>
@@ -703,14 +815,14 @@ export function TimeboxPlanningDialog({
                         {value.manualTitle || selectedTask?.title || "Manual timebox"}
                       </div>
                       <div className="mt-1 text-sm text-white/56">
-                        {value.manualStartAt && value.manualEndAt
-                          ? `${new Date(value.manualStartAt).toLocaleDateString([], {
+                        {manualStart && manualEnd
+                          ? `${manualStart.toLocaleDateString([], {
                               weekday: "long",
                               month: "short",
                               day: "numeric"
                             })} · ${formatClockRange(
-                              new Date(value.manualStartAt).toISOString(),
-                              new Date(value.manualEndAt).toISOString()
+                              manualStart.toISOString(),
+                              manualEnd.toISOString()
                             )}`
                           : "Choose a start and end time."}
                       </div>
@@ -875,9 +987,12 @@ export function TimeboxPlanningDialog({
       dayEvents,
       dayTimeboxes,
       draft.plannerMode,
+      editingTimebox,
       from,
       lockedTaskId,
+      maxDateKey,
       manualPreview,
+      minDateKey,
       selectedTask,
       suggestionQuery.data,
       suggestionQuery.isLoading,
@@ -892,12 +1007,16 @@ export function TimeboxPlanningDialog({
       open={open}
       onOpenChange={onOpenChange}
       eyebrow="Calendar"
-      title="Plan work"
-      description="Review the day, let Forge recommend valid slots, and place a real timebox on the task without leaving the detail view."
+      title={isEditing ? "Edit timebox" : "Plan work"}
+      description={
+        isEditing
+          ? "Update the day, hour range, title, and AP profile for this scheduled block without leaving the task or calendar view."
+          : "Review the day, let Forge recommend valid slots, and place a real timebox on the task without leaving the detail view."
+      }
       value={draft}
       onChange={setDraft}
       steps={steps}
-      submitLabel="Schedule timebox"
+      submitLabel={isEditing ? "Save timebox" : "Schedule timebox"}
       pending={submitting}
       pendingLabel="Scheduling"
       error={submitError}
@@ -909,30 +1028,35 @@ export function TimeboxPlanningDialog({
         }
 
         if (draft.plannerMode === "manual") {
-          const start = new Date(draft.manualStartAt);
-          const end = new Date(draft.manualEndAt);
-          if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
+          if (!manualStart || !manualEnd) {
             setSubmitError("Choose a valid manual start and end time.");
             return;
           }
-          if (end <= start) {
+          if (manualEnd <= manualStart) {
             setSubmitError("The manual timebox needs an end time after the start time.");
             return;
           }
           setSubmitError(null);
           setSubmitting(true);
           try {
-            await onCreateTimebox({
-              taskId: selectedTask.id,
-              projectId: selectedTask.projectId,
+            const manualPayload = {
               title: draft.manualTitle.trim() || selectedTask.title,
-              startsAt: start.toISOString(),
-              endsAt: end.toISOString(),
-              source: "manual",
+              startsAt: manualStart.toISOString(),
+              endsAt: manualEnd.toISOString(),
               overrideReason: draft.overrideReason.trim() || null,
               activityPresetKey: draft.activityPresetKey,
               customSustainRateApPerHour: draft.customSustainRateApPerHour
-            });
+            };
+            if (editingTimebox && onUpdateTimebox) {
+              await onUpdateTimebox(editingTimebox.id, manualPayload);
+            } else {
+              await onCreateTimebox({
+                taskId: selectedTask.id,
+                projectId: selectedTask.projectId,
+                ...manualPayload,
+                source: "manual"
+              });
+            }
             onOpenChange(false);
           } catch (error) {
             setSubmitError(
@@ -953,16 +1077,23 @@ export function TimeboxPlanningDialog({
         setSubmitError(null);
         setSubmitting(true);
         try {
-          await onCreateTimebox({
-            taskId: selectedTask.id,
-            projectId: selectedTask.projectId,
+          const suggestedPayload = {
             title: selectedSuggestion.title,
             startsAt: selectedSuggestion.startsAt,
             endsAt: selectedSuggestion.endsAt,
-            source: selectedSuggestion.source,
             activityPresetKey: draft.activityPresetKey,
             customSustainRateApPerHour: draft.customSustainRateApPerHour
-          });
+          };
+          if (editingTimebox && onUpdateTimebox) {
+            await onUpdateTimebox(editingTimebox.id, suggestedPayload);
+          } else {
+            await onCreateTimebox({
+              taskId: selectedTask.id,
+              projectId: selectedTask.projectId,
+              ...suggestedPayload,
+              source: selectedSuggestion.source
+            });
+          }
           onOpenChange(false);
         } catch (error) {
           setSubmitError(

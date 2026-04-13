@@ -260,6 +260,154 @@ describe("Life Force calendar flows", () => {
     expect(screen.getByText("manual")).toBeInTheDocument();
   });
 
+  it("defaults task-view timeboxing to a future day and submits an explicit day plus hour range", async () => {
+    const onCreateTimebox = vi.fn(async () => {});
+    recommendTaskTimeboxesMock.mockResolvedValue({ timeboxes: [] });
+    const tasks = [
+      {
+        id: "task_1",
+        title: "Draft the Life Force review",
+        status: "focus",
+        priority: "medium",
+        owner: "Albert",
+        goalId: null,
+        projectId: null,
+        dueDate: null,
+        effort: "steady",
+        energy: "steady",
+        points: 50,
+        plannedDurationSeconds: 7200,
+        schedulingRules: null,
+        sortOrder: 1,
+        completedAt: null,
+        createdAt: "2026-04-12T08:00:00.000Z",
+        updatedAt: "2026-04-12T08:00:00.000Z",
+        tagIds: []
+      }
+    ] as unknown as Task[];
+
+    renderWithProviders(
+      <TimeboxPlanningDialog
+        open
+        onOpenChange={vi.fn()}
+        tasks={tasks}
+        from="2026-04-13T00:00:00.000Z"
+        to="2026-04-20T00:00:00.000Z"
+        onCreateTimebox={onCreateTimebox}
+      />
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    const dayInput = await screen.findByDisplayValue("2026-04-14");
+    expect(dayInput).toBeInTheDocument();
+    fireEvent.click(screen.getAllByRole("button", { name: /Set it manually/i })[1]);
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    expect(
+      await screen.findByText("Set the exact timebox yourself")
+    ).toBeInTheDocument();
+    fireEvent.change(screen.getByDisplayValue("2026-04-14"), {
+      target: { value: "2026-04-15" }
+    });
+    fireEvent.change(screen.getByDisplayValue("09:00"), {
+      target: { value: "13:00" }
+    });
+    fireEvent.change(screen.getByDisplayValue("11:00"), {
+      target: { value: "15:30" }
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Schedule timebox" }));
+
+    expect(onCreateTimebox).toHaveBeenCalledWith(
+      expect.objectContaining({
+        taskId: "task_1",
+        startsAt: "2026-04-15T11:00:00.000Z",
+        endsAt: "2026-04-15T13:30:00.000Z",
+        source: "manual"
+      })
+    );
+  });
+
+  it("updates an existing timebox through the same guided modal", async () => {
+    const onUpdateTimebox = vi.fn(async () => {});
+    recommendTaskTimeboxesMock.mockResolvedValue({ timeboxes: [] });
+    const tasks = [
+      {
+        id: "task_1",
+        title: "Draft the Life Force review",
+        status: "focus",
+        priority: "medium",
+        owner: "Albert",
+        goalId: null,
+        projectId: null,
+        dueDate: null,
+        effort: "steady",
+        energy: "steady",
+        points: 50,
+        plannedDurationSeconds: 7200,
+        schedulingRules: null,
+        sortOrder: 1,
+        completedAt: null,
+        createdAt: "2026-04-12T08:00:00.000Z",
+        updatedAt: "2026-04-12T08:00:00.000Z",
+        tagIds: []
+      }
+    ] as unknown as Task[];
+
+    renderWithProviders(
+      <TimeboxPlanningDialog
+        open
+        onOpenChange={vi.fn()}
+        tasks={tasks}
+        from="2026-04-13T00:00:00.000Z"
+        to="2026-04-20T00:00:00.000Z"
+        editingTimebox={{
+          id: "timebox_1",
+          taskId: "task_1",
+          projectId: null,
+          connectionId: null,
+          calendarId: null,
+          remoteEventId: null,
+          linkedTaskRunId: null,
+          status: "planned",
+          source: "manual",
+          title: "Existing block",
+          startsAt: "2026-04-16T14:00:00.000Z",
+          endsAt: "2026-04-16T15:00:00.000Z",
+          overrideReason: "Keep the afternoon clear",
+          actionProfile: null,
+          createdAt: "2026-04-12T08:00:00.000Z",
+          updatedAt: "2026-04-12T08:00:00.000Z",
+          userId: "user_operator",
+          user: null
+        }}
+        onCreateTimebox={vi.fn(async () => {})}
+        onUpdateTimebox={onUpdateTimebox}
+      />
+    );
+
+    expect(await screen.findByText("Edit timebox")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    expect(
+      await screen.findByText("Set the exact timebox yourself")
+    ).toBeInTheDocument();
+    fireEvent.change(screen.getByDisplayValue("16:00"), {
+      target: { value: "15:00" }
+    });
+    fireEvent.change(screen.getByDisplayValue("17:00"), {
+      target: { value: "16:30" }
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save timebox" }));
+
+    expect(onUpdateTimebox).toHaveBeenCalledWith(
+      "timebox_1",
+      expect.objectContaining({
+        title: "Existing block",
+        startsAt: "2026-04-16T13:00:00.000Z",
+        endsAt: "2026-04-16T14:30:00.000Z"
+      })
+    );
+  });
+
   it("previews event AP drain before saving a busy calendar event", async () => {
     renderWithProviders(
       <CalendarEventFlowDialog

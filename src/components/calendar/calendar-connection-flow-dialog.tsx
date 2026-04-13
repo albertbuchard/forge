@@ -21,17 +21,24 @@ import { Button } from "@/components/ui/button";
 import { InfoTooltip } from "@/components/ui/info-tooltip";
 import { Input } from "@/components/ui/input";
 import { readCalendarDisplayName } from "@/lib/calendar-name-deduper";
+import { ForgeApiError } from "@/lib/api-error";
 import {
   discoverCalendarConnection,
+  discoverMacOSLocalCalendarSources,
   getGoogleCalendarOauthSession,
+  getMacOSLocalCalendarStatus,
   getMicrosoftCalendarOauthSession,
   patchSettings,
+  requestMacOSLocalCalendarAccess,
   startGoogleCalendarOauth,
   startMicrosoftCalendarOauth,
   testMicrosoftCalendarOauthConfiguration
 } from "@/lib/api";
 import type {
   CalendarDiscoveryPayload,
+  CalendarConnectionStatus,
+  MacOSCalendarAccessStatus,
+  MacOSLocalCalendarDiscoveryPayload,
   CalendarProvider,
   GoogleCalendarAuthSettings,
   GoogleCalendarOauthSession,
@@ -48,6 +55,15 @@ type ConnectionDraft = {
   selectedCalendarUrls: string[];
   forgeCalendarUrl: string | null;
   createForgeCalendar: boolean;
+  sourceId: string | null;
+  replaceConnectionIds: string[];
+};
+
+type ExistingCalendarConnection = {
+  id: string;
+  label: string;
+  provider: CalendarProvider;
+  status: CalendarConnectionStatus;
 };
 
 type GooglePopupMessage = {
@@ -91,6 +107,10 @@ const PROVIDER_DEFAULTS: Record<CalendarProvider, { label: string; serverUrl: st
     label: "Primary Exchange Online",
     serverUrl: ""
   },
+  macos_local: {
+    label: "Calendars On This Mac",
+    serverUrl: "forge-macos-local://eventkit/"
+  },
   caldav: {
     label: "Primary CalDAV",
     serverUrl: "https://caldav.example.com"
@@ -106,7 +126,9 @@ function createDraft(provider: CalendarProvider): ConnectionDraft {
     password: "",
     selectedCalendarUrls: [],
     forgeCalendarUrl: null,
-    createForgeCalendar: false
+    createForgeCalendar: false,
+    sourceId: null,
+    replaceConnectionIds: []
   };
 }
 
@@ -312,6 +334,7 @@ export function CalendarConnectionFlowDialog({
   googleSetup,
   microsoftSetup,
   onCalendarSettingsChanged,
+  existingConnections = [],
   onSubmit,
   pending = false
 }: {
@@ -322,6 +345,7 @@ export function CalendarConnectionFlowDialog({
   googleSetup: GoogleCalendarAuthSettings;
   microsoftSetup: MicrosoftCalendarAuthSettings;
   onCalendarSettingsChanged?: () => Promise<void>;
+  existingConnections?: ExistingCalendarConnection[];
   onSubmit: (
     input:
       | {
@@ -357,6 +381,15 @@ export function CalendarConnectionFlowDialog({
           authSessionId: string;
           selectedCalendarUrls: string[];
         }
+      | {
+          provider: "macos_local";
+          label: string;
+          sourceId: string;
+          selectedCalendarUrls: string[];
+          forgeCalendarUrl?: string | null;
+          createForgeCalendar?: boolean;
+          replaceConnectionIds?: string[];
+        }
   ) => Promise<void>;
   pending?: boolean;
 }) {
@@ -364,6 +397,10 @@ export function CalendarConnectionFlowDialog({
   const [draft, setDraft] = useState<ConnectionDraft>(() => createDraft(initialProvider));
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [discovery, setDiscovery] = useState<CalendarDiscoveryPayload | null>(null);
+  const [macosStatus, setMacosStatus] =
+    useState<MacOSCalendarAccessStatus>("not_determined");
+  const [macosDiscovery, setMacosDiscovery] =
+    useState<MacOSLocalCalendarDiscoveryPayload | null>(null);
   const [googleSession, setGoogleSession] = useState<GoogleCalendarOauthSession | null>(null);
   const [microsoftSession, setMicrosoftSession] = useState<MicrosoftCalendarOauthSession | null>(null);
   const [activeGoogleSetup, setActiveGoogleSetup] =
@@ -437,10 +474,19 @@ export function CalendarConnectionFlowDialog({
     setDraft(createDraft(initialProvider));
     resetGoogleSession();
     resetMicrosoftSession();
+    setMacosDiscovery(null);
+    setMacosStatus("not_determined");
     setGoogleClientIdEditing(false);
     setGoogleSetupMessage(null);
     setMicrosoftSetupMessage(null);
   }, [initialProvider, open]);
+
+  useEffect(() => {
+    if (!open || draft.provider !== "macos_local") {
+      return;
+    }
+    void macosStatusMutation.mutateAsync();
+  }, [draft.provider, open]);
 
   useEffect(() => {
     if (!open) {
@@ -571,8 +617,35 @@ export function CalendarConnectionFlowDialog({
     };
   }, [activeMicrosoftSetup.redirectUri, microsoftSession, open]);
 
-  const discoveryMutation = useMutation({
+  const discoveryMutation = useMutation<{
+    discovery: CalendarDiscoveryPayload | null;
+  }>({
     mutationFn: () => {
+      if (draft.provider === "macos_local") {
+        return discoverMacOSLocalCalendarSources().then(({ discovery }) => {
+          setMacosDiscovery(discovery);
+          setMacosStatus(discovery.status);
+          const preferredSource =
+            discovery.sources.find((source) =>
+              source.sourceId === draft.sourceId
+            ) ?? discovery.sources[0] ?? null;
+          if (preferredSource) {
+            applyDiscoveryPayload({
+              provider: "macos_local",
+              accountLabel: preferredSource.accountLabel,
+              serverUrl: draft.serverUrl,
+              principalUrl: null,
+              homeUrl: null,
+              calendars: preferredSource.calendars
+            });
+            setDraft((current) => ({
+              ...current,
+              sourceId: preferredSource.sourceId
+            }));
+          }
+          return { discovery: null };
+        });
+      }
       if (draft.provider === "apple") {
         return discoverCalendarConnection({
           provider: "apple",
@@ -588,7 +661,9 @@ export function CalendarConnectionFlowDialog({
       });
     },
     onSuccess: ({ discovery: payload }) => {
-      applyDiscoveryPayload(payload);
+      if (payload) {
+        applyDiscoveryPayload(payload);
+      }
     },
     onError: (error) => {
       setDiscovery(null);
@@ -599,6 +674,50 @@ export function CalendarConnectionFlowDialog({
       );
     }
   });
+
+  const macosStatusMutation = useMutation({
+    mutationFn: getMacOSLocalCalendarStatus,
+    onSuccess: ({ status }) => {
+      setMacosStatus(status);
+      if (status !== "full_access") {
+        setMacosDiscovery(null);
+        setDiscovery(null);
+      }
+    }
+  });
+
+  const macosAccessMutation = useMutation({
+    mutationFn: requestMacOSLocalCalendarAccess,
+    onSuccess: ({ status }) => {
+      setMacosStatus(status);
+    },
+    onError: (error) => {
+      setSubmitError(
+        error instanceof Error
+          ? error.message
+          : "Forge could not request Calendar access from macOS."
+      );
+    }
+  });
+
+  useEffect(() => {
+    if (
+      !open ||
+      draft.provider !== "macos_local" ||
+      macosStatus !== "full_access" ||
+      macosDiscovery !== null ||
+      discoveryMutation.isPending
+    ) {
+      return;
+    }
+    void discoveryMutation.mutateAsync();
+  }, [
+    discoveryMutation,
+    draft.provider,
+    macosDiscovery,
+    macosStatus,
+    open
+  ]);
 
   const saveMicrosoftSettingsMutation = useMutation({
     mutationFn: async (input: MicrosoftSettingsDraft) => {
@@ -760,6 +879,17 @@ export function CalendarConnectionFlowDialog({
       if (!hasUnsavedMicrosoftSettings && !savedMicrosoftSettingsDraft.clientId && !microsoftSetupMessage) {
         return activeMicrosoftSetup.setupMessage;
       }
+    }
+
+    if (
+      draft.provider === "macos_local" &&
+      (stepId === "credentials" || stepId === "discovery") &&
+      macosStatus !== "full_access"
+    ) {
+      if (macosStatus === "unavailable") {
+        return "This provider is only available on macOS, because Forge uses EventKit to access the host machine's calendar store.";
+      }
+      return "Grant Calendar full access for Forge on this Mac before discovering host calendars.";
     }
 
     return undefined;
@@ -932,7 +1062,7 @@ export function CalendarConnectionFlowDialog({
         eyebrow: "Connection",
         title: "Choose the calendar provider Forge should connect to",
         description:
-          "Apple uses autodiscovery from caldav.icloud.com, Google uses a localhost Authorization Code + PKCE flow, Exchange Online uses guided Microsoft sign-in in read-only mode, and custom CalDAV stays available for everything else.",
+          "macOS local uses EventKit to access the calendars already configured on this Mac, Apple uses autodiscovery from caldav.icloud.com, Google uses a localhost Authorization Code + PKCE flow, Exchange Online uses guided Microsoft sign-in in read-only mode, and custom CalDAV stays available for everything else.",
         render: (value, setValue) => (
           <div className="grid gap-5">
             <FlowField
@@ -943,6 +1073,7 @@ export function CalendarConnectionFlowDialog({
                 value={value.provider}
                 onChange={(next) => {
                   setDiscovery(null);
+                  setMacosDiscovery(null);
                   setSubmitError(null);
                   setMicrosoftSetupMessage(null);
                   resetGoogleSession();
@@ -964,6 +1095,11 @@ export function CalendarConnectionFlowDialog({
                     value: "microsoft",
                     label: "Exchange Online",
                     description: "Save the Microsoft app registration fields in Settings, then sign in with Microsoft and mirror selected Exchange Online calendars in read-only mode."
+                  },
+                  {
+                    value: "macos_local",
+                    label: "Calendars On This Mac",
+                    description: "Use EventKit to access the calendars already configured in Calendar.app on this host machine and avoid reconnecting those same accounts manually."
                   },
                   {
                     value: "caldav",
@@ -999,6 +1135,8 @@ export function CalendarConnectionFlowDialog({
                 <p className="mt-3 text-sm leading-6 text-white/60">
                   {value.provider === "google"
                     ? "Forge opens a Google sign-in popup, exchanges the authorization code on the backend, stores a per-user refresh token, and then discovers the writable calendars for that account."
+                    : value.provider === "macos_local"
+                    ? "Forge asks macOS for Calendar access, discovers the host calendars grouped by account source, and replaces overlapping remote connections instead of keeping two copies."
                     : value.provider === "microsoft"
                     ? "Forge starts a Microsoft sign-in popup, then discovers the calendars available to that account before you choose what to mirror."
                     : "Forge discovers the actual calendar collections before you choose which ones to mirror and which one should receive owned timeboxes."}
@@ -1028,6 +1166,8 @@ export function CalendarConnectionFlowDialog({
         title:
           draft.provider === "google"
             ? "Sign in with Google"
+            : draft.provider === "macos_local"
+              ? "Use the calendars already configured on this Mac"
             : draft.provider === "apple"
               ? "Provide the Apple account email and app-specific password"
               : draft.provider === "microsoft"
@@ -1036,6 +1176,8 @@ export function CalendarConnectionFlowDialog({
         description:
           draft.provider === "google"
             ? "Review the Google desktop OAuth client, save a local override only if you need one, then start the popup and let Forge finish the PKCE exchange on the backend."
+            : draft.provider === "macos_local"
+            ? "Forge requests Calendar access through EventKit, discovers sources from Calendar.app, then lets you choose which host calendars to mirror and where Forge should write."
             : draft.provider === "apple"
             ? "Apple discovery starts from https://caldav.icloud.com, so you only need the Apple ID email and app password here."
             : draft.provider === "microsoft"
@@ -1054,7 +1196,107 @@ export function CalendarConnectionFlowDialog({
               />
             </FlowField>
 
-            {value.provider === "google" ? (
+            {value.provider === "macos_local" ? (
+              <div className="grid gap-4">
+                <div className="rounded-[24px] border border-white/8 bg-[linear-gradient(180deg,rgba(20,32,48,0.98),rgba(11,18,30,0.98))] p-5">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <div className="font-medium text-white">
+                        macOS Calendar access
+                      </div>
+                      <p className="mt-2 max-w-2xl text-sm leading-6 text-white/60">
+                        Forge uses EventKit to read and write the calendars already
+                        configured in Calendar.app on this Mac. Grant Calendar full
+                        access, then discover the available account sources.
+                      </p>
+                    </div>
+                    <Badge
+                      className={
+                        macosStatus === "full_access"
+                          ? "bg-emerald-500/16 text-emerald-100"
+                          : "bg-white/[0.08] text-white/72"
+                      }
+                    >
+                      {macosStatus === "full_access"
+                        ? "Full access"
+                        : macosStatus.replaceAll("_", " ")}
+                    </Badge>
+                  </div>
+
+                  <div className="mt-4 flex flex-wrap items-center gap-3">
+                    <Button
+                      type="button"
+                      onClick={() => void macosAccessMutation.mutateAsync()}
+                      pending={macosAccessMutation.isPending}
+                      pendingLabel="Waiting for macOS"
+                    >
+                      <KeyRound className="size-4" />
+                      Request Calendar access
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      onClick={() => void macosStatusMutation.mutateAsync()}
+                      pending={macosStatusMutation.isPending}
+                      pendingLabel="Checking"
+                    >
+                      <RefreshCcw className="size-4" />
+                      Check access
+                    </Button>
+                    <Button
+                      type="button"
+                      onClick={() => void discoveryMutation.mutateAsync()}
+                      disabled={macosStatus !== "full_access"}
+                      pending={discoveryMutation.isPending}
+                      pendingLabel="Discovering"
+                    >
+                      <RefreshCcw className="size-4" />
+                      Discover host calendars
+                    </Button>
+                  </div>
+
+                  {macosDiscovery?.sources?.length ? (
+                    <div className="mt-5 grid gap-3">
+                      <div className="text-sm font-medium text-white">
+                        Host calendar sources
+                      </div>
+                      {macosDiscovery.sources.map((source) => {
+                        const selected = value.sourceId === source.sourceId;
+                        return (
+                          <button
+                            key={source.sourceId}
+                            type="button"
+                            className={`rounded-[20px] border px-4 py-3 text-left transition ${
+                              selected
+                                ? "border-[var(--primary)]/40 bg-[var(--primary)]/12 text-white"
+                                : "border-white/8 bg-white/[0.04] text-white/72 hover:bg-white/[0.07]"
+                            }`}
+                            onClick={() => {
+                              setValue({ sourceId: source.sourceId });
+                              applyDiscoveryPayload({
+                                provider: "macos_local",
+                                accountLabel: source.accountLabel,
+                                serverUrl: value.serverUrl,
+                                principalUrl: null,
+                                homeUrl: null,
+                                calendars: source.calendars
+                              });
+                            }}
+                          >
+                            <div className="font-medium">
+                              {source.accountLabel || source.sourceTitle}
+                            </div>
+                            <div className="mt-1 text-sm text-white/56">
+                              {source.sourceType} · {source.calendars.length} calendars
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  ) : null}
+                </div>
+              </div>
+            ) : value.provider === "google" ? (
               <div className="grid gap-4">
                 <div className="rounded-[24px] border border-white/8 bg-[linear-gradient(180deg,rgba(20,32,48,0.98),rgba(11,18,30,0.98))] p-5">
                   <div className="flex flex-wrap items-start justify-between gap-3">
@@ -1546,6 +1788,8 @@ export function CalendarConnectionFlowDialog({
         description:
           draft.provider === "microsoft"
             ? "Select the Exchange Online calendars Forge should mirror into the Calendar page. This connection stays read-only for now."
+            : draft.provider === "macos_local"
+            ? "Select the host-machine calendars Forge should mirror into the Calendar page, then choose the host calendar Forge should write into for work blocks and timeboxes."
             : "Select the calendars Forge should mirror into the Calendar page, then choose the calendar Forge should write into for work blocks and timeboxes.",
         render: (value, setValue) => (
           <div className="grid gap-4">
@@ -1602,9 +1846,15 @@ export function CalendarConnectionFlowDialog({
                   pending={discoveryMutation.isPending}
                   pendingLabel="Discovering"
                   onClick={() => void discoveryMutation.mutateAsync()}
+                  disabled={
+                    value.provider === "macos_local" &&
+                    macosStatus !== "full_access"
+                  }
                 >
                   <RefreshCcw className="size-4" />
-                  Discover calendars
+                  {value.provider === "macos_local"
+                    ? "Discover host calendars"
+                    : "Discover calendars"}
                 </Button>
                 {discovery ? (
                   <Badge className="bg-white/[0.08] text-white/74">
@@ -1617,7 +1867,7 @@ export function CalendarConnectionFlowDialog({
             {discovery ? (
               <>
                 <div className="rounded-[24px] border border-white/8 bg-white/[0.04] p-4 text-sm leading-6 text-white/64">
-                  Discovered through{" "}
+                  {value.provider === "macos_local" ? "Discovered through the host calendar store" : "Discovered through"}{" "}
                   <span className="font-medium text-white">{discovery.serverUrl}</span>
                   {discovery.homeUrl ? (
                     <>
@@ -1766,12 +2016,18 @@ export function CalendarConnectionFlowDialog({
                   </>
                 ) : (
                   <>
-                    Discover calendars after entering the credentials. For Apple,
-                    Forge starts from{" "}
-                    <span className="font-medium text-white">
-                      https://caldav.icloud.com
-                    </span>{" "}
-                    and resolves the principal plus calendar home automatically.
+                    {value.provider === "macos_local"
+                      ? "Grant macOS Calendar access and discover the host calendars first. If Calendar.app already aggregates Google, Exchange, or iCloud for this Mac, Forge will pick them up here without reconnecting those accounts."
+                      : (
+                          <>
+                            Discover calendars after entering the credentials. For Apple,
+                            Forge starts from{" "}
+                            <span className="font-medium text-white">
+                              https://caldav.icloud.com
+                            </span>{" "}
+                            and resolves the principal plus calendar home automatically.
+                          </>
+                        )}
                   </>
                 )}
               </div>
@@ -1787,6 +2043,16 @@ export function CalendarConnectionFlowDialog({
           "This keeps the sync model explicit before the provider connection is saved.",
         render: (value) => (
           <div className="grid gap-4">
+            {value.provider === "macos_local" && value.sourceId ? (
+              <div className="rounded-[20px] border border-white/8 bg-white/[0.04] px-4 py-3 text-sm leading-6 text-white/70">
+                Selected host source:{" "}
+                <span className="font-medium text-white">
+                  {macosDiscovery?.sources.find((source) => source.sourceId === value.sourceId)?.accountLabel ??
+                    macosDiscovery?.sources.find((source) => source.sourceId === value.sourceId)?.sourceTitle ??
+                    value.sourceId}
+                </span>
+              </div>
+            ) : null}
             <div className="rounded-[26px] border border-white/8 bg-[linear-gradient(180deg,rgba(21,31,42,0.96),rgba(10,16,26,0.96))] p-5">
               <div className="flex items-center gap-3">
                 <div className="rounded-[18px] bg-[var(--primary)]/14 p-3 text-[var(--primary)]">
@@ -1799,6 +2065,8 @@ export function CalendarConnectionFlowDialog({
                   <div className="mt-1 text-sm text-white/58">
                     {value.provider === "google"
                       ? "Google Calendar"
+                      : value.provider === "macos_local"
+                        ? "Calendars On This Mac"
                       : value.provider === "apple"
                         ? "Apple Calendar"
                         : value.provider === "microsoft"
@@ -1827,6 +2095,22 @@ export function CalendarConnectionFlowDialog({
                   </span>
                 </div>
               </div>
+              {value.replaceConnectionIds.length > 0 ? (
+                <div className="mt-4 rounded-[20px] border border-amber-400/20 bg-amber-400/10 px-4 py-3 text-sm leading-6 text-amber-50">
+                  Forge will replace {value.replaceConnectionIds.length} older overlapping
+                  connection{value.replaceConnectionIds.length === 1 ? "" : "s"} for this
+                  same calendar account so only one visible copy remains.
+                  {existingConnections
+                    .filter((connection) => value.replaceConnectionIds.includes(connection.id))
+                    .map((connection) => connection.label)
+                    .join(", ")
+                    ? ` ${existingConnections
+                        .filter((connection) => value.replaceConnectionIds.includes(connection.id))
+                        .map((connection) => connection.label)
+                        .join(", ")}.`
+                    : ""}
+                </div>
+              ) : null}
             </div>
           </div>
         )
@@ -1861,9 +2145,15 @@ export function CalendarConnectionFlowDialog({
       testMicrosoftSettingsMutation.isPending,
       activeMicrosoftSetup.isReadyForSignIn,
       activeMicrosoftSetup.redirectUri,
+      macosDiscovery,
       microsoftSession
     ]
   );
+
+  const submitLabel =
+    draft.provider === "macos_local" && draft.replaceConnectionIds.length > 0
+      ? "Replace and connect"
+      : "Connect provider";
 
   return (
     <QuestionFlowDialog
@@ -1878,9 +2168,12 @@ export function CalendarConnectionFlowDialog({
         if (discovery && next.provider !== discovery.provider) {
           setDiscovery(null);
         }
+        if (next.provider !== "macos_local") {
+          setMacosDiscovery(null);
+        }
       }}
       steps={steps}
-      submitLabel="Connect provider"
+      submitLabel={submitLabel}
       pending={pending}
       pendingLabel="Connecting"
       error={submitError}
@@ -1946,6 +2239,22 @@ export function CalendarConnectionFlowDialog({
               authSessionId: microsoftSession.sessionId,
               selectedCalendarUrls: draft.selectedCalendarUrls
             });
+          } else if (draft.provider === "macos_local") {
+            if (!draft.sourceId) {
+              setSubmitError(
+                "Choose which host calendar source Forge should connect before saving."
+              );
+              return;
+            }
+            await onSubmit({
+              provider: "macos_local",
+              label: normalizeLabel("macos_local", draft.label),
+              sourceId: draft.sourceId,
+              selectedCalendarUrls: draft.selectedCalendarUrls,
+              forgeCalendarUrl: draft.forgeCalendarUrl,
+              createForgeCalendar: draft.createForgeCalendar,
+              replaceConnectionIds: draft.replaceConnectionIds
+            });
           } else {
             await onSubmit({
               provider: "caldav",
@@ -1960,6 +2269,29 @@ export function CalendarConnectionFlowDialog({
           }
           onOpenChange(false);
         } catch (error) {
+          if (
+            error instanceof ForgeApiError &&
+            error.code === "calendar_connection_overlap"
+          ) {
+            const response = (error as ForgeApiError & {
+              response?: { overlappingConnectionIds?: unknown };
+            }).response;
+            const overlappingConnectionIds = Array.isArray(
+              response?.overlappingConnectionIds
+            )
+              ? response?.overlappingConnectionIds.filter(
+                  (entry): entry is string => typeof entry === "string"
+                )
+              : [];
+            setDraft((current) => ({
+              ...current,
+              replaceConnectionIds: overlappingConnectionIds
+            }));
+            setSubmitError(
+              `${error.message} Submit again to replace the older overlapping connection${overlappingConnectionIds.length === 1 ? "" : "s"}.`
+            );
+            return;
+          }
           setSubmitError(
             error instanceof Error
               ? error.message

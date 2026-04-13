@@ -12,7 +12,7 @@ import {
   Target
 } from "lucide-react";
 import { SurfaceSkeleton } from "@/components/experience/surface-skeleton";
-import { SchedulingRulesEditor } from "@/components/calendar/scheduling-rules-editor";
+import { TaskSchedulingDialog } from "@/components/calendar/task-scheduling-dialog";
 import { TimeboxPlanningDialog } from "@/components/calendar/timebox-planning-dialog";
 import { SheetScaffold } from "@/components/experience/sheet-scaffold";
 import { OpenInGraphButton } from "@/components/knowledge-graph/open-in-graph-button";
@@ -38,6 +38,7 @@ import {
   getCalendarOverview,
   getLifeForce,
   getTaskContext,
+  patchTaskTimebox,
   patchTask,
   releaseTaskRun,
   removeActivityLog,
@@ -57,11 +58,12 @@ import {
 } from "@/lib/entity-links";
 import { useI18n } from "@/lib/i18n";
 import {
+  estimateTaskTimeboxActionPointLoad,
   formatLifeForceAp,
   formatLifeForceRate
 } from "@/lib/life-force-display";
 import { useForgeShell } from "@/components/shell/app-shell";
-import type { TaskStatus } from "@/lib/types";
+import type { TaskStatus, TaskTimebox } from "@/lib/types";
 import { getSingleSelectedUserId } from "@/lib/user-ownership";
 
 function DetailLabel({ label, help }: { label: string; help?: string }) {
@@ -124,7 +126,9 @@ export function TaskDetailPage() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [workAdjustmentOpen, setWorkAdjustmentOpen] = useState(false);
   const [timeboxDialogOpen, setTimeboxDialogOpen] = useState(false);
+  const [taskSchedulingDialogOpen, setTaskSchedulingDialogOpen] = useState(false);
   const [statusSheetOpen, setStatusSheetOpen] = useState(false);
+  const [editingTimebox, setEditingTimebox] = useState<TaskTimebox | null>(null);
   const [isMobile, setIsMobile] = useState(() =>
     typeof window !== "undefined"
       ? window.matchMedia("(max-width: 1023px)").matches
@@ -195,6 +199,21 @@ export function TaskDetailPage() {
   const lifeForceQuery = useQuery({
     queryKey: ["forge-life-force", ...selectedUserIds],
     queryFn: async () => (await getLifeForce(selectedUserIds)).lifeForce
+  });
+  const planningCalendarOverviewQuery = useQuery({
+    queryKey: [
+      "task-calendar-overview",
+      params.taskId,
+      planningWindow.from,
+      planningWindow.to,
+      ...selectedUserIds
+    ],
+    queryFn: () =>
+      getCalendarOverview({
+        ...planningWindow,
+        userIds: selectedUserIds
+      }),
+    enabled: Boolean(params.taskId)
   });
 
   const invalidateAll = async () => {
@@ -269,6 +288,16 @@ export function TaskDetailPage() {
     mutationFn: createTaskTimebox,
     onSuccess: invalidateAll
   });
+  const patchTimeboxMutation = useMutation({
+    mutationFn: ({
+      timeboxId,
+      patch
+    }: {
+      timeboxId: string;
+      patch: Parameters<typeof patchTaskTimebox>[1];
+    }) => patchTaskTimebox(timeboxId, patch),
+    onSuccess: invalidateAll
+  });
 
   const payload = taskContextQuery.data;
 
@@ -312,6 +341,11 @@ export function TaskDetailPage() {
     rules: effectiveSchedulingRules,
     overview: calendarOverviewQuery.data?.calendar
   });
+  const scheduledTimeboxes = (
+    planningCalendarOverviewQuery.data?.calendar.timeboxes ?? []
+  )
+    .filter((timebox) => timebox.taskId === payload.task.id)
+    .sort((left, right) => Date.parse(left.startsAt) - Date.parse(right.startsAt));
 
   const describeRunStatus = (
     status: (typeof payload.taskRuns)[number]["status"]
@@ -830,26 +864,41 @@ export function TaskDetailPage() {
         </div>
 
         <div className="mt-5 grid gap-4 xl:grid-cols-[minmax(0,1fr)_20rem]">
-          <SchedulingRulesEditor
-            title="Task scheduling"
-            subtitle="Set when this task can run. If you leave it empty, the project defaults stay in force."
-            initialRules={payload.task.schedulingRules}
-            initialPlannedDurationSeconds={payload.task.plannedDurationSeconds}
-            allowPlannedDuration
-            saveLabel="Save task scheduling"
-            onSave={async ({ schedulingRules, plannedDurationSeconds }) => {
-              await updateTaskMutation.mutateAsync({
-                taskId: payload.task.id,
-                patch: {
-                  schedulingRules,
-                  plannedDurationSeconds
-                }
-              });
-              await queryClient.invalidateQueries({
-                queryKey: ["task-calendar-overview", params.taskId]
-              });
-            }}
-          />
+          <div className="rounded-[20px] bg-white/[0.04] p-4">
+            <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">
+              Task scheduling
+            </div>
+            <div className="mt-4 grid gap-3 sm:grid-cols-2">
+              <div className="rounded-[16px] bg-white/[0.03] px-3.5 py-3">
+                <DetailLabel label="Rule source" />
+                <div className="mt-2 text-white">
+                  {payload.task.schedulingRules
+                    ? "Task-specific override"
+                    : "Uses project defaults"}
+                </div>
+              </div>
+              <div className="rounded-[16px] bg-white/[0.03] px-3.5 py-3">
+                <DetailLabel label="Planned duration" />
+                <div className="mt-2 text-white">
+                  {payload.task.plannedDurationSeconds
+                    ? `${Math.round(payload.task.plannedDurationSeconds / 60)} min`
+                    : "No duration target"}
+                </div>
+              </div>
+            </div>
+            <p className="mt-4 text-sm leading-6 text-white/58">
+              Scheduling rules now live behind the guided modal flow instead of an inline editor. Use it to change eligible blocks, blocked contexts, and the planning duration without overcrowding the task page.
+            </p>
+            <div className="mt-4 flex flex-wrap gap-2">
+              <Button onClick={() => setTaskSchedulingDialogOpen(true)}>
+                <CalendarDays className="size-4" />
+                Edit task scheduling
+              </Button>
+              <Link to="/calendar">
+                <Button variant="secondary">Open calendar workspace</Button>
+              </Link>
+            </div>
+          </div>
 
           <div className="rounded-[20px] bg-white/[0.04] p-4">
             <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">
@@ -915,17 +964,105 @@ export function TaskDetailPage() {
             ) : null}
             <div className="mt-4 flex flex-wrap gap-2">
               <Button
-                pending={createTimeboxMutation.isPending}
+                pending={createTimeboxMutation.isPending || patchTimeboxMutation.isPending}
                 pendingLabel="Planning"
-                onClick={() => setTimeboxDialogOpen(true)}
+                onClick={() => {
+                  setEditingTimebox(null);
+                  setTimeboxDialogOpen(true);
+                }}
               >
                 <CalendarDays className="size-4" />
                 Time Box
               </Button>
-              <Link to="/calendar">
-                <Button variant="secondary">Open calendar workspace</Button>
-              </Link>
             </div>
+          </div>
+        </div>
+
+        <div className="mt-5 rounded-[20px] bg-white/[0.04] p-4">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">
+                Scheduled blocks
+              </div>
+              <p className="mt-2 text-sm leading-6 text-white/58">
+                Open a scheduled block to edit the day, the hour range, or the AP profile tied to this task.
+              </p>
+            </div>
+            <Badge className="bg-white/[0.08] text-white/72">
+              {scheduledTimeboxes.length}
+            </Badge>
+          </div>
+          <div className="mt-4 grid gap-3">
+            {scheduledTimeboxes.length === 0 ? (
+              <div className="rounded-[18px] bg-white/[0.03] px-4 py-4 text-sm text-white/55">
+                No future timeboxes are attached to this task yet.
+              </div>
+            ) : null}
+            {scheduledTimeboxes.map((timebox) => (
+              <div
+                key={timebox.id}
+                role="button"
+                tabIndex={0}
+                onClick={() => {
+                  setEditingTimebox(timebox);
+                  setTimeboxDialogOpen(true);
+                }}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    setEditingTimebox(timebox);
+                    setTimeboxDialogOpen(true);
+                  }
+                }}
+                className="rounded-[18px] border border-white/8 bg-white/[0.03] p-4 text-left transition hover:bg-white/[0.05]"
+              >
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="font-medium text-white">{timebox.title}</div>
+                    <div className="mt-2 text-sm text-white/58">
+                      {formatDateTime(timebox.startsAt)} to {formatDateTime(timebox.endsAt)}
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <Badge className="bg-white/[0.08] text-white/72">
+                      {timebox.source}
+                    </Badge>
+                    <Badge className="bg-white/[0.08] text-white/72">
+                      {timebox.status}
+                    </Badge>
+                  </div>
+                </div>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <Badge className="bg-white/[0.08] text-white/72">
+                    {formatLifeForceRate(
+                      estimateTaskTimeboxActionPointLoad(timebox).rateApPerHour
+                    )}
+                  </Badge>
+                  <Badge className="bg-white/[0.08] text-white/72">
+                    {formatLifeForceAp(
+                      estimateTaskTimeboxActionPointLoad(timebox).totalAp
+                    )}
+                  </Badge>
+                  {timebox.overrideReason ? (
+                    <Badge className="bg-white/[0.08] text-white/72">
+                      {timebox.overrideReason}
+                    </Badge>
+                  ) : null}
+                </div>
+                <div className="mt-4 flex flex-wrap gap-2">
+                  <span className="rounded-[999px] bg-white/[0.08] px-3 py-1 text-xs text-white/72">
+                    Click to edit
+                  </span>
+                  <Link
+                    to="/calendar"
+                    onClick={(event) => event.stopPropagation()}
+                    className="rounded-[999px] bg-white/[0.08] px-3 py-1 text-xs text-white/72 transition hover:bg-white/[0.12]"
+                  >
+                    Open calendar
+                  </Link>
+                </div>
+              </div>
+            ))}
           </div>
         </div>
 
@@ -1055,10 +1192,16 @@ export function TaskDetailPage() {
 
       <TimeboxPlanningDialog
         open={timeboxDialogOpen}
-        onOpenChange={setTimeboxDialogOpen}
+        onOpenChange={(open) => {
+          setTimeboxDialogOpen(open);
+          if (!open) {
+            setEditingTimebox(null);
+          }
+        }}
         tasks={[payload.task]}
         initialTaskId={payload.task.id}
         lockedTaskId={payload.task.id}
+        editingTimebox={editingTimebox}
         from={planningWindow.from}
         to={planningWindow.to}
         userIds={selectedUserIds}
@@ -1066,6 +1209,33 @@ export function TaskDetailPage() {
           await createTimeboxMutation.mutateAsync({
             ...input,
             userId: defaultUserId ?? undefined
+          });
+        }}
+        onUpdateTimebox={async (timeboxId, patch) => {
+          await patchTimeboxMutation.mutateAsync({
+            timeboxId,
+            patch: {
+              ...patch,
+              userId: defaultUserId ?? undefined
+            }
+          });
+        }}
+      />
+
+      <TaskSchedulingDialog
+        open={taskSchedulingDialogOpen}
+        onOpenChange={setTaskSchedulingDialogOpen}
+        tasks={[payload.task]}
+        onSave={async ({ taskId, schedulingRules, plannedDurationSeconds }) => {
+          await updateTaskMutation.mutateAsync({
+            taskId,
+            patch: {
+              schedulingRules,
+              plannedDurationSeconds
+            }
+          });
+          await queryClient.invalidateQueries({
+            queryKey: ["task-calendar-overview", params.taskId]
           });
         }}
       />

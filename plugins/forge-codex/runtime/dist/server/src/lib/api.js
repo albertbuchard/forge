@@ -130,7 +130,12 @@ async function request(path, init) {
                         ? body
                         : `Request failed: ${response.status}`,
             requestPath: path,
-            details
+            details,
+            response: typeof body === "string"
+                ? body
+                : body && typeof body === "object"
+                    ? body
+                    : null
         });
     }
     return body;
@@ -161,7 +166,12 @@ async function requestBlob(path, init) {
                     ? maybeBody.message
                     : `Request failed: ${response.status}`,
             requestPath: path,
-            details: []
+            details: [],
+            response: typeof body === "string"
+                ? body
+                : body && typeof body === "object"
+                    ? body
+                    : null
         });
     }
     const disposition = response.headers.get("content-disposition");
@@ -1107,6 +1117,33 @@ export function discoverCalendarConnection(input) {
     }).then((response) => ({
         ...response,
         discovery: dedupeCalendarDiscoveryPayload(response.discovery)
+    }));
+}
+export function getMacOSLocalCalendarStatus() {
+    return request("/api/v1/calendar/macos-local/status");
+}
+export function requestMacOSLocalCalendarAccess() {
+    return request("/api/v1/calendar/macos-local/request-access", {
+        method: "POST"
+    });
+}
+export function discoverMacOSLocalCalendarSources() {
+    return request("/api/v1/calendar/macos-local/discovery").then((response) => ({
+        ...response,
+        discovery: {
+            ...response.discovery,
+            sources: response.discovery.sources.map((source) => ({
+                ...source,
+                calendars: dedupeCalendarDiscoveryPayload({
+                    provider: "macos_local",
+                    accountLabel: source.accountLabel,
+                    serverUrl: "forge-macos-local://eventkit/",
+                    principalUrl: null,
+                    homeUrl: null,
+                    calendars: source.calendars
+                }).calendars
+            }))
+        }
     }));
 }
 export function startGoogleCalendarOauth(input) {

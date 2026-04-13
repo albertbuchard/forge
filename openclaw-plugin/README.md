@@ -396,7 +396,7 @@ Calendar-aware execution tools:
 
 - `forge_get_calendar_overview` reads provider state, mirrored events, work blocks, and timeboxes together
 - `forge_create_entities`, `forge_update_entities`, and `forge_delete_entities` are the normal path for `calendar_event`, `work_block_template`, and `task_timebox`
-- `forge_connect_calendar_provider` creates a Google, Apple, Exchange Online, or custom CalDAV connection once the mirrored calendars are chosen. Exchange Online normally relies on the interactive Settings sign-in flow first, after the local Microsoft client ID, tenant, and redirect URI are configured in Forge.
+- `forge_connect_calendar_provider` creates a Google, Apple, Exchange Online, Calendars On This Mac, or custom CalDAV connection once the mirrored calendars are chosen. Exchange Online normally relies on the interactive Settings sign-in flow first, after the local Microsoft client ID, tenant, and redirect URI are configured in Forge. The macOS-local path relies on EventKit and replaces overlapping remote account connections instead of keeping duplicate copies.
 - `forge_sync_calendar_connection` runs provider pull/push sync for one connection
 - `forge_create_work_block_template` creates recurring half-day, holiday, or custom work blocks
 - work-block templates accept optional `startsOn` / `endsOn` date bounds and stay compact in Forge instead of expanding into one stored event per day

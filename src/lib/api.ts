@@ -17,6 +17,8 @@ import type {
   CalendarAvailability,
   CalendarConnection,
   CalendarDiscoveryPayload,
+  MacOSLocalCalendarDiscoveryPayload,
+  MacOSCalendarAccessStatus,
   CalendarEvent,
   GoogleCalendarOauthSession,
   MicrosoftCalendarOauthSession,
@@ -317,7 +319,13 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
               ? body
               : `Request failed: ${response.status}`,
       requestPath: path,
-      details
+      details,
+      response:
+        typeof body === "string"
+          ? body
+          : body && typeof body === "object"
+            ? (body as Record<string, unknown>)
+            : null
     });
   }
 
@@ -356,7 +364,13 @@ async function requestBlob(
             ? maybeBody.message
             : `Request failed: ${response.status}`,
       requestPath: path,
-      details: []
+      details: [],
+      response:
+        typeof body === "string"
+          ? body
+          : body && typeof body === "object"
+            ? (body as Record<string, unknown>)
+            : null
     });
   }
   const disposition = response.headers.get("content-disposition");
@@ -2010,6 +2024,43 @@ export function discoverCalendarConnection(
   }));
 }
 
+export function getMacOSLocalCalendarStatus() {
+  return request<{ status: MacOSCalendarAccessStatus }>(
+    "/api/v1/calendar/macos-local/status"
+  );
+}
+
+export function requestMacOSLocalCalendarAccess() {
+  return request<{
+    granted: boolean;
+    status: MacOSCalendarAccessStatus;
+  }>("/api/v1/calendar/macos-local/request-access", {
+    method: "POST"
+  });
+}
+
+export function discoverMacOSLocalCalendarSources() {
+  return request<{ discovery: MacOSLocalCalendarDiscoveryPayload }>(
+    "/api/v1/calendar/macos-local/discovery"
+  ).then((response) => ({
+    ...response,
+    discovery: {
+      ...response.discovery,
+      sources: response.discovery.sources.map((source) => ({
+        ...source,
+        calendars: dedupeCalendarDiscoveryPayload({
+          provider: "macos_local",
+          accountLabel: source.accountLabel,
+          serverUrl: "forge-macos-local://eventkit/",
+          principalUrl: null,
+          homeUrl: null,
+          calendars: source.calendars
+        }).calendars
+      }))
+    }
+  }));
+}
+
 export function startGoogleCalendarOauth(input: {
   label?: string;
   browserOrigin?: string;
@@ -2127,6 +2178,15 @@ export function createCalendarConnection(
         label: string;
         authSessionId: string;
         selectedCalendarUrls: string[];
+      }
+    | {
+        provider: "macos_local";
+        label: string;
+        sourceId: string;
+        selectedCalendarUrls: string[];
+        forgeCalendarUrl?: string | null;
+        createForgeCalendar?: boolean;
+        replaceConnectionIds?: string[];
       }
 ) {
   return request<{ connection: CalendarConnection }>(
@@ -3949,6 +4009,7 @@ export function patchTask(
   taskId: string,
   patch: Partial<QuickTaskInput> & {
     status?: string;
+    completedAt?: string;
     plannedDurationSeconds?: number | null;
     schedulingRules?: CalendarSchedulingRules | null;
     enforceTodayWorkLog?: boolean;

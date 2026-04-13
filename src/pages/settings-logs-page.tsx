@@ -6,6 +6,7 @@ import {
   useState,
   type ReactNode
 } from "react";
+import { createPortal } from "react-dom";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { Search, X } from "lucide-react";
@@ -18,6 +19,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { EntityBadge } from "@/components/ui/entity-badge";
 import { ErrorState } from "@/components/ui/page-state";
+import { useAnchoredOverlayPosition } from "@/components/ui/use-anchored-overlay-position";
 import { Input } from "@/components/ui/input";
 import { listDiagnosticLogs } from "@/lib/api";
 import { type EntityKind, isEntityKind } from "@/lib/entity-visuals";
@@ -184,6 +186,13 @@ function CompactFilterMultiSelect({
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [highlightedIndex, setHighlightedIndex] = useState(0);
+  const rootRef = useRef<HTMLDivElement | null>(null);
+  const menuRef = useRef<HTMLDivElement | null>(null);
+  const menuStyle = useAnchoredOverlayPosition(rootRef, open, {
+    offset: 8,
+    preferredMaxHeight: 320,
+    minHeight: 160
+  });
 
   const selectedOptions = useMemo(
     () =>
@@ -222,12 +231,42 @@ function CompactFilterMultiSelect({
     onChange(selectedIds.filter((id) => id !== optionId));
   };
 
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+
+    const handlePointerDown = (event: PointerEvent) => {
+      const target = event.target as Node;
+      if (rootRef.current?.contains(target) || menuRef.current?.contains(target)) {
+        return;
+      }
+      setOpen(false);
+    };
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setOpen(false);
+      }
+    };
+
+    document.addEventListener("pointerdown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [open]);
+
   return (
     <label className="grid gap-2">
       <span className="text-[11px] font-medium uppercase tracking-[0.18em] text-white/45">
         {label}
       </span>
-      <div className="relative rounded-[20px] border border-white/8 bg-white/[0.04] px-3 py-2.5">
+      <div
+        ref={rootRef}
+        className="relative rounded-[20px] border border-white/8 bg-white/[0.04] px-3 py-2.5"
+      >
         {selectedOptions.length > 0 ? (
           <div className="mb-2 flex flex-wrap gap-1.5">
             {selectedOptions.map((option) => (
@@ -259,9 +298,6 @@ function CompactFilterMultiSelect({
               setOpen(true);
             }}
             onFocus={() => setOpen(true)}
-            onBlur={() => {
-              window.setTimeout(() => setOpen(false), 120);
-            }}
             onKeyDown={(event) => {
               if (event.key === "Backspace" && !query && selectedIds.length > 0) {
                 removeOption(selectedIds[selectedIds.length - 1]!);
@@ -300,13 +336,22 @@ function CompactFilterMultiSelect({
           />
         </div>
 
-        {open ? (
-          <div className="absolute left-0 right-0 top-full z-20 mt-2 max-h-64 overflow-y-auto rounded-[20px] border border-white/8 bg-[rgba(8,13,24,0.96)] p-2 shadow-[0_26px_60px_rgba(4,8,18,0.32)] backdrop-blur-xl">
+        {open && menuStyle && typeof document !== "undefined"
+          ? createPortal(
+              <div
+                ref={menuRef}
+                role="listbox"
+                aria-multiselectable="true"
+                className="z-[80] overflow-y-auto overscroll-contain rounded-[20px] border border-white/8 bg-[rgba(8,13,24,0.96)] p-2 shadow-[0_26px_60px_rgba(4,8,18,0.32)] backdrop-blur-xl [webkit-overflow-scrolling:touch]"
+                style={menuStyle}
+              >
             {filteredOptions.length > 0 ? (
               filteredOptions.map((option, index) => (
                 <button
                   key={option.id}
                   type="button"
+                  role="option"
+                  aria-selected={false}
                   className={cn(
                     "flex w-full items-start justify-between gap-3 rounded-[16px] px-3 py-2 text-left transition",
                     index === highlightedIndex
@@ -332,8 +377,10 @@ function CompactFilterMultiSelect({
             ) : (
               <div className="px-3 py-2 text-sm text-white/42">{emptyMessage}</div>
             )}
-          </div>
-        ) : null}
+              </div>,
+              document.body
+            )
+          : null}
       </div>
     </label>
   );

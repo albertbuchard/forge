@@ -896,7 +896,7 @@ function resolveUserScopeOption(
   );
 }
 
-function UserScopeSelector({
+export function UserScopeSelector({
   users,
   selectedUserIds,
   onChange,
