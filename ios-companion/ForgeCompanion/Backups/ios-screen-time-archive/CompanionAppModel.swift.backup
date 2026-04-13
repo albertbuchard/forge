@@ -1254,9 +1254,15 @@ final class CompanionAppModel: ObservableObject {
             if buildResult.healthDataDeferred {
                 lastSyncMessage =
                     "Synced movement while HealthKit stayed locked. Health data will resume after unlock."
+            } else if screenTimeStore.authorizationStatus == "approved"
+                && (receipt.imported.screenTimeHourlySegments ?? 0) == 0
+                && (receipt.imported.screenTimeDaySummaries ?? 0) == 0
+            {
+                lastSyncMessage =
+                    "Synced \(receipt.imported.sleepSessions) sleep, \(receipt.imported.workouts) workouts, and \(receipt.imported.movementTrips ?? 0) trips via \(trigger). Screen Time capture is still pending on this iPhone."
             } else {
                 lastSyncMessage =
-                    "Synced \(receipt.imported.sleepSessions) sleep, \(receipt.imported.workouts) workouts, and \(receipt.imported.movementTrips ?? 0) trips via \(trigger)"
+                    "Synced \(receipt.imported.sleepSessions) sleep, \(receipt.imported.workouts) workouts, \(receipt.imported.movementTrips ?? 0) trips, \(receipt.imported.screenTimeDaySummaries ?? 0) Screen Time days, and \(receipt.imported.screenTimeHourlySegments ?? 0) Screen Time hourly slices via \(trigger)"
             }
             latestError = nil
             await refreshHealthAccessStatus()
@@ -1505,6 +1511,13 @@ final class CompanionAppModel: ObservableObject {
                 value: movementStore.motionPermissionStatus.replacingOccurrences(of: "_", with: " "),
                 detail: "Movement context",
                 isMissing: movementStore.motionPermissionStatus == "unavailable"
+            ),
+            SyncCoverageRow(
+                id: "screen_time",
+                title: "Screen Time",
+                value: screenTimePermissionGateLabel,
+                detail: screenTimeStore.enabled ? "Will sync when available" : "Off",
+                isMissing: screenTimeStore.enabled && screenTimeStore.authorizationStatus != "approved"
             )
         ]
     }
@@ -1547,7 +1560,7 @@ final class CompanionAppModel: ObservableObject {
         guard let report = latestSyncReport else {
             return "No sync yet"
         }
-        return "\(report.sleepSessions) sleep, \(report.workouts) workouts, \(report.movementTrips) trips"
+        return "\(report.sleepSessions) sleep, \(report.workouts) workouts, \(report.movementTrips) trips, \(report.screenTimeHourlySegments) screen hours"
     }
 
     var lastSuccessfulSyncLabel: String {
@@ -1595,6 +1608,13 @@ final class CompanionAppModel: ObservableObject {
                 isMissing: (payloadSummary?.movementStays ?? 0) == 0 && (payloadSummary?.movementTrips ?? 0) == 0
             ),
             SyncCoverageRow(
+                id: "screen-time",
+                title: "Screen Time",
+                value: "\(payloadSummary?.screenTimeDaySummaries ?? 0) days, \(payloadSummary?.screenTimeHourlySegments ?? 0) hourly slices",
+                detail: "Screen Time sync carries Apple-compliant day summaries plus hourly app and category aggregates, not fabricated per-app second-by-second traces.",
+                isMissing: screenTimeStore.enabled && (payloadSummary?.screenTimeHourlySegments ?? 0) == 0
+            ),
+            SyncCoverageRow(
                 id: "watch",
                 title: "Watch",
                 value: watchSyncLabel,
@@ -1624,6 +1644,15 @@ final class CompanionAppModel: ObservableObject {
                 authorizationStatus: states.movement.authorizationStatus,
                 syncEligible: states.movement.syncEligible,
                 lastObservedAt: states.movement.lastObservedAt
+            ),
+            CompanionSourceDiagnosticsRow(
+                id: CompanionSourceKey.screenTime.rawValue,
+                title: CompanionSourceKey.screenTime.title,
+                desiredEnabled: states.screenTime.desiredEnabled,
+                appliedEnabled: states.screenTime.appliedEnabled,
+                authorizationStatus: states.screenTime.authorizationStatus,
+                syncEligible: states.screenTime.syncEligible,
+                lastObservedAt: states.screenTime.lastObservedAt
             )
         ]
     }

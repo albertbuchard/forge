@@ -1,0 +1,55 @@
+import SwiftUI
+import DeviceActivity
+import _DeviceActivity_SwiftUI
+
+@available(iOS 16.0, *)
+struct ScreenTimeCaptureHost: View {
+    @ObservedObject var screenTimeStore: ScreenTimeStore
+
+    private var rollingWeek: DateInterval {
+        let end = Date()
+        let start = Calendar.current.date(byAdding: .day, value: -20, to: Calendar.current.startOfDay(for: end))
+            ?? end.addingTimeInterval(-20 * 24 * 60 * 60)
+        return DateInterval(start: start, end: end)
+    }
+
+    var body: some View {
+        Group {
+            if screenTimeStore.enabled && screenTimeStore.authorizationStatus == "approved" {
+                ZStack {
+                    DeviceActivityReport(
+                        .forgeCaptureHourlyScreenTime,
+                        filter: DeviceActivityFilter(
+                            segment: .hourly(during: rollingWeek),
+                            users: .all,
+                            devices: .all
+                        )
+                    )
+                    DeviceActivityReport(
+                        .forgeCaptureDailyScreenTime,
+                        filter: DeviceActivityFilter(
+                            segment: .daily(during: rollingWeek),
+                            users: .all,
+                            devices: .all
+                        )
+                    )
+                }
+                .id(screenTimeStore.captureRefreshToken)
+                // Keep the hidden capture scene simple and large enough to get a
+                // real layout pass from DeviceActivity without affecting the UI.
+                .frame(width: 120, height: 120)
+                .opacity(0.01)
+                .allowsHitTesting(false)
+                .accessibilityHidden(true)
+                .onAppear {
+                    companionDebugLog("ScreenTimeCaptureHost", "DeviceActivity reports mounted")
+                }
+                .onReceive(NotificationCenter.default.publisher(for: UserDefaults.didChangeNotification)) { _ in
+                    screenTimeStore.ingestSharedSnapshots()
+                }
+            } else {
+                EmptyView()
+            }
+        }
+    }
+}

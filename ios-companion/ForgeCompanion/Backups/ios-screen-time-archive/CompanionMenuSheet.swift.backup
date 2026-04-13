@@ -4,6 +4,7 @@ struct CompanionMenuSheet: View {
     @EnvironmentObject private var appModel: CompanionAppModel
 
     let openSettings: () -> Void
+    let openScreenTimeSettings: () -> Void
     let openLifeTimeline: () -> Void
     let closeMenu: () -> Void
 
@@ -37,6 +38,14 @@ struct CompanionMenuSheet: View {
                     closeMenu()
                     DispatchQueue.main.async {
                         openLifeTimeline()
+                    }
+                }
+
+                actionButton("Screen Time", systemName: "hourglass.bottomhalf.filled") {
+                    companionDebugLog("CompanionMenuSheet", "tap Screen Time")
+                    closeMenu()
+                    DispatchQueue.main.async {
+                        openScreenTimeSettings()
                     }
                 }
 
@@ -150,6 +159,7 @@ struct CompanionSettingsSheet: View {
     let reloadForge: () -> Void
     let openDiagnostics: () -> Void
     let openMovementSettings: () -> Void
+    let openScreenTimeSettings: () -> Void
     let close: () -> Void
 
     @State private var syncing = false
@@ -163,6 +173,7 @@ struct CompanionSettingsSheet: View {
                     dataSourcesCard
                     permissionsCard
                     syncCard
+                    screenTimeCard
                     movementCard
                     toolsCard
                 }
@@ -218,6 +229,7 @@ struct CompanionSettingsSheet: View {
                 detailRow("Health", value: appModel.healthAccessLabel)
                 detailRow("Location", value: appModel.movementPermissionGateLabel)
                 detailRow("Motion", value: appModel.movementStore.motionPermissionStatus)
+                detailRow("Screen Time", value: appModel.screenTimePermissionGateLabel)
 
                 Button {
                     authorizing = true
@@ -272,6 +284,16 @@ struct CompanionSettingsSheet: View {
                         set: { appModel.setSourceEnabled(.movement, enabled: $0) }
                     )
                 )
+
+                sourceToggleRow(
+                    title: "Screen Time",
+                    detail: "Daily and hourly device usage summaries",
+                    status: appModel.screenTimeAccessLabel,
+                    isOn: Binding(
+                        get: { appModel.screenTimeStore.enabled },
+                        set: { appModel.setSourceEnabled(.screenTime, enabled: $0) }
+                    )
+                )
             }
         }
     }
@@ -304,6 +326,26 @@ struct CompanionSettingsSheet: View {
                 }
                 .buttonStyle(CompanionFilledButtonStyle())
                 .disabled(authorizing || syncing)
+            }
+        }
+    }
+
+    private var screenTimeCard: some View {
+        CompanionSectionCard {
+            VStack(alignment: .leading, spacing: 14) {
+                sectionHeader("Screen Time", subtitle: "Status and recent capture history. The actual on or off decision now lives in Data sources.")
+
+                detailRow("Access", value: appModel.screenTimeAccessLabel)
+                detailRow("Capture", value: appModel.screenTimeStore.latestCaptureSummary)
+                detailRow("Freshness", value: appModel.screenTimeStore.freshnessSummary)
+
+                Button("Open Screen Time details") {
+                    close()
+                    DispatchQueue.main.async {
+                        openScreenTimeSettings()
+                    }
+                }
+                .buttonStyle(CompanionGhostButtonStyle())
             }
         }
     }

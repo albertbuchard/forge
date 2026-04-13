@@ -1,0 +1,496 @@
+import SwiftUI
+import DeviceActivity
+import UIKit
+
+struct ScreenTimeSettingsSheet: View {
+    @EnvironmentObject private var appModel: CompanionAppModel
+    @ObservedObject var screenTimeStore: ScreenTimeStore
+    let close: () -> Void
+
+    @State private var enabling = false
+    @State private var advancedMenuExpanded = false
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 18) {
+                    liveReportCard
+                    advancedCard
+                    statusCard
+                    privacyCard
+                }
+                .padding(18)
+            }
+            .background(CompanionStyle.background.ignoresSafeArea())
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Text("Screen Time")
+                        .font(.system(size: 16, weight: .bold, design: .rounded))
+                        .foregroundStyle(CompanionStyle.textPrimary)
+                }
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Done", action: close)
+                        .font(.system(size: 15, weight: .semibold, design: .rounded))
+                        .foregroundStyle(CompanionStyle.textPrimary)
+                }
+            }
+        }
+        .onAppear {
+            screenTimeStore.setCaptureSurfaceVisible(true)
+        }
+        .onDisappear {
+            screenTimeStore.setCaptureSurfaceVisible(false)
+        }
+    }
+
+    private var statusCard: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(alignment: .firstTextBaseline) {
+                Text(screenTimeStore.enabled ? "Screen Time on" : "Screen Time off")
+                    .font(.system(size: 26, weight: .bold, design: .rounded))
+                    .foregroundStyle(CompanionStyle.textPrimary)
+                Spacer(minLength: 12)
+                badge(screenTimeStore.captureFreshness.capitalized)
+            }
+
+            VStack(alignment: .leading, spacing: 10) {
+                statusRow("Access", accessLabel)
+                statusRow("Source", sourceLabel)
+                statusRow("Latest", screenTimeStore.latestCaptureSummary)
+                statusRow("Last sync", lastScreenTimeSyncLabel)
+                statusRow("Last synced", lastScreenTimeSyncCountsLabel)
+                statusRow("Hours synced", lastScreenTimeHoursLabel)
+            }
+
+            if screenTimeStore.enabled && screenTimeStore.authorizationStatus != "approved" {
+                Button("Enable Screen Time") {
+                    enabling = true
+                    Task {
+                        await screenTimeStore.enableAndAuthorize()
+                        enabling = false
+                    }
+                }
+                .buttonStyle(CompanionFilledButtonStyle())
+                .disabled(enabling || screenTimeStore.authorizationStatus == "unavailable")
+            }
+        }
+        .padding(18)
+        .background(CompanionStyle.sheetBackground(cornerRadius: 28))
+    }
+
+    @ViewBuilder
+    private var liveReportCard: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Live Report")
+                .font(.system(size: 18, weight: .bold, design: .rounded))
+                .foregroundStyle(CompanionStyle.textPrimary)
+
+            if screenTimeStore.enabled == false {
+                Text("Enable Screen Time to load the on-device report.")
+                    .font(.system(size: 14, weight: .medium, design: .rounded))
+                    .foregroundStyle(CompanionStyle.textSecondary)
+            } else if screenTimeStore.authorizationStatus != "approved" {
+                Text("Authorize Screen Time access to render the report.")
+                    .font(.system(size: 14, weight: .medium, design: .rounded))
+                    .foregroundStyle(CompanionStyle.textSecondary)
+            } else if #available(iOS 16.0, *) {
+                VStack(alignment: .leading, spacing: 14) {
+                    DeviceActivityReport(
+                        .forgeHourlyScreenTime,
+                        filter: DeviceActivityFilter(
+                            segment: .hourly(during: rollingWeek),
+                            users: .all,
+                            devices: .all
+                        )
+                    )
+                    .id(screenTimeStore.captureRefreshToken)
+                    .frame(minHeight: 320)
+                    .background(ScreenTimeReportCaptureRegistrationView())
+                    .clipShape(
+                        RoundedRectangle(cornerRadius: 22, style: .continuous)
+                    )
+
+                    Button("Sync Visible Report to Forge") {
+                        enabling = true
+                        Task {
+                            await screenTimeStore.refreshCaptureNow()
+                            await appModel.runManualSync()
+                            enabling = false
+                        }
+                    }
+                    .buttonStyle(CompanionFilledButtonStyle())
+                    .disabled(enabling)
+
+                    Button("Reload Report") {
+                        screenTimeStore.reloadVisibleReport()
+                    }
+                    .font(.system(size: 13, weight: .semibold, design: .rounded))
+                    .foregroundStyle(CompanionStyle.textSecondary)
+                    .disabled(enabling)
+
+                    Text("Forge reads the visible Screen Time report from this screen when the direct shared snapshot is missing, so keep this report in view while syncing.")
+                        .font(.system(size: 12, weight: .medium, design: .rounded))
+                        .foregroundStyle(CompanionStyle.textMuted)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            } else {
+                Text("Live Screen Time reports require iOS 16 or later.")
+                    .font(.system(size: 14, weight: .medium, design: .rounded))
+                    .foregroundStyle(CompanionStyle.textSecondary)
+            }
+        }
+        .padding(18)
+        .background(CompanionStyle.sheetBackground(cornerRadius: 28))
+    }
+
+    private var privacyCard: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Status")
+                .font(.system(size: 18, weight: .bold, design: .rounded))
+                .foregroundStyle(CompanionStyle.textPrimary)
+
+            statusRow("Access", accessLabel)
+            statusRow("Source", sourceLabel)
+            statusRow("Availability", screenTimeStore.latestCaptureSummary)
+            Text("Apple renders detailed Screen Time usage inside the Device Activity report extension. Forge extracts summarized day and hour data from that report and syncs it to the server once the snapshot is captured.")
+                .font(.system(size: 13, weight: .medium, design: .rounded))
+                .foregroundStyle(CompanionStyle.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(18)
+        .background(CompanionStyle.sheetBackground(cornerRadius: 28))
+    }
+
+    @ViewBuilder
+    private var advancedCard: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            DisclosureGroup(
+                isExpanded: $advancedMenuExpanded,
+                content: {
+                    VStack(alignment: .leading, spacing: 14) {
+                        Text("Use this only for debugging. It captures the exact image we are feeding into OCR, then shows the raw extracted text, parser result, and low-level diagnostics.")
+                            .font(.system(size: 12, weight: .medium, design: .rounded))
+                            .foregroundStyle(CompanionStyle.textMuted)
+                            .fixedSize(horizontal: false, vertical: true)
+
+                        HStack(spacing: 10) {
+                            Button(screenTimeStore.advancedCaptureInFlight ? "Capturing..." : "Capture Debug Image") {
+                                Task {
+                                    await screenTimeStore.captureAdvancedDebugImage()
+                                }
+                            }
+                            .buttonStyle(CompanionFilledButtonStyle())
+                            .disabled(screenTimeStore.advancedCaptureInFlight || screenTimeStore.advancedOCRInFlight)
+
+                            Button(screenTimeStore.advancedOCRInFlight ? "Running OCR..." : "Run OCR + Parse") {
+                                Task {
+                                    await screenTimeStore.runAdvancedOCRAndParse()
+                                }
+                            }
+                            .font(.system(size: 13, weight: .semibold, design: .rounded))
+                            .foregroundStyle(CompanionStyle.textPrimary)
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 11)
+                            .background(
+                                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                    .fill(Color.white.opacity(0.08))
+                            )
+                            .disabled(screenTimeStore.advancedCaptureInFlight || screenTimeStore.advancedOCRInFlight)
+                        }
+
+                        if let diagnostics = screenTimeStore.advancedDiagnostics {
+                            VStack(alignment: .leading, spacing: 10) {
+                                statusRow("Captured", diagnostics.capturedAtLabel)
+                                statusRow("Image source", diagnostics.captureSource)
+                                statusRow("Image size", diagnostics.imageSizeDescription)
+                                statusRow("Parsed from", diagnostics.parsedSnapshotSource ?? "Not parsed yet")
+                            }
+
+                            if let image = diagnostics.capturedImage {
+                                VStack(alignment: .leading, spacing: 8) {
+                                    Text("Captured Image")
+                                        .font(.system(size: 12, weight: .semibold, design: .rounded))
+                                        .foregroundStyle(CompanionStyle.textMuted)
+
+                                    Image(uiImage: image)
+                                        .resizable()
+                                        .scaledToFit()
+                                        .frame(maxWidth: .infinity)
+                                        .clipShape(
+                                            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                                        )
+                                        .overlay(
+                                            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                                                .stroke(Color.white.opacity(0.08), lineWidth: 1)
+                                        )
+                                }
+                            }
+
+                            if let snapshot = diagnostics.parsedSnapshot {
+                                parsedSnapshotBlock(snapshot, parsedSource: diagnostics.parsedSnapshotSource)
+                            }
+
+                            debugTextBlock(
+                                title: "Accessibility Text",
+                                text: diagnostics.accessibilityText ?? "No accessibility text found."
+                            )
+
+                            debugTextBlock(
+                                title: "OCR Text",
+                                text: diagnostics.ocrText ?? "OCR has not been run yet."
+                            )
+
+                            diagnosticsBlock(diagnostics.diagnostics)
+                        } else {
+                            Text("No diagnostics captured yet.")
+                                .font(.system(size: 13, weight: .medium, design: .rounded))
+                                .foregroundStyle(CompanionStyle.textSecondary)
+                        }
+                    }
+                    .padding(.top, 12)
+                },
+                label: {
+                    HStack {
+                        Text("Advanced")
+                            .font(.system(size: 18, weight: .bold, design: .rounded))
+                            .foregroundStyle(CompanionStyle.textPrimary)
+                        Spacer(minLength: 10)
+                        badge("Debug")
+                    }
+                }
+            )
+            .tint(CompanionStyle.textPrimary)
+        }
+        .padding(18)
+        .background(CompanionStyle.sheetBackground(cornerRadius: 28))
+    }
+
+    private var accessLabel: String {
+        if screenTimeStore.enabled == false {
+            return "Off"
+        }
+        switch screenTimeStore.authorizationStatus {
+        case "approved":
+            return "Authorized"
+        case "denied":
+            return "Denied"
+        case "unavailable":
+            return "Unavailable"
+        default:
+            return "Not authorized"
+        }
+    }
+
+    private func statusRow(_ label: String, _ value: String) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 10) {
+            Text(label)
+                .font(.system(size: 12, weight: .semibold, design: .rounded))
+                .foregroundStyle(CompanionStyle.textMuted)
+            Spacer(minLength: 8)
+            Text(value)
+                .font(.system(size: 13, weight: .semibold, design: .rounded))
+                .foregroundStyle(CompanionStyle.textSecondary)
+                .multilineTextAlignment(.trailing)
+        }
+    }
+
+    private var lastScreenTimeSyncLabel: String {
+        guard appModel.lastSuccessfulSyncAt != nil else {
+            return "Never"
+        }
+        return appModel.lastSuccessfulSyncLabel
+    }
+
+    private var lastScreenTimeSyncCountsLabel: String {
+        let report = appModel.latestSyncReport
+        return "\(report?.screenTimeDaySummaries ?? 0) days · \(report?.screenTimeHourlySegments ?? 0) hourly slices"
+    }
+
+    private var lastScreenTimeHoursLabel: String {
+        guard let report = appModel.latestSyncReport else {
+            return "0 h"
+        }
+        let hours = Double(report.screenTimeTotalActivitySeconds) / 3600
+        return "\(hours.formatted(.number.precision(.fractionLength(0...1)))) h"
+    }
+
+    private var sourceLabel: String {
+        guard screenTimeStore.enabled else {
+            return "Disabled"
+        }
+        let snapshotSource = screenTimeStore.metadata["snapshot_source"] ?? ""
+        return snapshotSource == "visible_report_ocr" || snapshotSource == "visible_report_accessibility"
+            ? "Visible report text extraction"
+            : "On-device report extension"
+    }
+
+    private func chipWrap(title: String, items: [String]) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(title)
+                .font(.system(size: 12, weight: .semibold, design: .rounded))
+                .foregroundStyle(CompanionStyle.textMuted)
+            HStack(spacing: 8) {
+                ForEach(items, id: \.self) { item in
+                    badge(item)
+                }
+            }
+        }
+    }
+
+    private func badge(_ text: String) -> some View {
+        Text(text)
+            .font(.system(size: 11, weight: .semibold, design: .rounded))
+            .foregroundStyle(CompanionStyle.textPrimary)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background(
+                Capsule(style: .continuous)
+                    .fill(Color.white.opacity(0.08))
+            )
+    }
+
+    private func parsedSnapshotBlock(
+        _ snapshot: ForgeScreenTimeSnapshotEnvelope,
+        parsedSource: String?
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Parsed Screen Time")
+                .font(.system(size: 12, weight: .semibold, design: .rounded))
+                .foregroundStyle(CompanionStyle.textMuted)
+
+            statusRow("Parser", parsedSource ?? "Unknown")
+            statusRow("Snapshot source", snapshot.source)
+            statusRow("Kind", snapshot.segmentKind)
+            statusRow("Days", "\(snapshot.daySummaries.count)")
+            statusRow("Hours", "\(snapshot.hourlySegments.count)")
+
+            if snapshot.daySummaries.isEmpty == false {
+                VStack(alignment: .leading, spacing: 6) {
+                    ForEach(snapshot.daySummaries.prefix(14), id: \.id) { summary in
+                        HStack(alignment: .firstTextBaseline, spacing: 10) {
+                            Text(summary.dateKey)
+                                .font(.system(size: 12, weight: .semibold, design: .monospaced))
+                                .foregroundStyle(CompanionStyle.textPrimary)
+                            Spacer(minLength: 8)
+                            Text(screenTimeDurationLabel(summary.totalActivitySeconds))
+                                .font(.system(size: 12, weight: .medium, design: .rounded))
+                                .foregroundStyle(CompanionStyle.textSecondary)
+                        }
+                    }
+                }
+                .padding(12)
+                .background(
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .fill(Color.white.opacity(0.05))
+                )
+            }
+        }
+    }
+
+    private func diagnosticsBlock(_ lines: [String]) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Diagnostics")
+                .font(.system(size: 12, weight: .semibold, design: .rounded))
+                .foregroundStyle(CompanionStyle.textMuted)
+
+            VStack(alignment: .leading, spacing: 6) {
+                ForEach(Array(lines.enumerated()), id: \.offset) { _, line in
+                    Text(line)
+                        .font(.system(size: 12, weight: .medium, design: .monospaced))
+                        .foregroundStyle(CompanionStyle.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(12)
+            .background(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .fill(Color.white.opacity(0.05))
+            )
+        }
+    }
+
+    private func debugTextBlock(title: String, text: String) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(title)
+                .font(.system(size: 12, weight: .semibold, design: .rounded))
+                .foregroundStyle(CompanionStyle.textMuted)
+
+            Text(text)
+                .font(.system(size: 12, weight: .medium, design: .monospaced))
+                .foregroundStyle(CompanionStyle.textSecondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(12)
+                .background(
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .fill(Color.white.opacity(0.05))
+                )
+                .textSelection(.enabled)
+        }
+    }
+
+    private func screenTimeDurationLabel(_ totalActivitySeconds: Int) -> String {
+        let hours = totalActivitySeconds / 3600
+        let minutes = (totalActivitySeconds % 3600) / 60
+        if hours > 0 {
+            return "\(hours)h \(minutes)m"
+        }
+        return "\(minutes)m"
+    }
+
+    private var rollingWeek: DateInterval {
+        let end = Date()
+        let start = Calendar.current.date(
+            byAdding: .day,
+            value: -6,
+            to: Calendar.current.startOfDay(for: end)
+        ) ?? end.addingTimeInterval(-6 * 24 * 60 * 60)
+        return DateInterval(start: start, end: end)
+    }
+}
+
+private struct ScreenTimeReportCaptureRegistrationView: UIViewRepresentable {
+    func makeUIView(context: Context) -> ScreenTimeReportCaptureRegistrationUIView {
+        let view = ScreenTimeReportCaptureRegistrationUIView()
+        view.isUserInteractionEnabled = false
+        view.backgroundColor = .clear
+        return view
+    }
+
+    func updateUIView(_ uiView: ScreenTimeReportCaptureRegistrationUIView, context: Context) {
+        uiView.registerVisibleReportCaptureView()
+    }
+}
+
+private final class ScreenTimeReportCaptureRegistrationUIView: UIView {
+    override func didMoveToWindow() {
+        super.didMoveToWindow()
+        registerVisibleReportCaptureView()
+    }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        registerVisibleReportCaptureView()
+    }
+
+    func registerVisibleReportCaptureView() {
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            ScreenTimeVisibleReportCaptureRegistry.shared.register(
+                view: self.preferredCaptureAncestor()
+            )
+        }
+    }
+
+    private func preferredCaptureAncestor() -> UIView? {
+        var candidate: UIView? = self
+        var current = superview
+        while let view = current {
+            if view.bounds.width >= 180, view.bounds.height >= 180 {
+                candidate = view
+            }
+            current = view.superview
+        }
+        return candidate
+    }
+}

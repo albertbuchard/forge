@@ -28,13 +28,11 @@
 		28661A5954950848945D43EB /* _DeviceActivity_SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 3BF036CEAA0847EFD0BEA723 /* _DeviceActivity_SwiftUI.framework */; };
 		2A6671BF5103E278278769B5 /* houston.json in Resources */ = {isa = PBXBuildFile; fileRef = 67C9347A6520CAD1AEBFD089 /* houston.json */; };
 		2DF519C50022351269EA4FF3 /* material-theme.json in Resources */ = {isa = PBXBuildFile; fileRef = B67FFECF009F247E5AF99E2F /* material-theme.json */; };
-		30322A59BA901E3B472ECDBA /* ManagedSettings.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 4B1CB3E6790DB1D4A37C3D34 /* ManagedSettings.framework */; };
 		31DD17A609B0896155384020 /* CompanionAppModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = EB6330E339B74351A9737AEF /* CompanionAppModel.swift */; };
 		328D513B6DD0899F4F511A33 /* absolutely-light.json in Resources */ = {isa = PBXBuildFile; fileRef = B8B5D8C70B4B433853C995CE /* absolutely-light.json */; };
 		339A8EC2255659B63A8FF0D3 /* github-dark-default.json in Resources */ = {isa = PBXBuildFile; fileRef = 9D8E4DB589D76206AFE274F2 /* github-dark-default.json */; };
 		34D23AEAFF591904DCEAFA41 /* PairedForgeScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0289C0EB6BFA22514FE6E019 /* PairedForgeScreen.swift */; };
 		383BE6BEE9F5637EAECCDA3F /* night-owl.json in Resources */ = {isa = PBXBuildFile; fileRef = CFC91F75587B00C6F04C9098 /* night-owl.json */; };
-		3845399BD282CA9148B9DA9C /* DeviceActivity.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 7EB1A9C94E6090E79774F711 /* DeviceActivity.framework */; };
 		39EC5ED38B1335A358EB8DCB /* github-dark-dimmed.json in Resources */ = {isa = PBXBuildFile; fileRef = 2190CE0FC5F9176B0C740D0E /* github-dark-dimmed.json */; };
 		39F95BE8A62307BBF3147F44 /* DeviceActivity.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 7EB1A9C94E6090E79774F711 /* DeviceActivity.framework */; };
 		39F9E5C28A63D131EED95C7D /* ForgeWebView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A28AC152FF4863B5D716F40 /* ForgeWebView.swift */; };
@@ -62,7 +60,6 @@
 		5C23DA1D8383E9663D508069 /* codex-dark.json in Resources */ = {isa = PBXBuildFile; fileRef = 29ED0365D12A44207BFCDAC0 /* codex-dark.json */; };
 		622884FB2C7F4915E75B3E2F /* AppIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 17A70C1857380E071D589108 /* AppIntent.swift */; };
 		641311D8EF5DB5E2D303C022 /* ForgeWatchControl.swift in Sources */ = {isa = PBXBuildFile; fileRef = 171F05A34E92FDE3047869AB /* ForgeWatchControl.swift */; };
-		65775A14A34E3203237E72CB /* ForgeScreenTimeReportExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 8FA0A1EC0034341F6FD6810C /* ForgeScreenTimeReportExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		67B41083E274E59323E36713 /* absolutely-dark.json in Resources */ = {isa = PBXBuildFile; fileRef = 3BF2ABD66087D489A3DEB85A /* absolutely-dark.json */; };
 		68D7CBD349B0578FE0D9FCA6 /* SetupQRScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 73007370F8148A2BF315B2D0 /* SetupQRScreen.swift */; };
 		6A2E87B1A44D71B76ACC631D /* gruvbox-light-medium.json in Resources */ = {isa = PBXBuildFile; fileRef = AB2728B8CA817BC8E6441B54 /* gruvbox-light-medium.json */; };
@@ -89,7 +86,6 @@
 		884B407C19CF3635DE3A87E0 /* laserwave.json in Resources */ = {isa = PBXBuildFile; fileRef = FE25294B2E1BE0D4F8DEEE5A /* laserwave.json */; };
 		8C7CF2331F28E470BF950B68 /* MovementSettingsSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA4B31A97CE450C024D3EB8C /* MovementSettingsSheet.swift */; };
 		8D1F48512202759FA9B8DF1E /* WatchSharedModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = D662C6927F2A924DC7DA82B8 /* WatchSharedModels.swift */; };
-		8E649F5BFBF69A4A23C5DC67 /* FamilyControls.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 4DD2A3B790D968098D39D5A7 /* FamilyControls.framework */; };
 		905F77BEC01F3B520C44A83D /* ForgeCompanionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1445CEF627878D05ACAD5821 /* ForgeCompanionTests.swift */; };
 		9466F6DDD59D46CFF4474A36 /* material-theme-darker-D.json in Resources */ = {isa = PBXBuildFile; fileRef = F4921C634DCE88CC5277950E /* material-theme-darker-D.json */; };
 		947CA83023368F473276855A /* QRScannerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB2B85CDC2A05B34389D84B7 /* QRScannerView.swift */; };
@@ -108,7 +104,6 @@
 		AE7794F2FBF25CACC5183CC6 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = DBA50F60729F0219A8082AB9 /* Assets.xcassets */; };
 		B04FDEA7F9698DFD1FECF388 /* kanagawa-wave.json in Resources */ = {isa = PBXBuildFile; fileRef = 4488FD3178035D328C1AA09D /* kanagawa-wave.json */; };
 		B309098295E42F4EB0211F0C /* ForgeCompanionApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = ABF7DD37703C59A9A9CF7873 /* ForgeCompanionApp.swift */; };
-		B3EB0EFE3A40A7E6E403E56C /* _DeviceActivity_SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 3BF036CEAA0847EFD0BEA723 /* _DeviceActivity_SwiftUI.framework */; };
 		B42AF7527075F3325E9B653C /* matrix-dark.json in Resources */ = {isa = PBXBuildFile; fileRef = 137AF77ADC4D773B632201D1 /* matrix-dark.json */; };
 		B5D1EC12920874C35CD51368 /* vitesse-dark.json in Resources */ = {isa = PBXBuildFile; fileRef = A26AE0320EA50826185C8D03 /* vitesse-dark.json */; };
 		B62611EFCA1D0D35226A546E /* catppuccin-frappe.json in Resources */ = {isa = PBXBuildFile; fileRef = 774FDBFB6C1AC4DD7633342F /* catppuccin-frappe.json */; };
@@ -154,13 +149,6 @@
 			remoteGlobalIDString = A3D7B3F69A15FB337E820D99;
 			remoteInfo = ForgeCompanion;
 		};
-		8D0A71F59D5E5A3E360216E6 /* PBXContainerItemProxy */ = {
-			isa = PBXContainerItemProxy;
-			containerPortal = 4F8558956D3C63F60D8E5542 /* Project object */;
-			proxyType = 1;
-			remoteGlobalIDString = D7BDBCC2AC0457C8DAB50B41;
-			remoteInfo = ForgeScreenTimeReportExtension;
-		};
 		CE220BB95379375A2C32B5DB /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = 4F8558956D3C63F60D8E5542 /* Project object */;
@@ -178,17 +166,6 @@
 			dstSubfolderSpec = 13;
 			files = (
 				E5E0F5A7CE1D866094AC8849 /* ForgeWatchExtension.appex in Embed Foundation Extensions */,
-			);
-			name = "Embed Foundation Extensions";
-			runOnlyForDeploymentPostprocessing = 0;
-		};
-		9603692E0E02F211246EA460 /* Embed Foundation Extensions */ = {
-			isa = PBXCopyFilesBuildPhase;
-			buildActionMask = 2147483647;
-			dstPath = "";
-			dstSubfolderSpec = 13;
-			files = (
-				65775A14A34E3203237E72CB /* ForgeScreenTimeReportExtension.appex in Embed Foundation Extensions */,
 			);
 			name = "Embed Foundation Extensions";
 			runOnlyForDeploymentPostprocessing = 0;
@@ -349,10 +326,6 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				8E649F5BFBF69A4A23C5DC67 /* FamilyControls.framework in Frameworks */,
-				3845399BD282CA9148B9DA9C /* DeviceActivity.framework in Frameworks */,
-				30322A59BA901E3B472ECDBA /* ManagedSettings.framework in Frameworks */,
-				B3EB0EFE3A40A7E6E403E56C /* _DeviceActivity_SwiftUI.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -643,12 +616,10 @@
 				8A44D08DB737DE4FD062D54F /* Sources */,
 				CCF67C05D25DFD6505CD9782 /* Resources */,
 				ACD5BC0A9881069976E522A7 /* Frameworks */,
-				9603692E0E02F211246EA460 /* Embed Foundation Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
-				A8047ED2446EA4190B6CD569 /* PBXTargetDependency */,
 			);
 			name = ForgeCompanion;
 			packageProductDependencies = (
@@ -940,11 +911,6 @@
 			isa = PBXTargetDependency;
 			target = A3D7B3F69A15FB337E820D99 /* ForgeCompanion */;
 			targetProxy = 59A2508E530D6D8B95677332 /* PBXContainerItemProxy */;
-		};
-		A8047ED2446EA4190B6CD569 /* PBXTargetDependency */ = {
-			isa = PBXTargetDependency;
-			target = D7BDBCC2AC0457C8DAB50B41 /* ForgeScreenTimeReportExtension */;
-			targetProxy = 8D0A71F59D5E5A3E360216E6 /* PBXContainerItemProxy */;
 		};
 		F2A7D809B1659085AF87DF01 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;

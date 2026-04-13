@@ -1,0 +1,1394 @@
+import CoreFoundation
+import Foundation
+import Combine
+import FamilyControls
+import UIKit
+@preconcurrency import Vision
+
+@MainActor
+final class ScreenTimeVisibleReportCaptureRegistry {
+    static let shared = ScreenTimeVisibleReportCaptureRegistry()
+
+    weak var captureView: UIView?
+
+    func register(view: UIView?) {
+        captureView = view
+    }
+}
+
+@MainActor
+final class ScreenTimeStore: ObservableObject {
+    struct PersistedState: Codable {
+        var trackingEnabled: Bool
+        var syncEnabled: Bool
+        var metadata: [String: String]
+    }
+
+    struct AdvancedDiagnostics {
+        let capturedImage: UIImage?
+        let captureSource: String
+        let capturedAtLabel: String
+        let imageSizeDescription: String
+        let accessibilityText: String?
+        let ocrText: String?
+        let parsedSnapshot: ForgeScreenTimeSnapshotEnvelope?
+        let parsedSnapshotSource: String?
+        let diagnostics: [String]
+    }
+
+    private struct AdvancedCaptureArtifacts {
+        let image: UIImage?
+        let source: String
+        let imageSizeDescription: String
+        let accessibilityText: String?
+        let diagnostics: [String]
+    }
+
+    private enum StorageKeys {
+        static let screenTimeState = "forge_companion_screen_time_state"
+        static let localScreenTimeSnapshot = "forge_companion_screen_time_local_snapshot"
+    }
+
+    @Published private(set) var trackingEnabled = false
+    @Published private(set) var syncEnabled = true
+    @Published private(set) var authorizationStatus = "not_determined"
+    @Published private(set) var captureState = "disabled"
+    @Published private(set) var lastCapturedDayKey: String?
+    @Published private(set) var lastCaptureStartedAt: String?
+    @Published private(set) var lastCaptureEndedAt: String?
+    @Published private(set) var daySummaries: [ForgeScreenTimeDaySummarySnapshot] = []
+    @Published private(set) var hourlySegments: [ForgeScreenTimeHourlySegmentSnapshot] = []
+    @Published private(set) var metadata: [String: String] = [:]
+    @Published private(set) var captureRefreshToken = UUID()
+    @Published private(set) var advancedDiagnostics: AdvancedDiagnostics?
+    @Published private(set) var advancedCaptureInFlight = false
+    @Published private(set) var advancedOCRInFlight = false
+
+    private var cancellables: Set<AnyCancellable> = []
+    private let snapshotLoader: () -> ForgeScreenTimeSnapshotEnvelope
+    private let nowProvider: () -> Date
+    private let sleepForSeconds: @Sendable (TimeInterval) async -> Void
+    private let visibleReportSnapshotCapture: () async -> ForgeScreenTimeSnapshotEnvelope?
+    private let storedStateOverride: PersistedState?
+    private let authorizationStatusOverride: String?
+    private let bindAuthorizationUpdates: Bool
+    private var captureRefreshInFlight = false
+    private var sharedSnapshotObserverRegistered = false
+    private var captureSurfaceVisible = false
+
+    private static let visibleReportCaptureRetryDelaySeconds: TimeInterval = 0.35
+    private static let visibleReportCaptureAttempts = 3
+
+    init(
+        snapshotLoader: @escaping () -> ForgeScreenTimeSnapshotEnvelope = ForgeScreenTimeSnapshotStore.load,
+        nowProvider: @escaping () -> Date = Date.init,
+        sleepForSeconds: @escaping @Sendable (TimeInterval) async -> Void = { seconds in
+            let nanoseconds = UInt64((seconds * 1_000_000_000).rounded())
+            try? await Task.sleep(nanoseconds: nanoseconds)
+        },
+        visibleReportSnapshotCapture: @escaping () async -> ForgeScreenTimeSnapshotEnvelope? = {
+            await ScreenTimeStore.captureVisibleReportSnapshotFromRegisteredView()
+        },
+        storedStateOverride: PersistedState? = nil,
+        authorizationStatusOverride: String? = nil,
+        bindAuthorizationUpdates: Bool = true
+    ) {
+        self.snapshotLoader = snapshotLoader
+        self.nowProvider = nowProvider
+        self.sleepForSeconds = sleepForSeconds
+        self.visibleReportSnapshotCapture = visibleReportSnapshotCapture
+        self.storedStateOverride = storedStateOverride
+        self.authorizationStatusOverride = authorizationStatusOverride
+        self.bindAuthorizationUpdates = bindAuthorizationUpdates
+        loadState()
+        registerSharedSnapshotObserver()
+        if bindAuthorizationUpdates {
+            bindAuthorizationCenter()
+        }
+        refreshAuthorizationStatus()
+        ingestSharedSnapshots()
+        refreshCaptureState()
+    }
+
+    deinit {
+        let observer = Unmanaged.passUnretained(self).toOpaque()
+        CFNotificationCenterRemoveEveryObserver(
+            CFNotificationCenterGetDarwinNotifyCenter(),
+            observer
+        )
+    }
+
+    private func bindAuthorizationCenter() {
+        AuthorizationCenter.shared.$authorizationStatus
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                self?.refreshAuthorizationStatus()
+            }
+            .store(in: &cancellables)
+    }
+
+    func requestAuthorization() async {
+        companionDebugLog("ScreenTimeStore", "requestAuthorization start")
+        refreshAuthorizationStatus()
+        if authorizationStatus == "approved" {
+            ingestSharedSnapshots()
+            refreshCaptureState()
+            companionDebugLog("ScreenTimeStore", "requestAuthorization skipped already approved")
+            return
+        }
+        do {
+            try await AuthorizationCenter.shared.requestAuthorization(for: .individual)
+            refreshAuthorizationStatus()
+            ingestSharedSnapshots()
+            refreshCaptureState()
+            companionDebugLog("ScreenTimeStore", "requestAuthorization success")
+        } catch {
+            companionDebugLog(
+                "ScreenTimeStore",
+                "requestAuthorization failed error=\(error.localizedDescription)"
+            )
+            refreshAuthorizationStatus()
+            refreshCaptureState()
+        }
+    }
+
+    func enableAndAuthorize() async {
+        if enabled == false {
+            setEnabled(true)
+        }
+        await requestAuthorization()
+    }
+
+    var enabled: Bool {
+        trackingEnabled && syncEnabled
+    }
+
+    func setEnabled(_ enabled: Bool) {
+        trackingEnabled = enabled
+        syncEnabled = enabled
+        refreshCaptureState()
+        persistState()
+    }
+
+    func setTrackingEnabled(_ enabled: Bool) {
+        setEnabled(enabled)
+    }
+
+    func setSyncEnabled(_ enabled: Bool) {
+        setEnabled(enabled)
+    }
+
+    func handleAppDidBecomeActive() {
+        companionDebugLog("ScreenTimeStore", "handleAppDidBecomeActive")
+        refreshAuthorizationStatus()
+        ingestSharedSnapshots()
+        refreshCaptureState()
+    }
+
+    func setCaptureSurfaceVisible(_ visible: Bool) {
+        guard captureSurfaceVisible != visible else {
+            return
+        }
+        captureSurfaceVisible = visible
+        companionDebugLog("ScreenTimeStore", "captureSurfaceVisible -> \(visible)")
+        if visible {
+            ingestSharedSnapshots()
+            refreshCaptureState()
+        }
+    }
+
+    func ingestSharedSnapshots() {
+        let snapshot = preferredAvailableSnapshot()
+        let sortedDaySummaries = snapshot.daySummaries.sorted { $0.dateKey > $1.dateKey }
+        let sortedHourlySegments = snapshot.hourlySegments.sorted { lhs, rhs in
+            if lhs.startedAt == rhs.startedAt {
+                return lhs.hourIndex < rhs.hourIndex
+            }
+            return lhs.startedAt < rhs.startedAt
+        }
+        let nextLastCapturedDayKey = sortedDaySummaries.first?.dateKey
+        let nextLastCaptureStartedAt = sortedHourlySegments.first?.startedAt
+        let nextLastCaptureEndedAt = sortedHourlySegments.last?.endedAt
+        let nextMetadata = metadata.merging([
+            "snapshot_source": snapshot.source,
+            "snapshot_kind": snapshot.segmentKind,
+            "generated_at": snapshot.generatedAt
+        ]) { _, new in new }
+
+        let snapshotDidChange = daySummaries != sortedDaySummaries
+            || hourlySegments != sortedHourlySegments
+            || lastCapturedDayKey != nextLastCapturedDayKey
+            || lastCaptureStartedAt != nextLastCaptureStartedAt
+            || lastCaptureEndedAt != nextLastCaptureEndedAt
+            || metadata != nextMetadata
+
+        if snapshotDidChange {
+            daySummaries = sortedDaySummaries
+            hourlySegments = sortedHourlySegments
+            lastCapturedDayKey = nextLastCapturedDayKey
+            lastCaptureStartedAt = nextLastCaptureStartedAt
+            lastCaptureEndedAt = nextLastCaptureEndedAt
+            metadata = nextMetadata
+            companionDebugLog(
+                "ScreenTimeStore",
+                "ingestSharedSnapshots updated days=\(daySummaries.count) hours=\(hourlySegments.count) generatedAt=\(snapshot.generatedAt)"
+            )
+        }
+        refreshCaptureState()
+    }
+
+    func refreshCaptureNow() async {
+        companionDebugLog("ScreenTimeStore", "refreshCaptureNow visible report capture")
+        guard enabled, authorizationStatus == "approved" else {
+            ingestSharedSnapshots()
+            refreshCaptureState()
+            return
+        }
+        _ = await captureVisibleReportSnapshotWithRetries(reason: "manual refresh")
+    }
+
+    func captureAdvancedDebugImage() async {
+        advancedCaptureInFlight = true
+        defer {
+            advancedCaptureInFlight = false
+        }
+
+        let capturedAtLabel = Self.shortDateTime(nowProvider())
+        let artifacts = Self.captureAdvancedArtifacts()
+        var diagnostics = artifacts.diagnostics
+        diagnostics.append("Capture surface visible: \(captureSurfaceVisible)")
+        diagnostics.append("Screen Time enabled: \(enabled)")
+        diagnostics.append("Authorization status: \(authorizationStatus)")
+        diagnostics.append("Ready for sync: \(readyForSync)")
+        diagnostics.append("Cached snapshot days: \(daySummaries.count)")
+        diagnostics.append("Cached snapshot hourly segments: \(hourlySegments.count)")
+
+        advancedDiagnostics = AdvancedDiagnostics(
+            capturedImage: artifacts.image,
+            captureSource: artifacts.source,
+            capturedAtLabel: capturedAtLabel,
+            imageSizeDescription: artifacts.imageSizeDescription,
+            accessibilityText: artifacts.accessibilityText,
+            ocrText: nil,
+            parsedSnapshot: nil,
+            parsedSnapshotSource: nil,
+            diagnostics: diagnostics
+        )
+    }
+
+    func runAdvancedOCRAndParse() async {
+        if advancedDiagnostics?.capturedImage == nil {
+            await captureAdvancedDebugImage()
+        }
+
+        guard let diagnosticsState = advancedDiagnostics else {
+            return
+        }
+
+        advancedOCRInFlight = true
+        defer {
+            advancedOCRInFlight = false
+        }
+
+        let parseNow = nowProvider()
+        var diagnostics = diagnosticsState.diagnostics
+        let accessibilitySnapshot = diagnosticsState.accessibilityText.flatMap {
+            Self.parseVisibleReportExport($0, now: parseNow)
+        }
+
+        guard let image = diagnosticsState.capturedImage else {
+            diagnostics.append("OCR skipped because no captured image is available.")
+            if let accessibilitySnapshot {
+                diagnostics.append(
+                    "Accessibility fallback would parse \(accessibilitySnapshot.daySummaries.count) day summaries."
+                )
+            } else {
+                diagnostics.append("Accessibility fallback parse also failed.")
+            }
+            advancedDiagnostics = AdvancedDiagnostics(
+                capturedImage: diagnosticsState.capturedImage,
+                captureSource: diagnosticsState.captureSource,
+                capturedAtLabel: diagnosticsState.capturedAtLabel,
+                imageSizeDescription: diagnosticsState.imageSizeDescription,
+                accessibilityText: diagnosticsState.accessibilityText,
+                ocrText: nil,
+                parsedSnapshot: accessibilitySnapshot,
+                parsedSnapshotSource: accessibilitySnapshot == nil ? nil : "accessibility fallback",
+                diagnostics: diagnostics
+            )
+            return
+        }
+
+        let ocrText = await Self.recognizeText(in: image)
+        let ocrSnapshot = ocrText.flatMap { Self.parseVisibleReportExport($0, now: parseNow) }
+
+        diagnostics.append("OCR image source: \(diagnosticsState.captureSource)")
+        diagnostics.append("OCR image size: \(diagnosticsState.imageSizeDescription)")
+        diagnostics.append("OCR extracted characters: \(ocrText?.count ?? 0)")
+        diagnostics.append(
+            "OCR parse success: \(ocrSnapshot != nil) accessibility parse success: \(accessibilitySnapshot != nil)"
+        )
+
+        let parsedSnapshot = ocrSnapshot ?? accessibilitySnapshot
+        let parsedSnapshotSource: String?
+        if ocrSnapshot != nil {
+            parsedSnapshotSource = "ocr"
+        } else if accessibilitySnapshot != nil {
+            parsedSnapshotSource = "accessibility fallback"
+        } else {
+            parsedSnapshotSource = nil
+        }
+
+        if let parsedSnapshot {
+            diagnostics.append(
+                "Parsed snapshot source: \(parsedSnapshot.source) kind: \(parsedSnapshot.segmentKind)"
+            )
+            diagnostics.append(
+                "Parsed snapshot counts: \(parsedSnapshot.daySummaries.count) days, \(parsedSnapshot.hourlySegments.count) hourly segments"
+            )
+        } else {
+            diagnostics.append("No parser matched the extracted text.")
+        }
+
+        advancedDiagnostics = AdvancedDiagnostics(
+            capturedImage: diagnosticsState.capturedImage,
+            captureSource: diagnosticsState.captureSource,
+            capturedAtLabel: diagnosticsState.capturedAtLabel,
+            imageSizeDescription: diagnosticsState.imageSizeDescription,
+            accessibilityText: diagnosticsState.accessibilityText,
+            ocrText: ocrText,
+            parsedSnapshot: parsedSnapshot,
+            parsedSnapshotSource: parsedSnapshotSource,
+            diagnostics: diagnostics
+        )
+    }
+
+    func reloadVisibleReport() {
+        guard captureSurfaceVisible else {
+            return
+        }
+        companionDebugLog("ScreenTimeStore", "reloadVisibleReport explicit")
+        captureRefreshToken = UUID()
+    }
+
+    func prepareSnapshotForSync(reason: String) async {
+        guard enabled, authorizationStatus == "approved" else {
+            return
+        }
+        ingestSharedSnapshots()
+        guard readyForSync == false else {
+            return
+        }
+        if captureSurfaceVisible {
+            let captured = await captureVisibleReportSnapshotWithRetries(reason: "sync \(reason)")
+            companionDebugLog(
+                "ScreenTimeStore",
+                "prepareSnapshotForSync visible report reason=\(reason) captured=\(captured) days=\(daySummaries.count) hours=\(hourlySegments.count)"
+            )
+            return
+        }
+        companionDebugLog(
+            "ScreenTimeStore",
+            "prepareSnapshotForSync skipping hidden capture reason=\(reason) visibleSurface=false days=\(daySummaries.count) hours=\(hourlySegments.count)"
+        )
+        let captured = false
+        companionDebugLog(
+            "ScreenTimeStore",
+            "prepareSnapshotForSync complete reason=\(reason) captured=\(captured) days=\(daySummaries.count) hours=\(hourlySegments.count)"
+        )
+    }
+
+    func buildScreenTimePayload() -> CompanionSyncPayload.ScreenTimePayload {
+        CompanionSyncPayload.ScreenTimePayload(
+            settings: .init(
+                trackingEnabled: trackingEnabled,
+                syncEnabled: syncEnabled,
+                authorizationStatus: authorizationStatus,
+                captureState: captureState,
+                lastCapturedDayKey: lastCapturedDayKey,
+                lastCaptureStartedAt: lastCaptureStartedAt,
+                lastCaptureEndedAt: lastCaptureEndedAt,
+                metadata: metadata.merging([
+                    "captureFreshness": captureFreshness,
+                    "capturedDayCount": "\(capturedDayCount)",
+                    "capturedHourCount": "\(capturedHourCount)",
+                    "captureWindowDays": "\(captureWindowDays)",
+                    "deliveryMode": metadata["deliveryMode"]
+                        ?? (metadata["snapshot_source"] == "visible_report_ocr"
+                            ? "visible_report_ocr"
+                            : "device_activity_report_extension")
+                ]) { _, new in new }
+            ),
+            daySummaries: daySummaries.map { summary in
+                .init(
+                    dateKey: summary.dateKey,
+                    totalActivitySeconds: summary.totalActivitySeconds,
+                    pickupCount: summary.pickupCount,
+                    notificationCount: summary.notificationCount,
+                    firstPickupAt: summary.firstPickupAt,
+                    longestActivitySeconds: summary.longestActivitySeconds,
+                    topAppBundleIdentifiers: summary.topAppBundleIdentifiers,
+                    topCategoryLabels: summary.topCategoryLabels,
+                    metadata: summary.metadata
+                )
+            },
+            hourlySegments: hourlySegments.map { segment in
+                .init(
+                    dateKey: segment.dateKey,
+                    hourIndex: segment.hourIndex,
+                    startedAt: segment.startedAt,
+                    endedAt: segment.endedAt,
+                    totalActivitySeconds: segment.totalActivitySeconds,
+                    pickupCount: segment.pickupCount,
+                    notificationCount: segment.notificationCount,
+                    firstPickupAt: segment.firstPickupAt,
+                    longestActivityStartedAt: segment.longestActivityStartedAt,
+                    longestActivityEndedAt: segment.longestActivityEndedAt,
+                    metadata: segment.metadata,
+                    apps: segment.apps.map { app in
+                        .init(
+                            bundleIdentifier: app.bundleIdentifier,
+                            displayName: app.displayName,
+                            categoryLabel: app.categoryLabel,
+                            totalActivitySeconds: app.totalActivitySeconds,
+                            pickupCount: app.pickupCount,
+                            notificationCount: app.notificationCount
+                        )
+                    },
+                    categories: segment.categories.map { category in
+                        .init(
+                            categoryLabel: category.categoryLabel,
+                            totalActivitySeconds: category.totalActivitySeconds
+                        )
+                    }
+                )
+            }
+        )
+    }
+
+    var readyForSync: Bool {
+        enabled && authorizationStatus == "approved" && hasCapturedData
+    }
+
+    var capturedDayCount: Int {
+        daySummaries.count
+    }
+
+    var capturedHourCount: Int {
+        hourlySegments.count
+    }
+
+    var lastGeneratedAt: String? {
+        metadata["generated_at"]
+    }
+
+    var captureAgeHours: Double? {
+        guard let lastGeneratedAt, let generatedAt = Self.parseIso(lastGeneratedAt) else {
+            return nil
+        }
+        let delta = max(0, nowProvider().timeIntervalSince(generatedAt) / 3600)
+        return (delta * 10).rounded() / 10
+    }
+
+    var hasCapturedData: Bool {
+        daySummaries.isEmpty == false || hourlySegments.isEmpty == false
+    }
+
+    var captureFreshness: String {
+        if authorizationStatus == "unavailable" {
+            return "unavailable"
+        }
+        if hasCapturedData == false {
+            return "empty"
+        }
+        if let captureAgeHours, captureAgeHours <= 36 {
+            return "fresh"
+        }
+        return "stale"
+    }
+
+    var captureWindowDays: Int {
+        guard
+            let startedAt = lastCaptureStartedAt.flatMap(Self.parseIso),
+            let endedAt = lastCaptureEndedAt.flatMap(Self.parseIso)
+        else {
+            return hasCapturedData ? 1 : 0
+        }
+        let delta = max(0, endedAt.timeIntervalSince(startedAt))
+        return max(1, Int((delta / 86_400).rounded()))
+    }
+
+    var totalCapturedActivitySeconds: Int {
+        if daySummaries.isEmpty == false {
+            return daySummaries.reduce(0) { $0 + $1.totalActivitySeconds }
+        }
+        return hourlySegments.reduce(0) { $0 + $1.totalActivitySeconds }
+    }
+
+    var totalCapturedActivityHours: Double {
+        Double(totalCapturedActivitySeconds) / 3600
+    }
+
+    var totalCapturedHoursLabel: String {
+        totalCapturedActivityHours.formatted(.number.precision(.fractionLength(0...1)))
+    }
+
+    var trackedRangeSummary: String {
+        guard
+            let startedAt = lastCaptureStartedAt.flatMap(Self.parseIso),
+            let endedAt = lastCaptureEndedAt.flatMap(Self.parseIso)
+        else {
+            return "No captured range yet"
+        }
+        return "\(Self.shortDateTime(startedAt)) → \(Self.shortDateTime(endedAt))"
+    }
+
+    var freshnessSummary: String {
+        if captureRefreshInFlight && hasCapturedData == false {
+            return "Capturing first snapshot"
+        }
+        switch captureFreshness {
+        case "fresh":
+            return captureAgeHours.map { "Fresh · updated \($0.formatted(.number.precision(.fractionLength(0...1))))h ago" }
+                ?? "Fresh"
+        case "stale":
+            return captureAgeHours.map { "Stale · last update \($0.formatted(.number.precision(.fractionLength(0...1))))h ago" }
+                ?? "Stale"
+        case "unavailable":
+            return "Unavailable on this build"
+        default:
+            return authorizationStatus == "approved"
+                ? "Waiting for the report extension to write data"
+                : "Waiting for authorization"
+        }
+    }
+
+    var latestCaptureSummary: String {
+        if authorizationStatus == "denied" {
+            return "Screen Time denied"
+        }
+        if authorizationStatus == "unavailable" {
+            return "Entitlement unavailable"
+        }
+        if hasCapturedData == false {
+            if captureRefreshInFlight {
+                return "Capturing first Screen Time snapshot"
+            }
+            if enabled && authorizationStatus == "approved" {
+                return "Waiting for the report extension to write Screen Time data"
+            }
+            return enabled ? "Waiting for Screen Time authorization" : "Screen Time off"
+        }
+        if hourlySegments.isEmpty {
+            return "\(capturedDayCount) days · day summaries only · \(captureFreshness)"
+        }
+        return "\(capturedDayCount) days · \(capturedHourCount) hourly slices · \(captureFreshness)"
+    }
+
+    var topAppsPreview: [String] {
+        Array(
+            hourlySegments
+                .flatMap(\.apps)
+                .sorted {
+                    $0.totalActivitySeconds > $1.totalActivitySeconds
+                }
+                .prefix(3)
+                .map { $0.displayName.isEmpty ? $0.bundleIdentifier : $0.displayName }
+        )
+    }
+
+    var topCategoriesPreview: [String] {
+        let totals = Dictionary(grouping: hourlySegments.flatMap(\.categories), by: \.categoryLabel)
+            .map { key, categories in
+                (
+                    key,
+                    categories.reduce(0) { $0 + $1.totalActivitySeconds }
+                )
+            }
+            .sorted { lhs, rhs in
+                if lhs.1 == rhs.1 {
+                    return lhs.0 < rhs.0
+                }
+                return lhs.1 > rhs.1
+            }
+        return Array(totals.prefix(3).map(\.0))
+    }
+
+    var recentDayHistory: [ForgeScreenTimeDaySummarySnapshot] {
+        Array(daySummaries.prefix(7))
+    }
+
+    static func normalizeAuthorizationStatus(
+        description: String,
+        fallbackRawValue: Int? = nil
+    ) -> String {
+        let normalizedDescription = description
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+            .replacingOccurrences(of: "_", with: "")
+            .replacingOccurrences(of: " ", with: "")
+
+        if normalizedDescription.contains("approved") {
+            return "approved"
+        }
+        if normalizedDescription.contains("denied") {
+            return "denied"
+        }
+        if normalizedDescription.contains("notdetermined") {
+            return "not_determined"
+        }
+        if normalizedDescription.contains("unavailable") {
+            return "unavailable"
+        }
+
+        switch fallbackRawValue {
+        case 0:
+            return "not_determined"
+        case 1:
+            return "denied"
+        case 2:
+            return "approved"
+        default:
+            return "unavailable"
+        }
+    }
+
+    private func refreshAuthorizationStatus() {
+        if let authorizationStatusOverride {
+            authorizationStatus = authorizationStatusOverride
+            return
+        }
+        if #available(iOS 16.0, *) {
+            let status = AuthorizationCenter.shared.authorizationStatus
+            authorizationStatus = Self.normalizeAuthorizationStatus(
+                description: status.description,
+                fallbackRawValue: status.rawValue
+            )
+            metadata["authorizationStatusDescription"] = status.description
+            metadata["authorizationStatusRawValue"] = "\(status.rawValue)"
+        } else {
+            authorizationStatus = "unavailable"
+        }
+    }
+
+    private func refreshCaptureState() {
+        if trackingEnabled == false {
+            syncEnabled = false
+            captureState = "disabled"
+            return
+        }
+        if syncEnabled == false {
+            captureState = "sync_paused"
+            return
+        }
+        switch authorizationStatus {
+        case "approved":
+            if readyForSync {
+                captureState = "ready"
+            } else if captureRefreshInFlight {
+                captureState = "capturing"
+            } else {
+                captureState = "waiting_for_snapshot"
+            }
+        case "denied", "not_determined":
+            captureState = "needs_authorization"
+        default:
+            captureState = "unavailable"
+        }
+    }
+
+    private func captureVisibleReportSnapshotWithRetries(reason: String) async -> Bool {
+        guard captureSurfaceVisible else {
+            return false
+        }
+
+        ingestSharedSnapshots()
+        if readyForSync {
+            return true
+        }
+
+        captureRefreshInFlight = true
+        refreshCaptureState()
+        defer {
+            captureRefreshInFlight = false
+            refreshCaptureState()
+        }
+
+        for attempt in 0..<Self.visibleReportCaptureAttempts {
+            if Task.isCancelled {
+                return false
+            }
+            let attemptReason = attempt == 0 ? reason : "\(reason) retry \(attempt + 1)"
+            if await captureVisibleReportSnapshotIfPossible(reason: attemptReason) {
+                return true
+            }
+            if attempt + 1 < Self.visibleReportCaptureAttempts {
+                await sleepForSeconds(Self.visibleReportCaptureRetryDelaySeconds)
+            }
+        }
+
+        ingestSharedSnapshots()
+        refreshCaptureState()
+        return readyForSync
+    }
+
+    private func preferredAvailableSnapshot() -> ForgeScreenTimeSnapshotEnvelope {
+        let sharedSnapshot = snapshotLoader()
+        let localSnapshot = loadLocalSnapshot() ?? .empty
+        return Self.preferredSnapshot(shared: sharedSnapshot, local: localSnapshot)
+    }
+
+    private func loadLocalSnapshot() -> ForgeScreenTimeSnapshotEnvelope? {
+        guard
+            let data = UserDefaults.standard.data(forKey: StorageKeys.localScreenTimeSnapshot),
+            let snapshot = try? JSONDecoder().decode(
+                ForgeScreenTimeSnapshotEnvelope.self,
+                from: data
+            )
+        else {
+            return nil
+        }
+        return snapshot
+    }
+
+    private func saveLocalSnapshot(_ snapshot: ForgeScreenTimeSnapshotEnvelope) {
+        guard let data = try? JSONEncoder().encode(snapshot) else {
+            return
+        }
+        UserDefaults.standard.set(data, forKey: StorageKeys.localScreenTimeSnapshot)
+    }
+
+    private func captureVisibleReportSnapshotIfPossible(reason: String) async -> Bool {
+        companionDebugLog(
+            "ScreenTimeStore",
+            "captureVisibleReportSnapshotIfPossible start reason=\(reason)"
+        )
+        guard let snapshot = await visibleReportSnapshotCapture() else {
+            companionDebugLog(
+                "ScreenTimeStore",
+                "captureVisibleReportSnapshotIfPossible noVisibleReportText reason=\(reason)"
+            )
+            return false
+        }
+        guard snapshot.daySummaries.isEmpty == false || snapshot.hourlySegments.isEmpty == false else {
+            companionDebugLog(
+                "ScreenTimeStore",
+                "captureVisibleReportSnapshotIfPossible emptyVisibleReportText reason=\(reason)"
+            )
+            return false
+        }
+        saveLocalSnapshot(snapshot)
+        ingestSharedSnapshots()
+        refreshCaptureState()
+        companionDebugLog(
+            "ScreenTimeStore",
+            "captureVisibleReportSnapshotIfPossible success reason=\(reason) days=\(daySummaries.count) hours=\(hourlySegments.count)"
+        )
+        return readyForSync
+    }
+
+    private func registerSharedSnapshotObserver() {
+        guard sharedSnapshotObserverRegistered == false else {
+            return
+        }
+        let observer = Unmanaged.passUnretained(self).toOpaque()
+        CFNotificationCenterAddObserver(
+            CFNotificationCenterGetDarwinNotifyCenter(),
+            observer,
+            Self.sharedSnapshotNotificationCallback,
+            ForgeScreenTimeStorage.snapshotDidChangeDarwinName.rawValue,
+            nil,
+            .deliverImmediately
+        )
+        sharedSnapshotObserverRegistered = true
+    }
+
+    private func unregisterSharedSnapshotObserver() {
+        guard sharedSnapshotObserverRegistered else {
+            return
+        }
+        let observer = Unmanaged.passUnretained(self).toOpaque()
+        CFNotificationCenterRemoveEveryObserver(
+            CFNotificationCenterGetDarwinNotifyCenter(),
+            observer
+        )
+        sharedSnapshotObserverRegistered = false
+    }
+
+    private func handleSharedSnapshotNotification() {
+        companionDebugLog("ScreenTimeStore", "handleSharedSnapshotNotification")
+        ingestSharedSnapshots()
+    }
+
+    private static let sharedSnapshotNotificationCallback: CFNotificationCallback = {
+        _, observer, _, _, _
+        in
+        guard let observer else {
+            return
+        }
+        let store = Unmanaged<ScreenTimeStore>.fromOpaque(observer).takeUnretainedValue()
+        Task { @MainActor in
+            store.handleSharedSnapshotNotification()
+        }
+    }
+
+    private func loadState() {
+        if let storedStateOverride {
+            trackingEnabled = storedStateOverride.trackingEnabled
+            syncEnabled = storedStateOverride.syncEnabled
+            metadata = storedStateOverride.metadata
+            return
+        }
+        if
+            let data = UserDefaults.standard.data(forKey: StorageKeys.screenTimeState),
+            let state = try? JSONDecoder().decode(PersistedState.self, from: data)
+        {
+            trackingEnabled = state.trackingEnabled
+            syncEnabled = state.syncEnabled
+            metadata = state.metadata
+            return
+        }
+        trackingEnabled = false
+        syncEnabled = true
+        metadata = [:]
+    }
+
+    private func persistState() {
+        let state = PersistedState(
+            trackingEnabled: trackingEnabled,
+            syncEnabled: syncEnabled,
+            metadata: metadata
+        )
+        if let data = try? JSONEncoder().encode(state) {
+            UserDefaults.standard.set(data, forKey: StorageKeys.screenTimeState)
+        }
+    }
+
+    private static func parseIso(_ value: String) -> Date? {
+        if let date = isoFormatterWithFractional.date(from: value) {
+            return date
+        }
+        return isoFormatterBasic.date(from: value)
+    }
+
+    private static func shortDateTime(_ date: Date) -> String {
+        shortDateFormatter.string(from: date)
+    }
+
+    private static func preferredSnapshot(
+        shared: ForgeScreenTimeSnapshotEnvelope,
+        local: ForgeScreenTimeSnapshotEnvelope
+    ) -> ForgeScreenTimeSnapshotEnvelope {
+        let sharedHasData = shared.daySummaries.isEmpty == false || shared.hourlySegments.isEmpty == false
+        let localHasData = local.daySummaries.isEmpty == false || local.hourlySegments.isEmpty == false
+
+        switch (sharedHasData, localHasData) {
+        case (true, false):
+            return shared
+        case (false, true):
+            return local
+        case (false, false):
+            return shared
+        case (true, true):
+            if shared.hourlySegments.isEmpty != local.hourlySegments.isEmpty {
+                return shared.hourlySegments.isEmpty ? local : shared
+            }
+            let sharedGeneratedAt = parseIso(shared.generatedAt) ?? .distantPast
+            let localGeneratedAt = parseIso(local.generatedAt) ?? .distantPast
+            return sharedGeneratedAt >= localGeneratedAt ? shared : local
+        }
+    }
+
+    @MainActor
+    private static func captureAdvancedArtifacts() -> AdvancedCaptureArtifacts {
+        let registeredView = ScreenTimeVisibleReportCaptureRegistry.shared.captureView
+        let keyWindow = currentKeyWindow()
+        let registeredImage = registeredView.flatMap { captureImage(of: $0) }
+        let keyWindowImage = keyWindow.flatMap { captureImage(of: $0) }
+        let chosenImage = registeredImage ?? keyWindowImage
+        let chosenSource: String
+        if registeredImage != nil {
+            chosenSource = "registered_report_view"
+        } else if keyWindowImage != nil {
+            chosenSource = "key_window_fallback"
+        } else {
+            chosenSource = "unavailable"
+        }
+
+        var diagnostics: [String] = []
+        if let registeredView {
+            diagnostics.append(
+                "Registered capture view bounds: \(Self.describe(size: registeredView.bounds.size))"
+            )
+        } else {
+            diagnostics.append("Registered capture view: missing")
+        }
+        diagnostics.append("Registered image available: \(registeredImage != nil)")
+        diagnostics.append("Key window available: \(keyWindow != nil)")
+        diagnostics.append("Key window image available: \(keyWindowImage != nil)")
+        diagnostics.append("Selected capture source: \(chosenSource)")
+
+        let accessibilityText = captureVisibleReportTextFromAccessibility()
+        diagnostics.append("Accessibility extracted characters: \(accessibilityText?.count ?? 0)")
+
+        return AdvancedCaptureArtifacts(
+            image: chosenImage,
+            source: chosenSource,
+            imageSizeDescription: describe(image: chosenImage),
+            accessibilityText: accessibilityText,
+            diagnostics: diagnostics
+        )
+    }
+
+    nonisolated private static func captureVisibleReportSnapshotFromRegisteredView() async -> ForgeScreenTimeSnapshotEnvelope? {
+        let now = Date()
+
+        if let accessibleText = await MainActor.run(body: { Self.captureVisibleReportTextFromAccessibility() }),
+           let snapshot = parseVisibleReportExport(accessibleText, now: now)
+        {
+            return ForgeScreenTimeSnapshotEnvelope(
+                generatedAt: snapshot.generatedAt,
+                source: "visible_report_accessibility",
+                segmentKind: snapshot.segmentKind.replacingOccurrences(of: "visible_report", with: "visible_accessibility"),
+                daySummaries: snapshot.daySummaries.map { summary in
+                    ForgeScreenTimeDaySummarySnapshot(
+                        id: summary.id,
+                        dateKey: summary.dateKey,
+                        totalActivitySeconds: summary.totalActivitySeconds,
+                        pickupCount: summary.pickupCount,
+                        notificationCount: summary.notificationCount,
+                        firstPickupAt: summary.firstPickupAt,
+                        longestActivitySeconds: summary.longestActivitySeconds,
+                        topAppBundleIdentifiers: summary.topAppBundleIdentifiers,
+                        topCategoryLabels: summary.topCategoryLabels,
+                        metadata: summary.metadata.merging(["source": "visible_report_accessibility"]) { _, new in new }
+                    )
+                },
+                hourlySegments: snapshot.hourlySegments
+            )
+        }
+
+        let images = await MainActor.run(body: { Self.captureVisibleReportImagesForOCR() })
+        for image in images {
+            guard let recognizedText = await recognizeText(in: image) else {
+                continue
+            }
+            if let snapshot = parseVisibleReportExport(recognizedText, now: now) {
+                return snapshot
+            }
+        }
+
+        return nil
+    }
+
+    @MainActor
+    private static func captureVisibleReportImagesForOCR() -> [UIImage] {
+        var images: [UIImage] = []
+        if let registeredImage = captureRegisteredVisibleReportImage() {
+            images.append(registeredImage)
+        }
+        if let keyWindowImage = captureKeyWindowImage() {
+            images.append(keyWindowImage)
+        }
+        return images
+    }
+
+    @MainActor
+    private static func captureVisibleReportTextFromAccessibility() -> String? {
+        let rootView = ScreenTimeVisibleReportCaptureRegistry.shared.captureView ?? currentKeyWindow()
+        guard let rootView else {
+            return nil
+        }
+        let strings = collectVisibleText(from: rootView)
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { $0.isEmpty == false }
+        guard strings.isEmpty == false else {
+            return nil
+        }
+        return strings.joined(separator: "\n")
+    }
+
+    @MainActor
+    private static func captureRegisteredVisibleReportImage() -> UIImage? {
+        guard let view = ScreenTimeVisibleReportCaptureRegistry.shared.captureView else {
+            return nil
+        }
+        return captureImage(of: view)
+    }
+
+    @MainActor
+    private static func captureKeyWindowImage() -> UIImage? {
+        guard let keyWindow = currentKeyWindow() else {
+            return nil
+        }
+        return captureImage(of: keyWindow)
+    }
+
+    @MainActor
+    private static func currentKeyWindow() -> UIWindow? {
+        let scenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
+        return scenes
+            .flatMap(\.windows)
+            .first { $0.isKeyWindow }
+    }
+
+    @MainActor
+    private static func captureImage(of view: UIView) -> UIImage? {
+        guard view.bounds.isEmpty == false else {
+            return nil
+        }
+        view.layoutIfNeeded()
+        let format = UIGraphicsImageRendererFormat.default()
+        format.scale = view.window?.screen.scale ?? UIScreen.main.scale
+        let renderer = UIGraphicsImageRenderer(bounds: view.bounds, format: format)
+        return renderer.image { _ in
+            view.drawHierarchy(in: view.bounds, afterScreenUpdates: true)
+        }
+    }
+
+    private static func describe(image: UIImage?) -> String {
+        guard let image else {
+            return "Unavailable"
+        }
+        return describe(size: image.size)
+    }
+
+    private static func describe(size: CGSize) -> String {
+        "\(Int(size.width.rounded())) x \(Int(size.height.rounded()))"
+    }
+
+    @MainActor
+    private static func collectVisibleText(from view: UIView) -> [String] {
+        guard view.isHidden == false, view.alpha > 0.01 else {
+            return []
+        }
+
+        var collected: [String] = []
+
+        func append(_ value: String?) {
+            guard let value else { return }
+            let normalized = value.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard normalized.isEmpty == false else { return }
+            collected.append(normalized)
+        }
+
+        if let label = view as? UILabel {
+            append(label.text)
+        }
+        if let textField = view as? UITextField {
+            append(textField.text)
+            append(textField.placeholder)
+        }
+        if let textView = view as? UITextView {
+            append(textView.text)
+        }
+        append(view.accessibilityLabel)
+        append(view.accessibilityValue)
+
+        let elementCount = view.accessibilityElementCount()
+        if elementCount != NSNotFound, elementCount > 0 {
+            for index in 0..<elementCount {
+                guard let element = view.accessibilityElement(at: index) else {
+                    continue
+                }
+                if let nestedView = element as? UIView {
+                    collected.append(contentsOf: collectVisibleText(from: nestedView))
+                    continue
+                }
+                if let accessibilityElement = element as? UIAccessibilityElement {
+                    append(accessibilityElement.accessibilityLabel)
+                    append(accessibilityElement.accessibilityValue)
+                    continue
+                }
+                if let object = element as? NSObject {
+                    append(object.value(forKey: "accessibilityLabel") as? String)
+                    append(object.value(forKey: "accessibilityValue") as? String)
+                }
+            }
+        }
+
+        for subview in view.subviews {
+            collected.append(contentsOf: collectVisibleText(from: subview))
+        }
+
+        var deduplicated: [String] = []
+        var seen = Set<String>()
+        for value in collected where seen.insert(value).inserted {
+            deduplicated.append(value)
+        }
+        return deduplicated
+    }
+
+    nonisolated private static func recognizeText(in image: UIImage) async -> String? {
+        guard let cgImage = image.cgImage else {
+            return nil
+        }
+
+        return await withCheckedContinuation { continuation in
+            let request = VNRecognizeTextRequest { request, _ in
+                let observations = (request.results as? [VNRecognizedTextObservation]) ?? []
+                let lines = observations.compactMap { observation in
+                    observation.topCandidates(1).first?.string
+                }
+                continuation.resume(
+                    returning: lines.isEmpty ? nil : lines.joined(separator: "\n")
+                )
+            }
+            request.recognitionLevel = .accurate
+            request.usesLanguageCorrection = false
+            request.recognitionLanguages = ["en-US"]
+
+            let handler = VNImageRequestHandler(cgImage: cgImage, options: [:])
+            DispatchQueue.global(qos: .userInitiated).async {
+                do {
+                    try handler.perform([request])
+                } catch {
+                    continuation.resume(returning: nil)
+                }
+            }
+        }
+    }
+
+    nonisolated static func parseVisibleReportExport(
+        _ recognizedText: String,
+        now: Date = Date()
+    ) -> ForgeScreenTimeSnapshotEnvelope? {
+        let normalizedLines = recognizedText
+            .replacingOccurrences(of: "\r", with: "\n")
+            .components(separatedBy: "\n")
+            .map {
+                $0
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                    .replacingOccurrences(of: "|", with: " ")
+                    .replacingOccurrences(of: "  +", with: " ", options: .regularExpression)
+            }
+            .filter { $0.isEmpty == false }
+
+        if
+            let startIndex = normalizedLines.firstIndex(where: { $0.contains("FORGESYNCV1") }),
+            let endIndex = normalizedLines[startIndex...].firstIndex(where: { $0.contains("FORGESYNCEND") })
+        {
+            let exportLines = Array(normalizedLines[startIndex...endIndex])
+            let generatedAtFallback: String = {
+                let formatter = ISO8601DateFormatter()
+                formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+                return formatter.string(from: now)
+            }()
+            let generatedAt = exportLines.first(where: { $0.hasPrefix("GENERATED ") })
+                .map { String($0.dropFirst("GENERATED ".count)) }
+                ?? generatedAtFallback
+
+            let daySummaries = exportLines.compactMap { line -> ForgeScreenTimeDaySummarySnapshot? in
+                let components = line.components(separatedBy: " ")
+                guard components.count >= 6, components.first == "DAY" else {
+                    return nil
+                }
+                guard
+                    let totalActivitySeconds = Int(components[2]),
+                    let pickupCount = Int(components[3]),
+                    let notificationCount = Int(components[4]),
+                    let longestActivitySeconds = Int(components[5])
+                else {
+                    return nil
+                }
+                return ForgeScreenTimeDaySummarySnapshot(
+                    id: components[1],
+                    dateKey: components[1],
+                    totalActivitySeconds: totalActivitySeconds,
+                    pickupCount: pickupCount,
+                    notificationCount: notificationCount,
+                    firstPickupAt: nil,
+                    longestActivitySeconds: longestActivitySeconds,
+                    topAppBundleIdentifiers: [],
+                    topCategoryLabels: [],
+                    metadata: [
+                        "source": "visible_report_ocr"
+                    ]
+                )
+            }
+            .sorted { $0.dateKey > $1.dateKey }
+
+            if daySummaries.isEmpty == false {
+                return ForgeScreenTimeSnapshotEnvelope(
+                    generatedAt: generatedAt,
+                    source: "visible_report_ocr",
+                    segmentKind: "visible_report_daily_export",
+                    daySummaries: daySummaries,
+                    hourlySegments: []
+                )
+            }
+        }
+
+        return parseVisibleDailyRows(normalizedLines, now: now)
+    }
+
+    nonisolated private static func parseVisibleDailyRows(
+        _ recognizedLines: [String],
+        now: Date
+    ) -> ForgeScreenTimeSnapshotEnvelope? {
+        let relevantLines = Array(
+            recognizedLines.prefix { line in
+                line.localizedCaseInsensitiveContains("Top apps") == false
+            }
+        )
+
+        var parsedEntries: [(dateKey: String, totalActivitySeconds: Int)] = []
+        var pendingDateLabel: String?
+        var pendingDurationSeconds: Int?
+
+        for line in relevantLines {
+            if let sameLineEntry = parseVisibleDailyEntry(from: line, now: now) {
+                parsedEntries.append(sameLineEntry)
+                pendingDateLabel = nil
+                pendingDurationSeconds = nil
+                continue
+            }
+
+            if let dateLabel = extractVisibleDateLabel(from: line) {
+                if let carriedDurationSeconds = pendingDurationSeconds,
+                   let dateKey = dateKey(fromVisibleDateLabel: dateLabel, now: now)
+                {
+                    parsedEntries.append((dateKey, carriedDurationSeconds))
+                    pendingDurationSeconds = nil
+                } else {
+                    pendingDateLabel = dateLabel
+                }
+                continue
+            }
+
+            if let durationSeconds = parseDurationSeconds(from: line) {
+                if let carriedDateLabel = pendingDateLabel,
+                   let dateKey = dateKey(fromVisibleDateLabel: carriedDateLabel, now: now)
+                {
+                    parsedEntries.append((dateKey, durationSeconds))
+                    pendingDateLabel = nil
+                } else {
+                    pendingDurationSeconds = durationSeconds
+                }
+            }
+        }
+
+        let uniqueEntries = Dictionary(parsedEntries) { current, _ in current }
+            .sorted { $0.key > $1.key }
+
+        guard uniqueEntries.isEmpty == false else {
+            return nil
+        }
+
+        let generatedAt: String = {
+            let formatter = ISO8601DateFormatter()
+            formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+            return formatter.string(from: now)
+        }()
+
+        return ForgeScreenTimeSnapshotEnvelope(
+            generatedAt: generatedAt,
+            source: "visible_report_ocr",
+            segmentKind: "visible_report_daily_rows",
+            daySummaries: uniqueEntries.map { entry in
+                ForgeScreenTimeDaySummarySnapshot(
+                    id: entry.key,
+                    dateKey: entry.key,
+                    totalActivitySeconds: entry.value,
+                    pickupCount: 0,
+                    notificationCount: 0,
+                    firstPickupAt: nil,
+                    longestActivitySeconds: 0,
+                    topAppBundleIdentifiers: [],
+                    topCategoryLabels: [],
+                    metadata: [
+                        "source": "visible_report_ocr_rows"
+                    ]
+                )
+            },
+            hourlySegments: []
+        )
+    }
+
+    nonisolated private static func parseVisibleDailyEntry(
+        from line: String,
+        now: Date
+    ) -> (dateKey: String, totalActivitySeconds: Int)? {
+        guard
+            let dateLabel = extractVisibleDateLabel(from: line),
+            let durationSeconds = parseDurationSeconds(from: line),
+            let dateKey = dateKey(fromVisibleDateLabel: dateLabel, now: now)
+        else {
+            return nil
+        }
+        return (dateKey, durationSeconds)
+    }
+
+    nonisolated private static func extractVisibleDateLabel(from line: String) -> String? {
+        let pattern = #"(Sun|Mon|Tue|Wed|Thu|Fri|Sat)\s+\d{1,2}\s+[A-Za-z]{3}"#
+        guard
+            let match = line.range(of: pattern, options: .regularExpression)
+        else {
+            return nil
+        }
+        return String(line[match])
+    }
+
+    nonisolated private static func parseDurationSeconds(from line: String) -> Int? {
+        let compactLine = line.replacingOccurrences(of: " ", with: "")
+        let pattern = #"(\d+)h(?:(\d+)m)?|(\d+)m"#
+        guard let match = compactLine.range(of: pattern, options: .regularExpression) else {
+            return nil
+        }
+        let value = String(compactLine[match])
+        if let hoursMatch = value.range(of: #"^(\d+)h(?:(\d+)m)?$"#, options: .regularExpression) {
+            let hoursText = String(value[hoursMatch]).replacingOccurrences(of: #"h.*$"#, with: "", options: .regularExpression)
+            let minutesText = value.replacingOccurrences(of: #"^\d+h"#, with: "", options: .regularExpression)
+                .replacingOccurrences(of: "m", with: "")
+            let hours = Int(hoursText) ?? 0
+            let minutes = Int(minutesText) ?? 0
+            return (hours * 3600) + (minutes * 60)
+        }
+        if let minutes = Int(value.replacingOccurrences(of: "m", with: "")) {
+            return minutes * 60
+        }
+        return nil
+    }
+
+    nonisolated private static func dateKey(
+        fromVisibleDateLabel label: String,
+        now: Date
+    ) -> String? {
+        let parser = DateFormatter()
+        parser.calendar = Calendar(identifier: .gregorian)
+        parser.locale = Locale(identifier: "en_US_POSIX")
+        parser.timeZone = TimeZone.current
+        parser.dateFormat = "yyyy EEE d MMM"
+
+        let currentYear = Calendar.current.component(.year, from: now)
+        guard let parsedDate = parser.date(from: "\(currentYear) \(label)") else {
+            return nil
+        }
+        let formatter = DateFormatter()
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = TimeZone(secondsFromGMT: 0)
+        formatter.dateFormat = "yyyy-MM-dd"
+        return formatter.string(from: parsedDate)
+    }
+
+    private static let isoFormatterWithFractional: ISO8601DateFormatter = {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return formatter
+    }()
+
+    private static let isoFormatterBasic: ISO8601DateFormatter = {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime]
+        return formatter
+    }()
+
+    private static let shortDateFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .short
+        return formatter
+    }()
+}

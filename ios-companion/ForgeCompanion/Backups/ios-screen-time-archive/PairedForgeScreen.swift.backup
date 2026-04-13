@@ -10,6 +10,7 @@ struct PairedForgeScreen: View {
     @State private var isLoading = true
     @State private var webError: String?
     @State private var movementSettingsVisible = false
+    @State private var screenTimeSettingsVisible = false
     @State private var settingsVisible = false
     @State private var diagnosticsVisible = false
     @State private var lifeTimelineVisible = false
@@ -100,6 +101,7 @@ struct PairedForgeScreen: View {
 
                     CompanionMenuSheet(
                         openSettings: { settingsVisible = true },
+                        openScreenTimeSettings: { screenTimeSettingsVisible = true },
                         openLifeTimeline: { lifeTimelineVisible = true },
                         closeMenu: { menuVisible = false }
                     )
@@ -129,7 +131,17 @@ struct PairedForgeScreen: View {
                 reloadForge: { reloadToken = UUID() },
                 openDiagnostics: { diagnosticsVisible = true },
                 openMovementSettings: { movementSettingsVisible = true },
+                openScreenTimeSettings: { screenTimeSettingsVisible = true },
                 close: { settingsVisible = false }
+            )
+            .environmentObject(appModel)
+            .presentationDetents([.large])
+            .presentationDragIndicator(.visible)
+        }
+        .sheet(isPresented: $screenTimeSettingsVisible) {
+            ScreenTimeSettingsSheet(
+                screenTimeStore: appModel.screenTimeStore,
+                close: { screenTimeSettingsVisible = false }
             )
             .environmentObject(appModel)
             .presentationDetents([.large])

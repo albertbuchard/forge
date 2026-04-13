@@ -13,6 +13,12 @@ struct ForgeScreenTimeReportExtension: DeviceActivityReportExtension {
         ForgeDailyScreenTimeReport { snapshot in
             ForgeScreenTimeReportView(snapshot: snapshot)
         }
+        ForgeCaptureHourlyScreenTimeReport { snapshot in
+            ForgeScreenTimeCaptureView(snapshot: snapshot)
+        }
+        ForgeCaptureDailyScreenTimeReport { snapshot in
+            ForgeScreenTimeCaptureView(snapshot: snapshot)
+        }
     }
 }
 
@@ -47,6 +53,42 @@ private struct ForgeDailyScreenTimeReport: DeviceActivityReportScene {
             segmentKind: "daily"
         )
         debugLog("makeConfiguration complete context=daily days=\(snapshot.daySummaries.count) hours=\(snapshot.hourlySegments.count)")
+        persistMergedSnapshot(snapshot, replacesHourly: false, replacesDaily: true)
+        return snapshot
+    }
+}
+
+private struct ForgeCaptureHourlyScreenTimeReport: DeviceActivityReportScene {
+    let context: DeviceActivityReport.Context = .forgeCaptureHourlyScreenTime
+    let content: (ForgeScreenTimeSnapshotEnvelope) -> ForgeScreenTimeCaptureView
+
+    func makeConfiguration(
+        representing data: DeviceActivityResults<DeviceActivityData>
+    ) async -> ForgeScreenTimeSnapshotEnvelope {
+        debugLog("makeConfiguration start context=capture-hourly")
+        let snapshot = await buildSnapshotEnvelope(
+            from: data,
+            segmentKind: "capture_hourly"
+        )
+        debugLog("makeConfiguration complete context=capture-hourly days=\(snapshot.daySummaries.count) hours=\(snapshot.hourlySegments.count)")
+        persistMergedSnapshot(snapshot, replacesHourly: true, replacesDaily: false)
+        return snapshot
+    }
+}
+
+private struct ForgeCaptureDailyScreenTimeReport: DeviceActivityReportScene {
+    let context: DeviceActivityReport.Context = .forgeCaptureDailyScreenTime
+    let content: (ForgeScreenTimeSnapshotEnvelope) -> ForgeScreenTimeCaptureView
+
+    func makeConfiguration(
+        representing data: DeviceActivityResults<DeviceActivityData>
+    ) async -> ForgeScreenTimeSnapshotEnvelope {
+        debugLog("makeConfiguration start context=capture-daily")
+        let snapshot = await buildSnapshotEnvelope(
+            from: data,
+            segmentKind: "capture_daily"
+        )
+        debugLog("makeConfiguration complete context=capture-daily days=\(snapshot.daySummaries.count) hours=\(snapshot.hourlySegments.count)")
         persistMergedSnapshot(snapshot, replacesHourly: false, replacesDaily: true)
         return snapshot
     }
@@ -168,23 +210,6 @@ private struct ForgeScreenTimeReportView: View {
         return Array(aggregates.prefix(4))
     }
 
-    private var syncExportLines: [String] {
-        var lines = [
-            "FORGESYNCV1",
-            "GENERATED \(snapshot.generatedAt)",
-            "TOTAL \(totalActivitySeconds)",
-            "DAYS \(snapshot.daySummaries.count)",
-            "SLICES \(snapshot.hourlySegments.count)"
-        ]
-        for day in snapshot.daySummaries.prefix(7) {
-            lines.append(
-                "DAY \(day.dateKey) \(day.totalActivitySeconds) \(day.pickupCount) \(day.notificationCount) \(day.longestActivitySeconds)"
-            )
-        }
-        lines.append("FORGESYNCEND")
-        return lines
-    }
-
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             Text("Screen Time")
@@ -234,22 +259,6 @@ private struct ForgeScreenTimeReportView: View {
                         }
                     }
                 }
-
-                Divider()
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Forge sync export")
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(.secondary)
-                    Text(syncExportLines.joined(separator: "\n"))
-                        .font(.system(size: 10, weight: .semibold, design: .monospaced))
-                        .foregroundStyle(Color.black)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(10)
-                        .background(
-                            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                .fill(Color.white)
-                        )
-                }
             }
         }
         .padding(16)
@@ -258,6 +267,20 @@ private struct ForgeScreenTimeReportView: View {
             RoundedRectangle(cornerRadius: 18, style: .continuous)
                 .fill(Color(uiColor: .secondarySystemBackground))
         )
+    }
+}
+
+private struct ForgeScreenTimeCaptureView: View {
+    let snapshot: ForgeScreenTimeSnapshotEnvelope
+
+    var body: some View {
+        Color.clear
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .onAppear {
+                debugLog(
+                    "capture view appear days=\(snapshot.daySummaries.count) hours=\(snapshot.hourlySegments.count)"
+                )
+            }
     }
 }
 

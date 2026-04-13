@@ -26,6 +26,8 @@ enum ForgeScreenTimeStorage {
 extension DeviceActivityReport.Context {
     static let forgeHourlyScreenTime = Self("ForgeHourlyScreenTime")
     static let forgeDailyScreenTime = Self("ForgeDailyScreenTime")
+    static let forgeCaptureHourlyScreenTime = Self("ForgeCaptureHourlyScreenTime")
+    static let forgeCaptureDailyScreenTime = Self("ForgeCaptureDailyScreenTime")
 }
 
 struct ForgeScreenTimeAppUsageSnapshot: Codable, Hashable, Identifiable {

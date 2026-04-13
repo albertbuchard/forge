@@ -356,6 +356,7 @@ final class ForgeCompanionTests: XCTestCase {
             bindAuthorizationUpdates: false
         )
 
+        store.setCaptureSurfaceVisible(true)
         await store.prepareSnapshotForSync(reason: "unit test visible report")
 
         XCTAssertTrue(store.readyForSync)
@@ -363,6 +364,34 @@ final class ForgeCompanionTests: XCTestCase {
         XCTAssertEqual(store.capturedHourCount, 0)
         XCTAssertEqual(store.metadata["snapshot_source"], "visible_report_ocr")
         XCTAssertTrue(store.latestCaptureSummary.contains("day summaries only"))
+    }
+
+    func testScreenTimeStoreSkipsHiddenPollingWhenVisibleSurfaceIsClosed() async {
+        let emptySnapshot = makeScreenTimeSnapshot(generatedAt: "2026-04-11T10:00:00.000Z")
+        var sleepCallCount = 0
+        let store = ScreenTimeStore(
+            snapshotLoader: { emptySnapshot },
+            nowProvider: {
+                ISO8601DateFormatter().date(from: "2026-04-11T12:00:00Z") ?? Date()
+            },
+            sleepForSeconds: { _ in
+                sleepCallCount += 1
+            },
+            storedStateOverride: .init(
+                trackingEnabled: true,
+                syncEnabled: true,
+                metadata: [:]
+            ),
+            authorizationStatusOverride: "approved",
+            bindAuthorizationUpdates: false
+        )
+
+        await store.prepareSnapshotForSync(reason: "unit test hidden polling")
+
+        XCTAssertEqual(sleepCallCount, 0)
+        XCTAssertFalse(store.readyForSync)
+        XCTAssertEqual(store.capturedDayCount, 0)
+        XCTAssertEqual(store.capturedHourCount, 0)
     }
 
     func testScreenTimeVisibleReportExportParsingBuildsDaySummaries() {
@@ -386,6 +415,28 @@ final class ForgeCompanionTests: XCTestCase {
         XCTAssertEqual(snapshot?.daySummaries.first?.dateKey, "2026-04-11")
         XCTAssertEqual(snapshot?.daySummaries.first?.totalActivitySeconds, 7200)
         XCTAssertEqual(snapshot?.daySummaries.last?.pickupCount, 4)
+    }
+
+    func testScreenTimeVisibleReportRowParsingBuildsDaySummariesFromNormalReportText() {
+        let visibleText = """
+        Live Report
+        Sun 12 Apr 6h 42m
+        Sat 11 Apr 9h 2m
+        Fri 10 Apr 6h 6m
+        Thu 9 Apr 4h 11m
+        Top apps
+        Chrome 8h 51m
+        """
+
+        let now = ISO8601DateFormatter().date(from: "2026-04-12T20:00:00Z") ?? Date()
+        let snapshot = ScreenTimeStore.parseVisibleReportExport(visibleText, now: now)
+
+        XCTAssertEqual(snapshot?.source, "visible_report_ocr")
+        XCTAssertEqual(snapshot?.segmentKind, "visible_report_daily_rows")
+        XCTAssertEqual(snapshot?.daySummaries.count, 4)
+        XCTAssertEqual(snapshot?.daySummaries.first?.dateKey, "2026-04-12")
+        XCTAssertEqual(snapshot?.daySummaries.first?.totalActivitySeconds, (6 * 3600) + (42 * 60))
+        XCTAssertEqual(snapshot?.daySummaries.last?.dateKey, "2026-04-09")
     }
 
     func testScreenTimeAuthorizationNormalizationTreatsApprovedWithDataAccessAsApproved() {

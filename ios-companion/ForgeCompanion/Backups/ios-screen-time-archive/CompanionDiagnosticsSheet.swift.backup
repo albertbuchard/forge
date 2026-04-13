@@ -62,6 +62,7 @@ struct CompanionDiagnosticsSheet: View {
                     overviewMetricRow("Connection", appModel.syncStateLabel)
                     overviewMetricRow("Health", appModel.healthAccessLabel)
                     overviewMetricRow("Movement", appModel.movementAccessLabel)
+                    overviewMetricRow("Screen Time", appModel.screenTimeAccessLabel)
                     overviewMetricRow("Watch", appModel.watchSyncLabel)
                     overviewMetricRow("Last sync", appModel.latestImportSummary)
                     overviewMetricRow("Last message", appModel.lastSyncMessage)
@@ -84,6 +85,8 @@ struct CompanionDiagnosticsSheet: View {
                         overviewMetricRow("Trips", "\(summary.movementTrips)")
                         overviewMetricRow("Trip points", "\(summary.movementTripPoints)")
                         overviewMetricRow("Trip stops", "\(summary.movementTripStops)")
+                        overviewMetricRow("Screen Time days", "\(summary.screenTimeDaySummaries)")
+                        overviewMetricRow("Screen Time hours", "\(summary.screenTimeHourlySegments)")
                     } else {
                         mutedBody("No sync payload has been built yet.")
                     }
@@ -149,6 +152,8 @@ struct CompanionDiagnosticsSheet: View {
                         overviewMetricRow("Movement stays", "\(report.movementStays)")
                         overviewMetricRow("Movement trips", "\(report.movementTrips)")
                         overviewMetricRow("Movement places", "\(report.movementKnownPlaces)")
+                        overviewMetricRow("Screen Time days", "\(report.screenTimeDaySummaries)")
+                        overviewMetricRow("Screen Time hours", "\(report.screenTimeHourlySegments)")
                     } else {
                         mutedBody("No successful sync receipt yet.")
                     }
@@ -181,6 +186,8 @@ struct CompanionDiagnosticsSheet: View {
                     overviewMetricRow("Stays", "\(appModel.movementStore.storedStays.count)")
                     overviewMetricRow("Trips", "\(appModel.movementStore.storedTrips.count)")
                     overviewMetricRow("Latest location", appModel.movementStore.latestLocationSummary)
+                    overviewMetricRow("Screen Time status", appModel.screenTimeAccessLabel)
+                    overviewMetricRow("Screen Time capture", appModel.screenTimeStore.latestCaptureSummary)
                 }
             }
 
