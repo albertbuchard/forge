@@ -148,6 +148,7 @@ import {
   useGetSnapshotQuery,
   usePatchGoalMutation,
   usePatchProjectMutation,
+  usePatchTaskMutation,
   usePatchTaskStatusMutation,
   useReleaseTaskRunMutation
 } from "@/store/api/forge-api";
@@ -178,6 +179,10 @@ type ShellContextValue = {
     patch: Partial<ProjectMutationInput> & {
       schedulingRules?: CalendarSchedulingRules | null;
     }
+  ) => Promise<void>;
+  patchTask: (
+    taskId: string,
+    patch: Parameters<typeof patchTask>[1]
   ) => Promise<void>;
   patchTaskStatus: (
     taskId: string,
@@ -2583,7 +2588,8 @@ export function AppShell() {
   const [patchGoalMutation, patchGoalMutationState] = usePatchGoalMutation();
   const [patchProjectMutation, patchProjectMutationState] =
     usePatchProjectMutation();
-  const [patchTaskMutation, patchTaskMutationState] =
+  const [patchTaskMutation, patchTaskMutationState] = usePatchTaskMutation();
+  const [patchTaskStatusMutation, patchTaskStatusMutationState] =
     usePatchTaskStatusMutation();
   const [claimTaskRunMutation, claimTaskRunMutationState] =
     useClaimTaskRunMutation();
@@ -2604,7 +2610,7 @@ export function AppShell() {
     }
   ) => {
     try {
-      await patchTaskMutation({
+      await patchTaskStatusMutation({
         taskId,
         status,
         enforceTodayWorkLog:
@@ -2837,6 +2843,10 @@ export function AppShell() {
     },
     patchProject: async (projectId, patch) => {
       await patchProjectMutation({ projectId, patch }).unwrap();
+      await refreshLegacySnapshotQueries();
+    },
+    patchTask: async (taskId, patch) => {
+      await patchTaskMutation({ taskId, patch }).unwrap();
       await refreshLegacySnapshotQueries();
     },
     patchTaskStatus: async (taskId, status, options) => {

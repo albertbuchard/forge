@@ -242,7 +242,7 @@ export function TaskDetailPage() {
     }: {
       taskId: string;
       patch: Parameters<typeof patchTask>[1];
-    }) => patchTask(taskId, patch),
+    }) => shell.patchTask(taskId, patch),
     onSuccess: invalidateAll
   });
   const uncompleteMutation = useMutation({

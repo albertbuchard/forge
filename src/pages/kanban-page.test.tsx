@@ -33,14 +33,19 @@ vi.mock("@/components/shell/app-shell", () => ({
 vi.mock("@/components/execution-board", () => ({
   ExecutionBoard: ({
     tasks,
+    onEditTask,
     onSplitTask
   }: {
     tasks: Task[];
+    onEditTask?: (taskId: string) => void;
     onSplitTask?: (taskId: string) => void;
   }) => (
     <div>
       <div>Execution board {tasks.length}</div>
       <div>{tasks.map((task) => task.title).join(" | ")}</div>
+      <button type="button" onClick={() => onEditTask?.(tasks[0]!.id)}>
+        Edit first task
+      </button>
       <button type="button" onClick={() => onSplitTask?.(tasks[0]!.id)}>
         Open split modal
       </button>
@@ -49,7 +54,33 @@ vi.mock("@/components/execution-board", () => ({
 }));
 
 vi.mock("@/components/task-dialog", () => ({
-  TaskDialog: () => null
+  TaskDialog: ({
+    editingTask,
+    onSubmit,
+    open
+  }: {
+    editingTask?: Task | null;
+    onSubmit: (
+      input: { title: string },
+      taskId?: string | null
+    ) => Promise<void>;
+    open: boolean;
+  }) =>
+    open ? (
+      <button
+        type="button"
+        onClick={() =>
+          void onSubmit(
+            {
+              title: `${editingTask?.title ?? "Task"} updated`
+            },
+            editingTask?.id
+          )
+        }
+      >
+        Save task
+      </button>
+    ) : null
 }));
 
 vi.mock("@/components/shell/page-hero", () => ({
@@ -362,15 +393,17 @@ describe("KanbanPage split flow", () => {
   const botUser = createUser("user_bot", "Forge Bot", "bot");
 
   function renderKanban(tasks: Task[]) {
-    useForgeShellMock.mockReturnValue({
+    const shell = {
       snapshot: createSnapshot(tasks, [humanUser, secondHumanUser, botUser]),
       selectedUserIds: ["user_operator"],
+      patchTask: vi.fn().mockResolvedValue(undefined),
       patchTaskStatus: vi.fn(),
       startTaskNow: vi.fn(),
       openStartWork: vi.fn(),
       createTask: vi.fn(),
       refresh: vi.fn()
-    });
+    };
+    useForgeShellMock.mockReturnValue(shell);
 
     const queryClient = new QueryClient({
       defaultOptions: { queries: { retry: false }, mutations: { retry: false } }
@@ -385,6 +418,8 @@ describe("KanbanPage split flow", () => {
         </QueryClientProvider>
       </MemoryRouter>
     );
+
+    return shell;
   }
 
   beforeEach(() => {
@@ -428,6 +463,29 @@ describe("KanbanPage split flow", () => {
         secondTitle: "Oversized task - UI slice",
         remainingRatio: 0.65
       });
+    });
+  });
+
+  it("patches the task through the shell and refreshes the live board after save", async () => {
+    const shell = renderKanban([
+      createTask({
+        id: "task_1",
+        title: "Rename me",
+        goalId: "goal_1",
+        projectId: "project_1",
+        tagIds: ["tag_focus"],
+        user: humanUser
+      })
+    ]);
+
+    fireEvent.click(screen.getByRole("button", { name: "Edit first task" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save task" }));
+
+    await waitFor(() => {
+      expect(shell.patchTask).toHaveBeenCalledWith("task_1", {
+        title: "Rename me updated"
+      });
+      expect(shell.refresh).toHaveBeenCalled();
     });
   });
 

@@ -269,6 +269,7 @@ export function KanbanPage() {
 
   const invalidateBoard = async () => {
     await Promise.all([
+      shell.refresh(),
       queryClient.invalidateQueries({ queryKey: ["forge-snapshot"] }),
       queryClient.invalidateQueries({ queryKey: ["project-board"] }),
       queryClient.invalidateQueries({ queryKey: ["task-context"] })
@@ -282,7 +283,7 @@ export function KanbanPage() {
     }: {
       taskId: string;
       patch: Parameters<typeof patchTask>[1];
-    }) => patchTask(taskId, patch),
+    }) => shell.patchTask(taskId, patch),
     onSuccess: invalidateBoard
   });
   const deleteTaskMutation = useMutation({

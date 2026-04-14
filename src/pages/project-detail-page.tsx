@@ -26,7 +26,6 @@ import {
   getCalendarOverview,
   getProjectBoard,
   patchProject,
-  patchTask,
   uncompleteTask
 } from "@/lib/api";
 import {
@@ -686,7 +685,7 @@ export function ProjectDetailPage() {
         onOpenChange={setTaskDialogOpen}
         onSubmit={async (input, taskId) => {
           if (taskId) {
-            await patchTask(taskId, input);
+            await shell.patchTask(taskId, input);
           } else {
             await shell.createTask(input);
           }

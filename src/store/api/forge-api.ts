@@ -180,6 +180,17 @@ export const forgeApi = createApi({
         resolveResult(() => patchProject(projectId, patch)),
       invalidatesTags: ["Snapshot"]
     }),
+    patchTask: builder.mutation<
+      AsyncResult<typeof patchTask>,
+      {
+        taskId: string;
+        patch: Parameters<typeof patchTask>[1];
+      }
+    >({
+      queryFn: ({ taskId, patch }) =>
+        resolveResult(() => patchTask(taskId, patch)),
+      invalidatesTags: ["Snapshot"]
+    }),
     patchTaskStatus: builder.mutation<
       AsyncResult<typeof patchTask>,
       {
@@ -367,6 +378,7 @@ export const {
   usePatchGoalMutation,
   usePatchProjectMutation,
   usePatchSleepSessionMutation,
+  usePatchTaskMutation,
   usePatchTaskStatusMutation,
   useReleaseTaskRunMutation,
   useRunWorkbenchFlowMutation,

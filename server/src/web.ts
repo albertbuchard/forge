@@ -1,7 +1,10 @@
+import { request as httpRequest, type IncomingMessage } from "node:http";
+import { request as httpsRequest } from "node:https";
 import { spawn, type ChildProcess } from "node:child_process";
 import { existsSync } from "node:fs";
 import { access, readFile } from "node:fs/promises";
 import path from "node:path";
+import type { Duplex } from "node:stream";
 import { setTimeout as delay } from "node:timers/promises";
 import type { FastifyInstance, FastifyReply } from "fastify";
 
@@ -193,6 +196,15 @@ function copyProxyHeaders(response: Response, reply: FastifyReply) {
   }
 }
 
+function buildDevWebTarget(origin: URL, pathname: string, search: string) {
+  const target = new URL(
+    pathname.startsWith("/") ? pathname.slice(1) : pathname,
+    origin
+  );
+  target.search = search;
+  return target;
+}
+
 async function proxyDevAsset(input: {
   origin: URL;
   pathname: string;
@@ -200,11 +212,7 @@ async function proxyDevAsset(input: {
   reply: FastifyReply;
   fetchImpl: typeof fetch;
 }) {
-  const target = new URL(
-    input.pathname.startsWith("/") ? input.pathname.slice(1) : input.pathname,
-    input.origin
-  );
-  target.search = input.search;
+  const target = buildDevWebTarget(input.origin, input.pathname, input.search);
   const response = await input.fetchImpl(target, { redirect: "manual" });
   input.reply.code(response.status);
   copyProxyHeaders(response, input.reply);
@@ -215,6 +223,82 @@ async function proxyDevAsset(input: {
     return "";
   }
   return Buffer.from(await response.arrayBuffer());
+}
+
+function writeProxyUpgradeResponse(
+  socket: Duplex,
+  response: IncomingMessage
+) {
+  const statusCode = response.statusCode ?? 101;
+  const statusMessage = response.statusMessage ?? "Switching Protocols";
+  const headerLines: string[] = [];
+  for (let index = 0; index < response.rawHeaders.length; index += 2) {
+    const name = response.rawHeaders[index];
+    const value = response.rawHeaders[index + 1];
+    if (name && value) {
+      headerLines.push(`${name}: ${value}`);
+    }
+  }
+  socket.write(
+    `HTTP/${response.httpVersion} ${statusCode} ${statusMessage}\r\n${headerLines.join("\r\n")}\r\n\r\n`
+  );
+}
+
+async function proxyDevWebSocket(input: {
+  devWebRuntime: DevWebRuntime;
+  request: IncomingMessage;
+  socket: Duplex;
+  head: Buffer;
+}) {
+  const requestTarget = parseRequestTarget(input.request.url ?? "/");
+  const normalizedRequestPath = stripBasePath(
+    requestTarget.pathname,
+    getDefaultBasePath()
+  );
+  if (!normalizedRequestPath.startsWith("/__vite_hmr")) {
+    return false;
+  }
+
+  const devWebOrigin = await input.devWebRuntime.ensureReady();
+  if (!devWebOrigin) {
+    input.socket.destroy();
+    return true;
+  }
+
+  const target = buildDevWebTarget(
+    devWebOrigin,
+    normalizedRequestPath,
+    requestTarget.search
+  );
+  const proxyRequest = (target.protocol === "https:" ? httpsRequest : httpRequest)(
+    target,
+    {
+      headers: {
+        ...input.request.headers,
+        host: target.host
+      }
+    }
+  );
+
+  proxyRequest.on("upgrade", (response, proxySocket, proxyHead) => {
+    writeProxyUpgradeResponse(input.socket, response);
+    if (proxyHead.length > 0) {
+      input.socket.write(proxyHead);
+    }
+    if (input.head.length > 0) {
+      proxySocket.write(input.head);
+    }
+    proxySocket.pipe(input.socket).pipe(proxySocket);
+  });
+
+  proxyRequest.on("response", () => {
+    input.socket.destroy();
+  });
+  proxyRequest.on("error", () => {
+    input.socket.destroy();
+  });
+  proxyRequest.end();
+  return true;
 }
 
 async function waitForProcessExit(child: ChildProcess, timeoutMs = 5_000) {
@@ -418,6 +502,16 @@ export async function registerWebRoutes(
 
   app.addHook("onClose", async () => {
     await devWebRuntime.stop();
+  });
+  app.server.on("upgrade", (request, socket, head) => {
+    void (async () => {
+      await proxyDevWebSocket({
+        devWebRuntime,
+        request,
+        socket,
+        head
+      });
+    })();
   });
   app.get("/", async (_request, reply) =>
     serveAsset("/", reply, { devWebRuntime, fetchImpl })
