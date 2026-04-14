@@ -36,6 +36,12 @@ const captures = [
     route: "sleep",
     waitForText: "Recent sleep pattern",
     scrollTo: { x: 0, y: 230 }
+  },
+  {
+    name: "forge-wiki-memory.png",
+    route: "wiki",
+    waitForText: "Search KarpaWiki",
+    scrollTo: { x: 0, y: 0 }
   }
 ];
 
