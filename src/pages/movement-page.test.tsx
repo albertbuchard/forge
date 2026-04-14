@@ -290,4 +290,43 @@ describe("Movement page Life Force integration", () => {
     expect(await screen.findByText("Airport transfer")).toBeInTheDocument();
     expect(screen.getAllByText("8 AP/h").length).toBeGreaterThan(0);
   });
+
+  it("does not crash when instant Life Force data is partially missing", async () => {
+    getLifeForceMock.mockResolvedValueOnce({
+      lifeForce: {
+        userId: "user_operator",
+        dateKey: "2026-04-11",
+        baselineDailyAp: 200,
+        dailyBudgetAp: 220,
+        spentTodayAp: 40,
+        remainingAp: 180,
+        forecastAp: 92,
+        plannedRemainingAp: 52,
+        targetBandMinAp: 187,
+        targetBandMaxAp: 220,
+        instantCapacityApPerHour: 10,
+        instantFreeApPerHour: undefined,
+        overloadApPerHour: 0,
+        currentDrainApPerHour: 4.8,
+        fatigueBufferApPerHour: 1.8,
+        sleepRecoveryMultiplier: 1,
+        readinessMultiplier: 1,
+        fatigueDebtCarry: 0,
+        stats: [],
+        currentCurve: [],
+        activeDrains: [],
+        plannedDrains: [],
+        warnings: [],
+        recommendations: [],
+        topTaskIdsNeedingSplit: [],
+        updatedAt: "2026-04-11T12:00:00.000Z"
+      },
+      templates: []
+    });
+
+    renderWithProviders();
+
+    expect(await screen.findByText("Life Force sync")).toBeInTheDocument();
+    expect(screen.getByText("0 AP/h free right now")).toBeInTheDocument();
+  });
 });

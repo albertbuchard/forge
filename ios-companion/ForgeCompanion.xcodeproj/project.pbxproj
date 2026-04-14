@@ -925,12 +925,15 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = "ForgeCompanion/ForgeWatch Watch App/ForgeWatch Watch App.entitlements";
 				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 7;
 				DEVELOPMENT_TEAM = KZ65F7924F;
 				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.albertbuchard.ForgeCompanion.watchkitapp;
 				SDKROOT = watchos;
 				SKIP_INSTALL = YES;
 				TARGETED_DEVICE_FAMILY = 4;
+				VERSIONING_SYSTEM = "apple-generic";
 			};
 			name = Debug;
 		};
@@ -993,12 +996,15 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = "ForgeCompanion/ForgeWatch Watch App/ForgeWatch Watch App.entitlements";
 				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 7;
 				DEVELOPMENT_TEAM = KZ65F7924F;
 				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.albertbuchard.ForgeCompanion.watchkitapp;
 				SDKROOT = watchos;
 				SKIP_INSTALL = YES;
 				TARGETED_DEVICE_FAMILY = 4;
+				VERSIONING_SYSTEM = "apple-generic";
 			};
 			name = Release;
 		};
@@ -1027,6 +1033,7 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = ForgeCompanion/ForgeWatchExtension.entitlements;
 				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 7;
 				DEVELOPMENT_TEAM = KZ65F7924F;
 				INFOPLIST_FILE = ForgeCompanion/ForgeWatch/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -1034,10 +1041,12 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
+				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.albertbuchard.ForgeCompanion.watchkitapp.ForgeWatch;
 				SDKROOT = watchos;
 				SKIP_INSTALL = YES;
 				TARGETED_DEVICE_FAMILY = 4;
+				VERSIONING_SYSTEM = "apple-generic";
 			};
 			name = Debug;
 		};
@@ -1065,6 +1074,7 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = ForgeCompanion/ForgeWatchExtension.entitlements;
 				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 7;
 				DEVELOPMENT_TEAM = KZ65F7924F;
 				INFOPLIST_FILE = ForgeCompanion/ForgeWatch/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -1072,10 +1082,12 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
+				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.albertbuchard.ForgeCompanion.watchkitapp.ForgeWatch;
 				SDKROOT = watchos;
 				SKIP_INSTALL = YES;
 				TARGETED_DEVICE_FAMILY = 4;
+				VERSIONING_SYSTEM = "apple-generic";
 			};
 			name = Release;
 		};
@@ -1087,6 +1099,7 @@
 				CODE_SIGN_ENTITLEMENTS = ForgeCompanion/ForgeCompanion/ForgeCompanion.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 7;
 				DEVELOPMENT_TEAM = KZ65F7924F;
 				INFOPLIST_FILE = ForgeCompanion/Info.plist;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
@@ -1101,9 +1114,11 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
+				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.albertbuchard.ForgeCompanion;
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = 1;
+				VERSIONING_SYSTEM = "apple-generic";
 			};
 			name = Release;
 		};
@@ -1135,6 +1150,7 @@
 				CODE_SIGN_ENTITLEMENTS = ForgeCompanion/ForgeCompanion/ForgeCompanion.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 7;
 				DEVELOPMENT_TEAM = KZ65F7924F;
 				INFOPLIST_FILE = ForgeCompanion/Info.plist;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
@@ -1149,9 +1165,11 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
+				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.albertbuchard.ForgeCompanion;
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = 1;
+				VERSIONING_SYSTEM = "apple-generic";
 			};
 			name = Debug;
 		};

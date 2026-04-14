@@ -822,12 +822,12 @@ export function MovementPage() {
           </div>
           <div className="mt-2 text-2xl font-semibold text-white">
             {lifeForceQuery.data
-              ? `${Math.round(lifeForceQuery.data.spentTodayAp)}/${Math.round(lifeForceQuery.data.dailyBudgetAp)} AP`
+              ? `${Math.round(lifeForceQuery.data.spentTodayAp ?? 0)}/${Math.round(lifeForceQuery.data.dailyBudgetAp ?? 0)} AP`
               : "Loading..."}
           </div>
           <div className="mt-2 text-sm text-white/58">
             {lifeForceQuery.data
-              ? `${lifeForceQuery.data.instantFreeApPerHour.toFixed(1)} AP/h free right now`
+              ? `${formatLifeForceRate(lifeForceQuery.data.instantFreeApPerHour)} free right now`
               : "Movement can now be read against today’s live capacity."}
           </div>
         </div>

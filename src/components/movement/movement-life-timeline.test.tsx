@@ -157,6 +157,7 @@ describe("MovementLifeTimeline", () => {
       place: {
         id: "place_home",
         externalUid: "place_home",
+        userId: "user_operator",
         label: "Home",
         aliases: [],
         latitude: 46.5191,
@@ -164,7 +165,14 @@ describe("MovementLifeTimeline", () => {
         radiusMeters: 100,
         categoryTags: ["home"],
         visibility: "shared",
-        wikiNoteId: null
+        wikiNoteId: null,
+        linkedEntities: [],
+        linkedPeople: [],
+        metadata: {},
+        source: "test",
+        createdAt: "2026-04-06T09:00:00.000Z",
+        updatedAt: "2026-04-06T09:00:00.000Z",
+        wikiNote: null
       }
     });
     patchMovementStayMock.mockResolvedValue({});
@@ -264,8 +272,8 @@ describe("MovementLifeTimeline", () => {
       )
     ).toBeInTheDocument();
     expect(
-      await screen.findByText("User invalidated automatic movement")
-    ).toBeInTheDocument();
+      (await screen.findAllByText("User invalidated automatic movement")).length
+    ).toBeGreaterThan(0);
 
     await waitFor(() => {
       expect(screen.getAllByText("User invalidated").length).toBeGreaterThan(0);
@@ -389,5 +397,75 @@ describe("MovementLifeTimeline", () => {
     expect(await screen.findByText(/Home details/i)).toBeInTheDocument();
     expect(await screen.findByText(/Average position:/i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Create canonical place/i })).toBeInTheDocument();
+  });
+
+  it("shows the known location name directly in the stay box", async () => {
+    getMovementTimelineMock.mockResolvedValueOnce({
+      movement: {
+        segments: [
+          createSegment({
+            id: "segment_known_place_stay",
+            title: "Stay",
+            placeLabel: "Lausanne Office",
+            stay: {
+              id: "stay_office",
+              externalUid: "stay_office",
+              pairingSessionId: null,
+              userId: "user_operator",
+              placeId: "place_office",
+              label: "Office stay",
+              status: "completed",
+              classification: "stationary",
+              startedAt: "2026-04-06T08:00:00.000Z",
+              endedAt: "2026-04-06T09:00:00.000Z",
+              durationSeconds: 3600,
+              centerLatitude: 46.5191,
+              centerLongitude: 6.6323,
+              radiusMeters: 120,
+              sampleCount: 3,
+              weather: {},
+              metrics: {},
+              metadata: {},
+              publishedNoteId: null,
+              createdAt: "2026-04-06T09:00:00.000Z",
+              updatedAt: "2026-04-06T09:00:00.000Z",
+              place: {
+                id: "place_office",
+                externalUid: "place_office",
+                userId: "user_operator",
+                label: "Lausanne Office",
+                aliases: [],
+                latitude: 46.5191,
+                longitude: 6.6323,
+                radiusMeters: 100,
+                categoryTags: ["work"],
+                visibility: "shared",
+                wikiNoteId: null,
+                linkedEntities: [],
+                linkedPeople: [],
+                metadata: {},
+                source: "test",
+                createdAt: "2026-04-06T09:00:00.000Z",
+                updatedAt: "2026-04-06T09:00:00.000Z",
+                wikiNote: null
+              },
+              note: null,
+              estimatedScreenTimeSeconds: 0,
+              pickupCount: 0,
+              notificationCount: 0,
+              topApps: [],
+              topCategories: []
+            }
+          })
+        ],
+        nextCursor: null,
+        hasMore: false,
+        invalidSegmentCount: 0
+      }
+    });
+
+    renderTimeline(<MovementLifeTimeline userIds={["user_operator"]} />);
+
+    expect(await screen.findByRole("button", { name: /Lausanne Office/i })).toBeInTheDocument();
   });
 });

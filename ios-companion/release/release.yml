@@ -11,7 +11,7 @@ version:
 release:
   default_mode: testflight
   phased_release: false
-  automatic_release: false
+  automatic_release: true
   notify_external_testers: false
   testflight_groups: []
 

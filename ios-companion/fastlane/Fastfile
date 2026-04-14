@@ -104,6 +104,9 @@ platform :ios do
       submit_for_review: true,
       automatic_release: config.dig(:release, :automatic_release) == true,
       phased_release: config.dig(:release, :phased_release) == true,
+      submission_information: {
+        export_compliance_uses_encryption: false
+      },
       precheck_include_in_app_purchases: false,
       force: true
     )
@@ -323,7 +326,13 @@ def increment_release_versions!(config)
 end
 
 def current_build_number
-  Actions.sh("cd #{Shellwords.escape(File.join(release_root, 'ForgeCompanion'))} && xcrun agvtool what-version -terse", log: false).strip
+  project_dir = File.dirname(xcode_project_path)
+  command = "cd #{Shellwords.escape(project_dir)} && xcrun agvtool what-version -terse"
+  Actions.sh(command, log: false).strip
+rescue StandardError
+  info_plist_path = File.join(project_dir, "ForgeCompanion", "Info.plist")
+  UI.important("Falling back to #{info_plist_path} for CFBundleVersion because agvtool is unavailable")
+  Actions.sh("/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' #{Shellwords.escape(info_plist_path)}", log: false).strip
 end
 
 def build_release_archive!(artifact_dir:, archive_path:, marketing_version:, bump_build_number:)

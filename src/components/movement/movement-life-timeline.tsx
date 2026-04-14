@@ -283,9 +283,33 @@ function normalizeMissingSegmentTitle(segment: Extract<MovementTimelineSegment, 
   return segment.title;
 }
 
+function resolveStayDisplayTitle(
+  segment: Extract<MovementTimelineSegment, { kind: "stay" }>
+) {
+  const canonicalLabel = hasRecordedStay(segment)
+    ? segment.stay.place?.label ?? segment.placeLabel ?? segment.stay.label ?? null
+    : segment.placeLabel ?? null;
+  const normalizedTitle = segment.title.trim().toLowerCase();
+  const titleIsGeneric =
+    normalizedTitle.length === 0 ||
+    normalizedTitle === "stay" ||
+    normalizedTitle === "continued stay" ||
+    normalizedTitle === "repaired stay" ||
+    normalizedTitle === "manual stay";
+
+  if (canonicalLabel && titleIsGeneric) {
+    return canonicalLabel;
+  }
+
+  return segment.title.trim() || canonicalLabel || "Stay";
+}
+
 function displaySegmentTitle(segment: MovementTimelineSegment) {
   if (segment.kind === "missing") {
     return normalizeMissingSegmentTitle(segment);
+  }
+  if (segment.kind === "stay") {
+    return resolveStayDisplayTitle(segment);
   }
   if (segment.kind === "trip" && isGenericTripTitle(segment.title)) {
     const start = resolveTripEndpoint(segment, "start").label;
@@ -1631,7 +1655,17 @@ function MovementTimelineRow({
                     {formatDurationLabel(segment.durationSeconds)}
                   </div>
                 </div>
-                <div className="mt-auto pt-14">
+                <div className="mt-5 min-w-0">
+                  <div className="truncate font-display text-[1.12rem] tracking-[-0.04em] text-white">
+                    {displaySegmentTitle(segment)}
+                  </div>
+                  {hasRecordedStay(segment) && segment.stay.place?.label ? (
+                    <div className="mt-2 truncate font-label text-[10px] uppercase tracking-[0.2em] text-white/34">
+                      Canonical place
+                    </div>
+                  ) : null}
+                </div>
+                <div className="mt-auto pt-8">
                   <div className="font-label text-[10px] uppercase tracking-[0.22em] text-white/34">
                     {compactTimeLabel(segment.startedAt)} → {compactTimeLabel(segment.endedAt)}
                   </div>
