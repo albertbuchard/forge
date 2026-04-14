@@ -98,15 +98,22 @@ One-time Apple-side setup:
 
 ### Required for iOS workflow
 
-Add these repository secrets in the Forge GitHub repo:
+Choose one of these secret styles in the Forge GitHub repo.
+
+Single-secret setup:
+
+- `FORGE_IOS_RELEASE_ENV` with the raw multiline contents of `ios-companion/.release.env`, or
+- `FORGE_IOS_RELEASE_ENV_BASE64` with a base64-encoded `.release.env` payload
+
+Split-secret setup:
 
 - `FORGE_ASC_KEY_ID`
 - `FORGE_ASC_ISSUER_ID`
 - `FORGE_ASC_KEY_CONTENT_BASE64`
 
-Optional:
+Optional in either setup:
 
-- `FORGE_APPLE_TEAM_ID`
+- `FORGE_APPLE_TEAM_ID` if you do not want to rely on the default team `KZ65F7924F`
 
 ### Required only if CI automatic signing is not enough
 
@@ -120,6 +127,8 @@ Optional:
 
 Formatting note:
 
+- `FORGE_IOS_RELEASE_ENV(_BASE64)` should include the same values you would put in
+  `ios-companion/.release.env`
 - `FORGE_ASC_KEY_CONTENT_BASE64` should be the base64 body of the `.p8` App Store
   Connect key
 - `FORGE_IOS_BUILD_CERTIFICATE_BASE64` should be the base64 body of the exported `.p12`

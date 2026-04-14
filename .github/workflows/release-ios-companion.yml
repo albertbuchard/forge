@@ -109,33 +109,14 @@ jobs:
 
       - name: Write release environment file
         env:
+          FORGE_IOS_RELEASE_ENV: ${{ secrets.FORGE_IOS_RELEASE_ENV }}
+          FORGE_IOS_RELEASE_ENV_BASE64: ${{ secrets.FORGE_IOS_RELEASE_ENV_BASE64 }}
           FORGE_ASC_KEY_ID: ${{ secrets.FORGE_ASC_KEY_ID }}
           FORGE_ASC_ISSUER_ID: ${{ secrets.FORGE_ASC_ISSUER_ID }}
           FORGE_ASC_KEY_CONTENT_BASE64: ${{ secrets.FORGE_ASC_KEY_CONTENT_BASE64 }}
           FORGE_APPLE_TEAM_ID: ${{ secrets.FORGE_APPLE_TEAM_ID }}
         run: |
-          [[ -n "${FORGE_ASC_KEY_ID}" ]] || {
-            echo "Missing FORGE_ASC_KEY_ID secret." >&2
-            exit 1
-          }
-          [[ -n "${FORGE_ASC_ISSUER_ID}" ]] || {
-            echo "Missing FORGE_ASC_ISSUER_ID secret." >&2
-            exit 1
-          }
-          [[ -n "${FORGE_ASC_KEY_CONTENT_BASE64}" ]] || {
-            echo "Missing FORGE_ASC_KEY_CONTENT_BASE64 secret." >&2
-            exit 1
-          }
-
-          {
-            echo "FORGE_ASC_KEY_ID=${FORGE_ASC_KEY_ID}"
-            echo "FORGE_ASC_ISSUER_ID=${FORGE_ASC_ISSUER_ID}"
-            echo "FORGE_ASC_KEY_CONTENT_BASE64=${FORGE_ASC_KEY_CONTENT_BASE64}"
-            echo "FORGE_RELEASE_SKIP_REMOTE_VALIDATION=0"
-            if [[ -n "${FORGE_APPLE_TEAM_ID}" ]]; then
-              echo "FORGE_APPLE_TEAM_ID=${FORGE_APPLE_TEAM_ID}"
-            fi
-          } > ios-companion/.release.env
+          ./ios-companion/scripts/write-release-env.sh ios-companion/.release.env --require-asc-auth
 
       - name: Verify release config version matches tag
         env:

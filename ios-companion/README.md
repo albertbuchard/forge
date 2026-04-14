@@ -96,7 +96,8 @@ Public entrypoint:
 The script bootstraps a local Fastlane toolchain under `ios-companion/vendor/bundle`,
 runs Forge repo checks, archives the canonical generated Xcode project at
 `ios-companion/ForgeCompanion.xcodeproj`, and then uploads or submits
-depending on the selected mode.
+depending on the selected mode. It prefers an already-installed modern Ruby and only
+falls back to Homebrew Ruby bootstrap when no suitable Ruby is available.
 
 This repo now also includes tag-driven GitHub Actions release workflows:
 
@@ -133,7 +134,12 @@ Developer already has:
 ### One-time GitHub Actions setup
 
 For the CI workflow in `.github/workflows/release-ios-companion.yml`, add these
-repository secrets:
+repository secrets. You can choose either of these setup styles:
+
+1. One full release env secret:
+   - `FORGE_IOS_RELEASE_ENV` with the raw multiline contents of `ios-companion/.release.env`, or
+   - `FORGE_IOS_RELEASE_ENV_BASE64` with a base64-encoded `.release.env` payload
+2. Individual App Store Connect secrets:
 
 - `FORGE_ASC_KEY_ID`
 - `FORGE_ASC_ISSUER_ID`
@@ -148,7 +154,8 @@ If the GitHub runner cannot complete automatic signing with its own state, also 
 - optional `FORGE_IOS_PROVISIONING_PROFILES_BASE64` as newline-delimited base64
   `.mobileprovision` payloads
 
-The workflow writes `ios-companion/.release.env` from those secrets, captures the
+The workflow writes a normalized `ios-companion/.release.env` from the chosen secret
+source, applies the default Apple team id when you do not override it, captures the
 managed screenshots, and then calls the same publish script the local flow uses.
 
 For the exact release tags, full prerequisites, and the combined plugin plus iOS

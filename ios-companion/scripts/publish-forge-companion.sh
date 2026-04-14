@@ -47,9 +47,7 @@ set -a
 source "${ENV_FILE}"
 set +a
 
-for required_var in FORGE_APPLE_TEAM_ID; do
-  [[ -n "${!required_var:-}" ]] || fail "Missing ${required_var} in ${ENV_FILE}."
-done
+: "${FORGE_APPLE_TEAM_ID:=KZ65F7924F}"
 
 if [[ "${FORGE_RELEASE_SKIP_REMOTE_VALIDATION:-0}" != "1" ]]; then
   [[ -n "${FORGE_ASC_KEY_ID:-}" ]] || fail "Missing FORGE_ASC_KEY_ID in ${ENV_FILE}."
@@ -63,13 +61,15 @@ if [[ "${FORGE_RELEASE_SKIP_REMOTE_VALIDATION:-0}" != "1" ]]; then
 fi
 
 command -v xcodebuild >/dev/null 2>&1 || fail "xcodebuild is required."
-command -v brew >/dev/null 2>&1 || fail "Homebrew is required so the script can bootstrap a modern Ruby + Fastlane toolchain."
 command -v node >/dev/null 2>&1 || fail "Node.js is required for Forge release checks."
 command -v npm >/dev/null 2>&1 || fail "npm is required for Forge release checks."
 
 if [[ -x "/opt/homebrew/opt/ruby/bin/ruby" ]]; then
   RUBY_BIN="/opt/homebrew/opt/ruby/bin/ruby"
+elif [[ -x "/usr/local/opt/ruby/bin/ruby" ]]; then
+  RUBY_BIN="/usr/local/opt/ruby/bin/ruby"
 else
+  command -v brew >/dev/null 2>&1 || fail "Homebrew is required only when no modern Ruby is already installed."
   info "Installing Homebrew Ruby because release automation requires a modern Ruby runtime."
   brew list ruby >/dev/null 2>&1 || brew install ruby
   RUBY_PREFIX="$(brew --prefix ruby)"
