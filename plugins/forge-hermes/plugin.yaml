@@ -1,5 +1,5 @@
 name: forge
-version: 0.2.29
+version: 0.2.30
 description: Structured memory plugin for project management and mental health tracking in Hermes
 author: Forge
 provides_tools:
