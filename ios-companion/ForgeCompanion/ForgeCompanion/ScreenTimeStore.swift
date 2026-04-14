@@ -10,8 +10,8 @@ final class ScreenTimeStore: ObservableObject {
 
     @Published private(set) var trackingEnabled = false
     @Published private(set) var syncEnabled = false
-    @Published private(set) var authorizationStatus = "archived"
-    @Published private(set) var captureState = "archived"
+    @Published private(set) var authorizationStatus = "unavailable"
+    @Published private(set) var captureState = "disabled"
     @Published private(set) var lastCapturedDayKey: String?
     @Published private(set) var lastCaptureStartedAt: String?
     @Published private(set) var lastCaptureEndedAt: String?
@@ -56,8 +56,8 @@ final class ScreenTimeStore: ObservableObject {
             settings: .init(
                 trackingEnabled: false,
                 syncEnabled: false,
-                authorizationStatus: "archived",
-                captureState: "archived",
+                authorizationStatus: authorizationStatus,
+                captureState: captureState,
                 lastCapturedDayKey: nil,
                 lastCaptureStartedAt: nil,
                 lastCaptureEndedAt: nil,
@@ -93,7 +93,7 @@ final class ScreenTimeStore: ObservableObject {
     }
 
     var captureFreshness: String {
-        "archived"
+        "unavailable"
     }
 
     var captureWindowDays: Int {

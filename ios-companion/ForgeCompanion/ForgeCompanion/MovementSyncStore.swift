@@ -238,6 +238,13 @@ final class MovementSyncStore: NSObject, ObservableObject, @preconcurrency CLLoc
         static let movementState = "forge_companion_movement_state"
     }
 
+    private enum KnownPlaceDeduplicationContext: String {
+        case bootstrapLocal = "bootstrap_local"
+        case bootstrapRemote = "bootstrap_remote"
+        case persistedState = "persisted_state"
+        case testingState = "testing_state"
+    }
+
     @Published private(set) var trackingEnabled = false
     @Published private(set) var publishMode = "auto_publish"
     @Published private(set) var retentionMode = "aggregates_only"
@@ -291,7 +298,10 @@ final class MovementSyncStore: NSObject, ObservableObject, @preconcurrency CLLoc
             trackingEnabled = testingState.trackingEnabled
             publishMode = testingState.publishMode
             retentionMode = testingState.retentionMode
-            knownPlaces = testingState.knownPlaces
+            knownPlaces = deduplicatedKnownPlaces(
+                testingState.knownPlaces,
+                context: .testingState
+            )
             storedStays = testingState.stays
             storedTrips = testingState.trips
             cachedProjectedBoxes = testingState.projectedBoxes
@@ -403,11 +413,22 @@ final class MovementSyncStore: NSObject, ObservableObject, @preconcurrency CLLoc
                 metadata: [:]
             )
         }
-        let localByExternalUid = Dictionary(uniqueKeysWithValues: knownPlaces.map { ($0.externalUid, $0) })
-        knownPlaces = remotePlaces.map { remotePlace in
-            localByExternalUid[remotePlace.externalUid] ?? remotePlace
-        } + knownPlaces.filter { localPlace in
-            !remotePlaces.contains(where: { $0.externalUid == localPlace.externalUid })
+        let normalizedLocalPlaces = deduplicatedKnownPlaces(
+            knownPlaces,
+            context: .bootstrapLocal
+        )
+        let normalizedRemotePlaces = deduplicatedKnownPlaces(
+            remotePlaces,
+            context: .bootstrapRemote
+        )
+        let localByExternalUid = Dictionary(
+            uniqueKeysWithValues: normalizedLocalPlaces.map { (knownPlaceKey(for: $0), $0) }
+        )
+        let remotePlaceKeys = Set(normalizedRemotePlaces.map(knownPlaceKey(for:)))
+        knownPlaces = normalizedRemotePlaces.map { remotePlace in
+            localByExternalUid[knownPlaceKey(for: remotePlace)] ?? remotePlace
+        } + normalizedLocalPlaces.filter { localPlace in
+            !remotePlaceKeys.contains(knownPlaceKey(for: localPlace))
         }
         if bootstrap.deletedStayExternalUids.isEmpty == false {
             storedStays.removeAll { stay in
@@ -2307,7 +2328,10 @@ final class MovementSyncStore: NSObject, ObservableObject, @preconcurrency CLLoc
         trackingEnabled = decoded.trackingEnabled
         publishMode = decoded.publishMode
         retentionMode = decoded.retentionMode
-        knownPlaces = decoded.knownPlaces
+        knownPlaces = deduplicatedKnownPlaces(
+            decoded.knownPlaces,
+            context: .persistedState
+        )
         storedStays = decoded.stays
         storedTrips = decoded.trips
         cachedProjectedBoxes = decoded.projectedBoxes.sorted { left, right in
@@ -2344,6 +2368,44 @@ final class MovementSyncStore: NSObject, ObservableObject, @preconcurrency CLLoc
         if let data = try? JSONEncoder().encode(state) {
             UserDefaults.standard.set(data, forKey: StorageKeys.movementState)
         }
+    }
+
+    private func knownPlaceKey(for place: StoredKnownPlace) -> String {
+        let trimmedExternalUid = place.externalUid.trimmingCharacters(
+            in: .whitespacesAndNewlines
+        )
+        if trimmedExternalUid.isEmpty == false {
+            return trimmedExternalUid
+        }
+        return "__place_id__\(place.id)"
+    }
+
+    private func deduplicatedKnownPlaces(
+        _ places: [StoredKnownPlace],
+        context: KnownPlaceDeduplicationContext
+    ) -> [StoredKnownPlace] {
+        guard places.count > 1 else {
+            return places
+        }
+        var seenKeys: Set<String> = []
+        var duplicateKeys: [String] = []
+        var deduplicated: [StoredKnownPlace] = []
+        deduplicated.reserveCapacity(places.count)
+        for place in places {
+            let key = knownPlaceKey(for: place)
+            if seenKeys.insert(key).inserted {
+                deduplicated.append(place)
+            } else {
+                duplicateKeys.append(key)
+            }
+        }
+        if duplicateKeys.isEmpty == false {
+            companionDebugLog(
+                "MovementSyncStore",
+                "deduplicatedKnownPlaces context=\(context.rawValue) removed=\(duplicateKeys.count) keys=\(Array(Set(duplicateKeys)).sorted().joined(separator: ","))"
+            )
+        }
+        return deduplicated
     }
 
     private func isoString(_ value: Date) -> String {

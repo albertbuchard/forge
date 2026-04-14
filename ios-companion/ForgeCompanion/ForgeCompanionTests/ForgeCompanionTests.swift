@@ -1335,6 +1335,141 @@ final class ForgeCompanionTests: XCTestCase {
         )
     }
 
+    func testMovementStoreDeduplicatesKnownPlacesFromTestingState() {
+        let duplicateExternalUid = "user-place-work-ucpt"
+        let store = MovementSyncStore(
+            testingState: MovementSyncStore.PersistedState(
+                trackingEnabled: true,
+                publishMode: "auto_publish",
+                retentionMode: "aggregates_only",
+                knownPlaces: [
+                    MovementSyncStore.StoredKnownPlace(
+                        id: "place_a",
+                        externalUid: duplicateExternalUid,
+                        label: "Work",
+                        aliases: [],
+                        latitude: 46.5191,
+                        longitude: 6.6323,
+                        radiusMeters: 100,
+                        categoryTags: ["work"],
+                        visibility: "shared",
+                        wikiNoteId: nil,
+                        metadata: [:]
+                    ),
+                    MovementSyncStore.StoredKnownPlace(
+                        id: "place_b",
+                        externalUid: duplicateExternalUid,
+                        label: "Work Duplicate",
+                        aliases: [],
+                        latitude: 46.5192,
+                        longitude: 6.6324,
+                        radiusMeters: 120,
+                        categoryTags: ["work"],
+                        visibility: "shared",
+                        wikiNoteId: nil,
+                        metadata: [:]
+                    )
+                ],
+                stays: [],
+                trips: []
+            )
+        )
+
+        let payload = store.buildMovementPayload()
+
+        XCTAssertEqual(payload.knownPlaces.count, 1)
+        XCTAssertEqual(payload.knownPlaces.first?.externalUid, duplicateExternalUid)
+        XCTAssertEqual(payload.knownPlaces.first?.id, "place_a")
+    }
+
+    func testMovementStoreMergeBootstrapDeduplicatesLocalAndRemoteKnownPlaces() {
+        let duplicateExternalUid = "user-place-work-ucpt"
+        let store = MovementSyncStore(
+            testingState: MovementSyncStore.PersistedState(
+                trackingEnabled: true,
+                publishMode: "auto_publish",
+                retentionMode: "aggregates_only",
+                knownPlaces: [
+                    MovementSyncStore.StoredKnownPlace(
+                        id: "local_place_a",
+                        externalUid: duplicateExternalUid,
+                        label: "Work",
+                        aliases: ["Office"],
+                        latitude: 46.5191,
+                        longitude: 6.6323,
+                        radiusMeters: 100,
+                        categoryTags: ["work"],
+                        visibility: "shared",
+                        wikiNoteId: nil,
+                        metadata: [:]
+                    ),
+                    MovementSyncStore.StoredKnownPlace(
+                        id: "local_place_b",
+                        externalUid: duplicateExternalUid,
+                        label: "Work Duplicate",
+                        aliases: [],
+                        latitude: 46.5192,
+                        longitude: 6.6324,
+                        radiusMeters: 100,
+                        categoryTags: ["work"],
+                        visibility: "shared",
+                        wikiNoteId: nil,
+                        metadata: [:]
+                    )
+                ],
+                stays: [],
+                trips: []
+            )
+        )
+
+        store.mergeBootstrap(
+            SyncReceipt.MovementBootstrapEnvelope(
+                stayOverrides: [],
+                tripOverrides: [],
+                deletedStayExternalUids: [],
+                deletedTripExternalUids: [],
+                settings: .init(
+                    trackingEnabled: true,
+                    publishMode: "auto_publish",
+                    retentionMode: "aggregates_only",
+                    locationPermissionStatus: "always",
+                    motionPermissionStatus: "ready",
+                    backgroundTrackingReady: true
+                ),
+                places: [
+                    .init(
+                        id: "remote_place_a",
+                        externalUid: duplicateExternalUid,
+                        label: "Remote Work",
+                        aliases: [],
+                        latitude: 46.6,
+                        longitude: 6.7,
+                        radiusMeters: 90,
+                        categoryTags: ["work"]
+                    ),
+                    .init(
+                        id: "remote_place_b",
+                        externalUid: duplicateExternalUid,
+                        label: "Remote Work Duplicate",
+                        aliases: [],
+                        latitude: 46.61,
+                        longitude: 6.71,
+                        radiusMeters: 95,
+                        categoryTags: ["work"]
+                    )
+                ],
+                projectedBoxes: []
+            )
+        )
+
+        let payload = store.buildMovementPayload()
+
+        XCTAssertEqual(payload.knownPlaces.count, 1)
+        XCTAssertEqual(payload.knownPlaces.first?.externalUid, duplicateExternalUid)
+        XCTAssertEqual(payload.knownPlaces.first?.id, "local_place_a")
+        XCTAssertEqual(payload.knownPlaces.first?.label, "Work")
+    }
+
     func testRemoteMovementTimelineItemPreservesCanonicalUserDefinedBoxSemantics() throws {
         let segment = try loadSharedMovementFixture(
             id: "user_defined_missing_override"
