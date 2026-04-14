@@ -925,7 +925,7 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = "ForgeCompanion/ForgeWatch Watch App/ForgeWatch Watch App.entitlements";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 8;
+				CURRENT_PROJECT_VERSION = 9;
 				DEVELOPMENT_TEAM = KZ65F7924F;
 				GENERATE_INFOPLIST_FILE = YES;
 				MARKETING_VERSION = 1.0;
@@ -996,7 +996,7 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = "ForgeCompanion/ForgeWatch Watch App/ForgeWatch Watch App.entitlements";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 8;
+				CURRENT_PROJECT_VERSION = 9;
 				DEVELOPMENT_TEAM = KZ65F7924F;
 				GENERATE_INFOPLIST_FILE = YES;
 				MARKETING_VERSION = 1.0;
@@ -1033,7 +1033,7 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = ForgeCompanion/ForgeWatchExtension.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 8;
+				CURRENT_PROJECT_VERSION = 9;
 				DEVELOPMENT_TEAM = KZ65F7924F;
 				INFOPLIST_FILE = ForgeCompanion/ForgeWatch/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -1074,7 +1074,7 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = ForgeCompanion/ForgeWatchExtension.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 8;
+				CURRENT_PROJECT_VERSION = 9;
 				DEVELOPMENT_TEAM = KZ65F7924F;
 				INFOPLIST_FILE = ForgeCompanion/ForgeWatch/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -1099,7 +1099,7 @@
 				CODE_SIGN_ENTITLEMENTS = ForgeCompanion/ForgeCompanion/ForgeCompanion.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 8;
+				CURRENT_PROJECT_VERSION = 9;
 				DEVELOPMENT_TEAM = KZ65F7924F;
 				INFOPLIST_FILE = ForgeCompanion/Info.plist;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
@@ -1150,7 +1150,7 @@
 				CODE_SIGN_ENTITLEMENTS = ForgeCompanion/ForgeCompanion/ForgeCompanion.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 8;
+				CURRENT_PROJECT_VERSION = 9;
 				DEVELOPMENT_TEAM = KZ65F7924F;
 				INFOPLIST_FILE = ForgeCompanion/Info.plist;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
