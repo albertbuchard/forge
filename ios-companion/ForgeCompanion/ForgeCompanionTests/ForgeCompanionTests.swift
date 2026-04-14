@@ -1560,6 +1560,74 @@ final class ForgeCompanionTests: XCTestCase {
         XCTAssertEqual(item.linkableStayIds(using: store), ["remote_1", "stay_remote_1"])
     }
 
+    func testPlaceLabelOperationCreatesUserBoxForAutomaticStay() {
+        let startedAt = Date(timeIntervalSince1970: 1_775_000_000)
+        let item = MovementLifeTimelineItem(
+            id: "remote-stay-item",
+            source: .remoteAutomatic(
+                "box_remote_stay",
+                MovementTimelineCoordinate(latitude: 46.5191, longitude: 6.6323)
+            ),
+            kind: .stay,
+            title: "Stay",
+            subtitle: "Remote canonical stay",
+            placeLabel: nil,
+            tags: [],
+            syncSource: "canonical",
+            startedAtDate: startedAt,
+            endedAtDate: startedAt.addingTimeInterval(3600),
+            durationSeconds: 3600,
+            laneSide: .left,
+            connectorFromLane: .left,
+            connectorToLane: .left,
+            distanceMeters: nil,
+            averageSpeedMps: nil,
+            rawStayIds: ["stay_remote_1"],
+            origin: .recorded,
+            editable: true,
+            isCurrent: false
+        )
+
+        XCTAssertEqual(
+            movementTimelinePlaceLabelOperation(for: item),
+            .createUserBox
+        )
+    }
+
+    func testPlaceLabelOperationPatchesExistingUserBoxStay() {
+        let startedAt = Date(timeIntervalSince1970: 1_775_000_000)
+        let item = MovementLifeTimelineItem(
+            id: "user-box-stay-item",
+            source: .remoteUserBox(
+                "mbx_stay_1",
+                MovementTimelineCoordinate(latitude: 46.5191, longitude: 6.6323)
+            ),
+            kind: .stay,
+            title: "Home",
+            subtitle: "User-defined movement box",
+            placeLabel: "Home",
+            tags: [],
+            syncSource: "canonical",
+            startedAtDate: startedAt,
+            endedAtDate: startedAt.addingTimeInterval(3600),
+            durationSeconds: 3600,
+            laneSide: .left,
+            connectorFromLane: .left,
+            connectorToLane: .left,
+            distanceMeters: nil,
+            averageSpeedMps: nil,
+            rawStayIds: ["stay_remote_1"],
+            origin: .userDefined,
+            editable: true,
+            isCurrent: false
+        )
+
+        XCTAssertEqual(
+            movementTimelinePlaceLabelOperation(for: item),
+            .patchUserBox("mbx_stay_1")
+        )
+    }
+
     private func makeLocation(
         latitude: Double,
         longitude: Double,

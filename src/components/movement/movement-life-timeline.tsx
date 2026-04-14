@@ -37,7 +37,6 @@ import {
   getMovementTimeline,
   invalidateAutomaticMovementBox,
   listMovementPlaces,
-  patchMovementStay,
   preflightMovementUserBox,
   patchMovementUserBox
 } from "@/lib/api";
@@ -470,6 +469,38 @@ function buildMovementUserBoxPayloadInput(
     averageSpeedMps: draft.kind === "trip" ? segment?.trip?.averageSpeedMps ?? null : null,
     metadata: { createdFrom: "movement-life-timeline" }
   };
+}
+
+function resolveStayOverrideTitle(
+  segment: MovementTimelineSegment,
+  fallbackPlaceLabel: string
+) {
+  const recordedLabel =
+    segment.kind === "stay" ? segment.stay?.label?.trim() ?? "" : "";
+  if (recordedLabel) {
+    return recordedLabel;
+  }
+  const title = segment.title.trim();
+  if (title && title.toLowerCase() !== "stay") {
+    return title;
+  }
+  return fallbackPlaceLabel.trim() || "Stay";
+}
+
+function buildStayPlaceLabelOverridePayload(
+  segment: MovementTimelineSegment,
+  placeLabel: string
+) {
+  const draft = buildDraft(segment);
+  const trimmedPlaceLabel = placeLabel.trim();
+  return buildMovementUserBoxPayloadInput(
+    {
+      ...draft,
+      label: resolveStayOverrideTitle(segment, trimmedPlaceLabel),
+      placeLabel: trimmedPlaceLabel
+    },
+    segment
+  );
 }
 
 function segmentTimeBucket(value: string) {
@@ -2244,6 +2275,36 @@ export function MovementLifeTimeline({ userIds = [] }: MovementLifeTimelineProps
     onSuccess: invalidateMovementProjectionQueries
   });
 
+  const persistPlaceLabelOverride = async (
+    segment: MovementTimelineSegment,
+    place: Pick<MovementKnownPlace, "label">
+  ) => {
+    if (segment.kind !== "stay") {
+      throw new Error("Only stays can be linked to a saved place.");
+    }
+
+    const payload = buildStayPlaceLabelOverridePayload(segment, place.label);
+    if (segment.sourceKind === "user_defined") {
+      await patchMovementUserBox(
+        segment.boxId,
+        {
+          ...payload,
+          metadata: { updatedFrom: "movement-life-timeline-place-label" }
+        },
+        userIds
+      );
+      return;
+    }
+
+    await createMovementUserBox(
+      {
+        ...payload,
+        metadata: { createdFrom: "movement-life-timeline-place-label" }
+      },
+      userIds
+    );
+  };
+
   const placeMutation = useMutation({
     mutationFn: async (input: {
       segment: MovementTimelineSegment | null;
@@ -2257,14 +2318,7 @@ export function MovementLifeTimeline({ userIds = [] }: MovementLifeTimelineProps
       const { segment, ...placeInput } = input;
       const response = await createMovementPlace(placeInput, userIds);
       if (segment && hasRecordedStay(segment)) {
-        await Promise.all(
-          segment.rawStayIds.map((stayId) =>
-            patchMovementStay(stayId, {
-              placeExternalUid: response.place.externalUid,
-              placeLabel: response.place.label
-            })
-          )
-        );
+        await persistPlaceLabelOverride(segment, response.place);
       }
       return response;
     },
@@ -2280,14 +2334,7 @@ export function MovementLifeTimeline({ userIds = [] }: MovementLifeTimelineProps
       if (!hasRecordedStay(segment)) {
         throw new Error("Only recorded stays can be linked to a saved place.");
       }
-      await Promise.all(
-        segment.rawStayIds.map((stayId) =>
-          patchMovementStay(stayId, {
-            placeExternalUid: place.externalUid,
-            placeLabel: place.label
-          })
-        )
-      );
+      await persistPlaceLabelOverride(segment, place);
     },
     onSuccess: invalidateMovementProjectionQueries
   });

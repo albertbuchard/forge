@@ -489,11 +489,19 @@ describe("MovementLifeTimeline", () => {
     screen.getByRole("button", { name: /Lausanne Home/i }).click();
 
     await waitFor(() => {
-      expect(patchMovementStayMock).toHaveBeenCalledWith("stay_home", {
-        placeExternalUid: "place_home",
-        placeLabel: "Lausanne Home"
-      });
+      expect(createMovementUserBoxMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          kind: "stay",
+          title: "Home",
+          placeLabel: "Lausanne Home",
+          startedAt: "2026-04-06T08:00:00.000Z",
+          endedAt: "2026-04-06T09:00:00.000Z",
+          metadata: { createdFrom: "movement-life-timeline-place-label" }
+        }),
+        ["user_operator"]
+      );
     });
+    expect(patchMovementStayMock).not.toHaveBeenCalled();
   });
 
   it("opens a seeded new-place form from the stay label dialog", async () => {
@@ -556,6 +564,31 @@ describe("MovementLifeTimeline", () => {
     expect(await screen.findByText(/New known place/i)).toBeInTheDocument();
     expect(screen.getByDisplayValue("46.5191")).toBeInTheDocument();
     expect(screen.getByDisplayValue("6.6323")).toBeInTheDocument();
+
+    screen.getByRole("button", { name: /Save place/i }).click();
+
+    await waitFor(() => {
+      expect(createMovementPlaceMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          label: "Home",
+          latitude: 46.5191,
+          longitude: 6.6323
+        }),
+        ["user_operator"]
+      );
+    });
+    await waitFor(() => {
+      expect(createMovementUserBoxMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          kind: "stay",
+          title: "Home",
+          placeLabel: "Home",
+          metadata: { createdFrom: "movement-life-timeline-place-label" }
+        }),
+        ["user_operator"]
+      );
+    });
+    expect(patchMovementStayMock).not.toHaveBeenCalled();
   });
 
   it("shows the known location name directly in the stay box", async () => {

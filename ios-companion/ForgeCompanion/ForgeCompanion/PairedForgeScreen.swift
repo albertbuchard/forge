@@ -1100,26 +1100,89 @@ private struct MovementLifeTimelineView: View {
             return
         }
         do {
-            for stayId in item.linkableStayIds(using: appModel.movementStore) {
-                try await appModel.syncClient.patchMovementStay(
-                    stayId: stayId,
-                    placeExternalUid: place.externalUid,
-                    placeLabel: place.label,
+            let payload = makePlaceLabelUserBoxPayload(
+                for: item,
+                placeLabel: place.label,
+                metadataSource: "companion-place-label"
+            )
+            switch movementTimelinePlaceLabelOperation(for: item) {
+            case .patchUserBox(let boxId):
+                _ = try await appModel.syncClient.patchMovementUserBox(
+                    boxId: boxId,
+                    patch: payload,
                     pairing: pairing
                 )
+            case .createUserBox:
+                _ = try await appModel.syncClient.createMovementUserBox(
+                    box: payload,
+                    pairing: pairing
+                )
+            case .unsupported:
+                throw NSError(
+                    domain: "MovementLifeTimeline",
+                    code: 9,
+                    userInfo: [NSLocalizedDescriptionKey: "This stay cannot be relabeled."]
+                )
+            }
+
+            for stayId in item.linkableStayIds(using: appModel.movementStore) {
                 appModel.movementStore.updateLocalStay(
                     id: stayId,
-                    label: item.displayTitle,
+                    label: preservedStayTitle(for: item, fallbackPlaceLabel: place.label),
                     tags: item.tags,
                     placeLabel: place.label,
                     placeExternalUid: place.externalUid
                 )
             }
+
             placeLabelDraft = nil
             await reload()
         } catch {
             loadError = error.localizedDescription
         }
+    }
+
+    private func makePlaceLabelUserBoxPayload(
+        for item: MovementLifeTimelineItem,
+        placeLabel: String,
+        metadataSource: String
+    ) -> ForgeMovementUserBoxPayload {
+        let trimmedPlaceLabel = placeLabel.trimmingCharacters(in: .whitespacesAndNewlines)
+        let tags = item.tags.filter { $0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false }
+        return ForgeMovementUserBoxPayload(
+            kind: "stay",
+            startedAt: MovementTimelineFormatting.isoFormatter.string(from: item.startedAtDate),
+            endedAt: MovementTimelineFormatting.isoFormatter.string(from: item.endedAtDate),
+            title: preservedStayTitle(for: item, fallbackPlaceLabel: trimmedPlaceLabel),
+            subtitle: "User-defined movement box.",
+            placeLabel: .some(trimmedPlaceLabel.isEmpty ? nil : trimmedPlaceLabel),
+            anchorExternalUid: nil,
+            tags: tags,
+            distanceMeters: nil,
+            averageSpeedMps: nil,
+            metadata: ["updatedFrom": metadataSource]
+        )
+    }
+
+    private func preservedStayTitle(
+        for item: MovementLifeTimelineItem,
+        fallbackPlaceLabel: String
+    ) -> String {
+        let linkedStayIds = item.linkableStayIds(using: appModel.movementStore)
+        if let localLabel = appModel.movementStore.storedStays
+            .first(where: { linkedStayIds.contains($0.id) })?
+            .label
+            .trimmingCharacters(in: .whitespacesAndNewlines),
+           localLabel.isEmpty == false
+        {
+            return localLabel
+        }
+
+        let baseTitle = item.title.trimmingCharacters(in: .whitespacesAndNewlines)
+        if baseTitle.isEmpty == false, baseTitle.lowercased() != "stay" {
+            return baseTitle
+        }
+        return fallbackPlaceLabel
     }
 
     private func openDetail(_ item: MovementLifeTimelineItem) async {
@@ -1199,6 +1262,28 @@ private struct MovementTimelineDetailCoordinate: Identifiable, Hashable {
 
     var coordinate: CLLocationCoordinate2D {
         CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
+    }
+}
+
+enum MovementTimelinePlaceLabelOperation: Equatable {
+    case createUserBox
+    case patchUserBox(String)
+    case unsupported
+}
+
+func movementTimelinePlaceLabelOperation(
+    for item: MovementLifeTimelineItem
+) -> MovementTimelinePlaceLabelOperation {
+    guard item.kind == .stay else {
+        return .unsupported
+    }
+    switch item.source {
+    case .remoteUserBox(let boxId, _):
+        return .patchUserBox(boxId)
+    case .remoteAutomatic, .liveStay, .derived:
+        return .createUserBox
+    case .liveTrip, .anchor:
+        return .unsupported
     }
 }
 
