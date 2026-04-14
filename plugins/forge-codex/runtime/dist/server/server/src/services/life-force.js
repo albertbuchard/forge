@@ -234,6 +234,15 @@ function computeUncoveredSeconds(window, blockingWindows) {
     coveredMs += activeEndMs - activeStartMs;
     return Math.max(0, totalSeconds - Math.floor(coveredMs / 1000));
 }
+function containsInstant(window, instantIso) {
+    const instantMs = Date.parse(instantIso);
+    return (Number.isFinite(instantMs) &&
+        Date.parse(window.startAt) <= instantMs &&
+        Date.parse(window.endAt) > instantMs);
+}
+function isInstantCovered(instantIso, blockingWindows) {
+    return blockingWindows.some((window) => containsInstant(window, instantIso));
+}
 function nowIso() {
     return new Date().toISOString();
 }
@@ -1635,6 +1644,36 @@ function readTaskTimeboxLifeForceRows(userId, range) {
         return [];
     }
 }
+function readCalendarEventLifeForceRows(range) {
+    try {
+        return getDatabase()
+            .prepare(`SELECT
+           forge_events.id,
+           forge_events.title,
+           forge_events.start_at,
+           forge_events.end_at,
+           forge_events.availability,
+           forge_events.event_type,
+           COUNT(forge_event_links.id) AS link_count
+         FROM forge_events
+         LEFT JOIN forge_event_links
+           ON forge_event_links.forge_event_id = forge_events.id
+         WHERE forge_events.deleted_at IS NULL
+           AND forge_events.end_at > ?
+           AND forge_events.start_at < ?
+         GROUP BY
+           forge_events.id,
+           forge_events.title,
+           forge_events.start_at,
+           forge_events.end_at,
+           forge_events.availability,
+           forge_events.event_type`)
+            .all(range.from, range.to);
+    }
+    catch {
+        return [];
+    }
+}
 function readWorkBlockTemplateLifeForceRows(userId) {
     try {
         return getDatabase()
@@ -1717,7 +1756,7 @@ function buildWorkBlockProfile(input) {
         endMinute
     });
 }
-function buildTimeboxAndWorkBlockDrains(userId, range, now, lifeForceProfile, activeTaskRunTaskIds, actualSourceWindows) {
+function buildTimeboxAndWorkBlockDrains(userId, range, now, lifeForceProfile, activeTaskRunTaskIds, actualSourceWindows, calendarEventWindows) {
     const actualContributions = [];
     const plannedDrains = [];
     const activeDrains = [];
@@ -1756,11 +1795,12 @@ function buildTimeboxAndWorkBlockDrains(userId, range, now, lifeForceProfile, ac
                     startsAt: row.starts_at,
                     endsAt: row.ends_at
                 });
+        const higherPriorityWindows = [...actualSourceWindows, ...calendarEventWindows];
         const elapsedWindow = {
             startAt: row.starts_at,
             endAt: new Date(Math.min(now.getTime(), Date.parse(row.ends_at))).toISOString()
         };
-        const elapsedSeconds = computeUncoveredSeconds(elapsedWindow, actualSourceWindows);
+        const elapsedSeconds = computeUncoveredSeconds(elapsedWindow, higherPriorityWindows);
         if (elapsedSeconds > 0) {
             actualContributions.push({
                 entityType: "task_timebox",
@@ -1778,7 +1818,15 @@ function buildTimeboxAndWorkBlockDrains(userId, range, now, lifeForceProfile, ac
         }
         const remainingStartMs = Math.max(now.getTime(), Date.parse(row.starts_at));
         const remainingEndMs = Math.min(range.endMs, Date.parse(row.ends_at));
-        const remainingSeconds = Math.max(0, Math.floor((remainingEndMs - remainingStartMs) / 1000));
+        const remainingWindow = remainingEndMs > remainingStartMs
+            ? {
+                startAt: new Date(remainingStartMs).toISOString(),
+                endAt: new Date(remainingEndMs).toISOString()
+            }
+            : null;
+        const remainingSeconds = remainingWindow
+            ? computeUncoveredSeconds(remainingWindow, higherPriorityWindows)
+            : 0;
         if (remainingSeconds > 0) {
             plannedDrains.push({
                 entityType: "task_timebox",
@@ -1789,15 +1837,15 @@ function buildTimeboxAndWorkBlockDrains(userId, range, now, lifeForceProfile, ac
                 rateApPerHour: profile.sustainRateApPerHour,
                 title: row.title,
                 why: "Planned task timeboxes forecast how much Action Point throughput is still booked today.",
-                startsAt: row.starts_at,
-                endsAt: row.ends_at,
+                startsAt: remainingWindow?.startAt ?? row.starts_at,
+                endsAt: remainingWindow?.endAt ?? row.ends_at,
                 role: "secondary"
             });
         }
         if (Date.parse(row.starts_at) <= now.getTime() &&
             Date.parse(row.ends_at) > now.getTime() &&
             !activeTaskRunTaskIds.has(row.task_id) &&
-            !actualSourceWindows.some((window) => overlapsWindow(row.starts_at, row.ends_at, window.startAt, window.endAt))) {
+            !isInstantCovered(now.toISOString(), higherPriorityWindows)) {
             activeDrains.push({
                 entityType: "task_timebox",
                 entityId: row.id,
@@ -1819,8 +1867,11 @@ function buildTimeboxAndWorkBlockDrains(userId, range, now, lifeForceProfile, ac
             startAt: block.start_at,
             endAt: block.end_at
         });
-        const overlapsTimebox = timeboxes.some((timebox) => timebox.status !== "cancelled" &&
-            overlapsWindow(block.start_at, block.end_at, timebox.starts_at, timebox.ends_at));
+        const higherPriorityWindows = [
+            ...actualSourceWindows,
+            ...calendarEventWindows,
+            ...timeboxWindows
+        ];
         const profile = buildEffectiveProfile(buildWorkBlockProfile({
             templateId: block.id,
             title: block.title,
@@ -1832,11 +1883,8 @@ function buildTimeboxAndWorkBlockDrains(userId, range, now, lifeForceProfile, ac
             startAt: block.start_at,
             endAt: new Date(Math.min(now.getTime(), Date.parse(block.end_at))).toISOString()
         };
-        const elapsedSeconds = computeUncoveredSeconds(elapsedWindow, [
-            ...actualSourceWindows,
-            ...timeboxWindows
-        ]);
-        if (elapsedSeconds > 0 && !overlapsTimebox) {
+        const elapsedSeconds = computeUncoveredSeconds(elapsedWindow, higherPriorityWindows);
+        if (elapsedSeconds > 0) {
             actualContributions.push({
                 entityType: "work_block",
                 entityId: block.instance_id,
@@ -1857,8 +1905,16 @@ function buildTimeboxAndWorkBlockDrains(userId, range, now, lifeForceProfile, ac
         }
         const remainingStartMs = Math.max(now.getTime(), Date.parse(block.start_at));
         const remainingEndMs = Math.min(range.endMs, Date.parse(block.end_at));
-        const remainingSeconds = Math.max(0, Math.floor((remainingEndMs - remainingStartMs) / 1000));
-        if (remainingSeconds > 0 && !overlapsTimebox) {
+        const remainingWindow = remainingEndMs > remainingStartMs
+            ? {
+                startAt: new Date(remainingStartMs).toISOString(),
+                endAt: new Date(remainingEndMs).toISOString()
+            }
+            : null;
+        const remainingSeconds = remainingWindow
+            ? computeUncoveredSeconds(remainingWindow, higherPriorityWindows)
+            : 0;
+        if (remainingSeconds > 0) {
             plannedDrains.push({
                 entityType: "work_block",
                 entityId: block.instance_id,
@@ -1868,8 +1924,8 @@ function buildTimeboxAndWorkBlockDrains(userId, range, now, lifeForceProfile, ac
                 rateApPerHour: profile.sustainRateApPerHour,
                 title: block.title,
                 why: "Work blocks act as planning containers and forecast background load when no richer task plan exists.",
-                startsAt: block.start_at,
-                endsAt: block.end_at,
+                startsAt: remainingWindow?.startAt ?? block.start_at,
+                endsAt: remainingWindow?.endAt ?? block.end_at,
                 role: "background",
                 metadata: {
                     templateId: block.id,
@@ -1879,9 +1935,8 @@ function buildTimeboxAndWorkBlockDrains(userId, range, now, lifeForceProfile, ac
         }
         if (Date.parse(block.start_at) <= now.getTime() &&
             Date.parse(block.end_at) > now.getTime() &&
-            !overlapsTimebox &&
             activeTaskRunTaskIds.size === 0 &&
-            !actualSourceWindows.some((window) => overlapsWindow(block.start_at, block.end_at, window.startAt, window.endAt))) {
+            !isInstantCovered(now.toISOString(), higherPriorityWindows)) {
             activeDrains.push({
                 entityType: "work_block",
                 entityId: block.instance_id,
@@ -1909,35 +1964,12 @@ function buildTimeboxAndWorkBlockDrains(userId, range, now, lifeForceProfile, ac
         workBlockWindows
     };
 }
-function buildCalendarDrains(userId, now, range, lifeForceProfile, blockingWindows) {
+function buildCalendarDrains(rows, now, range, lifeForceProfile, blockingWindows) {
     const actualContributions = [];
     const nowIsoValue = now.toISOString();
     const activeDrains = [];
     const plannedDrains = [];
     try {
-        const rows = getDatabase()
-            .prepare(`SELECT
-           forge_events.id,
-           forge_events.title,
-           forge_events.start_at,
-           forge_events.end_at,
-           forge_events.availability,
-           forge_events.event_type,
-           COUNT(forge_event_links.id) AS link_count
-         FROM forge_events
-         LEFT JOIN forge_event_links
-           ON forge_event_links.forge_event_id = forge_events.id
-         WHERE forge_events.deleted_at IS NULL
-           AND forge_events.end_at > ?
-           AND forge_events.start_at < ?
-         GROUP BY
-           forge_events.id,
-           forge_events.title,
-           forge_events.start_at,
-           forge_events.end_at,
-           forge_events.availability,
-           forge_events.event_type`)
-            .all(range.from, range.to);
         for (const row of rows) {
             const calendarProfile = buildEffectiveProfile(readEntityActionProfile("calendar_event", row.id, {
                 profileKey: `calendar_event_${row.id}`,
@@ -1952,7 +1984,6 @@ function buildCalendarDrains(userId, now, range, lifeForceProfile, blockingWindo
                     startAt: row.start_at,
                     endAt: row.end_at
                 }), lifeForceProfile);
-            const overlapsBlockingWindow = blockingWindows.some((window) => overlapsWindow(row.start_at, row.end_at, window.startAt, window.endAt));
             const elapsedWindow = {
                 startAt: row.start_at,
                 endAt: new Date(Math.min(now.getTime(), Date.parse(row.end_at))).toISOString()
@@ -1993,7 +2024,7 @@ function buildCalendarDrains(userId, now, range, lifeForceProfile, blockingWindo
             }
             if (row.start_at <= nowIsoValue &&
                 row.end_at > nowIsoValue &&
-                !overlapsBlockingWindow) {
+                !isInstantCovered(nowIsoValue, blockingWindows)) {
                 activeDrains.push({
                     entityType: "calendar_event",
                     entityId: row.id,
@@ -2172,14 +2203,15 @@ export function buildLifeForcePayload(now = new Date(), userIds) {
         startAt: entry.startsAt,
         endAt: entry.endsAt
     }));
+    const calendarRows = readCalendarEventLifeForceRows(range);
+    const calendarEventWindows = calendarRows.map((row) => ({
+        startAt: row.start_at,
+        endAt: row.end_at
+    }));
     const activeTaskRunTaskIds = new Set(taskRuns.activeDrains.map((entry) => entry.entityId));
-    const plannedContainers = buildTimeboxAndWorkBlockDrains(user.id, range, now, profile, activeTaskRunTaskIds, actualSourceWindows);
-    const calendarBlockingWindows = [
-        ...actualSourceWindows,
-        ...plannedContainers.timeboxWindows,
-        ...plannedContainers.workBlockWindows
-    ];
-    const calendarDrains = buildCalendarDrains(user.id, now, range, profile, calendarBlockingWindows);
+    const plannedContainers = buildTimeboxAndWorkBlockDrains(user.id, range, now, profile, activeTaskRunTaskIds, actualSourceWindows, calendarEventWindows);
+    const calendarBlockingWindows = [...actualSourceWindows];
+    const calendarDrains = buildCalendarDrains(calendarRows, now, range, profile, calendarBlockingWindows);
     const contributions = [
         ...taskRuns.contributions,
         ...adjustments,

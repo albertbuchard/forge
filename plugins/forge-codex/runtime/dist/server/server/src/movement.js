@@ -4670,6 +4670,157 @@ export function getMovementTripDetail(tripId) {
         selectionAggregate
     };
 }
+export function getMovementBoxDetail(boxId, userIds = []) {
+    const scopedUserIds = userIds.length > 0 ? userIds : [getDefaultUser().id];
+    const segment = buildProjectedMovementTimelineSegments(scopedUserIds).find((entry) => entry.boxId === boxId);
+    if (!segment) {
+        return undefined;
+    }
+    const places = listMovementPlaceRows(scopedUserIds).map(mapMovementPlace);
+    const placesById = new Map(places.map((place) => [place.id, place]));
+    const stayRows = listMovementStayRows(scopedUserIds);
+    const rawStays = segment.rawStayIds
+        .map((id) => stayRows.find((row) => row.id === id))
+        .filter((row) => Boolean(row))
+        .map((row) => mapMovementStay(row, placesById));
+    const tripRows = listMovementTripRows(scopedUserIds);
+    const rawTripRows = segment.rawTripIds
+        .map((id) => tripRows.find((row) => row.id === id))
+        .filter((row) => Boolean(row));
+    const rawTripIds = rawTripRows.map((row) => row.id);
+    const pointsByTrip = new Map();
+    listTripPoints(rawTripIds).forEach((point) => {
+        pointsByTrip.set(point.trip_id, [...(pointsByTrip.get(point.trip_id) ?? []), point]);
+    });
+    const stopsByTrip = new Map();
+    listTripStops(rawTripIds).forEach((stop) => {
+        stopsByTrip.set(stop.trip_id, [...(stopsByTrip.get(stop.trip_id) ?? []), stop]);
+    });
+    const rawTrips = rawTripRows.map((row) => mapMovementTrip(row, placesById, pointsByTrip.get(row.id) ?? [], stopsByTrip.get(row.id) ?? []));
+    const stayPositions = rawStays.length > 0
+        ? rawStays.map((stay, index) => ({
+            latitude: stay.centerLatitude,
+            longitude: stay.centerLongitude,
+            recordedAt: stay.startedAt,
+            label: stay.place?.label ?? (stay.label || `Stay ${index + 1}`)
+        }))
+        : segment.kind === "stay" && segment.stay
+            ? [
+                {
+                    latitude: segment.stay.centerLatitude,
+                    longitude: segment.stay.centerLongitude,
+                    recordedAt: segment.stay.startedAt,
+                    label: segment.stay.place?.label ?? (segment.stay.label || "Stay")
+                }
+            ]
+            : [];
+    const averageStayPosition = stayPositions.length > 0
+        ? {
+            latitude: round(stayPositions.reduce((sum, position) => sum + position.latitude, 0) /
+                stayPositions.length, 6),
+            longitude: round(stayPositions.reduce((sum, position) => sum + position.longitude, 0) /
+                stayPositions.length, 6),
+            recordedAt: null,
+            label: "Average position"
+        }
+        : null;
+    const stayDetail = segment.kind === "stay"
+        ? {
+            positions: stayPositions,
+            averagePosition: averageStayPosition,
+            canonicalPlace: rawStays[0]?.place ?? segment.stay?.place ?? null,
+            radiusMeters: rawStays.length > 0
+                ? Math.max(...rawStays.map((stay) => stay.radiusMeters))
+                : segment.stay?.radiusMeters ?? null,
+            sampleCount: rawStays.length > 0
+                ? rawStays.reduce((sum, stay) => sum + stay.sampleCount, 0)
+                : segment.stay?.sampleCount ?? 0
+        }
+        : null;
+    const tripPositions = rawTrips.length > 0
+        ? rawTrips
+            .flatMap((trip) => trip.points)
+            .sort((left, right) => Date.parse(left.recordedAt) - Date.parse(right.recordedAt))
+            .map((point, index) => ({
+            latitude: point.latitude,
+            longitude: point.longitude,
+            recordedAt: point.recordedAt,
+            label: index === 0 ? "Start" : null,
+            accuracyMeters: point.accuracyMeters,
+            altitudeMeters: point.altitudeMeters,
+            speedMps: point.speedMps,
+            isStopAnchor: point.isStopAnchor
+        }))
+        : segment.kind === "trip" && segment.trip
+            ? segment.trip.points.map((point, index) => ({
+                latitude: point.latitude,
+                longitude: point.longitude,
+                recordedAt: point.recordedAt,
+                label: index === 0 ? "Start" : null,
+                accuracyMeters: point.accuracyMeters,
+                altitudeMeters: point.altitudeMeters,
+                speedMps: point.speedMps,
+                isStopAnchor: point.isStopAnchor
+            }))
+            : [];
+    const resolveEndpoint = (kind) => {
+        const fromPoints = kind === "start"
+            ? tripPositions[0] ?? null
+            : tripPositions[tripPositions.length - 1] ?? null;
+        if (fromPoints) {
+            return {
+                ...fromPoints,
+                label: kind === "start" ? "Start position" : "End position"
+            };
+        }
+        if (segment.kind === "trip") {
+            const place = kind === "start" ? segment.trip?.startPlace : segment.trip?.endPlace;
+            if (place) {
+                return {
+                    latitude: place.latitude,
+                    longitude: place.longitude,
+                    recordedAt: kind === "start" ? segment.startedAt : segment.endedAt,
+                    label: place.label
+                };
+            }
+        }
+        return null;
+    };
+    const totalMovingSeconds = rawTrips.length > 0
+        ? rawTrips.reduce((sum, trip) => sum + trip.movingSeconds, 0)
+        : segment.trip?.movingSeconds ?? 0;
+    const totalDistanceMeters = rawTrips.length > 0
+        ? rawTrips.reduce((sum, trip) => sum + trip.distanceMeters, 0)
+        : segment.trip?.distanceMeters ?? 0;
+    const tripDetail = segment.kind === "trip"
+        ? {
+            positions: tripPositions,
+            startPosition: resolveEndpoint("start"),
+            endPosition: resolveEndpoint("end"),
+            totalDistanceMeters,
+            movingSeconds: totalMovingSeconds,
+            idleSeconds: rawTrips.length > 0
+                ? rawTrips.reduce((sum, trip) => sum + trip.idleSeconds, 0)
+                : segment.trip?.idleSeconds ?? 0,
+            averageSpeedMps: totalMovingSeconds > 0
+                ? round(totalDistanceMeters / totalMovingSeconds, 2)
+                : segment.trip?.averageSpeedMps ?? null,
+            maxSpeedMps: rawTrips.length > 0
+                ? rawTrips.reduce((maxSpeed, trip) => Math.max(maxSpeed, trip.maxSpeedMps ?? 0), 0) || null
+                : segment.trip?.maxSpeedMps ?? null,
+            stopCount: rawTrips.length > 0
+                ? rawTrips.reduce((sum, trip) => sum + trip.stops.length, 0)
+                : segment.trip?.stops.length ?? 0
+        }
+        : null;
+    return {
+        segment,
+        rawStays,
+        rawTrips,
+        stayDetail,
+        tripDetail
+    };
+}
 export function getMovementSelectionAggregate(input) {
     const parsed = movementSelectionAggregateSchema.parse(input);
     const placeRows = listMovementPlaceRows(parsed.userIds);

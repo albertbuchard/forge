@@ -60,7 +60,7 @@ import { registerWebRoutes } from "./web.js";
 import { createManagerRuntime } from "./managers/runtime.js";
 import { isManagerError } from "./managers/type-guards.js";
 import { createCompanionPairingSession, createCompanionPairingSessionSchema, createSleepSession, createSleepSessionSchema, createWorkoutSession, createWorkoutSessionSchema, deleteSleepSession, deleteWorkoutSession, getCompanionPairingSessionById, getCompanionOverview, getFitnessViewData, getSleepSessionById, getSleepViewData, getWorkoutSessionById, ingestMobileHealthSync, mobileHealthSyncSchema, patchCompanionPairingSourceState, patchCompanionPairingSourceStateSchema, companionSourceKeySchema, requireValidPairing, revokeAllCompanionPairingSessions, revokeAllCompanionPairingSessionsSchema, revokeCompanionPairingSession, updateMobileCompanionSourceState, updateMobileCompanionSourceStateSchema, verifyCompanionPairing, verifyCompanionPairingSchema, updateSleepMetadata, updateSleepMetadataSchema, updateWorkoutMetadata, updateWorkoutMetadataSchema } from "./health.js";
-import { analyzeMovementUserBoxPreflight, createMovementUserBox, createMovementPlace, deleteMovementUserBox, getMovementAllTimeSummary, getMovementDayDetail, getMovementMobileBootstrap, getMovementTimeline, getMovementSelectionAggregate, getMovementSettings, getMovementTripDetail, getMovementMonthSummary, invalidateAutomaticMovementBox, listMovementPlaces, movementAutomaticBoxInvalidateSchema, movementMobileBootstrapSchema, movementMobilePlaceMutationSchema, movementMobileUserBoxCreateSchema, movementMobileUserBoxPreflightSchema, movementMobileUserBoxPatchSchema, movementMobileAutomaticBoxInvalidateSchema, movementMobileTimelineSchema, movementPlaceMutationSchema, movementPlacePatchSchema, movementSelectionAggregateSchema, movementStayPatchSchema, movementTripPatchSchema, movementUserBoxCreateSchema, movementUserBoxPreflightSchema, movementUserBoxPatchSchema, movementSettingsPatchSchema, movementTimelineQuerySchema, movementTripPointPatchSchema, deleteMovementStay, deleteMovementTrip, deleteMovementTripPoint, updateMovementPlace, updateMovementSettings, updateMovementStay, updateMovementTrip, updateMovementUserBox, updateMovementTripPoint, resolveMovementTimelineSegmentForBox } from "./movement.js";
+import { analyzeMovementUserBoxPreflight, createMovementUserBox, createMovementPlace, deleteMovementUserBox, getMovementAllTimeSummary, getMovementBoxDetail, getMovementDayDetail, getMovementMobileBootstrap, getMovementTimeline, getMovementSelectionAggregate, getMovementSettings, getMovementTripDetail, getMovementMonthSummary, invalidateAutomaticMovementBox, listMovementPlaces, movementAutomaticBoxInvalidateSchema, movementMobileBootstrapSchema, movementMobilePlaceMutationSchema, movementMobileUserBoxCreateSchema, movementMobileUserBoxPreflightSchema, movementMobileUserBoxPatchSchema, movementMobileAutomaticBoxInvalidateSchema, movementMobileTimelineSchema, movementPlaceMutationSchema, movementPlacePatchSchema, movementSelectionAggregateSchema, movementStayPatchSchema, movementTripPatchSchema, movementUserBoxCreateSchema, movementUserBoxPreflightSchema, movementUserBoxPatchSchema, movementSettingsPatchSchema, movementTimelineQuerySchema, movementTripPointPatchSchema, deleteMovementStay, deleteMovementTrip, deleteMovementTripPoint, updateMovementPlace, updateMovementSettings, updateMovementStay, updateMovementTrip, updateMovementUserBox, updateMovementTripPoint, resolveMovementTimelineSegmentForBox } from "./movement.js";
 import { getScreenTimeAllTimeSummary, getScreenTimeDayDetail, getScreenTimeMonthSummary, getScreenTimeSettings, screenTimeSettingsPatchSchema, updateScreenTimeSettings } from "./screen-time.js";
 import { assertWatchReady, buildWatchBootstrap, ingestWatchCaptureBatch, mobileWatchBootstrapSchema, mobileWatchCaptureBatchSchema, mobileWatchHabitCheckInSchema } from "./watch-mobile.js";
 const COMPATIBILITY_SUNSET = "transitional-node";
@@ -3668,7 +3668,7 @@ const AGENT_ONBOARDING_TOOL_INPUT_CATALOG = [
     {
         toolName: "forge_recommend_task_timeboxes",
         summary: "Suggest future task slots that fit the current calendar rules and schedule.",
-        whenToUse: "Use when preparing focused work in advance.",
+        whenToUse: "Use when preparing focused work in advance and the agent wants Forge to propose candidate slots instead of picking one manually.",
         inputShape: "{ taskId: string, from?: string, to?: string, limit?: integer }",
         requiredFields: ["taskId"],
         notes: [
@@ -3680,15 +3680,16 @@ const AGENT_ONBOARDING_TOOL_INPUT_CATALOG = [
     {
         toolName: "forge_create_task_timebox",
         summary: "Create a planned task timebox in the Forge calendar domain.",
-        whenToUse: "Use after choosing a valid future slot or when creating a manual timebox directly.",
-        inputShape: '{ taskId: string, projectId?: string|null, title: string, startsAt: string, endsAt: string, source?: "manual"|"suggested"|"live_run" }',
+        whenToUse: "Use after choosing a valid future slot or, preferably, when the agent has already reasoned over the live calendar and wants to place a manual timebox directly.",
+        inputShape: '{ taskId: string, projectId?: string|null, title: string, startsAt: string, endsAt: string, source?: "manual"|"suggested"|"live_run", overrideReason?: string|null, activityPresetKey?: string|null, customSustainRateApPerHour?: number|null, userId?: string|null }',
         requiredFields: ["taskId", "title", "startsAt", "endsAt"],
         notes: [
+            "Manual timeboxing is the main direct path when the agent already understands the calendar and wants to choose the slot itself.",
             "Forge publishes these through the shared Forge write target during provider sync.",
             "Live task runs can later attach to matching timeboxes.",
             "This is a convenience helper; agents can also create task_timebox through forge_create_entities."
         ],
-        example: '{"taskId":"task_123","projectId":"project_456","title":"Draft the methods section","startsAt":"2026-04-03T08:00:00.000Z","endsAt":"2026-04-03T09:30:00.000Z","source":"suggested"}'
+        example: '{"taskId":"task_123","projectId":"project_456","title":"Draft the methods section","startsAt":"2026-04-03T08:00:00.000Z","endsAt":"2026-04-03T09:30:00.000Z","source":"manual","overrideReason":"Protected writing block before clinic.","activityPresetKey":"deep_work","customSustainRateApPerHour":6.5}'
     },
     {
         toolName: "forge_grant_reward_bonus",
@@ -5580,6 +5581,15 @@ export async function buildServer(options = {}) {
         }
         return { movement };
     });
+    app.get("/api/v1/movement/boxes/:id", async (request, reply) => {
+        const { id } = request.params;
+        const movement = getMovementBoxDetail(id, resolveScopedUserIds(request.query) ?? []);
+        if (!movement) {
+            reply.code(404);
+            return { error: "Movement box not found" };
+        }
+        return { movement };
+    });
     app.post("/api/v1/movement/selection", async (request) => ({
         movement: getMovementSelectionAggregate(movementSelectionAggregateSchema.parse(request.body ?? {}))
     }));
@@ -5673,6 +5683,17 @@ export async function buildServer(options = {}) {
                 userIds: [pairing.user_id]
             })
         };
+    });
+    app.post("/api/v1/mobile/movement/boxes/:id/detail", async (request, reply) => {
+        const parsed = movementMobileBootstrapSchema.parse(request.body ?? {});
+        const pairing = requireValidPairing(parsed.sessionId, parsed.pairingToken);
+        const { id } = request.params;
+        const movement = getMovementBoxDetail(id, [pairing.user_id]);
+        if (!movement) {
+            reply.code(404);
+            return { error: "Movement box not found" };
+        }
+        return { movement };
     });
     app.post("/api/v1/mobile/movement/user-boxes", async (request, reply) => {
         const parsed = movementMobileUserBoxCreateSchema.parse(request.body ?? {});

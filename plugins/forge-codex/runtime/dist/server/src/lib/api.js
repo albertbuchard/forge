@@ -1657,8 +1657,20 @@ export function patchMovementPlace(placeId, patch) {
         body: JSON.stringify(patch)
     });
 }
+export function patchMovementStay(stayId, patch) {
+    return request(`/api/v1/movement/stays/${stayId}`, {
+        method: "PATCH",
+        body: JSON.stringify(patch)
+    });
+}
 export function getMovementTripDetail(tripId) {
     return request(`/api/v1/movement/trips/${tripId}`);
+}
+export function getMovementBoxDetail(boxId, userIds) {
+    const search = new URLSearchParams();
+    appendUserIds(search, coerceUserIds(userIds));
+    const suffix = search.size > 0 ? `?${search.toString()}` : "";
+    return request(`/api/v1/movement/boxes/${boxId}${suffix}`);
 }
 export function getMovementTimeline(input) {
     const search = new URLSearchParams();
