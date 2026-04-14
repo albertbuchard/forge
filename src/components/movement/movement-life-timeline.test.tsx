@@ -10,6 +10,7 @@ import type { MovementTimelineSegment } from "@/lib/types";
 const {
   getMovementTimelineMock,
   getMovementBoxDetailMock,
+  listMovementPlacesMock,
   createMovementPlaceMock,
   patchMovementStayMock,
   createMovementUserBoxMock,
@@ -20,6 +21,7 @@ const {
 } = vi.hoisted(() => ({
   getMovementTimelineMock: vi.fn(),
   getMovementBoxDetailMock: vi.fn(),
+  listMovementPlacesMock: vi.fn(),
   createMovementPlaceMock: vi.fn(),
   patchMovementStayMock: vi.fn(),
   createMovementUserBoxMock: vi.fn(),
@@ -47,6 +49,7 @@ vi.mock("@tanstack/react-virtual", () => ({
 vi.mock("@/lib/api", () => ({
   getMovementTimeline: (...args: unknown[]) => getMovementTimelineMock(...args),
   getMovementBoxDetail: (...args: unknown[]) => getMovementBoxDetailMock(...args),
+  listMovementPlaces: (...args: unknown[]) => listMovementPlacesMock(...args),
   createMovementPlace: (...args: unknown[]) => createMovementPlaceMock(...args),
   patchMovementStay: (...args: unknown[]) => patchMovementStayMock(...args),
   createMovementUserBox: (...args: unknown[]) => createMovementUserBoxMock(...args),
@@ -151,6 +154,9 @@ describe("MovementLifeTimeline", () => {
         hasMore: false,
         invalidSegmentCount: 0
       }
+    });
+    listMovementPlacesMock.mockResolvedValue({
+      places: []
     });
     createMovementUserBoxMock.mockResolvedValue({});
     createMovementPlaceMock.mockResolvedValue({
@@ -339,7 +345,7 @@ describe("MovementLifeTimeline", () => {
     ).toBeEnabled();
   });
 
-  it("opens stay detail and offers canonical place creation for unlinked stays", async () => {
+  it("opens stay detail and offers location labeling for unlinked stays", async () => {
     getMovementTimelineMock.mockResolvedValueOnce({
       movement: {
         segments: [
@@ -391,12 +397,165 @@ describe("MovementLifeTimeline", () => {
     renderTimeline(<MovementLifeTimeline userIds={["user_operator"]} />);
 
     expect(await screen.findByText("Movement")).toBeInTheDocument();
-    expect(await screen.findByRole("button", { name: /Create canonical place/i })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: /Label location/i })).toBeInTheDocument();
     screen.getByRole("button", { name: "Details" }).click();
 
     expect(await screen.findByText(/Home details/i)).toBeInTheDocument();
     expect(await screen.findByText(/Average position:/i)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Create canonical place/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Label location/i })).toBeInTheDocument();
+  });
+
+  it("lets the user assign an existing known place from the stay label dialog", async () => {
+    getMovementTimelineMock.mockResolvedValueOnce({
+      movement: {
+        segments: [
+          createSegment({
+            id: "segment_unlinked_stay",
+            boxId: "segment_unlinked_stay",
+            title: "Home",
+            subtitle: "Unlinked stay",
+            placeLabel: null,
+            rawStayIds: ["stay_home"],
+            stay: {
+              id: "stay_home",
+              externalUid: "stay_home",
+              pairingSessionId: null,
+              userId: "user_operator",
+              placeId: null,
+              label: "Home",
+              status: "completed",
+              classification: "stationary",
+              startedAt: "2026-04-06T08:00:00.000Z",
+              endedAt: "2026-04-06T09:00:00.000Z",
+              durationSeconds: 3600,
+              centerLatitude: 46.5191,
+              centerLongitude: 6.6323,
+              radiusMeters: 120,
+              sampleCount: 3,
+              weather: {},
+              metrics: {},
+              metadata: {},
+              publishedNoteId: null,
+              createdAt: "2026-04-06T09:00:00.000Z",
+              updatedAt: "2026-04-06T09:00:00.000Z",
+              place: null,
+              note: null,
+              estimatedScreenTimeSeconds: 0,
+              pickupCount: 0,
+              notificationCount: 0,
+              topApps: [],
+              topCategories: []
+            }
+          })
+        ],
+        nextCursor: null,
+        hasMore: false,
+        invalidSegmentCount: 0
+      }
+    });
+    listMovementPlacesMock.mockResolvedValueOnce({
+      places: [
+        {
+          id: "place_home",
+          externalUid: "place_home",
+          userId: "user_operator",
+          label: "Lausanne Home",
+          aliases: ["Flat"],
+          latitude: 46.5192,
+          longitude: 6.6322,
+          radiusMeters: 80,
+          categoryTags: ["home"],
+          visibility: "shared",
+          wikiNoteId: null,
+          linkedEntities: [],
+          linkedPeople: [],
+          metadata: {},
+          source: "test",
+          createdAt: "2026-04-06T09:00:00.000Z",
+          updatedAt: "2026-04-06T09:00:00.000Z",
+          wikiNote: null
+        }
+      ]
+    });
+
+    renderTimeline(<MovementLifeTimeline userIds={["user_operator"]} />);
+
+    expect(await screen.findByRole("button", { name: /Label location/i })).toBeInTheDocument();
+    screen.getByRole("button", { name: /Label location/i }).click();
+
+    expect(await screen.findByText(/Label stay location/i)).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: /Lausanne Home/i })).toBeInTheDocument();
+
+    screen.getByRole("button", { name: /Lausanne Home/i }).click();
+
+    await waitFor(() => {
+      expect(patchMovementStayMock).toHaveBeenCalledWith("stay_home", {
+        placeExternalUid: "place_home",
+        placeLabel: "Lausanne Home"
+      });
+    });
+  });
+
+  it("opens a seeded new-place form from the stay label dialog", async () => {
+    getMovementTimelineMock.mockResolvedValueOnce({
+      movement: {
+        segments: [
+          createSegment({
+            id: "segment_unlinked_stay",
+            boxId: "segment_unlinked_stay",
+            title: "Home",
+            subtitle: "Unlinked stay",
+            placeLabel: null,
+            rawStayIds: ["stay_home"],
+            stay: {
+              id: "stay_home",
+              externalUid: "stay_home",
+              pairingSessionId: null,
+              userId: "user_operator",
+              placeId: null,
+              label: "Home",
+              status: "completed",
+              classification: "stationary",
+              startedAt: "2026-04-06T08:00:00.000Z",
+              endedAt: "2026-04-06T09:00:00.000Z",
+              durationSeconds: 3600,
+              centerLatitude: 46.5191,
+              centerLongitude: 6.6323,
+              radiusMeters: 120,
+              sampleCount: 3,
+              weather: {},
+              metrics: {},
+              metadata: {},
+              publishedNoteId: null,
+              createdAt: "2026-04-06T09:00:00.000Z",
+              updatedAt: "2026-04-06T09:00:00.000Z",
+              place: null,
+              note: null,
+              estimatedScreenTimeSeconds: 0,
+              pickupCount: 0,
+              notificationCount: 0,
+              topApps: [],
+              topCategories: []
+            }
+          })
+        ],
+        nextCursor: null,
+        hasMore: false,
+        invalidSegmentCount: 0
+      }
+    });
+
+    renderTimeline(<MovementLifeTimeline userIds={["user_operator"]} />);
+
+    expect(await screen.findByRole("button", { name: /Label location/i })).toBeInTheDocument();
+    screen.getByRole("button", { name: /Label location/i }).click();
+
+    expect(await screen.findByText(/Label stay location/i)).toBeInTheDocument();
+    screen.getByRole("button", { name: /Create "Home"/i }).click();
+
+    expect(await screen.findByText(/New known place/i)).toBeInTheDocument();
+    expect(screen.getByDisplayValue("46.5191")).toBeInTheDocument();
+    expect(screen.getByDisplayValue("6.6323")).toBeInTheDocument();
   });
 
   it("shows the known location name directly in the stay box", async () => {

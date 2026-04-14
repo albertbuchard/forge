@@ -15,7 +15,8 @@ import {
   PencilLine,
   Route,
   Save,
-  Trash2
+  Trash2,
+  X
 } from "lucide-react";
 import { SheetScaffold } from "@/components/experience/sheet-scaffold";
 import {
@@ -35,6 +36,7 @@ import {
   deleteMovementUserBox,
   getMovementTimeline,
   invalidateAutomaticMovementBox,
+  listMovementPlaces,
   patchMovementStay,
   preflightMovementUserBox,
   patchMovementUserBox
@@ -42,6 +44,7 @@ import {
 import type {
   MovementBoxDetailCoordinate,
   MovementBoxDetailData,
+  MovementKnownPlace,
   MovementTimelineLaneSide,
   MovementTimelineSegment,
   MovementUserBoxPreflight
@@ -205,6 +208,43 @@ function movementPlaceSeedFromSegment(
   };
 }
 
+function resolveSegmentPlaceLabel(segment: MovementTimelineSegment | null) {
+  if (!segment) {
+    return null;
+  }
+  if (segment.kind === "stay") {
+    return hasRecordedStay(segment)
+      ? segment.stay.place?.label ?? segment.placeLabel ?? segment.stay.label ?? null
+      : segment.placeLabel ?? null;
+  }
+  return segment.placeLabel ?? null;
+}
+
+function distanceBetweenCoordinates(
+  startLatitude: number,
+  startLongitude: number,
+  endLatitude: number,
+  endLongitude: number
+) {
+  const earthRadiusMeters = 6_371_000;
+  const latDelta = ((endLatitude - startLatitude) * Math.PI) / 180;
+  const lngDelta = ((endLongitude - startLongitude) * Math.PI) / 180;
+  const startLatRadians = (startLatitude * Math.PI) / 180;
+  const endLatRadians = (endLatitude * Math.PI) / 180;
+  const haversine =
+    Math.sin(latDelta / 2) ** 2 +
+    Math.cos(startLatRadians) *
+      Math.cos(endLatRadians) *
+      Math.sin(lngDelta / 2) ** 2;
+  return 2 * earthRadiusMeters * Math.asin(Math.sqrt(haversine));
+}
+
+function buildMovementPlaceSearchText(place: MovementKnownPlace) {
+  return normalizeSearchText(
+    [place.label, ...place.aliases, ...place.categoryTags].join(" ")
+  );
+}
+
 function hasRecordedTrip(
   segment: MovementTimelineSegment
 ): segment is Extract<MovementTimelineSegment, { kind: "trip" }> & {
@@ -286,9 +326,7 @@ function normalizeMissingSegmentTitle(segment: Extract<MovementTimelineSegment, 
 function resolveStayDisplayTitle(
   segment: Extract<MovementTimelineSegment, { kind: "stay" }>
 ) {
-  const canonicalLabel = hasRecordedStay(segment)
-    ? segment.stay.place?.label ?? segment.placeLabel ?? segment.stay.label ?? null
-    : segment.placeLabel ?? null;
+  const canonicalLabel = resolveSegmentPlaceLabel(segment);
   const normalizedTitle = segment.title.trim().toLowerCase();
   const titleIsGeneric =
     normalizedTitle.length === 0 ||
@@ -964,20 +1002,22 @@ function MovementTimelineDetailCard({
             ) : null}
           </>
         ) : null}
-        {segment.placeLabel ? (
+        {resolveSegmentPlaceLabel(segment) ? (
           <Badge className="bg-white/[0.08] text-white/74">
-            {segment.placeLabel}
+            {resolveSegmentPlaceLabel(segment)}
           </Badge>
         ) : null}
       </div>
 
-      {hasRecordedStay(segment) && !segment.stay.place ? (
+      {hasRecordedStay(segment) ? (
         <div className="mt-4 rounded-[18px] border border-sky-300/14 bg-sky-300/8 p-3">
           <div className="text-[11px] uppercase tracking-[0.18em] text-sky-100/66">
-            Canonical place
+            Location label
           </div>
           <div className="mt-2 text-sm leading-6 text-sky-50/86">
-            This stay is still unlinked. Create the canonical place directly from this stay center so later matching stays inherit it automatically.
+            {segment.stay.place
+              ? `This stay is currently linked to ${segment.stay.place.label}. Search saved places or relabel it from this stay center.`
+              : "Search saved places for this stay, or create a new one from the stay center so later matching stays inherit it automatically."}
           </div>
           <div className="mt-3">
             <Button
@@ -985,7 +1025,7 @@ function MovementTimelineDetailCard({
               variant="ghost"
               className="rounded-full border border-sky-300/24 bg-sky-300/12 px-4 text-sky-50 hover:bg-sky-300/18"
             >
-              Create canonical place
+              Label location
             </Button>
           </div>
         </div>
@@ -1206,23 +1246,23 @@ function MovementTimelineDetailDialog({
 
               {stayDetail ? (
                 <>
-                  {!stayDetail.canonicalPlace ? (
-                    <Card className="rounded-[22px] border border-sky-300/14 bg-sky-300/8 p-4">
-                      <div className="text-[11px] uppercase tracking-[0.18em] text-sky-100/66">Canonical place</div>
-                      <div className="mt-2 text-sm leading-6 text-sky-50/86">
-                        This stay still has no canonical place. Use the stay center as the place seed and create it once from here.
-                      </div>
-                      <div className="mt-3">
-                        <Button
-                          onClick={onDefinePlace}
-                          variant="ghost"
-                          className="rounded-full border border-sky-300/24 bg-sky-300/12 px-4 text-sky-50 hover:bg-sky-300/18"
-                        >
-                          Create canonical place
-                        </Button>
-                      </div>
-                    </Card>
-                  ) : null}
+                  <Card className="rounded-[22px] border border-sky-300/14 bg-sky-300/8 p-4">
+                    <div className="text-[11px] uppercase tracking-[0.18em] text-sky-100/66">Location label</div>
+                    <div className="mt-2 text-sm leading-6 text-sky-50/86">
+                      {stayDetail.canonicalPlace
+                        ? `This stay is linked to ${stayDetail.canonicalPlace.label}. Search a different saved place or relabel it from the stay center.`
+                        : "This stay has no saved place yet. Search known locations first, or create a new place directly from the stay center."}
+                    </div>
+                    <div className="mt-3">
+                      <Button
+                        onClick={onDefinePlace}
+                        variant="ghost"
+                        className="rounded-full border border-sky-300/24 bg-sky-300/12 px-4 text-sky-50 hover:bg-sky-300/18"
+                      >
+                        Label location
+                      </Button>
+                    </div>
+                  </Card>
                   <div className="grid gap-4 xl:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)]">
                     <MovementDetailMap
                       title="Stay positions"
@@ -1286,6 +1326,220 @@ function MovementTimelineDetailDialog({
               ) : null}
             </div>
           ) : null}
+        </Dialog.Content>
+      </Dialog.Portal>
+    </Dialog.Root>
+  );
+}
+
+function MovementStayPlaceLabelDialog({
+  open,
+  onOpenChange,
+  segment,
+  places,
+  loading,
+  onSelectPlace,
+  onCreatePlace
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  segment: MovementTimelineSegment | null;
+  places: MovementKnownPlace[];
+  loading: boolean;
+  onSelectPlace: (place: MovementKnownPlace) => Promise<void>;
+  onCreatePlace: (segment: MovementTimelineSegment, labelHint: string) => void;
+}) {
+  const seed = segment ? movementPlaceSeedFromSegment(segment) : null;
+  const [query, setQuery] = useState("");
+
+  useEffect(() => {
+    if (!open) {
+      setQuery("");
+      return;
+    }
+    setQuery(resolveSegmentPlaceLabel(segment) ?? "");
+  }, [open, segment]);
+
+  const filteredPlaces = useMemo(() => {
+    if (!seed) {
+      return [];
+    }
+    const normalizedQuery = normalizeSearchText(query);
+    return [...places]
+      .filter((place) =>
+        normalizedQuery.length === 0
+          ? true
+          : buildMovementPlaceSearchText(place).includes(normalizedQuery)
+      )
+      .sort((left, right) => {
+        const leftLabel = normalizeSearchText(left.label);
+        const rightLabel = normalizeSearchText(right.label);
+        const leftStartsWith =
+          normalizedQuery.length > 0 && leftLabel.startsWith(normalizedQuery);
+        const rightStartsWith =
+          normalizedQuery.length > 0 && rightLabel.startsWith(normalizedQuery);
+        if (leftStartsWith !== rightStartsWith) {
+          return leftStartsWith ? -1 : 1;
+        }
+        const leftDistance = distanceBetweenCoordinates(
+          seed.latitude,
+          seed.longitude,
+          left.latitude,
+          left.longitude
+        );
+        const rightDistance = distanceBetweenCoordinates(
+          seed.latitude,
+          seed.longitude,
+          right.latitude,
+          right.longitude
+        );
+        if (Math.abs(leftDistance - rightDistance) > 1) {
+          return leftDistance - rightDistance;
+        }
+        return left.label.localeCompare(right.label);
+      })
+      .slice(0, 6);
+  }, [places, query, seed]);
+
+  const normalizedQuery = normalizeSearchText(query);
+  const exactMatchExists = filteredPlaces.some(
+    (place) => normalizeSearchText(place.label) === normalizedQuery
+  );
+  const currentLabel = resolveSegmentPlaceLabel(segment);
+
+  return (
+    <Dialog.Root open={open} onOpenChange={onOpenChange}>
+      <Dialog.Portal>
+        <Dialog.Overlay className="fixed inset-0 z-50 bg-[rgba(3,7,18,0.74)] backdrop-blur-sm" />
+        <Dialog.Content className="fixed left-1/2 top-[8vh] z-50 max-h-[84vh] w-[min(38rem,calc(100vw-1.25rem))] -translate-x-1/2 overflow-y-auto rounded-[30px] border border-white/10 bg-[linear-gradient(180deg,rgba(8,14,28,0.98),rgba(10,16,30,0.95))] p-5 shadow-[0_32px_90px_rgba(0,0,0,0.45)]">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <Dialog.Title className="font-display text-[1.3rem] tracking-[-0.05em] text-white">
+                Label stay location
+              </Dialog.Title>
+              <Dialog.Description className="mt-2 text-sm leading-6 text-white/62">
+                Search saved places first. If this stay is new, create a location from the
+                stay center with latitude and longitude already filled in.
+              </Dialog.Description>
+            </div>
+            <Dialog.Close asChild>
+              <button
+                type="button"
+                className="rounded-full border border-white/10 bg-white/[0.04] p-2 text-white/64 transition hover:bg-white/[0.08] hover:text-white"
+                aria-label="Close location label dialog"
+              >
+                <X className="size-4" />
+              </button>
+            </Dialog.Close>
+          </div>
+
+          {seed ? (
+            <div className="mt-5 rounded-[22px] border border-white/8 bg-white/[0.03] p-4">
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge tone="signal">Stay center</Badge>
+                {currentLabel ? (
+                  <Badge className="bg-white/[0.08] text-white/74">{currentLabel}</Badge>
+                ) : null}
+              </div>
+              <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                <div className="rounded-[18px] border border-white/8 bg-black/10 px-3 py-2">
+                  <div className="text-[11px] uppercase tracking-[0.18em] text-white/34">
+                    Latitude
+                  </div>
+                  <div className="mt-1 text-sm text-white/82">{seed.latitude.toFixed(6)}</div>
+                </div>
+                <div className="rounded-[18px] border border-white/8 bg-black/10 px-3 py-2">
+                  <div className="text-[11px] uppercase tracking-[0.18em] text-white/34">
+                    Longitude
+                  </div>
+                  <div className="mt-1 text-sm text-white/82">{seed.longitude.toFixed(6)}</div>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="mt-5 rounded-[22px] border border-amber-300/14 bg-amber-300/8 p-4 text-sm text-amber-50/86">
+              Forge can only label stays that already have a recorded stay center.
+            </div>
+          )}
+
+          <div className="mt-5 grid gap-3">
+            <Input
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Search known places or type a new label"
+            />
+            <div className="rounded-[22px] border border-white/8 bg-white/[0.03] p-4">
+              <div className="font-label text-[11px] uppercase tracking-[0.2em] text-white/42">
+                Known places
+              </div>
+              {loading ? (
+                <div className="mt-3 text-sm text-white/58">Loading saved places…</div>
+              ) : filteredPlaces.length > 0 ? (
+                <div className="mt-3 grid gap-2">
+                  {filteredPlaces.map((place) => {
+                    const radialDistance =
+                      seed == null
+                        ? null
+                        : distanceBetweenCoordinates(
+                            seed.latitude,
+                            seed.longitude,
+                            place.latitude,
+                            place.longitude
+                          );
+                    return (
+                      <button
+                        key={place.id}
+                        type="button"
+                        onClick={() => void onSelectPlace(place).then(() => onOpenChange(false))}
+                        className="rounded-[18px] border border-white/8 bg-black/10 px-4 py-3 text-left transition hover:border-[var(--primary)]/40 hover:bg-white/[0.05]"
+                      >
+                        <div className="flex flex-wrap items-center gap-2">
+                          <div className="text-sm text-white">{place.label}</div>
+                          {radialDistance != null ? (
+                            <Badge className="bg-white/[0.08] text-white/70">
+                              {distanceLabel(radialDistance)} away
+                            </Badge>
+                          ) : null}
+                        </div>
+                        {(place.aliases.length > 0 || place.categoryTags.length > 0) ? (
+                          <div className="mt-1 text-xs text-white/52">
+                            {[...place.aliases, ...place.categoryTags].join(" · ")}
+                          </div>
+                        ) : null}
+                      </button>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="mt-3 text-sm text-white/58">
+                  No saved place matches this stay yet.
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="mt-5 flex flex-wrap justify-end gap-2">
+            <Button
+              variant="ghost"
+              onClick={() => onOpenChange(false)}
+              className="border border-white/10 bg-white/[0.04]"
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={() => {
+                if (!segment || !seed) {
+                  return;
+                }
+                onCreatePlace(segment, exactMatchExists ? "" : query.trim());
+              }}
+              disabled={!segment || !seed}
+            >
+              {normalizedQuery.length > 0 && !exactMatchExists
+                ? `Create "${query.trim()}"`
+                : "Create new location"}
+            </Button>
+          </div>
         </Dialog.Content>
       </Dialog.Portal>
     </Dialog.Root>
@@ -1659,9 +1913,11 @@ function MovementTimelineRow({
                   <div className="truncate font-display text-[1.12rem] tracking-[-0.04em] text-white">
                     {displaySegmentTitle(segment)}
                   </div>
-                  {hasRecordedStay(segment) && segment.stay.place?.label ? (
-                    <div className="mt-2 truncate font-label text-[10px] uppercase tracking-[0.2em] text-white/34">
-                      Canonical place
+                  {segment.kind === "stay" && resolveSegmentPlaceLabel(segment) ? (
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <Badge className="max-w-full truncate bg-white/[0.08] text-white/76">
+                        {resolveSegmentPlaceLabel(segment)}
+                      </Badge>
                     </div>
                   ) : null}
                 </div>
@@ -1711,6 +1967,8 @@ export function MovementLifeTimeline({ userIds = [] }: MovementLifeTimelineProps
   const [editingSegmentId, setEditingSegmentId] = useState<string | null>(null);
   const [creatingDraft, setCreatingDraft] = useState<TimelineDraft | null>(null);
   const [detailSegmentId, setDetailSegmentId] = useState<string | null>(null);
+  const [placeLabelSegmentId, setPlaceLabelSegmentId] = useState<string | null>(null);
+  const [placeLabelDialogOpen, setPlaceLabelDialogOpen] = useState(false);
   const [placeEditorOpen, setPlaceEditorOpen] = useState(false);
   const [placeSeed, setPlaceSeed] = useState<MovementPlaceDraftSeed | null>(null);
   const [placeSeedSegmentId, setPlaceSeedSegmentId] = useState<string | null>(null);
@@ -1793,6 +2051,16 @@ export function MovementLifeTimeline({ userIds = [] }: MovementLifeTimelineProps
         ? (await getMovementBoxDetail(detailSegment.boxId, userIds)).movement
         : null,
     enabled: Boolean(detailSegment?.boxId)
+  });
+  const placeLabelSegment = useMemo(
+    () => segments.find((segment) => segment.id === placeLabelSegmentId) ?? null,
+    [placeLabelSegmentId, segments]
+  );
+  const movementPlacesQuery = useQuery({
+    queryKey: ["forge-movement-places", ...userIds],
+    queryFn: async () => (await listMovementPlaces(userIds)).places,
+    retry: false,
+    refetchOnWindowFocus: false
   });
   const futureTailHeight = useMemo(() => {
     const latestEndedAt = segments[segments.length - 1]?.endedAt;
@@ -1922,6 +2190,25 @@ export function MovementLifeTimeline({ userIds = [] }: MovementLifeTimelineProps
     );
   }, [segments, selectedSegmentId]);
 
+  const invalidateMovementProjectionQueries = async () => {
+    await Promise.all([
+      queryClient.invalidateQueries({
+        queryKey: ["forge-movement-life-timeline"]
+      }),
+      queryClient.invalidateQueries({
+        queryKey: ["forge-movement-life-timeline-data"]
+      }),
+      queryClient.invalidateQueries({ queryKey: ["forge-movement-box-detail"] }),
+      queryClient.invalidateQueries({ queryKey: ["forge-movement-day"] }),
+      queryClient.invalidateQueries({ queryKey: ["forge-movement-month"] }),
+      queryClient.invalidateQueries({ queryKey: ["forge-movement-all-time"] }),
+      queryClient.invalidateQueries({ queryKey: ["forge-movement-places"] }),
+      queryClient.invalidateQueries({
+        queryKey: ["forge-psyche-self-observation-calendar"]
+      })
+    ]);
+  };
+
   const saveMutation = useMutation({
     mutationFn: async (input: {
       segment: MovementTimelineSegment | null;
@@ -1954,23 +2241,7 @@ export function MovementLifeTimeline({ userIds = [] }: MovementLifeTimelineProps
         userIds
       );
     },
-    onSuccess: async () => {
-      await Promise.all([
-        queryClient.invalidateQueries({
-          queryKey: ["forge-movement-life-timeline"]
-        }),
-        queryClient.invalidateQueries({
-          queryKey: ["forge-movement-life-timeline-data"]
-        }),
-        queryClient.invalidateQueries({ queryKey: ["forge-movement-day"] }),
-        queryClient.invalidateQueries({ queryKey: ["forge-movement-month"] }),
-        queryClient.invalidateQueries({ queryKey: ["forge-movement-all-time"] }),
-        queryClient.invalidateQueries({ queryKey: ["forge-movement-places"] }),
-        queryClient.invalidateQueries({
-          queryKey: ["forge-psyche-self-observation-calendar"]
-        })
-      ]);
-    }
+    onSuccess: invalidateMovementProjectionQueries
   });
 
   const placeMutation = useMutation({
@@ -1997,16 +2268,28 @@ export function MovementLifeTimeline({ userIds = [] }: MovementLifeTimelineProps
       }
       return response;
     },
-    onSuccess: async () => {
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ["forge-movement-places"] }),
-        queryClient.invalidateQueries({ queryKey: ["forge-movement-life-timeline"] }),
-        queryClient.invalidateQueries({ queryKey: ["forge-movement-life-timeline-data"] }),
-        queryClient.invalidateQueries({ queryKey: ["forge-movement-box-detail"] }),
-        queryClient.invalidateQueries({ queryKey: ["forge-movement-day"] }),
-        queryClient.invalidateQueries({ queryKey: ["forge-movement-all-time"] })
-      ]);
-    }
+    onSuccess: invalidateMovementProjectionQueries
+  });
+
+  const assignPlaceMutation = useMutation({
+    mutationFn: async (input: {
+      segment: MovementTimelineSegment;
+      place: MovementKnownPlace;
+    }) => {
+      const { segment, place } = input;
+      if (!hasRecordedStay(segment)) {
+        throw new Error("Only recorded stays can be linked to a saved place.");
+      }
+      await Promise.all(
+        segment.rawStayIds.map((stayId) =>
+          patchMovementStay(stayId, {
+            placeExternalUid: place.externalUid,
+            placeLabel: place.label
+          })
+        )
+      );
+    },
+    onSuccess: invalidateMovementProjectionQueries
   });
 
   const deleteMutation = useMutation({
@@ -2147,12 +2430,38 @@ export function MovementLifeTimeline({ userIds = [] }: MovementLifeTimelineProps
     }
   });
 
+  const openPlaceLabelDialog = (segment: MovementTimelineSegment) => {
+    if (!hasRecordedStay(segment)) {
+      return;
+    }
+    setPlaceLabelSegmentId(segment.id);
+    setPlaceLabelDialogOpen(true);
+  };
+
   const openCanonicalPlaceDraft = (segment: MovementTimelineSegment) => {
     const seed = movementPlaceSeedFromSegment(segment);
     if (!seed) {
       return;
     }
     setPlaceSeed(seed);
+    setPlaceSeedSegmentId(segment.id);
+    setPlaceEditorOpen(true);
+  };
+
+  const openPlaceCreateFromLabelDialog = (
+    segment: MovementTimelineSegment,
+    labelHint: string
+  ) => {
+    const seed = movementPlaceSeedFromSegment(segment);
+    if (!seed) {
+      return;
+    }
+    setPlaceLabelDialogOpen(false);
+    setPlaceLabelSegmentId(segment.id);
+    setPlaceSeed({
+      ...seed,
+      label: labelHint.trim() || seed.label
+    });
     setPlaceSeedSegmentId(segment.id);
     setPlaceEditorOpen(true);
   };
@@ -2293,7 +2602,7 @@ export function MovementLifeTimeline({ userIds = [] }: MovementLifeTimelineProps
                       setEditingSegmentId(segment.id);
                     }}
                     onOpenDetail={() => setDetailSegmentId(segment.id)}
-                    onDefinePlace={() => openCanonicalPlaceDraft(segment)}
+                    onDefinePlace={() => openPlaceLabelDialog(segment)}
                   />
                 </div>
               );
@@ -2397,7 +2706,31 @@ export function MovementLifeTimeline({ userIds = [] }: MovementLifeTimelineProps
           if (!detailSegment) {
             return;
           }
-          openCanonicalPlaceDraft(detailSegment);
+          openPlaceLabelDialog(detailSegment);
+        }}
+      />
+      <MovementStayPlaceLabelDialog
+        open={placeLabelDialogOpen}
+        onOpenChange={(open) => {
+          setPlaceLabelDialogOpen(open);
+          if (!open) {
+            setPlaceLabelSegmentId(null);
+          }
+        }}
+        segment={placeLabelSegment}
+        places={movementPlacesQuery.data ?? []}
+        loading={movementPlacesQuery.isFetching}
+        onSelectPlace={async (place) => {
+          if (!placeLabelSegment) {
+            return;
+          }
+          await assignPlaceMutation.mutateAsync({
+            segment: placeLabelSegment,
+            place
+          });
+        }}
+        onCreatePlace={(segment, labelHint) => {
+          openPlaceCreateFromLabelDialog(segment, labelHint);
         }}
       />
       <MovementPlaceEditorDialog

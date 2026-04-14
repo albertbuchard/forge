@@ -1528,6 +1528,38 @@ final class ForgeCompanionTests: XCTestCase {
         XCTAssertFalse(item.editable)
     }
 
+    func testMovementLifeTimelineItemLinkableStayIdsKeepRemoteRawStayIdsWithoutLocalCache() {
+        let startedAt = Date(timeIntervalSince1970: 1_775_000_000)
+        let item = MovementLifeTimelineItem(
+            id: "remote-stay-item",
+            source: .remoteAutomatic(
+                "box_remote_stay",
+                MovementTimelineCoordinate(latitude: 46.5191, longitude: 6.6323)
+            ),
+            kind: .stay,
+            title: "Stay",
+            subtitle: "Remote canonical stay",
+            placeLabel: nil,
+            tags: [],
+            syncSource: "canonical",
+            startedAtDate: startedAt,
+            endedAtDate: startedAt.addingTimeInterval(3600),
+            durationSeconds: 3600,
+            laneSide: .left,
+            connectorFromLane: .left,
+            connectorToLane: .left,
+            distanceMeters: nil,
+            averageSpeedMps: nil,
+            rawStayIds: ["stay_remote_1"],
+            origin: .recorded,
+            editable: true,
+            isCurrent: false
+        )
+
+        let store = MovementSyncStore(testingState: nil)
+        XCTAssertEqual(item.linkableStayIds(using: store), ["remote_1", "stay_remote_1"])
+    }
+
     private func makeLocation(
         latitude: Double,
         longitude: Double,

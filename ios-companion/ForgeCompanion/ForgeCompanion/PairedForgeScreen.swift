@@ -210,6 +210,7 @@ private struct MovementLifeTimelineView: View {
     @State private var creatingDraft: MovementTimelineEditorDraft?
     @State private var detailSnapshot: MovementTimelineDetailSnapshot?
     @State private var detailLoading = false
+    @State private var placeLabelDraft: MovementTimelinePlaceLabelDraft?
     @State private var placeDraft: MovementTimelinePlaceDraft?
     @State private var scrolledToCurrent = false
     @State private var focusedVisibleId: String?
@@ -306,7 +307,7 @@ private struct MovementLifeTimelineView: View {
                                                     }
                                                 },
                                                 onDefinePlace: {
-                                                    openPlaceDraft(for: item)
+                                                    openPlaceLabelDraft(for: item)
                                                 },
                                                 onDelete: {
                                                     Task {
@@ -471,7 +472,8 @@ private struct MovementLifeTimelineView: View {
                 loading: detailLoading,
                 definePlace: {
                     if let item = displayItems.first(where: { $0.id == snapshot.itemId }) {
-                        openPlaceDraft(for: item)
+                        detailSnapshot = nil
+                        openPlaceLabelDraft(for: item)
                     }
                 },
                 edit: {
@@ -488,6 +490,22 @@ private struct MovementLifeTimelineView: View {
                 }
             )
             .presentationDetents([.large])
+            .presentationDragIndicator(.visible)
+        }
+        .sheet(item: $placeLabelDraft) { draft in
+            MovementTimelinePlaceLabelSheet(
+                draft: draft,
+                knownPlaces: rankedKnownPlaces(for: draft.item),
+                close: { placeLabelDraft = nil },
+                selectPlace: { place in
+                    await assignKnownPlace(place, to: draft.item)
+                },
+                createNewPlace: { labelHint in
+                    placeLabelDraft = nil
+                    openPlaceDraft(for: draft.item, labelHint: labelHint)
+                }
+            )
+            .presentationDetents([.medium, .large])
             .presentationDragIndicator(.visible)
         }
         .sheet(item: $placeDraft) { draft in
@@ -991,18 +1009,117 @@ private struct MovementLifeTimelineView: View {
         }
     }
 
-    private func openPlaceDraft(for item: MovementLifeTimelineItem) {
-        guard item.kind == .stay, item.hasCanonicalPlace == false, let coordinate = item.coordinate else {
+    private func openPlaceLabelDraft(for item: MovementLifeTimelineItem) {
+        guard item.kind == .stay else {
+            return
+        }
+        placeLabelDraft = MovementTimelinePlaceLabelDraft(
+            item: item,
+            query: item.placeLabel?.isEmpty == false ? item.placeLabel! : item.displayTitle
+        )
+    }
+
+    private func openPlaceDraft(
+        for item: MovementLifeTimelineItem,
+        labelHint: String? = nil
+    ) {
+        guard item.kind == .stay, let coordinate = item.coordinate else {
             return
         }
         placeDraft = MovementTimelinePlaceDraft(
             itemId: item.id,
-            label: item.placeLabel?.isEmpty == false ? item.placeLabel! : item.displayTitle,
+            label:
+                labelHint?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+                ? labelHint!.trimmingCharacters(in: .whitespacesAndNewlines)
+                : item.placeLabel?.isEmpty == false
+                    ? item.placeLabel!
+                    : item.displayTitle,
             latitude: coordinate.latitude,
             longitude: coordinate.longitude,
             radiusMeters: item.stayRadiusMeters(using: appModel.movementStore),
             tags: item.tags
         )
+    }
+
+    private func rankedKnownPlaces(
+        for item: MovementLifeTimelineItem
+    ) -> [MovementSyncStore.StoredKnownPlace] {
+        let places = appModel.movementStore.knownPlaces
+        guard let draft = placeLabelDraft, draft.item.id == item.id else {
+            return places.sorted { $0.label.localizedCaseInsensitiveCompare($1.label) == .orderedAscending }
+        }
+        let normalizedQuery = draft.query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let coordinate = item.coordinate
+        return places
+            .filter { place in
+                guard normalizedQuery.isEmpty == false else {
+                    return true
+                }
+                let haystack = (
+                    [place.label] + place.aliases + place.categoryTags
+                )
+                    .joined(separator: " ")
+                    .lowercased()
+                return haystack.contains(normalizedQuery)
+            }
+            .sorted { left, right in
+                if normalizedQuery.isEmpty == false {
+                    let leftStartsWith = left.label.lowercased().hasPrefix(normalizedQuery)
+                    let rightStartsWith = right.label.lowercased().hasPrefix(normalizedQuery)
+                    if leftStartsWith != rightStartsWith {
+                        return leftStartsWith && rightStartsWith == false
+                    }
+                }
+                if let coordinate {
+                    let leftDistance = CLLocation(
+                        latitude: coordinate.latitude,
+                        longitude: coordinate.longitude
+                    ).distance(
+                        from: CLLocation(latitude: left.latitude, longitude: left.longitude)
+                    )
+                    let rightDistance = CLLocation(
+                        latitude: coordinate.latitude,
+                        longitude: coordinate.longitude
+                    ).distance(
+                        from: CLLocation(latitude: right.latitude, longitude: right.longitude)
+                    )
+                    if abs(leftDistance - rightDistance) > 1 {
+                        return leftDistance < rightDistance
+                    }
+                }
+                return left.label.localizedCaseInsensitiveCompare(right.label) == .orderedAscending
+            }
+    }
+
+    private func assignKnownPlace(
+        _ place: MovementSyncStore.StoredKnownPlace,
+        to item: MovementLifeTimelineItem
+    ) async {
+        guard let pairing = appModel.pairing else {
+            loadError = "Reconnect to Forge before labeling stay locations."
+            return
+        }
+        do {
+            for stayId in item.linkableStayIds(using: appModel.movementStore) {
+                try await appModel.syncClient.patchMovementStay(
+                    stayId: stayId,
+                    placeExternalUid: place.externalUid,
+                    placeLabel: place.label,
+                    pairing: pairing
+                )
+                appModel.movementStore.updateLocalStay(
+                    id: stayId,
+                    label: item.displayTitle,
+                    tags: item.tags,
+                    placeLabel: place.label,
+                    placeExternalUid: place.externalUid
+                )
+            }
+            placeLabelDraft = nil
+            await reload()
+        } catch {
+            loadError = error.localizedDescription
+        }
     }
 
     private func openDetail(_ item: MovementLifeTimelineItem) async {
@@ -1028,7 +1145,7 @@ private struct MovementLifeTimelineView: View {
 
     private func savePlaceDraft(_ draft: MovementTimelinePlaceDraft) async {
         guard let pairing = appModel.pairing else {
-            loadError = "Reconnect to Forge before creating canonical places."
+            loadError = "Reconnect to Forge before creating locations."
             return
         }
         do {
@@ -1047,25 +1164,25 @@ private struct MovementLifeTimelineView: View {
             )
 
             if let item = displayItems.first(where: { $0.id == draft.itemId }) {
-                for stayId in item.linkableStayIds(using: appModel.movementStore) {
-                    try await appModel.syncClient.patchMovementStay(
-                        stayId: stayId,
-                        placeExternalUid: place.externalUid,
-                        placeLabel: place.label,
-                        pairing: pairing
-                    )
-                    appModel.movementStore.updateLocalStay(
-                        id: stayId,
-                        label: item.displayTitle,
-                        tags: item.tags,
-                        placeLabel: place.label,
-                        placeExternalUid: place.externalUid
-                    )
-                }
+                await assignKnownPlace(
+                    MovementSyncStore.StoredKnownPlace(
+                        id: place.id,
+                        externalUid: place.externalUid,
+                        label: place.label,
+                        aliases: place.aliases,
+                        latitude: place.latitude,
+                        longitude: place.longitude,
+                        radiusMeters: place.radiusMeters,
+                        categoryTags: place.categoryTags,
+                        visibility: place.visibility,
+                        wikiNoteId: place.wikiNoteId,
+                        metadata: [:]
+                    ),
+                    to: item
+                )
             }
 
             placeDraft = nil
-            await reload()
         } catch {
             loadError = error.localizedDescription
         }
@@ -1095,6 +1212,15 @@ private struct MovementTimelinePlaceDraft: Identifiable {
 
     var id: String {
         itemId
+    }
+}
+
+private struct MovementTimelinePlaceLabelDraft: Identifiable {
+    let item: MovementLifeTimelineItem
+    var query: String
+
+    var id: String {
+        item.id
     }
 }
 
@@ -1129,7 +1255,7 @@ private struct MovementTimelineDetailSnapshot: Identifiable {
     let averageSpeedMps: Double?
     let maxSpeedMps: Double?
     let stopCount: Int?
-    let canCreatePlace: Bool
+    let canLabelPlace: Bool
 
     var id: String { itemId }
 
@@ -1204,7 +1330,7 @@ private struct MovementTimelineDetailSnapshot: Identifiable {
         self.averageSpeedMps = detail.tripDetail?.averageSpeedMps
         self.maxSpeedMps = detail.tripDetail?.maxSpeedMps
         self.stopCount = detail.tripDetail?.stopCount
-        self.canCreatePlace = kind == .stay && (placeLabel?.isEmpty != false)
+        self.canLabelPlace = kind == .stay
     }
 
     @MainActor
@@ -1286,7 +1412,7 @@ private struct MovementTimelineDetailSnapshot: Identifiable {
         self.averageSpeedMps = trips.isEmpty ? item.averageSpeedMps : trips.compactMap(\.averageSpeedMps).last
         self.maxSpeedMps = trips.isEmpty ? nil : trips.compactMap(\.maxSpeedMps).max()
         self.stopCount = trips.isEmpty ? nil : trips.map { $0.stops.count }.reduce(0, +)
-        self.canCreatePlace = kind == .stay && item.hasCanonicalPlace == false && item.coordinate != nil
+        self.canLabelPlace = kind == .stay
     }
 }
 
@@ -1298,7 +1424,7 @@ private struct MovementTimelinePlaceSheet: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section("Canonical place") {
+                Section("Location details") {
                     TextField("Label", text: $draft.label)
                     TextField("Latitude", value: $draft.latitude, format: .number.precision(.fractionLength(6)))
                     TextField("Longitude", value: $draft.longitude, format: .number.precision(.fractionLength(6)))
@@ -1312,7 +1438,7 @@ private struct MovementTimelinePlaceSheet: View {
                     )
                 }
             }
-            .navigationTitle("New Canonical Place")
+            .navigationTitle("New Location")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
@@ -1328,6 +1454,131 @@ private struct MovementTimelinePlaceSheet: View {
                 }
             }
         }
+    }
+}
+
+private struct MovementTimelinePlaceLabelSheet: View {
+    @State var draft: MovementTimelinePlaceLabelDraft
+    let knownPlaces: [MovementSyncStore.StoredKnownPlace]
+    let close: () -> Void
+    let selectPlace: (MovementSyncStore.StoredKnownPlace) async -> Void
+    let createNewPlace: (String) -> Void
+
+    private var coordinate: MovementTimelineCoordinate? {
+        draft.item.coordinate
+    }
+
+    private var hasExactMatch: Bool {
+        let normalizedQuery = draft.query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard normalizedQuery.isEmpty == false else {
+            return false
+        }
+        return knownPlaces.contains { $0.label.lowercased() == normalizedQuery }
+    }
+
+    var body: some View {
+        NavigationStack {
+            List {
+                if let coordinate {
+                    Section("Stay center") {
+                        detailRow("Latitude", coordinate.latitude.formatted(.number.precision(.fractionLength(6))))
+                        detailRow("Longitude", coordinate.longitude.formatted(.number.precision(.fractionLength(6))))
+                    }
+                }
+
+                Section("Search known places") {
+                    TextField("Search known places or type a new label", text: $draft.query)
+                        .textInputAutocapitalization(.words)
+                        .autocorrectionDisabled()
+                }
+
+                Section("Known locations") {
+                    if knownPlaces.isEmpty {
+                        Text("No saved places match yet.")
+                            .font(.system(size: 14, weight: .medium, design: .rounded))
+                            .foregroundStyle(CompanionStyle.textSecondary)
+                    } else {
+                        ForEach(knownPlaces) { place in
+                            Button {
+                                Task {
+                                    await selectPlace(place)
+                                }
+                            } label: {
+                                VStack(alignment: .leading, spacing: 4) {
+                                    HStack(alignment: .center, spacing: 8) {
+                                        Text(place.label)
+                                            .font(.system(size: 15, weight: .semibold, design: .rounded))
+                                            .foregroundStyle(CompanionStyle.textPrimary)
+                                        if let coordinate {
+                                            Text(
+                                                movementKnownPlaceDistanceLabel(
+                                                    from: coordinate,
+                                                    to: place
+                                                )
+                                            )
+                                            .font(.system(size: 11, weight: .bold, design: .rounded))
+                                            .foregroundStyle(CompanionStyle.textMuted)
+                                            .padding(.horizontal, 8)
+                                            .padding(.vertical, 4)
+                                            .background(Color.white.opacity(0.06), in: Capsule())
+                                        }
+                                    }
+                                    if place.aliases.isEmpty == false || place.categoryTags.isEmpty == false {
+                                        Text((place.aliases + place.categoryTags).joined(separator: " · "))
+                                            .font(.system(size: 12, weight: .medium, design: .rounded))
+                                            .foregroundStyle(CompanionStyle.textSecondary)
+                                    }
+                                }
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                            }
+                        }
+                    }
+                }
+            }
+            .navigationTitle("Label Location")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button("Cancel", action: close)
+                }
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button(hasExactMatch == false && draft.query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false ? "Create \"\(draft.query.trimmingCharacters(in: .whitespacesAndNewlines))\"" : "Create New") {
+                        createNewPlace(
+                            draft.query.trimmingCharacters(in: .whitespacesAndNewlines)
+                        )
+                    }
+                    .disabled(coordinate == nil)
+                }
+            }
+        }
+    }
+
+    private func detailRow(_ label: String, _ value: String) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(label)
+                .font(.system(size: 12, weight: .bold, design: .rounded))
+                .foregroundStyle(CompanionStyle.textMuted)
+            Text(value)
+                .font(.system(size: 14, weight: .semibold, design: .rounded))
+                .foregroundStyle(CompanionStyle.textPrimary)
+        }
+        .padding(.vertical, 2)
+    }
+
+    private func movementKnownPlaceDistanceLabel(
+        from coordinate: MovementTimelineCoordinate,
+        to place: MovementSyncStore.StoredKnownPlace
+    ) -> String {
+        let meters = CLLocation(
+            latitude: coordinate.latitude,
+            longitude: coordinate.longitude
+        ).distance(
+            from: CLLocation(latitude: place.latitude, longitude: place.longitude)
+        )
+        if meters >= 1000 {
+            return String(format: "%.1f km away", meters / 1000)
+        }
+        return "\(Int(meters.rounded())) m away"
     }
 }
 
@@ -1354,8 +1605,8 @@ private struct MovementTimelineDetailSheet: View {
                     }
 
                     if snapshot.kind == .stay {
-                        if snapshot.canCreatePlace {
-                            Button("Create canonical place from this stay") {
+                        if snapshot.canLabelPlace {
+                            Button("Label location") {
                                 definePlace()
                             }
                             .buttonStyle(.borderedProminent)
@@ -1366,7 +1617,7 @@ private struct MovementTimelineDetailSheet: View {
                             coordinates: snapshot.stayPositions,
                             averagePosition: snapshot.averagePosition
                         )
-                        detailCard("Canonical place", snapshot.placeLabel ?? "Not linked yet")
+                        detailCard("Location", snapshot.placeLabel ?? "Not linked yet")
                         if let averagePosition = snapshot.averagePosition {
                             detailCard("Average position", averagePosition.latitude.formatted(.number.precision(.fractionLength(6))) + ", " + averagePosition.longitude.formatted(.number.precision(.fractionLength(6))))
                         }
@@ -1632,7 +1883,7 @@ private struct MovementTimelineRow: View {
             )
             detailRow("Duration", item.durationLabel)
             if let placeLabel = item.placeLabel, placeLabel.isEmpty == false {
-                detailRow("Place", placeLabel)
+                detailRow("Location", placeLabel)
             }
             if let distance = item.distanceMeters {
                 detailRow("Distance", "\(String(format: "%.1f", distance / 1000)) km")
@@ -1658,8 +1909,8 @@ private struct MovementTimelineRow: View {
             if item.tags.isEmpty == false {
                 FlowTagCloud(tags: item.tags)
             }
-            if item.kind == .stay, item.hasCanonicalPlace == false, item.coordinate != nil {
-                Button("Create canonical place") {
+            if item.kind == .stay {
+                Button("Label location") {
                     onDefinePlace()
                 }
                 .font(.system(size: 13, weight: .semibold, design: .rounded))
@@ -1789,6 +2040,30 @@ private struct MovementTimelineStayShape: View {
                             .foregroundStyle(CompanionStyle.textSecondary)
                     }
                     .padding(16)
+                }
+                .overlay(alignment: .center) {
+                    VStack(spacing: 8) {
+                        Text(item.displayTitle)
+                            .font(.system(size: 16, weight: .bold, design: .rounded))
+                            .foregroundStyle(CompanionStyle.textPrimary)
+                            .multilineTextAlignment(.center)
+                            .lineLimit(2)
+                            .padding(.horizontal, 18)
+                        if let placeLabel = item.placeLabel, placeLabel.isEmpty == false {
+                            Text(placeLabel)
+                                .font(.system(size: 11, weight: .bold, design: .rounded))
+                                .foregroundStyle(CompanionStyle.textPrimary)
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 6)
+                                .background(Color.white.opacity(0.12), in: Capsule())
+                                .overlay(
+                                    Capsule()
+                                        .stroke(Color.white.opacity(0.12), lineWidth: 1)
+                                )
+                                .padding(.horizontal, 18)
+                        }
+                    }
+                    .padding(.vertical, 18)
                 }
                 .overlay(alignment: .topTrailing) {
                     if item.durationSeconds > 6 * 60 * 60 {
@@ -3573,9 +3848,7 @@ struct MovementLifeTimelineItem: Identifiable, Hashable {
         if rawStayIds.isEmpty == false {
             let direct = rawStayIds
             let stripped = rawStayIds.map { $0.replacingOccurrences(of: "stay_", with: "") }
-            return movementStore.storedStays
-                .map(\.id)
-                .filter { direct.contains($0) || stripped.contains($0) }
+            return Array(Set(direct + stripped)).sorted()
         }
         switch source {
         case .liveStay(let stayId, _):
