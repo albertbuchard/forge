@@ -2483,6 +2483,7 @@ test("movement sync stores places, stays, trips, and serves the movement workspa
       movement: {
         segments: Array<{
           id: string;
+          boxId?: string | null;
           kind: "stay" | "trip" | "missing";
           laneSide: "left" | "right";
           connectorFromLane: "left" | "right";
@@ -2525,6 +2526,63 @@ test("movement sync stores places, stays, trips, and serves the movement workspa
     assert.ok(
       olderTimeline.movement.segments.some((segment) => segment.kind === "trip")
     );
+
+    const canonicalTimelineResponse = await app.inject({
+      method: "GET",
+      url: "/api/v1/movement/timeline?limit=20"
+    });
+    assert.equal(canonicalTimelineResponse.statusCode, 200);
+    const canonicalTimeline = canonicalTimelineResponse.json() as {
+      movement: {
+        segments: Array<{
+          boxId?: string | null;
+          kind: "stay" | "trip" | "missing";
+        }>;
+      };
+    };
+    const stayBoxId = canonicalTimeline.movement.segments.find(
+      (segment) => segment.kind === "stay"
+    )?.boxId;
+    assert.ok(stayBoxId);
+
+    const boxDetailResponse = await app.inject({
+      method: "GET",
+      url: `/api/v1/movement/boxes/${stayBoxId}`
+    });
+    assert.equal(boxDetailResponse.statusCode, 200);
+    const boxDetail = (
+      boxDetailResponse.json() as {
+        movement: {
+          segment: { kind: "stay" | "trip" | "missing" };
+          stayDetail: {
+            positions: Array<{ latitude: number; longitude: number }>;
+            averagePosition: { latitude: number; longitude: number } | null;
+          } | null;
+        };
+      }
+    ).movement;
+    assert.equal(boxDetail.segment.kind, "stay");
+    assert.ok(boxDetail.stayDetail);
+    assert.ok((boxDetail.stayDetail?.positions.length ?? 0) > 0);
+    assert.ok(boxDetail.stayDetail?.averagePosition);
+
+    const mobileBoxDetailResponse = await app.inject({
+      method: "POST",
+      url: `/api/v1/mobile/movement/boxes/${stayBoxId}/detail`,
+      payload: {
+        sessionId: qrPayload.sessionId,
+        pairingToken: qrPayload.pairingToken
+      }
+    });
+    assert.equal(mobileBoxDetailResponse.statusCode, 200);
+    const mobileBoxDetail = (
+      mobileBoxDetailResponse.json() as {
+        movement: {
+          segment: { kind: "stay" | "trip" | "missing" };
+        };
+      }
+    ).movement;
+    assert.equal(mobileBoxDetail.segment.kind, "stay");
 
     const createUserBoxResponse = await app.inject({
       method: "POST",

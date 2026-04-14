@@ -602,6 +602,7 @@ import {
   createMovementPlace,
   deleteMovementUserBox,
   getMovementAllTimeSummary,
+  getMovementBoxDetail,
   getMovementDayDetail,
   getMovementMobileBootstrap,
   getMovementTimeline,
@@ -6976,6 +6977,18 @@ export async function buildServer(
     }
     return { movement };
   });
+  app.get("/api/v1/movement/boxes/:id", async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const movement = getMovementBoxDetail(
+      id,
+      resolveScopedUserIds(request.query as Record<string, unknown>) ?? []
+    );
+    if (!movement) {
+      reply.code(404);
+      return { error: "Movement box not found" };
+    }
+    return { movement };
+  });
   app.post("/api/v1/movement/selection", async (request) => ({
     movement: getMovementSelectionAggregate(
       movementSelectionAggregateSchema.parse(request.body ?? {})
@@ -7097,6 +7110,17 @@ export async function buildServer(
         userIds: [pairing.user_id]
       })
     };
+  });
+  app.post("/api/v1/mobile/movement/boxes/:id/detail", async (request, reply) => {
+    const parsed = movementMobileBootstrapSchema.parse(request.body ?? {});
+    const pairing = requireValidPairing(parsed.sessionId, parsed.pairingToken);
+    const { id } = request.params as { id: string };
+    const movement = getMovementBoxDetail(id, [pairing.user_id]);
+    if (!movement) {
+      reply.code(404);
+      return { error: "Movement box not found" };
+    }
+    return { movement };
   });
   app.post("/api/v1/mobile/movement/user-boxes", async (request, reply) => {
     const parsed = movementMobileUserBoxCreateSchema.parse(request.body ?? {});

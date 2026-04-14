@@ -1,4 +1,5 @@
 import SwiftUI
+import MapKit
 
 struct PairedForgeScreen: View {
     @EnvironmentObject private var appModel: CompanionAppModel
@@ -207,6 +208,9 @@ private struct MovementLifeTimelineView: View {
     @State private var selectedId: String?
     @State private var editorDraft: MovementTimelineEditorDraft?
     @State private var creatingDraft: MovementTimelineEditorDraft?
+    @State private var detailSnapshot: MovementTimelineDetailSnapshot?
+    @State private var detailLoading = false
+    @State private var placeDraft: MovementTimelinePlaceDraft?
     @State private var scrolledToCurrent = false
     @State private var focusedVisibleId: String?
 
@@ -295,6 +299,14 @@ private struct MovementLifeTimelineView: View {
                                                     } else {
                                                         editorDraft = MovementTimelineEditorDraft(item: item)
                                                     }
+                                                },
+                                                onDetail: {
+                                                    Task {
+                                                        await openDetail(item)
+                                                    }
+                                                },
+                                                onDefinePlace: {
+                                                    openPlaceDraft(for: item)
                                                 },
                                                 onDelete: {
                                                     Task {
@@ -451,6 +463,42 @@ private struct MovementLifeTimelineView: View {
                 }
             )
             .presentationDetents([.large])
+            .presentationDragIndicator(.visible)
+        }
+        .sheet(item: $detailSnapshot) { snapshot in
+            MovementTimelineDetailSheet(
+                snapshot: snapshot,
+                loading: detailLoading,
+                definePlace: {
+                    if let item = displayItems.first(where: { $0.id == snapshot.itemId }) {
+                        openPlaceDraft(for: item)
+                    }
+                },
+                edit: {
+                    detailSnapshot = nil
+                    if let item = displayItems.first(where: { $0.id == snapshot.itemId }) {
+                        if item.sourceKind == "automatic" {
+                            Task {
+                                await invalidateAutomaticItem(item)
+                            }
+                        } else {
+                            editorDraft = MovementTimelineEditorDraft(item: item)
+                        }
+                    }
+                }
+            )
+            .presentationDetents([.large])
+            .presentationDragIndicator(.visible)
+        }
+        .sheet(item: $placeDraft) { draft in
+            MovementTimelinePlaceSheet(
+                draft: draft,
+                close: { placeDraft = nil },
+                save: { updatedDraft in
+                    await savePlaceDraft(updatedDraft)
+                }
+            )
+            .presentationDetents([.medium, .large])
             .presentationDragIndicator(.visible)
         }
     }
@@ -943,35 +991,536 @@ private struct MovementLifeTimelineView: View {
         }
     }
 
-    private func resolveCanonicalPlaceExternalUid(
-        label: String,
-        tags: [String],
-        coordinates: MovementTimelineCoordinate?,
-        pairing: PairingPayload
-    ) async throws -> String? {
-        guard label.isEmpty == false, let coordinates else {
-            return nil
+    private func openPlaceDraft(for item: MovementLifeTimelineItem) {
+        guard item.kind == .stay, item.hasCanonicalPlace == false, let coordinate = item.coordinate else {
+            return
         }
-        if let existing = appModel.movementStore.knownPlaces.first(where: {
-            $0.label.caseInsensitiveCompare(label) == .orderedSame
-        }) {
-            return existing.externalUid
-        }
-        let place = try await appModel.syncClient.createMovementPlace(
-            label: label,
-            latitude: coordinates.latitude,
-            longitude: coordinates.longitude,
-            categoryTags: tags,
-            pairing: pairing
+        placeDraft = MovementTimelinePlaceDraft(
+            itemId: item.id,
+            label: item.placeLabel?.isEmpty == false ? item.placeLabel! : item.displayTitle,
+            latitude: coordinate.latitude,
+            longitude: coordinate.longitude,
+            radiusMeters: item.stayRadiusMeters(using: appModel.movementStore),
+            tags: item.tags
         )
-        _ = appModel.movementStore.addKnownPlace(
-            label: place.label,
-            categoryTags: place.categoryTags,
-            latitude: place.latitude,
-            longitude: place.longitude
-        )
-        return place.externalUid
     }
+
+    private func openDetail(_ item: MovementLifeTimelineItem) async {
+        detailLoading = true
+        defer { detailLoading = false }
+        do {
+            if let boxId = item.boxId, let pairing = appModel.pairing {
+                let detail = try await appModel.syncClient.fetchMovementBoxDetail(
+                    boxId: boxId,
+                    pairing: pairing
+                )
+                detailSnapshot = MovementTimelineDetailSnapshot(detail: detail)
+                return
+            }
+            detailSnapshot = MovementTimelineDetailSnapshot(
+                item: item,
+                movementStore: appModel.movementStore
+            )
+        } catch {
+            loadError = error.localizedDescription
+        }
+    }
+
+    private func savePlaceDraft(_ draft: MovementTimelinePlaceDraft) async {
+        guard let pairing = appModel.pairing else {
+            loadError = "Reconnect to Forge before creating canonical places."
+            return
+        }
+        do {
+            let place = try await appModel.syncClient.createMovementPlace(
+                label: draft.label.trimmingCharacters(in: .whitespacesAndNewlines),
+                latitude: draft.latitude,
+                longitude: draft.longitude,
+                categoryTags: draft.tags,
+                pairing: pairing
+            )
+            _ = appModel.movementStore.addKnownPlace(
+                label: place.label,
+                categoryTags: place.categoryTags,
+                latitude: place.latitude,
+                longitude: place.longitude
+            )
+
+            if let item = displayItems.first(where: { $0.id == draft.itemId }) {
+                for stayId in item.linkableStayIds(using: appModel.movementStore) {
+                    try await appModel.syncClient.patchMovementStay(
+                        stayId: stayId,
+                        placeExternalUid: place.externalUid,
+                        placeLabel: place.label,
+                        pairing: pairing
+                    )
+                    appModel.movementStore.updateLocalStay(
+                        id: stayId,
+                        label: item.displayTitle,
+                        tags: item.tags,
+                        placeLabel: place.label,
+                        placeExternalUid: place.externalUid
+                    )
+                }
+            }
+
+            placeDraft = nil
+            await reload()
+        } catch {
+            loadError = error.localizedDescription
+        }
+    }
+}
+
+private struct MovementTimelineDetailCoordinate: Identifiable, Hashable {
+    let id: String
+    let latitude: Double
+    let longitude: Double
+    let label: String
+    let recordedAt: Date?
+    let speedMps: Double?
+
+    var coordinate: CLLocationCoordinate2D {
+        CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
+    }
+}
+
+private struct MovementTimelinePlaceDraft: Identifiable {
+    let itemId: String
+    var label: String
+    var latitude: Double
+    var longitude: Double
+    var radiusMeters: Double
+    var tags: [String]
+
+    var id: String {
+        itemId
+    }
+}
+
+private struct MovementTimelineDetailSnapshot: Identifiable {
+    enum Kind {
+        case stay
+        case trip
+        case missing
+    }
+
+    let itemId: String
+    let title: String
+    let subtitle: String
+    let kind: Kind
+    let startedAt: Date
+    let endedAt: Date
+    let durationSeconds: Int
+    let rawStayCount: Int
+    let rawTripCount: Int
+    let rawPointCount: Int
+    let placeLabel: String?
+    let stayPositions: [MovementTimelineDetailCoordinate]
+    let averagePosition: MovementTimelineDetailCoordinate?
+    let stayRadiusMeters: Double?
+    let sampleCount: Int
+    let tripPositions: [MovementTimelineDetailCoordinate]
+    let tripStartPosition: MovementTimelineDetailCoordinate?
+    let tripEndPosition: MovementTimelineDetailCoordinate?
+    let tripDistanceMeters: Double?
+    let tripMovingSeconds: Int?
+    let tripIdleSeconds: Int?
+    let averageSpeedMps: Double?
+    let maxSpeedMps: Double?
+    let stopCount: Int?
+    let canCreatePlace: Bool
+
+    var id: String { itemId }
+
+    init(detail: ForgeMovementBoxDetail) {
+        let segment = detail.segment
+        self.itemId = "remote-\(segment.id)"
+        self.title = segment.title
+        self.subtitle = segment.subtitle
+        self.kind = segment.kind == "stay" ? .stay : segment.kind == "trip" ? .trip : .missing
+        self.startedAt = MovementTimelineFormatting.parse(segment.startedAt)
+        self.endedAt = MovementTimelineFormatting.parse(segment.endedAt)
+        self.durationSeconds = segment.durationSeconds
+        self.rawStayCount = detail.rawStays.count
+        self.rawTripCount = detail.rawTrips.count
+        self.rawPointCount = detail.segment.rawPointCount
+        self.placeLabel = detail.stayDetail?.canonicalPlace?.label ?? segment.placeLabel
+        self.stayPositions = detail.stayDetail?.positions.enumerated().map { index, position in
+            MovementTimelineDetailCoordinate(
+                id: "stay-\(index)",
+                latitude: position.latitude,
+                longitude: position.longitude,
+                label: position.label ?? "Position \(index + 1)",
+                recordedAt: position.recordedAt.flatMap(MovementTimelineFormatting.isoFormatter.date(from:)),
+                speedMps: position.speedMps
+            )
+        } ?? []
+        self.averagePosition = detail.stayDetail?.averagePosition.map {
+            MovementTimelineDetailCoordinate(
+                id: "average",
+                latitude: $0.latitude,
+                longitude: $0.longitude,
+                label: $0.label ?? "Average position",
+                recordedAt: nil,
+                speedMps: nil
+            )
+        }
+        self.stayRadiusMeters = detail.stayDetail?.radiusMeters
+        self.sampleCount = detail.stayDetail?.sampleCount ?? 0
+        self.tripPositions = detail.tripDetail?.positions.enumerated().map { index, position in
+            MovementTimelineDetailCoordinate(
+                id: "trip-\(index)",
+                latitude: position.latitude,
+                longitude: position.longitude,
+                label: position.label ?? "Point \(index + 1)",
+                recordedAt: position.recordedAt.flatMap(MovementTimelineFormatting.isoFormatter.date(from:)),
+                speedMps: position.speedMps
+            )
+        } ?? []
+        self.tripStartPosition = detail.tripDetail?.startPosition.map {
+            MovementTimelineDetailCoordinate(
+                id: "trip-start",
+                latitude: $0.latitude,
+                longitude: $0.longitude,
+                label: $0.label ?? "Start position",
+                recordedAt: $0.recordedAt.flatMap(MovementTimelineFormatting.isoFormatter.date(from:)),
+                speedMps: $0.speedMps
+            )
+        }
+        self.tripEndPosition = detail.tripDetail?.endPosition.map {
+            MovementTimelineDetailCoordinate(
+                id: "trip-end",
+                latitude: $0.latitude,
+                longitude: $0.longitude,
+                label: $0.label ?? "End position",
+                recordedAt: $0.recordedAt.flatMap(MovementTimelineFormatting.isoFormatter.date(from:)),
+                speedMps: $0.speedMps
+            )
+        }
+        self.tripDistanceMeters = detail.tripDetail?.totalDistanceMeters
+        self.tripMovingSeconds = detail.tripDetail?.movingSeconds
+        self.tripIdleSeconds = detail.tripDetail?.idleSeconds
+        self.averageSpeedMps = detail.tripDetail?.averageSpeedMps
+        self.maxSpeedMps = detail.tripDetail?.maxSpeedMps
+        self.stopCount = detail.tripDetail?.stopCount
+        self.canCreatePlace = kind == .stay && (placeLabel?.isEmpty != false)
+    }
+
+    @MainActor
+    init(item: MovementLifeTimelineItem, movementStore: MovementSyncStore) {
+        self.itemId = item.id
+        self.title = item.displayTitle
+        self.subtitle = item.subtitle
+        self.kind = item.kind == .stay ? .stay : item.kind == .trip ? .trip : .missing
+        self.startedAt = item.startedAtDate
+        self.endedAt = item.endedAtDate
+        self.durationSeconds = item.durationSeconds
+        let stays = movementStore.storedStays.filter { item.linkableStayIds(using: movementStore).contains($0.id) }
+        let trips = movementStore.storedTrips.filter {
+            item.rawTripIds.contains($0.id) || item.rawTripIds.contains($0.id.replacingOccurrences(of: "trip_", with: ""))
+        }
+        self.rawStayCount = stays.count
+        self.rawTripCount = trips.count
+        self.rawPointCount = trips.reduce(0) { $0 + $1.points.count }
+        self.placeLabel = item.placeLabel
+        var localStayPositions = stays.enumerated().map { index, stay in
+            MovementTimelineDetailCoordinate(
+                id: "local-stay-\(stay.id)",
+                latitude: stay.centerLatitude,
+                longitude: stay.centerLongitude,
+                label: stay.placeLabel.isEmpty ? "Position \(index + 1)" : stay.placeLabel,
+                recordedAt: stay.startedAt,
+                speedMps: nil
+            )
+        }
+        if localStayPositions.isEmpty, let coordinate = item.coordinate {
+            localStayPositions = [
+                MovementTimelineDetailCoordinate(
+                    id: "fallback-stay",
+                    latitude: coordinate.latitude,
+                    longitude: coordinate.longitude,
+                    label: item.displayTitle,
+                    recordedAt: item.startedAtDate,
+                    speedMps: nil
+                )
+            ]
+        }
+        self.stayPositions = localStayPositions
+        if localStayPositions.isEmpty == false {
+            let avgLatitude = localStayPositions.map(\.latitude).reduce(0, +) / Double(localStayPositions.count)
+            let avgLongitude = localStayPositions.map(\.longitude).reduce(0, +) / Double(localStayPositions.count)
+            self.averagePosition = MovementTimelineDetailCoordinate(
+                id: "local-average",
+                latitude: avgLatitude,
+                longitude: avgLongitude,
+                label: "Average position",
+                recordedAt: nil,
+                speedMps: nil
+            )
+        } else {
+            self.averagePosition = nil
+        }
+        self.stayRadiusMeters = item.stayRadiusMeters(using: movementStore)
+        self.sampleCount = stays.map(\.sampleCount).reduce(0, +)
+        let localTripPositions = trips
+            .flatMap(\.points)
+            .sorted(by: { $0.recordedAt < $1.recordedAt })
+            .enumerated()
+            .map { index, point in
+                MovementTimelineDetailCoordinate(
+                    id: "local-trip-\(point.id)",
+                    latitude: point.latitude,
+                    longitude: point.longitude,
+                    label: index == 0 ? "Start position" : "Point \(index + 1)",
+                    recordedAt: point.recordedAt,
+                    speedMps: point.speedMps
+                )
+            }
+        self.tripPositions = localTripPositions
+        self.tripStartPosition = localTripPositions.first
+        self.tripEndPosition = localTripPositions.last
+        self.tripDistanceMeters = trips.isEmpty ? item.distanceMeters : trips.map(\.distanceMeters).reduce(0, +)
+        self.tripMovingSeconds = trips.isEmpty ? nil : trips.map(\.movingSeconds).reduce(0, +)
+        self.tripIdleSeconds = trips.isEmpty ? nil : trips.map(\.idleSeconds).reduce(0, +)
+        self.averageSpeedMps = trips.isEmpty ? item.averageSpeedMps : trips.compactMap(\.averageSpeedMps).last
+        self.maxSpeedMps = trips.isEmpty ? nil : trips.compactMap(\.maxSpeedMps).max()
+        self.stopCount = trips.isEmpty ? nil : trips.map { $0.stops.count }.reduce(0, +)
+        self.canCreatePlace = kind == .stay && item.hasCanonicalPlace == false && item.coordinate != nil
+    }
+}
+
+private struct MovementTimelinePlaceSheet: View {
+    @State var draft: MovementTimelinePlaceDraft
+    let close: () -> Void
+    let save: (MovementTimelinePlaceDraft) async -> Void
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("Canonical place") {
+                    TextField("Label", text: $draft.label)
+                    TextField("Latitude", value: $draft.latitude, format: .number.precision(.fractionLength(6)))
+                    TextField("Longitude", value: $draft.longitude, format: .number.precision(.fractionLength(6)))
+                    TextField("Radius meters", value: $draft.radiusMeters, format: .number.precision(.fractionLength(0)))
+                    TextField(
+                        "Tags",
+                        text: Binding(
+                            get: { draft.tags.joined(separator: ", ") },
+                            set: { draft.tags = $0.split(separator: ",").map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { $0.isEmpty == false } }
+                        )
+                    )
+                }
+            }
+            .navigationTitle("New Canonical Place")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button("Cancel", action: close)
+                }
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Save") {
+                        Task {
+                            await save(draft)
+                        }
+                    }
+                    .disabled(draft.label.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+            }
+        }
+    }
+}
+
+private struct MovementTimelineDetailSheet: View {
+    let snapshot: MovementTimelineDetailSnapshot
+    let loading: Bool
+    let definePlace: () -> Void
+    let edit: () -> Void
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    if loading {
+                        ProgressView("Loading movement detail…")
+                            .tint(CompanionStyle.accentStrong)
+                    }
+
+                    Group {
+                        detailCard("Started", snapshot.startedAt.formatted(.dateTime.day().month(.abbreviated).year().hour().minute()))
+                        detailCard("Ended", snapshot.endedAt.formatted(.dateTime.day().month(.abbreviated).year().hour().minute()))
+                        detailCard("Duration", MovementTimelineFormatting.durationLabel(snapshot.durationSeconds))
+                        detailCard("Raw coverage", "\(snapshot.rawStayCount) stays · \(snapshot.rawTripCount) trips · \(snapshot.rawPointCount) points")
+                    }
+
+                    if snapshot.kind == .stay {
+                        if snapshot.canCreatePlace {
+                            Button("Create canonical place from this stay") {
+                                definePlace()
+                            }
+                            .buttonStyle(.borderedProminent)
+                            .tint(CompanionStyle.accentStrong)
+                        }
+                        MovementTimelineMapCard(
+                            title: "Stay map",
+                            coordinates: snapshot.stayPositions,
+                            averagePosition: snapshot.averagePosition
+                        )
+                        detailCard("Canonical place", snapshot.placeLabel ?? "Not linked yet")
+                        if let averagePosition = snapshot.averagePosition {
+                            detailCard("Average position", averagePosition.latitude.formatted(.number.precision(.fractionLength(6))) + ", " + averagePosition.longitude.formatted(.number.precision(.fractionLength(6))))
+                        }
+                        if let radius = snapshot.stayRadiusMeters {
+                            detailCard("Radius", "\(Int(radius.rounded())) m")
+                        }
+                        detailCard("Samples", "\(snapshot.sampleCount)")
+                        if snapshot.stayPositions.isEmpty == false {
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text("Exact positions")
+                                    .font(.system(size: 13, weight: .bold, design: .rounded))
+                                    .foregroundStyle(CompanionStyle.textPrimary)
+                                ForEach(snapshot.stayPositions) { position in
+                                    Text("\(position.label): \(position.latitude.formatted(.number.precision(.fractionLength(6)))), \(position.longitude.formatted(.number.precision(.fractionLength(6))))")
+                                        .font(.system(size: 12, weight: .medium, design: .rounded))
+                                        .foregroundStyle(CompanionStyle.textSecondary)
+                                }
+                            }
+                        }
+                    } else if snapshot.kind == .trip {
+                        MovementTimelineMapCard(
+                            title: "Travel map",
+                            coordinates: snapshot.tripPositions,
+                            averagePosition: nil
+                        )
+                        if let start = snapshot.tripStartPosition {
+                            detailCard("Start position", "\(start.latitude.formatted(.number.precision(.fractionLength(6)))), \(start.longitude.formatted(.number.precision(.fractionLength(6))))")
+                        }
+                        if let end = snapshot.tripEndPosition {
+                            detailCard("End position", "\(end.latitude.formatted(.number.precision(.fractionLength(6)))), \(end.longitude.formatted(.number.precision(.fractionLength(6))))")
+                        }
+                        if let distance = snapshot.tripDistanceMeters {
+                            detailCard("Distance", "\(String(format: "%.2f", distance / 1000)) km")
+                        }
+                        if let moving = snapshot.tripMovingSeconds {
+                            detailCard("Moving time", MovementTimelineFormatting.durationLabel(moving))
+                        }
+                        if let idle = snapshot.tripIdleSeconds {
+                            detailCard("Idle time", MovementTimelineFormatting.durationLabel(idle))
+                        }
+                        if let speed = snapshot.averageSpeedMps {
+                            detailCard("Average speed", "\(String(format: "%.2f", speed)) m/s")
+                        }
+                        if let speed = snapshot.maxSpeedMps {
+                            detailCard("Max speed", "\(String(format: "%.2f", speed)) m/s")
+                        }
+                        if let stopCount = snapshot.stopCount {
+                            detailCard("Stops", "\(stopCount)")
+                        }
+                    }
+                }
+                .padding(16)
+            }
+            .background(CompanionStyle.background)
+            .navigationTitle(snapshot.title)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Edit", action: edit)
+                        .disabled(snapshot.kind == .missing)
+                }
+            }
+        }
+    }
+
+    private func detailCard(_ label: String, _ value: String) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(label.uppercased())
+                .font(.system(size: 10, weight: .bold, design: .rounded))
+                .foregroundStyle(CompanionStyle.textMuted)
+            Text(value)
+                .font(.system(size: 14, weight: .semibold, design: .rounded))
+                .foregroundStyle(CompanionStyle.textPrimary)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(14)
+        .background(CompanionStyle.sheetBackground(cornerRadius: 22))
+    }
+}
+
+private struct MovementTimelineMapCard: View {
+    let title: String
+    let coordinates: [MovementTimelineDetailCoordinate]
+    let averagePosition: MovementTimelineDetailCoordinate?
+
+    var body: some View {
+        let region = movementDetailRegion(
+            coordinates: coordinates,
+            averagePosition: averagePosition
+        )
+        VStack(alignment: .leading, spacing: 8) {
+            Text(title)
+                .font(.system(size: 13, weight: .bold, design: .rounded))
+                .foregroundStyle(CompanionStyle.textPrimary)
+            Map(initialPosition: .region(region)) {
+                if coordinates.count > 1 {
+                    MapPolyline(coordinates: coordinates.map(\.coordinate))
+                        .stroke(CompanionStyle.accentStrong, lineWidth: 4)
+                }
+                ForEach(coordinates) { coordinate in
+                    Annotation(coordinate.label, coordinate: coordinate.coordinate) {
+                        Circle()
+                            .fill(Color.white)
+                            .frame(width: 10, height: 10)
+                            .overlay(
+                                Circle()
+                                    .stroke(CompanionStyle.accentStrong.opacity(0.5), lineWidth: 2)
+                            )
+                    }
+                }
+                if let averagePosition {
+                    Annotation("Average", coordinate: averagePosition.coordinate) {
+                        Circle()
+                            .fill(Color.yellow)
+                            .frame(width: 12, height: 12)
+                    }
+                }
+            }
+            .allowsHitTesting(false)
+            .frame(height: 220)
+            .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+        }
+        .padding(14)
+        .background(CompanionStyle.sheetBackground(cornerRadius: 22))
+    }
+}
+
+private func movementDetailRegion(
+    coordinates: [MovementTimelineDetailCoordinate],
+    averagePosition: MovementTimelineDetailCoordinate?
+) -> MKCoordinateRegion {
+    let points = coordinates + (averagePosition.map { [$0] } ?? [])
+    guard let first = points.first else {
+        return MKCoordinateRegion(
+            center: CLLocationCoordinate2D(latitude: 0, longitude: 0),
+            span: MKCoordinateSpan(latitudeDelta: 0.02, longitudeDelta: 0.02)
+        )
+    }
+    let latitudes = points.map(\.latitude)
+    let longitudes = points.map(\.longitude)
+    let minLat = latitudes.min() ?? first.latitude
+    let maxLat = latitudes.max() ?? first.latitude
+    let minLng = longitudes.min() ?? first.longitude
+    let maxLng = longitudes.max() ?? first.longitude
+    return MKCoordinateRegion(
+        center: CLLocationCoordinate2D(
+            latitude: (minLat + maxLat) / 2,
+            longitude: (minLng + maxLng) / 2
+        ),
+        span: MKCoordinateSpan(
+            latitudeDelta: max(0.01, (maxLat - minLat) * 1.8),
+            longitudeDelta: max(0.01, (maxLng - minLng) * 1.8)
+        )
+    )
 }
 
 private struct MovementTimelineRow: View {
@@ -980,6 +1529,8 @@ private struct MovementTimelineRow: View {
     let isSelected: Bool
     let onSelect: () -> Void
     let onEdit: () -> Void
+    let onDetail: () -> Void
+    let onDefinePlace: () -> Void
     let onDelete: () -> Void
 
     var body: some View {
@@ -1107,9 +1658,37 @@ private struct MovementTimelineRow: View {
             if item.tags.isEmpty == false {
                 FlowTagCloud(tags: item.tags)
             }
+            if item.kind == .stay, item.hasCanonicalPlace == false, item.coordinate != nil {
+                Button("Create canonical place") {
+                    onDefinePlace()
+                }
+                .font(.system(size: 13, weight: .semibold, design: .rounded))
+                .foregroundStyle(CompanionStyle.textPrimary)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 9)
+                .background(Color.blue.opacity(0.16), in: Capsule())
+                .overlay(
+                    Capsule()
+                        .stroke(Color.blue.opacity(0.22), lineWidth: 1)
+                )
+                .buttonStyle(.plain)
+            }
             HStack {
                 Spacer()
                 HStack(spacing: 8) {
+                    Button("Details") {
+                        onDetail()
+                    }
+                    .font(.system(size: 13, weight: .semibold, design: .rounded))
+                    .foregroundStyle(CompanionStyle.textPrimary)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 9)
+                    .background(Color.white.opacity(0.08), in: Capsule())
+                    .overlay(
+                        Capsule()
+                            .stroke(Color.white.opacity(0.08), lineWidth: 1)
+                    )
+                    .buttonStyle(.plain)
                     if item.sourceKind == "user_defined" {
                         Button("Delete") {
                             onDelete()
@@ -2962,6 +3541,59 @@ struct MovementLifeTimelineItem: Identifiable, Hashable {
         -46
     }
 
+    var coordinate: MovementTimelineCoordinate? {
+        switch source {
+        case .remoteAutomatic(_, let coordinate), .remoteUserBox(_, let coordinate):
+            return coordinate
+        case .liveStay(_, let coordinate):
+            return coordinate
+        case .liveTrip, .derived, .anchor:
+            return nil
+        }
+    }
+
+    var boxId: String? {
+        switch source {
+        case .remoteAutomatic(let boxId, _), .remoteUserBox(let boxId, _):
+            return boxId
+        case .liveStay, .liveTrip, .derived, .anchor:
+            return nil
+        }
+    }
+
+    var hasCanonicalPlace: Bool {
+        guard let placeLabel else {
+            return false
+        }
+        return placeLabel.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+    }
+
+    @MainActor
+    func linkableStayIds(using movementStore: MovementSyncStore) -> [String] {
+        if rawStayIds.isEmpty == false {
+            let direct = rawStayIds
+            let stripped = rawStayIds.map { $0.replacingOccurrences(of: "stay_", with: "") }
+            return movementStore.storedStays
+                .map(\.id)
+                .filter { direct.contains($0) || stripped.contains($0) }
+        }
+        switch source {
+        case .liveStay(let stayId, _):
+            return [stayId]
+        default:
+            return []
+        }
+    }
+
+    @MainActor
+    func stayRadiusMeters(using movementStore: MovementSyncStore) -> Double {
+        let linkedStays = movementStore.storedStays.filter { linkableStayIds(using: movementStore).contains($0.id) }
+        if let radius = linkedStays.map(\.radiusMeters).max() {
+            return radius
+        }
+        return 100
+    }
+
     func promotedToCurrent(referenceDate: Date) -> MovementLifeTimelineItem {
         MovementLifeTimelineItem(
             id: id,
@@ -3039,6 +3671,17 @@ private enum MovementTimelineFormatting {
 
     static func parse(_ value: String) -> Date {
         isoFormatter.date(from: value) ?? Date()
+    }
+
+    static func durationLabel(_ seconds: Int) -> String {
+        let hours = Double(seconds) / 3600
+        if hours >= 24 {
+            return "\(Int(round(hours)))h"
+        }
+        if hours >= 1 {
+            return "\(String(format: "%.1f", hours))h"
+        }
+        return "\(max(1, seconds / 60))m"
     }
 }
 

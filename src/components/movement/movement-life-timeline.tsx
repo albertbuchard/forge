@@ -30,19 +30,27 @@ import { ErrorState } from "@/components/ui/page-state";
 import { SurfaceSkeleton } from "@/components/experience/surface-skeleton";
 import {
   createMovementUserBox,
+  getMovementBoxDetail,
   createMovementPlace,
   deleteMovementUserBox,
   getMovementTimeline,
   invalidateAutomaticMovementBox,
+  patchMovementStay,
   preflightMovementUserBox,
   patchMovementUserBox
 } from "@/lib/api";
 import type {
+  MovementBoxDetailCoordinate,
+  MovementBoxDetailData,
   MovementTimelineLaneSide,
   MovementTimelineSegment,
   MovementUserBoxPreflight
 } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import {
+  MovementPlaceEditorDialog,
+  type MovementPlaceDraftSeed
+} from "@/components/movement/movement-place-editor-dialog";
 
 const TIMELINE_PAGE_SIZE = 24;
 const GRID_ROW_HEIGHT = 64;
@@ -154,6 +162,47 @@ function compactTimeLabel(value: string) {
 
 function shortLatLngLabel(latitude: number, longitude: number) {
   return `${latitude.toFixed(3)}, ${longitude.toFixed(3)}`;
+}
+
+function exactLatLngLabel(latitude: number, longitude: number) {
+  return `${latitude.toFixed(6)}, ${longitude.toFixed(6)}`;
+}
+
+function formatDurationMinutes(seconds: number) {
+  return `${Math.max(1, Math.round(seconds / 60))} min`;
+}
+
+function normalizeDetailMapPoints(points: MovementBoxDetailCoordinate[]) {
+  if (points.length === 0) {
+    return [];
+  }
+  const minLat = Math.min(...points.map((point) => point.latitude));
+  const maxLat = Math.max(...points.map((point) => point.latitude));
+  const minLng = Math.min(...points.map((point) => point.longitude));
+  const maxLng = Math.max(...points.map((point) => point.longitude));
+  const latRange = Math.max(maxLat - minLat, 0.0001);
+  const lngRange = Math.max(maxLng - minLng, 0.0001);
+  return points.map((point, index) => ({
+    ...point,
+    x: 12 + ((point.longitude - minLng) / lngRange) * 76,
+    y: 12 + (1 - (point.latitude - minLat) / latRange) * 76,
+    id: `${point.recordedAt ?? "point"}-${index}`
+  }));
+}
+
+function movementPlaceSeedFromSegment(
+  segment: MovementTimelineSegment
+): MovementPlaceDraftSeed | null {
+  if (!hasRecordedStay(segment) || segment.stay.place) {
+    return null;
+  }
+  return {
+    label: segment.stay.label || segment.title,
+    latitude: segment.stay.centerLatitude,
+    longitude: segment.stay.centerLongitude,
+    radiusMeters: segment.stay.radiusMeters,
+    categoryTags: segment.tags
+  };
 }
 
 function hasRecordedTrip(
@@ -795,10 +844,14 @@ function MovementTimelineHistoryCap({
 
 function MovementTimelineDetailCard({
   segment,
-  onEdit
+  onEdit,
+  onOpenDetail,
+  onDefinePlace
 }: {
   segment: MovementTimelineSegment;
   onEdit: () => void;
+  onOpenDetail: () => void;
+  onDefinePlace: () => void;
 }) {
   return (
     <Card className="rounded-[28px] border border-white/10 bg-[linear-gradient(180deg,rgba(9,14,26,0.98),rgba(5,9,19,0.95))] p-5 shadow-[0_24px_74px_rgba(0,0,0,0.34)]">
@@ -834,6 +887,13 @@ function MovementTimelineDetailCard({
           </div>
         </div>
         <div className="flex items-center gap-2">
+          <Button
+            onClick={onOpenDetail}
+            variant="ghost"
+            className="rounded-full border border-white/10 bg-white/[0.04] px-3 text-white/78 hover:bg-white/[0.08]"
+          >
+            Details
+          </Button>
           <Button
             onClick={onEdit}
             variant="ghost"
@@ -886,6 +946,26 @@ function MovementTimelineDetailCard({
           </Badge>
         ) : null}
       </div>
+
+      {hasRecordedStay(segment) && !segment.stay.place ? (
+        <div className="mt-4 rounded-[18px] border border-sky-300/14 bg-sky-300/8 p-3">
+          <div className="text-[11px] uppercase tracking-[0.18em] text-sky-100/66">
+            Canonical place
+          </div>
+          <div className="mt-2 text-sm leading-6 text-sky-50/86">
+            This stay is still unlinked. Create the canonical place directly from this stay center so later matching stays inherit it automatically.
+          </div>
+          <div className="mt-3">
+            <Button
+              onClick={onDefinePlace}
+              variant="ghost"
+              className="rounded-full border border-sky-300/24 bg-sky-300/12 px-4 text-sky-50 hover:bg-sky-300/18"
+            >
+              Create canonical place
+            </Button>
+          </div>
+        </div>
+      ) : null}
 
       <div className="mt-5 grid gap-3">
         <div className="rounded-[18px] border border-white/8 bg-white/[0.03] p-3">
@@ -950,6 +1030,241 @@ function MovementTimelineDetailCard({
         )}
       </div>
     </Card>
+  );
+}
+
+function MovementDetailMap({
+  title,
+  points,
+  averagePoint
+}: {
+  title: string;
+  points: MovementBoxDetailCoordinate[];
+  averagePoint?: MovementBoxDetailCoordinate | null;
+}) {
+  const normalized = normalizeDetailMapPoints(
+    averagePoint ? [...points, averagePoint] : points
+  );
+  const baseCount = averagePoint ? normalized.length - 1 : normalized.length;
+  const pathPoints = normalized.slice(0, baseCount);
+  const average = averagePoint ? normalized[normalized.length - 1] ?? null : null;
+  const path = pathPoints
+    .map((point, index) => `${index === 0 ? "M" : "L"} ${point.x} ${point.y}`)
+    .join(" ");
+
+  return (
+    <Card className="rounded-[30px] border border-white/10 bg-[linear-gradient(180deg,rgba(8,13,25,0.95),rgba(10,17,30,0.88))] p-5">
+      <div className="font-label text-[11px] uppercase tracking-[0.2em] text-white/42">
+        {title}
+      </div>
+      <div className="mt-2 text-sm text-white/62">
+        Relative coordinates normalized into one view so we can inspect the actual captured stay or trip geometry in one glance.
+      </div>
+      <div className="mt-5 rounded-[24px] border border-white/8 bg-[rgba(255,255,255,0.03)] p-3">
+        <svg viewBox="0 0 100 100" className="h-52 w-full">
+          <rect x="0" y="0" width="100" height="100" rx="18" fill="rgba(255,255,255,0.02)" />
+          {pathPoints.length > 1 ? (
+            <path d={path} fill="none" stroke="rgba(92,225,230,0.95)" strokeWidth="1.6" />
+          ) : null}
+          {pathPoints.map((point, index) => (
+            <circle
+              key={point.id}
+              cx={point.x}
+              cy={point.y}
+              r={index === 0 || index === pathPoints.length - 1 ? 2.2 : 1.4}
+              fill={index === 0 || index === pathPoints.length - 1 ? "#ffffff" : "rgba(92,225,230,0.9)"}
+            />
+          ))}
+          {average ? (
+            <>
+              <circle cx={average.x} cy={average.y} r={3} fill="rgba(255,208,88,0.95)" />
+              <circle
+                cx={average.x}
+                cy={average.y}
+                r={6}
+                fill="none"
+                stroke="rgba(255,208,88,0.48)"
+                strokeWidth="1"
+                strokeDasharray="2 2"
+              />
+            </>
+          ) : null}
+        </svg>
+      </div>
+    </Card>
+  );
+}
+
+function MovementTimelineDetailDialog({
+  open,
+  onOpenChange,
+  segment,
+  detail,
+  loading,
+  onEdit,
+  onDefinePlace
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  segment: MovementTimelineSegment | null;
+  detail: MovementBoxDetailData | null;
+  loading: boolean;
+  onEdit: () => void;
+  onDefinePlace: () => void;
+}) {
+  const activeSegment = detail?.segment ?? segment;
+  const stayDetail = detail?.stayDetail ?? null;
+  const tripDetail = detail?.tripDetail ?? null;
+
+  return (
+    <Dialog.Root open={open} onOpenChange={onOpenChange}>
+      <Dialog.Portal>
+        <Dialog.Overlay className="fixed inset-0 z-50 bg-[rgba(3,7,18,0.74)] backdrop-blur-sm" />
+        <Dialog.Content className="fixed left-1/2 top-[6vh] z-50 max-h-[88vh] w-[min(60rem,calc(100vw-1.25rem))] -translate-x-1/2 overflow-y-auto rounded-[30px] border border-white/10 bg-[linear-gradient(180deg,rgba(8,14,28,0.98),rgba(10,16,30,0.95))] p-5 shadow-[0_32px_90px_rgba(0,0,0,0.45)]">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <Dialog.Title className="font-display text-[1.3rem] tracking-[-0.05em] text-white">
+                {activeSegment ? `${displaySegmentTitle(activeSegment)} details` : "Movement details"}
+              </Dialog.Title>
+              <Dialog.Description className="mt-2 text-sm leading-6 text-white/62">
+                Inspect the canonical box, the raw movement evidence behind it, and the exact coordinates Forge used to assemble this stay or trip.
+              </Dialog.Description>
+            </div>
+            <div className="flex items-center gap-2">
+              {activeSegment ? (
+                <Button
+                  onClick={onEdit}
+                  variant="ghost"
+                  className="rounded-full border border-white/10 bg-white/[0.04] px-3 text-white/78 hover:bg-white/[0.08]"
+                  disabled={!activeSegment.editable || activeSegment.kind === "missing"}
+                >
+                  <PencilLine className="size-4" />
+                  Edit
+                </Button>
+              ) : null}
+              <Dialog.Close asChild>
+                <button
+                  type="button"
+                  className="rounded-full border border-white/10 bg-white/[0.04] p-2 text-white/64 transition hover:bg-white/[0.08] hover:text-white"
+                >
+                  <ArrowUpRight className="size-4 rotate-45" />
+                </button>
+              </Dialog.Close>
+            </div>
+          </div>
+
+          {loading ? (
+            <div className="mt-6 rounded-[22px] border border-white/8 bg-white/[0.03] p-5 text-sm text-white/62">
+              Loading the canonical box detail and raw movement evidence…
+            </div>
+          ) : activeSegment ? (
+            <div className="mt-6 grid gap-4">
+              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                <Card className="rounded-[22px] border border-white/8 bg-white/[0.03] p-4">
+                  <div className="text-[11px] uppercase tracking-[0.18em] text-white/38">Started</div>
+                  <div className="mt-2 text-sm text-white">{formatDateTime(activeSegment.startedAt)}</div>
+                </Card>
+                <Card className="rounded-[22px] border border-white/8 bg-white/[0.03] p-4">
+                  <div className="text-[11px] uppercase tracking-[0.18em] text-white/38">Ended</div>
+                  <div className="mt-2 text-sm text-white">{formatDateTime(activeSegment.endedAt)}</div>
+                </Card>
+                <Card className="rounded-[22px] border border-white/8 bg-white/[0.03] p-4">
+                  <div className="text-[11px] uppercase tracking-[0.18em] text-white/38">Duration</div>
+                  <div className="mt-2 text-sm text-white">{formatDurationLabel(activeSegment.durationSeconds)}</div>
+                </Card>
+                <Card className="rounded-[22px] border border-white/8 bg-white/[0.03] p-4">
+                  <div className="text-[11px] uppercase tracking-[0.18em] text-white/38">Raw coverage</div>
+                  <div className="mt-2 text-sm text-white">
+                    {activeSegment.rawStayIds.length} stays · {activeSegment.rawTripIds.length} trips · {activeSegment.rawPointCount} points
+                  </div>
+                </Card>
+              </div>
+
+              {stayDetail ? (
+                <>
+                  {!stayDetail.canonicalPlace ? (
+                    <Card className="rounded-[22px] border border-sky-300/14 bg-sky-300/8 p-4">
+                      <div className="text-[11px] uppercase tracking-[0.18em] text-sky-100/66">Canonical place</div>
+                      <div className="mt-2 text-sm leading-6 text-sky-50/86">
+                        This stay still has no canonical place. Use the stay center as the place seed and create it once from here.
+                      </div>
+                      <div className="mt-3">
+                        <Button
+                          onClick={onDefinePlace}
+                          variant="ghost"
+                          className="rounded-full border border-sky-300/24 bg-sky-300/12 px-4 text-sky-50 hover:bg-sky-300/18"
+                        >
+                          Create canonical place
+                        </Button>
+                      </div>
+                    </Card>
+                  ) : null}
+                  <div className="grid gap-4 xl:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)]">
+                    <MovementDetailMap
+                      title="Stay positions"
+                      points={stayDetail.positions}
+                      averagePoint={stayDetail.averagePosition}
+                    />
+                    <Card className="rounded-[28px] border border-white/10 bg-white/[0.03] p-5">
+                      <div className="font-label text-[11px] uppercase tracking-[0.2em] text-white/42">Stay metrics</div>
+                      <div className="mt-4 grid gap-3">
+                        <div className="text-sm text-white/78">
+                          Canonical place: {stayDetail.canonicalPlace?.label ?? "Not linked yet"}
+                        </div>
+                        <div className="text-sm text-white/78">
+                          Average position: {stayDetail.averagePosition ? exactLatLngLabel(stayDetail.averagePosition.latitude, stayDetail.averagePosition.longitude) : "Unavailable"}
+                        </div>
+                        <div className="text-sm text-white/78">
+                          Radius: {stayDetail.radiusMeters != null ? distanceLabel(stayDetail.radiusMeters) : "Unavailable"}
+                        </div>
+                        <div className="text-sm text-white/78">Samples: {stayDetail.sampleCount}</div>
+                        <div className="rounded-[18px] border border-white/8 bg-black/10 p-3">
+                          <div className="text-[11px] uppercase tracking-[0.18em] text-white/34">Exact positions</div>
+                          <div className="mt-3 grid gap-2">
+                            {stayDetail.positions.map((position, index) => (
+                              <div key={`${position.recordedAt ?? "stay"}-${index}`} className="text-sm text-white/74">
+                                {position.label ?? `Position ${index + 1}`}: {exactLatLngLabel(position.latitude, position.longitude)}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    </Card>
+                  </div>
+                </>
+              ) : null}
+
+              {tripDetail ? (
+                <div className="grid gap-4 xl:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)]">
+                  <MovementDetailMap title="Travel map" points={tripDetail.positions} />
+                  <Card className="rounded-[28px] border border-white/10 bg-white/[0.03] p-5">
+                    <div className="font-label text-[11px] uppercase tracking-[0.2em] text-white/42">Trip metrics</div>
+                    <div className="mt-4 grid gap-3">
+                      <div className="text-sm text-white/78">
+                        Start position: {tripDetail.startPosition ? exactLatLngLabel(tripDetail.startPosition.latitude, tripDetail.startPosition.longitude) : "Unavailable"}
+                      </div>
+                      <div className="text-sm text-white/78">
+                        End position: {tripDetail.endPosition ? exactLatLngLabel(tripDetail.endPosition.latitude, tripDetail.endPosition.longitude) : "Unavailable"}
+                      </div>
+                      <div className="text-sm text-white/78">Distance: {distanceLabel(tripDetail.totalDistanceMeters)}</div>
+                      <div className="text-sm text-white/78">Moving time: {formatDurationMinutes(tripDetail.movingSeconds)}</div>
+                      <div className="text-sm text-white/78">Idle time: {formatDurationMinutes(tripDetail.idleSeconds)}</div>
+                      <div className="text-sm text-white/78">
+                        Average speed: {tripDetail.averageSpeedMps != null ? `${tripDetail.averageSpeedMps.toFixed(2)} m/s` : "Unavailable"}
+                      </div>
+                      <div className="text-sm text-white/78">
+                        Max speed: {tripDetail.maxSpeedMps != null ? `${tripDetail.maxSpeedMps.toFixed(2)} m/s` : "Unavailable"}
+                      </div>
+                      <div className="text-sm text-white/78">Stops: {tripDetail.stopCount}</div>
+                    </div>
+                  </Card>
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+        </Dialog.Content>
+      </Dialog.Portal>
+    </Dialog.Root>
   );
 }
 
@@ -1189,12 +1504,16 @@ function MovementTimelineRow({
   segment,
   selected,
   onToggle,
-  onEdit
+  onEdit,
+  onOpenDetail,
+  onDefinePlace
 }: {
   segment: MovementTimelineSegment;
   selected: boolean;
   onToggle: () => void;
   onEdit: () => void;
+  onOpenDetail: () => void;
+  onDefinePlace: () => void;
 }) {
   const lane = segment.laneSide;
   const detailSide = lane === "right" ? "left" : "right";
@@ -1336,6 +1655,8 @@ function MovementTimelineRow({
             <MovementTimelineDetailCard
               segment={segment}
               onEdit={onEdit}
+              onOpenDetail={onOpenDetail}
+              onDefinePlace={onDefinePlace}
             />
           </motion.div>
         ) : null}
@@ -1355,6 +1676,10 @@ export function MovementLifeTimeline({ userIds = [] }: MovementLifeTimelineProps
   const [draftById, setDraftById] = useState<Record<string, TimelineDraft>>({});
   const [editingSegmentId, setEditingSegmentId] = useState<string | null>(null);
   const [creatingDraft, setCreatingDraft] = useState<TimelineDraft | null>(null);
+  const [detailSegmentId, setDetailSegmentId] = useState<string | null>(null);
+  const [placeEditorOpen, setPlaceEditorOpen] = useState(false);
+  const [placeSeed, setPlaceSeed] = useState<MovementPlaceDraftSeed | null>(null);
+  const [placeSeedSegmentId, setPlaceSeedSegmentId] = useState<string | null>(null);
   const [dataModalOpen, setDataModalOpen] = useState(false);
   const [reopenDataModalOnEditClose, setReopenDataModalOnEditClose] = useState(false);
   const [segmentQuery, setSegmentQuery] = useState("");
@@ -1423,6 +1748,18 @@ export function MovementLifeTimeline({ userIds = [] }: MovementLifeTimelineProps
     () => [...dataSegmentsDescending].reverse(),
     [dataSegmentsDescending]
   );
+  const detailSegment = useMemo(
+    () => segments.find((segment) => segment.id === detailSegmentId) ?? null,
+    [detailSegmentId, segments]
+  );
+  const detailQuery = useQuery({
+    queryKey: ["forge-movement-box-detail", detailSegment?.boxId ?? null, ...userIds],
+    queryFn: async () =>
+      detailSegment?.boxId
+        ? (await getMovementBoxDetail(detailSegment.boxId, userIds)).movement
+        : null,
+    enabled: Boolean(detailSegment?.boxId)
+  });
   const futureTailHeight = useMemo(() => {
     const latestEndedAt = segments[segments.length - 1]?.endedAt;
     if (!latestEndedAt) {
@@ -1602,6 +1939,42 @@ export function MovementLifeTimeline({ userIds = [] }: MovementLifeTimelineProps
     }
   });
 
+  const placeMutation = useMutation({
+    mutationFn: async (input: {
+      segment: MovementTimelineSegment | null;
+      id?: string;
+      label: string;
+      latitude: number;
+      longitude: number;
+      radiusMeters: number;
+      categoryTags: string[];
+    }) => {
+      const { segment, ...placeInput } = input;
+      const response = await createMovementPlace(placeInput, userIds);
+      if (segment && hasRecordedStay(segment)) {
+        await Promise.all(
+          segment.rawStayIds.map((stayId) =>
+            patchMovementStay(stayId, {
+              placeExternalUid: response.place.externalUid,
+              placeLabel: response.place.label
+            })
+          )
+        );
+      }
+      return response;
+    },
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["forge-movement-places"] }),
+        queryClient.invalidateQueries({ queryKey: ["forge-movement-life-timeline"] }),
+        queryClient.invalidateQueries({ queryKey: ["forge-movement-life-timeline-data"] }),
+        queryClient.invalidateQueries({ queryKey: ["forge-movement-box-detail"] }),
+        queryClient.invalidateQueries({ queryKey: ["forge-movement-day"] }),
+        queryClient.invalidateQueries({ queryKey: ["forge-movement-all-time"] })
+      ]);
+    }
+  });
+
   const deleteMutation = useMutation({
     mutationFn: async (segment: MovementTimelineSegment) => {
       if (segment.sourceKind === "user_defined") {
@@ -1740,6 +2113,16 @@ export function MovementLifeTimeline({ userIds = [] }: MovementLifeTimelineProps
     }
   });
 
+  const openCanonicalPlaceDraft = (segment: MovementTimelineSegment) => {
+    const seed = movementPlaceSeedFromSegment(segment);
+    if (!seed) {
+      return;
+    }
+    setPlaceSeed(seed);
+    setPlaceSeedSegmentId(segment.id);
+    setPlaceEditorOpen(true);
+  };
+
   const handleScroll = () => {
     const element = scrollParentRef.current;
     if (!element) {
@@ -1875,6 +2258,8 @@ export function MovementLifeTimeline({ userIds = [] }: MovementLifeTimelineProps
                       }
                       setEditingSegmentId(segment.id);
                     }}
+                    onOpenDetail={() => setDetailSegmentId(segment.id)}
+                    onDefinePlace={() => openCanonicalPlaceDraft(segment)}
                   />
                 </div>
               );
@@ -1955,6 +2340,49 @@ export function MovementLifeTimeline({ userIds = [] }: MovementLifeTimelineProps
               setDataModalOpen(true);
             }
           }
+        }}
+      />
+      <MovementTimelineDetailDialog
+        open={detailSegment !== null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setDetailSegmentId(null);
+          }
+        }}
+        segment={detailSegment}
+        detail={detailQuery.data ?? null}
+        loading={detailQuery.isFetching}
+        onEdit={() => {
+          if (!detailSegment || !detailSegment.editable) {
+            return;
+          }
+          setEditingSegmentId(detailSegment.id);
+          setDetailSegmentId(null);
+        }}
+        onDefinePlace={() => {
+          if (!detailSegment) {
+            return;
+          }
+          openCanonicalPlaceDraft(detailSegment);
+        }}
+      />
+      <MovementPlaceEditorDialog
+        open={placeEditorOpen}
+        onOpenChange={(open) => {
+          setPlaceEditorOpen(open);
+          if (!open) {
+            setPlaceSeed(null);
+            setPlaceSeedSegmentId(null);
+          }
+        }}
+        place={null}
+        seed={placeSeed}
+        onSave={async (input) => {
+          await placeMutation.mutateAsync({
+            ...input,
+            segment:
+              segments.find((segment) => segment.id === placeSeedSegmentId) ?? null
+          });
         }}
       />
       <SheetScaffold

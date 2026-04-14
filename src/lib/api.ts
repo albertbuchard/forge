@@ -79,6 +79,7 @@ import type {
   MovementAllTimeData,
   MovementDayData,
   MovementKnownPlace,
+  MovementBoxDetailData,
   MovementMonthData,
   MovementSelectionAggregate,
   MovementSettingsPayload,
@@ -3213,9 +3214,34 @@ export function patchMovementPlace(
   );
 }
 
+export function patchMovementStay(
+  stayId: string,
+  patch: {
+    placeExternalUid?: string | null;
+    placeLabel?: string;
+  }
+) {
+  return request(`/api/v1/movement/stays/${stayId}`, {
+    method: "PATCH",
+    body: JSON.stringify(patch)
+  });
+}
+
 export function getMovementTripDetail(tripId: string) {
   return request<{ movement: MovementTripDetailData }>(
     `/api/v1/movement/trips/${tripId}`
+  );
+}
+
+export function getMovementBoxDetail(
+  boxId: string,
+  userIds?: string[] | unknown
+) {
+  const search = new URLSearchParams();
+  appendUserIds(search, coerceUserIds(userIds));
+  const suffix = search.size > 0 ? `?${search.toString()}` : "";
+  return request<{ movement: MovementBoxDetailData }>(
+    `/api/v1/movement/boxes/${boxId}${suffix}`
   );
 }
 

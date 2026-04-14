@@ -1780,6 +1780,45 @@ export interface MovementTripDetailData {
   selectionAggregate: MovementSelectionAggregate;
 }
 
+export interface MovementBoxDetailCoordinate {
+  latitude: number;
+  longitude: number;
+  recordedAt: string | null;
+  label: string | null;
+  accuracyMeters?: number | null;
+  altitudeMeters?: number | null;
+  speedMps?: number | null;
+  isStopAnchor?: boolean;
+}
+
+export interface MovementBoxStayDetailData {
+  positions: MovementBoxDetailCoordinate[];
+  averagePosition: MovementBoxDetailCoordinate | null;
+  canonicalPlace: MovementKnownPlace | null;
+  radiusMeters: number | null;
+  sampleCount: number;
+}
+
+export interface MovementBoxTripDetailData {
+  positions: MovementBoxDetailCoordinate[];
+  startPosition: MovementBoxDetailCoordinate | null;
+  endPosition: MovementBoxDetailCoordinate | null;
+  totalDistanceMeters: number;
+  movingSeconds: number;
+  idleSeconds: number;
+  averageSpeedMps: number | null;
+  maxSpeedMps: number | null;
+  stopCount: number;
+}
+
+export interface MovementBoxDetailData {
+  segment: MovementTimelineSegment;
+  rawStays: MovementStayRecord[];
+  rawTrips: MovementTripRecord[];
+  stayDetail: MovementBoxStayDetailData | null;
+  tripDetail: MovementBoxTripDetailData | null;
+}
+
 export type MovementTimelineLaneSide = "left" | "right";
 
 export interface MovementTimelineSegmentBase {

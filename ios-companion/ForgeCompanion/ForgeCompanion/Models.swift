@@ -609,6 +609,45 @@ struct ForgeMovementTimelineSegment: Codable, Hashable, Identifiable {
     let trip: ForgeMovementTimelineTrip?
 }
 
+struct ForgeMovementBoxDetailCoordinate: Codable, Hashable {
+    let latitude: Double
+    let longitude: Double
+    let recordedAt: String?
+    let label: String?
+    let accuracyMeters: Double?
+    let altitudeMeters: Double?
+    let speedMps: Double?
+    let isStopAnchor: Bool?
+}
+
+struct ForgeMovementBoxStayDetail: Codable, Hashable {
+    let positions: [ForgeMovementBoxDetailCoordinate]
+    let averagePosition: ForgeMovementBoxDetailCoordinate?
+    let canonicalPlace: ForgeMovementTimelinePlace?
+    let radiusMeters: Double?
+    let sampleCount: Int
+}
+
+struct ForgeMovementBoxTripDetail: Codable, Hashable {
+    let positions: [ForgeMovementBoxDetailCoordinate]
+    let startPosition: ForgeMovementBoxDetailCoordinate?
+    let endPosition: ForgeMovementBoxDetailCoordinate?
+    let totalDistanceMeters: Double
+    let movingSeconds: Int
+    let idleSeconds: Int
+    let averageSpeedMps: Double?
+    let maxSpeedMps: Double?
+    let stopCount: Int
+}
+
+struct ForgeMovementBoxDetail: Codable, Hashable {
+    let segment: ForgeMovementTimelineSegment
+    let rawStays: [ForgeMovementTimelineStay]
+    let rawTrips: [ForgeMovementTimelineTrip]
+    let stayDetail: ForgeMovementBoxStayDetail?
+    let tripDetail: ForgeMovementBoxTripDetail?
+}
+
 struct ForgeMovementUserBoxPreflight: Codable, Hashable {
     let overlapsAnything: Bool
     let visibleRangeStart: String?

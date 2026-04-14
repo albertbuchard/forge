@@ -9,6 +9,9 @@ import type { MovementTimelineSegment } from "@/lib/types";
 
 const {
   getMovementTimelineMock,
+  getMovementBoxDetailMock,
+  createMovementPlaceMock,
+  patchMovementStayMock,
   createMovementUserBoxMock,
   preflightMovementUserBoxMock,
   patchMovementUserBoxMock,
@@ -16,6 +19,9 @@ const {
   invalidateAutomaticMovementBoxMock
 } = vi.hoisted(() => ({
   getMovementTimelineMock: vi.fn(),
+  getMovementBoxDetailMock: vi.fn(),
+  createMovementPlaceMock: vi.fn(),
+  patchMovementStayMock: vi.fn(),
   createMovementUserBoxMock: vi.fn(),
   preflightMovementUserBoxMock: vi.fn(),
   patchMovementUserBoxMock: vi.fn(),
@@ -40,6 +46,9 @@ vi.mock("@tanstack/react-virtual", () => ({
 
 vi.mock("@/lib/api", () => ({
   getMovementTimeline: (...args: unknown[]) => getMovementTimelineMock(...args),
+  getMovementBoxDetail: (...args: unknown[]) => getMovementBoxDetailMock(...args),
+  createMovementPlace: (...args: unknown[]) => createMovementPlaceMock(...args),
+  patchMovementStay: (...args: unknown[]) => patchMovementStayMock(...args),
   createMovementUserBox: (...args: unknown[]) => createMovementUserBoxMock(...args),
   preflightMovementUserBox: (...args: unknown[]) => preflightMovementUserBoxMock(...args),
   patchMovementUserBox: (...args: unknown[]) => patchMovementUserBoxMock(...args),
@@ -144,6 +153,21 @@ describe("MovementLifeTimeline", () => {
       }
     });
     createMovementUserBoxMock.mockResolvedValue({});
+    createMovementPlaceMock.mockResolvedValue({
+      place: {
+        id: "place_home",
+        externalUid: "place_home",
+        label: "Home",
+        aliases: [],
+        latitude: 46.5191,
+        longitude: 6.6323,
+        radiusMeters: 100,
+        categoryTags: ["home"],
+        visibility: "shared",
+        wikiNoteId: null
+      }
+    });
+    patchMovementStayMock.mockResolvedValue({});
     preflightMovementUserBoxMock.mockResolvedValue({
       preflight: {
         overlapsAnything: false,
@@ -162,6 +186,65 @@ describe("MovementLifeTimeline", () => {
     patchMovementUserBoxMock.mockResolvedValue({});
     deleteMovementUserBoxMock.mockResolvedValue({});
     invalidateAutomaticMovementBoxMock.mockResolvedValue({});
+    getMovementBoxDetailMock.mockResolvedValue({
+      movement: {
+        segment: createSegment({
+          id: "segment_auto_stay",
+          stay: {
+            id: "stay_home",
+            externalUid: "stay_home",
+            pairingSessionId: null,
+            userId: "user_operator",
+            placeId: null,
+            label: "Home",
+            status: "completed",
+            classification: "stationary",
+            startedAt: "2026-04-06T08:00:00.000Z",
+            endedAt: "2026-04-06T09:00:00.000Z",
+            durationSeconds: 3600,
+            centerLatitude: 46.5191,
+            centerLongitude: 6.6323,
+            radiusMeters: 120,
+            sampleCount: 3,
+            weather: {},
+            metrics: {},
+            metadata: {},
+            publishedNoteId: null,
+            createdAt: "2026-04-06T09:00:00.000Z",
+            updatedAt: "2026-04-06T09:00:00.000Z",
+            place: null,
+            note: null,
+            estimatedScreenTimeSeconds: 0,
+            pickupCount: 0,
+            notificationCount: 0,
+            topApps: [],
+            topCategories: []
+          }
+        }),
+        rawStays: [],
+        rawTrips: [],
+        stayDetail: {
+          positions: [
+            {
+              latitude: 46.5191,
+              longitude: 6.6323,
+              recordedAt: "2026-04-06T08:00:00.000Z",
+              label: "Stay 1"
+            }
+          ],
+          averagePosition: {
+            latitude: 46.5191,
+            longitude: 6.6323,
+            recordedAt: null,
+            label: "Average position"
+          },
+          canonicalPlace: null,
+          radiusMeters: 120,
+          sampleCount: 3
+        },
+        tripDetail: null
+      }
+    });
   });
 
   afterEach(() => {
@@ -246,5 +329,65 @@ describe("MovementLifeTimeline", () => {
     expect(
       screen.getByRole("button", { name: /Fit Missing Time/i })
     ).toBeEnabled();
+  });
+
+  it("opens stay detail and offers canonical place creation for unlinked stays", async () => {
+    getMovementTimelineMock.mockResolvedValueOnce({
+      movement: {
+        segments: [
+          createSegment({
+            id: "segment_unlinked_stay",
+            boxId: "segment_unlinked_stay",
+            title: "Home",
+            subtitle: "Unlinked stay",
+            placeLabel: null,
+            rawStayIds: ["stay_home"],
+            stay: {
+              id: "stay_home",
+              externalUid: "stay_home",
+              pairingSessionId: null,
+              userId: "user_operator",
+              placeId: null,
+              label: "Home",
+              status: "completed",
+              classification: "stationary",
+              startedAt: "2026-04-06T08:00:00.000Z",
+              endedAt: "2026-04-06T09:00:00.000Z",
+              durationSeconds: 3600,
+              centerLatitude: 46.5191,
+              centerLongitude: 6.6323,
+              radiusMeters: 120,
+              sampleCount: 3,
+              weather: {},
+              metrics: {},
+              metadata: {},
+              publishedNoteId: null,
+              createdAt: "2026-04-06T09:00:00.000Z",
+              updatedAt: "2026-04-06T09:00:00.000Z",
+              place: null,
+              note: null,
+              estimatedScreenTimeSeconds: 0,
+              pickupCount: 0,
+              notificationCount: 0,
+              topApps: [],
+              topCategories: []
+            }
+          })
+        ],
+        nextCursor: null,
+        hasMore: false,
+        invalidSegmentCount: 0
+      }
+    });
+
+    renderTimeline(<MovementLifeTimeline userIds={["user_operator"]} />);
+
+    expect(await screen.findByText("Movement")).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: /Create canonical place/i })).toBeInTheDocument();
+    screen.getByRole("button", { name: "Details" }).click();
+
+    expect(await screen.findByText(/Home details/i)).toBeInTheDocument();
+    expect(await screen.findByText(/Average position:/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Create canonical place/i })).toBeInTheDocument();
   });
 });

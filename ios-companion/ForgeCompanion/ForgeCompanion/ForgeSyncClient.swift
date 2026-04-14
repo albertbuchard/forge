@@ -121,6 +121,10 @@ struct ForgeSyncClient {
         let movement: ForgeMovementTimelinePage
     }
 
+    private struct MovementBoxDetailEnvelope: Decodable {
+        let movement: ForgeMovementBoxDetail
+    }
+
     private struct MovementPlaceMutationRequest: Encodable {
         struct Place: Encodable {
             let externalUid: String
@@ -166,6 +170,17 @@ struct ForgeSyncClient {
 
     private struct MovementUserBoxEnvelope: Decodable {
         let box: ForgeMovementTimelineSegment
+    }
+
+    private struct MovementStayPatchRequest: Encodable {
+        struct Patch: Encodable {
+            let placeExternalUid: String?
+            let placeLabel: String?
+        }
+
+        let sessionId: String
+        let pairingToken: String
+        let patch: Patch
     }
 
     private struct MovementUserBoxPreflightEnvelope: Decodable {
@@ -528,6 +543,58 @@ struct ForgeSyncClient {
             "createMovementPlace success label=\(label) placeId=\(envelope.place.id)"
         )
         return envelope.place
+    }
+
+    func fetchMovementBoxDetail(
+        boxId: String,
+        pairing: PairingPayload
+    ) async throws -> ForgeMovementBoxDetail {
+        companionDebugLog(
+            "ForgeSyncClient",
+            "fetchMovementBoxDetail start box=\(boxId)"
+        )
+        let envelope: MovementBoxDetailEnvelope = try await sendRequest(
+            path: "/mobile/movement/boxes/\(boxId)/detail",
+            apiBaseUrl: pairing.apiBaseUrl,
+            body: MovementBootstrapRequest(
+                sessionId: pairing.sessionId,
+                pairingToken: pairing.pairingToken
+            )
+        )
+        companionDebugLog(
+            "ForgeSyncClient",
+            "fetchMovementBoxDetail success box=\(boxId)"
+        )
+        return envelope.movement
+    }
+
+    func patchMovementStay(
+        stayId: String,
+        placeExternalUid: String,
+        placeLabel: String,
+        pairing: PairingPayload
+    ) async throws {
+        companionDebugLog(
+            "ForgeSyncClient",
+            "patchMovementStay start stay=\(stayId)"
+        )
+        let _: EmptyEnvelope = try await sendRequest(
+            path: "/mobile/movement/stays/\(stayId)",
+            apiBaseUrl: pairing.apiBaseUrl,
+            method: "PATCH",
+            body: MovementStayPatchRequest(
+                sessionId: pairing.sessionId,
+                pairingToken: pairing.pairingToken,
+                patch: .init(
+                    placeExternalUid: placeExternalUid,
+                    placeLabel: placeLabel
+                )
+            )
+        )
+        companionDebugLog(
+            "ForgeSyncClient",
+            "patchMovementStay success stay=\(stayId)"
+        )
     }
 
     func submitWatchHabitCheckIn(
