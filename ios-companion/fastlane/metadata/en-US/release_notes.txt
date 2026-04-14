@@ -1,4 +1,4 @@
-Forge Companion 1.0 introduces the native iPhone bridge for Forge with HealthKit sleep
-and workout sync, passive movement capture, a full life timeline, Tailscale-aware
-pairing, richer diagnostics, and a lower-friction sync flow after permissions are
-granted.
+Forge Companion 1.0.1 fixes stay location labeling across the native companion and the
+shared Forge movement timeline. Stay boxes now keep their place labels reliably, show
+the linked place badge when available, and make it easier to assign an existing place
+or create a new one from the stay's coordinates.
