@@ -106,6 +106,23 @@ Set `FORGE_DATA_ROOT` or an explicit plugin `dataRoot` if you want another store
 
 ![Forge overview](./openclaw-plugin/docs/assets/forge-overview-dashboard.png)
 
+## Feature Gallery
+
+Forge's web app has dedicated operational surfaces for execution, movement, and health,
+not just a single dashboard shell.
+
+| Surface | Screenshot |
+| --- | --- |
+| Kanban board | ![Forge Kanban board](./openclaw-plugin/docs/assets/forge-kanban-board.png) |
+| Movement timeline | ![Forge Movement life timeline](./openclaw-plugin/docs/assets/forge-movement-life-timeline.png) |
+| Sleep overview | ![Forge Sleep overview](./openclaw-plugin/docs/assets/forge-sleep-overview.png) |
+
+Regenerate the docs screenshots against a running local Forge runtime with:
+
+```bash
+npm run media:web:docs-screenshots
+```
+
 ## Current Stack
 
 | Layer            | Stack                                            | Notes                                                 |

@@ -487,6 +487,17 @@ li {
   line-height: 1.55;
 }
 
+.feature-shot {
+  display: flex;
+  flex-direction: column;
+}
+
+.feature-shot img {
+  aspect-ratio: 16 / 11;
+  object-fit: cover;
+  object-position: top center;
+}
+
 .split-list {
   display: grid;
   gap: 18px;
