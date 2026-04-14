@@ -1,5 +1,6 @@
 import { AiSurfaceWorkspace } from "@/components/customization/ai-surface-workspace";
 import { Link } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
 import {
   type SurfaceWidgetDefinition
 } from "@/components/customization/editable-surface";
@@ -22,6 +23,11 @@ import { ProgressMeter } from "@/components/ui/progress-meter";
 import { EntityBadge } from "@/components/ui/entity-badge";
 import { EntityName } from "@/components/ui/entity-name";
 import {
+  getFitnessView,
+  getMovementDay,
+  getSleepView
+} from "@/lib/api";
+import {
   getReadableActivityDescription,
   getReadableActivityTitle
 } from "@/lib/activity-copy";
@@ -31,29 +37,121 @@ import {
 } from "@/lib/life-force-display";
 import { getEntityNotesSummary } from "@/lib/note-helpers";
 import { useI18n } from "@/lib/i18n";
-import type { SurfaceLayoutPayload } from "@/lib/types";
+import type {
+  MovementDayData,
+  SurfaceLayoutPayload
+} from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 function normalizeOverviewLayout(layout: SurfaceLayoutPayload): SurfaceLayoutPayload {
-  const summaryIndex = layout.order.indexOf("summary");
-  const signalsIndex = layout.order.indexOf("signals");
-  if (summaryIndex === -1 || signalsIndex === -1 || summaryIndex < signalsIndex) {
+  const orderedIds = ["summary", "body-signals", "signals"] as const;
+  const nextOrder = [...layout.order];
+  let mutated = false;
+
+  for (const id of orderedIds) {
+    if (!nextOrder.includes(id)) {
+      nextOrder.push(id);
+      mutated = true;
+    }
+  }
+
+  const summaryIndex = nextOrder.indexOf("summary");
+  const bodySignalsIndex = nextOrder.indexOf("body-signals");
+  const signalsIndex = nextOrder.indexOf("signals");
+
+  if (summaryIndex === -1 || bodySignalsIndex === -1 || signalsIndex === -1) {
+    return mutated
+      ? {
+          ...layout,
+          order: nextOrder
+        }
+      : layout;
+  }
+
+  if (summaryIndex < bodySignalsIndex && bodySignalsIndex < signalsIndex && !mutated) {
     return layout;
   }
-  const nextOrder = [...layout.order];
-  nextOrder.splice(summaryIndex, 1);
-  const nextSignalsIndex = nextOrder.indexOf("signals");
-  nextOrder.splice(nextSignalsIndex, 0, "summary");
+
+  for (const id of orderedIds) {
+    const index = nextOrder.indexOf(id);
+    if (index !== -1) {
+      nextOrder.splice(index, 1);
+    }
+  }
+  const anchorIndex = nextOrder.indexOf("goals");
+  nextOrder.splice(anchorIndex === -1 ? 0 : anchorIndex, 0, ...orderedIds);
   return {
     ...layout,
     order: nextOrder
   };
 }
 
+function localDateKey(date = new Date()) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function formatCompactDuration(seconds: number) {
+  if (seconds >= 3_600) {
+    const hours = seconds / 3_600;
+    if (hours >= 10 || Number.isInteger(hours)) {
+      return `${Math.round(hours)}h`;
+    }
+    return `${hours.toFixed(1)}h`;
+  }
+  return `${Math.max(1, Math.round(seconds / 60))}m`;
+}
+
+function formatCompactDistance(distanceMeters: number) {
+  if (distanceMeters >= 1_000) {
+    return `${(distanceMeters / 1_000).toFixed(1)} km`;
+  }
+  return `${Math.round(distanceMeters)} m`;
+}
+
+function buildMovementPlaceBreakdown(day: MovementDayData | undefined) {
+  if (!day) {
+    return [];
+  }
+  const totals = new Map<string, number>();
+  for (const segment of day.segments) {
+    if (segment.kind !== "stay" || segment.durationSeconds <= 0) {
+      continue;
+    }
+    const label = segment.label.trim() || "Unlabeled stay";
+    totals.set(label, (totals.get(label) ?? 0) + segment.durationSeconds);
+  }
+  return [...totals.entries()]
+    .map(([label, seconds]) => ({ label, seconds }))
+    .sort((left, right) => right.seconds - left.seconds)
+    .slice(0, 3);
+}
+
 export function OverviewPage() {
   const { t } = useI18n();
   const shell = useForgeShell();
   const snapshot = shell.snapshot;
+  const todayDateKey = localDateKey();
+  const sleepQuery = useQuery({
+    queryKey: ["forge-overview-sleep", ...shell.selectedUserIds],
+    queryFn: async () => (await getSleepView(shell.selectedUserIds)).sleep
+  });
+  const fitnessQuery = useQuery({
+    queryKey: ["forge-overview-fitness", ...shell.selectedUserIds],
+    queryFn: async () => (await getFitnessView(shell.selectedUserIds)).fitness
+  });
+  const movementDayQuery = useQuery({
+    queryKey: ["forge-overview-movement-day", todayDateKey, ...shell.selectedUserIds],
+    queryFn: async () =>
+      (
+        await getMovementDay({
+          date: todayDateKey,
+          userIds: shell.selectedUserIds
+        })
+      ).movement
+  });
   const nextMilestone =
     snapshot.dashboard.milestoneRewards.find((reward) => !reward.completed) ??
     snapshot.dashboard.milestoneRewards[0] ??
@@ -71,6 +169,19 @@ export function OverviewPage() {
       : snapshot.metrics.momentumScore >= 60
         ? "Steady"
         : "Needs attention";
+  const sleepSummary = sleepQuery.data?.summary ?? null;
+  const fitnessSummary = fitnessQuery.data?.summary ?? null;
+  const movementDay = movementDayQuery.data;
+  const movementPlaceBreakdown = buildMovementPlaceBreakdown(movementDay);
+  const hasHealthData =
+    sleepSummary !== null ||
+    fitnessSummary !== null;
+  const hasMovementData =
+    movementDay !== undefined &&
+    (movementDay.summary.tripCount > 0 ||
+      movementDay.summary.stayCount > 0 ||
+      movementDay.summary.totalMovingSeconds > 0 ||
+      movementPlaceBreakdown.length > 0);
   const hasOverviewData =
     snapshot.lifeForce !== undefined ||
     snapshot.overview.activeGoals.length > 0 ||
@@ -78,7 +189,12 @@ export function OverviewPage() {
     snapshot.overview.topTasks.length > 0 ||
     snapshot.overview.recentEvidence.length > 0 ||
     snapshot.overview.dueHabits.length > 0 ||
-    snapshot.overview.neglectedGoals.length > 0;
+    snapshot.overview.neglectedGoals.length > 0 ||
+    sleepQuery.isLoading ||
+    fitnessQuery.isLoading ||
+    movementDayQuery.isLoading ||
+    hasHealthData ||
+    hasMovementData;
   const summaryMetrics = snapshot.lifeForce
     ? [
         {
@@ -284,12 +400,166 @@ export function OverviewPage() {
       defaultHeight: 7,
       minWidth: 6,
       render: () => (
-        <LifeForceOverviewWorkspace
-          selectedUserIds={shell.selectedUserIds}
-          fallbackLifeForce={snapshot.lifeForce!}
-          onRefresh={shell.refresh}
-          showEditor={false}
-        />
+        snapshot.lifeForce ? (
+          <LifeForceOverviewWorkspace
+            selectedUserIds={shell.selectedUserIds}
+            fallbackLifeForce={snapshot.lifeForce}
+            onRefresh={shell.refresh}
+            showEditor={false}
+          />
+        ) : (
+          <Card className="rounded-[24px] border-white/8 bg-white/[0.04] p-5 text-sm leading-6 text-white/60">
+            Life Force is not configured for this user yet. Once a profile exists,
+            the full capacity curve, drains, and recommendations will appear here.
+          </Card>
+        )
+      )
+    },
+    {
+      id: "body-signals",
+      title: "Life, health, movement",
+      description:
+        "Health imports and movement context make the overview feel like a real daily operating page.",
+      defaultWidth: 12,
+      defaultHeight: 4,
+      minWidth: 6,
+      render: () => (
+        <div className="grid min-w-0 gap-4 xl:grid-cols-3">
+          <Card className="rounded-[24px] border-white/8 bg-white/[0.04] p-4">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <div className="text-[11px] uppercase tracking-[0.16em] text-white/38">
+                  Life Force
+                </div>
+                <div className="mt-2 text-lg font-semibold text-white">
+                  {snapshot.lifeForce
+                    ? `${Math.round(snapshot.lifeForce.remainingAp)} AP remaining`
+                    : "No Life Force profile yet"}
+                </div>
+              </div>
+              {snapshot.lifeForce ? (
+                <Badge className="bg-white/[0.08] text-white/72">
+                  {formatLifeForceRate(snapshot.lifeForce.instantFreeApPerHour)}
+                </Badge>
+              ) : null}
+            </div>
+            <div className="mt-3 text-sm leading-6 text-white/58">
+              {snapshot.lifeForce
+                ? `${Math.round(snapshot.lifeForce.spentTodayAp)} / ${Math.round(snapshot.lifeForce.dailyBudgetAp)} AP spent today. Remaining ${formatLifeForceAp(snapshot.lifeForce.remainingAp)} with ${formatLifeForceRate(snapshot.lifeForce.currentDrainApPerHour)} current drain.`
+                : "Once Life Force is configured, this block will show today's budget, remaining headroom, and live drain."}
+            </div>
+          </Card>
+
+          <Card className="rounded-[24px] border-white/8 bg-white/[0.04] p-4">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <div className="text-[11px] uppercase tracking-[0.16em] text-white/38">
+                  Health
+                </div>
+                <div className="mt-2 text-lg font-semibold text-white">
+                  {hasHealthData ? "Sleep and training" : "No health data yet"}
+                </div>
+              </div>
+              {fitnessSummary ? (
+                <Badge className="bg-white/[0.08] text-white/72">
+                  {fitnessSummary.workoutCount} workout{fitnessSummary.workoutCount === 1 ? "" : "s"}
+                </Badge>
+              ) : null}
+            </div>
+            {sleepQuery.isLoading || fitnessQuery.isLoading ? (
+              <div className="mt-3 text-sm leading-6 text-white/58">
+                Loading recent sleep and workout metrics…
+              </div>
+            ) : hasHealthData ? (
+              <div className="mt-3 grid gap-2 text-sm text-white/72">
+                {sleepSummary ? (
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <span>Average sleep</span>
+                    <span className="font-medium text-white">
+                      {formatCompactDuration(sleepSummary.averageSleepSeconds)}
+                    </span>
+                  </div>
+                ) : null}
+                {sleepSummary ? (
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <span>Sleep score</span>
+                    <span className="font-medium text-white">
+                      {Math.round(sleepSummary.averageSleepScore)}
+                    </span>
+                  </div>
+                ) : null}
+                {fitnessSummary ? (
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <span>Exercise</span>
+                    <span className="font-medium text-white">
+                      {Math.round(fitnessSummary.exerciseMinutes)} min
+                    </span>
+                  </div>
+                ) : null}
+                {fitnessSummary ? (
+                  <div className="text-xs leading-5 text-white/54">
+                    {fitnessSummary.topWorkoutType
+                      ? `${fitnessSummary.topWorkoutType} is the top workout type right now.`
+                      : "Workout imports are available when Apple Health or habit-generated sessions exist."}
+                  </div>
+                ) : null}
+              </div>
+            ) : (
+              <div className="mt-3 text-sm leading-6 text-white/58">
+                Sleep and workout summaries appear here as soon as Forge has recent records.
+              </div>
+            )}
+          </Card>
+
+          <Card className="rounded-[24px] border-white/8 bg-white/[0.04] p-4">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <div className="text-[11px] uppercase tracking-[0.16em] text-white/38">
+                  Movement
+                </div>
+                <div className="mt-2 text-lg font-semibold text-white">
+                  {hasMovementData ? "Today's place balance" : "No movement timeline yet"}
+                </div>
+              </div>
+              {hasMovementData ? (
+                <Badge className="bg-white/[0.08] text-white/72">
+                  {formatCompactDuration(movementDay?.summary.totalMovingSeconds ?? 0)} moving
+                </Badge>
+              ) : null}
+            </div>
+            {movementDayQuery.isLoading ? (
+              <div className="mt-3 text-sm leading-6 text-white/58">
+                Loading today's stays, trips, and place balance…
+              </div>
+            ) : hasMovementData ? (
+              <div className="mt-3 grid gap-2">
+                <div className="flex flex-wrap gap-2">
+                  {movementPlaceBreakdown.map((entry) => (
+                    <Badge
+                      key={entry.label}
+                      className="bg-white/[0.08] text-white/78"
+                    >
+                      {formatCompactDuration(entry.seconds)} at {entry.label}
+                    </Badge>
+                  ))}
+                  {(movementDay?.summary.totalMovingSeconds ?? 0) > 0 ? (
+                    <Badge className="bg-[rgba(78,222,163,0.14)] text-[var(--secondary)]">
+                      {formatCompactDuration(movementDay?.summary.totalMovingSeconds ?? 0)} moving
+                    </Badge>
+                  ) : null}
+                </div>
+                <div className="text-sm leading-6 text-white/58">
+                  {(movementDay?.summary.tripCount ?? 0)} trip{(movementDay?.summary.tripCount ?? 0) === 1 ? "" : "s"} and{" "}
+                  {formatCompactDistance(movementDay?.summary.totalDistanceMeters ?? 0)} tracked today.
+                </div>
+              </div>
+            ) : (
+              <div className="mt-3 text-sm leading-6 text-white/58">
+                Movement summaries appear here once the companion has synced stays, trips, or known places.
+              </div>
+            )}
+          </Card>
+        </div>
       )
     },
     {
