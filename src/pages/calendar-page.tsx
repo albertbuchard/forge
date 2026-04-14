@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ArrowUpRight,
@@ -15,7 +15,7 @@ import {
   Sparkles,
   Trash2
 } from "lucide-react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { CalendarEventFlowDialog } from "@/components/calendar/calendar-event-flow-dialog";
 import { CalendarQuickRenameDialog } from "@/components/calendar/calendar-quick-rename-dialog";
 import { CalendarWeekToolbar } from "@/components/calendar/calendar-week-toolbar";
@@ -39,6 +39,7 @@ import {
   createTaskTimebox,
   createWorkBlockTemplate,
   deleteCalendarEvent,
+  deleteTaskTimebox,
   deleteWorkBlockTemplate,
   getCalendarOverview,
   getLifeForce,
@@ -298,6 +299,7 @@ function formatTemplateDateRange(template: WorkBlockTemplate) {
 
 export function CalendarPage() {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const shell = useForgeShell();
   const selectedUserIds = Array.isArray(shell.selectedUserIds)
     ? shell.selectedUserIds
@@ -339,6 +341,7 @@ export function CalendarPage() {
   }> | null>(null);
   const [menuState, setMenuState] = useState<CalendarMenuState | null>(null);
   const [eventSyncStatus, setEventSyncStatus] = useState<EventSyncStatus | null>(null);
+  const focusedTimeboxId = searchParams.get("timeboxId");
 
   const range = useMemo(() => {
     const from = weekStart.toISOString();
@@ -464,6 +467,14 @@ export function CalendarPage() {
       patch: Parameters<typeof patchTaskTimebox>[1];
     }) => patchTaskTimebox(timeboxId, patch),
     onSuccess: invalidateCalendar
+  });
+  const deleteTimeboxMutation = useMutation({
+    mutationFn: deleteTaskTimebox,
+    onSuccess: async () => {
+      setSelectedTimebox(null);
+      setTimeboxDialogOpen(false);
+      await invalidateCalendar();
+    }
   });
 
   const createEventMutation = useMutation({
@@ -847,6 +858,44 @@ export function CalendarPage() {
       (item): item is ForgeClipboardCalendarEventItem => item.type === "calendar_event"
     ) ?? []
   );
+
+  useEffect(() => {
+    if (!focusedTimeboxId) {
+      return;
+    }
+    const matchingTimebox = overview.timeboxes.find(
+      (timebox) => timebox.id === focusedTimeboxId
+    );
+    if (!matchingTimebox) {
+      return;
+    }
+    const targetWeekStart = startOfWeek(new Date(matchingTimebox.startsAt));
+    if (targetWeekStart.getTime() !== weekStart.getTime()) {
+      setWeekStart(targetWeekStart);
+      return;
+    }
+    if (selectedTimebox?.id !== matchingTimebox.id || !timeboxDialogOpen) {
+      setSelectedTimebox(matchingTimebox);
+      setTimeboxDialogOpen(true);
+    }
+  }, [focusedTimeboxId, overview.timeboxes, selectedTimebox?.id, timeboxDialogOpen, weekStart]);
+
+  const clearFocusedTimeboxParam = () => {
+    if (!focusedTimeboxId) {
+      return;
+    }
+    const nextSearchParams = new URLSearchParams(searchParams);
+    nextSearchParams.delete("timeboxId");
+    setSearchParams(nextSearchParams, { replace: true });
+  };
+
+  const handleTimeboxDialogOpenChange = (open: boolean) => {
+    setTimeboxDialogOpen(open);
+    if (!open) {
+      setSelectedTimebox(null);
+      clearFocusedTimeboxParam();
+    }
+  };
 
   const openCreateEventDialogForDay = (day: Date) => {
     setSelectedEvent(null);
@@ -1473,39 +1522,45 @@ export function CalendarPage() {
                         setSelectedTimebox(timebox);
                         setTimeboxDialogOpen(true);
                       }}
-                      className="min-w-0 overflow-hidden cursor-move rounded-[18px] bg-[var(--primary)]/14 px-3 py-2 text-sm text-[var(--primary)] shadow-[inset_0_0_0_1px_rgba(192,193,255,0.18)]"
+                      className="min-w-0 cursor-move overflow-hidden rounded-[18px] border border-[rgba(192,193,255,0.18)] bg-[linear-gradient(180deg,rgba(67,72,112,0.34),rgba(43,47,80,0.32))] px-3 py-2 text-left text-sm text-white/82 shadow-[inset_0_0_0_1px_rgba(192,193,255,0.08)] transition hover:border-[rgba(192,193,255,0.32)] hover:bg-[linear-gradient(180deg,rgba(74,79,122,0.4),rgba(48,53,92,0.36))]"
                     >
                       {(() => {
                         const actionLoad = estimateTaskTimeboxActionPointLoad(timebox);
                         return (
-                      <div className="flex min-w-0 items-center justify-between gap-2">
-                        <div className="min-w-0 [overflow-wrap:anywhere] font-medium">{timebox.title}</div>
-                        <div className="flex shrink-0 items-center gap-1.5">
-                          <Badge size="sm" className="shrink-0 bg-white/[0.08] text-white/78">
+                      <>
+                        <div className="flex min-w-0 items-start justify-between gap-2">
+                          <div className="min-w-0 flex-1">
+                            <div className="line-clamp-2 font-medium leading-5 text-white">
+                              {timebox.title}
+                            </div>
+                            <div className="mt-1 flex items-center gap-2 text-white/58">
+                              <Clock3 className="size-3.5 shrink-0" />
+                              {new Date(timebox.startsAt).toLocaleTimeString([], {
+                                hour: "2-digit",
+                                minute: "2-digit"
+                              })}{" "}
+                              -{" "}
+                              {new Date(timebox.endsAt).toLocaleTimeString([], {
+                                hour: "2-digit",
+                                minute: "2-digit"
+                              })}
+                            </div>
+                          </div>
+                        </div>
+                        <div className="mt-2 flex min-w-0 flex-wrap items-center gap-1.5">
+                          <Badge size="sm" className="bg-white/[0.08] px-2 py-0.5 text-[10px] uppercase tracking-[0.14em] text-white/72">
                             {timebox.status}
                           </Badge>
-                          <Badge size="sm" className="shrink-0 bg-white/[0.08] text-white/78">
+                          <Badge size="sm" className="bg-[var(--primary)]/14 px-2 py-0.5 text-[10px] uppercase tracking-[0.14em] text-[var(--primary)]">
                             {formatLifeForceRate(actionLoad.rateApPerHour)}
                           </Badge>
+                          <Badge size="sm" className="bg-white/[0.08] px-2 py-0.5 text-[10px] uppercase tracking-[0.14em] text-white/72">
+                            {formatLifeForceAp(actionLoad.totalAp)}
+                          </Badge>
                         </div>
-                      </div>
+                      </>
                         );
                       })()}
-                      <div className="mt-1 flex items-center gap-2 text-white/70">
-                        <Clock3 className="size-3.5" />
-                        {new Date(timebox.startsAt).toLocaleTimeString([], {
-                          hour: "2-digit",
-                          minute: "2-digit"
-                        })}{" "}
-                        -{" "}
-                        {new Date(timebox.endsAt).toLocaleTimeString([], {
-                          hour: "2-digit",
-                          minute: "2-digit"
-                        })}
-                      </div>
-                      <div className="mt-2 text-xs uppercase tracking-[0.14em] text-white/56">
-                        {formatLifeForceAp(estimateTaskTimeboxActionPointLoad(timebox).totalAp)}
-                      </div>
                       <div className="mt-2 flex flex-wrap gap-2">
                         <button
                           type="button"
@@ -1802,12 +1857,7 @@ export function CalendarPage() {
 
       <TimeboxPlanningDialog
         open={timeboxDialogOpen}
-        onOpenChange={(open) => {
-          setTimeboxDialogOpen(open);
-          if (!open) {
-            setSelectedTimebox(null);
-          }
-        }}
+        onOpenChange={handleTimeboxDialogOpenChange}
         tasks={shell.snapshot.tasks}
         editingTimebox={selectedTimebox}
         from={range.from}
@@ -1820,6 +1870,10 @@ export function CalendarPage() {
             timeboxId,
             patch
           });
+        }}
+        onDeleteTimebox={async (timeboxId) => {
+          await deleteTimeboxMutation.mutateAsync(timeboxId);
+          clearFocusedTimeboxParam();
         }}
       />
 

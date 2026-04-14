@@ -4518,7 +4518,8 @@ const AGENT_ONBOARDING_TOOL_INPUT_CATALOG = [
     toolName: "forge_recommend_task_timeboxes",
     summary:
       "Suggest future task slots that fit the current calendar rules and schedule.",
-    whenToUse: "Use when preparing focused work in advance.",
+    whenToUse:
+      "Use when preparing focused work in advance and the agent wants Forge to propose candidate slots instead of picking one manually.",
     inputShape:
       "{ taskId: string, from?: string, to?: string, limit?: integer }",
     requiredFields: ["taskId"],
@@ -4533,17 +4534,18 @@ const AGENT_ONBOARDING_TOOL_INPUT_CATALOG = [
     toolName: "forge_create_task_timebox",
     summary: "Create a planned task timebox in the Forge calendar domain.",
     whenToUse:
-      "Use after choosing a valid future slot or when creating a manual timebox directly.",
+      "Use after choosing a valid future slot or, preferably, when the agent has already reasoned over the live calendar and wants to place a manual timebox directly.",
     inputShape:
-      '{ taskId: string, projectId?: string|null, title: string, startsAt: string, endsAt: string, source?: "manual"|"suggested"|"live_run" }',
+      '{ taskId: string, projectId?: string|null, title: string, startsAt: string, endsAt: string, source?: "manual"|"suggested"|"live_run", overrideReason?: string|null, activityPresetKey?: string|null, customSustainRateApPerHour?: number|null, userId?: string|null }',
     requiredFields: ["taskId", "title", "startsAt", "endsAt"],
     notes: [
+      "Manual timeboxing is the main direct path when the agent already understands the calendar and wants to choose the slot itself.",
       "Forge publishes these through the shared Forge write target during provider sync.",
       "Live task runs can later attach to matching timeboxes.",
       "This is a convenience helper; agents can also create task_timebox through forge_create_entities."
     ],
     example:
-      '{"taskId":"task_123","projectId":"project_456","title":"Draft the methods section","startsAt":"2026-04-03T08:00:00.000Z","endsAt":"2026-04-03T09:30:00.000Z","source":"suggested"}'
+      '{"taskId":"task_123","projectId":"project_456","title":"Draft the methods section","startsAt":"2026-04-03T08:00:00.000Z","endsAt":"2026-04-03T09:30:00.000Z","source":"manual","overrideReason":"Protected writing block before clinic.","activityPresetKey":"deep_work","customSustainRateApPerHour":6.5}'
   },
   {
     toolName: "forge_grant_reward_bonus",

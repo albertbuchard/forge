@@ -18,6 +18,7 @@ const {
   deleteWorkBlockTemplateMock,
   createTaskTimeboxMock,
   patchTaskTimeboxMock,
+  deleteTaskTimeboxMock,
   createCalendarEventMock,
   patchCalendarEventMock,
   deleteCalendarEventMock,
@@ -50,6 +51,7 @@ const {
   deleteWorkBlockTemplateMock: vi.fn(),
   createTaskTimeboxMock: vi.fn(),
   patchTaskTimeboxMock: vi.fn(),
+  deleteTaskTimeboxMock: vi.fn(),
   createCalendarEventMock: vi.fn(),
   patchCalendarEventMock: vi.fn(),
   deleteCalendarEventMock: vi.fn(),
@@ -105,6 +107,7 @@ vi.mock("@/lib/api", () => ({
   deleteWorkBlockTemplate: deleteWorkBlockTemplateMock,
   createTaskTimebox: createTaskTimeboxMock,
   patchTaskTimebox: patchTaskTimeboxMock,
+  deleteTaskTimebox: deleteTaskTimeboxMock,
   createCalendarEvent: createCalendarEventMock,
   patchCalendarEvent: patchCalendarEventMock,
   deleteCalendarEvent: deleteCalendarEventMock,
@@ -662,6 +665,9 @@ beforeEach(() => {
   createCalendarEventMock.mockResolvedValue({
     event: { id: "calevent_1" }
   });
+  deleteTaskTimeboxMock.mockResolvedValue({
+    timebox: { id: "timebox_planning" }
+  });
   patchCalendarEventMock.mockResolvedValue({
     event: { id: "calevent_1" }
   });
@@ -914,6 +920,88 @@ describe("calendar routing surfaces", () => {
 
     fireEvent.click(await screen.findByText("Planning window"));
     expect(await screen.findByText("Edit timebox")).toBeInTheDocument();
+  });
+
+  it("opens a linked timebox directly from the calendar query string", async () => {
+    getCalendarOverviewMock.mockResolvedValueOnce({
+      calendar: {
+        generatedAt: "2026-04-03T08:00:00.000Z",
+        providers: [],
+        connections: [],
+        calendars: [],
+        events: [],
+        workBlockTemplates: [],
+        workBlockInstances: [],
+        timeboxes: [
+          {
+            id: "timebox_planning",
+            taskId: "task_1",
+            projectId: "project_1",
+            connectionId: null,
+            calendarId: null,
+            remoteEventId: null,
+            linkedTaskRunId: null,
+            title: "Planning window",
+            startsAt: "2026-04-13T12:00:00.000Z",
+            endsAt: "2026-04-13T14:00:00.000Z",
+            status: "planned",
+            source: "manual",
+            overrideReason: null,
+            actionProfile: null,
+            createdAt: "2026-04-03T08:00:00.000Z",
+            updatedAt: "2026-04-03T08:00:00.000Z"
+          }
+        ]
+      }
+    });
+
+    renderWithRouter(<CalendarPage />, "/calendar?timeboxId=timebox_planning");
+
+    expect(await screen.findByText("Edit timebox")).toBeInTheDocument();
+    expect(screen.getAllByText("Planning window").length).toBeGreaterThan(0);
+  });
+
+  it("lets the user delete a planned timebox from the calendar edit flow", async () => {
+    getCalendarOverviewMock.mockResolvedValueOnce({
+      calendar: {
+        generatedAt: "2026-04-03T08:00:00.000Z",
+        providers: [],
+        connections: [],
+        calendars: [],
+        events: [],
+        workBlockTemplates: [],
+        workBlockInstances: [],
+        timeboxes: [
+          {
+            id: "timebox_planning",
+            taskId: "task_1",
+            projectId: "project_1",
+            connectionId: null,
+            calendarId: null,
+            remoteEventId: null,
+            linkedTaskRunId: null,
+            title: "Planning window",
+            startsAt: "2026-04-13T12:00:00.000Z",
+            endsAt: "2026-04-13T14:00:00.000Z",
+            status: "planned",
+            source: "manual",
+            overrideReason: null,
+            actionProfile: null,
+            createdAt: "2026-04-03T08:00:00.000Z",
+            updatedAt: "2026-04-03T08:00:00.000Z"
+          }
+        ]
+      }
+    });
+
+    renderWithRouter(<CalendarPage />, "/calendar");
+
+    fireEvent.click(await screen.findByText("Planning window"));
+    fireEvent.click(await screen.findByRole("button", { name: "Delete timebox" }));
+
+    await waitFor(() =>
+      expect(deleteTaskTimeboxMock.mock.calls[0]?.[0]).toBe("timebox_planning")
+    );
   });
 
   it("lets the user edit and delete recurring work blocks from the calendar surface", async () => {

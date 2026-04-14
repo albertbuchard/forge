@@ -480,6 +480,91 @@ test("life force debits elapsed timeboxes, work blocks, and calendar containers 
   }
 });
 
+test("life force gives calendar events precedence over overlapping work blocks for actual, planned, and active AP", async () => {
+  const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-life-force-calendar-precedence-"));
+  const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
+
+  try {
+    const database = getDatabase();
+    const dateKey = "2026-04-14";
+    const weekday = new Date(`${dateKey}T00:00:00.000Z`).getUTCDay();
+    const now = new Date(`${dateKey}T13:30:00.000Z`);
+
+    createWorkBlockTemplate({
+      title: "Clinical Work",
+      kind: "main_activity",
+      color: "#2563eb",
+      timezone: "UTC",
+      weekDays: [weekday],
+      startMinute: 8 * 60,
+      endMinute: 19 * 60,
+      blockingState: "allowed",
+      userId: "user_operator"
+    });
+
+    createCalendarEvent({
+      title: "Lunch consult",
+      description: "",
+      location: "",
+      startAt: `${dateKey}T13:00:00.000Z`,
+      endAt: `${dateKey}T14:00:00.000Z`,
+      timezone: "UTC",
+      isAllDay: false,
+      availability: "busy",
+      eventType: "meeting",
+      categories: [],
+      activityPresetKey: "meeting",
+      customSustainRateApPerHour: 4.5,
+      links: [],
+      userId: "user_operator"
+    });
+
+    const payload = buildLifeForcePayload(now, ["user_operator"]);
+
+    const activeDrainKinds = payload.activeDrains.map((entry) => entry.sourceType);
+    assert.ok(activeDrainKinds.includes("calendar_event"));
+    assert.ok(!activeDrainKinds.includes("work_block"));
+
+    const workBlockPlan = payload.plannedDrains.find(
+      (entry) => entry.sourceType === "work_block"
+    );
+    const eventPlan = payload.plannedDrains.find(
+      (entry) => entry.sourceType === "calendar_event"
+    );
+    assert.ok(workBlockPlan);
+    assert.ok(eventPlan);
+    assert.equal(Number(workBlockPlan!.instantAp.toFixed(2)), 70);
+    assert.equal(Number(eventPlan!.instantAp.toFixed(2)), 2.25);
+    assert.equal(Number(payload.plannedRemainingAp.toFixed(2)), 72.25);
+
+    const actualRows = (
+      database
+        .prepare(
+          `SELECT event_kind, total_ap
+           FROM ap_ledger_events
+           WHERE date_key = ?
+             AND event_kind IN ('work_block_actual', 'calendar_event_actual')
+           ORDER BY event_kind ASC`
+        )
+        .all(dateKey) as Array<{ event_kind: string; total_ap: number }>
+    ).map((row) => ({
+      event_kind: row.event_kind,
+      total_ap: Number(row.total_ap.toFixed(2))
+    }));
+
+    assert.deepEqual(actualRows, [
+      { event_kind: "calendar_event_actual", total_ap: 2.25 },
+      { event_kind: "work_block_actual", total_ap: 70 }
+    ]);
+    assert.equal(Number(payload.spentTodayAp.toFixed(2)), 72.25);
+    assert.equal(Number(payload.forecastAp.toFixed(2)), 144.5);
+  } finally {
+    await app.close();
+    closeDatabase();
+    await rm(rootDir, { recursive: true, force: true });
+  }
+});
+
 test("life force honors custom calendar AP profiles and keeps rest or holiday blocks non-zero", async () => {
   const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-life-force-calendar-custom-"));
   const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });

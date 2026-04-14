@@ -403,8 +403,18 @@ Use the calendar tools when the request is about planning or availability rather
 - `forge_connect_calendar_provider` only when the operator explicitly wants a new Google, Apple, Exchange Online, or custom CalDAV connection and the discovery choices are already known
 - `forge_sync_calendar_connection` after a provider connection is created or when the calendar needs a fresh pull/push cycle
 - `forge_create_work_block_template` as a convenience helper for Main Activity, Secondary Activity, Third Activity, Rest, Holiday, or Custom recurring blocks
-- `forge_recommend_task_timeboxes` to find future slots that satisfy current rules
-- `forge_create_task_timebox` as a convenience helper to confirm a selected slot into a real planned timebox
+- `forge_recommend_task_timeboxes` to find future slots that satisfy current rules when the user wants suggestions or when the agent needs help narrowing options
+- `forge_create_task_timebox` as the main direct route for manual timeboxing once the slot is known; use it after reasoning from the live calendar overview or after accepting a suggested slot
+
+Timebox planning rules for agents:
+
+- prefer manual timeboxing when the agent already has enough calendar context to choose the slot itself
+- use `forge_get_calendar_overview` first when the current day or week matters; reason over mirrored events, work blocks, existing timeboxes, and availability before placing the block
+- use `forge_create_task_timebox` directly for the manual path with explicit `startsAt` and `endsAt`
+- use `forge_recommend_task_timeboxes` only for the assisted path, then confirm one returned slot with `forge_create_task_timebox`
+- when manually timeboxing, keep the title specific and task-shaped, not generic
+- if the block needs a special Action Point profile, pass `activityPresetKey` and/or `customSustainRateApPerHour`
+- if the user wants a note about why this slot exists, pass `overrideReason`
 
 Use the health tools when the request is about sleep or sports review:
 
@@ -456,6 +466,13 @@ Use these exact calendar batch payload shapes when working generically:
   `{"operations":[{"entityType":"work_block_template","data":{"title":"Summer holiday","kind":"holiday","color":"#14b8a6","timezone":"Europe/Zurich","weekDays":[0,1,2,3,4,5,6],"startMinute":0,"endMinute":1440,"startsOn":"2026-08-01","endsOn":"2026-08-16","blockingState":"blocked"}}]}`
 - create a planned task slot:
   `{"operations":[{"entityType":"task_timebox","data":{"taskId":"task_123","projectId":"project_456","title":"Draft the methods section","startsAt":"2026-04-03T06:00:00.000Z","endsAt":"2026-04-03T07:30:00.000Z","source":"suggested"}}]}`
+
+Use these exact timebox helper payload shapes when the dedicated helper is simpler than batch CRUD:
+
+- create a manual task timebox directly:
+  `{"taskId":"task_123","projectId":"project_456","title":"Draft the methods section","startsAt":"2026-04-03T06:00:00.000Z","endsAt":"2026-04-03T07:30:00.000Z","source":"manual","overrideReason":"Protected writing block before clinic.","activityPresetKey":"deep_work","customSustainRateApPerHour":6.5}`
+- create a suggested task timebox after reviewing recommendations:
+  `{"taskId":"task_123","projectId":"project_456","title":"Draft the methods section","startsAt":"2026-04-03T08:00:00.000Z","endsAt":"2026-04-03T09:30:00.000Z","source":"suggested"}`
 
 Use these interaction rules.
 

@@ -35,6 +35,7 @@ import {
   createTaskTimebox,
   createWorkAdjustment,
   deleteTask,
+  deleteTaskTimebox,
   getCalendarOverview,
   getLifeForce,
   getTaskContext,
@@ -298,6 +299,10 @@ export function TaskDetailPage() {
     }) => patchTaskTimebox(timeboxId, patch),
     onSuccess: invalidateAll
   });
+  const deleteTimeboxMutation = useMutation({
+    mutationFn: deleteTaskTimebox,
+    onSuccess: invalidateAll
+  });
 
   const payload = taskContextQuery.data;
 
@@ -346,6 +351,7 @@ export function TaskDetailPage() {
   )
     .filter((timebox) => timebox.taskId === payload.task.id)
     .sort((left, right) => Date.parse(left.startsAt) - Date.parse(right.startsAt));
+  const nextScheduledTimebox = scheduledTimeboxes[0] ?? null;
 
   const describeRunStatus = (
     status: (typeof payload.taskRuns)[number]["status"]
@@ -603,6 +609,16 @@ export function TaskDetailPage() {
             <Badge className="bg-emerald-500/12 text-emerald-200">
               Timer active
             </Badge>
+          ) : null}
+          {nextScheduledTimebox ? (
+            <Link
+              to={`/calendar?timeboxId=${encodeURIComponent(nextScheduledTimebox.id)}`}
+              className="inline-flex"
+            >
+              <Badge className="cursor-pointer bg-[var(--primary)]/16 text-[var(--primary)] transition hover:bg-[var(--primary)]/24">
+                Timeboxed · {formatDateTime(nextScheduledTimebox.startsAt)}
+              </Badge>
+            </Link>
           ) : null}
         </div>
 
@@ -1014,26 +1030,27 @@ export function TaskDetailPage() {
                     setTimeboxDialogOpen(true);
                   }
                 }}
-                className="rounded-[18px] border border-white/8 bg-white/[0.03] p-4 text-left transition hover:bg-white/[0.05]"
+                className="rounded-[18px] border border-white/8 bg-[linear-gradient(180deg,rgba(26,32,49,0.86),rgba(16,21,34,0.86))] p-4 text-left transition hover:bg-[linear-gradient(180deg,rgba(30,36,54,0.92),rgba(18,23,37,0.92))]"
               >
                 <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <div className="font-medium text-white">{timebox.title}</div>
-                    <div className="mt-2 text-sm text-white/58">
+                  <div className="min-w-0 flex-1">
+                    <div className="line-clamp-2 font-medium leading-6 text-white">
+                      {timebox.title}
+                    </div>
+                    <div className="mt-1 flex items-center gap-2 text-sm text-white/58">
+                      <Clock3 className="size-3.5 shrink-0" />
                       {formatDateTime(timebox.startsAt)} to {formatDateTime(timebox.endsAt)}
                     </div>
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    <Badge className="bg-white/[0.08] text-white/72">
-                      {timebox.source}
-                    </Badge>
-                    <Badge className="bg-white/[0.08] text-white/72">
-                      {timebox.status}
-                    </Badge>
                   </div>
                 </div>
                 <div className="mt-3 flex flex-wrap gap-2">
                   <Badge className="bg-white/[0.08] text-white/72">
+                    {timebox.source}
+                  </Badge>
+                  <Badge className="bg-white/[0.08] text-white/72">
+                    {timebox.status}
+                  </Badge>
+                  <Badge className="bg-[var(--primary)]/14 text-[var(--primary)]">
                     {formatLifeForceRate(
                       estimateTaskTimeboxActionPointLoad(timebox).rateApPerHour
                     )}
@@ -1051,14 +1068,14 @@ export function TaskDetailPage() {
                 </div>
                 <div className="mt-4 flex flex-wrap gap-2">
                   <span className="rounded-[999px] bg-white/[0.08] px-3 py-1 text-xs text-white/72">
-                    Click to edit
+                    Edit in guide
                   </span>
                   <Link
-                    to="/calendar"
+                    to={`/calendar?timeboxId=${encodeURIComponent(timebox.id)}`}
                     onClick={(event) => event.stopPropagation()}
                     className="rounded-[999px] bg-white/[0.08] px-3 py-1 text-xs text-white/72 transition hover:bg-white/[0.12]"
                   >
-                    Open calendar
+                    Open in calendar
                   </Link>
                 </div>
               </div>
@@ -1219,6 +1236,9 @@ export function TaskDetailPage() {
               userId: defaultUserId ?? undefined
             }
           });
+        }}
+        onDeleteTimebox={async (timeboxId) => {
+          await deleteTimeboxMutation.mutateAsync(timeboxId);
         }}
       />
 

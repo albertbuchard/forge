@@ -11,6 +11,7 @@ const {
   createTaskTimeboxMock,
   createWorkAdjustmentMock,
   deleteTaskMock,
+  deleteTaskTimeboxMock,
   getCalendarOverviewMock,
   getLifeForceMock,
   getTaskContextMock,
@@ -26,6 +27,7 @@ const {
   createTaskTimeboxMock: vi.fn(),
   createWorkAdjustmentMock: vi.fn(),
   deleteTaskMock: vi.fn(),
+  deleteTaskTimeboxMock: vi.fn(),
   getCalendarOverviewMock: vi.fn(),
   getLifeForceMock: vi.fn(),
   getTaskContextMock: vi.fn(),
@@ -43,6 +45,7 @@ vi.mock("@/lib/api", () => ({
   createTaskTimebox: createTaskTimeboxMock,
   createWorkAdjustment: createWorkAdjustmentMock,
   deleteTask: deleteTaskMock,
+  deleteTaskTimebox: deleteTaskTimeboxMock,
   getCalendarOverview: getCalendarOverviewMock,
   getLifeForce: getLifeForceMock,
   getTaskContext: getTaskContextMock,
@@ -243,6 +246,11 @@ describe("TaskDetailPage", () => {
         user: null
       }
     });
+    deleteTaskTimeboxMock.mockResolvedValue({
+      timebox: {
+        id: "timebox_1"
+      }
+    });
     recommendTaskTimeboxesMock.mockResolvedValue({ timeboxes: [] });
     getLifeForceMock.mockResolvedValue({
       lifeForce: {
@@ -349,6 +357,13 @@ describe("TaskDetailPage", () => {
     expect(screen.getAllByText("Time Box").length).toBeGreaterThan(0);
     expect(screen.getByText("Scheduled blocks")).toBeInTheDocument();
     expect(screen.getByText("Deep work tomorrow morning")).toBeInTheDocument();
+    expect(screen.getByText(/Timeboxed ·/)).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: /Timeboxed ·/i })
+    ).toHaveAttribute("href", "/calendar?timeboxId=timebox_1");
+    expect(
+      screen.getByRole("link", { name: "Open in calendar" })
+    ).toHaveAttribute("href", "/calendar?timeboxId=timebox_1");
     expect(screen.getByText("Edit task scheduling")).toBeInTheDocument();
     expect(
       screen.getByText(/This task only debits the Action Points you actually worked today/i)

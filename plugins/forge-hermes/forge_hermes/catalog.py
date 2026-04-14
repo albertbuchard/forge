@@ -1322,7 +1322,7 @@ TOOL_CATALOG: List[ToolSpec] = [
     },
     {
         "name": "forge_recommend_task_timeboxes",
-        "description": "Suggest future task timeboxes that fit the current calendar rules and current schedule.",
+        "description": "Suggest future task timeboxes that fit the current calendar rules and current schedule. Use this when the agent wants candidate slots; if the slot is already clear from the calendar, create the timebox directly instead.",
         "parameters": object_schema(
             {
                 "taskId": {"type": "string", "minLength": 1},
@@ -1338,7 +1338,7 @@ TOOL_CATALOG: List[ToolSpec] = [
     },
     {
         "name": "forge_create_task_timebox",
-        "description": "Create a planned task timebox directly in Forge's calendar domain. This is a planning helper; agents can also use forge_create_entities with entityType task_timebox.",
+        "description": "Create a planned task timebox directly in Forge's calendar domain. This is the preferred manual timeboxing route once the agent has chosen a slot from the live calendar, and it also works to confirm a suggested slot.",
         "parameters": object_schema(
             {
                 "taskId": {"type": "string", "minLength": 1},
@@ -1347,6 +1347,14 @@ TOOL_CATALOG: List[ToolSpec] = [
                 "startsAt": {"type": "string", "minLength": 1},
                 "endsAt": {"type": "string", "minLength": 1},
                 "source": {"enum": ["manual", "suggested", "live_run"]},
+                "overrideReason": optional_nullable_string("Optional note about why this slot exists or why it was chosen."),
+                "activityPresetKey": optional_nullable_string("Optional activity preset key for the timebox AP profile."),
+                "customSustainRateApPerHour": {
+                    "type": ["number", "null"],
+                    "minimum": 0,
+                    "description": "Optional manual AP per hour override for the timebox."
+                },
+                "userId": optional_nullable_string("Optional owner override when the timebox should belong to a specific Forge user."),
             },
             required=["taskId", "title", "startsAt", "endsAt"],
         ),

@@ -408,6 +408,71 @@ describe("Life Force calendar flows", () => {
     );
   });
 
+  it("lets the user delete an existing timebox from the guided modal", async () => {
+    const onDeleteTimebox = vi.fn(async () => {});
+    recommendTaskTimeboxesMock.mockResolvedValue({ timeboxes: [] });
+
+    renderWithProviders(
+      <TimeboxPlanningDialog
+        open
+        onOpenChange={vi.fn()}
+        tasks={
+          [
+            {
+              id: "task_1",
+              title: "Draft the Life Force review",
+              status: "focus",
+              priority: "medium",
+              owner: "Albert",
+              goalId: null,
+              projectId: null,
+              dueDate: null,
+              effort: "steady",
+              energy: "steady",
+              points: 50,
+              plannedDurationSeconds: 7200,
+              schedulingRules: null,
+              sortOrder: 1,
+              completedAt: null,
+              createdAt: "2026-04-12T08:00:00.000Z",
+              updatedAt: "2026-04-12T08:00:00.000Z",
+              tagIds: []
+            }
+          ] as unknown as Task[]
+        }
+        from="2026-04-13T00:00:00.000Z"
+        to="2026-04-20T00:00:00.000Z"
+        editingTimebox={{
+          id: "timebox_1",
+          taskId: "task_1",
+          projectId: null,
+          connectionId: null,
+          calendarId: null,
+          remoteEventId: null,
+          linkedTaskRunId: null,
+          status: "planned",
+          source: "manual",
+          title: "Existing block",
+          startsAt: "2026-04-16T14:00:00.000Z",
+          endsAt: "2026-04-16T15:00:00.000Z",
+          overrideReason: null,
+          actionProfile: null,
+          createdAt: "2026-04-12T08:00:00.000Z",
+          updatedAt: "2026-04-12T08:00:00.000Z",
+          userId: "user_operator",
+          user: null
+        }}
+        onCreateTimebox={vi.fn(async () => {})}
+        onUpdateTimebox={vi.fn(async () => {})}
+        onDeleteTimebox={onDeleteTimebox}
+      />
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: "Delete timebox" }));
+
+    expect(onDeleteTimebox).toHaveBeenCalledWith("timebox_1");
+  });
+
   it("previews event AP drain before saving a busy calendar event", async () => {
     renderWithProviders(
       <CalendarEventFlowDialog

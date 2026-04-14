@@ -212,6 +212,7 @@ export function TimeboxPlanningDialog({
   to,
   onCreateTimebox,
   onUpdateTimebox,
+  onDeleteTimebox,
   initialTaskId,
   lockedTaskId,
   editingTimebox,
@@ -244,6 +245,7 @@ export function TimeboxPlanningDialog({
       customSustainRateApPerHour?: number | null;
     }
   ) => Promise<void>;
+  onDeleteTimebox?: (timeboxId: string) => Promise<void>;
   initialTaskId?: string;
   lockedTaskId?: string;
   editingTimebox?: TaskTimebox | null;
@@ -304,6 +306,7 @@ export function TimeboxPlanningDialog({
   });
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     if (!open) {
@@ -556,6 +559,40 @@ export function TimeboxPlanningDialog({
                 <p className="mt-4 text-sm leading-6 text-white/60">
                   Pick a day first, then either accept one of Forge&apos;s suggested slots or set the block manually.
                 </p>
+                {isEditing && editingTimebox && onDeleteTimebox ? (
+                  <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-[20px] border border-rose-400/18 bg-rose-400/8 px-4 py-3">
+                    <div className="text-sm leading-6 text-rose-100/84">
+                      Remove this planned timebox if you no longer want it in the calendar.
+                    </div>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      className="text-rose-100 hover:bg-rose-500/12"
+                      pending={deleting}
+                      pendingLabel="Deleting"
+                      onClick={() =>
+                        void (async () => {
+                          setSubmitError(null);
+                          setDeleting(true);
+                          try {
+                            await onDeleteTimebox(editingTimebox.id);
+                            onOpenChange(false);
+                          } catch (error) {
+                            setSubmitError(
+                              error instanceof Error
+                                ? error.message
+                                : "Forge could not delete this timebox."
+                            );
+                          } finally {
+                            setDeleting(false);
+                          }
+                        })()
+                      }
+                    >
+                      Delete timebox
+                    </Button>
+                  </div>
+                ) : null}
               </div>
             ) : null}
           </div>
