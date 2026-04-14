@@ -26,7 +26,7 @@
           <span class="brand-mark">F</span>
           <span class="brand-copy">
             <strong>Forge</strong>
-            <span>Engineering Docs</span>
+            <span>Project Guide</span>
           </span>
         </a>
         <nav class="topnav">
@@ -49,13 +49,13 @@
 
         <section class="hero split">
           <div class="hero-card">
-            <p class="eyebrow">Development</p>
-            <h1>Local runtime, verification, and docs generation.</h1>
+            <p class="eyebrow">Run Forge Yourself</p>
+            <h1>Start Forge locally and verify the real product paths, not just the code.</h1>
             <p class="lede">
-              Forge development means verifying both the TypeScript codebase and
-              the live mounted runtime surfaces. The local repo setup is expected to
-              serve the UI under <code>/forge/</code> and the backend under
-              <code>/api/v1/</code>.
+              If you want to try Forge, contribute to it, or operate it
+              locally, this page shows the main commands and the checks that
+              matter. The key rule is simple: make sure the app and API
+              actually load where users expect them.
             </p>
           </div>
           <aside class="hero-card">
@@ -72,7 +72,7 @@
         <section class="section" id="local-development">
           <div class="section-heading">
             <p class="eyebrow">Local Development</p>
-            <h2>Default repo commands.</h2>
+            <h2>These commands get the app running in a realistic local setup.</h2>
           </div>
           <div class="card-grid two">
             <article class="card">
@@ -110,7 +110,7 @@ npm run dev:openclaw-plugin-runtime</code></pre>
         <section class="section">
           <div class="section-heading">
             <p class="eyebrow">Primary Commands</p>
-            <h2>Repo commands that matter day to day.</h2>
+            <h2>The main commands for building, testing, and exporting docs.</h2>
           </div>
           <table class="doc-table">
             <thead>
@@ -151,7 +151,7 @@ npm run dev:openclaw-plugin-runtime</code></pre>
         <section class="section" id="verification">
           <div class="section-heading">
             <p class="eyebrow">Verification</p>
-            <h2>Baseline verification expected after changes.</h2>
+            <h2>After changes, verify the product is still reachable and trustworthy.</h2>
           </div>
           <div class="card-grid two">
             <article class="card">
@@ -168,20 +168,19 @@ curl -I http://127.0.0.1:3027/forge/</code></pre>
             </article>
           </div>
           <div class="note warning">
-            Forge’s local repo instructions treat live runtime verification as
-            mandatory. Static type-checking is not enough if the app shell or API
-            mount is broken.
+            Forge treats live verification as mandatory. Passing types or unit
+            tests is not enough if the app shell or API mount is broken.
           </div>
         </section>
 
         <section class="section" id="docs-pipeline">
           <div class="section-heading">
             <p class="eyebrow">Docs Pipeline</p>
-            <h2>How GitHub Pages stays aligned with the runtime spec.</h2>
+            <h2>The public guide and API explorer are generated from the product itself.</h2>
           </div>
           <div class="card-grid two">
             <article class="card">
-              <h3>Source of the API truth</h3>
+              <h3>Where the API contract comes from</h3>
               <p>
                 Forge generates its OpenAPI document in
                 <code>server/src/openapi.ts</code>. The runtime serves that same
@@ -189,7 +188,7 @@ curl -I http://127.0.0.1:3027/forge/</code></pre>
               </p>
             </article>
             <article class="card">
-              <h3>Pages export step</h3>
+              <h3>How GitHub Pages stays accurate</h3>
               <p>
                 The docs export script writes the current generated spec into
                 <code>openclaw-plugin/docs/api/openapi.json</code> so GitHub Pages can
@@ -202,8 +201,8 @@ curl -I http://127.0.0.1:3027/forge/</code></pre>
 
         <section class="section" id="release-adjacent">
           <div class="section-heading">
-            <p class="eyebrow">Release-Adjacent</p>
-            <h2>Commands near packaging and public distribution.</h2>
+            <p class="eyebrow">Release Paths</p>
+            <h2>These commands matter when Forge is being packaged or published.</h2>
           </div>
           <div class="card-grid three">
             <article class="card">
@@ -231,8 +230,8 @@ curl -I http://127.0.0.1:3027/forge/</code></pre>
         </section>
 
         <footer class="footer">
-          Repo-specific operational guides still live in <code>docs/</code> as
-          Markdown alongside this summary.
+          If you are evaluating Forge operationally, start here, then move to
+          Integrations and the API reference as needed.
         </footer>
       </main>
     </div>

@@ -6,7 +6,7 @@
     <title>Forge Integration Guide</title>
     <meta
       name="description"
-      content="Forge integration notes for OpenClaw, Hermes, Codex, iPhone companion, and shared multi-user runtimes."
+      content="Learn how Forge connects to OpenClaw, Hermes, Codex, and the iPhone companion while keeping one coherent local-first system."
     />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -26,7 +26,7 @@
           <span class="brand-mark">F</span>
           <span class="brand-copy">
             <strong>Forge</strong>
-            <span>Engineering Docs</span>
+            <span>Project Guide</span>
           </span>
         </a>
         <nav class="topnav">
@@ -50,12 +50,12 @@
         <section class="hero split">
           <div class="hero-card">
             <p class="eyebrow">Integrations</p>
-            <h1>Agent hosts, mobile companion, and shared runtime patterns.</h1>
+            <h1>Forge connects your browser, agents, and phone to the same life system.</h1>
             <p class="lede">
-              Forge is designed to be one shared runtime for the browser, agent
-              adapters, and native companion surfaces. The safest integration pattern
-              is to keep one explicit origin, port, and data root when those surfaces
-              are meant to collaborate.
+              Forge is designed so your browser, agent hosts, and companion app
+              all work from the same underlying system. The important idea is
+              continuity: one origin, one data root, one evolving picture of
+              your tasks, notes, health, and movement.
             </p>
           </div>
           <aside class="hero-card">
@@ -72,8 +72,8 @@
 
         <section class="section" id="shared-runtime">
           <div class="section-heading">
-            <p class="eyebrow">Shared Runtime</p>
-            <h2>The default collaboration pattern.</h2>
+            <p class="eyebrow">Shared System</p>
+            <h2>Forge works best when every surface points at the same underlying instance.</h2>
           </div>
           <div class="card-grid two">
             <article class="card">
@@ -89,7 +89,7 @@ userIds:  explicit on cross-owner reads</code></pre>
               <p>
                 If OpenClaw, Hermes, Codex, and the browser are meant to see the same
                 goals, tasks, notes, strategies, and users, they must point at the
-                same Forge runtime rather than drifting onto separate default stores.
+                same Forge instance rather than drifting onto separate default stores.
               </p>
             </article>
           </div>
@@ -98,7 +98,7 @@ userIds:  explicit on cross-owner reads</code></pre>
         <section class="section" id="openclaw">
           <div class="section-heading">
             <p class="eyebrow">OpenClaw</p>
-            <h2>Published plugin path.</h2>
+            <h2>Bring Forge into OpenClaw as an operational workspace.</h2>
           </div>
           <div class="card-grid two">
             <article class="card">
@@ -117,7 +117,7 @@ openclaw plugins info forge-openclaw-plugin
 openclaw forge health</code></pre>
             </article>
             <article class="card">
-              <h3>What the adapter exposes</h3>
+              <h3>What you get</h3>
               <p>
                 The plugin exposes a curated Forge operating surface rather than every
                 internal route. It is optimized around operator overview, entity
@@ -130,7 +130,7 @@ openclaw forge health</code></pre>
         <section class="section" id="hermes">
           <div class="section-heading">
             <p class="eyebrow">Hermes</p>
-            <h2>Native Python plugin path.</h2>
+            <h2>Run Forge inside a Hermes-driven workflow.</h2>
           </div>
           <div class="card-grid two">
             <article class="card">
@@ -152,11 +152,11 @@ openclaw forge health</code></pre>
         <section class="section" id="codex">
           <div class="section-heading">
             <p class="eyebrow">Codex</p>
-            <h2>Repo-local adapter surface.</h2>
+            <h2>Use Forge from Codex during in-repo work.</h2>
           </div>
           <div class="card-grid two">
             <article class="card">
-              <h3>Scope</h3>
+              <h3>What it is for</h3>
               <p>
                 The Codex adapter lives in <code>plugins/forge-codex/</code> and is
                 intended for shared runtime work inside the repo rather than public
@@ -177,11 +177,11 @@ openclaw forge health</code></pre>
         <section class="section" id="ios">
           <div class="section-heading">
             <p class="eyebrow">iPhone Companion</p>
-            <h2>Native pairing and HealthKit import.</h2>
+            <h2>The iPhone companion brings movement and HealthKit into Forge.</h2>
           </div>
           <div class="card-grid two">
             <article class="card">
-              <h3>Role</h3>
+              <h3>What the companion does</h3>
               <p>
                 The iOS companion pairs to a local Forge runtime, requests Apple
                 permissions, imports HealthKit sleep and workout data, and writes
@@ -203,16 +203,16 @@ openclaw forge health</code></pre>
               alt="Forge iPhone companion sync flow"
             />
             <figcaption>
-              The iPhone companion uses the same Forge runtime rather than maintaining
-              a separate shadow data model.
+              The iPhone companion adds native data capture while still feeding
+              the same Forge system you use on the web.
             </figcaption>
           </figure>
         </section>
 
         <section class="section">
           <div class="section-heading">
-            <p class="eyebrow">Detailed Repo Guides</p>
-            <h2>Longer guides that still live as repo Markdown.</h2>
+            <p class="eyebrow">Deeper Guides</p>
+            <h2>If you want implementation detail, these longer guides go further.</h2>
           </div>
           <ul class="guide-list">
             <li>
@@ -239,7 +239,8 @@ openclaw forge health</code></pre>
         </section>
 
         <footer class="footer">
-          Use the API reference when you need exact request and response shapes.
+          Use the API reference when you want exact request and response shapes
+          behind these integrations.
         </footer>
       </main>
     </div>

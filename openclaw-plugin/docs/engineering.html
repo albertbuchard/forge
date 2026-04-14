@@ -26,7 +26,7 @@
           <span class="brand-mark">F</span>
           <span class="brand-copy">
             <strong>Forge</strong>
-            <span>Engineering Docs</span>
+            <span>Project Guide</span>
           </span>
         </a>
         <nav class="topnav">
@@ -49,12 +49,13 @@
 
         <section class="hero split">
           <div class="hero-card">
-            <p class="eyebrow">Engineering Reference</p>
-            <h1>Runtime shape, storage model, and repository boundaries.</h1>
+            <p class="eyebrow">How Forge Is Built</p>
+            <h1>Forge is one local-first system shared by the web app, API, agents, and companion.</h1>
             <p class="lede">
-              Forge is a local-first multi-surface system. The same runtime serves
-              the web app, the HTTP API, the OpenAPI document, the agent adapters,
-              and the file-backed wiki memory layer.
+              This page explains the architecture behind Forge so readers can
+              understand how the product stays coherent across interfaces,
+              stores structured data locally first, and keeps its docs aligned
+              with the running system.
             </p>
           </div>
           <aside class="hero-card">
@@ -72,7 +73,7 @@
         <section class="section" id="runtime-surfaces">
           <div class="section-heading">
             <p class="eyebrow">Runtime Surfaces</p>
-            <h2>What Forge exposes at runtime.</h2>
+            <h2>These are the product surfaces users and tools actually interact with.</h2>
           </div>
           <div class="card-grid three">
             <article class="card">
@@ -105,7 +106,7 @@
         <section class="section" id="stack">
           <div class="section-heading">
             <p class="eyebrow">Stack</p>
-            <h2>Current production stack in this repo.</h2>
+            <h2>This is the stack currently powering the product.</h2>
           </div>
           <table class="doc-table">
             <thead>
@@ -139,7 +140,7 @@
               <tr>
                 <td>Documentation</td>
                 <td>GitHub Pages static docs + generated OpenAPI reference</td>
-                <td>Engineering docs are published alongside a rendered API reference.</td>
+                <td>The public guide and API explorer stay published side by side.</td>
               </tr>
             </tbody>
           </table>
@@ -148,7 +149,7 @@
         <section class="section" id="data-model">
           <div class="section-heading">
             <p class="eyebrow">Storage And Data Model</p>
-            <h2>How Forge stores operational and long-form data.</h2>
+            <h2>Forge combines structured operational data with long-form knowledge.</h2>
           </div>
           <div class="card-grid two">
             <article class="card">
@@ -189,7 +190,7 @@
         <section class="section" id="route-families">
           <div class="section-heading">
             <p class="eyebrow">Route Families</p>
-            <h2>How the API is organized.</h2>
+            <h2>The API is grouped by product area so the system stays legible.</h2>
           </div>
           <table class="doc-table">
             <thead>
@@ -242,7 +243,7 @@
         <section class="section" id="repository-layout">
           <div class="section-heading">
             <p class="eyebrow">Repository Layout</p>
-            <h2>Where the major Forge concerns live.</h2>
+            <h2>These folders carry the main product responsibilities.</h2>
           </div>
           <table class="doc-table">
             <thead>
@@ -262,7 +263,7 @@
               </tr>
               <tr>
                 <td><code>docs/</code></td>
-                <td>Longer engineering guides kept as Markdown inside the repo.</td>
+                <td>Longer technical guides and operating notes.</td>
               </tr>
               <tr>
                 <td><code>openclaw-plugin/</code></td>
@@ -274,7 +275,7 @@
               </tr>
               <tr>
                 <td><code>plugins/forge-codex/</code></td>
-                <td>Repo-local Codex adapter and runtime payload.</td>
+                <td>Codex adapter and runtime payload used for in-repo agent work.</td>
               </tr>
               <tr>
                 <td><code>ios-companion/</code></td>
@@ -290,16 +291,16 @@
 
         <section class="section">
           <div class="note">
-            The rendered API reference at <a href="./api/">`/api/`</a> is built
-            from the same OpenAPI generator the Forge runtime serves at
-            <code>/api/v1/openapi.json</code>. The GitHub Pages site is not a second
-            hand-maintained spec.
+            The API reference at <a href="./api/">`/api/`</a> is generated from
+            the same OpenAPI source that the running Forge server exposes at
+            <code>/api/v1/openapi.json</code>, so the public docs stay aligned
+            with the real product contract.
           </div>
         </section>
 
         <footer class="footer">
-          For longer operational guides, use the repo Markdown docs in
-          <code>docs/</code> alongside this Pages site.
+          Use this page when you want to understand why Forge feels unified
+          across web, API, agents, and native companion surfaces.
         </footer>
       </main>
     </div>
