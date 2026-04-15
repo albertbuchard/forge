@@ -70,10 +70,10 @@ export function FloatingActionMenu({
       aria-hidden="true"
     >
       <div
-        className="fixed z-[71] w-[min(22rem,calc(100vw-1.5rem))] rounded-[26px] border border-white/10 bg-[rgba(10,15,27,0.97)] p-2 shadow-[0_28px_80px_rgba(4,8,18,0.4)] backdrop-blur-xl"
+        className="fixed z-[71] flex max-h-[min(34rem,calc(100dvh-1.5rem))] w-[min(22rem,calc(100vw-1.5rem))] flex-col overflow-hidden rounded-[26px] border border-white/10 bg-[rgba(10,15,27,0.97)] p-2 shadow-[0_28px_80px_rgba(4,8,18,0.4)] backdrop-blur-xl"
         style={{
           left: Math.min(position.x, window.innerWidth - 24 - 352),
-          top: Math.min(position.y, window.innerHeight - 24 - 320)
+          top: Math.min(position.y, window.innerHeight - 24 - 544)
         }}
         onPointerDown={(event) => event.stopPropagation()}
       >
@@ -91,7 +91,8 @@ export function FloatingActionMenu({
           </button>
         </div>
 
-        <div className="mt-2 grid gap-1">
+        <div className="mt-2 min-h-0 overflow-y-auto overscroll-contain pr-1">
+          <div className="grid gap-1">
           {items.map((item) => {
             const Icon = item.icon;
             return (
@@ -140,6 +141,7 @@ export function FloatingActionMenu({
               </button>
             );
           })}
+          </div>
         </div>
       </div>
     </div>,
