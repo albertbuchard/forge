@@ -320,6 +320,8 @@ enum CompanionScreenshotFixtures {
         SyncReport(
             syncedAt: referenceDate.addingTimeInterval(-4 * 60),
             sleepSessions: 7,
+            sleepNights: 7,
+            sleepSegments: 26,
             workouts: 3,
             createdCount: 8,
             updatedCount: 19,
@@ -327,6 +329,8 @@ enum CompanionScreenshotFixtures {
             movementStays: 3,
             movementTrips: 2,
             movementKnownPlaces: 2,
+            vitalsDaySummaries: 7,
+            vitalsMetricEntries: 56,
             screenTimeDaySummaries: 3,
             screenTimeHourlySegments: 12,
             screenTimeTotalActivitySeconds: 15_300
@@ -337,6 +341,8 @@ enum CompanionScreenshotFixtures {
         SyncPayloadSummary(
             builtAt: referenceDate.addingTimeInterval(-4 * 60),
             sleepSessions: 7,
+            sleepNights: 7,
+            sleepSegments: 26,
             sleepStageEntries: 26,
             workouts: 3,
             workoutsWithAverageHeartRate: 2,
@@ -347,6 +353,8 @@ enum CompanionScreenshotFixtures {
             movementTrips: 2,
             movementTripPoints: 6,
             movementTripStops: 0,
+            vitalsDaySummaries: 7,
+            vitalsMetricEntries: 56,
             screenTimeDaySummaries: 3,
             screenTimeHourlySegments: 12,
             screenTimeTotalActivitySeconds: 15_300,

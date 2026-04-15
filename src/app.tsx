@@ -21,6 +21,7 @@ import { MovementPage } from "@/pages/movement-page";
 import { NotesPage } from "@/pages/notes-page";
 import { OverviewPage } from "@/pages/overview-page";
 import { ProjectDetailPage } from "@/pages/project-detail-page";
+import { ProjectManagementHierarchyPage } from "@/pages/project-management-hierarchy-page";
 import { ProjectsPage } from "@/pages/projects-page";
 import { SettingsWikiPage } from "@/pages/settings-wiki-page";
 import { StrategiesPage } from "@/pages/strategies-page";
@@ -57,6 +58,7 @@ import { SleepPage } from "@/pages/sleep-page";
 import { SportsPage } from "@/pages/sports-page";
 import { TaskDetailPage } from "@/pages/task-detail-page";
 import { TodayPage } from "@/pages/today-page";
+import { VitalsPage } from "@/pages/vitals-page";
 import { WikiPage } from "@/pages/wiki-page";
 import { WikiIngestHistoryPage } from "@/pages/wiki-ingest-history-page";
 import { WikiEditorPage } from "@/pages/wiki-editor-page";
@@ -189,6 +191,15 @@ export function App() {
           />
           <Route path="projects" element={<ProjectsPage />} />
           <Route
+            path="projects/hierarchy"
+            element={surface(
+              "project-hierarchy",
+              "Project hierarchy",
+              "Full hierarchy from goals down to subtasks.",
+              <ProjectManagementHierarchyPage />
+            )}
+          />
+          <Route
             path="projects/:projectId"
             element={surface(
               "project-detail",
@@ -271,6 +282,15 @@ export function App() {
               "Sports",
               "Fitness, workouts, and sports context.",
               <SportsPage />
+            )}
+          />
+          <Route
+            path="vitals"
+            element={surface(
+              "vitals-index",
+              "Vitals",
+              "Body signals, recovery, cardio fitness, and daily HealthKit metrics.",
+              <VitalsPage />
             )}
           />
           <Route path="psyche" element={<PsychePage />} />

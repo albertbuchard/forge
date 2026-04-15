@@ -51,6 +51,7 @@ import {
   LayoutDashboard,
   LayoutGrid,
   Map,
+  HeartPulse,
   Network,
   Moon,
   NotebookPen,
@@ -340,6 +341,13 @@ const PRIMARY_ROUTES: ShellRouteDefinition[] = [
     icon: Dumbbell
   },
   {
+    id: "vitals",
+    to: "/vitals",
+    label: "Vitals",
+    detail: "Recovery, cardio fitness, breathing, composition, and body signals",
+    icon: HeartPulse
+  },
+  {
     id: "kanban",
     to: "/kanban",
     labelKey: "common.routeLabels.kanban",
@@ -447,6 +455,7 @@ const MOBILE_MORE_ROUTES = [
   requirePrimaryRoute("workbench"),
   requirePrimaryRoute("movement"),
   requirePrimaryRoute("sports"),
+  requirePrimaryRoute("vitals"),
   requirePrimaryRoute("wiki"),
   requirePrimaryRoute("psyche"),
   requirePrimaryRoute("activity"),
@@ -2683,18 +2692,28 @@ export function AppShell() {
       const created = await createTaskMutation({
         title: input.title,
         description: input.description,
+        level: "task",
         owner: operatorName,
         userId:
           project.userId ??
           (selectedUserIds.length === 1 ? selectedUserIds[0] : null),
+        assigneeUserIds: [],
         goalId: project.goalId,
         projectId: project.id,
+        parentWorkItemId: null,
         priority: "medium",
         status: "in_progress",
         effort: "deep",
         energy: "steady",
         dueDate: "",
         points: 60,
+        plannedDurationSeconds: 86_400,
+        aiInstructions: "",
+        executionMode: null,
+        acceptanceCriteria: [],
+        blockerLinks: [],
+        completionReport: null,
+        gitRefs: [],
         tagIds: [],
         notes: []
       }).unwrap();

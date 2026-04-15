@@ -25,7 +25,8 @@ import { EntityName } from "@/components/ui/entity-name";
 import {
   getFitnessView,
   getMovementDay,
-  getSleepView
+  getSleepView,
+  getVitalsView
 } from "@/lib/api";
 import {
   getReadableActivityDescription,
@@ -39,7 +40,8 @@ import { getEntityNotesSummary } from "@/lib/note-helpers";
 import { useI18n } from "@/lib/i18n";
 import type {
   MovementDayData,
-  SurfaceLayoutPayload
+  SurfaceLayoutPayload,
+  VitalsViewData
 } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -129,6 +131,39 @@ function buildMovementPlaceBreakdown(day: MovementDayData | undefined) {
     .slice(0, 3);
 }
 
+function buildVitalsHighlightRows(vitals: VitalsViewData | undefined) {
+  if (!vitals) {
+    return [];
+  }
+  const desiredMetrics = [
+    "restingHeartRate",
+    "heartRateVariabilitySDNN",
+    "vo2Max",
+    "oxygenSaturation"
+  ] as const;
+  return desiredMetrics
+    .map((key) => vitals.metrics.find((metric) => metric.metric === key))
+    .filter((metric): metric is VitalsViewData["metrics"][number] => Boolean(metric))
+    .slice(0, 3);
+}
+
+function formatVitalOverviewValue(metric: VitalsViewData["metrics"][number]) {
+  if (metric.latestValue == null) {
+    return "No reading";
+  }
+  const digits =
+    metric.unit === "steps" ||
+    metric.unit === "flights" ||
+    metric.unit === "kcal" ||
+    metric.unit === "min"
+      ? 0
+      : 1;
+  return `${metric.latestValue.toLocaleString(undefined, {
+    maximumFractionDigits: digits,
+    minimumFractionDigits: digits === 0 ? 0 : metric.latestValue >= 100 ? 0 : 1
+  })} ${metric.unit}`;
+}
+
 export function OverviewPage() {
   const { t } = useI18n();
   const shell = useForgeShell();
@@ -152,6 +187,10 @@ export function OverviewPage() {
         })
       ).movement
   });
+  const vitalsQuery = useQuery({
+    queryKey: ["forge-overview-vitals", ...shell.selectedUserIds],
+    queryFn: async () => (await getVitalsView(shell.selectedUserIds)).vitals
+  });
   const nextMilestone =
     snapshot.dashboard.milestoneRewards.find((reward) => !reward.completed) ??
     snapshot.dashboard.milestoneRewards[0] ??
@@ -172,10 +211,13 @@ export function OverviewPage() {
   const sleepSummary = sleepQuery.data?.summary ?? null;
   const fitnessSummary = fitnessQuery.data?.summary ?? null;
   const movementDay = movementDayQuery.data;
+  const vitalsSummary = vitalsQuery.data ?? null;
+  const vitalsHighlightRows = buildVitalsHighlightRows(vitalsSummary ?? undefined);
   const movementPlaceBreakdown = buildMovementPlaceBreakdown(movementDay);
   const hasHealthData =
     sleepSummary !== null ||
-    fitnessSummary !== null;
+    fitnessSummary !== null ||
+    vitalsSummary !== null;
   const hasMovementData =
     movementDay !== undefined &&
     (movementDay.summary.tripCount > 0 ||
@@ -193,6 +235,7 @@ export function OverviewPage() {
     sleepQuery.isLoading ||
     fitnessQuery.isLoading ||
     movementDayQuery.isLoading ||
+    vitalsQuery.isLoading ||
     hasHealthData ||
     hasMovementData;
   const summaryMetrics = snapshot.lifeForce
@@ -454,21 +497,21 @@ export function OverviewPage() {
             <div className="flex items-start justify-between gap-3">
               <div>
                 <div className="text-[11px] uppercase tracking-[0.16em] text-white/38">
-                  Health
+                  Body signals
                 </div>
                 <div className="mt-2 text-lg font-semibold text-white">
-                  {hasHealthData ? "Sleep and training" : "No health data yet"}
+                  {hasHealthData ? "Recovery, training, and vitals" : "No health data yet"}
                 </div>
               </div>
-              {fitnessSummary ? (
+              {vitalsSummary ? (
                 <Badge className="bg-white/[0.08] text-white/72">
-                  {fitnessSummary.workoutCount} workout{fitnessSummary.workoutCount === 1 ? "" : "s"}
+                  {vitalsSummary.summary.metricCount} metrics
                 </Badge>
               ) : null}
             </div>
-            {sleepQuery.isLoading || fitnessQuery.isLoading ? (
+            {sleepQuery.isLoading || fitnessQuery.isLoading || vitalsQuery.isLoading ? (
               <div className="mt-3 text-sm leading-6 text-white/58">
-                Loading recent sleep and workout metrics…
+                Loading recent sleep, workout, and body-signal metrics…
               </div>
             ) : hasHealthData ? (
               <div className="mt-3 grid gap-2 text-sm text-white/72">
@@ -503,10 +546,25 @@ export function OverviewPage() {
                       : "Workout imports are available when Apple Health or habit-generated sessions exist."}
                   </div>
                 ) : null}
+                {vitalsHighlightRows.length > 0 ? (
+                  <div className="mt-1 grid gap-2">
+                    {vitalsHighlightRows.map((metric) => (
+                      <div
+                        key={metric.metric}
+                        className="flex flex-wrap items-center justify-between gap-2 rounded-[14px] border border-white/8 bg-white/[0.03] px-3 py-2"
+                      >
+                        <span>{metric.label}</span>
+                        <span className="font-medium text-white">
+                          {formatVitalOverviewValue(metric)}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
               </div>
             ) : (
               <div className="mt-3 text-sm leading-6 text-white/58">
-                Sleep and workout summaries appear here as soon as Forge has recent records.
+                Sleep, workout, and vitals summaries appear here as soon as Forge has recent HealthKit records.
               </div>
             )}
           </Card>

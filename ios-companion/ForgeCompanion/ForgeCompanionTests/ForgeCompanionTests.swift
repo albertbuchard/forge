@@ -27,6 +27,14 @@ private let sharedMovementFixtureDateFormatter: ISO8601DateFormatter = {
 
 @MainActor
 final class ForgeCompanionTests: XCTestCase {
+    private func makeDate(_ value: String) -> Date {
+        guard let date = sharedMovementFixtureDateFormatter.date(from: value) else {
+            XCTFail("Invalid test date \(value)")
+            return Date(timeIntervalSince1970: 0)
+        }
+        return date
+    }
+
     private func loadSharedMovementFixture(id: String) throws -> SharedMovementFixtureScenario {
         let fixtureURL = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
@@ -177,6 +185,162 @@ final class ForgeCompanionTests: XCTestCase {
 
         XCTAssertEqual(summary.status, .error)
         XCTAssertEqual(summary.detail, "Upload failed")
+    }
+
+    func testSleepInferenceCountsShortInternalGapsWhenInBedIsMissing() async {
+        let store = HealthSyncStore()
+        let segments = [
+            HealthSyncStore.SleepSegment(
+                externalUid: "seg_1",
+                startDate: makeDate("2026-04-04T22:00:00.000Z"),
+                endDate: makeDate("2026-04-04T23:00:00.000Z"),
+                stageLabel: "core",
+                bucket: .asleep,
+                sourceValue: 3
+            ),
+            HealthSyncStore.SleepSegment(
+                externalUid: "seg_2",
+                startDate: makeDate("2026-04-04T23:10:00.000Z"),
+                endDate: makeDate("2026-04-05T00:00:00.000Z"),
+                stageLabel: "rem",
+                bucket: .asleep,
+                sourceValue: 5
+            )
+        ]
+
+        let inferredGap = await store.inferredGapDuration(for: segments, threshold: 15 * 60)
+
+        XCTAssertEqual(inferredGap, 600)
+    }
+
+    func testSleepInferenceMergesOverlappingStageSegments() async {
+        let store = HealthSyncStore()
+        let segments = [
+            HealthSyncStore.SleepSegment(
+                externalUid: "seg_1",
+                startDate: makeDate("2026-04-04T22:00:00.000Z"),
+                endDate: makeDate("2026-04-04T23:00:00.000Z"),
+                stageLabel: "core",
+                bucket: .asleep,
+                sourceValue: 3
+            ),
+            HealthSyncStore.SleepSegment(
+                externalUid: "seg_2",
+                startDate: makeDate("2026-04-04T22:30:00.000Z"),
+                endDate: makeDate("2026-04-04T23:30:00.000Z"),
+                stageLabel: "core",
+                bucket: .asleep,
+                sourceValue: 3
+            )
+        ]
+
+        let breakdown = await store.mergedStageBreakdown(for: segments)
+
+        XCTAssertEqual(breakdown.count, 1)
+        XCTAssertEqual(breakdown.first?.stage, "core")
+        XCTAssertEqual(breakdown.first?.seconds, 5_400)
+    }
+
+    func testSleepInferenceSelectsLongestOvernightEpisodePerWakeDate() async {
+        let store = HealthSyncStore()
+        let episodes = [
+            HealthSyncStore.SleepEpisode(
+                startDate: makeDate("2026-04-04T22:00:00.000Z"),
+                endDate: makeDate("2026-04-05T05:30:00.000Z"),
+                localDateKey: "2026-04-05",
+                sourceTimezone: "UTC",
+                rawSegmentCount: 6,
+                timeInBedSeconds: 27_000,
+                asleepSeconds: 25_800,
+                awakeSeconds: 1_200,
+                stageBreakdown: [],
+                recoveryMetrics: [:],
+                sourceMetrics: [:],
+                links: [],
+                annotations: .init(qualitySummary: "", notes: "", tags: [])
+            ),
+            HealthSyncStore.SleepEpisode(
+                startDate: makeDate("2026-04-05T12:00:00.000Z"),
+                endDate: makeDate("2026-04-05T13:00:00.000Z"),
+                localDateKey: "2026-04-05",
+                sourceTimezone: "UTC",
+                rawSegmentCount: 2,
+                timeInBedSeconds: 3_600,
+                asleepSeconds: 3_000,
+                awakeSeconds: 600,
+                stageBreakdown: [],
+                recoveryMetrics: [:],
+                sourceMetrics: [:],
+                links: [],
+                annotations: .init(qualitySummary: "", notes: "", tags: [])
+            ),
+            HealthSyncStore.SleepEpisode(
+                startDate: makeDate("2026-04-05T23:00:00.000Z"),
+                endDate: makeDate("2026-04-06T06:00:00.000Z"),
+                localDateKey: "2026-04-06",
+                sourceTimezone: "UTC",
+                rawSegmentCount: 5,
+                timeInBedSeconds: 25_200,
+                asleepSeconds: 24_000,
+                awakeSeconds: 1_200,
+                stageBreakdown: [],
+                recoveryMetrics: [:],
+                sourceMetrics: [:],
+                links: [],
+                annotations: .init(qualitySummary: "", notes: "", tags: [])
+            )
+        ]
+
+        let canonical = await store.selectCanonicalNights(from: episodes)
+
+        XCTAssertEqual(canonical.count, 2)
+        XCTAssertEqual(canonical[0].localDateKey, "2026-04-06")
+        XCTAssertEqual(canonical[1].localDateKey, "2026-04-05")
+        XCTAssertEqual(canonical[1].timeInBedSeconds, 27_000)
+    }
+
+    func testSleepInferenceClusteringSplitsOnlyOnRealLongGaps() async {
+        let store = HealthSyncStore()
+        let anchors = [
+            HealthSyncStore.SleepSegment(
+                externalUid: "seg_1",
+                startDate: makeDate("2026-04-04T22:00:00.000Z"),
+                endDate: makeDate("2026-04-04T23:00:00.000Z"),
+                stageLabel: "core",
+                bucket: .asleep,
+                sourceValue: 3
+            ),
+            HealthSyncStore.SleepSegment(
+                externalUid: "seg_2",
+                startDate: makeDate("2026-04-04T23:20:00.000Z"),
+                endDate: makeDate("2026-04-05T00:00:00.000Z"),
+                stageLabel: "deep",
+                bucket: .asleep,
+                sourceValue: 4
+            ),
+            HealthSyncStore.SleepSegment(
+                externalUid: "seg_3",
+                startDate: makeDate("2026-04-05T05:10:00.000Z"),
+                endDate: makeDate("2026-04-05T06:00:00.000Z"),
+                stageLabel: "core",
+                bucket: .asleep,
+                sourceValue: 3
+            ),
+            HealthSyncStore.SleepSegment(
+                externalUid: "seg_4",
+                startDate: makeDate("2026-04-05T06:10:00.000Z"),
+                endDate: makeDate("2026-04-05T06:40:00.000Z"),
+                stageLabel: "rem",
+                bucket: .asleep,
+                sourceValue: 5
+            )
+        ]
+
+        let clusters = await store.clusterSleepAnchorSegments(anchors)
+
+        XCTAssertEqual(clusters.count, 2)
+        XCTAssertEqual(clusters[0].count, 2)
+        XCTAssertEqual(clusters[1].count, 2)
     }
 
     func testPermissionSyncPhaseUsesBusyLabelsForLiveWork() {

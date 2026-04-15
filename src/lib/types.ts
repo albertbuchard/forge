@@ -200,6 +200,10 @@ export interface UserDirectoryPayload {
 export interface OwnedEntity {
   userId?: string | null;
   user?: UserSummary | null;
+  ownerUserId?: string | null;
+  ownerUser?: UserSummary | null;
+  assigneeUserIds?: string[];
+  assignees?: UserSummary[];
 }
 
 export interface TaskTimeSummary {
@@ -687,22 +691,55 @@ export interface Project extends OwnedEntity {
   title: string;
   description: string;
   status: "active" | "paused" | "completed";
+  workflowStatus: TaskStatus;
   targetPoints: number;
   themeColor: string;
+  productRequirementsDocument: string;
   schedulingRules: CalendarSchedulingRules;
   createdAt: string;
   updatedAt: string;
+}
+
+export type WorkItemLevel = "issue" | "task" | "subtask";
+export type WorkItemExecutionMode = "afk" | "hitl";
+export type WorkItemGitRefType = "commit" | "branch" | "pull_request";
+
+export interface WorkItemBlockerLink {
+  entityType: string;
+  entityId: string;
+  label?: string;
+}
+
+export interface WorkItemGitRef {
+  id: string;
+  workItemId: string;
+  refType: WorkItemGitRefType;
+  provider: string;
+  repository: string;
+  refValue: string;
+  url: string | null;
+  displayTitle: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface WorkItemCompletionReport {
+  modifiedFiles: string[];
+  workSummary: string;
+  linkedGitRefIds: string[];
 }
 
 export interface Task extends OwnedEntity {
   id: string;
   title: string;
   description: string;
+  level: WorkItemLevel;
   status: TaskStatus;
   priority: TaskPriority;
   owner: string;
   goalId: string | null;
   projectId: string | null;
+  parentWorkItemId: string | null;
   dueDate: string | null;
   effort: TaskEffort;
   energy: TaskEnergy;
@@ -712,6 +749,12 @@ export interface Task extends OwnedEntity {
   sortOrder: number;
   resolutionKind?: TaskResolutionKind | null;
   splitParentTaskId?: string | null;
+  aiInstructions: string;
+  executionMode: WorkItemExecutionMode | null;
+  acceptanceCriteria: string[];
+  blockerLinks: WorkItemBlockerLink[];
+  completionReport: WorkItemCompletionReport | null;
+  gitRefs: WorkItemGitRef[];
   completedAt: string | null;
   createdAt: string;
   updatedAt: string;
@@ -720,6 +763,8 @@ export interface Task extends OwnedEntity {
   actionPointSummary?: TaskActionPointSummary;
   splitSuggestion?: TaskSplitSuggestion;
 }
+
+export type WorkItem = Task;
 
 export interface ActivityEvent extends OwnedEntity {
   id: string;
@@ -1162,7 +1207,11 @@ export interface CompanionOverviewPayload {
   lastSyncAt: string | null;
   counts: {
     sleepSessions: number;
+    sleepSegments: number;
+    sleepRawLogs: number;
     workouts: number;
+    vitalsDaySummaries?: number;
+    vitalsMetricEntries?: number;
     reflectiveSleepSessions: number;
     linkedWorkouts: number;
     habitGeneratedWorkouts: number;
@@ -1214,23 +1263,143 @@ export interface SleepSessionRecord {
   source: string;
   sourceType: string;
   sourceDevice: string;
+  sourceTimezone: string;
+  localDateKey: string;
   startedAt: string;
   endedAt: string;
   timeInBedSeconds: number;
   asleepSeconds: number;
   awakeSeconds: number;
+  rawSegmentCount: number;
   sleepScore: number | null;
   regularityScore: number | null;
   bedtimeConsistencyMinutes: number | null;
   wakeConsistencyMinutes: number | null;
   stageBreakdown: Array<{ stage: string; seconds: number }>;
   recoveryMetrics: Record<string, unknown>;
+  sourceMetrics: Record<string, unknown>;
   links: HealthLink[];
   annotations: Record<string, unknown>;
   provenance: Record<string, unknown>;
   derived: Record<string, unknown>;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface SleepSegmentRecord {
+  id: string;
+  externalUid: string;
+  importRunId: string | null;
+  pairingSessionId: string | null;
+  sleepSessionId: string | null;
+  userId: string;
+  source: string;
+  sourceType: string;
+  sourceDevice: string;
+  sourceTimezone: string;
+  localDateKey: string;
+  startedAt: string;
+  endedAt: string;
+  stage: string;
+  bucket: string;
+  sourceValue: number | null;
+  metadata: Record<string, unknown>;
+  provenance: Record<string, unknown>;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SleepRawLogRecord {
+  id: string;
+  importRunId: string | null;
+  pairingSessionId: string | null;
+  sleepSessionId: string | null;
+  userId: string;
+  source: string;
+  logType: string;
+  externalUid: string | null;
+  sourceTimezone: string;
+  localDateKey: string;
+  startedAt: string | null;
+  endedAt: string | null;
+  payload: Record<string, unknown>;
+  metadata: Record<string, unknown>;
+  createdAt: string;
+}
+
+export interface SleepSurfaceStageShare {
+  stage: string;
+  seconds: number;
+  percentage: number;
+}
+
+export interface SleepSurfaceNight {
+  sleepId: string;
+  dateKey: string;
+  sourceTimezone: string;
+  startedAt: string;
+  endedAt: string;
+  asleepSeconds: number;
+  timeInBedSeconds: number;
+  awakeSeconds: number;
+  rawSegmentCount: number;
+  score: number | null;
+  regularity: number | null;
+  efficiency: number;
+  restorativeShare: number;
+  weeklyAverageSleepSeconds: number;
+  deltaFromWeeklyAverageSeconds: number;
+  bedtimeDriftMinutes: number | null;
+  wakeDriftMinutes: number | null;
+  recoveryState: string | null;
+  qualitativeState: string;
+  hasReflection: boolean;
+  hasRawSegments: boolean;
+  qualitySummary: string | null;
+  stageBreakdown: SleepSurfaceStageShare[];
+}
+
+export interface SleepCalendarDay {
+  dateKey: string;
+  sleepId: string;
+  startedAt: string;
+  endedAt: string;
+  sourceTimezone: string;
+  sleepHours: number;
+  score: number | null;
+  regularity: number | null;
+  efficiency: number;
+  recoveryState: string | null;
+  hasReflection: boolean;
+  hasRawSegments: boolean;
+}
+
+export interface SleepPhaseTimelineBlock {
+  id: string;
+  stage: string;
+  label: string;
+  lane: "sleep" | "in_bed";
+  startedAt: string;
+  endedAt: string;
+  durationSeconds: number;
+  offsetRatio: number;
+  widthRatio: number;
+}
+
+export interface SleepPhaseTimeline {
+  startedAt: string;
+  endedAt: string;
+  totalSeconds: number;
+  hasRawSegments: boolean;
+  hasSleepStageData: boolean;
+  blocks: SleepPhaseTimelineBlock[];
+}
+
+export interface SleepSessionDetailPayload {
+  sleep: SleepSessionRecord;
+  phaseTimeline: SleepPhaseTimeline;
+  rawSegments: SleepSegmentRecord[];
+  rawLogs: SleepRawLogRecord[];
 }
 
 export interface WorkoutSessionRecord {
@@ -1286,6 +1455,8 @@ export interface SleepViewData {
     latestBedtime: string | null;
     latestWakeTime: string | null;
   };
+  latestNight: SleepSurfaceNight | null;
+  calendarDays: SleepCalendarDay[];
   weeklyTrend: Array<{
     id: string;
     dateKey: string;
@@ -1343,6 +1514,44 @@ export interface FitnessViewData {
     energyKcal: number;
   }>;
   sessions: WorkoutSessionRecord[];
+}
+
+export interface VitalMetricDayRecord {
+  dateKey: string;
+  average: number | null;
+  minimum: number | null;
+  maximum: number | null;
+  latest: number | null;
+  total: number | null;
+  sampleCount: number;
+  latestSampleAt: string | null;
+}
+
+export interface VitalsViewData {
+  summary: {
+    trackedDays: number;
+    metricCount: number;
+    latestDateKey: string | null;
+    latestMetricCount: number;
+    categoryBreakdown: Array<{
+      category: string;
+      metricCount: number;
+      coverageDays: number;
+    }>;
+  };
+  metrics: Array<{
+    metric: string;
+    label: string;
+    category: string;
+    unit: string;
+    aggregation: "discrete" | "cumulative";
+    latestValue: number | null;
+    latestDateKey: string | null;
+    baselineValue: number | null;
+    deltaValue: number | null;
+    coverageDays: number;
+    days: VitalMetricDayRecord[];
+  }>;
 }
 
 export type MovementPublishMode =
@@ -3273,6 +3482,7 @@ export interface ForgeSnapshot {
   projects: ProjectSummary[];
   tags: Tag[];
   tasks: Task[];
+  workItems?: WorkItem[];
   habits: Habit[];
   activity: ActivityEvent[];
   activeTaskRuns: TaskRun[];

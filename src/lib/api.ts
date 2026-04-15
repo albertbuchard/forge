@@ -93,6 +93,7 @@ import type {
   Strategy,
   Tag,
   Task,
+  WorkItem,
   TaskTimebox,
   TaskContext,
   TaskRun,
@@ -2622,6 +2623,86 @@ export function getProjectBoard(projectId: string) {
   return request<ProjectBoardPayload>(`/api/v1/projects/${projectId}/board`);
 }
 
+export function getWorkItemsBoard(params?: {
+  projectId?: string;
+  goalId?: string;
+  levels?: string[];
+  userIds?: string[] | unknown;
+  assigneeIds?: string[] | unknown;
+}) {
+  const query = new URLSearchParams();
+  if (params?.projectId) {
+    query.set("projectId", params.projectId);
+  }
+  if (params?.goalId) {
+    query.set("goalId", params.goalId);
+  }
+  if (Array.isArray(params?.levels) && params.levels.length > 0) {
+    query.set("levels", params.levels.join(","));
+  }
+  if (Array.isArray(params?.userIds)) {
+    for (const userId of params.userIds) {
+      if (typeof userId === "string" && userId.trim().length > 0) {
+        query.append("userIds", userId);
+      }
+    }
+  }
+  if (Array.isArray(params?.assigneeIds)) {
+    for (const userId of params.assigneeIds) {
+      if (typeof userId === "string" && userId.trim().length > 0) {
+        query.append("assigneeIds", userId);
+      }
+    }
+  }
+  const suffix = query.toString().length > 0 ? `?${query.toString()}` : "";
+  return request<{
+    goals: Goal[];
+    strategies: Strategy[];
+    projects: ProjectSummary[];
+    workItems: WorkItem[];
+  }>(`/api/v1/work-items/board${suffix}`);
+}
+
+export function getWorkItemsHierarchy(params?: {
+  projectId?: string;
+  goalId?: string;
+  levels?: string[];
+  userIds?: string[] | unknown;
+  assigneeIds?: string[] | unknown;
+}) {
+  const query = new URLSearchParams();
+  if (params?.projectId) {
+    query.set("projectId", params.projectId);
+  }
+  if (params?.goalId) {
+    query.set("goalId", params.goalId);
+  }
+  if (Array.isArray(params?.levels) && params.levels.length > 0) {
+    query.set("levels", params.levels.join(","));
+  }
+  if (Array.isArray(params?.userIds)) {
+    for (const userId of params.userIds) {
+      if (typeof userId === "string" && userId.trim().length > 0) {
+        query.append("userIds", userId);
+      }
+    }
+  }
+  if (Array.isArray(params?.assigneeIds)) {
+    for (const userId of params.assigneeIds) {
+      if (typeof userId === "string" && userId.trim().length > 0) {
+        query.append("assigneeIds", userId);
+      }
+    }
+  }
+  const suffix = query.toString().length > 0 ? `?${query.toString()}` : "";
+  return request<{
+    goals: Goal[];
+    strategies: Strategy[];
+    projects: ProjectSummary[];
+    workItems: WorkItem[];
+  }>(`/api/v1/work-items/hierarchy${suffix}`);
+}
+
 export function getOperatorContext() {
   return request<{ context: OperatorContextPayload }>(
     "/api/v1/operator/context"
@@ -3040,12 +3121,27 @@ export function getSleepView(userIds?: string[] | unknown) {
   return request<{ sleep: SleepViewData }>(`/api/v1/health/sleep${suffix}`);
 }
 
+export function getSleepSessionRawDetail(sleepId: string) {
+  return request<import("./types").SleepSessionDetailPayload>(
+    `/api/v1/health/sleep/${sleepId}/raw`
+  );
+}
+
 export function getFitnessView(userIds?: string[] | unknown) {
   const search = new URLSearchParams();
   appendUserIds(search, coerceUserIds(userIds));
   const suffix = search.size > 0 ? `?${search.toString()}` : "";
   return request<{ fitness: FitnessViewData }>(
     `/api/v1/health/fitness${suffix}`
+  );
+}
+
+export function getVitalsView(userIds?: string[] | unknown) {
+  const search = new URLSearchParams();
+  appendUserIds(search, coerceUserIds(userIds));
+  const suffix = search.size > 0 ? `?${search.toString()}` : "";
+  return request<{ vitals: import("./types").VitalsViewData }>(
+    `/api/v1/health/vitals${suffix}`
   );
 }
 
@@ -4021,6 +4117,7 @@ export function createTask(input: QuickTaskInput) {
     ...input,
     goalId: input.goalId || null,
     projectId: input.projectId || null,
+    parentWorkItemId: input.parentWorkItemId || null,
     dueDate: input.dueDate || null,
     plannedDurationSeconds:
       input.plannedDurationSeconds === undefined
@@ -4029,6 +4126,25 @@ export function createTask(input: QuickTaskInput) {
     notes: normalizeNestedNotes(input.notes)
   };
   return request<{ task: Task }>("/api/v1/tasks", {
+    method: "POST",
+    body: JSON.stringify(normalized)
+  });
+}
+
+export function createWorkItem(input: QuickTaskInput) {
+  const normalized = {
+    ...input,
+    goalId: input.goalId || null,
+    projectId: input.projectId || null,
+    parentWorkItemId: input.parentWorkItemId || null,
+    dueDate: input.dueDate || null,
+    plannedDurationSeconds:
+      input.plannedDurationSeconds === undefined
+        ? null
+        : input.plannedDurationSeconds,
+    notes: normalizeNestedNotes(input.notes)
+  };
+  return request<{ workItem: WorkItem }>("/api/v1/work-items", {
     method: "POST",
     body: JSON.stringify(normalized)
   });
@@ -4051,6 +4167,36 @@ export function patchTask(
       ...patch,
       goalId: patch.goalId === "" ? null : patch.goalId,
       projectId: patch.projectId === "" ? null : patch.projectId,
+      parentWorkItemId:
+        patch.parentWorkItemId === "" ? null : patch.parentWorkItemId,
+      dueDate: patch.dueDate === "" ? null : patch.dueDate,
+      plannedDurationSeconds:
+        patch.plannedDurationSeconds === undefined
+          ? undefined
+          : patch.plannedDurationSeconds
+    })
+  });
+}
+
+export function patchWorkItem(
+  workItemId: string,
+  patch: Partial<QuickTaskInput> & {
+    status?: string;
+    completedAt?: string;
+    plannedDurationSeconds?: number | null;
+    schedulingRules?: CalendarSchedulingRules | null;
+    enforceTodayWorkLog?: boolean;
+    completedTodayWorkSeconds?: number;
+  }
+) {
+  return request<{ workItem: WorkItem }>(`/api/v1/work-items/${workItemId}`, {
+    method: "PATCH",
+    body: JSON.stringify({
+      ...patch,
+      goalId: patch.goalId === "" ? null : patch.goalId,
+      projectId: patch.projectId === "" ? null : patch.projectId,
+      parentWorkItemId:
+        patch.parentWorkItemId === "" ? null : patch.parentWorkItemId,
       dueDate: patch.dueDate === "" ? null : patch.dueDate,
       plannedDurationSeconds:
         patch.plannedDurationSeconds === undefined
@@ -4085,6 +4231,10 @@ export function uncompleteTask(taskId: string) {
 
 export function getTaskContext(taskId: string) {
   return request<TaskContext>(`/api/v1/tasks/${taskId}/context`);
+}
+
+export function getWorkItemContext(workItemId: string) {
+  return request<TaskContext>(`/api/v1/work-items/${workItemId}/context`);
 }
 
 export function logOperatorWork(input: OperatorLogWorkInput) {

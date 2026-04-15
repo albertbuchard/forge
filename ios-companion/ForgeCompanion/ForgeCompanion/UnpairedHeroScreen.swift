@@ -13,7 +13,7 @@ struct UnpairedHeroScreen: View {
                         .font(.system(size: 13, weight: .semibold, design: .rounded))
                         .foregroundStyle(CompanionStyle.textMuted)
 
-                    Text("Sync sleep and workouts into Forge.")
+                    Text("Sync sleep, vitals, and workouts into Forge.")
                         .font(
                             .system(
                                 size: min(max(proxy.size.width * 0.094, 28), 40),

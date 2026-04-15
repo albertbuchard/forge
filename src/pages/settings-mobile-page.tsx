@@ -33,13 +33,30 @@ function formatCapabilityLabel(capability: string) {
 }
 
 function formatSyncSummary(payloadSummary: Record<string, unknown>) {
+  const sleepNights =
+    typeof payloadSummary.sleepNights === "number"
+      ? payloadSummary.sleepNights
+      : typeof payloadSummary.sleepSessions === "number"
+        ? payloadSummary.sleepSessions
+        : 0;
+  const sleepSegments =
+    typeof payloadSummary.sleepSegments === "number"
+      ? payloadSummary.sleepSegments
+      : 0;
   const sleepSessions =
     typeof payloadSummary.sleepSessions === "number"
       ? payloadSummary.sleepSessions
       : 0;
   const workouts =
     typeof payloadSummary.workouts === "number" ? payloadSummary.workouts : 0;
-  return `${sleepSessions} sleep · ${workouts} workouts`;
+  const vitals =
+    payloadSummary.vitals &&
+    typeof payloadSummary.vitals === "object" &&
+    !Array.isArray(payloadSummary.vitals) &&
+    typeof (payloadSummary.vitals as Record<string, unknown>).metricEntries === "number"
+      ? ((payloadSummary.vitals as Record<string, unknown>).metricEntries as number)
+      : 0;
+  return `${sleepNights || sleepSessions} nights · ${sleepSegments} raw segments · ${workouts} workouts · ${vitals} vitals`;
 }
 
 function permissionTone(enabled: boolean) {
@@ -353,6 +370,18 @@ export function SettingsMobilePage() {
               </div>
             </div>
             <div className="rounded-[18px] bg-white/[0.04] p-4">
+              <div className="text-sm text-white/58">Vitals days</div>
+              <div className="mt-2 font-display text-3xl text-white">
+                {overview.counts.vitalsDaySummaries ?? 0}
+              </div>
+            </div>
+            <div className="rounded-[18px] bg-white/[0.04] p-4">
+              <div className="text-sm text-white/58">Vital entries</div>
+              <div className="mt-2 font-display text-3xl text-white">
+                {overview.counts.vitalsMetricEntries ?? 0}
+              </div>
+            </div>
+            <div className="rounded-[18px] bg-white/[0.04] p-4">
               <div className="text-sm text-white/58">Reflected sleep</div>
               <div className="mt-2 font-display text-3xl text-white">
                 {overview.counts.reflectiveSleepSessions}
@@ -410,7 +439,7 @@ export function SettingsMobilePage() {
               <div>1. Generate a one-time QR code here inside Forge Settings.</div>
               <div>2. Scan it in Forge Companion to pass the API URL and pairing token.</div>
               <div>3. Approve Health access on iPhone, then run the first sync.</div>
-              <div>4. Review import history below and open Sleep or Sports to enrich the imported records.</div>
+              <div>4. Review import history below and open Sleep, Sports, or Vitals to inspect the imported records.</div>
             </div>
           </div>
 
@@ -595,6 +624,13 @@ export function SettingsMobilePage() {
             >
               <Link2 className="size-4" />
               Open sports view
+            </Link>
+            <Link
+              to="/vitals"
+              className="inline-flex min-h-11 items-center gap-2 rounded-[16px] border border-white/8 bg-white/[0.03] px-4 py-3 text-sm text-white/72 transition hover:bg-white/[0.06] hover:text-white"
+            >
+              <Link2 className="size-4" />
+              Open vitals view
             </Link>
           </div>
         </Card>

@@ -1238,6 +1238,8 @@ final class CompanionAppModel: ObservableObject {
             let report = SyncReport(
                 syncedAt: Date.now,
                 sleepSessions: receipt.imported.sleepSessions,
+                sleepNights: receipt.imported.sleepNights ?? receipt.imported.sleepSessions,
+                sleepSegments: receipt.imported.sleepSegments ?? 0,
                 workouts: receipt.imported.workouts,
                 createdCount: receipt.imported.createdCount,
                 updatedCount: receipt.imported.updatedCount,
@@ -1245,6 +1247,8 @@ final class CompanionAppModel: ObservableObject {
                 movementStays: receipt.imported.movementStays ?? 0,
                 movementTrips: receipt.imported.movementTrips ?? 0,
                 movementKnownPlaces: receipt.imported.movementKnownPlaces ?? 0,
+                vitalsDaySummaries: receipt.imported.vitalsDaySummaries ?? 0,
+                vitalsMetricEntries: receipt.imported.vitalsMetricEntries ?? 0,
                 screenTimeDaySummaries: receipt.imported.screenTimeDaySummaries ?? 0,
                 screenTimeHourlySegments: receipt.imported.screenTimeHourlySegments ?? 0,
                 screenTimeTotalActivitySeconds: payloadSummary.screenTimeTotalActivitySeconds
@@ -1256,7 +1260,7 @@ final class CompanionAppModel: ObservableObject {
                     "Synced movement while HealthKit stayed locked. Health data will resume after unlock."
             } else {
                 lastSyncMessage =
-                    "Synced \(receipt.imported.sleepSessions) sleep, \(receipt.imported.workouts) workouts, and \(receipt.imported.movementTrips ?? 0) trips via \(trigger)"
+                    "Synced \(receipt.imported.sleepNights ?? receipt.imported.sleepSessions) nights, \(receipt.imported.workouts) workouts, \(receipt.imported.vitalsMetricEntries ?? 0) body metrics, and \(receipt.imported.movementTrips ?? 0) trips via \(trigger)"
             }
             latestError = nil
             await refreshHealthAccessStatus()
@@ -1489,7 +1493,7 @@ final class CompanionAppModel: ObservableObject {
                 id: "health",
                 title: "Health",
                 value: healthAccessLabel,
-                detail: "Sleep and workouts",
+                detail: "Sleep, vitals, and workouts",
                 isMissing: healthSyncEnabled && healthAccessStatus == .notSet
             ),
             SyncCoverageRow(
@@ -1547,7 +1551,7 @@ final class CompanionAppModel: ObservableObject {
         guard let report = latestSyncReport else {
             return "No sync yet"
         }
-        return "\(report.sleepSessions) sleep, \(report.workouts) workouts, \(report.movementTrips) trips"
+        return "\(report.sleepNights) nights, \(report.sleepSegments) raw segments, \(report.workouts) workouts"
     }
 
     var lastSuccessfulSyncLabel: String {
@@ -1569,9 +1573,9 @@ final class CompanionAppModel: ObservableObject {
             SyncCoverageRow(
                 id: "sleep",
                 title: "Sleep",
-                value: "\(payloadSummary?.sleepSessions ?? 0) sessions",
-                detail: "Stage segments synced as summarized sleep sessions, not raw category samples.",
-                isMissing: (payloadSummary?.sleepSessions ?? 0) == 0
+                value: "\(payloadSummary?.sleepNights ?? 0) nights + \(payloadSummary?.sleepSegments ?? 0) raw",
+                detail: "Forge sync now carries canonical overnight nights plus the raw Apple sleep segments used to reconstruct them.",
+                isMissing: (payloadSummary?.sleepNights ?? 0) == 0
             ),
             SyncCoverageRow(
                 id: "workouts",
@@ -1581,11 +1585,18 @@ final class CompanionAppModel: ObservableObject {
                 isMissing: (payloadSummary?.workouts ?? 0) == 0
             ),
             SyncCoverageRow(
+                id: "vitals",
+                title: "Body signals",
+                value: "\(payloadSummary?.vitalsMetricEntries ?? 0) metrics across \(payloadSummary?.vitalsDaySummaries ?? 0) days",
+                detail: "Daily HealthKit vitals now include recovery, cardio, breathing, composition, and activity signals such as resting HR, HRV, VO2 max, respiratory rate, SpO2, weight, and exercise totals.",
+                isMissing: (payloadSummary?.vitalsMetricEntries ?? 0) == 0
+            ),
+            SyncCoverageRow(
                 id: "heart-rate",
                 title: "Heart rate",
                 value: "\(payloadSummary?.workoutsWithAverageHeartRate ?? 0) avg + \(payloadSummary?.workoutsWithMaxHeartRate ?? 0) max",
-                detail: "Raw heart-rate datapoints are not synced yet. Forge only receives workout-level heart-rate summaries right now.",
-                isMissing: (payloadSummary?.workoutsWithAverageHeartRate ?? 0) == 0 && (payloadSummary?.workoutsWithMaxHeartRate ?? 0) == 0
+                detail: "Workout heart-rate summaries still sync, and Forge now also receives daily resting heart rate, walking heart rate, and HRV body signals.",
+                isMissing: (payloadSummary?.workoutsWithAverageHeartRate ?? 0) == 0 && (payloadSummary?.workoutsWithMaxHeartRate ?? 0) == 0 && (payloadSummary?.vitalsMetricEntries ?? 0) == 0
             ),
             SyncCoverageRow(
                 id: "movement",
@@ -1636,7 +1647,9 @@ final class CompanionAppModel: ObservableObject {
         SyncPayloadSummary(
             builtAt: .now,
             sleepSessions: payload.sleepSessions.count,
-            sleepStageEntries: payload.sleepSessions.reduce(0) { $0 + $1.stageBreakdown.count },
+            sleepNights: payload.sleepNights.count,
+            sleepSegments: payload.sleepSegments.count,
+            sleepStageEntries: payload.sleepNights.reduce(0) { $0 + $1.stageBreakdown.count },
             workouts: payload.workouts.count,
             workoutsWithAverageHeartRate: payload.workouts.reduce(0) { $0 + ($1.averageHeartRate == nil ? 0 : 1) },
             workoutsWithMaxHeartRate: payload.workouts.reduce(0) { $0 + ($1.maxHeartRate == nil ? 0 : 1) },
@@ -1646,6 +1659,8 @@ final class CompanionAppModel: ObservableObject {
             movementTrips: payload.movement.trips.count,
             movementTripPoints: payload.movement.trips.reduce(0) { $0 + $1.points.count },
             movementTripStops: payload.movement.trips.reduce(0) { $0 + $1.stops.count },
+            vitalsDaySummaries: payload.vitals.daySummaries.count,
+            vitalsMetricEntries: payload.vitals.daySummaries.reduce(0) { $0 + $1.metrics.count },
             screenTimeDaySummaries: payload.screenTime.daySummaries.count,
             screenTimeHourlySegments: payload.screenTime.hourlySegments.count,
             screenTimeTotalActivitySeconds: payload.screenTime.daySummaries.isEmpty == false
@@ -2084,6 +2099,8 @@ final class CompanionAppModel: ObservableObject {
 private struct PersistedSyncReport: Codable {
     let syncedAt: Date
     let sleepSessions: Int
+    let sleepNights: Int
+    let sleepSegments: Int
     let workouts: Int
     let createdCount: Int
     let updatedCount: Int
@@ -2091,6 +2108,8 @@ private struct PersistedSyncReport: Codable {
     let movementStays: Int
     let movementTrips: Int
     let movementKnownPlaces: Int
+    let vitalsDaySummaries: Int
+    let vitalsMetricEntries: Int
     let screenTimeDaySummaries: Int
     let screenTimeHourlySegments: Int
     let screenTimeTotalActivitySeconds: Int
@@ -2098,6 +2117,8 @@ private struct PersistedSyncReport: Codable {
     private enum CodingKeys: String, CodingKey {
         case syncedAt
         case sleepSessions
+        case sleepNights
+        case sleepSegments
         case workouts
         case createdCount
         case updatedCount
@@ -2105,6 +2126,8 @@ private struct PersistedSyncReport: Codable {
         case movementStays
         case movementTrips
         case movementKnownPlaces
+        case vitalsDaySummaries
+        case vitalsMetricEntries
         case screenTimeDaySummaries
         case screenTimeHourlySegments
         case screenTimeTotalActivitySeconds
@@ -2113,6 +2136,8 @@ private struct PersistedSyncReport: Codable {
     init(report: SyncReport) {
         syncedAt = report.syncedAt
         sleepSessions = report.sleepSessions
+        sleepNights = report.sleepNights
+        sleepSegments = report.sleepSegments
         workouts = report.workouts
         createdCount = report.createdCount
         updatedCount = report.updatedCount
@@ -2120,6 +2145,8 @@ private struct PersistedSyncReport: Codable {
         movementStays = report.movementStays
         movementTrips = report.movementTrips
         movementKnownPlaces = report.movementKnownPlaces
+        vitalsDaySummaries = report.vitalsDaySummaries
+        vitalsMetricEntries = report.vitalsMetricEntries
         screenTimeDaySummaries = report.screenTimeDaySummaries
         screenTimeHourlySegments = report.screenTimeHourlySegments
         screenTimeTotalActivitySeconds = report.screenTimeTotalActivitySeconds
@@ -2129,6 +2156,8 @@ private struct PersistedSyncReport: Codable {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         syncedAt = try container.decode(Date.self, forKey: .syncedAt)
         sleepSessions = try container.decode(Int.self, forKey: .sleepSessions)
+        sleepNights = try container.decodeIfPresent(Int.self, forKey: .sleepNights) ?? sleepSessions
+        sleepSegments = try container.decodeIfPresent(Int.self, forKey: .sleepSegments) ?? 0
         workouts = try container.decode(Int.self, forKey: .workouts)
         createdCount = try container.decode(Int.self, forKey: .createdCount)
         updatedCount = try container.decode(Int.self, forKey: .updatedCount)
@@ -2136,6 +2165,8 @@ private struct PersistedSyncReport: Codable {
         movementStays = try container.decodeIfPresent(Int.self, forKey: .movementStays) ?? 0
         movementTrips = try container.decodeIfPresent(Int.self, forKey: .movementTrips) ?? 0
         movementKnownPlaces = try container.decodeIfPresent(Int.self, forKey: .movementKnownPlaces) ?? 0
+        vitalsDaySummaries = try container.decodeIfPresent(Int.self, forKey: .vitalsDaySummaries) ?? 0
+        vitalsMetricEntries = try container.decodeIfPresent(Int.self, forKey: .vitalsMetricEntries) ?? 0
         screenTimeDaySummaries = try container.decodeIfPresent(Int.self, forKey: .screenTimeDaySummaries) ?? 0
         screenTimeHourlySegments = try container.decodeIfPresent(Int.self, forKey: .screenTimeHourlySegments) ?? 0
         screenTimeTotalActivitySeconds = try container.decodeIfPresent(Int.self, forKey: .screenTimeTotalActivitySeconds) ?? 0
@@ -2145,6 +2176,8 @@ private struct PersistedSyncReport: Codable {
         SyncReport(
             syncedAt: syncedAt,
             sleepSessions: sleepSessions,
+            sleepNights: sleepNights,
+            sleepSegments: sleepSegments,
             workouts: workouts,
             createdCount: createdCount,
             updatedCount: updatedCount,
@@ -2152,6 +2185,8 @@ private struct PersistedSyncReport: Codable {
             movementStays: movementStays,
             movementTrips: movementTrips,
             movementKnownPlaces: movementKnownPlaces,
+            vitalsDaySummaries: vitalsDaySummaries,
+            vitalsMetricEntries: vitalsMetricEntries,
             screenTimeDaySummaries: screenTimeDaySummaries,
             screenTimeHourlySegments: screenTimeHourlySegments,
             screenTimeTotalActivitySeconds: screenTimeTotalActivitySeconds

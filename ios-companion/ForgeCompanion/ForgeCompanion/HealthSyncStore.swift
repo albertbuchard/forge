@@ -8,28 +8,234 @@ actor HealthSyncStore {
         let healthDataDeferred: Bool
     }
 
-    private enum SleepBucket {
+    enum VitalAggregationKind: String {
+        case discrete
+        case cumulative
+    }
+
+    enum SleepBucket {
         case inBed
         case asleep
         case awake
     }
 
-    private struct SleepSegment {
+    struct SleepSegment {
+        let externalUid: String
         let startDate: Date
         let endDate: Date
         let stageLabel: String
         let bucket: SleepBucket
+        let sourceValue: Int
+    }
+
+    struct SleepEpisode {
+        let startDate: Date
+        let endDate: Date
+        let localDateKey: String
+        let sourceTimezone: String
+        let rawSegmentCount: Int
+        let timeInBedSeconds: Int
+        let asleepSeconds: Int
+        let awakeSeconds: Int
+        let stageBreakdown: [CompanionSyncPayload.SleepStage]
+        let recoveryMetrics: [String: CompanionSyncPayload.ScalarValue]
+        let sourceMetrics: [String: CompanionSyncPayload.ScalarValue]
+        let links: [CompanionSyncPayload.HealthLink]
+        let annotations: CompanionSyncPayload.SleepAnnotations
+    }
+
+    struct VitalMetricDefinition {
+        let key: String
+        let label: String
+        let category: String
+        let identifier: HKQuantityTypeIdentifier
+        let unit: HKUnit
+        let displayUnit: String
+        let aggregation: VitalAggregationKind
+        let displayMultiplier: Double
+    }
+
+    struct VitalQuantitySample {
+        let startedAt: Date
+        let endedAt: Date
+        let value: Double
     }
 
     private let store = HKHealthStore()
     private let syncWindowDays = 21
     private let incrementalLookbackHours = 72
     private let sleepSessionGap: TimeInterval = 4 * 60 * 60
+    private let sleepInferenceGap: TimeInterval = 15 * 60
     private let isoFormatter: ISO8601DateFormatter = {
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
         return formatter
     }()
+
+    private var vitalMetricDefinitions: [VitalMetricDefinition] {
+        [
+            VitalMetricDefinition(
+                key: "restingHeartRate",
+                label: "Resting heart rate",
+                category: "recovery",
+                identifier: .restingHeartRate,
+                unit: HKUnit.count().unitDivided(by: .minute()),
+                displayUnit: "bpm",
+                aggregation: .discrete,
+                displayMultiplier: 1
+            ),
+            VitalMetricDefinition(
+                key: "heartRateVariabilitySDNN",
+                label: "HRV (SDNN)",
+                category: "recovery",
+                identifier: .heartRateVariabilitySDNN,
+                unit: .secondUnit(with: .milli),
+                displayUnit: "ms",
+                aggregation: .discrete,
+                displayMultiplier: 1
+            ),
+            VitalMetricDefinition(
+                key: "walkingHeartRateAverage",
+                label: "Walking heart rate",
+                category: "cardio",
+                identifier: .walkingHeartRateAverage,
+                unit: HKUnit.count().unitDivided(by: .minute()),
+                displayUnit: "bpm",
+                aggregation: .discrete,
+                displayMultiplier: 1
+            ),
+            VitalMetricDefinition(
+                key: "heartRateRecoveryOneMinute",
+                label: "Heart rate recovery",
+                category: "cardio",
+                identifier: .heartRateRecoveryOneMinute,
+                unit: HKUnit.count().unitDivided(by: .minute()),
+                displayUnit: "bpm",
+                aggregation: .discrete,
+                displayMultiplier: 1
+            ),
+            VitalMetricDefinition(
+                key: "vo2Max",
+                label: "VO2 max",
+                category: "cardio",
+                identifier: .vo2Max,
+                unit: HKUnit(from: "ml/(kg*min)"),
+                displayUnit: "ml/kg/min",
+                aggregation: .discrete,
+                displayMultiplier: 1
+            ),
+            VitalMetricDefinition(
+                key: "respiratoryRate",
+                label: "Respiratory rate",
+                category: "breathing",
+                identifier: .respiratoryRate,
+                unit: HKUnit.count().unitDivided(by: .minute()),
+                displayUnit: "br/min",
+                aggregation: .discrete,
+                displayMultiplier: 1
+            ),
+            VitalMetricDefinition(
+                key: "oxygenSaturation",
+                label: "Oxygen saturation",
+                category: "breathing",
+                identifier: .oxygenSaturation,
+                unit: .percent(),
+                displayUnit: "%",
+                aggregation: .discrete,
+                displayMultiplier: 100
+            ),
+            VitalMetricDefinition(
+                key: "bodyTemperature",
+                label: "Body temperature",
+                category: "temperature",
+                identifier: .bodyTemperature,
+                unit: .degreeCelsius(),
+                displayUnit: "°C",
+                aggregation: .discrete,
+                displayMultiplier: 1
+            ),
+            VitalMetricDefinition(
+                key: "appleSleepingWristTemperature",
+                label: "Sleeping wrist temperature",
+                category: "temperature",
+                identifier: .appleSleepingWristTemperature,
+                unit: .degreeCelsius(),
+                displayUnit: "°C",
+                aggregation: .discrete,
+                displayMultiplier: 1
+            ),
+            VitalMetricDefinition(
+                key: "bodyMass",
+                label: "Body mass",
+                category: "composition",
+                identifier: .bodyMass,
+                unit: .gramUnit(with: .kilo),
+                displayUnit: "kg",
+                aggregation: .discrete,
+                displayMultiplier: 1
+            ),
+            VitalMetricDefinition(
+                key: "bodyFatPercentage",
+                label: "Body fat",
+                category: "composition",
+                identifier: .bodyFatPercentage,
+                unit: .percent(),
+                displayUnit: "%",
+                aggregation: .discrete,
+                displayMultiplier: 100
+            ),
+            VitalMetricDefinition(
+                key: "leanBodyMass",
+                label: "Lean body mass",
+                category: "composition",
+                identifier: .leanBodyMass,
+                unit: .gramUnit(with: .kilo),
+                displayUnit: "kg",
+                aggregation: .discrete,
+                displayMultiplier: 1
+            ),
+            VitalMetricDefinition(
+                key: "basalEnergyBurned",
+                label: "Basal energy",
+                category: "activity",
+                identifier: .basalEnergyBurned,
+                unit: .kilocalorie(),
+                displayUnit: "kcal",
+                aggregation: .cumulative,
+                displayMultiplier: 1
+            ),
+            VitalMetricDefinition(
+                key: "appleExerciseTime",
+                label: "Exercise time",
+                category: "activity",
+                identifier: .appleExerciseTime,
+                unit: .minute(),
+                displayUnit: "min",
+                aggregation: .cumulative,
+                displayMultiplier: 1
+            ),
+            VitalMetricDefinition(
+                key: "stepCount",
+                label: "Steps",
+                category: "activity",
+                identifier: .stepCount,
+                unit: .count(),
+                displayUnit: "steps",
+                aggregation: .cumulative,
+                displayMultiplier: 1
+            ),
+            VitalMetricDefinition(
+                key: "flightsClimbed",
+                label: "Flights climbed",
+                category: "activity",
+                identifier: .flightsClimbed,
+                unit: .count(),
+                displayUnit: "flights",
+                aggregation: .cumulative,
+                displayMultiplier: 1
+            )
+        ]
+    }
 
     private var requestedReadTypes: Set<HKObjectType> {
         let sleep = HKObjectType.categoryType(forIdentifier: .sleepAnalysis)
@@ -38,8 +244,25 @@ actor HealthSyncStore {
         let activeEnergy = HKQuantityType.quantityType(forIdentifier: .activeEnergyBurned)
         let distanceWalking = HKQuantityType.quantityType(forIdentifier: .distanceWalkingRunning)
         let stepCount = HKQuantityType.quantityType(forIdentifier: .stepCount)
+        let bloodPressureSystolic = HKQuantityType.quantityType(forIdentifier: .bloodPressureSystolic)
+        let bloodPressureDiastolic = HKQuantityType.quantityType(forIdentifier: .bloodPressureDiastolic)
+        let vitalTypes = vitalMetricDefinitions.compactMap { definition in
+            HKQuantityType.quantityType(forIdentifier: definition.identifier)
+        }
 
-        return Set([sleep, workouts, heartRate, activeEnergy, distanceWalking, stepCount].compactMap { $0 })
+        return Set(
+            [
+                sleep,
+                workouts,
+                heartRate,
+                activeEnergy,
+                distanceWalking,
+                stepCount,
+                bloodPressureSystolic,
+                bloodPressureDiastolic
+            ]
+                .compactMap { $0 } + vitalTypes
+        )
     }
 
     func requestAuthorization() async throws -> Bool {
@@ -121,19 +344,30 @@ actor HealthSyncStore {
             UIApplication.shared.backgroundRefreshStatus == .available
         }
         let sleepSessions: [CompanionSyncPayload.SleepSession]
+        let sleepNights: [CompanionSyncPayload.SleepNight]
+        let sleepSegments: [CompanionSyncPayload.SleepSegment]
         let workouts: [CompanionSyncPayload.WorkoutSession]
+        let vitals: CompanionSyncPayload.VitalsPayload
         if canReadHealthData {
-            async let fetchedSleepSessions = fetchSleepSessions(startDate: startDate, endDate: endDate)
+            async let fetchedSleepData = fetchSleepPayload(startDate: startDate, endDate: endDate)
             async let fetchedWorkouts = fetchWorkoutSessions(startDate: startDate, endDate: endDate)
-            sleepSessions = try await fetchedSleepSessions
+            async let fetchedVitals = fetchVitalsPayload(startDate: startDate, endDate: endDate)
+            let fetchedSleepPayload = try await fetchedSleepData
+            sleepSessions = fetchedSleepPayload.legacySessions
+            sleepNights = fetchedSleepPayload.nights
+            sleepSegments = fetchedSleepPayload.segments
             workouts = try await fetchedWorkouts
+            vitals = try await fetchedVitals
         } else {
             companionDebugLog(
                 "HealthSyncStore",
                 "buildSyncPayload deferring HealthKit reads because protected data is unavailable or authorization is missing"
             )
             sleepSessions = []
+            sleepNights = []
+            sleepSegments = []
             workouts = []
+            vitals = .init(daySummaries: [])
         }
 
         let payload = await CompanionSyncPayload(
@@ -157,13 +391,16 @@ actor HealthSyncStore {
             ),
             sourceStates: sourceStates,
             sleepSessions: sleepSessions,
+            sleepNights: sleepNights,
+            sleepSegments: sleepSegments,
             workouts: workouts,
+            vitals: vitals,
             movement: movementPayload,
             screenTime: screenTimePayload
         )
         companionDebugLog(
             "HealthSyncStore",
-            "buildSyncPayload success sleep=\(payload.sleepSessions.count) workouts=\(payload.workouts.count) trips=\(payload.movement.trips.count) stays=\(payload.movement.stays.count) screenTimeHours=\(payload.screenTime.hourlySegments.count) backgroundRefresh=\(backgroundRefreshEnabled)"
+            "buildSyncPayload success sleepLegacy=\(payload.sleepSessions.count) sleepNights=\(payload.sleepNights.count) sleepSegments=\(payload.sleepSegments.count) workouts=\(payload.workouts.count) vitalsDays=\(payload.vitals.daySummaries.count) trips=\(payload.movement.trips.count) stays=\(payload.movement.stays.count) screenTimeHours=\(payload.screenTime.hourlySegments.count) backgroundRefresh=\(backgroundRefreshEnabled)"
         )
         return BuildSyncPayloadResult(
             payload: payload,
@@ -177,14 +414,21 @@ actor HealthSyncStore {
         }
     }
 
-    private func fetchSleepSessions(startDate: Date, endDate: Date) async throws -> [CompanionSyncPayload.SleepSession] {
+    private func fetchSleepPayload(
+        startDate: Date,
+        endDate: Date
+    ) async throws -> (
+        legacySessions: [CompanionSyncPayload.SleepSession],
+        nights: [CompanionSyncPayload.SleepNight],
+        segments: [CompanionSyncPayload.SleepSegment]
+    ) {
         guard let sleepType = HKObjectType.categoryType(forIdentifier: .sleepAnalysis) else {
-            companionDebugLog("HealthSyncStore", "fetchSleepSessions unavailable sleep type")
-            return []
+            companionDebugLog("HealthSyncStore", "fetchSleepPayload unavailable sleep type")
+            return ([], [], [])
         }
         companionDebugLog(
             "HealthSyncStore",
-            "fetchSleepSessions start start=\(isoString(startDate)) end=\(isoString(endDate))"
+            "fetchSleepPayload start start=\(isoString(startDate)) end=\(isoString(endDate))"
         )
         let samples = try await queryCategorySamples(type: sleepType, startDate: startDate, endDate: endDate)
         let segments = samples
@@ -197,31 +441,17 @@ actor HealthSyncStore {
             }
         let anchors = segments.filter { $0.bucket != .inBed }
         guard !anchors.isEmpty else {
-            companionDebugLog("HealthSyncStore", "fetchSleepSessions no anchors")
-            return []
+            companionDebugLog("HealthSyncStore", "fetchSleepPayload no anchors")
+            return (
+                [],
+                [],
+                segments.map { mapRawSleepSegment($0) }.sorted { $0.startedAt > $1.startedAt }
+            )
         }
 
-        var clusters: [[SleepSegment]] = []
-        var currentCluster: [SleepSegment] = []
-        var currentEnd: Date?
+        let clusters = clusterSleepAnchorSegments(anchors)
 
-        for segment in anchors {
-            if var currentEnd, segment.startDate.timeIntervalSince(currentEnd) > sleepSessionGap {
-                if !currentCluster.isEmpty {
-                    clusters.append(currentCluster)
-                }
-                currentCluster = [segment]
-                currentEnd = segment.endDate
-                continue
-            }
-            currentCluster.append(segment)
-            currentEnd = max(currentEnd ?? segment.endDate, segment.endDate)
-        }
-        if !currentCluster.isEmpty {
-            clusters.append(currentCluster)
-        }
-
-        let sessions: [CompanionSyncPayload.SleepSession] = clusters.compactMap { cluster in
+        let episodes: [SleepEpisode] = clusters.compactMap { cluster in
             guard
                 let anchorStart = cluster.map(\.startDate).min(),
                 let anchorEnd = cluster.map(\.endDate).max()
@@ -241,14 +471,16 @@ actor HealthSyncStore {
                     return nil
                 }
                 return SleepSegment(
+                    externalUid: segment.externalUid,
                     startDate: clipped.start,
                     endDate: clipped.end,
                     stageLabel: segment.stageLabel,
-                    bucket: segment.bucket
+                    bucket: segment.bucket,
+                    sourceValue: segment.sourceValue
                 )
             }
 
-            let timeInBedSeconds = mergedDuration(
+            let timeInBedUnion = mergedDuration(
                 for: boundedSegments
                     .filter { $0.bucket == .inBed }
                     .map { ($0.startDate, $0.endDate) }
@@ -258,35 +490,52 @@ actor HealthSyncStore {
                     .filter { $0.bucket == .asleep }
                     .map { ($0.startDate, $0.endDate) }
             )
-            let awakeSeconds = mergedDuration(
+            let explicitAwakeSeconds = mergedDuration(
                 for: boundedSegments
                     .filter { $0.bucket == .awake }
                     .map { ($0.startDate, $0.endDate) }
             )
+            let inferredGapSeconds = timeInBedUnion > 0
+                ? 0
+                : inferredGapDuration(
+                    for: boundedSegments.filter { $0.bucket != .inBed },
+                    threshold: sleepInferenceGap
+                )
+            let timeInBedSeconds = timeInBedUnion > 0
+                ? timeInBedUnion
+                : mergedDuration(
+                    for: boundedSegments
+                        .filter { $0.bucket != .inBed }
+                        .map { ($0.startDate, $0.endDate) }
+                ) + inferredGapSeconds
+            let awakeSeconds = explicitAwakeSeconds + inferredGapSeconds
             guard timeInBedSeconds > 0 || asleepSeconds > 0 else {
                 return nil
             }
 
-            var stageTotals: [String: Int] = [:]
-            for segment in boundedSegments where segment.bucket != .inBed {
-                stageTotals[segment.stageLabel, default: 0] += Int(segment.endDate.timeIntervalSince(segment.startDate))
-            }
-            let stageBreakdown = stageTotals
-                .map { CompanionSyncPayload.SleepStage(stage: $0.key, seconds: $0.value) }
+            let stageBreakdown = mergedStageBreakdown(for: boundedSegments)
+                .map { CompanionSyncPayload.SleepStage(stage: $0.stage, seconds: $0.seconds) }
                 .sorted { $0.stage < $1.stage }
 
-            return CompanionSyncPayload.SleepSession(
-                externalUid: "sleep-\(isoString(sessionStart))-\(isoString(sessionEnd))",
-                startedAt: isoString(sessionStart),
-                endedAt: isoString(sessionEnd),
+            return SleepEpisode(
+                startDate: sessionStart,
+                endDate: sessionEnd,
+                localDateKey: localDateKey(for: sessionEnd),
+                sourceTimezone: sourceTimeZoneIdentifier(),
+                rawSegmentCount: boundedSegments.count,
                 timeInBedSeconds: timeInBedSeconds,
                 asleepSeconds: asleepSeconds,
                 awakeSeconds: awakeSeconds,
                 stageBreakdown: stageBreakdown,
                 recoveryMetrics: [
-                    "sleepWindowStart": isoString(sessionStart),
-                    "sleepWindowEnd": isoString(sessionEnd),
-                    "capturedStages": String(stageBreakdown.count)
+                    "sleepWindowStart": .string(isoString(sessionStart)),
+                    "sleepWindowEnd": .string(isoString(sessionEnd)),
+                    "capturedStages": .number(Double(stageBreakdown.count))
+                ],
+                sourceMetrics: [
+                    "hasInBedSamples": .boolean(timeInBedUnion > 0),
+                    "explicitAwakeSeconds": .number(Double(explicitAwakeSeconds)),
+                    "inferredGapSeconds": .number(Double(inferredGapSeconds))
                 ],
                 links: [],
                 annotations: .init(
@@ -296,12 +545,50 @@ actor HealthSyncStore {
                 )
             )
         }
-        .sorted { $0.startedAt > $1.startedAt }
+
+        let canonicalNights = selectCanonicalNights(from: episodes)
+            .map { episode in
+                CompanionSyncPayload.SleepNight(
+                    externalUid: "sleep-\(isoString(episode.startDate))-\(isoString(episode.endDate))",
+                    startedAt: isoString(episode.startDate),
+                    endedAt: isoString(episode.endDate),
+                    sourceTimezone: episode.sourceTimezone,
+                    localDateKey: episode.localDateKey,
+                    timeInBedSeconds: episode.timeInBedSeconds,
+                    asleepSeconds: episode.asleepSeconds,
+                    awakeSeconds: episode.awakeSeconds,
+                    rawSegmentCount: episode.rawSegmentCount,
+                    stageBreakdown: episode.stageBreakdown,
+                    recoveryMetrics: episode.recoveryMetrics,
+                    sourceMetrics: episode.sourceMetrics,
+                    links: episode.links,
+                    annotations: episode.annotations
+                )
+            }
+            .sorted { $0.startedAt > $1.startedAt }
+        let legacySessions = canonicalNights.map { night in
+            CompanionSyncPayload.SleepSession(
+                externalUid: night.externalUid,
+                startedAt: night.startedAt,
+                endedAt: night.endedAt,
+                timeInBedSeconds: night.timeInBedSeconds,
+                asleepSeconds: night.asleepSeconds,
+                awakeSeconds: night.awakeSeconds,
+                stageBreakdown: night.stageBreakdown,
+                recoveryMetrics: night.recoveryMetrics.mapValues(stringifyMetricValue),
+                links: night.links,
+                annotations: night.annotations
+            )
+        }
         companionDebugLog(
             "HealthSyncStore",
-            "fetchSleepSessions success samples=\(samples.count) segments=\(segments.count) sessions=\(sessions.count)"
+            "fetchSleepPayload success samples=\(samples.count) segments=\(segments.count) episodes=\(episodes.count) nights=\(canonicalNights.count)"
         )
-        return sessions
+        return (
+            legacySessions,
+            canonicalNights,
+            segments.map { mapRawSleepSegment($0) }.sorted { $0.startedAt > $1.startedAt }
+        )
     }
 
     private func fetchWorkoutSessions(startDate: Date, endDate: Date) async throws -> [CompanionSyncPayload.WorkoutSession] {
@@ -328,6 +615,78 @@ actor HealthSyncStore {
             "fetchWorkoutSessions success workouts=\(workouts.count) mapped=\(sessions.count)"
         )
         return sessions
+    }
+
+    private func fetchVitalsPayload(
+        startDate: Date,
+        endDate: Date
+    ) async throws -> CompanionSyncPayload.VitalsPayload {
+        let sourceTimezone = sourceTimeZoneIdentifier()
+        companionDebugLog(
+            "HealthSyncStore",
+            "fetchVitalsPayload start start=\(isoString(startDate)) end=\(isoString(endDate))"
+        )
+        var summariesByDate: [String: [CompanionSyncPayload.VitalMetricSample]] = [:]
+
+        await withTaskGroup(of: [String: [CompanionSyncPayload.VitalMetricSample]].self) { group in
+            for definition in vitalMetricDefinitions {
+                group.addTask {
+                    do {
+                        return try await self.buildDailyVitalSamples(
+                            for: definition,
+                            startDate: startDate,
+                            endDate: endDate,
+                            sourceTimezone: sourceTimezone
+                        )
+                    } catch {
+                        companionDebugLog(
+                            "HealthSyncStore",
+                            "fetchVitalsPayload metric failed metric=\(definition.key) error=\(error.localizedDescription)"
+                        )
+                        return [:]
+                    }
+                }
+            }
+            group.addTask {
+                do {
+                    return try await self.buildDailyBloodPressureSamples(
+                        startDate: startDate,
+                        endDate: endDate,
+                        sourceTimezone: sourceTimezone
+                    )
+                } catch {
+                    companionDebugLog(
+                        "HealthSyncStore",
+                        "fetchVitalsPayload metric failed metric=bloodPressure error=\(error.localizedDescription)"
+                    )
+                    return [:]
+                }
+            }
+
+            for await partial in group {
+                for (dateKey, metrics) in partial {
+                    summariesByDate[dateKey, default: []].append(contentsOf: metrics)
+                }
+            }
+        }
+
+        let daySummaries = summariesByDate.keys.sorted(by: >).map { dateKey in
+            CompanionSyncPayload.VitalDaySummary(
+                dateKey: dateKey,
+                sourceTimezone: sourceTimezone,
+                metrics: (summariesByDate[dateKey] ?? []).sorted { left, right in
+                    if left.category == right.category {
+                        return left.label < right.label
+                    }
+                    return left.category < right.category
+                }
+            )
+        }
+        companionDebugLog(
+            "HealthSyncStore",
+            "fetchVitalsPayload success days=\(daySummaries.count) metricEntries=\(daySummaries.reduce(0) { $0 + $1.metrics.count })"
+        )
+        return .init(daySummaries: daySummaries)
     }
 
     private func mapWorkoutSession(_ workout: HKWorkout) async throws -> CompanionSyncPayload.WorkoutSession {
@@ -401,6 +760,161 @@ actor HealthSyncStore {
             "mapWorkoutSession success id=\(session.externalUid) type=\(session.workoutType) steps=\(session.stepCount.map(String.init) ?? "nil")"
         )
         return session
+    }
+
+    private func buildDailyVitalSamples(
+        for definition: VitalMetricDefinition,
+        startDate: Date,
+        endDate: Date,
+        sourceTimezone: String
+    ) async throws -> [String: [CompanionSyncPayload.VitalMetricSample]] {
+        let samples = try await queryQuantitySamples(
+            definition: definition,
+            startDate: startDate,
+            endDate: endDate
+        )
+        guard samples.isEmpty == false else {
+            return [:]
+        }
+        let grouped = Dictionary(grouping: samples) { sample in
+            localDateKey(for: sample.endedAt, timeZoneIdentifier: sourceTimezone)
+        }
+        var summaries: [String: [CompanionSyncPayload.VitalMetricSample]] = [:]
+        for (dateKey, daySamples) in grouped {
+            let metric = makeVitalMetricSample(
+                definition: definition,
+                samples: daySamples
+            )
+            summaries[dateKey] = [metric]
+        }
+        return summaries
+    }
+
+    private func buildDailyBloodPressureSamples(
+        startDate: Date,
+        endDate: Date,
+        sourceTimezone: String
+    ) async throws -> [String: [CompanionSyncPayload.VitalMetricSample]] {
+        guard
+            HKQuantityType.quantityType(forIdentifier: .bloodPressureSystolic) != nil,
+            HKQuantityType.quantityType(forIdentifier: .bloodPressureDiastolic) != nil
+        else {
+            return [:]
+        }
+        let systolicDefinition = VitalMetricDefinition(
+            key: "bloodPressureSystolic",
+            label: "Systolic pressure",
+            category: "cardio",
+            identifier: .bloodPressureSystolic,
+            unit: .millimeterOfMercury(),
+            displayUnit: "mmHg",
+            aggregation: .discrete,
+            displayMultiplier: 1
+        )
+        let diastolicDefinition = VitalMetricDefinition(
+            key: "bloodPressureDiastolic",
+            label: "Diastolic pressure",
+            category: "cardio",
+            identifier: .bloodPressureDiastolic,
+            unit: .millimeterOfMercury(),
+            displayUnit: "mmHg",
+            aggregation: .discrete,
+            displayMultiplier: 1
+        )
+        async let systolicSamples = queryQuantitySamples(
+            definition: systolicDefinition,
+            startDate: startDate,
+            endDate: endDate
+        )
+        async let diastolicSamples = queryQuantitySamples(
+            definition: diastolicDefinition,
+            startDate: startDate,
+            endDate: endDate
+        )
+
+        var summaries: [String: [CompanionSyncPayload.VitalMetricSample]] = [:]
+        for (definition, samples) in [
+            (systolicDefinition, try await systolicSamples),
+            (diastolicDefinition, try await diastolicSamples)
+        ] {
+            let grouped = Dictionary(grouping: samples) { sample in
+                localDateKey(for: sample.endedAt, timeZoneIdentifier: sourceTimezone)
+            }
+            for (dateKey, daySamples) in grouped {
+                summaries[dateKey, default: []].append(
+                    makeVitalMetricSample(definition: definition, samples: daySamples)
+                )
+            }
+        }
+        return summaries
+    }
+
+    private func makeVitalMetricSample(
+        definition: VitalMetricDefinition,
+        samples: [VitalQuantitySample]
+    ) -> CompanionSyncPayload.VitalMetricSample {
+        let sortedSamples = samples.sorted { left, right in
+            if left.endedAt == right.endedAt {
+                return left.startedAt < right.startedAt
+            }
+            return left.endedAt < right.endedAt
+        }
+        let values = sortedSamples.map(\.value)
+        let latestValue = definition.aggregation == .cumulative
+            ? values.reduce(0, +)
+            : sortedSamples.last?.value
+        return CompanionSyncPayload.VitalMetricSample(
+            metric: definition.key,
+            label: definition.label,
+            category: definition.category,
+            unit: definition.displayUnit,
+            displayUnit: definition.displayUnit,
+            aggregation: definition.aggregation.rawValue,
+            average: definition.aggregation == .discrete ? average(values) : nil,
+            minimum: definition.aggregation == .discrete ? values.min() : nil,
+            maximum: definition.aggregation == .discrete ? values.max() : nil,
+            latest: latestValue,
+            total: definition.aggregation == .cumulative ? values.reduce(0, +) : nil,
+            sampleCount: values.count,
+            latestSampleAt: sortedSamples.last.map { isoString($0.endedAt) }
+        )
+    }
+
+    private func queryQuantitySamples(
+        definition: VitalMetricDefinition,
+        startDate: Date,
+        endDate: Date
+    ) async throws -> [VitalQuantitySample] {
+        guard let quantityType = HKQuantityType.quantityType(forIdentifier: definition.identifier) else {
+            return []
+        }
+        return try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<[VitalQuantitySample], Error>) in
+            let predicate = HKQuery.predicateForSamples(withStart: startDate, end: endDate, options: [])
+            let sortDescriptors = [
+                NSSortDescriptor(key: HKSampleSortIdentifierStartDate, ascending: true),
+                NSSortDescriptor(key: HKSampleSortIdentifierEndDate, ascending: true)
+            ]
+            let query = HKSampleQuery(
+                sampleType: quantityType,
+                predicate: predicate,
+                limit: HKObjectQueryNoLimit,
+                sortDescriptors: sortDescriptors
+            ) { _, samples, error in
+                if let error {
+                    continuation.resume(throwing: error)
+                    return
+                }
+                let resolved = (samples as? [HKQuantitySample] ?? []).map { sample in
+                    VitalQuantitySample(
+                        startedAt: sample.startDate,
+                        endedAt: sample.endDate,
+                        value: sample.quantity.doubleValue(for: definition.unit) * definition.displayMultiplier
+                    )
+                }
+                continuation.resume(returning: resolved)
+            }
+            self.store.execute(query)
+        }
     }
 
     private func queryCategorySamples(
@@ -531,11 +1045,171 @@ actor HealthSyncStore {
             return nil
         }
         return SleepSegment(
+            externalUid: sample.uuid.uuidString.lowercased(),
             startDate: sample.startDate,
             endDate: sample.endDate,
             stageLabel: mapping.label,
-            bucket: mapping.bucket
+            bucket: mapping.bucket,
+            sourceValue: sample.value
         )
+    }
+
+    private func mapRawSleepSegment(_ segment: SleepSegment) -> CompanionSyncPayload.SleepSegment {
+        let sourceTimezone = sourceTimeZoneIdentifier()
+        return CompanionSyncPayload.SleepSegment(
+            externalUid: segment.externalUid,
+            startedAt: isoString(segment.startDate),
+            endedAt: isoString(segment.endDate),
+            sourceTimezone: sourceTimezone,
+            localDateKey: localDateKey(for: segment.endDate, timeZoneIdentifier: sourceTimezone),
+            stage: segment.stageLabel,
+            bucket: rawBucketLabel(for: segment.bucket),
+            sourceValue: segment.sourceValue,
+            metadata: [
+                "durationSeconds": .number(segment.endDate.timeIntervalSince(segment.startDate))
+            ]
+        )
+    }
+
+    private func rawBucketLabel(for bucket: SleepBucket) -> String {
+        switch bucket {
+        case .inBed:
+            return "in_bed"
+        case .asleep:
+            return "asleep"
+        case .awake:
+            return "awake"
+        }
+    }
+
+    private func sourceTimeZoneIdentifier() -> String {
+        let identifier = TimeZone.current.identifier
+        return identifier.isEmpty ? "UTC" : identifier
+    }
+
+    private func localDateKey(for date: Date, timeZoneIdentifier: String? = nil) -> String {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: timeZoneIdentifier ?? sourceTimeZoneIdentifier()) ?? .current
+        let components = calendar.dateComponents([.year, .month, .day], from: date)
+        return String(
+            format: "%04d-%02d-%02d",
+            components.year ?? 1970,
+            components.month ?? 1,
+            components.day ?? 1
+        )
+    }
+
+    private func localHour(for date: Date, timeZoneIdentifier: String? = nil) -> Int {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: timeZoneIdentifier ?? sourceTimeZoneIdentifier()) ?? .current
+        return calendar.component(.hour, from: date)
+    }
+
+    func clusterSleepAnchorSegments(_ anchors: [SleepSegment]) -> [[SleepSegment]] {
+        guard !anchors.isEmpty else {
+            return []
+        }
+        var clusters: [[SleepSegment]] = []
+        var currentCluster: [SleepSegment] = []
+        var currentEnd: Date?
+        for segment in anchors {
+            if let existingEnd = currentEnd, segment.startDate.timeIntervalSince(existingEnd) > sleepSessionGap {
+                if !currentCluster.isEmpty {
+                    clusters.append(currentCluster)
+                }
+                currentCluster = [segment]
+                currentEnd = segment.endDate
+                continue
+            }
+            currentCluster.append(segment)
+            currentEnd = max(currentEnd ?? segment.endDate, segment.endDate)
+        }
+        if !currentCluster.isEmpty {
+            clusters.append(currentCluster)
+        }
+        return clusters
+    }
+
+    func selectCanonicalNights(from episodes: [SleepEpisode]) -> [SleepEpisode] {
+        let eligible = episodes.filter { episode in
+            let startHour = localHour(for: episode.startDate, timeZoneIdentifier: episode.sourceTimezone)
+            return startHour >= 18 || startHour < 8
+        }
+        let grouped = Dictionary(grouping: eligible, by: \.localDateKey)
+        return grouped.values
+            .compactMap { nights in
+                nights.max { left, right in
+                    let leftDuration = left.endDate.timeIntervalSince(left.startDate)
+                    let rightDuration = right.endDate.timeIntervalSince(right.startDate)
+                    if leftDuration == rightDuration {
+                        return left.startDate > right.startDate
+                    }
+                    return leftDuration < rightDuration
+                }
+            }
+            .sorted { $0.startDate > $1.startDate }
+    }
+
+    private func stringifyMetricValue(_ value: CompanionSyncPayload.ScalarValue) -> String {
+        switch value {
+        case .string(let stringValue):
+            return stringValue
+        case .number(let numberValue):
+            if numberValue.rounded() == numberValue {
+                return String(Int(numberValue))
+            }
+            return String(numberValue)
+        case .boolean(let booleanValue):
+            return booleanValue ? "true" : "false"
+        case .null:
+            return ""
+        }
+    }
+
+    private func average(_ values: [Double]) -> Double? {
+        guard values.isEmpty == false else {
+            return nil
+        }
+        return values.reduce(0, +) / Double(values.count)
+    }
+
+    func inferredGapDuration(
+        for segments: [SleepSegment],
+        threshold: TimeInterval
+    ) -> Int {
+        let merged = mergedIntervals(
+            for: segments.map { ($0.startDate, $0.endDate) }
+        )
+        guard merged.count > 1 else {
+            return 0
+        }
+        var total: TimeInterval = 0
+        for index in 1..<merged.count {
+            let gap = merged[index].0.timeIntervalSince(merged[index - 1].1)
+            if gap > 0, gap <= threshold {
+                total += gap
+            }
+        }
+        return Int(total)
+    }
+
+    func mergedStageBreakdown(
+        for segments: [SleepSegment]
+    ) -> [(stage: String, seconds: Int)] {
+        let stageLabels = Set(
+            segments
+                .filter { $0.bucket != .inBed }
+                .map(\.stageLabel)
+        )
+        return stageLabels.map { stageLabel in
+            let seconds = mergedDuration(
+                for: segments
+                    .filter { $0.stageLabel == stageLabel && $0.bucket != .inBed }
+                    .map { ($0.startDate, $0.endDate) }
+            )
+            return (stage: stageLabel, seconds: seconds)
+        }
+        .filter { $0.seconds > 0 }
     }
 
     private func workoutTypeLabel(for type: HKWorkoutActivityType) -> String {
@@ -594,8 +1268,14 @@ actor HealthSyncStore {
     }
 
     private func mergedDuration(for intervals: [(Date, Date)]) -> Int {
+        mergedIntervals(for: intervals).reduce(0) { partialResult, interval in
+            partialResult + Int(interval.1.timeIntervalSince(interval.0))
+        }
+    }
+
+    private func mergedIntervals(for intervals: [(Date, Date)]) -> [(Date, Date)] {
         guard !intervals.isEmpty else {
-            return 0
+            return []
         }
         let sorted = intervals.sorted { left, right in
             if left.0 == right.0 {
@@ -611,9 +1291,7 @@ actor HealthSyncStore {
                 merged.append(interval)
             }
         }
-        return merged.reduce(0) { partialResult, interval in
-            partialResult + Int(interval.1.timeIntervalSince(interval.0))
-        }
+        return merged
     }
 
     private func isoString(_ date: Date) -> String {

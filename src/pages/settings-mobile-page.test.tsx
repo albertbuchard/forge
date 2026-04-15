@@ -148,6 +148,8 @@ describe("SettingsMobilePage", () => {
         counts: {
           sleepSessions: 4,
           workouts: 3,
+          vitalsDaySummaries: 5,
+          vitalsMetricEntries: 18,
           reflectiveSleepSessions: 2,
           linkedWorkouts: 1,
           habitGeneratedWorkouts: 0,
@@ -181,6 +183,9 @@ describe("SettingsMobilePage", () => {
     expect(await screen.findByText("Device sync sources")).toBeInTheDocument();
     expect(screen.getByText("Pending on phone")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Open Companion Sync Lab" })).toBeInTheDocument();
+    expect(screen.getByText("Vitals days")).toBeInTheDocument();
+    expect(screen.getByText("18")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Open vitals view" })).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("switch", { name: "Health sync source" }));
 

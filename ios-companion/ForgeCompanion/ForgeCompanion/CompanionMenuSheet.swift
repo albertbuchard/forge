@@ -255,7 +255,7 @@ struct CompanionSettingsSheet: View {
 
                 sourceToggleRow(
                     title: "Health",
-                    detail: "Sleep and workouts from Apple Health",
+                    detail: "Sleep, vitals, and workouts from Apple Health",
                     status: appModel.healthAccessLabel,
                     isOn: Binding(
                         get: { appModel.healthSyncEnabled },

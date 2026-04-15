@@ -16,11 +16,13 @@ const { LifeForceOverviewWorkspaceMock } = vi.hoisted(() => ({
 const {
   getSleepViewMock,
   getFitnessViewMock,
-  getMovementDayMock
+  getMovementDayMock,
+  getVitalsViewMock
 } = vi.hoisted(() => ({
   getSleepViewMock: vi.fn(),
   getFitnessViewMock: vi.fn(),
-  getMovementDayMock: vi.fn()
+  getMovementDayMock: vi.fn(),
+  getVitalsViewMock: vi.fn()
 }));
 
 vi.mock("@/components/shell/app-shell", () => ({
@@ -30,7 +32,8 @@ vi.mock("@/components/shell/app-shell", () => ({
 vi.mock("@/lib/api", () => ({
   getSleepView: (...args: unknown[]) => getSleepViewMock(...args),
   getFitnessView: (...args: unknown[]) => getFitnessViewMock(...args),
-  getMovementDay: (...args: unknown[]) => getMovementDayMock(...args)
+  getMovementDay: (...args: unknown[]) => getMovementDayMock(...args),
+  getVitalsView: (...args: unknown[]) => getVitalsViewMock(...args)
 }));
 
 vi.mock("@/components/customization/ai-surface-workspace", () => ({
@@ -405,6 +408,49 @@ describe("OverviewPage", () => {
         }
       }
     });
+    getVitalsViewMock.mockResolvedValue({
+      vitals: {
+        summary: {
+          trackedDays: 7,
+          metricCount: 4,
+          latestDateKey: "2026-04-12",
+          latestMetricCount: 4,
+          categoryBreakdown: [
+            { category: "recovery", metricCount: 2, coverageDays: 7 },
+            { category: "cardio", metricCount: 1, coverageDays: 4 },
+            { category: "activity", metricCount: 1, coverageDays: 7 }
+          ]
+        },
+        metrics: [
+          {
+            metric: "restingHeartRate",
+            label: "Resting heart rate",
+            category: "recovery",
+            unit: "bpm",
+            aggregation: "discrete",
+            latestValue: 54,
+            latestDateKey: "2026-04-12",
+            baselineValue: 56,
+            deltaValue: -2,
+            coverageDays: 7,
+            days: []
+          },
+          {
+            metric: "heartRateVariabilitySDNN",
+            label: "HRV (SDNN)",
+            category: "recovery",
+            unit: "ms",
+            aggregation: "discrete",
+            latestValue: 62,
+            latestDateKey: "2026-04-12",
+            baselineValue: 58,
+            deltaValue: 4,
+            coverageDays: 7,
+            days: []
+          }
+        ]
+      }
+    });
   });
 
   afterEach(() => {
@@ -519,10 +565,14 @@ describe("OverviewPage", () => {
       </QueryClientProvider>
     );
 
-    expect(await screen.findByText("Sleep and training")).toBeInTheDocument();
+    expect(
+      await screen.findByText("Recovery, training, and vitals")
+    ).toBeInTheDocument();
     expect(screen.getByText("Average sleep")).toBeInTheDocument();
     expect(screen.getByText("7.4h")).toBeInTheDocument();
     expect(screen.getByText("185 min")).toBeInTheDocument();
+    expect(screen.getByText("Resting heart rate")).toBeInTheDocument();
+    expect(screen.getByText("54.0 bpm")).toBeInTheDocument();
     expect(screen.getByText("Today's place balance")).toBeInTheDocument();
     expect(screen.getByText("11h at Work")).toBeInTheDocument();
     expect(screen.getByText("6h at Home")).toBeInTheDocument();

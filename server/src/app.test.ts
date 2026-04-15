@@ -1491,7 +1491,71 @@ test("mobile health sync builds richer summaries and reconciles habit-generated 
               tags: ["sleep-support"]
             }
           }
-        ]
+        ],
+        vitals: {
+          daySummaries: [
+            {
+              dateKey: "2026-04-05",
+              sourceTimezone: "Europe/Zurich",
+              metrics: [
+                {
+                  metric: "restingHeartRate",
+                  label: "Resting heart rate",
+                  category: "recovery",
+                  unit: "bpm",
+                  displayUnit: "bpm",
+                  aggregation: "discrete",
+                  average: 54,
+                  minimum: 52,
+                  maximum: 58,
+                  latest: 55,
+                  sampleCount: 6,
+                  latestSampleAt: "2026-04-05T06:40:00.000Z"
+                },
+                {
+                  metric: "heartRateVariabilitySDNN",
+                  label: "HRV (SDNN)",
+                  category: "recovery",
+                  unit: "ms",
+                  displayUnit: "ms",
+                  aggregation: "discrete",
+                  average: 61,
+                  minimum: 58,
+                  maximum: 66,
+                  latest: 63,
+                  sampleCount: 4,
+                  latestSampleAt: "2026-04-05T06:40:00.000Z"
+                },
+                {
+                  metric: "vo2Max",
+                  label: "VO2 max",
+                  category: "cardio",
+                  unit: "ml/kg/min",
+                  displayUnit: "ml/kg/min",
+                  aggregation: "discrete",
+                  average: 47.2,
+                  minimum: 47.2,
+                  maximum: 47.2,
+                  latest: 47.2,
+                  sampleCount: 1,
+                  latestSampleAt: "2026-04-05T07:58:00.000Z"
+                },
+                {
+                  metric: "stepCount",
+                  label: "Steps",
+                  category: "activity",
+                  unit: "steps",
+                  displayUnit: "steps",
+                  aggregation: "cumulative",
+                  total: 9420,
+                  latest: 9420,
+                  sampleCount: 184,
+                  latestSampleAt: "2026-04-05T20:55:00.000Z"
+                }
+              ]
+            }
+          ]
+        }
       }
     });
     assert.equal(syncResponse.statusCode, 200);
@@ -1512,6 +1576,8 @@ test("mobile health sync builds richer summaries and reconciles habit-generated 
           counts: {
             reflectiveSleepSessions: number;
             reconciledWorkouts: number;
+            vitalsDaySummaries?: number;
+            vitalsMetricEntries?: number;
             screenTimeDaySummaries?: number;
             screenTimeHourlySegments?: number;
           };
@@ -1526,11 +1592,46 @@ test("mobile health sync builds richer summaries and reconciles habit-generated 
     assert.equal(overview.healthState, "healthy_sync");
     assert.equal(overview.counts.reflectiveSleepSessions, 1);
     assert.equal(overview.counts.reconciledWorkouts, 1);
+    assert.equal(overview.counts.vitalsDaySummaries, 1);
+    assert.equal(overview.counts.vitalsMetricEntries, 4);
     assert.equal(overview.counts.screenTimeDaySummaries, 1);
     assert.equal(overview.counts.screenTimeHourlySegments, 2);
     assert.equal(overview.permissions.healthKitAuthorized, true);
     assert.equal(overview.permissions.backgroundRefreshEnabled, true);
     assert.equal(overview.permissions.screenTimeReady, true);
+
+    const vitalsResponse = await app.inject({
+      method: "GET",
+      url: "/api/v1/health/vitals"
+    });
+    assert.equal(vitalsResponse.statusCode, 200);
+    const vitals = (
+      vitalsResponse.json() as {
+        vitals: {
+          summary: {
+            trackedDays: number;
+            metricCount: number;
+          };
+          metrics: Array<{
+            metric: string;
+            latestValue: number | null;
+            coverageDays: number;
+          }>;
+        };
+      }
+    ).vitals;
+    assert.equal(vitals.summary.trackedDays, 1);
+    assert.equal(vitals.summary.metricCount, 4);
+    assert.equal(
+      vitals.metrics.find((metric) => metric.metric === "restingHeartRate")
+        ?.latestValue,
+      55
+    );
+    assert.equal(
+      vitals.metrics.find((metric) => metric.metric === "stepCount")
+        ?.latestValue,
+      9420
+    );
 
     const sleepResponse = await app.inject({
       method: "GET",
@@ -1846,6 +1947,250 @@ test("mobile health sync accepts screen time warning paths and records warning d
           entry.message.includes("unavailable")
       )
     );
+  } finally {
+    await app.close();
+    closeDatabase();
+    await rm(rootDir, { recursive: true, force: true });
+  }
+});
+
+test("mobile health sync stores canonical sleep nights with raw segments and exposes raw sleep detail", async () => {
+  const rootDir = await mkdtemp(
+    path.join(os.tmpdir(), "forge-mobile-health-sleep-nights-")
+  );
+  const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
+
+  try {
+    const operatorCookie = await issueOperatorSessionCookie(app);
+    const pairingResponse = await app.inject({
+      method: "POST",
+      url: "/api/v1/health/pairing-sessions",
+      headers: {
+        cookie: operatorCookie,
+        host: "127.0.0.1:4317"
+      },
+      payload: {
+        userId: "user_operator"
+      }
+    });
+    assert.equal(pairingResponse.statusCode, 201);
+    const qrPayload = (
+      pairingResponse.json() as {
+        qrPayload: { sessionId: string; pairingToken: string };
+      }
+    ).qrPayload;
+
+    const syncResponse = await app.inject({
+      method: "POST",
+      url: "/api/v1/mobile/healthkit/sync",
+      payload: {
+        sessionId: qrPayload.sessionId,
+        pairingToken: qrPayload.pairingToken,
+        device: {
+          name: "Omar iPhone",
+          platform: "ios",
+          appVersion: "1.0",
+          sourceDevice: "iPhone"
+        },
+        permissions: {
+          healthKitAuthorized: true,
+          backgroundRefreshEnabled: true,
+          motionReady: false,
+          locationReady: false,
+          screenTimeReady: false
+        },
+        sleepSessions: [],
+        sleepNights: [
+          {
+            externalUid: "night_2026_04_05",
+            startedAt: "2026-04-04T22:40:00.000Z",
+            endedAt: "2026-04-05T06:35:00.000Z",
+            sourceTimezone: "Europe/Zurich",
+            localDateKey: "2026-04-05",
+            timeInBedSeconds: 28_500,
+            asleepSeconds: 26_700,
+            awakeSeconds: 1_800,
+            rawSegmentCount: 4,
+            stageBreakdown: [
+              { stage: "core", seconds: 14_400 },
+              { stage: "deep", seconds: 5_400 },
+              { stage: "rem", seconds: 6_900 }
+            ],
+            recoveryMetrics: {
+              sleepWindowStart: "2026-04-04T22:40:00.000Z"
+            },
+            sourceMetrics: {
+              hasInBedSamples: true,
+              inferredGapSeconds: 0
+            },
+            links: [],
+            annotations: {
+              qualitySummary: "Recovered after a long day.",
+              notes: "Canonical night should keep raw segments attached.",
+              tags: ["apple-health"]
+            }
+          }
+        ],
+        sleepSegments: [
+          {
+            externalUid: "seg_1",
+            startedAt: "2026-04-04T22:40:00.000Z",
+            endedAt: "2026-04-05T06:35:00.000Z",
+            sourceTimezone: "Europe/Zurich",
+            localDateKey: "2026-04-05",
+            stage: "in_bed",
+            bucket: "in_bed",
+            sourceValue: 0,
+            metadata: { source: "test" }
+          },
+          {
+            externalUid: "seg_2",
+            startedAt: "2026-04-04T22:55:00.000Z",
+            endedAt: "2026-04-05T02:55:00.000Z",
+            sourceTimezone: "Europe/Zurich",
+            localDateKey: "2026-04-05",
+            stage: "core",
+            bucket: "asleep",
+            sourceValue: 3,
+            metadata: { source: "test" }
+          },
+          {
+            externalUid: "seg_3",
+            startedAt: "2026-04-05T02:55:00.000Z",
+            endedAt: "2026-04-05T04:25:00.000Z",
+            sourceTimezone: "Europe/Zurich",
+            localDateKey: "2026-04-05",
+            stage: "deep",
+            bucket: "asleep",
+            sourceValue: 4,
+            metadata: { source: "test" }
+          },
+          {
+            externalUid: "seg_4",
+            startedAt: "2026-04-05T04:25:00.000Z",
+            endedAt: "2026-04-05T06:20:00.000Z",
+            sourceTimezone: "Europe/Zurich",
+            localDateKey: "2026-04-05",
+            stage: "rem",
+            bucket: "asleep",
+            sourceValue: 5,
+            metadata: { source: "test" }
+          }
+        ],
+        workouts: []
+      }
+    });
+    assert.equal(syncResponse.statusCode, 200);
+    const sync = (
+      syncResponse.json() as {
+        sync: {
+          imported: {
+            sleepSessions: number;
+            sleepNights: number;
+            sleepSegments: number;
+          };
+        };
+      }
+    ).sync;
+    assert.equal(sync.imported.sleepSessions, 0);
+    assert.equal(sync.imported.sleepNights, 1);
+    assert.equal(sync.imported.sleepSegments, 4);
+
+    const sleepResponse = await app.inject({
+      method: "GET",
+      url: "/api/v1/health/sleep"
+    });
+    assert.equal(sleepResponse.statusCode, 200);
+    const sleep = (
+      sleepResponse.json() as {
+        sleep: {
+          latestNight: {
+            sleepId: string;
+            weeklyAverageSleepSeconds: number;
+            stageBreakdown: Array<{ stage: string; percentage: number }>;
+          } | null;
+          calendarDays: Array<{
+            dateKey: string;
+            sleepId: string;
+            hasRawSegments: boolean;
+          }>;
+          sessions: Array<{
+            id: string;
+            localDateKey: string;
+            sourceTimezone: string;
+            rawSegmentCount: number;
+          }>;
+        };
+      }
+    ).sleep;
+    assert.equal(sleep.sessions.length, 1);
+    assert.equal(sleep.sessions[0]?.localDateKey, "2026-04-05");
+    assert.equal(sleep.sessions[0]?.sourceTimezone, "Europe/Zurich");
+    assert.equal(sleep.sessions[0]?.rawSegmentCount, 4);
+    assert.equal(sleep.latestNight?.sleepId, sleep.sessions[0]?.id);
+    assert.equal(sleep.calendarDays.length, 1);
+    assert.equal(sleep.calendarDays[0]?.dateKey, "2026-04-05");
+    assert.equal(sleep.calendarDays[0]?.hasRawSegments, true);
+    assert.ok(
+      (sleep.latestNight?.weeklyAverageSleepSeconds ?? 0) > 0
+    );
+    assert.ok(
+      sleep.latestNight?.stageBreakdown.some(
+        (stage) => stage.stage === "deep" && stage.percentage > 0
+      )
+    );
+
+    const rawDetailResponse = await app.inject({
+      method: "GET",
+      url: `/api/v1/health/sleep/${sleep.sessions[0]?.id}/raw`
+    });
+    assert.equal(rawDetailResponse.statusCode, 200);
+    const rawDetail = rawDetailResponse.json() as {
+      sleep: { id: string };
+      phaseTimeline: {
+        hasSleepStageData: boolean;
+        blocks: Array<{ lane: string; stage: string }>;
+      };
+      rawSegments: Array<{ stage: string; bucket: string; sourceValue: number | null }>;
+      rawLogs: Array<unknown>;
+    };
+    assert.equal(rawDetail.sleep.id, sleep.sessions[0]?.id);
+    assert.equal(rawDetail.phaseTimeline.hasSleepStageData, true);
+    assert.deepEqual(
+      rawDetail.phaseTimeline.blocks.map((block) => `${block.lane}:${block.stage}`),
+      ["in_bed:in_bed", "sleep:core", "sleep:deep", "sleep:rem"]
+    );
+    assert.equal(rawDetail.rawSegments.length, 4);
+    assert.deepEqual(
+      rawDetail.rawSegments.map((segment) => segment.stage),
+      ["in_bed", "core", "deep", "rem"]
+    );
+    assert.deepEqual(
+      rawDetail.rawSegments.map((segment) => segment.bucket),
+      ["in_bed", "asleep", "asleep", "asleep"]
+    );
+    assert.equal(rawDetail.rawSegments[1]?.sourceValue, 3);
+    assert.equal(rawDetail.rawLogs.length, 0);
+
+    const overviewResponse = await app.inject({
+      method: "GET",
+      url: "/api/v1/health/overview"
+    });
+    assert.equal(overviewResponse.statusCode, 200);
+    const overview = (
+      overviewResponse.json() as {
+        overview: {
+          counts: {
+            sleepSessions: number;
+            sleepSegments: number;
+            sleepRawLogs: number;
+          };
+        };
+      }
+    ).overview;
+    assert.equal(overview.counts.sleepSessions, 1);
+    assert.equal(overview.counts.sleepSegments, 4);
+    assert.equal(overview.counts.sleepRawLogs, 0);
   } finally {
     await app.close();
     closeDatabase();
