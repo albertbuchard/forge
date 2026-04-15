@@ -168,6 +168,67 @@ def default_locale(config)
   config.dig(:metadata, :default_locale) || "en-US"
 end
 
+def screenshot_source_locale(config)
+  config.dig(:metadata, :screenshot_source_locale) || default_locale(config)
+end
+
+def screenshot_target_locales(config)
+  configured = Array(config.dig(:metadata, :screenshot_locales)).map(&:to_s).map(&:strip).reject(&:empty?)
+  return configured.uniq unless configured.empty?
+
+  locales_from_metadata = Dir.children(metadata_root(config))
+    .select { |entry| File.directory?(File.join(metadata_root(config), entry)) }
+    .sort
+
+  ([screenshot_source_locale(config)] + locales_from_metadata).uniq
+end
+
+def mirror_screenshots_for_locales!(config)
+  source_locale = screenshot_source_locale(config)
+  target_locales = screenshot_target_locales(config)
+  manifest_path = screenshots_manifest_path(config)
+  UI.user_error!("Missing screenshot manifest at #{manifest_path}") unless File.exist?(manifest_path)
+
+  manifest = JSON.parse(File.read(manifest_path))
+  source_files = Array(manifest["required_files"]).map(&:to_s).reject(&:empty?)
+  UI.user_error!("Screenshot manifest #{manifest_path} has no required_files entries") if source_files.empty?
+
+  source_files.each do |relative_path|
+    unless relative_path.start_with?("#{source_locale}/")
+      UI.user_error!("Screenshot manifest entry #{relative_path} must live under the source locale #{source_locale}")
+    end
+  end
+
+  target_locales.each do |locale|
+    source_files.each do |relative_path|
+      locale_relative_path =
+        if locale == source_locale
+          relative_path
+        else
+          relative_path.sub(/\A#{Regexp.escape(source_locale)}\//, "#{locale}/")
+        end
+
+      source_path = File.join(screenshots_root(config), relative_path)
+      destination_path = File.join(screenshots_root(config), locale_relative_path)
+      UI.user_error!("Missing screenshot asset #{source_path}") unless File.exist?(source_path)
+      FileUtils.mkdir_p(File.dirname(destination_path))
+      next if locale == source_locale
+
+      FileUtils.cp(source_path, destination_path)
+    end
+  end
+
+  source_files.flat_map do |relative_path|
+    target_locales.map do |locale|
+      if locale == source_locale
+        relative_path
+      else
+        relative_path.sub(/\A#{Regexp.escape(source_locale)}\//, "#{locale}/")
+      end
+    end
+  end
+end
+
 def normalized_release_mode(raw_mode)
   case raw_mode.to_s
   when "validate", "testflight", "app-store"
@@ -279,13 +340,10 @@ def validate_metadata!(config:, mode:)
   end
 
   upload_screenshots = mode == "app-store" && config.dig(:metadata, :upload_screenshots_for_app_store) == true
+  screenshot_files = []
   if upload_screenshots
-    manifest_path = screenshots_manifest_path(config)
-    UI.user_error!("Missing screenshot manifest at #{manifest_path}") unless File.exist?(manifest_path)
-    manifest = JSON.parse(File.read(manifest_path))
-    files = Array(manifest["required_files"])
-    UI.user_error!("Screenshot manifest #{manifest_path} has no required_files entries") if files.empty?
-    files.each do |relative_path|
+    screenshot_files = mirror_screenshots_for_locales!(config)
+    screenshot_files.each do |relative_path|
       full_path = File.join(screenshots_root(config), relative_path)
       UI.user_error!("Missing screenshot asset #{full_path}") unless File.exist?(full_path)
     end
@@ -294,7 +352,9 @@ def validate_metadata!(config:, mode:)
   {
     locale: default_locale(config),
     metadata_root: metadata_root(config),
-    upload_screenshots: upload_screenshots
+    upload_screenshots: upload_screenshots,
+    screenshot_locales: screenshot_target_locales(config),
+    screenshot_files: screenshot_files
   }
 end
 

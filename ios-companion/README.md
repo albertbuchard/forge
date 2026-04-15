@@ -168,5 +168,7 @@ Screenshot upload is repo-managed but disabled by default. The release config li
 - `ios-companion/release/release.yml`
 - `ios-companion/fastlane/screenshots/manifest.json`
 
-When `upload_screenshots_for_app_store` is set to `true`, the script will require the
-manifested screenshot files to exist before it uploads or submits the release.
+When `upload_screenshots_for_app_store` is set to `true`, the release lanes treat the
+manifest as the source-locale truth and automatically mirror that screenshot set into
+every locale listed in `metadata.screenshot_locales` before validation, upload, and
+submission.

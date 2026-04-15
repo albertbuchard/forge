@@ -73,8 +73,9 @@ struct CompanionDiagnosticsSheet: View {
                     sectionTitle("Latest payload")
                     if let summary = appModel.latestSyncPayloadSummary {
                         overviewMetricRow("Built", summary.builtAt.formatted(date: .omitted, time: .shortened))
+                        overviewMetricRow("Raw sleep records", "\(summary.sleepRawRecords)")
+                        overviewMetricRow("Sleep segments", "\(summary.sleepSegments)")
                         overviewMetricRow("Sleep nights", "\(summary.sleepNights)")
-                        overviewMetricRow("Raw sleep segments", "\(summary.sleepSegments)")
                         overviewMetricRow("Sleep stage entries", "\(summary.sleepStageEntries)")
                         overviewMetricRow("Workouts", "\(summary.workouts)")
                         overviewMetricRow("Vital days", "\(summary.vitalsDaySummaries)")
@@ -146,8 +147,9 @@ struct CompanionDiagnosticsSheet: View {
                     sectionTitle("Latest receipt")
                     if let report = appModel.latestSyncReport {
                         overviewMetricRow("Synced at", report.syncedAt.formatted(date: .omitted, time: .shortened))
+                        overviewMetricRow("Raw sleep records", "\(report.sleepRawRecords)")
+                        overviewMetricRow("Sleep segments", "\(report.sleepSegments)")
                         overviewMetricRow("Sleep nights", "\(report.sleepNights)")
-                        overviewMetricRow("Raw sleep segments", "\(report.sleepSegments)")
                         overviewMetricRow("Vital days", "\(report.vitalsDaySummaries)")
                         overviewMetricRow("Vital metric entries", "\(report.vitalsMetricEntries)")
                         overviewMetricRow("Created", "\(report.createdCount)")

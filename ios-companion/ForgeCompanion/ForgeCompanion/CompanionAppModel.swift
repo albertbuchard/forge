@@ -1240,6 +1240,7 @@ final class CompanionAppModel: ObservableObject {
                 sleepSessions: receipt.imported.sleepSessions,
                 sleepNights: receipt.imported.sleepNights ?? receipt.imported.sleepSessions,
                 sleepSegments: receipt.imported.sleepSegments ?? 0,
+                sleepRawRecords: receipt.imported.sleepRawRecords ?? 0,
                 workouts: receipt.imported.workouts,
                 createdCount: receipt.imported.createdCount,
                 updatedCount: receipt.imported.updatedCount,
@@ -1551,7 +1552,7 @@ final class CompanionAppModel: ObservableObject {
         guard let report = latestSyncReport else {
             return "No sync yet"
         }
-        return "\(report.sleepNights) nights, \(report.sleepSegments) raw segments, \(report.workouts) workouts"
+        return "\(report.sleepRawRecords) raw, \(report.sleepSegments) segments, \(report.sleepNights) nights, \(report.workouts) workouts"
     }
 
     var lastSuccessfulSyncLabel: String {
@@ -1573,8 +1574,8 @@ final class CompanionAppModel: ObservableObject {
             SyncCoverageRow(
                 id: "sleep",
                 title: "Sleep",
-                value: "\(payloadSummary?.sleepNights ?? 0) nights + \(payloadSummary?.sleepSegments ?? 0) raw",
-                detail: "Forge sync now carries canonical overnight nights plus the raw Apple sleep segments used to reconstruct them.",
+                value: "\(payloadSummary?.sleepRawRecords ?? 0) raw + \(payloadSummary?.sleepSegments ?? 0) segments + \(payloadSummary?.sleepNights ?? 0) nights",
+                detail: "Forge sync now carries provider raw sleep records, normalized sleep segments, and canonical overnight nights as separate layers.",
                 isMissing: (payloadSummary?.sleepNights ?? 0) == 0
             ),
             SyncCoverageRow(
@@ -1649,6 +1650,7 @@ final class CompanionAppModel: ObservableObject {
             sleepSessions: payload.sleepSessions.count,
             sleepNights: payload.sleepNights.count,
             sleepSegments: payload.sleepSegments.count,
+            sleepRawRecords: payload.sleepRawRecords.count,
             sleepStageEntries: payload.sleepNights.reduce(0) { $0 + $1.stageBreakdown.count },
             workouts: payload.workouts.count,
             workoutsWithAverageHeartRate: payload.workouts.reduce(0) { $0 + ($1.averageHeartRate == nil ? 0 : 1) },
@@ -2101,6 +2103,7 @@ private struct PersistedSyncReport: Codable {
     let sleepSessions: Int
     let sleepNights: Int
     let sleepSegments: Int
+    let sleepRawRecords: Int
     let workouts: Int
     let createdCount: Int
     let updatedCount: Int
@@ -2119,6 +2122,7 @@ private struct PersistedSyncReport: Codable {
         case sleepSessions
         case sleepNights
         case sleepSegments
+        case sleepRawRecords
         case workouts
         case createdCount
         case updatedCount
@@ -2138,6 +2142,7 @@ private struct PersistedSyncReport: Codable {
         sleepSessions = report.sleepSessions
         sleepNights = report.sleepNights
         sleepSegments = report.sleepSegments
+        sleepRawRecords = report.sleepRawRecords
         workouts = report.workouts
         createdCount = report.createdCount
         updatedCount = report.updatedCount
@@ -2158,6 +2163,7 @@ private struct PersistedSyncReport: Codable {
         sleepSessions = try container.decode(Int.self, forKey: .sleepSessions)
         sleepNights = try container.decodeIfPresent(Int.self, forKey: .sleepNights) ?? sleepSessions
         sleepSegments = try container.decodeIfPresent(Int.self, forKey: .sleepSegments) ?? 0
+        sleepRawRecords = try container.decodeIfPresent(Int.self, forKey: .sleepRawRecords) ?? 0
         workouts = try container.decode(Int.self, forKey: .workouts)
         createdCount = try container.decode(Int.self, forKey: .createdCount)
         updatedCount = try container.decode(Int.self, forKey: .updatedCount)
@@ -2178,6 +2184,7 @@ private struct PersistedSyncReport: Codable {
             sleepSessions: sleepSessions,
             sleepNights: sleepNights,
             sleepSegments: sleepSegments,
+            sleepRawRecords: sleepRawRecords,
             workouts: workouts,
             createdCount: createdCount,
             updatedCount: updatedCount,

@@ -346,6 +346,7 @@ actor HealthSyncStore {
         let sleepSessions: [CompanionSyncPayload.SleepSession]
         let sleepNights: [CompanionSyncPayload.SleepNight]
         let sleepSegments: [CompanionSyncPayload.SleepSegment]
+        let sleepRawRecords: [CompanionSyncPayload.SleepRawRecord]
         let workouts: [CompanionSyncPayload.WorkoutSession]
         let vitals: CompanionSyncPayload.VitalsPayload
         if canReadHealthData {
@@ -356,6 +357,7 @@ actor HealthSyncStore {
             sleepSessions = fetchedSleepPayload.legacySessions
             sleepNights = fetchedSleepPayload.nights
             sleepSegments = fetchedSleepPayload.segments
+            sleepRawRecords = fetchedSleepPayload.rawRecords
             workouts = try await fetchedWorkouts
             vitals = try await fetchedVitals
         } else {
@@ -366,6 +368,7 @@ actor HealthSyncStore {
             sleepSessions = []
             sleepNights = []
             sleepSegments = []
+            sleepRawRecords = []
             workouts = []
             vitals = .init(daySummaries: [])
         }
@@ -393,6 +396,7 @@ actor HealthSyncStore {
             sleepSessions: sleepSessions,
             sleepNights: sleepNights,
             sleepSegments: sleepSegments,
+            sleepRawRecords: sleepRawRecords,
             workouts: workouts,
             vitals: vitals,
             movement: movementPayload,
@@ -400,7 +404,7 @@ actor HealthSyncStore {
         )
         companionDebugLog(
             "HealthSyncStore",
-            "buildSyncPayload success sleepLegacy=\(payload.sleepSessions.count) sleepNights=\(payload.sleepNights.count) sleepSegments=\(payload.sleepSegments.count) workouts=\(payload.workouts.count) vitalsDays=\(payload.vitals.daySummaries.count) trips=\(payload.movement.trips.count) stays=\(payload.movement.stays.count) screenTimeHours=\(payload.screenTime.hourlySegments.count) backgroundRefresh=\(backgroundRefreshEnabled)"
+            "buildSyncPayload success sleepLegacy=\(payload.sleepSessions.count) sleepRawRecords=\(payload.sleepRawRecords.count) sleepNights=\(payload.sleepNights.count) sleepSegments=\(payload.sleepSegments.count) workouts=\(payload.workouts.count) vitalsDays=\(payload.vitals.daySummaries.count) trips=\(payload.movement.trips.count) stays=\(payload.movement.stays.count) screenTimeHours=\(payload.screenTime.hourlySegments.count) backgroundRefresh=\(backgroundRefreshEnabled)"
         )
         return BuildSyncPayloadResult(
             payload: payload,
@@ -420,11 +424,12 @@ actor HealthSyncStore {
     ) async throws -> (
         legacySessions: [CompanionSyncPayload.SleepSession],
         nights: [CompanionSyncPayload.SleepNight],
-        segments: [CompanionSyncPayload.SleepSegment]
+        segments: [CompanionSyncPayload.SleepSegment],
+        rawRecords: [CompanionSyncPayload.SleepRawRecord]
     ) {
         guard let sleepType = HKObjectType.categoryType(forIdentifier: .sleepAnalysis) else {
             companionDebugLog("HealthSyncStore", "fetchSleepPayload unavailable sleep type")
-            return ([], [], [])
+            return ([], [], [], [])
         }
         companionDebugLog(
             "HealthSyncStore",
@@ -445,7 +450,8 @@ actor HealthSyncStore {
             return (
                 [],
                 [],
-                segments.map { mapRawSleepSegment($0) }.sorted { $0.startedAt > $1.startedAt }
+                segments.map { mapRawSleepSegment($0) }.sorted { $0.startedAt > $1.startedAt },
+                segments.map { mapRawSleepSourceRecord($0) }.sorted { $0.startedAt > $1.startedAt }
             )
         }
 
@@ -587,7 +593,8 @@ actor HealthSyncStore {
         return (
             legacySessions,
             canonicalNights,
-            segments.map { mapRawSleepSegment($0) }.sorted { $0.startedAt > $1.startedAt }
+            segments.map { mapRawSleepSegment($0) }.sorted { $0.startedAt > $1.startedAt },
+            segments.map { mapRawSleepSourceRecord($0) }.sorted { $0.startedAt > $1.startedAt }
         )
     }
 
@@ -1065,6 +1072,27 @@ actor HealthSyncStore {
             stage: segment.stageLabel,
             bucket: rawBucketLabel(for: segment.bucket),
             sourceValue: segment.sourceValue,
+            metadata: [
+                "durationSeconds": .number(segment.endDate.timeIntervalSince(segment.startDate))
+            ]
+        )
+    }
+
+    private func mapRawSleepSourceRecord(_ segment: SleepSegment) -> CompanionSyncPayload.SleepRawRecord {
+        let sourceTimezone = sourceTimeZoneIdentifier()
+        return CompanionSyncPayload.SleepRawRecord(
+            externalUid: segment.externalUid,
+            startedAt: isoString(segment.startDate),
+            endedAt: isoString(segment.endDate),
+            sourceTimezone: sourceTimezone,
+            localDateKey: localDateKey(for: segment.endDate, timeZoneIdentifier: sourceTimezone),
+            providerRecordType: "healthkit_sleep_sample",
+            rawStage: segment.stageLabel,
+            rawValue: segment.sourceValue,
+            payload: [
+                "bucket": .string(rawBucketLabel(for: segment.bucket)),
+                "sourceValue": .number(Double(segment.sourceValue))
+            ],
             metadata: [
                 "durationSeconds": .number(segment.endDate.timeIntervalSince(segment.startDate))
             ]

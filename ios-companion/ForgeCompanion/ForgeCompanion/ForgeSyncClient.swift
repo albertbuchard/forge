@@ -276,7 +276,7 @@ struct ForgeSyncClient {
     func pushHealthSync(payload: CompanionSyncPayload, apiBaseUrl: String) async throws -> SyncReceipt {
         companionDebugLog(
             "ForgeSyncClient",
-            "pushHealthSync start session=\(payload.sessionId) apiBaseUrl=\(apiBaseUrl) nights=\(payload.sleepNights.count) segments=\(payload.sleepSegments.count) legacySleep=\(payload.sleepSessions.count) workouts=\(payload.workouts.count) vitalsDays=\(payload.vitals.daySummaries.count) stays=\(payload.movement.stays.count) trips=\(payload.movement.trips.count)"
+            "pushHealthSync start session=\(payload.sessionId) apiBaseUrl=\(apiBaseUrl) raw=\(payload.sleepRawRecords.count) nights=\(payload.sleepNights.count) segments=\(payload.sleepSegments.count) legacySleep=\(payload.sleepSessions.count) workouts=\(payload.workouts.count) vitalsDays=\(payload.vitals.daySummaries.count) stays=\(payload.movement.stays.count) trips=\(payload.movement.trips.count)"
         )
         let envelope: SyncEnvelope = try await sendRequest(
             path: "/mobile/healthkit/sync",

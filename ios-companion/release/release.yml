@@ -17,7 +17,11 @@ release:
 
 metadata:
   default_locale: en-US
+  screenshot_source_locale: en-US
+  screenshot_locales:
+    - en-US
+    - en-GB
   metadata_path: fastlane/metadata
   screenshots_path: fastlane/screenshots
   screenshots_manifest: fastlane/screenshots/manifest.json
-  upload_screenshots_for_app_store: false
+  upload_screenshots_for_app_store: true

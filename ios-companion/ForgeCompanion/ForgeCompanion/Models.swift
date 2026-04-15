@@ -192,6 +192,19 @@ struct CompanionSyncPayload: Codable {
         let metadata: [String: ScalarValue]
     }
 
+    struct SleepRawRecord: Codable {
+        let externalUid: String
+        let startedAt: String
+        let endedAt: String
+        let sourceTimezone: String
+        let localDateKey: String
+        let providerRecordType: String
+        let rawStage: String
+        let rawValue: Int?
+        let payload: [String: ScalarValue]
+        let metadata: [String: ScalarValue]
+    }
+
     struct WorkoutAnnotations: Codable {
         let subjectiveEffort: Int?
         let moodBefore: String
@@ -406,6 +419,7 @@ struct CompanionSyncPayload: Codable {
     let sleepSessions: [SleepSession]
     let sleepNights: [SleepNight]
     let sleepSegments: [SleepSegment]
+    let sleepRawRecords: [SleepRawRecord]
     let workouts: [WorkoutSession]
     let vitals: VitalsPayload
     let movement: MovementPayload
@@ -417,6 +431,7 @@ struct SyncReceipt: Decodable {
         let sleepSessions: Int
         let sleepNights: Int?
         let sleepSegments: Int?
+        let sleepRawRecords: Int?
         let workouts: Int
         let createdCount: Int
         let updatedCount: Int
@@ -470,6 +485,7 @@ struct SyncReport {
     let sleepSessions: Int
     let sleepNights: Int
     let sleepSegments: Int
+    let sleepRawRecords: Int
     let workouts: Int
     let createdCount: Int
     let updatedCount: Int
@@ -489,6 +505,7 @@ struct SyncPayloadSummary: Codable {
     let sleepSessions: Int
     let sleepNights: Int
     let sleepSegments: Int
+    let sleepRawRecords: Int
     let sleepStageEntries: Int
     let workouts: Int
     let workoutsWithAverageHeartRate: Int
