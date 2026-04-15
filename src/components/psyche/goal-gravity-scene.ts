@@ -34,6 +34,14 @@ export interface GoalGravityScene {
   defaultSelectedId: string;
 }
 
+function clusterScopedNodeId(
+  clusterGoalId: string,
+  entityKind: string,
+  entityId: string
+) {
+  return `${entityKind}:${clusterGoalId}:${entityId}`;
+}
+
 type MutablePackedNode = PsycheGraphNode & {
   homeX: number;
   homeY: number;
@@ -246,7 +254,7 @@ export function buildGoalGravityScene(clusters: GoalGravityCluster[], { compact 
       const nodeRadius = estimateValueRadius(value.title, { compact });
       const valueX = goalX + Math.cos(angle) * valueOrbitRadius;
       const valueY = goalY + Math.sin(angle) * valueOrbitRadius;
-      const nodeId = `value:${value.id}`;
+      const nodeId = clusterScopedNodeId(cluster.goal.id, "value", value.id);
 
       nodes.push({
         id: nodeId,
@@ -295,7 +303,7 @@ export function buildGoalGravityScene(clusters: GoalGravityCluster[], { compact 
     let projectOffset = -projectSpan / 2;
 
     visibleProjects.forEach(({ project, size }, projectIndex) => {
-      const nodeId = `project:${project.id}`;
+      const nodeId = clusterScopedNodeId(cluster.goal.id, "project", project.id);
       const projectX = goalX + projectOffset + size.width / 2;
       const projectY = goalY - (compact ? 330 : 434) - projectIndex * (compact ? 16 : 20);
       projectOffset += size.width + projectGap;
@@ -333,7 +341,7 @@ export function buildGoalGravityScene(clusters: GoalGravityCluster[], { compact 
     });
 
     cluster.linkedHabits.slice(0, compact ? 2 : 3).forEach((habit, habitIndex) => {
-      const nodeId = `habit:${habit.id}`;
+      const nodeId = clusterScopedNodeId(cluster.goal.id, "habit", habit.id);
       const habitSize = estimateRectNodeSize(habit.title, { compact });
       const habitX = goalX - (compact ? 44 : 58);
       const habitY = goalY + (compact ? 228 : 294) + habitIndex * (compact ? 92 : 104);
@@ -372,7 +380,7 @@ export function buildGoalGravityScene(clusters: GoalGravityCluster[], { compact 
 
     let behaviorY = goalY + (compact ? 132 : 156);
     cluster.linkedBehaviors.slice(0, compact ? 2 : 3).forEach((behavior) => {
-      const nodeId = `behavior:${behavior.id}`;
+      const nodeId = clusterScopedNodeId(cluster.goal.id, "behavior", behavior.id);
       const behaviorSize = estimateRectNodeSize(behavior.title, { compact });
       const behaviorX = goalX - (compact ? 272 : 352);
       nodes.push({
@@ -415,7 +423,7 @@ export function buildGoalGravityScene(clusters: GoalGravityCluster[], { compact 
 
     let beliefY = goalY + (compact ? 8 : 10);
     cluster.linkedBeliefs.slice(0, compact ? 2 : 3).forEach((belief) => {
-      const nodeId = `belief:${belief.id}`;
+      const nodeId = clusterScopedNodeId(cluster.goal.id, "belief", belief.id);
       const beliefSize = estimateRectNodeSize(belief.statement, { compact, emphasis: true });
       const beliefX = goalX + (compact ? 278 : 362);
       nodes.push({
@@ -463,7 +471,7 @@ export function buildGoalGravityScene(clusters: GoalGravityCluster[], { compact 
     let reportOffset = -reportSpan / 2;
 
     visibleReports.forEach(({ report, size }) => {
-      const nodeId = `report:${report.id}`;
+      const nodeId = clusterScopedNodeId(cluster.goal.id, "report", report.id);
       const reportX = goalX + reportOffset + size.width / 2;
       const reportY = goalY + (compact ? 332 : 430);
       reportOffset += size.width + reportGap;

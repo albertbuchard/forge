@@ -1246,9 +1246,10 @@ export function SleepPage() {
   const [detailTab, setDetailTab] = useState<"summary" | "reflection" | "raw">(
     "summary"
   );
-  const selectedUserIds = Array.isArray(shell.selectedUserIds)
+  const selectedUserIds = Array.isArray(shell?.selectedUserIds)
     ? shell.selectedUserIds
     : [];
+  const shellSnapshot = shell?.snapshot;
 
   const sleepQuery = useQuery({
     queryKey: ["forge-sleep", ...selectedUserIds],
@@ -1369,10 +1370,10 @@ export function SleepPage() {
     : null;
 
   const linkOptions = buildHealthEntityLinkOptions({
-    goals: shell.snapshot.dashboard.goals,
-    projects: shell.snapshot.dashboard.projects,
-    tasks: shell.snapshot.dashboard.tasks,
-    habits: shell.snapshot.dashboard.habits,
+    goals: shellSnapshot?.dashboard.goals ?? [],
+    projects: shellSnapshot?.dashboard.projects ?? [],
+    tasks: shellSnapshot?.dashboard.tasks ?? [],
+    habits: shellSnapshot?.dashboard.habits ?? [],
     values: valuesQuery.data ?? [],
     patterns: patternsQuery.data ?? [],
     behaviors: behaviorsQuery.data ?? [],
