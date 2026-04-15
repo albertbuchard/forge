@@ -55,7 +55,7 @@ export const SleepPatternsBox = defineHealthBox({
     surfaceId: "sleep-index",
     routePath: "/sleep",
     title: "Sleep patterns",
-    description: "Trend, stage averages, recovery state, and timing patterns.",
+    description: "Weekly baseline, stage mix, and timing patterns around canonical nights.",
     category: "Sleep",
     tags: ["sleep", "patterns"],
     execute: (input) => buildSleepWorkbenchExecution(input),
@@ -73,17 +73,17 @@ export const SleepBrowserBox = defineHealthBox({
     id: "surface:sleep-index:browser",
     surfaceId: "sleep-index",
     routePath: "/sleep",
-    title: "Night browser",
-    description: "Searchable and virtualized sleep history browser.",
+    title: "Night detail",
+    description: "Interactive sleep calendar, selected-night detail, and optional raw evidence.",
     category: "Sleep",
     tags: ["sleep", "browser", "history"],
     execute: (input) => buildSleepWorkbenchExecution(input),
     output: [
-        createSummaryOutput({ label: "Night browser summary", description: "Summary of searchable sleep history." }),
+        createSummaryOutput({ label: "Night detail summary", description: "Summary of the sleep calendar and selected-night detail." }),
         createContextOutput({
             key: "sleepView",
             label: "Sleep view",
-            description: "Structured sleep history for browsing and analysis.",
+            description: "Structured canonical nights, calendar summaries, and phase detail.",
             modelName: "ForgeSleepView"
         })
     ]
